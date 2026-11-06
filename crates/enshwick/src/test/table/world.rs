@@ -367,6 +367,7 @@ pub(crate) extern "system" fn spawn(
     let entity = with(None, |s| {
         let entity = FIRST_SPAWNED + u32::try_from(s.spawns.len()).unwrap_or(0);
         s.spawns.push((entity, request));
+        s.spawn_steps.push(s.ticks.step);
         Some(entity)
     });
     match entity {

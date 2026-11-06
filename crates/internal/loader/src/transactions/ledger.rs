@@ -42,6 +42,10 @@ pub(crate) trait Voxels {
     /// Spawns `prop` for `actor` (0 for none) and announces it; the new
     /// entity, in the world from the next step.
     fn spawn_prop(&mut self, prop: &Prop, actor: u32) -> Result<u32, Status>;
+    /// Notes that a mod placed `entity` as `prop`, so it counts as the
+    /// mod's own; an undo's restore, which may bring back a player's prop,
+    /// is never noted.
+    fn placed(&mut self, entity: u32, prop: &Prop);
     /// The prop `entity` is, and the kinds of state it holds that a
     /// respawn would lose, as bits; [`Status::MISSING`] when it is no prop.
     fn read_prop(&mut self, entity: u32) -> Result<(Prop, u32), Status>;

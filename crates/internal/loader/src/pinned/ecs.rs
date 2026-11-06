@@ -2,6 +2,7 @@
 
 use super::{Constant, Symbol};
 
+pub(crate) const ADD_COMPONENTS: Constant = Constant::new("ecs.add_components");
 pub(crate) const ATTRIBUTE_COUNT: Constant = Constant::new("ecs.attribute_count");
 pub(crate) const ATTRIBUTE_FIND: Symbol = Symbol::new("ecs.attribute_find");
 pub(crate) const ATTRIBUTE_SLOT: Constant = Constant::new("ecs.attribute_slot");
@@ -51,6 +52,9 @@ pub(crate) const REGISTRY_TYPE_COUNT: Constant = Constant::new("ecs.registry_typ
 pub(crate) const REGISTRY_TYPE_RECORDS: Constant = Constant::new("ecs.registry_type_records");
 pub(crate) const REGISTRY_TYPE_RECORD_SIZE: Constant =
     Constant::new("ecs.registry_type_record_size");
+pub(crate) const REMOVE_COMPONENTS: Constant = Constant::new("ecs.remove_components");
+pub(crate) const REMOVE_COMPONENTS_HASHES: Constant = Constant::new("ecs.remove_components_hashes");
+pub(crate) const REMOVE_COMPONENTS_SIZE: Constant = Constant::new("ecs.remove_components_size");
 pub(crate) const ROW_ENTITY: Symbol = Symbol::new("ecs.row_entity");
 pub(crate) const SLOT_ROOT: Symbol = Symbol::new("ecs.slot_root");
 pub(crate) const SPAWN_COMPONENT_BYTES: Constant = Constant::new("ecs.spawn_component_bytes");

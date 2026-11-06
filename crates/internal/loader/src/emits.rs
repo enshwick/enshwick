@@ -28,6 +28,7 @@ use crate::pinned::Symbol;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
+    pinned::ecs::ADD_COMPONENTS.id(),
     pinned::ecs::COMMAND_APPEND.id(),
     pinned::ecs::COMMAND_BUFFERS.id(),
     pinned::ecs::COMMAND_RECORDS.id(),
@@ -53,9 +54,6 @@ const ALLOWED: [&str; 4] = [
 const GAME_THREAD_SOURCE: u16 = 0;
 /// The largest event the game's push takes, exclusive.
 const MAX_EVENT: u32 = 256;
-/// The command kind that sets a component on an entity.
-const SET_COMPONENT: u8 = 3;
-
 type PushFn =
     unsafe extern "system" fn(stream: *mut u8, hash: u32, size: u32, source: u16) -> *mut u8;
 type TimeFn = unsafe extern "system" fn(world: *const u8) -> i64;
@@ -76,6 +74,8 @@ struct Allowed {
 /// The `Teleport` component's layout, from reflection.
 #[derive(Debug, Clone, Copy)]
 struct TeleportLayout {
+    /// The `AddComponents` command kind, from the build table.
+    kind: u8,
     hash: u32,
     size: usize,
     position: usize,
@@ -140,6 +140,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             let teleport = (|| {
                 let transform = offset("keen::ecs::Teleport", "targetTransform")?;
                 Some(TeleportLayout {
+                    kind: u8::try_from(loader.offset(pinned::ecs::ADD_COMPONENTS)?).ok()?,
                     hash: hash_of("keen::ecs::Teleport")?,
                     size: usize::try_from(reflection.type_info("keen::ecs::Teleport").ok()?.size())
                         .ok()?,
@@ -314,7 +315,7 @@ pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(),
         (layout.append)(
             core::ptr::with_exposed_provenance_mut(buffer),
             core::ptr::with_exposed_provenance_mut(buffer + layout.records),
-            SET_COMPONENT,
+            teleport.kind,
             size,
             request.entity.0,
         )

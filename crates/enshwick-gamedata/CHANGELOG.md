@@ -8,6 +8,11 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- Engine routes find the entity command buffer's AddComponents and
+  RemoveComponents kinds (`ecs.add_components`, `ecs.remove_components`)
+  and the RemoveComponents layout (`ecs.remove_components_hashes`,
+  `ecs.remove_components_size`) on every game build, the second through
+  the engine's own RemoveComponents request (#961).
 - Routes fold a record size or stride from index arithmetic (`take =
   "scale"`), match memory through any base register (`[?+*]`) and take the
   n-th of a known number of runs of a repeated shape after a unique anchor

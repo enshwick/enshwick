@@ -4,7 +4,10 @@
 //! component type and a transform, the one its game code uses to find
 //! placed things. A destroy is a request in the entity world's first command
 //! buffer, which the engine plays back after the systems of the next step,
-//! as it does for its own game-thread code.
+//! as it does for its own game-thread code. Keeping an entity out of the
+//! save, or putting it back, is the same: an `AddComponents` or
+//! `RemoveComponents` command for `DoNotSave` in that buffer, as the game's
+//! own animal behaviour adds it to a live animal (server 26430253).
 
 use std::sync::OnceLock;
 
@@ -17,11 +20,20 @@ use crate::pinned::{Constant, Symbol};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
+    pinned::ecs::ADD_COMPONENTS.id(),
+    pinned::ecs::COMMAND_APPEND.id(),
     pinned::ecs::COMMAND_BUFFERS.id(),
+    pinned::ecs::COMMAND_RECORDS.id(),
+    pinned::ecs::COMMAND_SET_DATA.id(),
+    pinned::ecs::COMMAND_SET_HASH.id(),
+    pinned::ecs::COMMAND_SET_SIZE.id(),
     pinned::ecs::DESTROY_REQUEST.id(),
     pinned::ecs::ENTITIES_ENTRY_SIZE.id(),
     pinned::ecs::ENTITIES_ENTRY_TRANSFORM.id(),
     pinned::ecs::ENTITIES_WITH.id(),
+    pinned::ecs::REMOVE_COMPONENTS.id(),
+    pinned::ecs::REMOVE_COMPONENTS_HASHES.id(),
+    pinned::ecs::REMOVE_COMPONENTS_SIZE.id(),
 ];
 
 /// The engine's growable array the query fills; the loader gives it no grow
@@ -36,6 +48,16 @@ struct Found {
 
 type QueryFn = unsafe extern "system" fn(out: *mut Found, entity_world: *mut u8, ty: u32) -> u8;
 type DestroyFn = unsafe extern "system" fn(buffer: *mut u8, requester: u32, entity: u32) -> u8;
+/// The engine's command append: the buffer, its record list, the command
+/// kind, the command's whole size and its entity; the command, zeroed after
+/// its header, or null when the buffer is full.
+type AppendFn = unsafe extern "system" fn(
+    buffer: *mut u8,
+    records: *mut u8,
+    kind: u8,
+    size: u32,
+    entity: u32,
+) -> *mut u8;
 
 /// The game functions and offsets, from the build table.
 #[derive(Debug, Clone, Copy)]
@@ -45,6 +67,86 @@ struct Layout {
     entry_size: usize,
     entry_transform: usize,
     command_buffers: usize,
+}
+
+/// The commands that add and remove `DoNotSave`, from the build table and
+/// the catalogue, apart from the entity reads, so a missing piece turns
+/// off only what needs it.
+#[derive(Debug, Clone, Copy)]
+struct Saving {
+    append: AppendFn,
+    command_buffers: usize,
+    records: usize,
+    hash: u32,
+    /// `None` on a build where a piece of the `AddComponents` command is
+    /// not found: entities stay in the save.
+    add: Option<AddCommand>,
+    /// `None` on a build where a piece of the `RemoveComponents` command is
+    /// not found: entities left out stay out.
+    remove: Option<RemoveCommand>,
+}
+
+/// The `AddComponents` command for `DoNotSave`: its kind, where its first
+/// type hash and size sit, its whole size and the component's.
+#[derive(Debug, Clone, Copy)]
+struct AddCommand {
+    kind: u8,
+    hash_at: usize,
+    size_at: usize,
+    size: u32,
+    component: u16,
+}
+
+/// The `RemoveComponents` command: its kind, where its first type hash sits
+/// and its whole size.
+#[derive(Debug, Clone, Copy)]
+struct RemoveCommand {
+    kind: u8,
+    hash_at: usize,
+    size: u32,
+}
+
+impl Saving {
+    fn new(loader: &Loader) -> Option<Self> {
+        let kind = |name: Constant| u8::try_from(loader.offset(name)?).ok();
+        let ids = crate::catalogue::ids::DO_NOT_SAVE;
+        let append = usize::try_from(loader.address(pinned::ecs::COMMAND_APPEND)?).ok()?;
+        let component = crate::catalogue::size(loader, ids)?;
+        let add = (|| {
+            let data = loader.offset(pinned::ecs::COMMAND_SET_DATA)?;
+            Some(AddCommand {
+                kind: kind(pinned::ecs::ADD_COMPONENTS)?,
+                hash_at: loader.offset(pinned::ecs::COMMAND_SET_HASH)?,
+                size_at: loader.offset(pinned::ecs::COMMAND_SET_SIZE)?,
+                size: u32::try_from(data + component).ok()?,
+                component: u16::try_from(component).ok()?,
+            })
+        })();
+        let remove = (|| {
+            Some(RemoveCommand {
+                kind: kind(pinned::ecs::REMOVE_COMPONENTS)?,
+                hash_at: loader.offset(pinned::ecs::REMOVE_COMPONENTS_HASHES)?,
+                size: u32::try_from(loader.offset(pinned::ecs::REMOVE_COMPONENTS_SIZE)?).ok()?,
+            })
+        })();
+        Some(Self {
+            // SAFETY: `append` is the build table's `ecs.command_append`,
+            // the game function `AppendFn` types, resolved by
+            // `loader.address`.
+            append: unsafe { core::mem::transmute::<usize, AppendFn>(append) },
+            command_buffers: loader.offset(pinned::ecs::COMMAND_BUFFERS)?,
+            records: loader.offset(pinned::ecs::COMMAND_RECORDS)?,
+            hash: crate::catalogue::component_hash(loader, ids)?,
+            add,
+            remove,
+        })
+    }
+}
+
+static SAVING: OnceLock<Option<Saving>> = OnceLock::new();
+
+fn saving(loader: &Loader) -> Option<&'static Saving> {
+    SAVING.get_or_init(|| Saving::new(loader)).as_ref()
 }
 
 /// Entries the first walk makes room for.
@@ -186,5 +288,85 @@ pub(crate) fn destroy(loader: &Loader, entity: Entity) -> Result<(), Status> {
     if queued == 0 {
         return Err(Status::REFUSED);
     }
+    crate::spawns::destroyed(entity);
     Ok(())
+}
+
+/// Keeps `entity`, which a mod spawned or placed, out of the world's saves
+/// (`saved` false) or puts it back in them, after the systems of the next
+/// step; vanilla entities are refused, so no mod drops the game's own data
+/// from a save.
+pub(crate) fn set_saved(loader: &Loader, entity: Entity, saved: bool) -> Result<(), Status> {
+    if entity == Entity(0) {
+        return Err(Status::BAD_ARGS);
+    }
+    let saving = saving(loader).ok_or(Status::MISSING)?;
+    let world = entity_world()?;
+    let template = crate::world::template(loader, entity)?;
+    if crate::spawns::spawned(entity) != Some(template) {
+        return Err(Status::REFUSED);
+    }
+    let live = crate::world::component(loader, entity, saving.hash).is_err();
+    if !crate::spawns::needs_saved(entity, saved, live) {
+        return Ok(());
+    }
+    if saved {
+        let remove = saving.remove.ok_or(Status::MISSING)?;
+        let command = append(saving, world, remove.kind, remove.size, entity)?;
+        // SAFETY: `append` handed out `remove.size` writable bytes, the
+        // table's `ecs.remove_components_size`, which nothing else touches
+        // before the next step; its first type hash is a `u32` at the
+        // table's `ecs.remove_components_hashes`, inside them.
+        unsafe { enshwick::raw::write_at(command, remove.hash_at, saving.hash) };
+    } else {
+        let add = saving.add.ok_or(Status::MISSING)?;
+        let command = append(saving, world, add.kind, add.size, entity)?;
+        // SAFETY: `append` handed out `add.size` writable bytes,
+        // `ecs.command_set_data` plus the component's size, zeroed after the
+        // header, which nothing else touches before the next step; the first
+        // type hash is a `u32` at the table's `ecs.command_set_hash`, in the
+        // header before the data.
+        unsafe { enshwick::raw::write_at(command, add.hash_at, saving.hash) };
+        // SAFETY: the same command of `add.size` writable bytes; the first
+        // component's size is a `u16` at the table's `ecs.command_set_size`,
+        // in the header before the data.
+        unsafe { enshwick::raw::write_at(command, add.size_at, add.component) };
+    }
+    crate::spawns::asked_saved(entity, saved);
+    Ok(())
+}
+
+/// Appends a command of `kind` and `size` bytes for `entity` to the
+/// world's first command buffer; the command, zeroed after its header.
+fn append(
+    saving: &Saving,
+    world: usize,
+    kind: u8,
+    size: u32,
+    entity: Entity,
+) -> Result<*mut u8, Status> {
+    // SAFETY: `entity_world` checked the caller is on the server's game
+    // thread and the world is non-null; the world holds the pointer to its
+    // command buffers at the table's `ecs.command_buffers`.
+    let buffer = unsafe { crate::memory::read_ptr::<u8>(world, saving.command_buffers) };
+    if buffer.is_null() {
+        return Err(Status::MISSING);
+    }
+    // SAFETY: `saving.append` is the table's `ecs.command_append`, on the
+    // world's first command buffer, non-null by the guard before it, and its
+    // record list at the table's `ecs.command_records`, on the game thread
+    // between steps (`entity_world`), where no system writes it.
+    let command = unsafe {
+        (saving.append)(
+            buffer,
+            buffer.wrapping_add(saving.records),
+            kind,
+            size,
+            entity.0,
+        )
+    };
+    if command.is_null() {
+        return Err(Status::REFUSED);
+    }
+    Ok(command)
 }

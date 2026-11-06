@@ -2223,6 +2223,35 @@ take = "address"
 check = ["push rbx", "sub rsp,0x30", "mov ebx,r8d"]
 
 [[route]]
+id = "ecs.add_components"
+in = "survivors.spawn"
+shape = ["mov r8l,*", "mov rcx,rax", "lea rdx,[rax+?]", "call {ecs.command_append}"]
+take = "value"
+
+[[route]]
+id = "~ecs.remove_components"
+callers = "ecs.command_append"
+shape = ["mov rcx,[rbx]", "mov edx,[rcx+rax*4]", "mov [r8+rax*4+?],edx", "inc rax"]
+
+[[route]]
+id = "ecs.remove_components"
+in = "~ecs.remove_components"
+shape = ["mov r8l,*", "mov r9d,?i", "call {ecs.command_append}", "mov r8,rax"]
+take = "value"
+
+[[route]]
+id = "ecs.remove_components_size"
+in = "~ecs.remove_components"
+shape = ["mov r8l,?i", "mov r9d,*", "call {ecs.command_append}", "mov r8,rax"]
+take = "value"
+
+[[route]]
+id = "ecs.remove_components_hashes"
+in = "~ecs.remove_components"
+shape = ["mov edx,[rcx+rax*4]", "mov [r8+rax*4+*],edx"]
+take = "value"
+
+[[route]]
 id = "ecs.entities_entry_size"
 in = "ecs.entities_with"
 shape = ["mov r8,[rdi]", "shl r9,*"]

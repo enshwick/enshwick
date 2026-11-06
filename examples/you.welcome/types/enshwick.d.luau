@@ -2787,6 +2787,8 @@ declare enshwick: {
 		save_info: () -> SaveInfo?,
 		--- Holds the world's saves while `held`, or lets them go: the game saves only while no running mod holds them, so its timed saves wait and `World.save` is refused meanwhile, for example while players are outside a safe room. Each mod holds its own; a mod that turns off lets go, and every hold ends with its hosted game. The log names each mod that holds or lets go. Takes effect after the next step; any thread.
 		hold_saves: (held: boolean) -> (),
+		--- Keeps an entity of the mod's out of the world's saves, or puts it back in them. With `saved` false the game's own `DoNotSave` component leaves it out: it is gone after the server restarts, while the world goes on. Only entities a mod spawned (`Effects.spawn`) or placed (a transaction's props) since the world loaded are allowed, from the step after their spawn, so no mod drops the game's own data from a save; once the world loads again, they count as the game's. The change shows from the next step and counts from the next save that starts after it. For a new entity, `Spawn.do_not_save` keeps it out from its first step. On the server's game thread only.
+		set_saved: (entity: number, saved: boolean) -> (),
 		--- Runs `filter` before the server applies a player's rename of any entity, on its game thread; returning `false` refuses the rename. The game itself checks no permission for renames. A client runs it while it hosts a game.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_rename: (filter: (arg1: Rename) -> boolean?) -> (),

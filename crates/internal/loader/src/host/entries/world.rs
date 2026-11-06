@@ -358,6 +358,15 @@ pub(crate) extern "system" fn destroy(me: ModHandle, entity: Entity) -> Status {
     })
 }
 
+pub(crate) extern "system" fn set_saved(me: ModHandle, entity: Entity, saved: u8) -> Status {
+    entry("set_saved", || {
+        match caller(me).and_then(|loader| crate::entities::set_saved(loader, entity, saved != 0)) {
+            Ok(()) => Status::OK,
+            Err(status) => status,
+        }
+    })
+}
+
 pub(crate) extern "system" fn save_world(me: ModHandle) -> Status {
     entry("save_world", || {
         match caller(me).and_then(crate::saves::request) {

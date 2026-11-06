@@ -730,8 +730,9 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 122 * 8);
-    assert!(size_of::<HostApi>() == 24 + 188 * 8);
+    assert!(size_of::<HostApi>() == 24 + 189 * 8);
     assert!(core::mem::offset_of!(HostApi, crafting_prop) == 24 + 187 * 8);
+    assert!(core::mem::offset_of!(HostApi, set_saved) == 24 + 188 * 8);
     assert!(core::mem::offset_of!(HostApi, chat_filter) == 24 + 184 * 8);
     assert!(core::mem::offset_of!(HostApi, save_info) == 24 + 185 * 8);
     assert!(core::mem::offset_of!(HostApi, hold_saves) == 24 + 186 * 8);

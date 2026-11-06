@@ -46,6 +46,8 @@ struct World {
     announced: Vec<(&'static str, u32)>,
     /// The props in the world, by entity.
     props: FxHashMap<u32, Prop>,
+    /// The props noted as a mod's own, in the order placed.
+    owned: Vec<u32>,
     /// The state each prop holds that a respawn would lose, as kind bits.
     stateful: FxHashMap<u32, u32>,
     /// The last entity id handed out.
@@ -124,6 +126,10 @@ impl Voxels for World {
         }
         self.announced.push(("prop placed", actor));
         Ok(self.last_entity)
+    }
+
+    fn placed(&mut self, entity: u32, _prop: &Prop) {
+        self.owned.push(entity);
     }
 
     fn read_prop(&mut self, entity: u32) -> Result<(Prop, u32), Status> {

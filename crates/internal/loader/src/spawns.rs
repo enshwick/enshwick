@@ -7,11 +7,14 @@
 //! request hands out the new entity's id at once; the entity is in the
 //! world from the next step on.
 
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
+use enshwick::Entity;
 use enshwick::abi::{SpawnRequest, Status};
+use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use crate::host::Loader;
+use crate::locks::Relock;
 use crate::pinned;
 use crate::pinned::Symbol;
 use crate::spawn_request::{RequestLayout, Start};
@@ -163,7 +166,9 @@ pub(crate) fn spawn(loader: &Loader, request: &SpawnRequest) -> Result<u32, Stat
         let size = crate::catalogue::size(loader, ids).ok_or(Status::MISSING)?;
         extra.push((hash, vec![0u8; size]));
     }
-    spawn_with(loader, request, extra, 0)
+    let entity = spawn_with(loader, request, extra, 0)?;
+    note(loader, entity, request.template);
+    Ok(entity)
 }
 
 /// [`spawn`], the entity starting with `extra` components as well: each a
@@ -277,4 +282,224 @@ pub(crate) fn spawn_with(
     }
     crate::log!(DEBUG, "spawn of entity {entity} asked");
     Ok(entity)
+}
+
+/// The fewest spawns kept before the ones no longer in the world go.
+const MOST_SPAWNED: usize = 1 << 16;
+
+/// A spawn a mod asked for: its template, the step it was asked in, and
+/// the last [`set_saved`](crate::entities::set_saved) asked for it with its
+/// step.
+#[derive(Debug, Clone, Copy)]
+struct Kept {
+    template: [u8; 16],
+    at: u64,
+    asked: Option<(bool, u64)>,
+}
+
+/// The entities mods spawned or placed in the running world: the entities a
+/// mod may keep out of the save, which a vanilla entity given the id of a
+/// gone one does not pass for.
+#[derive(Debug)]
+struct Spawned {
+    kept: FxHashMap<u32, Kept>,
+    /// The size at which the next note first drops the entities gone from
+    /// the world: twice what stayed the last time, so the walk costs each
+    /// spawn a constant share.
+    limit: usize,
+}
+
+static SPAWNED: Mutex<Spawned> = Mutex::new(Spawned {
+    kept: FxHashMap::with_hasher(FxBuildHasher),
+    limit: MOST_SPAWNED,
+});
+
+/// Whether a command asked in step `asked` may not have reached the world
+/// at step `now`: the engine plays it back after the systems of the next
+/// step.
+const fn waiting(asked: u64, now: u64) -> bool {
+    now <= asked.saturating_add(1)
+}
+
+impl Spawned {
+    /// Keeps `entity` of `template`, asked for in step `now`; at the limit
+    /// first drops the entities for which `in_world` is false, keeping those
+    /// asked for too recently to be in the world yet.
+    fn note(
+        &mut self,
+        entity: u32,
+        template: [u8; 16],
+        now: u64,
+        in_world: impl Fn(u32, [u8; 16]) -> bool,
+    ) {
+        if self.kept.len() >= self.limit {
+            self.kept
+                .retain(|&kept, was| waiting(was.at, now) || in_world(kept, was.template));
+            self.limit = MOST_SPAWNED.max(self.kept.len() * 2);
+        }
+        let asked = None;
+        self.kept.insert(
+            entity,
+            Kept {
+                template,
+                at: now,
+                asked,
+            },
+        );
+    }
+
+    /// Whether `entity` needs a command to end up `saved`, the world showing
+    /// `live` at step `now`: a command still waiting counts over the world.
+    fn needs(&self, entity: u32, saved: bool, live: bool, now: u64) -> bool {
+        let shown = self
+            .kept
+            .get(&entity)
+            .and_then(|kept| kept.asked)
+            .filter(|&(_, at)| waiting(at, now))
+            .map_or(live, |(asked, _)| asked);
+        shown != saved
+    }
+}
+
+/// Keeps `entity`, which a mod spawned or placed from `template`, as one a
+/// mod may keep out of the save.
+pub(crate) fn note(loader: &Loader, entity: u32, template: [u8; 16]) {
+    let now = crate::events::steps();
+    SPAWNED.relock().note(entity, template, now, |kept, was| {
+        crate::world::template(loader, Entity(kept)) == Ok(was)
+    });
+}
+
+/// The template a mod spawned or placed `entity` from in the running world,
+/// or `None` for an entity no mod spawned.
+pub(crate) fn spawned(entity: Entity) -> Option<[u8; 16]> {
+    SPAWNED
+        .relock()
+        .kept
+        .get(&entity.0)
+        .map(|kept| kept.template)
+}
+
+/// Whether `entity` needs a `DoNotSave` command to end up `saved`, the world
+/// showing `live` now.
+pub(crate) fn needs_saved(entity: Entity, saved: bool, live: bool) -> bool {
+    SPAWNED
+        .relock()
+        .needs(entity.0, saved, live, crate::events::steps())
+}
+
+/// Notes that a command to make `entity` `saved` went to the world now.
+pub(crate) fn asked_saved(entity: Entity, saved: bool) {
+    let now = crate::events::steps();
+    if let Some(kept) = SPAWNED.relock().kept.get_mut(&entity.0) {
+        kept.asked = Some((saved, now));
+    }
+}
+
+/// Forgets `entity`, which a mod asked to destroy, so a vanilla entity
+/// given its id later does not pass for it.
+pub(crate) fn destroyed(entity: Entity) {
+    SPAWNED.relock().kept.remove(&entity.0);
+}
+
+/// Forgets the entities mods spawned, when a hosted game ends.
+pub(crate) fn forget() {
+    let mut spawned = SPAWNED.relock();
+    spawned.kept.clear();
+    spawned.limit = MOST_SPAWNED;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn empty() -> Spawned {
+        Spawned {
+            kept: FxHashMap::default(),
+            limit: MOST_SPAWNED,
+        }
+    }
+
+    #[test]
+    fn a_spawn_is_kept_with_its_template_until_destroyed_or_the_hosted_game_ends() {
+        SPAWNED.relock().note(7, [1; 16], 0, |_, _| false);
+        SPAWNED.relock().note(9, [1; 16], 0, |_, _| false);
+        assert_eq!(spawned(Entity(7)), Some([1; 16]));
+        assert_eq!(spawned(Entity(8)), None, "no mod spawned it");
+        destroyed(Entity(9));
+        assert_eq!(
+            spawned(Entity(9)),
+            None,
+            "its id may go to a vanilla entity"
+        );
+        forget();
+        assert_eq!(spawned(Entity(7)), None);
+    }
+
+    #[test]
+    fn a_full_record_drops_only_the_entities_gone_from_the_world_then_waits_twice_as_long() {
+        let mut record = empty();
+        for entity in 0..u32::try_from(MOST_SPAWNED - 1).unwrap() {
+            record.note(entity, [2; 16], 0, |_, _| unreachable!("not full yet"));
+        }
+        record.note(u32::MAX - 1, [4; 16], 9, |_, _| {
+            unreachable!("not full yet")
+        });
+        record.note(u32::MAX, [3; 16], 9, |kept, was| {
+            kept % 2 == 0 && was == [2; 16]
+        });
+        assert_eq!(record.kept.len(), MOST_SPAWNED / 2 + 2);
+        assert_eq!(record.kept.get(&4).map(|k| k.template), Some([2; 16]));
+        assert!(!record.kept.contains_key(&5), "gone from the world");
+        assert!(
+            record.kept.contains_key(&(u32::MAX - 1)),
+            "asked for in this step, so not in the world yet"
+        );
+        assert!(record.kept.contains_key(&u32::MAX));
+        assert_eq!(
+            record.limit,
+            (MOST_SPAWNED / 2 + 1) * 2,
+            "twice what stayed"
+        );
+        record.note(u32::MAX - 2, [3; 16], 10, |_, _| {
+            unreachable!("below the limit")
+        });
+    }
+
+    #[test]
+    fn a_record_of_live_entities_is_walked_again_only_after_it_doubles() {
+        let mut record = empty();
+        for entity in 0..u32::try_from(MOST_SPAWNED).unwrap() {
+            record.note(entity, [2; 16], 0, |_, _| true);
+        }
+        record.note(u32::MAX, [2; 16], 5, |_, _| true);
+        assert_eq!(record.limit, MOST_SPAWNED * 2);
+        let more =
+            u32::try_from(MOST_SPAWNED).unwrap()..u32::try_from(MOST_SPAWNED * 2 - 2).unwrap();
+        for entity in more {
+            record.note(entity, [2; 16], 6, |_, _| {
+                unreachable!("below the doubled limit")
+            });
+        }
+    }
+
+    #[test]
+    fn a_change_of_mind_in_one_step_queues_both_commands_and_a_repeat_queues_none() {
+        let mut record = empty();
+        record.note(7, [1; 16], 0, |_, _| false);
+        assert!(record.needs(7, false, true, 3), "saved now, asked out");
+        record.kept.get_mut(&7).unwrap().asked = Some((false, 3));
+        assert!(!record.needs(7, false, true, 3), "the same ask again");
+        assert!(
+            record.needs(7, true, true, 3),
+            "put back before the world shows it out"
+        );
+        record.kept.get_mut(&7).unwrap().asked = Some((true, 3));
+        assert!(!record.needs(7, true, true, 4), "still waiting a step on");
+        assert!(
+            record.needs(7, true, false, 5),
+            "after playback the world counts again"
+        );
+        assert!(!record.needs(7, true, true, 5));
+    }
 }
