@@ -44,10 +44,37 @@ fn a_run_s_object_with_unknown_flags_or_an_endless_position_reads_as_none() {
     assert_eq!(sent_back(8, finite), None);
     assert_eq!(sent_back(ActionTarget::ENTITY | 8, finite), None);
     assert_eq!(sent_back(0, finite), None);
-    assert!(
-        sent_back(ActionTarget::ENTITY, f64::NAN).is_some(),
+    assert_eq!(
+        sent_back(ActionTarget::ENTITY, f64::NAN).map(|t| t.position),
+        Some([0.0; 3]),
         "a position the flags do not set is not read"
     );
+}
+
+#[test]
+fn an_entity_only_run_with_junk_position_bytes_writes_back_to_its_own_message() {
+    let mut body = Message::ActionRun {
+        id: "a".into(),
+        action: "b".into(),
+        args: String::new(),
+        target: Some(ActionTarget {
+            flags: ActionTarget::ENTITY,
+            entity: enshwick::Entity(7),
+            ..ActionTarget::NONE
+        }),
+    }
+    .body();
+    let at = body.len() - 24;
+    body[at..].fill(0xff);
+    let kind = Message::ActionRun {
+        id: String::new(),
+        action: String::new(),
+        args: String::new(),
+        target: None,
+    }
+    .kind();
+    let message = Message::read(kind, &body).expect("an entity-only run reads");
+    assert_eq!(Message::read(kind, &message.body()), Some(message));
 }
 use enshwick::config::Field;
 

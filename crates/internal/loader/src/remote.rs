@@ -151,10 +151,16 @@ fn take_target(bytes: &[u8]) -> Option<ActionTarget> {
         eight.copy_from_slice(&bytes[at..at + 8]);
         f64::from_le_bytes(eight)
     };
+    let flags = word(0);
     let target = ActionTarget {
-        flags: word(0),
+        flags,
         entity: enshwick::Entity(word(4)),
-        position: [number(8), number(16), number(24)],
+        // Bytes the flags leave unset read as zero, so the message writes back the same.
+        position: if flags & ActionTarget::POSITION == 0 {
+            [0.0; 3]
+        } else {
+            [number(8), number(16), number(24)]
+        },
         ..ActionTarget::NONE
     };
     (target.flags != 0 && target.is_valid()).then_some(target)
