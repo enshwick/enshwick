@@ -1,3 +1,8 @@
+<!--
+type: reference
+description: A server mod reads which of the game's controls each player holds this step, as their client sent them, and what it may trust of that.
+-->
+
 # The controls a player holds
 
 [`load.input()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/input.rs)
