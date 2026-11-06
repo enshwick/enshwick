@@ -279,7 +279,11 @@ pub(crate) fn spawn_with(
         return Err(Status::REFUSED);
     }
     crate::log!(DEBUG, "spawn of entity {entity} asked");
-    SPAWNED.relock().note(loader, entity, request.template);
+    SPAWNED
+        .relock()
+        .note(entity, request.template, |kept, was| {
+            crate::world::template(loader, Entity(kept)) == Ok(was)
+        });
     Ok(entity)
 }
 
@@ -300,13 +304,12 @@ static SPAWNED: Mutex<Spawned> = Mutex::new(Spawned {
 
 impl Spawned {
     /// Keeps `entity` of `template`; at [`MOST_SPAWNED`] first drops the
-    /// entities whose template the world no longer gives them, on the
-    /// game thread: those destroyed, and those asked for in this step,
-    /// which are not in the world yet.
-    fn note(&mut self, loader: &Loader, entity: u32, template: [u8; 16]) {
+    /// entities for which `in_world` is false, the world no longer giving
+    /// them their template: those destroyed, and those asked for in this
+    /// step, which are not in the world yet.
+    fn note(&mut self, entity: u32, template: [u8; 16], in_world: impl Fn(u32, [u8; 16]) -> bool) {
         if self.templates.len() >= MOST_SPAWNED {
-            self.templates
-                .retain(|&kept, &mut was| crate::world::template(loader, Entity(kept)) == Ok(was));
+            self.templates.retain(|&kept, &mut was| in_world(kept, was));
         }
         self.templates.insert(entity, template);
     }
@@ -321,4 +324,39 @@ pub(crate) fn spawned(entity: Entity) -> Option<[u8; 16]> {
 /// Forgets the entities mods spawned, when a hosted game ends.
 pub(crate) fn forget() {
     SPAWNED.relock().templates.clear();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn empty() -> Spawned {
+        Spawned {
+            templates: FxHashMap::default(),
+        }
+    }
+
+    #[test]
+    fn a_spawn_is_kept_with_its_template_until_the_hosted_game_ends() {
+        SPAWNED.relock().note(7, [1; 16], |_, _| false);
+        assert_eq!(spawned(Entity(7)), Some([1; 16]));
+        assert_eq!(spawned(Entity(8)), None, "no mod spawned it");
+        forget();
+        assert_eq!(spawned(Entity(7)), None);
+    }
+
+    #[test]
+    fn a_full_record_drops_only_the_entities_no_longer_in_the_world() {
+        let mut record = empty();
+        for entity in 0..u32::try_from(MOST_SPAWNED).unwrap() {
+            record.note(entity, [2; 16], |_, _| unreachable!("not full yet"));
+        }
+        record.note(u32::MAX, [3; 16], |kept, was| {
+            kept % 2 == 0 && was == [2; 16]
+        });
+        assert_eq!(record.templates.len(), MOST_SPAWNED / 2 + 1);
+        assert_eq!(record.templates.get(&4), Some(&[2; 16]));
+        assert_eq!(record.templates.get(&5), None, "gone from the world");
+        assert_eq!(record.templates.get(&u32::MAX), Some(&[3; 16]));
+    }
 }
