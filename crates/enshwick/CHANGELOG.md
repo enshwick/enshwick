@@ -268,8 +268,7 @@ Each entry names the pull request that made the change.
 - The terrain docs said the save keeps every terrain edit; it keeps one
   only inside a base, a Flame Altar's building zone (#963).
 - A recipe rule a mod sets during init is kept until the loader resolves the
-  recipe layout, and a data pack's rules go out under the pack's own handle
-  (#960).
+  recipe layout, where the loader refused it (#960).
 - A world's saved weather fronts keep their phenomenon when the mods that
   add phenomena change: the loader writes the phenomena's GUIDs beside the
   save and gives each restored front its phenomenon's new place, where

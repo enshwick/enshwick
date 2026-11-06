@@ -139,7 +139,7 @@ impl Load<'_> {
     /// See the [module](self).
     #[script]
     pub fn remove_item(&mut self, item: Guid) -> Result<(), Off> {
-        recipes::disable_as(self.host(), RecipeRule::Output(item.into()))?;
+        recipes::disable(RecipeRule::Output(item.into()))?;
         let source = format!("remove_item {item}");
         self.change(
             &Change::new(item, Field::Count, changes::Value::Set(0.0)),
@@ -177,9 +177,13 @@ impl Load<'_> {
     /// }
     /// ```
     #[script]
+    #[expect(
+        clippy::unused_self,
+        reason = "an init call beside the other removals, where mods and scripts find it"
+    )]
     pub fn remove_workshop(&mut self, station: Guid) -> Result<(), Off> {
-        recipes::disable_as(self.host(), RecipeRule::Workshop(station.into()))?;
-        recipes::disable_as(self.host(), RecipeRule::Output(station.into()))
+        recipes::disable(RecipeRule::Workshop(station.into()))?;
+        recipes::disable(RecipeRule::Output(station.into()))
     }
 
     /// Serves the vanilla loot table `table`, random or a container's fill
