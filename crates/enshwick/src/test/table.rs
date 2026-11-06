@@ -65,7 +65,7 @@ use mods::{
     settings, texts,
 };
 use net::{net_channel, net_ready, net_send};
-use saves::{Saves, hold_saves, save_info};
+use saves::{Saves, hold_saves, save_info, set_saved};
 pub(crate) use services::view;
 use services::{
     crafting_prop, declare_content, define_event, publish, send_event, service, subscribe,
@@ -691,6 +691,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         save: Saves {
             info: None,
             held: false,
+            unsaved: Vec::new(),
         },
         skills: Vec::new(),
         comfort_filters: Vec::new(),
@@ -1039,4 +1040,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     save_info,
     hold_saves,
     crafting_prop,
+    set_saved,
 };

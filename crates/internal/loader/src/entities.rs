@@ -5,8 +5,8 @@
 //! placed things. A destroy is a request in the entity world's first command
 //! buffer, which the engine plays back after the systems of the next step,
 //! as it does for its own game-thread code. Keeping an entity out of the
-//! save, or putting it back, is the same: an AddComponents or
-//! RemoveComponents command for `DoNotSave` in that buffer, as the game's
+//! save, or putting it back, is the same: an `AddComponents` or
+//! `RemoveComponents` command for `DoNotSave` in that buffer, as the game's
 //! own animal behaviour adds it to a live animal (server 26430253).
 
 use std::sync::OnceLock;

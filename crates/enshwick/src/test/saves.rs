@@ -44,4 +44,20 @@ impl Installed {
     pub fn saves_held(&self) -> bool {
         table::with(false, |s| s.save.held)
     }
+
+    /// The entities the mod keeps out of the world's saves, in the order it
+    /// last asked.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.unsaved().is_empty());
+    /// ```
+    #[must_use]
+    pub fn unsaved(&self) -> Vec<crate::Entity> {
+        table::with(Vec::new(), |s| {
+            s.save.unsaved.iter().map(|&e| crate::Entity(e)).collect()
+        })
+    }
 }

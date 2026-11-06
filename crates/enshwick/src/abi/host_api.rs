@@ -1693,4 +1693,14 @@ pub struct HostApi {
         width: u8,
         out: *mut u8,
     ) -> Status,
+    /// Keeps `entity`, which a mod spawned or placed, out of the world's
+    /// saves (`saved` 0) or puts it back in them (any other `saved`), from
+    /// the next step on; the next save after that keeps it or leaves it
+    /// out. [`Status::REFUSED`] for an entity no mod spawned, such as a
+    /// vanilla one, or a full command buffer; [`Status::MISSING`] for an
+    /// entity not in the world, on a client or on a build without the
+    /// commands; [`Status::BAD_ARGS`] for entity 0. On the server's game
+    /// thread only ([`Status::WRONG_THREAD`] elsewhere). A panic in the
+    /// loader returns [`Status::REFUSED`]. ABI 11.9.
+    pub set_saved: extern "system" fn(me: ModHandle, entity: Entity, saved: u8) -> Status,
 }
