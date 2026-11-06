@@ -53,6 +53,11 @@ Each entry names the pull request that made the change.
 - `Spawn::do_not_save` spawns an entity the world's save leaves out, as the
   game's own passing animals. `SpawnRequest::flags` and
   `SpawnRequest::DO_NOT_SAVE`, ABI 11.6 (#936).
+- `World::set_saved` keeps a live entity a mod spawned or placed out of the
+  world's saves, or puts it back, through the game's own `DoNotSave`
+  commands, from the next step on; vanilla entities are refused. Luau
+  reaches it as `enshwick.world.set_saved`. `HostApi::set_saved`, ABI 11.10;
+  the fake host reports the entities left out with `unsaved` (#961).
 - `items::Kind::Consumed`: every item filter hears a use once all of them
   allowed it, the place to count uses or reward one. `ItemAction::CONSUMED`,
   ABI 11.7; the fake host's `item_action` follows an allowed use with it;
