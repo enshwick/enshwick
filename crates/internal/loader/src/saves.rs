@@ -12,9 +12,12 @@
 //! client also builds the paths of all its worlds for its menus, and its
 //! save system builds them on a thread of its own, not on the hosted game's
 //! (client 410 and 426). There the key is the last one built since the
-//! hosted game started to initialise, and none once that game ends.
+//! hosted game started to initialise, and none once that game ends. A
+//! client names a world it saves to Steam by its file name alone; the
+//! loader places it in the running account's Steam cloud folder.
 
-use std::path::Path;
+use std::borrow::Cow;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
@@ -24,6 +27,7 @@ use crate::chains::Next;
 use crate::host::{Loader, Target};
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
+use crate::module::Export;
 use crate::pinned;
 use crate::pinned::Constant;
 
@@ -46,6 +50,10 @@ const WORLD_EXTENSION: &str = "ksd";
 /// The starts of the names of a client's other save files, which share the
 /// world saves' folder and extension: its characters and its global save.
 const OTHER_SAVES: &[&str] = &["character", "global"];
+
+/// The folder beside Steam's `local/` user data folder that holds the
+/// account's cloud files.
+const STEAM_CLOUD_FOLDER: &str = "remote";
 
 type RequestFn = unsafe extern "system" fn(server: *mut u8);
 type PathFn = unsafe extern "system" fn(result: *mut u8, path: *mut u8, slot: *mut u8) -> *mut u8;
@@ -233,10 +241,21 @@ unsafe fn read_path(layout: &Layout, path: *mut u8) -> Option<String> {
 /// the world `side` runs from now on has its folders checked and stops the
 /// game when a hold on that world is unmet, before its save is read.
 fn remember(path: &str, side: Side) {
-    let Some(key) = key_of(path) else {
+    static UNPLACED: crate::wire::Drops = crate::wire::Drops::new();
+    let path = full_path(path, side, steam_saves).unwrap_or_else(|| {
+        if let Some(total) = UNPLACED.add(1) {
+            crate::log!(
+                WARN,
+                "save {path} is in Steam's cloud, whose folder Steam does not name ({total} times), \
+                 so its world's mod folders sit in the game folder"
+            );
+        }
+        Cow::Borrowed(path)
+    });
+    let Some(key) = key_of(&path) else {
         return;
     };
-    let key = intern(&key, path);
+    let key = intern(&key, &path);
     let changed = {
         let mut keys = KEYS.relock();
         let before = keys.pick(side);
@@ -276,10 +295,15 @@ fn arrive(key: &str) {
 
 /// The world saved: a new world's GUID is recorded once it has a save.
 pub(crate) fn saved(loader: &Loader) {
+    static UNNOTED: crate::wire::Drops = crate::wire::Drops::new();
     if let Some(key) = world_key(loader)
         && let Err(e) = crate::world_folders::note(key)
+        && let Some(total) = UNNOTED.add(1)
     {
-        crate::log!(WARN, "world {key}: its GUID was not recorded: {e}");
+        crate::log!(
+            WARN,
+            "world {key}: its GUID was not recorded ({total} times): {e}"
+        );
     }
 }
 
@@ -333,6 +357,79 @@ fn key_of(path: &str) -> Option<String> {
         return None;
     }
     Some(path.with_extension("").to_str()?.to_owned())
+}
+
+/// The full path of the save the game names `path` on `side`; `None` when a
+/// client names a save in Steam's cloud and `steam`, the folder of the
+/// account's Steam saves, is unknown.
+///
+/// A client names a world it saves to Steam by its Steam file name alone,
+/// `world4.ksd`, and a local world by its full path (client 26430625).
+fn full_path<'a>(
+    path: &'a str,
+    side: Side,
+    steam: impl FnOnce() -> Option<&'static Path>,
+) -> Option<Cow<'a, str>> {
+    if side != Side::CLIENT || Path::new(path).is_absolute() {
+        return Some(Cow::Borrowed(path));
+    }
+    steam()?
+        .join(path)
+        .into_os_string()
+        .into_string()
+        .ok()
+        .map(Cow::Owned)
+}
+
+/// The folder where Steam keeps the running account's cloud files of the
+/// game, `userdata/<account>/<app>/remote/`; found once Steam has started.
+///
+/// Steam names the account's `local/` folder beside it, and keeps the cloud
+/// files in `remote/` (Steamworks `ISteamUser::GetUserDataFolder`).
+fn steam_saves() -> Option<&'static Path> {
+    static FOLDER: OnceLock<PathBuf> = OnceLock::new();
+    if let Some(folder) = FOLDER.get() {
+        return Some(folder);
+    }
+    let folder = steam_user_data()?.parent()?.join(STEAM_CLOUD_FOLDER);
+    Some(FOLDER.get_or_init(|| folder))
+}
+
+/// The folder Steam's `GetUserDataFolder` names for the running account,
+/// `userdata/<account>/<app>/local/`; `None` before Steam starts.
+fn steam_user_data() -> Option<PathBuf> {
+    type SteamUser = unsafe extern "C" fn() -> *mut core::ffi::c_void;
+    type UserDataFolder =
+        unsafe extern "C" fn(this: *mut core::ffi::c_void, buffer: *mut u8, len: i32) -> u8;
+    let module = crate::module::Module::loaded("steam_api64.dll")?;
+    let user = module.export("SteamAPI_SteamUser_v023")?;
+    let folder = module.export("SteamAPI_ISteamUser_GetUserDataFolder")?;
+    // SAFETY: the Steamworks flat API declares `SteamAPI_SteamUser_v023` as
+    // `SteamUser`.
+    let user = unsafe { core::mem::transmute::<Export, SteamUser>(user) };
+    // SAFETY: the Steamworks flat API declares
+    // `SteamAPI_ISteamUser_GetUserDataFolder` as `UserDataFolder`, its C++
+    // `bool` read as a byte.
+    let folder = unsafe { core::mem::transmute::<Export, UserDataFolder>(folder) };
+    // SAFETY: `user` is the flat API's `SteamAPI_SteamUser_v023`, which takes
+    // no arguments and returns null before Steam starts.
+    let this = unsafe { user() };
+    if this.is_null() {
+        return None;
+    }
+    let mut buffer = [0u8; 1024];
+    // SAFETY: `this` is the non-null user interface, which lives for the
+    // process; Steam writes at most the 1024 bytes of the local `buffer`,
+    // NUL-terminated.
+    let found = unsafe { folder(this, buffer.as_mut_ptr(), 1024) };
+    if found == 0 {
+        return None;
+    }
+    let text = core::ffi::CStr::from_bytes_until_nul(&buffer)
+        .ok()?
+        .to_str()
+        .ok()?;
+    (!text.is_empty()).then(|| PathBuf::from(text))
 }
 
 /// The key of the world the server runs, once the engine has built its path.
@@ -586,6 +683,31 @@ mod tests {
         keys = Keys::CLOSED;
         keys.note(Side::CLIENT, "world2-menu");
         assert_eq!(keys.pick(Side::CLIENT), None);
+    }
+
+    #[test]
+    fn a_client_world_saved_to_steam_lies_in_the_account_s_steam_saves_folder() {
+        let steam = Path::new(r"C:\Steam\userdata\487707326\1203620\remote");
+        let path = full_path("world4.ksd", Side::CLIENT, || Some(steam)).unwrap();
+        assert_eq!(
+            key_of(&path).as_deref(),
+            Some(r"C:\Steam\userdata\487707326\1203620\remote\world4")
+        );
+        assert_eq!(full_path("world4.ksd", Side::CLIENT, || None), None);
+    }
+
+    #[test]
+    fn a_save_named_by_its_full_path_or_on_a_server_lies_where_it_is_named() {
+        let local = "C:/Users/a/Saved Games/keen games/Enshrouded/default/world4.ksd";
+        let never = || -> Option<&'static Path> { unreachable!("no Steam lookup") };
+        assert_eq!(
+            full_path(local, Side::CLIENT, never).as_deref(),
+            Some(local)
+        );
+        assert_eq!(
+            full_path("savegame/world0.ksd", Side::SERVER, never).as_deref(),
+            Some("savegame/world0.ksd")
+        );
     }
 
     #[test]

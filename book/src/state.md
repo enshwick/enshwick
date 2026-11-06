@@ -14,7 +14,9 @@ its own folder in `mods/`.
 
 `<stem>` is the save's file name without `.ksd`, such as `world0`. The game
 keeps every world of a machine in one folder: a dedicated server's
-`savegame/`, a client's Steam `remote/` or `Saved Games\Enshrouded\`. The
+`savegame/`; on a client, the worlds saved to Steam in Steam's
+`userdata/<account>/1203620/remote/` and the local worlds in
+`Saved Games\keen games\Enshrouded\default\` (client 26430625). The
 loader creates a world's folders when something first writes there.
 
 Settings are what a player chooses; data is what the mod remembers. Keep them
