@@ -5909,6 +5909,20 @@ shape = [
 take = "value"
 
 [[route]]
+id = "text.format"
+sides = ["client"]
+in = "ui.popup"
+shape = [
+  "mov edx,[rsi+?]",
+  "lea rcx,[rbp+?]",
+  "call *",
+  "movups xmm0,[rax]",
+  "movsd xmm1,[rax+?]",
+]
+take = "address"
+check = ["mov [rsp+0x10],rbx", "mov [rsp+0x18],rsi", "push rbp", "push rdi"]
+
+[[route]]
 id = "ui.progress"
 sides = ["client"]
 loads = ["doBasicProgressBar()"]

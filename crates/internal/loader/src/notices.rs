@@ -10,7 +10,7 @@
 //! of the next step, as the game does. A player whose client lacks Enshwick
 //! gets the text in chat instead.
 
-use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use enshwick::Entity;
@@ -58,6 +58,8 @@ struct SlotText {
     /// One more than the bytes of `bytes` the text takes; 0 while the slot
     /// is unset, so an empty text is still a text.
     len: AtomicUsize,
+    /// The text's hash as the game hashes a text view.
+    hash: AtomicU64,
 }
 
 impl SlotText {
@@ -65,6 +67,7 @@ impl SlotText {
         Self {
             bytes: [const { AtomicU8::new(0) }; MAX_TEXT + 1],
             len: AtomicUsize::new(0),
+            hash: AtomicU64::new(0),
         }
     }
 
@@ -75,6 +78,8 @@ impl SlotText {
             byte.store(new, Ordering::Relaxed);
         }
         self.bytes[text.len()].store(0, Ordering::Relaxed);
+        self.hash
+            .store(crate::content::text_hash(text), Ordering::Relaxed);
         self.len.store(text.len() + 1, Ordering::Release);
     }
 
@@ -84,6 +89,7 @@ impl SlotText {
         Some(crate::content::Handed::new(
             self.bytes.as_ptr().cast::<u8>(),
             len,
+            self.hash.load(Ordering::Relaxed),
         ))
     }
 }
@@ -160,6 +166,12 @@ pub(crate) fn text(id: u32) -> Option<crate::content::Handed> {
         .iter()
         .position(|tag| enshwick_gamedata::reflect::fnv1a32(tag) == id)?;
     SLOT_TEXTS[slot].view()
+}
+
+/// The ids of the notice text tags.
+pub(crate) fn tag_ids() -> impl Iterator<Item = u32> {
+    TAGS.iter()
+        .map(|tag| enshwick_gamedata::reflect::fnv1a32(tag))
 }
 
 /// Queues a notice the server sent for the client's next step.

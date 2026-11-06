@@ -152,6 +152,7 @@ pub(crate) const HOOKED: &[Symbol] = &[
     skill::POINTS_PER_LEVEL,
     survivors::REGISTRY_LOAD,
     survivors::SPAWN,
+    text::FORMAT,
     text::LOOKUP,
     text::LOOKUP_ENGLISH,
     textures::KEYS,

@@ -428,6 +428,11 @@ pub(crate) fn mod_dialog(
     ))
 }
 
+/// The ids of the dialogs' text tags, for the loader's text format.
+pub(crate) fn tag_ids() -> impl Iterator<Item = u32> {
+    dialog::tag_ids()
+}
+
 /// The text of a dialog's text tag, for the loader's text lookup.
 pub(crate) fn text(id: u32) -> Option<&'static str> {
     dialog::text(id)
