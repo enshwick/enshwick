@@ -1,6 +1,6 @@
 <!--
 type: how-to
-description: An entity template is what a placed object or a creature is made of. Mods copy a vanilla template under their own id and change the components of a copy or a vanilla one.
+description: An entity template is what a placed object or a creature is made of. Mods copy a vanilla template under their own id and change a template's components.
 -->
 
 # Entity templates
