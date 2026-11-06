@@ -89,7 +89,9 @@ Each entry names the pull request that made the change.
   enemy with its own level, health, damage, faction, arsenal and boss mark;
   `Load::add_arsenal` and `Load::change_arsenal` make and change arsenals
   from the game's attacks and behaviours. `vanilla::enemy` and
-  `vanilla::template` name the game's enemies and templates (#952).
+  `vanilla::template` name the game's enemies and templates; a Rust mod's
+  first such call after `init` logs a warning, as it reads every
+  template's name on the calling thread (#952).
 - `content::spawns` (behind `typed`): `Load::add_spawn_entry` adds a
   template to the game's random spawners, by spawner or wherever a template
   spawns already, and `Load::change_spawner` changes their counts and
@@ -166,7 +168,9 @@ Each entry names the pull request that made the change.
 - A world's saved weather fronts keep their phenomenon when the mods that
   add phenomena change: the loader writes the phenomena's GUIDs beside the
   save and gives each restored front its phenomenon's new place, where
-  before a front could load as another phenomenon (#952).
+  before a front could load as another phenomenon. A save from before the
+  loader kept them frees only the fronts outside their layer's
+  phenomena (#952).
 - A mod item's meter lives: its template is registered with the game, where
   before the entity of a given item read as gone (#952).
 - The workshop of `Load::add_workshop` places and spawns like the game's

@@ -42,7 +42,9 @@ the mod added before the call.
 The game keeps the crafting props of a base in one mask of 64 bits, which
 vanilla and every mod share: the game's own props take 51 of them. The loader
 gives each new crafting prop the next free bit, in load order, and refuses one
-past the last, which turns its mod off.
+past the last, which turns its mod off. Load order is by mod id and
+dependencies, so the same mods give the same bits. A placed crafting prop
+and the save name the prop by its GUID and id, never by its bit.
 
 ```rust
 use enshwick::content::{Guid, id};

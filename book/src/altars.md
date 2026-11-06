@@ -137,6 +137,16 @@ fn init(load: &mut enshwick::Load<'_>, altar: Guid) -> Result<(), enshwick::Off>
 In Luau the call is `enshwick.altars.add_flame_altar{...}`, at the top level
 of `main.luau`, with the same fields.
 
+```luau
+local altar = "<the GUID of the game's Flame Altar item>"
+local wide = enshwick.altars.add_flame_altar({
+    item = { id = "you.altars:wide-altar", like = altar },
+    zones = { { grow = 20, height = 80 } },
+    recipe_cost = 2,
+})
+enshwick.log.info(`wide altars are {wide.template}`)
+```
+
 ## Altars per level and bases past 16
 
 `load.on_altar_limit(|limit| ...)` adds a filter to the chain that decides
