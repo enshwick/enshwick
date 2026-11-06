@@ -237,13 +237,15 @@ fn every_other_player_on_a_machine_of_its_own_gets_a_socket() {
     assert!(!wired(8, 0, 1, 7), "no machine");
 }
 
-#[test]
 fn a_socket_opened_to_the_host_s_player_before_its_key_was_known_goes() {
     let _alone = alone();
     PACKET.store(1200, Ordering::Relaxed);
+    DESTROYS.store(0, Ordering::Relaxed);
     let game = Game::for_test(fake_create, fake_destroy, fake_limit);
     let host: [u32; 2] = [1, 0];
     let session = host.as_ptr().expose_provenance();
+    // The fake game reads a socket's channel and peer, both 0, from it.
+    let socket = [0u32; 2];
     let mut slot = None;
     let state = fresh(&mut slot, session);
     for (key, machine) in [(7, 2), (8, 3)] {
@@ -251,6 +253,7 @@ fn a_socket_opened_to_the_host_s_player_before_its_key_was_known_goes() {
             key,
             Peer {
                 machine,
+                socket: socket.as_ptr().expose_provenance(),
                 ..peer(true)
             },
         );
@@ -260,6 +263,7 @@ fn a_socket_opened_to_the_host_s_player_before_its_key_was_known_goes() {
     unhost_for_test();
     let kept: Vec<u64> = state.peers.keys().copied().collect();
     assert_eq!(kept, [8], "the remote player keeps its socket");
+    assert_eq!(DESTROYS.load(Ordering::Relaxed), 1, "the silent one closes");
 }
 
 #[test]
