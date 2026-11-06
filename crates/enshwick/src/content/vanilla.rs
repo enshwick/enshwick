@@ -479,7 +479,9 @@ impl Vanilla {
     }
 
     /// The vanilla template named `name`, as the template collection lists
-    /// it. The first call reads every template's name once.
+    /// it. The first call reads every template's name once, 139 ms on a
+    /// dedicated server (build 26083076), more than a Luau script's budget
+    /// of 100 ms a second: name templates while the mod starts.
     ///
     /// # Errors
     ///

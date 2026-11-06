@@ -33,7 +33,10 @@ both sides. Its model, animations and attacks are the game's: the client has
 to have them.
 
 `vanilla::enemy(name)` names a vanilla enemy by its template's name, with its
-faction and arsenal; `vanilla::template(name)` names any template.
+faction and arsenal; `vanilla::template(name)` names any template. The first
+of these calls reads the names of all the game's templates once, 139 ms on a
+dedicated server: a Luau mod makes it at the top level of `main.luau`, where
+no per-second budget applies.
 
 ## Arsenals
 
