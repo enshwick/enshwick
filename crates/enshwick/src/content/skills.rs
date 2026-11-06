@@ -409,8 +409,8 @@ impl Load<'_> {
     /// tree screen draws it from the data.
     ///
     /// A player's save keeps a fixed count of unlocked nodes (256 on server
-    /// 387), and the game's own tree takes most of them: every mod's nodes
-    /// share the rest, in load order.
+    /// 399, beside the game's 243), and the game's own tree takes most of
+    /// them: every mod's nodes share the rest, in load order.
     ///
     /// # Errors
     ///

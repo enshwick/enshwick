@@ -124,6 +124,50 @@ mod tests {
     }
 
     #[test]
+    fn a_script_lists_the_tree_and_adds_a_node_and_a_perk() {
+        let loader = run(
+            FakeHost::new().progression(),
+            &format!(
+                r#"
+                local nodes = enshwick.content.skill_nodes()
+                local root = nodes[1]
+                enshwick.log.info(`{{#nodes}} nodes, first a {{root.kind}}`)
+                local node = enshwick.content.add_skill_node({{
+                    id = "you.luau:endurance",
+                    like = nodes[2].id,
+                    x = root.x,
+                    y = root.y + 300,
+                    links_from = {{ root.id }},
+                    name = enshwick.content.guid("you.luau:endurance.name"),
+                    description = enshwick.content.guid("you.luau:endurance.text"),
+                    cost = 1,
+                }})
+                enshwick.log.info(`node {{node}}`)
+                local ok = pcall(enshwick.content.add_skill_node, {{
+                    id = "you.luau:near", like = nodes[2].id, x = root.x, y = root.y,
+                    name = enshwick.content.guid("you.luau:n"), description = enshwick.content.guid("you.luau:n.text"),
+                }})
+                enshwick.log.info(`near refused {{not ok}}`)
+                local perk = enshwick.content.add_perk({{
+                    id = "you.luau:thirst", like = "{PERK}",
+                    name = enshwick.content.guid("you.luau:thirst.name"),
+                    description = enshwick.content.guid("you.luau:thirst.text"),
+                }})
+                enshwick.log.info(`perk {{perk}}`)
+                "#,
+                PERK = enshwick::test::VANILLA_PERK,
+            ),
+        );
+        let logs = format!("{:?}", loader.logs());
+        assert!(logged(&loader, "2 nodes, first a Root"), "{logs}");
+        let node = Id::new("you.luau:endurance").guid().fnv1a();
+        assert!(logged(&loader, &format!("node {node}")), "{logs}");
+        assert!(logged(&loader, "near refused true"), "{logs}");
+        let perk = Id::new("you.luau:thirst").guid();
+        assert!(logged(&loader, &format!("perk {perk}")), "{logs}");
+    }
+
+    #[test]
     fn a_script_adds_a_recipe_beside_a_vanilla_one() {
         let loader = run(
             FakeHost::new().items().recipes(),

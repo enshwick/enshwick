@@ -79,6 +79,7 @@ mod typed {
         Spawns => "content/spawns.md",
         Knowledge => "content/knowledge.md",
         Journal => "content/journal.md",
+        Skills => "content/skills.md",
     }
 }
 
