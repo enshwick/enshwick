@@ -121,4 +121,33 @@ mod tests {
         assert_eq!(loader.keys(&[key("F8")], Duration::from_millis(16)), 1);
         assert_eq!(loader.action_runs(), [("day".to_owned(), String::new())]);
     }
+
+    #[test]
+    fn a_script_puts_an_action_on_a_key_in_one_call_with_the_action_s_label() {
+        let loader = run(
+            FakeHost::new()
+                .side(Side::CLIENT)
+                .language(enshwick::i18n::Language::UK_UA),
+            r#"
+            local actions = enshwick.actions.actions(enshwick.i18n.parse('[en]\n"day" = "Make it day"\n\n[uk]\n"day" = "Зробити день"\n'))
+            actions:add({ id = "day", label = "day" }, function()
+                return enshwick.actions.done("Morning")
+            end)
+            actions:control("day", "F8")
+            local ok = pcall(actions.control, actions, "night", "F9")
+            enshwick.log.info(`undeclared {ok}`)
+        "#,
+        );
+        assert!(logged(&loader, "undeclared false"), "{:?}", loader.logs());
+        assert_eq!(
+            loader.controls(),
+            [(
+                "day".to_owned(),
+                "Зробити день".to_owned(),
+                [Some(key("F8")), None]
+            )]
+        );
+        assert_eq!(loader.keys(&[key("F8")], Duration::from_millis(16)), 1);
+        assert_eq!(loader.action_runs(), [("day".to_owned(), String::new())]);
+    }
 }
