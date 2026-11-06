@@ -2,7 +2,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{Entity, Header, PlayerInfo, Str};
+use crate::abi::{Entity, Header, PlayerInfo, Status, Str};
 
 /// A question the loader asks a mod about its player actions, registered
 /// with [`HostApi::actions`](super::HostApi::actions).
@@ -122,6 +122,43 @@ impl ActionTarget {
     pub fn is_valid(&self) -> bool {
         self.flags & !(Self::ENTITY | Self::POSITION) == 0
             && (self.flags & Self::POSITION == 0 || self.position.iter().all(|c| c.is_finite()))
+    }
+
+    /// Reads the target a mod passes with a run, as the client loader and the
+    /// fake loader take it: `Ok(None)` for null or no flags, and
+    /// [`Status::BAD_ARGS`] for a header too short or a target that is not
+    /// [valid](Self::is_valid).
+    ///
+    /// # Errors
+    ///
+    /// [`Status::BAD_ARGS`] for a target the loader refuses.
+    ///
+    /// # Safety
+    ///
+    /// - `raw` is null, or points at an `ActionTarget` readable for the size
+    ///   its header states, which no other thread writes during the call.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{ActionTarget, Status};
+    ///
+    /// let mut short = ActionTarget { flags: ActionTarget::ENTITY, ..ActionTarget::NONE };
+    /// short.header.size = 8;
+    /// // SAFETY: `short` is a whole local `ActionTarget`.
+    /// assert_eq!(unsafe { ActionTarget::read(&raw const short) }, Err(Status::BAD_ARGS));
+    /// // SAFETY: null is allowed.
+    /// assert_eq!(unsafe { ActionTarget::read(core::ptr::null()) }, Ok(None));
+    /// ```
+    pub unsafe fn read(raw: *const Self) -> Result<Option<Self>, Status> {
+        if raw.is_null() {
+            return Ok(None);
+        }
+        // SAFETY: the caller's contract, for the size the header states.
+        let target = unsafe { super::read_headed(raw, <Self as super::Headed>::BORN) }
+            .filter(Self::is_valid)
+            .ok_or(Status::BAD_ARGS)?;
+        Ok(Some(target).filter(|t| t.flags != 0))
     }
 }
 

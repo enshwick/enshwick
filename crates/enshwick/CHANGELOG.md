@@ -148,6 +148,9 @@ Each entry names the pull request that made the change.
   `Result<(), Option<String>>`, the refusing filter's reason if any, in
   place of a `bool`; a Luau build filter's answer is typed `any`, and a value
   other than nil, a boolean or a string refuses (#957).
+- `abi::ActionTarget::read` reads the object a run names as the loaders
+  take it; `run_action_at` refuses a target whose header is too short with
+  `BAD_ARGS`, where it ran the action without the object (#957).
 - The ABI is 11.10: mods built for 11.9 and older load as before (#957).
 - With developer tools on, the loader logs once when the map's marker list
   has no room for a mod's markers, with how many it left out, where it dropped them silently

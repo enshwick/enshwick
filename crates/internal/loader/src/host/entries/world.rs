@@ -297,16 +297,10 @@ pub(crate) extern "system" fn run_action_at(
         // SAFETY: `HostApi::run_action_at` has the mod pass `target` null or
         // a live `ActionTarget` readable for the size its header states, for
         // the call.
-        let target = unsafe {
-            enshwick::abi::read_headed(
-                target,
-                <enshwick::abi::ActionTarget as enshwick::abi::Headed>::BORN,
-            )
+        let target = match unsafe { enshwick::abi::ActionTarget::read(target) } {
+            Ok(target) => target,
+            Err(status) => return status,
         };
-        if target.is_some_and(|t| !t.is_valid()) {
-            return Status::BAD_ARGS;
-        }
-        let target = target.filter(|t| t.flags != 0);
         if crate::actions::run_on_server(&record.id, action, args, target) {
             Status::OK
         } else {

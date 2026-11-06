@@ -114,10 +114,10 @@ pub(crate) extern "system" fn run_action_at(
     target: *const crate::abi::ActionTarget,
 ) -> Status {
     // SAFETY: the safe layer passes null or a live `ActionTarget` for the call.
-    let named = unsafe { read_headed(target, size_of::<crate::abi::ActionTarget>()) };
-    if named.is_some_and(|t| !t.is_valid()) {
-        return Status::BAD_ARGS;
-    }
+    let named = match unsafe { crate::abi::ActionTarget::read(target) } {
+        Ok(named) => named,
+        Err(status) => return status,
+    };
     let named = named
         .as_ref()
         .and_then(crate::actions::ActionTarget::from_raw);
