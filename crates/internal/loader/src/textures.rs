@@ -306,7 +306,10 @@ pub(crate) fn link(loader: &'static Loader) {
             }
         }
     }
-    if !keys_linked && !crate::content::new_keys_of_type(TEMPLATE).is_empty() {
+    if !keys_linked
+        && !(crate::content::new_keys_of_type(TEMPLATE).is_empty()
+            && crate::content::orphan_templates().is_empty())
+    {
         link_templates(loader);
     }
 }
@@ -623,7 +626,12 @@ unsafe fn append(out: *mut KeysOut, type_hash: u32) {
         return;
     }
     let extra = crate::content::new_keys_of_type(type_hash);
-    if extra.is_empty() {
+    let orphans = if images {
+        Vec::new()
+    } else {
+        crate::content::orphan_templates()
+    };
+    if extra.is_empty() && orphans.is_empty() {
         return;
     }
     let mut keys: Vec<[u8; KEY]> = Vec::with_capacity(count + extra.len());
@@ -636,6 +644,7 @@ unsafe fn append(out: *mut KeysOut, type_hash: u32) {
         }));
     }
     with_served(&mut keys, &extra);
+    with_aliases(&mut keys, &orphans);
     let keys: &'static [[u8; KEY]] = Box::leak(keys.into_boxed_slice());
     let _first = combined.set((original, keys));
     // SAFETY: the caller guarantees `out` is live and writable, and nothing
@@ -645,8 +654,9 @@ unsafe fn append(out: *mut KeysOut, type_hash: u32) {
     if !images {
         crate::log!(
             INFO,
-            "mod templates: {} listed for the game's template registry",
-            extra.len()
+            "mod templates: {} listed for the game's template registry, {} of removed mods as vanilla ones",
+            extra.len(),
+            orphans.len()
         );
     }
 }
@@ -659,6 +669,25 @@ fn with_served(keys: &mut Vec<[u8; KEY]>, served: &[enshwick::abi::ResourceKey])
         entry[..16].copy_from_slice(&key.guid);
         entry[16..20].copy_from_slice(&key.type_hash.to_le_bytes());
         entry[20..24].copy_from_slice(&key.part.to_le_bytes());
+        if !keys.contains(&entry) {
+            keys.push(entry);
+        }
+    }
+}
+
+/// `keys`, the game's listing, with each clone of `aliases` listed as its
+/// vanilla template's entry with the clone's GUID, once each; a clone whose
+/// vanilla template the game does not list stays out.
+fn with_aliases(keys: &mut Vec<[u8; KEY]>, aliases: &[([u8; 16], [u8; 16])]) {
+    for (clone, vanilla) in aliases {
+        let Some(mut entry) = keys
+            .iter()
+            .find(|key| key[..16] == vanilla[..] && key[16..20] == TEMPLATE.to_le_bytes())
+            .copied()
+        else {
+            continue;
+        };
+        entry[..16].copy_from_slice(clone);
         if !keys.contains(&entry) {
             keys.push(entry);
         }
@@ -755,6 +784,30 @@ mod tests {
         assert!(!lists(UI_IMAGE, false), "an image the request cannot load");
         assert!(lists(UI_IMAGE, true));
         assert!(!lists(0x1234, true));
+    }
+
+    #[test]
+    fn a_removed_mod_s_clone_is_listed_as_its_vanilla_template_s_entry() {
+        let mut vanilla = [0u8; KEY];
+        vanilla[..16].copy_from_slice(&[4; 16]);
+        vanilla[16..20].copy_from_slice(&TEMPLATE.to_le_bytes());
+        vanilla[20..24].copy_from_slice(&3u32.to_le_bytes());
+        let mut listed = vec![vanilla];
+        with_aliases(
+            &mut listed,
+            &[([8; 16], [4; 16]), ([8; 16], [4; 16]), ([9; 16], [5; 16])],
+        );
+        assert_eq!(
+            listed.len(),
+            2,
+            "once, and never for an unlisted vanilla template"
+        );
+        assert_eq!(listed[1][..16], [8; 16]);
+        assert_eq!(
+            listed[1][16..],
+            vanilla[16..],
+            "the vanilla entry's type and part"
+        );
     }
 
     #[test]

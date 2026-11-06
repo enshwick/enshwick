@@ -482,6 +482,23 @@ pub(crate) fn new_keys_of_type(type_hash: u32) -> Vec<ResourceKey> {
     })
 }
 
+/// Cloned templates no mod that is on serves now, each with the vanilla
+/// template read in its place: the game registers them from its listing, so
+/// a world's placed clones of a removed mod load as the vanilla one.
+pub(crate) fn orphan_templates() -> Vec<([u8; 16], [u8; 16])> {
+    let served: Vec<[u8; 16]> = new_keys_of_type(crate::catalogue::types::TEMPLATE)
+        .iter()
+        .map(|key| key.guid)
+        .collect();
+    ALIASES.get().map_or_else(Vec::new, |aliases| {
+        aliases
+            .iter()
+            .filter(|(clone, _)| !served.contains(clone))
+            .map(|(clone, vanilla)| (*clone, *vanilla))
+            .collect()
+    })
+}
+
 /// Every served resource several mods patch: its key in words and the
 /// patching mods, in the order their patches run.
 pub(crate) fn shared() -> Vec<(String, Vec<ModIndex>)> {

@@ -77,7 +77,9 @@ Each entry names the pull request that made the change.
   component (by its generated type with `typed`), in memory and in load
   order. The loader lists the templates mods serve to the game's template
   registry on the server and the client, so a copy spawns and places like
-  the game's own. Workshops and item meters are templates made this way.
+  the game's own, and lists a removed mod's copies as the vanilla template
+  they were made from, so a world's placed copies still load. Workshops and
+  item meters are templates made this way.
   Luau reaches both through `enshwick.content` (#952).
 - `content::props`: `Load::add_prop` adds a prop type, an item that places a
   copy of a vanilla prop's template, with a copy of its recipe for the build

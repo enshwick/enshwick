@@ -52,3 +52,9 @@ fn a_phenomenon_outside_its_layer_s_range_is_freed() {
     assert_eq!(remapped(&saved, &served, (0, 2), 2), None);
     assert_eq!(remapped(&saved, &served, (1, 2), 2), Some(2));
 }
+
+#[test]
+fn a_layer_whose_range_reaches_the_last_index_keeps_its_front_there() {
+    let all: Vec<[u8; 16]> = (0..=255u8).map(|i| [i; 16]).collect();
+    assert_eq!(remapped(&all, &all, (250, 6), 255), Some(255));
+}

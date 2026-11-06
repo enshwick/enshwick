@@ -520,9 +520,8 @@ fn remapped(
     let guid = saved.get(usize::from(index))?;
     let now = served.iter().position(|served| served == guid)?;
     let now = u8::try_from(now).ok()?;
-    (first..first.saturating_add(count))
-        .contains(&now)
-        .then_some(now)
+    let (start, end) = (u16::from(first), u16::from(first) + u16::from(count));
+    (start..end).contains(&u16::from(now)).then_some(now)
 }
 
 /// The GUIDs of the locked weather resource's phenomena, in index order;
