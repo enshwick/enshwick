@@ -155,6 +155,16 @@ Each entry names the pull request that made the change.
 - A text the loader draws on the game's screens or a map marker label, such
   as an off reason with a Windows path, shows each backslash and the letter
   after it (#950).
+- A dialog shows its title and message, and a notice its text, where the
+  game turns a text tag into text: the loader answers its own tags in the
+  game's text format too, not only in its text lookup (#950).
+- A data pack, Luau scripts included, draws its windows, HUD and screen
+  panels: their callbacks draw under the pack's own handle, which the
+  loader takes, not the loader's (#950).
+- A dropdown shows its options under its row and takes a pick; the game's
+  own list opened under the loader's windows (#950).
+- The host of a game opens no socket to its own player, which it reaches
+  in process (#950).
 - An action's handler, `allow`, `at` or `per_player` may add an action with
   `Actions::add`; before, the call deadlocked the thread (#947).
 - A use reward (`Action::Consume`, a pack's `consume` reward) follows only
