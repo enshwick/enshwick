@@ -3145,7 +3145,7 @@ declare enshwick: {
 		--- Runs `filter` on each player's craft request in the server's world, before the crafting system reads it; returning `false` refuses it, and nothing is made or taken. It runs on the game thread, where `World` reads work, in the dedicated server or a hosting client.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_craft: (filter: (arg1: CraftRecipeEvent) -> boolean?) -> (),
-		--- Runs `filter` after the game's cursor check allows a placement, as `Load.on_build` does: a refusal refuses it as the game refuses a placement without building permission, and `BuildVerdict.RefuseBecause` tells the builder why. It runs on both sides, on the cursor systems' worker threads, on every frame a player aims to build: the server's answer decides, so `filter` gives the same answer on both sides and stays quick.
+		--- Runs `filter` after the game's cursor check allows a placement, as `Load.on_build` does. The filter returns nil or `true` to allow, `false` to refuse as the game refuses a placement without building permission, or a string to refuse and tell the builder why: a key of the mod's texts or plain words; any other value refuses. It runs on both sides, on every frame a player aims to build: the server's answer decides, so `filter` gives the same answer on both sides and stays quick.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_build: (filter: (arg1: Placement) -> any) -> (),
 	},
@@ -3340,7 +3340,7 @@ declare enshwick: {
 		waypoint: (player: number) -> vector?,
 		--- What the map shows now as a `MapSnapshot`: every player with position and waypoint, the Flame Altars of `altars` with their bases, every marker and the map's frame. Without `altars` the snapshot has none; without a frame its `frame` is nil; on a game build without waypoints no player has one. The loader reads every marker, so take one now and then, not every step.
 		snapshot: (altars: Altars?) -> MapSnapshot,
-		--- Calls `handler` on the server's game thread when a player sets, moves or clears the waypoint all players see. The waypoints are compared on a tick every tenth of a second, so a change shows within that; a player's waypoint when they join counts as no change. A waypoint outside the map is not handed on, and the log says so once.
+		--- Calls `handler` on the server's game thread when a player sets, moves or clears the waypoint all players see. The waypoints are compared on a tick every tenth of a second, so a change shows within that; a player's waypoint when they join counts as no change. A waypoint outside the map is not handed on, and the log says so once. On a client it hears only a game that client hosts.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_waypoint: (handler: (arg1: WaypointChanged) -> ()) -> (),
 		--- Calls `handler` on the server's game thread for each ping a player makes on the map or in the world, and each one a mod raises with `Effects.ping`. A sender is heard at most once a tenth of a second, and a ping outside the map is not handed on.

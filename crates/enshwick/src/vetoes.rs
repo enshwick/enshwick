@@ -85,7 +85,8 @@ where
 /// What a build filter answers for a placement, from [`Load::on_build`].
 ///
 /// From Luau a filter answers `false` to refuse, a string to refuse with
-/// that reason, and nil or `true` to allow. The name is enshwick's.
+/// that reason, and nil or `true` to allow; any other value refuses, and a
+/// script error allows. The name is enshwick's.
 ///
 /// # Examples
 ///
@@ -127,9 +128,10 @@ impl Answer for BuildVerdict {
 
     fn from_answer(answer: Result<Value, Error>) -> Self {
         match answer {
-            Ok(Value::Bool(false)) => Self::Refuse,
+            Ok(Value::Nil | Value::Bool(true)) | Err(_) => Self::Allow,
             Ok(Value::String(reason)) => Self::RefuseBecause(reason.into()),
-            _ => Self::Allow,
+            // A mistyped answer refuses, so the author sees it at once.
+            Ok(_) => Self::Refuse,
         }
     }
 }
@@ -165,7 +167,10 @@ where
         BuildVerdict::Refuse => return 0,
         BuildVerdict::RefuseBecause(reason) => reason,
     };
-    if call.reason.is_null() {
+    let covered = call
+        .header
+        .covers(core::mem::offset_of!(BuildCheck, reason) + size_of::<*mut Str>());
+    if !covered || call.reason.is_null() {
         return 0;
     }
     REASON.with_borrow_mut(|kept| {
@@ -236,12 +241,13 @@ impl Load<'_> {
     }
 
     /// Runs `filter` after the game's cursor check allows a placement, as
-    /// [`Load::on_build`] does: a refusal refuses it as the game refuses a
-    /// placement without building permission, and
-    /// [`BuildVerdict::RefuseBecause`] tells the builder why. It runs on
-    /// both sides, on the cursor systems' worker threads, on every frame a
-    /// player aims to build: the server's answer decides, so `filter` gives
-    /// the same answer on both sides and stays quick.
+    /// [`Load::on_build`] does. The filter returns nil or `true` to allow,
+    /// `false` to refuse as the game refuses a placement without building
+    /// permission, or a string to refuse and tell the builder why: a key of
+    /// the mod's texts or plain words; any other value refuses. It runs on
+    /// both sides, on every frame a player aims to build: the server's
+    /// answer decides, so `filter` gives the same answer on both sides and
+    /// stays quick.
     ///
     /// # Errors
     ///
@@ -257,5 +263,24 @@ impl Load<'_> {
             |user| (host.api().build_filter)(host.handle(), run_build::<F>, user),
             "build filter",
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_script_s_mistyped_answer_refuses_and_its_error_allows() {
+        let answer = BuildVerdict::from_answer;
+        assert_eq!(answer(Ok(Value::Nil)), BuildVerdict::Allow);
+        assert_eq!(answer(Ok(Value::Bool(true))), BuildVerdict::Allow);
+        assert_eq!(answer(Ok(Value::Bool(false))), BuildVerdict::Refuse);
+        assert_eq!(
+            answer(Ok(Value::String("build.below_sea".to_owned()))),
+            BuildVerdict::refuse_because("build.below_sea")
+        );
+        assert_eq!(answer(Ok(Value::Number(1.0))), BuildVerdict::Refuse);
+        assert_eq!(answer(Err(Error::new("boom"))), BuildVerdict::Allow);
     }
 }

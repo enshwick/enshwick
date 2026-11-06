@@ -78,7 +78,7 @@ end)
 ```
 
 From Luau the filter returns `true` or nil to allow, `false` to refuse, and a
-string to refuse with that reason.
+string to refuse with that reason; any other value refuses too.
 
 The server runs the cursor check on the cursor each player's client sends,
 and the client runs it for its own prediction, so the filter runs on both

@@ -144,6 +144,10 @@ Each entry names the pull request that made the change.
   `content::workshops::clone_template` and `list_template` are gone,
   `TEMPLATE_COLLECTION` moved to `content::templates`, and `WorkshopLayout`
   lost its `crafting`, `interaction` and `client` fields (#952).
+- **Breaking:** the fake loader's `Installed::build` returns
+  `Result<(), Option<String>>`, the refusing filter's reason if any, in
+  place of a `bool`; a Luau build filter's answer is typed `any`, and a value
+  other than nil, a boolean or a string refuses (#957).
 - The ABI is 11.10: mods built for 11.9 and older load as before (#957).
 - With developer tools on, the loader logs once when the map's marker list
   has no room for a mod's markers, with how many it left out, where it dropped them silently
