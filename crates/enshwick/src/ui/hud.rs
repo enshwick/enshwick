@@ -115,12 +115,7 @@ impl Hud<'_> {
     }
 }
 
-/// A HUD callback as the loader keeps it, with the host of the mod that
-/// registered it, as [`Drawer`](super::frame::Drawer) keeps it.
-struct Drawer<F> {
-    host: Host,
-    draw: Mutex<F>,
-}
+use super::frame::Drawer;
 
 unsafe extern "system" fn draw_hud<F>(frame: *const UiFrame, user: *mut c_void)
 where
