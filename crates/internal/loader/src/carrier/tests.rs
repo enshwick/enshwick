@@ -215,6 +215,20 @@ fn a_socket_the_session_did_not_make_is_tried_again_later() {
 }
 
 #[test]
+fn the_host_s_own_player_gets_no_socket_where_its_machine_is_not_the_host_s() {
+    let _alone = alone();
+    host_for_test(7);
+    let state = members_twice(1200);
+    unhost_for_test();
+    assert_eq!(
+        CREATES.load(Ordering::Relaxed),
+        0,
+        "the host's own player is reached in process"
+    );
+    assert!(state.peers.is_empty() && state.tried.is_empty());
+}
+
+#[test]
 fn a_session_turned_off_is_on_again_after_the_game_ends() {
     let _alone = alone();
     *CARRIER.server.relock() = Some(members_twice(0));

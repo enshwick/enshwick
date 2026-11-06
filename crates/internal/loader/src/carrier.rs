@@ -554,12 +554,13 @@ fn members(game: &Game, session: usize, state: &mut State, machines: &[(u64, u32
     if state.off {
         return;
     }
+    let host_key = CARRIER.host_key.load(Ordering::Acquire);
     for &(key, machine) in machines {
         let due = state
             .tried
             .get(&key)
             .is_none_or(|&at| now.saturating_duration_since(at) >= OPEN_AGAIN);
-        if machine == 0 || machine == host || state.peers.contains_key(&key) || !due {
+        if !wired(key, machine, host, host_key) || state.peers.contains_key(&key) || !due {
             continue;
         }
         match game.open_peer(session, game.machine_kind(), machine, next_epoch(), now) {
@@ -577,6 +578,15 @@ fn members(game: &Game, session: usize, state: &mut State, machines: &[(u64, u32
             }
         }
     }
+}
+
+/// Whether the player `key` on `machine` gets a socket: not a machine of
+/// none, nor the host's own player, whom the hosting client reaches in
+/// process, known by its machine or, where the session names another host
+/// machine (client 26430625), by its key. A socket to it never speaks, and
+/// when it is given up the host's own hello would go with it.
+fn wired(key: u64, machine: u32, host_machine: u32, host_key: u64) -> bool {
+    machine != 0 && machine != host_machine && (host_key == 0 || key != host_key)
 }
 /// Pumps a client's socket, where it sends its chat: opens it once the
 /// server advertises Enshwick, takes what came and sends what is due, then
