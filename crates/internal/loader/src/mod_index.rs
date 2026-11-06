@@ -46,9 +46,10 @@ impl ModIndex {
         ModHandle(self.0.wrapping_add(1))
     }
 
-    /// Whose build rows answer a lookup through `handle`: the mod's, or the
-    /// loader's for the handle of no mod, which the loader's own copy of the
-    /// API uses while it runs data packs.
+    /// Whose build rows answer a lookup through `handle` among `mods`
+    /// loaded mods: the mod's, or the loader's for the handle of no mod,
+    /// which the loader's own copy of the API uses while it runs data packs;
+    /// `None` for a handle past the mods.
     ///
     /// # Examples
     ///
@@ -56,14 +57,16 @@ impl ModIndex {
     /// use enshwick::abi::ModHandle;
     /// use enshwick_loader::mod_index::ModIndex;
     ///
-    /// assert!(ModIndex::looking_up(ModHandle(0)).is_loader());
-    /// assert_eq!(ModIndex::looking_up(ModHandle(3)), ModIndex::new(2));
+    /// assert_eq!(ModIndex::looking_up(ModHandle(0), 3), Some(ModIndex::LOADER));
+    /// assert_eq!(ModIndex::looking_up(ModHandle(3), 3), Some(ModIndex::new(2)));
+    /// assert_eq!(ModIndex::looking_up(ModHandle(4), 3), None);
     /// ```
     #[must_use]
-    pub const fn looking_up(handle: ModHandle) -> Self {
+    pub const fn looking_up(handle: ModHandle, mods: usize) -> Option<Self> {
         match Self::from_handle(handle) {
-            Some(index) => index,
-            None => Self::LOADER,
+            Some(index) if index.0 < mods => Some(index),
+            Some(_) => None,
+            None => Some(Self::LOADER),
         }
     }
 
@@ -100,7 +103,14 @@ mod tests {
 
     #[test]
     fn a_lookup_through_no_mod_s_handle_is_the_loader_s_own() {
-        assert_eq!(ModIndex::looking_up(ModHandle(0)), ModIndex::LOADER);
-        assert_eq!(ModIndex::looking_up(ModHandle(1)), ModIndex::new(0));
+        assert_eq!(
+            ModIndex::looking_up(ModHandle(0), 0),
+            Some(ModIndex::LOADER)
+        );
+        assert_eq!(
+            ModIndex::looking_up(ModHandle(1), 1),
+            Some(ModIndex::new(0))
+        );
+        assert_eq!(ModIndex::looking_up(ModHandle(2), 1), None, "no such mod");
     }
 }

@@ -475,8 +475,7 @@ impl Loader {
     /// own copy of the API, which reads vanilla content for data packs, the
     /// loader's.
     fn rows_of(&self, me: ModHandle) -> Option<ModIndex> {
-        let index = ModIndex::looking_up(me);
-        (index.is_loader() || index.get() < self.mods.len()).then_some(index)
+        ModIndex::looking_up(me, self.mods.len())
     }
 
     /// Turns a mod off: unlinks its hooks and logs why.
