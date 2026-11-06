@@ -340,7 +340,7 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
         position: unsafe { read_at(transform.cast(), 0) },
         reason: &raw mut reason,
     };
-    let refused_by = filters.iter().filter(|f| f.live()).find(|f| {
+    let refuses = |f: &&Registered<BuildCheckFn>| {
         // SAFETY: `callback` is a `BuildCheckFn` the mod registered, in its
         // DLL, which stays loaded (`Registered`); `user` is the pointer it
         // registered with it, and `call` and the `reason` it points at live
@@ -348,7 +348,11 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
         crate::profile::call(f.owner, crate::profile::Feature::Vetoes, || unsafe {
             (f.callback)(&raw const call, f.user()) == 0
         })
-    });
+    };
+    // SAFETY: `call.reason` points at `reason`, live on this stack for the
+    // whole chain.
+    let refused_by =
+        unsafe { first_refusal(filters.iter().filter(|f| f.live()), call.reason, refuses) };
     if let Some(filter) = refused_by {
         // SAFETY: only the refusing filter wrote `reason`, a text it keeps
         // until its next call on this thread, which comes after this read.
@@ -366,6 +370,25 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
         // call (the caller's contract) and the building systems read after it.
         unsafe { write_at(flags.cast(), 0, current | layout.no_permission) };
     }
+}
+
+/// The first of `filters` that `refuses`, with `reason` emptied before each
+/// asks, so a reason an allowing filter wrote never counts as the refusing
+/// one's.
+///
+/// # Safety
+///
+/// - `reason` is valid for writes of one `Str` throughout the call.
+unsafe fn first_refusal<T>(
+    filters: impl IntoIterator<Item = T>,
+    reason: *mut Str,
+    mut refuses: impl FnMut(&T) -> bool,
+) -> Option<T> {
+    filters.into_iter().find(|f| {
+        // SAFETY: the caller keeps `reason` writable for the call.
+        unsafe { reason.write(Str::EMPTY) };
+        refuses(f)
+    })
 }
 
 #[cfg(test)]
@@ -403,5 +426,23 @@ mod tests {
         }
         assert_eq!(refused, request(0, 7, 0));
         assert_eq!(allowed, request(5, 8, 3));
+    }
+
+    #[test]
+    fn a_reason_an_allowing_filter_wrote_never_counts_for_the_refusing_one() {
+        let mut reason = Str::EMPTY;
+        let slot = &raw mut reason;
+        let refuses = |f: &i32| {
+            if *f == 1 {
+                // SAFETY: `slot` points at `reason`, which outlives the call.
+                unsafe { slot.write(Str::new("chatty but allowing")) };
+            }
+            *f == 2
+        };
+        // SAFETY: `slot` points at `reason` on this stack for the call.
+        let refused_by = unsafe { first_refusal([1, 2], slot, refuses) };
+        assert_eq!(refused_by, Some(2));
+        // SAFETY: `reason` holds `Str::EMPTY`, a static text.
+        assert_eq!(unsafe { reason.as_str() }.unwrap_or_default(), "");
     }
 }
