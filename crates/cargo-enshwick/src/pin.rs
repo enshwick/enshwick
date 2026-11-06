@@ -255,10 +255,17 @@ fn port_tables(
             sources.push((path, src, row, source));
         }
     }
-    if sources.is_empty()
-        && args.repo.join(ANCHORS).is_file()
-        && let Some(side) = args.old.as_deref().and_then(side_of_exe)
-    {
+    if let (true, true, Some(old_path)) = (
+        sources.is_empty(),
+        args.repo.join(ANCHORS).is_file(),
+        args.old.as_deref(),
+    ) {
+        let side = side_of_exe(old_path).with_context(|| {
+            format!(
+                "{} has no table and its side shows only in its name: keep it as enshrouded_server.exe or enshrouded.exe",
+                old_path.display()
+            )
+        })?;
         let src = found_table(&args.repo, side, old)?;
         let row = table::parse(&src).context("the table found on the old build")?;
         let path = args.repo.join(table::DIR).join(table_file(side, old_fp));
