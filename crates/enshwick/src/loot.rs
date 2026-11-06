@@ -457,7 +457,9 @@ impl LootPass<'_> {
 
 type PassHandler = Box<dyn Fn(&LootPass<'_>) + Send + Sync>;
 
-static PASS: crate::fresh::Fresh<(Containers, crate::ecs::Worlds, PassHandler)> =
+/// The handler with the host of the mod that registered it, which it runs as:
+/// in the loader's copy of the API that is a data pack, not the copy's host.
+static PASS: crate::fresh::Fresh<(Containers, crate::ecs::Worlds, crate::Host, PassHandler)> =
     crate::fresh::Fresh::new();
 
 crate::detour! {
@@ -469,17 +471,19 @@ fn after_check(next: crate::Next<'_, unsafe extern "system" fn(*mut u64)>, ctx: 
     // thread, passed on unchanged, so the rest of the chain gets what the
     // game's own call gave it.
     unsafe { next.call(ctx) };
-    if let Some((containers, worlds, handler)) = PASS.get()
+    if let Some((containers, worlds, host, handler)) = PASS.get()
         // SAFETY: `ctx` is the live context the game passed to `SYSTEM`, on
         // its thread, during the hook.
         && unsafe { worlds.is_server(ctx) }
     {
-        // Guarded here: the detour's own guard would run the system again.
-        crate::host::guard(
-            "panic in a loot pass handler",
-            || (),
-            || handler(&LootPass { containers, ctx }),
-        );
+        host.scope(|| {
+            // Guarded here: the detour's own guard would run the system again.
+            crate::host::guard(
+                "panic in a loot pass handler",
+                || (),
+                || handler(&LootPass { containers, ctx }),
+            );
+        });
     }
 }
 
@@ -565,7 +569,10 @@ impl Load<'_> {
         let containers = Containers::resolve(self)?;
         let worlds = crate::ecs::Worlds::resolve(self)?;
         let system = self.system(SYSTEM)?;
-        if PASS.set((containers, worlds, Box::new(handler))).is_err() {
+        if PASS
+            .set((containers, worlds, self.host(), Box::new(handler)))
+            .is_err()
+        {
             return Err(Off::new("one loot pass handler per mod"));
         }
         // SAFETY: `system` is the reflected update function of `SYSTEM`,

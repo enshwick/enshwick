@@ -183,7 +183,14 @@ Each entry names the pull request that made the change.
   before the entity of a given item read as gone (#952).
 - The workshop of `Load::add_workshop` places and spawns like the game's
   own: its template is registered with the game (#952).
-
+- A data pack's code runs as the pack: its init, resource builders and
+  callbacks log in its own log, read its own settings and turn the pack off
+  when they panic or fail, where before they went out as the loader, a
+  builder's warnings were lost and a panicking pack stayed on (#958).
+- The book says what a pack's chest slots do: they reach every chest of that
+  kind each time a world loads, chests placed before the pack too, and
+  removing the pack loses no item, since the game gives a chest saved with
+  more slots than its kind now has 128 slots (#958).
 - A client joins a dedicated server again in the same game process: the
   loader closes its own socket of the last game before it opens one for
   the next, where before every join after the first was kicked for a

@@ -675,7 +675,8 @@ pub unsafe fn init<M: Mod>(
 }
 
 /// Runs `init` with a [`Load`] for the data pack `me`, as the loader
-/// does for a pack folder; the process's host stays as it is.
+/// does for a pack folder; [`host`](crate::host()) answers the pack for the
+/// call, and the process's host stays as it is.
 ///
 /// # Safety
 ///
@@ -694,8 +695,9 @@ pub unsafe fn init_pack(
     let Some(host) = (unsafe { Host::new(api, me) }) else {
         return Status::BAD_ARGS;
     };
-    let outcome =
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| init(&mut Load::new(host))));
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        host.scope(|| init(&mut Load::new(host)))
+    }));
     match outcome {
         Ok(Ok(())) => Status::OK,
         Ok(Err(off)) => {
@@ -725,6 +727,26 @@ pub unsafe fn install_host(api: *const HostApi, me: ModHandle) {
     // bullets guarantee both.
     if let Some(host) = unsafe { Host::new(api, me) } {
         MAX_LEVEL.store(host.install().log_level().0, Ordering::Relaxed);
+    }
+}
+
+/// Runs `call`, the loader's call into code of the data pack `me`, with
+/// [`host`](crate::host()) answering the pack on this thread, so the pack's
+/// logs, settings reads and faults go out under its own handle.
+///
+/// # Safety
+///
+/// - `api` is null, or points at an aligned [`HostApi`] readable for the size its
+///   header states.
+/// - That table stays valid and unchanged for the rest of the process,
+///   as the loader's process-wide table does.
+pub unsafe fn as_pack<R>(api: *const HostApi, me: ModHandle, call: impl FnOnce() -> R) -> R {
+    // SAFETY: `Host::new` needs `api` null or a table readable for its
+    // header's size that outlives the process; this function's `# Safety`
+    // bullets guarantee both.
+    match unsafe { Host::new(api, me) } {
+        Some(host) => host.scope(call),
+        None => call(),
     }
 }
 

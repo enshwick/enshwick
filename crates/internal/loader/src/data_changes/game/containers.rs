@@ -1,5 +1,12 @@
 //! The loader's patches of the templates that items with changed container
 //! slots place: the slots each gets, never fewer than it has.
+//!
+//! A placed chest takes its slots from its template at each world load, so
+//! a patch reaches the chests a save already holds; one saved with more
+//! slots than its template gives comes back with 128, its items in place,
+//! so a pack's removal loses nothing (server 26430253, a server copy with
+//! its small box template served below the saved size and with a slots
+//! pack removed).
 
 use core::ffi::c_void;
 

@@ -108,6 +108,8 @@ pub(crate) struct State {
     pub(crate) host: FakeHost,
     pub(crate) logs: Vec<(Level, String)>,
     pub(crate) faults: Vec<String>,
+    /// The handle each log line and fault came under, in order.
+    pub(crate) sent: Vec<(ModHandle, Level, String)>,
     pub(crate) hooks: Vec<LinkedHook>,
     /// The slots of the linked hooks: one slot joins one chain.
     pub(crate) hook_slots: Vec<usize>,
@@ -590,6 +592,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         host,
         logs: Vec::new(),
         faults: Vec::new(),
+        sent: Vec::new(),
         hooks: Vec::new(),
         hook_slots: Vec::new(),
         manifest: None,

@@ -100,6 +100,81 @@ mod tests {
         let _gone = std::fs::remove_dir_all(&data);
     }
 
+    fn handle() -> Option<ModHandle> {
+        enshwick::host().map(|host| host.handle())
+    }
+
+    #[test]
+    fn a_pack_s_init_and_later_calls_see_the_pack_as_their_host() {
+        let loader = FakeHost::new().install();
+        // SAFETY: the fake host's table lives for the process; the loader
+        // makes its own handle the host of the copy that runs the packs.
+        unsafe { enshwick::__private::install_host(loader.api(), ModHandle(9)) };
+        // SAFETY: the fake host's table lives for the process.
+        let status = unsafe {
+            enshwick::__private::init_pack(loader.api(), ModHandle(1), |_| {
+                assert_eq!(handle(), Some(ModHandle(1)), "init runs as the pack");
+                Ok(())
+            })
+        };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert_eq!(
+            handle(),
+            Some(ModHandle(9)),
+            "the loader's again after init"
+        );
+        let nested = || {
+            // SAFETY: the fake host's table lives for the process.
+            let nested =
+                unsafe { enshwick::__private::as_pack(loader.api(), ModHandle(3), handle) };
+            (handle(), nested)
+        };
+        // SAFETY: the fake host's table lives for the process.
+        let inner = unsafe { enshwick::__private::as_pack(loader.api(), ModHandle(2), nested) };
+        assert_eq!(inner, (Some(ModHandle(2)), Some(ModHandle(3))));
+        assert_eq!(handle(), Some(ModHandle(9)));
+    }
+
+    #[test]
+    fn a_pack_s_panic_leaves_the_loader_as_the_host() {
+        let loader = FakeHost::new().install();
+        // SAFETY: the fake host's table lives for the process.
+        unsafe { enshwick::__private::install_host(loader.api(), ModHandle(9)) };
+        let panicked = std::panic::catch_unwind(|| {
+            // SAFETY: the fake host's table lives for the process.
+            unsafe {
+                enshwick::__private::as_pack(loader.api(), ModHandle(2), || {
+                    panic!("the pack's builder")
+                })
+            }
+        });
+        assert!(panicked.is_err());
+        assert_eq!(handle(), Some(ModHandle(9)));
+    }
+
+    #[test]
+    fn a_pack_s_log_line_goes_out_under_the_pack_s_handle() {
+        use enshwick::abi::Level;
+
+        let loader = FakeHost::new().install();
+        // SAFETY: the fake host's table lives for the process.
+        unsafe { enshwick::__private::install_host(loader.api(), ModHandle(9)) };
+        // SAFETY: the fake host's table lives for the process.
+        unsafe {
+            enshwick::__private::as_pack(loader.api(), ModHandle(2), || {
+                enshwick::warn!("from the pack");
+            });
+        };
+        enshwick::warn!("from the loader");
+        assert_eq!(
+            loader.sent(),
+            [
+                (ModHandle(2), Level::WARN, "from the pack".to_owned()),
+                (ModHandle(9), Level::WARN, "from the loader".to_owned()),
+            ]
+        );
+    }
+
     #[test]
     fn a_pack_draws_its_window_and_hud_under_its_own_handle() {
         use enshwick::abi::Side;

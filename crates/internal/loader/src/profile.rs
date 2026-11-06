@@ -154,6 +154,9 @@ pub fn start(mods: usize) {
 
 /// Runs mod `owner`'s callback `f` for `feature`, marking it for crash
 /// blame, and timing it when diagnostics are on.
+///
+/// A data pack's callback runs in the loader's own copy of the API, so it
+/// runs with the pack as that copy's host.
 #[inline]
 pub fn call<R>(owner: ModIndex, feature: Feature, f: impl FnOnce() -> R) -> R {
     let marker = u32::try_from(owner.get())
@@ -162,16 +165,44 @@ pub fn call<R>(owner: ModIndex, feature: Feature, f: impl FnOnce() -> R) -> R {
         .and_then(|o| o.checked_mul(256))
         .map_or(0, |o| o | feature as u32);
     let outer = RUNNING.replace(marker);
-    let result = match BUCKETS
+    let result = as_owner(owner, || measured(owner, feature, f));
+    RUNNING.set(outer);
+    result
+}
+
+/// Runs `f` with `owner` as the host of the loader's own copy of the API
+/// when `owner` is a data pack, which that copy runs.
+#[cfg(windows)]
+#[inline]
+fn as_owner<R>(owner: ModIndex, f: impl FnOnce() -> R) -> R {
+    let pack = crate::host::loader()
+        .and_then(|loader| loader.mods.get(owner.get()))
+        .is_some_and(|record| record.pack);
+    if !pack {
+        return f();
+    }
+    // SAFETY: `API` is the loader's process-wide table, a static.
+    unsafe { enshwick::__private::as_pack(&raw const crate::host::API, owner.handle(), f) }
+}
+
+/// Runs `f`: no mod runs off Windows.
+#[cfg(not(windows))]
+#[inline]
+fn as_owner<R>(_owner: ModIndex, f: impl FnOnce() -> R) -> R {
+    f()
+}
+
+/// Runs `f`, timed in `owner`'s bucket for `feature` while timing is on.
+#[inline]
+fn measured<R>(owner: ModIndex, feature: Feature, f: impl FnOnce() -> R) -> R {
+    match BUCKETS
         .get()
         .zip(owner.get().checked_mul(FEATURES))
         .and_then(|(b, at)| b.get(at.checked_add(feature as usize)?))
     {
         None => f(),
         Some(bucket) => timed(bucket, f),
-    };
-    RUNNING.set(outer);
-    result
+    }
 }
 
 /// The mod callback this thread runs, if any: the mod's index and the
