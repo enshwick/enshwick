@@ -355,12 +355,14 @@ mod tests {
         };
         assert_eq!(shown, b"Luau check");
 
-        // SAFETY: as before.
+        // SAFETY: `out` is a writable local record of three `u64`, and the
+        // slot holds `passed`, which writes only that record.
         unsafe { format(&raw mut out, 8) };
         assert_eq!(out, [0, 0, 8], "a game tag goes to the game");
 
         let dialog = crate::ui::tag_ids().next().unwrap();
-        // SAFETY: as before.
+        // SAFETY: `out` is a writable local record of three `u64`, and the
+        // slot holds `passed`, which writes only that record.
         unsafe { format(&raw mut out, dialog) };
         assert_eq!(
             out,
