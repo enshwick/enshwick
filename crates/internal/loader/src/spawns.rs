@@ -7,11 +7,15 @@
 //! request hands out the new entity's id at once; the entity is in the
 //! world from the next step on.
 
-use std::sync::OnceLock;
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 
+use enshwick::Entity;
 use enshwick::abi::{SpawnRequest, Status};
+use rustc_hash::FxBuildHasher;
 
 use crate::host::Loader;
+use crate::locks::Relock;
 use crate::pinned;
 use crate::pinned::Symbol;
 use crate::spawn_request::{RequestLayout, Start};
@@ -276,5 +280,46 @@ pub(crate) fn spawn_with(
         return Err(Status::REFUSED);
     }
     crate::log!(DEBUG, "spawn of entity {entity} asked");
+    SPAWNED.relock().note(loader, entity, request.template);
     Ok(entity)
+}
+
+/// The most spawns kept before the ones no longer in the world go.
+const MOST_SPAWNED: usize = 1 << 16;
+
+/// The entities mods spawned or placed in the running world, each with its
+/// template: the entities a mod may keep out of the save, which a vanilla
+/// entity given the id of a gone one does not pass for.
+#[derive(Debug)]
+struct Spawned {
+    templates: HashMap<u32, [u8; 16], FxBuildHasher>,
+}
+
+static SPAWNED: Mutex<Spawned> = Mutex::new(Spawned {
+    templates: HashMap::with_hasher(FxBuildHasher),
+});
+
+impl Spawned {
+    /// Keeps `entity` of `template`; at [`MOST_SPAWNED`] first drops the
+    /// entities whose template the world no longer gives them, on the
+    /// game thread: those destroyed, and those asked for in this step,
+    /// which are not in the world yet.
+    fn note(&mut self, loader: &Loader, entity: u32, template: [u8; 16]) {
+        if self.templates.len() >= MOST_SPAWNED {
+            self.templates
+                .retain(|&kept, &mut was| crate::world::template(loader, Entity(kept)) == Ok(was));
+        }
+        self.templates.insert(entity, template);
+    }
+}
+
+/// The template a mod spawned or placed `entity` from in the running world,
+/// or `None` for an entity no mod spawned.
+pub(crate) fn spawned(entity: Entity) -> Option<[u8; 16]> {
+    SPAWNED.relock().templates.get(&entity.0).copied()
+}
+
+/// Forgets the entities mods spawned, when a hosted game ends.
+pub(crate) fn forget() {
+    SPAWNED.relock().templates.clear();
 }
