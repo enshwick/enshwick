@@ -1,6 +1,6 @@
 <!--
 type: how-to
-description: Mods add skill nodes to the skill tree within the room a player's save keeps, and perks copied from vanilla ones.
+description: Mods add skill nodes to the skill tree within the room a player's save keeps, linked from vanilla nodes, and perks copied from vanilla ones.
 -->
 
 # Skill nodes and perks

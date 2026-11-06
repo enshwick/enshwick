@@ -1,6 +1,6 @@
 <!--
 type: how-to
-description: Mods take vanilla items, workshops and loot tables out of play, and serve a vanilla item with another item's data.
+description: Mods take vanilla items, workshops and loot tables out of play while held stacks survive, and serve a vanilla item with another item's data.
 -->
 
 # Removing and re-keying vanilla content
