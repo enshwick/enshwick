@@ -1,281 +1,233 @@
 <!--
 type: tutorial
-description: Set up the tools, create a first Enshwick mod in Rust, put it into Enshrouded and find its log. The mod uses the API's high-level calls; raw hooks come last.
+description: The smallest Enshwick mod in each form, a data pack, a Luau script and a Rust mod, each a few lines that show a result in the log and in the game.
 -->
 
-# Getting started
+# Hello, world
 
-You set up the tools, create a mod, put it into the game and find its log.
-The first mod uses the API's high-level calls. Raw hooks come last, for what
-the API has no call for.
+You make the smallest mod in each of its three forms: a data pack, a Luau
+script and a Rust mod. Each takes a few lines and shows its result in the
+log and in the game.
 
-## Mods without Rust
+## What you need
 
-For a mod without Rust, start at
-[Luau mods](luau.md) or [A mod without Rust](content/a-mod-without-rust.md).
+Every form needs the Enshwick loader in the game's folder. Take
+`enshwick.zip` of the newest alpha on the
+[releases page](https://github.com/enshwick/enshwick/releases) and extract
+it next to the game's executable.
 
-## Performance
-
-Mods run inside the game's frame, so their handlers cost the game time. A
-tick handler runs every 100 ms by default, since a call costs about 1 µs and
-the number of server steps a second differs between servers, clients and
-load. Ask for every step only for state that changes each step, input or
-the camera. [Ticks](events.md#ticks) has the numbers, the every-step and
-runtime period options, and an adaptive tick.
-
-## The toolchain
-
-A mod is a Windows DLL. You need:
-
-- Rust 1.99 or newer through [rustup](https://rustup.rs), with the target
-  `x86_64-pc-windows-msvc`;
-- on Windows, the MSVC build tools; on Linux or macOS,
-  [cargo-xwin](https://github.com/rust-cross/cargo-xwin)
-  (`cargo install --locked cargo-xwin`), which fetches the Windows SDK;
-- the Enshwick loader in the game's folder: extract `enshwick.zip` of the
-  newest alpha on the
-  [releases page](https://github.com/enshwick/enshwick/releases) next to
-  `enshrouded.exe` or `enshrouded_server.exe`.
+Starting a mod and building one in Rust also need Rust 1.99 or newer, from
+[rustup](https://rustup.rs). Install the Windows target and the
+[`cargo enshwick`](https://github.com/enshwick/enshwick/tree/main/crates/cargo-enshwick)
+tool:
 
 ```bash
 rustup target add x86_64-pc-windows-msvc
 cargo install --git https://github.com/enshwick/enshwick cargo-enshwick
 ```
 
-The second line installs
-[`cargo enshwick`](https://github.com/enshwick/enshwick/tree/main/crates/cargo-enshwick),
-a Cargo subcommand that starts a mod, installs it and reads a built one.
+A Rust mod is a Windows DLL. On Windows it builds with the MSVC build
+tools. On Linux or macOS it builds with
+[cargo-xwin](https://github.com/rust-cross/cargo-xwin), which fetches the
+Windows SDK: `cargo install --locked cargo-xwin`.
 
-## A new mod
+## A data pack
 
-```bash
-cargo enshwick new you.my-mod --side server
-```
+A data pack is a folder of TOML files with no code. This one gives each
+player a torch the first time they join a world.
 
-`new <id>` creates the crate in `<dir>/<name>`; `--dir` sets the folder (the
-current one by default) and `--side` is `server` (the default), `client` or
-`both`. The id is `<author>.<name>`: your name or handle, a dot, and the
-mod's name, each of `[a-z0-9-]`, at most 64 characters in all. The author part
-keeps two mods of one name apart. The name starts with a letter, since it names
-the crate too. The crate holds:
+1. Make a folder `you.hello-pack` with two files. `pack.toml` names the
+   pack:
 
-- `Cargo.toml`: a `cdylib` named after the id's name, `enshwick` pinned with
-  `=` to the release the tool was built with, `serde`, the lints, and a
-  release profile with `panic = "unwind"`, which every hook needs to catch
-  panics;
-- `Cargo.toml` also holds the mod's
-  [manifest](concepts/loader-and-abi.md#the-manifest), its id, side and name,
-  in `[package.metadata.enshwick]`, with `exports` and the dependency tables
-  as comments;
-- `src/lib.rs`: a settings type with one field, `enabled`, a mod type named
-  after the id's name (`my-mod` becomes `MyMod`), `declare_mod!` and two
-  tests: every text exists in every language, and the
-  mod starts on the [fake loader](testing.md);
-- `src/texts.toml`: the mod's name, description and setting labels;
-- `rust-toolchain.toml`, with the Windows target, and `.cargo/config.toml`,
-  which links the C runtime statically, so players need no redistributable;
-- `README.md` and `.gitignore`.
+   ```toml
+   id = "you.hello-pack"
+   version = "0.1.0"
+   ```
 
-`--enshwick-rev <commit>` builds the mod on a commit of this repository's
-`main` branch from git instead of the release, for a loader built from that
-commit.
+   `rewards.toml` holds the gift:
 
-Inside a Cargo workspace the crate joins it: `new` adds its folder to the
-workspace's `members`, unless a pattern there already covers it. The release
-profile, the toolchain file and `.cargo/config.toml` stay out, since Cargo
-reads them only at the workspace root; put `panic = "unwind"` and the static C
-runtime there. Lints and dependencies come from the workspace where it
-declares them. A folder the workspace excludes gets a workspace of its own.
+   ```toml
+   [[reward]]
+   id = "hello"
+   on = { join = true }
+   give = [{ item = "Tool_Torch01", count = 1 }]
+   limit = "once"
+   ```
 
-It builds and loads as it is: as a world loads, the loader writes its
-settings file beside the world's save, in
-`<stem>-mod-settings/you.my-mod/settings.toml`.
+2. Copy the folder into the game's `mods/` folder, on the server and in
+   every player's game.
+3. Start the game and load a world. The pack's log,
+   `logs/you.hello-pack_<date>_<time>.log` in the game's folder, says what
+   the loader read:
 
-## Install it into the game
+   ```text
+   info  [you.hello-pack] data pack: 0 ids, 0 loot drops, 0 changes, 0 selections
+   ```
 
-```bash
-cd my-mod
-cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Enshrouded"
-```
+4. Join the world: a torch is in your inventory.
 
-`install` builds the mod in release for `x86_64-pc-windows-msvc`, through
-`cargo xwin` off Windows, and copies the DLL to `<game>/mods/<id>/<package>.dll`, in a folder named
-after the mod's id.
-When the target or cargo-xwin is missing, it says so with the command that
-adds it. The game folder is `--game`, or the
-`ENSHROUDED_DIR` environment variable. It must hold `enshrouded.exe` or
-`enshrouded_server.exe`. In a workspace with several mods, `--package` (`-p`)
-names one; without it, `install` takes the package in the current folder, or
-the workspace's only mod. It also says when the loader is not installed in
-that folder yet.
+`cargo enshwick new --data you.hello-pack` makes the same folder with one
+commented file per kind of data. [A mod without Rust](content/a-mod-without-rust.md)
+goes on from here.
 
-To see what a built DLL says about itself (id, version, side, join check and
-dependencies):
+## A Luau script
 
-```bash
-cargo enshwick manifest target/x86_64-pc-windows-msvc/release/my_mod.dll
-```
+A Luau mod is a data pack with scripts. This one writes a line to its log
+and greets each player who joins.
 
-`--expect-version <version>` makes it fail when the DLL reports another
-version, for release pipelines. It loads the DLL, so it runs on Windows only.
+1. Run `cargo enshwick new --luau you.hello-luau`. It makes the folder
+   `you.hello-luau/` with `main.luau`, a manifest and the API's types for
+   your editor.
+2. Replace `main.luau` with:
 
-## A first mod
+   ```luau
+   --!strict
+   enshwick.log.info("Hello, world")
 
-This mod sets how many Flame Altars every Flame level allows. The API has a
-call for exactly that, so the mod only answers with a number from its
-settings.
+   enshwick.on("PlayerJoined", function(joined)
+       local player = enshwick.world.player(joined.entity)
+       if player then
+           enshwick.world.notify(player, "Hello, world")
+       end
+   end)
+   ```
 
-Without settings, the whole mod fits in a few lines. This one always allows
-16 altars. Its `Cargo.toml` names it:
+3. Copy the folder into the game's `mods/` folder.
+4. Start the game and load a world. The mod's log, `logs/you.hello-luau_<date>_<time>.log`, has
+   the line:
 
-```toml
-[package.metadata.enshwick]
-id = "you.my-altar-count"
-side = "both"
-```
+   ```text
+   info  [you.hello-luau] Hello, world
+   ```
 
-Its code:
+5. Join the world: "Hello, world" shows on your screen.
+
+[Luau mods](luau.md) tells what a script can reach and how it runs.
+
+## A Rust mod
+
+A Rust mod is a DLL built against the
+[`enshwick`](https://github.com/enshwick/enshwick/tree/main/crates/enshwick)
+crate. This one writes the same line and greets each player who joins.
+
+1. Run `cargo enshwick new you.hello-rust`. It makes the crate
+   `hello-rust/`.
+2. The greeting uses [unstable](stability.md) calls. In `Cargo.toml`,
+   replace the line `enshwick.workspace = true` under `[dependencies]`
+   with:
+
+   ```toml
+   [dependencies]
+   enshwick = { workspace = true, features = ["unstable"] }
+   ```
+
+3. In `src/lib.rs`, keep the first line, the comment that `new` wrote.
+   Replace the rest with the code that follows this list.
+4. Build the mod and install it into the game's folder:
+
+   ```bash
+   cd hello-rust
+   cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Enshrouded"
+   ```
+
+5. Start the game and load a world. The mod's log, `logs/you.hello-rust_<date>_<time>.log`, has
+   the line:
+
+   ```text
+   info  [you.hello-rust] Hello, world
+   ```
+
+6. Join the world: "Hello, world" shows on your screen.
+
+The code of `src/lib.rs`:
 
 <!-- smallest-mod -->
 ```rust,standalone_crate
+use enshwick::events::PlayerJoined;
 use enshwick::{Load, Mod, Off};
 
-struct AltarCount;
+/// The mod.
+#[derive(Debug)]
+pub struct Hello;
 
-impl Mod for AltarCount {
+impl Mod for Hello {
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-        load.on_altar_limit(|limit| limit.allowed = 16)?;
+        enshwick::info!("Hello, world");
+        let world = load.world()?;
+        load.on::<PlayerJoined>(move |joined| {
+            if let Some(player) = world.player(joined.entity) {
+                world.notify(&player, "Hello, world");
+            }
+        })?;
         Ok(Self)
     }
 }
 
-enshwick::declare_mod!(AltarCount);
+enshwick::declare_mod!(Hello);
 ```
 <!-- /smallest-mod -->
 
-With settings, a server admin picks the number:
-
-```rust,standalone_crate
-use std::sync::atomic::{AtomicU8, Ordering};
-
-use enshwick::{Load, Mod, Off};
-
-/// Flame Altar settings.
-#[enshwick::config]
-struct Settings {
-    /// Altars allowed at every Flame level, 1 to 16.
-    altars: u8,
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Self { altars: 16 }
-    }
-}
-
-/// What the limit answers; replaced as each world loads.
-static ALTARS: AtomicU8 = AtomicU8::new(16);
-
-struct AltarCount;
-
-impl Mod for AltarCount {
-    fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-        load.on_settings(|settings: &Settings| {
-            ALTARS.store(settings.altars.clamp(1, 16), Ordering::Relaxed);
-        })?;
-        load.on_altar_limit(|limit| limit.allowed = ALTARS.load(Ordering::Relaxed))?;
-        Ok(Self)
-    }
-}
-
-enshwick::declare_mod!(AltarCount);
-```
-
 What each piece does:
 
-- `Settings` derives [`Config`](settings.md): each world's file
-  `<stem>-mod-settings/you.my-altar-count/settings.toml` is written from its
-  doc comments and `Default` as the world first loads.
-- `[package.metadata.enshwick]` names the mod and where it runs:
-  `side = "both"` because the client's interface asks the same limit, so
-  players and their server must run the mod alike. See
-  [The loader and the ABI](concepts/loader-and-abi.md).
-- `init` takes the settings with `on_settings`, which hands them over now,
-  as the defaults, and again as each world loads. It adds its answer to the
-  game's limit with `on_altar_limit`, which the loader asks with the Flame level, the game's own
-  count and the count so far each time the game needs the number. Any `?` that fails turns the mod off with the reason in
-  the log; the game then runs vanilla. See
-  [The life of a mod](concepts/lifecycle.md).
-- The limit reads an atomic, so the settings handler can change it under a
-  running game. A change to the file applies when the world loads again.
-- `declare_mod!` exports the mod and adds `AltarCount::instance()`.
+- `init` runs once, as the loader starts the mod. It writes the line, then
+  subscribes to [`PlayerJoined`](events.md).
+- `load.world()` is the handle to the server's [world](world.md). The
+  handler moves it in and shows the joining player a notice.
+- Any `?` that fails turns the mod off, with the reason in the log, and the
+  game runs on without it ([The life of a mod](concepts/lifecycle.md)).
+- `declare_mod!` exports the mod to the loader.
 
-[`enshwick-better-altars`](https://github.com/enshwick/mods/tree/main/better-altars)
-started as this mod. It adds a table per Flame level swapped with
-`arc-swap`, and more than 16 altars.
+## What `cargo enshwick new` makes
 
-Most of what mods do has such a call: [events](events.md), the
-[world](world.md), [content](content.md), [settings](settings.md) and the
-other chapters of Writing a mod. Look there first.
+The id is `<author>.<name>`: your name or handle, a dot, and the mod's
+name. Each part is of `[a-z0-9-]`, at most 64 characters in all, and the
+name starts with a letter, since it names the crate too. The author part
+keeps two mods of one name apart.
 
-## Reaching lower
+`--side` says where the mod runs: `server`, the default, or `both` when
+players' games need it too ([Sides and hosting](concepts/sides-and-hosting.md)).
+`--dir` sets the folder the crate goes into, the current one by default.
 
-When the API has no call for what a mod needs, the mod reaches into the game
-itself: it finds a function by its symbolic id and links a hook into it.
-This is the low-level way. It is `unsafe`: the mod states the function's
-type, and the compiler cannot check it. The same limit as a hook on the game's own lookup:
+The crate holds:
 
-```rust,standalone_crate
-use std::sync::atomic::{AtomicU8, Ordering};
+- `Cargo.toml`, with the mod's id, side and name in
+  `[package.metadata.enshwick]`, its
+  [manifest](concepts/loader-and-abi.md#the-manifest);
+- `src/lib.rs`, a mod with one setting, `enabled`, and two tests: every
+  text exists in every language, and the mod starts on the
+  [fake loader](testing.md);
+- `src/texts.toml`, the mod's name, description and setting labels in
+  English and Ukrainian ([Texts](content/texts.md));
+- `rust-toolchain.toml` and `.cargo/config.toml`, which set the Windows
+  target and link the C runtime statically, so players need no
+  redistributable;
+- `README.md` and `.gitignore`.
 
-use enshwick::{Load, Mod, Next, Off};
+The release profile keeps `panic = "unwind"`. The loader needs it to catch
+a panic in a mod and turn only that mod off.
 
-static ALTARS: AtomicU8 = AtomicU8::new(16);
+Inside a Cargo workspace, `new` adds the crate to the workspace's
+`members`. Cargo reads the release profile, the toolchain file and
+`.cargo/config.toml` only at the workspace root, so put `panic = "unwind"`
+and the static C runtime there.
 
-struct AltarCount;
+`cargo enshwick install` builds the mod in release for the Windows target,
+through `cargo xwin` off Windows. It copies the DLL to
+`<game>/mods/<id>/`. The game folder is `--game` or the `ENSHROUDED_DIR`
+environment variable. In a workspace with several mods, `-p` names one.
 
-enshwick::detour! {
-    static MAX_ALTARS: unsafe extern "system" fn(balancing: u64, level: u32) -> u8 = max_altars;
-}
-
-fn max_altars(next: Next<'_, unsafe extern "system" fn(u64, u32) -> u8>, balancing: u64, level: u32) -> u8 {
-    match AltarCount::instance() {
-        Some(_) => ALTARS.load(Ordering::Relaxed),
-        // SAFETY: the original takes the arguments the game passed.
-        None => unsafe { next.call(balancing, level) },
-    }
-}
-
-impl Mod for AltarCount {
-    fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-        let max_altars = load.symbol("building.max_altars")?;
-        // SAFETY: the game's altar limit has the type `MAX_ALTARS` declares.
-        unsafe { load.hook(&MAX_ALTARS, max_altars) }?;
-        Ok(Self)
-    }
-}
-
-enshwick::declare_mod!(AltarCount);
-```
-
-- `detour!` declares the hook `MAX_ALTARS`; [Hooks](hooks.md) explains it.
-- `load.symbol` finds the function by its symbolic id on the running build.
-  [Finding the game](finding-the-game.md) shows how ids are found and pinned.
-- A hook chains with other mods' hooks on the same function, as
-  `on_altar_limit` filters chain. The mod must also keep its hook working
-  when the game changes. Prefer the API's call where there is
-  one, and ask for one when other mods would need the same hook.
+`cargo enshwick manifest <dll>` prints what a built DLL says about itself:
+id, version, side, join check and dependencies. It loads the DLL, so it
+runs on Windows only.
 
 ## Where the logs are
 
 The loader writes to `logs/` in the game's folder, one file per source and
-run: `enshwick_<date>_<time>.log` says which mods loaded, were skipped or
-turned off, and why, and `<mod id>_<date>_<time>.log` holds your mod's lines. [Log files](logging.md#log-files) has the rest.
+run. `enshwick_<date>_<time>.log` says which mods loaded, were skipped or
+turned off, and why. `<mod id>_<date>_<time>.log` holds the mod's own
+lines. [Log files](logging.md#log-files) has the rest.
 
 ## What to read next
 
-Read [Concepts](concepts.md) once: how the loader finds and starts mods, the
-two sides of the game, the join check and threads. Then take the chapter for
-what your mod does: [Settings](settings.md), [Events](events.md),
-[Hooks](hooks.md), [Content](content.md). [Testing](testing.md) shows how to
-test a mod without the game.
+[Your first real mod](first-mod.md) adds an item, its recipe, its texts and
+a setting, step by step.

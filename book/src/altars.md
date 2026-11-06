@@ -154,6 +154,62 @@ enshwick.log.info(`wide altars are {wide.template}`)
 
 ## Altars per level and bases past 16
 
+This mod lets a server admin set how many Flame Altars every Flame level
+allows. Its `Cargo.toml` says `side = "both"`, since each player's interface
+asks the same limit:
+
+```rust,standalone_crate
+use std::sync::atomic::{AtomicU8, Ordering};
+
+use enshwick::{Load, Mod, Off};
+
+/// Flame Altar settings.
+#[enshwick::config]
+struct Settings {
+    /// Altars allowed at every Flame level, 1 to 16.
+    altars: u8,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self { altars: 16 }
+    }
+}
+
+/// What the limit answers; replaced as each world loads.
+static ALTARS: AtomicU8 = AtomicU8::new(16);
+
+struct AltarCount;
+
+impl Mod for AltarCount {
+    fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+        load.on_settings(|settings: &Settings| {
+            ALTARS.store(settings.altars.clamp(1, 16), Ordering::Relaxed);
+        })?;
+        load.on_altar_limit(|limit| limit.allowed = ALTARS.load(Ordering::Relaxed))?;
+        Ok(Self)
+    }
+}
+
+enshwick::declare_mod!(AltarCount);
+```
+
+```luau
+local altars = 16
+enshwick.on_settings(function(settings)
+    altars = math.clamp(settings.altars, 1, 16)
+end)
+
+enshwick.altars.on_altar_limit(function(limit)
+    limit.allowed = altars
+    return limit
+end)
+```
+
+The Luau mod has `side = "both"` and the setting `altars` in its
+`pack.toml` ([Settings](settings.md#settings-of-a-luau-mod)). The Rust limit reads an
+atomic, so the settings handler can change it while the game runs.
+
 `load.on_altar_limit(|limit| ...)` adds a filter to the chain that decides
 how many altars each Flame level allows, on both sides. Each filter, in load
 order, sees the level, the game's own count and the count so far, and sets

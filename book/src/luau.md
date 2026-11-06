@@ -5,24 +5,32 @@ description: A Luau mod is a data pack with scripts: pack.toml and main.luau in 
 
 # Luau mods
 
-A Luau mod is a [data pack](content/packs.md) with scripts: a folder in
-`mods/` with a `pack.toml`, a `main.luau`, and any other `.luau` files it
-loads, up to four folders deep.
+A Luau mod changes the game with scripts and needs no compiler. It is a
+[data pack](content/packs.md) with scripts: a folder in the game's mods
+folder with a `pack.toml` and a `main.luau`.
 
 ## What a Luau mod can do
 
-A Luau mod reaches the API a Rust mod has, through the global `enshwick`:
-each module of the Rust API is a table, `enshwick.<module>.<function>`, with
-the Rust names. Each chapter of this book shows the Luau beside the Rust.
-Where Luau differs, [the table below](#where-luau-differs-from-rust) says
-why.
+A Luau mod reaches the API a Rust mod has, through the global `enshwick`.
+Each module of the Rust API is a table of it, with the Rust names:
+`enshwick.<module>.<function>`. Each chapter of this book shows the Luau
+beside the Rust. Where Luau differs, [the table of
+differences](#where-luau-differs-from-rust) says why.
+
+Scripts are [Luau](https://luau.org), Roblox's typed dialect of Lua 5.1.
+Each mod runs in a sandbox of its own and reaches the game only through
+`enshwick`.
 
 ## How the loader runs it
 
-The loader runs it as it runs any pack: it is in the mod list and the
-lock, counts in [the join check](concepts/join-check.md) with the hash of
-every script, has its log `logs/<id>_<date>_<time>.log`, and is turned off
-alone when it goes wrong. It may hold data files too, such as `items.toml`.
+The loader runs a Luau mod as it runs any pack. It is in the mod list and
+the lock, and it counts in [the join check](concepts/join-check.md) with
+the hash of every script. It has its own log,
+`logs/<id>_<date>_<time>.log`, and when it goes wrong, the loader turns it
+off alone.
+
+`main.luau` may load other `.luau` files of the folder, up to four folders
+deep. The folder may hold data files too, such as `items.toml`:
 
 ```text
 mods/
@@ -35,41 +43,45 @@ mods/
       enshwick.d.luau
 ```
 
-Scripts are [Luau](https://luau.org), Roblox's typed dialect of Lua 5.1.
-Each mod runs in a sandbox of its own and reaches the game only through the
-global `enshwick`.
-
 ## Start a Luau mod
 
-1. Run `cargo enshwick new --luau you.greeter`. It makes the folder with
-   `pack.toml`, a `main.luau` that greets each player who joins, a README,
-   `types/enshwick.d.luau`, the API's definitions for the editor, and
-   `types/enshwick.typed.d.luau`, the types of
-   [`enshwick.typed`](game-types.md#can-a-luau-mod-use-them)'s values.
-   `--side` sets where it runs, the server when left out. With
-   `--game <game folder>` it also writes `types/game.d.luau`, the
-   [game's own types](game-types.md), such as the fields
-   `enshwick.on_game_type` hands a handler.
+[Hello, world](getting-started.md#a-luau-script) shows the smallest Luau
+mod. To start one of your own:
+
+1. Run `cargo enshwick new --luau you.greeter`. It makes the folder with a
+   `main.luau` that greets each player who joins, a `pack.toml` and a
+   README. `--side` sets where it runs, the server when left out.
 2. Open the folder in an editor with the
    [luau-lsp](https://github.com/JohnnyMorganz/luau-lsp) extension. The
-   folder's `.vscode/settings.json` points it at the definitions, so every
-   call and event shows its types and documentation.
+   folder's `.vscode/settings.json` points it at the definitions in
+   `types/`, so every call and event shows its types and documentation.
 3. Check the types without the game:
 
    ```text
    luau-lsp analyze --definitions:@enshwick=types/enshwick.d.luau --definitions:@typed=types/enshwick.typed.d.luau main.luau
    ```
 
-   With the game's types, add `--definitions:@game=types/game.d.luau`.
 4. Copy the folder into the game's `mods/` folder as `mods/you.greeter/`.
 
 The repository's
 [`examples/you.welcome`](https://github.com/enshwick/enshwick/tree/main/examples/you.welcome)
 is a Luau mod to start from.
-`cargo enshwick luau --out types/enshwick.d.luau` writes the definitions
-again for the loader the tool was built with, after an update, and
-`cargo enshwick types --from <game folder> --luau types/game.d.luau` the
-game's types after a game update.
+
+`types/` holds the definitions `new` wrote:
+
+| File | Declares |
+| --- | --- |
+| `enshwick.d.luau` | the API, for the loader the tool was built with |
+| `enshwick.typed.d.luau` | the values of [`enshwick.typed`](game-types.md#can-a-luau-mod-use-them) |
+| `game.d.luau` | the [game's own types](game-types.md), such as the fields `enshwick.on_game_type` hands a handler; only with `--game <game folder>` |
+
+After an update, write them again:
+
+- `cargo enshwick luau --out types/enshwick.d.luau --typed types/enshwick.typed.d.luau`
+  for the API and the typed values;
+- `cargo enshwick types --from <game folder> --luau types/game.d.luau` for
+  the game's types, then add `--definitions:@game=types/game.d.luau` to the
+  check.
 
 ## How the Rust API reads in Luau
 
@@ -85,29 +97,29 @@ enshwick.schedule.every(60, function()
 end)
 ```
 
-Names are the Rust API's: `enshwick.world.notify_all` is
-`World::notify_all`, and the event `PlayerJoined` is `events::PlayerJoined`.
+Names are the Rust API's. `enshwick.world.notify_all` is
+`World::notify_all`. The event `PlayerJoined` is `events::PlayerJoined`.
+The Rust shapes map this way:
 
-- A handle a Rust mod gets from `Load`, such as `load.weather()`, is its
-  module's table: `enshwick.weather.at(position)` is `weather.at(position)`.
-  On a game build without what the handle needs, the table keeps only its
-  start-time functions, and the log says why, so a script checks the
-  function it calls: `if enshwick.weather.at then`.
-- A handle whose opening switches a loader feature on opens only when the
-  script asks, as a Rust mod asks `Load` in `init`: `enshwick.altars.altars()`,
-  `enshwick.stats.stats()` and `enshwick.map.fog_of_war()` at the top level
-  of `main.luau` open it and return it as an object. Until then the table's
-  functions raise an error, so a mod that never asks arms no altar hooks and
-  copies no fog.
-- A call a Rust mod makes on `Load` during `init`, such as
-  `load.define_affix(...)`, is a function of its module's table that a script
-  calls at the top level of `main.luau`: `enshwick.affixes.define_affix(...)`.
-  After the start it raises an error.
-- A Rust handle a call returns, such as a `ClockSpeed` or a `Texts`, is a
-  Luau object with the handle's methods: `speed:set(2)`. A method that takes
-  `self` by value returns the next object, as a builder does.
-- A hook or filter takes a function: it gets the value Rust hands a
-  closure, and returns the changed value or nothing to keep it.
+- A handle a Rust mod gets from `Load` is its module's table. For
+  `load.weather()`, a script calls `enshwick.weather.at(position)`.
+- On a game build without what a handle needs, the table keeps only its
+  start-time functions, and the log says why. A script checks the function
+  it calls first: `if enshwick.weather.at then`.
+- Some handles switch a loader feature on, such as the altars, the stats
+  and the map's fog. A script opens one at the top level of `main.luau`, as
+  a Rust mod asks for it while it starts. `enshwick.altars.altars()` returns
+  it as an object. Until then the handle's methods raise an error, and the
+  loader arms none of the hooks behind them.
+- A call a Rust mod makes on `Load` while it starts is a function a script
+  calls at the top level of `main.luau`. `load.define_affix(...)` becomes
+  `enshwick.affixes.define_affix(...)`, and after the start it raises an
+  error.
+- A Rust handle a call returns, such as a `ClockSpeed`, is a Luau object
+  with the handle's methods: `speed:set(2)`. A method that takes `self` by
+  value returns the next object, as a builder does.
+- A hook or filter takes a function. The function gets the value Rust hands
+  a closure, and returns the changed value, or nothing to keep it.
 
 These belong to the `enshwick` table itself:
 
@@ -142,25 +154,28 @@ these Luau types:
 | a Rust handle | an object with its methods |
 | `Duration` | seconds |
 
-The Luau API is not a second copy: it is read from descriptions kept beside
-the Rust items in `enshwick::script`. `#[derive(Script)]` describes a type,
-`#[script(<part>)]` the methods of an `impl` block a script may call, and the
-event tables describe each event, so a new event or a newly marked method
+The Luau API is read from descriptions kept beside the Rust items, so it
+is no second copy. `#[derive(Script)]` describes a type.
+`#[script(<part>)]` marks the methods of an impl block a script may call. The
+event tables describe each event. A new event or a newly marked method
 reaches Luau and the definitions with no other change.
 
-A call that fails raises a Luau error with the call's name and the
-reason, such as `enshwick.world.broadcast: text: expected a string, got a
-number`. `pcall` catches it.
+A call that fails raises a Luau error with the call's name and the reason,
+such as `enshwick.world.broadcast: text: expected a string, got a number`.
+`pcall` catches it.
 
 ## Where Luau differs from Rust
 
 Every public function of the Rust API has a Luau function of the same
-module and name, `enshwick.<module>.<name>`, or a Rust handle's method on the
-Luau object, `handle:<name>()`; a value, such as an item or a change, is a
-table with the struct's fields, without the struct's methods, such as
-`Container::is_open`: a script reads the fields they read. A test of the
-repository fails for any other function without one, unless this table names
-it and says why.
+module and name, `enshwick.<module>.<name>`. A Rust handle's method is a
+method of the Luau object, `handle:<name>()`.
+
+A value, such as an item or a change, is a table with the struct's fields,
+without the struct's methods. Where Rust has `Container::is_open`, a script
+reads the fields that method reads.
+
+A test of the repository fails for any other function without a Luau
+mirror, unless this table names it and says why.
 
 | Rust | Why |
 | --- | --- |
@@ -210,25 +225,30 @@ it and says why.
 
 A few calls cost more in Luau than in Rust. The filter of
 `enshwick.interactions.on_interaction` runs for every entity in each
-player's reach on every frame; where a Rust filter allocates nothing, the
-runtime builds the interaction's table and enters the script each time. Keep
-that filter short, or write it in Rust for a mod that checks many entities.
+player's reach on every frame. A Rust filter allocates nothing there, but
+the runtime builds the interaction's table and enters the script each time.
+Keep that filter short, or write it in Rust for a mod that checks many
+entities.
 
 ## The sandbox
 
-A script reaches the game only through `enshwick`. It has Luau's own
-libraries for tables, strings, `utf8`, `bit32`, `math`, `buffer`, `vector`,
-coroutines and the clock (`os.clock`, `os.time`, `os.date`), and nothing
-that starts processes or loads compiled code. It reads only its own folder,
-with `enshwick.mods.read`, and writes files with
-`enshwick.files.write_atomically`, such as exports for a wiki or a map into
-`enshwick.export_dir()`, the folder `export/<folder>/` in the game folder,
-named as the mod's folder in `mods/`.
-A write may name any path the game may write, as a Rust mod's may, so the
-sandbox keeps a script's mistakes small but is no security boundary: a Luau
-mod needs the same trust as a Rust mod.
-The globals and the `enshwick` tables are read-only. `require` resolves only
-the mod's own scripts.
+A script reaches the game only through `enshwick`. The globals and the
+`enshwick` tables are read-only, and `require` resolves only the mod's own
+scripts.
+
+A script has Luau's own libraries for tables, strings, UTF-8, bits, math,
+buffers, vectors and coroutines. Of the `os` library it has the clock,
+time and date functions. A script has nothing that starts processes or
+loads compiled code.
+
+A script reads only its own folder, with `enshwick.mods.read`. It writes
+files with `enshwick.files.write_atomically`. Exports for a wiki or a map go
+into `enshwick.export_dir()`. That is the folder `export/<folder>/` in the
+game folder, named as the mod's own folder.
+
+The sandbox keeps a script's mistakes small, but it is no security
+boundary. A write may name any path the game may write, as a Rust mod's
+may, so a Luau mod needs the same trust as a Rust mod.
 
 Each mod has these budgets:
 
@@ -243,9 +263,9 @@ little work each time and leaves the rest to a task.
 
 ## When a script fails
 
-An error that leaves a handler or a task, a script past a budget, or a panic
-in a call it made turns that mod off, as a panic turns off a Rust mod. The
-log names the file and line:
+A script that fails turns its mod off, as a panic turns off a Rust mod. It
+fails when an error leaves a handler or a task, when it runs past a budget,
+or when a call it made panics. The log names the file and line:
 
 ```text
 WorldSaved: main.luau:2: boom
@@ -258,13 +278,16 @@ fails at start leaves the mod off from the start, with the same line.
 
 `main.luau` runs on the loader's start thread. Event handlers and tasks run
 on the server's game thread, between simulation steps, where calls into the
-world are allowed (see [Threads](concepts/threads.md)). A hook or filter a
-script sets, such as `enshwick.damage.on_damage`, runs where the Rust one
-runs, inside the game's step; the mod's scripts run one call at a time, and
-each call counts against the budgets, so keep such a function short.
+world are allowed (see [Threads](concepts/threads.md)).
+
+A hook or filter a script sets, such as `enshwick.damage.on_damage`, runs
+where the Rust one runs, inside the game's step. The mod's scripts run one
+call at a time, and each call counts against the budgets, so keep such a
+function short.
 
 ## What a mod costs
 
-With `diagnostics = true`, the status summary shows each Luau mod's memory,
-its peak, its calls and how many ran past their budget, beside the time its
-handlers took (see [Logging and diagnostics](logging.md)).
+With `diagnostics = true`, the status summary shows what each Luau mod
+costs ([Logging and diagnostics](logging.md)). It lists the mod's memory
+and its peak, its calls, how many ran past their budget, and the time its
+handlers took.

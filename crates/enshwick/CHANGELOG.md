@@ -162,6 +162,12 @@ Each entry names the pull request that made the change.
 - The crate's description, README and root docs, and the book's introduction,
   describe Enshwick as the modding framework and API for Enshrouded, with its
   mod loader (#968).
+- The book leads from the smallest mod to the hardest parts. It opens with
+  Hello, world, the smallest data pack, Luau script and Rust mod, and the
+  tutorial Your first real mod. Everyday tasks, game systems, mods working
+  together and reaching into the game follow, then shipping, concepts and
+  reference. Every chapter keeps its address. Settings, Hooks and Luau mods
+  read with shorter sentences and one topic per paragraph (#967).
 - A save hold no longer outlasts a shutdown: as a dedicated server or a
   hosted game shuts down, every `World::hold_saves` hold lets go and the
   final save runs, and the log names each mod that held saves and for how

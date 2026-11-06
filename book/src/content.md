@@ -10,8 +10,9 @@ any other game resource.
 
 ## What this part covers
 
-This part of the book covers the high-level calls
-first and the served resources under them last:
+The chapters under Content cover the high-level calls. Texts and Data
+packs sit under Everyday tasks, and Served resources, the bytes under
+every call, under Reaching into the game:
 
 - [Items](content/items.md): a new item cloned from a vanilla one, with
   its own name, icon, tooltip lines and meter;
