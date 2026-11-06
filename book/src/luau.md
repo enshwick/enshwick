@@ -77,7 +77,8 @@ is a Luau mod to start from.
 
 After an update, write them again:
 
-- `cargo enshwick luau --out types/enshwick.d.luau` for the API;
+- `cargo enshwick luau --out types/enshwick.d.luau --typed types/enshwick.typed.d.luau`
+  for the API and the typed values;
 - `cargo enshwick types --from <game folder> --luau types/game.d.luau` for
   the game's types, then add `--definitions:@game=types/game.d.luau` to the
   check.
@@ -97,7 +98,8 @@ end)
 ```
 
 Names are the Rust API's. `enshwick.world.notify_all` is
-`World::notify_all`. The event `PlayerJoined` is `events::PlayerJoined`. The Rust shapes map this way:
+`World::notify_all`. The event `PlayerJoined` is `events::PlayerJoined`.
+The Rust shapes map this way:
 
 - A handle a Rust mod gets from `Load` is its module's table. For
   `load.weather()`, a script calls `enshwick.weather.at(position)`.
@@ -107,8 +109,8 @@ Names are the Rust API's. `enshwick.world.notify_all` is
 - Some handles switch a loader feature on, such as the altars, the stats
   and the map's fog. A script opens one at the top level of `main.luau`, as
   a Rust mod asks for it while it starts. `enshwick.altars.altars()` returns
-  it as an object. Until then its table's functions raise an error, so a mod that
-  never asks arms no altar hooks.
+  it as an object. Until then the handle's methods raise an error, and the
+  loader arms none of the hooks behind them.
 - A call a Rust mod makes on `Load` while it starts is a function a script
   calls at the top level of `main.luau`. `load.define_affix(...)` becomes
   `enshwick.affixes.define_affix(...)`, and after the start it raises an
@@ -235,8 +237,8 @@ A script reaches the game only through `enshwick`. The globals and the
 scripts.
 
 A script has Luau's own libraries for tables, strings, UTF-8, bits, math,
-buffers, vectors and coroutines. Of the `os` library it
-has the clock, time and date functions. A script has nothing that starts processes or
+buffers, vectors and coroutines. Of the `os` library it has the clock,
+time and date functions. A script has nothing that starts processes or
 loads compiled code.
 
 A script reads only its own folder, with `enshwick.mods.read`. It writes

@@ -5,8 +5,8 @@ description: A mod's settings belong to each world and lie beside its save. The 
 
 # Settings
 
-Settings let an admin tune a mod for each world. The loader keeps them in a
-file beside the world's save and hands the mod the values as the world
+Settings let an admin tune a mod for each world. The loader keeps them in
+files beside the world's save, one per settings type, and hands the mod the values as the world
 loads.
 
 ## Declare settings

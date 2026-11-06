@@ -14,7 +14,9 @@ working than the one before it.
 An API call keeps working when the game updates, since the loader finds the
 game's code for it on every build. It also composes: when several mods
 answer the same call, the loader runs them in load order. A mod that reaches
-into the game takes both jobs on itself.
+into the game must fit each new build itself. The loader still chains every
+mod's hooks on one function, but each link must call on for the others to
+run ([Hooks](hooks.md#chains-and-priority)).
 
 The same altar limit, first as the API's call:
 
@@ -76,10 +78,10 @@ a function, a field or a value by name, so it never holds an address.
 and [ECS inside systems](ecs.md) cover what code inside the game's frame
 may do.
 
-A Luau mod has none of these: a script runs in a sandbox without pointers
-([Where Luau differs from Rust](luau.md#where-luau-differs-from-rust)). It
-reads the game's types and resources as values, through `enshwick.typed`
-and `enshwick.resources`.
+A Luau mod has no hooks or code patches: a script runs in a sandbox without
+pointers ([Where Luau differs from Rust](luau.md#where-luau-differs-from-rust)).
+It reads and writes the game's types and resources as values, through
+`enshwick.typed` and `enshwick.resources`.
 
 ## What happens when it goes wrong
 

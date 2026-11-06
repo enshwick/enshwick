@@ -195,14 +195,19 @@ enshwick::declare_mod!(AltarCount);
 ```
 
 ```luau
+local altars = 16
+enshwick.on_settings(function(settings)
+    altars = math.clamp(settings.altars, 1, 16)
+end)
+
 enshwick.altars.on_altar_limit(function(limit)
-    limit.allowed = math.clamp(enshwick.settings().altars, 1, 16)
+    limit.allowed = altars
     return limit
 end)
 ```
 
-The Luau mod declares the setting `altars` in its `pack.toml`
-([Settings](settings.md#settings-of-a-luau-mod)). The Rust limit reads an
+The Luau mod has `side = "both"` and the setting `altars` in its
+`pack.toml` ([Settings](settings.md#settings-of-a-luau-mod)). The Rust limit reads an
 atomic, so the settings handler can change it while the game runs.
 
 `load.on_altar_limit(|limit| ...)` adds a filter to the chain that decides

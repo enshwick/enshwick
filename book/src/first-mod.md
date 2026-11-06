@@ -18,8 +18,8 @@ sides:
 cargo enshwick new you.travel-chest --side both
 ```
 
-The recipe calls are [unstable](stability.md). In `Cargo.toml`, ask for
-them:
+The recipe calls are [unstable](stability.md). In `Cargo.toml`, replace
+the line `enshwick.workspace = true` under `[dependencies]` with:
 
 ```toml
 [dependencies]
@@ -223,7 +223,9 @@ them to `src/texts.toml`, in both languages:
 "config.cost.doc" = "Скриня коштує як інгредієнти ящика, помножені на це число."
 ```
 
-In Luau, the setting goes into `pack.toml`, and the recipe reads it:
+In Luau, the setting goes into `pack.toml`, and the recipe reads it. This
+`add_recipe_with` call takes the place of the `add_recipe` call of the
+step before:
 
 ```toml
 [[setting]]
@@ -256,7 +258,8 @@ applies.
 
 ## Try it
 
-1. Run `cargo enshwick install --game <game folder>`, or copy the Luau
+1. In the crate's folder, `travel-chest/`, run
+   `cargo enshwick install --game <game folder>`. For the Luau mod, copy its
    folder into the game's `mods/` folder.
 2. Start the game and load a world. The mod's log,
    `logs/you.travel-chest_<date>_<time>.log`, shows no error.

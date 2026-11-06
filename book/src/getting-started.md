@@ -92,8 +92,8 @@ and greets each player who joins.
    end)
    ```
 
-3. Copy the folder into the game's `mods/` folder on the server.
-4. Start the server. Its log, `logs/you.hello-luau_<date>_<time>.log`, has
+3. Copy the folder into the game's `mods/` folder.
+4. Start the game and load a world. The mod's log, `logs/you.hello-luau_<date>_<time>.log`, has
    the line:
 
    ```text
@@ -112,8 +112,9 @@ crate. This one writes the same line and greets each player who joins.
 
 1. Run `cargo enshwick new you.hello-rust`. It makes the crate
    `hello-rust/`.
-2. The greeting uses [unstable](stability.md) calls. In `Cargo.toml`, ask
-   for them:
+2. The greeting uses [unstable](stability.md) calls. In `Cargo.toml`,
+   replace the line `enshwick.workspace = true` under `[dependencies]`
+   with:
 
    ```toml
    [dependencies]
@@ -129,7 +130,7 @@ crate. This one writes the same line and greets each player who joins.
    cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Enshrouded"
    ```
 
-5. Start the server. Its log, `logs/you.hello-rust_<date>_<time>.log`, has
+5. Start the game and load a world. The mod's log, `logs/you.hello-rust_<date>_<time>.log`, has
    the line:
 
    ```text
@@ -192,8 +193,9 @@ The crate holds:
 - `Cargo.toml`, with the mod's id, side and name in
   `[package.metadata.enshwick]`, its
   [manifest](concepts/loader-and-abi.md#the-manifest);
-- `src/lib.rs`, a mod with one setting, `enabled`, and two tests that run
-  on the [fake loader](testing.md);
+- `src/lib.rs`, a mod with one setting, `enabled`, and two tests: every
+  text exists in every language, and the mod starts on the
+  [fake loader](testing.md);
 - `src/texts.toml`, the mod's name, description and setting labels in
   English and Ukrainian ([Texts](content/texts.md));
 - `rust-toolchain.toml` and `.cargo/config.toml`, which set the Windows

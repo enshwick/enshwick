@@ -184,8 +184,7 @@ a hooked function.
 
 `declare_mod!` adds `instance()` to the mod's type. It returns the mod's state
 once `init` has returned it. Before that, or when `init` failed, it returns
-`None`. A
-hook that gets `None` forwards to `next`:
+`None`. A hook that gets `None` forwards to `next`:
 
 ```rust,standalone_crate
 use enshwick::{Load, Mod, Next, Off};
