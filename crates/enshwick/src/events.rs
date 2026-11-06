@@ -227,7 +227,9 @@ without_data! {
     /// as [`crate::state::WorldStore`] and files in its world data folder,
     /// belongs to this save.
     WorldSaving = WORLD_SAVING;
-    /// [`Event::SHUTDOWN_STARTED`].
+    /// [`Event::SHUTDOWN_STARTED`]; the world's next save is its final one,
+    /// which runs unless a mod holds saves inside its handler
+    /// (`World::hold_saves`).
     ShutdownStarted = SHUTDOWN_STARTED;
     /// [`Event::JOIN_REFUSED`]; [`crate::mods::join_missing`] lists the mods.
     JoinRefused = JOIN_REFUSED;

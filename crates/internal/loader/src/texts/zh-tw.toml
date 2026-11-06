@@ -50,6 +50,7 @@
 "stand-in.name" = "已移除模組的物品"
 "stand-in.description" = "為目前未安裝的模組保留。重新安裝該模組即可取回物品。"
 "muted.notice" = "你已在聊天中被禁言。其他玩家看不到你傳送的內容。"
+"saves.held-long" = "以下模組正在暫停世界存檔：{mods}。在所有模組解除之前，遊戲不會存檔。"
 "refused" = "未變更：{why}。"
 "refused.by-mod" = "被模組拒絕"
 "refused.value" = "{key} 接受 {accepts}"

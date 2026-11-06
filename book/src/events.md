@@ -55,7 +55,7 @@ The types are in
 | `WorldSaved` | none | a save of the world finished writing to disk | game |
 | `PlayerJoined` | `PlayerData` (`slot`, `entity`, `key`) | a player's character entered the world | game |
 | `PlayerLeft` | `PlayerData` | a player who joined is leaving; the character is still in the world | game |
-| `ShutdownStarted` | none | an orderly stop begins, with the world and players alive; the final save follows | game |
+| `ShutdownStarted` | none | an orderly stop begins, with the world and players alive; the final save follows unless a mod holds saves inside its handler ([saves](world.md)) | game |
 | `BuildingPlaced` | `BuildingData` | a player placed a building piece or prop; raised after the step that placed it | game |
 | `BuildingRemoved` | `BuildingData` | a player picked up or tore down a placed piece; the entity no longer exists | game |
 | `SettingsChanged` | none | a settings file of the mod in the running world changed, the console or the Mods screen changed a setting, or the server of another's world sent new values | not fixed: loader or game |

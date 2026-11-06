@@ -51,6 +51,28 @@ mod tests {
     }
 
     #[test]
+    fn a_script_s_hold_lets_go_at_shutdown_and_a_hold_from_shutdown_started_refuses_the_final_save()
+    {
+        let loader = run(
+            FakeHost::new().world(),
+            r#"
+            enshwick.world.hold_saves(true)
+            local shutdowns = 0
+            enshwick.on("ShutdownStarted", function()
+                shutdowns += 1
+                if shutdowns == 2 then
+                    enshwick.world.hold_saves(true)
+                end
+            end)
+            "#,
+        );
+        assert!(loader.saves_held(), "{:?}", loader.logs());
+        assert!(loader.shut_down(), "{:?}", loader.logs());
+        assert!(!loader.shut_down(), "{:?}", loader.logs());
+        assert!(loader.saves_held());
+    }
+
+    #[test]
     fn a_script_keeps_its_own_entity_out_of_the_save_and_never_a_vanilla_one() {
         let loader = run(
             FakeHost::new().world().prop(

@@ -50,6 +50,7 @@
 "stand-in.name" = "Oggetto di una mod rimossa"
 "stand-in.description" = "Conservato per una mod che ora non è installata. Installa di nuovo la mod per riavere l'oggetto."
 "muted.notice" = "Sei silenziato in chat. Gli altri giocatori non vedono ciò che scrivi."
+"saves.held-long" = "I salvataggi del mondo sono bloccati da: {mods}. Il gioco non salva finché ogni mod non li sblocca."
 "refused" = "Non modificato: {why}."
 "refused.by-mod" = "rifiutato dalla mod"
 "refused.value" = "{key} accetta {accepts}"

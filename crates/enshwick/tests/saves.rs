@@ -3,27 +3,36 @@
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Mutex, OnceLock};
     use std::time::Duration;
 
     use enshwick::abi::{Event, Header, SaveInfo, SpawnRequest, Status};
     use enshwick::effects::{Effects, Spawn};
-    use enshwick::events::{WorldSaved, WorldSaving};
+    use enshwick::events::{ShutdownStarted, WorldSaved, WorldSaving};
     use enshwick::world::{World, WorldGuid};
     use enshwick::{Entity, Load, Mod, Off};
 
     static WORLD: OnceLock<World> = OnceLock::new();
     static EFFECTS: OnceLock<Effects> = OnceLock::new();
     static ORDER: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
+    /// Whether the mod refuses the final save when the shutdown begins.
+    static REFUSE_FINAL: AtomicBool = AtomicBool::new(false);
 
     struct Keeper;
 
     impl Mod for Keeper {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let _first = WORLD.set(load.world()?);
+            let world = load.world()?;
+            let _first = WORLD.set(world);
             let _first = EFFECTS.set(load.effects());
             load.on::<WorldSaving>(|()| ORDER.lock().unwrap().push("saving"))?;
             load.on::<WorldSaved>(|()| ORDER.lock().unwrap().push("saved"))?;
+            load.on::<ShutdownStarted>(move |()| {
+                if REFUSE_FINAL.load(Ordering::Relaxed) {
+                    world.hold_saves(true).unwrap();
+                }
+            })?;
             Ok(Self)
         }
     }
@@ -91,6 +100,35 @@ mod tests {
             .map(|(id, request)| (Entity(id), request.flags))
             .collect();
         assert_eq!(flags, [(kept, 0), (passing, SpawnRequest::DO_NOT_SAVE)]);
+    }
+
+    #[test]
+    fn the_final_save_runs_through_a_hold_unless_the_mod_holds_saves_again_as_shutdown_begins() {
+        let loader = enshwick::test::FakeHost::new().world().install();
+        // SAFETY: the three functions are the exports of this file's `declare_mod!(Keeper)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let world = WORLD.get().unwrap();
+
+        world.hold_saves(true).unwrap();
+        assert!(
+            loader.shut_down(),
+            "a hold from before the shutdown lets go"
+        );
+        assert!(!loader.saves_held());
+        world.hold_saves(true).unwrap();
+        assert!(
+            !loader.saves_held(),
+            "a hold asked for after ShutdownStarted is not taken"
+        );
+
+        REFUSE_FINAL.store(true, Ordering::Relaxed);
+        assert!(
+            !loader.shut_down(),
+            "a hold from ShutdownStarted on refuses the final save"
+        );
+        assert!(loader.saves_held());
     }
 
     #[test]

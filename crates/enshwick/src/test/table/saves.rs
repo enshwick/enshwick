@@ -10,6 +10,9 @@ pub(crate) struct Saves {
     pub(crate) info: Option<SaveInfo>,
     /// Whether the mod holds the world's saves.
     pub(crate) held: bool,
+    /// Whether the mod heard the shutdown begin: a hold asked for since is
+    /// not taken, as the loader does.
+    pub(crate) shut: bool,
     /// The entities the mod keeps out of the save, in the order it asked.
     pub(crate) unsaved: Vec<u32>,
 }
@@ -72,7 +75,9 @@ pub(crate) extern "system" fn hold_saves(_me: ModHandle, held: u8) -> Status {
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
-        s.save.held = held == 1;
+        if !(s.save.shut && held == 1) {
+            s.save.held = held == 1;
+        }
         Status::OK
     })
 }

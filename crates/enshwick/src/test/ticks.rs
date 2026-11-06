@@ -169,6 +169,7 @@ impl Installed {
         with((), |s| {
             s.ticks.games_ended += 1;
             s.save.held = false;
+            s.save.shut = false;
         });
     }
 }

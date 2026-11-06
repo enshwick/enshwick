@@ -702,6 +702,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         save: Saves {
             info: None,
             held: false,
+            shut: false,
             unsaved: Vec::new(),
         },
         skills: Vec::new(),

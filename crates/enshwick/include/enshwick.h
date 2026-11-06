@@ -4720,9 +4720,13 @@ typedef struct EnshwickHostApi {
   // Holds the world's saves while `held` is 1, or lets them go for 0:
   // the game saves only while no running mod holds them, the timed save
   // waiting and `HostApi::save_world` refused meanwhile, and the log names each
-  // mod that holds or lets go. A mod that turns off lets go. Server only
+  // mod that holds or lets go. A mod that turns off lets go. At shutdown
+  // every hold lets go before `Event::SHUTDOWN_STARTED`; a hold set
+  // while the mod hears that event refuses the final save, and a hold
+  // asked for after it is not taken. Server only
   // (`Status::MISSING` on a build without the save layout); any thread,
-  // taking effect after the next step; `Status::BAD_ARGS` for another
+  // taking effect after the next step, or at once while the mod hears
+  // `Event::SHUTDOWN_STARTED`; `Status::BAD_ARGS` for another
   // `held`. A panic in the loader returns `Status::REFUSED`. ABI 11.6.
   EnshwickStatus (*hold_saves)(EnshwickModHandle me, uint8_t held);
   // Gives the crafting prop `prop` its index in the game's crafting prop

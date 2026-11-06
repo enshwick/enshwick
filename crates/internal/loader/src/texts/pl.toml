@@ -50,6 +50,7 @@
 "stand-in.name" = "Przedmiot usuniętego moda"
 "stand-in.description" = "Zachowany dla moda, który nie jest teraz zainstalowany. Zainstaluj mod ponownie, aby odzyskać przedmiot."
 "muted.notice" = "Jesteś wyciszony na czacie. Inni gracze nie widzą, co piszesz."
+"saves.held-long" = "Zapisy świata są wstrzymane przez: {mods}. Gra nie zapisze, dopóki każdy mod ich nie zwolni."
 "refused" = "Nie zmieniono: {why}."
 "refused.by-mod" = "mod odrzucił zmianę"
 "refused.value" = "{key} przyjmuje {accepts}"

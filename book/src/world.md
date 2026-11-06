@@ -273,7 +273,39 @@ them go, for a mod that saves only while players are in safe places. The
 game saves only while no running mod holds its saves: the timed saves wait
 and `save()` is refused meanwhile. Each mod holds its own, the log names each mod that
 holds or lets go, a mod that turns off lets go, and every hold ends with its
-hosted game.
+hosted game. Once saves stay held for 10 minutes, the log warns and each
+administrator online gets a notice, again every 10 minutes while they stay
+held.
+
+When a dedicated server or a hosted game shuts down, every hold lets go and
+the final save runs; the log names each mod that held saves and for how
+long. `ShutdownStarted` says that the next save is the final one: a mod that
+calls `hold_saves(true)` inside its `ShutdownStarted` handler refuses the
+final save, and the log names it. A hold asked for after that handler is not
+taken, so a mod that keeps calling `hold_saves(true)` does not stop the final
+save.
+
+```rust
+use enshwick::events::ShutdownStarted;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let world = load.world()?;
+    // This world must stay as it was loaded: no final save.
+    load.on::<ShutdownStarted>(move |()| {
+        if let Err(why) = world.hold_saves(true) {
+            enshwick::warn!("the final save runs: {why}");
+        }
+    })?;
+    Ok(())
+}
+```
+
+```luau
+-- This world must stay as it was loaded: no final save.
+enshwick.on("ShutdownStarted", function()
+    enshwick.world.hold_saves(true)
+end)
+```
 
 An entity spawned with `Spawn::new().do_not_save()` stays out of the save,
 as the game's own passing animals do: it is gone once the world loads again.
