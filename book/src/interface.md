@@ -246,8 +246,8 @@ enshwick.ui.on_screen_changed(function(change)
 end)
 ```
 
-Which object the open screen belongs to, such as which chest, is not read
-yet.
+The screen names its kind only, not the object it belongs to, such as
+which chest.
 
 ## A prompt on the mod's object
 

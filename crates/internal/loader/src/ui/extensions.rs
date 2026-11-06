@@ -143,23 +143,29 @@ pub(super) fn link(loader: &Loader) {
         Err(id) if !extensions.is_empty() => {
             loader.feature_off(FEATURE, id, "this build's table lacks it");
         }
-        Err(_) => {}
+        Err(id) => crate::log!(
+            INFO,
+            "interface: mods read no open screen on this build: it lacks {id}"
+        ),
     }
 }
 
-/// The game's name of each `HudScreenType` value on this build, indexed by
-/// value; values past a byte are left out, as the screen is read as one.
 fn screen_names(loader: &Loader) -> Vec<&'static str> {
     let screens = catalogue::type_name(catalogue::ids::HUD_SCREEN_TYPE);
     let mut names = vec![""; usize::from(u8::MAX) + 1];
-    if let Ok(info) = loader.reflection.type_info(screens) {
-        for constant in info.enum_values() {
-            if let Some(slot) = usize::try_from(constant.value())
-                .ok()
-                .and_then(|value| names.get_mut(value))
-            {
-                *slot = constant.name();
-            }
+    let Ok(info) = loader.reflection.type_info(screens) else {
+        crate::log!(
+            INFO,
+            "interface: mods read no open screen on this build: reflection lacks {screens}"
+        );
+        return names;
+    };
+    for constant in info.enum_values() {
+        if let Some(slot) = usize::try_from(constant.value())
+            .ok()
+            .and_then(|value| names.get_mut(value))
+        {
+            *slot = constant.name();
         }
     }
     names
@@ -215,6 +221,9 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize) {
     let (Some(extensions), Some(linked)) = (EXTENSIONS.sealed(), LINKED.get()) else {
         return;
     };
+    if extensions.is_empty() {
+        return;
+    }
     // SAFETY: the caller passes the frame's live interface context on the
     // interface thread; the offsets are the table's `map.context_state` and
     // `map.state_play_data`.

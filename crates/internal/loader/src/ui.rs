@@ -784,9 +784,14 @@ fn frames(engine: &Engine, context: usize) {
         return;
     };
     let screen = screen(engine.app_state(context));
-    // SAFETY: `detour` calls this inside the frame on the interface thread
-    // with the frame's own `context`.
-    let hud_screen = unsafe { extensions::open_screen(context) };
+    // A menu or loading frame may still point at the last game's play data.
+    let hud_screen = if screen == UiFrame::IN_GAME {
+        // SAFETY: `detour` calls this inside the frame on the interface
+        // thread with the frame's own `context`.
+        unsafe { extensions::open_screen(context) }
+    } else {
+        Str::EMPTY
+    };
     for registered in frames.iter().filter(|r| r.live()) {
         let token = NEXT_TOKEN.fetch_add(1, Ordering::Relaxed);
         DRAWING.set(Some(Drawing {
