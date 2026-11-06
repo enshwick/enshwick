@@ -94,8 +94,9 @@ pub(crate) extern "system" fn ui_widget(
     let Some(mut copy) = super::get_headed(widget.cast_const()) else {
         return Status::BAD_ARGS;
     };
-    // The loader refuses a widget whose handle is not the drawing callback's.
-    if with(false, |s| s.drawing.is_some_and(|owner| owner != me)) {
+    // The loader refuses a widget outside a callback or from a handle not
+    // the drawing callback's.
+    if with(false, |s| s.drawing != Some(me)) {
         return Status::WRONG_THREAD;
     }
     let status = draw(frame, &mut copy);
