@@ -96,12 +96,12 @@ impl Load<'_> {
     /// compared on a tick every tenth of a second, so a change shows within
     /// that; a
     /// player's waypoint when they join counts as no change. A waypoint
-    /// outside the map is not handed on, and the log says so once.
+    /// outside the map is not handed on, and the log says so once. On a
+    /// client it hears only a game that client hosts.
     ///
     /// # Errors
     ///
-    /// [`Off`] after `init`, on a client that hosts no game, or on a game
-    /// build without waypoints.
+    /// [`Off`] after `init` or on a game build without waypoints.
     ///
     /// # Examples
     ///
@@ -137,6 +137,8 @@ impl Load<'_> {
                 let Ok(now) = map.waypoint(player.entity) else {
                     continue;
                 };
+                // Kept even outside the map, so a move back counts as a change.
+                let before = state.seen.insert(player.key, now);
                 if now.is_some_and(|at| !inside(state.frame.as_ref(), at)) {
                     if !state.warned {
                         state.warned = true;
@@ -144,7 +146,6 @@ impl Load<'_> {
                     }
                     continue;
                 }
-                let before = state.seen.insert(player.key, now);
                 if before.is_some_and(|before| before != now) {
                     handler(&WaypointChanged {
                         player: player.key,

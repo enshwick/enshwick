@@ -102,9 +102,9 @@ One sender is heard at most once a tenth of a second.
 
 Both come from what a client sends, so neither hands on a place outside
 the [map's frame](#the-maps-frame); a waypoint there is named once in the
-log. A server copy showed a ping a mod raises reaching `on_ping`'s
-subscription; a player's own ping and waypoint wait for the batch's in-game
-check.
+log. Both are unstable: a server copy showed a ping a mod raises reaching
+`on_ping`, and a player's own ping and waypoint are not yet seen in the
+game (see [Stability](stability.md)).
 
 ```rust
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {

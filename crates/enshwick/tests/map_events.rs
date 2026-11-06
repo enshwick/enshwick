@@ -95,7 +95,7 @@ mod tests {
         step();
         step();
         assert!(WAYPOINTS.lock().unwrap().is_empty(), "joining is no change");
-        for bytes in [&set, &set, &moved, &outside, &off] {
+        for bytes in [&set, &set, &moved, &outside, &moved, &off] {
             assert!(loader.set_component(ANN, ty, bytes));
             step();
         }
@@ -107,8 +107,13 @@ mod tests {
             .collect();
         assert_eq!(
             positions,
-            [Some([12.5, 3.0, -7.25]), Some([20.0, 3.0, -7.25]), None],
-            "a waypoint outside the map is left out"
+            [
+                Some([12.5, 3.0, -7.25]),
+                Some([20.0, 3.0, -7.25]),
+                Some([20.0, 3.0, -7.25]),
+                None
+            ],
+            "a waypoint outside the map is left out, and one moved back from there counts"
         );
         assert!(
             WAYPOINTS
