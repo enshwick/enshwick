@@ -165,7 +165,7 @@ impl Registry {
             if name.is_empty() {
                 return Err(bad());
             }
-            let listed = self.listed(d, player, language);
+            let listed = self.listed(d, player, language, None);
             let target = self.player_named(&name, &listed)?;
             return Ok(vec![target, Value::Toggle(on)]);
         }
@@ -247,15 +247,16 @@ impl Registry {
         }
     }
 
-    /// The players a list switches on for `player` now; none while the
-    /// action has nothing at hand.
+    /// The players a list switches on for `player` now, on the object
+    /// `target` names; none while the action has nothing at hand.
     fn listed(
         &self,
         d: &Declared,
         player: &Player,
         language: Language,
+        target: Option<ActionTarget>,
     ) -> Vec<(PlayerKey, String)> {
-        let ask = self.ask(player, language, None);
+        let ask = self.ask(player, language, target);
         let subject = match d.action.at.as_ref().map(|at| at(&ask)) {
             Some(Ok(subject)) => Some(subject),
             Some(Err(_)) => return Vec::new(),
@@ -406,30 +407,33 @@ impl Registry {
             None => Outcome::refused(self.say("actions.unknown", language, &[("word", id)])),
             Some(d) => match sheet::decode_args(args) {
                 None => Outcome::refused(self.say("actions.denied", language, &[])),
-                Some(mut values) => match self.name_players(d, player, &mut values, language) {
-                    Ok(()) => self.run(d, player, &values, language, Via::Interface, target),
-                    Err(why) => Outcome::refused(self.refusal(&why, &d.action, language)),
-                },
+                Some(mut values) => {
+                    match self.name_players(d, player, &mut values, language, target) {
+                        Ok(()) => self.run(d, player, &values, language, Via::Interface, target),
+                        Err(why) => Outcome::refused(self.refusal(&why, &d.action, language)),
+                    }
+                }
             },
         };
         format!("{}{}", u8::from(outcome.done), outcome.text)
     }
 
     /// Fills in the names of the players in `values`, which the interface
-    /// sends by key: online, or on the list.
+    /// sends by key: online, or on the list of the object `target` names.
     fn name_players(
         &self,
         d: &Declared,
         player: &Player,
         values: &mut [Value],
         language: Language,
+        target: Option<ActionTarget>,
     ) -> Result<(), ReadArgsError> {
         if !values.iter().any(|v| matches!(v, Value::Player { .. })) {
             return Ok(());
         }
         let online = self.online();
         let listed = if d.action.on.is_some() {
-            self.listed(d, player, language)
+            self.listed(d, player, language, target)
         } else {
             Vec::new()
         };

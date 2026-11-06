@@ -31,6 +31,26 @@ mod tests {
                     Outcome::done(format!("switched {entity:?}"))
                 },
             )?;
+            actions.add(
+                Action::per_player("access", "Who may open", |ask, _subject| {
+                    match ask.target.and_then(|t| t.entity) {
+                        Some(enshwick::Entity(4096)) => {
+                            vec![(enshwick::PlayerKey::new(0x63), "Olga".to_owned())]
+                        }
+                        _ => Vec::new(),
+                    }
+                })
+                .at(|ask| match ask.target {
+                    Some(_) => Ok(Subject::new(7, "The safe")),
+                    None => Err("Open a safe first".into()),
+                }),
+                |request| match request.args {
+                    [enshwick::actions::Value::Player { name, .. }, _] => {
+                        Outcome::done(format!("{name} switched"))
+                    }
+                    _ => Outcome::refused("bad"),
+                },
+            )?;
             let _kept = ACTIONS.set(actions);
             Ok(Self)
         }
@@ -88,6 +108,19 @@ mod tests {
                 .ask_actions(run, &owner(), 0, "switch", "")
                 .as_deref(),
             Some("0Open a safe first")
+        );
+    }
+
+    #[test]
+    fn an_offline_player_on_the_named_object_s_list_is_switched_from_its_panel() {
+        let loader = start(enshwick::test::FakeHost::new().player(owner()));
+        let safe = ActionTarget::entity(enshwick::Entity(4096));
+        let off = "p0000000000000063\tb0";
+        assert_eq!(
+            loader
+                .ask_action_at(&owner(), 0, "access", off, safe)
+                .as_deref(),
+            Some("1Olga switched")
         );
     }
 
