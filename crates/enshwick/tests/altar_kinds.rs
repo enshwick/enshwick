@@ -31,7 +31,7 @@ mod tests {
                         height: 50,
                     },
                 ],
-                recipe_cost: None,
+                recipe_cost: Some(1),
             })?;
             // A later filter sees the kind's size and builds on it.
             load.on_altar_zone(|zone| zone.grow += 1)?;
@@ -71,6 +71,13 @@ mod tests {
             loader.altar_zone(OTHER_ALTAR, 1, 30),
             (1, 30),
             "another kind's"
+        );
+        assert!(
+            loader
+                .content_ids()
+                .contains(&WIDE.part("recipe").to_string()),
+            "the recipe the cost asks for: {:?}",
+            loader.content_ids()
         );
     }
 }

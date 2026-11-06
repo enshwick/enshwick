@@ -654,6 +654,11 @@ mod tests {
             ..ArsenalChange::default()
         };
         assert_eq!(unknown(arsenals(&registry()), &change), [Guid([99; 16])]);
+        let behaviors = ArsenalChange {
+            behaviors: Some(vec![Guid([98; 16])]),
+            ..ArsenalChange::default()
+        };
+        assert_eq!(unknown(arsenals(&registry()), &behaviors), [Guid([98; 16])]);
         let tune = ArsenalChange {
             tune: vec![AttackChange::new(Guid([20; 16]))],
             ..ArsenalChange::default()
