@@ -91,7 +91,9 @@ reaches the mods before they all decided, so another mod may still refuse
 it, and the game may refuse it after them. `Consumed` comes once the stack
 in the used slot went down or left it, within 5 seconds of the use. A use
 the game refuses, such as a healing potion at full health, raises no
-`Consumed`.
+`Consumed`. Neither does a use whose player moves, sorts or equips any
+stack before the game takes the item, since a stack dragged out of the
+slot looks like one the game took.
 
 A refusal takes the game's path for an action it already ran, so the item
 stays where it was and nothing is lost. `count` is 1 for a use and a

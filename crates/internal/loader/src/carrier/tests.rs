@@ -252,3 +252,32 @@ fn a_socket_of_the_last_game_is_closed_in_the_session_the_client_keeps() {
         );
     }
 }
+
+#[test]
+fn every_rejoin_closes_only_the_socket_the_last_game_left() {
+    let _alone = alone();
+    DESTROYS.store(0, Ordering::Relaxed);
+    let game = Game::for_test(fake_create, fake_destroy, fake_limit);
+    // One socket per game, the fake reading channel and peer from its first
+    // word: the same server, another server, the first again, then a socket
+    // whose memory another channel took, no longer the loader's to close.
+    let sockets = [[0u32], [0], [0], [5]];
+    let expected = [1, 2, 3, 3];
+    for (socket, destroys) in sockets.iter().zip(expected) {
+        let mut guard = CARRIER.client.relock();
+        fresh(&mut guard, 1).peers.insert(
+            SERVER,
+            Peer {
+                socket: socket.as_ptr().expose_provenance(),
+                ..peer(true)
+            },
+        );
+        drop(guard);
+        forget();
+        // A leave with nothing open retires nothing.
+        forget();
+        close_retired(&game, 1);
+        assert_eq!(DESTROYS.load(Ordering::Relaxed), destroys, "{socket:?}");
+        assert!(!CARRIER.client_retired.load(Ordering::Acquire));
+    }
+}

@@ -3083,8 +3083,9 @@ typedef struct EnshwickItemAction {
 // game placed it; the answer is ignored.
 #define EnshwickItemAction_PLACE 6
 // The game took the item of a `CONSUME` every filter
-// allowed from its slot, at a later step; a use the game refuses raises
-// none. The answer is ignored. ABI 11.7.
+// allowed from its slot, at a later step; a use the game refuses, or
+// whose player moves a stack first, raises none. The answer is ignored.
+// ABI 11.7.
 #define EnshwickItemAction_CONSUMED 7
 
 // A mod's item filter: the action and the pointer given at registration;
@@ -4650,8 +4651,8 @@ typedef struct EnshwickHostApi {
   // in the server's world, on the thread of the system that runs it:
   // before the game uses, throws away, equips or takes off an item, where
   // 0 refuses it as an action already run, after a pickup or a
-  // placement, and after a use every filter allowed
-  // (`ItemAction::CONSUMED`, from ABI
+  // placement, and after the game took the item of a use every filter
+  // allowed (`ItemAction::CONSUMED`, from ABI
   // 11.7, so a use reaches a filter twice), whose answers are ignored. A
   // filter ignores a kind it does not know. Allowed during
   // `enshwick_mod_init` only: `Status::TOO_LATE` after,

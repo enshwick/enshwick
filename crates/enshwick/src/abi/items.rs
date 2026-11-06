@@ -68,8 +68,9 @@ impl ItemAction {
     /// game placed it; the answer is ignored.
     pub const PLACE: u32 = 6;
     /// The game took the item of a [`CONSUME`](Self::CONSUME) every filter
-    /// allowed from its slot, at a later step; a use the game refuses raises
-    /// none. The answer is ignored. ABI 11.7.
+    /// allowed from its slot, at a later step; a use the game refuses, or
+    /// whose player moves a stack first, raises none. The answer is ignored.
+    /// ABI 11.7.
     pub const CONSUMED: u32 = 7;
 }
 

@@ -12,7 +12,9 @@
 //! reaches them all again as `CONSUMED` once the game took the item from
 //! its slot, at a later entry of `inventory_actions`: the game refuses some
 //! uses after the filters, such as a potion at full health, and keeps the
-//! item. Pickups and placements reach
+//! item. A use whose player moves, sorts or equips a stack before then
+//! raises none, since a stack dragged out of the slot looks taken. Pickups
+//! and placements reach
 //! the filters from the server's event streams, after the game made them.
 //! Reflection of dedicated server build 26319703 names all of it.
 
@@ -77,6 +79,10 @@ struct Layout {
     slot_index: usize,
     item: Versioned,
     equipment: Versioned,
+    /// The handled `u32` versions in `ServerConsumedPlayerInput` of the
+    /// actions that move a stack and keep it: a transfer, a sort, an
+    /// equipment change and an equipment set swap.
+    moves: [usize; 4],
     /// `ItemActionType` `Consume` and `Trash`.
     consume: u8,
     trash: u8,
@@ -172,6 +178,12 @@ fn layout(loader: &Loader) -> Option<Layout> {
             kind: change + field(equipment, "type")?,
             consumed: field(consumed, "consumedChangeEquipmentAction")?,
         },
+        moves: [
+            field(consumed, "consumedInventoryTransferAction")?,
+            field(consumed, "consumedSortInventoryAction")?,
+            field(consumed, "consumedChangeEquipmentAction")?,
+            field(consumed, "consumedSwapEquipmentSetAction")?,
+        ],
         consume: value("keen::ecs::ItemActionType", "Consume")?,
         trash: value("keen::ecs::ItemActionType", "Trash")?,
         equip: value("keen::ecs::ChangeEquipment", "Equip")?,
@@ -371,10 +383,17 @@ unsafe fn screen_pending(ctx: *mut u64, equipment: bool) {
     let now = Instant::now();
     if !equipment {
         let slot_now = |call: &ItemAction| {
+            // SAFETY: the caller guarantees the system's live context, at its
+            // entry on its thread.
+            let consumed =
+                unsafe { components.component(ctx, call.player.0, layout.consumed_input) }?;
             let slot = u8::try_from(call.slot).ok()?;
             // SAFETY: the caller guarantees the system's live context, at its
             // entry on its thread.
-            unsafe { holding(components, layout, ctx, call.inventory.0, slot) }
+            let stack = unsafe { holding(components, layout, ctx, call.inventory.0, slot) }?;
+            // SAFETY: `consumed` is the player's live
+            // `ServerConsumedPlayerInput` component.
+            Some((stack, unsafe { moves(layout, consumed) }))
         };
         for consumed in taken(now, slot_now) {
             let _heard = ask(&consumed, false);
@@ -450,6 +469,9 @@ unsafe fn screen_pending(ctx: *mut u64, equipment: bool) {
                 },
                 item,
                 count,
+                // SAFETY: `consumed` is the player's live
+                // `ServerConsumedPlayerInput` component.
+                unsafe { moves(layout, consumed) },
                 now,
             );
         }
@@ -516,7 +538,21 @@ struct Use {
     /// What the slot held when the use came.
     item: u32,
     count: u32,
+    /// The player's handled versions of [`Layout::moves`] then.
+    moves: [u32; 4],
     until: Instant,
+}
+
+/// The handled versions of [`Layout::moves`] in `consumed`.
+///
+/// # Safety
+///
+/// - `consumed` is a player's live `ServerConsumedPlayerInput` component,
+///   read on the game thread.
+unsafe fn moves(layout: &Layout, consumed: *const u8) -> [u32; 4] {
+    // SAFETY: the caller's `consumed` is the live component; each u32
+    // version sits at its reflected offset in `layout.moves`.
+    layout.moves.map(|at| unsafe { read_at(consumed, at) })
 }
 
 /// What a watched use's slot shows now.
@@ -526,12 +562,13 @@ enum Seen {
     Taken,
     /// Nothing yet.
     Waiting,
-    /// The time ran out or the inventory is gone: the game refused the use.
+    /// The time ran out, the inventory is gone or the player moved a stack:
+    /// the game refused the use, or the slot can no longer prove it took it.
     Refused,
 }
 
 impl Use {
-    /// Reads the slot's `now`, `None` without the inventory, at `at`; a
+    /// Reads the slot's `now`, `None` when it proves nothing, at `at`; a
     /// stack that grew, as by a pickup, is the new count to go down from.
     fn see(&mut self, now: Option<(u32, u32)>, at: Instant) -> Seen {
         let Some((item, count)) = now else {
@@ -565,8 +602,9 @@ static USES: Uses = Uses {
     any: AtomicBool::new(false),
 };
 
-/// Starts watching `call`, whose slot holds `count` of `item`.
-fn watch(call: ItemAction, item: u32, count: u32, at: Instant) {
+/// Starts watching `call`, whose slot holds `count` of `item`, while the
+/// player's handled moves are `moves`.
+fn watch(call: ItemAction, item: u32, count: u32, moves: [u32; 4], at: Instant) {
     let mut watched = USES.watched.relock();
     if watched.len() >= MAX_WATCHED {
         crate::log!(
@@ -579,17 +617,20 @@ fn watch(call: ItemAction, item: u32, count: u32, at: Instant) {
         call,
         item,
         count,
+        moves,
         until: at + USE_WAIT,
     });
     USES.any.store(true, Ordering::Release);
 }
 
-/// The watched uses whose item the game took, read through `slot_now`,
-/// each item gone from a stack paying one use of its slot, oldest first;
-/// refused ones are let go.
+/// The watched uses whose item the game took, read through `slot_now` with
+/// the player's handled moves, each item gone from a stack paying one use
+/// of its slot, oldest first; refused ones are let go, and so are those
+/// whose player moved a stack since: dragged out of its slot, a stack the
+/// game kept looks like one it took.
 fn taken(
     at: Instant,
-    mut slot_now: impl FnMut(&ItemAction) -> Option<(u32, u32)>,
+    mut slot_now: impl FnMut(&ItemAction) -> Option<((u32, u32), [u32; 4])>,
 ) -> Vec<ItemAction> {
     if !USES.any.load(Ordering::Acquire) {
         return Vec::new();
@@ -614,7 +655,9 @@ fn taken(
             }
             continue;
         }
-        let now = slot_now(&used.call);
+        let now = slot_now(&used.call)
+            .filter(|&(_, moves)| moves == used.moves)
+            .map(|(stack, _)| stack);
         match (used.see(now, at), now) {
             (Seen::Waiting, _) => kept.push(used),
             (Seen::Taken, Some((item, count))) => {
@@ -726,6 +769,7 @@ mod tests {
             kind: 13,
             consumed: 120,
         },
+        moves: [32, 36, 120, 124],
         consume: 1,
         trash: 2,
         equip: 0,
@@ -754,6 +798,7 @@ mod tests {
             call: drink(100, 0),
             item: 7,
             count: 5,
+            moves: STILL,
             until: at + USE_WAIT,
         };
         assert_eq!(used.see(Some((7, 5)), at), Seen::Waiting, "kept so far");
@@ -773,41 +818,78 @@ mod tests {
         );
     }
 
+    /// The player's handled moves while none ran.
+    const STILL: [u32; 4] = [3, 0, 1, 0];
+
     #[test]
     fn a_refused_use_is_let_go_and_one_stack_down_pays_one_use() {
         let _alone = SHARED.relock();
         forget();
         let at = Instant::now();
         // A potion at full health: the game keeps all five.
-        watch(drink(100, 0), 7, 5, at);
-        assert!(taken(at, |_| Some((7, 5))).is_empty());
-        assert!(taken(at + USE_WAIT, |_| Some((7, 5))).is_empty());
+        watch(drink(100, 0), 7, 5, STILL, at);
+        assert!(taken(at, |_| Some(((7, 5), STILL))).is_empty());
+        assert!(taken(at + USE_WAIT, |_| Some(((7, 5), STILL))).is_empty());
         assert!(!USES.any.load(Ordering::Acquire), "let go");
         // Two uses of one stack, then one more of another slot: the stack
         // goes down once.
-        watch(drink(100, 0), 7, 5, at);
-        watch(drink(100, 0), 7, 5, at);
-        watch(drink(100, 1), 7, 2, at);
-        let slots = |call: &ItemAction| Some(if call.slot == 0 { (7, 4) } else { (7, 2) });
+        watch(drink(100, 0), 7, 5, STILL, at);
+        watch(drink(100, 0), 7, 5, STILL, at);
+        watch(drink(100, 1), 7, 2, STILL, at);
+        let slots = |call: &ItemAction| Some((if call.slot == 0 { (7, 4) } else { (7, 2) }, STILL));
         assert_eq!(taken(at, slots).len(), 1, "one use paid");
         assert!(
             taken(at, slots).is_empty(),
             "the other waits for the next one"
         );
-        let slots = |call: &ItemAction| Some(if call.slot == 0 { (7, 3) } else { (7, 1) });
+        let slots = |call: &ItemAction| Some((if call.slot == 0 { (7, 3) } else { (7, 1) }, STILL));
         assert_eq!(taken(at, slots).len(), 2, "both stacks went down");
         assert!(!USES.any.load(Ordering::Acquire));
         // Two uses of one stack that the game ran in one step: down by two.
-        watch(drink(100, 0), 7, 5, at);
-        watch(drink(100, 0), 7, 5, at);
-        watch(drink(100, 0), 7, 5, at);
+        watch(drink(100, 0), 7, 5, STILL, at);
+        watch(drink(100, 0), 7, 5, STILL, at);
+        watch(drink(100, 0), 7, 5, STILL, at);
         assert_eq!(
-            taken(at, |_| Some((7, 3))).len(),
+            taken(at, |_| Some(((7, 3), STILL))).len(),
             2,
             "two items gone, two uses"
         );
-        assert_eq!(taken(at, |_| Some((0, 0))).len(), 1, "the stack went");
+        assert_eq!(
+            taken(at, |_| Some(((0, 0), STILL))).len(),
+            1,
+            "the stack went"
+        );
         assert!(!USES.any.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn a_refused_use_whose_stack_the_player_drags_away_pays_nothing() {
+        let _alone = SHARED.relock();
+        forget();
+        let at = Instant::now();
+        // A potion at full health, then the stack dragged out of its slot,
+        // split in half, sorted away or swapped with another item: each move
+        // is a handled version that went up.
+        for (i, stack) in [(0, 0), (7, 2), (0, 0), (9, 1)].into_iter().enumerate() {
+            watch(drink(100, 0), 7, 5, STILL, at);
+            assert!(taken(at, |_| Some(((7, 5), STILL))).is_empty(), "kept");
+            let mut moved = STILL;
+            moved[i] += 1;
+            assert!(
+                taken(at, |_| Some((stack, moved))).is_empty(),
+                "move {i} pays no use"
+            );
+            assert!(!USES.any.load(Ordering::Acquire), "move {i}: let go");
+        }
+        // A move that ran before the game took the item still pays nothing:
+        // the slot alone cannot tell the two apart.
+        watch(drink(100, 0), 7, 5, STILL, at);
+        let mut moved = STILL;
+        moved[0] += 1;
+        assert!(taken(at, |_| Some(((7, 4), moved))).is_empty());
+        // Moves before the use are the ones it starts from.
+        watch(drink(100, 0), 7, 5, [9, 9, 9, 9], at);
+        assert_eq!(taken(at, |_| Some(((7, 4), [9, 9, 9, 9]))).len(), 1);
     }
 
     #[test]
