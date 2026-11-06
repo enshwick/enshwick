@@ -100,40 +100,55 @@ mod tests {
         let _gone = std::fs::remove_dir_all(&data);
     }
 
-    #[test]
-    fn a_pack_draws_its_window_and_hud_under_its_own_handle() {
-        use enshwick::abi::Side;
-        use enshwick::test::Drawn;
-        use enshwick::ui::Anchor;
+    fn handle() -> Option<ModHandle> {
+        enshwick::host().map(|host| host.handle())
+    }
 
-        let loader = FakeHost::new().side(Side::CLIENT).install();
+    #[test]
+    fn a_pack_s_init_and_later_calls_see_the_pack_as_their_host() {
+        let loader = FakeHost::new().install();
         // SAFETY: the fake host's table lives for the process; the loader
         // makes its own handle the host of the copy that runs the packs.
         unsafe { enshwick::__private::install_host(loader.api(), ModHandle(9)) };
-        // SAFETY: `init_pack` needs a host table that lives for the process,
-        // which the installed fake host's is.
+        // SAFETY: the fake host's table lives for the process.
         let status = unsafe {
-            enshwick::__private::init_pack(loader.api(), ModHandle(1), |load| {
-                load.on_frame(|frame| {
-                    frame.window("pack", "Pack", |w| w.label("framed"));
-                })?;
-                load.on_hud(|hud| hud.text(Anchor::TopRight, "hud line"))?;
+            enshwick::__private::init_pack(loader.api(), ModHandle(1), |_| {
+                assert_eq!(handle(), Some(ModHandle(1)), "init runs as the pack");
                 Ok(())
             })
         };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
-        let drawn = loader.draw_frame();
-        assert!(
-            drawn
-                .iter()
-                .any(|d| matches!(d, Drawn::Label { text, .. } if text == "framed")),
-            "the window's label, drawn as the pack: {drawn:?}"
+        assert_eq!(
+            handle(),
+            Some(ModHandle(9)),
+            "the loader's again after init"
         );
-        let hud = loader.draw_hud();
-        assert!(
-            hud.iter()
-                .any(|(_, d)| matches!(d, Drawn::Label { text, .. } if text == "hud line")),
-            "the HUD line, drawn as the pack: {hud:?}"
-        );
+        let nested = || {
+            // SAFETY: the fake host's table lives for the process.
+            let nested =
+                unsafe { enshwick::__private::as_pack(loader.api(), ModHandle(3), handle) };
+            (handle(), nested)
+        };
+        // SAFETY: the fake host's table lives for the process.
+        let inner = unsafe { enshwick::__private::as_pack(loader.api(), ModHandle(2), nested) };
+        assert_eq!(inner, (Some(ModHandle(2)), Some(ModHandle(3))));
+        assert_eq!(handle(), Some(ModHandle(9)));
+    }
+
+    #[test]
+    fn a_pack_s_panic_leaves_the_loader_as_the_host() {
+        let loader = FakeHost::new().install();
+        // SAFETY: the fake host's table lives for the process.
+        unsafe { enshwick::__private::install_host(loader.api(), ModHandle(9)) };
+        let panicked = std::panic::catch_unwind(|| {
+            // SAFETY: the fake host's table lives for the process.
+            unsafe {
+                enshwick::__private::as_pack(loader.api(), ModHandle(2), || {
+                    panic!("the pack's builder")
+                })
+            }
+        });
+        assert!(panicked.is_err());
+        assert_eq!(handle(), Some(ModHandle(9)));
     }
 }

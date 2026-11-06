@@ -153,7 +153,9 @@ pub fn start(mods: usize) {
 }
 
 /// Runs mod `owner`'s callback `f` for `feature`, marking it for crash
-/// blame, and timing it when diagnostics are on.
+/// blame, and timing it when diagnostics are on. A data pack's callback
+/// runs in the loader's own copy of the API, so it runs with the pack as
+/// that copy's host.
 #[inline]
 pub fn call<R>(owner: ModIndex, feature: Feature, f: impl FnOnce() -> R) -> R {
     let marker = u32::try_from(owner.get())
@@ -162,16 +164,38 @@ pub fn call<R>(owner: ModIndex, feature: Feature, f: impl FnOnce() -> R) -> R {
         .and_then(|o| o.checked_mul(256))
         .map_or(0, |o| o | feature as u32);
     let outer = RUNNING.replace(marker);
-    let result = match BUCKETS
+    let result = if is_pack(owner) {
+        // SAFETY: `API` is the loader's process-wide table, a static.
+        unsafe {
+            enshwick::__private::as_pack(&raw const crate::host::API, owner.handle(), || {
+                measured(owner, feature, f)
+            })
+        }
+    } else {
+        measured(owner, feature, f)
+    };
+    RUNNING.set(outer);
+    result
+}
+
+/// Whether mod `owner` is a data pack.
+fn is_pack(owner: ModIndex) -> bool {
+    crate::host::loader()
+        .and_then(|loader| loader.mods.get(owner.get()))
+        .is_some_and(|record| record.pack)
+}
+
+/// Runs `f`, timed in `owner`'s bucket for `feature` while timing is on.
+#[inline]
+fn measured<R>(owner: ModIndex, feature: Feature, f: impl FnOnce() -> R) -> R {
+    match BUCKETS
         .get()
         .zip(owner.get().checked_mul(FEATURES))
         .and_then(|(b, at)| b.get(at.checked_add(feature as usize)?))
     {
         None => f(),
         Some(bucket) => timed(bucket, f),
-    };
-    RUNNING.set(outer);
-    result
+    }
 }
 
 /// The mod callback this thread runs, if any: the mod's index and the
