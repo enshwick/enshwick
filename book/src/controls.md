@@ -70,10 +70,11 @@ Windows reports it as Enter.
 | `.fires(&[Phase, ...])`       | when it fires, in place of `Phase::Press` alone; empty keeps it      |
 | `.hold_for(duration)`         | how long a key stays down before `Phase::Hold`; 500 ms by default    |
 | `.link(GameAction)`           | fires on the server when the player's game action fires              |
+| `.runs(action)`               | runs the mod's action on the server each time the control fires      |
 
 In Luau, a control is a table of the builder's fields: `name`, `label`,
 `key`, `second`, `fires` as a list of phase names, `hold_for` in seconds,
-and `link` as the game action's name. A key is its text, such as
+`link` as the game action's name, and `runs` as the action's id. A key is its text, such as
 `"Shift+E"`; `enshwick.controls.parse(text)` and `from_bits(bits)` return
 its own spelling, and `bits`, `code`, `modifiers` and `is_mouse` read it. The handler gets a table of
 `control`, `phase` and, on the server, `player`.
@@ -114,6 +115,52 @@ enshwick.controls.control({ name = "horn", label = "Horn", key = "H" }, function
     actions:run("honk", {})
 end)
 ```
+
+A control that only runs an action without arguments names it with
+`.runs("honk")` instead: the client sends the run each time the control
+fires, and the handler still runs on the client.
+
+## A mod that runs on the server only
+
+A mod of side `server` has no code on the players' clients, so it declares
+controls that run one of its actions. The server sends those controls to
+each client with Enshwick that joins: the client's Controls page lists them
+under the mod's name with the mod's keys, the player may change the keys,
+and a press sends the run to the server. The server checks who may run the
+action and shows its reply as a notice, as for any action. The label is a
+key of the mod's texts, so each player reads it in their own language. A
+player without Enshwick gets nothing and plays on.
+
+```rust
+use enshwick::actions::{Action, Outcome};
+use enshwick::controls::{Control, Key};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let texts = load.texts_from(
+        "[en]\n\"day\" = \"Make it day\"\n\n[uk]\n\"day\" = \"Зробити день\"\n",
+    )?;
+    let actions = load.actions(texts)?;
+    actions.add(Action::new("day", "day").admins(), |_| Outcome::done("Morning"))?;
+    load.control(Control::new("day", "day").key(Key::parse("F8")?).runs("day"), |_| {})?;
+    Ok(())
+}
+```
+
+```luau
+local texts = enshwick.i18n.texts_from('[en]\n"day" = "Make it day"\n\n[uk]\n"day" = "Зробити день"\n')
+local actions = enshwick.actions.actions(texts)
+actions:add({ id = "day", label = "day", admins = true }, function()
+    return enshwick.actions.done("Morning")
+end)
+enshwick.controls.control({ name = "day", label = "day", key = "F8", runs = "day" }, function() end)
+```
+
+The server sends up to 24 such controls a mod, each label cut to 160 bytes;
+a client keeps those of up to 32 mods. While a client
+hosts the world, it runs the mod itself, so its own copy reads the keys. In
+another's world, the server's controls take the place of the client's own
+copy of the mod. The [`you.welcome`](https://github.com/enshwick/enshwick/tree/main/examples/you.welcome)
+example offers its administrators such a key.
 
 ## Following a game action
 
@@ -159,7 +206,7 @@ any player holds this step, on the server, vanilla clients included.
 ## The player's keys
 
 The Mods screen's Controls page lists every mod's controls under the mod's
-name. A click on a key waits for the next key or combination, which becomes
+name, the server's controls of its server-only mods included. A click on a key waits for the next key or combination, which becomes
 the binding; Escape cancels and Unbind clears it. The left mouse button
 works the page, so it is bound in the file only. The page warns when two
 controls share a key; the game's own keys are not checked.
@@ -195,4 +242,5 @@ holds as the server does once a step, and fires the linked controls. `FakeHost::
 keys, `FakeHost::side(Side::CLIENT)` makes the fake a client, which alone
 sends player actions,
 `controls()` lists the controls with their keys in force, and
-`action_runs()` the actions a control sent the server.
+`action_runs()` the actions a control sent the server, by its handler or by
+`.runs`.

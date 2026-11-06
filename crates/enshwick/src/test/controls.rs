@@ -357,7 +357,8 @@ impl Installed {
     }
 
     /// The player actions the mod asked the server to run, with
-    /// [`Actions::run`](crate::actions::Actions::run): action and arguments
+    /// [`Actions::run`](crate::actions::Actions::run) or a control's
+    /// [`Control::runs`](crate::controls::Control::runs): action and arguments
     /// in the sheet's encoding, in order. As in the loader, only a client
     /// sends them: a fake on the server side refuses the run.
     ///

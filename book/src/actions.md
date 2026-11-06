@@ -236,8 +236,9 @@ English.
 Actions run in the game server: the dedicated server, and a client while it
 hosts a game, single player included. A control or panel that runs one
 needs Enshwick on the player's client. A mod of side `server` has no part on
-the client to declare controls or panels, so its actions run only from the
-console.
+the client, so it offers its actions through controls that
+[run an action](controls.md#a-mod-that-runs-on-the-server-only): the server
+sends them to each player's client.
 
 ## Worked example
 
