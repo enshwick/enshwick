@@ -25,7 +25,7 @@ tree has 243 nodes, 12 of them roots.
 | `links_from` | the nodes it is unlocked from, vanilla or a mod's |
 | `name`, `description` | its texts' tags |
 | `cost` | the skill points it costs; nil keeps the vanilla node's |
-| `max_level` | the levels it has; nil keeps the vanilla node's |
+| `max_level` | 0 for a copy of a node with levels; nil keeps the vanilla node's |
 | `kind` | what it is; nil keeps the vanilla node's |
 
 A player unlocks it with skill points as the game's own nodes. The tree
@@ -58,13 +58,19 @@ A player's save keeps a fixed count of unlocked nodes: 256 on server 399, as
 the running server's reflection reports. The game's tree takes 243 of them,
 so 13 nodes fit for every mod together, in load order. A node beyond the room
 returns `Err(Off)` when the game's own tree is full already; past other mods'
-nodes, the loader logs it under the mod's name when the game first reads the
-tree and leaves it out. On a server copy of server 399, the 14th node of a
-mod was left out this way.
+nodes, the loader leaves it out when the game first reads the tree. On a
+server copy of server 399, the 14th node of a mod was left out this way.
 
-A node closer to another than half the tree's smallest gap between two nodes
-returns `Err(Off)`: on server 399 that gap is about 103, so a node keeps about
-51 away from every other.
+Each node shows as the mod's feature `skill node <id>` in the status summary
+and on the Mods screen, with the reason when it is refused or left out.
+
+A node closer to another than half the vanilla tree's smallest gap between
+two nodes returns `Err(Off)`: on server 399 that gap is about 103, so a node
+keeps about 51 away from every other, mods' nodes included. A place that is
+not a finite number, a node linked twice from one node, and a node with
+levels also return `Err(Off)`. The game keeps a node's levels in a slot of
+its own (`levelIndex`), which a copy would share with its vanilla node, so a
+copy of a node with levels sets `max_level` to 0.
 
 ## A perk of the mod's own
 

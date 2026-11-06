@@ -29,7 +29,7 @@
 //! }
 //! ```
 
-use crate::content::knowledge::{hash_key, key_of_hash};
+use crate::content::knowledge::{hash_key, key_of as id_of};
 use crate::resources::{Registry, Value};
 use crate::typed::ecs::UnlockedSkillNodes;
 use crate::typed::{
@@ -56,6 +56,8 @@ const POSITION: &str = "uiPosition";
 const INCOMING: &str = "incomingLinks";
 const OUTGOING: &str = "outgoingLinks";
 const KNOWN: &str = "knownSkillNodes";
+const MAX_LEVEL: &str = "maxLevel";
+const LEVEL_INDEX: &str = "levelIndex";
 
 /// A node of the skill tree, vanilla or a mod's.
 ///
@@ -92,6 +94,9 @@ impl SkillNodeId {
 }
 
 /// A vanilla node of the skill tree, from [`Load::skill_nodes`].
+///
+/// The name is enshwick's: it holds a few fields of the game's
+/// `SkillTreeNode`.
 ///
 /// # Examples
 ///
@@ -136,7 +141,9 @@ pub struct NewSkillNode {
     pub description: Guid,
     /// The skill points it costs; `None` keeps the vanilla node's.
     pub cost: Option<u16>,
-    /// The levels it has; `None` keeps the vanilla node's.
+    /// The levels it has; `None` keeps the vanilla node's. A node with
+    /// levels is refused, since the game keeps them in a slot of the vanilla
+    /// node's own, so a copy of one sets 0.
     pub max_level: Option<u8>,
     /// What it is; `None` keeps the vanilla node's.
     pub kind: Option<SkillNodeType>,
@@ -201,11 +208,6 @@ pub struct NewPerk {
     pub description: Guid,
 }
 
-/// The id a value of a node or link id holds.
-fn id_of(value: &Value) -> Option<u32> {
-    value.field(ID).and_then(key_of_hash)
-}
-
 /// The list in field `name` of `value`, to change.
 fn list_mut<'a>(value: &'a mut Value, name: &str) -> Result<&'a mut Vec<Value>, Off> {
     match value.field_mut(name) {
@@ -268,10 +270,15 @@ fn spacing(nodes: &[(f64, f64)]) -> f64 {
     closest / 2.0
 }
 
-/// `tree` with `new` added, unless the tree already holds `room` nodes.
-fn add_node_to(mut tree: Value, new: &NewSkillNode, room: usize) -> Result<Value, Off> {
+/// The node of `nodes` that `new` copies, or why `new` does not fit beside
+/// them.
+fn model<'a>(
+    nodes: &'a [Value],
+    new: &NewSkillNode,
+    room: usize,
+    near: f64,
+) -> Result<&'a Value, Off> {
     let refuse = |why: String| Err(Off::new(format!("skill node {}: {why}", new.id)));
-    let nodes = list(&tree, NODES);
     if nodes.len() >= room {
         return refuse(format!(
             "the tree holds {} nodes, the most a player's save keeps",
@@ -288,25 +295,46 @@ fn add_node_to(mut tree: Value, new: &NewSkillNode, room: usize) -> Result<Value
     else {
         return refuse(format!("no node {} to copy", new.like.get()));
     };
-    let places: Vec<_> = nodes.iter().filter_map(position).collect();
+    let levels = match (new.max_level, like.field(MAX_LEVEL)) {
+        (Some(levels), _) => u64::from(levels),
+        (None, Some(Value::Uint(levels))) => *levels,
+        (None, _) => 0,
+    };
+    if levels > 0 {
+        return refuse(
+            "a node with levels keeps them in a slot of the game's own (levelIndex), which a copy would share".into(),
+        );
+    }
     let (x, y) = (f64::from(new.x), f64::from(new.y));
-    let near = spacing(&places);
-    if let Some(&(ox, oy)) = places
+    if !x.is_finite() || !y.is_finite() {
+        return refuse(format!("({x}, {y}) is no place on the tree"));
+    }
+    if let Some((ox, oy)) = nodes
         .iter()
-        .find(|&&(ox, oy)| (ox - x).hypot(oy - y) < near)
+        .filter_map(position)
+        .find(|&(ox, oy)| (ox - x).hypot(oy - y) < near)
     {
         return refuse(format!(
             "({x}, {y}) lies within {near} of the node at ({ox}, {oy})"
         ));
     }
-    if let Some(from) = new
-        .links_from
-        .iter()
-        .find(|from| !nodes.iter().any(|held| id_of(held) == Some(from.get())))
-    {
-        return refuse(format!("no node {} to link from", from.get()));
+    for (i, from) in new.links_from.iter().enumerate() {
+        if !nodes.iter().any(|held| id_of(held) == Some(from.get())) {
+            return refuse(format!("no node {} to link from", from.get()));
+        }
+        if new.links_from[..i].contains(from) {
+            return refuse(format!("linked from node {} twice", from.get()));
+        }
     }
-    let mut copy = like.clone();
+    Ok(like)
+}
+
+/// `tree` with `new` added, unless the tree already holds `room` nodes or
+/// `new` does not fit beside them (see [`model`]).
+fn add_node_to(mut tree: Value, new: &NewSkillNode, room: usize, near: f64) -> Result<Value, Off> {
+    let mut copy = model(list(&tree, NODES), new, room, near)?.clone();
+    let node = new.node();
+    let (x, y) = (f64::from(new.x), f64::from(new.y));
     let links: Vec<u32> = (0..new.links_from.len()).map(|i| new.link(i)).collect();
     let set = |copy: &mut Value, field: &str, value: Value| {
         if let Some(held) = copy.field_mut(field) {
@@ -330,11 +358,13 @@ fn add_node_to(mut tree: Value, new: &NewSkillNode, room: usize) -> Result<Value
         Value::List(links.iter().map(|&l| hash_key(l)).collect()),
     );
     set(&mut copy, OUTGOING, Value::List(Vec::new()));
+    // The slot every node without levels holds (server 387).
+    set(&mut copy, LEVEL_INDEX, Value::Uint(0));
     if let Some(cost) = new.cost {
         set(&mut copy, "costs", Value::Uint(cost.into()));
     }
     if let Some(levels) = new.max_level {
-        set(&mut copy, "maxLevel", Value::Uint(levels.into()));
+        set(&mut copy, MAX_LEVEL, Value::Uint(levels.into()));
     }
     if let Some(kind) = &new.kind {
         set(&mut copy, "type", kind.to_value());
@@ -383,6 +413,49 @@ impl Load<'_> {
             .and_then(|count| usize::try_from(count).ok())
             .ok_or_else(|| Off::new(format!("skill nodes: {KNOWN} is no array of a count")))
     }
+
+    /// Checks `new` against the vanilla tree and declares its id: the room
+    /// a save keeps, the spacing of the vanilla nodes and the tree's key.
+    fn check_skill_node(
+        &mut self,
+        new: &NewSkillNode,
+    ) -> Result<(usize, f64, crate::abi::ResourceKey), Off> {
+        let room = self.skill_room()?;
+        let key = self.skill_tree()?;
+        let vanilla = self.host().game_value(key)?;
+        let near = spacing(
+            &list(&vanilla, NODES)
+                .iter()
+                .filter_map(position)
+                .collect::<Vec<_>>(),
+        );
+        // A link from a node a mod adds is only in the tree once it is built.
+        let known: Vec<_> = nodes_of(&vanilla).into_iter().map(|node| node.id).collect();
+        let checked = NewSkillNode {
+            links_from: new
+                .links_from
+                .iter()
+                .copied()
+                .filter(|from| known.contains(from))
+                .collect(),
+            ..new.clone()
+        };
+        add_node_to(vanilla, &checked, room, near)?;
+        self.declare(new.id)?;
+        Ok((room, near, key))
+    }
+}
+
+/// Shows `outcome` as the mod's feature `feature` in the loader's status
+/// summary and on its Mods screen: on, or off with the reason.
+fn report<T>(host: crate::host::Host, feature: &str, outcome: Result<T, Off>) -> Result<T, Off> {
+    let reason = outcome.as_ref().err().map_or("", Off::to_reason);
+    let _shown = (host.api().feature)(
+        host.handle(),
+        crate::abi::Str::new(feature),
+        crate::abi::Str::new(reason),
+    );
+    outcome
 }
 
 #[crate::script(content_skills)]
@@ -410,41 +483,32 @@ impl Load<'_> {
     ///
     /// A player's save keeps a fixed count of unlocked nodes (256 on server
     /// 399, beside the game's 243), and the game's own tree takes most of
-    /// them: every mod's nodes share the rest, in load order.
+    /// them: every mod's nodes share the rest, in load order. Each node
+    /// shows as the mod's feature `skill node <id>` in the status summary
+    /// and on the Mods screen, with the reason when it is refused.
     ///
     /// # Errors
     ///
     /// [`Off`] when the tree holds as many nodes as a save keeps, `like` is
-    /// not in the game's tree, the place lies within half the tree's
-    /// smallest gap of another node, or the loader refuses the id (see
-    /// [`Load::declare`]). A node beyond the room after other mods' nodes,
-    /// or linked from a node no mod adds, is logged when the game first
-    /// reads the tree, and left out.
+    /// not in the game's tree, the node would have levels, the place is not
+    /// finite or lies within half the vanilla tree's smallest gap of
+    /// another node, a node is linked from twice, or the loader refuses the
+    /// id (see [`Load::declare`]). A node beyond the room after other mods'
+    /// nodes, or linked from a node no mod adds, is refused when the game
+    /// first reads the tree, and left out.
     ///
     /// # Examples
     ///
     /// See the [module](self).
     #[script]
     pub fn add_skill_node(&mut self, new: NewSkillNode) -> Result<SkillNodeId, Off> {
-        let room = self.skill_room()?;
-        let key = self.skill_tree()?;
-        let vanilla = self.host().game_value(key)?;
-        // A link from a node a mod adds is only in the tree once it is built.
-        let known: Vec<_> = nodes_of(&vanilla).into_iter().map(|node| node.id).collect();
-        let checked = NewSkillNode {
-            links_from: new
-                .links_from
-                .iter()
-                .copied()
-                .filter(|from| known.contains(from))
-                .collect(),
-            ..new.clone()
-        };
-        add_node_to(vanilla, &checked, room)?;
-        self.declare(new.id)?;
+        let host = self.host();
+        let feature = format!("skill node {}", new.id);
+        let checked = self.check_skill_node(&new);
+        let (room, near, key) = report(host, &feature, checked)?;
         let node = new.node();
-        crate::resources::serve_value(self.host(), key, key, move |tree| {
-            add_node_to(tree, &new, room)
+        crate::resources::serve_value(host, key, key, move |tree| {
+            report(host, &feature, add_node_to(tree, &new, room, near))
         })?;
         Ok(node)
     }
@@ -512,6 +576,9 @@ impl Load<'_> {
 mod tests {
     use super::*;
 
+    /// Half the gap of the two nodes of [`tree`].
+    const NEAR: f64 = 50.0;
+
     fn node(id: u32, x: f64, kind: &str) -> Value {
         Value::Struct(vec![
             (ID.into(), hash_key(id)),
@@ -529,6 +596,7 @@ mod tests {
             ("costs".into(), Value::Uint(1)),
             ("type".into(), Value::Name(kind.into())),
             ("maxLevel".into(), Value::Uint(0)),
+            ("levelIndex".into(), Value::Uint(u64::from(id))),
         ])
     }
 
@@ -559,7 +627,7 @@ mod tests {
 
     #[test]
     fn a_node_copies_its_model_and_is_linked_both_ways_from_its_source() {
-        let added = add_node_to(tree(), &new("you.skills:a", 300.0), 256).unwrap();
+        let added = add_node_to(tree(), &new("you.skills:a", 300.0), 256, NEAR).unwrap();
         let nodes = list(&added, NODES);
         assert_eq!(nodes.len(), 3);
         let copy = &nodes[2];
@@ -580,28 +648,64 @@ mod tests {
     #[test]
     fn a_node_beyond_the_room_on_another_or_from_nowhere_is_refused() {
         assert!(
-            add_node_to(tree(), &new("you.skills:a", 300.0), 2).is_err(),
+            add_node_to(tree(), &new("you.skills:a", 300.0), 2, NEAR).is_err(),
             "full"
         );
         assert!(
-            add_node_to(tree(), &new("you.skills:a", 140.0), 256).is_err(),
+            add_node_to(tree(), &new("you.skills:a", 140.0), 256, NEAR).is_err(),
             "within 50 of 100"
         );
-        assert!(add_node_to(tree(), &new("you.skills:a", 151.0), 256).is_ok());
+        assert!(add_node_to(tree(), &new("you.skills:a", 151.0), 256, NEAR).is_ok());
         let nowhere = NewSkillNode {
             links_from: vec![SkillNodeId(9)],
             ..new("you.skills:a", 300.0)
         };
-        assert!(add_node_to(tree(), &nowhere, 256).is_err());
+        assert!(add_node_to(tree(), &nowhere, 256, NEAR).is_err());
         let unlike = NewSkillNode {
             like: SkillNodeId(9),
             ..new("you.skills:a", 300.0)
         };
-        assert!(add_node_to(tree(), &unlike, 256).is_err());
-        let once = add_node_to(tree(), &new("you.skills:a", 300.0), 256).unwrap();
+        assert!(add_node_to(tree(), &unlike, 256, NEAR).is_err());
+        let once = add_node_to(tree(), &new("you.skills:a", 300.0), 256, NEAR).unwrap();
         assert!(
-            add_node_to(once, &new("you.skills:a", 600.0), 256).is_err(),
+            add_node_to(once, &new("you.skills:a", 600.0), 256, NEAR).is_err(),
             "twice"
+        );
+    }
+
+    #[test]
+    fn a_node_off_the_plane_linked_twice_or_with_levels_is_refused_and_a_copy_takes_no_level_slot()
+    {
+        for x in [f32::NAN, f32::INFINITY] {
+            assert!(
+                add_node_to(tree(), &new("you.skills:a", x), 256, NEAR).is_err(),
+                "{x}"
+            );
+        }
+        let twice = NewSkillNode {
+            links_from: vec![SkillNodeId(1), SkillNodeId(1)],
+            ..new("you.skills:a", 300.0)
+        };
+        assert!(add_node_to(tree(), &twice, 256, NEAR).is_err());
+        let levels = NewSkillNode {
+            max_level: Some(3),
+            ..new("you.skills:a", 300.0)
+        };
+        assert!(add_node_to(tree(), &levels, 256, NEAR).is_err());
+        let added = add_node_to(tree(), &new("you.skills:a", 300.0), 256, NEAR).unwrap();
+        assert_eq!(
+            list(&added, NODES)[2].field(LEVEL_INDEX),
+            Some(&Value::Uint(0)),
+            "not the model's 2"
+        );
+    }
+
+    #[test]
+    fn the_spacing_given_holds_however_close_earlier_mods_placed_theirs() {
+        let first = add_node_to(tree(), &new("you.skills:a", 160.0), 256, NEAR).unwrap();
+        assert!(
+            add_node_to(first, &new("you.skills:b", 190.0), 256, NEAR).is_err(),
+            "30 from the first mod's node"
         );
     }
 

@@ -172,6 +172,24 @@ mod tests {
             "a link from a node no mod adds: {:?}",
             loader.logs()
         );
+        let features = loader.features();
+        let off = |id: &str| {
+            features
+                .iter()
+                .find(|(name, _)| name == &format!("skill node {id}"))
+                .map(|(_, off)| off.clone())
+        };
+        assert_eq!(off("you.skills:first"), Some(None), "{features:?}");
+        for (id, why) in [
+            ("you.skills:third", "the most a player's save keeps"),
+            ("you.skills:near", "lies within"),
+            ("you.skills:nowhere", "no node 9"),
+        ] {
+            assert!(
+                off(id).flatten().is_some_and(|off| off.contains(why)),
+                "{id} shows why it is refused: {features:?}"
+            );
+        }
         let refused = REFUSED.lock().unwrap().clone();
         assert_eq!(refused.len(), 2, "{refused:?}");
         assert!(refused[0].contains("lies within"), "{}", refused[0]);
