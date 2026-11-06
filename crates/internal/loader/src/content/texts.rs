@@ -336,7 +336,16 @@ mod tests {
         FORMAT_NEXT.slot().store(next as usize, Ordering::Release);
         let mut texts = rustc_hash::FxHashMap::default();
         texts.insert(7, vec![(ENGLISH, "Luau check")]);
-        assert!(OURS.set(ours(&texts)).is_ok());
+        let answered = ours(&texts);
+        assert!(
+            crate::notices::tag_ids()
+                .chain(crate::ui::tag_ids())
+                .all(|id| answered.contains(&id))
+                && answered.len() > 1 + crate::notices::tag_ids().count(),
+            "every notice and dialog tag is answered"
+        );
+        assert!(!answered.contains(&0) && !answered.contains(&1));
+        assert!(OURS.set(answered).is_ok());
         assert!(TEXTS.set(texts).is_ok());
 
         let mut out = [0u64; 3];

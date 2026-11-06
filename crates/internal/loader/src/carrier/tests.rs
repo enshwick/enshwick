@@ -229,6 +229,15 @@ fn the_host_s_own_player_gets_no_socket_where_its_machine_is_not_the_host_s() {
 }
 
 #[test]
+fn every_other_player_on_a_machine_of_its_own_gets_a_socket() {
+    assert!(wired(8, 2, 1, 7), "another player, the host known");
+    assert!(wired(8, 2, 1, 0), "another player, the host not known yet");
+    assert!(!wired(7, 2, 1, 7), "the host's own player by its key");
+    assert!(!wired(8, 1, 1, 7), "the host's machine");
+    assert!(!wired(8, 0, 1, 7), "no machine");
+}
+
+#[test]
 fn a_session_turned_off_is_on_again_after_the_game_ends() {
     let _alone = alone();
     *CARRIER.server.relock() = Some(members_twice(0));
