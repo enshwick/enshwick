@@ -13,7 +13,7 @@ pinned version through rustup), [lefthook](https://lefthook.dev),
 ```bash
 lefthook install                            # the git hooks
 rumdl check .                               # every document, as the hooks check it
-cargo install --locked cargo-nextest@0.9.150
+cargo install --locked cargo-nextest@0.9.151
 cargo nextest run --workspace
 ```
 
