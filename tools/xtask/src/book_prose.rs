@@ -473,9 +473,58 @@ mod tests {
         let sentence = format!("{}.", ["word"; 21].join(" "));
         let text = format!("{sentence} {sentence} Two words.");
         assert!(problems("book/src/x.md", &text).is_empty());
+        let average = format!("{}. {sentence}", ["word"; 19].join(" "));
+        assert!(problems("book/src/x.md", &average).is_empty());
         assert_eq!(
             problems("book/src/x.md", &format!("{sentence} {sentence}")),
             ["book/src/x.md: 2 sentences have 42 words, above an average of 20"]
+        );
+    }
+
+    #[test]
+    fn link_titles_reference_targets_and_tag_attributes_count_nothing() {
+        assert_eq!(
+            counts(
+                "See [the page](x.md \"A long title\") and [the ref][some long ref] or <a href=\"x.md\">this one</a>."
+            ),
+            [(9, 0)]
+        );
+    }
+
+    #[test]
+    fn a_lone_backtick_or_angle_bracket_stays_prose() {
+        assert_eq!(counts("It costs 5` more, and a <= b."), [(7, 0)]);
+        assert_eq!(counts("Ends on a tick `"), [(4, 0)]);
+    }
+
+    #[test]
+    fn a_fence_ends_only_at_its_own_marker() {
+        assert_eq!(counts("```\n~~~\nIn code.\n```\n\nWord.\n"), [(1, 0)]);
+    }
+
+    #[test]
+    fn links_and_numbers_starting_a_line_are_prose() {
+        assert_eq!(
+            counts("[Hooks](hooks.md) run first,\n) then more.\n\n[r]: https://example.com/a.b\n"),
+            [(5, 0)]
+        );
+    }
+
+    #[test]
+    fn a_book_with_a_long_sentence_fails_the_check() {
+        let root = std::env::temp_dir().join(format!("xtask-prose-{}", std::process::id()));
+        let source = root.join(SOURCE);
+        std::fs::create_dir_all(&source).unwrap();
+        let long = format!("{}.", ["word"; 26].join(" "));
+        std::fs::write(source.join("hooks.md"), format!("# Hooks\n\n{long}\n")).unwrap();
+        let found = check(&root);
+        std::fs::remove_dir_all(&root).unwrap();
+        assert_eq!(
+            found,
+            [
+                "book/src/hooks.md:3: a sentence has 26 words; keep it to 25: \"word word word word word word …\"",
+                "book/src/hooks.md: 1 sentences have 26 words, above an average of 20",
+            ]
         );
     }
 
