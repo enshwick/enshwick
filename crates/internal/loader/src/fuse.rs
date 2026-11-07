@@ -9,7 +9,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 pub struct Fuse {
     feature: &'static str,
     off: AtomicBool,
-    /// Whether a live check of [`Fuse::verify`] held this session.
+    /// Whether a live check of `Fuse::verify` held in this process.
+    #[cfg_attr(
+        not(windows),
+        expect(dead_code, reason = "live checks read game memory on Windows only")
+    )]
     checked: AtomicBool,
 }
 
@@ -31,6 +35,7 @@ impl Fuse {
     /// on the way means the object is not made yet: the write is refused
     /// and the next call checks again. A check that held costs one load
     /// after it.
+    #[cfg(windows)]
     #[inline]
     pub(crate) fn verify(
         &self,
@@ -43,6 +48,7 @@ impl Fuse {
         self.verify_first(build, check)
     }
 
+    #[cfg(windows)]
     #[cold]
     #[inline(never)]
     fn verify_first(
@@ -173,60 +179,65 @@ mod tests {
         );
     }
 
-    fn failed(wanted: &'static str) -> crate::live::Broken {
-        crate::live::holds("knowledge.state", false, wanted).unwrap_err()
-    }
+    #[cfg(windows)]
+    mod live_checks {
+        use super::*;
 
-    fn null() -> crate::live::Broken {
-        let zero = 0_usize;
-        crate::live::pointer("knowledge.object", (&raw const zero).addr(), 0).unwrap_err()
-    }
+        fn failed(wanted: &'static str) -> crate::live::Broken {
+            crate::live::holds("knowledge.state", false, wanted).unwrap_err()
+        }
 
-    #[test]
-    fn a_live_check_that_holds_runs_once_and_lets_writes_through() {
-        let fuse = Fuse::new("held check");
-        let runs = core::cell::Cell::new(0);
-        let check = || {
-            runs.set(runs.get() + 1);
-            Ok(())
-        };
-        assert!(fuse.verify("build 1", check));
-        assert!(fuse.verify("build 1", check));
-        assert_eq!(runs.get(), 1);
-        let _caught = fuse.run("a later call", || -> u32 { panic!("broken") });
-        assert!(
-            !fuse.verify("build 1", check),
-            "a blown fuse refuses writes"
-        );
-    }
+        fn null() -> crate::live::Broken {
+            let zero = 0_usize;
+            crate::live::pointer("knowledge.object", (&raw const zero).addr(), 0).unwrap_err()
+        }
 
-    #[test]
-    fn a_failed_live_check_turns_the_feature_off_for_the_session_with_its_reason() {
-        let fuse = Fuse::new("failed check");
-        assert!(!fuse.verify("build 1", || Err(failed("a flag, 0 or 1"))));
-        assert!(fuse.is_off());
-        assert!(!fuse.verify("build 1", || Ok(())), "stays off");
-        assert_eq!(fuse.run("a later call", || 1), None);
-        let off = crate::diag::parts_off();
-        let part = off.iter().find(|p| p.part == "failed check");
-        assert_eq!(
-            part.map(|p| p.reason.as_str()),
-            Some("knowledge.state does not give a flag, 0 or 1 on the live object")
-        );
-    }
+        #[test]
+        fn a_live_check_that_holds_runs_once_and_lets_writes_through() {
+            let fuse = Fuse::new("held check");
+            let runs = core::cell::Cell::new(0);
+            let check = || {
+                runs.set(runs.get() + 1);
+                Ok(())
+            };
+            assert!(fuse.verify("build 1", check));
+            assert!(fuse.verify("build 1", check));
+            assert_eq!(runs.get(), 1);
+            let _caught = fuse.run("a later call", || -> u32 { panic!("broken") });
+            assert!(
+                !fuse.verify("build 1", check),
+                "a blown fuse refuses writes"
+            );
+        }
 
-    #[test]
-    fn a_null_on_the_way_refuses_the_write_and_checks_again_next_call() {
-        let fuse = Fuse::new("unmade object");
-        assert!(!fuse.verify("build 1", || Err(null())));
-        assert!(!fuse.is_off(), "an object not made yet is no broken layout");
-        assert!(fuse.verify("build 1", || Ok(())));
-    }
+        #[test]
+        fn a_failed_live_check_turns_the_feature_off_for_the_session_with_its_reason() {
+            let fuse = Fuse::new("failed check");
+            assert!(!fuse.verify("build 1", || Err(failed("a flag, 0 or 1"))));
+            assert!(fuse.is_off());
+            assert!(!fuse.verify("build 1", || Ok(())), "stays off");
+            assert_eq!(fuse.run("a later call", || 1), None);
+            let off = crate::diag::parts_off();
+            let part = off.iter().find(|p| p.part == "failed check");
+            assert_eq!(
+                part.map(|p| p.reason.as_str()),
+                Some("knowledge.state does not give a flag, 0 or 1 on the live object")
+            );
+        }
 
-    #[test]
-    fn a_live_check_that_panics_turns_only_its_feature_off() {
-        let fuse = Fuse::new("panicking check");
-        assert!(!fuse.verify("build 1", || panic!("bad read")));
-        assert!(fuse.is_off());
+        #[test]
+        fn a_null_on_the_way_refuses_the_write_and_checks_again_next_call() {
+            let fuse = Fuse::new("unmade object");
+            assert!(!fuse.verify("build 1", || Err(null())));
+            assert!(!fuse.is_off(), "an object not made yet is no broken layout");
+            assert!(fuse.verify("build 1", || Ok(())));
+        }
+
+        #[test]
+        fn a_live_check_that_panics_turns_only_its_feature_off() {
+            let fuse = Fuse::new("panicking check");
+            assert!(!fuse.verify("build 1", || panic!("bad read")));
+            assert!(fuse.is_off());
+        }
     }
 }
