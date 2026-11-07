@@ -200,7 +200,6 @@ impl Mod for AltarCount {
 
 enshwick::declare_mod!(AltarCount);
 ```
-<!-- /altar-count -->
 
 ```luau
 local altars = 16

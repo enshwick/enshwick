@@ -31,14 +31,14 @@ body:
     id: game
     attributes:
       label: Game version
-      description: "The `game:` line of the loader's log, `logs/enshwick_<date>_<time>.log`, names it. For a build the loader does not know, copy its `unknown game build` line instead. Without a loader's log, write `no loader's log`."
+      description: "The `game:` line of the loader's log, `logs/enshwick_<date>_<time>.log`, names it. Without a `game:` line, copy the line that names the game build or says it could not be read. Without a loader's log, write `no loader's log`."
     validations:
       required: true
   - type: input
     id: loader
     attributes:
       label: Loader version
-      description: The first line of the loader's log names it. Without a loader's log, give the release you installed.
+      description: The `Enshwick <version> starting` line of the loader's log names it. Without that line, give the release you installed.
     validations:
       required: true
   - type: textarea
