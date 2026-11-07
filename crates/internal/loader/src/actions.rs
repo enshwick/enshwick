@@ -144,8 +144,33 @@ pub(crate) fn declaring(loader: &Loader) -> Vec<ModIndex> {
     running(loader).into_iter().map(|r| r.owner).collect()
 }
 
+/// The ids of mod `owner`'s actions `player` may run now, from the sheet
+/// the mod gives for them; `None` when the mod is off or declared no
+/// actions.
+pub(crate) fn allowed(
+    loader: &Loader,
+    owner: ModIndex,
+    player: &PlayerInfo,
+) -> Option<Vec<String>> {
+    let registered = running(loader).into_iter().find(|r| r.owner == owner)?;
+    let sheet = ask(
+        registered,
+        ActionCall::SHEET,
+        player,
+        0,
+        ("", ""),
+        ActionTarget::NONE,
+    );
+    Some(
+        enshwick::actions::sheet::decode(&sheet)
+            .into_iter()
+            .map(|entry| entry.id)
+            .collect(),
+    )
+}
+
 /// The connected player with account key `key`.
-fn player(loader: &Loader, key: u64) -> Option<PlayerInfo> {
+pub(crate) fn player(loader: &Loader, key: u64) -> Option<PlayerInfo> {
     crate::world::players(loader)
         .ok()?
         .into_iter()

@@ -172,7 +172,11 @@ actions:control("honk", "H")
 
 A mod of side `server` has no code on the players' clients, so it declares
 controls that run one of its actions. The server sends those controls to
-each client with Enshwick that joins. The client's Controls page lists them
+each client with Enshwick that joins, but only the ones whose action that
+player may run, by the action's `allow` or `admins`. When the server changes
+a player's permissions, it sends that player's controls again within two
+seconds. An `allow` that reads other state is asked again only then and at
+the next join. The client's Controls page lists them
 under the mod's name with the mod's keys. The player may change the keys,
 and a press sends the run to the server. The server checks who may run the
 action and shows its reply as a notice, as for any action. The label is a

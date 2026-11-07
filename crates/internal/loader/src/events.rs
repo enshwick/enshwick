@@ -431,6 +431,10 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         crate::interactions::after_step(loader, step)
     );
     part!("control firings", crate::controls::after_step(loader));
+    part!(
+        "carried controls",
+        crate::controls::resend_on_rights(loader)
+    );
     part!("build refusals", crate::build_reasons::after_step(loader));
     part!("stat steps", crate::stats::after_step(loader, step, now));
     part!(

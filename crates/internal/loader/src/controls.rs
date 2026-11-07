@@ -31,7 +31,7 @@ use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::registry::Registry;
-use crate::remote::{Carried, Heard, MAX_CARRIED, MAX_CARRIED_TEXT, Message, cut};
+use crate::remote::{Carried, Heard, MAX_CARRIED};
 
 /// A control a mod declared.
 #[derive(Debug)]
@@ -68,6 +68,7 @@ static STATE: State = State {
     start: OnceLock::new(),
     kept: Mutex::new(None),
     players: Mutex::new(Players::new()),
+    rights: Mutex::new(None),
 };
 /// The keys turn off at their first panic, the linked controls at theirs.
 static KEYS_FUSE: Fuse = Fuse::new("mod control keys");
@@ -91,6 +92,8 @@ struct State {
     /// The server's players' trackers and the firings that wait for the
     /// step's end.
     players: Mutex<Players>,
+    /// The permissions the server's clients got their carried controls for.
+    rights: Mutex<Option<rights::Rights>>,
 }
 
 /// What the client's key reader reads, swapped whole.
@@ -644,6 +647,7 @@ pub(crate) fn after_step(loader: &Loader) {
 /// world goes away.
 pub(crate) fn forget() {
     STATE.players.relock().forget();
+    *STATE.rights.relock() = None;
 }
 
 /// A control as the controls page shows it.
@@ -783,57 +787,6 @@ pub(crate) fn forget_carried() {
     });
 }
 
-/// Sends the client of `key`, which just said hello, the controls of every
-/// running mod of side server that run an action, in its player's language;
-/// false when its link had no room.
-pub(crate) fn hello(key: u64) -> bool {
-    let (Some(loader), Some(declared)) = (crate::host::loader(), DECLARED.sealed()) else {
-        return true;
-    };
-    if declared.iter().all(|d| d.action.is_empty()) {
-        return true;
-    }
-    crate::texts::for_player(key, || {
-        carried_messages(loader, declared)
-            .iter()
-            .all(|message| crate::net::to_player(key, message))
-    })
-}
-
-/// One [`Message::Controls`] per running mod of side server with controls
-/// that run an action, its texts in the reader's language.
-fn carried_messages(loader: &Loader, declared: &[Declared]) -> Vec<Message> {
-    let mut messages = Vec::new();
-    for (index, record) in loader.mods.iter().enumerate() {
-        if record.manifest.side != Side::SERVER
-            || record.off.load(core::sync::atomic::Ordering::Acquire)
-        {
-            continue;
-        }
-        let controls: Vec<Carried> = declared
-            .iter()
-            .filter(|d| d.owner.get() == index && !d.action.is_empty())
-            .take(MAX_CARRIED)
-            .map(|d| Carried {
-                name: d.name.clone(),
-                label: cut(&label_of(record, &d.label), MAX_CARRIED_TEXT).to_owned(),
-                action: d.action.clone(),
-                keys: d.defaults,
-                fires: d.fires,
-                hold_ms: d.hold_ms,
-            })
-            .collect();
-        if !controls.is_empty() {
-            messages.push(Message::Controls {
-                id: record.id.clone(),
-                name: cut(&record.label(), MAX_CARRIED_TEXT).to_owned(),
-                controls,
-            });
-        }
-    }
-    messages
-}
-
 /// A control's `label` in the reader's language: a key of its mod's texts,
 /// else as written.
 fn label_of(record: &crate::host::ModRecord, label: &str) -> String {
@@ -941,6 +894,9 @@ pub(crate) enum SetKeyError {
 }
 
 mod input;
+mod rights;
+
+pub(crate) use rights::{hello, resend_on_rights};
 
 pub(crate) use input::{capture_keys, focused, key_name};
 
