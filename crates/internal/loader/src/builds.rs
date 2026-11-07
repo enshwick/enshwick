@@ -174,11 +174,13 @@ impl KnownBuild {
     }
 
     /// Notes that no engine route found entry `id`: missing unless an
-    /// anchor found it.
-    fn unfound(&mut self, id: &str) {
-        if self.table.lack(id) {
+    /// anchor found it; whether it is missing.
+    fn unfound(&mut self, id: &str) -> bool {
+        let lacks = self.table.lack(id);
+        if lacks {
             self.unanchored.push(id.to_owned());
         }
+        lacks
     }
 
     /// Notes that entry `id`'s engine route and anchor disagree, which
@@ -236,7 +238,10 @@ impl KnownBuild {
                     );
                 }
                 _ => {
-                    if let Some(enshwick_gamedata::Routed::Outside(value)) = found {
+                    let lacks = self.unfound(id);
+                    if let Some(enshwick_gamedata::Routed::Outside(value)) = found
+                        && lacks
+                    {
                         self.outside.push(id.to_owned());
                         crate::log!(
                             WARN,
@@ -245,7 +250,6 @@ impl KnownBuild {
                             crate::errors::FEATURES_OFF
                         );
                     }
-                    self.unfound(id);
                     unfound.push(id);
                 }
             }

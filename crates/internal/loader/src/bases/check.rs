@@ -1,5 +1,5 @@
 //! The live check the base grouping runs on the bases object before it
-//! first writes to it on a world.
+//! first writes to it.
 
 use super::Fields;
 use crate::base_groups::window;

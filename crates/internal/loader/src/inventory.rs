@@ -852,7 +852,18 @@ unsafe extern "system" fn row(registers: *mut Registers, _user: *mut c_void) {
     let view = usize::try_from(registers.rbp)
         .unwrap_or(0)
         .wrapping_sub(executor.view_frame);
-    // SAFETY: at the table's `inventory.actions_row`, the system's view lies
+    let build = crate::host::loader().map_or("", |loader| loader.build.name.as_str());
+    if !INVENTORY_FUSE.verify(build, || run::view_holds(executor, view)) {
+        if INVENTORY_FUSE.is_off() && QUEUE.pending.load(Ordering::Acquire) {
+            let gone = QUEUE.drain(|_| true);
+            finish(
+                gone.iter()
+                    .map(|r| Finished::without_run(r, InventoryResult::UNAVAILABLE)),
+            );
+        }
+        return;
+    }
+    // SAFETY: the live check above read this pointer on the view; at the table's `inventory.actions_row`, the system's view lies
     // `inventory.view_frame` below `rbp` in its live frame, filled before the
     // row loop (`inventory.view_fill` checked by `Loader::code_holds`); it holds the
     // item registry pointer at the table's `inventory.view_item_registry`.
@@ -879,15 +890,6 @@ unsafe extern "system" fn row(registers: *mut Registers, _user: *mut c_void) {
     let Some(_turn) = Turn::take(&BUSY) else {
         return;
     };
-    let build = crate::host::loader().map_or("", |loader| loader.build.name.as_str());
-    if !INVENTORY_FUSE.verify(build, || run::view_holds(executor, view)) {
-        let gone = QUEUE.drain(|_| true);
-        finish(
-            gone.iter()
-                .map(|r| Finished::without_run(r, InventoryResult::UNAVAILABLE)),
-        );
-        return;
-    }
     let _outcome = INVENTORY_FUSE.run("the row", || {
         while let Some(request) = QUEUE.claim() {
             if crate::host::is_off(request.owner) {

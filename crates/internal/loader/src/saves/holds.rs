@@ -133,6 +133,9 @@ pub(crate) fn hold(loader: &Loader, owner: ModIndex, hold: bool) -> Status {
     if layout(loader).is_none() {
         return Status::MISSING;
     }
+    if hold && HOLDS_FUSE.is_off() {
+        return Status::UNAVAILABLE;
+    }
     let id = mod_id(loader, owner);
     let mut saving = SAVING.relock();
     match saving.change(owner, hold, Instant::now()) {

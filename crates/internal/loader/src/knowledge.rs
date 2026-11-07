@@ -454,7 +454,7 @@ pub(crate) fn grant(
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let server = crate::world::server()?;
     if !GRANTS_FUSE.verify(&loader.build.name, || store_holds(layout, server)) {
-        return Err(Status::MISSING);
+        return Err(GRANTS_FUSE.refused());
     }
     let (game, state) = store_of(layout, server)?;
     let (scope, def) = definition(layout, state, id).ok_or(Status::BAD_ARGS)?;

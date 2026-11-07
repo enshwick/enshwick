@@ -203,6 +203,9 @@ pub(super) unsafe fn write_ranges_into(
     let Some(range_at) = FIELDS.get().map(|fields| fields.range) else {
         return true;
     };
+    if RANGES_FUSE.is_off() {
+        return false;
+    }
     let targets = TARGETS.load();
     // SAFETY: the caller guarantees the system's live context on its thread;
     // its iterator is `UPGRADE_WORDS` words, checked against the system's

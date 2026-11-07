@@ -250,13 +250,14 @@ Each entry names the pull request that made the change.
   does not resolve for live reads and writes; the refusal names the field
   (#986).
 - The loader's parts that write game memory read their found offsets on one
-  live object before their first write of a world, through reads that
-  cannot fault: knowledge grants, altar ranges, Quick Stash, game settings
-  changes, save holds, weather changes, inventory requests and the base
-  grouping. A part whose object does not hold turns off alone, with one
-  warning naming the build, the entry and what did not hold, on the Mods
-  screen and in the status summary; its queued inventory requests are
-  answered as unavailable. An entry whose engine route takes a value
+  live object before their first write in a game process, through reads
+  that cannot fault: knowledge grants, altar ranges, Quick Stash, game
+  settings changes, save holds, weather changes, inventory requests and the
+  base grouping. A part whose object does not hold turns off alone, with
+  one warning naming the build, the entry and what did not hold, on the
+  Mods screen and in the status summary; its calls, save holds and queued
+  inventory requests then answer as unavailable. An object the game has not
+  made yet refuses the call as missing and is checked again on the next. An entry whose engine route takes a value
   outside its range is missing, and the loader says it "is outside its
   range" (#982).
 - `actions`: `Load::actions` hands its texts to the loader once, beneath the

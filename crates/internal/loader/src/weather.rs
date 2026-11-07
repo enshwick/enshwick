@@ -623,7 +623,7 @@ enum RemapError {
     #[error("the weather is not loaded ({0:?})")]
     Unloaded(Status),
     /// The live weather system did not hold its found offsets.
-    #[error("weather changes are off on this world")]
+    #[error("weather changes are off on this game build")]
     Off,
     /// The file beside the save does not read.
     #[error("{path} does not read: {why}", path = .0.display(), why = .1)]
@@ -634,9 +634,13 @@ enum RemapError {
 /// [`as_saved`] for a save without them.
 fn remap(loader: &Loader, path: &std::path::Path) -> Result<(), RemapError> {
     let layout = layout(loader).ok_or(RemapError::Unloaded(Status::MISSING))?;
-    if !writable(loader, layout).map_err(RemapError::Unloaded)? {
-        return Err(RemapError::Off);
-    }
+    writable(loader, layout).map_err(|status| {
+        if status == Status::UNAVAILABLE {
+            RemapError::Off
+        } else {
+            RemapError::Unloaded(status)
+        }
+    })?;
     let (system, _) = system(layout).map_err(RemapError::Unloaded)?;
     let resource = Resource::lock(layout, system).ok_or(RemapError::Unloaded(Status::MISSING))?;
     let served = phenomena(layout, &resource).ok_or(RemapError::Unloaded(Status::MISSING))?;
@@ -739,9 +743,7 @@ pub(crate) fn set(loader: &Loader, effect: u32, duration: i64) -> Result<(), Sta
         return Err(Status::BAD_ARGS);
     }
     let layout = layout(loader).ok_or(Status::MISSING)?;
-    if !writable(loader, layout)? {
-        return Err(Status::MISSING);
-    }
+    writable(loader, layout)?;
     let (system, now) = system(layout)?;
     let resource = Resource::lock(layout, system).ok_or(Status::MISSING)?;
     // SAFETY: `resource` holds the weather resource locked, and its

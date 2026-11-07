@@ -1,5 +1,5 @@
 //! The live check the parts that write the weather run before their first
-//! write on a world.
+//! write.
 
 use enshwick::abi::Status;
 
@@ -65,14 +65,19 @@ pub(super) fn system_holds(layout: &Layout, server: usize) -> Result<(), Broken>
     )
 }
 
-/// Whether the weather may be written on this world: [`system_holds`] held
-/// once on the live system.
+/// Whether the weather may be written: [`system_holds`] held once on the
+/// live system.
 ///
 /// # Errors
 ///
 /// The status of [`crate::world::server`] when there is no live server to
-/// check.
-pub(super) fn writable(loader: &Loader, layout: &Layout) -> Result<bool, Status> {
+/// check, [`Status::MISSING`] while the system is not made yet and
+/// [`Status::UNAVAILABLE`] once weather changes are off.
+pub(super) fn writable(loader: &Loader, layout: &Layout) -> Result<(), Status> {
     let server = crate::world::server()?;
-    Ok(CHANGES_FUSE.verify(&loader.build.name, || system_holds(layout, server)))
+    if CHANGES_FUSE.verify(&loader.build.name, || system_holds(layout, server)) {
+        Ok(())
+    } else {
+        Err(CHANGES_FUSE.refused())
+    }
 }

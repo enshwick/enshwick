@@ -26,14 +26,16 @@ impl Fuse {
 
     /// Whether the feature may write game memory: runs `check`, which reads
     /// the offsets the feature found on a live object, until one holds, and
-    /// turns the feature off for the session when one fails, with one
-    /// warning naming the game `build` and what did not hold. A check that
-    /// held costs one load after it.
+    /// turns the feature off for the process when one fails, with one
+    /// warning naming the game `build` and what did not hold. A null pointer
+    /// on the way means the object is not made yet: the write is refused
+    /// and the next call checks again. A check that held costs one load
+    /// after it.
     #[inline]
-    pub fn verify<E: core::fmt::Display>(
+    pub(crate) fn verify(
         &self,
         build: &str,
-        check: impl FnOnce() -> Result<(), E>,
+        check: impl FnOnce() -> Result<(), crate::live::Broken>,
     ) -> bool {
         if self.checked.load(Ordering::Acquire) {
             return !self.is_off();
@@ -43,16 +45,16 @@ impl Fuse {
 
     #[cold]
     #[inline(never)]
-    fn verify_first<E: core::fmt::Display>(
+    fn verify_first(
         &self,
         build: &str,
-        check: impl FnOnce() -> Result<(), E>,
+        check: impl FnOnce() -> Result<(), crate::live::Broken>,
     ) -> bool {
         if self.is_off() {
             return false;
         }
-        match check() {
-            Ok(()) => {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(check)) {
+            Ok(Ok(())) => {
                 self.checked.store(true, Ordering::Release);
                 crate::log!(
                     INFO,
@@ -61,17 +63,35 @@ impl Fuse {
                 );
                 !self.is_off()
             }
-            Err(why) => {
+            // shortcut: a wrong offset that reads a null keeps the part
+            // refusing without a message; name it once a build shows one.
+            Ok(Err(why)) if why.is_null() => false,
+            Ok(Err(why)) => {
                 if !self.off.swap(true, Ordering::Relaxed) {
                     crate::log!(WARN, "{} off on {build}: {why}", self.feature);
                     crate::diag::part_off(self.feature, &why.to_string());
                 }
                 false
             }
+            Err(payload) => {
+                self.panicked("its live check", payload.as_ref());
+                false
+            }
         }
     }
 
-    /// Whether a panic turned the feature off.
+    /// The status a write [`Fuse::verify`] refused answers: unavailable once
+    /// the feature is off, missing while its live object is not made yet.
+    #[cold]
+    pub fn refused(&self) -> enshwick::abi::Status {
+        if self.is_off() {
+            enshwick::abi::Status::UNAVAILABLE
+        } else {
+            enshwick::abi::Status::MISSING
+        }
+    }
+
+    /// Whether a panic or a failed live check turned the feature off.
     #[inline]
     pub fn is_off(&self) -> bool {
         self.off.load(Ordering::Relaxed)
@@ -153,13 +173,22 @@ mod tests {
         );
     }
 
+    fn failed(wanted: &'static str) -> crate::live::Broken {
+        crate::live::holds("knowledge.state", false, wanted).unwrap_err()
+    }
+
+    fn null() -> crate::live::Broken {
+        let zero = 0_usize;
+        crate::live::pointer("knowledge.object", (&raw const zero).addr(), 0).unwrap_err()
+    }
+
     #[test]
     fn a_live_check_that_holds_runs_once_and_lets_writes_through() {
         let fuse = Fuse::new("held check");
         let runs = core::cell::Cell::new(0);
         let check = || {
             runs.set(runs.get() + 1);
-            Ok::<(), &str>(())
+            Ok(())
         };
         assert!(fuse.verify("build 1", check));
         assert!(fuse.verify("build 1", check));
@@ -174,15 +203,30 @@ mod tests {
     #[test]
     fn a_failed_live_check_turns_the_feature_off_for_the_session_with_its_reason() {
         let fuse = Fuse::new("failed check");
-        assert!(!fuse.verify("build 1", || Err("knowledge.state gives a null pointer")));
+        assert!(!fuse.verify("build 1", || Err(failed("a flag, 0 or 1"))));
         assert!(fuse.is_off());
-        assert!(!fuse.verify("build 1", || Ok::<(), &str>(())), "stays off");
+        assert!(!fuse.verify("build 1", || Ok(())), "stays off");
         assert_eq!(fuse.run("a later call", || 1), None);
         let off = crate::diag::parts_off();
         let part = off.iter().find(|p| p.part == "failed check");
         assert_eq!(
             part.map(|p| p.reason.as_str()),
-            Some("knowledge.state gives a null pointer")
+            Some("knowledge.state does not give a flag, 0 or 1 on the live object")
         );
+    }
+
+    #[test]
+    fn a_null_on_the_way_refuses_the_write_and_checks_again_next_call() {
+        let fuse = Fuse::new("unmade object");
+        assert!(!fuse.verify("build 1", || Err(null())));
+        assert!(!fuse.is_off(), "an object not made yet is no broken layout");
+        assert!(fuse.verify("build 1", || Ok(())));
+    }
+
+    #[test]
+    fn a_live_check_that_panics_turns_only_its_feature_off() {
+        let fuse = Fuse::new("panicking check");
+        assert!(!fuse.verify("build 1", || panic!("bad read")));
+        assert!(fuse.is_off());
     }
 }

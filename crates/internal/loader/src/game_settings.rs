@@ -199,7 +199,7 @@ pub(crate) fn write(loader: &Loader, bytes: &[u8]) -> Result<(), Status> {
     let checked = layout(loader).ok_or(Status::MISSING)?;
     let server = crate::world::server()?;
     if !WRITES_FUSE.verify(&loader.build.name, || settings_hold(checked, server)) {
-        return Err(Status::MISSING);
+        return Err(WRITES_FUSE.refused());
     }
     let (layout, server, settings) = live(loader)?;
     if bytes.len() != layout.size {

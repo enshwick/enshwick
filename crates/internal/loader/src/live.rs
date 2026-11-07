@@ -1,7 +1,7 @@
 //! The check a part that writes game memory runs on one live object before
 //! its first write: the offsets and addresses it found must give pointers
 //! that read, counts under their bounds, vtables in the image's read-only
-//! data and the type hashes reflection gives, or the part turns off alone.
+//! data and values that keep their invariants, or the part turns off alone.
 //! Every read goes through [`crate::pages::read`], so a wrong offset reads
 //! nothing instead of faulting.
 
@@ -20,26 +20,24 @@ pub(crate) struct Broken {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "no part reads a reflected type hash on its live object yet"
-    )
-)]
 enum What {
     Unreadable { at: usize },
     Null,
     Dangling { to: usize },
     Count { count: u64, max: u64 },
     Vtable { at: usize },
-    Hash { found: u32, wanted: u32 },
     Fails { wanted: &'static str },
 }
 
 impl Broken {
     const fn new(entry: &'static str, what: What) -> Self {
         Self { entry, what }
+    }
+
+    /// Whether the entry gave a null pointer, as an object the game has
+    /// not made yet does.
+    pub(crate) const fn is_null(&self) -> bool {
+        matches!(self.what, What::Null)
     }
 
     /// What did not hold, worded to follow the entry.
@@ -57,9 +55,6 @@ impl Broken {
             }
             What::Vtable { at } => format!(
                 "gives a vtable at {at:#x} on the live object, outside the image's read-only data"
-            ),
-            What::Hash { found, wanted } => format!(
-                "gives type hash {found:#010x} on the live object, not reflection's {wanted:#010x}"
             ),
             What::Fails { wanted } => format!("does not give {wanted} on the live object"),
         }
@@ -157,29 +152,6 @@ pub(crate) fn vtable(entry: &'static str, object: usize, image: Image) -> Result
     }
 }
 
-/// Checks that the `u32` type hash at `entry`'s `offset` in `object` is
-/// `wanted`, the one reflection gives.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "no part reads a reflected type hash on its live object yet"
-    )
-)]
-pub(crate) fn hash(
-    entry: &'static str,
-    object: usize,
-    offset: usize,
-    wanted: u32,
-) -> Result<(), Broken> {
-    let found = u32::from_le_bytes(bytes(entry, object, offset)?);
-    if found == wanted {
-        Ok(())
-    } else {
-        Err(Broken::new(entry, What::Hash { found, wanted }))
-    }
-}
-
 /// The `N` bytes at `entry`'s `offset` in `object`, which must all read.
 pub(crate) fn bytes<const N: usize>(
     entry: &'static str,
@@ -210,19 +182,17 @@ mod tests {
 
     use super::*;
 
-    /// An object as the engine lays one out: a vtable, a pointer, a count
-    /// and a type hash.
+    /// An object as the engine lays one out: a vtable, a pointer and a
+    /// count.
     #[repr(C)]
     struct Object {
         vtable: usize,
         pointer: usize,
         count: u64,
-        hash: u32,
     }
 
     const POINTER: usize = 8;
     const COUNT: usize = 16;
-    const HASH: usize = 24;
 
     fn first_slot() {}
 
@@ -241,7 +211,6 @@ mod tests {
             vtable: (&raw const VTABLE).addr(),
             pointer: (&raw const *target).addr(),
             count: 3,
-            hash: 0xfeed_beef,
         }
     }
 
@@ -259,7 +228,6 @@ mod tests {
         );
         assert_eq!(count("t.count", at(&object), COUNT, 4), Ok(3));
         assert_eq!(vtable("t.vtable", at(&object), image()), Ok(()));
-        assert_eq!(hash("t.hash", at(&object), HASH, 0xfeed_beef), Ok(()));
     }
 
     #[test]
@@ -304,18 +272,6 @@ mod tests {
         assert!(
             vtable("t.vtable", at(&object), image()).is_err(),
             "not a table"
-        );
-    }
-
-    #[test]
-    fn a_wrong_type_hash_is_refused_with_both_hashes() {
-        let target = 7;
-        let object = good(&target);
-        let wrong = hash("t.hash", at(&object), HASH, 0x1234).unwrap_err();
-        assert!(
-            wrong.reason().contains("0xfeedbeef") && wrong.reason().contains("0x00001234"),
-            "{}",
-            wrong.reason()
         );
     }
 

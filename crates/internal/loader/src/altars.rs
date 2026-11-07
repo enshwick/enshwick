@@ -240,7 +240,7 @@ static WORLD: AtomicU64 = AtomicU64::new(0);
 /// links run vanilla.
 static OFF: AtomicBool = AtomicBool::new(false);
 /// The switch of the range pass's writes, off once a live trigger shape
-/// does not hold its found field; [`OFF`] then follows.
+/// does not hold its found field; the other altar passes stay on.
 static RANGES_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("altar ranges");
 // SAFETY: `SystemFn` is the signature of every system entry, here the
 // reflected `add_buildzones_server`'s, and `link` uses this slot only as that
@@ -704,7 +704,8 @@ unsafe extern "system" fn upgrade(ctx: *mut u64) {
         // its thread, and vanilla has not run this tick.
         match std::panic::catch_unwind(|| unsafe { write_ranges(engine, ctx, build) }) {
             Ok(true) => return,
-            Ok(false) => turn_off("a live trigger shape did not hold its found field"),
+            // RANGES_FUSE logged it: only the ranges go vanilla.
+            Ok(false) => {}
             Err(_) => turn_off("the range pass panicked"),
         }
         // Hand the tick to vanilla from the first row.
