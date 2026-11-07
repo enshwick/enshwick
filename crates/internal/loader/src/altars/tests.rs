@@ -36,21 +36,41 @@ fn vanilla() -> AltarZone {
     }
 }
 
+unsafe extern "system" fn blamed(_zone: *mut AltarZone, user: *mut c_void) {
+    // SAFETY: the test's own cell, alive for the call.
+    let seen = unsafe { &*user.cast::<Cell<Option<(usize, crate::profile::Feature)>>>() };
+    seen.set(crate::profile::current_callback());
+}
+
+type Link = (ModIndex, AltarZoneFn, *mut c_void);
+
 #[test]
 fn filters_chain_on_the_zone_so_far_and_vanilla_gives_no_target() {
-    let none = core::ptr::null_mut();
+    let (none, mod0) = (core::ptr::null_mut(), ModIndex::new(0));
     assert_eq!(chain(vanilla(), core::iter::empty()), None);
-    let twice: [(AltarZoneFn, *mut c_void); 2] = [(wider, none), (wider, none)];
+    let twice: [Link; 2] = [(mod0, wider, none), (mod0, wider, none)];
     assert_eq!(chain(vanilla(), twice.into_iter()), Some((4, 60)));
 }
 
 #[test]
 fn a_filter_cannot_move_the_altar_or_shrink_the_zone_below_vanilla() {
-    let none = core::ptr::null_mut();
-    let filters: [(AltarZoneFn, *mut c_void); 2] = [(wider, none), (broken, none)];
+    let (none, mod0) = (core::ptr::null_mut(), ModIndex::new(0));
+    let filters: [Link; 2] = [(mod0, wider, none), (mod0, broken, none)];
     assert_eq!(chain(vanilla(), filters.into_iter()), None);
-    let filters: [(AltarZoneFn, *mut c_void); 2] = [(broken, none), (wider, none)];
+    let filters: [Link; 2] = [(mod0, broken, none), (mod0, wider, none)];
     assert_eq!(chain(vanilla(), filters.into_iter()), Some((2, 60)));
+}
+
+#[test]
+fn a_zone_filter_runs_as_its_owner() {
+    let seen: Cell<Option<(usize, crate::profile::Feature)>> = Cell::new(None);
+    let filter: Link = (
+        ModIndex::new(3),
+        blamed,
+        (&raw const seen).cast_mut().cast(),
+    );
+    let _vanilla = chain(vanilla(), core::iter::once(filter));
+    assert_eq!(seen.get(), Some((3, crate::profile::Feature::Altars)));
 }
 
 #[test]
