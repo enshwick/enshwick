@@ -518,6 +518,10 @@ ids! {
     /// The id of a sound container's resource type, which a client plays
     /// by its GUID.
     SOUND_CONTAINER = "sound_container";
+    /// The id of a sound's resource type: its samples and their format.
+    SOUND = "sound";
+    /// The id of a sound container's entry that plays one sound.
+    SOUND_CONTAINER_SOUND_ENTRY = "sound_container_sound_entry";
     /// The id of a marker type's name text tag, a GUID.
     MAP_MARKER_TYPE_TYPE_NAME = "map_marker_type.type_name";
     /// The id of a marker type's sorting, a byte of [`MARKER_TYPE_SORTING`].

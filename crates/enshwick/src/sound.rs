@@ -24,12 +24,20 @@
 //! }
 //! ```
 
+#[cfg(feature = "unstable")]
+mod add;
+
 use core::ops::RangeInclusive;
 
 use crate::abi::Side;
 use crate::content::{Guid, types};
 use crate::resources::Value;
 use crate::{Load, Off};
+
+#[cfg(feature = "unstable")]
+pub use add::{
+    MAX_FILE_BYTES, MAX_MOD_BYTES, MAX_SECONDS, NewSound, SAMPLE_RATE, SoundContainerScene,
+};
 
 /// The loudest volume a change sets, as a factor of the recording's.
 pub const MAX_VOLUME: f32 = 4.0;
@@ -59,7 +67,7 @@ const PRIORITY: &str = "priority";
 /// let guid = Guid::named("you.bells:bell");
 /// assert_eq!(SoundContainerId::from_guid(guid).guid(), guid);
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 pub struct SoundContainerId(Guid);
 
 impl SoundContainerId {
