@@ -7,6 +7,7 @@
 //! moves data that no longer fits to the end of the bytes, as
 //! [`Blob`](crate::content::Blob) does.
 
+mod outside;
 mod rebase;
 
 use std::borrow::Cow;

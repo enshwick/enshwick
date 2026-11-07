@@ -395,8 +395,6 @@ pub struct Row {
     pub id: &'static str,
     /// Its roles, as [`Named::ROLES`] names them.
     pub roles: &'static [Role],
-    /// Its type in a script.
-    pub script: &'static crate::script::Ty,
     /// How it reads and crosses into a script.
     pub(crate) shape: &'static Shape,
 }
@@ -404,11 +402,10 @@ pub struct Row {
 impl Row {
     /// The row of `T`.
     #[must_use]
-    pub(crate) const fn of<T: Named + Shaped + crate::script::Typed>() -> Self {
+    pub(crate) const fn of<T: Named + Shaped>() -> Self {
         Self {
             id: T::ID,
             roles: T::ROLES,
-            script: <T as crate::script::Typed>::TY,
             shape: T::SHAPE,
         }
     }
@@ -481,11 +478,17 @@ impl Compiled {
 /// The table of every generated type with a role, a [`Row`] each.
 macro_rules! named_table {
     ($($id:literal => $ty:ty,)*) => {
-        /// Every generated type with a role, by id, with its script type
-        /// and its shape.
+        /// Every generated type with a role, by id, with its shape.
         #[doc(hidden)]
         pub const NAMED: &[$crate::typed::runtime::Row] =
             &[$($crate::typed::runtime::Row::of::<$ty>()),*];
+
+        /// The script type of each type of [`NAMED`], in its order, with
+        /// its docs, for the Luau definitions: a table of its own, so the
+        /// loader, which never reads it, does not link the docs.
+        #[doc(hidden)]
+        pub const SCRIPT_TYPES: &[&$crate::script::Ty] =
+            &[$(<$ty as $crate::script::Typed>::TY),*];
 
         /// The compiled conversions of each type of [`NAMED`], in its order.
         #[cfg(any(test, feature = "test"))]

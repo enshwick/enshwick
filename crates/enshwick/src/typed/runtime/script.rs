@@ -366,8 +366,9 @@ impl Load<'_> {
     /// # Errors
     ///
     /// [`Off`] for an id of no generated component, and when the build
-    /// lacks the type or its shape differs from the generated struct,
-    /// naming the build.
+    /// lacks the type, its shape differs from the generated struct, or a
+    /// field's data lies outside the component, such as a `BlobArray`'s,
+    /// naming the field and the build.
     #[script(name = "component_type")]
     pub(crate) fn typed_component_type(&mut self, id: &str) -> Result<ComponentType, Off> {
         let row = Row::find(id, Role::Component)?;
@@ -420,7 +421,7 @@ impl Load<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::typed::runtime::{reflected_enum, reflected_struct};
+    use crate::typed::runtime::{Compiled, Shaped, reflected_enum, reflected_struct};
 
     reflected_enum! {
         /// A test enum.
@@ -634,15 +635,16 @@ mod tests {
     /// compiled conversions do, refusals by the same words.
     fn same<T>(data: &Data, script: Value)
     where
-        T: super::super::Shaped + super::super::Reflected + Typed + IntoScript + FromScript,
+        T: Shaped + crate::typed::Reflected + Typed + IntoScript + FromScript,
     {
-        let compiled = super::super::Compiled::of::<T>();
-        let shape = <T as super::super::Shaped>::SHAPE;
+        let compiled = Compiled::of::<T>();
+        let shape = T::SHAPE;
         assert_eq!(
             format!("{:?}", shape.shown(data)),
             format!("{:?}", (compiled.to_script)(data)),
             "{data:?}"
         );
+        let shown = format!("{script:?}");
         assert_eq!(
             format!(
                 "{:?}",
@@ -650,19 +652,19 @@ mod tests {
             ),
             format!(
                 "{:?}",
-                (compiled.from_script)(script.clone()).map_err(|e| e.to_string())
+                (compiled.from_script)(script).map_err(|e| e.to_string())
             ),
-            "{script:?}"
+            "{shown}"
         );
     }
 
     #[test]
     fn a_shape_reads_and_refuses_the_codec_s_values_as_the_rust_type_does() {
-        let outer = Reflected::to_value(&outer());
+        let value = crate::typed::Reflected::to_value(&outer());
         let shown = by_name(outer().into_value(), Outer::TY);
-        same::<Outer>(&outer, shown.clone());
+        same::<Outer>(&value, shown);
         let leaves = leaves();
-        let leaves_shown = (Leaves::SHAPE.shown(&leaves)).unwrap();
+        let leaves_shown = Leaves::SHAPE.shown(&leaves).unwrap();
         same::<Leaves>(&leaves, leaves_shown);
         for (name, wrong) in [
             ("small", Data::Int(-200)),
@@ -694,7 +696,7 @@ mod tests {
             ("spare", Data::Struct(vec![("level".into(), Data::Uint(1))])),
             ("spare", Data::Uint(1)),
         ] {
-            same::<Outer>(&with(&outer, name, wrong), Value::Nil);
+            same::<Outer>(&with(&value, name, wrong), Value::Nil);
         }
         same::<Outer>(&Data::Struct(Vec::new()), Value::Nil);
         same::<Outer>(&Data::Uint(1), Value::Nil);
@@ -703,7 +705,7 @@ mod tests {
 
     #[test]
     fn a_shape_takes_and_refuses_a_script_s_tables_as_the_rust_type_does() {
-        let outer = Reflected::to_value(&outer());
+        let value = crate::typed::Reflected::to_value(&outer());
         let Value::Map(fields) = by_name(outer().into_value(), Outer::TY) else {
             unreachable!()
         };
@@ -743,7 +745,7 @@ mod tests {
             Value::String("outer".into()),
             Value::List(vec![Value::Nil]),
         ] {
-            same::<Outer>(&outer, script);
+            same::<Outer>(&value, script);
         }
         let leaves = leaves();
         let Ok(Value::Map(fields)) = Leaves::SHAPE.shown(&leaves) else {

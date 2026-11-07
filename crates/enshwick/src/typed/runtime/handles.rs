@@ -12,14 +12,16 @@ use crate::world::{World, WritableType};
 use crate::{Entity, Host, Load, Off};
 
 /// The running build's type id and reflected type for the id `id`, its
-/// shape checked: a
-/// [`sample`] of the build's type must pass `check`, so a field the build
-/// renamed, removed, or retyped to a value the generated type cannot hold,
-/// such as a wider integer, at any depth, turns off only that type.
+/// shape checked: a [`sample`] of the build's type must pass `check`, so a
+/// field the build renamed, removed, or retyped to a value the generated
+/// type cannot hold, such as a wider integer, at any depth, turns off only
+/// that type. For a type read `live` from an entity, a field whose data
+/// lies outside the component's own bytes turns it off too, by name.
 fn resolve(
     load: &Load<'_>,
     id: &'static str,
     check: &dyn Fn(&Value) -> Result<(), ShapeError>,
+    live: bool,
 ) -> Result<(crate::ecs::ComponentType, &'static Type<'static>), Off> {
     let host = load.host();
     let ecs =
@@ -28,6 +30,15 @@ fn resolve(
     let ty = registry
         .hashed(ecs.hash())
         .ok_or_else(|| off(id, host, "the type registry lacks it"))?;
+    if live && let Some(field) = registry.outside_field(ty) {
+        return Err(off(
+            id,
+            host,
+            &format!(
+                "its field {field} keeps its data outside the component, where a read of a live component does not reach"
+            ),
+        ));
+    }
     let value = sample(registry, ty.qualified_name())
         .ok_or_else(|| off(id, host, "its value does not read"))?;
     check(&value).map_err(|e| off(id, host, &e.to_string()))?;
@@ -61,7 +72,7 @@ impl RawComponent {
         id: &'static str,
         check: &dyn Fn(&Value) -> Result<(), ShapeError>,
     ) -> Result<Self, Off> {
-        let (ecs, ty) = resolve(load, id, check)?;
+        let (ecs, ty) = resolve(load, id, check, true)?;
         Ok(Self {
             id,
             ty: ecs,
@@ -125,7 +136,7 @@ impl RawEvent {
         id: &'static str,
         check: &dyn Fn(&Value) -> Result<(), ShapeError>,
     ) -> Result<Self, Off> {
-        let (_, ty) = resolve(load, id, check)?;
+        let (_, ty) = resolve(load, id, check, false)?;
         Ok(Self {
             id,
             ty: load.game_event_type(id)?,
@@ -174,7 +185,7 @@ impl RawResource {
         id: &'static str,
         check: &dyn Fn(&Value) -> Result<(), ShapeError>,
     ) -> Result<Self, Off> {
-        let (_, ty) = resolve(load, id, check)?;
+        let (_, ty) = resolve(load, id, check, false)?;
         Ok(Self {
             id,
             hash: ty.qualified_hash(),
@@ -245,6 +256,11 @@ impl RawResource {
 /// A generated component type resolved on the running build: reads and
 /// writes of an entity's component as its generated struct.
 ///
+/// A read copies the component's own bytes. A type with a field whose data
+/// lies outside them, at any depth, such as a `BlobArray`, does not resolve:
+/// its refusal names the field. A template's components hold such fields
+/// and read through [`ComponentChange`](crate::content::templates::ComponentChange).
+///
 /// # Examples
 ///
 /// ```
@@ -287,8 +303,8 @@ impl<T: Component> ComponentType<T> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the build lacks the type or its shape differs from
-    /// `T`, naming the build.
+    /// [`Off`] when the build lacks the type, its shape differs from `T`,
+    /// or a field's data lies outside the component, naming the build.
     ///
     /// # Examples
     ///

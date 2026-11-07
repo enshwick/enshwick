@@ -259,6 +259,15 @@ assert_eq!(enshwick::ItemId::from_guid(CHEST).get(), 1_302_084_846);
 assert_eq!(CHEST.to_string(), "6943053a-32c1-4718-ae22-e61427ddf54d");
 ```
 
+In Luau, `enshwick.content.item_id` and `enshwick.content.recipe_id` give the
+id. They take a GUID, such as `enshwick.content.item` gives for a vanilla
+item, or a content id in full for the mod's own:
+
+```lua
+local torch = enshwick.content.item_id(enshwick.content.item("Tool_Torch01"))
+local tonic = enshwick.content.item_id("you.tonics:tonic")
+```
+
 Saves keep item ids, so a content id is fixed for good once players have the
 item: see [Content ids](../content.md#content-ids).
 

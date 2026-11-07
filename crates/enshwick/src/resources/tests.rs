@@ -83,6 +83,36 @@ fn registry() -> Registry<'static> {
     ])
 }
 
+#[test]
+fn the_first_field_whose_data_lies_outside_a_type_is_named_by_its_path() {
+    let registry = Registry::new([
+        Type::new("demo::uint8", Kind::Uint8, 1, 1),
+        Type::new("demo::BlobArray<demo::uint8>", Kind::BlobArray, 8, 4).with_inner("demo::uint8"),
+        Type::new("demo::Inner", Kind::Struct, 8, 4).with_fields(vec![Field::new(
+            "entries",
+            0,
+            "demo::BlobArray<demo::uint8>",
+        )]),
+        Type::new("demo::StaticArray<demo::Inner,2>", Kind::StaticArray, 16, 4)
+            .with_inner("demo::Inner")
+            .with_count(2),
+        Type::new("demo::Outer", Kind::Struct, 20, 4).with_fields(vec![
+            Field::new("level", 0, "demo::uint8"),
+            Field::new("pairs", 4, "demo::StaticArray<demo::Inner,2>"),
+        ]),
+        Type::new("demo::Plain", Kind::Struct, 1, 1).with_fields(vec![Field::new(
+            "level",
+            0,
+            "demo::uint8",
+        )]),
+    ]);
+    let outside = |name| registry.outside_field(registry.named(name).unwrap());
+    assert_eq!(outside("demo::Outer").as_deref(), Some("pairs.0.entries"));
+    assert_eq!(outside("demo::Inner").as_deref(), Some("entries"));
+    assert_eq!(outside("demo::Plain"), None);
+    assert_eq!(outside("demo::uint8"), None);
+}
+
 fn item(label: &str, values: &[u16]) -> Value {
     Value::Struct(vec![
         ("label".into(), Value::Text(label.into())),

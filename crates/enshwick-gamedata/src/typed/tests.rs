@@ -508,8 +508,10 @@ fn every_covered_type_crosses_into_a_script_and_back() {
         .count();
     let mut described = 0;
     let mut wrong = Vec::new();
-    for row in enshwick::typed::NAMED {
-        let enshwick::script::Ty::Record(record) = row.script else {
+    let script = enshwick::typed::SCRIPT_TYPES.iter();
+    assert_eq!(script.len(), enshwick::typed::NAMED.len());
+    for (row, ty) in enshwick::typed::NAMED.iter().zip(script) {
+        let enshwick::script::Ty::Record(record) = ty else {
             wrong.push(format!("{}: not a record", row.id));
             continue;
         };

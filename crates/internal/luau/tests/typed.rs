@@ -18,6 +18,7 @@ mod tests {
     const DIED: &str = "keen::ecs::EntityDiedEvent";
     const MAPPING: &str = "keen::BuildingMaterialMappingResource";
     const COMBAT_FLAGS: &str = "keen::ecs::CombatFlags";
+    const SPAWNER: &str = "keen::ecs::RandomSpawner";
     const STONE: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
     const ENTITY: Entity = Entity(4096);
 
@@ -88,6 +89,15 @@ mod tests {
             Type::new(COMBAT_FLAGS, Kind::Struct, 1, 1)
                 .with_inner("keen::ecs::Component")
                 .with_fields(vec![field("isImmune", 0, "keen::bool")]),
+            Type::new("keen::BlobArray<keen::uint32>", Kind::BlobArray, 8, 4)
+                .with_inner("keen::uint32"),
+            Type::new(SPAWNER, Kind::Struct, 8, 4)
+                .with_inner("keen::ecs::Component")
+                .with_fields(vec![field(
+                    "spawnEntries",
+                    0,
+                    "keen::BlobArray<keen::uint32>",
+                )]),
         ]
     }
 
@@ -114,6 +124,7 @@ mod tests {
             .type_hash("ecs::Faction", hash(FACTION))
             .type_size("ecs::Faction", 1)
             .type_hash("ecs::CombatFlags", hash(COMBAT_FLAGS))
+            .type_hash("ecs::RandomSpawner", hash(SPAWNER))
             .type_hash("BuildingMaterialMappingResource", hash(MAPPING))
             .game_event_type("ecs::EntityDiedEvent", hash(DIED), 16)
             .component(ENTITY, hash(FACTION), &[faction])
@@ -278,6 +289,29 @@ mod tests {
         assert!(
             line("unknown ").contains("no generated resource"),
             "{logs:?}"
+        );
+    }
+
+    #[test]
+    fn a_component_with_a_blob_array_is_refused_naming_the_field() {
+        let loader = run(
+            r#"
+            local ok, why = pcall(enshwick.typed.component_type, "ecs.RandomSpawner")
+            print(`spawner {ok} {why}`)
+        "#,
+            7,
+        );
+        let logs = loader.logs();
+        let line = logs
+            .iter()
+            .find_map(|(_, line)| line.split_once("spawner ").map(|(_, rest)| rest.to_owned()))
+            .unwrap_or_else(|| panic!("{logs:?}"));
+        assert!(
+            line.starts_with("false")
+                && line.contains("ecs::RandomSpawner")
+                && line.contains("spawnEntries")
+                && line.contains("outside the component"),
+            "{line}"
         );
     }
 }
