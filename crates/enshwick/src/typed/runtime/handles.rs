@@ -304,10 +304,11 @@ impl RawResource {
 /// A generated component type resolved on the running build: reads and
 /// writes of an entity's component as its generated struct.
 ///
-/// A read copies the component's own bytes. A type with a field whose data
-/// lies outside them, at any depth, such as a `BlobArray`, does not resolve:
-/// its refusal names the field. A template's components hold such fields
-/// and read through [`ComponentChange`](crate::content::templates::ComponentChange).
+/// A field whose data follows the component, such as a `BlobArray`, reads
+/// from the template's set-up data the component lies in, through a check
+/// that the memory reads; a blob past it fails that read, naming the field.
+/// A type with a field whose data lies elsewhere, at any depth, such as a
+/// designer data kind, does not resolve: its refusal names the field.
 ///
 /// # Examples
 ///
@@ -352,7 +353,8 @@ impl<T: Component> ComponentType<T> {
     /// # Errors
     ///
     /// [`Off`] when the build lacks the type, its shape differs from `T`,
-    /// or a field's data lies outside the component, naming the build.
+    /// or a field's data lies where a read does not reach, such as a
+    /// designer data kind's, naming the build.
     ///
     /// # Examples
     ///
@@ -369,7 +371,8 @@ impl<T: Component> ComponentType<T> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the component's bytes do not read as `T`.
+    /// [`Off`] when the component's bytes, or the blob data that follows
+    /// them, do not read as `T`, naming the field.
     ///
     /// # Examples
     ///
