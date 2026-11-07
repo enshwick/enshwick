@@ -129,6 +129,60 @@ mod tests {
 
     const TAG: &str = "v1.0.0-alpha.13";
 
+    fn loader(version: &str) -> Vec<Package> {
+        vec![Package {
+            name: crate::notes::LOADER.to_owned(),
+            version: version.to_owned(),
+            dir: String::new(),
+            deps: Vec::new(),
+            windows_only: false,
+            windows_tests: false,
+        }]
+    }
+
+    /// A git repository of its own for this test process, with `files` as
+    /// `(path, text)`, each added to its index.
+    fn repository(files: &[(&str, &str)]) -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!("xtask-tag-lines-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("book")).unwrap();
+        let root_text = root.to_str().unwrap();
+        assert!(git(&["-C", root_text, "init", "--quiet"]).is_some());
+        for (path, text) in files {
+            std::fs::write(root.join(path), text).unwrap();
+            assert!(git(&["-C", root_text, "add", path]).is_some());
+        }
+        root
+    }
+
+    #[test]
+    fn the_check_names_each_tracked_line_of_another_tag_but_changelogs() {
+        let line = "cargo install --git https://x --tag v1.0.0-alpha.12 cargo-enshwick\n";
+        let root = repository(&[
+            ("README.md", line),
+            ("book/a.md", &format!("a\n{line}")),
+            ("book/ok.md", &line.replace("alpha.12", "alpha.13")),
+            ("CHANGELOG.md", line),
+            ("notes.txt", line),
+        ]);
+        assert_eq!(
+            check(&root, &loader("1.0.0-alpha.13")),
+            [
+                "README.md:1: names another tag than v1.0.0-alpha.13; `cargo xtask tag-lines` moves it",
+                "book/a.md:2: names another tag than v1.0.0-alpha.13; `cargo xtask tag-lines` moves it",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_workspace_without_the_loader_is_a_problem() {
+        let mut packages = loader("1.0.0");
+        packages[0].name = "other".to_owned();
+        assert_eq!(
+            tag(&packages),
+            Err(format!("no package {}", crate::notes::LOADER))
+        );
+    }
+
     #[test]
     fn an_install_line_of_an_older_alpha_moves_to_the_workspace_tag() {
         let text = "a\ncargo install --git https://x --tag v1.0.0-alpha.12 cargo-enshwick\n";
