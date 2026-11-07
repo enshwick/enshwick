@@ -151,7 +151,7 @@ too, and their keys come from the same GUIDs.
 ## Renamed content
 
 Content whose GUID changed keeps what saves hold under the old one through
-[`Load::rename_content`](https://docs.rs/enshwick/latest/enshwick/struct.Load.html#method.rename_content).
+[`Load::rename_content`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/renames.rs).
 Declare every rename the mod ever made, oldest first, once in `init` and
 before adding the content:
 
