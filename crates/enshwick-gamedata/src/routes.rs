@@ -457,9 +457,18 @@ fn bounds(
 fn proposed_range(least: u64, greatest: u64) -> (u64, u64) {
     match (least, greatest) {
         (_, g) if g >= 1 << 32 && least != g => (0, u64::MAX),
-        (l, g) if g >= 1 << 20 && l == g => (l, g),
+        (l, g) if l == g && is_name_hash(l) => (l, g),
         (l, g) => (l / 2, g.saturating_mul(2).max(16)),
     }
+}
+
+/// Whether a value too big for an offset or count may be a 32-bit name
+/// hash: the kept builds' struct offsets reach `0x4667f0`, their hashes
+/// start at `0x4723f62`, so an offset of the big UI objects keeps room to
+/// move.
+#[cfg(test)]
+const fn is_name_hash(value: u64) -> bool {
+    value >= 1 << 24 && value < 1 << 32
 }
 
 /// The steps of a shape's text, none for none.

@@ -4055,7 +4055,7 @@ sides = ["client"]
 system = "replicate_map_markers_for_ui"
 shape = ["mov rax,[rip+?]", "mov ecx,*"]
 take = "value"
-range = [0x36ea00, 0x36ea00]
+range = [0x1b7500, 0x6dd400]
 
 [[route]]
 id = "map.list_capacity"
@@ -4084,7 +4084,7 @@ shape = [
   "mov rbp,{ui.context}",
 ]
 take = "value"
-range = [0x4667f0, 0x4667f0]
+range = [0x2333f8, 0x8ccfe0]
 
 [[route]]
 id = "map.registry_blob"
@@ -5191,7 +5191,7 @@ sides = ["client"]
 system = "ui_npc_status"
 shape = ["je ?", "mov rbx,[rdi+*]"]
 take = "value"
-range = [0x463e98, 0x463e98]
+range = [0x231f4c, 0x8c7d30]
 
 [[route]]
 id = "survivors.ui_map_capacity"
@@ -5199,7 +5199,7 @@ sides = ["client"]
 system = "ui_npc_status"
 shape = ["imul eax,edx,?", "mov r11,[rdi+*]"]
 take = "value"
-range = [0x463ea0, 0x463ea0]
+range = [0x231f50, 0x8c7d40]
 
 [[route]]
 id = "survivors.ui_map_count"
@@ -5207,7 +5207,7 @@ sides = ["client"]
 system = "ui_npc_status"
 shape = ["mov r11,[rdi+?]", "cmp [rdi+*],ebp"]
 take = "value"
-range = [0x463ee4, 0x463ee4]
+range = [0x231f72, 0x8c7dc8]
 
 [[route]]
 id = "survivors.ui_map_keys"
@@ -5215,7 +5215,7 @@ sides = ["client"]
 system = "ui_npc_status"
 shape = ["mov r10,[rdi+*]", "cmp [r10+r9*4],eax"]
 take = "value"
-range = [0x463eb8, 0x463eb8]
+range = [0x231f5c, 0x8c7d70]
 
 [[route]]
 id = "survivors.ui_map_values"
@@ -5223,7 +5223,7 @@ sides = ["client"]
 system = "ui_npc_status"
 shape = ["imul rbx,r9,?", "add rbx,[rdi+*]"]
 take = "value"
-range = [0x463ed0, 0x463ed0]
+range = [0x231f68, 0x8c7da0]
 
 [[route]]
 id = "survivors.ui_record_size"

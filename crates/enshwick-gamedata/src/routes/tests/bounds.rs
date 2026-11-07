@@ -2,7 +2,7 @@
 //! address it takes must lie in, and the type a field route's last step
 //! holds.
 
-use super::super::proposed_range;
+use super::super::{is_name_hash, proposed_range};
 use super::*;
 
 /// Rows over [`fake`] that bound what [`FAKE_ROUTES`] takes: the same
@@ -109,6 +109,31 @@ fn a_proposed_range_keeps_a_name_hash_exact_and_leaves_room_for_an_offset() {
     assert_eq!(
         proposed_range(0x7b_c028, 0xeb_c028),
         (0x3d_e014, 0x1d7_8050)
+    );
+    assert_eq!(
+        proposed_range(0x46_3e98, 0x46_3e98),
+        (0x23_1f4c, 0x8c_7d30),
+        "an offset into a big object that never moved"
+    );
+}
+
+/// A struct offset fixed to one value turns its feature off as soon as a
+/// build moves the struct, so only a name hash keeps an exact range.
+#[test]
+fn only_a_name_hash_has_an_exact_range() {
+    let routes = Routes::embedded().unwrap();
+    let exact: Vec<String> = routes
+        .routes
+        .iter()
+        .filter_map(|r| {
+            r.range
+                .filter(|&(lo, hi)| lo == hi && !is_name_hash(lo))
+                .map(|(lo, _)| format!("{}: {lo:#x}", r.id))
+        })
+        .collect();
+    assert!(
+        exact.is_empty(),
+        "exact ranges that are no name hash: {exact:?}"
     );
 }
 
