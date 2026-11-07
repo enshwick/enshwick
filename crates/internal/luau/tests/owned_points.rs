@@ -125,6 +125,21 @@ mod tests {
     }
 
     #[test]
+    fn a_point_defined_twice_in_a_start_is_one_point() {
+        let loader = run(&format!(
+            "local again = enshwick.points.define_point(\"price\")\n{ASK}"
+        ));
+        assert_eq!(loader.defined_points(), ["you.luau:price"]);
+        assert!(loader.extend_point(|_: &Price, answer: &u32| Verdict::Set(answer + 1)));
+        let _saved = loader.raise::<WorldSaved>(&());
+        assert!(
+            logged(&loader, "price 11 changed extended true"),
+            "{:?}",
+            loader.logs()
+        );
+    }
+
+    #[test]
     fn a_rust_link_refuses_a_point_the_script_owns() {
         let loader = run(ASK);
         assert!(loader.extend_point(|_: &Price, _: &u32| Verdict::Refuse));

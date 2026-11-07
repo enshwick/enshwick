@@ -705,6 +705,27 @@ mod tests {
     }
 
     #[test]
+    fn spread_counts_up_to_the_last_value_passed() {
+        let n = |v: f64| LuaValue::Number(v);
+        let nil = || LuaValue::Nil;
+        let none = MultiValue::new();
+        assert_eq!((nil(), nil(), nil(), nil(), none.clone()).spread().0, 0);
+        assert_eq!((n(1.0), nil(), n(3.0), nil(), none.clone()).spread().0, 3);
+        assert_eq!((n(1.0), n(2.0), n(3.0), n(4.0), none).spread().0, 4);
+        let rest: MultiValue = [n(5.0), n(6.0)].into_iter().collect();
+        let (given, values) = (n(1.0), nil(), nil(), nil(), rest).spread();
+        assert_eq!(given, 6);
+        assert_eq!(values.count(), 6);
+    }
+
+    #[test]
+    fn args_hold_eight_in_place_and_more_in_a_list() {
+        for len in [0, 1, 7, 8, 9, 20] {
+            assert_eq!(Args::new(len).slots().len(), len, "{len}");
+        }
+    }
+
+    #[test]
     fn an_optional_union_s_variant_keeps_its_record() {
         let lua = Lua::new();
         let value = Some(Status::Done(Count { n: 3 })).into_value();
