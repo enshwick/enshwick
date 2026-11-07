@@ -20,6 +20,22 @@ expression: shape
       ],
       "type": "object"
     },
+    "Mode": {
+      "oneOf": [
+        {
+          "const": "observe",
+          "type": "string"
+        },
+        {
+          "const": "advise",
+          "type": "string"
+        },
+        {
+          "const": "override",
+          "type": "string"
+        }
+      ]
+    },
     "PackDependency": {
       "anyOf": [
         {
@@ -29,6 +45,60 @@ expression: shape
           "$ref": "#/$defs/DependencyTable"
         }
       ]
+    },
+    "PackPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "doc": {
+          "default": "",
+          "type": "string"
+        },
+        "input": {
+          "items": {
+            "$ref": "#/$defs/PackPointField"
+          },
+          "type": "array"
+        },
+        "mode": {
+          "$ref": "#/$defs/Mode"
+        },
+        "name": {
+          "type": "string"
+        },
+        "output": {
+          "type": "string"
+        },
+        "refusable": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "mode",
+        "output"
+      ],
+      "type": "object"
+    },
+    "PackPointField": {
+      "additionalProperties": false,
+      "properties": {
+        "doc": {
+          "default": "",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "type": "object"
     },
     "PackSetting": {
       "additionalProperties": false,
@@ -135,6 +205,12 @@ expression: shape
     "name": {
       "default": "",
       "type": "string"
+    },
+    "point": {
+      "items": {
+        "$ref": "#/$defs/PackPoint"
+      },
+      "type": "array"
     },
     "requires": {
       "additionalProperties": {

@@ -95,15 +95,18 @@ pub struct PackManifest {
     #[serde(default)]
     pub enshwick: String,
     /// What other mods may use, each `event:<name>` for an event its scripts
-    /// define or `content:<name>` for its content: `event:greeted` lets them
-    /// hear `<id>:greeted`. The loader refuses them anything else of the
-    /// pack's.
+    /// define, `point:<name>` for a point of `[[point]]` or `content:<name>`
+    /// for its content: `event:greeted` lets them hear `<id>:greeted`. The
+    /// loader refuses them anything else of the pack's.
     #[serde(default)]
     pub exports: Vec<String>,
     /// The pack's settings, in the order the Mods screen shows them; a Luau
     /// mod reads them, as a Rust mod reads its `Config`.
     #[serde(default)]
     pub setting: Vec<PackSetting>,
+    /// The extension points its scripts own and define at start.
+    #[serde(default)]
+    pub point: Vec<super::PackPoint>,
 }
 
 /// One setting of a pack, a `[[setting]]` table of `pack.toml`.
@@ -269,6 +272,7 @@ impl PackManifest {
             ));
         }
         manifest.check_settings(text)?;
+        manifest.check_points(text)?;
         manifest.check_exports(text)?;
         manifest.check_dependencies(text)?;
         Ok(manifest)
@@ -382,9 +386,10 @@ impl PackManifest {
     }
 
     /// The kinds a pack declares and so may export: its scripts' events and
-    /// its content.
-    const EXPORT_KINDS: [crate::schema_section::Kind; 2] = [
+    /// points, and its content.
+    const EXPORT_KINDS: [crate::schema_section::Kind; 3] = [
         crate::schema_section::Kind::Event,
+        crate::schema_section::Kind::Point,
         crate::schema_section::Kind::Content,
     ];
 

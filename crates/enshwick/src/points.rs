@@ -30,7 +30,7 @@ use crate::load::{hand_over, ok};
 use crate::{Host, Load, Off};
 
 #[cfg(feature = "unstable")]
-pub use described::{DescribedField, DescribedPoint, DescribedVerdict};
+pub use described::{DescribedField, DescribedOwnedPoint, DescribedPoint, DescribedVerdict};
 
 /// How links act on a point's answer, as the owning mod chooses.
 ///
@@ -42,7 +42,9 @@ pub use described::{DescribedField, DescribedPoint, DescribedVerdict};
 /// assert!(Mode::Override.changes());
 /// assert!(!Mode::Observe.changes());
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script, serde::Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "lowercase")]
 #[non_exhaustive]
 pub enum Mode {
     /// Links see the answer and change nothing.
