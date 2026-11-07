@@ -468,8 +468,11 @@ pub(crate) fn initialised() -> bool {
 #[inline]
 #[must_use]
 pub fn enabled(level: Level) -> bool {
-    level.0 <= MAX_LEVEL.load(Ordering::Relaxed)
-        || crate::host::pack().is_some_and(|pack| level.0 <= pack.log_level().0)
+    let max = match crate::host::pack() {
+        Some(pack) => pack.log_level().0,
+        None => MAX_LEVEL.load(Ordering::Relaxed),
+    };
+    level.0 <= max
 }
 
 unsafe extern "system" fn refresh_level(
@@ -485,20 +488,26 @@ unsafe extern "system" fn refresh_level(
 /// The state of the call site `site` for the data pack this thread runs,
 /// so the first pack to reach a site of the loader's copy does not silence
 /// it for the others; `site` itself outside a pack.
-///
-/// shortcut: a pack's line takes one uncontended lock per call; move to a
-/// lock-free table if a pack's `warn_every!` shows in a frame trace.
 fn for_pack<T: Default + Send + Sync + 'static>(site: &'static T) -> &'static T {
     type Sites = rustc_hash::FxHashMap<(usize, usize), &'static (dyn core::any::Any + Send + Sync)>;
     static SITES: std::sync::LazyLock<std::sync::Mutex<Sites>> =
         std::sync::LazyLock::new(std::sync::Mutex::default);
+    thread_local! {
+        // The states this thread already found, so a line after the first
+        // takes no lock.
+        static SEEN: core::cell::RefCell<Sites> = core::cell::RefCell::default();
+    }
     let Some(pack) = crate::host::pack() else {
         return site;
     };
     let key = (core::ptr::from_ref(site).addr(), pack.handle().0);
-    let state = *crate::Relock::relock(&*SITES)
-        .entry(key)
-        .or_insert_with(|| Box::leak(Box::new(T::default())));
+    let state = SEEN.with_borrow_mut(|seen| {
+        *seen.entry(key).or_insert_with(|| {
+            *crate::Relock::relock(&*SITES)
+                .entry(key)
+                .or_insert_with(|| Box::leak(Box::new(T::default())))
+        })
+    });
     state.downcast_ref().unwrap_or(site)
 }
 

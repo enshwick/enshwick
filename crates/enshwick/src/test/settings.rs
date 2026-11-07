@@ -102,6 +102,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn pack_log_level(mut self, pack: ModHandle, level: Level) -> Self {
+        self.pack_log_levels.retain(|(other, _)| *other != pack);
         self.pack_log_levels.push((pack, level));
         self
     }

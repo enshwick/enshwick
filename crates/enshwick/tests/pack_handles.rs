@@ -213,6 +213,27 @@ mod tests {
     }
 
     #[test]
+    fn a_pack_s_hud_callback_runs_as_the_pack() {
+        use enshwick::abi::Side;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        static SEEN: AtomicUsize = AtomicUsize::new(0);
+        let loader = FakeHost::new().side(Side::CLIENT).install();
+        // SAFETY: the fake host's table lives for the process.
+        unsafe { enshwick::__private::install_host(loader.api(), ModHandle(9)) };
+        // SAFETY: the fake host's table lives for the process.
+        let status = unsafe {
+            enshwick::__private::init_pack(loader.api(), ModHandle(1), |load| {
+                load.on_hud(|_| SEEN.store(handle().map_or(0, |h| h.0), Ordering::Relaxed))?;
+                Ok(())
+            })
+        };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let _drawn = loader.draw_hud();
+        assert_eq!(SEEN.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
     fn a_pack_s_debug_line_passes_at_the_pack_s_level_while_the_loader_keeps_info() {
         use enshwick::abi::Level;
 
@@ -231,6 +252,31 @@ mod tests {
         assert_eq!(
             loader.sent(),
             [(ModHandle(2), Level::DEBUG, "from the pack".to_owned())]
+        );
+    }
+
+    #[test]
+    fn a_pack_s_debug_line_is_dropped_at_the_pack_s_level_while_the_loader_keeps_debug() {
+        use enshwick::abi::Level;
+
+        let loader = FakeHost::new()
+            .log_level(Level::DEBUG)
+            .pack_log_level(ModHandle(2), Level::DEBUG)
+            .pack_log_level(ModHandle(2), Level::WARN)
+            .pack_log_level(ModHandle(3), Level::DEBUG)
+            .install();
+        // SAFETY: the fake host's table lives for the process.
+        unsafe { enshwick::__private::install_host(loader.api(), ModHandle(9)) };
+        // SAFETY: the fake host's table lives for the process.
+        unsafe {
+            enshwick::__private::as_pack(loader.api(), ModHandle(2), || {
+                enshwick::debug!("from the pack");
+            });
+        };
+        enshwick::debug!("from the loader");
+        assert_eq!(
+            loader.sent(),
+            [(ModHandle(9), Level::DEBUG, "from the loader".to_owned())]
         );
     }
 
