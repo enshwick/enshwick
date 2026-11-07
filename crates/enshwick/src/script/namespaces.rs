@@ -459,7 +459,15 @@ pub const NAMESPACES: &[Namespace] = &[
     Namespace::on_request::<crate::map::FogOfWar>("fog_of_war"),
     Namespace::of::<crate::daytime::Clock>(),
     Namespace::starting("daytime", "", &[crate::Load::SCRIPT_DAYTIME]),
-    Namespace::starting("sound", "", &[crate::Load::SCRIPT_SOUND]),
+    Namespace::starting(
+        "sound",
+        "",
+        &[
+            crate::Load::SCRIPT_SOUND,
+            #[cfg(feature = "unstable")]
+            crate::Load::SCRIPT_SOUND_ADD,
+        ],
+    ),
     Namespace::on_request::<crate::altars::Altars>("altars"),
     Namespace::starting(
         "altars",

@@ -164,6 +164,8 @@ mod sides;
 mod skill_tree;
 mod skills;
 mod sound_changes;
+#[cfg(feature = "unstable")]
+mod sound_files;
 mod sounds;
 #[cfg(feature = "typed")]
 mod spawns;

@@ -207,7 +207,11 @@ impl Load<'_> {
     ///
     /// As [`Load::change_sound`].
     #[script(name = "change")]
-    pub fn change_sound_script(&mut self, sound: Guid, change: SoundChange) -> Result<(), Off> {
+    pub(crate) fn change_sound_script(
+        &mut self,
+        sound: Guid,
+        change: SoundChange,
+    ) -> Result<(), Off> {
         self.change_sound(SoundContainerId::from_guid(sound), change)
     }
 }

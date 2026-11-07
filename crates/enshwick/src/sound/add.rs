@@ -334,7 +334,7 @@ impl Load<'_> {
     ///     })
     /// }
     /// ```
-    #[script]
+    #[script(name = "add")]
     pub fn add_sound(&mut self, new: NewSound) -> Result<SoundContainerId, Off> {
         let NewSound {
             id,
@@ -352,22 +352,18 @@ impl Load<'_> {
             .ok_or_else(|| fail("the id has no room for its sound's part".to_owned()))?;
         let path = file_in(&self.mod_dir()?, &file).map_err(fail)?;
         let size = std::fs::metadata(&path)
-            .map_err(|error| fail(format!("{}: {error}", file)))?
+            .map_err(|error| fail(format!("{file}: {error}")))?
             .len();
         if size > MAX_FILE_BYTES {
-            return Err(fail(format!(
-                "{}: {size} bytes, past {MAX_FILE_BYTES}",
-                file
-            )));
+            return Err(fail(format!("{file}: {size} bytes, past {MAX_FILE_BYTES}")));
         }
         if self.sound_bytes + size > MAX_MOD_BYTES {
             return Err(fail(format!(
-                "{}: the mod's sounds would pass {MAX_MOD_BYTES} bytes",
-                file
+                "{file}: the mod's sounds would pass {MAX_MOD_BYTES} bytes"
             )));
         }
-        let wav = std::fs::read(&path).map_err(|error| fail(format!("{}: {error}", file)))?;
-        let pcm = read_wav(&wav).map_err(|error| fail(format!("{}: {error}", file)))?;
+        let wav = std::fs::read(&path).map_err(|error| fail(format!("{file}: {error}")))?;
+        let pcm = read_wav(&wav).map_err(|error| fail(format!("{file}: {error}")))?;
         drop(wav);
         let container = self.declare(id)?;
         let sound = self.declare(sound_id)?;
