@@ -6,7 +6,7 @@ use crate::abi::{
     FogInfo, MapMarkerTypeInfo, ModHandle, Side, Status, UiAnswerFn, UiDialog, UiExtension,
     UiFrameFn, UiMarker, UiWidget,
 };
-use crate::test::table::{State, text, with};
+use crate::test::table::{Registered, State, text, with};
 use crate::ui::screens;
 
 /// The screens on which the player is in the world with no window open,
@@ -350,7 +350,7 @@ pub(crate) extern "system" fn map_marker_types(
 }
 
 pub(crate) extern "system" fn ui_dialog(
-    _me: ModHandle,
+    me: ModHandle,
     dialog: *const UiDialog,
     callback: UiAnswerFn,
     user: *mut c_void,
@@ -371,7 +371,7 @@ pub(crate) extern "system" fn ui_dialog(
         if s.dialogs.len() >= 16 {
             return Status::REFUSED;
         }
-        s.dialogs.push((shown, callback, user.expose_provenance()));
+        s.dialogs.push((shown, Registered::new(callback, user, me)));
         Status::OK
     })
 }

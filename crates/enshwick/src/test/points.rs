@@ -11,7 +11,7 @@ use crate::abi::{
 use crate::points::{Decision, LinkPlace, Point, Verdict, order};
 
 use super::Installed;
-use super::table::{Registration, put, view, with};
+use super::table::{Registered, Registration, put, view, with};
 
 /// A point as declared: name, input and answer layouts, whether links
 /// change the answer and whether they may refuse.
@@ -57,11 +57,10 @@ impl Declared {
     }
 }
 
-/// A link: its handler and pointer, and whether it is still on.
+/// A link: its handler, pointer and owner, and whether it is still on.
 #[derive(Clone, Copy)]
 struct Link {
-    callback: PointFn,
-    user: usize,
+    handler: Registered<PointFn>,
     on: bool,
 }
 
@@ -176,7 +175,7 @@ pub(crate) extern "system" fn define_point(
 }
 
 pub(crate) extern "system" fn attach_point(
-    _me: ModHandle,
+    me: ModHandle,
     link: *const PointLink,
     callback: PointFn,
     user: *mut c_void,
@@ -197,8 +196,7 @@ pub(crate) extern "system" fn attach_point(
         before: ids(link.before, link.before_count),
         after: ids(link.after, link.after_count),
         link: Link {
-            callback,
-            user: user.expose_provenance(),
+            handler: Registered::new(callback, user, me),
             on: true,
         },
     };
@@ -251,13 +249,9 @@ fn run(
     for (i, link) in links.iter().enumerate().filter(|(_, l)| l.on) {
         // SAFETY: the layouts match, input and value live for the call, and
         // `user` is the pointer the link was attached with.
-        let answer = unsafe {
-            (link.callback)(
-                input,
-                value,
-                core::ptr::with_exposed_provenance_mut(link.user),
-            )
-        };
+        let answer = link
+            .handler
+            .run(|callback, user| unsafe { callback(input, value, user) });
         match answer {
             PointVerdict::SET if changes => verdict = PointVerdict::SET,
             PointVerdict::REFUSE if changes && refuse => return (PointVerdict::REFUSE, panicked),
@@ -343,8 +337,7 @@ impl Installed {
                 return false;
             };
             defined.links.push(Link {
-                callback: crate::points::run_link::<P, F>,
-                user: user.expose_provenance(),
+                handler: Registered::unowned(crate::points::run_link::<P, F>, user.cast()),
                 on: true,
             });
             defined.live.fetch_add(1, Ordering::Relaxed);

@@ -79,12 +79,8 @@ impl Installed {
         };
         // SAFETY: the mod's callback with its pointer, handed back once; the
         // result lives for the call.
-        unsafe {
-            (open.done)(
-                &raw const result,
-                core::ptr::with_exposed_provenance_mut(open.user),
-            );
-        }
+        open.done
+            .run(|done, user| unsafe { done(&raw const result, user) });
         true
     }
 }

@@ -5,7 +5,7 @@ use core::sync::atomic::Ordering;
 use crate::abi::{HookSpec, MidHookSpec, ModHandle, Status};
 use crate::rules;
 use crate::test::LinkedHook;
-use crate::test::table::{Registration, put, with};
+use crate::test::table::{Registered, Registration, put, with};
 
 pub(crate) extern "system" fn hook(_me: ModHandle, spec: *const HookSpec) -> Status {
     // SAFETY: the safe layer passes a valid spec for the call; `as_ref` turns away null.
@@ -49,7 +49,7 @@ pub(crate) extern "system" fn hook(_me: ModHandle, spec: *const HookSpec) -> Sta
     linked
 }
 
-pub(crate) extern "system" fn hook_at(_me: ModHandle, spec: *const MidHookSpec) -> Status {
+pub(crate) extern "system" fn hook_at(me: ModHandle, spec: *const MidHookSpec) -> Status {
     // SAFETY: the safe layer passes a valid spec for the call; `as_ref` turns away null.
     let Some(spec) = (unsafe { spec.as_ref() }) else {
         return Status::BAD_ARGS;
@@ -70,7 +70,7 @@ pub(crate) extern "system" fn hook_at(_me: ModHandle, spec: *const MidHookSpec) 
             return Status::REFUSED;
         }
         s.mid_hooks
-            .push((spec.address, spec.handler, spec.user.expose_provenance()));
+            .push((spec.address, Registered::new(spec.handler, spec.user, me)));
         Status::OK
     })
 }

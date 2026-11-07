@@ -3,7 +3,7 @@
 use core::ffi::c_void;
 
 use crate::abi::{ConfigCheckFn, ContentRename, Level, ModHandle, ModInfo, Status, Str};
-use crate::test::table::{found, put, text, with};
+use crate::test::table::{Registered, found, put, text, with};
 
 pub(crate) extern "system" fn fault(me: ModHandle, reason: Str) {
     let reason = text(reason);
@@ -150,7 +150,7 @@ pub(crate) extern "system" fn config_schema(
 }
 
 pub(crate) extern "system" fn config_check(
-    _me: ModHandle,
+    me: ModHandle,
     file: Str,
     callback: ConfigCheckFn,
     user: *mut c_void,
@@ -161,7 +161,7 @@ pub(crate) extern "system" fn config_check(
             return Status::REFUSED;
         }
         s.config_checks
-            .insert(file, (callback, user.expose_provenance()));
+            .insert(file, Registered::new(callback, user, me));
         Status::OK
     })
 }

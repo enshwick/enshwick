@@ -330,10 +330,9 @@ impl Installed {
         action: &str,
         args: &str,
     ) -> Option<String> {
-        let (callback, user) = table::with(None, |s| s.actions)?;
+        let actions = table::with(None, |s| s.actions)?;
         Some(ask(
-            callback,
-            user,
+            actions,
             kind,
             player,
             language,
@@ -377,11 +376,10 @@ impl Installed {
         args: &str,
         target: crate::actions::ActionTarget,
     ) -> Option<String> {
-        let (callback, user) = table::with(None, |s| s.actions)?;
+        let actions = table::with(None, |s| s.actions)?;
         let run = crate::abi::ActionCall::RUN;
         Some(ask(
-            callback,
-            user,
+            actions,
             run,
             player,
             language,
@@ -434,11 +432,11 @@ impl Installed {
         let sources = table::with(Vec::new(), |s| s.status_sources.clone());
         sources
             .into_iter()
-            .map(|(callback, user)| {
+            .map(|source| {
                 let mut out = Str::EMPTY;
                 // SAFETY: `user` is the pointer the mod registered with; a
                 // writable out pointer.
-                unsafe { callback(core::ptr::with_exposed_provenance_mut(user), &raw mut out) };
+                source.run(|callback, user| unsafe { callback(user, &raw mut out) });
                 // SAFETY: the text stays valid until the source runs again.
                 unsafe { out.as_str() }.unwrap_or("").to_owned()
             })
@@ -509,12 +507,9 @@ impl Installed {
             return false;
         };
         let channel = table::with(None, |s| {
-            s.channels
-                .iter()
-                .find(|c| c.0 == name)
-                .map(|c| (c.1, c.2, c.3))
+            s.channels.iter().find(|c| c.0 == name).map(|c| (c.1, c.2))
         });
-        let Some((id, callback, user)) = channel else {
+        let Some((id, handler)) = channel else {
             return false;
         };
         let peer = match from {
@@ -531,7 +526,7 @@ impl Installed {
             reserved_tail: 0,
         };
         // SAFETY: a handler the mod registered with its own pointer.
-        unsafe { callback(&raw const raw, core::ptr::with_exposed_provenance_mut(user)) };
+        handler.run(|callback, user| unsafe { callback(&raw const raw, user) });
         true
     }
 
@@ -577,11 +572,9 @@ impl Installed {
             }),
             text: Str::new(text),
         };
-        filters.iter().all(|&(callback, user)| {
-            let user = core::ptr::with_exposed_provenance_mut(user);
+        filters.iter().all(|filter| {
             // SAFETY: a valid call; `user` is the pointer the mod registered with.
-            let allowed = unsafe { callback(&raw const call, user) };
-            allowed != 0
+            filter.run(|callback, user| unsafe { callback(&raw const call, user) }) != 0
         })
     }
 }
@@ -602,13 +595,8 @@ pub(crate) fn console() -> PlayerInfo {
 }
 
 /// Asks a mod's actions callback as the loader does; its reply.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the fields of the loader's question, one each"
-)]
 pub(crate) fn ask(
-    callback: crate::abi::ActionFn,
-    user: usize,
+    actions: table::Registered<crate::abi::ActionFn>,
     kind: u32,
     player: &PlayerInfo,
     language: u32,
@@ -627,13 +615,7 @@ pub(crate) fn ask(
     };
     let mut reply = Str::EMPTY;
     // SAFETY: a valid call; `user` is the pointer the mod registered with.
-    unsafe {
-        callback(
-            &raw const call,
-            core::ptr::with_exposed_provenance_mut(user),
-            &raw mut reply,
-        );
-    }
+    actions.run(|callback, user| unsafe { callback(&raw const call, user, &raw mut reply) });
     // SAFETY: the reply stays valid until the callback runs again.
     unsafe { reply.as_str() }.unwrap_or("").to_owned()
 }

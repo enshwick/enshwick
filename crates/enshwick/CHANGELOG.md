@@ -359,6 +359,11 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- `log`: a data pack's log check reads its own level from an atomic the pack
+  keeps and asks the loader again when the loader's settings change (#983).
+- `test`: the fake host runs every callback a mod or data pack registered as
+  its owner, as the loader does; `Installed::set_pack_log_level` sets a
+  pack's level in the fake (#983).
 - `abi`: `ChunkData` and `Event::CHUNK_LOADED` and `CHUNK_UNLOADED` say they
   name chunks of the world's entities, never of its terrain's voxels (#977).
 - `events`: `ChunkLoaded` and `ChunkUnloaded` say they follow the chunks of

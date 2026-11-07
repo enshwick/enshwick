@@ -368,14 +368,16 @@ struct Vanilla {
 /// result, or `None` when it is the vanilla zone.
 fn chain(
     vanilla: AltarZone,
-    filters: impl Iterator<Item = (AltarZoneFn, *mut c_void)>,
+    filters: impl Iterator<Item = (ModIndex, AltarZoneFn, *mut c_void)>,
 ) -> Option<(i64, i64)> {
     let mut zone = vanilla;
-    for (callback, user) in filters {
+    for (owner, callback, user) in filters {
         let before = zone;
         // SAFETY: the mod's filter with its own pointer and a zone valid for
         // the call; the safe layer catches its panics.
-        unsafe { callback(&raw mut zone, user) };
+        crate::profile::call(owner, crate::profile::Feature::Altars, || unsafe {
+            callback(&raw mut zone, user);
+        });
         zone.header = before.header;
         zone.altar = before.altar;
         zone.level = before.level;
@@ -433,7 +435,7 @@ fn size_zones_with(sizers: &[&Sizer]) {
     };
     let mut targets = Targets::new();
     for altar in vanilla {
-        let filters = sizers.iter().map(|s| (s.callback, s.user()));
+        let filters = sizers.iter().map(|s| (s.owner, s.callback, s.user()));
         if let Some((grow, height)) = chain(altar.zone, filters) {
             targets.insert(
                 altar.zone.altar.0,

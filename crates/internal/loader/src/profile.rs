@@ -176,10 +176,21 @@ pub fn call<R>(owner: ModIndex, feature: Feature, f: impl FnOnce() -> R) -> R {
 #[cfg(windows)]
 #[inline]
 fn as_owner<R>(owner: ModIndex, f: impl FnOnce() -> R) -> R {
-    let pack = crate::host::loader()
-        .and_then(|loader| loader.mods.get(owner.get()))
-        .is_some_and(|record| record.pack);
-    as_pack_or_loader(pack.then(|| owner.handle()), f)
+    let pack = crate::host::loader().and_then(|loader| pack_handle(&loader.mods, owner));
+    as_pack_or_loader(pack, f)
+}
+
+/// The handle of `owner` when it is a data pack among `mods`, whose code
+/// the loader's own copy of the API runs; `None` for a mod's own DLL.
+#[cfg(windows)]
+#[inline]
+pub(crate) fn pack_handle(
+    mods: &[crate::host::ModRecord],
+    owner: ModIndex,
+) -> Option<enshwick::abi::ModHandle> {
+    mods.get(owner.get())
+        .filter(|record| record.pack)
+        .map(|_| owner.handle())
 }
 
 /// Runs `f` as the data pack `pack` in the loader's own copy of the API, or

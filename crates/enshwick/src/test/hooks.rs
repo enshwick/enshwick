@@ -249,13 +249,13 @@ impl Installed {
             s.mid_hooks
                 .iter()
                 .filter(|h| h.0 == address)
-                .map(|h| (h.1, h.2))
+                .map(|h| h.1)
                 .collect()
         });
-        for &(handler, user) in &handlers {
+        for handler in &handlers {
             // SAFETY: the registers are valid for the call, and `user` is the
             // pointer the mod registered the handler with.
-            unsafe { handler(registers, core::ptr::with_exposed_provenance_mut(user)) };
+            handler.run(|handler, user| unsafe { handler(registers, user) });
         }
         handlers.len()
     }

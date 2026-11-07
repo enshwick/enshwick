@@ -92,8 +92,7 @@ use world::{
 /// A submitted inventory request and where its result goes.
 pub(crate) struct OpenRequest {
     pub(crate) request: SubmittedRequest,
-    pub(crate) done: InventoryResultFn,
-    pub(crate) user: usize,
+    pub(crate) done: Registered<InventoryResultFn>,
 }
 
 /// A defined mod event: name, layout and the size of its data.
@@ -117,6 +116,49 @@ pub(crate) fn as_owner<R>(owner: ModHandle, call: impl FnOnce() -> R) -> R {
     unsafe { crate::__private::as_pack(&raw const TABLE, owner, call) }
 }
 
+/// A callback the mod registered with its pointer and the handle that
+/// registered it, so the fake calls it as that mod or data pack.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Registered<F> {
+    pub(crate) callback: F,
+    pub(crate) user: usize,
+    /// `None` for a test's stand-in for another mod, which runs as the
+    /// loader, as another DLL's callback runs outside the pack's scope.
+    owner: Option<ModHandle>,
+}
+
+impl<F: Copy> Registered<F> {
+    pub(crate) fn new(callback: F, user: *mut core::ffi::c_void, owner: ModHandle) -> Self {
+        Self {
+            callback,
+            user: user.expose_provenance(),
+            owner: Some(owner),
+        }
+    }
+
+    /// A test's stand-in for another mod's callback.
+    pub(crate) fn unowned(callback: F, user: *mut core::ffi::c_void) -> Self {
+        Self {
+            callback,
+            user: user.expose_provenance(),
+            owner: None,
+        }
+    }
+
+    /// Runs `call` with the callback and its pointer as the owner, as the
+    /// loader runs a callback in its owner's profile scope.
+    pub(crate) fn run<R>(&self, call: impl FnOnce(F, *mut core::ffi::c_void) -> R) -> R {
+        let (callback, user) = (
+            self.callback,
+            core::ptr::with_exposed_provenance_mut(self.user),
+        );
+        match self.owner {
+            Some(owner) => as_owner(owner, || call(callback, user)),
+            None => crate::__private::as_loader(|| call(callback, user)),
+        }
+    }
+}
+
 /// What the installed fake answers and what it has recorded.
 pub(crate) struct State {
     pub(crate) host: FakeHost,
@@ -132,13 +174,13 @@ pub(crate) struct State {
     /// Whether the mod may still ask for what only init may.
     pub(crate) registration: Registration,
     /// Mid-function hooks: address, handler and the mod's pointer.
-    pub(crate) mid_hooks: Vec<(u64, MidHookFn, usize)>,
+    pub(crate) mid_hooks: Vec<(u64, Registered<MidHookFn>)>,
     /// Loader event handlers: event, handler, pointer and owner.
     pub(crate) subscriptions: Vec<(Event, EventFn, usize, ModHandle)>,
     /// Game event handlers: type hash (0 for every type), handler, pointer
     /// and owner.
     pub(crate) game_events: Vec<(u32, GameEventFn, usize, ModHandle)>,
-    pub(crate) served: Vec<(ServedResource, ResourcePatchFn, usize)>,
+    pub(crate) served: Vec<(ServedResource, Registered<ResourcePatchFn>)>,
     /// Every rebuild of a served resource the mod asked for, at init and
     /// after.
     pub(crate) rebuilds: Vec<ResourceKey>,
@@ -163,12 +205,12 @@ pub(crate) struct State {
     /// the game's count and the mask's bits of the first call.
     pub(crate) crafting_props: (Option<(u8, u8)>, Vec<[u8; 16]>),
     /// The mod's player actions callback, once registered.
-    pub(crate) actions: Option<(crate::abi::ActionFn, usize)>,
+    pub(crate) actions: Option<Registered<crate::abi::ActionFn>>,
     pub(crate) chat: Vec<(crate::PlayerKey, String)>,
     pub(crate) labels: Vec<(u32, String)>,
-    pub(crate) rename_filters: Vec<(RenameCallFn, usize)>,
+    pub(crate) rename_filters: Vec<Registered<RenameCallFn>>,
     pub(crate) inventory_requests: Vec<OpenRequest>,
-    pub(crate) status_sources: Vec<(StatusFn, usize)>,
+    pub(crate) status_sources: Vec<Registered<StatusFn>>,
     /// The mod's features as it last reported them: name and, when off,
     /// the reason.
     pub(crate) features: Vec<(String, Option<String>)>,
@@ -195,14 +237,14 @@ pub(crate) struct State {
     /// The step each of `spawns` was asked in: the entity is in the world
     /// from the next one, as the loader's spawns are.
     pub(crate) spawn_steps: Vec<u64>,
-    pub(crate) craft_filters: Vec<(CraftCheckFn, usize)>,
+    pub(crate) craft_filters: Vec<Registered<CraftCheckFn>>,
     /// Channels the mod opened: full name, id, handler and pointer.
-    pub(crate) channels: Vec<(String, u32, NetMessageFn, usize)>,
+    pub(crate) channels: Vec<(String, u32, Registered<NetMessageFn>)>,
     /// Messages the mod sent: channel id, raw peer and bytes.
     pub(crate) net_sent: Vec<(u32, crate::PlayerKey, Vec<u8>)>,
     /// Notices the mod showed: account key and text.
     pub(crate) notices: Vec<(crate::PlayerKey, String)>,
-    pub(crate) build_filters: Vec<(BuildCheckFn, usize)>,
+    pub(crate) build_filters: Vec<Registered<BuildCheckFn>>,
     /// The clock `time_of_day` writes, settable while installed.
     pub(crate) daytime: Option<DaytimeInfo>,
     /// The mod's factor on the clock's speed, once it asked to change it.
@@ -211,8 +253,8 @@ pub(crate) struct State {
     pub(crate) game_settings: Option<(Vec<u8>, u32)>,
     /// The game settings' bytes the mod kept with the world, by offset.
     pub(crate) kept_settings: Vec<Option<u8>>,
-    pub(crate) damage_filters: Vec<(DamageFilterFn, usize)>,
-    pub(crate) knowledge_input_filters: Vec<(KnowledgeInputFn, usize)>,
+    pub(crate) damage_filters: Vec<Registered<DamageFilterFn>>,
+    pub(crate) knowledge_input_filters: Vec<Registered<KnowledgeInputFn>>,
     /// The buff types the fake knows.
     pub(crate) buff_types: Vec<BuffTypeInfo>,
     /// The buffs of each entity that holds buffs.
@@ -268,7 +310,7 @@ pub(crate) struct State {
     /// The mod's markers on the map.
     pub(crate) markers: Vec<super::FakeMarker>,
     /// The mod's checks of new settings texts, by file.
-    pub(crate) config_checks: std::collections::BTreeMap<String, (ConfigCheckFn, usize)>,
+    pub(crate) config_checks: std::collections::BTreeMap<String, Registered<ConfigCheckFn>>,
     /// The texts the mod handed the loader last, as TOML.
     pub(crate) published_texts: Option<String>,
     /// The mod's answer to an update pick.
@@ -278,7 +320,7 @@ pub(crate) struct State {
     /// Inputs waiting for the widget with their text.
     pub(crate) inputs: Vec<(String, super::Input)>,
     /// Dialogs waiting for an answer, with where it goes.
-    pub(crate) dialogs: Vec<(super::ShownDialog, UiAnswerFn, usize)>,
+    pub(crate) dialogs: Vec<(super::ShownDialog, Registered<UiAnswerFn>)>,
     /// The world key last handed out, alive until the next one.
     world_key: Option<Box<str>>,
     /// The altars `altars` lists, settable while installed.
@@ -289,11 +331,11 @@ pub(crate) struct State {
     pub(crate) zone_control: bool,
     /// The mod's altar zone filters, and how often it asked for a new sizing.
     pub(crate) zone_sizing: ZoneSizing,
-    pub(crate) zone_filters: Vec<(BuildingZoneCheckFn, usize)>,
-    pub(crate) survivor_lookup: Option<(SurvivorLookupFn, usize)>,
-    pub(crate) bed_checks: Vec<(BedCheckFn, usize)>,
-    pub(crate) summons: Vec<(SummonFn, usize)>,
-    pub(crate) summoned: Vec<(SummonFn, usize)>,
+    pub(crate) zone_filters: Vec<Registered<BuildingZoneCheckFn>>,
+    pub(crate) survivor_lookup: Option<Registered<SurvivorLookupFn>>,
+    pub(crate) bed_checks: Vec<Registered<BedCheckFn>>,
+    pub(crate) summons: Vec<Registered<SummonFn>>,
+    pub(crate) summoned: Vec<Registered<SummonFn>>,
     /// Item data kinds by full id, and values by kind and entity: the item
     /// and the bytes.
     pub(crate) item_kinds: Vec<String>,
@@ -312,23 +354,23 @@ pub(crate) struct State {
     /// The mod's controls and the action runs it sent.
     #[cfg(feature = "unstable")]
     pub(crate) controls: super::controls::FakeControls,
-    pub(crate) survivor_status: Option<(SurvivorStatusFn, usize)>,
-    pub(crate) interaction_filters: Vec<(InteractionFn, usize)>,
-    pub(crate) item_filters: Vec<(crate::abi::ItemActionFn, usize)>,
-    pub(crate) chat_filters: Vec<(crate::abi::ChatFilterFn, usize)>,
+    pub(crate) survivor_status: Option<Registered<SurvivorStatusFn>>,
+    pub(crate) interaction_filters: Vec<Registered<InteractionFn>>,
+    pub(crate) item_filters: Vec<Registered<crate::abi::ItemActionFn>>,
+    pub(crate) chat_filters: Vec<Registered<crate::abi::ChatFilterFn>>,
     /// Each account's chat rate: the start of its window in fake server
     /// time and the lines heard in it.
     pub(crate) chat_rate: Vec<(crate::PlayerKey, u64, u32)>,
     /// The world's save on disk and the mod's hold on saves.
     pub(crate) save: Saves,
-    pub(crate) skills: Vec<(crate::abi::SkillNode, SkillCheckFn, usize)>,
-    pub(crate) comfort_filters: Vec<(ComfortFn, usize)>,
+    pub(crate) skills: Vec<(crate::abi::SkillNode, Registered<SkillCheckFn>)>,
+    pub(crate) comfort_filters: Vec<Registered<ComfortFn>>,
     /// The rates the mod declared, with the factor it set for each.
     pub(crate) rates: Vec<(crate::abi::RateId, f32)>,
     /// What the mod asked of the engine's pacing places.
     pub(crate) pacing: Pacing,
-    pub(crate) experience_filters: Vec<(ExperiencePassFn, usize)>,
-    pub(crate) altar_limits: Vec<(AltarLimitFilterFn, usize)>,
+    pub(crate) experience_filters: Vec<Registered<ExperiencePassFn>>,
+    pub(crate) altar_limits: Vec<Registered<AltarLimitFilterFn>>,
     /// Whether the mod raised the base limit, and whether the hooks are
     /// armed, from which on the raised limit holds.
     pub(crate) base_limit: BaseLimitState,
@@ -540,7 +582,7 @@ pub(crate) struct BaseLimitState {
 #[derive(Debug, Default)]
 pub(crate) struct ZoneSizing {
     /// The filters and their pointers.
-    pub(crate) filters: Vec<(AltarZoneFn, usize)>,
+    pub(crate) filters: Vec<Registered<AltarZoneFn>>,
     /// How often the mod asked for the zones to be sized again.
     pub(crate) resizes: usize,
 }
@@ -549,9 +591,9 @@ pub(crate) struct ZoneSizing {
 #[derive(Debug, Default)]
 pub(crate) struct Pacing {
     /// The loop wait handlers and their pointers.
-    pub(crate) loop_waits: Vec<(LoopWaitFn, usize)>,
+    pub(crate) loop_waits: Vec<Registered<LoopWaitFn>>,
     /// The server wait handlers and their pointers.
-    pub(crate) server_waits: Vec<(ServerWaitFn, usize)>,
+    pub(crate) server_waits: Vec<Registered<ServerWaitFn>>,
     /// The lowest worker caps asked for, default and background.
     pub(crate) task_workers: Option<(u32, u32)>,
 }

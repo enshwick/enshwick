@@ -3,10 +3,10 @@
 use core::ffi::c_void;
 
 use crate::abi::{ItemActionFn, ModHandle, Status};
-use crate::test::table::{Registration, with};
+use crate::test::table::{Registered, Registration, with};
 
 pub(crate) extern "system" fn item_filter(
-    _me: ModHandle,
+    me: ModHandle,
     callback: ItemActionFn,
     user: *mut c_void,
 ) -> Status {
@@ -14,7 +14,7 @@ pub(crate) extern "system" fn item_filter(
         if s.registration == Registration::Closed {
             return Status::TOO_LATE;
         }
-        s.item_filters.push((callback, user.expose_provenance()));
+        s.item_filters.push(Registered::new(callback, user, me));
         Status::OK
     })
 }

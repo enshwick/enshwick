@@ -9,7 +9,7 @@ use crate::abi::{CallFn, CallSpec, ModHandle, Status};
 use crate::services::{Call, CallError};
 
 use super::Installed;
-use super::table::{put, with};
+use super::table::{Registered, put, with};
 
 /// A call as declared: name, major, and the input's and answer's layouts
 /// and sizes.
@@ -44,12 +44,12 @@ impl Declared {
     }
 }
 
-/// A served call: its declaration, handler and pointer.
+/// A served call: its declaration, and its handler with the pointer and
+/// the handle that served it.
 #[derive(Clone)]
 struct Served {
     declared: Declared,
-    callback: CallFn,
-    user: usize,
+    handler: Registered<CallFn>,
 }
 
 /// The fake's calls.
@@ -86,7 +86,7 @@ fn declared(spec: *const CallSpec) -> Option<Declared> {
 }
 
 pub(crate) extern "system" fn serve_call(
-    _me: ModHandle,
+    me: ModHandle,
     spec: *const CallSpec,
     callback: CallFn,
     user: *mut c_void,
@@ -105,8 +105,7 @@ pub(crate) extern "system" fn serve_call(
         }
         calls.served.push(Served {
             declared,
-            callback,
-            user: user.expose_provenance(),
+            handler: Registered::new(callback, user, me),
         });
         Status::OK
     })
@@ -179,10 +178,10 @@ pub(crate) extern "system" fn call(
         // and answer that large, live for the call; the state lock is not
         // held, so the handler may call the fake.
         Ok(server) => unsafe {
-            (server.callback)(
+            (server.handler.callback)(
                 input,
                 output,
-                core::ptr::with_exposed_provenance_mut(server.user),
+                core::ptr::with_exposed_provenance_mut(server.handler.user),
             )
         },
         Err(status) => status,
@@ -223,8 +222,7 @@ impl Installed {
         with((), |s| {
             s.calls.others.push(Served {
                 declared: Declared::of::<C>(),
-                callback: crate::services::run_typed::<C, F>,
-                user: user.expose_provenance(),
+                handler: Registered::unowned(crate::services::run_typed::<C, F>, user.cast()),
             });
         });
     }
@@ -266,13 +264,13 @@ impl Installed {
         let mut answer = core::mem::MaybeUninit::<C::Output>::uninit();
         // SAFETY: the mod served the handler for a declaration equal to `C`'s
         // field by field and in size; input and answer live for the call.
-        let status = unsafe {
-            (server.callback)(
+        let status = server.handler.run(|callback, user| unsafe {
+            callback(
                 core::ptr::from_ref(input).cast(),
                 answer.as_mut_ptr().cast(),
-                core::ptr::with_exposed_provenance_mut(server.user),
+                user,
             )
-        };
+        });
         match status {
             // SAFETY: an OK status means the handler wrote an answer of the
             // matched type, `C::Output`.

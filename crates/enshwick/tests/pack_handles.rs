@@ -281,6 +281,66 @@ mod tests {
     }
 
     #[test]
+    fn a_pack_keeps_its_level_until_the_loader_s_settings_change() {
+        use enshwick::abi::Level;
+        use enshwick::events::LoaderSettingsChanged;
+
+        let loader = FakeHost::new()
+            .pack_log_level(ModHandle(2), Level::WARN)
+            .install();
+        // SAFETY: the fake host's table lives for the process.
+        unsafe { enshwick::__private::install_host(loader.api(), ModHandle(9)) };
+        // SAFETY: the fake host's table lives for the process.
+        let status =
+            unsafe { enshwick::__private::init_pack(loader.api(), ModHandle(2), |_| Ok(())) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let debug = |line: &'static str| {
+            // SAFETY: the fake host's table lives for the process.
+            unsafe {
+                enshwick::__private::as_pack(loader.api(), ModHandle(2), || {
+                    enshwick::debug!("{line}");
+                });
+            }
+        };
+        debug("at warn");
+        loader.set_pack_log_level(ModHandle(2), Level::DEBUG);
+        debug("kept at warn");
+        assert_eq!(
+            loader.raise::<LoaderSettingsChanged>(&()),
+            1,
+            "the pack's own refresh"
+        );
+        debug("at debug");
+        assert_eq!(
+            loader.sent(),
+            [(ModHandle(2), Level::DEBUG, "at debug".to_owned())],
+            "the level is read once, and again after the change"
+        );
+    }
+
+    #[test]
+    fn a_pack_s_level_read_in_one_fake_life_is_read_again_in_the_next() {
+        use enshwick::abi::Level;
+
+        let debug_in = |level: Level| {
+            let loader = FakeHost::new()
+                .pack_log_level(ModHandle(2), level)
+                .install();
+            // SAFETY: the fake host's table lives for the process.
+            unsafe { enshwick::__private::install_host(loader.api(), ModHandle(9)) };
+            // SAFETY: the fake host's table lives for the process.
+            unsafe {
+                enshwick::__private::as_pack(loader.api(), ModHandle(2), || {
+                    enshwick::debug!("from the pack");
+                });
+            };
+            loader.sent().len()
+        };
+        assert_eq!(debug_in(Level::DEBUG), 1);
+        assert_eq!(debug_in(Level::WARN), 0, "the last life's level is gone");
+    }
+
+    #[test]
     fn a_once_and_an_every_site_log_for_each_pack_that_reaches_them() {
         use std::time::Duration;
 

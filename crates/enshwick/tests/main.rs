@@ -116,6 +116,8 @@ mod open_screen;
 mod pacing;
 #[cfg(feature = "unstable")]
 mod pack_handles;
+#[cfg(feature = "unstable")]
+mod pack_owners;
 #[cfg(feature = "schema")]
 mod pack_schemas;
 #[cfg(feature = "unstable")]

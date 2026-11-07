@@ -27,14 +27,9 @@ impl Installed {
             reserved: 0,
             left_ns,
         };
-        for (callback, user) in handlers {
+        for handler in handlers {
             // SAFETY: a valid registration; `user` is the mod's pointer.
-            unsafe {
-                callback(
-                    &raw const wait,
-                    core::ptr::with_exposed_provenance_mut(user),
-                );
-            }
+            handler.run(|callback, user| unsafe { callback(&raw const wait, user) });
         }
     }
 
@@ -50,14 +45,9 @@ impl Installed {
     #[must_use]
     pub fn server_wait(&self, mut wait_ns: u64) -> u64 {
         let handlers = table::with(Vec::new(), |s| s.pacing.server_waits.clone());
-        for (callback, user) in handlers {
+        for handler in handlers {
             // SAFETY: a valid registration; `user` is the mod's pointer.
-            unsafe {
-                callback(
-                    &raw mut wait_ns,
-                    core::ptr::with_exposed_provenance_mut(user),
-                );
-            }
+            handler.run(|callback, user| unsafe { callback(&raw mut wait_ns, user) });
         }
         wait_ns
     }

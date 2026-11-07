@@ -9,7 +9,7 @@ use crate::abi::{
 };
 use crate::controls::{GameAction, Key, Tracker, chords, is_valid_name, phases, valid_phases};
 
-use super::table::{Registration, text, with};
+use super::table::{Registered, Registration, text, with};
 use super::{FakeHost, Installed};
 
 /// A control the mod declared.
@@ -22,8 +22,7 @@ struct FakeControl {
     hold_ms: u32,
     /// The mod's action a firing runs on the server; empty for none.
     action: String,
-    callback: ControlFn,
-    user: usize,
+    handler: Registered<ControlFn>,
     tracker: Tracker,
     /// The game action's tracker for each player entity.
     players: Vec<(u32, Tracker)>,
@@ -44,7 +43,7 @@ pub(crate) struct FakeControls {
 }
 
 pub(crate) extern "system" fn control(
-    _me: ModHandle,
+    me: ModHandle,
     spec: *const ControlSpec,
     callback: ControlFn,
     user: *mut c_void,
@@ -91,8 +90,7 @@ pub(crate) extern "system" fn control(
             fires: spec.fires,
             hold_ms: spec.hold_ms,
             action,
-            callback,
-            user: user.expose_provenance(),
+            handler: Registered::new(callback, user, me),
             tracker: Tracker::default(),
             players: Vec::new(),
         });
@@ -163,8 +161,7 @@ impl FakeHost {
 struct Call {
     name: String,
     kind: u32,
-    callback: ControlFn,
-    user: usize,
+    handler: Registered<ControlFn>,
 }
 
 impl FakeControl {
@@ -172,8 +169,7 @@ impl FakeControl {
         Call {
             name: self.name.clone(),
             kind,
-            callback: self.callback,
-            user: self.user,
+            handler: self.handler,
         }
     }
 }
@@ -207,12 +203,8 @@ fn deliver(calls: &[Call], server: Option<&PlayerInfo>) -> usize {
         };
         // SAFETY: `event` lives for the call and `user` is the pointer the
         // mod declared `callback` with.
-        unsafe {
-            (call.callback)(
-                &raw const event,
-                core::ptr::with_exposed_provenance_mut(call.user),
-            );
-        };
+        call.handler
+            .run(|callback, user| unsafe { callback(&raw const event, user) });
     }
     calls.len()
 }

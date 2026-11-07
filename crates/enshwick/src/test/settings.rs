@@ -135,6 +135,28 @@ impl Installed {
         });
     }
 
+    /// Makes `level` the data pack `pack`'s most detailed log level, as an
+    /// edit of the loader's settings would; raise
+    /// [`events::LoaderSettingsChanged`](crate::events::LoaderSettingsChanged)
+    /// for the pack to read it, as the loader does after the edit.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{Level, ModHandle};
+    /// use enshwick::events;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.set_pack_log_level(ModHandle(2), Level::DEBUG);
+    /// assert_eq!(loader.raise::<events::LoaderSettingsChanged>(&()), 0);
+    /// ```
+    pub fn set_pack_log_level(&self, pack: ModHandle, level: Level) {
+        table::with((), |s| {
+            s.host.pack_log_levels.retain(|(other, _)| *other != pack);
+            s.host.pack_log_levels.push((pack, level));
+        });
+    }
+
     /// The schema of the mod's settings file `file` as the mod handed it
     /// the loader, which [`Load::on_settings`](crate::Load::on_settings)
     /// does; `None` before.
@@ -166,20 +188,14 @@ impl Installed {
     /// assert_eq!(loader.check_settings("settings", "x = 1"), Ok(()));
     /// ```
     pub fn check_settings(&self, file: &str, text: &str) -> Result<(), SettingsRefused> {
-        let Some((callback, user)) = table::with(None, |s| s.config_checks.get(file).copied())
-        else {
+        let Some(check) = table::with(None, |s| s.config_checks.get(file).copied()) else {
             return Ok(());
         };
         let mut why = Str::EMPTY;
         // SAFETY: the mod's check with its own pointer; the text lives for
         // the call.
-        let status = unsafe {
-            callback(
-                Str::new(text),
-                &raw mut why,
-                core::ptr::with_exposed_provenance_mut(user),
-            )
-        };
+        let status =
+            check.run(|callback, user| unsafe { callback(Str::new(text), &raw mut why, user) });
         if status.is_ok() {
             return Ok(());
         }

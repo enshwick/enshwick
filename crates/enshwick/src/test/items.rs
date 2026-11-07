@@ -87,13 +87,12 @@ fn ask(call: &ItemAction) -> bool {
         ItemAction::PICKUP | ItemAction::PLACE | ItemAction::CONSUMED
     );
     let mut allowed = true;
-    for &(callback, user) in &filters {
+    for filter in &filters {
         if refusable && !allowed {
             break;
         }
-        let user = core::ptr::with_exposed_provenance_mut(user);
         // SAFETY: a valid call; `user` is the mod's pointer.
-        allowed &= unsafe { callback(call, user) != 0 };
+        allowed &= filter.run(|callback, user| unsafe { callback(call, user) != 0 });
     }
     allowed || !refusable
 }
