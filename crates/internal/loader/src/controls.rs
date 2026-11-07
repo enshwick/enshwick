@@ -14,6 +14,7 @@
 
 use core::cell::RefCell;
 use core::ffi::c_void;
+use core::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
@@ -69,6 +70,7 @@ static STATE: State = State {
     kept: Mutex::new(None),
     players: Mutex::new(Players::new()),
     rights: Mutex::new(None),
+    next_look: AtomicU64::new(0),
 };
 /// The keys turn off at their first panic, the linked controls at theirs.
 static KEYS_FUSE: Fuse = Fuse::new("mod control keys");
@@ -94,6 +96,9 @@ struct State {
     players: Mutex<Players>,
     /// The permissions the server's clients got their carried controls for.
     rights: Mutex<Option<rights::Rights>>,
+    /// The [`now_ms`] at which the server next compares its players'
+    /// permissions with those, so a step between costs one atomic read.
+    next_look: AtomicU64,
 }
 
 /// What the client's key reader reads, swapped whole.

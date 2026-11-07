@@ -1,7 +1,7 @@
 //! Which carried controls each player gets: only those whose action the
 //! player may run, sent again when the server changes their permissions.
 
-use std::time::{Duration, Instant};
+use core::sync::atomic::{AtomicU64, Ordering};
 
 use enshwick::PlayerKey;
 use enshwick::abi::{PlayerInfo, Side};
@@ -28,15 +28,16 @@ pub(crate) fn hello(key: u64) -> bool {
 }
 
 /// Sends again the carried controls of each player whose permissions
-/// changed since their client got them, at most once per [`EVERY`], on the
+/// changed since their client got them, at most once per [`EVERY_MS`], on the
 /// server's game thread after its step.
 pub(crate) fn resend_on_rights(loader: &Loader) {
+    if !due(&STATE.next_look, super::now_ms()) {
+        return;
+    }
     let Some(declared) = DECLARED.sealed() else {
         return;
     };
-    if declared.iter().all(|d| d.action.is_empty())
-        || !with_rights(|rights| rights.due(Instant::now()))
-    {
+    if declared.iter().all(|d| d.action.is_empty()) {
         return;
     }
     let players = crate::world::players(loader).unwrap_or_default();
@@ -92,7 +93,7 @@ fn carried_messages(
     let mut messages = Vec::new();
     for (index, record) in loader.mods.iter().enumerate() {
         if record.manifest.side != Side::SERVER
-            || record.off.load(core::sync::atomic::Ordering::Acquire)
+            || record.off.load(Ordering::Acquire)
             || !declared
                 .iter()
                 .any(|d| d.owner.get() == index && !d.action.is_empty())
@@ -120,16 +121,25 @@ fn carried_messages(
     messages
 }
 
-/// How often the server compares its players' permissions with those their
-/// carried controls were sent for.
-const EVERY: Duration = Duration::from_secs(2);
+/// How often, in milliseconds, the server compares its players' permissions
+/// with those their carried controls were sent for.
+const EVERY_MS: u64 = 2_000;
+
+/// Whether a look is due at `now` (milliseconds), once per [`EVERY_MS`]
+/// after the last; one atomic read while none is.
+fn due(next: &AtomicU64, now: u64) -> bool {
+    if now < next.load(Ordering::Relaxed) {
+        return false;
+    }
+    next.store(now.saturating_add(EVERY_MS), Ordering::Relaxed);
+    true
+}
 
 /// The permissions each client's carried controls were sent for, by account
 /// key; `None` while its player was not in the world yet.
 #[derive(Debug, Default)]
 pub(super) struct Rights {
     sent: FxHashMap<u64, Option<u8>>,
-    looked: Option<Instant>,
 }
 
 impl Rights {
@@ -141,15 +151,6 @@ impl Rights {
     /// Client `key` left, whether or not its player reached the world.
     pub(super) fn left(&mut self, key: u64) {
         self.sent.remove(&key);
-    }
-
-    /// Whether a look is due at `now`, once per [`EVERY`].
-    pub(super) fn due(&mut self, now: Instant) -> bool {
-        let due = self.looked.is_none_or(|at| now.duration_since(at) >= EVERY);
-        if due {
-            self.looked = Some(now);
-        }
-        due
     }
 
     /// The players among `players` whose client got controls and whose
@@ -266,10 +267,10 @@ mod tests {
 
     #[test]
     fn a_look_is_due_once_per_interval() {
-        let mut rights = Rights::default();
-        let start = Instant::now();
-        assert!(rights.due(start));
-        assert!(!rights.due(start + EVERY / 2));
-        assert!(rights.due(start + EVERY));
+        let next = AtomicU64::new(0);
+        assert!(due(&next, 5));
+        assert!(!due(&next, 5 + EVERY_MS / 2));
+        assert!(due(&next, 5 + EVERY_MS));
+        assert!(!due(&next, 5 + EVERY_MS + 1));
     }
 }
