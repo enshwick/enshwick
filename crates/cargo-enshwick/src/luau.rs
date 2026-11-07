@@ -18,6 +18,25 @@ pub const TYPED_DEFINITIONS_FILE: &str = "enshwick.typed.d.luau";
 /// The Rust path every generated type of the typed API starts with.
 const TYPED: &str = "enshwick::typed::";
 
+/// The words Luau keeps for itself, which a table type names only in
+/// brackets.
+const LUAU_KEYWORDS: [&str; 22] = [
+    "and", "break", "continue", "do", "else", "elseif", "end", "false", "for", "function", "if",
+    "in", "local", "nil", "not", "or", "repeat", "return", "then", "true", "until", "while",
+];
+
+/// A field's key in a table type: its name, or `["name"]` for a keyword or
+/// a name that is no identifier, such as a game field named `function`.
+fn field_key(name: &str) -> Cow<'_, str> {
+    let ident = name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+    if ident && !LUAU_KEYWORDS.contains(&name) {
+        Cow::Borrowed(name)
+    } else {
+        Cow::Owned(format!("[{name:?}]"))
+    }
+}
+
 /// The Luau name of the type named `name`: a generated type of the typed
 /// API by its path there, `typed_ecs_Health` for `ecs::Health`, since every
 /// Luau type shares one namespace; any other by its own name.
@@ -54,7 +73,7 @@ impl Named {
                     } else {
                         ty
                     };
-                    let _written = writeln!(out, "\t{}: {ty},", field.name());
+                    let _written = writeln!(out, "\t{}: {ty},", field_key(field.name()));
                 }
                 out.push_str("}\n");
             }
@@ -573,6 +592,17 @@ mod tests {
         );
         assert_eq!(luau_name("enshwick::typed::root::Guid"), "typed_Guid");
         assert_eq!(luau_name("Player"), "Player");
+    }
+
+    #[test]
+    fn a_field_named_after_a_luau_keyword_is_written_in_brackets() {
+        assert_eq!(field_key("health"), "health");
+        assert_eq!(field_key("function"), "[\"function\"]");
+        assert_eq!(field_key("2d"), "[\"2d\"]");
+        assert!(
+            !typed_definitions().contains("\tfunction:"),
+            "a keyword field reads as a field"
+        );
     }
 
     #[test]
