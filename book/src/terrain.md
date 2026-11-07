@@ -532,7 +532,11 @@ fn replay(world: World, voxels: Voxels, min: VoxelPos, size: [u32; 3]) -> Result
 The first read of a part of the world not in memory fails with `NotLoaded`
 and starts loading it. The same read about a second later returns the
 ground as the save has it. No player needs to be near. `ChunkLoaded`
-does not tell when a box can be read. So a mod tries again from a
+does not tell when a box can be read, but `TerrainPageLoaded` does
+([Hearing the terrain load and unload](#hearing-the-terrain-load-and-unload)).
+So on a dedicated server a mod reads once, which starts the load, and
+replays when that page's event comes. A game a client hosts raises no page
+events, so there a mod tries again from a
 [scheduled task](concepts/threads.md#what-may-be-called-where) until the read
 answers. A mod keeps what it stores in its
 [world store](state.md), beside the save.
@@ -557,6 +561,61 @@ without one it costs nothing.
 
 `on_voxels_changed` is stable; the transactions a replay writes with need
 the `unstable` feature ([Stability](stability.md)).
+
+## Hearing the terrain load and unload
+
+The server keeps the ground in memory by page, a square of the world 128
+metres a side on server build 26430253. It loads a page when a read needs
+it. When memory runs short, it drops the page used least lately. Both
+happen with players near or not.
+
+`TerrainPageLoaded` and `TerrainPageUnloaded` tell a mod about each page
+after the step, on the game thread. Their `TerrainPageData` names the page:
+
+- `x` and `z`: its column and row in the world's grid of pages, from 0 at
+  the world's corner
+- `size`: its side in metres
+
+A page spans `x * size` to `(x + 1) * size` metres along x. It spans the
+same along z, at every height. The pages are those of the finest voxels,
+the ones `Voxels` reads, and the name "page" is Enshwick's.
+
+A read of a page that just loaded usually answers. One that still gets
+`NotLoaded` tries again at a later step. A mod that keeps edits outside the
+bases writes them again when their page loads:
+
+```rust
+use enshwick::events::{TerrainPageLoaded, TerrainPageUnloaded};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    load.on::<TerrainPageLoaded>(|page| {
+        let (x, z) = (page.x * page.size, page.z * page.size);
+        enshwick::info!("the ground from {x} m, {z} m is back: write its kept edits again");
+    })?;
+    load.on::<TerrainPageUnloaded>(|page| {
+        enshwick::info!("page {},{} left memory", page.x, page.z);
+    })
+}
+```
+
+From Luau the events are the same:
+
+```luau
+enshwick.on("TerrainPageLoaded", function(page)
+    enshwick.log.info(`page {page.x},{page.z} is back`)
+end)
+```
+
+A page can turn more than once in a session, so a mod replays on every
+load. A page that turns twice in one step raises both
+events, in order. The events come only on a dedicated server; a client
+that hosts a game raises neither. On a game build without them, they stay
+off, and the log and the Mods screen say why.
+
+The loader hooks the page cache only while a mod listens. A step in which
+pages turned then costs about 9 microseconds to find them, and about 28
+for 80 turns. Other steps cost nothing. A step raises at most 8,192 pages;
+the log counts any past that.
 
 ## Capturing a region
 

@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 14
+#define ENSHWICK_ABI_MINOR 15
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -1194,6 +1194,19 @@ typedef uint32_t EnshwickEvent;
 // enshwick's. Raised on the game thread after the step. Server only.
 // ABI 11.12.
 #define EnshwickEvent_VOXELS_CHANGED 23
+// A page of the terrain came into the server's memory, so its voxels
+// usually read and edit; data is a `TerrainPageData`. The ground loads and
+// drops by page on its own, with players near or not, so a mod that
+// keeps its terrain edits outside the save writes them again here.
+// Raised on the game thread after the step. Dedicated server only.
+// ABI 11.15.
+#define EnshwickEvent_TERRAIN_PAGE_LOADED 24
+// A page of the terrain left the server's memory, the one used least
+// lately, and its voxels read as not loaded until a read loads it
+// again; data is a `TerrainPageData`. Raised on the game thread
+// after the step.
+// Dedicated server only. ABI 11.15.
+#define EnshwickEvent_TERRAIN_PAGE_UNLOADED 25
 
 // A mod event a mod defines, or the one it subscribes to.
 typedef struct EnshwickEventSpec {
@@ -4993,6 +5006,25 @@ typedef struct EnshwickQuestData {
   // The quest's id, a player knowledge id.
   EnshwickKnowledgeId quest;
 } EnshwickQuestData;
+
+// The data of the `TerrainPageLoaded`
+// and `TerrainPageUnloaded` events: a
+// page of the finest voxels, the ones
+// `Voxels` reads. "Page" is enshwick's name.
+typedef struct EnshwickTerrainPageData {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // Its column in the world's grid of pages, from 0 at the world's
+  // corner along the voxels' x axis.
+  uint32_t x;
+  // Its row, from 0 along the voxels' z axis.
+  uint32_t z;
+  // Its side in metres, 128 on server 26430253: it spans `x * size` to
+  // `(x + 1) * size` metres along x and `z * size` to `(z + 1) * size`
+  // along z, as `VoxelPos::to_metres`
+  // counts them, at every height.
+  uint32_t size;
+} EnshwickTerrainPageData;
 
 // The data of the `Ticked` event.
 //

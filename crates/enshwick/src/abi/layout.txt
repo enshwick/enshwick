@@ -1,4 +1,4 @@
-abi 11.14
+abi 11.15
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
 ActionCall size 184 align 8 born 144
@@ -920,6 +920,11 @@ TerrainMaterialInfo size 20 align 4 born 20
     reserved at 11 size 1 type u8
     item at 12 size 4 type ItemId
     health at 16 size 4 type i32
+TerrainPageData size 20 align 4 born 20
+    header at 0 size 8 type Header
+    x at 8 size 4 type u32
+    z at 12 size 4 type u32
+    size at 16 size 4 type u32
 TickData size 56 align 8 born 56
     header at 0 size 8 type Header
     step at 8 size 8 type u64

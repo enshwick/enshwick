@@ -6557,6 +6557,42 @@ in = "~fn:voxel.grid_depth"
 shape = ["lea r9,[r15+rcx*8]", "mov ecx,[r15+rcx*8+*]"]
 take = "value"
 
+# The pointer to a column grid's slots, one `u32` cache handle per page,
+# which the column lookup reads after its bounds checks (server 26430253).
+[[route]]
+id = "voxel.grid_slots"
+in = "~fn:voxel.grid_depth"
+shape = ["jae ?", "mov r8,[r9+*]"]
+take = "value"
+
+# The engine's spin wait, which the column lookup calls while its lock is
+# taken, and the voxel page cache's update, the one caller of it that marks
+# a finished load: it runs on a worker thread, finishes the loads, then
+# drops the pages used least lately; `rsi` holds the entry past its first
+# 8 bytes at both sites (server 26430253, server copy).
+[[route]]
+id = "~spin_wait"
+in = "~fn:voxel.grid_depth"
+shape = ["call *", "mov rcx,rbp", "call ?"]
+take = "address"
+
+[[route]]
+id = "~voxel.page_update"
+callers = "~spin_wait"
+shape = ["mov dword [rsi+0x40],0x2", "jmp ?"]
+
+[[route]]
+id = "voxel.page_loaded"
+sides = ["server"]
+in = "~voxel.page_update"
+shape = ["mov dword [rsi+0x40],0x2", "jmp ?"]
+
+[[route]]
+id = "voxel.page_dropped"
+sides = ["server"]
+in = "~voxel.page_update"
+shape = ["mov rax,[rbp+?]", "mov [rsi+0x40],r13d", "dec qword [r15+?]"]
+
 [[route]]
 id = "voxel.grid_stride"
 in = "~fn:voxel.grid_stride"

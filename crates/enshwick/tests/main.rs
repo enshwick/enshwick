@@ -190,6 +190,7 @@ mod task_workers;
 #[cfg(feature = "typed")]
 mod templates;
 mod terrain;
+mod terrain_pages;
 mod ticks;
 #[cfg(feature = "unstable")]
 mod transactions;

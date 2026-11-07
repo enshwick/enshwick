@@ -89,6 +89,7 @@ macro_rules! headed {
             TeleportRequest,
             TerrainEdit,
             TerrainMaterialInfo,
+            TerrainPageData,
             TickData,
             TransactionInfo,
             UiDialog,

@@ -280,6 +280,7 @@ mod table_ids;
 pub use table_ids::TABLE_IDS;
 #[cfg(windows)]
 mod terrain;
+pub mod terrain_pages;
 mod texts;
 #[cfg(windows)]
 mod textures;

@@ -879,6 +879,7 @@ const _: () = {
     // Written as an array at the stride of the mod's own header.
     assert!(size_of::<WeatherFront>() == 8 + 8 + 24 + 8 + 8 + 16);
     assert!(size_of::<ChunkData>() == 8 + 16);
+    assert!(size_of::<TerrainPageData>() == 8 + 12);
     assert!(core::mem::offset_of!(HostApi, terrain_materials) == 24 + 85 * 8);
     // Frozen: written as an array.
     assert!(size_of::<TerrainMaterialInfo>() == 8 + 12);
