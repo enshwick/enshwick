@@ -1,6 +1,6 @@
 //! `cargo xtask notes`: the notes of an alpha release of the loader, the
 //! version the workspace carries: the warning that anything may change, the
-//! game builds the loader's tables support, each crate's changelog section of
+//! game builds the compatibility reports cover, each crate's changelog section of
 //! that version and the known issues.
 
 use std::fmt::Write as _;
@@ -11,8 +11,8 @@ use crate::{Package, packages, say, workspace_root};
 const USAGE: &str = "usage: cargo xtask notes [--out <file>] [--known-issues <text>]";
 /// The package whose version names the release.
 const LOADER: &str = "enshwick-loader";
-/// The build tables the loader embeds.
-const TABLES: &str = "crates/enshwick-gamedata/tables";
+/// The compatibility reports of the builds the loader supports.
+const REPORTS: &str = "crates/enshwick-gamedata/reports";
 /// GitHub refuses a release body longer than this, in characters.
 const MAX_BODY: usize = 125_000;
 const WARNING: &str = "\
@@ -42,7 +42,7 @@ pub(crate) fn run(args: &[String]) -> Result<bool, String> {
         .version;
     let text = notes(
         version,
-        &builds(&root.join(TABLES))?,
+        &builds(&root.join(REPORTS))?,
         &changes(&root, &packages, version)?,
         &known_issues,
     )?;
@@ -73,7 +73,7 @@ fn options(root: &Path, args: &[String]) -> Result<(PathBuf, String), String> {
     Ok((out, known_issues))
 }
 
-/// One game build a table of the loader supports; a table may leave out
+/// One game build a compatibility report covers; a report may leave out
 /// either number, as the loader's own reading allows.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct GameBuild {
@@ -82,7 +82,7 @@ struct GameBuild {
     steam_build: Option<u64>,
 }
 
-/// The builds of every table in `dir`, newest first on each side.
+/// The builds of every report in `dir`, newest first on each side.
 fn builds(dir: &Path) -> Result<Vec<GameBuild>, String> {
     let entries = std::fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let mut builds = Vec::new();
@@ -469,8 +469,8 @@ mod tests {
     }
 
     #[test]
-    fn every_table_of_the_loader_reads() -> Result<(), String> {
-        let builds = builds(&workspace_root().join(TABLES))?;
+    fn every_report_of_the_loader_reads() -> Result<(), String> {
+        let builds = builds(&workspace_root().join(REPORTS))?;
         assert!(builds.iter().any(|b| b.side == "client"));
         assert!(builds.iter().any(|b| b.side == "server"));
         Ok(())

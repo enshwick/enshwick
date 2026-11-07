@@ -124,7 +124,29 @@ has a loader rule of its own, `require_enshwick`, in
 
 Mods depend on `enshwick` only. The other crates are parts of the platform.
 
+### What the repository holds of the game
+
+The repository holds no code, assets, archives or dumps of the game. It holds
+these facts about the game:
+
+- Type and field names, sizes and offsets, read from the game's reflection
+  data: in the generated typed API (`crates/enshwick/src/typed`), in the
+  catalogue of engine facts and in the engine routes
+  (`crates/enshwick-gamedata/anchors/routes.toml`).
+- Short code patterns that the loader uses to find functions, with the bytes
+  that change between builds left open, each at most 192 bytes
+  (`crates/enshwick-gamedata/anchors/patterns.toml`).
+- Names, counts and ids of what the loader finds on each build
+  (`crates/enshwick-gamedata/reports`).
+
+The reflection catalogues that the typed API is generated from, and the
+tables of past builds, stay outside the repository. `cargo enshwick generate`
+reads them from the folder that `ENSH_GAMEDATA` names. The tests that compare
+with them skip when it is not set.
+
 ## License
 
 [MIT](LICENSE). Enshrouded is a game by Keen Games. Enshwick is not affiliated
-with Keen Games, and Keen's code and data are not part of this repository.
+with Keen Games. The repository holds none of Keen's code or assets, only the
+facts that [What the repository holds of the game](#what-the-repository-holds-of-the-game)
+lists.

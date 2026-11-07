@@ -9,12 +9,14 @@ same way: by the engine routes and the anchors in
 [`anchors/`](https://github.com/enshwick/enshwick/tree/main/crates/enshwick-gamedata/anchors),
 with no file made for a build.
 
-The tables in [`tables/`](https://github.com/enshwick/enshwick/tree/main/crates/enshwick-gamedata/tables),
-one per kept build, named `<side>-<guid>-<age>.toml` after its fingerprint,
-are the record of what each kept build pins, with its Steam build id
-(`steam_build`) and the game's own version number (`game_version`). The
-tests compare the routes and anchors with them; the loader does not read
-them, and a new build gets none.
+The tables of the kept builds, one per build, named
+`<side>-<guid>-<age>.toml` after its fingerprint, are the record of what each
+kept build pins, with its Steam build id (`steam_build`) and the game's own
+version number (`game_version`). They lie outside this repository, in
+`tables/` of the game data folder that `ENSH_GAMEDATA` names, beside the
+typed catalogues in `typed/`. The tests compare the routes and anchors with
+them and skip without them; the loader does not read them, and a new build
+gets none.
 
 The catalogue (`catalogue.rs`) maps the ids the API asks engine facts by,
 such as `item_info.name`, to the game's reflected types and fields, so a

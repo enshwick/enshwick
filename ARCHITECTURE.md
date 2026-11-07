@@ -76,10 +76,11 @@ cargo-enshwick ──▶ enshwick, enshwick-gamedata
   first; a route that finds another address than its anchor turns the entry
   off. No file is made per build: what neither a route nor an anchor finds
   turns off, and a build where nothing is missing runs without a warning.
-- The tables under `crates/enshwick-gamedata/tables/` are the frozen record
-  of the kept builds, which the tests compare the routes and anchors with;
-  the loader does not read them. `reports/` holds the public compatibility
-  report of each build.
+- The tables of the kept builds, and the reflection catalogues the typed API
+  is generated from, lie outside the repository, in the game data folder
+  `ENSH_GAMEDATA` names; the tests compare the routes and anchors with them
+  and skip without them, and the loader does not read them. `reports/`
+  holds the public compatibility report of each build.
 - `crates/enshwick-gamedata/anchors/classes.toml` classes every table entry:
   found from the engine, or a pattern because research found no route, each
   with its reason; a test fails on an entry without one.
