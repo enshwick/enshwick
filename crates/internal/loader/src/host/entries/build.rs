@@ -201,20 +201,6 @@ pub(crate) extern "system" fn log_level(me: ModHandle) -> Level {
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_loader_s_own_copy_reads_the_loader_s_level() {
-        crate::log::set_levels(crate::settings::Settings {
-            log_level: Level::DEBUG,
-            ..crate::settings::Settings::default()
-        });
-        assert_eq!(log_level(crate::host::LOADER_HANDLE), Level::DEBUG);
-    }
-}
-
 pub(crate) extern "system" fn type_hash(type_name: Str, out: *mut u32) -> Status {
     entry("type_hash", || {
         let (Some(loader), Some(type_name)) = (loader(), text(type_name)) else {
@@ -262,4 +248,18 @@ pub(crate) extern "system" fn event_types(
         // touched by another thread during the call.
         unsafe { put_headed_list(&types, out, capacity, count) }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_loader_s_own_copy_reads_the_loader_s_level() {
+        crate::log::set_levels(crate::settings::Settings {
+            log_level: Level::DEBUG,
+            ..crate::settings::Settings::default()
+        });
+        assert_eq!(log_level(crate::host::LOADER_HANDLE), Level::DEBUG);
+    }
 }
