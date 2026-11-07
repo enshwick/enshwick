@@ -303,8 +303,6 @@ fn copy(layout: &Layout, fog: usize, at: Option<[f32; 2]>, range: f32) {
         // A fog the client loaded shows what the save explored: none of it
         // was uncovered now.
         mirror.image.settle();
-    } else {
-        let _closed = mirror.uncovered();
     }
 }
 

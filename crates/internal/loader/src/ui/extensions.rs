@@ -317,10 +317,11 @@ unsafe fn prompt(data: usize, at: PromptAt) -> (Str, u32) {
     }
     let title = TITLE.with_borrow_mut(|buffer| {
         let copied = &mut buffer[..len.min(TITLE_MAX)];
-        // SAFETY: the game's `doInteractionPrompt` reads these `len` bytes of
-        // the prompt's title in the same interface frame (client 26430625),
-        // and `copied` is at most that long.
-        unsafe { crate::memory::read_bytes(text, 0, copied) };
+        // The kernel's copy: a route that reads wrong on a new build gives
+        // no title rather than a fault.
+        if !crate::pages::copy_into(text, copied) {
+            return Str::EMPTY;
+        }
         let whole = match core::str::from_utf8(copied) {
             Ok(whole) => whole,
             // SAFETY: `valid_up_to` bytes of `copied` are UTF-8.

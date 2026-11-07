@@ -778,7 +778,7 @@ export type FogOfWar = {
 	coverage: (self: FogOfWar, position: vector) -> number?,
 }
 
---- Fog of war the local player uncovered in one window of at most a second, from `Load.on_fog_uncovered`. The name is the game's `FogOfWar` with a verb of enshwick's.
+--- Fog of war the local player uncovered since the window before, closed at most once a second, from `Load.on_fog_uncovered`. The name is the game's `FogOfWar` with a verb of enshwick's.
 export type FogOfWarUncovered = {
 	--- The lowest corner of the box around the uncovered ground: world x and z in metres.
 	min: {number},

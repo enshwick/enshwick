@@ -256,38 +256,47 @@ fn container_value(
 }
 
 /// `base`, a vanilla uncompressed sound streamed as content, made to hold
-/// `frames` frames served as content `hash` under `name`.
-fn sound_value(mut base: Value, stereo: bool, frames: u32, hash: [u32; 4], name: &str) -> Value {
+/// `frames` frames served as content `hash` under `name`; [`Off`] when the
+/// base lacks a field the frames need, so a renamed field serves nothing
+/// rather than the base's layout over the mod's frames.
+fn sound_value(
+    mut base: Value,
+    stereo: bool,
+    frames: u32,
+    hash: [u32; 4],
+    name: &str,
+) -> Result<Value, Off> {
     let nanos = i64::try_from(u64::from(frames) * 1_000_000_000 / u64::from(SAMPLE_RATE))
         .unwrap_or(i64::MAX);
     let mut set = |field: &str, value: Value| {
-        if let Some(slot) = base.field_mut(field) {
-            *slot = value;
-        }
+        let slot = base
+            .field_mut(field)
+            .ok_or_else(|| Off::new(format!("the game's sound has no {field}")))?;
+        *slot = value;
+        Ok::<_, Off>(())
     };
     set(
         CHANNELS,
         Value::Name(if stereo { STEREO } else { MONO }.to_owned()),
-    );
-    set(FRAME_COUNT, Value::Uint(u64::from(frames)));
+    )?;
+    set(FRAME_COUNT, Value::Uint(u64::from(frames)))?;
     set(
         DURATION,
         Value::Struct(vec![(TIME_VALUE.to_owned(), Value::Int(nanos))]),
-    );
-    set(DEBUG_NAME, Value::Text(name.to_owned()));
-    if let Some(content) = base
+    )?;
+    let _named = set(DEBUG_NAME, Value::Text(name.to_owned()));
+    let content = base
         .field_mut(STREAMED)
         .and_then(|streamed| streamed.field_mut(CONTENT_HASH))
-    {
-        *content = Value::Struct(
-            CONTENT_HASH_PARTS
-                .iter()
-                .zip(hash)
-                .map(|(part, word)| ((*part).to_owned(), Value::Uint(u64::from(word))))
-                .collect(),
-        );
-    }
-    base
+        .ok_or_else(|| Off::new(format!("the game's sound has no {STREAMED}.{CONTENT_HASH}")))?;
+    *content = Value::Struct(
+        CONTENT_HASH_PARTS
+            .iter()
+            .zip(hash)
+            .map(|(part, word)| ((*part).to_owned(), Value::Uint(u64::from(word))))
+            .collect(),
+    );
+    Ok(base)
 }
 
 /// Whether `value` is an uncompressed sound whose samples stream as content.
@@ -405,7 +414,7 @@ impl Load<'_> {
             host,
             sound.key(types::SOUND_RESOURCE)?,
             base,
-            move |value| Ok(sound_value(value, stereo, frames, hash, &name)),
+            move |value| sound_value(value, stereo, frames, hash, &name),
         )?;
         let value = container_value(sound, scene, &entry_type, fields);
         crate::resources::serve_new(
@@ -502,13 +511,34 @@ mod tests {
             (DEBUG_NAME.into(), Value::Text("waterfall".into())),
         ]);
         assert!(is_streamed_uncompressed(&base));
-        let built = sound_value(
-            base,
-            true,
-            SAMPLE_RATE * 2,
-            [192_000, 1, 2, 3],
-            "you.horns:horn",
+        let over_base = |base: Value| {
+            sound_value(
+                base,
+                true,
+                SAMPLE_RATE * 2,
+                [192_000, 1, 2, 3],
+                "you.horns:horn",
+            )
+        };
+        let Value::Struct(fields) = &base else {
+            unreachable!("built as a struct")
+        };
+        let renamed = fields
+            .iter()
+            .map(|(name, value)| {
+                let name = if name == FRAME_COUNT {
+                    "frames"
+                } else {
+                    name.as_str()
+                };
+                (name.to_owned(), value.clone())
+            })
+            .collect();
+        assert!(
+            over_base(Value::Struct(renamed)).is_err(),
+            "a base without a field the frames need serves nothing"
         );
+        let built = over_base(base).unwrap();
         assert!(is_streamed_uncompressed(&built));
         assert_eq!(built.field(CHANNELS), Some(&Value::Name(STEREO.into())));
         assert_eq!(

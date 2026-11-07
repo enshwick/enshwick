@@ -127,14 +127,25 @@ pub(crate) fn register(
     if SERVED_LIST.get().is_some() {
         return Status::TOO_LATE;
     }
-    let mut pending = PENDING.relock();
     let patch = Patch {
         owner,
         apply: patch,
         user: user.expose_provenance(),
     };
+    add(&mut PENDING.relock(), key, base, patch)
+}
+
+/// Adds `patch` of `key` from `base` to `pending`. A change, served from
+/// its own key, chains onto the base the key's maker serves it from, and a
+/// maker that comes after changes goes first, so mods change each other's
+/// new resources in either load order.
+fn add(pending: &mut Vec<Served>, key: ResourceKey, base: ResourceKey, patch: Patch) -> Status {
     match pending.iter_mut().find(|s| s.key == key) {
-        Some(served) if served.base != base => return Status::REFUSED,
+        Some(served) if served.base == key && base != key => {
+            served.base = base;
+            served.patches.insert(0, patch);
+        }
+        Some(served) if base != key && served.base != base => return Status::REFUSED,
         Some(served) => served.patches.push(patch),
         None => pending.push(Served {
             key,
@@ -615,6 +626,14 @@ fn serves(served: &[Served], key: &ResourceKey, on: impl Fn(ModIndex) -> bool) -
     served
         .iter()
         .any(|s| s.key == *key && s.patches.iter().any(|p| on(p.owner)) && !s.state.relock().failed)
+}
+
+/// Whether mods that are on serve `key` and its build has not failed, as
+/// for a resource a mod added.
+pub(crate) fn mods_serve(key: &ResourceKey) -> bool {
+    SERVED_LIST
+        .get()
+        .is_some_and(|served| serves(served, key, mod_on))
 }
 
 fn served(handle: u32) -> Option<&'static Served> {

@@ -172,6 +172,7 @@ mod skills;
 mod sound_changes;
 #[cfg(feature = "unstable")]
 mod sound_files;
+mod sound_made;
 mod sounds;
 #[cfg(feature = "typed")]
 mod spawns;

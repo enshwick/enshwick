@@ -59,8 +59,8 @@ pub struct MapPinged {
 /// a window of uncovering at most once a second.
 const FOG_EVERY: Duration = Duration::from_millis(250);
 
-/// Fog of war the local player uncovered in one window of at most a
-/// second, from [`Load::on_fog_uncovered`]. The name is the game's
+/// Fog of war the local player uncovered since the window before, closed
+/// at most once a second, from [`Load::on_fog_uncovered`]. The name is the game's
 /// `FogOfWar` with a verb of enshwick's.
 ///
 /// # Examples

@@ -300,8 +300,8 @@ pub(super) fn draw(
     }
 }
 
-/// Whether the client's archive holds a sound container with GUID `guid`,
-/// so a mod's typo never reaches the game's sound system.
+/// Whether the client's archive or a mod holds a sound container with GUID
+/// `guid`, so a mod's typo never reaches the game's sound system.
 fn holds_sound(guid: [u8; 16]) -> bool {
     use enshwick_gamedata::catalogue;
     let Some(type_hash) = catalogue::type_hash(catalogue::ids::SOUND_CONTAINER) else {
@@ -313,6 +313,7 @@ fn holds_sound(guid: [u8; 16]) -> bool {
         part: 0,
     };
     crate::archive::game().is_some_and(|archive| archive.contains(&key))
+        || crate::content::mods_serve(&key)
 }
 
 /// Draws a settings row, writing back the player's change.

@@ -443,7 +443,7 @@ impl Pack {
     }
 
     /// Whether the pack adds or changes anything players' games read: items,
-    /// workshops, recipes, texts or changes of values beside loot. Such a pack runs on
+    /// workshops, recipes, texts, sounds or changes of values beside loot. Such a pack runs on
     /// the server and every player alike, so it keeps `join` on.
     ///
     /// # Examples
@@ -471,6 +471,7 @@ impl Pack {
                 .all(|(change, _)| change.field.entry() == Entry::Loot)
             && self.selections.is_empty()
             && self.recipe_selections.is_empty()
+            && self.sounds.is_empty()
             && self.texts.trim().is_empty())
     }
 

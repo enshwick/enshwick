@@ -8,7 +8,7 @@
 //! the system writes the new one as it runs.
 
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Instant;
 
 use enshwick::abi::{HookFlags, Side, Status};
@@ -45,10 +45,12 @@ struct Layout {
     digital: usize,
 }
 
-/// The reads' state: the layout once linked, the last mask and when it was
-/// read, in milliseconds from `start` plus one, so 0 is never read.
+/// The reads' state: the layout once linked, whether a mod asked yet, the
+/// last mask and when it was read, in milliseconds from `start` plus one,
+/// so 0 is never read.
 struct State {
     layout: OnceLock<Layout>,
+    asked: AtomicBool,
     start: OnceLock<Instant>,
     bits: AtomicU64,
     read_ms: AtomicU64,
@@ -56,6 +58,7 @@ struct State {
 
 static STATE: State = State {
     layout: OnceLock::new(),
+    asked: AtomicBool::new(false),
     start: OnceLock::new(),
     bits: AtomicU64::new(0),
     read_ms: AtomicU64::new(0),
@@ -157,7 +160,9 @@ unsafe fn read(ctx: *mut u64, layout: &Layout) {
 }
 
 unsafe extern "system" fn player_ui(ctx: *mut u64) -> u64 {
-    if let Some(layout) = STATE.layout.get()
+    // Until a mod asks, the system runs as the game's alone.
+    if STATE.asked.load(Ordering::Relaxed)
+        && let Some(layout) = STATE.layout.get()
         && !ctx.is_null()
     {
         // SAFETY: `ctx` is non-null by the check before it and is the
@@ -174,7 +179,11 @@ unsafe extern "system" fn player_ui(ctx: *mut u64) -> u64 {
 
 /// The local player's held mask, or why not: [`Status::MISSING`] while no
 /// step read it for [`FRESH_MS`], on a server or on a build without it.
+/// The first ask starts the reads, so it answers [`Status::MISSING`].
 pub(crate) fn held() -> Result<u64, Status> {
+    if !STATE.asked.load(Ordering::Relaxed) {
+        STATE.asked.store(true, Ordering::Relaxed);
+    }
     let read = STATE.read_ms.load(Ordering::Acquire);
     if read == 0 || FUSE.is_off() || now_ms().saturating_sub(read) > FRESH_MS {
         return Err(Status::MISSING);
@@ -187,7 +196,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn no_read_yet_answers_missing() {
+    fn the_first_ask_starts_the_reads_and_answers_missing() {
+        assert!(
+            !STATE.asked.load(Ordering::Relaxed),
+            "the detour reads nothing"
+        );
         assert_eq!(held(), Err(Status::MISSING));
+        assert!(STATE.asked.load(Ordering::Relaxed));
     }
 }

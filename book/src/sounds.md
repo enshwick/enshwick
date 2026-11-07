@@ -101,7 +101,7 @@ streamed from memory. A server checks the file and holds nothing.
 | Channels | mono or stereo |
 | Rate | 48000 Hz, the rate of every sound the game plays |
 | Size | at most 16 MiB a file and 64 MiB a mod |
-| Length | at most 600 seconds |
+| Length | what 16 MiB holds: about 87 seconds of stereo, 174 of mono |
 
 A mod with sounds runs on both sides (`side = "both"`), so a client without
 it cannot join. A file past a bound, of another format or outside the

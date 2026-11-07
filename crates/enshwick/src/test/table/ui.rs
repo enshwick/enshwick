@@ -137,6 +137,20 @@ pub(crate) extern "system" fn ui_widget(
     }
 }
 
+/// Whether the archive or the mod holds a sound container with GUID `guid`,
+/// as the loader checks before it plays one.
+fn holds_sound(s: &State, guid: [u8; 16]) -> bool {
+    s.host
+        .type_hashes
+        .get(crate::engine_ids::SOUND_CONTAINER)
+        .is_some_and(|&hash| {
+            s.host.resources.contains_key(&(guid, hash, 0))
+                || s.served
+                    .iter()
+                    .any(|served| served.0.key.guid == guid && served.0.key.type_hash == hash)
+        })
+}
+
 /// Draws the widget `w` in `frame` and writes its answer into it.
 fn draw(frame: u64, w: &mut UiWidget) -> Status {
     use crate::test::{Drawn, Input};
@@ -168,12 +182,7 @@ fn draw(frame: u64, w: &mut UiWidget) -> Status {
             UiWidget::END if open && s.extending != Some(frame) => Drawn::End,
             UiWidget::SOUND => Drawn::Sound(w.style),
             UiWidget::PLAY => {
-                let held = s
-                    .host
-                    .type_hashes
-                    .get(crate::engine_ids::SOUND_CONTAINER)
-                    .is_some_and(|&hash| s.host.resources.contains_key(&(w.sound, hash, 0)));
-                if !held {
+                if !holds_sound(s, w.sound) {
                     return Status::MISSING;
                 }
                 Drawn::Play(crate::content::Guid(w.sound))

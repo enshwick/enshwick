@@ -13,6 +13,10 @@ fn a_sound_takes_the_pack_s_namespace_and_its_problems_their_line() {
     assert_eq!(pack.sounds.len(), 1);
     assert_eq!(pack.sounds[0].id, "you.horns:horn");
     assert_eq!(pack.sounds[0].scene, Some(SceneEntry::Ui));
+    assert!(
+        pack.reaches_players(),
+        "a pack of sounds alone runs on both sides"
+    );
     let bad = PackFiles::new().with(
         SOUNDS_FILE,
         "[[sound]]\nid = \"horn\"\nfile = \"../horn.wav\"\n\n[[sound]]\nid = \"horn\"\nfile = \"b.wav\"\nvolume = 5.0\n",
