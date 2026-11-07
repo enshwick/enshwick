@@ -249,6 +249,16 @@ Each entry names the pull request that made the change.
   component, such as a `BlobArray`, or of a kind this API does not know,
   does not resolve for live reads and writes; the refusal names the field
   (#986).
+- The loader's parts that write game memory read their found offsets on one
+  live object before their first write of a world, through reads that
+  cannot fault: knowledge grants, altar ranges, Quick Stash, game settings
+  changes, save holds, weather changes, inventory requests and the base
+  grouping. A part whose object does not hold turns off alone, with one
+  warning naming the build, the entry and what did not hold, on the Mods
+  screen and in the status summary; its queued inventory requests are
+  answered as unavailable. An entry whose engine route takes a value
+  outside its range is missing, and the loader says it "is outside its
+  range" (#982).
 - `actions`: `Load::actions` hands its texts to the loader once, beneath the
   texts the mod hands itself, before or after; a runs-control's label reads
   from them in each player's language with the usual fallback, and a key both
