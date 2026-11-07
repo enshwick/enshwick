@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use enshwick::abi::{Header, HostApi, Manifest, ManifestFlags, ModHandle, Status, Str};
 use enshwick_gamedata::reflect::{Fingerprint, Reflection};
 
+use super::library::InitFn;
 use super::*;
 use crate::locks::Relock as _;
 
