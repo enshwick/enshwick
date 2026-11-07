@@ -7,7 +7,7 @@ mod tests {
 
     use enshwick::WorldError;
     use enshwick::abi::{ChunkData, Header, Status, WeatherFront};
-    use enshwick::events::ChunkLoaded;
+    use enshwick::events::{ChunkLoaded, ChunkUnloaded};
     use enshwick::weather::{Forecast, Weather, WeatherPhenomenonEffect, WeatherState};
     use enshwick::{Load, Mod, Off};
 
@@ -20,6 +20,9 @@ mod tests {
             let _first = WEATHER.set(load.weather());
             load.on::<ChunkLoaded>(|chunk| {
                 enshwick::info!("chunk {},{} loaded", chunk.x, chunk.z);
+            })?;
+            load.on::<ChunkUnloaded>(|chunk| {
+                enshwick::info!("chunk {} unloaded", chunk.index);
             })?;
             Ok(Self)
         }
@@ -106,5 +109,9 @@ mod tests {
             size: 256,
         };
         assert_eq!(loader.raise::<ChunkLoaded>(&chunk), 1);
+        assert_eq!(loader.raise::<ChunkUnloaded>(&chunk), 1);
+        let logged = |line: &str| loader.logs().iter().any(|(_, l)| l.contains(line));
+        assert!(logged("chunk 1,1 loaded"), "{:?}", loader.logs());
+        assert!(logged("chunk 41 unloaded"), "{:?}", loader.logs());
     }
 }

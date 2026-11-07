@@ -262,9 +262,14 @@ with_data! {
     KnowledgeChanged = KNOWLEDGE_CHANGED: KnowledgeData, size_of::<KnowledgeData>();
     /// [`Event::QUEST_COMPLETED`].
     QuestCompleted = QUEST_COMPLETED: QuestData, size_of::<QuestData>();
-    /// [`Event::CHUNK_LOADED`].
+    /// [`Event::CHUNK_LOADED`]: a chunk of the world's entities, which loads
+    /// only as players come near, so a server with no player near raises
+    /// none. The terrain's voxels load and unload apart from it, without a
+    /// player, and raise no event.
     ChunkLoaded = CHUNK_LOADED: ChunkData, size_of::<ChunkData>();
-    /// [`Event::CHUNK_UNLOADED`].
+    /// [`Event::CHUNK_UNLOADED`]: a chunk of the world's entities unloaded
+    /// once no player was near; the terrain's voxels raise no event, as
+    /// for [`ChunkLoaded`].
     ChunkUnloaded = CHUNK_UNLOADED: ChunkData, size_of::<ChunkData>();
     /// [`Event::BUILDING_REMOVED`].
     BuildingRemoved = BUILDING_REMOVED: BuildingData, size_of::<BuildingData>();
