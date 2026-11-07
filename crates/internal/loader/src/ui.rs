@@ -643,7 +643,7 @@ fn hud(engine: &Engine, context: usize) {
     HUD_ITEMS.with_borrow_mut(Vec::clear);
     // SAFETY: `hud_detour` calls this inside the frame on the interface
     // thread with the frame's own non-zero `context`.
-    let hud_screen = unsafe { extensions::open_screen(engine, context) };
+    let reads = unsafe { extensions::frame_reads(engine, context) };
     for registered in huds.iter().filter(|r| r.live()) {
         let token = NEXT_TOKEN.fetch_add(1, Ordering::Relaxed);
         DRAWING.set(Some(Drawing {
@@ -654,13 +654,7 @@ fn hud(engine: &Engine, context: usize) {
             hud: true,
             extension: None,
         }));
-        let frame = UiFrame {
-            header: enshwick::abi::Header::of::<UiFrame>(),
-            token,
-            screen: UiFrame::IN_GAME,
-            reserved: 0,
-            hud_screen,
-        };
+        let frame = reads.frame(token);
         // SAFETY: the callback lives in a mod DLL that stays loaded, and it
         // gets a live `UiFrame` and the pointer its mod registered with it;
         // an `extern "system"` function aborts rather than unwinds.
@@ -790,7 +784,7 @@ fn frames(engine: &Engine, context: usize) {
     let screen = screen(engine.app_state(context));
     // SAFETY: `detour` calls this inside the frame on the interface thread
     // with the frame's own `context`.
-    let hud_screen = unsafe { extensions::open_screen(engine, context) };
+    let reads = unsafe { extensions::frame_reads(engine, context) };
     for registered in frames.iter().filter(|r| r.live()) {
         let token = NEXT_TOKEN.fetch_add(1, Ordering::Relaxed);
         DRAWING.set(Some(Drawing {
@@ -802,11 +796,8 @@ fn frames(engine: &Engine, context: usize) {
             extension: None,
         }));
         let frame = UiFrame {
-            header: enshwick::abi::Header::of::<UiFrame>(),
-            token,
             screen,
-            reserved: 0,
-            hud_screen,
+            ..reads.frame(token)
         };
         // SAFETY: the callback lives in a mod DLL that stays loaded, and it
         // gets a live `UiFrame` and the pointer its mod registered with it;

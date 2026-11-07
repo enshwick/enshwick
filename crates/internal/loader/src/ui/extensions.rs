@@ -51,6 +51,58 @@ struct Linked {
     /// The game's name of each screen by its value; empty for a value no
     /// constant names.
     names: Vec<&'static str>,
+    /// Where the play data keeps the interaction prompt, on a build whose
+    /// table has it.
+    prompt: Option<PromptAt>,
+    /// Where the play data keeps the open screen's `u32` host entity, on a
+    /// build whose table has it.
+    screen_host: Option<usize>,
+}
+
+/// The interaction prompt's offsets in the play data: its title, a
+/// `UiText` (pointer, length, hash), the `u32` verb and the valid byte.
+#[derive(Clone, Copy, Debug)]
+struct PromptAt {
+    title: usize,
+    verb: usize,
+    valid: usize,
+}
+
+/// The longest prompt title a frame reads, in bytes; a longer one is cut at
+/// its last whole character before it.
+const TITLE_MAX: usize = 256;
+
+/// What the frames mods draw read of the game the player is in, each empty
+/// or 0 outside a game and on a build without its read.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct FrameReads {
+    pub(super) hud_screen: Str,
+    pub(super) prompt_title: Str,
+    pub(super) prompt_verb: u32,
+    pub(super) screen_host: enshwick::Entity,
+}
+
+impl FrameReads {
+    const NONE: Self = Self {
+        hud_screen: Str::EMPTY,
+        prompt_title: Str::EMPTY,
+        prompt_verb: 0,
+        screen_host: enshwick::Entity(0),
+    };
+
+    /// The in-game frame `token` with these reads.
+    pub(super) fn frame(self, token: u64) -> UiFrame {
+        UiFrame {
+            header: Header::of::<UiFrame>(),
+            token,
+            screen: UiFrame::IN_GAME,
+            reserved: 0,
+            hud_screen: self.hud_screen,
+            prompt_title: self.prompt_title,
+            prompt_verb: self.prompt_verb,
+            screen_host: self.screen_host,
+        }
+    }
 }
 
 /// The extensions: open while mods initialise, sealed after.
@@ -69,6 +121,9 @@ thread_local! {
     };
     /// The edge whose window is open in this frame.
     static OPEN: Cell<Option<u32>> = const { Cell::new(None) };
+    /// The frame's copy of the prompt's title, which the frame's
+    /// [`FrameReads::prompt_title`] views until the next frame reads it.
+    static TITLE: RefCell<[u8; TITLE_MAX]> = const { RefCell::new([0; TITLE_MAX]) };
 }
 
 /// Registers mod `owner`'s panel at `edge` of the game's screen named
@@ -127,6 +182,8 @@ pub(super) fn link(loader: &Loader) {
             state_play_data: table(pinned::map::STATE_PLAY_DATA)?,
             hud_screen: table(pinned::ui::HUD_SCREEN)?,
             names: screen_names(loader),
+            prompt: prompt_at(loader),
+            screen_host: loader.offset(pinned::ui::SCREEN_HOST),
         })
     })();
     match found {
@@ -171,21 +228,42 @@ fn screen_names(loader: &Loader) -> Vec<&'static str> {
     names
 }
 
+/// Where the play data keeps the interaction prompt, or `None` with a log
+/// line when the table lacks an entry of it.
+fn prompt_at(loader: &Loader) -> Option<PromptAt> {
+    let table = |id: pinned::Constant| loader.offset(id).ok_or(id.id());
+    let found = (|| {
+        Ok::<_, &str>(PromptAt {
+            title: table(pinned::ui::PROMPT_TITLE)?,
+            verb: table(pinned::ui::PROMPT_VERB)?,
+            valid: table(pinned::ui::PROMPT_VALID)?,
+        })
+    })();
+    found
+        .inspect_err(|id| {
+            crate::log!(
+                INFO,
+                "interface: mods read no prompt on this build: it lacks {id}"
+            );
+        })
+        .ok()
+}
+
 /// Runs `read` only for the in-game app state: a menu or loading frame may
 /// still point at the last game's play data.
-fn in_game_only(app_state: u8, read: impl FnOnce() -> Option<u8>) -> Option<u8> {
+fn in_game_only<T>(app_state: u8, read: impl FnOnce() -> Option<T>) -> Option<T> {
     (super::screen(app_state) == UiFrame::IN_GAME)
         .then(read)
         .flatten()
 }
 
-/// The HUD screen byte of the game the player is in; `None` outside one.
+/// The play data of the game the player is in; `None` outside one.
 ///
 /// # Safety
 ///
 /// - `context` is 0 or the live interface context of the frame being
 ///   drawn, on the interface thread.
-unsafe fn screen_byte(engine: &Engine, context: usize, linked: &Linked) -> Option<u8> {
+unsafe fn play(engine: &Engine, context: usize, linked: &Linked) -> Option<usize> {
     if context == 0 {
         return None;
     }
@@ -195,10 +273,101 @@ unsafe fn screen_byte(engine: &Engine, context: usize, linked: &Linked) -> Optio
         // are the table's `map.context_state` and `map.state_play_data`.
         let data =
             unsafe { super::play_data(context, linked.context_state, linked.state_play_data) };
-        // SAFETY: `data` is the non-null play data (checked before it), whose
-        // HUD screen byte sits at `ui.hud_screen` (clients 410, 426 and 520).
-        (data != 0).then(|| unsafe { crate::memory::read::<u8>(data, linked.hud_screen) })
+        (data != 0).then_some(data)
     })
+}
+
+/// The HUD screen byte of the game the player is in; `None` outside one.
+///
+/// # Safety
+///
+/// - `context` is 0 or the live interface context of the frame being
+///   drawn, on the interface thread.
+unsafe fn screen_byte(engine: &Engine, context: usize, linked: &Linked) -> Option<u8> {
+    // SAFETY: the caller's contract.
+    let data = unsafe { play(engine, context, linked) }?;
+    // SAFETY: `data` is the non-null play data, whose HUD screen byte sits at
+    // `ui.hud_screen` (clients 410, 426 and 520).
+    Some(unsafe { crate::memory::read::<u8>(data, linked.hud_screen) })
+}
+
+/// The prompt's title and verb in the play data `data`; empty and 0 while
+/// the prompt offers nothing. The title is copied into [`TITLE`] and cut at
+/// its last whole character within [`TITLE_MAX`] bytes.
+///
+/// # Safety
+///
+/// - `data` is the non-null play data of the frame being drawn, on the
+///   interface thread, with the prompt at `at`.
+unsafe fn prompt(data: usize, at: PromptAt) -> (Str, u32) {
+    // SAFETY: the caller's contract: `data` is the live play data, whose
+    // prompt valid byte sits at `ui.prompt_valid` (every kept client).
+    if unsafe { crate::memory::read::<u8>(data, at.valid) } == 0 {
+        return (Str::EMPTY, 0);
+    }
+    // SAFETY: the caller's contract; the verb's u32 and the title's pointer
+    // and length words sit at `ui.prompt_verb` and `ui.prompt_title`.
+    let (verb, text, len) = unsafe {
+        (
+            crate::memory::read::<u32>(data, at.verb),
+            crate::memory::read::<usize>(data, at.title),
+            crate::memory::read::<usize>(data, at.title + size_of::<usize>()),
+        )
+    };
+    if text == 0 || len == 0 {
+        return (Str::EMPTY, verb);
+    }
+    let title = TITLE.with_borrow_mut(|buffer| {
+        let copied = &mut buffer[..len.min(TITLE_MAX)];
+        // SAFETY: the game's `doInteractionPrompt` reads these `len` bytes of
+        // the prompt's title in the same interface frame (client 26430625),
+        // and `copied` is at most that long.
+        unsafe { crate::memory::read_bytes(text, 0, copied) };
+        let whole = match core::str::from_utf8(copied) {
+            Ok(whole) => whole,
+            // SAFETY: `valid_up_to` bytes of `copied` are UTF-8.
+            Err(cut) => unsafe { core::str::from_utf8_unchecked(&copied[..cut.valid_up_to()]) },
+        };
+        // The view outlives this borrow: `TITLE` is this thread's and only
+        // the next frame's read writes it again.
+        Str::new(whole)
+    });
+    (title, verb)
+}
+
+/// What the frames mods draw read of the game the player is in: the open
+/// screen, the interaction prompt and the open screen's host.
+///
+/// # Safety
+///
+/// - `context` is 0 or the live interface context of the frame being
+///   drawn, on the interface thread.
+pub(super) unsafe fn frame_reads(engine: &Engine, context: usize) -> FrameReads {
+    let Some(linked) = LINKED.get() else {
+        return FrameReads::NONE;
+    };
+    // SAFETY: the caller's contract.
+    let Some(data) = (unsafe { play(engine, context, linked) }) else {
+        return FrameReads::NONE;
+    };
+    // SAFETY: `data` is the non-null play data of this frame, on the
+    // interface thread; the offsets are the table's `ui.hud_screen`,
+    // `ui.prompt_*` and `ui.screen_host` (every kept client).
+    unsafe {
+        let screen = crate::memory::read::<u8>(data, linked.hud_screen);
+        let (prompt_title, prompt_verb) =
+            linked.prompt.map_or((Str::EMPTY, 0), |at| prompt(data, at));
+        FrameReads {
+            hud_screen: screen_name(linked, Some(screen)),
+            prompt_title,
+            prompt_verb,
+            screen_host: enshwick::Entity(
+                linked
+                    .screen_host
+                    .map_or(0, |at| crate::memory::read::<u32>(data, at)),
+            ),
+        }
+    }
 }
 
 /// The game's name of screen byte `screen`; empty for `None`.
@@ -206,21 +375,6 @@ fn screen_name(linked: &Linked, screen: Option<u8>) -> Str {
     screen
         .and_then(|s| linked.names.get(usize::from(s)))
         .map_or(Str::EMPTY, |name| Str::new(name))
-}
-
-/// The game's name of the screen the player has open, for the frames mods
-/// draw; empty outside a game and on a build without the screen's read.
-///
-/// # Safety
-///
-/// - `context` is 0 or the live interface context of the frame being
-///   drawn, on the interface thread.
-pub(super) unsafe fn open_screen(engine: &Engine, context: usize) -> Str {
-    let Some(linked) = LINKED.get() else {
-        return Str::EMPTY;
-    };
-    // SAFETY: the caller's contract.
-    screen_name(linked, unsafe { screen_byte(engine, context, linked) })
 }
 
 /// The panels of `screen`, edge by edge and in registration order within
@@ -254,13 +408,15 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize) {
     let Some(screen) = (unsafe { screen_byte(engine, context, linked) }) else {
         return;
     };
-    let name = screen_name(linked, Some(screen));
+    // SAFETY: the caller passes the frame's live interface context on the
+    // interface thread.
+    let reads = unsafe { frame_reads(engine, context) };
     for extension in by_edge(extensions, screen, |e| (e.screen, e.edge)) {
         if extension.registered.live() {
             // SAFETY: this function's `# Safety` gives the frame, its thread
             // and its `context`; the only window open is the extensions' own,
             // which `open` and `close` keep one at a time.
-            unsafe { run(extension.registered, context, extension.edge, name) };
+            unsafe { run(extension.registered, context, extension.edge, reads) };
         }
     }
     // SAFETY: this function's `# Safety` gives the frame, its thread and its
@@ -324,7 +480,7 @@ unsafe fn close(engine: &Engine, context: usize) {
 /// - Called inside a frame of the game's interface update, on its thread,
 ///   with that frame's non-zero `context`, while no window but the
 ///   extensions' own is open.
-unsafe fn run(registered: Registered<UiFrameFn>, context: usize, edge: u32, hud_screen: Str) {
+unsafe fn run(registered: Registered<UiFrameFn>, context: usize, edge: u32, reads: FrameReads) {
     let token = NEXT_TOKEN.fetch_add(1, Ordering::Relaxed);
     DRAWING.set(Some(Drawing {
         token,
@@ -334,13 +490,7 @@ unsafe fn run(registered: Registered<UiFrameFn>, context: usize, edge: u32, hud_
         hud: false,
         extension: Some(edge),
     }));
-    let frame = UiFrame {
-        header: Header::of::<UiFrame>(),
-        token,
-        screen: UiFrame::IN_GAME,
-        reserved: 0,
-        hud_screen,
-    };
+    let frame = reads.frame(token);
     // SAFETY: the callback lives in a mod DLL that stays loaded, and it gets
     // a live `UiFrame` and the pointer its mod registered with it; an
     // `extern "system"` function aborts rather than unwinds.

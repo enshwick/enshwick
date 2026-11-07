@@ -291,6 +291,11 @@ ids! {
     PLAYER_INPUT = "player_input";
     PLAYER_INPUT_DIGITAL = "player_input.digital";
     PLAYER_INPUT_TYPE = "player_input_type";
+    /// The id of the client's own input component on its local player.
+    CLIENT_PLAYER_INPUT = "client_player_input";
+    /// The id of its `u64` of the game controls held, a `Bitmask64` of
+    /// `PlayerInputType`.
+    CLIENT_PLAYER_INPUT_DIGITAL = "client_player_input.digital";
     /// The id of the server-only component of a player's targets, one
     /// `TargetInfo` per `TargetType`.
     SELECTED_TARGETS = "selected_targets";

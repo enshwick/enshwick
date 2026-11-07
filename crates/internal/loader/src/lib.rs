@@ -146,6 +146,8 @@ pub mod listing;
     expect(dead_code, reason = "only the client's join reads lobbies")
 )]
 mod lobby;
+#[cfg(windows)]
+mod local_held;
 mod locks;
 pub mod log;
 #[cfg_attr(

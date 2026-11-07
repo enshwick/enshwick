@@ -826,6 +826,17 @@ pub const FACTS: &[(&str, Fact)] = &[
         Fact::Type("keen::ecs::PlayerInputType"),
     ),
     (
+        ids::CLIENT_PLAYER_INPUT,
+        Fact::Type("keen::ecs::ClientPlayerInput"),
+    ),
+    (
+        ids::CLIENT_PLAYER_INPUT_DIGITAL,
+        Fact::Path(&[
+            ("keen::ecs::ClientPlayerInput", "data"),
+            ("keen::ecs::ClientPlayerInputData", "digitalInput"),
+        ]),
+    ),
+    (
         ids::SELECTED_TARGETS,
         Fact::Type("keen::ecs::SelectedTargets"),
     ),
