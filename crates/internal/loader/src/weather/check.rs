@@ -67,11 +67,12 @@ pub(super) fn system_holds(layout: &Layout, server: usize) -> Result<(), Broken>
 
 /// Whether the weather may be written on this world: [`system_holds`] held
 /// once on the live system.
-pub(super) fn writable(loader: &Loader, layout: &Layout) -> Result<(), Status> {
+///
+/// # Errors
+///
+/// The status of [`crate::world::server`] when there is no live server to
+/// check.
+pub(super) fn writable(loader: &Loader, layout: &Layout) -> Result<bool, Status> {
     let server = crate::world::server()?;
-    if CHANGES_FUSE.verify(&loader.build.name, || system_holds(layout, server)) {
-        Ok(())
-    } else {
-        Err(Status::MISSING)
-    }
+    Ok(CHANGES_FUSE.verify(&loader.build.name, || system_holds(layout, server)))
 }

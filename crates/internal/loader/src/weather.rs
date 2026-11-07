@@ -634,7 +634,9 @@ enum RemapError {
 /// [`as_saved`] for a save without them.
 fn remap(loader: &Loader, path: &std::path::Path) -> Result<(), RemapError> {
     let layout = layout(loader).ok_or(RemapError::Unloaded(Status::MISSING))?;
-    writable(loader, layout).map_err(|_| RemapError::Off)?;
+    if !writable(loader, layout).map_err(RemapError::Unloaded)? {
+        return Err(RemapError::Off);
+    }
     let (system, _) = system(layout).map_err(RemapError::Unloaded)?;
     let resource = Resource::lock(layout, system).ok_or(RemapError::Unloaded(Status::MISSING))?;
     let served = phenomena(layout, &resource).ok_or(RemapError::Unloaded(Status::MISSING))?;
@@ -737,7 +739,9 @@ pub(crate) fn set(loader: &Loader, effect: u32, duration: i64) -> Result<(), Sta
         return Err(Status::BAD_ARGS);
     }
     let layout = layout(loader).ok_or(Status::MISSING)?;
-    writable(loader, layout)?;
+    if !writable(loader, layout)? {
+        return Err(Status::MISSING);
+    }
     let (system, now) = system(layout)?;
     let resource = Resource::lock(layout, system).ok_or(Status::MISSING)?;
     // SAFETY: `resource` holds the weather resource locked, and its
