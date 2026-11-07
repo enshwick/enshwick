@@ -565,7 +565,7 @@ pub struct FogInfo {
     pub uncovered_size: [u32; 2],
 }
 
-impl_headed!(FogInfo);
+impl_headed!(FogInfo, born = 40);
 
 impl FogInfo {
     /// No fog, its header set.
