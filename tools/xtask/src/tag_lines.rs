@@ -94,7 +94,9 @@ fn rewrite(text: &str, tag: &str) -> (String, Vec<usize>) {
             let len = rest[start..]
                 .find(|c: char| !(c.is_ascii_alphanumeric() || ".-+".contains(c)))
                 .unwrap_or(rest.len() - start);
-            let value = &rest[start..start + len];
+            // A sentence may end on the tag: its final period is prose.
+            let value = rest[start..start + len].trim_end_matches(['.', '-', '+']);
+            let len = value.len();
             out.push_str(&rest[..start]);
             if is_version_tag(value) && value != tag {
                 out.push_str(tag);
@@ -157,6 +159,16 @@ mod tests {
         let (moved, lines) = rewrite(text, TAG);
         assert!(lines.is_empty());
         assert_eq!(moved, text);
+    }
+
+    #[test]
+    fn a_tag_ending_a_sentence_moves_and_keeps_the_period() {
+        let (moved, lines) = rewrite(
+            "Run it with `--tag v1.0.0-alpha.12`. Or --tag v1.0.0-alpha.12.",
+            TAG,
+        );
+        assert_eq!(lines, [1]);
+        assert_eq!(moved, format!("Run it with `--tag {TAG}`. Or --tag {TAG}."));
     }
 
     #[test]
