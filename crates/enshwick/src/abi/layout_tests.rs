@@ -235,7 +235,7 @@ shapes! {
         UiWidget { header, kind, flags, style, steps, text, detail, options, option_count, index, value, min, max, result, anchor, reserved, sound },
         UiMarker { header, position, label, color, marker_type },
         UiDialog { header, title, message, detail, buttons, flags },
-        FogInfo { header, width, height, metres_per_pixel, size_z, version, session },
+        FogInfo { header, width, height, metres_per_pixel, size_z, version, session, uncovered, uncovered_pixels, reserved, uncovered_min, uncovered_size },
         MapMarkerInfo { header, position, marker_type, label },
         MapFrameInfo { header, origin, size, metres_per_cell },
         MapMarkerTypeInfo { header, type_name, marker_id, sorting_category, is_fast_travel_destination, is_custom_marker_type, show_above_fog_of_war, show_label, reserved },

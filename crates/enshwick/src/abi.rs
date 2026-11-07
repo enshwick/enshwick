@@ -783,7 +783,7 @@ const _: () = {
     assert!(size_of::<MapMarkerInfo>() == 8 + 24 + 16 + 16);
     assert!(core::mem::offset_of!(HostApi, fog_open) == 24 + 158 * 8);
     assert!(core::mem::offset_of!(HostApi, fog_read) == 24 + 159 * 8);
-    assert!(size_of::<FogInfo>() == 8 + 16 + 16);
+    assert!(size_of::<FogInfo>() == 8 + 16 + 16 + 16 + 16);
     assert!(core::mem::offset_of!(HostApi, serve_call) == 24 + 160 * 8);
     assert!(core::mem::offset_of!(HostApi, call) == 24 + 162 * 8);
     assert!(size_of::<CallSpec>() == 8 + 16 + 8 + 16 + 16);

@@ -550,6 +550,19 @@ pub struct FogInfo {
     /// Counts the fogs the loader has seen, one per world the client
     /// enters; a new one starts from the save of that world.
     pub session: u64,
+    /// Counts the closed windows of uncovering in this session: the
+    /// loader closes the pixels uncovered since the last window into a
+    /// new one at most once a second; 0 before the first. ABI 11.14.
+    pub uncovered: u64,
+    /// The pixels the last window turned from hidden to shown. ABI 11.14.
+    pub uncovered_pixels: u32,
+    /// Zero.
+    pub reserved: u32,
+    /// The lowest pixel of the box around the last window's pixels, as
+    /// x and row. ABI 11.14.
+    pub uncovered_min: [u32; 2],
+    /// The box's width and height in pixels. ABI 11.14.
+    pub uncovered_size: [u32; 2],
 }
 
 impl_headed!(FogInfo);
@@ -564,5 +577,10 @@ impl FogInfo {
         size_z: 0.0,
         version: 0,
         session: 0,
+        uncovered: 0,
+        uncovered_pixels: 0,
+        reserved: 0,
+        uncovered_min: [0; 2],
+        uncovered_size: [0; 2],
     };
 }

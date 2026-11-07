@@ -90,6 +90,17 @@ struct Mirror {
     fog: usize,
     session: u64,
     image: FogImage,
+    /// When the copy began, the clock of its windows of uncovering.
+    started: std::time::Instant,
+}
+
+impl Mirror {
+    /// The last closed window of uncovering, closing the pending one when
+    /// it is due.
+    fn uncovered(&mut self) -> crate::fog_image::Uncovered {
+        let ms = u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        self.image.close_uncovered(ms)
+    }
 }
 
 /// Opens the fog for mod `owner`; during init only, on a client.
@@ -243,7 +254,9 @@ fn copy(layout: &Layout, fog: usize, at: Option<[f32; 2]>, range: f32) {
     };
     let held = mirror.as_ref().map(|m| (m.fog, m.image.shape()));
     let skipped = TileRect::unpack(SKIPPED.swap(0, Ordering::AcqRel));
-    let rect = match plan(held, fog, shape, revealed, skipped) {
+    let planned = plan(held, fog, shape, revealed, skipped);
+    let full = matches!(planned, Plan::Full);
+    let rect = match planned {
         Plan::Nothing => return,
         Plan::Tiles(rect) => rect,
         Plan::Full => {
@@ -251,6 +264,7 @@ fn copy(layout: &Layout, fog: usize, at: Option<[f32; 2]>, range: f32) {
                 fog,
                 session: SESSIONS.fetch_add(1, Ordering::AcqRel) + 1,
                 image: FogImage::new(shape),
+                started: std::time::Instant::now(),
             });
             let [wide, high] = shape.tiles();
             TileRect {
@@ -284,6 +298,13 @@ fn copy(layout: &Layout, fog: usize, at: Option<[f32; 2]>, range: f32) {
             unsafe { crate::memory::read_bytes(tiles.expose_provenance(), start, tile) };
             mirror.image.put_tile(tx, ty, tile);
         }
+    }
+    if full {
+        // A fog the client loaded shows what the save explored: none of it
+        // was uncovered now.
+        mirror.image.settle();
+    } else {
+        let _closed = mirror.uncovered();
     }
 }
 
@@ -321,10 +342,11 @@ pub(crate) fn read(
     if FUSE.is_off() {
         return Status::MISSING;
     }
-    let mirror = MIRROR.relock();
-    let Some(mirror) = mirror.as_ref() else {
+    let mut mirror = MIRROR.relock();
+    let Some(mirror) = mirror.as_mut() else {
         return Status::MISSING;
     };
+    let window = mirror.uncovered();
     let shape = mirror.image.shape();
     let [width, height] = shape.size();
     *info = FogInfo {
@@ -339,6 +361,11 @@ pub(crate) fn read(
         size_z: shape.size_z(),
         version: mirror.image.version(),
         session: mirror.session,
+        uncovered: window.seq,
+        uncovered_pixels: window.pixels,
+        reserved: 0,
+        uncovered_min: window.min,
+        uncovered_size: window.size,
     };
     if size[0] == 0 || size[1] == 0 {
         return Status::OK;
