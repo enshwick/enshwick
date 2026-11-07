@@ -164,6 +164,7 @@ This mod lets a server admin set how many Flame Altars every Flame level
 allows. Its `Cargo.toml` says `side = "both"`, since each player's interface
 asks the same limit:
 
+<!-- altar-count -->
 ```rust,standalone_crate
 use std::sync::atomic::{AtomicU8, Ordering};
 
@@ -199,6 +200,7 @@ impl Mod for AltarCount {
 
 enshwick::declare_mod!(AltarCount);
 ```
+<!-- /altar-count -->
 
 ```luau
 local altars = 16
