@@ -5,15 +5,21 @@ description: Mods add skill nodes to the skill tree within the room a player's s
 
 # Skill nodes and perks
 
-A mod adds skill tree nodes, each copying a vanilla node's effect and icons
-at a place of its own, linked from vanilla or mod nodes, and perks copied
-from vanilla perks with texts of their own.
+A mod adds skill tree nodes and perks. A node copies a vanilla node's effect
+and icons, at its own place, linked from vanilla or mod nodes. A perk copies a
+vanilla perk with its own texts.
 
 ## A node of the mod's own
 
-`load.skill_nodes()` lists the game's nodes: each one's id, kind (`Root`,
-`Attribute`, `ActiveSkill` or `PassiveSkill`) and place. On server 399 the
-tree has 243 nodes, 12 of them roots.
+`load.skill_nodes()` lists the game's nodes, each with its id, kind and place.
+The kind is one of these:
+
+- `Root`
+- `Attribute`
+- `ActiveSkill`
+- `PassiveSkill`
+
+On server 399 the tree has 243 nodes, 12 of them roots.
 
 `load.add_skill_node(NewSkillNode)` adds a copy of the vanilla node `like`:
 
@@ -57,20 +63,21 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 A player's save keeps a fixed count of unlocked nodes: 256 on server 399, as
 the running server's reflection reports. The game's tree takes 243 of them,
 so 13 nodes fit for every mod together, in load order. A node beyond the room
-returns `Err(Off)` when the game's own tree is full already; past other mods'
-nodes, the loader leaves it out when the game first reads the tree. On a
+returns `Err(Off)` when the game's own tree is full already. When other mods'
+nodes fill the room, the loader leaves the node out as the game first reads the
+tree. On a
 server copy of server 399, the 14th node of a mod was left out this way.
 
 Each node shows as the mod's feature `skill node <id>` in the status summary
-and on the Mods screen, with the reason when it is refused or left out.
+and on the Mods screen. A node that is refused or left out shows the reason.
 
 A node closer to another than half the vanilla tree's smallest gap between
-two nodes returns `Err(Off)`: on server 399 that gap is about 103, so a node
+two nodes returns `Err(Off)`. On server 399 that gap is about 103, so a node
 keeps about 51 away from every other, mods' nodes included. A place that is
 not a finite number, a node linked twice from one node, and a node with
 levels also return `Err(Off)`. The game keeps a node's levels in a slot of
-its own (`levelIndex`), which a copy would share with its vanilla node, so a
-copy of a node with levels sets `max_level` to 0.
+its own (`levelIndex`). A copy would share that slot with its vanilla node, so
+a copy of a node with levels sets `max_level` to 0.
 
 ## A perk of the mod's own
 
@@ -81,9 +88,11 @@ These calls need the `typed` feature.
 
 ## From Luau
 
-The same calls are `enshwick.content.skill_nodes()`,
-`enshwick.content.add_skill_node{...}` and `enshwick.content.add_perk{...}`,
-at the top level of `main.luau`.
+The same calls run at the top level of `main.luau`:
+
+- `enshwick.content.skill_nodes()`
+- `enshwick.content.add_skill_node{...}`
+- `enshwick.content.add_perk{...}`
 
 ```luau
 local nodes = enshwick.content.skill_nodes()

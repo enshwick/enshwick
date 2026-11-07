@@ -19,21 +19,28 @@ and attributes, enum constants and base.
 ## List and read resources
 
 [`Host::resource_keys`] lists the keys of every resource of a type, or of every
-resource, in archive order. [`Host::game_value`] reads one as a [`Value`]: a
-struct is its fields by name, an enum constant its name, a bitmask the names of
-its set flags, a GUID or reference its GUID, an absent optional `Nil`.
+resource, in archive order. [`Host::game_value`] reads one as a [`Value`]. Each
+kind of data reads as follows:
+
+- a struct is its fields by name;
+- an enum constant is its name;
+- a bitmask is the names of its set flags;
+- a GUID or reference is its GUID;
+- an absent optional is `Nil`.
+
 [`Host::content_hashes`] and [`Host::game_content`] do the same for contents.
 
 ## Serve a change
 
 Decode the base in [`Load::serve`], change what you need, and encode it over
-the base. The codec keeps every byte whose value did not change, so other mods'
-changes to the same resource chain in load order, as with any served resource.
+the base. The codec keeps every byte whose value did not change. Because of
+that, other mods' changes to the same resource chain in load order, as with any
+served resource.
 A struct you encode may name only the fields it changes.
 
-For a resource of your own, declare its id with `Load::declare` and serve a
-value under that GUID with `Load::serve_new`: the value alone makes it, and
-every field the value leaves out is zero. The game must hold a resource of that
+For a resource of your own, declare its id with `Load::declare`. Then serve a
+value under that GUID with `Load::serve_new`. The value alone makes the
+resource, and every field the value leaves out is zero. The game must hold a resource of that
 type, which the loader opens as the base the value replaces.
 
 ```rust
@@ -68,18 +75,26 @@ end
 `damageMod2Handed` is 1.5 on dedicated server build 26319703.
 
 An array that grows moves to the end of the resource, its offset rewritten.
-Elements match by position: after you remove one, each later element is written
-over the bytes of the element that held its index before, so fields the type
-does not reflect come from that element.
+Elements match by position. After you remove one, each later element is written
+over the bytes of the element that held its index before. As a result, fields
+the type does not reflect come from that element.
 An array whose data is packed, such as a voxel grid, reads as its header's
 bytes and writes back unchanged.
 
 ## From Luau
 
-`enshwick.resources` has the same calls: `named`, `hashed`, `impact_named`,
-`impact_hashed`, `type_names`, `resource_keys`, `content_hashes`, `game_content`,
-`serve_content`, `game_value`, `decode`, `encode`, `serve`, `serve_new`,
-`declare` and the GUID and hash helpers. A type the build lacks is `nil`. A value is a plain table; a variant
+`enshwick.resources` has the same calls:
+
+- `named` and `hashed`;
+- `impact_named` and `impact_hashed`;
+- `type_names` and `resource_keys`;
+- `content_hashes` and `game_content`;
+- `serve_content` and `game_value`;
+- `decode` and `encode`;
+- `serve` and `serve_new`;
+- `declare` and the GUID and hash helpers.
+
+A type the build lacks is `nil`. A value is a plain table; a variant
 is `{ type = ..., value = ... }`
 and raw bytes are a `buffer`. An integer past 2^53, which a Luau
 number cannot hold exactly, is its decimal text, and text is taken back for any

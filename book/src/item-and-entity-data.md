@@ -13,11 +13,11 @@ world.
 
 ## A ring's bonus and a chest's owner
 
-A mod attaches data such as a
-ring's rolled bonus, the name engraved on a sword, the player who owns a placed
-chest, the nickname of a survivor. Each piece belongs to a kind with an id
-`<mod>:<name>` and a value type of the mod's choosing, kept per world beside
-the game's save, never inside it. The
+A mod attaches data to one thing of the world. Examples are a ring's rolled
+bonus, the name engraved on a sword and the player who owns a placed chest.
+Another is the nickname of a survivor. Each piece belongs to a kind with an
+id `<mod>:<name>` and a value type of the mod's choosing. The values are kept
+per world beside the game's save, never inside it. The
 [`item_data`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/item_data.rs)
 module attaches to items, the
 [`entity_data`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/entity_data.rs)
@@ -78,8 +78,8 @@ end
   items with durability or a level, and items with a
   [meter](content/items.md#meters). An
   [`ItemInstance`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/item_data.rs)
-  is that entity and the item id it holds; `ItemInstance::of(&slot)` takes it
-  from an [inventory](inventories.md) slot, or gives `None` for an empty slot
+  is that entity and the item id it holds. `ItemInstance::of(&slot)` takes it
+  from an [inventory](inventories.md) slot. It gives `None` for an empty slot
   or an item without an entity of its own.
 - **An entity the save keeps in place**: a placed prop, an altar, a
   container, a survivor. A player's character is not one, so entity data
@@ -88,7 +88,7 @@ end
 ## Kinds
 
 `load.item_data::<T>(id)` and `load.entity_data::<T>(id, replication)` open
-a kind during `init`, on both sides:
+a kind. They run during `init`, on both sides:
 
 - `name` is the mod's own kind, `<mod>:<name>`;
 - `mod:name` is any mod's kind. Every mod that opens one id shares its
@@ -123,18 +123,21 @@ Item data is set on the server, or on a client while it hosts, once the
 world has loaded. Entity data is set on the server's game thread, once the
 world has loaded.
 
-`set` and `remove` return a `SetError`: the value does not encode or is too
-long, the call came from the wrong place (a client alone for item data, off
-the server's game thread for entity data), or the world has not loaded. For
-entity data also: the entity does not exist, or no load finds the entity
-again (`NotKept`).
+`set` and `remove` can fail. They return a `SetError` in these cases:
+
+- the value does not encode or is too long;
+- the call came from the wrong place: a client alone for item data, or off
+  the server's game thread for entity data;
+- the world has not loaded;
+- for entity data, the entity does not exist;
+- for entity data, no load finds the entity again (`NotKept`).
 
 ## How a load finds the owner again
 
-An entity id lasts one session. Each load of a world numbers its entities,
-item entities included, anew in the order of the save, so adding or
-removing one thing moves the ids of everything saved after it. `Entity`
-therefore has no serde form, and a mod keeps nothing by entity id in its own
+An entity id lasts one session. Each load of a world numbers its entities
+anew in the order of the save, item entities included. So adding or removing
+one thing moves the ids of everything saved after it. `Entity` therefore has
+no serde form, and a mod keeps nothing by entity id in its own
 files. The server keeps each value under its owner's place instead.
 
 **Items.** When the world saves, the server keeps each value under the
@@ -148,27 +151,27 @@ again, if it holds the same item. This comes a moment after `PlayerJoined`:
 a mod that sets a value on the item before then replaces the one that
 waits. Until then the value waits while the player plays, and goes aside
 when the player leaves with that slot holding another item. Another
-character of the same account never gets it. On a game build whose table does not say
-where the server keeps a player's character, the value goes aside in the
-world's file at the leave, kept but attached to nothing. Within a session
+character of the same account never gets it. A game build's table may not say
+where the server keeps a player's character. On such a build the value goes
+aside in the world's file at the leave, kept but attached to nothing. Within a session
 the value stays with the item across moves between inventories and trades.
 
 **Entities.** The server keeps each value under the entity's template and
 position, as the save keeps it, to a sixteen-thousandth of a metre. After the
 first step of a loaded world, every value finds its entity again by that
-place. A value whose place names no entity for certain goes aside: its place
-holds no entity, or two entities of the template share it, such as two chests
-a mod spawned at one point, even turned apart. A value aside stays in the
-world's file, attached to nothing and never matched again, since a later
-entity may take its place. The log says how many went aside. Nothing is given
+place. A value whose place names no entity for certain goes aside. Either its
+place holds no entity, or two entities of the template share it. Two chests a
+mod spawned at one point share it, even turned apart. A value aside stays in
+the world's file, attached to nothing. It is never matched again, since a
+later entity may take its place. The log says how many went aside. Nothing is given
 to another entity on a guess.
 
-When the game destroys the owner, as a craft that uses an item up does, the
-server drops its values after that step and tells the clients. When the id
-names another thing:
+The game may destroy the owner, as a craft that uses an item up does. Then
+the server drops its values after that step and tells the clients. When the
+id names another thing:
 
-- an item's value reads as missing once the entity holds another item; an
-  entity's value reads as missing when a read on the server's game thread
+- an item's value reads as missing once the entity holds another item;
+- an entity's value reads as missing when a read on the server's game thread
   finds its template changed. The server keeps, with each entity value, the
   template its entity had when the value was set;
 - the server drops every such value when the world saves.
@@ -180,18 +183,18 @@ answer from what the server keeps, until that next check.
 ## Saved and sent
 
 The server keeps item and entity data in one file,
-`<stem>-mod-data/enshwick/attachments.bin`, written when the world
-saves and when the server stops, never in the game's save: removing the mods
-leaves the world vanilla. A client that joins gets every value it is sent,
+`<stem>-mod-data/enshwick/attachments.bin`. It writes the file when the world
+saves and when the server stops, never in the game's save. So removing the
+mods leaves the world vanilla. A client that joins gets every value it is sent,
 and each change after, so `get` on a client answers from what its server
 sent. A vanilla client gets nothing.
 
 A client and the server number entities apart: the client's own world gives
 a replicated entity another id. A sent kind reaches clients under the
-server's ids, so a client reads a value by an id the server named, such as
+server's ids. So a client reads a value by an id the server named, such as
 one in a [message](messages.md) or the item entities of inventory slots.
 
 What a player should see on an item itself belongs in its
-[meter](content/items.md#meters), which the game draws, or in its
-[tooltip lines](content/items.md#tooltip-lines), which are the same for
+[meter](content/items.md#meters), which the game draws. It may also belong in
+its [tooltip lines](content/items.md#tooltip-lines), which are the same for
 every item of its type.

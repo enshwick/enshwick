@@ -6,15 +6,15 @@ description: The game keeps one entity per survivor. A mod that keeps several en
 # Survivors
 
 The game keeps one entity per survivor and asks for it from many of its
-systems: when a survivor sleeps, roams, gets a bed, or comes to a summoning
-staff.
+systems. It asks when a survivor sleeps, roams, gets a bed, or comes to a
+summoning staff.
 
 ## Lookups
 
 A mod that keeps several entities of one survivor answers those
 questions itself through
 [`load.on_survivor_lookup`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/survivors.rs).
-The platform tells the askers apart and reads what each works on; the mod
+The platform tells the askers apart and reads what each works on. The mod
 sees a `Lookup` with the survivor, the game's own answer and a `Purpose`:
 
 | Purpose            | Who asks                                     | What the mod answers                           |
@@ -29,10 +29,12 @@ sees a `Lookup` with the survivor, the game's own answer and a `Purpose`:
 | `Cursor`           | The cursor's distance check before assigning | `Nobody` skips the measure                     |
 
 `Answer::Vanilla` keeps the game's answer. Two engine rules come with the
-answers: after a `Uniqueness` answer that keeps another entity than the
-game's, the survivor's record stays on the game's own entity, and after a
-`Spawn` answer the move command reaches only the answered entity for a
-moment.
+answers:
+
+- A `Uniqueness` answer may keep another entity than the game's. After it,
+  the survivor's record stays on the game's own entity.
+- After a `Spawn` answer, the move command reaches only the answered entity
+  for a moment.
 
 ```rust
 use enshwick::survivors::{Answer, Purpose};
@@ -58,36 +60,50 @@ end)
 ```
 
 One mod answers at a time; a second is refused. The lookup runs on the
-server's worker threads, in the dedicated server or a hosting client, and for
-`Cursor` on a client alone too: keep it quick, never block, and read
+server's worker threads, in the dedicated server or a hosting client. For
+`Cursor` it runs on a client alone too. Keep it quick, never block, and read
 [altars](altars.md) through a handle taken at init.
 
 ## Beds
 
-`load.on_survivor_bed_check` runs after a survivor's own check kept its bed;
-returning `false` makes the game clear it. A `BedCheck`, Enshwick's name, has
-the survivor's `npc_id`, its `entity`, the `bed_id`, the survivor's `home`
-cell and the bed's cell, `bed_at`.
+`load.on_survivor_bed_check` runs after a survivor's own check kept its bed.
+Returning `false` makes the game clear it. A `BedCheck`, a name of Enshwick's
+own, has these fields:
+
+- `npc_id`, the survivor's id;
+- `entity`, the survivor's entity;
+- `bed_id`;
+- `home`, the survivor's home cell;
+- `bed_at`, the bed's cell.
 
 ## Summoning staffs
 
 `load.add_summon_item(item, survivor)` files a mod item as a summoning staff
 of the survivor, on both sides, so the game treats it as that survivor's
-staff. `load.on_summon` runs before a staff spawns or moves a survivor and
-returns a `SummonVerdict`: `Take` makes the use take the item, in the same
-transaction and only when the spawn or move works; `Refuse` refuses the use,
-and nothing spawns, moves or is taken; `Allow` leaves it to the game.
+staff. `load.on_summon` runs before a staff spawns or moves a survivor. It
+returns a `SummonVerdict`:
+
+- `Take` makes the use take the item, in the same transaction and only when
+  the spawn or move works.
+- `Refuse` refuses the use, and nothing spawns, moves or is taken.
+- `Allow` leaves it to the game.
+
 `load.on_summoned` runs after a use that worked.
 
-A `Summon` names the used item: its id, its `slot`, its own entity `pide`
-and, for an item with a [meter](content/items.md#meters), the `meter` as
-clients see it; after the use, `consumed` says whether the game took it. A
+A `Summon` names the used item:
+
+- its id;
+- `slot`, its slot;
+- `pide`, its own entity;
+- `meter`, for an item with a [meter](content/items.md#meters), as clients
+  see it;
+- `consumed`, after the use, whether the game took it. A
 staff with charges takes the item on its last charge from `on_summon` and
 spends one in `on_summoned` otherwise. Both run inside the game's step, on
 the thread of the use: hand world writes to the [scheduler](events.md#the-scheduler).
 
-`survivors::WORKSHOP_SURVIVORS` lists the game's workshop survivors, each with
-its id, its vanilla staff and the template the staff places;
+`survivors::WORKSHOP_SURVIVORS` lists the game's workshop survivors. Each comes
+with its id, its vanilla staff and the template the staff places.
 `WorkshopSurvivor::find("blacksmith")` picks one by its short name.
 
 ```rust
@@ -121,14 +137,14 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ## The survivor menu
 
 The client's survivor menu keeps one record per survivor. With several
-entities of one survivor, `load.on_survivor_status` decides what it shows: it
-gets the survivor and the status byte of each entity, and returns the byte to
+entities of one survivor, `load.on_survivor_status` decides what it shows. It
+gets the survivor and the status byte of each entity. It returns the byte to
 show, or `None` for the game's. Client only; one mod at a time.
 
 ## Worked example
 
 [`enshwick-survivors-per-altar`](https://github.com/enshwick/mods/tree/main/survivors-per-altar)
 answers the game's survivor lookups per altar in
-[`policy.rs`](https://github.com/enshwick/mods/blob/main/survivors-per-altar/src/policy.rs):
-`on_survivor_lookup`, fed by the altars it reads on `AltarsChanged`, and
-`Answer::Vanilla` while its setting is off.
+[`policy.rs`](https://github.com/enshwick/mods/blob/main/survivors-per-altar/src/policy.rs).
+Its `on_survivor_lookup` is fed by the altars it reads on `AltarsChanged`. It
+answers `Answer::Vanilla` while its setting is off.

@@ -9,7 +9,7 @@ description: How the Enshwick loader finds and loads mods: its two DLLs, the rec
 
 The loader comes in two parts:
 
-- `powrprof.dll`, the stub, in the folder of `enshrouded.exe` or
+- `powrprof.dll`, the stub. It sits in the folder of `enshrouded.exe` or
   `enshrouded_server.exe`. Windows loads it with the game. It forwards every
   export to the system's `powrprof.dll`, then, on a thread of its own, loads
   the loader. Without the loader the game
@@ -18,19 +18,19 @@ The loader comes in two parts:
   loads the mods, initialises them, arms their hooks and answers their calls.
 
 On every game build, a new one too, the loader finds what it needs by engine
-routes and code patterns; a mod whose entries are not found stays off with
-the reason, and `build_patterns = false` keeps a build that no compatibility
-report covers vanilla instead; see
+routes and code patterns. A mod whose entries are not found stays off with
+the reason. With `build_patterns = false`, a build that no compatibility
+report covers stays vanilla instead. See
 [Finding the game](../finding-the-game.md).
 
 ## How mods are found
 
 Each mod lives in a folder of its own in `mods/`, and runs while that folder
 is there. The loader takes the folders in name order, all but its own
-`mods/enshwick/`. In each folder, the one DLL that exports the four functions
-of
-[`abi::exports`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
-is the mod; the loader tells it apart by its export table before loading it.
+`mods/enshwick/`. In each folder, the mod is the one DLL that exports the four
+functions of
+[`abi::exports`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs).
+The loader tells it apart by its export table before loading it.
 Other DLLs in the folder are the mod's own, and the mod's imports resolve
 from its folder. A second DLL with the four exports in the same folder is
 skipped, with both files named in the loader's log. A DLL built for another ABI
@@ -42,17 +42,21 @@ A folder with a `pack.toml` is a [data pack](../content/packs.md), which the
 loader runs as a mod of its own; its entry's file is `<id>/pack.toml`.
 
 To turn a mod off, move its folder out of `mods/`; to remove it, delete the
-folder. The loader keeps no list of mods. A DLL directly in `mods/`, a
-`mods/chain/` folder and a `mods/enshwick/mods.toml` are not read; on start,
-the loader's log names each one it finds.
+folder. The loader keeps no list of mods. It reads none of these:
+
+- a DLL directly in `mods/`
+- a `mods/chain/` folder
+- a `mods/enshwick/mods.toml` file
+
+On start, the loader's log names each one it finds.
 
 ## The record of a world
 
 At every world load the loader writes `mods.lock` into that world's data,
-`<stem>-mod-data/enshwick/mods.lock` beside its save: the loader's version and
-SHA-256, the game build, and each running mod's id, version, folder and
-SHA-256, in load order. Copying the folders it names sets up the same server again, and comparing two records
-shows where two servers differ. What changed since the world last loaded
+as `<stem>-mod-data/enshwick/mods.lock` beside its save. It holds the loader's
+version and SHA-256, the game build, and each running mod's id, version,
+folder and SHA-256, in load order. Copying the folders it names sets up the
+same server again, and comparing two records shows where two servers differ. What changed since the world last loaded
 goes to the loader's log, such as
 `since this world last loaded: you.trading-post 0.3.0 -> 0.3.1`.
 
@@ -63,17 +67,17 @@ A mod and the loader are built separately, so they talk through a C ABI,
 
 - `ABI_MAJOR` and `ABI_MINOR` are the ABI version. An append to the layout
   is the next minor, any other change a new major. A loader loads mods of
-  its major built for its minor or an older one, so a mod needs a rebuild
-  only for a new major; the loader tells the player which Enshwick release
+  its major built for its minor or an older one. So a mod needs a rebuild
+  only for a new major. The loader tells the player which Enshwick release
   to rebuild it for. Structs that cross the boundary on their own start
   with a `Header` (size, major and minor).
 - `HostApi` is the loader's table of functions, passed to the mod at init.
 
 A mod rarely touches the ABI. [`Load`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
-wraps the table during init, and
+wraps the table during init. Afterwards,
 [`host()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/host.rs)
-returns a `Host` afterwards, from any thread, for logging, `fault`,
-`hosting()` and the raw table. Each mod DLL links its own copy of the crate,
+returns a `Host`, from any thread. It serves logging, `fault`, `hosting()`
+and the raw table. Each mod DLL links its own copy of the crate,
 so `host()` always answers for the mod that calls it. The
 [ABI reference](../abi-reference.md) has the details.
 
@@ -124,60 +128,66 @@ age = 387
 A key the table does not take, a side, an id or an alias that is wrong fails
 the build with its name. A changed `Cargo.toml` rebuilds the mod.
 
-- `id` is `<author>.<name>`, each part of `[a-z0-9-]`, at most 64 characters
-  in all. It names the mod in logs, and its settings folder
-  `<stem>-mod-settings/<id>` and data folder `<stem>-mod-data/<id>` in each world, and is the namespace of its content,
-  stats, points, services and events (`you.trading-post:prices`). An invalid
-  id fails the build; `enshwick` is the loader's own and is refused.
-- `side` is `"server"`, a mod that runs only where the world runs, or
-  `"both"`, a mod every player in the world must have too; see
+- `id` is `<author>.<name>`, at most 64 characters in all. Each part uses
+  only `[a-z0-9-]`. It names the mod in logs and names its folders in each
+  world: settings in `<stem>-mod-settings/<id>`, data in
+  `<stem>-mod-data/<id>`. It is the namespace of its content, stats, points,
+  services and events (`you.trading-post:prices`). An invalid id fails the
+  build. `enshwick` is the loader's own and is refused.
+- `side` takes one of two values. A `"server"` mod runs only where the
+  world runs. Every player in the world must have a `"both"` mod too. See
   [Sides and hosting](sides-and-hosting.md) and
   [The join check](join-check.md).
 - The version is the crate's, SemVer; the loader names it in every message
   about the mod.
-- `name`, and the crate's `description`, `authors`, `license` and `homepage`
-  (else `repository`), are what players read: on the Mods screen, in the
-  status summary and in the join check's notes. A mod without a name is
+- Players read `name` and these fields of the crate:
+  - `description`
+  - `authors`
+  - `license`
+  - `homepage`, else `repository`
+
+  They read them on the Mods screen, in the status summary and in the join
+  check's notes. A mod without a name is
   shown by its id. The mod's texts translate its name and description under
   [`mod.name` and `mod.description`](../content/texts.md#the-mods-own-name).
 - `developer = true`: the mod is a developer tool, such as a probe that logs
   what the game does. While it runs, every player reads a warning that
   developer tools are on; see [The interface](../interface.md).
-- `exports` lists the content and stat kinds other mods may use, as
-  `content:<name>` and `stat:<name>`; a call, point, service or event says it
+- `exports` lists the content and stat kinds other mods may use. Each entry
+  is `content:<name>` or `stat:<name>`. A call, point, service or event says it
   on its declaration. See
   [What other mods may use](#what-other-mods-may-use).
-- `requires`, `after` and `breaks` are tables of other mods, each under an
-  alias of the mod's choosing (a Rust name in snake case, unique across the
-  three), as a mod id alone or `{ id, version }` with a Cargo-style version
+- Three tables name other mods, each under an alias of the mod's choosing.
+  An alias is a Rust name in snake case, unique across the three tables. An
+  entry is a mod id alone or `{ id, version }` with a Cargo-style version
   range; no range is any version.
-- `requires` names mods that must be present in the range; they load first,
-  and this mod is skipped without them.
-- `after` names mods that load first when present, and takes no range. The
-  mod loads either way.
-- `breaks` names mods this one does not work beside, in the range: when one
-  of them loads, this mod is skipped with
-  `does not work beside <id> <version>; remove one of them`.
-- A dev build, version `0.0.0-dev`, meets every range of `requires`, and no
+  - `requires` names mods that must be present in the range; they load
+    first, and this mod is skipped without them.
+  - `after` names mods that load first when present, and takes no range.
+    The mod loads either way.
+  - `breaks` names mods this one does not work beside, in the range: when
+    one of them loads, this mod is skipped with
+    `does not work beside <id> <version>; remove one of them`.
+- A dev build, version `0.0.0-dev`, meets every range of `requires`. No
   range of `breaks` names it, as two dev builds join each other.
 - `builds` pins symbols and constants for game builds the loader's table does
-  not cover, per side, by the build's GUID and age; see
+  not cover. It pins them per side, by the build's GUID and age. See
   [Finding the game](../finding-the-game.md).
 
 The aliases name the dependencies in code too, so a mod writes another mod's
-id once. `enshwick::deps!()` writes a module `deps` with a module per alias of
-`requires` and `after`. Each holds `ID`, the mod's id, and
-`id("<name>")`, its content id `<id>:<name>`, once the loader lets this mod
+id once. `enshwick::deps!()` writes a module `deps`. It holds a module per alias of
+`requires` and `after`. Each holds `ID`, the mod's id, and `id("<name>")`.
+That function returns the content id `<id>:<name>`, once the loader lets this mod
 name it (see [what other mods may use](#what-other-mods-may-use)). A required
 mod's `id` returns the id, or `Off` when that mod does not export the name.
-An optional mod's `id`, from `after`, is `None` while that
+An optional mod comes from `after`. Its `id` is `None` while that
 mod does not run or does not export the name. Ask at init and keep the id.
 `deps::vanilla` names the game's own content by the debug names its data
-gives it, such as `deps::vanilla::item("Prop_Production_T1_Forge")`; no
+gives it, such as `deps::vanilla::item("Prop_Production_T1_Forge")`. No
 dependency takes the alias `vanilla`.
 
-A call, point, service or event takes a local name: `name = "price"` is this
-mod's `<id>:price`, and `of = <alias>` puts the dependency's id in front. An
+A call, point, service or event takes a local name. `name = "price"` is this
+mod's `<id>:price`. `of = <alias>` puts the dependency's id in front. An
 alias the table lacks fails the build and lists the aliases it has. A name
 with a `:` stays as written, for tests and tools. With `lockers` required and
 `lanterns` loaded first when it runs:
@@ -223,27 +233,44 @@ dependencies in the same tables of its `pack.toml`.
 
 A mod's calls, points, services, events, content and stat kinds are its own
 until it exports them. Each export names its kind and its local name, as the
-manifest lists it: `call:price-of`, `point:price`, `service:prices`,
-`event:sold`, `content:locker`, `stat:luck`. A call, point, service or event
+manifest lists it:
+
+- `call:price-of`
+- `point:price`
+- `service:prices`
+- `event:sold`
+- `content:locker`
+- `stat:luck`
+
+A call, point, service or event
 is exported by `export` on its declaration, as
 `#[enshwick::call(name = "price-of", export, ..)]`. Content and stat kinds
 are exported in `exports`, as `exports = ["content:locker", "stat:luck"]`.
-The loader matches kind and name, and refuses another mod a reference to
-anything else of the mod: an exported point `price` opens no content,
+The loader matches kind and name. It refuses another mod a reference to
+anything else of the mod. An exported point `price` opens no content,
 stat kind or event of that name.
 
-When `you.trading-post` exports its call `price-of` and its event `sold`,
-another mod may call `you.trading-post:price-of` and hear
-`you.trading-post:sold`. A link to the point `you.trading-post:margin` is
+When `you.trading-post` exports these, another mod may use them:
+
+| Export | Another mod may |
+| --- | --- |
+| `call:price-of` | call `you.trading-post:price-of` |
+| `event:sold` | hear `you.trading-post:sold` |
+
+A link to the point `you.trading-post:margin` is
 refused, and the log says
 `point you.trading-post:margin: you.trading-post does not export point:margin; it exports call:price-of, event:sold`.
 
-- `caller`, `extend_point`, `observe_point`, `on_mod_event` and `open_stat`
-  return `Off`, which turns the asking mod off at init.
-- `service` returns `Off` with the reason, and `optional_service` returns
+- These calls return `Off`, which turns the asking mod off at init:
+  - `caller`
+  - `extend_point`
+  - `observe_point`
+  - `on_mod_event`
+  - `open_stat`
+- `service` returns `Off` with the reason. `optional_service` returns
   `None`.
-- A content id through `deps::<alias>::id` returns `Off` for a required mod
-  and `None` for an optional one. An exported content name exports its
+- A content id through `deps::<alias>::id` returns `Off` for a required mod.
+  For an optional one it returns `None`. An exported content name exports its
   parts too: with `exports = ["content:locker"]`, `you.lockers:locker.recipe`
   passes. The log says
   `content id you.lockers:key: you.lockers does not export content:key; it exports content:locker`.
@@ -259,23 +286,24 @@ refused, and the log says
   not checked: inside the game's data the loader does not see whose it is.
 
 A [data pack or Luau mod](../content/packs.md) lists its exports, its
-scripts' events and its content, as `exports` in its `pack.toml`, such as
-`exports = ["event:greeted", "content:lantern"]`.
+scripts' events and its content, as `exports` in its `pack.toml`. For
+example: `exports = ["event:greeted", "content:lantern"]`.
 
 ### Schemas for other mods
 
-Each [extension point](../extending.md#defining-a-point),
+Exports go into the DLL's `.enshpt` section. Each
+[extension point](../extending.md#defining-a-point),
 [event](../services.md) and [call](../calls.md) the mod declares without
-`of` and marks `export` puts its schema into the DLL's `.enshpt` section,
-and an exported service its name; one without the flag stays the mod's own
-and ships nothing. `declare_mod!` takes nothing but the mod's type: when the
+`of` and marks `export` puts its schema into that section. An exported
+service puts its name there. One without the flag stays the mod's own and
+ships nothing. `declare_mod!` takes nothing but the mod's type. When the
 loader first asks for the manifest, it collects the schemas and the
 exported names from that section into the manifest. `cargo enshwick deps`
 reads the same section from the DLL file, without running the mod, to write
 other mods' declarations. A point or call whose types a schema cannot
-describe fails the build, exported or not, and so does an exported event
-whose fields it cannot describe, and `export` on a name of another mod's
-id:
+describe fails the build, exported or not. So does an exported event whose
+fields a schema cannot describe. So does `export` on a name of another
+mod's id:
 
 ```rust,standalone_crate
 #[enshwick::point(name = "price", mode = Override, output = u32, export)]

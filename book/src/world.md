@@ -42,7 +42,7 @@ enshwick.on("PlayerJoined", function(joined)
 end)
 ```
 
-In Luau, `enshwick.world` is the `World`: its functions take the same
+In Luau, `enshwick.world` is the `World`. Its functions take the same
 arguments, and a value such as a `Player` is a table of its fields.
 
 `load.world()` turns the mod off on a game build without the component types the reads need.
@@ -70,9 +70,10 @@ through the system's context instead; see [ECS inside systems](ecs.md).
 | `component(entity, ty)` | a read-only pointer to the entity's component of that type |
 
 The pointer from `component` stays valid until the game thread returns to the
-game; read what you need at once. Its type is an `ecs::ComponentType`,
-resolved at init with `ComponentType::resolve`, which turns the mod off when
-the type is not reflected on the running build; the same type is what
+game; read what you need at once. Its type is an `ecs::ComponentType`.
+Resolve it at init with `ComponentType::resolve`. That call turns the mod
+off when the type is not reflected on the running build. The same type is
+what
 [`ecs::Components`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ecs.rs)
 takes inside systems ([ECS](ecs.md)).
 
@@ -93,10 +94,15 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 ## Stats
 
-`vitals(entity)` returns its health, stamina and mana, each a `Meter` with
-`current` and `max`, buffs and gear included; `progress(entity)` a
-character's `level`, `experience` toward the next level and
-`experience_needed` for it. Health is there for every entity that has
+`vitals(entity)` returns an entity's health, stamina and mana, buffs and
+gear included. Each is a `Meter`. A meter has `current` and `max`.
+`progress(entity)` returns a character's level and experience:
+
+- `level`
+- `experience` toward the next level
+- `experience_needed` for it
+
+  Health is there for every entity that has
 vitals; stamina and mana only for those that have them, such as characters.
 
 ```rust
@@ -117,9 +123,13 @@ Both read the entity's attribute sets as the game keeps them. On a game build
 without the layout they need, they return `None`, and `load.world()` still
 works.
 
-`set_health(entity, value)`, `set_stamina(entity, value)` and
-`set_mana(entity, value)` set the current value and return the `Meter` the
-entity now has; `heal(entity, amount)` adds to its health, and takes from it
+Three calls set the current value and return the `Meter` the entity now has:
+
+- `set_health(entity, value)`
+- `set_stamina(entity, value)`
+- `set_mana(entity, value)`
+
+`heal(entity, amount)` adds to its health, and takes from it
 for a negative amount. The value stays between a floor and the maximum, which
 the game derives from gear and buffs and the writes leave alone:
 
@@ -148,30 +158,30 @@ The game sends the new value to the clients and regenerates from it as from
 any other.
 
 `item_meter(pide)` reads the [meter](content/items.md#meters) of an item's
-own entity, a `Meter` with the count and its maximum, and
-`change_item_meter(pide, change)` sets it to what `change` makes of the
-count, kept between 0 and the maximum. The game saves it with the world and
-shows it on the item's slot.
+own entity. It returns a `Meter` with the count and its maximum.
+`change_item_meter(pide, change)` sets the meter to what `change` makes of
+the count, kept between 0 and the maximum. The game saves it with the world
+and shows it on the item's slot.
 
-`shroud_time(entity)` reads how long a character holds out in the shroud
-before it drains health, in seconds, as a `Meter` with the most it holds,
-and `change_shroud_time(entity, change)` sets it, kept between 0 and that
-most; clients see it from the next step. The game refills it outside the
-shroud and saves none of it. `in_shroud(entity)` tells whether a character
+`shroud_time(entity)` reads how long, in seconds, a character holds out in
+the shroud before it drains health. It returns a `Meter` with the most the
+character holds. `change_shroud_time(entity, change)` sets it, kept between
+0 and that most; clients see it from the next step. The game refills it
+outside the shroud and saves none of it. `in_shroud(entity)` tells whether a character
 stands in the shroud where it drains them, outside the altars' reach.
 
-`skills(entity)` lists the skill nodes a character unlocked, each a `Skill`
-with the node's id in the game's skill tree and its level for nodes that
-level up. Unlocking and unlearning stay the player's: the game resets a
+`skills(entity)` lists the skill nodes a character unlocked, each a `Skill`.
+A `Skill` has the node's id in the game's skill tree. For nodes that level
+up, it also has the level. Unlocking and unlearning stay the player's: the game resets a
 whole tree it finds unconnected or over its points when the character loads.
 
 ## Writing components
 
-A write goes to the component the server owns, and the loader marks it
-changed the way the game's own writes do, so the game sends it to clients and
-saves it with the world. The copies the game keeps for clients, the
-`Network*` and `Client*` components, are never written: the game overwrites
-them from the server's own every step, so `WritableType::resolve` refuses them.
+A write goes to the component the server owns. The loader marks it changed
+the way the game's own writes do. So the game sends it to clients and saves
+it with the world. The game keeps copies for clients, the `Network*` and
+`Client*` components. These are never written: the game overwrites them
+from the server's own every step. So `WritableType::resolve` refuses them.
 
 | Call | Does |
 | --- | --- |
@@ -201,31 +211,41 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 Writes work on the game thread between steps, in a game event, a scheduled
-task or an action. The game thread runs ECS
-systems itself while it steps, so a write from a filter or a hook on a system
-is refused even there. They fail with a `WorldError`: `Gone` for an entity not
-in the world, `Lacks` when it lacks the component, `Refused` for a type the
-loader will not write, `WrongThread` off the game thread or inside a step, and
-`Missing` where no server runs, as on a client in another player's game, or on
-a build without writes. A field
-of an engine type means what the engine makes of it: a write the engine does
-not expect, such as a value its systems keep elsewhere, may be overwritten or
-do nothing, so check a new write on a test server first.
+task or an action. The game thread runs ECS systems itself while it steps.
+So a write from a filter or a hook on a system is refused even there. Writes
+fail with a `WorldError`:
+
+| Error | When |
+| --- | --- |
+| `Gone` | the entity is not in the world |
+| `Lacks` | the entity lacks the component |
+| `Refused` | the loader will not write the type |
+| `WrongThread` | the write runs off the game thread or inside a step |
+| `Missing` | no server runs, as on a client in another player's game, or the build has no writes |
+
+A field of an engine type means what the engine makes of it. The engine may
+not expect a write, such as a value its systems keep elsewhere. Such a write
+may be overwritten or do nothing, so check a new write on a test server
+first.
 
 ## Finding entities
 
 `entities(ty)` returns every entity with a component of type `ty` and a place
-in the world, as `Placed { entity, position }`, position in metres;
-`near(point, radius, ty)` those within `radius` metres of `point`, nearest
-first. `transform_type()` is the component every placed entity has, so
-`near(point, radius, world.transform_type())` finds everything there.
+in the world. Each comes as `Placed { entity, position }`, position in
+metres. `near(point, radius, ty)` returns those near a point, nearest first.
+They lie within `radius` metres of `point`. `transform_type()` is the component every placed
+entity has. So `near(point, radius, world.transform_type())` finds
+everything there.
+
 `containers(kinds)` lists the entities that hold items, by kind:
-`ContainerKinds::default()` is what players build, such as storage chests;
-the other constants of `ContainerKinds` name the rest, combined with `|`, and
-`ContainerKinds::ALL` takes every kind. It finds nothing on a build that lacks
-a component it tells the kinds apart by. The
-engine walks every archetype with the component, so call them now and then,
-from an action or a timer, not on every step.
+
+- `ContainerKinds::default()` is what players build, such as storage chests.
+- The other constants of `ContainerKinds` name the rest, combined with `|`.
+- `ContainerKinds::ALL` takes every kind.
+
+It finds nothing on a build that lacks a component it tells the kinds apart
+by. The engine walks every archetype with the component. So call them
+now and then, from an action or a timer, not on every step.
 
 ```rust
 use enshwick::actions::{Action, Outcome};
@@ -243,47 +263,53 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ## Destroying entities and saving
 
 `destroy(entity)` asks the server to remove an entity after the systems of
-the next step, the way the game removes things itself: no loot drops and no
-death is raised. It refuses a player's character (`WorldError::Refused`) and
-an entity not in the world (`WorldError::Gone`), and fails with
-`WorldError::Missing` where no server runs or on a build without the command.
+the next step. It removes it the way the game removes things itself: no loot
+drops and no death is raised. It refuses a player's character with
+`WorldError::Refused`. It refuses an entity not in the world with
+`WorldError::Gone`. It fails with `WorldError::Missing` where no server runs
+or on a build without the command.
 
 `save()` asks the server to save the world now, as its timed saves do;
 [`WorldSaved`](events.md) follows once the save is on disk. A save already
 under way counts as asked. Before the world has loaded it is refused.
 
 `key()` names the world the server runs: its save file's name without
-`.ksd`, such as `world0`, the same in every session. The game gives a
+`.ksd`. An example is `world0`, the same in every session. The game gives a
 deleted world's name to its next new world, so a key names a slot.
 `data_dir()` is the mod's folder in that world, `<stem>-mod-data/<id>`
-beside the save, where a [world store](state.md#per-world-state) keeps the
-mod's state; the loader sets it aside when a new world takes the name
-([State](state.md#when-a-new-world-takes-a-saves-name)).
+beside the save. There a [world store](state.md#per-world-state) keeps the
+mod's state. The loader sets the folder aside when a new world takes the
+name ([State](state.md#when-a-new-world-takes-a-saves-name)).
 
 Like the reads, all three need the game thread; `key()` and `data_dir()`
 work from any thread.
 
 [`WorldSaving`](events.md) is raised after the step in which a save got
-under way, before [`WorldSaved`](events.md): what the mod writes then, its
-world store and files in its data folder, belongs to that save.
-`save_info()` reads the save on disk: the world's GUID, which stays the same
-across saves, when it was written, its size and how many backups the game
-keeps beside it; it is `None` before the first save of a new world.
+under way, before [`WorldSaved`](events.md). What the mod writes then
+belongs to that save: its world store and files in its data folder.
+`save_info()` reads the save on disk:
+
+- the world's GUID, which stays the same across saves
+- when it was written
+- its size
+- how many backups the game keeps beside it
+
+It is `None` before the first save of a new world.
 
 `hold_saves(true)` holds the world's saves and `hold_saves(false)` lets
 them go, for a mod that saves only while players are in safe places. The
 game saves only while no running mod holds its saves: the timed saves wait
-and `save()` is refused meanwhile. Each mod holds its own, the log names each mod that
-holds or lets go, a mod that turns off lets go, and every hold ends with its
-hosted game. Once saves stay held for 10 minutes, the log warns and each
+and `save()` is refused meanwhile. Each mod holds its own. The log names each mod
+that holds or lets go. A mod that turns off lets go, and every hold ends
+with its hosted game. Once saves stay held for 10 minutes, the log warns and each
 administrator online gets a notice, again every 10 minutes while they stay
 held.
 
 When a dedicated server or a hosted game shuts down, every hold lets go and
-the final save runs; the log names each mod that held saves and for how
-long. `ShutdownStarted` says that the next save is the final one: a mod that
-calls `hold_saves(true)` inside its `ShutdownStarted` handler refuses the
-final save, and the log names it. A hold asked for after that handler is not
+the final save runs. The log names each mod that held saves and for how
+long. `ShutdownStarted` says that the next save is the final one. A mod may
+call `hold_saves(true)` inside its handler for that event. The mod then
+refuses the final save, and the log names it. A hold asked for after that handler is not
 taken, so a mod that keeps calling `hold_saves(true)` does not stop the final
 save.
 
@@ -312,9 +338,10 @@ end)
 An entity spawned with `Spawn::new().do_not_save()` stays out of the save,
 as the game's own passing animals do: it is gone once the world loads again.
 `set_saved(entity, false)` leaves out an entity a mod spawned or placed
-since the world loaded, from the step after its spawn, and `set_saved(entity, true)` puts it back in: the game gives the
-entity its `DoNotSave` component, or takes it away, after the next step, and
-the next save that starts after that leaves the entity out or keeps it.
+since the world loaded, from the step after its spawn.
+`set_saved(entity, true)` puts it back in. After the next step the game
+gives the entity its `DoNotSave` component, or takes it away. The next save
+that starts after that leaves the entity out or keeps it.
 Vanilla entities are refused, so no mod drops the game's own data from a
 save. An entity not in the world fails with `WorldError::Gone`; where no
 server runs, or on a build without the commands, the call fails with
@@ -354,7 +381,7 @@ live entity is left out with `enshwick.world.set_saved(entity, false)`.
 
 ## Players
 
-`player(entity)` returns the connected player whose character is `entity`;
+`player(entity)` returns the connected player whose character is `entity`.
 `players()` returns every connected player with a character in the world. A
 [`Player`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world.rs)
 has:
@@ -363,16 +390,16 @@ has:
 - `slot`, the server's player slot;
 - `key`, the same number for the same account in every session. Use it to
   remember a player between sessions;
-- `permissions`, the server's permission bits, `PlayerInfo::CAN_*` in
-  [`abi`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs);
+- `permissions`, the server's permission bits. They are `PlayerInfo::CAN_*` in
+  [`abi`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs).
   `is_admin()` tells whether the player may kick and ban, the server's
   administrators;
 - `name`, the name the client sent. It is untrusted: a client picks it, and two
   players may share it. Show it, but decide by `key` or `permissions`.
 
-`player_by_key(key)` finds the connected player with an account key, and
-`players_named(name)` the connected players with a name, ignoring case, as
-the console finds a player a line names. Since names repeat, code that wants
+`player_by_key(key)` finds the connected player with an account key.
+`players_named(name)` finds the connected players with a name, ignoring
+case, as the console finds a player a line names. Since names repeat, code that wants
 one player refuses when it gets several.
 
 ### Kicking and banning
@@ -387,29 +414,31 @@ actions, as its administrators do; the mod decides who may ask:
 
 A dedicated server keeps the list in `bannedAccounts` of
 `enshrouded_server.json`; a game a client hosts keeps it until the game
-ends. The game never removes an administrator online, so a kick or a ban of
-one returns `WorldError::Refused`; so do a kick or a ban of a hosted game's
-host and a kick or a ban of an account not online. A ban of an account on
+ends. The game never removes an administrator online. So a kick or a ban of one
+returns `WorldError::Refused`. So does a kick or a ban of a hosted game's
+host, and of an account not online. A ban of an account on
 the list already succeeds. Call it on the server's game thread between steps.
 
 ### Chat mutes
 
-`set_muted(key, true)` mutes an account in chat and `set_muted(key, false)`
-lifts the mute; `muted(key)` tells whether it is muted. The server drops
-every line the muted player types before any other player reads it, and
-tells the player why with one of the game's notices, at most every 30
-seconds; a client without Enshwick reads the same as a chat line. Lines mods
-send and mod messages pass. Mutes belong to the world: the loader keeps them
-beside its save in `<save>-mod-data/enshwick/muted.txt`, one account per
-line, with `#` notes, and reads the file as the world loads, so a mute lasts
-until it is lifted and travels with the save; an edit of the file by hand
-applies at the next world load.
+`set_muted(key, true)` mutes an account in chat, and
+`set_muted(key, false)` lifts the mute. `muted(key)` tells whether it is
+muted. The server drops every line the muted player types before any other
+player reads it. It tells the player why with one of the game's notices, at
+most every 30 seconds. A client without Enshwick reads the same as a chat
+line. Lines mods send and mod messages pass.
 
-An administrator online and a hosted game's host are never muted:
+Mutes belong to the world. The loader keeps them beside its save in
+`<save>-mod-data/enshwick/muted.txt`, one account per line, with `#` notes.
+It reads the file as the world loads. So a mute lasts until it is lifted
+and travels with the save. An edit of the file by hand applies at the next
+world load.
+
+An administrator online and a hosted game's host are never muted.
 `set_muted` returns `WorldError::Refused` for them when it can tell, and
-their lines pass even when their account was muted before. Both calls work on any
-thread, on a dedicated server and in a game a client hosts, while a world
-runs; elsewhere `set_muted` returns `WorldError::Missing`. The mod decides who may ask, such as an
+their lines pass even when their account was muted before. Both calls work
+on any thread while a world runs, on a dedicated server and in a game a
+client hosts. Elsewhere `set_muted` returns `WorldError::Missing`. The mod decides who may ask, such as an
 [action](actions.md) only administrators see.
 
 ```rust
@@ -426,9 +455,9 @@ fn toggle_mute(world: &World, key: enshwick::PlayerKey) -> Result<bool, WorldErr
 ## Build rights
 
 `world.can_build(&player, a, b)` tells whether the server lets a player edit
-the box between the corners `a` and `b`, in metres. A mod that digs, fills or
-pastes for a player asks before it changes the world; the server decides, so
-a client cannot talk its way past the check. The permissions follow the
+a box. The box lies between the corners `a` and `b`, in metres. A mod that
+digs, fills or pastes for a player asks before it changes the world. The
+server decides, so a client cannot talk its way past the check. The permissions follow the
 game's terrain tools:
 
 - every edit needs the `CanEditWorld` permission;
@@ -448,13 +477,16 @@ such as one that needs a building zone, are not part of the check.
 
 `Err` carries a
 [`BuildRefusal`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world/build.rs)
-named after the game's own answer: `NoPermission` with the missing
-`PlayerPermissions` bit, `CursorOutsideBuildingZone` or
-`CursorInsideStrictBuildInhibitorZone`. The check runs on the server's game
-thread at a quiet moment only and is refused inside a step. When the server
-cannot tell, off the game thread, inside a step, before a world is loaded or
-on a game build without the checks, the answer is `Unchecked`, and the edit
-is refused.
+named after the game's own answer:
+
+- `NoPermission` with the missing `PlayerPermissions` bit
+- `CursorOutsideBuildingZone`
+- `CursorInsideStrictBuildInhibitorZone`
+
+The check runs on the server's game thread at a quiet moment only and is
+refused inside a step. Sometimes the server cannot tell: off the game
+thread, inside a step, before a world is loaded or on a game build without
+the checks. Then the answer is `Unchecked`, and the edit is refused.
 
 ```rust
 use enshwick::Entity;
@@ -482,9 +514,9 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 ## Labels
 
-`world.set_label(entity, text)` names an entity as a player's rename does: the
-game shows the name on hover, sends it to every client, vanilla ones included,
-and saves it with the world. The game keeps 255 bytes; an empty text removes
+`world.set_label(entity, text)` names an entity as a player's rename does.
+The game shows the name on hover and sends it to every client, vanilla ones
+included. It saves the name with the world. The game keeps 255 bytes; an empty text removes
 the name. It works on the game thread only, and returns `false` elsewhere or
 when the entity is gone.
 `world.has_label(entity)` tells whether an entity already carries such a
@@ -507,10 +539,15 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 The game checks no permission when a player renames something.
 [`load.on_rename(|rename| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world/rename.rs)
-runs before every rename on the server, on its game thread, with a
-[`Rename`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world/rename.rs):
-the `entity`, the `player` (`None` when the server cannot tell) and the new
-`text`. Returning `false` refuses the rename, and the entity keeps its name.
+runs before every rename on the server, on its game thread. It gets a
+[`Rename`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world/rename.rs)
+with:
+
+- the `entity`
+- the `player`, `None` when the server cannot tell
+- the new `text`
+
+Returning `false` refuses the rename, and the entity keeps its name.
 
 ```rust
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {

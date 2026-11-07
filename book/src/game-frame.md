@@ -19,7 +19,8 @@ times per frame, and the frame waits for it.
 
 In the common case a hook does not allocate, lock, format or log.
 
-- **No allocation.** No `Vec`, `String`, `Box` or `format!` per call. Use stack
+- **No allocation.** No `Vec` or `String` per call. No `Box` or `format!`
+  either. Use stack
   arrays, or a `thread_local!` value reused between calls, as
   [`enshwick-survivors-per-altar`](https://github.com/enshwick/mods/blob/main/survivors-per-altar/src/policy.rs)
   does for its plan.
@@ -61,13 +62,13 @@ fn node_unlocked(next: Next<'_, unsafe extern "system" fn(u32, *const u64) -> u8
 State a hook reads while other threads may change it is atomic, thread-local,
 or swapped whole:
 
-- atomics for flags and numbers (`AtomicBool`, `AtomicU32`, an `f32` stored as
-  bits);
+- atomics for flags and numbers, such as `AtomicBool` and `AtomicU32`. Store
+  an `f32` in one as its bits;
 - `std::sync::OnceLock` for what `init` resolves once, such as function
   pointers and offsets;
-- an `ArcSwap` from the `arc-swap` crate for a table that changes as a whole,
-  such as settings applied by `on_settings`: readers load it without a
-  lock, the writer stores a new one.
+- an `ArcSwap` from the `arc-swap` crate for a table that changes as a whole.
+  Settings applied by `on_settings` are such a table. Readers load it without
+  a lock, and the writer stores a new one.
 
 [`enshwick-better-altars`](https://github.com/enshwick/mods/blob/main/better-altars/src/count.rs)
 keeps its altar table in an `ArcSwap`.
@@ -85,8 +86,8 @@ writes its save on a thread it spawns from the `WorldSaved` handler.
 - Every `unsafe` block names its invariant in a `// SAFETY:` comment: why the
   pointer is valid, why the type is right, why the thread is allowed.
 - Raw reads and writes of game memory go through `raw::read_at` and
-  `raw::write_at`, with the invariant at each call, rather than pointer casts
-  spread through the code. Both copy the value unaligned and make no
+  `raw::write_at`, with the invariant at each call. Do not spread pointer
+  casts through the code. Both copy the value unaligned and make no
   reference into game memory:
 
 ```rust
@@ -111,7 +112,7 @@ assert_eq!(bytes[4], 7);
 - Strings and data the loader passes are borrowed for the call. Copy what you
   keep.
 - A pointer to a component or a caller frame is valid only while the game is
-  where it was when the hook got it; do not keep it past the call.
+  where it was when the hook got it. Do not keep it past the call.
 
 ## Panics
 

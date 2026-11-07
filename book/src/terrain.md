@@ -47,47 +47,58 @@ end)
 
 ## Ground and materials
 
-The ground is made of voxels half a metre a side, each of a material: air,
-a terrain material with an id from 1 to 127, or a building material. Built
-pieces are never touched by these edits. `materials()` lists the terrain
-materials of the running game: the voxel id, the item digging it yields (as
-an item id, see [items](content/items.md)), the game's hardness category,
-a voxel's health against tools, and whether a player's tool can flatten it.
+The ground is made of voxels half a metre a side, each of a material. A
+material is air, a terrain material with an id from 1 to 127, or a building
+material. Built pieces are never touched by these edits. `materials()` lists
+the terrain materials of the running game. For each it gives:
+
+- the voxel id
+- the item digging it yields, as an item id (see [items](content/items.md))
+- the game's hardness category
+- a voxel's health against tools
+- whether a player's tool can flatten it
+
 A mod that wants dirt or stone finds the material whose item is the dirt or
 stone item.
 
 ## Edits
 
 Every edit changes the ground at once and clients see it; the save keeps
-it only inside a base ([What a save keeps](#what-a-save-keeps)). Positions are in metres and no axis may be below 0; a radius or a height
-is above 0 and up to `MAX_RADIUS` (16 metres), and smaller edits, up to
-about 8 metres, keep the game's frame short. `Shape::Round` is a disc or a
-sphere, `Shape::Square` a square or a cube.
+it only inside a base ([What a save keeps](#what-a-save-keeps)). Positions
+are in metres, and no axis may be below 0. A radius or a height is above 0
+and up to `MAX_RADIUS` (16 metres). Smaller edits, up to about 8 metres,
+keep the game's frame short. `Shape::Round` is a disc or a sphere,
+`Shape::Square` a square or a cube.
 
 | Call | What it does | Returns |
 | --- | --- | --- |
 | `add(at, radius, height, material, shape)` | adds a mound of the material, `radius` across and `height` high at its middle, as a shovel does | the volume added, m³ |
-| `dig(at, radius, shape, protect)` | digs out the terrain in the sphere or cube; a material in `protect` stays, and the dig stops at the first half-metre shell that meets it, as a pickaxe stops at rock it cannot break | the volume removed, m³ |
+| `dig(at, radius, shape, protect)` | digs out the terrain in the sphere or cube. A material in `protect` stays. The dig stops at the first half-metre shell that meets it, as a pickaxe stops at rock it cannot break | the volume removed, m³ |
 | `flatten(at, radius, material, shape)` | levels the ground to the height of `at`: ground above goes, gaps below fill with the material | whether anything changed |
 
-`terrain.dry()` gives the same terrain for edits that only count: each
-returns what it would change and changes nothing, to see whether there is
-ground somewhere or how much an edit would take.
+`terrain.dry()` gives the same terrain for edits that only count. Each
+returns what it would change and changes nothing. A mod uses it to see
+whether there is ground somewhere or how much an edit would take.
 
 Each call fails with a [`WorldError`](world.md#writing-components):
-`Refused` for a radius, height, position or material out of range,
-`OutsideWorld` for an edit that reaches past the world's edge or above
-1,024 metres, `NotLoaded` while part of what it can reach is not loaded,
-`WrongThread` off the game thread, `Missing` while no world runs. The
-server holds only some parts of the world in memory; an edit elsewhere
-writes nothing, since the game would compute it against air (a mound
-counted whole, a dig that removes nothing) and merge the result onto the
-ground once it loads. Asking starts loading the area, so the same edit
-works again a second or so later.
 
-A player's shovel and pickaxe also check where the player may build, take
-the cost, give the loot and experience and keep an undo; these edits do
-none of that, so a mod adds what it needs, for example with
+| Error | When |
+| --- | --- |
+| `Refused` | a radius, height, position or material is out of range |
+| `OutsideWorld` | the edit reaches past the world's edge or above 1,024 metres |
+| `NotLoaded` | part of what the edit can reach is not loaded |
+| `WrongThread` | the call runs off the game thread |
+| `Missing` | no world runs |
+
+The server holds only some parts of the world in memory. An edit elsewhere
+writes nothing, since the game would compute it against air. A mound would
+be counted whole and a dig would remove nothing. The game would then merge
+the result onto the ground once it loads. Asking starts loading the area,
+so the same edit works again a second or so later.
+
+A player's shovel and pickaxe also check where the player may build. They
+take the cost, give the loot and experience and keep an undo. These edits do
+none of that, so a mod adds what it needs. It may use
 [altar zones](altars.md) and [inventory transactions](inventories.md). For
 an undo, write the edits as a transaction.
 
@@ -97,9 +108,13 @@ Unstable: needs the `unstable` feature and may change in any release
 ([Stability](stability.md)).
 
 `world.transaction()` starts a `Transaction`: edits of the world the loader
-writes as one and can take back as one. `terrain_add`, `terrain_dig` and
-`terrain_flatten` take the same arguments as the `Terrain` calls; `commit`
-hands the edits to the loader and returns a `TransactionId`. Any thread may
+writes as one and can take back as one. Three of its calls take the same arguments as the `Terrain` calls:
+
+- `terrain_add`
+- `terrain_dig`
+- `terrain_flatten`
+
+`commit` hands the edits to the loader and returns a `TransactionId`. Any thread may
 commit.
 
 ```rust
@@ -143,15 +158,15 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 The loader writes the edits in order on the server's game thread between
-steps, aiming at 64 bricks of 8³ voxels (4 metres a side) a step, so a
+steps. It aims at 64 bricks of 8³ voxels (4 metres a side) a step. So a
 large transaction spreads over several steps instead of weighing on one.
-64 is a target, not a cap: an edit is never split, so one that touches
+64 is a target, not a cap: an edit is never split. So an edit that touches
 more bricks runs whole in a step of its own, and a step may write 80 or
 100.
-On a dedicated server with no player, one transaction of eight digs of
-6 metres, 57,512 voxels, was written over 20 steps and undone over 19; a
-world step took 5.9 ms on average (18 ms for the slowest twentieth), and
-steps came every 51 ms against 48 ms idle.
+On a dedicated server with no player, one transaction held eight digs of
+6 metres, 57,512 voxels. It was written over 20 steps and undone over 19.
+A world step took 5.9 ms on average (18 ms for the slowest twentieth).
+Steps came every 51 ms against 48 ms idle.
 Before an edit writes, the loader keeps every brick it can touch, 1 KiB a
 brick. `world.transaction_status(id)` tells where a transaction stands:
 
@@ -166,36 +181,35 @@ brick. `world.transaction_status(id)` tells where a transaction stands:
 | `Expired` | its undo data was dropped; it can no longer be undone |
 | `UndoRefused(why)` | the last undo stopped, keeping what it put back; ask again later |
 
-A transaction checks that its whole region lies inside the world and is
-loaded before it writes anything: if not, it fails with `OutsideWorld` or
-`NotLoaded`, and the world is as it was; the check starts loading the
-area, so the same transaction committed again a second or so later can
-pass. Once the loader has met the
-running world, a commit with an edit past its edge is refused at once
-with `OutsideWorld`. A region can still unload while a large transaction is under way;
-it then stops before the next edit, and an undo takes back what it wrote.
+Before it writes anything, a transaction checks that its whole region lies
+inside the world and is loaded. If not, it fails with `OutsideWorld` or
+`NotLoaded`, and the world is as it was. The check starts loading the area.
+So the same transaction committed again a second or so later can pass.
+Once the loader has met the running world, a commit with an edit past its
+edge is refused at once with `OutsideWorld`. A region can still unload while
+a large transaction is under way. The transaction then stops before the next
+edit, and an undo takes back what it wrote.
 
-`world.undo(id)` drops a queued transaction and takes back one written in
-whole or in part, putting every brick back as it was, newest edit first,
-again at 64 bricks a step. Clients see the undo, and the save keeps it, as
-any edit. Before it writes, the undo checks that every brick still holds
-what the transaction left there, and it checks each brick again right
-before writing it back. If a player, another mod or a later transaction
-has changed one, the undo stops and the status turns `UndoRefused` with
-`Refused`. Found before the first write, the conflict means nothing was
-written; found later, the undo stops at that brick and keeps the bricks it
-already put back. Either way it may be asked again once the conflict is
-gone. Part of the region not loaded
-refuses the undo before it writes; a column that unloads during the undo
-makes it wait, and after about 3,600 steps it stops with `NotLoaded`. An
-undo stopped this way may be asked again. Undo overlapping transactions
-newest first.
+`world.undo(id)` drops a queued transaction. It takes back one written in
+whole or in part, putting every brick back as it was, newest edit first. It
+too writes at 64 bricks a step. Clients see the undo, and the save keeps it,
+as any edit. Before it writes, the undo checks that every brick still holds
+what the transaction left there. It checks each brick again right before
+writing it back. If a player, another mod or a later transaction has changed
+one, the undo stops. The status then turns `UndoRefused` with `Refused`.
+A conflict found before the first write means nothing was written. A
+conflict found later stops the undo at that brick, and the bricks it already
+put back stay. Either way it may be asked again once the conflict is gone.
+Part of the region not loaded refuses the undo before it writes. A column
+that unloads during the undo makes it wait. After about 3,600 steps it stops
+with `NotLoaded`. An undo stopped this way may be asked again. Undo
+overlapping transactions newest first.
 
 The loader keeps up to 64 MiB of undo data, 65,536 bricks, over all
-transactions; past that, the oldest written transactions lose theirs and
-turn `Expired`. A transaction holds up to 1,024 edits and may touch no more
-bricks than the cap; a commit, or an undo, while queued work holds the
-cap is refused. The loader remembers the newest 4,096 transactions; the status of
+transactions. Past that, the oldest written transactions lose theirs and
+turn `Expired`. A transaction holds up to 1,024 edits. It may touch no more
+bricks than the cap. A commit, or an undo, is refused while queued work holds
+the cap. The loader remembers the newest 4,096 transactions; the status of
 an older one is `None`. When the world ends, queued work fails with
 `Missing` and written transactions turn `Expired`.
 
@@ -235,25 +249,27 @@ fn wall_for(world: World, player: &Player, shape: ItemId, stone: ItemId, at: [f6
 }
 ```
 
-`VoxelBox::new` builds a box of voxels, `set` changes one, and `moved_to`
-gives the same voxels at another corner, so a box read in one place pastes
-somewhere else. A voxel's kind must be the one its material names.
+`VoxelBox::new` builds a box of voxels, and `set` changes one.
+`moved_to` gives the same voxels at another corner. So a box read in one
+place pastes somewhere else. A voxel's kind must be the one its material
+names.
 
-`place_block` takes the shape's item, which has a `VoxelBlueprintItem`,
-and the material's item, whose `ChangeVoxelData` places a building
-material; anything else is refused at commit. The block is centred on the
-transform's position, and its orientation is kept in quarter turns, as the
-game keeps it. As a player's building tool does, it writes over air and
-over ground and building voxels softer than `Unbreakable`, and leaves the
-rest. It takes no cost from anyone. `place_block` raises the game's `BuildingPlaceEvent` and
-`erase_block` its `BuildingTearDownEvent`, so the game's listeners and
-other mods see the change. `write_voxels` raises no event.
+`place_block` takes the shape's item, which has a `VoxelBlueprintItem`.
+It also takes the material's item, whose `ChangeVoxelData` places a building
+material. Anything else is refused at commit. The block is centred on the
+transform's position. Its orientation is kept in quarter turns, as the
+game keeps it. As a player's building tool does, it writes over air. It also
+writes over ground and building voxels softer than `Unbreakable`, and leaves
+the rest. It takes no cost from anyone. `place_block` raises the game's
+`BuildingPlaceEvent`. `erase_block` raises its `BuildingTearDownEvent`. So
+the game's listeners and other mods see the change. `write_voxels` raises no
+event.
 
 ### Props
 
-`place_prop(item, at)` places a prop as a player places one from an item:
-the template the item places, standing at the transform, with the item it
-came from. The game's `BuildingPlaceEvent` tells its listeners, and its
+`place_prop(item, at)` places a prop as a player places one from an item.
+The prop is the template the item places. It stands at the transform and
+keeps the item it came from. The game's `BuildingPlaceEvent` tells its listeners, and its
 `LogicEntityPlacedEvent` for a switch or another logic prop. An item that
 places nothing is refused at commit. A prop is in the world from the step
 after the one that placed it; `world.transaction_entities(id)` lists the
@@ -298,7 +314,7 @@ what it has now:
 | `NpcBed` | a survivor assigned to a bed |
 | `StoreAssociatedNpcIds` | survivors assigned to a station |
 | `CustomPlayerString` | text a player wrote on a sign |
-| `Fuel` | fuel a player put in a prop that does not refill itself, such as a barrel or a station: more charges than a fresh one starts with |
+| `Fuel` | fuel a player put in a prop that does not refill itself, such as a barrel or a station. It is more charges than a fresh one starts with |
 | `LogicGraphNodeConnected` | a switch, plate or other logic prop wired to other logic |
 | `LogicGraphTrigger` | a logic trigger prop, as the loader cannot tell a player's settings from its item's |
 
@@ -309,17 +325,24 @@ well or a rain barrel: it refills on its own, whatever a player took.
 `remove_prop` refuses a prop that holds state: the transaction fails with
 `WorldError::HoldsState(state)`, naming the kinds, before it writes
 anything. So removing a plant or a logic trigger always needs the
-destructive mode. Empty a chest first, with the inventory API, or use
-`remove_prop_discarding_state(entity)`, which removes the prop anyway and
-loses what it held for good: the items, the plant and its growth, the
-queue, the survivors' places, the text, the fuel, the wiring and a
-trigger's settings.
+destructive mode. Empty a chest first, with the inventory API. Or use
+`remove_prop_discarding_state(entity)`, which removes the prop anyway. It
+loses what the prop held for good:
+
+- the items
+- the plant and its growth
+- the queue
+- the survivors' places
+- the text
+- the fuel
+- the wiring
+- a trigger's settings
 
 A removal takes two steps. In the first the loader checks the prop and
-keeps players from it: they cannot open it, move items in or out, sort it
-or dismantle it, and Quick Stash is turned off for a magic chest, the only
-container it fills, then put back as the player left it. In the second it checks the
-prop again and only then asks the game to remove it. If anything landed
+keeps players from it. They cannot open it, move items in or out, sort it
+or dismantle it. Quick Stash is turned off for a magic chest, the only
+container it fills. Quick Stash is then put back as the player left it. In the second
+step the loader checks the prop again and only then asks the game to remove it. If anything landed
 in it meanwhile, the removal fails with `HoldsState` and the prop stays,
 open to players again.
 
@@ -329,24 +352,27 @@ prop starts with: a logic trigger's settings and a plant's level.
 
 An undo keeps to the same rule. It takes a placed prop away only while it
 holds no state, a trigger's settings and a plant's level as they first
-were. Once a chest it placed has items, a plant has grown or a player has
-set a trigger, the undo stops with `UndoRefused(HoldsState(…))` and the
+were. A chest it placed may get items, a plant may grow or a player may set
+a trigger. Once that happens, the undo stops with `UndoRefused(HoldsState(…))` and the
 prop stays; empty it and ask again. A plant that grows into its next stage
 becomes a new entity, which an undo no longer finds. Like a removal, an
 undo keeps players from the props it takes away for the step before.
 
-An undo brings a removed prop back from its item, at its place, only when
-the removal took no state with it; one removed with
-`remove_prop_discarding_state` that held state stays removed, and the
-undo is refused the same way. An undo also refuses to bring a prop back
+An undo brings a removed prop back from its item, at its place. It does so
+only when the removal took no state with it. A prop that held state and was
+removed with `remove_prop_discarding_state` stays removed. The undo is
+refused the same way. An undo also refuses to bring a prop back
 where another like it now stands.
 
 Creatures placed from items, animals, pets and survivors, and flame
-altars, which own a base, are no props. `props_in` and `capture` leave
-them out, `place_prop` refuses an item that places a creature or an
-altar, since placing an altar founds a base, and
-`remove_prop`, in either mode, fails with `WorldError::NotAProp`. The
-entity calls reach them.
+altars, which own a base, are no props:
+
+- `props_in` and `capture` leave them out.
+- `place_prop` refuses an item that places a creature or an altar, since
+  placing an altar founds a base.
+- `remove_prop`, in either mode, fails with `WorldError::NotAProp`.
+
+The entity calls reach them.
 
 ### What a save keeps
 
@@ -373,8 +399,8 @@ fn place_to_keep(world: World, chest: ItemId, at: [f64; 3]) -> Option<Transactio
 
 `world.transaction_for(&player)` starts a transaction for a player. Before
 it writes anything, the loader checks that the server lets the player edit
-the box of every change, as `world.can_build` does; a prop's box is its
-item's placement box, turned with it. A refusal fails the
+the box of every change. The check is the one `world.can_build` does. A
+prop's box is its item's placement box, turned with it. A refusal fails the
 transaction with `NotAllowed(why)`, and nothing is written. The check runs
 at the transaction's first step on the game thread, never at the commit,
 so `commit` succeeds and `transaction_status` tells. The building events
@@ -386,8 +412,8 @@ mod itself: it checks no rights, and its events name no owner.
 [`load.voxels()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/voxels.rs)
 returns the `Voxels` of the server's world, which read the ground and the
 building blocks voxel by voxel without changing them. A `VoxelPos` is a
-voxel's index on each axis from the world's corner, half a metre a step
-with y up; `VoxelPos::from_metres` finds the voxel holding a world
+voxel's index on each axis from the world's corner. Each step is half a
+metre, with y up. `VoxelPos::from_metres` finds the voxel holding a world
 position.
 
 ```rust
@@ -414,22 +440,26 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
-`read(min, size)` returns a `VoxelBox` of up to `READ_MAX` voxels, a box
-of 64 a side; `sample(at)` reads one voxel. Each voxel has a material,
-`Air`, `Terrain(id)` with the id `materials()` lists or `Building(id)`,
-and a fill from 0 to 255, which shapes the surface between voxels; the
-game does not name it, so the name is Enshwick's. A box is read in the
-order x, then y, then z; `VoxelBox::get` finds a voxel by its place and
-`iter` walks them all with their places.
+`read(min, size)` returns a `VoxelBox`. It holds up to `READ_MAX` voxels,
+a box of 64 a side. `sample(at)` reads one voxel. Each voxel has a material:
+
+- `Air`
+- `Terrain(id)`, with the id `materials()` lists
+- `Building(id)`
+
+Each voxel also has a fill from 0 to 255, which shapes the surface between
+voxels. The game does not name the fill, so the name is Enshwick's. A box is
+read in the order x, then y, then z. `VoxelBox::get` finds a voxel by its
+place, and `iter` walks them all with their places.
 
 The server holds only some parts of the world in memory. A read of a box
-that is not wholly loaded fails with `NotLoaded` and starts loading it;
-about a second later the same read returns the real ground. Every read can
+that is not wholly loaded fails with `NotLoaded` and starts loading it.
+About a second later the same read returns the real ground. Every read can
 pull an area into memory, so a mod reads where it needs to and never
 sweeps the world. A box past the world's edge, or above 1,024 metres,
-fails with `OutsideWorld`: the game itself reads such voxels as air, which
+fails with `OutsideWorld`. The game itself reads such voxels as air, which
 a mod could not tell from real air. The edge is the game's own, read from
-the running world; the height is the loader's, above every place the game
+the running world. The height is the loader's, above every place the game
 builds, since the game keeps none. An empty box,
 one larger than `READ_MAX` or one past 2³⁰ voxels on an axis is `Refused`.
 A read costs one lock and one copy for each 4-metre brick it touches.
@@ -442,14 +472,21 @@ Where each call works is in
 ## Hearing every voxel edit
 
 `load.on_voxels_changed(handler)` calls `handler` after the step for each
-write of the server's world voxels: a player digging, shaping or building,
-the game's own changes, and the terrain edits and transactions of mods.
-Each `VoxelEdit` has its `source`, `Game`, `ThisMod` or `OtherMod`, the box
-the game wrote (`min` and `size`), and its `changes`: every voxel that
-changed, with its place, the voxel before and the voxel after. The game
-writes a whole box at a time, aligned to its 4-metre bricks and larger than
-the edit, so the loader reads the box before the game writes it and hands
-over only the voxels that differ. An undo and a transaction's
+write of the server's world voxels. That covers a player digging, shaping or
+building, and the game's own changes. It also covers the terrain edits and
+transactions of mods. Each `VoxelEdit` has:
+
+- its `source`, who wrote it: `Game` or a mod
+- the box the game wrote, `min` and `size`
+- its `changes`: every voxel that changed, with its place, the voxel before
+  and the voxel after
+
+A mod's write is `ThisMod` to the mod that wrote it and `OtherMod` to the
+others.
+
+The game writes a whole box at a time, aligned to its 4-metre bricks and
+larger than the edit. So the loader reads the box before the game writes
+it, and hands over only the voxels that differ. An undo and a transaction's
 `write_voxels` write brick by brick, one edit each; a write that changes
 nothing raises none. Data packs write as the game. On a client it runs
 while the client hosts a game.
@@ -460,8 +497,8 @@ changed voxels waiting in one step, is not raised; the log counts it.
 
 A mod can keep edits the save drops: the save keeps changes only inside a
 base ([What a save keeps](#what-a-save-keeps)). It stores the changes it
-hears, then puts them back once the world runs again: it reads a box over
-them, which loads that part of the world, and writes it back with
+hears, then puts them back once the world runs again. It reads a box over
+them, which loads that part of the world. It then writes the box back with
 `write_voxels`. Its own replay comes back as edits whose source is
 `ThisMod`, which it skips.
 
@@ -493,9 +530,9 @@ fn replay(world: World, voxels: Voxels, min: VoxelPos, size: [u32; 3]) -> Result
 ```
 
 The first read of a part of the world not in memory fails with `NotLoaded`
-and starts loading it; the same read about a second later returns the
-ground as the save has it. No player needs to be near, and `ChunkLoaded`
-does not tell when a box can be read, so a mod tries again from a
+and starts loading it. The same read about a second later returns the
+ground as the save has it. No player needs to be near. `ChunkLoaded`
+does not tell when a box can be read. So a mod tries again from a
 [scheduled task](concepts/threads.md#what-may-be-called-where) until the read
 answers. A mod keeps what it stores in its
 [world store](state.md), beside the save.
@@ -512,10 +549,10 @@ end)
 ```
 
 While a mod listens, every write of the world's voxels costs one more box
-read inside the game's write, and a comparison of the box's voxels. The
-read took 300 nanoseconds for the loader's own writes on a dedicated server,
-and 0.6 to 1.5 microseconds for a player's dig or added soil on a client
-that hosted a game. The loader hooks the write only when a mod listens, so
+read inside the game's write. It also costs a comparison of the box's
+voxels. The read took 300 nanoseconds for the loader's own writes on a
+dedicated server. It took 0.6 to 1.5 microseconds for a player's dig or
+added soil on a client that hosted a game. The loader hooks the write only when a mod listens, so
 without one it costs nothing.
 
 `on_voxels_changed` is stable; the transactions a replay writes with need
@@ -526,28 +563,32 @@ the `unstable` feature ([Stability](stability.md)).
 Unstable: needs the `unstable` feature and may change in any release
 ([Stability](stability.md)).
 
-`world.props_in(a, b)` lists the props whose position lies in the box
-between two corners in metres: the things players placed from items, such
-as chests, beds and torches. Each `Prop` has its entity, the `ItemId` it
-was placed from (its `UsedItem`) and a `WorldTransform` with its position
-in metres and its orientation, a quaternion x, y, z then w with y up.
-A prop is told apart by its template, the one its item places, so the
-notes and animals a world comes with are not props even where they carry
+`world.props_in(a, b)` lists the props whose position lies in a box
+between two corners in metres. Props are the things players placed from
+items, such as chests, beds and torches. Each `Prop` has:
+
+- its entity
+- the `ItemId` it was placed from (its `UsedItem`)
+- a `WorldTransform` with its position in metres and its orientation, a
+  quaternion x, y, z then w with y up
+
+A prop is told apart by its template, the one its item places. So the
+notes and animals a world comes with are not props, even where they carry
 an item. The call walks every entity with a `UsedItem`, so call it now and
 then, not every step. While no world runs, a box holding things to check
 fails with `Missing`.
 
 `world.capture(a, b)` takes the region between two voxels, both included,
-as plain data: a `Capture` with its voxels and its props, both counted from
-the region's lowest corner, its `origin`. It reads the voxels in tiles of
-up to 64 voxels, 32 metres, a side, counted from that corner, and takes at
-most `CAPTURE_TILES`, 16 tiles: such as a region of 128 by 128 metres and
-32 high, or a cube of 64 metres. A larger region is `Refused` before any
-read. A tile read took 2.4 to 3.1 milliseconds on a server copy under
-Rosetta and Wine, so a capture holds the game thread for at most about 50
-milliseconds. A mod captures a bigger region in parts, one per step or
-scheduler task, and keeps them together itself. `NotLoaded` and
-`OutsideWorld` come from the reads: a region not wholly loaded fails after
+as plain data. The result is a `Capture` with its voxels and its props. Both
+are counted from the region's lowest corner, its `origin`. The call reads
+the voxels in tiles of up to 64 voxels, 32 metres, a side, counted from that
+corner. It takes at most `CAPTURE_TILES`, 16 tiles. That fits a region of
+128 by 128 metres and 32 high, or a cube of 64 metres. A larger region is
+`Refused` before any read. A tile read took 2.4 to 3.1 milliseconds on a
+server copy under Rosetta and Wine. So a capture holds the game thread for
+at most about 50 milliseconds. A mod captures a bigger region in parts, one
+per step or scheduler task, and keeps them together itself. `NotLoaded` and
+`OutsideWorld` come from the reads. A region not wholly loaded fails after
 every tile has started loading, so a second try a moment later finds it.
 
 ```rust
@@ -588,15 +629,15 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
-`rotated(quarter_turns)` turns a capture about the vertical, each quarter
-turn taking the +x side to +z as seen from above, with negative turns the
+`rotated(quarter_turns)` turns a capture about the vertical. Each quarter
+turn takes the +x side to +z as seen from above; negative turns go the
 other way. The region keeps its corner: a box 32 voxels wide and 20 deep
-turns into one 20 wide and 32 deep. Voxels move to their turned places and
-props turn their positions and orientations with them; a voxel holds no
+turns into one 20 wide and 32 deep. Voxels move to their turned places.
+Props turn their positions and orientations with them. A voxel holds no
 direction of its own, so nothing else changes. A turned orientation comes
 with w at or above zero, so four quarter turns give back the same numbers
 within rounding. `translated(by)` moves the
 origin by a number of voxels on each axis, and is `None` once the corner
 would leave the world's coordinates. Both are pure: they change only the
-capture, never the world. A `Capture` implements serde's `Serialize` and
-`Deserialize`, so a mod can keep it in any format serde writes.
+capture, never the world. A capture implements serde's `Serialize` and
+`Deserialize`. So a mod can keep it in any format serde writes.

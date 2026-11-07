@@ -17,8 +17,8 @@ memory: nothing is written to a save or the game's archive.
 
 ## A copy with changed components
 
-`load.add_template(NewTemplate)` copies the vanilla template `like` under the
-id `id` and applies `changes` in order. The copy keeps the family, model and
+`load.add_template(NewTemplate)` copies the vanilla template `like`. The copy
+takes the id `id`, and the call applies `changes` in order. The copy keeps the family, model and
 proxy model of the template it copies, so it looks like it. It is listed in
 the game's template collection and returns a `TemplateId`, the GUID saves keep
 for every object or creature made from it.
@@ -41,16 +41,19 @@ things:
 | Remove it | `ComponentChange::remove::<T>()` | `remove_named(id)` |
 
 With the `typed` feature the component is one of the
-[generated types](../game-types.md), and the loader checks at `init` that the
+[generated types](../game-types.md). The loader checks at `init` that the
 running build's type still has its shape. Without it, a change names the
 component by enshwick's id for its type and works on the codec's
 [values](../resource-values.md) or on the component's bytes.
 
 A set adds a component only when templates of the same family carry its type
-somewhere in the game's data: an `Npc` template takes a `Boss` component,
-since the game's bosses are `Npc` templates, but no crafting component. Any
-other set, a remove or edit of a component the template lacks, and a `like`
-that is no vanilla template return `Err(Off)` from the call.
+somewhere in the game's data. The game's bosses are `Npc` templates. So an
+`Npc` template takes a `Boss` component. It takes no crafting component.
+These return `Err(Off)` from the call:
+
+- any other set;
+- a remove or edit of a component the template lacks;
+- a `like` that is no vanilla template.
 
 ```rust
 use enshwick::content::{Guid, id};
@@ -74,7 +77,7 @@ fn init(load: &mut enshwick::Load<'_>, wolf: Guid) -> Result<(), enshwick::Off> 
 ## From Luau
 
 The same calls are `enshwick.content.add_template{...}` and
-`enshwick.content.change_template(guid, {...})`, at the top level of
+`enshwick.content.change_template(guid, {...})`. They run at the top level of
 `main.luau`. A change is a table: `component` is the generated type's path in
 the typed API, such as `ecs.Faction`. With `set` the table is the whole
 component by its Rust field names, `base` included. With `edit` it names only

@@ -5,8 +5,9 @@ description: Most of the game's simulation runs as ECS systems that walk the row
 
 # ECS inside systems
 
-Most of the game's simulation runs as ECS systems: functions that walk the rows
-of a query, one row per entity that has the components they ask for.
+Most of the game's simulation runs as ECS systems. A system is a function that
+walks the rows of a query, one row per entity that has the components it asks
+for.
 
 ## A system's context
 
@@ -56,14 +57,14 @@ constants for the running build.
 [`Ecs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ecs.rs)
 walks the system's query with the engine's own iterator:
 
-- `query::<N>(ctx)` starts a walk; `next()` moves to the next row and returns
-  its iterator words, `&[u64; N]`, or `None` at the end. `N` is the number of
+- `query::<N>(ctx)` starts a walk. `next()` moves to the next row and returns
+  its iterator words, `&[u64; N]`. At the end it returns `None`. `N` is the number of
   words the system's iterator declares, its context word included. Which word
   holds which component pointer or change-tracking value depends on the system;
   find it once per system and name the indices as constants.
 - `row(ctx)` is the 1-based row the query is on, 0 before the first;
   `set_row(ctx, row)` moves it. A pass of the mod's own sets it to 0 first and
-  puts back the saved row afterwards, so vanilla's walk starts where it would
+  puts back the saved row afterwards. So vanilla's walk starts where it would
   have.
 - `entity(ctx)` is the entity of the current row, `None` before the first.
 - `mark_changed(tracker, stamp_a, stamp_b, entity, kind)` marks a written
@@ -134,8 +135,9 @@ gets the `InventorySetup` type this way to find the world's Safes.
 ### Positions
 
 World coordinates are 32.32 fixed point: `FIXED_PER_METRE` engine units to
-the metre. `ecs::transform_position`, an `unsafe fn` over a raw component
-pointer, reads a `CurrentTransform` component in metres, and `ecs::metres` and `ecs::fixed` convert between the two:
+the metre. `ecs::transform_position` reads a `CurrentTransform` component in
+metres. It is an `unsafe fn` over a raw component pointer. `ecs::metres` and
+`ecs::fixed` convert between the two:
 
 ```rust
 use enshwick::ecs::{FIXED_PER_METRE, fixed, metres};
@@ -173,9 +175,9 @@ and their systems share the same functions.
 [`Worlds`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ecs.rs)
 tells them apart:
 
-- `is_server(ctx)` is true for a context of the server's world: always on the
-  dedicated server, on a client only for the built-in server's systems while it
-  hosts a game;
+- `is_server(ctx)` is true for a context of the server's world. It is always
+  true on the dedicated server. On a client it is true only for the built-in
+  server's systems while it hosts a game;
 - `hosting()` is true while this process runs a game server.
 
 A server feature in a hooked system checks `is_server(ctx)` first and forwards

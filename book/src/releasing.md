@@ -16,10 +16,15 @@ by hand or through a mod manager. A release archive holds that folder. How serve
 
 ## Versions
 
-The platform's crates carry versions of their own: the loader
-(`enshwick-loader`), the `powrprof.dll` stub (`enshwick-loader-stub`),
-`enshwick` with its test fake, `enshwick-macros`, the engine routes and
-anchors with the reflection reader (`enshwick-gamedata`) and `cargo-enshwick`.
+The platform's crates carry versions of their own:
+
+- the loader, `enshwick-loader`
+- the `powrprof.dll` stub, `enshwick-loader-stub`
+- `enshwick` with its test fake, and `enshwick-macros`
+- the engine routes and anchors with the reflection reader,
+  `enshwick-gamedata`
+- `cargo-enshwick`
+
 A changed route or anchor is a loader patch release and leaves the API's
 version alone. Mods have versions
 of their own too, released apart from the platform and from each other.
@@ -27,8 +32,8 @@ of their own too, released apart from the platform and from each other.
 Which loader a mod runs under is not read from that version but from the ABI
 version `enshwick` was built with (see
 [ABI reference](abi-reference.md#versions)). A mod loads only under a loader
-of the same ABI version. Pin `enshwick` with `=`, and release a new build of
-the mod for each Enshwick release that changes the ABI; a loader of another
+of the same ABI version. Pin `enshwick` with `=`. Release a new build of
+the mod for each Enshwick release that changes the ABI. A loader of another
 version does not start the mod and logs
 `rebuild it for Enshwick <version>`.
 
@@ -64,27 +69,27 @@ enshwick = { git = "https://github.com/enshwick/enshwick", tag = "v1.0.0-alpha.N
 
 Each alpha is a GitHub prerelease tagged
 `v1.0.0-alpha.N` on the
-[releases page](https://github.com/enshwick/enshwick/releases): its
-`enshwick.zip` holds the stub and the loader, and no mod, and its notes list
+[releases page](https://github.com/enshwick/enshwick/releases). Its
+`enshwick.zip` holds the stub and the loader, and no mod. Its notes list
 the game builds it supports and what changed. Before 1.0 any alpha may change
-the API, the ABI, file layouts, settings and mod ids, so a mod built for one
+the API, the ABI, file layouts, settings and mod ids. So a mod built for one
 alpha may need a rebuild for the next. A build of `main` between two alphas
-carries the version of the last one, so the join check does not tell it apart
+carries the version of the last one. So the join check does not tell it apart
 from that alpha. How the platform builds and releases
 its own crates is in
 [CONTRIBUTING.md](https://github.com/enshwick/enshwick/blob/main/CONTRIBUTING.md#releases).
 
 The loader's engine routes and anchors (see
-[Finding the game](finding-the-game.md)) are compiled into the loader and
-serve every game build, a new one too; a route or anchor fixed for a new
+[Finding the game](finding-the-game.md)) are compiled into the loader. They
+serve every game build, a new one too. A route or anchor fixed for a new
 build ships with the next loader release, with that build's compatibility
 report.
 
 ## The list of loaded mods
 
 [`enshwick::mods::all()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
-lists every loaded mod, the loader first (id `enshwick`), in load order, each
-a [`ModEntry`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
+lists every loaded mod in load order, the loader first (id `enshwick`). Each
+is a [`ModEntry`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
 with its id, version, side, file, whether it runs and the manifest's credits:
 
 ```rust
@@ -99,13 +104,13 @@ stub and the loader's DLL.
 
 ## The join check and a refused join
 
-When the join check keeps a client out because the server runs mods of side
-`both` the client lacks or has in another version, the loader lists them on
-the mismatch screen, then raises
+The join check keeps a client out when the server runs mods of side `both`
+that the client lacks or has in another version. The loader lists those mods
+on the mismatch screen, then raises
 [`events::JoinRefused`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/events.rs)
 on the client.
 [`mods::join_missing()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
-then lists those mods: the id and version the server advertises, `running`
+then lists those mods. Each has the id and version the server advertises, `running`
 false, and the client's DLL path when it has the mod (empty otherwise). A
 server advertises no homepage or name, so players find a mod by its id.
 
@@ -129,14 +134,15 @@ itself.
 ## Where to publish
 
 - **Publish every release on a page players can open**, such as GitHub
-  releases, and set it as the crate's `homepage` (or `repository`) in
-  `Cargo.toml`: the manifest takes it, and the Mods screen shows it.
+  releases. Set it in `Cargo.toml` as the crate's `homepage`. The
+  `repository` key works too. The manifest takes it, and the Mods screen
+  shows it.
 - **Use the same files everywhere.** Upload the release archive to Nexus or
-  other mod sites as it is, so players who install through a mod manager get
+  other mod sites as it is. So players who install through a mod manager get
   what the release page has.
 
 ## Removed mods and holds
 
-Removing a mod's folder removes the hold in it too; a hold the mod set in a
+Removing a mod's folder removes the hold in it too. A hold the mod set in a
 world's `<stem>-mod-data/<id>/hold.txt` stays until the player deletes it, at
-their own risk; see [Holds](state.md#holds).
+their own risk. See [Holds](state.md#holds).

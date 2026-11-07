@@ -2,7 +2,9 @@
 //! them: no sentence over [`MAX_WORDS`] words or [`MAX_CODE_SPANS`] code
 //! spans, and a chapter's sentences averaging [`AVERAGE_WORDS`] words or
 //! fewer. A code span counts as one word. Code blocks, headings and HTML
-//! comments hold no sentences; list items and table cells end one.
+//! comments hold no sentences; list items and table cells end one. Code
+//! spans with no prose word between them, such as a table's column of
+//! paths, are a list of names, not a sentence.
 
 use std::path::Path;
 
@@ -352,7 +354,10 @@ fn sentence(line: usize, chars: &[char], start: usize, end: usize) -> Option<Sen
         .split_whitespace()
         .filter(|word| word.chars().any(|c| c.is_alphanumeric() || c == CODE))
         .collect();
-    if words.is_empty() {
+    let names_only = words
+        .iter()
+        .all(|word| !word.chars().any(char::is_alphanumeric));
+    if names_only {
         return None;
     }
     let leading = chars[..start].iter().filter(|&&c| c == '\n').count()
@@ -416,17 +421,17 @@ mod tests {
 
     #[test]
     fn list_items_and_table_cells_end_a_sentence() {
-        let text = "Pick one:\n\n- a first item\n  wrapped on\n- `second`\n1. third\n\n| Name | What it does |\n| --- | :-: |\n| `a|b` | runs once |\n";
+        let text = "Pick one:\n\n- a first item\n  wrapped on\n- `second` item\n1. third\n\n| Name | What it does |\n| --- | :-: |\n| `a|b` cell | runs once |\n";
         assert_eq!(
             counts(text),
             [
                 (2, 0),
                 (5, 0),
-                (1, 1),
+                (2, 1),
                 (1, 0),
                 (1, 0),
                 (3, 0),
-                (1, 1),
+                (2, 1),
                 (2, 0)
             ]
         );
@@ -455,12 +460,12 @@ mod tests {
     #[test]
     fn long_sentences_and_many_code_spans_are_named() {
         let long = format!("{}.", ["word"; 26].join(" "));
-        let text = format!("{long}\n`a` `b` `c`.\n");
+        let text = format!("{long}\nUse `a`, `b` and `c`.\n");
         assert_eq!(
             problems("book/src/x.md", &text),
             [
                 "book/src/x.md:1: a sentence has 26 words; keep it to 25: \"word word word word word word …\"",
-                "book/src/x.md:2: a sentence has 3 code spans; keep it to 2: \"`…` `…` `…`. …\"",
+                "book/src/x.md:2: a sentence has 3 code spans; keep it to 2: \"Use `…`, `…` and `…`. …\"",
             ]
         );
     }
@@ -474,6 +479,15 @@ mod tests {
             problems("book/src/x.md", &format!("{sentence} {sentence}")),
             ["book/src/x.md: 2 sentences have 42 words, above an average of 20"]
         );
+    }
+
+    #[test]
+    fn a_list_of_code_spans_is_no_sentence() {
+        assert_eq!(
+            counts("| `a::*`, `b::c`, `d`, `e` | Why `a` and `b` differ. |\n- `x`, `y`, `z`.\n"),
+            [(5, 2)]
+        );
+        assert_eq!(counts("Use `a`, `b` and `c`."), [(5, 3)]);
     }
 
     #[test]

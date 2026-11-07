@@ -9,7 +9,7 @@ description: The Effects handle of a mod raises game events in the server's worl
 returns the mod's
 [`Effects`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/effects.rs):
 game events it raises in the server's world, teleports and spawns. Like
-[`World`](world.md), it is `Copy`; get it during `init` and move it into
+[`World`](world.md), it is `Copy`. Get it during `init` and move it into
 handlers, tasks and actions.
 
 ```rust
@@ -47,10 +47,10 @@ end)
 
 ## Raising game events
 
-An event a mod raises goes where the game's own go: the loader puts it into
-the event stream the engine moves at the start of the next step, so the
-systems that read its type act on it as on one the game raised, and
-[game event](game-events.md) handlers see it too. The loader stamps it with
+An event a mod raises goes where the game's own go. The loader puts it into
+the event stream the engine moves at the start of the next step. So the
+systems that read its type act on it as on one the game raised.
+[Game event](game-events.md) handlers see it too. The loader stamps it with
 the game time.
 
 Only types the server's own systems raise are allowed, each with a typed
@@ -65,11 +65,14 @@ call:
 | `ping(sender, at)` | `UiPingEvent` | a ping on the map and in the world, from the sender; unstable, needs the `unstable` feature |
 
 `emit_raw(ty, bytes)` raises an event from its whole reflected layout, for
-the same allowed types; the loader refuses any other type, and a size that
+the same allowed types. The loader refuses any other type, and a size that
 is not the type's. Each call fails with a
-[`WorldError`](world.md#writing-components): `WrongThread` off the game
-thread, `Refused` for a type the loader does not allow or when the step has
-no room for more events, `Missing` on a build without the event.
+[`WorldError`](world.md#writing-components):
+
+- `WrongThread` off the game thread;
+- `Refused` for a type the loader does not allow, or when the step has no
+  room for more events;
+- `Missing` on a build without the event.
 
 ```rust
 use enshwick::actions::{Action, Arg, Outcome, Value};
@@ -96,27 +99,33 @@ Unstable: needs the `unstable` feature and may change in any release
 ([Stability](stability.md)).
 
 `teleport(entity, position, how)` moves an entity as the game's admin
-teleport does: after the next step the entity jumps to `position`, in metres,
-and clients see it arrive. `Teleport::new()` keeps the entity's orientation;
-`.search_best_spawn_position()` lets the game look for a free spot nearby to
-stand on, as it does for respawns, and `.facing_yaw(radians)` turns the
-entity on arrival.
-It fails with `Gone` for an entity not in the world or without a place, and
-with `Refused` for one the game's teleport does not move: it moves actors and
-characters, not props. It fails with `Missing` where no server runs or on a
-build without teleports.
+teleport does. After the next step the entity jumps to `position`, in metres,
+and clients see it arrive. `Teleport::new()` keeps the entity's orientation.
+Two methods change the teleport:
+
+- `.search_best_spawn_position()` lets the game look for a free spot nearby
+  to stand on, as it does for respawns;
+- `.facing_yaw(radians)` turns the entity on arrival.
+
+It fails with `Gone` for an entity not in the world or without a place. It
+fails with `Refused` for one the game's teleport does not move: it moves
+actors and characters, not props. It fails with `Missing` where no server
+runs or on a build without teleports.
 
 ## Spawns
 
 `spawn(template, position, how)` spawns an entity of a template, as the
 game's admin spawn does: an enemy, an animal, a survivor or a prop. The
 template is a GUID as `World::template` gives it, so a mod can spawn copies of
-what it finds in the world. The new entity's id comes back at once; the
-entity is in the world after the next step, and a template the game does not
-know spawns nothing. `Spawn::new()` takes the template as it is;
-`.level(n)` scales the entity as the game scales enemies,
-`.despawn_after(duration)` lets the game remove it after that much game time,
-and `.orientation_yaw(radians)` turns it.
+what it finds in the world. The new entity's id comes back at once. The
+entity is in the world after the next step. A template the game does not
+know spawns nothing. `Spawn::new()` takes the template as it is. Three
+methods change the spawn:
+
+- `.level(n)` scales the entity as the game scales enemies;
+- `.despawn_after(duration)` lets the game remove it after that much game
+  time;
+- `.orientation_yaw(radians)` turns it.
 
 ```rust
 use core::time::Duration;
@@ -144,8 +153,8 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
-Items lying in the world are entities too, but a dropped stack carries the
-item and its count in components the spawn does not fill; to hand a player
+Items lying in the world are entities too. But a dropped stack carries the
+item and its count in components the spawn does not fill. To hand a player
 items, use [inventory transactions](inventories.md).
 
 Where each call works is in

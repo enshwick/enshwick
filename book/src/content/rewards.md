@@ -47,9 +47,14 @@ give = [{ item = "tonic", count = 2 }, { experience = 50 }]
 limit = "once"
 ```
 
-In `rewards.toml` an item or a recipe is the pack's own name, another mod's
-content id or a vanilla name, as in [the other pack files](packs.md); a
-knowledge entry or a buff is its GUID.
+In `rewards.toml` an item or a recipe is one of these, as in
+[the other pack files](packs.md):
+
+- the pack's own name
+- another mod's content id
+- a vanilla name
+
+A knowledge entry or a buff is its GUID.
 
 | Action             | `on` in `rewards.toml`  | When                                       |
 | ------------------ | ----------------------- | ------------------------------------------ |
@@ -68,12 +73,21 @@ knowledge entry or a buff is its GUID.
 | `Knowledge(id)`            | `{ knowledge = "<guid>" }`        | The knowledge entry, set                                 |
 | `Buff(id)`                 | `{ buff = "<guid>" }`             | The buff, for its type's own duration                    |
 
-The limit is `Every` (`every`, when left out), `Once` per player in the
-world, `Daily`, once per player each calendar day in UTC, or `World`, once
-in the world to the first player. The chance is from 0 to 1, always when
-left out. `pack check` reports a reward without an action or with two, one
-that gives nothing, a chance outside 0 to 1, a name used twice and a name
-the pack does not define.
+The limit is one of:
+
+- `Every` (`every`), the limit when left out
+- `Once`: once per player in the world
+- `Daily`: once per player each calendar day in UTC
+- `World`: once in the world, to the first player
+
+The chance is from 0 to 1, always when left out. `pack check` reports these
+problems:
+
+- a reward without an action or with two
+- a reward that gives nothing
+- a chance outside 0 to 1
+- a name used twice
+- a name the pack does not define
 
 ## Hold a grant back or give from code
 
@@ -108,21 +122,23 @@ Rewards run in the server's world, on the game thread, a step after their
 action. A craft counts for each unit the crafting system made of the
 player's request, so a request for three gives the reward three times. The
 game crafts a request in the step after it and reports the units in the
-step after that; the server pairs each unit with the oldest request of its
-recipe from the same step or the two before it, up to the amount asked. A
-unit with no such request, such as what a station makes on its own, gives
-nothing, and a request the game refused gives nothing later. A station's
-own unit in those steps may count for a request that got fewer units than
-it asked, and when two players ask for the same recipe in those steps and
-the first runs short of ingredients, units of the second player's request
-may count for the first. The
-world's file `rewards.toml` in the mod's data folder beside the save keeps
-who got a limited reward, by account, so a limit holds across restarts and
+step after that. The server pairs each unit with the oldest request of its
+recipe, up to the amount asked. That request comes from the same step or the
+two before it. A unit with no such request, such as what a station makes on
+its own, gives nothing. A request the game refused gives nothing later.
+
+A station's own unit in those steps may count for a request that got fewer
+units than it asked. Two players may also ask for the same recipe in those
+steps, and the first may run short of ingredients. Then units of the second
+player's request may count for the first.
+
+The world's file `rewards.toml` in the mod's data folder beside the save keeps
+who got a limited reward, by account. So a limit holds across restarts and
 moves with the save. Items and experience are given as the reward states
 them; the game's rates do not change them.
 
 A reward whose action this game build lacks turns off alone, with a
 warning in the log; the rest of the pack applies. `Rewards::grant` and
 `Rewards::give` run on the thread that calls them, so call them on the game
-thread; an item handler runs on its system's thread, so schedule the grant
+thread. An item handler runs on its system's thread, so schedule the grant
 from there.

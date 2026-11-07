@@ -11,8 +11,8 @@ game's data and nothing is written to a save.
 
 ## Why does nothing leave the data?
 
-The server clears every held stack whose item the registry lacks when an
-inventory loads, without a log line, and the next save keeps that loss. So
+When an inventory loads, the server clears every held stack whose item the
+registry lacks. It writes no log line, and the next save keeps that loss. So
 every call here keeps the vanilla entry registered: a world opens as vanilla
 when the mod is removed. On a server copy of server 399, a world of 139 held
 stacks kept all of them through each call below.
@@ -50,20 +50,20 @@ which the mod leaves alone.
 ## Empty a loot table
 
 `load.remove_loot_table(table)` serves a random loot table or a container's
-fill table that gives nothing: a fill table loses its stacks, its groups and
+fill table that gives nothing. A fill table loses its stacks, its groups and
 the labels it rolls loot by. Loot players hold is plain stacks and stays.
 A table the game lacks returns `Err(Off)`.
 
 ## Serve one item with another's data
 
-`load.rekey_item(old, new)` serves the vanilla item `old` with the data of
-the item `new`, under `old`'s own id. `new` is a vanilla item, or an item
-the mod added with `load.add_item` before the call, with its name, tooltip
-lines and icon. A mod item with a meter has an entity of its own, so it
-re-keys only an item that has one too. Saves, recipes and loot that name `old` get `new`'s
-look and use. On a server copy of server 399, wood
-logs re-keyed to an arrow read as the arrow, stack size 500 and category
-ammunition, and every held stack of logs stayed.
+`load.rekey_item(old, new)` serves one vanilla item with the data of another
+item. The item `old` gets the data of `new` and keeps its own id. `new` is a
+vanilla item, or an item the mod added with `load.add_item` before the call.
+A mod's item brings its name, tooltip lines and icon. A mod item with a meter
+has an entity of its own, so it re-keys only an item that has one too. Saves,
+recipes and loot that name `old` get `new`'s look and use. A server copy of
+server 399 re-keyed wood logs to an arrow. The logs read as the arrow, stack
+size 500 and category ammunition, and every held stack of logs stayed.
 
 - The stack size is at least `old`'s: the game cuts a held stack above its
   item's stack size and saves the cut.
@@ -72,7 +72,7 @@ ammunition, and every held stack of logs stayed.
 - Mods that re-key or serve `old` chain in load order, and the last
   re-key's data wins. A build that fails keeps `old` as it was.
 - An item with an entity of its own (`ItemFlag::HasPIDE`), such as one with
-  durability, re-keys only to another such item; otherwise the call returns
+  durability, re-keys only to another such item. Otherwise the call returns
   `Err(Off)`, since the game would make or clear that entity in every held
   stack.
 
@@ -86,9 +86,12 @@ These calls need the `typed` feature.
 
 ## From Luau
 
-The same calls are `enshwick.content.remove_item(item)`,
-`remove_workshop(station)`, `remove_loot_table(table)` and
-`rekey_item(old, new)`, each by GUID, at the top level of `main.luau`.
+The same calls run at the top level of `main.luau`, each by GUID:
+
+- `enshwick.content.remove_item(item)`
+- `remove_workshop(station)`
+- `remove_loot_table(table)`
+- `rekey_item(old, new)`
 
 ## Who needs the mod
 

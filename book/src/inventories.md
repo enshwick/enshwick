@@ -35,13 +35,13 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
-`load.inventories()` returns `Err(Off)` after `init` or on a game build that lacks a piece the reads or the
-transactions need.
+`load.inventories()` can return `Err(Off)`. It does so after `init`, or on a
+game build that lacks a piece the reads or the transactions need.
 
 ## How inventories are built
 
 Items are not entities. An inventory, such as a chest or a player, links up
-to 16 sub-inventories of 8 slots each; a link may be virtual, pointing at
+to 16 sub-inventories of 8 slots each. A link may be virtual, pointing at
 another inventory. Only items with durability or a level have an entity of
 their own, the item's PIDE.
 
@@ -82,24 +82,39 @@ Both return a
 | `count(root, item)` | How many of item id `item` the inventory holds. |
 | `slot(slot_ref)` | What one slot holds, with `InventoryCategory::INVALID`. |
 | `root(slot_ref)` | The inventory a slot belongs to at the root, the chest or player; `None` when its sub-inventory has no owner. |
-| `durability(pide)` | An item entity's durability as clients see it: a `Bar` with `current` and `max`; `None` for an item without durability. |
+| `durability(pide)` | An item entity's durability as clients see it, as a `Bar`. The bar has `current` and `max`. `None` for an item without durability. |
 | `meter(pide)` | An item entity's [meter](content/items.md#meters), a `Bar`; `None` for an item without one. |
 
-`Inventories::slots` and `Inventories::count` read the same as `read()` does,
-without the `Reader`; a [Luau mod](#from-luau) reads through them.
+Two calls read the same as `read()` does, without the `Reader`:
+
+- `Inventories::slots`;
+- `Inventories::count`.
+
+A [Luau mod](#from-luau) reads through them.
 
 A [`Slot`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)
-holds `at` (its `SlotRef`), `category` (equipment, currency, ordinary
-storage, ...), `item` (the item id, 0 for none), `count` and `pide`
-(`None` for items without an entity). `is_empty()` is true when
-`item` or `count` is 0.
+holds these fields:
+
+- `at`, its `SlotRef`;
+- `category`: equipment, currency, ordinary storage, ...;
+- `item`, the item id, 0 for none;
+- `count`;
+- `pide`, `None` for items without an entity.
+
+A slot is empty when its `item` or `count` is 0. `is_empty()` tells so.
 
 Item ids are [`ItemId::from_guid`](content/items.md#guids-and-item-ids) of the
 item's GUID.
 
 [`item_info(item)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)
-gives an item's static data from any thread: `max_stack_size`, and flags with
-`has_pide()`, `is_container()` and `is_blueprint()`. It returns `None` for
+gives an item's static data from any thread. The data holds `max_stack_size`
+and three flags, read with these methods:
+
+- `has_pide()`;
+- `is_container()`;
+- `is_blueprint()`.
+
+`item_info` returns `None` for
 an unknown item, and while no world runs.
 
 ## Changes
@@ -118,25 +133,25 @@ One operation each:
 | `move_slot(slot, to, amount, done)` | Moves a stack, or `Some(amount)` of it, into an inventory's free or matching slots. |
 | `move_all(from, to, done)` | Moves every stack of one inventory into another, as the game's "take all" does. |
 
-`Op::Give` in a batch also takes a `fill`: how full each new item's
-[meter](content/items.md#meters) starts, as a `Fill`. `Fill::of(count, max)`
-gives `count` of `max`; `None` keeps the template's start.
+`Op::Give` in a batch also takes a `fill`. It sets how full each new item's
+[meter](content/items.md#meters) starts, as a `Fill`. `Fill::of(count, max)` gives count of max.
+`None` keeps the template's start.
 
 Moves leave what does not fit in the source. `move_all` leaves the source's
 action bar, equipment and locked slots where they are;
 `Op::MoveAll { include_special: true, .. }` in a batch moves them too.
 
-`Op::Renew` replaces a stack with new items, each with its own entity and
-its [meter](content/items.md#meters) at a fill, asked for the same slot: an
-item from before its mod gave it a meter gets one at once.
+`Op::Renew` replaces a stack with new items, asked for the same slot. Each new
+item has its own entity and its [meter](content/items.md#meters) at a fill. So
+an item from before its mod gave it a meter gets one at once.
 `renew(root, items, fill, done)` renews every such stack of `items` in an
-inventory in one transaction, and returns `None` when none needs it.
+inventory in one transaction. It returns `None` when none needs it.
 
 ### Batches
 
 [`Batch`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)
 runs several [`Op`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)s
-as one transaction through
+as one transaction. A batch goes in through
 [`submit`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs):
 every operation succeeds, or nothing changes.
 
@@ -162,8 +177,8 @@ The one-operation calls above are batches of one. A batch also sets:
 
 - `allow_partial()`: commit even when a give or take leaves some of its
   count undone; without it, that rolls the batch back;
-- `notify()`: show the actor the game's pickup message for each stack and
-  its inventory-full message for what does not fit, as the game's own
+- `notify()`: show the actor the game's pickup message for each stack. For
+  what does not fit, show its inventory-full message, as the game's own
   looting does. A batch with a give always does; moves are silent without
   it;
 - `actor(player)`: the player the game credits with the change, for those
@@ -179,12 +194,12 @@ tests them:
   ([`MAX_OPS`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs));
 - at most 16 distinct inventories named
   ([`MAX_INVENTORIES`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs));
-- what fits the game's op log of 512 records, counting a give or take as 16,
-  a slot move as 4, a destroy as 1 and a `MoveAll` as 256. So one batch
-  holds at most two `MoveAll`s;
-- no malformed operation: no inventory or item, a count of 0 or above
-  `i32::MAX`, a move amount of `Some(0)`, a `MoveAll` from an inventory into
-  itself.
+- what fits the game's op log of 512 records. A give or take counts as 16, a
+  slot move as 4, a destroy as 1 and a `MoveAll` as 256. So one batch holds
+  at most two `MoveAll`s;
+- no malformed operation. Malformed is a missing inventory or item, or a
+  count of 0 or above `i32::MAX`. So is a move amount of `Some(0)`, or a
+  `MoveAll` from an inventory into itself.
 
 `submit` refuses a batch that breaks a limit before it reaches the game,
 with `Done::Refused(BatchError)`.
@@ -208,9 +223,9 @@ assert!(parts.iter().all(|part| part.check().is_ok()));
 ## Outcomes
 
 Each callback gets an
-[`Outcome`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs):
-`done`, how the request ended, and `ops`, one result per operation when the
-request ran, else empty.
+[`Outcome`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs).
+Its `done` says how the request ended. Its `ops` hold one result per
+operation when the request ran, and are empty otherwise.
 
 | `Done` | Meaning |
 | --- | --- |
@@ -221,7 +236,7 @@ request ran, else empty.
 | `Refused(BatchError)` | The batch broke a limit and never reached the game. |
 
 An [`OpResult`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)
-holds the game's `error` code (0 for none) and `remaining`, how much of the
+holds the game's `error` code, 0 for none. Its `remaining` is how much of the
 count the operation could not do. `ok()` is true without an error.
 Operations after a failed one are not run and carry
 `InventoryOpResult::NOT_RUN`. `OpResult::NO_ROOM` marks an item that did not
@@ -250,8 +265,8 @@ inventory it touched to the clients, as vanilla does after a transfer.
 
 Every request returns a
 [`Ticket`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)
-that holds the same outcome once it is known, for polling instead of a
-callback: `is_done()` and `outcome()`. Clone it freely. A callback that does
+that holds the same outcome once it is known. It serves polling instead of a
+callback, through `is_done()` and `outcome()`. Clone it freely. A callback that does
 nothing, `|_| {}`, is fine when you poll.
 
 ## Callbacks and threads
@@ -261,7 +276,8 @@ nothing, `|_| {}`, is fine when you poll.
 - The loader runs requests inside the game's inventory system, one at a
   time, in the order they came.
 - The callback runs on the server's game thread after a later step, so it
-  may [read](#reads) inventories and submit further requests, such as to empty one container after another.
+  may [read](#reads) inventories and submit further requests. One use is to empty one container
+  after another.
 - A refused batch, and a request the loader turns away, get their outcome
   the same way, on the game thread after the next step.
 - If the mod is turned off before the outcome arrives, the callback never
@@ -274,8 +290,8 @@ online it does not run at all, and requests wait until they time out after
 The loader runs requests from a [mid-function hook](mid-function-hooks.md)
 in that per-player loop. It arms the hook when a mod asks for inventories,
 and on every dedicated server, whose console gives items. It runs once per
-online player each step; while no request waits, a pass costs the stub's
-[few nanoseconds](mid-function-hooks.md#cost), three atomic loads and one
+online player each step. While no request waits, a pass costs the stub's
+[few nanoseconds](mid-function-hooks.md#cost): three atomic loads and one
 read of game memory.
 
 ## On a hosting client
@@ -289,21 +305,28 @@ game is hosted. See [Sides and hosting](concepts/sides-and-hosting.md).
 ## Testing
 
 [The test fake](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/test.rs)
-records a mod's requests: `inventory_requests()` lists them and
-`finish_inventory(outcome, results)` answers the oldest as the game would;
+records a mod's requests. `inventory_requests()` lists them, and
+`finish_inventory(outcome, results)` answers the oldest as the game would.
 `item` and `without_inventories` set what the build has. See
 [Testing](testing.md).
 
 [`enshwick-area-loot`](https://github.com/enshwick/mods/blob/main/area-loot/src/take.rs)
-uses reads, `MoveAll` batches with `actor`, `allow_partial` and `notify`,
-and chained callbacks; see [Loot containers](content/loot.md#a-worked-example).
+uses reads, `MoveAll` batches and chained callbacks. Its batches set `actor`
+and `allow_partial`. They also set `notify`. See [Loot containers](content/loot.md#a-worked-example).
 
 ## From Luau
 
 `enshwick.inventory` reads and changes inventories on the server, as
-`Inventories` does in Rust. `slots` and `count` read at once; `give`,
-`take`, `destroy_slot`, `move_slot` and `move_all` run in the game's next
+`Inventories` does in Rust. `slots` and `count` read at once. These calls run in the game's next
 inventory step and hand the outcome to a function:
+
+- `give`
+- `take`
+- `destroy_slot`
+- `move_slot`
+- `move_all`
+
+A gift on join:
 
 ```luau
 local GIFT = 3073 -- an item id from the game's data
@@ -319,7 +342,13 @@ enshwick.on("PlayerJoined", function(player)
 end)
 ```
 
-`outcome.done` is `Committed`, `RolledBack`, `Unavailable`, `TimedOut` or
-`Refused`, and each entry of `outcome.ops` has the operation's `error` by
-name and the count it fell short by. A slot is a `string` key, as `slots`
-returns it in `at`.
+`outcome.done` is one of these names:
+
+- `Committed`
+- `RolledBack`
+- `Unavailable`
+- `TimedOut`
+- `Refused`
+
+Each entry of `outcome.ops` has the operation's `error` by name and the count
+it fell short by. A slot is a `string` key. `slots` returns it in `at`.

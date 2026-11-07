@@ -18,7 +18,7 @@ id, the [`KnowledgeId::from_guid`] of the content id:
 | --- | --- |
 | `id` | the entry's content id |
 | `scope` | `World`, shared by every player, or `Player`, each player's own |
-| `kind` | `Bool`, `Counter` or `Flags` |
+| `kind` | `Bool`: a bool. `Counter`: a counter. `Flags`: flags |
 | `flags` | the bits a flags entry may hold; 0 for the others |
 | `skill_points` | the skill points a player's entry gives when granted |
 | `experience` | the experience value a player's entry gives when granted |
@@ -49,9 +49,12 @@ These calls need the `typed` feature.
 ## Testing an entry
 
 A `KnowledgeQuery` tests one entry, vanilla or a mod's, where quests, journal
-pages and skill nodes ask for knowledge: `KnowledgeQuery::is_set(id, scope)`
-holds when a bool is set, `KnowledgeQuery::at_least(id, scope, count)` when a
-counter reaches `count`. A player's entry is tested for the player the game
+pages and skill nodes ask for knowledge. It is one of:
+
+- `KnowledgeQuery::is_set(id, scope)`, which holds when a bool is set;
+- `KnowledgeQuery::at_least(id, scope, count)`, which holds when a counter
+  reaches `count`.
+ A player's entry is tested for the player the game
 asks about.
 
 ## From Luau
@@ -72,7 +75,7 @@ local found = { id = shrine, scope = "Player", test = "IsSet" }
 ## When the mod is removed
 
 A save keeps the values of the mod's entries while the mod runs. A save made
-without the mod drops them, so they read 0 when it comes back; on a server
+without the mod drops them, so they read 0 when it comes back. On a server
 copy of server 399, the world opened and saved without errors.
 
 [`KnowledgeId::from_guid`]: https://docs.rs/enshwick/latest/enshwick/knowledge/struct.KnowledgeId.html#method.from_guid

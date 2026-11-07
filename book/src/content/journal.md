@@ -21,14 +21,14 @@ quest, as for its own quests; [Knowledge](../knowledge.md) reads it.
 | `id` | the quest's content id |
 | `name` | its title's text tag |
 | `source` | who gives it, which groups it in the journal |
-| `kind` | `PlayerQuest`, `WorldQuest` or `Auto` |
+| `kind` | `PlayerQuest` or `WorldQuest`. The third kind is `Auto`. |
 | `main` | whether the journal lists it as a main quest |
 | `for_all_players` | whether one player's completion unlocks it for all |
 | `steps` | its steps, in order |
 | `rewards` | items by GUID and experience values |
 
-Each `QuestStep` shows while `shown_when` holds and is done once `done_when`
-holds; `progress` lists parts the journal counts. A mod moves the quest on by
+Each `QuestStep` shows while `shown_when` holds. It is done once `done_when`
+holds. Its `progress` lists parts the journal counts. A mod moves the quest on by
 granting the knowledge its steps ask for. Texts come from the mod's texts, in
 every language it gives (see [Texts](texts.md)).
 
@@ -77,7 +77,7 @@ result. `knowledge.quests()` lists the quest ids of the running game.
 ## Personal quest progression
 
 `knowledge.quest_progression(player)` says whether a player follows the
-quests on their own rather than with the world, and
+quests on their own rather than with the world.
 `knowledge.set_quest_progression(player, personal)` sets it, as the journal's
 own setting does. The server sets it and the game sends it to the clients.
 
@@ -85,11 +85,16 @@ These calls need the `typed` feature.
 
 ## From Luau
 
-The same calls are `enshwick.content.add_quest{...}`,
-`enshwick.content.add_journal_page{...}` and
-`enshwick.content.change_quest(id, {...})` at the top level of `main.luau`,
-and `enshwick.knowledge.quest_progression(player)` and
-`set_quest_progression(player, personal)` while the world runs.
+Three of the same calls run at the top level of `main.luau`:
+
+- `enshwick.content.add_quest{...}`
+- `enshwick.content.add_journal_page{...}`
+- `enshwick.content.change_quest(id, {...})`
+
+Two more run while the world runs:
+
+- `enshwick.knowledge.quest_progression(player)`
+- `set_quest_progression(player, personal)`
 
 ```luau
 local given = enshwick.content.add_knowledge({ id = "you.trail:given", scope = "Player", kind = "Bool" })
@@ -111,5 +116,5 @@ enshwick.content.add_quest({
 
 ## Who needs the mod
 
-The journal is drawn on the client from its own copy of the data, so a mod
-that adds a quest or a page runs on both sides.
+The client draws the journal from its own copy of the data. So a mod that
+adds a quest or a page runs on both sides.

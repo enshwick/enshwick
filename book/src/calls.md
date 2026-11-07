@@ -49,17 +49,18 @@ enshwick::declare_mod!(TradingPost);
 ```
 
 - Name it after the serving mod, `<id>:<call>`. The loader refuses other names.
-  A local `name = "price-of"` gets the mod's own id in front at build time; a
+  A local `name = "price-of"` gets the mod's own id in front at build time. A
   caller writes `of = <alias>` with the alias its manifest gives the server
   (see [naming dependencies](concepts/loader-and-abi.md#the-manifest)).
 - `version` is the call's major, 1 when left out. A changed field or answer is a
   new major, which the server may serve beside the old one.
 - Every type in the input and the answer has a [`Shape`](services.md#shapes)
-  that a schema describes: numbers, `bool`, `Entity`, `Guid`, and the mod's own
-  structs, enums and value types.
+  that a schema describes. The shapes are numbers, `bool` and `Entity`. They
+  also include `Guid` and the mod's own structs, enums and value types.
 - The input and the answer have no padding, since another language reads them as
-  bytes. The build fails on a gap: add its bytes as fields of their own, such as
-  a `u8` and a `u16` between a `bool` and the next `u32`.
+  bytes. The build fails on a gap. Add its bytes as fields of their own, such
+  as a `u8` and a `u16`. Those two fill the gap between a `bool` and the next
+  `u32`.
 
 ## Serving
 
@@ -98,13 +99,13 @@ without running it:
 cargo enshwick deps trading_post --from <game folder>
 ```
 
-`trading_post` is the server's alias in the mod's `Cargo.toml`, and the call is
-declared as `#[enshwick::call(name = "price-of", of = trading_post, ..)]` in
-`src/deps/trading_post.rs`. `--from` is the server's DLL, a folder with it in it
+`trading_post` is the server's alias in the mod's `Cargo.toml`. The file
+`src/deps/trading_post.rs` declares the call as
+`#[enshwick::call(name = "price-of", of = trading_post, ..)]`. `--from` is the server's DLL, a folder with it in it
 or in its `mods/`, or a schema file the server published. The file ends with
 checks that hold it to the server's layout.
 [`load.caller::<C>()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/services/calls.rs)
-then gives a `Caller`, which is `Copy` and runs the call from any thread:
+then gives a `Caller`. It is `Copy` and runs the call from any thread:
 
 ```rust
 # #[enshwick::call(name = "you.trading-post:price-of", output = u32)]
@@ -125,8 +126,8 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
-The loader matches the caller with the server once every mod is initialised, by
-name and major, and the input and the answer must agree field by field and in
+The loader matches the caller with the server by name and major, once every
+mod is initialised. The input and the answer must agree field by field and in
 size. Without a match it logs the reason, such as a server that serves another
 major, and every call answers `CallError::Unmatched`. A call to a server
 switched off later answers `CallError::Off`, and a failed handler
@@ -135,7 +136,7 @@ the mod is pointless without it.
 
 A required server initialises first, so the loader matches a call to it at
 once. When the server does not serve the call as declared, `caller` returns
-`Off` and the log says
+`Off`. The log says
 `call you.trading-post:price-of v1: this mod requires you.trading-post, and the call cannot match: ...`
 with the reason. In a test, serve a required server's call with
 `Installed::serve_call` before the mod starts.
@@ -149,15 +150,23 @@ What a refused export does, in the game and in a test, is in
 ### The schema
 
 A call's schema sits in the server's manifest beside its
-[points'](extending.md#the-schema), in the same format, as a `[[call]]` table:
-`name`, `major`, `input`, `output`, `doc`, `input_size`, `output_size`, `layout`
-(each input field's layout hash, as decimal text) and `output_layout`, with the
-`[[type]]` tables of every type the input and the answer reach.
+[points'](extending.md#the-schema), in the same format, as a `[[call]]` table. The table has these keys:
+
+- `name` and `major`
+- `input` and `output`
+- `doc`
+- `input_size` and `output_size`
+- `layout`: each input field's layout hash, as decimal text
+- `output_layout`
+
+The schema also holds the `[[type]]` tables of every type the input and the
+answer reach.
 
 ## Described calls
 
 A runtime that knows a call only from its schema, such as a script engine, uses
-`DescribedCall` with `Load::described_caller` and `Load::serve_described_call`.
+`DescribedCall`. It goes through `Load::described_caller` and
+`Load::serve_described_call`.
 The loader matches them the same way, and the input and the answer travel as
 bytes. Both are `unsafe`, since the other side reads those bytes as its own
 types. Every value a described caller sends, or a described server answers, is a
@@ -206,21 +215,26 @@ enshwick.on("WorldSaved", function()
 end)
 ```
 
-The function answers nil and why not: `unmatched` when no running mod serves
-the call as described or the start is not over, `off` when the server or its
-handler is, and `failed` when its handler failed. A call asked for after the
+The function answers nil and why not:
+
+- `unmatched` when no running mod serves the call as described, or the start
+  is not over
+- `off` when the server or its handler is off
+- `failed` when its handler failed
+
+A call asked for after the
 start raises an error: it takes the next start.
 
 The input's fields are numbers, booleans, entities and GUIDs. The runtime
-works out each field's layout hash from its name, type and offset and refuses
+works out each field's layout hash from its name, type and offset. It refuses
 a module whose hashes do not match, so a module edited by hand no longer
 reaches the server. A call whose input holds a value type or an enum is for
-Rust mods only: `cargo enshwick deps --luau` leaves it out and says why,
-since a script could forge such a field's description and send the server a
-value its type forbids. The answer may be of any type.
+Rust mods only. `cargo enshwick deps --luau` leaves such a call out and says
+why. It does so because a script could forge such a field's description and
+send the server a value its type forbids. The answer may be of any type.
 
-`enshwick.serve_call(call, handler)` at the top level of `main.luau` serves a
-call of the mod, as `load.serve_call` does. The script describes the call by
+`enshwick.serve_call(call, handler)` serves a call of the mod, as
+`load.serve_call` does. Call it at the top level of `main.luau`. The script describes the call by
 its local name, its input's fields and its answer, each a number, boolean,
 entity or GUID. The runtime lays them out and hashes them as `#[call]` does,
 so a Rust mod's caller of the same type reaches it:

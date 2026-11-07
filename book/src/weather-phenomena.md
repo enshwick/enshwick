@@ -11,18 +11,19 @@ change the game's.
 
 ## Adding and changing one
 
-During `init`, `load.add_weather_phenomenon(NewPhenomenon)` adds a copy of one of the
-game's phenomena under a content id, with its own probability, duration,
-radius, strength and effect, to the layer of the phenomenon it copies or to a
-layer named by its GUID. `load.change_weather_phenomenon` changes the values
-of the game's phenomenon or of one a mod added before. Mods that add or
-change phenomena apply in load order, each on the one before's result.
+During `init`, `load.add_weather_phenomenon(NewPhenomenon)` adds a copy of
+one of the game's phenomena under a content id. The copy has its own
+probability, duration, radius, strength and effect. It goes to the layer of
+the phenomenon it copies or to a layer named by its GUID.
+`load.change_weather_phenomenon` changes the values of the game's phenomenon
+or of one a mod added before. Mods that add or change phenomena apply in load
+order, each on the one before's result.
 
 ## What a copy keeps
 
-A copy keeps the clouds and look of the phenomenon it copies, and its effect
-is clouds, rain or a blizzard: the game knows no other, and a new look needs
-client assets. Clients draw weather from their own copy of the resource, so a
+A copy keeps the clouds and look of the phenomenon it copies. Its effect is
+clouds, rain or a blizzard, since the game knows no other. A new look needs
+client assets. Clients draw weather from their own copy of the resource. So a
 mod that adds a phenomenon runs on both sides. The resource holds at most 255
 phenomena, for the game and every mod together.
 
@@ -55,9 +56,9 @@ fn init(load: &mut enshwick::Load<'_>, rain: Guid) -> Result<(), enshwick::Off> 
 ## From Luau
 
 The same calls are `enshwick.weather.add_weather_phenomenon{...}` and
-`enshwick.weather.change_weather_phenomenon(guid, {...})`, at the top level
-of `main.luau`, with the fields of `NewPhenomenon` and `PhenomenonChange`;
-a duration is in seconds of game time.
+`enshwick.weather.change_weather_phenomenon(guid, {...})`. They run at the
+top level of `main.luau`. They take the fields of `NewPhenomenon` and
+`PhenomenonChange`. A duration is in seconds of game time.
 
 ```luau
 local rain = "<the GUID of one of the game's rain phenomena>"

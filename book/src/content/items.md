@@ -6,8 +6,9 @@ description: Add an item to the game with Load::add_item: a clone of a vanilla i
 # Items
 
 [`Load::add_item`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/items.rs)
-adds an item to the game: a clone of a vanilla one that looks and behaves
-like it, under a [content id](../content.md#content-ids) of its own. It takes
+adds an item to the game. The item clones a vanilla one under a
+[content id](../content.md#content-ids) of its own, and looks and behaves
+like it. It takes
 its own name and description if you give them.
 
 ## A first item
@@ -68,9 +69,10 @@ enshwick.content.add_item({
 A real mod keeps the texts in `src/texts.toml` and reads them with
 `load.texts()`; see [Texts](texts.md).
 [`vanilla::item`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/vanilla.rs)
-names a vanilla item by its debug name, also as `deps::vanilla::item` of
-[`deps!`](../concepts/loader-and-abi.md#the-manifest); a name the game lacks turns the mod
-off, with the names that look like it in the log.
+names a vanilla item by its debug name.
+[`deps!`](../concepts/loader-and-abi.md#the-manifest) offers it too, as
+`deps::vanilla::item`. A name the game lacks turns the mod off, with the names
+that look like it in the log.
 
 ## `NewItem`
 
@@ -89,11 +91,14 @@ off, with the names that look like it in the log.
 other fields with struct update syntax. `add_item` declares the item's id,
 its meter template's and its icon's.
 
-`add_item` serves two resources: the new item's data, built from the
-vanilla one with the new id, GUID, name, description, meter and tooltip lines
-written in, and the item registry with the new GUID listed after the others;
-with a meter also the entity template and the template collection with it.
-With an icon it serves the icon's UI image too. Everything else in the
+`add_item` serves two resources:
+
+- the new item's data, built from the vanilla one with the new id, GUID,
+  name, description, meter and tooltip lines written in;
+- the item registry with the new GUID listed after the others.
+
+With a meter it also serves the entity template and the template collection
+with it. With an icon it serves the icon's UI image too. Everything else in the
 item data is the vanilla item's, so a cloned chest places the same vanilla
 chest.
 
@@ -110,8 +115,8 @@ it from a [recipe](recipes.md), loot, or a mod's
 
 A meter is a count each item keeps on its own, from 0 to a maximum, such as
 the charges of a staff. The game keeps it as it keeps the water pouch's
-water: on the item's own entity, saved with the world, sent to players and
-drawn as a bar on the item's slot.
+water, on the item's own entity. The meter is saved with the world, sent to
+players and drawn as a bar on the item's slot.
 
 ```rust
 use enshwick::content::{Id, id, vanilla};
@@ -137,13 +142,16 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 | `max` | The most it holds, 1 or more. |
 | `start` | What a new item holds when nothing sets its fill. |
 
-Each new item starts at `start`, or at the fill the give names: an
-[`Op::Give`](../inventories.md) with `fill: Some(Fill::of(count, max))`, or a
-[drop](random-loot.md) with `.meter(min, max, of)` for a count rolled as it
-drops. [`World::item_meter`](../world.md) reads it and
-`change_item_meter` changes it, on the server's game thread;
-[`Reader::meter`](../inventories.md) reads it as clients see it, and so does
-a summoning staff's [`Summon`](../survivors.md).
+Each new item starts at `start`, or at the fill the give names:
+
+- an [`Op::Give`](../inventories.md) with `fill: Some(Fill::of(count, max))`;
+- a [drop](random-loot.md) with `.meter(min, max, of)`, for a count rolled as
+  it drops.
+
+[`World::item_meter`](../world.md) reads it and `change_item_meter` changes
+it, on the server's game thread. [`Reader::meter`](../inventories.md) reads it
+as clients see it. A summoning staff's [`Summon`](../survivors.md) reads it
+the same way.
 
 The item gets an entity of its own (the game's `HasPIDE`) and keeps its
 count as fuel (`UsesFuel`), which is what draws the bar. An item that has an
@@ -173,8 +181,13 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
-`StatFormat::Number` reads `5`, `Signed` reads `+5` and `Percent` reads
-`5%`. The lines are the same for every item of the type; what one item holds
+Each `StatFormat` shows the value 5 its own way:
+
+- `StatFormat::Number` reads `5`;
+- `Signed` reads `+5`;
+- `Percent` reads `5%`.
+
+The lines are the same for every item of the type; what one item holds
 of its own shows through its meter.
 
 ## Icons
@@ -186,7 +199,7 @@ is a UI image the mod serves under a content id of its own, made when the
 client first shows it:
 
 - `Pixels::Tint(Tint { colour, amount })` recolours the vanilla icon
-  `like`: every pixel moves `amount` percent toward `colour` at its own
+  `like`. Every pixel moves `amount` percent toward `colour` at its own
   brightness, so the shading stays. The pixels come from the player's own
   game files, so no game data ships with the mod;
 - `Pixels::Png(include_bytes!("icon.png"))` draws the mod's own picture,
@@ -214,13 +227,14 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
-`like` is the vanilla icon's GUID: an item's own GUID for an item whose icon
-the game draws from its model, most items, or the GUID in its `iconImage`.
+`like` is the vanilla icon's GUID. Most items have an icon the game draws from
+their model, and for them it is the item's own GUID. Otherwise it is the GUID
+in the item's `iconImage`.
 
-An icon shows on a client whose loader knows the build's texture code: the
-loader serves the pixels, lists the icon with the game's UI images and
-waits until the UI knows it before an item names it, since a UI image the
-UI does not know ends the game. Anywhere else, a client of another build or
+An icon shows on a client whose loader knows the build's texture code. There
+the loader serves the pixels and lists the icon with the game's UI images. It
+waits until the UI knows the icon before an item names it, since a UI image
+the UI does not know ends the game. Anywhere else, a client of another build or
 the dedicated server, the item keeps its vanilla icon. `Load::add_icon`
 serves an icon alone, for an item a mod serves itself.
 
@@ -231,9 +245,10 @@ reads the textual form `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` and stores the
 bytes in the order the game keeps them in memory. It is a `const fn`: in a
 constant, a malformed GUID fails the build.
 
-The game numbers items, recipes and workshops by a 32-bit id, which
+The game numbers items, recipes and workshops by a 32-bit id.
 [`Guid::fnv1a`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)
-computes from the GUID; `ItemId::from_guid` and `RecipeId::from_guid` give it its type. The id is what an inventory slot holds and what the
+computes it from the GUID. `ItemId::from_guid` and `RecipeId::from_guid` give
+it its type. The id is what an inventory slot holds and what the
 [inventory](../inventories.md) calls take:
 
 ```rust
@@ -249,11 +264,15 @@ item: see [Content ids](../content.md#content-ids).
 
 ## Errors
 
-`add_item` returns `Err(Off)` when the game's reflection lacks a field the clone writes, when
-another mod serves the same item GUID from another vanilla item, when the
-meter's maximum is 0, or when the loader refuses one of its content ids. An
-item whose game id a vanilla item has turns the mod off when the game first
-reads the registry, with both items named in the mod's log. A meter on an item that has an entity already turns
+`add_item` returns `Err(Off)` in four cases:
+
+- the game's reflection lacks a field the clone writes;
+- another mod serves the same item GUID from another vanilla item;
+- the meter's maximum is 0;
+- the loader refuses one of its content ids.
+
+An item whose game id a vanilla item has turns the mod off when the game
+first reads the registry. The mod's log names both items. A meter on an item that has an entity already turns
 the mod off when the game reads the item.
 [`enshwick-personal-safes`](https://github.com/enshwick/mods/tree/main/personal-safes)
 adds its Safe this way.

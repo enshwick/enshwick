@@ -6,19 +6,18 @@ description: One mod offers functions to others as a service, a table of extern 
 # Services between mods
 
 One mod can offer functions to others as a **service**, a table of
-`extern "system"` functions, and tell them what happens with a **mod
-event**, plain data it sends to every mod that subscribed.
+`extern "system"` functions. It can also tell them what happens with a
+**mod event**: plain data it sends to every mod that subscribed.
 
 ## Before you write one
 
-Mods are separate
-DLLs, possibly built with different compilers months apart, so the loader
-checks at load time that both sides agree on every field, and refuses a
-mismatch with a message that names the field.
+Mods are separate DLLs, possibly built with different compilers months
+apart. So the loader checks at load time that both sides agree on every
+field. It refuses a mismatch with a message that names the field.
 
 A service carries one mod's own logic to another. Game data, such as altars,
 their zones and bases, comes from the platform's API instead (see
-[Altars and bases](altars.md)), so mods need not depend on each other for it.
+[Altars and bases](altars.md)). So mods need not depend on each other for it.
 To let other mods change one of your mod's rules, define an extension point
 instead (see [Extending other mods](extending.md)). A single function that
 mods in other languages call too is a [call](calls.md).
@@ -53,31 +52,39 @@ pub struct Sold {
 ```
 
 - [`#[service]`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs)
-  and `#[event]` make the struct `repr(C)` and give it a layout: a hash per
-  field of its name, the shape of its type, its size, alignment and offset.
+  and `#[event]` give the struct a layout. They also make it `repr(C)`. The
+  layout is a hash per field of its name, the shape of its type, its size,
+  alignment and offset.
 - The full name is `<id>:<what>`, with the id from the publisher's
-  `Cargo.toml`, the form content ids and extension points use: here
-  `you.trading-post:prices`. An event's name must start with its definer's
+  `Cargo.toml`. Content ids and extension points use the same form. Here it
+  is `you.trading-post:prices`. An event's name must start with its definer's
   id; the loader refuses others.
 - `version` is the major version of the service, 1 when left out.
-- Every field's type implements [`Shape`](#shapes): its structural hash
+- Every field's type implements [`Shape`](#shapes). Its structural hash
   reaches into the type, so a change inside it refuses the link with the name
   of the outer field.
 - An event's data has no padding, since a [Luau mod](#mod-events)
-  hears it as bytes: the build fails on a gap, and its bytes become fields of
+  hears it as bytes. The build fails on a gap, and its bytes become fields of
   their own.
 
 Pass plain data across a table or in an event: integers, floats, `repr(C)`
 structs, and pointers with a length the caller owns. An event is `Copy`.
-Never pass Rust types such as `String`, `Vec` or `Box`, and never free memory
-the other side allocated.
+Never pass Rust types such as `String` or `Vec`. The same holds for `Box`.
+Never free memory the other side allocated.
 
 ### Shapes
 
 A field's hash reaches into its type through [`Shape`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/shape.rs).
-Integers, floats, `bool` (with its two values), arrays, pointers, `Option`
-and `extern` function pointers have one already, as do the API's own types
-such as `Entity` and `Guid`. A type of the mod's own derives it:
+These types have one already:
+
+- integers and floats
+- `bool`, with its two values
+- arrays and pointers
+- `Option`
+- `extern` function pointers
+- the API's own types, such as `Entity` and `Guid`
+
+A type of the mod's own derives it:
 
 ```rust
 use enshwick::Shape;
@@ -107,17 +114,22 @@ pub struct Opened {
 }
 ```
 
-A struct hashes its name and every field with its offset and shape; an enum,
-which has an integer `repr` and unit variants, every variant with its
-discriminant; a newtype with `#[shape(values(..))]` the named constants with
-their values. Adding a variant, renumbering one, giving a nested struct
-another field or a constant another value changes the outer field's hash, so
-two mods that read the same bytes differently never link.
+What a type hashes depends on its kind:
+
+- A struct hashes its name and every field with its offset and shape.
+- An enum, which has an integer `repr` and unit variants, hashes every variant
+  with its discriminant.
+- A newtype with `#[shape(values(..))]` hashes the named constants with their
+  values.
+
+Each of these changes the outer field's hash: adding a variant, renumbering
+one, giving a nested struct another field or a constant another value. So two
+mods that read the same bytes differently never link.
 
 ## Publishing
 
 [`load.publish(&TABLE)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
-publishes a `'static` table during `init`:
+publishes a `'static` table. It does so during `init`:
 
 ```rust
 #[enshwick::service(name = "prices", export)]
@@ -140,12 +152,12 @@ A name and major are published once: a second publisher is refused. One mod
 may publish several majors of a service side by side.
 
 Other mods reach the service and the event only when the publisher
-[exports](concepts/loader-and-abi.md#what-other-mods-may-use) them, with
-`export` on their declarations, as in
+[exports](concepts/loader-and-abi.md#what-other-mods-may-use) them. The publisher marks them
+with `export` on their declarations. The declarations then read
 `#[enshwick::service(name = "prices", export)]` and
 `#[enshwick::event(name = "sold", export)]`. An exported table's fields are
 `extern "system"` functions and data whose types and arguments a schema
-describes: numbers, `bool`, the API's own types and types that derive
+describes. A schema describes numbers, `bool`, the API's own types and types that derive
 `Shape`. Any other field fails the build. A Luau mod cannot call a
 service, so `cargo enshwick deps --luau` leaves services out and says so.
 
@@ -154,11 +166,11 @@ service, so `cargo enshwick deps --luau` leaves services out and says so.
 [`load.service::<T>()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
 returns the table once the loader has checked that the published table
 starts with every field of `T`. The publisher's manifest carries the schema
-of every service it exports, and
-[`cargo enshwick deps`](extending.md#getting-a-points-definition) writes
-the declaration of `T` into `src/deps/trading_post.rs`, named with the alias
-the user's `Cargo.toml` gives the publisher (see [Load order](#load-order)),
-with checks that hold each field to the publisher's layout:
+of every service it exports. [`cargo enshwick deps`](extending.md#getting-a-points-definition)
+writes the declaration of `T`. The file is `src/deps/trading_post.rs`, named
+with the alias the user's `Cargo.toml` gives the publisher (see
+[Load order](#load-order)). It holds checks that hold each field to the
+publisher's layout:
 
 ```rust
 #[enshwick::service(name = "prices", of = trading_post, version = 1)]
@@ -177,14 +189,14 @@ No `unsafe` is needed: the check stands behind the reference. Keep it in the
 mod's state and call it from any thread the publisher allows.
 
 For a service the mod can do without, `load.optional_service::<T>()` returns
-`None` instead of an error, and logs a warning when a table is published but
+`None` instead of an error. It logs a warning when a table is published but
 does not serve `T`.
 
 ## Mod events
 
 The definer defines its event during `init` and keeps the
 [`Emitter`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/services.rs)
-it gets back; sending calls every subscriber's handler on the sending
+it gets back. Sending calls every subscriber's handler on the sending
 thread, with no queue and no allocation:
 
 ```rust
@@ -212,9 +224,9 @@ fn sell(item: u32, price: u32) {
 
 The definer's manifest carries the event's schema, since the event is
 declared without `of`. Other mods take the declaration
-from it: [`cargo enshwick deps`](extending.md#getting-a-points-definition)
+from it. [`cargo enshwick deps`](extending.md#getting-a-points-definition)
 writes it into `src/deps/trading_post.rs`, with the definer's points and
-calls, as `#[enshwick::event(name = "sold", of = trading_post)]`. They
+calls. The declaration reads `#[enshwick::event(name = "sold", of = trading_post)]`. They
 subscribe during `init`:
 
 ```rust
@@ -235,9 +247,9 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
   is refused; see
   [What other mods may use](concepts/loader-and-abi.md#what-other-mods-may-use).
 - The loader matches subscriptions once every mod is initialised. With no
-  running mod defining the event, or a definition that lacks or changed a
-  field of the subscriber's, it logs why under the subscriber's id and the
-  handler stays idle.
+  running mod defining the event, the loader logs why under the subscriber's
+  id, and the handler stays idle. The same happens when a definition lacks or
+  changed a field of the subscriber's.
 - Events sent during `init` reach no one.
 - A handler runs on the sender's thread, inside the sender's call: keep it
   short, and hand long work to the [scheduler](events.md).
@@ -259,7 +271,7 @@ update trading-post
 ```
 
 Changing a field already published, its type, order or meaning, is a new
-major: publish the new table as `version = 2`, and keep publishing version 1
+major. Publish the new table as `version = 2`. Keep publishing version 1
 beside it while users of it remain.
 
 ## Load order
@@ -272,14 +284,14 @@ the user's [manifest](concepts/loader-and-abi.md#the-manifest):
 trading_post = { id = "you.trading-post", version = ">=0.1, <1.0" }
 ```
 
-The alias names the publisher in the user's declarations:
+The alias names the publisher in the user's declarations.
 `#[enshwick::event(of = trading_post, name = "sold")]` is
-`you.trading-post:sold`, and the same `of` works on `#[service]` (see
+`you.trading-post:sold`. The same `of` works on `#[service]` (see
 [naming dependencies](concepts/loader-and-abi.md#the-manifest)).
 
 `requires` loads the publisher first, and skips the user with a reason when
 the publisher is missing or its version is out of range. Before 1.0 every
-minor release may bump `0.x`, and `^0.1` refuses 0.2.0: name the whole series
+minor release may bump `0.x`, and `^0.1` refuses 0.2.0. So name the whole series
 that publishes the fields the user needs, such as `>=0.1, <1.0`. `after`
 orders without requiring: use it with `optional_service` or an event
 the mod can do without.
@@ -307,8 +319,9 @@ events, not services: a service is a table of native functions.
 
 `pack.toml` names the mods a Luau mod depends on under aliases, as a
 [data pack](content/packs.md#packtoml) does. `enshwick.deps` holds a table
-per alias of `requires` and `after`, as `deps!` does for a Rust mod: `id` is
-the mod's id, and `running()` says whether it runs now. A mod of `requires`
+per alias, as `deps!` does for a Rust mod. The aliases are those of
+`requires` and `after`. In each table, `id` is the mod's id. `running()` says
+whether the mod runs now. A mod of `requires`
 always runs beside this one. Read `running()` for one of `after`:
 
 ```toml
@@ -326,11 +339,21 @@ end
 
 A Luau mod hears another mod's events and sends its own.
 `cargo enshwick deps <alias> --luau` writes the description of each event the
-owner declares, beside its points. A description may also be written by hand:
-each field with a `name` and how it reads, `u8` to `i64`, `f32`, `f64`,
-`bool`, `guid`, or an id: `entity`, `item_id`, `recipe_id`,
-`knowledge_id`, `skill_node`, `player_key`, `buff_type_id` or `npc_id`, laid
-out and hashed as Rust lays out a `#[repr(C)]` struct of those fields:
+owner declares, beside its points. A description may also be written by hand. It gives each field a `name` and
+how it reads. A field reads as a number, `bool`, `guid` or an id. The
+integers are `u8-i64`. The floats are `f32` and `f64`. The ids are these:
+
+- `entity`
+- `item_id`
+- `recipe_id`
+- `knowledge_id`
+- `skill_node`
+- `player_key`
+- `buff_type_id`
+- `npc_id`
+
+The fields are laid out and hashed as Rust lays out a `#[repr(C)]` struct of
+those fields:
 
 ```luau
 local greeted = enshwick.define_event({ name = "greeted", fields = {
@@ -343,11 +366,11 @@ enshwick.on_mod_event(require("./deps/trading_post/sold"), function(sold)
 end)
 ```
 
-The loader matches a subscription by its layout hashes, as for a Rust mod,
-and leaves it idle, with the reason in the log, when the defining mod's
-event differs or is smaller. `define_event` takes the event's local name:
-`greeted` is `you.greeter:greeted`, as `#[event(name = "greeted")]` is for a
-Rust mod. An event a script defines has primitive fields only.
+The loader matches a subscription by its layout hashes, as for a Rust mod.
+When the defining mod's event differs or is smaller, the loader leaves the
+subscription idle, with the reason in the log. `define_event` takes the
+event's local name. Here `greeted` is `you.greeter:greeted`. The same holds
+for `#[event(name = "greeted")]` in a Rust mod. An event a script defines has primitive fields only.
 `define_event` raises an error for a new event, or for changed fields, after
 the start: either takes the next start. A `send` before `main.luau` has
 finished reaches no one. Other mods hear the event only when `pack.toml`

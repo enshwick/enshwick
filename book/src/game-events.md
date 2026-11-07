@@ -34,28 +34,53 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 | Kind | Fields |
 | --- | --- |
-| `HitEvent` | `root_source_id` (who the hit is credited to), `source_id`, `target_id`, `root_target_id`, `weapon_pide_id`, `health_change` (below 0 for damage), `stamina_change`, `damage_types`, `attack_category`, `target_faction` |
-| `EntityDiedEvent` | `dead_entity_id`; enshwick's own `killer` (the last hit's attacker) and `killer_player` (the player credited with the kill) |
-| `LevelUpEvent` | `player_entity_id`, `level` |
-| `XpGainedEvent` | `player_entity_id`, `amount`, `source` (`Combat`, `Quest`, `Mining` and others) |
-| `CraftRecipeEvent` | `crafting_operator_id`, `crafting_station_id`, `recipe_id`, `recipe_amount` |
-| `CraftRecipeSuccessEvent` | `workshop_id`, `recipe_id` |
-| `AcceptOfferedInteractionEvent` | `guest_entity_id`, `host_entity_id`, `offer_id` |
-| `BuildingPlaceEvent`, `BuildingTearDownEvent`, `BuildingPickUpEvent` | `block` (`owner_id`, `position`, volume, `material`); `tracking_item_id` for `BuildingPlaceEvent`, `picked_entity_id` for `BuildingPickUpEvent` |
-| `FlameAltarEvent` | `player_entity_id`, `base_entity_id`, `r#type` (`Abandon`, `Reclaim`, `RemoveWater`, `SetAsPreferredSpawnAltar`) |
-| `LootInteractionEvent` | `guest_id`, `host_id`, `loot_all` |
-| `HandleEquipmentSlotChangedEvent` | `player_entity_id`, `equipment_slot` |
-| `RevivedPlayerEvent` | `target_entity_id`, `source_entity_id` |
+| `HitEvent` | `root_source_id`, who the hit is credited to |
+| | `source_id` and `target_id` |
+| | `root_target_id` and `weapon_pide_id` |
+| | `health_change`, below 0 for damage |
+| | `stamina_change` and `damage_types` |
+| | `attack_category` and `target_faction` |
+| `EntityDiedEvent` | `dead_entity_id` |
+| | `killer`, enshwick's own: the last hit's attacker |
+| | `killer_player`, enshwick's own: the player credited with the kill |
+| `LevelUpEvent` | `player_entity_id` and `level` |
+| `XpGainedEvent` | `player_entity_id` and `amount` |
+| | `source`. Its values include `Combat` and `Quest`. `Mining` is another. |
+| `CraftRecipeEvent` | `crafting_operator_id` and `crafting_station_id` |
+| | `recipe_id` and `recipe_amount` |
+| `CraftRecipeSuccessEvent` | `workshop_id` and `recipe_id` |
+| `AcceptOfferedInteractionEvent` | `guest_entity_id` and `host_entity_id` |
+| | `offer_id` |
+| `BuildingPlaceEvent` | `block` and `tracking_item_id` |
+| `BuildingTearDownEvent` | `block` |
+| `BuildingPickUpEvent` | `block` and `picked_entity_id` |
+| `FlameAltarEvent` | `player_entity_id` and `base_entity_id` |
+| | `r#type` |
+| | its value `Abandon` or `Reclaim` |
+| | its value `RemoveWater` or `SetAsPreferredSpawnAltar` |
+| `LootInteractionEvent` | `guest_id` and `host_id` |
+| | `loot_all` |
+| `HandleEquipmentSlotChangedEvent` | `player_entity_id` and `equipment_slot` |
+| `RevivedPlayerEvent` | `target_entity_id` and `source_entity_id` |
 
-Each kind and field takes the game's own name in Rust casing; `Block`,
-`killer` and `killer_player` are enshwick's and need the `unstable` feature.
+The `block` of a building event holds four values:
 
-The loader maps each kind and its fields to the running build, so a game
+- `owner_id`;
+- `position`;
+- the volume;
+- `material`.
+
+Each kind and field takes the game's own name in Rust casing. `Block` is
+enshwick's own type. So are the fields `killer` and `killer_player`. All three
+need the `unstable` feature.
+
+The loader maps each kind and its fields to the running build. So a game
 update that renames or moves them changes the loader, not your mod.
 
 Entities that may be missing are `Option`s. Kill credit comes from the hits
-the dead entity kept and the player the game credits, read while it is still
-in the world; an entity that kept no history has `None` there. Not all damage is a
+the dead entity kept and the player the game credits. Both are read while the
+entity is still in the world. An entity that kept no history has `None`
+there. Not all damage is a
 hit: falls and the shroud change health without one.
 
 ## Any event by name
@@ -81,14 +106,15 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 - `field` reads a field the type declares; `inherited_field` one of a base
   type, since reflection lists a field under the type that declares it.
-- `event.get(field)` is `None` for a field of another type, and
+- `event.get(field)` is `None` for a field of another type.
   `event.read::<T>(offset)` reads what reflection does not name, such as an
   array element. `event.bytes()` is the whole event.
-- Field types are the integers, `f32`, `f64`, `bool` and `Entity`.
+- Field types are the integers, `f32` and `f64`. `bool` and `Entity` are
+  field types too.
 
 `load.on_every_raw_game_event(|event| ...)` receives every event of every type,
-for finding out what the game raises, and `load.game_event_types()` lists every
-event type the running build reflects, with its name, hash and size; the
+for finding out what the game raises. `load.game_event_types()` lists every
+event type the running build reflects, with its name, hash and size. The
 [probe](https://github.com/enshwick/mods/tree/main/devtools/enshwick-probe)
 uses both to count events by name. Each event is copied for the mod, so leave
 it to development builds.
@@ -112,7 +138,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 The server's systems write events into streams while they run. At the start
 of the next step, on the game thread and before any system runs, the engine
-moves the streams into its event queues; the loader copies the events a mod
+moves the streams into its event queues. The loader copies the events a mod
 asked for there and hands them over right after. So a handler:
 
 - runs on the server's game thread, where [`World`](world.md) reads work, and
@@ -122,22 +148,23 @@ asked for there and hands them over right after. So a handler:
   your own.
 
 Subscribe during `init`. The loader links the engine's move only when a mod
-subscribed to a game event, so unused events cost nothing; with
+subscribed to a game event, so unused events cost nothing. With
 subscribers, the move costs one hash lookup per event. On a client the events
 come from the built-in server while it hosts a game, as server events do.
 
 ## Testing
 
 [`FakeHost`](testing.md) records the types a mod asked for in
-`game_event_types()`, and `raise_game_event(type_hash, bytes)` hands an event
-to the mod's handlers. `game_event_type(name, hash, size)` gives the fake build an
-event type that `load.game_event_types()` lists and `load.game_event_type` resolves;
-give it the offsets the mod resolves with `field_offset`.
+`game_event_types()`. `raise_game_event(type_hash, bytes)` hands an event
+to the mod's handlers. `game_event_type(name, hash, size)` gives the fake
+build an event type. `load.game_event_types()` lists that type, and
+`load.game_event_type` resolves it. Give the fake type the offsets the mod
+resolves with `field_offset`.
 
 ## From Luau
 
-`enshwick.on` takes the name of a typed game event, such as `HitEvent` or
-`EntityDiedEvent`. The handler gets the event's fields as
+`enshwick.on` takes the name of a typed game event. Examples are `HitEvent`
+and `EntityDiedEvent`. The handler gets the event's fields as
 `game_events::HitEvent` has them, a mask as the list of its bit names, a game
 value as its name. A value the API does not name arrives as
 `Other(<number>)`, a name of ours with the game's number in it:
@@ -151,8 +178,16 @@ end)
 ```
 
 Any other game event is read by its reflected type and the fields the script
-names, each with how to read it: `u8`, `i8`, `u16`, `i16`, `u32`, `i32`,
-`u64`, `i64`, `f32`, `f64`, `bool` or `entity`, the 64-bit ones as strings.
+names. Each field comes with how to read it, one of these:
+
+- `u8` or `i8`
+- `u16` or `i16`
+- `u32` or `i32`
+- `u64` or `i64`
+- `f32` or `f64`
+- `bool` or `entity`
+
+The 64-bit ones arrive as strings.
 `enshwick.game_event_types()` lists every type of the running build with
 its size. A field the type lacks on this build leaves the mod off at start,
 with the reason in the log.
@@ -164,4 +199,4 @@ end)
 ```
 
 Game events run on the server's game thread before the step's systems, as
-for a Rust mod; on a client, only while it hosts a game.
+for a Rust mod. On a client they run only while it hosts a game.

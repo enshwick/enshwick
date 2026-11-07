@@ -5,8 +5,8 @@ description: A mod is a DLL that exports four functions over the C ABI, so C, C+
 
 # Mods in C
 
-A mod is a DLL that exports four functions over the C ABI, so C, C++, Zig,
-Odin or any language that can include a C header can write one. Here you build
+A mod is a DLL that exports four functions over the C ABI. That lets C, C++,
+Zig, Odin or any language that can include a C header write one. Here you build
 the example mod
 [`hello.c`](https://github.com/enshwick/enshwick/blob/main/examples/hello-c/hello.c).
 
@@ -20,19 +20,29 @@ layout on every change. `hello.c` writes one line to the log when it starts.
 ## Write the mod
 
 1. Copy `enshwick.h` next to your source file.
-2. Fill a static `EnshwickManifest`: its `header` is the struct's size,
-   `ENSHWICK_ABI_MAJOR` and `ENSHWICK_ABI_MINOR`; a mod needs at least `id`,
-   `version` and `side`. `ENSHWICK_STR_INIT("text")` makes a string.
-3. Define `enshwick_mod_abi`, `enshwick_mod_query`, `enshwick_mod_init` and
-   `enshwick_mod_ready`. The header
-   declares them with `ENSHWICK_EXPORT`, so the DLL exports them.
-4. In `enshwick_mod_init`, call the loader through the `EnshwickHostApi` table
-   it passes, such as `host->log(me, EnshwickLevel_INFO, line)`.
+2. Fill a static `EnshwickManifest`. Its `header` is the struct's size and the
+   ABI version. The version is `ENSHWICK_ABI_MAJOR` and `ENSHWICK_ABI_MINOR`.
+   A mod needs at least `id` and `version`. It needs `side` too.
+   `ENSHWICK_STR_INIT("text")` makes a string.
+3. Define the four functions the DLL exports:
+   - `enshwick_mod_abi`
+   - `enshwick_mod_query`
+   - `enshwick_mod_init`
+   - `enshwick_mod_ready`
 
-Names follow one pattern: Rust's `Status::OK` is `EnshwickStatus_OK`, the type
-`HookSpec` is `EnshwickHookSpec`, and a constant such as `MAX_ZONES` is
-`ENSHWICK_MAX_ZONES`. Every comment in the header is the Rust item's
-documentation.
+   The header declares them with `ENSHWICK_EXPORT`, so the DLL exports them.
+4. In `enshwick_mod_init`, call the loader through the `EnshwickHostApi` table
+   it passes. An example is `host->log(me, EnshwickLevel_INFO, line)`.
+
+Names follow one pattern:
+
+| Rust item                | C name               |
+| ------------------------ | -------------------- |
+| `Status::OK`             | `EnshwickStatus_OK`  |
+| the type `HookSpec`      | `EnshwickHookSpec`   |
+| a constant: `MAX_ZONES`  | `ENSHWICK_MAX_ZONES` |
+
+Every comment in the header is the Rust item's documentation.
 
 ## Build it
 
@@ -50,15 +60,15 @@ calls the C runtime links it as usual: with Visual Studio's `cl /LD`, `clang-cl`
 or [cargo-xwin](https://github.com/rust-cross/cargo-xwin)'s SDK off Windows.
 
 The loader loads your mod with
-[`LoadLibraryExW`](https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-loadlibraryexw)
-and the flags `LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR` and
-`LOAD_LIBRARY_SEARCH_DEFAULT_DIRS`, so a DLL your mod links against loads
-only from your mod's folder, the game's folder or the Windows system folder,
-never from the current directory or `PATH`. Ship every DLL it links against
+[`LoadLibraryExW`](https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-loadlibraryexw).
+It passes the flags `LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR` and
+`LOAD_LIBRARY_SEARCH_DEFAULT_DIRS`. So a DLL your mod links against loads
+only from your mod's folder, the game's folder or the Windows system folder.
+It never loads from the current directory or `PATH`. Ship every DLL it links against
 beside it, or link the C runtime statically (`/MT`). A DLL your mod loads
 itself, or marks for delay loading, follows
-[the default search order](https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-search-order),
-which leaves out your mod's folder: load it by its full path.
+[the default search order](https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-search-order).
+That order leaves out your mod's folder, so load such a DLL by its full path.
 
 ## Check it
 
@@ -70,7 +80,8 @@ loader starts it.
 ## Keep it current
 
 A loader loads a mod built against an older header while
-`ENSHWICK_ABI_MAJOR` is the same, so rebuild the mod against the `enshwick.h`
-of a release whose `ENSHWICK_ABI_MAJOR` differs from the one you built with.
+`ENSHWICK_ABI_MAJOR` is the same. So rebuild the mod when a release's
+`ENSHWICK_ABI_MAJOR` differs from the one you built with, against that
+release's `enshwick.h`.
 `enshwick_mod_abi` returns `ENSHWICK_ABI_MAJOR`. The
 [ABI reference](abi-reference.md#versions) has the rules.

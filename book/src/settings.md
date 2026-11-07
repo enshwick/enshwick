@@ -115,7 +115,7 @@ assert_eq!(cost.accepts(), "1 to 100");
 
 | Attribute        | Meaning                                                                                                                          |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `range = a..=b`  | Numbers from `a` to `b`, each element of a list of numbers too; `a..` and `..=b` leave one end open. Constants work              |
+| `range = a..=b`  | Numbers from `a` to `b`, each element of a list of numbers too. `a..` and `..=b` leave one end open. Constants work              |
 | `choices = [..]` | One of these values; any type serde writes, such as an enum's variants                                                           |
 | `text = "key"`   | The key of the field's label in the mod's [texts](content/texts.md), `config.<field>` by default; its description is `<key>.doc` |
 | `first = n`      | For a list, the number its first element shows with on the Mods screen, 1 by default                                             |
@@ -332,7 +332,7 @@ Rows speak the player's language through the mod's
 | a row's label | the field's text key: `config.<field>` or its `text` |
 | the description under it | `<key>.doc` |
 | a choice | `<key>.<choice>` |
-| a list element's label | `<key>.element`, with `{n}` for the number, such as `Flame level {n}` |
+| a list element's label | `<key>.element`, with `{n}` for the number. For example, `Flame level {n}` |
 
 Without a text, the label is the key in words and the description is the
 doc comment.

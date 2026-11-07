@@ -11,9 +11,9 @@ that runs.
 
 ## The lookups
 
-Every lookup returns `Result<_, Off>`: a mod that cannot find what it needs
-returns the `Off` with `?` and stays off, and the game runs vanilla
-where it would have acted.
+Every lookup returns `Result<_, Off>`. A mod that cannot find what it needs
+returns the `Off` with `?` and stays off. The game then runs vanilla where it
+would have acted.
 
 | Call | Finds | Survives updates |
 | --- | --- | --- |
@@ -58,16 +58,16 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
-`symbol` looks in the mod's own build rows first, then in the loader's table,
-and returns an absolute address: the row holds an offset from the game's image
+`symbol` looks in the mod's own build rows first, then in the loader's table.
+It returns an absolute address: the row holds an offset from the game's image
 base, and the loader adds the base. `constant` looks in the same two places and
 returns the value as it is.
 
 The loader finds what several mods share: the ECS iterator, component
 reads, chat, labels, inventories and so on. It finds them the same way on
 every game build, with no file made for the build. Most come from the
-engine routes: the loader finds them in the game's code through what the
-engine itself names, its ECS systems and its interface's debug strings. The
+engine routes. The loader finds them in the game's code through what the
+engine itself names: its ECS systems and its interface's debug strings. The
 few that no route reaches have an anchor: a code pattern that finds the
 entry on any build. Both are data in
 [`crates/enshwick-gamedata/anchors`](https://github.com/enshwick/enshwick/tree/main/crates/enshwick-gamedata/anchors),
@@ -100,9 +100,9 @@ age = 410
 "my-mod.spawn_return" = 0x22_368b
 ```
 
-- `side` is the binary the row is for: `"server"` for the dedicated server,
-  `"client"` for the game. The game's binary holds twins of the server's
-  functions, which run while it hosts a game, so a mod with server hooks pins
+- `side` is the binary the row is for. `"server"` is the dedicated server,
+  `"client"` the game. The game's binary holds twins of the server's
+  functions, which run while it hosts a game. So a mod with server hooks pins
   them in a `"client"` row as well (see
   [Sides and hosting](concepts/sides-and-hosting.md)).
 - `guid` and `age` identify the build: the GUID, as 32 lowercase hex digits,
@@ -117,12 +117,12 @@ running binary. Rows for other builds are ignored, so a mod can carry rows for
 several builds at once.
 
 [`enshwick-research`](https://github.com/enshwick/mods/blob/main/devtools/enshwick-research/src/lib.rs)
-pins the client functions it studies in a `"client"` row and two server
+pins the client functions it studies in a `"client"` row. It pins two server
 functions in a `"server"` row.
 
 When the game updates, a mod's new rows come from
-[`cargo enshwick pin`](https://github.com/enshwick/enshwick/blob/main/crates/cargo-enshwick/README.md#porting-build-rows-pin):
-given the old and the new executable, it finds every pinned symbol of each
+[`cargo enshwick pin`](https://github.com/enshwick/enshwick/blob/main/crates/cargo-enshwick/README.md#porting-build-rows-pin).
+It takes the old and the new executable. It finds every pinned symbol of each
 mod's rows again and puts the new rows next to the old ones. What it cannot place for sure it
 leaves out with a `pin:` note, for a human to settle. Rows that pin the start
 of a function or a call site port best; an address in the middle of code that
@@ -130,17 +130,17 @@ changed does not.
 
 ## When the build is unknown or an id is missing
 
-- **A new build.** The loader identifies the binary by its fingerprint and
-  finds its entries by the engine routes and the anchors, as on every build
-  (the
+- **A new build.** The loader identifies the binary by its fingerprint. It
+  finds its entries by the engine routes and the anchors, as on every build.
+  The
   [anchors](https://github.com/enshwick/enshwick/blob/main/crates/enshwick-gamedata/README.md#patterns)
-  describe their patterns). It searches on every start and writes nothing.
+  describe their patterns. It searches on every start and writes nothing.
   What neither finds is missing, so only the loader features and the mods
-  that need it turn off, and the log names the build. With `build_patterns =
-  false` in `enshwick.toml` in the game's folder, a build that no
-  compatibility report of the loader release covers stays vanilla instead,
-  and a mod that set a [hold](state.md) stops the game, so a world that needs
-  the mod is not opened without it. A mod's own rows cannot make an unknown
+  that need it turn off. The log names the build. With `build_patterns = false` in
+  `enshwick.toml` in the game's folder, a build that no compatibility report
+  of the loader release covers stays vanilla instead.
+  A mod that set a [hold](state.md) then stops the game, so a world that
+  needs the mod is not opened without it. A mod's own rows cannot make an unknown
   build known.
 - **Missing id.** An id that neither the mod's rows nor the loader finds
   gives `Off` with "missing on this game build". Only the mod that asked
@@ -164,21 +164,27 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
-- A pattern is hex bytes separated by spaces, two digits each, with `??` (or
-  `?`) for a byte that may be anything, such as a jump's displacement or a
-  field offset that moves between builds.
+- A pattern is hex bytes separated by spaces, two digits each. `??` (or `?`)
+  stands for a byte that may be anything. Examples are a jump's displacement
+  or a field offset that moves between builds.
 - It needs at least one fixed byte.
 - It must match exactly once. No match and more than one match both give `Off`,
   so a pattern never lands on the wrong place. Make it long enough to be unique.
 
 [`code::Pattern`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/code.rs)
-is the same parser and search, for use on any slice: `parse`, `matches`,
-`find_all` and `find_unique`, so a unit test can check a pattern against a
-copy of the bytes. `code::find_each_unique` searches for many patterns in one
-pass over the code. `load.code()` returns the game's code section as
-a `&[u8]` that starts at its absolute address, for a mod that reads the bytes
-around a match during `init`; it borrows the `Load`, since arming writes into
-the code afterwards:
+is the same parser and search, for use on any slice. Its functions are these:
+
+- `parse`;
+- `matches`;
+- `find_all`;
+- `find_unique`.
+
+So a unit test can check a pattern against a copy of the bytes.
+`code::find_each_unique` searches for many patterns in one pass over the code.
+
+`load.code()` returns the game's code section as a `&[u8]` that starts at its
+absolute address. It serves a mod that reads the bytes around a match during
+`init`. It borrows the `Load`, since arming writes into the code afterwards:
 
 ```rust
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {

@@ -22,9 +22,9 @@ enshwick = { workspace = true, features = ["test"] }
 
 ## The shape of a test
 
-You tell the fake what the game and the loader
-would answer, start the mod through the same exports the real loader calls,
-then check what the mod asked for and what its hooks and handlers do.
+You tell the fake what the game and the loader would answer. You start the
+mod through the same exports the real loader calls. Then you check what the
+mod asked for and what its hooks and handlers do.
 
 1. Build a [`FakeHost`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/test.rs)
    with what the game would answer: symbols, settings text, the side.
@@ -33,8 +33,8 @@ then check what the mod asked for and what its hooks and handlers do.
    fake, which is the loader of the process until it drops.
 3. Start the mod with `start(enshwick_mod_init, enshwick_mod_ready)`, the two
    exports [`declare_mod!`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/declare.rs)
-   writes. `start` runs `init`, and runs `ready` only when `init` returns
-   `Status::OK`.
+   writes. `start` runs `init` first. Then it runs `ready`, but only when
+   the first returns `Status::OK`.
 4. Check the outcome: the status, the logs, the hooks it linked. Call a detour
    or raise an event as the game would.
 
@@ -116,16 +116,19 @@ that function plays the original.
 
 Lookups you did not configure answer `Status::MISSING`, as a game build without
 them would. A world's settings files are empty unless `settings` or
-`settings_file` gives their text, so the mod reads its own defaults; the side
-defaults to `Side::SERVER` and the log level to `Level::INFO`. Raise
+`settings_file` gives their text. So the mod reads its own defaults. The side
+defaults to `Side::SERVER`, and the log level to `Level::INFO`. Raise
 `SettingsReplaced` for a world that loads, `SettingsChanged` for an edit while
 it runs.
 
-The fake refuses what the loader refuses, with the same status. A second
-hook of the mod on one function, one hook slot on two functions, a code
-patch outside the game's code or over another patch, a point not named
-after the mod's id, and a rate clients count from a mod without `join:
-true` are refused. Hooks, code patches, points and rates asked for after
+The fake refuses what the loader refuses, with the same status. It refuses
+these:
+
+- a second hook of the mod on one function;
+- one hook slot on two functions;
+- a code patch outside the game's code or over another patch;
+- a point not named after the mod's id;
+- a rate clients count from a mod without `join: true`. Hooks, code patches, points and rates asked for after
 `init` returns come too late.
 
 A test of the path where the game build lacks what the mod needs:
@@ -214,19 +217,29 @@ fact by hand where it tests that fact.
 ## Builder methods
 
 [`FakeHost`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/test.rs)
-is a builder: each method sets one thing the game would answer, such as the
-side, a symbol, a component, a player or another mod's service, and
+is a builder. Each method sets one thing the game would answer, such as the
+side, a symbol, a component, a player or another mod's service.
 `install()` ends it. Its rustdoc lists every method.
 
 ## What the installed fake shows
 
 `install()` returns an
-[`Installed`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/test.rs),
-whose methods fall into three groups, each listed in its rustdoc: starting
-the mod (`start`, `init`, `ready`, all `unsafe`: pass the exports of one
-`declare_mod!`), reading back what the mod asked for in order (`logs`,
-`hooks`, `chat` and the rest), and playing the game to it (`detour`,
-`raise`, `tick` and the rest).
+[`Installed`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/test.rs).
+Its methods fall into three groups, each listed in its rustdoc:
+
+- Starting the mod. These methods are `unsafe`: pass the exports of one
+  `declare_mod!`.
+  - `start`
+  - `init`
+  - `ready`
+- Reading back what the mod asked for, in order:
+  - `logs`
+  - `hooks`
+  - `chat` and the rest
+- Playing the game to it:
+  - `detour`
+  - `raise`
+  - `tick` and the rest
 
 Mid-function hooks run on registers you set up:
 
@@ -237,7 +250,7 @@ assert_eq!(loader.run_at(0x1_4000_1000, &mut registers), 0);
 ```
 
 An inventory request stays open until the test finishes it. `outcome` is an
-`InventoryResult` constant and `ops` holds one result per operation; the mod's
+`InventoryResult` constant. `ops` holds one result per operation. The mod's
 callback runs inside the call, as on the game thread:
 
 ```rust
@@ -252,14 +265,14 @@ assert!(!loader.finish_inventory(InventoryResult::COMMITTED, &done));
 ## One mod life per install
 
 Every `install` starts a new mod life, as a fresh load of the DLL would in
-the game: the mod's `init` runs again, and the platform's own state starts
-empty. Under `cargo test` the tests of one binary share a process, and the
-fake serves one test at a time: `install` waits while another test holds an
+the game. The mod's `init` runs again, and the platform's own state starts
+empty. Under `cargo test` the tests of one binary share a process. So the
+fake serves one test at a time. `install` waits while another test holds an
 installed fake, and panics when the same test still holds one.
 
 State a mod keeps in a `static` outside its own type survives into the next
-test, unless it lives in a `ModLocal`, which reads as empty again in every
-mod life:
+test. A `ModLocal` is the exception: it reads as empty again in every mod
+life:
 
 ```rust
 use enshwick::state::ModLocal;
@@ -282,8 +295,9 @@ one people play on, with a copy of a world:
   each line typed into it, so a mod's actions run without anyone joining;
 - [`enshwick-probe`](https://github.com/enshwick/mods/tree/main/devtools/enshwick-probe),
   a development mod that is never released, exercises the platform's world
-  API and game events and logs each check as `PASS`, `FAIL` or `SKIP` to
-  `logs/enshwick.probe_<date>_<time>.log`;
+  API and game events. It logs each check to
+  `logs/enshwick.probe_<date>_<time>.log`. A passed check logs `PASS`, a
+  failed one `FAIL`. A skipped one logs `SKIP`;
 - [`enshwick-research`](https://github.com/enshwick/mods/tree/main/devtools/enshwick-research),
   another development mod, logs what a running client hands its item
   tooltip and what a refused join leaves behind, to

@@ -13,10 +13,14 @@ Three typed hooks cover how characters grow, from
 `load.on_skill(skill, handler)` answers the game's checks of one `Skill` the
 platform names; the loader finds its node on the running game build.
 The handler gets a `SkillCheck` with the `SkillGate` that asks and the game's
-own answer, and returns `Some(true)` to unlock the skill for that
-check, `Some(false)` to lock it, or `None` for the game's answer. The platform
-names the gates it knows, such as `SkillGate::FlyMode`, so a mod can open one
-feature without touching the skill tree. It runs on both sides.
+own answer. It returns one of three answers for that check:
+
+- `Some(true)` unlocks the skill;
+- `Some(false)` locks it;
+- `None` keeps the game's answer.
+
+The platform names the gates it knows, such as `SkillGate::FlyMode`, so a mod
+can open one feature without touching the skill tree. It runs on both sides.
 
 ```rust
 use enshwick::progress::{Skill, SkillGate};
@@ -38,7 +42,7 @@ end)
 ## Comfort
 
 Each tick every comfort provider in a base registers its comfort for its
-category; the base keeps the best per category and a player's comfort is the
+category. The base keeps the best per category, and a player's comfort is the
 sum. `load.on_comfort(filter)` returns the value each registers. Filters of
 several mods run in load order, each on the last one's value. It runs on the
 server's worker threads for every base: keep it to arithmetic.
@@ -46,11 +50,16 @@ server's worker threads for every base: keep it to arithmetic.
 ## Experience
 
 `load.on_experience(filter)` sees every spawned character's experience before
-the server applies it: level, progress inside the level, what the level needs
-and the gained experience the game applies next, one `Experience` per
-character. Changes to `gained` are
-written back and sent to the players. `Levels` gives the level cap and what
-each level needs.
+the server applies it. It gets one `Experience` per character with these
+values:
+
+- the level;
+- the progress inside the level;
+- what the level needs;
+- the gained experience the game applies next.
+
+Changes to `gained` are written back and sent to the players. `Levels` gives
+the level cap and what each level needs.
 
 ```rust
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -66,5 +75,5 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 [`enshwick-shared-experience`](https://github.com/enshwick/mods/tree/main/shared-experience)
 keeps every character of a world up with the one furthest ahead in
-experience, through `on_experience`, in
+experience. It does so through `on_experience`, in
 [`lib.rs`](https://github.com/enshwick/mods/blob/main/shared-experience/src/lib.rs).

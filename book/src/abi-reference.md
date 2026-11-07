@@ -37,31 +37,31 @@ one:
 
 - A mod exports `enshwick_mod_abi`, the major it was built for. A loader of
   a newer major does not load it and logs
-  `<file> skipped: built for ABI major 5, and Enshwick 1.0.0-alpha.12 runs ABI 6.0: rebuild it for Enshwick 1.0.0-alpha.12`;
-  a loader of an older major logs that the mod is newer and asks to update
+  `<file> skipped: built for ABI major 5, and Enshwick 1.0.0-alpha.12 runs ABI 6.0: rebuild it for Enshwick 1.0.0-alpha.12`.
+  A loader of an older major logs that the mod is newer and asks to update
   Enshwick.
 - The manifest's header holds the minor. A loader older than that minor
   logs `<file> skipped: built for ABI 6.2, newer than ABI 6.0 of Enshwick 1.0.0-alpha.12: update Enshwick`.
 - Structs that cross the boundary on their own start with a
-  [`Header`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs):
-  the struct's size as its writer knew it and the writer's major and minor.
-  A reader takes a field only when
+  [`Header`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs).
+  It holds the struct's size as its writer knew it and the writer's major
+  and minor. A reader takes a field only when
   [`Header::covers`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
-  it, so a mod of an older minor and a loader of a newer one read the
+  it. So a mod of an older minor and a loader of a newer one read the
   fields both know. The loader requires of a mod's struct only
-  `Headed::BORN`, where the fields of the major's minor 0 end; the
-  golden file records it for every headed type, and the layout tests fail
+  `Headed::BORN`, where the fields of the major's minor 0 end. The
+  golden file records it for every headed type. The layout tests fail
   when an append moves it within a major.
 
 A mod keeps loading across every release of its major, so a mod author
-rebuilds only for a new major. Pin `enshwick` with `=` in a mod's
-`Cargo.toml`, such as `enshwick = "=1.0.0-alpha.12"`, as `cargo enshwick new`
-writes it; a caret requirement lets `cargo update` move the mod to a
-release of a newer minor, which older loaders refuse.
+rebuilds only for a new major. In a mod's `Cargo.toml`, pin the crate
+with an exact version, such as `enshwick = "=1.0.0-alpha.12"`.
+`cargo enshwick new` writes it so. A caret requirement lets `cargo update`
+move the mod to a release of a newer minor, which older loaders refuse.
 
-A loader built from a commit of `main` between two alphas, such as one from
-`cargo xtask dist`, loads a mod built against `main` from git, pinned to a
-commit:
+Some loaders are built from a commit of `main` between two alphas, such as
+one from `cargo xtask dist`. Such a loader loads a mod built against `main`
+from git, pinned to a commit:
 
 ```toml
 [dependencies]
@@ -80,8 +80,8 @@ the ABI, and a break raises the prerelease number of `1.0.0-alpha.N`.
 The repository checks this in CI:
 
 - A test fails when the layout of the ABI types differs from
-  `abi/layout.txt`, or when `ABI_MAJOR` and `ABI_MINOR` are not the
-  version the change needs; it names the version to set.
+  `abi/layout.txt`. It also fails when `ABI_MAJOR` and `ABI_MINOR` are
+  not the version the change needs. It names the version to set.
 - CI runs [cargo-semver-checks](https://github.com/obi1kenobi/cargo-semver-checks)
   on `enshwick` against its last release on crates.io, so a release whose
   version claims less change than its API made fails.
@@ -103,16 +103,22 @@ and unloaded.
 
 ## The manifest
 
-[`Manifest`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
-is what [`declare_mod!`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs)
-builds from the crate's `Cargo.toml`; the rustdoc of `abi::Manifest` lists its
-fields, and [the manifest](concepts/loader-and-abi.md#the-manifest) the keys
-they come from.
+The [`Manifest`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
+comes from the crate's `Cargo.toml`.
+[`declare_mod!`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs) builds it.
+The rustdoc of `abi::Manifest` lists its fields, and
+[the manifest](concepts/loader-and-abi.md#the-manifest) the keys they come
+from.
 
-The loader skips a mod whose manifest has another major or a newer minor, an invalid id, the
-loader's own id `enshwick`, a version that is not SemVer, an unknown side, or a
-dependency range that does not parse; the reason goes to the loader's log as
-`<file> skipped: <reason>`.
+The loader skips a mod whose manifest has any of these:
+
+- another major or a newer minor
+- an invalid id, or the loader's own id `enshwick`
+- a version that is not SemVer
+- an unknown side
+- a dependency range that does not parse
+
+The reason goes to the loader's log as `<file> skipped: <reason>`.
 
 ## Status codes
 
@@ -120,8 +126,8 @@ Every call that can fail returns a
 [`Status`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs).
 The safe layer turns a failed status into an
 [`Off`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
-reason of the form `<what>: <why>`, such as
-`symbol quest.reward: missing on this game build`:
+reason of the form `<what>: <why>`. For example:
+`symbol quest.reward: missing on this game build`.
 
 | Code | Constant        | Meaning                                                                    | `<why>` in the Off reason          |
 | ---- | --------------- | -------------------------------------------------------------------------- | ---------------------------------- |
@@ -140,15 +146,19 @@ reason of the form `<what>: <why>`, such as
 | 12   | `NOT_KEPT`      | Nothing finds the entity after a load: a player, or no place in the world  | `not found again after a load`     |
 | 13   | `UNAVAILABLE`   | The call cannot run here: no server runs, or the build lacks its pieces    | `not available here or on this game build` |
 
-`enshwick_mod_init` itself returns `OK`, `REFUSED` when `Mod::init` returned
-`Err(Off)`, or `FAULTED` when it panicked; the loader logs
-`off: init returned 3` or `off: init returned 6` under the mod's id.
+`enshwick_mod_init` itself returns one of three codes. The loader logs a
+refusal or a fault under the mod's id:
+
+| Code      | When                            | Log line               |
+| --------- | ------------------------------- | ---------------------- |
+| `OK`      |                                 |                        |
+| `REFUSED` | `Mod::init` returned `Err(Off)` | `off: init returned 3` |
+| `FAULTED` | `Mod::init` panicked            | `off: init returned 6` |
 
 Every host function answers a mod that is off with `FAULTED`, and a handle
 the loader never gave out with `BAD_ARGS`. A panic in the loader's own code
-behind a host function never reaches the mod: the call returns `REFUSED`
-(or zero for a function that returns a value) and the loader logs the
-fault.
+behind a host function never reaches the mod. The call returns `REFUSED`,
+or zero for a function that returns a value. The loader logs the fault.
 
 ## Ids
 
@@ -167,8 +177,8 @@ declares each as a typedef:
 
 `HostApi::recipe_kind` answers a
 [`RecipeKind`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi/content.rs)
-code, and a recipe selection of `change_data` and a recipe output `RateId`
-take one. A mod reads a code it does not know as `OTHER`.
+code. A recipe selection of `change_data` takes one, and so does a recipe
+output `RateId`. A mod reads a code it does not know as `OTHER`.
 
 | Code | Constant            | The item a recipe makes                                                                      |
 | ---- | ------------------- | -------------------------------------------------------------------------------------------- |
@@ -185,22 +195,22 @@ take one. A mod reads a code it does not know as `OTHER`.
 A mod subscribes with
 [`Load::on`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
 and the types in
-[`events`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/events.rs),
-or with a raw [`Event`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
+[`events`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/events.rs).
+It may also subscribe with a raw [`Event`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
 id through `Load::on_raw_event`. See [Events and the scheduler](events.md).
 
-`on_raw_event` takes the event's id, an `abi::Event` constant such as
-`Event::TICKED` (3), and hands the handler the data pointer, null for events
-without data. The rustdoc of `abi::Event` lists every id, and
+`on_raw_event` takes the event's id, an `abi::Event` constant. An example
+is `Event::TICKED` (3). It hands the handler the data pointer, null for
+events without data. The rustdoc of `abi::Event` lists every id, and
 [Event kinds](events.md#event-kinds) has each event's data, time and thread.
 
 ## The host table
 
 [`HostApi`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi/host_api.rs)
-is the table of functions the loader passes to `enshwick_mod_init`: every
-service a mod reaches, from logging and hooks to the world, content and
+is the table of functions the loader passes to `enshwick_mod_init`. It
+holds every service a mod reaches, from logging and hooks to the world, content and
 other mods. The safe layer wraps each field in a typed call. A field whose
 documentation says it is allowed during `enshwick_mod_init` only refuses
 later calls. The rustdoc of `abi::HostApi` lists every field with
-its threads and statuses, and `enshwick.h` has the same comments for C as
+its threads and statuses. `enshwick.h` has the same comments for C as
 `EnshwickHostApi`.

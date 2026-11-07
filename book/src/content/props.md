@@ -20,7 +20,7 @@ template of its own.
   with the `template` changes applied in order; the mod's item places this
   copy;
 - with `recipe_cost`, the vanilla prop's recipe as `<id>.recipe`, its
-  ingredient counts times the cost: the build menu lists the prop after the
+  ingredient counts times the cost. The build menu lists the prop after the
   vanilla one, unlocked with it.
 
 It returns a `PropId`: the item, which `world::Prop::item` reports for every
@@ -33,19 +33,22 @@ placed prop: the ids never change.
 ## A crafting prop
 
 A crafting prop stands near a workshop and lets it make recipes that require
-it, as the vanilla mortar does. `crafting_prop` makes the new prop one: the
-template is marked as the crafting prop `<id>.crafting-prop`, the game's
-workshop registry lists it, and each recipe in `recipes` requires it beside
-the props it requires already. A recipe named there is a vanilla one or one
+it, as the vanilla mortar does. `crafting_prop` makes the new prop one:
+
+- the template is marked as the crafting prop `<id>.crafting-prop`;
+- the game's workshop registry lists it;
+- each recipe in `recipes` requires it beside the props it requires already.
+
+A recipe named there is a vanilla one or one
 the mod added before the call.
 
-The game keeps the crafting props of a base in one mask of 64 bits, which
-vanilla and every mod share: the game's own props take 51 of them. The loader
+The game keeps the crafting props of a base in one mask of 64 bits. Vanilla
+and every mod share it, and the game's own props take 51 of the bits. The loader
 gives each new crafting prop the next free bit, in load order, and refuses one
 past the last, which turns its mod off. Load order is by mod id and
 dependencies, so the same mods give the same bits. The server sends clients
 the bits of a base's crafting props, so only a mod of side both adds a
-crafting prop: a client takes the same bits when it runs the world's mods
+crafting prop. A client takes the same bits when it runs the world's mods
 and no other mod with a crafting prop.
 
 ```rust
@@ -73,7 +76,7 @@ both sides.
 ## From Luau
 
 The same call is `enshwick.content.add_prop{...}`, at the top level of
-`main.luau`, with the same fields; `item` is the table `add_item` takes.
+`main.luau`, with the same fields. Its `item` is the table `add_item` takes.
 
 ```luau
 local chest = "<the GUID of the game's chest item>"

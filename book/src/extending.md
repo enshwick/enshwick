@@ -5,21 +5,22 @@ description: A mod lets other mods change one of its rules at a typed extension 
 
 # Extending other mods
 
-A mod can let other mods change one of its rules at an **extension point**:
-a typed question the mod asks whenever the rule applies, with its own answer
-first and every other mod's link after it.
+A mod can let other mods change one of its rules at an **extension point**.
+A point is a typed question the mod asks whenever the rule applies. The mod
+answers first, and each other mod's link follows.
 
 ## How links work
 
-Links attach in order, may change the answer or refuse where the point allows, and are checked against the
-point's declaration field by field when the game starts, like
-[services](services.md). A link that panics is turned off alone, the player
-can switch one link off without the mod, and the Mods screen and the
-[conflict report](logging.md#conflicts) show who extends what.
+Links attach in order and may change the answer, or refuse where the point
+allows. When the game starts, each link is checked against the point's
+declaration field by field, like [services](services.md). A link that panics
+is turned off alone. The player can switch one link off without the mod. The
+Mods screen and the [conflict report](logging.md#conflicts) show who extends
+what.
 
 The [examples](https://github.com/enshwick/enshwick/tree/main/examples)
-folder holds the mods this chapter follows: `trading-post` defines the point
-`you.trading-post:price`, what it pays for an item, and `haggling` extends it.
+folder holds the mods this chapter follows. `trading-post` defines the point
+`you.trading-post:price`, what it pays for an item. `haggling` extends it.
 Regular customers get more for what they sell, and the trading post buys no
 item on the refused list.
 
@@ -35,45 +36,79 @@ writes the definitions of everything a dependency offers from it, into
 cargo enshwick deps trading_post --from <game folder>
 ```
 
-The alias is the one the mod's `Cargo.toml` gives the owner in
-`[package.metadata.enshwick.requires]` or `after`; without an
-alias the tool writes a file for every dependency. Each definition names the
-point by its local name and the alias, as
-`#[enshwick::point(name = "price", of = trading_post, ..)]`. `--from` is the
-owner's DLL, a folder with it in it or in its `mods/`, such as the game's, or a
-schema file the owner published. The tool reads the schema from the DLL without
-running it. `enshwick::deps!()` at the crate root makes each file the public
-module `deps::<alias>`, so its types count as the mod's own API. The file ends
-with checks that hold it to the owner's layout; write it again when the owner
-adds fields or points, rather than editing it. A definition older than the owner keeps
-working, since points grow by appending fields, and one that no longer matches
-the owner leaves the link inert with the reason in the log.
+The alias is the one the mod's `Cargo.toml` gives the owner. It sits in
+`[package.metadata.enshwick.requires]` or `after`. Without an alias, the tool
+writes a file for every dependency. Each definition names the point by its
+local name and the alias, as
+`#[enshwick::point(name = "price", of = trading_post, ..)]`. `--from` names
+the owner's DLL or a schema file the owner published. It may also name a
+folder with the DLL in it or in its `mods/`, such as the game's. The tool
+reads the schema from the DLL without running it. `enshwick::deps!()` at the
+crate root makes each file the public module `deps::<alias>`, so its types
+count as the mod's own API. The file ends with checks that hold it to the
+owner's layout. When the owner adds fields or points, write the file again
+rather than editing it. A definition older than the owner keeps working,
+since points grow by appending fields. A definition that no longer matches
+the owner leaves the link inert, with the reason in the log.
 
 ### The schema
 
 The schema is TOML, the same for every language a definition is written in:
 
-| Table                                | Keys                                                                                                               |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| top                                  | `schema` (the format, 1), `mod` (the owner's id), `version` (the owner's)                                          |
-| `[[point]]`                          | `name`, `mode` (`observe`, `advise`, `override`), `refusable`, `input`, `output`, `doc`, `layout`, `output_layout` |
-| `[[type]]`                           | `name`, `doc`, `kind` (`struct`, `newtype`, `values`, `enum`), `repr` for `values` and `enum`                      |
-| `[[type.field]]`                     | `name`, `doc`, `type`                                                                                              |
-| `[[type.value]]`, `[[type.variant]]` | `name`, `doc`, `value`                                                                                             |
+| Table                                | Key                       | What it holds                |
+| ------------------------------------ | ------------------------- | ---------------------------- |
+| top                                  | `schema`                  | The format, 1                |
+| top                                  | `mod`                     | The owner's id               |
+| top                                  | `version`                 | The owner's version          |
+| `[[point]]`                          | `name`, `mode`            |                              |
+| `[[point]]`                          | `refusable`, `input`      |                              |
+| `[[point]]`                          | `output`, `doc`           |                              |
+| `[[point]]`                          | `layout`, `output_layout` |                              |
+| `[[type]]`                           | `name`, `doc`             |                              |
+| `[[type]]`                           | `kind`                    |                              |
+| `[[type]]`                           | `repr`                    | Only for `values` and `enum` |
+| `[[type.field]]`                     | `name`, `doc`             |                              |
+| `[[type.field]]`                     | `type`                    |                              |
+| `[[type.value]]`, `[[type.variant]]` | `name`, `doc`             |                              |
+| `[[type.value]]`, `[[type.variant]]` | `value`                   |                              |
 
-A type is a number (`u8` to `u64`, `i8` to `i64`, `f32`, `f64`), `bool`,
-`enshwick.entity`, `enshwick.guid`, or a `[[type]]` of the schema. `layout`
-lists each input field's layout hash and `output_layout` the answer's, as
-decimal text: a definition checks itself against them.
+A point's `mode` is one of three values:
+
+- `observe`
+- `advise`
+- `override`
+
+A type's `kind` is one of four values:
+
+- `struct`
+- `newtype`
+- `values`
+- `enum`
+
+A type in the schema is one of these:
+
+- an integer number: `u8-u64` or `i8-i64`
+- a float number: `f32` or `f64`
+- `bool`
+- `enshwick.entity` or `enshwick.guid`
+- a `[[type]]` of the schema
+
+`layout` lists each input field's layout hash and `output_layout` the
+answer's, as decimal text: a definition checks itself against them.
 
 ## Extending a point
 
 [`load.extend_point(order, link)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/points.rs)
-attaches `link` during `init`. The link gets the point's input and the answer
-so far, the owner's own or what the links before it left, and returns a
+attaches `link`. It runs during `init`. The link gets the point's input and
+the answer so far. That answer is the owner's own, or what the links before
+it left. The link returns a
 [`Verdict`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/points.rs):
-`Pass` keeps the answer, `Set(value)` changes it, and `Refuse` stops the
-chain where the point allows refusals. The heart of `haggling`, with the
+
+- `Pass` keeps the answer.
+- `Set(value)` changes it.
+- `Refuse` stops the chain where the point allows refusals.
+
+The heart of `haggling`, with the
 definition from [the schema](#getting-a-points-definition) in `price`:
 
 ```rust
@@ -119,9 +154,10 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 The example keeps its regulars in settings and swaps them whole when the
-settings change: a link may be asked on any thread the owner asks from, such
-as the server's worker threads inside the game's systems, so it reads
-lock-free state, never waits and never allocates on its common path. Each
+settings change. It does so because a link may be asked on any thread the
+owner asks from. Such threads include the server's worker threads inside the
+game's systems. So a link reads lock-free state, never waits and never
+allocates on its common path. Each
 point's documentation names its thread.
 
 `load.observe_point(order, link)` attaches a link that only sees each answer,
@@ -171,15 +207,16 @@ the mod runs and the loader's log says
 `point you.trading-post:price: the link stays inert: you.trading-post does not run`. Use
 `requires` when the mod is pointless without the owner: the loader then skips
 the mod with a reason. A required owner initialises first, so the loader
-checks a link to its point at once: when the owner defines no such point, or
-another declaration of it, `extend_point` and `observe_point` return `Off`
-and the log says
-`point you.trading-post:price: this mod requires you.trading-post, and the link cannot match: ...`
-with a reason of the table below. Other links match once every mod is
+checks a link to its point at once. If the owner defines no such point, or
+another declaration of it, `extend_point` and `observe_point` fail. Each
+returns `Off`, and the log says
+`point you.trading-post:price: this mod requires you.trading-post, and the link cannot match: ...`.
+A reason from [the table](#when-the-loader-leaves-a-link-inert) ends the
+line. Other links match once every mod is
 initialised, so load order does not matter for them. In a test, the fake
 loader refuses the same; define a required owner's point with
-`Installed::define_point` before the mod starts. A mod links each point once: a second
-`extend_point` or `observe_point` on the same point returns `Off`.
+`Installed::define_point` before the mod starts. A mod links each point once. A second `extend_point` or
+`observe_point` on the same point fails. It returns `Off`.
 
 An owner that is loaded but does not export the point refuses every link to
 it, required or not, and the log says
@@ -212,21 +249,27 @@ The point is answered without it from then on, and the mod keeps running.
 ## Defining a point
 
 The mod that owns a rule declares its point once with
-[`#[point]`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs):
-the input struct, the name `<owner id>:<point>`, the mode, the answer's type
-and, when links may refuse, `refusable`. Its schema ships with the mod (see
-[the manifest](concepts/loader-and-abi.md#schemas-for-other-mods)), so
-other mods can write their definitions from it, when it is marked `export`
-(see [what other mods may use](concepts/loader-and-abi.md#what-other-mods-may-use));
-without the flag it is the mod's own and other mods may not link it. Every field's
-type and the answer's are numbers, `bool`, `enshwick::Entity`,
-`enshwick::content::Guid`, or types of the mod's own with
-[`#[derive(Shape)]`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs);
-the doc comments of the point and its fields go into the schema too, each up
-to its first heading, so an `# Examples` section, whose code compiles only in
-the owner, stays out of other mods' definitions. The input and the answer have
-no padding, since a [Luau mod](#from-luau) reads them as
-bytes: the build fails on a gap, and its bytes become fields of their own, as
+[`#[point]`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs).
+The declaration gives the input struct, the name `<owner id>:<point>`, the
+mode and the answer's type. When links may refuse, it adds `refusable`. Its
+schema ships with the mod (see [the manifest](concepts/loader-and-abi.md#schemas-for-other-mods)), so other
+mods can write their definitions from it. They can do so only when the point
+is marked `export` (see [what other mods may use](concepts/loader-and-abi.md#what-other-mods-may-use)).
+Without the flag, the point is the mod's own and other mods may not link it.
+
+Every field's type and the answer's type is one of these:
+
+- a number
+- `bool`
+- `enshwick::Entity` or `enshwick::content::Guid`
+- a type of the mod's own with
+  [`#[derive(Shape)]`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs)
+
+The doc comments of the point and its fields go into the schema too, each up
+to its first heading. An `# Examples` section therefore stays out of other
+mods' definitions, since its code compiles only in the owner. The input and
+the answer have no padding, since a [Luau mod](#from-luau) reads them as
+bytes. The build fails on a gap, and its bytes become fields of their own, as
 for a [call](calls.md).
 
 ```rust
@@ -268,9 +311,14 @@ The mode is the owner's choice:
 | `Override` | may change the answer, and the owner takes it                       |
 
 [`decide`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/points.rs)
-returns `Kept(answer)`, `Changed(value)` or `Refused`. With no live link it
-is one atomic load and returns at once, so a point costs nothing until a mod
-extends it; with links it is one call into the loader and one call per link,
+returns one of three values:
+
+- `Kept(answer)`
+- `Changed(value)`
+- `Refused`
+
+With no live link, `decide` is one atomic load and returns at once, so a
+point costs nothing until a mod extends it. With links, it is one call into the loader and one call per link,
 without allocating. Ask the point where the rule is decided, on whatever
 thread that is, and keep the owner's own answer cheap to compute.
 
@@ -280,10 +328,10 @@ mode needs a new point name.
 
 ## Testing
 
-With the `test` feature the [fake loader](testing.md) plays the other side:
-for a mod that owns a point, `extend_point` attaches a link as another mod
-would and `defined_points` lists the points; for a mod that extends one,
-`ask_point` asks it as the owner would, in the loader's order, and
+With the `test` feature, the [fake loader](testing.md) plays the other side.
+For a mod that owns a point, `extend_point` attaches a link as another mod
+would. There, `defined_points` lists the points. For a mod that extends one,
+`ask_point` asks it as the owner would, in the loader's order. There,
 `attached_points` lists the links. A panicking link turns off as under the
 loader. The example's test:
 
@@ -327,30 +375,41 @@ fn a_regular_gets_more(loader: &enshwick::test::Installed) {
 
 Beside `examples/`, three released mods define points other mods may
 extend:
-[`enshwick-area-loot`](https://github.com/enshwick/mods/tree/main/area-loot)
-in [`points.rs`](https://github.com/enshwick/mods/blob/main/area-loot/src/points.rs),
-[`enshwick-personal-safes`](https://github.com/enshwick/mods/tree/main/personal-safes)
-in [`points.rs`](https://github.com/enshwick/mods/blob/main/personal-safes/src/points.rs)
-and
-[`enshwick-survivors-per-altar`](https://github.com/enshwick/mods/tree/main/survivors-per-altar)
-in [`points.rs`](https://github.com/enshwick/mods/blob/main/survivors-per-altar/src/points.rs).
+
+- [`enshwick-area-loot`](https://github.com/enshwick/mods/tree/main/area-loot)
+  in [`points.rs`](https://github.com/enshwick/mods/blob/main/area-loot/src/points.rs)
+- [`enshwick-personal-safes`](https://github.com/enshwick/mods/tree/main/personal-safes)
+  in [`points.rs`](https://github.com/enshwick/mods/blob/main/personal-safes/src/points.rs)
+- [`enshwick-survivors-per-altar`](https://github.com/enshwick/mods/tree/main/survivors-per-altar)
+  in [`points.rs`](https://github.com/enshwick/mods/blob/main/survivors-per-altar/src/points.rs)
+
 Their tests link each point through the fake host.
 
 ## From Luau
 
 A [Luau mod](luau.md) links into another mod's point as a Rust mod does; it
 owns no points of its own. `cargo enshwick deps <alias> --from <owner's DLL> --luau`
-writes a module for each point, call and event of the dependency that
-`pack.toml` names `<alias>` in `[requires]` or `[after]`, as
-`deps/<alias>/<name>.luau` with the owner's local name. A point's module holds
+writes a module for each point, call and event of a dependency.
+`pack.toml` names that dependency `<alias>`. It does so in `[requires]` or
+`[after]`. Each module is `deps/<alias>/<name>.luau`, with the owner's local
+name. A point's module holds
 the types it reaches, its named values, and each field's place with the
 layout hash the owner's build wrote. The loader links only when every hash
-matches the owner's, the input the module reads is no larger than the
-owner's and the answer has the owner's size. A script changes an answer only
-of a number, `boolean`, GUID or id type (`Entity`, `ItemId`, `RecipeId`,
-`KnowledgeId`, `SkillNode`, `PlayerKey`, `BuffTypeId`, `NpcId`), whose hash
-the runtime checks against the type the module names; on another answer type
-it may observe the point. The handler gets the input and the answer so far,
+matches the owner's. The input the module reads must also be no larger than
+the owner's, and the answer must have the owner's size. A script changes an
+answer only of a number, `boolean`, GUID or id type. These are the id types:
+
+- `Entity`
+- `ItemId`
+- `RecipeId`
+- `KnowledgeId`
+- `SkillNode`
+- `PlayerKey`
+- `BuffTypeId`
+- `NpcId`
+
+The runtime checks the answer type's hash against the type the module names.
+On another answer type, a script may observe the point. The handler gets the input and the answer so far,
 and returns a new answer, `nil` to keep it, or `enshwick.refuse` on a
 refusable point. An `Order` as a third argument places the link, as
 `Order` does in Rust:
