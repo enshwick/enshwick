@@ -5,7 +5,7 @@ mods. It starts a Rust mod, a Luau mod or a data pack, and it installs a mod
 into the game.
 
 ```sh
-cargo install --git https://github.com/enshwick/enshwick cargo-enshwick
+cargo install --git https://github.com/enshwick/enshwick --tag v1.0.0-alpha.12 cargo-enshwick
 cargo enshwick new you.my-mod --side server
 cd my-mod
 cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Enshrouded"
@@ -17,7 +17,7 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
   texts and tests. It builds and loads as it is: settings in each world's
   `<stem>-mod-settings/<id>/settings.toml`, a line in
   `logs/<id>_<date>_<time>.log`. It pins
-  the `enshwick` release the tool was built with; `--enshwick-rev <commit>`
+  the `enshwick` release the tool was built with, an alpha's tag from git; `--enshwick-rev <commit>`
   takes a commit of this repository's `main` branch from git instead.
   Inside a Cargo workspace the crate joins it: its folder goes into the
   workspace's `members` unless a pattern there covers it, and the release

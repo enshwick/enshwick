@@ -12,6 +12,10 @@ repository.workspace = true
 homepage.workspace = true
 publish = true
 
+[features]
+## Test-only API: an empty `Reflection` through `Default`.
+test = []
+
 [dependencies]
 enshwick.workspace = true
 iced-x86.workspace = true

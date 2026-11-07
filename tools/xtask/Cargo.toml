@@ -7,10 +7,17 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
+default-run = "xtask"
+
+# `cargo xtask compat`: what works on a game build. It links the loader, so
+# it is a binary of its own, which plain `cargo xtask` builds and runs; a
+# rebuild of the running `xtask.exe` would fail on Windows.
+[[bin]]
+name = "xtask-compat"
+path = "src/compat.rs"
+required-features = ["compat"]
 
 [features]
-# `cargo xtask compat`: what works on a game build. It links the loader, so
-# plain `cargo xtask` builds without it and runs itself again with it.
 compat = ["dep:clap", "dep:enshwick", "dep:enshwick-gamedata", "dep:enshwick-loader", "dep:memchr"]
 
 [dependencies]

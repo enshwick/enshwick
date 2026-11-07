@@ -33,6 +33,9 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- `cargo enshwick new` writes `enshwick` as a git dependency on the tag of
+  the alpha the tool is from, since alphas are not on crates.io; a release
+  still pins its crates.io version (#979).
 - `pin --patterns` takes a witness only from a second use whose pattern
   reads the value, so a fixed pattern near the first use no longer drops
   it for `one_witness` (#951).

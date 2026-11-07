@@ -25,6 +25,8 @@ mod game;
 mod join_check;
 mod library;
 pub(crate) mod record;
+#[cfg(test)]
+mod tests;
 
 pub use dry_run::{DryMod, DryRun, DryRunError, dry_run};
 pub(crate) use join_check::TABLE_IDS;
@@ -332,11 +334,14 @@ fn arm_watched(loader: &Loader, frame: Option<FrameSlot>, watching: Option<&mut 
     }
 }
 
-/// Calls every mod's `init` in load order, putting game code each one
+/// Calls the `init` of every mod still on in load order, putting game code each one
 /// changes outside the API down to it.
 fn initialise(loader: &Loader, order: &[&Library], mut watching: Option<&mut Watching>) {
     for (index, library) in order.iter().enumerate() {
         let record = &loader.mods[index];
+        if record.off.load(Ordering::Acquire) {
+            continue;
+        }
         if crate::developer_tools::refused(loader.developer_tools, record.manifest.flags).is_some()
         {
             loader.turn_off(ModIndex::new(index), crate::developer_tools::off_reason());

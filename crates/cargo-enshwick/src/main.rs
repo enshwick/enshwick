@@ -60,8 +60,9 @@ enum Command {
         #[arg(long, requires = "luau", conflicts_with = "data")]
         game: Option<PathBuf>,
         /// A full commit hash of the platform repository to build the crate
-        /// on from git, for a loader built from that commit; the crates.io
-        /// release when left out.
+        /// on from git, for a loader built from that commit; left out, the
+        /// release this tool is from: an alpha's tag from git, as alphas are
+        /// not on crates.io, or the crates.io release.
         #[arg(long, value_name = "COMMIT", conflicts_with_all = ["data", "luau"])]
         enshwick_rev: Option<new::Commit>,
     },

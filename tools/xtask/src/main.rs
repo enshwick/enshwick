@@ -19,6 +19,12 @@
 //! alpha release ([`notes`]). `cargo xtask header` rewrites the ABI's
 //! C header, which the check holds to the ABI module and its golden layout
 //! ([`header`]).
+//!
+//! `cargo xtask compat` reports what works on a game build. It links the
+//! loader, so it is the binary `xtask-compat` of this package, built with
+//! the `compat` feature; `cargo xtask compat` builds and runs it, and
+//! `cargo run -p xtask --bin xtask-compat --features compat -- <exe>` runs it
+//! directly.
 
 #![forbid(unsafe_code)]
 
@@ -26,8 +32,6 @@ mod affected;
 mod book;
 mod book_links;
 mod book_prose;
-#[cfg(feature = "compat")]
-mod compat;
 mod crate_rules;
 mod dist;
 mod fuzz;
@@ -335,22 +339,8 @@ fn git(args: &[&str]) -> Option<String> {
         .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-/// `cargo xtask compat`: what works on a game build, from its executable.
-#[cfg(feature = "compat")]
-fn compat_task(args: &[String]) -> ExitCode {
-    match compat::main(args) {
-        Ok(true) => ExitCode::SUCCESS,
-        Ok(false) => ExitCode::from(compat::BROKEN),
-        Err(error) => {
-            let _shown = writeln!(std::io::stderr(), "error: {error}");
-            ExitCode::FAILURE
-        }
-    }
-}
-
-/// `cargo xtask compat` runs this tool again built with the loader, which
-/// plain `cargo xtask` leaves out to stay quick to build.
-#[cfg(not(feature = "compat"))]
+/// `cargo xtask compat` runs `xtask-compat`, the binary built with the
+/// loader, which plain `cargo xtask` leaves out to stay quick to build.
 fn compat_task(args: &[String]) -> ExitCode {
     let status = Command::new(cargo())
         .args([
@@ -358,10 +348,11 @@ fn compat_task(args: &[String]) -> ExitCode {
             "--quiet",
             "--package",
             "xtask",
+            "--bin",
+            "xtask-compat",
             "--features",
             "compat",
             "--",
-            "compat",
         ])
         .args(args)
         .status();

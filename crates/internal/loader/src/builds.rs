@@ -510,6 +510,28 @@ pub fn embedded(running: Side) -> KnownBuild {
     }
 }
 
+/// A build that knows no entry, for tests that run the loader without a
+/// game or a kept table.
+///
+/// # Panics
+///
+/// When `tables::Table::parse` stops taking its fixed text.
+#[cfg(test)]
+#[must_use]
+pub fn empty() -> KnownBuild {
+    let table = tables::Table::parse(
+        "name = \"empty\"\nside = \"server\"\nguid = \"00000000000000000000000000000000\"\nage = 0",
+    )
+    .unwrap();
+    KnownBuild {
+        name: table.name().to_owned(),
+        table: table.resolve(),
+        unanchored: Vec::new(),
+        conflicts: Vec::new(),
+        lacking: OnceLock::new(),
+    }
+}
+
 /// What `ids` read on the executables `ENSH_SERVER_EXE` and
 /// `ENSH_CLIENT_EXE` name, each skipped without its variable: by the
 /// executable's own table, then by every table of its side carried to it by

@@ -609,10 +609,14 @@ pub const fn fnv1a32(bytes: &[u8]) -> u32 {
 
 /// Every reflected type and ECS system of an image, looked up by name.
 ///
+/// With the `test` feature the default is empty, every lookup failing, for
+/// tests run without a game.
+///
 /// # Examples
 ///
 /// See the [module documentation](crate::reflect).
 #[derive(Debug)]
+#[cfg_attr(feature = "test", derive(Default))]
 pub struct Reflection<'a> {
     types: FxHashMap<&'a str, Vec<TypeInfo<'a>>>,
     systems: FxHashMap<&'a str, Vec<System<'a>>>,

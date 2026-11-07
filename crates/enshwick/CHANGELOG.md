@@ -186,6 +186,9 @@ Each entry names the pull request that made the change.
 - Every book chapter reads in sentences of at most 25 words with at most
   two code spans, 20 words on average. Long runs of names became lists and
   tables, and every fact and code example stayed (#976).
+- The crate root and the book say a mod depends on an alpha's tag from
+  git, as `cargo enshwick new` writes it, since alphas are not on crates.io
+  (#979).
 - The crate's description, README and root docs, and the book's introduction,
   describe Enshwick as the modding framework and API for Enshrouded, with its
   mod loader (#968).
@@ -296,6 +299,8 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- The loader calls no `init` of a mod already turned off before its turn,
+  as `ready` skips it (#979).
 - A data pack acts as itself everywhere the loader's copy of the API runs
   it: a thread the API spawns for it (the world store's write), its log
   level from `enshwick.toml`, each `info_once!` and `warn_every!` site, and

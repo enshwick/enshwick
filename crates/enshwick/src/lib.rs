@@ -24,16 +24,17 @@
 //! initialised. A mod that fails or panics is turned off, and the game runs
 //! vanilla where the mod acted.
 //!
-//! Depend on this crate from crates.io; `cargo enshwick new` writes the
-//! lines. The derive and attribute macros come from `enshwick-macros`, which
-//! this crate re-exports:
+//! Alphas are not on crates.io, so a mod depends on an alpha's tag from
+//! git; `cargo enshwick new` writes the lines for the alpha it is from. The
+//! derive and attribute macros come from `enshwick-macros`, which this crate
+//! re-exports:
 //!
 //! ```toml
 //! [dependencies]
-//! enshwick = "<version>"
+//! enshwick = { git = "https://github.com/enshwick/enshwick", tag = "v<version>" }
 //!
 //! [dev-dependencies]
-//! enshwick = { version = "<version>", features = ["test"] }
+//! enshwick = { git = "https://github.com/enshwick/enshwick", tag = "v<version>", features = ["test"] }
 //! ```
 //!
 //! A mod builds for `x86_64-pc-windows-msvc`, the game's target. The crate
