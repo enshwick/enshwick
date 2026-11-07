@@ -73,6 +73,10 @@ processors):
 | Intel, AVX            | +6.3 ns            | +6.4 ns      | —            |
 | no AVX                | +5.2 ns            | —            | —            |
 
+Each handler then runs as its mod, so a crash in it names the mod and the
+status report times it under "mid hooks". With one empty handler, that
+dispatch costs +4.2 ns more than the stub alone (same test, same machine).
+
 ## Choosing an address
 
 The loader replaces the 5 bytes from `address` with a jump to a stub. It moves

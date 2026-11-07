@@ -28,7 +28,7 @@ Each entry names the pull request that made the change.
   damage filter allocates nothing per hit once warm (#989).
 - The loader runs each mid-function hook handler, the pacing waits among
   them, as its mod: a crash there names the mod, and with diagnostics on
-  the status report times them as "mid hooks", at about 2 ns a handler
+  the status report times them as "mid hooks", at about 4 ns a handler
   (#993).
 - A data pack's log level check is one load, about 1.7 ns instead of 6.9 ns
   (#993).
