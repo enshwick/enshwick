@@ -576,4 +576,215 @@ mod tests {
         );
         assert_eq!(record.fields()[3].name(), "type");
     }
+
+    reflected_struct! {
+        /// A test struct with a field of every leaf kind and a bitmask.
+        Leaves {
+            /// A small signed number.
+            small: i8 = "small",
+            /// A wider unsigned one.
+            wide: u16 = "wide",
+            /// A switch.
+            flag: bool = "flag",
+            /// A ratio.
+            ratio: f32 = "ratio",
+            /// A name.
+            name: String = "name",
+            /// A reference.
+            id: Guid = "id",
+            /// Untyped data.
+            raw: Data = "raw",
+            /// A variant or none.
+            held: Option<crate::resources::Variant> = "held",
+            /// Moods as flags.
+            moods: crate::typed::Flags<Mood> = "moods",
+        }
+    }
+
+    fn leaves() -> Data {
+        Data::Struct(vec![
+            ("small".into(), Data::Int(-3)),
+            ("wide".into(), Data::Uint(700)),
+            ("flag".into(), Data::Uint(2)),
+            ("ratio".into(), Data::Float(0.1)),
+            ("name".into(), Data::Bytes(b"wolf".to_vec())),
+            ("id".into(), Data::Guid(Guid([7; 16]))),
+            ("raw".into(), Data::List(vec![Data::Uint(u64::MAX)])),
+            (
+                "held".into(),
+                Data::Variant(Box::new(crate::resources::Variant::new(
+                    "demo::Sphere",
+                    Data::Float(1.5),
+                ))),
+            ),
+            ("moods".into(), Data::Flags(vec!["Calm".into()])),
+        ])
+    }
+
+    /// `value` with the field `name` set to `to`.
+    fn with(value: &Data, name: &str, to: Data) -> Data {
+        let mut value = value.clone();
+        if let Some(held) = value.field_mut(name) {
+            *held = to;
+        }
+        value
+    }
+
+    /// The shape of `T` reads `data` and takes back `script` as its
+    /// compiled conversions do, refusals by the same words.
+    fn same<T>(data: &Data, script: Value)
+    where
+        T: super::super::Shaped + super::super::Reflected + Typed + IntoScript + FromScript,
+    {
+        let compiled = super::super::Compiled::of::<T>();
+        let shape = <T as super::super::Shaped>::SHAPE;
+        assert_eq!(
+            format!("{:?}", shape.shown(data)),
+            format!("{:?}", (compiled.to_script)(data)),
+            "{data:?}"
+        );
+        assert_eq!(
+            format!(
+                "{:?}",
+                shape.taken(script.clone()).map_err(|e| e.to_string())
+            ),
+            format!(
+                "{:?}",
+                (compiled.from_script)(script.clone()).map_err(|e| e.to_string())
+            ),
+            "{script:?}"
+        );
+    }
+
+    #[test]
+    fn a_shape_reads_and_refuses_the_codec_s_values_as_the_rust_type_does() {
+        let outer = Reflected::to_value(&outer());
+        let shown = by_name(outer().into_value(), Outer::TY);
+        same::<Outer>(&outer, shown.clone());
+        let leaves = leaves();
+        let leaves_shown = (Leaves::SHAPE.shown(&leaves)).unwrap();
+        same::<Leaves>(&leaves, leaves_shown);
+        for (name, wrong) in [
+            ("small", Data::Int(-200)),
+            ("small", Data::Uint(5)),
+            ("wide", Data::Int(-1)),
+            ("wide", Data::Float(1.0)),
+            ("flag", Data::Text("yes".into())),
+            ("ratio", Data::Int(1)),
+            ("name", Data::Uint(1)),
+            (
+                "id",
+                Data::Text("6943053a-32c1-4718-ae22-e61427ddf54d".into()),
+            ),
+            ("held", Data::Nil),
+            ("held", Data::Int(1)),
+            ("moods", Data::Uint(0b101)),
+            ("moods", Data::Flags(vec!["Wild".into()])),
+            ("moods", Data::Name("Calm".into())),
+        ] {
+            same::<Leaves>(&with(&leaves, name, wrong), Value::Nil);
+        }
+        for (name, wrong) in [
+            ("mood", Data::Name("Wild".into())),
+            ("mood", Data::Uint(9)),
+            ("mood", Data::Text("Calm".into())),
+            ("inners", Data::Bytes(vec![0, 5, 0, 0])),
+            ("inners", Data::List(vec![Data::Struct(Vec::new())])),
+            ("type", Data::Int(-1)),
+            ("spare", Data::Struct(vec![("level".into(), Data::Uint(1))])),
+            ("spare", Data::Uint(1)),
+        ] {
+            same::<Outer>(&with(&outer, name, wrong), Value::Nil);
+        }
+        same::<Outer>(&Data::Struct(Vec::new()), Value::Nil);
+        same::<Outer>(&Data::Uint(1), Value::Nil);
+        same::<Empty>(&Data::Uint(1), Value::List(Vec::new()));
+    }
+
+    #[test]
+    fn a_shape_takes_and_refuses_a_script_s_tables_as_the_rust_type_does() {
+        let outer = Reflected::to_value(&outer());
+        let Value::Map(fields) = by_name(outer().into_value(), Outer::TY) else {
+            unreachable!()
+        };
+        let set = |name: &str, to: Value| {
+            let mut fields = fields.clone();
+            match fields.iter_mut().find(|(field, _)| field == name) {
+                Some((_, held)) => *held = to,
+                None => fields.push((name.to_owned(), to)),
+            }
+            Value::Map(fields)
+        };
+        let inner = |level: Value| Value::Map(vec![("level".into(), level)]);
+        for script in [
+            set("mood", Value::String("Calm".into())),
+            set("mood", Value::String("Angry".into())),
+            set(
+                "mood",
+                Value::Map(vec![("Other".into(), Value::String("Calm".into()))]),
+            ),
+            set(
+                "mood",
+                Value::Map(vec![("Other".into(), Value::Number(4.0))]),
+            ),
+            set("mood", Value::Number(1.0)),
+            set("type", Value::Number(42.0)),
+            set("type", Value::String("x".into())),
+            set("type", Value::Number(2f64.powi(54))),
+            set("inners", Value::List(vec![inner(Value::Number(300.0))])),
+            set("inners", Value::List(vec![inner(Value::Nil)])),
+            set("inners", Value::Map(Vec::new())),
+            set("spare", inner(Value::Number(1.0))),
+            set("spare", Value::String("none".into())),
+            set("base", Value::List(Vec::new())),
+            set("base", Value::Nil),
+            set("rank", Value::Number(1.0)),
+            Value::Map(Vec::new()),
+            Value::String("outer".into()),
+            Value::List(vec![Value::Nil]),
+        ] {
+            same::<Outer>(&outer, script);
+        }
+        let leaves = leaves();
+        let Ok(Value::Map(fields)) = Leaves::SHAPE.shown(&leaves) else {
+            unreachable!()
+        };
+        let set = |name: &str, to: Value| {
+            let mut fields = fields.clone();
+            if let Some((_, held)) = fields.iter_mut().find(|(field, _)| field == name) {
+                *held = to;
+            }
+            Value::Map(fields)
+        };
+        for script in [
+            set("small", Value::Number(-129.0)),
+            set("wide", Value::Number(1.5)),
+            set("flag", Value::Number(1.0)),
+            set("ratio", Value::String("0.1".into())),
+            set("name", Value::Number(1.0)),
+            set("id", Value::String("not a guid".into())),
+            set("raw", Value::Vector([0.0; 3])),
+            set(
+                "held",
+                Value::Map(vec![("value".into(), Value::Number(1.0))]),
+            ),
+            set("held", Value::Nil),
+            set("moods", Value::List(vec![Value::String("Calm".into())])),
+            set(
+                "moods",
+                Value::List(vec![Value::Map(vec![("Other".into(), Value::Number(3.0))])]),
+            ),
+            set(
+                "moods",
+                Value::List(vec![
+                    Value::String("Calm".into()),
+                    Value::Map(vec![("Other".into(), Value::Number(3.0))]),
+                ]),
+            ),
+            set("moods", Value::List(vec![Value::String("Angry".into())])),
+            set("moods", Value::String("Calm".into())),
+        ] {
+            same::<Leaves>(&leaves, script);
+        }
+    }
 }

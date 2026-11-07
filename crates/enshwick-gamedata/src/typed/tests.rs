@@ -482,7 +482,7 @@ fn every_covered_type_reads_as_its_generated_item() {
         let name = engine_name(row.id).unwrap();
         let read = enshwick::typed::sample(&registry, name)
             .ok_or_else(|| "no sample".to_owned())
-            .and_then(|value| (row.check)(&value).map_err(|e| e.to_string()));
+            .and_then(|value| row.check(&value).map_err(|e| e.to_string()));
         if let Err(why) = read {
             wrong.push(format!("{}: {why}", row.id));
         }
@@ -521,7 +521,7 @@ fn every_covered_type_crosses_into_a_script_and_back() {
         described += 1;
         let sample = enshwick::typed::sample(&registry, engine_name(row.id).unwrap()).unwrap();
         let shown = |value: &enshwick::resources::Value| {
-            (row.to_script)(value).map(|script| format!("{script:?}"))
+            row.to_script(value).map(|script| format!("{script:?}"))
         };
         match row.through_script(&sample) {
             Ok(back) if shown(&back).ok() == shown(&sample).ok() => {}
@@ -530,6 +530,53 @@ fn every_covered_type_crosses_into_a_script_and_back() {
         }
     }
     assert_eq!(described, covered, "a script twin for every covered type");
+    assert!(wrong.is_empty(), "{wrong:#?}");
+}
+
+/// Every covered type's shape, the one walk a script's values cross by,
+/// reads a sample of the build's type as its compiled Rust conversions do,
+/// and takes back what they take: the same table, the same value, the same
+/// refusal of a table with a key no field has.
+#[test]
+#[cfg_attr(miri, ignore = "converts thousands of types")]
+fn every_shape_crosses_a_sample_as_its_rust_type_does() {
+    let Some((catalogue, _)) = committed() else {
+        return;
+    };
+    let registry = catalogue.registry();
+    let (named, compiled) = (enshwick::typed::NAMED, enshwick::typed::COMPILED);
+    assert_eq!(named.len(), compiled.len());
+    let mut wrong = Vec::new();
+    for (row, rust) in named.iter().zip(compiled) {
+        let sample = enshwick::typed::sample(&registry, engine_name(row.id).unwrap()).unwrap();
+        let shown = row.to_script(&sample);
+        let expected = (rust.to_script)(&sample);
+        if format!("{shown:?}") != format!("{expected:?}") {
+            wrong.push(format!("{}: shown {shown:?}, not {expected:?}", row.id));
+            continue;
+        }
+        let Ok(enshwick::script::Value::Map(mut table)) = shown else {
+            continue;
+        };
+        let taken = |table: Vec<(String, enshwick::script::Value)>| {
+            let value = enshwick::script::Value::Map(table);
+            let by_shape = row.to_codec(value.clone()).map_err(|e| e.to_string());
+            let by_rust = (rust.from_script)(value).map_err(|e| e.to_string());
+            (by_shape, by_rust)
+        };
+        let (by_shape, by_rust) = taken(table.clone());
+        if by_shape != by_rust {
+            wrong.push(format!("{}: taken {by_shape:?}, not {by_rust:?}", row.id));
+        }
+        table.push(("no_such_field".to_owned(), enshwick::script::Value::Nil));
+        let (by_shape, by_rust) = taken(table);
+        if by_shape.is_ok() || by_shape != by_rust {
+            wrong.push(format!(
+                "{}: a stray key gave {by_shape:?}, not {by_rust:?}",
+                row.id
+            ));
+        }
+    }
     assert!(wrong.is_empty(), "{wrong:#?}");
 }
 
@@ -550,7 +597,7 @@ fn every_committed_typed_file_carries_the_header_of_one_build() {
             files.push(path);
         }
     }
-    let mut builds = std::collections::BTreeSet::new();
+    let mut builds = BTreeSet::new();
     for path in &files {
         let text = std::fs::read_to_string(path).unwrap();
         let build = text

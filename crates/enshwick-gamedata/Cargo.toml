@@ -29,7 +29,7 @@ twox-hash.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
-enshwick = { workspace = true, features = ["typed", "unstable"] }
+enshwick = { workspace = true, features = ["test", "typed", "unstable"] }
 proptest.workspace = true
 criterion.workspace = true
 insta.workspace = true

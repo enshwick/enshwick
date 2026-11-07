@@ -15,7 +15,7 @@ use crate::resources::{Bytes, Value as Data};
 use crate::script::{
     Class, Error, Field, FromScript, Function, IntoScript, Object, Record, Ty, Typed, Value,
 };
-use crate::{ItemId, Off};
+use crate::{ItemId, Off, RecipeId};
 
 impl Typed for Guid {
     const TY: &'static Ty = &Ty::String;
@@ -271,6 +271,14 @@ impl Object for ChangeHandle {
     const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_HANDLE];
 }
 
+/// The GUID `id` names: GUID text, or a content id in full, which holds a
+/// `:` no GUID text has.
+fn guid_of(id: &str) -> Result<Guid, Off> {
+    Guid::try_parse(id)
+        .or_else(|| Guid::try_named(id))
+        .ok_or_else(|| Off::new(format!("{id:?} is neither a GUID nor a content id")))
+}
+
 /// The free functions of [`content`](super) as a script's namespace
 /// `content`: vanilla lookups, recipe rules and helpers.
 #[doc(hidden)]
@@ -294,18 +302,30 @@ impl Content {
         vanilla::item(name)
     }
 
-    /// The item id of the content id `id` in full (`<mod>:<name>`), as
-    /// `ItemId::named` gives it in Rust, for a mod's own items in
-    /// `enshwick.items`.
+    /// The item id of `id`, a GUID such as `item` gives for a vanilla item,
+    /// or a content id in full (`<mod>:<name>`) for a mod's own item, as
+    /// `ItemId::from_guid` and `ItemId::named` give it in Rust: the number
+    /// `inventory` and `items` take.
     ///
     /// # Errors
     ///
-    /// [`Off`] for a malformed content id.
+    /// [`Off`] for text that is neither a GUID nor a content id.
     #[script]
     pub fn item_id(self, id: &str) -> Result<ItemId, Off> {
-        Guid::try_named(id)
-            .map(ItemId::from_guid)
-            .ok_or_else(|| Off::new(format!("{id:?} is no content id")))
+        guid_of(id).map(ItemId::from_guid)
+    }
+
+    /// The recipe id of `id`, a GUID such as `recipe` gives for a vanilla
+    /// recipe, or a content id in full for a mod's own, as
+    /// `RecipeId::from_guid` and `RecipeId::named` give it in Rust: the
+    /// number recipe events carry.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] for text that is neither a GUID nor a content id.
+    #[script]
+    pub fn recipe_id(self, id: &str) -> Result<RecipeId, Off> {
+        guid_of(id).map(RecipeId::from_guid)
     }
 
     /// The vanilla recipe named `name`.

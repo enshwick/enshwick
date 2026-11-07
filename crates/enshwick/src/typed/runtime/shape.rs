@@ -14,7 +14,7 @@ use crate::script::{Error, FromScript, IntoScript, Value};
 /// same way.
 #[doc(hidden)]
 #[derive(Debug)]
-pub enum Shape {
+pub(crate) enum Shape {
     /// A type that is no generated item, such as `u8`, `String` or
     /// [`Guid`], crossing through its own conversions.
     Leaf(Leaf),
@@ -32,7 +32,7 @@ pub enum Shape {
 
 /// A [`Shape::Leaf`]'s conversions, one pair per leaf type.
 #[doc(hidden)]
-pub struct Leaf {
+pub(crate) struct Leaf {
     shown: fn(&Data) -> Result<Value, ShapeError>,
     taken: fn(Value) -> Result<Data, Error>,
 }
@@ -57,7 +57,7 @@ impl Leaf {
 /// own fields.
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct Struct {
+pub(crate) struct Struct {
     name: &'static str,
     base: Option<fn() -> &'static Shape>,
     fields: &'static [Field],
@@ -66,7 +66,7 @@ pub struct Struct {
 impl Struct {
     #[doc(hidden)]
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         name: &'static str,
         base: Option<fn() -> &'static Shape>,
         fields: &'static [Field],
@@ -79,7 +79,7 @@ impl Struct {
 /// its shape, asked for later since a type may hold itself.
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct Field {
+pub(crate) struct Field {
     rust: &'static str,
     game: &'static str,
     shape: fn() -> &'static Shape,
@@ -88,7 +88,7 @@ pub struct Field {
 impl Field {
     #[doc(hidden)]
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         rust: &'static str,
         game: &'static str,
         shape: fn() -> &'static Shape,
@@ -100,7 +100,7 @@ impl Field {
 /// A generated enum: its Rust path and each variant's Rust and game name.
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct Enum {
+pub(crate) struct Enum {
     name: &'static str,
     variants: &'static [(&'static str, &'static str)],
 }
@@ -108,7 +108,7 @@ pub struct Enum {
 impl Enum {
     #[doc(hidden)]
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         name: &'static str,
         variants: &'static [(&'static str, &'static str)],
     ) -> Self {
@@ -125,7 +125,7 @@ impl Shape {
     /// # Errors
     ///
     /// [`ShapeError`] when it does not.
-    pub fn check(&self, value: &Data) -> Result<(), ShapeError> {
+    pub(crate) fn check(&self, value: &Data) -> Result<(), ShapeError> {
         self.shown(value).map(drop)
     }
 
@@ -135,7 +135,7 @@ impl Shape {
     /// # Errors
     ///
     /// [`ShapeError`] when it does not read as the type.
-    pub fn shown(&self, value: &Data) -> Result<Value, ShapeError> {
+    pub(crate) fn shown(&self, value: &Data) -> Result<Value, ShapeError> {
         match self {
             Self::Leaf(leaf) => (leaf.shown)(value),
             Self::Optional(inner) => match value {
@@ -175,7 +175,7 @@ impl Shape {
     /// # Errors
     ///
     /// [`Error`] when it does not read as the type.
-    pub fn taken(&self, value: Value) -> Result<Data, Error> {
+    pub(crate) fn taken(&self, value: Value) -> Result<Data, Error> {
         match self {
             Self::Leaf(leaf) => (leaf.taken)(value),
             Self::Optional(inner) => match value {
@@ -183,7 +183,9 @@ impl Shape {
                 some => inner.taken(some),
             },
             Self::List(inner) => inner.taken_list(value).map(Data::List),
-            Self::Flags(inner) => inner.taken_list(value).map(super::flags_value),
+            Self::Flags(inner) => inner
+                .taken_list(value)
+                .map(|values| super::flags_value(&values)),
             Self::Struct(record) => record.taken(value),
             Self::Enum(choice) => choice.taken(value),
         }
@@ -245,10 +247,10 @@ impl Struct {
                 .map_or(Value::Nil, |at| entries.swap_remove(at).1)
         };
         let mut fields = Vec::with_capacity(self.fields.len());
-        if let Some(base) = self.base {
-            if let Data::Struct(inherited) = base().taken(take(BASE)).map_err(|e| e.within(BASE))? {
-                fields = inherited;
-            }
+        if let Some(base) = self.base
+            && let Data::Struct(inherited) = base().taken(take(BASE)).map_err(|e| e.within(BASE))?
+        {
+            fields = inherited;
         }
         for field in self.fields {
             let taken = (field.shape)()
@@ -263,10 +265,10 @@ impl Struct {
 impl Enum {
     fn shown(&self, value: &Data) -> Result<Value, ShapeError> {
         let constant = Constant::from_value(value)?;
-        if let Constant::Name(name) = &constant {
-            if let Some((rust, _)) = self.variants.iter().find(|(_, game)| game == name) {
-                return Ok(Value::String((*rust).to_owned()));
-            }
+        if let Constant::Name(name) = &constant
+            && let Some((rust, _)) = self.variants.iter().find(|(_, game)| game == name)
+        {
+            return Ok(Value::String((*rust).to_owned()));
         }
         Ok(constant.into_script())
     }
@@ -288,7 +290,7 @@ impl Enum {
 /// A type with a [`Shape`]: every generated item and every type a
 /// generated field holds.
 #[doc(hidden)]
-pub trait Shaped {
+pub(crate) trait Shaped {
     /// The type's shape.
     const SHAPE: &'static Shape;
 }

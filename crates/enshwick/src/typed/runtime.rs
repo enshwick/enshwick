@@ -13,8 +13,7 @@ pub(crate) mod shape;
 pub use handles::{ComponentType, EventType, ResourceType};
 pub(crate) use handles::{RawComponent, RawEvent, RawResource};
 pub use sample::sample;
-#[doc(hidden)]
-pub use shape::{Shape, Shaped};
+pub(crate) use shape::{Shape, Shaped};
 
 /// Why a [`Value`] is not the shape a generated type expects: a field the
 /// build lacks, or a value of another kind.
@@ -309,12 +308,12 @@ impl<E: Reflected> Reflected for Flags<E> {
     }
 
     fn to_value(&self) -> Value {
-        flags_value(self.0.iter().map(E::to_value).collect())
+        flags_value(&self.0.iter().map(E::to_value).collect::<Vec<_>>())
     }
 }
 
 /// The codec's value of a bitmask whose set flags' values are `values`.
-fn flags_value(values: Vec<Value>) -> Value {
+fn flags_value(values: &[Value]) -> Value {
     if !values.is_empty() && values.iter().all(|v| matches!(v, Value::Uint(_))) {
         return Value::Uint(values.iter().fold(0, |bits, v| match v {
             Value::Uint(bit) if *bit < 64 => bits | (1 << bit),
@@ -399,7 +398,7 @@ pub struct Row {
     /// Its type in a script.
     pub script: &'static crate::script::Ty,
     /// How it reads and crosses into a script.
-    pub shape: &'static Shape,
+    pub(crate) shape: &'static Shape,
 }
 
 impl Row {
@@ -431,11 +430,20 @@ impl Row {
     pub fn to_script(&self, value: &Value) -> Result<crate::script::Value, ShapeError> {
         self.shape.shown(value)
     }
+
+    /// A script's `value` read as the type, as the codec writes it.
+    ///
+    /// # Errors
+    ///
+    /// [`Error`](crate::script::Error) when it does not read as the type.
+    pub fn to_codec(&self, value: crate::script::Value) -> Result<Value, crate::script::Error> {
+        self.shape.taken(value)
+    }
 }
 
 /// A generated type's compiled conversions, in the order of the table of
 /// [`Row`]s, for the tests that hold every row's shape to its Rust type.
-#[cfg(feature = "test")]
+#[cfg(any(test, feature = "test"))]
 #[doc(hidden)]
 #[derive(Debug)]
 pub struct Compiled {
@@ -445,7 +453,7 @@ pub struct Compiled {
     pub from_script: fn(crate::script::Value) -> Result<Value, crate::script::Error>,
 }
 
-#[cfg(feature = "test")]
+#[cfg(any(test, feature = "test"))]
 impl Compiled {
     /// The conversions of `T`, the path script values took before shapes.
     #[must_use]
@@ -480,7 +488,7 @@ macro_rules! named_table {
             &[$($crate::typed::runtime::Row::of::<$ty>()),*];
 
         /// The compiled conversions of each type of [`NAMED`], in its order.
-        #[cfg(feature = "test")]
+        #[cfg(any(test, feature = "test"))]
         #[doc(hidden)]
         pub const COMPILED: &[$crate::typed::runtime::Compiled] =
             &[$($crate::typed::runtime::Compiled::of::<$ty>()),*];
