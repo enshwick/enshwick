@@ -25,6 +25,7 @@
 mod affected;
 mod book;
 mod book_links;
+mod book_prose;
 #[cfg(feature = "compat")]
 mod compat;
 mod crate_rules;
@@ -163,7 +164,7 @@ fn run(args: &[String]) -> Result<bool, String> {
 }
 
 /// The problems the checks that compile nothing find in the tree: manifest
-/// ranges, the book and its links, and the crate rules.
+/// ranges, the book, its links and sentence lengths, and the crate rules.
 fn tree_problems(root: &std::path::Path, packages: &[Package]) -> Result<Vec<String>, String> {
     let mut problems: Vec<String> = ranges::check(root, packages)
         .into_iter()
@@ -173,6 +174,11 @@ fn tree_problems(root: &std::path::Path, packages: &[Package]) -> Result<Vec<Str
         book::check(root)
             .into_iter()
             .map(|problem| format!("book: {problem}")),
+    );
+    problems.extend(
+        book_prose::check(root)
+            .into_iter()
+            .map(|problem| format!("book prose: {problem}")),
     );
     let mods = book_links::mods_clone(root).map_err(|why| format!("book links: {why}"))?;
     let links = book_links::check(root, mods.as_deref());

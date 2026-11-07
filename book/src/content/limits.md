@@ -14,14 +14,14 @@ make.
 
 ## Changes at init
 
-A change takes the same fields, ranges and selections as a pack's, merged by
+A change takes the same fields, ranges and selections as a pack's. It is merged by
 the same rule with every pack and mod
 ([Several packs on one value](packs.md#several-packs-on-one-value)).
 
 [`Load::change`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/changes.rs)
 declares a change during `init`. With `Load::change_items` and
 `Load::change_recipes` it makes the selections a pack makes. The loader reads
-the selection from the game's data and merges one change per item in the
+the selection from the game's data. It merges one change per item in the
 mod's place in load order, as it does for a pack:
 
 ```rust
@@ -66,9 +66,9 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(ChangeHandle, ChangeHandle), e
 }
 ```
 
-- `Target::Entry` names one vanilla item; `Target::Items` picks every item
+- `Target::Entry` names one vanilla item. `Target::Items` picks every item
   of some categories, every item that stacks, or every item that places a
-  container, read from the game's data.
+  container. It reads them from the game's data.
 - Until `set`, the change leaves every value as the other mods make it.
   `reset` takes the mod's value out again.
 - Each `set` merges every change again and builds the items, chest
@@ -81,19 +81,20 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(ChangeHandle, ChangeHandle), e
 
 The server decides. Its game cuts every stack above an item's stack size
 and sizes every chest it places. A player's game uses its own stack sizes
-for the split and merge it offers and for what it shows, so every side
+for the split and merge it offers and for what it shows. So every side
 needs the same value. A change of an item or a recipe therefore needs a
-mod of side `both`, which sets the value from its settings: a player
-joining a server runs on the [settings the server sends](../settings.md#on-a-joined-server). Loot changes reach the server
+mod of side `both`, which sets the value from its settings. A player
+joining a server runs on the
+[settings the server sends](../settings.md#on-a-joined-server). Loot changes reach the server
 alone and need no join.
 
 ## Chests
 
-A chest takes its size from the game's data each time a world loads, so a
+A chest takes its size from the game's data each time a world loads. So a
 new size reaches every chest of that kind, placed before the change or
 after it. When a size goes, as when the mod or pack is removed, no item is
-lost: a chest whose save holds more slots than the game now gives it comes
-back with 128 slots, every item in its slot. Slots only grow: a chest a player
+lost. A chest whose save holds more slots than the game now gives it comes
+back with 128 slots. Every item stays in its slot. Slots only grow: a chest a player
 upgrades moves every item it holds.
 
 ## Stack sizes and saved worlds
@@ -105,7 +106,7 @@ keep a saved world's stacks.
 **A pack's hold.** The first time a world saved with a pack that raised a
 stack size loads, the pack sets a [hold](../state.md#holds) on that world.
 If the world is opened again without the pack, the game stops before the
-world loads and the log names the pack and items; other worlds open without
+world loads and the log names the pack and items. Other worlds open without
 the pack as usual. When several packs raise one item, each of them holds. A
 pack that only lowers stack sizes sets no hold.
 
@@ -114,8 +115,8 @@ error you.stacks holds this game (it lets Material_T1_Wood_Logs and 12 more item
 ```
 
 **The kept sizes.** The loader keeps every stack size above the game's that
-was in force when a world was saved, in `mods/enshwick/kept-stacks.toml`,
-and serves at least that size from the start, for every mod and pack and
+was in force when a world was saved. It keeps them in
+`mods/enshwick/kept-stacks.toml`. It serves at least that size from the start, for every mod and pack and
 without them:
 
 ```text
@@ -127,10 +128,10 @@ info  stacks of 3f4093ae-75ed-4e5d-bd0b-784ba83b88f5 stay at 999, not 100: a sav
   file while the game is stopped.
 - Removing the mod or pack that raised a size keeps the size too: the loader
   still serves it.
-- While any size is kept, the loader [holds](../state.md#holds) the game:
-  on a game build it does not know, which it would leave vanilla, the game
-  stops before a world loads and cuts nothing.
+- While any size is kept, the loader [holds](../state.md#holds) the game
+  on a game build it does not know. The loader would leave such a build
+  vanilla. On it, the game stops before a world loads and cuts nothing.
 
-The two meet when a raising pack is removed: its hold stops the game at that
-world until its `hold.txt` is deleted, and after that the kept size still
-keeps the world's stacks whole.
+The two meet when a raising pack is removed. Its hold stops the game at that
+world until its `hold.txt` is deleted. After that, the kept size still keeps
+the world's stacks whole.

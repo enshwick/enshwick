@@ -11,7 +11,7 @@ names the places a mod can change to make the game use less CPU.
 
 ## The places
 
-Each function asks the loader during `init`; the loader finds the place in the
+Each function asks the loader during `init`. The loader finds the place in the
 running build's table, hooks it and tells whether the build has it. Handlers
 of several mods run in load order, and with worker caps the lowest wins.
 
@@ -26,8 +26,8 @@ of several mods run in load order, and with worker caps the lowest wins.
 The event loop turns the time left before its deadline into whole
 milliseconds, truncating. With less than a millisecond left it waits 0 ms,
 again and again, until the deadline passes. A handler that sleeps that time
-instead saves the polling; it must never sleep past `left_ns`, and it leaves
-the wait itself to the game, which then sees every event:
+instead saves the polling. It must never sleep past `left_ns`. It leaves the
+wait itself to the game, so the game still sees every event:
 
 ```rust
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -48,9 +48,13 @@ The handler runs on the waiting thread, as often as the loop waits: it is
 
 ## The server loop
 
-The server loop waits [`SERVER_IDLE_WAIT_NS`] with nobody online,
-[`SERVER_ONLINE_WAIT_NS`] with players, and [`SERVER_SLOW_WAIT_NS`] after a
-pass longer than 14 ms. A handler may change the wait; an event still ends it
+The server loop waits for one of three times:
+
+- [`SERVER_IDLE_WAIT_NS`] with nobody online;
+- [`SERVER_ONLINE_WAIT_NS`] with players;
+- [`SERVER_SLOW_WAIT_NS`] after a pass longer than 14 ms.
+
+A handler may change the wait; an event still ends it
 early. A longer wait with players online means fewer passes between the
 simulation steps, and up to that much more latency for what arrives between
 them.
@@ -80,7 +84,7 @@ end)
 ```
 
 A Luau handler gets the wait as decimal text, since a Luau number cannot
-hold every `u64`, and returns the new wait as text or `nil` to keep it. The
+hold every `u64`. It returns the new wait as text, or `nil` to keep it. The
 constants are Rust items; `SERVER_ONLINE_WAIT_NS` is 1,000,000.
 
 ## Task workers
@@ -89,8 +93,8 @@ The engine starts a worker thread per logical CPU in each task group, up to
 its own limits. Under Wine those are the host's CPUs, whatever a container
 allows. `cap_task_workers` lowers the limits as the task system starts. Only
 the dedicated server starts it after the loader arms its hooks (see
-[the life of a mod](concepts/lifecycle.md)); on the client, and with both caps 0, it returns
-`false`. The game's log shows the result, `[task] Group 'Default'
+[the life of a mod](concepts/lifecycle.md)). On the client, and with both caps
+0, it returns `false`. The game's log shows the result, `[task] Group 'Default'
 Worker:…`.
 
 ```rust
@@ -120,9 +124,9 @@ give both the same value.
 ## Worked example
 
 [`enshwick-optimizer`](https://github.com/enshwick/mods/tree/main/optimizer)
-uses both:
+uses both.
 [`waits.rs`](https://github.com/enshwick/mods/blob/main/optimizer/src/waits.rs)
-links `on_loop_wait` and logs when the wait is not found, and
+links `on_loop_wait` and logs when the wait is not found.
 [`lib.rs`](https://github.com/enshwick/mods/blob/main/optimizer/src/lib.rs)
 caps the task workers with `cap_task_workers`, from its setting or a
 container's CPU limit.

@@ -5,19 +5,25 @@ description: A mod hears a player use, trash, equip, unequip, pick up or place a
 
 # What players do with items
 
-A mod hears a player use, trash, equip, unequip, pick up or place an item,
-may refuse the first four, and hears that every mod allowed a use. The calls are
+A mod hears players use, trash, equip, unequip, pick up or place an item.
+It may refuse the first four and hears when all mods allowed a use. The calls are
 [unstable](../stability.md) until a person checks them in game.
 
 ## Give an item behaviour
 
 [`load.on_item(item, kind, handler)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/items.rs)
-runs `handler` when a player does `kind` with `item`. A mod's own item is
-`ItemId::from_guid` of its content id's GUID, and in Luau
+runs `handler` when a player does that kind of action with the item. A mod's
+own item is `ItemId::from_guid` of its content id's GUID, and in Luau
 `enshwick.content.item_id` of its full content id. The handler gets an
-`ItemAction`: the `kind`, the `player`'s character, the `item`, the `count`
-and the `slot` it is in before the action. Returning `false` refuses the
-action where the kind allows it.
+`ItemAction` with these fields:
+
+- `kind`
+- `player`, the player's character
+- `item`
+- `count`
+- `slot`, the slot the item is in before the action
+
+Returning `false` refuses the action where the kind allows it.
 
 ```rust
 use enshwick::content::{Id, id};
@@ -53,7 +59,7 @@ hears the actions with every item, for a mod that decides by the item.
 
 A [data pack](packs.md) with a `main.luau` names the item's functions in the
 item's `on` table, one key per kind. Each value is the name of a global
-function of `main.luau`, which the loader binds once `main.luau` ran, as
+function of `main.luau`. The loader binds it once `main.luau` ran, as
 `enshwick.items.on_item` binds it.
 
 ```toml
@@ -74,8 +80,13 @@ function keep_tonic()
 end
 ```
 
-`pack check` reports a key other than the seven kinds, a value that is no
-Luau name, and an `on` table in a pack without a `main.luau`. A name that
+`pack check` reports these problems:
+
+- a key other than the seven kinds
+- a value that is no Luau name
+- an `on` table in a pack without a `main.luau`
+
+A name that
 `main.luau` leaves without a global function stops the mod at start, with
 the item and the key in the log.
 
@@ -91,34 +102,37 @@ the item and the key in the log.
 | `Place`   | `place`   | After a player placed the item as a piece       | Nothing: the answer is ignored     |
 | `Consumed` | `consumed` | After the game took the item of an allowed `Consume` | Nothing: the answer is ignored |
 
-A mod that counts uses or rewards one listens to `Consumed`: a `Consume`
-reaches the mods before they all decided, so another mod may still refuse
+A mod that counts uses or rewards one listens to `Consumed`. A `Consume`
+reaches the mods before they all decided. So another mod may still refuse
 it, and the game may refuse it after them. `Consumed` comes once the stack
 in the used slot went down or left it, within 5 seconds of the use. A use
 the game refuses, such as a healing potion at full health, raises no
 `Consumed`. Neither does a use whose player does anything else before the
-game takes the item, such as moving or stashing a stack, since a stack
-dragged out of the slot looks like one the game took.
+game takes the item, such as moving or stashing a stack. This is because a
+stack dragged out of the slot looks like one the game took.
 
 A refusal takes the game's path for an action it already ran, so the item
 stays where it was and nothing is lost. `count` is 1 for a use and a
 placement, and the stack for the others; `slot` is none for a pickup and a
 placement.
 
-The source is the reflection of dedicated server build 26319703: a use and a
-trash are the player input's `itemAction`, which the server's
-`inventory_actions` system runs, an equip and an unequip its
-`changeEquipmentAction`, which `equipment_actions` runs, and a pickup and a
-placement the `PickupEvent` and the `BuildingPlaceEvent`. A use from the
-action bar and a tool's hit are not heard yet.
+The source is the reflection of dedicated server build 26319703:
+
+- A use and a trash are the player input's `itemAction`. The server's
+  `inventory_actions` system runs it.
+- An equip and an unequip are its `changeEquipmentAction`, which
+  `equipment_actions` runs.
+- A pickup and a placement are the `PickupEvent` and the `BuildingPlaceEvent`.
+
+A use from the action bar and a tool's hit are not heard.
 
 ## Where the handlers run
 
 The handlers run in the server's world only, in the dedicated server or a
-hosting client: a client playing on a server needs no mod for them. A use,
+hosting client. A client playing on a server needs no mod for them. A use,
 a trash, an equip and an unequip reach them on the thread of the system
-that runs the action, once per action; a pickup and a placement on the game
-thread, before the next step. Keep them quick and never block. Several mods
+that runs the action, once per action. A pickup and a placement reach them
+on the game thread, before the next step. Keep them quick and never block. Several mods
 may hear one item; any refusal wins, and an action after the fact reaches
 every mod. A handler that panics, or a Luau handler that fails, allows the
 action and turns its mod off.

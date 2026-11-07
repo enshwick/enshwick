@@ -13,9 +13,9 @@ server checks and runs them wherever they come from.
 
 ## Where actions run from
 
-A mod that lets players or administrators do something, such as letting a
-friend open a chest or picking a reward, declares it once as an action, and
-offers it through means of its own:
+A mod declares each thing players or administrators can do once, as an
+action. Examples are letting a friend open a chest or picking a reward. The
+mod offers the action through means of its own:
 
 - from the mod's own [controls](controls.md) and
   [panels on the game's screens](interface.md#panels-on-the-games-screens),
@@ -76,16 +76,16 @@ end)
 ```
 
 With the mod's id `weather`, the console line `weather set storm 10` runs
-it, `weather help` lists the actions, and a control of the mod runs it with
+it. `weather help` lists the actions. A control of the mod runs it with
 `actions.run("set", &[Value::Choice(2), Value::Number(10.0)])`.
 
 ## Declaring
 
 [`load.actions(texts)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/actions.rs)
-returns the mod's `Actions`; call it once,
+returns the mod's `Actions`. Call it once,
 during `init`, on both sides of a mod of side `both` alike. Texts are keys of
 `texts`, the mod's [translations](settings.md), shown in each player's
-language; a key without a text shows as it is, so plain English works too.
+language. A key without a text shows as it is, so plain English works too.
 `actions.add(action, handler)` declares one action:
 
 | Builder                             | What it does                                                                                     |
@@ -93,19 +93,40 @@ language; a key without a text shows as it is, so plain English works too.
 | `Action::new(id, label)`            | a button; `id` is 1 to 32 of `[a-z0-9-]`, its name on the console                                |
 | `Action::per_player(id, label, on)` | a list of players with a switch each; `on` names the players switched on                         |
 | `.help(key)`                        | a line under the label and in the console's help                                                 |
-| `.arg(Arg::...)`                    | an argument, in order: `player`, `choice`, `number`, `toggle`                                    |
+| `.arg(Arg::...)`                    | an argument, in order; its kinds follow this table                                               |
 | `.allow(fn)`, `.admins()`           | who sees the action and may run it                                                               |
 | `.at(fn)`                           | what it acts on for a player, or why there is nothing, which the player reads beside it          |
 
-In Luau, `enshwick.actions.actions(texts)` returns the `Actions`, and an
-action is a table of the builder's fields: `id`, `label`, `help`, `args`,
-`admins`, and the functions `allow(player)`, `at(ask)` and
-`per_player(ask, subject)`. Only `true` from `allow` lets a player in, and
-with `admins` both must hold. `enshwick.actions.player`, `choice`, `number`
-and `toggle` make the arguments; `number` takes the range as `min` and
-`max`. `at` returns `{ Ok = enshwick.actions.subject(id, label) }` or
-`{ Err = reason }`, and `per_player` returns a list of `{ key, name }`. A
-subject's `id` is a 64-bit key, so it crosses as its decimal digits.
+`Arg` makes four kinds of argument:
+
+- `player`
+- `choice`
+- `number`
+- `toggle`
+
+In Luau, `enshwick.actions.actions(texts)` returns the `Actions`. An action
+is a table of the builder's fields:
+
+- `id`
+- `label`
+- `help`
+- `args`
+- `admins`
+- the function `allow(player)`
+- the function `at(ask)`
+- the function `per_player(ask, subject)`
+
+Only `true` from `allow` lets a player in. With `admins` set, both must
+hold. Four functions make the arguments:
+
+- `enshwick.actions.player`
+- `choice`
+- `number`. It takes the range as `min` and `max`.
+- `toggle`
+
+`at` returns `{ Ok = enshwick.actions.subject(id, label) }` on success. On
+failure it returns `{ Err = reason }`. `per_player` returns a list of
+`{ key, name }`. A subject's `id` is a 64-bit key, so it crosses as its decimal digits.
 
 ```luau
 local actions = enshwick.actions.actions(enshwick.i18n.texts_from('[en]\n"access" = "Who may use it"\n'))
@@ -131,29 +152,47 @@ actions:add({
 end)
 ```
 
-Arguments are typed choices, never free text: a player online, named on
-the console; one of a few options; a number in a range with a step; on or
-off. A list takes the players online and the ones `on` names, so a player
+Arguments are typed choices, never free text. Each is one of four kinds:
+
+- a player online, named on the console;
+- one of a few options;
+- a number in a range with a step;
+- on or off.
+
+A list takes the players online and the ones `on` names, so a player
 switched on can be switched off while away.
 
 ## Handling
 
 The handler runs on the server's game thread, where [world reads](world.md)
-work, with a `Request`: the player, the subject `.at` found for this run,
-the values picked in the order of the arguments (a list hands
-`Value::Player` and `Value::Toggle`), the player's language and where it
-came from, `Via::Interface` or `Via::Console`. `request.say(key, values)`
-fills the mod's text in the player's language. It returns an `Outcome`,
-`Outcome::done(text)` or `Outcome::refused(text)`: from a control or panel
-the text shows as one of the game's notices, its lines joined into one and
-cut to a notice's length, or as a chat line to a client that takes no
-notices; from the console it is the console's answer.
+work. It gets a `Request` that holds:
+
+- the player;
+- the subject `.at` found for this run;
+- the values picked, in the order of the arguments (a list hands
+  `Value::Player` and `Value::Toggle`);
+- the player's language;
+- where it came from, `Via::Interface` or `Via::Console`.
+
+`request.say(key, values)` fills the mod's text in the player's language.
+The handler returns an `Outcome`. It is `Outcome::done(text)` or
+`Outcome::refused(text)`. From a control or panel, the text shows as one of
+the game's notices. Its lines are joined into one and cut to a notice's
+length. A client that takes no notices gets it as a chat line instead. From
+the console, the text is the console's answer.
 
 A Luau handler gets the request as an object whose methods read those
-fields: `request:player()`, `subject()`, `args()`, `language()`, `via()`
-and `say(key, values)`, with `values` a list of `{ name, value }`. Each
-value is a table of one variant, such as `{ Number = 10 }`, and a choice is
-its index from 0, as in Rust. The handler returns
+fields:
+
+- `request:player()`
+- `subject()`
+- `args()`
+- `language()`
+- `via()`
+- `say(key, values)`. Its `values` is a list of `{ name, value }`.
+
+Each value is a table of one variant, such as `{ Number = 10 }`, and a
+choice is its index from 0, as in Rust. The handler returns
 `enshwick.actions.done(text)` or `enshwick.actions.refused(text)`; nil is
 done without a text. A Luau client runs an action with
 `actions:run(id, values)`.
@@ -164,7 +203,7 @@ In Luau it is `actions:control(id, key)`, and
 [Controls](controls.md#changing-the-world) shows it.
 
 The server decides everything. It checks `.allow` and runs `.at` again on
-every run, whatever the client sent, and refuses values outside their
+every run, whatever the client sent. It refuses values outside their
 types and ranges before the handler sees them. A mod's own permission rules,
 [extension points](extending.md) included, belong in `.at`, so the
 mod's controls and panels and the console all follow them.
@@ -176,12 +215,17 @@ The platform's replies, such as "No player named Bob.", are under
 
 A panel beside a chest's screen acts on that chest, not on whatever `.at`
 finds nearest. `actions.run_at(id, values, target)` runs the action on the
-object an `ActionTarget` names: its entity in the server's world, as the
-server sent it to the client, where it stands in metres, or both, from
-`ActionTarget::entity(entity)`, `ActionTarget::at(position)` and
-`with_position`. The server hands it to `.at` as `ask.target` and to the
-handler as `request.target`; a run without one, the console and the
-actions' list have `None`.
+object an `ActionTarget` names. A target names the object's entity in the
+server's world, as the server sent it to the client. It can name where the
+object stands in metres instead, or both. These make a target:
+
+- `ActionTarget::entity(entity)`
+- `ActionTarget::at(position)`
+- `with_position`
+
+The server hands it to `.at` as `ask.target`. The handler gets it as
+`request.target`. A run without one, the console and the actions' list
+have `None`.
 
 ```rust
 use enshwick::actions::{Action, ActionTarget, Outcome, Subject};
@@ -223,16 +267,17 @@ whose flags it does not know. A named entity must exist in the server's
 world, and its position there replaces the one the client sent. The object
 must stand within 12 metres of the player, enshwick's own bound; otherwise
 the run is refused with "That is too far away." in the player's language.
-Who may use the object is the mod's rule, so `.at` still checks that the
+Who may use the object is the mod's rule. That is why `.at` still checks that the
 object is the kind it acts on and the player's to use.
 
 ## From the console
 
 A console line names the mod by its id, then the action and its values as
-words: a player by name, a choice by its word, a number, `on` or `off`. A
-list takes a player and `on` or `off`: `you.trading-post access Ann on`. `<mod id> help`
-lists the actions with their words. The console is an administrator with no
-character, so `request.player.entity` is 0, `.admins()` lets it in, and an
+words. Values are a player by name, a choice by its word, a number, or `on`
+or `off`. A list takes a player and `on` or `off`. For example:
+`you.trading-post access Ann on`. `<mod id> help` lists the actions with
+their words. The console is an administrator with no character. That is why
+`request.player.entity` is 0 and `.admins()` lets it in. It is also why an
 `.at` that looks for something near the player finds nothing. Answers are in
 English.
 
@@ -242,25 +287,30 @@ Actions run in the game server: the dedicated server, and a client while it
 hosts a game, single player included. A control or panel that runs one
 needs Enshwick on the player's client. A mod of side `server` has no part on
 the client, so it offers its actions through controls that
-[run an action](controls.md#a-mod-that-runs-on-the-server-only): the server
+[run an action](controls.md#a-mod-that-runs-on-the-server-only). The server
 sends them to each player's client.
 
 ## Worked example
 
 [`enshwick-personal-safes`](https://github.com/enshwick/mods/tree/main/personal-safes)
-declares who may open a Safe as a list action: `.at` finds the
-Safe at hand, the player's own first, through the mod's own rules and its
-extension point; `on` names the players allowed there; a second action,
-`list`, names them.
+declares who may open a Safe as a list action:
+
+- `.at` finds the Safe at hand, the player's own first, through the mod's
+  own rules and its extension point.
+- `on` names the players allowed there.
+- A second action, `list`, names them.
 
 ## Testing
 
 With the `test` feature, the [fake loader](testing.md) asks the actions as
-the loader does: `ask_actions(ActionCall::RUN, ...)` runs one as a control
-sends it, `ask_action_at(&player, language, id, args, target)` runs one on a
-named object, `action_targets()` lists the objects a client's runs named,
-`ask_actions(ActionCall::SHEET, &player, language, "", "")`
-returns the mod's sheet, which `actions::sheet::decode` reads, and
-`console::run("<mod id> <action> ...")` runs the console form: the fake
-hands a line to the mod's own actions unless `console_answer` gave its first
-word an answer.
+the loader does:
+
+- `ask_actions(ActionCall::RUN, ...)` runs one as a control sends it.
+- `ask_action_at(&player, language, id, args, target)` runs one on a named
+  object.
+- `action_targets()` lists the objects a client's runs named.
+- `ask_actions(ActionCall::SHEET, &player, language, "", "")` returns the
+  mod's sheet, which `actions::sheet::decode` reads.
+- `console::run("<mod id> <action> ...")` runs the console form. The fake
+  hands a line to the mod's own actions unless `console_answer` gave its first
+  word an answer.

@@ -35,14 +35,15 @@ client hosts:
 - game events, the world reads, the scheduler, inventories and actions
   serve the built-in server from its first step until the game stops;
 - each hosted game starts with `WorldLoaded` and ends with `ShutdownStarted`. The next
-  game has a new server, a new thread and new entities, so reset state tied to
+  game has a new server, thread and entities, so reset state tied to
   one game, such as entity ids, on `ShutdownStarted`;
 - while no game is hosted, the server features rest: the world reads return
   nothing and no game events come.
 
 [`Host::hosting`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/host.rs)
-tells whether this process runs a server now: always on the dedicated server,
-on the client from the built-in server's first step until the game stops.
+tells whether this process runs a server now. It always does on the dedicated
+server. On the client it does from the built-in server's first step until the
+game stops.
 
 ```rust
 fn acts() -> bool {
@@ -52,7 +53,7 @@ fn acts() -> bool {
 
 ## Two worlds in one process
 
-Server systems run only in the server's world, but some game functions serve
+Server systems run only in the server's world. But some game functions serve
 both worlds of a hosting client, such as cursor checks and base stock. A hook
 on one of them acts for the server only after it asks
 [`ecs::Worlds`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ecs.rs):

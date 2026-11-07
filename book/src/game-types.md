@@ -24,10 +24,16 @@ The feature adds a few thousand items, so it adds some seconds to a build.
 ## How are the items named?
 
 A module holds each of the game's namespaces, without the engine's root
-namespace: the game's `keen::ecs::Health` is `enshwick::typed::ecs::Health`,
-and `keen::LootSettingsResource` is `enshwick::typed::LootSettingsResource`.
-A field `deadEntityId` is `dead_entity_id`, and an enum constant `MagicalFog`
-is the variant `MagicalFog`. Every enum has a variant `Other` for a constant
+namespace. Some examples:
+
+| The game's name | The item |
+| --- | --- |
+| `keen::ecs::Health` | `enshwick::typed::ecs::Health` |
+| `keen::LootSettingsResource` | `enshwick::typed::LootSettingsResource` |
+| field `deadEntityId` | field `dead_entity_id` |
+| enum constant `MagicalFog` | variant `MagicalFog` |
+
+Every enum has a variant `Other` for a constant
 the item does not name, such as one a newer build adds. The API reference lists
 every item with its fields, size and role.
 
@@ -73,9 +79,9 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 A `ResourceType` gives the key of a resource by its GUID, reads the game's own
 value, and serves a changed one. Several mods that serve one key change it in
 load order, each on the one before's result. The bytes of what the item does
-not hold stay as the game has them. When the resource does not read as the
-item, or the change does not fit the type, the log says why and the game gets
-the resource unchanged:
+not hold stay as the game has them. The resource may not read as the item, or
+the change may not fit the type. Then the log says why and the game gets the
+resource unchanged:
 
 ```rust
 use enshwick::content::Guid;
@@ -102,9 +108,9 @@ case.
 
 ## Can a Luau mod use them?
 
-Yes. `enshwick.typed` opens the same generated items by their ids, the path in
-`enshwick::typed` with dots: `ecs.Health`, `ecs.EntityDiedEvent`,
-`LootSettingsResource`. Open them at the top level of `main.luau`, where a Rust
+Yes. `enshwick.typed` opens the same generated items by their ids. An id is
+the path in `enshwick::typed` with dots, such as `ecs.Health`. Other ids are
+`ecs.EntityDiedEvent` and `LootSettingsResource`. Open them at the top level of `main.luau`, where a Rust
 mod resolves them in `init`:
 
 ```luau
@@ -130,18 +136,22 @@ end)
 ```
 
 A value is a table with the Rust item's field names, `base` for the type it
-derives from. An enum constant is its variant's name, such as `"MagicalFog"`,
-and a constant the item does not name is `{ Other = <name or number> }`. A
-`u64` or `i64` is a string of its decimal digits, and a write also takes a
-whole number up to 2^53; a GUID is a string, and a bitmask a list of its
-flags' constants. A field of a game variant, which may hold any type, is
-`{ type = <qualified name>, value = <data> }`, its data as
-[`enshwick.resources`](resource-values.md) gives it, by the game's own field names. An array is a list, its first item at
-index 1, and an optional is its value or nil; inside a list, an absent item
-is `enshwick.resources.none()`, since nil would end the list. A value read through `enshwick.typed`
-goes through the generated Rust item, so a Luau mod reads and writes what a
-Rust mod does, and a type whose shape a game update changed is refused the
-same way.
+derives from. An enum constant is its variant's name, such as `"MagicalFog"`.
+A constant the item does not name is `{ Other = <name or number> }`. A `u64`
+or `i64` is a string of its decimal digits. A write also takes a whole number
+up to 2^53 for them. A GUID is a string, and a bitmask a list of its flags'
+constants.
+
+A field of a game variant may hold any type. It is
+`{ type = <qualified name>, value = <data> }`. Its data is as
+[`enshwick.resources`](resource-values.md) gives it, by the game's own field
+names. An array is a list, its first item at index 1. An optional is its
+value or nil. Inside a list, an absent item is `enshwick.resources.none()`,
+since nil would end the list.
+
+A value read through `enshwick.typed` goes through the generated Rust item.
+So a Luau mod reads and writes what a Rust mod does. A type whose shape a
+game update changed is refused the same way.
 
 A Luau mod differs in three places. `ComponentType:read` and `write` take no
 world: the handle holds the server's world from the start. A write and a
@@ -150,9 +160,13 @@ served change name every field of the item: return the table `read` or
 unchanged.
 
 `cargo enshwick luau --out types/enshwick.d.luau --typed types/enshwick.typed.d.luau`
-writes the types of these values for the editor: `typed_ecs_NetworkHealth` for
-`ecs.NetworkHealth`, `typed_LootSettingsResource` for `LootSettingsResource`,
-named by the path since every Luau type shares one namespace. Point luau-lsp at
+writes the types of these values for the editor. Each type is named by its
+path, since every Luau type shares one namespace:
+
+- `typed_ecs_NetworkHealth` for `ecs.NetworkHealth`
+- `typed_LootSettingsResource` for `LootSettingsResource`
+
+Point luau-lsp at
 the file beside `enshwick.d.luau` and name the type where it helps:
 
 ```luau
@@ -162,15 +176,19 @@ local value: typed_ecs_NetworkHealth? = health:read(1)
 
 ## Write the game's types into your crate
 
-For a struct the typed API does not cover, such as one a
-[hooked system](ecs.md) hands you, `cargo enshwick types` writes the game's
-types as Rust or Luau from the game's reflection data.
+The typed API may not cover a struct, such as one a
+[hooked system](ecs.md) hands you. Then `cargo enshwick types` writes the
+game's types as Rust or Luau from the game's reflection data.
 
 ### The game's names
 
 The names are the game's:
-`keen::ecs::Health` becomes `game::keen::ecs::Health`, a field `dataStorage`
-becomes `data_storage`, and an enum constant `MagicalFog` becomes `MAGICAL_FOG`.
+
+| The game's name | In the written file |
+| --- | --- |
+| `keen::ecs::Health` | `game::keen::ecs::Health` |
+| field `dataStorage` | field `data_storage` |
+| enum constant `MagicalFog` | constant `MAGICAL_FOG` |
 
 ### Write the types
 
@@ -186,10 +204,10 @@ cargo enshwick types --from "$ENSHROUDED_DIR" keen::ecs::Health \
 runtime type comes out, over six thousand of them; the editor's `keen::ds::`
 copies come only when named. Add `pub mod game;` to `src/lib.rs`.
 
-Luau has no namespaces, and luau-lsp makes every exported type global, so a
+Luau has no namespaces, and luau-lsp makes every exported type global. So a
 game type whose name the [API's definitions](luau.md) already take keeps its
-namespace: the game's `keen::ecs::HitEvent` is `Ecs_HitEvent` beside the API's
-`HitEvent`. A [Luau mod](luau.md#start-a-luau-mod) loads both files at once.
+namespace. The API's definitions hold a `HitEvent`. So the game's
+`keen::ecs::HitEvent` is `Ecs_HitEvent` beside it. A [Luau mod](luau.md#start-a-luau-mod) loads both files at once.
 
 ### Read a struct from game memory
 
@@ -238,22 +256,24 @@ unsafe fn health(component: *const u8) -> Health {
 }
 ```
 
-A field Rust cannot place where the game has it, such as an eight-byte integer
-at an offset of four, comes out as bytes; one the game does not describe stays
-in padding, and the struct's documentation names it.
+Rust cannot place some fields where the game has them, such as an
+eight-byte integer at an offset of four. Such a field comes out as bytes. A
+field the game does not describe stays in padding, and the struct's
+documentation names it.
 
 ### Use them from Luau
 
 `game.d.luau` declares each struct as an exported record type, each enum as a
 union of its constants' names, and keeps the game's field names. Point luau-lsp
-at it beside `enshwick.d.luau`. It holds types only, by the game's names, for
-the values `enshwick.resources` and `enshwick.on_game_type` hand a script; the
-values of `enshwick.typed` take the types of `enshwick.typed.d.luau`.
+at it beside `enshwick.d.luau`. It holds types only, by the game's names. They
+are for the values that `enshwick.resources` and `enshwick.on_game_type` hand
+a script. The values of `enshwick.typed` take the types of
+`enshwick.typed.d.luau`.
 
 ### Write them again after an update
 
 Offsets and sizes change between game builds, and the file names the build it
 came from. Run the command again on the new build and rebuild the mod. Until
 then, the size check at `init` turns the mod off on a build where the type grew
-or shrank; for a field that matters, compare `load.field_offset(type, field)`
+or shrank. For a field that matters, compare `load.field_offset(type, field)`
 with its offset too.

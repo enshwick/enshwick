@@ -25,24 +25,47 @@ module reads it.
 "locker.name" = "Spind"
 ```
 
-- Each table is a language code:
+- Each table is a language code.
   [`Language`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
-  lists every language the game knows, such as `en`, `en-us`, `de`, `uk`, `pt-br` or
-  `zh-cn`. Codes ignore case; an unknown code is an error.
+  lists every language the game knows. Examples are `en-us` and `pt-br`.
+  Codes ignore case; an unknown code is an error.
 - Keys are the mod's own names for its texts; values must be strings.
 - `en` is the fallback: a language without a text of its own for a key gets
-  the `en` text. A regional language looks in its main variety first:
-  `pt-br` in `pt`, `es-mx` in `es-419` and then `es`, `fr-ca` in `fr`, `nb`
-  in `no`.
-  [`Language::lookup_order`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
-  gives the order.
-- `Language::OFFERED` lists the languages the game's settings offer: `en`,
-  `de`, `fr`, `it`, `es`, `ru`, `pl`, `ja`, `ko`, `pt-br`, `th`, `tr`,
-  `zh-cn`, `zh-tw` and `uk`. The game's English reads as `en-us`, which
-  falls back to `en`.
+  the `en` text.
+
+A regional language looks in its main variety first.
+[`Language::lookup_order`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
+gives the order:
+
+| Language | Looks in            |
+| -------- | ------------------- |
+| `pt-br`  | `pt`                |
+| `es-mx`  | `es-419`, then `es` |
+| `fr-ca`  | `fr`                |
+| `nb`     | `no`                |
+
+`Language::OFFERED` lists the languages the game's settings offer:
+
+- `en`
+- `de`
+- `fr`
+- `it`
+- `es`
+- `ru`
+- `pl`
+- `ja`
+- `ko`
+- `pt-br`
+- `th`
+- `tr`
+- `zh-cn`
+- `zh-tw`
+- `uk`
+
+The game's English reads as `en-us`, which falls back to `en`.
 
 Keep the file at `src/texts.toml`, beside `lib.rs`.
-[`declare_mod!`](../concepts/loader-and-abi.md#the-manifest) embeds it, and
+[`declare_mod!`](../concepts/loader-and-abi.md#the-manifest) embeds it.
 [`Load::texts`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
 reads it during `init`.
 [`enshwick::texts!()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs)
@@ -76,35 +99,38 @@ enshwick.i18n.add_texts(texts, {
 ```
 
 A Luau mod keeps the file as `texts.toml` in its folder, beside
-`main.luau`, and `enshwick.i18n.texts()` reads it. A script names a key by
+`main.luau`. `enshwick.i18n.texts()` reads it. A script names a key by
 its text, since it has no `texts!` constants.
 
-A key's constant is the key in upper case with `.` and `-` as `_`:
-`texts::LOCKER_NAME` for `"locker.name"`. `texts::value` has a constant per
-value name the texts fill in, such as `value::OWNER` for `{owner}`.
+A key's constant is the key in upper case, with `.` and `-` replaced. Each
+becomes `_`. The constant of `"locker.name"` is `texts::LOCKER_NAME`.
+`texts::value` has a constant per value name the texts fill in. For `{owner}`
+it is `value::OWNER`.
 `texts::ALL` lists every key, and `texts::TOML` is the file itself, for
 tests.
 
 The mod does not build when the file has one of these faults:
 
 - a text is empty;
-- a key lacks a text in a language of `Language::REQUIRED`, `en` and
-  `uk`; the error names the languages;
+- a key lacks a text in a language of `Language::REQUIRED`. Those are
+  `en` and `uk`. The error names the languages;
 - a table is not a language code;
-- two texts of a key fill in different values, such as `{name}` in `uk`
-  where the `en` text has `{owner}`.
+- two texts of a key fill in different values. For example, the `en` text
+  has `{owner}`. The `uk` text has `{name}` instead.
 
-`load.texts` returns `Err(Off)` when the crate has no `src/texts.toml`.
+`load.texts` needs `src/texts.toml` in the crate. Without it, the call
+returns `Err(Off)`.
 [`Load::texts_from(toml)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
 hands over texts from a string, as for a data pack.
 
 ## Texts the game shows
 
 [`Load::add_texts(&texts, pairs)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
-gives game tags their texts. Each pair is a key of the texts file and a tag,
-a [content id](../content.md#content-ids) of the mod's own, whose GUID goes
-into the `name` and `description` of a [`NewItem`](items.md). Every language that has a text for the key gets it;
-a key with no text in any language is an error.
+gives game tags their texts. Each pair is a key of the texts file and a tag.
+The tag is a [content id](../content.md#content-ids) of the mod's own. The
+tag's GUID goes into a [`NewItem`](items.md). There it fills the `name` and
+`description`. Every language that has a text for the key gets it; a key with
+no text in any language is an error.
 
 The client shows the texts: wherever the game asks for the tag, it gets the
 text in the player's language, else the `en` text. The dedicated server
@@ -119,8 +145,8 @@ Each text goes through
 
 The key `mod.name` names the mod and `mod.description` says what it does, in
 every language of the file. The Mods screen, the join check's notes, the
-console and the status summary show them in the player's language, and the
-manifest's `name` and `description` where the file lacks them:
+console and the status summary show them in the player's language. Where the
+file lacks them, they show the manifest's `name` and `description`:
 
 ```toml
 [en]
@@ -133,8 +159,8 @@ manifest's `name` and `description` where the file lacks them:
 ```
 
 A server names its mods to a joining player with Enshwick in that player's
-language, and to a game without Enshwick, which does not say its language,
-with the manifest's name.
+language. A game without Enshwick does not say its language, so the server
+names its mods to it with the manifest's name.
 
 ## Texts the mod uses itself
 
@@ -142,11 +168,12 @@ The returned
 [`Texts`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
 also serves the mod's own strings, such as chat replies:
 
-- `get(key, language)` returns the text in `language`, else in `en`, else
-  `None`;
-- `fill(key, language, args)` returns the text with each `{name}` in it
-  replaced by its value in `args`, or the key itself when no language has a
-  text for it, so a missing text shows rather than vanishes;
+- `get(key, language)` returns the text in `language`. It falls back to
+  `en`, then to `None`;
+- `fill(key, language, args)` returns the text with each `{name}` replaced
+  by its value. The values come from `args`. When no language has a text for
+  the key, it returns the key itself, so a missing text shows rather than
+  vanishes;
 - `translations(key)` lists every language with a text for the key;
 - `languages()` lists every language the file has a table for;
 - `untranslated()` lists each language and key where another language has
@@ -166,9 +193,9 @@ assert_eq!(texts.get("greeting", Language::FALLBACK), Some("Hi"));
 assert_eq!(Language::from_code("pt-BR"), Some(Language::PT_BR));
 ```
 
-A test holds the file complete without naming its languages:
+A test holds the file complete without naming its languages.
 `missing_in(Language::OFFERED)` lists each language the game offers and each
-key it lacks, so a language the game adds shows up as missing texts, and
+key it lacks, so a language the game adds shows up as missing texts.
 `untranslated()` catches a key one table forgot:
 
 ```rust
@@ -200,8 +227,8 @@ assert!(line.contains('3'));
 
 A player's game with Enshwick tells the server its language when it joins.
 On a server, `language()` is that player's language while the loader asks
-the mod about the player, such as an [action](../actions.md) or a check of
-settings the player changes; elsewhere on a server it is
+the mod about the player. Examples are an [action](../actions.md) or a check
+of settings the player changes. Elsewhere on a server it is
 `Language::FALLBACK`. The loader's own answers to a player follow the
 player's language the same way; its console follows the loader's
 `language` setting ([logging](../logging.md)), English by default.
@@ -212,12 +239,12 @@ back to `Language::FALLBACK`.
 ## The game's own texts
 
 A mod that names vanilla things, such as a survivor in its item's name,
-reads the game's own text rather than shipping a copy of it, so the player
-sees it in their language as the game spells it.
+reads the game's own text. It ships no copy of that text, so the player sees
+it in their language as the game spells it.
 [`i18n::game_text(id)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
-is the text of a tag in the language the player reads the game in, and
-`game_text_in(id, language)` in any language; `id` is the tag's game id,
-`Guid::fnv1a` of the tag a resource names. A text missing in a language comes
+is the text of a tag in the language the player reads the game in.
+`game_text_in(id, language)` is the text in any language. The `id` is the
+tag's game id: `Guid::fnv1a` of the tag a resource names. A text missing in a language comes
 in English, as the game shows it.
 
 ```rust
@@ -237,20 +264,19 @@ assert!(!name.is_empty());
 ```
 
 `items::vanilla_name(item, language)` reads a vanilla item's name tag from
-its data and returns its text; `WorkshopSurvivor::name(language)` is the
+its data and returns its text. `WorkshopSurvivor::name(language)` is the
 survivor's name, which the game gives its summoning staff.
 [`enshwick-survivors-per-altar`](https://github.com/enshwick/mods/tree/main/survivors-per-altar)
-names its copy staffs this way: it registers each staff's name during
+names its copy staffs this way. It registers each staff's name during
 `init` for every language it translates, with the survivor's name in that
 language.
 
 The loader reads the texts from the game's archive files, never from the
 game's memory, so they are there during `init` and on any thread. The first
-call for a language reads that language's table, a few megabytes, and the
-loader keeps it, so the texts it hands out stay valid for the process. Only
-the client's archive holds texts: on a dedicated server every call returns
-`None`, and a mod falls back to a name of its own there, which no player
-sees.
+call for a language reads that language's table, a few megabytes. The loader
+keeps the table, so the texts it hands out stay valid for the process. Only
+the client's archive holds texts, so on a dedicated server every call returns
+`None`. There a mod falls back to a name of its own, which no player sees.
 
 ## Who translates a mod?
 
@@ -259,8 +285,8 @@ source, and no file beside the game overrides it. A translation into another
 language goes into the mod, or into a data pack of its own that adds texts
 for the mod's content.
 
-The loader's own texts, the words of the Mods screen, the answers of the
-[console](../chat.md#the-console)'s tools, the reasons a settings change is refused and the
-name of an item whose mod is gone, ship in
+The loader's own texts ship in
 [`texts/`](https://github.com/enshwick/enshwick/blob/main/crates/internal/loader/src/texts),
-a file per language.
+a file per language. They hold the words of the Mods screen and the answers
+of the [console](../chat.md#the-console)'s tools. They also hold the reasons a
+settings change is refused and the name of an item whose mod is gone.

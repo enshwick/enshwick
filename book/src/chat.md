@@ -36,15 +36,27 @@ lines; more are dropped.
 On the server, a mod hears every line that reaches the chat, and may drop or
 rewrite what players type before anyone reads it.
 
-`load.on_chat_said(handler)` calls `handler` after the step with a
-`ChatLine`: the sender's account and character, its kind (`Player`, `Emote`
-or `Notice`, such as a player joining) and its text. A player's line arrives
-as the filters left it, at most eight a second per player; lines that mods
-send never arrive.
+`load.on_chat_said(handler)` calls the handler after the step with a
+`ChatLine`. The line holds:
+
+- the sender's account and character
+- its kind:
+  - `Player`
+  - `Emote`
+  - `Notice`, such as a player joining
+- its text
+
+A player's line arrives as the filters left it, at most eight a second per
+player; lines that mods send never arrive.
 
 `load.on_chat(filter)` runs `filter` on each line a player types, inside the
-game's chat post, after the chat mute. It answers `ChatVerdict::Keep`,
-`Drop` or `Rewrite(text)`. Filters of all mods run in load order: a drop
+game's chat post, after the chat mute. It answers one of:
+
+- `ChatVerdict::Keep`
+- `Drop`
+- `Rewrite(text)`
+
+Filters of all mods run in load order: a drop
 stops the filters after it, and a rewrite hands its text on. A muted
 player's line reaches no filter and no handler. A filter that panics turns
 off alone, and lines pass it.
@@ -65,8 +77,8 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 From Luau, the same calls are `enshwick.chat.on_chat(fn)` and
-`enshwick.chat.on_chat_said(fn)`; a Luau filter returns `false` to drop the
-line, a string to rewrite it, and nil or `true` to keep it. An empty
+`enshwick.chat.on_chat_said(fn)`. A Luau filter returns `false` to drop the
+line or a string to rewrite it. It returns nil or `true` to keep it. An empty
 rewrite drops the line too.
 
 ```luau
@@ -127,9 +139,9 @@ end)
 
 The game raises these messages on the client, in the client's own world, so
 the server cannot raise one for a client. A notice travels as a
-[message](messages.md) to the client's loader, which shows the text through a
-text tag of its own and raises the game's message event in the client's world
-at its next step.
+[message](messages.md) to the client's loader. The loader shows the text
+through a text tag of its own. It raises the game's message event in the
+client's world at its next step.
 
 ## The console
 
@@ -165,9 +177,9 @@ The answer goes back to the caller, not to any chat.
 ### The server's console window
 
 A line typed into a dedicated server's own console window, or its terminal,
-runs the same way, and its answer shows there and in the loader's log. In
-Docker the container needs input: `docker run -it`, or `stdin_open: true`
-and `tty: true` in Compose, then `docker attach` to type. A server started
+runs the same way. Its answer shows there and in the loader's log. In
+Docker the container needs input. Start it with `docker run -it`. In Compose,
+set `stdin_open: true` and `tty: true` instead. Then type after `docker attach`. A server started
 without input, such as a Windows service, runs only the lines mods run.
 
 ### The loader's tools
@@ -189,8 +201,8 @@ without input, such as a Windows service, runs only the lines mods run.
 | `enshwick config [mod] [key] [value]`           | read and change a mod's settings; see [The schema and the console](settings.md#the-schema-and-the-console)                                                                                                                    |
 | `enshwick ui-demo <player>`                     | opens a window of every [interface](interface.md) widget on that player's client, when it runs Enshwick, for a visual check                                                                                                   |
 
-The loader has no tools that kick, ban, give items, spawn or move players:
-those are a mod's, through the [account actions](world.md#kicking-and-banning)
+The loader has no tools that kick, ban, give items, spawn or move players.
+Those are a mod's, through the [account actions](world.md#kicking-and-banning)
 and the rest of the API.
 
 No mod may take the id `enshwick`.

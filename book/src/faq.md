@@ -7,28 +7,30 @@ description: Where the Enshwick logs, crash files and status summary are, why a 
 
 ## Where are the logs?
 
-Everything is under `logs/` in the game's folder (beside `enshrouded.exe` or
-`enshrouded_server.exe`), one file per source and run, such as
-`enshwick_2026-11-03_10-00-00.log` for the loader.
+Everything is under `logs/` in the game's folder. That folder holds
+`enshrouded.exe` or `enshrouded_server.exe`. The logs are one file per source
+and run, such as `enshwick_2026-11-03_10-00-00.log` for the loader.
 [Log files](logging.md#log-files) lists each file and how long it is kept,
 and [Levels](logging.md#levels) sets how much is written. One more file,
 `start.log`, stays there only when the loader did not start, and says why;
 see [Nothing loads at all](#nothing-loads-at-all).
 
-To ask for help, attach two files to an issue: the loader's file of the run
-that went wrong, `logs/enshwick_<date>_<time>.log`, and after a crash the
-crash file, `logs/enshwick-crash_<date>_<time>.log`. The loader's file holds
-the versions, your system and every line the loader wrote; paths in it show
-your folders, so read it before you share it.
+To ask for help, attach two files to an issue. The first is the loader's
+file of the run that went wrong, `logs/enshwick_<date>_<time>.log`. The
+second, after a crash, is the crash file,
+`logs/enshwick-crash_<date>_<time>.log`. The loader's file holds the
+versions, your system and every line the loader wrote. Paths in it show your
+folders, so read it before you share it.
 
 ## What is in a crash file?
 
-A line for each crash: a hardware fault nothing handled, such as an access
-violation, an illegal or privileged instruction, an integer division by zero
-or a stack overflow, that ends the game. Faults the game or a mod handles and
-survives are never written. The loader writes the line as the game's own
-crash handler starts writing its crash dump, or when no handler is left, and
-the game's crash handling then runs as it would without Enshwick:
+A crash file holds a line for each crash. A crash is a hardware fault nothing
+handled that ends the game. Examples are an access violation, an illegal or
+privileged instruction, an integer division by zero or a stack overflow.
+Faults the game or a mod handles and survives are never written. The loader
+writes the line when the game's own crash handler starts writing its crash
+dump, or when no handler is left. Then the game's crash handling runs as it
+would without Enshwick:
 
 ```text
 2026-10-21 23:45:18Z fault 0xc0000005 at 0x7ffb1a2b3c4d, blamed on you.trading-post: in its code (+0x3c4d in you.trading-post); reading 0x0
@@ -46,13 +48,13 @@ is blamed on:
 | `in the game, called from enshwick`                    | the fault is in game code under the loader's code, with no mod's near it  |
 | `in the game: no mod's or loader's code on the stack`  | Enshwick and its mods are not involved                                    |
 
-The offset in brackets is the address inside the DLL that holds it, and the
-last part is what the faulting access read, wrote or ran.
+The offset in brackets is the address inside the DLL that holds it. The last
+part is what the faulting access read, wrote or ran.
 
 Each crash writes its line to the loader's file of that run and to a file of
-its own, `logs/enshwick-crash_<date>_<time>.log`; the newest 10 crash files
+its own, `logs/enshwick-crash_<date>_<time>.log`. The newest 10 crash files
 are kept. The next start logs the last crash as a warning and shows it at
-the top of the status summary; the line waits in
+the top of the status summary. The line waits in
 `mods/enshwick/last-crash.txt` until then.
 
 ## Where is the status summary?
@@ -66,9 +68,9 @@ loader's log: the mods, whether each runs, and what they share.
 Look in the loader's log for the mod's DLL name or id, and in the mod's own
 file, `logs/<mod id>_<date>_<time>.log`. A
 mod that never initialised was skipped; a mod that initialised and stopped
-was turned off. A turned-off mod's log has a line `off: <reason>` at `error`;
-when the mod itself returned `Err(Off)` from `init`, the line before it, at
-`warn`, carries the mod's own reason.
+was turned off. A turned-off mod's log has a line `off: <reason>` at `error`. When the mod
+returned `Err(Off)` from `init`, the line before it carries the mod's own
+reason. That line is at `warn`.
 
 ### Nothing loads at all
 
@@ -79,14 +81,15 @@ when the mod itself returned `Err(Off)` from `init`, the line before it, at
 
 When the loader's log is missing or empty, read `logs/start.log`. The stub
 and the loader write a line there, with the Windows error, when they stop
-before the log opens: the loader DLL is missing or does not load, or the
-game's folder takes no files. When the game's folder takes no files, the line
+before the log opens. They stop when the loader DLL is missing or does not
+load, or when the game's folder takes no files. When the game's folder takes no files, the line
 goes to `enshwick/start.log` in the Windows temporary folder (`%TEMP%`)
 instead. Each line starts with its date and time (UTC). Once the loader
 starts again, its file takes these lines in and `start.log` goes.
 
-A panic in the loader or a mod writes a line at `error` with the message,
-the place in the code and the thread, to the loader's log or to the mod's log.
+A panic in the loader or a mod writes a line at `error` to the loader's log
+or to the mod's log. The line holds the message, the place in the code and
+the thread.
 
 On an unknown build every mod's hold applies; see
 [The game stops before the world loads](#the-game-stops-before-the-world-loads).
@@ -102,10 +105,14 @@ build, the game version and the executable.
 When some entries are missing, the loader's log reads `game: <build>, <n>
 entries found by engine routes and anchors, <m> missing; ...`, and at
 `debug` the missing entries. Whatever the routes and anchors do not find
-stays off: a loader feature logs `<feature> off on <build>: <entry> is not
-found by its anchor's pattern`, `<entry> is found by no engine route or
-anchor`, or `<entry> does not read as its anchor says` when nothing checks
-the code at the entry, and a mod that needs a missing entry turns off with
+stays off. A loader feature that stays off logs one of these lines:
+
+- `<feature> off on <build>: <entry> is not found by its anchor's pattern`
+- `<entry> is found by no engine route or anchor`
+- `<entry> does not read as its anchor says`, when nothing checks the code at
+  the entry
+
+A mod that needs a missing entry turns off with
 `symbol <id>: missing on this game build`. The Mods screen lists the
 features that are off. A build whose reflection reads no types or systems
 runs vanilla, as a build the loader does not know. Everything else runs. A
@@ -137,8 +144,8 @@ hosts a game; see [Sides and hosting](concepts/sides-and-hosting.md).
 
 ### The mod turned itself off in init
 
-The mod's log has `off: <reason>` at `warn`, then the loader's
-`off: init returned 3`. Common reasons, as the safe layer words them:
+The mod's log has `off: <reason>` at `warn`. The loader's
+`off: init returned 3` follows it. Common reasons, as the safe layer words them:
 
 | Reason                                                 | What it means                                                          |
 | ------------------------------------------------------ | ---------------------------------------------------------------------- |
@@ -173,9 +180,9 @@ acted. It stays off until the game restarts, except a mod off for one world.
 
 ## The game stops before the world loads
 
-A mod that keeps a world the vanilla game cannot open safely sets a hold:
-`hold.txt` in its folder `mods/<folder>/`, or in a world's
-`<stem>-mod-data/<id>/`, holding the reason. While the file exists and that
+A mod that keeps a world the vanilla game cannot open safely sets a hold.
+The hold is a file `hold.txt` that holds the reason. It sits in the mod's
+folder `mods/<folder>/` or in a world's `<stem>-mod-data/<id>/`. While the file exists and that
 mod does not run (skipped, off, or the build is unknown), the loader logs
 
 ```text
@@ -189,13 +196,19 @@ and the mod, or delete `hold.txt` and accept the risk the reason names. See
 
 ## Another mod ships its own powrprof.dll
 
-Some mods come with their own `powrprof.dll`, `dinput8.dll`, `winmm.dll` or
-`dbghelp.dll`. When one of them replaces Enshwick's `powrprof.dll`, Enshwick
-does not start.
+Some mods come with their own copy of one of these DLLs:
+
+- `powrprof.dll`
+- `dinput8.dll`
+- `winmm.dll`
+- `dbghelp.dll`
+
+When one of them replaces Enshwick's `powrprof.dll`, Enshwick does not
+start.
 
 Put Enshwick's `powrprof.dll` back into the game's folder. Another mod's
-`powrprof.dll` cannot run beside it, so keep one of the two mods. Another
-mod's `dinput8.dll`, `winmm.dll` or `dbghelp.dll` stays beside the game and
+`powrprof.dll` cannot run beside it, so keep one of the two mods. When
+another mod ships one of the other three DLLs, it stays beside the game and
 runs next to Enshwick.
 
 The status summary and the Mods screen list other mods' proxy DLLs beside the
@@ -206,18 +219,16 @@ Under Proton, each proxy needs its name in the overrides, such as
 
 ## Nothing happens under Proton
 
-The game must load Enshwick's `powrprof.dll` instead of the system one, with
-an override in the game's launch options:
-[Install Enshwick](https://enshwick.com/guides/install/) shows it, and
-[Run a server on Linux](https://enshwick.com/guides/run-a-linux-server/) does
-for a dedicated server.
+The game must load Enshwick's `powrprof.dll` instead of the system one. An
+override in the game's launch options does that. [Install Enshwick](https://enshwick.com/guides/install/) shows it,
+and [Run a server on Linux](https://enshwick.com/guides/run-a-linux-server/) shows it for a dedicated server.
 
 ## The join was refused
 
 The client compares its mods of side `both` with the server's before it
 joins. When the server runs mods the client lacks or has in another version,
-the client stays out and goes back to the menu, which shows the mods that
-differ, "Mods missing", by id and versions:
+the client stays out. It goes back to the menu, which shows the mods that
+differ by id and versions under "Mods missing":
 
 ```text
 Missing: 1
@@ -227,12 +238,12 @@ you.trading-post: needs 0.2.0, you have 0.1.0
 ```
 
 The loader's log then has
-`join refused: the server runs mods this client lacks`. A server that lets a
-client in and kicks it later for its mods sends the same list, which shows
-once the client is back in the menu. Other cases do not keep the player out:
+`join refused: the server runs mods this client lacks`. A server may let a
+client in and kick it later for its mods. That server sends the same list,
+which shows once the client is back in the menu. Other cases do not keep the player out:
 
 - the client runs mods the server does not: they are turned off for that
-  world, with a note, and listed on the screen as off for this server;
+  world, with a note. The screen lists them as off for this server;
 - the mods match but the loaders differ: a note asks to install the server's
   version;
 - the server does not answer the query: the client joins without a check

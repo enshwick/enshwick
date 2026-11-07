@@ -58,7 +58,7 @@ In Luau, a drop's `chance` may come from the mod's
 
 - The game rolls a container's loot once, when a player first opens it:
   world chests and enemy corpses. Each matching drop then rolls its own
-  chance and adds its stack in the same transaction as the vanilla loot, so
+  chance. It adds its stack in the same transaction as the vanilla loot, so
   it is saved and replicated with it.
 - Containers rolled before, in a save, stay as they were.
 - Destroyed objects and pickup spawners roll a single item instead. A drop
@@ -71,28 +71,36 @@ In Luau, a drop's `chance` may come from the mod's
 A [`Drop`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot/drops.rs)
 holds the items, the chance, the count and the source:
 
-- `Drop::new(item, chance, from)` gives one item, `item` being the game id
+- `Drop::new(item, chance, from)` gives one item. `item` is the game id
   [`ItemId::from_guid`](items.md#guids-and-item-ids) gives;
 - `Drop::one_of(items, chance, from)` gives one of several items, each as
   likely; `chance` is that of any of them;
-- `.count(min, max)` gives `min` to `max` items per hit, each count in
-  between as likely; one by default;
+- `.count(min, max)` sets the items per hit. Each count from `min` to `max`
+  is as likely; one by default;
 - `.meter(min, max, of)` starts each dropped item's
-  [meter](items.md#meters) at `min` to `max` of `of`, each count as likely:
-  charges rolled as the item drops. Without it the item starts as its
+  [meter](items.md#meters) at a count out of `of`. Each count from `min` to
+  `max` is as likely: charges rolled as the item drops. Without it the item starts as its
   template says. A single-item roll, the `DESTROYED` kind, keeps the
   template's start.
 
-`add_loot` turns the mod off when the drop is not valid: no item, an item id
-of 0, a chance outside 0 to 1, a count with `min` of 0 or above `max`, or a
-meter with `min` above `max`, `max` above `of` or an `of` of 0. It
-also does so when the running build lacks a piece the drops need, such as the
-pinned `loot.roll` symbol, or `loot.roll_one` for a `DESTROYED` drop.
+`add_loot` turns the mod off when the drop is not valid:
+
+- no item, or an item id of 0;
+- a chance outside 0 to 1;
+- a count with `min` of 0 or above `max`;
+- a meter with `min` above `max`;
+- a meter with `max` above `of`;
+- a meter with an `of` of 0.
+
+It also turns the mod off when the running build lacks a piece the drops
+need. One such piece is the pinned `loot.roll` symbol. Another is
+`loot.roll_one`, for a `DESTROYED` drop.
 
 `loot::replace_drops(drops)` swaps the mod's drops while the game runs, from
-any thread, such as when a setting changes; an empty list stops them. A kind of
-roll that no drop linked at start waits for a restart, so a mod that may turn
-its drops on later adds them at init and replaces them with none at once.
+any thread, such as when a setting changes. An empty list stops them. A kind
+of roll that no drop linked at start waits for a restart. So a mod that may
+turn its drops on later adds them at init and replaces them with none at
+once.
 
 ## Where it drops
 
@@ -106,12 +114,18 @@ its drops on later adds them at init and replaces them with none at once.
 | `.with_labels(&[id, ...])`     | the same, limited to these loot label ids        |
 | `.with_nodes(&[node, ...])`    | the same, limited to these world nodes           |
 
-`Kinds` are `CORPSES` (corpses and loot bags enemies leave), `CHESTS` (world
-chests and every other container that rolls on first opening), `DESTROYED`
-and `CONTAINERS` (corpses and chests); `with` joins two sets.
+`Kinds` are these:
 
-Label ids and node ids are `LootContainerId`s, as the game names them; a label id is the FNV-1a hash of an enemy or chest type's label
-collection GUID. `Source::matches` tells whether a
+- `CORPSES`: corpses and loot bags enemies leave;
+- `CHESTS`: world chests and every other container that rolls on first
+  opening;
+- `DESTROYED`;
+- `CONTAINERS`: corpses and chests.
+
+`with` joins two sets.
+
+Label ids and node ids are `LootContainerId`s, as the game names them. A
+label id is the FNV-1a hash of an enemy or chest type's label collection GUID. `Source::matches` tells whether a
 [`Roll`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot/drops.rs)
 comes from a source, which a unit test can check without the game:
 
@@ -128,7 +142,7 @@ assert!(Source::kinds(Kinds::CORPSES).with_labels(&[LootContainerId::new(9)]).ma
 ## A worked example: copy staffs
 
 [Survivors per altar](https://github.com/enshwick/mods/tree/main/survivors-per-altar)
-adds a copy staff per survivor with `add_item`, then puts them in loot with
-`Drop::one_of`: one chance for bosses and one for locked chests, both from
-its settings, and no drop when a chance is 0. When `copy_staffs` turns off
+adds a copy staff per survivor with `add_item`. Then it puts them in loot with
+`Drop::one_of`. Bosses get one chance and locked chests another, both from its
+settings, and a chance of 0 drops nothing. When `copy_staffs` turns off
 while the game runs, it calls `replace_drops` with none.

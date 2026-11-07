@@ -12,8 +12,8 @@ of the game's attacks and behaviours.
 ## An enemy of the mod's own
 
 `load.add_enemy(NewEnemy)` copies the vanilla enemy template `like` under the
-mod's id, as [`add_template`](templates.md) does, and sets what `NewEnemy`
-gives:
+mod's id. It works as [`add_template`](templates.md) does, and sets what
+`NewEnemy` gives:
 
 | Field | What it sets |
 | --- | --- |
@@ -25,8 +25,8 @@ gives:
 | `boss` | whether it is a boss |
 | `changes` | further [component changes](templates.md#what-a-change-does) |
 
-Health follows the level as in the game: on a server copy, a vanilla wolf of
-level 20 had 567 health and its copy with `health = 2` had 1135. The enemy
+Health follows the level as in the game. On a server copy, a vanilla wolf of
+level 20 had 567 health, and its copy with `health = 2` had 1135. The enemy
 spawns from its template, as spawners and `effects::spawn` spawn others. An
 enemy is read on the server and the client, so a mod that adds one runs on
 both sides. Its model, animations and attacks are the game's: the client has
@@ -34,8 +34,8 @@ to have them.
 
 `vanilla::enemy(name)` names a vanilla enemy by its template's name, with its
 faction and arsenal; `vanilla::template(name)` names any template. The first
-of these calls reads the names of all the game's templates once, 139 ms on a
-dedicated server: a Luau mod makes it at the top level of `main.luau`, where
+of these calls reads the names of all the game's templates once. That takes
+139 ms on a dedicated server, so a Luau mod makes it at the top level of `main.luau`, where
 no per-second budget applies. A Rust mod makes it in `init`; a first call
 after `init` runs on the calling thread and logs a warning.
 
@@ -79,11 +79,14 @@ These calls need the `typed` feature, which gives the factions.
 
 ## From Luau
 
-The same calls are `enshwick.content.add_enemy{...}`,
-`enshwick.content.add_arsenal{...}` and
-`enshwick.content.change_arsenal(guid, {...})`, at the top level of
-`main.luau`; `enshwick.content.enemy(name)` and
-`enshwick.content.template(name)` name vanilla ones.
+The same calls run at the top level of `main.luau`:
+
+- `enshwick.content.add_enemy{...}`
+- `enshwick.content.add_arsenal{...}`
+- `enshwick.content.change_arsenal(guid, {...})`
+
+`enshwick.content.enemy(name)` and `enshwick.content.template(name)` name
+vanilla ones.
 
 ```luau
 local biter = enshwick.content.add_arsenal({

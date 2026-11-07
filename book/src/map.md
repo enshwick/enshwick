@@ -59,20 +59,22 @@ end)
 towns, ruins, dungeons, Flame shrines, quest areas and the like. Each
 `MapMarker` has its position in metres, its type and the text tag of its
 label. The loader reads them from the game's data once per scene, apart
-from the game thread, so they are there with no player near and later calls
+from the game thread. So they are there with no player near, and later calls
 are cheap. Until that read is done, a second or two after the first call,
 they fail with `NotLoaded`: ask again later.
 `map.markers_in(a, b)` keeps those in the box between two corners, edges
 included. They fail with a [`WorldError`](world.md#writing-components):
-`WrongThread` off the game thread, `Missing` while no world runs or when
-the scene does not read on the game build, and `Refused` for a corner that
-is not finite.
+
+- `WrongThread` off the game thread;
+- `Missing` while no world runs or when the scene does not read on the game
+  build;
+- `Refused` for a corner that is not finite.
 
 A marker's type is a `MapMarkerTypeId`, the key of the game's marker type
 registry. The registry is game data and grows with the game, so the API
 has no fixed list of types. A client reads the registry with
-`Ui::map_marker_types` ([Map markers](interface.md#map-markers)), whose
-`MapMarkerType` entries carry the same keys with their group and flags; a
+`Ui::map_marker_types` ([Map markers](interface.md#map-markers)). Its
+`MapMarkerType` entries carry the same keys with their group and flags. A
 dedicated server's data has no registry. A marker without a type or a
 label has `None` there.
 
@@ -89,22 +91,23 @@ it only while the player plays, never in the save. It fails like
 ## Hearing waypoints and pings
 
 `load.on_waypoint(handler)` calls the handler on the server's game thread
-when a player sets, moves or clears their waypoint, with a
+when a player sets, moves or clears their waypoint. The handler gets a
 `WaypointChanged`: the player's account, their character and the new
-`position`, `None` once cleared. The waypoints are compared on a tick every
-tenth of a second, so a change shows within that; the waypoint a player has
-when they join counts as no change.
+`position`. The `position` is `None` once cleared. The waypoints are compared
+on a tick every tenth of a second, so a change shows within that. The waypoint
+a player has when they join counts as no change.
 
 `load.on_ping(handler)` calls the handler for each ping, the game's
-`UiPingEvent`, with a `MapPinged`: the pinging player's account, `None` for a
-ping a mod raised for another entity, the entity it comes from and where.
-One sender is heard at most once a tenth of a second.
+`UiPingEvent`. The handler gets a `MapPinged`: the pinging player's account,
+the entity it comes from and where. The account is `None` for a ping a mod
+raised for another entity. One sender is heard at most once a tenth of a
+second.
 
 Both come from what a client sends, so neither hands on a place outside
-the [map's frame](#the-maps-frame); a waypoint there is named once in the
-log. Both are unstable: a server copy showed a ping a mod raises reaching
-`on_ping`, and a player's own ping and waypoint are not yet seen in the
-game (see [Stability](stability.md)).
+the [map's frame](#the-maps-frame). A waypoint there is named once in the
+log. Both are unstable (see [Stability](stability.md)). A server copy showed a
+ping a mod raises reaching `on_ping`. A player's own ping and waypoint are not
+yet seen in the game.
 
 ```rust
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -128,10 +131,10 @@ end)
 ## The map's frame
 
 `map.frame()` returns a `MapFrame`: where the world's map starts, how far
-it reaches and the size of the game's map cells, all in metres on the
-world's x and z axes. A map drawn outside the game puts its corner at
+it reaches and the size of the game's map cells. All three are in metres on
+the world's x and z axes. A map drawn outside the game puts its corner at
 `origin` and spans `size`. On the main scene of the current game the frame
-starts at (0, 0) and spans 10 240 m each way in cells of 8 m.
+starts at (0, 0). It spans 10 240 m each way in cells of 8 m.
 
 ```rust
 use enshwick::map::Map;
@@ -144,19 +147,27 @@ fn place(map: Map, position: [f64; 3]) -> Option<[f64; 2]> {
 ```
 
 The loader reads it once per scene like the markers, so it fails like
-`markers()`: `NotLoaded` until that read is done, `WrongThread` off the
-game thread, and `Missing` while no world runs, for a scene without a map,
-or when the scene does not read on the game build.
+`markers()`:
+
+- `NotLoaded` until that read is done;
+- `WrongThread` off the game thread;
+- `Missing` while no world runs, for a scene without a map, or when the
+  scene does not read on the game build.
 
 ## Snapshots for a map outside the game
 
-`map.snapshot(altars)` takes what the map shows now as a `MapSnapshot`:
-every player with position and waypoint, the Flame Altars of an `Altars`
-from `load.altars()` with the base each belongs to, every marker and the
-map's frame, `None` for a scene without one. It is
-plain serde data in Enshwick's own format, for a process beside the server
+`map.snapshot(altars)` takes what the map shows now as a `MapSnapshot`. It
+holds:
+
+- every player with position and waypoint;
+- the Flame Altars of an `Altars` from `load.altars()`, with the base each
+  belongs to;
+- every marker;
+- the map's frame, `None` for a scene without one.
+
+It is plain serde data in Enshwick's own format, for a process beside the server
 such as a web map. `to_bytes()` writes `MAP_SNAPSHOT_FORMAT` in two bytes and
-then the fields in postcard's encoding; `MapSnapshot::from_bytes` reads it
+then the fields in postcard's encoding. `MapSnapshot::from_bytes` reads it
 back and refuses any other format. A snapshot carries a marker's label as a
 text id only, since a dedicated server has no texts. Take one every few
 seconds, not every step: it walks every marker.
@@ -164,18 +175,23 @@ seconds, not every step: it walks every marker.
 ## The fog of war on the client
 
 `load.fog_of_war()` asks the loader to copy the client's fog of war for
-the mod, during `init`; on a dedicated server it fails, since only the
+the mod, during `init`. On a dedicated server it fails, since only the
 player's machine has the fog. The loader copies it as the game uncovers it,
 so `FogOfWar` reads from any thread.
 
-`fog.state()` returns a `FogState`: the image's size in pixels, the metres
-one pixel covers, the world's z size, a `version` that grows whenever pixels
-may have changed, and a `session` that changes with each world the client
-enters. Once the client leaves the world, the copy is gone until it enters one
+`fog.state()` returns a `FogState` with these fields:
+
+- the image's size in pixels;
+- the metres one pixel covers;
+- the world's z size;
+- a `version` that grows whenever pixels may have changed;
+- a `session` that changes with each world the client enters.
+
+Once the client leaves the world, the copy is gone until it enters one
 again. `state.pixel_of(position)` finds the pixel of a place in metres:
-row 0 is the world's high z edge, and x grows with world x. `fog.read(min,
-size)` copies a box of pixels as a `FogImage`, one byte each from 0 (hidden)
-to 255 (uncovered), and `fog.coverage(position)` reads one place. While
+row 0 is the world's high z edge, and x grows with world x.
+`fog.read(min, size)` copies a box of pixels as a `FogImage`, one byte each
+from 0 (hidden) to 255 (uncovered). `fog.coverage(position)` reads one place. While
 the client is in no world, on a game build without the fog, or after the
 loader stopped copying it, they fail with `FogError::Missing`.
 

@@ -46,7 +46,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 ## From Luau
 
-A Luau mod reaches the same calls through `enshwick.buffs`; here each player
+A Luau mod reaches the same calls through `enshwick.buffs`. Here each player
 who joins gets a buff for five minutes, its id from the game's data:
 
 ```luau
@@ -68,36 +68,55 @@ as the game's content names it. `BuffTypeId::from_guid(guid)` makes one, and
 mod serves under its own [content id](content.md#content-ids).
 `BuffTypeId::named("you.lockers:warmth")` takes a content id in full, for
 tests, tools or another mod's buff type.
-`types()` lists every type of the running game (274 on the 1.0 game) with
-its `BuffSlotType` (`Food`, `Buff`, `Debuff`, `Rested` or `Terrain`), its
-default duration, whether the game saves it with a character, whether it
-shows, and the `LocaTag` of its name, which a client shows. The dedicated
-server has no texts of its own, so a mod that names buffs keeps its own
-table or reads the names on a client.
+`types()` lists every type of the running game, 274 on the 1.0 game. Each
+type comes with:
+
+- its kind, a `BuffSlotType`:
+  - `Food`
+  - `Buff`
+  - `Debuff`
+  - `Rested`
+  - `Terrain`
+- its default duration
+- whether the game saves it with a character
+- whether it shows
+- the `LocaTag` of its name, which a client shows
+
+The dedicated server has no texts of its own. So a mod that names buffs keeps
+its own table or reads the names on a client.
 
 ## An entity's buffs
 
-`of(entity)` lists the buffs an entity has: the type, the buff's own entity
-(which carries its effect), the kind, the level when it has one, its whole
-duration and the time left, in game time. `has(entity, id)` asks for one
-type. Characters, survivors, animals and enemies hold buffs; anything else
-answers `WorldError::Lacks`.
+`of(entity)` lists the buffs an entity has. Each buff comes with:
+
+- its type
+- the buff's own entity, which carries its effect
+- its kind
+- its level, when it has one
+- its whole duration and the time left, in game time
+
+`has(entity, id)` asks for one type. Characters, survivors, animals and
+enemies hold buffs; anything else answers `WorldError::Lacks`.
 
 ## Giving and removing
 
 `apply(entity, id, how)` gives a buff at once, as the game restores a
-character's saved buffs when it joins: `Apply::new()` with the type's own
-duration, `.lasting(duration)` for another, `.level(n)` for a level. A buff
-the entity has already is renewed to the duration asked and keeps its level.
-The game's own faction and death checks do not run: the mod decides who gets
-a buff.
+character's saved buffs when it joins. `how` sets the duration and level:
+
+- `Apply::new()` keeps the type's own duration.
+- `.lasting(duration)` sets another duration.
+- `.level(n)` sets a level.
+
+A buff the entity has already is renewed to the duration asked and keeps its
+level. The game's own faction and death checks do not run: the mod decides who
+gets a buff.
 
 `remove(entity, id)` removes every buff of the type, as the game cleanses
-one: it goes in the next step, without what the type does when it runs out,
-and the call returns whether the entity had it. The game frees the buff's
-place only in that next step, so giving the same type again in the step it
-was removed answers `WorldError::Refused`: give it from a
-[scheduler](events.md#the-scheduler) task one step later.
+one. The buff goes in the next step, without what the type does when it runs
+out. The call returns whether the entity had it. The game frees the buff's
+place only in that next step. So giving the same type again in the step it was
+removed answers `WorldError::Refused`. Give it from a
+[scheduler](events.md#the-scheduler) task one step later instead.
 
 Clients see buffs given and removed as the game's own, with their icons and
 times. The game saves the types it saves with a character, buffs from mods

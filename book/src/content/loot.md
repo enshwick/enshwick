@@ -17,8 +17,8 @@ The game checks every such container each step in one ECS system,
 [`loot::SYSTEM`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot.rs)
 (`destroy_inventory_on_loot`), on a worker thread.
 [`load.on_loot_pass`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot.rs)
-runs a handler after each run of it in the server's world, with a `LootPass`
-that walks that run's containers and reads any entity as one:
+runs a handler after each run of it in the server's world. The handler gets a
+`LootPass` that walks that run's containers and reads any entity as one:
 
 ```rust
 use enshwick::world::near;
@@ -54,9 +54,10 @@ enshwick.loot.on_loot_pass(function(containers)
 end)
 ```
 
-A Luau handler gets the pass's containers as a list of `Container` tables,
-the fields of the table under [Reading one container](#reading-one-container);
-`is_open()` and `near` are the checks the Luau example spells out.
+A Luau handler gets the pass's containers as a list of `Container` tables.
+Their fields are those of the table under
+[Reading one container](#reading-one-container). The Luau example spells out
+the checks `is_open()` and `near`.
 
 `each` leaves the system's row where it found it, so the walk does not
 disturb vanilla. Keep the handler short; it runs every step. A mod that walks
@@ -74,13 +75,16 @@ holds what one container is and holds, read in one go:
 | `position` | Where it stands, in metres; y is up. |
 | `is_empty` | Whether it holds nothing, as the game last recorded. |
 | `expires` | Whether it despawns on its own after a while (`LifeTime`). |
-| `area_loot` | Its `AreaLootOverride`: `Some(true)` when area loot may take it, `Some(false)` when excluded (items a player dropped), `None` without one. |
+| `area_loot` | Its `AreaLootOverride`, or `None` without one. `Some(true)` means area loot may take it. `Some(false)` means it is excluded, as items a player dropped are. |
 | `offer` | Its interaction offer, an [`InteractionOfferRuntime`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot.rs); `None` without one. |
 
-An `InteractionOfferRuntime` names who last opened or looted the container
-(`guest_id`, `None` before anyone did), when (`last_accept_time`, in the
-game's nanoseconds, changing with each interaction) and whether the game
-offers no interaction now (`is_disabled`).
+An `InteractionOfferRuntime` has three fields:
+
+- `guest_id`: who last opened or looted the container, `None` before anyone
+  did;
+- `last_accept_time`: when, in the game's nanoseconds, changing with each
+  interaction;
+- `is_disabled`: whether the game offers no interaction now.
 
 Two methods sort containers:
 
@@ -94,16 +98,17 @@ Two methods sort containers:
 
 From inside any hooked system, with its context:
 
-- `container(ctx, entity)` reads one entity as a loot container; `None` when
-  it is not one (no `DestroyOnLoot`, inventory state or position) or is
-  gone;
+- `container(ctx, entity)` reads one entity as a loot container. It gives
+  `None` when the entity is gone or is not one: it has no `DestroyOnLoot`,
+  inventory state or position;
 - `position(ctx, entity)` gives any entity's position in metres;
 - `is_player(ctx, entity)` tells whether an entity is a player character,
   such as an offer's `guest_id`.
 
 [`near(center, at, radius, height)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world/geometry.rs)
-tells whether `at` lies within `radius` metres of `center` across the
-ground and within `height` metres above or below it:
+tells whether `at` lies near the centre. It must lie within `radius` metres
+of the centre across the ground, and within `height` metres above or below
+it:
 
 ```rust
 use enshwick::world::near;
@@ -131,8 +136,10 @@ the same player puts the pieces of this chapter together. The steps follow
 one such mod's
 [`take.rs`](https://github.com/enshwick/mods/blob/main/area-loot/src/take.rs):
 
-1. At `init` it resolves `Containers`, `Inventories` and `Worlds`, and hooks
-   `loot::SYSTEM`.
+1. At `init` it hooks `loot::SYSTEM` and resolves these:
+   - `Containers`
+   - `Inventories`
+   - `Worlds`
 2. The hook calls vanilla first, then skips any context for which
    `is_server` is false, and walks the containers with `each`. It catches a
    panic in its own pass and turns itself off, so the game keeps running
@@ -141,11 +148,12 @@ one such mod's
    that went empty after a player's interaction (the offer's `guest_id`, checked
    with `is_player`) starts a take.
 4. It gathers the containers around that are `is_open()` and `near` within
-   the configured radius and height, and leaves out any that another player
-   opened or looted in the last 10 seconds, or whose last guest, another
-   player, still stands within 4 metres.
-5. It empties them one at a time with a `MoveAll` batch, nearest first, and
-   goes on to the next only when the batch committed and a
-   [read](../inventories.md#reads) in the callback shows the last one empty.
+   the configured radius and height. It leaves out any that another player
+   opened or looted in the last 10 seconds. It also leaves out any whose last
+   guest, another player, still stands within 4 metres.
+5. It empties them one at a time with a `MoveAll` batch, nearest first. It
+   goes on to the next only when the batch committed. A
+   [read](../inventories.md#reads) in the callback must also show the last
+   one empty.
    A full inventory stops it.
 6. On `ShutdownStarted` it clears the tracker: entity ids belong to one game.

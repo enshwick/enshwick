@@ -35,8 +35,8 @@ you make one that lets four times as many wood logs fit in one inventory slot.
 ## Check it
 
 1. Run `cargo enshwick pack check you.material-stacks --game <game folder>`. It
-   reads every file against the game's data and prints each problem with its
-   file and line, with the names that look like a misspelt one:
+   reads every file against the game's data. It prints each problem with its
+   file and line, and the names that look like a misspelt one:
 
    ```text
    error: items.toml:2:1: no item "Material_T1_Wood_Log" in this pack, and no vanilla item "Material_T1_Wood_Log"; near: Material_T1_Wood_Logs
@@ -44,8 +44,9 @@ you make one that lets four times as many wood logs fit in one inventory slot.
 
 ## Install and play
 
-1. Copy the folder into the game's `mods/` folder, on the server and in every
-   player's game: the join check lets only players with the same pack in.
+1. Copy the folder into the game's `mods/` folder on the server and in every
+   player's game. It has to be in both, because the join check lets only
+   players with the same pack in.
 2. Start the game. The pack's log, `logs/you.material-stacks_<date>_<time>.log`,
    counts what it changed:
 

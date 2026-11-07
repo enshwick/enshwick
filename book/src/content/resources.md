@@ -16,14 +16,14 @@ A resource is named by a
 [`ResourceKey`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs):
 a GUID, a type hash and a part.
 [`Guid::key(ty)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)
-makes the key of part 0 with the hash the loader gives the type on the
-running build, and
+makes the key of part 0. Its hash is the one the loader gives the type on the
+running build.
 [`content::types`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)
-names the resource types mods commonly serve, such as `ITEM_INFO` and
+names the resource types mods commonly serve. Two of them are `ITEM_INFO` and
 `ITEM_REGISTRY`.
 
-`load.serve(key, base, builder)` serves `key`, built by `builder` from the
-bytes of the resource `base`:
+`load.serve(key, base, builder)` serves a resource under `key`. The `builder`
+builds it from the bytes of the resource `base`:
 
 - with `key` and `base` different, it is a new resource, such as a new item
   cloned from a vanilla one;
@@ -48,17 +48,17 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
-Field offsets change between game builds; resolve a layout such as
+Field offsets change between game builds. During `init`, resolve a layout
+such as
 [`ItemLayout::resolve`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/items.rs)
-during `init`, which asks the loader by Enshwick's ids, and move it into
-the builder. For a field no layout names, `load.field_offset(type, field)`
+and move it into the builder. The resolve asks the loader by Enshwick's ids. For a field no layout names, `load.field_offset(type, field)`
 and `load.type_size(type)` read the game's reflection. See
 [Finding the game](../finding-the-game.md).
 
 ## When the builder runs
 
 `serve` only registers the builder; call it during `init`. The game builds
-the resource the first time it reads it, on whatever thread it reads it, and
+the resource the first time it reads it, on whatever thread it reads it. It
 keeps the result for the life of the process. So the builder:
 
 - is `Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync + 'static`: move what it
@@ -72,29 +72,34 @@ the builder never runs.
 
 ## Rebuilding
 
-When values a builder reads change after the game built the resource, such
-as the settings a server sends a joined client, the mod can have it built
-again: `load.allow_rebuild(key)` during `init`, after `serve`, has the loader
-keep a copy of the base, and `content::rebuild(key)` later, from any thread,
-runs every mod's patch on that copy and writes the bytes that differ over
-the resource the game holds. Nothing happens while the game has not built
-the resource yet. The game keeps reading the first build's bytes, so a
-rebuild must come out the same length: changed values qualify, added
-entries do not, and `rebuild` returns `Err(Off)` for them. Each rebuild
+When values a builder reads change after the game built the resource, the
+mod can have it built again. An example is the settings a server sends a
+joined client. Two calls do it:
+
+- `load.allow_rebuild(key)` has the loader keep a copy of the base. Call it
+  during `init`, after `serve`;
+- `content::rebuild(key)` later, from any thread, runs every mod's patch on
+  that copy. It writes the bytes that differ over the resource the game
+  holds.
+
+Nothing happens while the game has not built the resource yet. The game
+keeps reading the first build's bytes, so a rebuild must come out the same
+length. Changed values qualify. Added entries do not, and `rebuild` returns
+`Err(Off)` for them. Each rebuild
 keeps the new bytes for the process, so it is for rare changes.
 
 ## Patches from several mods compose
 
 Several mods may serve one key. Each builder is a patch, and the loader runs
 the patches in load order, each on the result of the one before. This is how
-two mods both add an item to the item registry: each builder sees the
+two mods both add an item to the item registry. Each builder sees the
 registry with the earlier mods' items already in it, and adds its own.
 Write builders to expect that: find entries by what they are, never by a
 fixed index or count.
 
 The rules:
 
-- every mod serving one key must name the same `base`; a mod that names
+- every mod serving one key must name the same `base`. A mod that names
   another base for a key already served is refused, and `serve` returns
   `Err(Off)`;
 - a patch that fails turns its mod off and is skipped; the next patch runs
@@ -121,12 +126,12 @@ offsets that move with it.
 | --- | --- |
 | `Blob::new(base)` | A copy of `base` to edit. |
 | `bytes()`, `into_bytes()` | The bytes as edited, borrowed or owned. |
-| `read_u32(at)` | The `u32` at `at`, `None` past the end. |
-| `write(at, bytes)` | Writes `bytes` at `at`; `false` when they do not fit. |
+| `read_u32(at)` | The `u32` at `at`. It is `None` past the end. |
+| `write(at, bytes)` | Writes `bytes` at `at`. Returns `false` when they do not fit. |
 | `array(field)` | The array whose header is at `field`: where its elements start and how many there are. |
-| `set_array(field, start, count)` | Points the header at `field` to `count` elements at `start`. |
+| `set_array(field, start, count)` | Points the header at `field` to the elements at `start`. Their number is `count`. |
 | `append(data, align)` | Appends `data` at the next multiple of `align` and returns where. |
-| `grow_array(field, size, align, relative, extra)` | Moves the array at `field`, of `size`-byte elements, to the end with `extra` elements after the old ones; returns the index of the first extra one. |
+| `grow_array(field, size, align, relative, extra)` | Moves the array at `field` to the end, with `extra` elements after the old ones. Each element is `size` bytes. Returns the index of the first extra one. |
 
 An array or string header is 8 bytes: a signed 32-bit offset from the header
 itself, then a 32-bit count.
@@ -137,8 +142,9 @@ itself, then a 32-bit count.
   array and string headers. As elements move, their headers are corrected
   so they still point at their data;
 - each extra element comes with `Some(offset)` when its bytes were copied
-  from that offset in the blob, so its headers are corrected the same way,
-  or `None` when its headers are empty or set later with `set_array`.
+  from that offset in the blob. Its headers are therefore corrected the same
+  way. An extra element comes with `None` when its headers are empty or set
+  later with `set_array`.
 
 ```rust
 use enshwick::content::Blob;
@@ -161,20 +167,21 @@ assert!(blob.set_array(header, text, 4));
 assert_eq!(blob.array(header), Some((text, 4)));
 ```
 
-The API's own
-[`items.rs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/items.rs),
-[`recipes.rs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs)
-and
-[`workshops.rs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/workshops.rs)
-are worked examples: each builds its resources with `Blob` alone.
+The API's own content files are worked examples. Each builds its resources
+with `Blob` alone:
+
+- [`items.rs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/items.rs)
+- [`recipes.rs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs)
+- [`workshops.rs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/workshops.rs)
 
 ## Reading vanilla resources
 
-A builder sees only its own base. To read another vanilla resource, such as
-the template a station item places or an item's name tag,
+A builder sees only its own base.
 [`content::game_resource(key)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)
-returns its bytes from the game's archive files, as the game reads them
-before it resolves their references, so `Blob` reads them the same way. It
+reads another vanilla resource, such as the template a station item places or
+an item's name tag. It returns the bytes from the game's archive files. They
+are the bytes as the game reads them before it resolves their references, so
+`Blob` reads them the same way. It
 works during `init` and later, on any thread and on both sides, and never
 touches the game's memory. Each call reads the archive, so keep what a mod
 needs more than once.
@@ -193,11 +200,16 @@ if let Some(item) = key.ok().and_then(game_resource) {
 ## One text for one tag
 
 [`Load::add_text(tag, language, text)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)
-is the low-level text call: the client shows `text` wherever the game asks
-for the `LocaTag` `tag`, a declared [content id](../content.md#content-ids)'s
-GUID, in `language`, a
-[`Language`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
-number. A served item whose name field holds `tag` shows that text as its
+is the low-level text call. The client shows `text` wherever the game asks
+for the tag in `language`:
+
+- `tag` is a `LocaTag`, a declared [content id](../content.md#content-ids)'s
+  GUID;
+- `language` is a
+  [`Language`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
+  number.
+
+A served item whose name field holds `tag` shows that text as its
 name.
 
 ```rust

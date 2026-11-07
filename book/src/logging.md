@@ -5,14 +5,20 @@ description: The loader writes one log folder for itself and every mod, a status
 
 # Logging and diagnostics
 
-The loader writes one log folder for itself and every mod, writes a status
-summary of what runs on request, and turns a failing mod off with a reason in
-the log.
+The loader writes one log folder for itself and every mod. On request, it
+writes a status summary of what runs. It turns a failing mod off with a reason
+in the log.
 
 ## Log macros
 
-`enshwick::error!`, `warn!`, `info!` and `debug!` write a line under the
-mod's id, formatted like `format!`:
+Four macros write a line under the mod's id, formatted like `format!`:
+
+- `enshwick::error!`
+- `warn!`
+- `info!`
+- `debug!`
+
+In Rust and Luau:
 
 ```rust
 enshwick::info!("{} altars merged", 3);
@@ -24,16 +30,25 @@ enshwick.log.info(`{3} altars merged`)
 print("bed 1210 checked") -- as enshwick.log.info
 ```
 
-In Luau, `enshwick.log` has `info`, `warn` and `error`, and `level` reads
-the mod's level; the macros that log once or at most once a period are
-Rust's.
+In Luau, `enshwick.log` has these functions:
+
+- `info`
+- `warn`
+- `error`
+- `level`, which reads the mod's level.
+
+The macros that log once or at most once a period are Rust's.
 
 For lines that may repeat:
 
-| Macro                                                                       | Logs                                                                                           |
-| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `info_once!`, `warn_once!`, `error_once!`                                   | the first time this call site runs in the mod's life, never again                              |
-| `info_every!(period, ...)`, `warn_every!(period, ...)`, `error_every!(...)` | at most once per `period` from this call site, adding how many lines it skipped since the last |
+| Macro | Logs |
+| --- | --- |
+| `info_once!` | the first time this call site runs in the mod's life, never again |
+| `warn_once!` | as `info_once!` |
+| `error_once!` | as `info_once!` |
+| `info_every!(period, ...)` | at most once per `period` from this call site, adding how many lines it skipped since the last |
+| `warn_every!(period, ...)` | as `info_every!` |
+| `error_every!(...)` | as `info_every!` |
 
 ```rust
 use std::time::Duration;
@@ -64,14 +79,14 @@ A line reads `hh:mm:ss.mmmZ level [source] message`, in UTC. Each source keeps
 its newest 10 files and deletes older ones as it opens a new one; deleting any
 file by hand is safe. A file that would pass 8 MiB ends with a line naming the
 next file, and the run goes on there. A background thread writes them and
-flushes every line, so a hook never waits on the disk and the last lines
-before a crash are kept. Up to 4096 lines wait for it; a line that finds the
-queue full is dropped rather than making the game wait, and the next line
-written says how many were dropped.
+flushes every line. So a hook never waits on the disk, and the last lines
+before a crash are kept. Up to 4096 lines wait for it. A line that finds the
+queue full is dropped rather than making the game wait. The next line written
+says how many were dropped.
 
 The stub and the loader write the lines from before the log opens to
-`start.log`; the loader's file takes them in as it opens and removes it, so
-`start.log` stays only when the loader did not start. When the game's folder
+`start.log`. The loader's file takes them in as it opens and removes
+`start.log`. So `start.log` stays only when the loader did not start. When the game's folder
 takes no files, they go to `enshwick/start.log` in the Windows temporary
 folder. The loader's file starts with its version, Windows or the Wine
 version, and the number of logical processors.
@@ -84,7 +99,7 @@ The writer keeps the latest 1024 lines in memory. The
 
 - `mod`: one mod's lines, or the loader's with `enshwick`; every source when
   left out;
-- `level`: `error`, `warn`, `info` or `debug`, the lines at that level or more
+- `level`: one of the [levels](#levels), for the lines at that level or more
   severe; every kept line when left out;
 - `n`: how many of the latest lines, 10 by default and at most 16.
 
@@ -119,9 +134,9 @@ The keys of `enshwick.toml`:
 | `release_check`      | `true`   | ask GitHub once per start for a newer release; read at start  |
 
 With `release_check` on, the loader asks GitHub for the list of Enshwick
-releases once per start, on a thread of its own with a 5-second limit per
-step. A newer release shows as one dimmed line on the Mods screen with its
-version and the address of its page; the loader downloads and installs
+releases once per start. It asks on a thread of its own, with a 5-second
+limit per step. A newer release shows as one dimmed line on the Mods screen
+with its version and the address of its page. The loader downloads and installs
 nothing. A dedicated server only logs it. A prerelease counts only while the
 running loader is one. No network, or any other failure, shows nothing and
 logs one line.
@@ -138,9 +153,9 @@ The console's `enshwick status` writes a status summary into the loader's
 log. It lists:
 
 - the loader and game versions, and whether this process hosts a game;
-- every mod with its name, version and whether it runs, its authors, licence
-  and homepage, notes such as a recommended mod that is missing, and the lines
-  the mod adds;
+- every mod with its name, version and whether it runs. Each also shows its
+  authors, licence and homepage, its notes and the lines the mod adds. A note
+  may say that a recommended mod is missing;
 - the mods turned off, and why;
 - what mods serve and patch, every service, mod event and extension point
   with the mods on it, and the links left inert with the reason;
@@ -153,8 +168,8 @@ log. It lists:
 A mod adds its own lines with
 [`load.add_status(|| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/status.rs).
 The closure returns a `String`; each non-empty line shows under the mod. It
-runs only when the summary is written, on a loader thread or the game thread,
-never inside a hook, and only while the mod runs. Keep what it reports in
+runs only when the summary is written, and only while the mod runs. It runs on
+a loader thread or the game thread, never inside a hook. Keep what it reports in
 atomics and read them there:
 
 ```rust
@@ -171,9 +186,9 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 A mod made of parts that can fail apart wraps each part's setup in
 [`load.feature(name, |load| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/status.rs).
-When the closure returns an `Off`, only that part is off: the mod keeps
-running, its log names the part and the reason, and the status summary and
-the Mods screen show it. The closure's value comes back as `Some` when the
+When the closure returns an `Off`, only that part is off. The mod keeps
+running, and its log names the part and the reason. The status summary and
+the Mods screen show it too. The closure's value comes back as `Some` when the
 part runs. Look up everything the part needs before it links hooks or adds
 content, since what it registered before it failed stays:
 
@@ -206,7 +221,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ## Hook diagnostics
 
 With `diagnostics = true` the loader counts the calls of every hooked
-function, one locked increment in its thunk, and the summary lists the 40
+function, one locked increment in its thunk. The summary lists the 40
 busiest, with the mods linked on each. Add `diagnostics_timing = true` and
 every 256th call is timed as well; the summary shows the mean time of the
 whole chain with the original.
@@ -217,19 +232,26 @@ thunks count nothing and a hooked call runs as before.
 ## Per-mod costs
 
 With `diagnostics = true` the loader also times every call it makes into a
-mod: event, game event and mod event handlers, actions, messages, interface
-frames, filters and vetoes, survivor and altar callbacks, stat changes,
-inventory results, status lines, resource patches and links on
-extension points, each link apart. A
-callback's time leaves out the callbacks it causes in other mods, which count
-for those. With `diagnostics_timing = true` as well, every link and every
-original has a timed thunk in front of it, and a link's own time is its
-thunk's less the rest of the chain's, so a mod pays only for its own link
+mod. These are the calls it times:
+
+- event, game event and mod event handlers;
+- actions and messages;
+- interface frames;
+- filters and vetoes;
+- survivor and altar callbacks;
+- stat changes and inventory results;
+- status lines and resource patches;
+- links on extension points, each link apart.
+
+A callback's time leaves out the callbacks it causes in other mods, which
+count for those. With `diagnostics_timing = true` as well, every link and
+every original has a timed thunk in front of it. A link's own time is its
+thunk's less the rest of the chain's. So a mod pays only for its own link,
 even when several mods hook one function. Timing a callback costs about
 14 ns; with `diagnostics` off it costs nothing measurable.
 
 The summary lists the ten costliest mods, each with its work per second of
-time and its four costliest items; the loader's own links count under
+time and its four costliest items. The loader's own links count under
 `enshwick`, with the callbacks they make into mods inside them:
 
 ```text
@@ -249,7 +271,7 @@ The summary and `enshwick conflicts` on the console list where mods meet:
 | Line | Means |
 | --- | --- |
 | `hook <function>: a (priority 0) then b (priority 5)` | both link the function, in that running order, each calling on |
-| `hook <function>: ...; b refused, a holds it exclusively` | `a` linked it with `EXCLUSIVE`, and `b`'s link was refused |
+| `hook <function>: ...; b refused, a holds it exclusively` | `a` linked it with `EXCLUSIVE`. The link of `b` was refused |
 | `code patch at <address>: a holds it; refused: b` | `b` asked to [patch](code-patches.md) bytes `a` patches already |
 | `<filter>: a, b, chained in load order` | both filter it, such as interactions or damage; each may refuse |
 | `skill override: a, b, asked in load order` | the first answer decides |
@@ -266,13 +288,14 @@ The summary and `enshwick conflicts` on the console list where mods meet:
 ### Code changed outside the API
 
 A mod that writes game code itself, with a hooking library of its own or by
-hand, passes none of the checks above. The loader finds such changes anyway:
-it keeps a copy of the game's code section while it starts and compares it
-after each DLL in `mods/` loads, after each mod's `init` and after each
-`ready`. A change found after a DLL or mod ran is put down to it only when
-the changed code jumps into that DLL, directly or through up to three more
-jumps, as a hook does; any other change is put down to another program,
-whose threads may write at any time. It logs the change as a warning in the loader's log and lists it with the
+hand, passes none of the checks above. The loader finds such changes anyway.
+It keeps a copy of the game's code section while it starts. It compares the
+copy after each DLL in `mods/` loads and after each mod's `init`. It also
+compares it after each `ready`. A change found after a DLL or mod ran is put
+down to it only when the changed code jumps into that DLL. The jump may be
+direct or go through up to three more jumps, as a hook does. Any other change
+is put down to another program, whose threads may write at any time. The
+loader logs the change as a warning in the loader's log and lists it with the
 conflicts:
 
 | Line ends with | The change came |
@@ -285,25 +308,25 @@ conflicts:
 | `by another program after every init, before Enshwick turned on its hooks` | between the last `init` and arming, from a thread of some mod or another program |
 
 The copy starts from the executable on disk, so code changed before the
-loader started shows too; when the file's code does not read as the code in
+loader started shows too. When the file's code does not read as the code in
 memory, as for an encrypted executable, the copy starts when the loader does.
 Two names on one line mean two mods wrote the same bytes, and the later one
 won.
 
-The loader's own writes are never listed: its hooks and the code patches
-mods ask for through the API, and the jump that holds the server's entry
-point until the loader is ready. Changes made after the last `ready`,
+The loader's own writes are never listed. They are its hooks and the code
+patches mods ask for through the API. The jump that holds the server's entry
+point until the loader is ready is one too. Changes made after the last `ready`,
 and changes to game data rather than code, are not seen.
 
 ## Faults
 
-When the loader turns a mod off, the loader's log and the mod's log say why,
-the mod's log with an error `off: <reason>`, and the Mods screen shows the
+When the loader turns a mod off, the loader's log and the mod's log say why.
+The mod's log says it with an error `off: <reason>`. The Mods screen shows the
 reason under the mod, in the reader's language for an `Off::text`. The
 summary's list of mods turned off keeps the reason, and `enshwick` on the
 console marks the mod `(off)`. A hardware fault that ends the game goes to the
 loader's log and to a crash file of its own,
-`logs/enshwick-crash_<date>_<time>.log`, and the next start shows its line in
+`logs/enshwick-crash_<date>_<time>.log`. The next start shows its line in
 the log and at the top of the status summary.
 
 What turns a mod off, and the reason each case logs, is in
@@ -312,5 +335,5 @@ What turns a mod off, and the reason each case logs, is in
 ## Worked example
 
 [`enshwick-optimizer`](https://github.com/enshwick/mods/tree/main/optimizer)
-adds its lines to the status summary with `add_status`, in
+adds its lines to the status summary with `add_status`. It does so in
 [`lib.rs`](https://github.com/enshwick/mods/blob/main/optimizer/src/lib.rs).

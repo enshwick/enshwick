@@ -27,12 +27,12 @@ The loader takes every mod through five steps, all at game start.
    are refused after `init`.
 4. **Arm.** Once every mod is initialised, the loader writes one detour per
    hooked function and wires each chain past the mods that are off. On the
-   dedicated server the server's own code has not started yet: it waits at
-   its entry point until the hooks are armed, at most 10 seconds, so a hook
-   sees even the server's start-up, such as its task system. On the client,
-   whose start-up runs under Steam's DRM wrapper, the loader instead waits
-   for the game's window, at most 15 seconds, and the game's start-up has
-   run by then.
+   dedicated server the server's own code has not started yet. It waits at
+   its entry point until the hooks are armed, at most 10 seconds. So a hook
+   sees even the server's start-up, such as its task system. The client's
+   start-up runs under Steam's DRM wrapper. So on the client the loader
+   instead waits for the game's window, at most 15 seconds, and the game's
+   start-up has run by then.
 5. **Ready.** `Mod::ready` runs for every mod still on, in load order. Start
    background threads here.
 
@@ -47,12 +47,18 @@ state type:
 - `ready(&'static self, host)`, optional, runs once the hooks are armed.
 
 `Off::new(reason)` turns the mod off with a reason for the log. Every fallible
-call on `Load` returns `Result<_, Off>`, so `?` is the usual way out.
+call on `Load` returns `Result<_, Off>`. So `?` is the usual way out.
 
-`declare_mod!` exports the type with the manifest: `enshwick_mod_abi`,
-`enshwick_mod_query`, `enshwick_mod_init` and `enshwick_mod_ready`, each
-catching panics. It also adds `instance()`, the
-mod's state once `init` has returned it; a hook reads its settings there (see
+`declare_mod!` exports the type with the manifest, in four functions that
+each catch panics:
+
+- `enshwick_mod_abi`
+- `enshwick_mod_query`
+- `enshwick_mod_init`
+- `enshwick_mod_ready`
+
+It also adds `instance()`, the mod's state once `init` has returned it. A
+hook reads its settings there (see
 [The mod's state in a hook](../hooks.md#the-mods-state-in-a-hook)).
 
 ```rust,standalone_crate
@@ -71,8 +77,9 @@ enshwick::declare_mod!(Quiet);
 ## When a mod fails
 
 The loader turns the mod off and the game runs vanilla where it acted. "Off"
-means its hook links are unwired from every chain, its mid-function handlers
-are skipped, and its event handlers, actions and status lines no longer run.
+means its hook links are unwired from every chain and its mid-function
+handlers are skipped. Its event handlers, actions and status lines no longer
+run.
 The DLL stays loaded and the mod stays off until the next start.
 
 | What happens | Result |
@@ -88,9 +95,9 @@ The DLL stays loaded and the mod stays off until the next start.
 A panic is caught only with `panic = "unwind"`, which the release profile of
 `cargo enshwick new` keeps. A hardware fault, such as an access violation, is
 not a panic. When it ends the game, the loader writes its line to the loader's
-log and to `logs/enshwick-crash_<date>_<time>.log` before the game's own
-crash handling runs, naming the mod whose code faulted, whose callback it was
-running, or whose code was on the stack; see
+log and to `logs/enshwick-crash_<date>_<time>.log`. It does so before the
+game's own crash handling runs. The line names the mod whose code faulted,
+whose callback it was running, or whose code was on the stack. See
 [What is in a crash file?](../faq.md#what-is-in-a-crash-file).
 
 Where the reason shows, in the log, the status summary and the Mods screen, is

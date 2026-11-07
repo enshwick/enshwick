@@ -7,14 +7,14 @@ description: Read and change the difficulty and gameplay values of a world while
 
 [`load.game_settings()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/game_settings.rs)
 returns the server's
-[`GameSettings`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/game_settings.rs):
-the difficulty and gameplay values of its configuration (`gameSettings` in
-`enshrouded_server.json`) or of the host's world menu, read typed and changed
-while the world runs.
+[`GameSettings`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/game_settings.rs).
+They are the difficulty and gameplay values of its configuration or the
+host's world menu. `enshrouded_server.json` keeps them in
+`gameSettings`. A mod reads them typed and changes them while the world runs.
 
 ## Using the settings
 
-`GameSettings` is `Copy`; get it during `init` and move it into handlers,
+`GameSettings` is `Copy`. Get it during `init` and move it into handlers,
 tasks and actions.
 
 ```rust
@@ -53,39 +53,55 @@ end)
 
 ## Reading
 
-`read()` returns the settings in force as a `Settings` and the `GameSettingsPreset` they
-came from, or `None` off the game thread and while no world runs. `Settings`
-has a field for each of the game's values: factors (1 is the game's normal),
-switches, the day and night lengths and hunger's time as `Duration`s, and
-enums for the choices such as `WeatherFrequency` or `TombstoneMode`. An enum
-value this API does not name reads as `Other(byte)` and is written back as it
-was.
+`read()` returns the settings in force as a `Settings`. With them comes the
+`GameSettingsPreset` they came from. It returns `None` off the game thread and
+while no world runs. `Settings` has a field for each of the game's values:
+
+- factors, where 1 is the game's normal;
+- switches;
+- the day and night lengths and hunger's time, as `Duration`s;
+- enums for the choices, such as `WeatherFrequency` or `TombstoneMode`.
+
+An enum value this API does not name reads as `Other(byte)`. It is written
+back as it was.
 
 ## Changing
 
-`change(|s| ...)` lets a closure edit the settings in force and applies them
-as the game's admin command does: the server's systems read them from the
-next step, every client gets them, and the preset becomes `GameSettingsPreset::Custom`.
-It returns the settings now in force, or a
-[`WorldError`](world.md#writing-components): `Refused` for a negative or not
-finite factor or a day or night length of zero, `WrongThread` off the game
-thread, `Missing` while no world runs.
+`change(|s| ...)` lets a closure edit the settings in force. It applies them
+as the game's admin command does:
 
-Most values act at once. Some act on what comes next: enemy health, damage and
-stamina on enemies spawned after the change, food buffs on food eaten after
-it, the tombstone mode on the next death, the weather frequency on the next
-change of weather. A new day or night length keeps the clock's hour and only
-changes its pace ([time of day](daytime.md)).
+- the server's systems read them from the next step;
+- every client gets them;
+- the preset becomes `GameSettingsPreset::Custom`.
+
+It returns the settings now in force, or a
+[`WorldError`](world.md#writing-components):
+
+- `Refused` for a negative or not finite factor, or a day or night length of
+  zero;
+- `WrongThread` off the game thread;
+- `Missing` while no world runs.
+
+Most values act at once. Some act on what comes next:
+
+- enemy health, damage and stamina on enemies spawned after the change;
+- food buffs on food eaten after it;
+- the tombstone mode on the next death;
+- the weather frequency on the next change of weather.
+
+A new day or night length keeps the clock's hour and only changes its pace
+([time of day](daytime.md)).
 
 A change lasts until the server stops, and the configuration's values return
 with the next start, unless the game saves its configuration first. A
 dedicated server writes `gameSettings` back to `enshrouded_server.json`
-whenever its configuration changes, such as after a ban, an unban or an
-admin's settings change, and a change made here may then reach the file. `keep(|s| ...)`
-changes the settings the same way and keeps the fields whose value it
-changed with the running world: the loader applies them again each time that
-world loads, by the end of its first step, over what the configuration says.
-The loader keeps them by field name in
+whenever its configuration changes. A ban, an unban or an admin's settings
+change does so, and a change made here may then reach the file.
+
+`keep(|s| ...)` changes the settings the same way. It also keeps the fields
+whose value it changed with the running world. The loader applies them again
+each time that world loads, by the end of its first step, over what the
+configuration says. The loader keeps them by field name in
 `<stem>-mod-data/enshwick/game-settings.toml`. `forget_kept()` forgets
 every kept field of the world, any mod's, and puts back the values the world
 loaded with.
@@ -104,9 +120,9 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
-Several mods changing settings compose as their changes do: each `change`
+Several mods changing settings compose as their changes do. Each `change`
 or `keep` edits the values in force, so mods that touch different values
-never meet, and the last change to one value wins; kept fields add up the
+never meet. The last change to one value wins, and kept fields add up the
 same way.
 
 Where each call works is in

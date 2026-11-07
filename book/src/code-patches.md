@@ -11,7 +11,7 @@ cannot reach.
 
 ## Asking for a patch
 
-A patch is the smallest change a mod can make, and the bluntest: the bytes
+A patch is the smallest change a mod can make, and the bluntest. The bytes
 stay changed for every caller, and for the rest of the process.
 
 ```rust
@@ -23,15 +23,15 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
-`load.patch_code(address, expected, replacement)` asks for the bytes at
-`address` to read `expected` and become `replacement`. Both have the same
-length. Find the address with a [code pattern](finding-the-game.md#code-patterns)
+`load.patch_code(address, expected, replacement)` asks for a change at
+`address`. The bytes there must read `expected`, and they become
+`replacement`. Both have the same length. Find the address with a [code pattern](finding-the-game.md#code-patterns)
 or a pinned symbol, never a fixed number. The call is `unsafe`: the loader
 checks the bytes it replaces, never what the new ones do.
 
 ## Checks
 
-When the mod asks, during `init`, `patch_code` returns `Off` when:
+The mod asks during `init`. At that moment, `patch_code` returns `Off` when:
 
 - the lengths differ or are zero;
 - the bytes are not all inside the game's code section;
@@ -47,13 +47,13 @@ and skips it, turning its mod off, when:
 - one of the mod's hooks could not be armed.
 
 The loader writes the patches that pass in the same batch as every hook's
-jump, with the game's other threads suspended, and logs each one: written,
+jump, with the game's other threads suspended. It logs each one: written,
 skipped with the reason, waiting, or left out because its mod is off.
 
 ## A thread inside a patch
 
 A patch is never written while a game thread runs inside its bytes, or would
-return into them: the thread would resume in the middle of other
+return into them. The thread would then resume in the middle of other
 instructions. Arming waits a little for the thread to leave. When it stays,
 the patch waits, with the rest of its mod's patches, and the mod waits with
 them:
@@ -63,9 +63,9 @@ them:
 - the rest of it runs: its events, services, actions and other calls work;
 - the Mods screen and the status report show it as waiting.
 
-The loader tries the waiting patches again on the game thread, after the
-first step of the running world and then up to three more times a minute
-apart. Each try checks at most once a second for ten seconds and never waits
+The loader tries the waiting patches again on the game thread. The first try
+follows the first step of the running world, and up to three more come a
+minute apart. Each try checks at most once a second for ten seconds and never waits
 on the game thread. A client that joins another's server runs no world, so
 there its waiting patches are not tried again. When the patches go in, the mod's hooks come on. After the last
 try, the patches are skipped with "a thread stayed inside it through every
@@ -79,9 +79,9 @@ patches is written, since a change made of several patches may be unsafe in
 part. A mod that returns `Off` from `init` after asking for patches gets none
 of them.
 
-[the loader's base limit](https://github.com/enshwick/enshwick/blob/main/crates/internal/loader/src/bases.rs)
+[The loader's base limit](https://github.com/enshwick/enshwick/blob/main/crates/internal/loader/src/bases.rs)
 widens the game's base grouping from 16 to 32 zones with six patches
-and three hooks, all found by patterns before any is registered. A
+and three hooks. All of them are found by patterns before any is registered. A
 miss there logs a warning and leaves the game at 16 altar zones.
 
 ## Patches stay
@@ -94,5 +94,5 @@ Write patches whose effect is safe without the rest of the mod.
 
 A patch site is found by a code pattern, as in
 [Code patterns](finding-the-game.md#code-patterns). Wildcard what changes
-between builds, such as displacements and offsets, and include the bytes you
-patch in the pattern: `expected` must match them at arming anyway.
+between builds, such as displacements and offsets. Include the bytes you
+patch in the pattern, since `expected` must match them at arming anyway.

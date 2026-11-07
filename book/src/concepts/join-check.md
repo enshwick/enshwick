@@ -5,8 +5,9 @@ description: The join check keeps a player out of a world whose mods of side bot
 
 # The join check
 
-The join check keeps a player out of a world whose mods of side `both` the
-player's game lacks or runs in another version, and tells the player which.
+The join check keeps a player out of a world when the player's game lacks a
+mod of side `both`. It does the same when the game runs one in another
+version. It tells the player which mods.
 
 ## Two sides
 
@@ -15,15 +16,16 @@ A mod has one of two sides, its manifest's `side`:
 - **`server`**: it runs only where the world runs, on the dedicated server or
   on a client that hosts a game or plays alone. Players need not install it.
 - **`both`**: it runs where the world runs and on every client playing in the
-  world, which must have it in the world's version: content, or a limit the
-  client's interface also checks.
+  world. Each such client must have it in the world's version. Examples are
+  content, or a limit the client's interface also checks.
 
 Only mods of side `both` count in the join check, and only they open
 [message channels](../messages.md) to clients. There is no mod for the client
 alone and no join flag.
 
-A client runs only the mods of the world it plays in: on a dedicated server,
-the server's mods of side `both`; in a game it plays alone or hosts, its own.
+A client runs only the mods of the world it plays in. On a dedicated server
+these are the server's mods of side `both`. In a game it plays alone or
+hosts, they are its own.
 Its other mods are turned off for that world, so a modded client can join a
 vanilla server.
 
@@ -36,9 +38,10 @@ running mods of side `both` (the ones that are on):
   see in the server browser that it runs mods;
 - the Steam rule `enshwick`: the fingerprint, eight hex digits over the loader
   version and every `id@version`;
-- `enshwick.mods`, `enshwick.mods.1`, ...: the mods, `id@version`, sorted and
-  split to fit Steam's rule length; a [data pack](../content/packs.md)'s
-  version carries the hash of its files, `lanterns@1.0.0+3f2a9c1e`.
+- `enshwick.mods`, `enshwick.mods.1`, ...: the mods. Each is `id@version`,
+  sorted and split to fit Steam's rule length. A
+  [data pack](../content/packs.md)'s version carries the hash of its files,
+  `lanterns@1.0.0+3f2a9c1e`.
 
 A server advertises no homepage or name for its mods: a player reads a mod's
 id and version, never a place a server chose. The loader sets the name and
@@ -49,14 +52,17 @@ joined ([Settings](#settings)).
 ## Games a client hosts
 
 A client that hosts a game has no Steam rules. Every game, hosted or on a
-dedicated server, sits in a Steam lobby that each player enters before the
-game connects, so a hosting client with the loader puts two keys into its
-lobby's data: `enshwick`, the loader version, and `enshwick.mods`, its running
-mods of side `both` as `id@version,...`.
+dedicated server, sits in a Steam lobby. Each player enters it before the game
+connects. So a hosting client with the loader puts two keys into its lobby's
+data:
+
+- `enshwick`, the loader version;
+- `enshwick.mods`, its running mods of side `both`. Each is listed as
+  `id@version,...`.
 
 A friend's modded client that enters such a lobby compares the lists. The
 host's settings follow over the loader's messages once the friend's game has
-connected, as on a dedicated server; until then the friend's mods run on
+connected, as on a dedicated server. Until then the friend's mods run on
 their defaults. The check is weaker than a dedicated server's, since the game
 has already chosen to join when the client reads the lobby:
 
@@ -66,8 +72,9 @@ has already chosen to join when the client reads the lobby:
   lists each, and the player joins all the same; no `JoinRefused` is raised.
   The host's own check then removes the player, as a dedicated server does.
 - **The host runs no Enshwick**, or a lobby without the keys. Nothing is
-  checked and the client's mods run on their defaults, since the client cannot
-  tell such a host from a dedicated server, whose check already ran.
+  checked, and the client's mods run on their defaults. The reason is that the
+  client cannot tell such a host from a dedicated server, whose check already
+  ran.
 
 ## What a player sees
 
@@ -86,18 +93,19 @@ compares the fingerprint with its own:
 - **The server does not answer the query.** The player joins without a check.
 
 A mod turned off for a world is back on before the client joins another
-server or opens a world of its own, and that world decides again. A data pack
-stays off until the game restarts, since its data went when it turned off;
-the Mods screen says so.
+server or opens a world of its own. That world decides again. A data pack
+stays off until the game restarts, since its data went when it turned off.
+The Mods screen says so.
 
 Notes show as dialogs in the game's own style, over the game, which goes on
-drawing. A refused join is refused at once and the game goes back to its
-menu; the game's own dialog about a failed join is held back.
+drawing. A refused join is refused at once, and the game goes back to its
+menu. The game's own dialog about a failed join is held back.
 
 ## The mismatch screen
 
-After a refused join, or a kick for its mods, the client shows the mods that
-differ in the main menu, on a page of the Mods screen, once:
+A refused join, or a kick for its mods, brings up the mismatch screen once.
+The client shows the mods that differ in the main menu, on a page of the Mods
+screen:
 
 - **Missing**: the server's mods the player lacks, or has turned off until the
   game restarts;
@@ -141,8 +149,8 @@ mod's settings, with `require_enshwick = true`. With
 world only; the change applies when the world loads again.
 
 A server without mods of side `both` admits every player. A hosted game never
-checks or kicks its host, and checks guests only after the host's own game has
-said hello and while the host is in the world. Administrators are checked and
+checks or kicks its host. It checks guests only after the host's own game has
+said hello, and only while the host is in the world. Administrators are checked and
 kicked like every other player.
 
 The check keeps games with different mods apart; it does not stop cheating. A
@@ -151,13 +159,13 @@ game that lies about its mods passes it.
 ## Settings
 
 Once a player's game has connected and said hello, the server sends it every
-setting of its mods of side `both`, without a `secret`, and again after each
-change. The player's mods run on those values for that world, and the
+setting of its mods of side `both`, without a `secret`. It sends them again
+after each change. The player's mods run on those values for that world, and the
 player's game never writes them to disk. See
 [Settings](../settings.md#on-a-joined-server).
 
 ## Mods the player lacks
 
-A mod hears of a refused join through `JoinRefused` and reads the mods the
-player lacks with `mods::join_missing()`: each with the id and version the
-server advertises, and the player's DLL path when the player has the mod.
+A mod hears of a refused join through `JoinRefused`. It reads the mods the
+player lacks with `mods::join_missing()`. Each comes with the id and version
+the server advertises, and the player's DLL path when the player has the mod.

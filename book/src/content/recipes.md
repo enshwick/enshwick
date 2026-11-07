@@ -60,8 +60,8 @@ enshwick.content.add_recipe({
 ```
 
 The new recipe is a copy of the first recipe that makes `like`: same
-workshop, unlock and duration. It makes `output_count` of `output`, and each
-of its ingredient counts is the copied recipe's times `cost`. Here the locker
+workshop, unlock and duration. It makes `output_count` of `output`. Each of
+its ingredient counts is the copied recipe's times `cost`. Here the locker
 is crafted where the storage box is, for twice the box's ingredients.
 
 | Field | Meaning |
@@ -74,11 +74,12 @@ is crafted where the storage box is, for twice the box's ingredients.
 | `workshop` | Where it is made: `None` keeps the copied recipe's workshop, `Some(id)` moves it, such as to a [workshop of the mod's own](workshops.md). |
 
 A `like` that no recipe makes is found out only when the game first reads
-the registry: the patch fails and the mod is turned off then, not at `init`.
+the registry. Then the patch fails and the mod is turned off, not at
+`init`.
 
 When the cost comes from a setting that changes, such as a world's or a
-server's join value, `load.add_recipe_with(|| NewRecipe { .. })` asks the
-closure each time the registry is built, and
+server's join value, use `load.add_recipe_with(|| NewRecipe { .. })`. It asks
+the closure each time the registry is built.
 `content::recipes::rebuild_recipes()` from the settings handler builds it
 again with the new cost ([Rebuilding](resources.md#rebuilding)).
 
@@ -114,8 +115,8 @@ end)
 ```
 
 Each copy has the original's workshop and unlock, unless `workshop` moves
-it; its output count is the original's times `output`, and its ingredient
-counts are the original's times `cost`. The original stays as it is. The
+it. Its output count is the original's times `output`. Its ingredient counts
+are the original's times `cost`. The original stays as it is. The
 copy makes the original's first output only.
 
 [`RecipeView`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs)
@@ -128,16 +129,16 @@ shows what a recipe is:
 - `kind()`, what that item is, from the game's own data
   ([Recipe kinds](#recipe-kinds)).
 
-`choose` sees only the game's own recipes: recipes other mods add, and the
-copies of your own earlier calls, are never offered, since the crafting menu
-places each copy after a recipe it knows before any mod's registry patch
-runs.
+`choose` sees only the game's own recipes. Recipes other mods add, and the
+copies of your own earlier calls, are never offered. The reason is that the
+crafting menu places each copy after a recipe it knows before any mod's
+registry patch runs.
 
 ### The salt
 
 A copy needs a GUID of its own. The loader derives it from the original's
-GUID, marked with a hash of `salt`, so it stays the same on every start and
-differs between mods that copy the same recipe. Use the mod id as the salt,
+GUID, marked with a hash of `salt`. So it stays the same on every start, and
+it differs between mods that copy the same recipe. Use the mod id as the salt,
 and never change it: saves hold the copies' ids like any other.
 
 ## Recipe kinds
@@ -152,12 +153,12 @@ own item data classes it:
 | `Overgrowth` | `overgrowth` | equipment slot `OvergrowthMaterial` |
 | `Terrain` | `terrain` | equipment slot `TerrainMaterial` |
 | `Decorative` | `decorative` | placed props that carry the item tag of the crafting menu's Decorative group: decorations and furniture outside Comfort Furniture |
-| `ComfortFurniture` | `comfort-furniture` | placed props that carry the item tag of the crafting menu's Comfort Furniture group: beds, chairs, tables, lights, braziers, trophies, and a few logic switches and instruments |
+| `ComfortFurniture` | `comfort-furniture` | placed props that carry the item tag of the crafting menu's Comfort Furniture group. They are beds, chairs, tables, lights, braziers, trophies, and a few logic switches and instruments |
 | `Other` | `other` | everything else: equipment, functional props, materials |
 
 Match it with a `_` arm: later versions may add kinds. Prefer it to a debug
 name prefix, which misses recipes whose names break the pattern. The game
-data files a prop under a menu group by its item tag, so `Decorative` and
+data files a prop under a menu group by its item tag. So `Decorative` and
 `ComfortFurniture` follow the game's own grouping rather than a name. A
 prop with both tags is `Decorative`.
 
@@ -188,8 +189,14 @@ A dedicated server builds its recipe registry before it loads the items, so
 
 The client's crafting menu does not list what the registry holds. It lists
 the recipe ids of a tree baked into the game's UI bundle: per workshop,
-groups of sets of recipes. So `add_recipe`, `add_recipe_with` and
-`derive_recipes` also patch the UI bundle on the client, and the
+groups of sets of recipes. So three calls also patch the UI bundle on the
+client:
+
+- `add_recipe`;
+- `add_recipe_with`;
+- `derive_recipes`.
+
+The
 [`content::menu`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/menu.rs)
 module does the edit:
 
@@ -202,13 +209,14 @@ module does the edit:
 
 The menu is shared like the registry: each mod's patch runs on the bundle as
 the mods before it left it. Each new recipe goes right after the one it
-copies, so of the locker of one mod and the Vault of a mod loaded later, both
-copied from the wooden chest, the Vault shows first: chest, Vault, locker. One group of
-the menu shows at most 512 recipes, all its sets together
-([`GROUP_ENTRIES`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/menu.rs));
-the mod's log says when a recipe is left out because its group is full or
-because nothing in the menu says where it goes. The dedicated server has no
-crafting menu and serves no UI bundle.
+copies. Take the locker of one mod and the Vault of a mod loaded later, both
+copied from the wooden chest. The Vault shows first: chest, Vault, locker.
+
+One group of the menu shows at most 512 recipes, all its sets together
+([`GROUP_ENTRIES`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/menu.rs)).
+The mod's log says when a recipe is left out because its group is full. It
+also says when a recipe is left out because nothing in the menu says where it
+goes. The dedicated server has no crafting menu and serves no UI bundle.
 
 ## The workshop limit
 
@@ -226,9 +234,9 @@ patches run, so both calls follow it:
 
 - while the limit holds, derived copies stop
   [`RESERVED_FOR_SINGLE`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs)
-  (16) short of 512 at each workshop, which leaves room for single recipes
-  from `add_recipe`, and a single recipe is skipped at a workshop that
-  already holds 512;
+  (16) short of 512 at each workshop. That leaves room for single recipes
+  from `add_recipe`. A single recipe is skipped at a workshop that already
+  holds 512;
 - once it is lifted, neither stops.
 
 Copies count against the workshop they are made at, so a copy moved to a new
@@ -247,12 +255,13 @@ With the limit lifted, the loader's log names each workshop past the game's
 number: `workshop <id>: <n> recipes, past the game's 512`.
 
 The vanilla workshops are shared by every mod. A mod that adds many recipes
-should give them a [workshop of its own](workshops.md) or an NPC of its own
-rather than crowd the vanilla ones; that also keeps it working where the
+should give them a [workshop of its own](workshops.md) or an NPC of its own.
+That way it does not crowd the vanilla ones, and it keeps working where the
 limit holds.
 
 ## Worked example
 
 [`enshwick-personal-safes`](https://github.com/enshwick/mods/tree/main/personal-safes)
-adds the Safe's recipe with `add_recipe_with`, its cost from a setting, in
+adds the Safe's recipe with `add_recipe_with`. Its cost comes from a setting.
+The code is in
 [`lib.rs`](https://github.com/enshwick/mods/blob/main/personal-safes/src/lib.rs).

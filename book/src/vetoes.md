@@ -12,9 +12,14 @@ that panics turns the mod off and lets the action through.
 ## Crafting
 
 [`load.on_craft(|craft| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/vetoes.rs)
-runs on each player's craft request in the server's world, with the game's
-`CraftRecipeEvent`: the `crafting_operator_id`, the `crafting_station_id`
-(`None` for crafting by hand), the `recipe_id` and the `recipe_amount`.
+runs on each player's craft request in the server's world. It gets the game's
+`CraftRecipeEvent`, with these fields:
+
+- `crafting_operator_id`;
+- `crafting_station_id`, `None` for crafting by hand;
+- `recipe_id`;
+- `recipe_amount`.
+
 Returning `false` refuses it: nothing is made and nothing is taken.
 
 ```rust
@@ -28,27 +33,35 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
-The loader screens the requests
-on the game thread at the start of the next step, before the crafting system
-reads them, so [`World`](world.md) reads work in the filter. A refused
+The loader screens the requests on the game thread at the start of the next
+step. That comes before the crafting system reads them, so [`World`](world.md) reads work in the filter. A refused
 request reaches the crafting system empty, with no crafter and no amount.
 
 ## Building
 
 [`load.on_build(|placement| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/vetoes.rs)
-runs after the game's cursor check allows a placement, with a `Placement`,
-Enshwick's name, since the game's check has none: the building `player`,
-the `item` placed and its `position` in metres.
-It answers a `BuildVerdict`: `Refuse` refuses the placement the way the game
-refuses one without building permission, so the building systems do not
-place it, and `RefuseBecause` refuses it with a reason the builder reads. The
-reason is a key of the mod's [texts](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs), shown in the player's
-language, or plain words. A client that runs the mod shows it under the build
-cursor while the player aims there. The server tells a player whose client
-does not show it once, as a notice, or in chat to a client without Enshwick;
-it tells one player at most once a second, and the same reason again only
-after that player's refusals stopped for a second. A `bool` turns into a
-verdict with `.into()`.
+runs after the game's cursor check allows a placement. It gets a `Placement`,
+a name of Enshwick's own, since the game's check has none. Its fields are
+these:
+
+- `player`, who builds;
+- `item`, what is placed;
+- `position`, where, in metres.
+
+It answers a `BuildVerdict`:
+
+- `Refuse` refuses the placement the way the game refuses one without
+  building permission, so the building systems do not place it.
+- `RefuseBecause` refuses it with a reason the builder reads.
+
+The reason is a key of the mod's
+[texts](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs),
+shown in the player's language, or plain words. A client that runs the mod
+shows it under the build cursor while the player aims there. Some clients do
+not show it. The server tells such a player once, as a notice, or in chat to a
+client without Enshwick. It tells one player at most once a second. It tells
+the same reason again only after that player's refusals stopped for a second.
+A `bool` turns into a verdict with `.into()`.
 
 ```rust
 use enshwick::vetoes::BuildVerdict;
@@ -77,26 +90,33 @@ enshwick.vetoes.on_build(function(placement)
 end)
 ```
 
-From Luau the filter returns `true` or nil to allow, `false` to refuse, and a
-string to refuse with that reason; any other value refuses too.
+From Luau the filter returns `true` or nil to allow, and `false` to refuse.
+It returns a string to refuse with that reason. Any other value refuses too.
 
-The server runs the cursor check on the cursor each player's client sends,
-and the client runs it for its own prediction, so the filter runs on both
-sides, on the cursor systems' worker threads, on every frame a player aims to
-build. Keep it quick: no allocation, no lock, no log, and no world reads,
-which belong on the game thread. The server's answer decides. A client that
-runs the mod too shows the cursor as not allowed, so give the same answer on
-both sides: base it on what both know, the item and the place, or on
-[settings](settings.md#on-a-joined-server) the server sends. A client without the
-mod shows the placement as allowed, and the server places nothing.
+The server runs the cursor check on the cursor each player's client sends.
+The client runs it for its own prediction. So the filter runs on both sides,
+on the cursor systems' worker threads, on every frame a player aims to build.
+Keep it quick: no allocation, no lock, no log, and no world reads, which
+belong on the game thread.
+
+The server's answer decides. A client that runs the mod too shows the cursor
+as not allowed, so give the same answer on both sides. Base it on what both
+know, the item and the place, or on
+[settings](settings.md#on-a-joined-server) the server sends. A client without
+the mod shows the placement as allowed, and the server places nothing.
 
 ## Interactions
 
 [`load.on_interaction`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/interactions.rs)
 runs a filter before the game lets a player interact with an entity, from
-opening a chest to dismantling a piece. It gets an `Interaction`: what the
-player does (`kind`), the player, the target, and the item the target was
-placed from and where it stands, when the platform could read them.
+opening a chest to dismantling a piece. It gets an `Interaction`, which holds:
+
+- what the player does (`kind`);
+- the player;
+- the target;
+- the item the target was placed from and where it stands, when the
+  platform could read them.
+
 Returning `false` refuses it.
 
 ```rust
@@ -132,14 +152,15 @@ answer it from what the mod has already seen of the target.
 
 An interaction without a player's character or without a target is allowed
 without asking. The filters run in the server's world only, in the dedicated
-server or a hosting client, on the thread of the system that checks the
-interaction: keep them quick and never block. Several mods may filter; any
+server or a hosting client. They run on the thread of the system that checks
+the interaction, so keep them quick and never block. Several mods may filter; any
 refusal wins.
 
 ## Worked example
 
 [`enshwick-personal-safes`](https://github.com/enshwick/mods/tree/main/personal-safes)
 links its interaction filter in
-[`lib.rs`](https://github.com/enshwick/mods/blob/main/personal-safes/src/lib.rs),
-and [`access.rs`](https://github.com/enshwick/mods/blob/main/personal-safes/src/access.rs)
+[`lib.rs`](https://github.com/enshwick/mods/blob/main/personal-safes/src/lib.rs).
+Its
+[`access.rs`](https://github.com/enshwick/mods/blob/main/personal-safes/src/access.rs)
 decides who may open, move and dismantle a Safe.

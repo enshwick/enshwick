@@ -100,20 +100,21 @@ the station needs derives from it:
 `recipe_cost` adds a recipe:
 
 1. the station's template, an [entity template](templates.md) copied from the
-   vanilla one, whose crafting components (`Crafting`, `CraftingInteraction`,
-   `ClientCraftingInteraction`) name the new workshop;
+   vanilla one. Its crafting components name the new workshop. Two are
+   `Crafting` and `CraftingInteraction`. The third is
+   `ClientCraftingInteraction`;
 2. the template collection with the new template listed;
 3. the station item, a clone of the vanilla station item that places the new
    template;
 4. the item registry with the new item listed;
 5. the workshop registry with a copy of the vanilla station's entry, naming
    the new workshop, the new item and, with `named`, the new name;
-6. on the client, the UI bundle with a crafting menu for the new workshop:
-   one group with one empty set, where its recipes go
+6. on the client, the UI bundle with a crafting menu for the new workshop.
+   The menu has one group with one empty set, where its recipes go
    ([The crafting menu](recipes.md#the-crafting-menu));
 7. with `recipe_cost`, a copy of the vanilla station's recipe that makes
-   the new station, at the workshop where the vanilla station is crafted,
-   its ingredient counts times the cost.
+   the new station. The copy is made at the workshop where the vanilla station
+   is crafted, with the recipe's ingredient counts times the cost.
 
 The new workshop starts with no recipes. Only recipes you send there are
 made at it.
@@ -131,17 +132,21 @@ made at it.
 
 `NewWorkshop::new(id, like)` makes one with the vanilla names and no
 recipe; set the other fields with struct update syntax. Give the name and
-description their texts with [`add_texts`](texts.md) and the tags
+description their texts with [`add_texts`](texts.md). Their tags are
 `new.name()` and `new.description()`.
 
 [`stations::WORKBENCH`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/workshops.rs)
-is the Workbench. Any other crafting station comes from the game's data:
+is the Workbench. Any other crafting station comes from the game's data.
 [`Vanilla::game()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/vanilla.rs)
-finds an item by its debug name and `station(item)` reads the template the
-item places, after checking that the workshop registry has a workshop of the
-item's own that is no survivor's and that the template has all three
-crafting components. `workshop(item)` is the station's own workshop, for
-recipes made at the vanilla station.
+finds an item by its debug name. `station(item)` reads the template the item
+places, after two checks:
+
+- the workshop registry has a workshop of the item's own that is no
+  survivor's;
+- the template has all three crafting components.
+
+`workshop(item)` is the station's own workshop, for recipes made at the
+vanilla station.
 
 ```rust
 use enshwick::Off;
@@ -158,8 +163,8 @@ On build 1269579 that covers over thirty crafting stations, the Forge,
 Kiln, Smelter, Loom, Alchemy Station, Oven and Kitchen among them.
 
 Every [content id](../content.md#content-ids) is the mod's own and fixed for
-good: saves keep the template GUID of each placed station and the item id of
-each stack. `add_workshop` declares the item's, the template's and the
+good. That is because saves keep the template GUID of each placed station and
+the item id of each stack. `add_workshop` declares the item's, the template's and the
 workshop's ids. An id that is a part already, or too long to take
 `.description`, turns the mod off.
 

@@ -8,9 +8,9 @@ description: Read and change the values the game keeps for the world and each pl
 [`load.knowledge()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/knowledge.rs)
 returns the
 [`Knowledge`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/knowledge.rs)
-of the server's world: the values the game keeps for the world and for each
-player, which recipes, quests, journal pages, skill points and much more
-read.
+of the server's world. It holds the values the game keeps for the world and
+for each player. Recipes, quests, journal pages, skill points and much more
+read them.
 
 ## Getting it
 
@@ -52,9 +52,9 @@ end)
 
 Every knowledge id is the world's, shared by every player, or each player's
 own, and is a bool, a counter or flags. `get(player, id)` reads a player's
-value (for an id of the world's, the world's) and `world(id)` the world's, as
-a `Known`: the kind, the scope, the value, and the bits the game expects of
-flags. `is_set()` and `has_flag(bit)` read it. Both answer `None` for an id
+value, or the world's for an id of the world's. `world(id)` reads the
+world's value. Both answer a `Known`: the kind, the scope, the value, and the
+bits the game expects of flags. `is_set()` and `has_flag(bit)` read it. Both answer `None` for an id
 the game does not know, a player not in the game, or off the game thread.
 
 Some ids mean something fixed:
@@ -71,18 +71,28 @@ its own table, built from the game's data.
 ## Granting
 
 `grant(player, id, grant)` and `grant_world(id, grant)` grant knowledge as the
-game does: the next step applies it with everything that follows, such as
+game does. The next step applies it with everything that follows, such as
 experience, unlocks chained on it, the clients and the save. The grant must
-fit the id's kind: `Grant::Set` for a bool, `Grant::Add(n)` for a counter,
-`Grant::Flag(bit)` for one bit of flags. A grant only adds; a revoke takes
-back.
+fit the id's kind:
 
-A grant fails with a [`WorldError`](world.md#writing-components): `Refused`
-for an id the game does not know, a grant that does not fit the kind, a bit
-the game does not expect, a player not in the game, or a step that already
-holds the game's limit of grants; `WrongThread` off the game thread. Granting a quest's or a recipe's own id skips what leads to it, so
-the journal may show a quest done without its steps; granting the knowledge
-its requirement asks for keeps it whole.
+- `Grant::Set` for a bool
+- `Grant::Add(n)` for a counter
+- `Grant::Flag(bit)` for one bit of flags
+
+A grant only adds; a revoke takes back.
+
+A grant fails with a [`WorldError`](world.md#writing-components). It is
+`WrongThread` off the game thread. It is `Refused` for:
+
+- an id the game does not know
+- a grant that does not fit the kind
+- a bit the game does not expect
+- a player not in the game
+- a step that already holds the game's limit of grants
+
+Granting a quest's or a recipe's own id skips what leads to it. So the
+journal may show a quest done without its steps. Granting the knowledge its
+requirement asks for keeps it whole.
 
 ## Taking back
 
@@ -90,26 +100,30 @@ Unstable: needs the `unstable` feature and may change in any release
 ([Stability](stability.md)).
 
 `revoke(player, id, revoke)` and `revoke_world(id, revoke)` take
-knowledge back: `Revoke::Clear` clears a bool, `Revoke::Sub(n)` lowers a
-counter down to 0, `Revoke::Unflag(bit)` clears one bit of flags. The value
-changes at once, the clients get it again (the world's to every client, a
-player's to that player), and the next save keeps it; `KnowledgeChanged`
-reports it after the next step. What the grant brought stays: experience,
+knowledge back:
+
+- `Revoke::Clear` clears a bool.
+- `Revoke::Sub(n)` lowers a counter down to 0.
+- `Revoke::Unflag(bit)` clears one bit of flags.
+
+The value changes at once, and the next save keeps it. The clients get it
+again: the world's to every client, a player's to that player.
+`KnowledgeChanged` reports it after the next step. What the grant brought stays: experience,
 unlocks chained on it, skill points already spent. A quest's id taken back
 while its steps still hold is rewarded again. A revoke fails as a grant
 does, and for a player whose save has not loaded yet.
 
 ## Players not in the game
 
-A player's knowledge lives in the character's save on the player's machine;
-the server holds it only while the player is in the game, once that save has
+A player's knowledge lives in the character's save on the player's machine.
+The server holds it only while the player is in the game, once that save has
 loaded. `grant_account(account, id, grant)` and
-`revoke_account(account, id, revoke)` take the account's
-[`Player::key`](world.md) instead of a character: when the account's
-character is in the game the change applies now, otherwise it waits with the
-world, in `<stem>-mod-data/enshwick/knowledge.toml`, and applies once
-the account's next character has loaded in that world, whichever character
-it is. Only a player's ids qualify.
+`revoke_account(account, id, revoke)` take an account instead of a
+character. The account is its [`Player::key`](world.md). When the account's
+character is in the game, the change applies now. Otherwise it waits with the
+world, in `<stem>-mod-data/enshwick/knowledge.toml`. It applies once the
+account's next character has loaded in that world, whichever character it
+is. Only a player's ids qualify.
 
 ```rust
 use enshwick::knowledge::Grant;
@@ -127,12 +141,12 @@ Unstable: needs the `unstable` feature and may change in any release
 ([Stability](stability.md)).
 
 A client asks the server for knowledge in its input, for what its interface
-marks, and a vanilla server grants whatever it asks: a modified client could
+marks. A vanilla server grants whatever it asks. So a modified client could
 grant itself any recipe, quest or skill point. The loader's knowledge guard
-knows what a vanilla client asks for, a player's bools and the seen bit (0)
-of a player's flags; the rest is ids of the world's, counters, other flag
+knows what a vanilla client asks for: a player's bools and the seen bit (0)
+of a player's flags. The rest is ids of the world's, counters, other flag
 bits, ids that give experience or skill points, and quests. The guard refuses
-the rest: a refused request changes nothing and is not asked again. It has no
+the rest. A refused request changes nothing and is not asked again. It has no
 setting.
 
 Requests the guard or a filter refuses are logged as
@@ -140,9 +154,9 @@ Requests the guard or a filter refuses are logged as
 counts them all.
 
 `load.on_knowledge_input(filter)` runs `filter` on every request
-after the guard, with the guard's reason (`refusal`) and the verdict so far
-(`allowed`); its answer replaces the verdict, so a mod can refuse more or
-allow what the guard refuses. Filters run in load order on the server's
+after the guard. The filter gets the guard's reason as `refusal`. It gets
+the verdict so far as `allowed`. Its answer replaces the verdict, so a mod
+can refuse more or allow what the guard refuses. Filters run in load order on the server's
 worker threads, only when a client asks.
 
 ```rust
@@ -156,10 +170,10 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ## Events
 
 [`KnowledgeChanged`](events.md) is raised on the game thread after each step
-for every value that step changed, with the player's character (0 for the
-world), the id and the new value; [`QuestCompleted`](events.md) when a
-player completed a quest and got its rewards, with the character and the
-quest's id.
+for every value that step changed. It holds the player's character (0 for
+the world), the id and the new value. [`QuestCompleted`](events.md) is raised
+when a player completed a quest and got its rewards. It holds the character
+and the quest's id.
 
 Where each call works is in
 [What may be called where](concepts/threads.md#what-may-be-called-where).

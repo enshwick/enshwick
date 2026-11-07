@@ -63,13 +63,13 @@ A stat kind has a [content id](content.md#content-ids) and a `StatDef`:
 
 | Field | Means |
 | --- | --- |
-| `ty` | `Additive` (points, 0 by default), `Multiplicative` (a factor, 1 by default) or `Flag` (on or off) |
+| `ty` | `Additive`: points, 0 by default. `Multiplicative`: a factor, 1 by default. `Flag`: on or off. |
 | `default` | the value without modifiers; `starting_at(v)` sets it |
 | `min`, `max` | the range the value stays in; `range(min, max)` sets it |
-| `format` | how the value reads: `Number`, `Signed` or `Percent` |
+| `format` | how the value reads, `Number` or `Signed`. A third format is `Percent`. |
 
 The text that names a kind is the derived part `<name>.name` in its
-owner's [texts](content/texts.md), as content derives its name: the kind
+owner's [texts](content/texts.md), as content derives its name. The kind
 `<mod>:luck` reads `luck.name`. A stat kind, an affix and an item of one
 mod with the same name share that text, so give them different names.
 
@@ -78,9 +78,9 @@ mod with the same name share that text, so give them different names.
 built-in kind or another mod's: `deps::<alias>::stat("luck")` names a kind of
 a dependency. The dependency's
 [`exports`](concepts/loader-and-abi.md#what-other-mods-may-use) must list
-`stat:` with its name or the name it is a part of (`stat:charm` for
-`charm.fire`), or `open_stat` refuses it and the loader names what the
-dependency exports. `deps::<alias>::id` names content, which `content:`
+`stat:` with the kind's name. The name it is a part of also works:
+`stat:charm` covers `charm.fire`. Otherwise `open_stat` refuses it, and the
+loader names what the dependency exports. `deps::<alias>::id` names content, which `content:`
 exports. Every mod that
 opens one id shares its values. A kind no mod defines reads 0, and the
 loader logs it. `stats.info(stat)` gives a kind's id, text key and
@@ -88,8 +88,8 @@ definition, for a menu or a tooltip.
 
 Item stats store a kind by its key, the game id of the GUID its id turns
 into, as for any [content id](content.md#content-ids). Two ids with one key
-would read as one kind, so the loader turns off the mod that opens the
-second and names both ids and both mods; affixes are checked the same way.
+would read as one kind. So the loader turns off the mod that opens the
+second, and names both ids and both mods. Affixes are checked the same way.
 
 ## Modifiers
 
@@ -97,8 +97,8 @@ A `Modifier` is a stat, an `Op` and a value. They come from three sources,
 summed in this order:
 
 1. **Worn items**: an item keeps its `ItemStats` as [item data](item-and-entity-data.md)
-   of the platform's kind `enshwick:stats`; `stats.item(item)` reads it and
-   `stats.set_item(item, &stats)` writes it, on the server; `set_item` is
+   of the platform's kind `enshwick:stats`. On the server, `stats.item(item)`
+   reads it and `stats.set_item(item, &stats)` writes it. `set_item` is
    unstable, as item data is. The items an
    entity wears are its equipment: armour, rings, the ranged weapon and the
    shield. Clients that run Enshwick get every item's stats.
@@ -107,13 +107,20 @@ summed in this order:
 3. **Mods**: `stats.set(entity, key, modifier, lasting)` keeps a modifier
    under the mod's own key; the same key and stat replace the one before,
    and `stats.remove(entity, key, stat)` takes it away. `Lasting` is
-   `UntilRemoved`, `For(duration)` of real time, or `Saved`: kept with the
-   world for the player's account and given back each time the player
-   joins.
+   one of these:
+   - `UntilRemoved`;
+   - `For(duration)`, of real time;
+   - `Saved`: kept with the world for the player's account and given back
+     each time the player joins.
 
 The operations apply in a fixed order, whatever order the sources give them
-in: every `Add` to the default, then every `Multiply`, then the greatest
-`Max` as a floor; an `Override` replaces the result, and the last one in
+in:
+
+1. every `Add`, to the default;
+2. then every `Multiply`;
+3. then the greatest `Max`, as a floor.
+
+An `Override` replaces the result, and the last one in
 source order wins. The kind's range applies last, and a `Flag` reads 1 for
 any value but 0. `aggregate(&def, modifiers)` is the same sum, for a mod's
 own use and its tests:
@@ -128,23 +135,30 @@ assert_eq!(value, 120.0);
 ```
 
 `stats.sources(entity, Some(stat))` lists the modifiers that count toward a
-stat with their `Origin` (`Item`, `Buff` or `Mod`), in the order they apply.
+stat, in the order they apply. Each comes with its `Origin`. The origins are
+`Item` and `Buff`. A mod's modifier has `Mod`.
 
 ## Values
 
 `stats.value(entity, stat)` reads a value, and `stats.is_on(entity, stat)` a
 flag. The server works an entity's values out after each step in which one
-of its sources changed: a mod set or removed a modifier, a timed one ran
-out, an item's stats changed, or what it wears or its buffs differ from the
-last look, which comes once a second and at once when a player's equipment
-changes. The values go out as one snapshot, so a read takes no lock and
-costs a hash lookup, from any thread: a damage filter may read them. A
+of its sources changed. A source changes when:
+
+- a mod sets or removes a modifier;
+- a timed one runs out;
+- an item's stats change;
+- what the entity wears or its buffs differ from the last look.
+
+The server looks once a second, and at once when a player's equipment
+changes. The values go out as one snapshot, so a read takes no lock and costs
+a hash lookup. Reads work from any thread: a damage filter may read them. A
 client reads defaults; what a player sees of a built-in kind comes through
 the game itself.
 
-The server watches players, every entity a mod keeps a modifier on, and the
-entities a mod asks it to watch with `stats.watch(entity, true)`, such as an
-enemy whose curse buff should count. Others keep their defaults.
+The server watches players and every entity a mod keeps a modifier on. It
+also watches the entities a mod asks it to watch with
+`stats.watch(entity, true)`. An example is an enemy whose curse buff should
+count. Others keep their defaults.
 
 `load.on_stats_changed(|change| ...)` runs on the server's game thread after
 the step that moved a value, with the entity, the stat and the values before
@@ -157,35 +171,46 @@ them to the game on the server, the dedicated one or a hosting client:
 
 | Kinds | Type | What the game does with them |
 | --- | --- | --- |
-| `health_max`, `stamina_max`, `mana_max` | points | added to the entity's maximum as gear adds to it; clients see the new maximum |
+| `health_max` | points | added to the entity's maximum as gear adds to it; clients see the new maximum |
+| `stamina_max` | points | as `health_max` |
+| `mana_max` | points | as `health_max` |
 | `damage`, `damage_<type>` | factor | multiply the hits the entity deals, every type or one |
 | `resistance`, `resistance_<type>` | part | the part of a hit's damage the entity takes less: 0.25 takes a quarter less, 1 takes none, a negative part takes more |
 
-The types are `cut`, `pierce`, `blunt`, `fire`, `ice`, `shroud`,
-`lightning` and `poison`. Damage and resistance act through the same site
+The values of `<type>` are these:
+
+- `cut`
+- `pierce`
+- `blunt`
+- `fire`
+- `ice`
+- `shroud`
+- `lightning`
+- `poison`
+
+Damage and resistance act through the same site
 as [damage filters](damage.md), before them: on hits only, after the game's
 own resistances and before its armour. The attacker of a hit is the root of
 what hit, so an archer's damage factors count for its arrows. Health,
 stamina and mana maxima go through the game's own adders, which perks, food
-and gear change the same way, so they stay as the game keeps them; the
+and gear change the same way. So they stay as the game keeps them. The
 current value follows the game's own rules.
 
 The game's other attributes, such as movement speed, critical chance or
-armour points, are not built-in kinds yet; their sets work alike and may
-follow.
+armour points, are not built-in kinds. Their sets work alike.
 
 ## Tooltips
 
 What an item gives is item data, so a client that runs Enshwick knows every
-item's `ItemStats`: [`affixes.lines(item)`](affixes.md#what-an-item-rolled)
-lists it a modifier per line, and `stats.info(stat)` names each line's text
-key and format. Per-item tooltip lines need a client hook of their own;
-until it lands, a mod item that always gives the same can show it with
+item's `ItemStats`. [`affixes.lines(item)`](affixes.md#what-an-item-rolled)
+lists it a modifier per line. `stats.info(stat)` names each line's text
+key and format. Per-item tooltip lines need a client hook of their own. A mod
+item that always gives the same can show it with
 [tooltip lines](content/items.md#tooltip-lines) on its type.
 
 ## Testing
 
 The [fake loader](testing.md) answers stats as the server does, working
-values out on every read: `loader.wear(entity, item)` puts an item on an
-entity, `loader.set_buffs` and the buff calls give buffs, and
+values out on every read. `loader.wear(entity, item)` puts an item on an
+entity. `loader.set_buffs` and the buff calls give buffs.
 `loader.settle_stats()` runs the change handlers as a step would.

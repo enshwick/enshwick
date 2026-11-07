@@ -7,8 +7,8 @@ description: A mid-function hook runs a mod's handler before one instruction ins
 
 Sometimes the value to change sits in a register halfway through a function,
 and no function boundary is near it. `load.hook_at(address, handler)` runs
-`handler` before the instruction at `address`, with the registers the game code
-has there:
+`handler` with the registers the game code has. It runs before the
+instruction at `address`:
 
 ```rust
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -40,9 +40,9 @@ holds the 16 general-purpose registers and `rflags`.
 - Writes to any field but `rsp` take effect when the game code goes on.
 - `rsp` is the stack pointer at `address`, for reading the function's locals;
   writes to it are ignored.
-- The loader keeps every vector register the game holds across the handlers:
-  the `xmm` and `ymm` registers and, where the system turns AVX-512 on, the
-  `zmm` and mask registers. Handler code may use any of them freely, including
+- The loader keeps every vector register the game holds across the handlers.
+  These are the `xmm` and `ymm` registers. Where the system turns AVX-512 on,
+  they include the `zmm` and mask registers. Handler code may use any of them freely, including
   AVX code that ends with `vzeroupper` and AVX-512 code. It does not save the
   x87 state, and a handler cannot read or change any vector value the game
   holds.
@@ -54,11 +54,11 @@ the vector registers is chosen per processor when the hooks are armed:
 
 | Processor                  | What the stub does                                                                                                                                                                                            |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| no AVX                     | saves `xmm0`-`xmm5`; the calling convention keeps the rest                                                                                                                                                    |
-| AMD with AVX, no AVX-512   | saves `ymm0`-`ymm15`                                                                                                                                                                                          |
-| Intel with AVX, no AVX-512 | saves `ymm0`-`ymm15`; when their upper halves are zero, gives them back with `vzeroupper` so the SSE code after the hook keeps its speed                                                                      |
-| AMD with AVX-512           | ORs the vector and mask registers together and saves, by what is not zero, `xmm0`-`xmm5`, `ymm0`-`ymm15` or `zmm0`-`zmm15`, then `zmm16`-`zmm31` and the masks on their own                                   |
-| Intel with AVX-512         | reads the state in use with `xgetbv` (a 512-bit OR would lower the clock) and saves the same parts; reads it again after the handlers and zeroes `zmm16`-`zmm31` and the masks only where a handler used them |
+| no AVX                     | saves `xmm0-xmm5`; the calling convention keeps the rest                                                                                                                                                    |
+| AMD with AVX, no AVX-512   | saves `ymm0-ymm15`                                                                                                                                                                                          |
+| Intel with AVX, no AVX-512 | saves `ymm0-ymm15`; when their upper halves are zero, gives them back with `vzeroupper` so the SSE code after the hook keeps its speed                                                                      |
+| AMD with AVX-512           | ORs the vector and mask registers together. By what is not zero, it saves one of three sets. The sets are `xmm0-xmm5` and `ymm0-ymm15`. The third is `zmm0-zmm15`. Then it saves `zmm16-zmm31` and the masks on their own. |
+| Intel with AVX-512         | reads the state in use with `xgetbv`, since a 512-bit OR would lower the clock. It saves the same parts. After the handlers it reads the state again. It zeroes `zmm16-zmm31` and the masks only where a handler used them. |
 
 Per call of a hooked 3-instruction function with an empty handler, release
 build, Ryzen 9 9950X3D (`cargo test -p enshwick-loader --release --lib
@@ -75,26 +75,26 @@ processors):
 
 ## Choosing an address
 
-The loader replaces the 5 bytes from `address` with a jump to a stub and moves
-the instructions that were there; after the handlers the moved instructions
+The loader replaces the 5 bytes from `address` with a jump to a stub. It moves
+the instructions that were there. After the handlers the moved instructions
 run and the function goes on.
 
 - `address` must start an instruction.
 - Nothing may jump into those 5 bytes after their first, such as to a loop
   head or a branch target. The loader refuses the address when a direct jump
-  or call of the same function lands there, by the function's bounds in the
-  unwind data of its module. It cannot see a jump through a table or a
+  or call of the same function lands there. It finds the function's bounds in
+  the unwind data of its module. It cannot see a jump through a table or a
   computed address, a jump from another function, or one in code without
   unwind data. Pick an address inside a straight run of instructions.
 - Control must not leave within those bytes: a return, an unconditional or
   indirect jump, or an interrupt among them makes the loader refuse the address.
-- The first bytes must move cleanly: the loader refuses the address when
-  re-encoding a branch among them would split it into several instructions
-  (its target lies too far for a short form).
+- The first bytes must move cleanly. The loader refuses the address when
+  re-encoding a branch among them would split it into several instructions.
+  That happens when its target lies too far for a short form.
 - The bytes must not overlap another hook's jump. Function hooks keep their
   bytes first, so a mid-function hook within the first bytes of a hooked
-  function is refused, and of two mid-function hooks whose bytes overlap, one
-  is refused.
+  function is refused. Of two mid-function hooks whose bytes overlap, one is
+  refused.
 
 `hook_at` itself refuses, with `Off`:
 
@@ -119,9 +119,9 @@ off. From then on its handlers are skipped; the game goes on unchanged.
 
 ## Testing
 
-In [the test fake](testing.md), `mid_hooks()` lists the addresses a mod hooked
-and `run_at(address, &mut registers)` runs its handlers there, as the game
-reaching that instruction would, and returns how many ran.
+In [the test fake](testing.md), `mid_hooks()` lists the addresses a mod
+hooked. `run_at(address, &mut registers)` runs its handlers there, as the game
+reaching that instruction would. It returns how many ran.
 
 Write the handler as [code in the game's frame](game-frame.md): it runs every
 time the game passes the instruction.
