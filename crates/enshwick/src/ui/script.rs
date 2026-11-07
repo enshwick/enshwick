@@ -123,7 +123,7 @@ pub(crate) struct ScriptFrame {
     host: Host,
     token: u64,
     screen: Screen,
-    hud_screen: crate::abi::Str,
+    raw: crate::abi::UiFrame,
 }
 
 impl ScriptFrame {
@@ -132,7 +132,7 @@ impl ScriptFrame {
             host: frame.host,
             token: frame.token,
             screen: frame.screen,
-            hud_screen: frame.hud_screen,
+            raw: frame.raw,
         }
     }
 
@@ -143,7 +143,7 @@ impl ScriptFrame {
             host: self.host,
             token: self.token,
             screen: self.screen,
-            hud_screen: self.hud_screen,
+            raw: self.raw,
             _life: core::marker::PhantomData,
             _thread: core::marker::PhantomData,
         }
@@ -170,6 +170,20 @@ impl ScriptFrame {
     #[script(name = "open_screen")]
     pub(crate) fn open_screen_script(&self) -> Option<super::HudScreenType> {
         self.frame().open_screen()
+    }
+
+    /// What the player's interaction prompt offers in this frame, as
+    /// [`Frame::prompt`] says.
+    #[script(name = "prompt")]
+    pub(crate) fn prompt_script(&self) -> Option<super::Prompt> {
+        self.frame().prompt()
+    }
+
+    /// The entity the open screen belongs to, as [`Frame::screen_host`]
+    /// says.
+    #[script(name = "screen_host")]
+    pub(crate) fn screen_host_script(&self) -> Option<crate::Entity> {
+        self.frame().screen_host()
     }
 }
 

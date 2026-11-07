@@ -3,8 +3,30 @@
 use enshwick::abi as api_frame;
 use enshwick::abi::{ModHandle, Side, Status};
 
-use crate::host::memory::{get_headed, get_headed_list, put_headed};
-use crate::host::{caller_index, entry};
+use crate::host::memory::{get_headed, get_headed_list, put, put_headed};
+use crate::host::{caller, caller_index, entry};
+
+pub(crate) extern "system" fn local_held(me: ModHandle, out: *mut u64) -> Status {
+    entry("local_held", || {
+        if out.is_null() {
+            return Status::BAD_ARGS;
+        }
+        let loader = match caller(me) {
+            Ok(loader) => loader,
+            Err(status) => return status,
+        };
+        if loader.side != Side::CLIENT {
+            return Status::MISSING;
+        }
+        match crate::local_held::held() {
+            // SAFETY: `HostApi::local_held` has the mod pass `out` pointing at
+            // a writable, aligned `u64` that no other thread touches during
+            // the call, non-null by the check above.
+            Ok(bits) => unsafe { put(out, bits) },
+            Err(status) => status,
+        }
+    })
+}
 
 pub(crate) extern "system" fn ui_frame(
     me: ModHandle,

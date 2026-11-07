@@ -24,10 +24,32 @@ pub struct Frame<'f> {
     pub(super) host: Host,
     pub(super) token: u64,
     pub(super) screen: Screen,
-    /// The game screen's name, as the loader keeps it for the process.
-    pub(super) hud_screen: Str,
+    /// The loader's frame, its fields past an older loader's size zero:
+    /// the game screen's name, kept for the process, the prompt's title,
+    /// borrowed for the callback, and the screen's host.
+    pub(super) raw: UiFrame,
     pub(super) _life: PhantomData<&'f mut ()>,
     pub(super) _thread: PhantomData<*const ()>,
+}
+
+/// The size of the first `UiFrame`, which every loader passes.
+const BORN: usize = core::mem::offset_of!(UiFrame, hud_screen);
+
+/// What the player's interaction prompt offers in a frame, from
+/// [`Frame::prompt`]. The name is enshwick's.
+///
+/// # Examples
+///
+/// See [`Frame::prompt`].
+#[cfg(feature = "unstable")]
+#[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
+pub struct Prompt {
+    /// What the prompt names, such as a chest's or a survivor's name, as
+    /// the game shows it in the player's language.
+    pub title: String,
+    /// The game's `LocaTagId` of its verb, such as the one for "Open".
+    pub verb: u32,
 }
 
 impl Frame<'_> {
@@ -65,10 +87,72 @@ impl Frame<'_> {
     #[cfg(feature = "unstable")]
     #[must_use]
     pub fn open_screen(&self) -> Option<super::HudScreenType> {
-        // SAFETY: the loader keeps the text for the process (`UiFrame`'s
-        // `hud_screen`), and `Str::EMPTY` points at a static.
-        let name = unsafe { self.hud_screen.as_str() }?;
-        super::HudScreenType::from_name(name)
+        super::HudScreenType::from_name(self.hud_screen_name())
+    }
+
+    /// The game screen's name, kept by the loader for the process
+    /// (`UiFrame`'s `hud_screen`); empty for none.
+    pub(super) fn hud_screen_name(&self) -> &'static str {
+        // SAFETY: the loader keeps the text for the process, and a frame of
+        // an older loader reads it zero, which is empty.
+        unsafe { self.raw.hud_screen.as_str() }.unwrap_or("")
+    }
+
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// What the player's interaction prompt offers in this frame: the name
+    /// the game shows, such as a chest's, and its verb; `None` while it
+    /// offers nothing, outside a game and on a game build where the loader
+    /// does not find it. The prompt is the one the client's last step
+    /// wrote. Allocates the title only when called.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     load.on_frame(|frame| {
+    ///         if let Some(prompt) = frame.prompt() {
+    ///             frame.label(&format!("Looking at {}", prompt.title));
+    ///         }
+    ///     })
+    /// }
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[must_use]
+    pub fn prompt(&self) -> Option<Prompt> {
+        // SAFETY: the loader borrows the title for the callback, inside
+        // which `self` lives; a frame of an older loader reads it zero.
+        let title = unsafe { self.raw.prompt_title.as_str() }?;
+        (!title.is_empty() || self.raw.prompt_verb != 0).then(|| Prompt {
+            title: title.to_owned(),
+            verb: self.raw.prompt_verb,
+        })
+    }
+
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// The entity the open screen belongs to, such as the chest whose
+    /// inventory shows or the survivor whose dialog is open; `None` for a
+    /// screen of no object, such as the map or a build tool, outside a game
+    /// and on a game build where the loader does not find it. The id names
+    /// the client's own world: a server's entity of the same object has
+    /// another id.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     load.on_frame(|frame| {
+    ///         if let Some(host) = frame.screen_host() {
+    ///             frame.label(&format!("Screen of {host:?}"));
+    ///         }
+    ///     })
+    /// }
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[must_use]
+    pub fn screen_host(&self) -> Option<crate::Entity> {
+        (self.raw.screen_host.0 != 0).then_some(self.raw.screen_host)
     }
 
     fn draw(&mut self, widget: &mut UiWidget) -> bool {
@@ -299,8 +383,9 @@ pub(super) unsafe extern "system" fn draw_frame<F>(frame: *const UiFrame, user: 
 where
     F: FnMut(&mut Frame<'_>),
 {
-    // SAFETY: the loader passes a valid frame for the call.
-    let Some(raw) = (unsafe { frame.as_ref() }) else {
+    // SAFETY: the loader passes a frame readable for the size its header
+    // states, for the call; the fields an older loader lacks read zero.
+    let Some(raw) = (unsafe { crate::abi::read_headed(frame, BORN) }) else {
         return;
     };
     // SAFETY: `user` is the leaked `Drawer<F>` this function was registered
@@ -321,14 +406,7 @@ where
                 host,
                 token: raw.token,
                 screen,
-                hud_screen: if raw
-                    .header
-                    .covers(core::mem::offset_of!(UiFrame, hud_screen) + size_of::<Str>())
-                {
-                    raw.hud_screen
-                } else {
-                    Str::EMPTY
-                },
+                raw,
                 _life: PhantomData,
                 _thread: PhantomData,
             });

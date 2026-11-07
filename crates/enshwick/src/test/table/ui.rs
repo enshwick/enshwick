@@ -36,6 +36,25 @@ pub(crate) extern "system" fn ui_frame(
     })
 }
 
+/// The local player's held controls, as the test set them; the loader's
+/// answers: [`Status::MISSING`] on a server or outside a game.
+pub(crate) extern "system" fn local_held(_me: ModHandle, out: *mut u64) -> Status {
+    if out.is_null() {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        match s.local_held.filter(|_| s.host.side != Side::SERVER) {
+            Some(bits) => {
+                // SAFETY: the safe layer passes a writable `u64` for the call,
+                // non-null by the check above.
+                unsafe { out.write(bits) };
+                Status::OK
+            }
+            None => Status::MISSING,
+        }
+    })
+}
+
 /// The input waiting for the widget labelled `text`, taken.
 pub(crate) fn input(s: &mut State, text: &str) -> Option<crate::test::Input> {
     let at = s.inputs.iter().position(|(t, _)| t == text)?;

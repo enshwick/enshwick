@@ -43,6 +43,7 @@ use super::entries::transactions::{
     transaction_commit, transaction_commit_for, transaction_entities, transaction_status,
     transaction_undo,
 };
+use super::entries::ui::local_held;
 use super::entries::ui::{
     fog_open, fog_read, map_marker_types, ui_dialog, ui_extension, ui_frame, ui_hud, ui_markers,
     ui_widget,
@@ -252,4 +253,5 @@ pub(crate) static API: HostApi = HostApi {
     crafting_prop,
     set_saved,
     run_action_at,
+    local_held,
 };

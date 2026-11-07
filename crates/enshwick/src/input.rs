@@ -1,6 +1,6 @@
 //! The game's own controls as players use them: which ones a player holds
 //! this step, read in the server's world for every player, vanilla clients
-//! included.
+//! included, and on a client the ones its local player holds.
 //!
 //! Unstable: needs the `unstable` feature and may change in any release.
 //!
@@ -59,7 +59,7 @@ pub struct Input(&'static Resolved);
 
 impl crate::script::Bound for Input {
     const NAME: &'static str = "input";
-    const DOC: &'static str = "The game's controls each player holds, read in the server's world.";
+    const DOC: &'static str = "The game's controls each player holds, read in the server's world, and the local player's on a client.";
     const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_HELD];
 
     fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -163,6 +163,37 @@ impl Input {
             bits,
             actions: &self.0.actions,
         }))
+    }
+
+    /// The game's controls the local player holds, as this client's
+    /// interface read them in its last step; `None` on a server, outside a
+    /// game and while no step ran for a second, as in the pause menu. Only
+    /// the gameplay controls: the client-only ones, such as the menu and
+    /// map keys, are not in it. Read on any thread.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::controls::GameAction;
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let input = load.input()?;
+    ///     load.on_frame(move |frame| {
+    ///         if input.local_held().is_some_and(|held| held.contains(GameAction::Block)) {
+    ///             frame.label("Blocking");
+    ///         }
+    ///     })
+    /// }
+    /// ```
+    #[script]
+    #[must_use]
+    pub fn local_held(self) -> Option<InputMask> {
+        let host = self.0.host;
+        let mut bits = 0u64;
+        ((host.api().local_held)(host.handle(), &raw mut bits) == Status::OK).then_some(InputMask {
+            bits,
+            actions: &self.0.actions,
+        })
     }
 }
 

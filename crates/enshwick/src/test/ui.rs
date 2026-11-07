@@ -5,6 +5,41 @@ use crate::abi::Header;
 use super::table;
 use super::{FakeHost, Installed};
 
+/// The prompt and the screen's host the fake's frames hear, as a test set
+/// them.
+#[derive(Clone, Debug, Default)]
+struct Reads {
+    title: String,
+    verb: u32,
+    host: u32,
+}
+
+fn reads() -> Reads {
+    table::with(Reads::default(), |s| Reads {
+        title: s
+            .prompt
+            .as_ref()
+            .map_or_else(String::new, |(t, _)| t.clone()),
+        verb: s.prompt.as_ref().map_or(0, |&(_, v)| v),
+        host: s.screen_host,
+    })
+}
+
+/// An in-game frame `token` with `open` the screen and `reads` its prompt
+/// and host, which it borrows.
+fn in_game(token: u64, open: &str, reads: &Reads) -> crate::abi::UiFrame {
+    crate::abi::UiFrame {
+        header: Header::of::<crate::abi::UiFrame>(),
+        token,
+        screen: crate::abi::UiFrame::IN_GAME,
+        reserved: 0,
+        hud_screen: crate::abi::Str::new(open),
+        prompt_title: crate::abi::Str::new(&reads.title),
+        prompt_verb: reads.verb,
+        screen_host: crate::Entity(reads.host),
+    }
+}
+
 #[expect(
     clippy::unused_self,
     reason = "the fake's state is process-wide; `self` proves it is installed"
@@ -31,13 +66,8 @@ impl Installed {
                 s.frame = Some((token, false, Vec::new()));
                 s.drawing = Some(owner);
             });
-            let frame = crate::abi::UiFrame {
-                header: Header::of::<crate::abi::UiFrame>(),
-                token,
-                screen: crate::abi::UiFrame::IN_GAME,
-                reserved: 0,
-                hud_screen: crate::abi::Str::new(open),
-            };
+            let reads = reads();
+            let frame = in_game(token, open, &reads);
             // SAFETY: a callback the mod registered with its own pointer.
             table::as_owner(owner, || unsafe {
                 callback(
@@ -76,13 +106,8 @@ impl Installed {
                 s.hud = Some((token, Vec::new()));
                 s.drawing = Some(owner);
             });
-            let frame = crate::abi::UiFrame {
-                header: Header::of::<crate::abi::UiFrame>(),
-                token,
-                screen: crate::abi::UiFrame::IN_GAME,
-                reserved: 0,
-                hud_screen: crate::abi::Str::new(open),
-            };
+            let reads = reads();
+            let frame = in_game(token, open, &reads);
             // SAFETY: a callback the mod registered with its own pointer.
             table::as_owner(owner, || unsafe {
                 callback(
@@ -133,13 +158,8 @@ impl Installed {
                 s.extending = Some(token);
                 s.drawing = Some(owner);
             });
-            let frame = crate::abi::UiFrame {
-                header: Header::of::<crate::abi::UiFrame>(),
-                token,
-                screen: crate::abi::UiFrame::IN_GAME,
-                reserved: 0,
-                hud_screen: crate::abi::Str::new(open),
-            };
+            let reads = reads();
+            let frame = in_game(token, open, &reads);
             // SAFETY: a callback the mod registered with its own pointer.
             unsafe {
                 callback(
@@ -177,6 +197,58 @@ impl Installed {
         table::with((), |s| {
             s.open_screen = screen.map_or("", crate::ui::HudScreenType::name);
         });
+    }
+
+    /// Shows the interaction prompt `title` with the verb `LocaTagId`
+    /// `verb` in the frames drawn from now on, as when the player looks at
+    /// an object; `None` shows none.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::Side;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
+    /// loader.show_prompt(Some(("Chest", 7)));
+    /// assert!(loader.draw_frame().is_empty());
+    /// ```
+    pub fn show_prompt(&self, prompt: Option<(&str, u32)>) {
+        table::with((), |s| {
+            s.prompt = prompt.map(|(title, verb)| (title.to_owned(), verb));
+        });
+    }
+
+    /// Makes `host`, an entity of the client's world, the object the open
+    /// screen belongs to in the frames drawn from now on; `None` for none.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::Entity;
+    /// use enshwick::abi::Side;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
+    /// loader.host_screen(Some(Entity(512)));
+    /// assert!(loader.draw_frame().is_empty());
+    /// ```
+    pub fn host_screen(&self, host: Option<crate::Entity>) {
+        table::with((), |s| s.screen_host = host.map_or(0, |e| e.0));
+    }
+
+    /// Makes `held`, a `Bitmask64` of the game's `PlayerInputType`, the
+    /// controls the local player holds from now on, as the client's last
+    /// step read them; `None` as outside a game.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::Side;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
+    /// loader.hold_locally(Some(1 << 30));
+    /// ```
+    pub fn hold_locally(&self, held: Option<u64>) {
+        table::with((), |s| s.local_held = held);
     }
 
     /// The mod's markers on the map, as it set them last.
