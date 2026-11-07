@@ -45,6 +45,13 @@ pub(crate) fn resend_on_rights(loader: &Loader) {
     }
 }
 
+/// Forgets what client `key` got, when its player leaves the server.
+pub(crate) fn left(key: u64) {
+    if let Some(rights) = STATE.rights.relock().as_mut() {
+        rights.left(key);
+    }
+}
+
 fn with_rights<R>(f: impl FnOnce(&mut Rights) -> R) -> R {
     f(STATE.rights.relock().get_or_insert_with(Rights::default))
 }
@@ -129,6 +136,11 @@ impl Rights {
     /// Client `key` got the controls its player's `permissions` allow.
     pub(super) fn sent(&mut self, key: u64, permissions: Option<u8>) {
         self.sent.insert(key, permissions);
+    }
+
+    /// Client `key` left, whether or not its player reached the world.
+    pub(super) fn left(&mut self, key: u64) {
+        self.sent.remove(&key);
     }
 
     /// Whether a look is due at `now`, once per [`EVERY`].
@@ -246,6 +258,10 @@ mod tests {
         // 7 left: a later player with its key starts without controls.
         assert_eq!(keys(rights.changed(&[player(8, 0)])), Vec::<u64>::new());
         assert_eq!(keys(rights.changed(&[player(7, 1)])), Vec::<u64>::new());
+        // 10 said hello and left before its player was in the world.
+        rights.sent(10, None);
+        rights.left(10);
+        assert_eq!(keys(rights.changed(&[player(10, 0)])), Vec::<u64>::new());
     }
 
     #[test]

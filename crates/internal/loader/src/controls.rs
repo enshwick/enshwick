@@ -896,7 +896,7 @@ pub(crate) enum SetKeyError {
 mod input;
 mod rights;
 
-pub(crate) use rights::{hello, resend_on_rights};
+pub(crate) use rights::{hello, left, resend_on_rights};
 
 pub(crate) use input::{capture_keys, focused, key_name};
 
