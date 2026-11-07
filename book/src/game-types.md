@@ -44,8 +44,8 @@ on the running build, and it fails only for that type. Read an entity's
 component on the game thread; `write` writes it back, marked changed the
 game's way. A read copies the component's own bytes. Some fields keep their
 data outside them, such as an array the game keeps as a `BlobArray`. A
-component type with such a field does not resolve, and the refusal names the
-field:
+component type with such a field, or with a field of a kind this API does
+not know, does not resolve, and the refusal names the field:
 
 ```rust
 use enshwick::events::PlayerJoined;

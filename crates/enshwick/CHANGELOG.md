@@ -227,8 +227,9 @@ Each entry names the pull request that made the change.
   and give `check` and `to_script`; the script types are `typed::SCRIPT_TYPES`
   (#986).
 - `typed`: a component type with a field whose data lies outside the
-  component, such as a `BlobArray`, does not resolve for live reads and
-  writes; the refusal names the field (#986).
+  component, such as a `BlobArray`, or of a kind this API does not know,
+  does not resolve for live reads and writes; the refusal names the field
+  (#986).
 - `actions`: `Load::actions` hands its texts to the loader once, beneath the
   texts the mod hands itself, before or after; a runs-control's label reads
   from them in each player's language with the usual fallback, and a key both
