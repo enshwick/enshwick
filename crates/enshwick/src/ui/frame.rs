@@ -113,7 +113,7 @@ impl Frame<'_> {
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.on_frame(|frame| {
     ///         if let Some(prompt) = frame.prompt() {
-    ///             frame.label(&format!("Looking at {}", prompt.title));
+    ///             frame.label(format!("Looking at {}", prompt.title).as_str());
     ///         }
     ///     })
     /// }
@@ -145,7 +145,7 @@ impl Frame<'_> {
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.on_frame(|frame| {
     ///         if let Some(host) = frame.screen_host() {
-    ///             frame.label(&format!("Screen of {host:?}"));
+    ///             frame.label(format!("Screen of {host:?}").as_str());
     ///         }
     ///     })
     /// }

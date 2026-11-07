@@ -304,7 +304,7 @@ It returns `None` while the prompt offers nothing.
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.on_frame(|frame| {
         if let Some(prompt) = frame.prompt() {
-            frame.label(&format!("Looking at {}", prompt.title));
+            frame.label(format!("Looking at {}", prompt.title).as_str());
         }
     })
 }
