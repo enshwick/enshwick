@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 13
+#define ENSHWICK_ABI_MINOR 14
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -2157,7 +2157,7 @@ typedef struct EnshwickUiWidget {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // What to draw: one of the kind constants, `UiWidget::WINDOW` to
-  // `UiWidget::SOUND`.
+  // `UiWidget::PLAY`.
   uint32_t kind;
   // `UiWidget::READ_ONLY`, `UiWidget::WRAP`, `UiWidget::CENTER`.
   uint32_t flags;
@@ -2190,6 +2190,9 @@ typedef struct EnshwickUiWidget {
   uint32_t anchor;
   // Zero.
   uint32_t reserved;
+  // The sound container a `UiWidget::PLAY` widget plays, its GUID in
+  // memory order. ABI 11.14.
+  uint8_t sound[16];
 } EnshwickUiWidget;
 // A window in the game's style, a panel over the screen that takes the
 // input while it shows: `text` is its id, unique in the mod, `detail`
@@ -2213,6 +2216,11 @@ typedef struct EnshwickUiWidget {
 #define EnshwickUiWidget_PROGRESS 8
 // Plays the interface sound `style`.
 #define EnshwickUiWidget_SOUND 9
+// Plays the sound container `sound` as an interface sound, heard only
+// on this client and from no place in the world;
+// `Status::MISSING` for a container neither
+// the client's archive nor a mod holds. Needs no window. ABI 11.14.
+#define EnshwickUiWidget_PLAY 10
 // The row shows its value and does not take changes; a button does not
 // take clicks.
 #define EnshwickUiWidget_READ_ONLY 1

@@ -250,6 +250,16 @@ pub(super) fn draw(
             unsafe { engine.sound(context, raw.style) };
             Status::OK
         }
+        UiWidget::PLAY => {
+            if !holds_sound(raw.sound) {
+                return Status::MISSING;
+            }
+            // SAFETY: `widget` found this thread's `DRAWING`, set only while
+            // a frame callback runs inside the frame on the interface thread,
+            // with its non-zero `context`.
+            unsafe { engine.play(context, &raw.sound) };
+            Status::OK
+        }
         UiWidget::LABEL => {
             let text = copy(&[text]);
             // SAFETY: `window_open`, checked by `widget_checks::order`, means this
@@ -288,6 +298,21 @@ pub(super) fn draw(
         }
         _ => Status::MISSING,
     }
+}
+
+/// Whether the client's archive holds a sound container with GUID `guid`,
+/// so a mod's typo never reaches the game's sound system.
+fn holds_sound(guid: [u8; 16]) -> bool {
+    use enshwick_gamedata::catalogue;
+    let Some(type_hash) = catalogue::type_hash(catalogue::ids::SOUND_CONTAINER) else {
+        return false;
+    };
+    let key = enshwick::abi::ResourceKey {
+        guid,
+        type_hash,
+        part: 0,
+    };
+    crate::archive::game().is_some_and(|archive| archive.contains(&key))
 }
 
 /// Draws a settings row, writing back the player's change.

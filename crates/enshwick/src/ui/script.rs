@@ -268,7 +268,7 @@ impl ScriptFrame {
     ///
     /// As [`Frame::play`].
     #[script(name = "play")]
-    pub(crate) fn play_script(&self, sound: crate::content::Guid) -> Result<(), crate::Off> {
+    pub(crate) fn play_script(&self, sound: crate::content::Guid) -> Result<(), Off> {
         self.frame()
             .play(crate::sound::SoundContainerId::from_guid(sound))
     }

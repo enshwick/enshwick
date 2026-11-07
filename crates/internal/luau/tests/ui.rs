@@ -5,6 +5,7 @@
 #[cfg(test)]
 mod tests {
     use enshwick::abi::{MapMarkerTypeInfo, Side, UiDialog, UiMarker, UiWidget};
+    use enshwick::content::{Guid, types};
     use enshwick::test::{Drawn, FakeHost, Input};
     use enshwick::ui::{HudScreenType, Response};
 
@@ -116,6 +117,32 @@ mod tests {
             "{closing:?}"
         );
         assert!(loader.draw_frame().is_empty(), "closed");
+    }
+
+    #[test]
+    fn a_script_plays_a_held_sound_container_and_hears_why_another_is_refused() {
+        let held = Guid::named("you.bells:bell");
+        let typo = Guid::named("you.bells:bel");
+        let host = FakeHost::new()
+            .side(Side::CLIENT)
+            .type_hash(types::SOUND_CONTAINER_RESOURCE.id(), 7)
+            .resource(held.key_by_hash(7), Vec::new());
+        let main = format!(
+            r#"
+            enshwick.ui.on_frame(function(frame)
+                frame:play("{held}")
+                local ok, why = pcall(frame.play, frame, "{typo}")
+                enshwick.log.info(`refused {{not ok}} {{why}}`)
+            end)
+            "#
+        );
+        let loader = run(host, &main);
+        assert_eq!(loader.draw_frame(), [Drawn::Play(held)]);
+        assert!(
+            logged(&loader, "refused true") && logged(&loader, &typo.to_string()),
+            "{:?}",
+            loader.logs()
+        );
     }
 
     #[test]

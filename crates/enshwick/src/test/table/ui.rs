@@ -148,6 +148,17 @@ fn draw(frame: u64, w: &mut UiWidget) -> Status {
             },
             UiWidget::END if open && s.extending != Some(frame) => Drawn::End,
             UiWidget::SOUND => Drawn::Sound(w.style),
+            UiWidget::PLAY => {
+                let held = s
+                    .host
+                    .type_hashes
+                    .get(crate::engine_ids::SOUND_CONTAINER)
+                    .is_some_and(|&hash| s.host.resources.contains_key(&(w.sound, hash, 0)));
+                if !held {
+                    return Status::MISSING;
+                }
+                Drawn::Play(crate::content::Guid(w.sound))
+            }
             UiWidget::WINDOW | UiWidget::END => return Status::REFUSED,
             _ if !open => return Status::REFUSED,
             UiWidget::LABEL => Drawn::Label {

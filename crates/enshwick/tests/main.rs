@@ -163,6 +163,7 @@ mod sides;
 #[cfg(feature = "typed")]
 mod skill_tree;
 mod skills;
+mod sounds;
 #[cfg(feature = "typed")]
 mod spawns;
 #[cfg(feature = "unstable")]

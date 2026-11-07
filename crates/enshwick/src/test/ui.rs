@@ -325,6 +325,9 @@ pub enum Drawn {
     },
     /// A sound, `UiWidget::SOUND_*`.
     Sound(u32),
+    /// A sound container played with
+    /// [`Frame::play`](crate::ui::Frame::play), by its GUID.
+    Play(crate::content::Guid),
 }
 
 /// A marker the mod set on the map, as [`Installed::markers`] reports it.

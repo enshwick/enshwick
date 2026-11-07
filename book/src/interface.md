@@ -96,6 +96,16 @@ widgets draw only inside one. The widgets:
 | `dropdown`               | the settings choice, at most 64 options       | true when changed         |
 | `progress`               | the game's bar, from 0 to 1                   |                           |
 | `sound`                  | plays a click, confirmation, back or refusal  |                           |
+| `play`                   | plays a sound container by its GUID           | `Off` for an unknown GUID |
+
+`sound` and `play` need no window. `play` takes a
+[`SoundContainerId`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/sound.rs),
+the GUID of one of the game's sound containers, as its archive names it, or
+of a mod's own. It plays the container as an interface sound: only this
+client hears it, and it comes from no place in the world. The loader refuses
+a GUID the game's archive does not hold before it reaches the game. A sound
+that misleads players in a fight, such as an attack that does not happen,
+does not belong in a mod.
 
 Rows take `read_only(true)`: they show the value and do not take changes.
 A slider whose range has an end that is not finite draws nothing. A reversed

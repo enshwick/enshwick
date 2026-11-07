@@ -1,4 +1,4 @@
-abi 11.13
+abi 11.14
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
 ActionCall size 184 align 8 born 144
@@ -996,7 +996,7 @@ UiMarker size 56 align 8 born 56
     label at 32 size 16 type Str
     color at 48 size 4 type u32
     marker_type at 52 size 4 type u32
-UiWidget size 96 align 8 born 96
+UiWidget size 112 align 8 born 96
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
     flags at 12 size 4 type u32
@@ -1013,6 +1013,7 @@ UiWidget size 96 align 8 born 96
     result at 84 size 4 type u32
     anchor at 88 size 4 type u32
     reserved at 92 size 4 type u32
+    sound at 96 size 16 type [u8; 16]
 Voxel size 4 align 1
     kind at 0 size 1 type u8
     material at 1 size 1 type u8

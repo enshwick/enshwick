@@ -923,7 +923,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, notify) == 24 + 67 * 8);
     assert!(core::mem::offset_of!(HostApi, ui_dialog) == 24 + 94 * 8);
     assert!(size_of::<UiFrame>() == 40);
-    assert!(size_of::<UiWidget>() == 8 + 16 + 32 + 8 + 32);
+    assert!(size_of::<UiWidget>() == 8 + 16 + 32 + 8 + 32 + 16);
     assert!(size_of::<UiMarker>() == 8 + 24 + 16 + 8);
     assert!(core::mem::offset_of!(HostApi, texts) == 24 + 98 * 8);
     assert!(core::mem::offset_of!(HostApi, config_check) == 24 + 97 * 8);
