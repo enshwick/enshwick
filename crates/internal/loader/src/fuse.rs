@@ -54,6 +54,11 @@ impl Fuse {
         match check() {
             Ok(()) => {
                 self.checked.store(true, Ordering::Release);
+                crate::log!(
+                    INFO,
+                    "{}: its live object holds what {build} found",
+                    self.feature
+                );
                 !self.is_off()
             }
             Err(why) => {
