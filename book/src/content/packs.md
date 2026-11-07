@@ -89,7 +89,7 @@ lockers = "you.lockers"
 | `requires` | a table of the mods and packs it relates to, as a Rust mod's [manifest](../concepts/loader-and-abi.md#the-manifest) names them |
 | `after` | a table of the mods and packs it relates to, as a Rust mod's [manifest](../concepts/loader-and-abi.md#the-manifest) names them; it takes no version |
 | `breaks` | a table of the mods and packs it relates to, as a Rust mod's [manifest](../concepts/loader-and-abi.md#the-manifest) names them |
-| `exports` | what the pack offers other mods. Each entry is a kind and a local name. The kind is `event` for an event its scripts define, `point` for a point of `[[point]]`, or content. `["event:greeted"]` offers the event `<id>:greeted`. The loader refuses other mods the rest, matching kind and name (see [what other mods may use](../concepts/loader-and-abi.md#what-other-mods-may-use)) |
+| `exports` | what the pack offers other mods. Each entry is a kind and a local name. The kind is `event` for an event its scripts define, or `point` for a point it declares. The kind content names its content. `["event:greeted"]` offers the event `<id>:greeted`. The loader refuses other mods the rest, matching kind and name (see [what other mods may use](../concepts/loader-and-abi.md#what-other-mods-may-use)) |
 | `enshwick` | the Enshwick releases the pack is made for, as a version requirement such as `"=1.0.0-alpha.12"`. A loader of another release skips the pack and logs both versions. Empty for any |
 | `[[setting]]` | a setting of a [Luau mod](../settings.md#settings-of-a-luau-mod), one table each |
 | `[[point]]` | an [extension point](../extending.md#defining-a-point-in-luau) a Luau mod owns, one table each |
