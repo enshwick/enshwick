@@ -625,10 +625,12 @@ mod tests {
         let bytes = std::fs::read(path).unwrap();
         let image = Image::parse(&bytes, Layout::File, None).unwrap();
         let tables = crate::builds::load();
-        let table = exact(&tables, TableSide::Server, image.fingerprint().unwrap()).unwrap();
+        let Some(table) = exact(&tables, TableSide::Server, image.fingerprint().unwrap()) else {
+            return;
+        };
         let text = enshwick_gamedata::kept()
             .unwrap()
-            .iter()
+            .into_iter()
             .find(|(file, _)| *file == table.file_name())
             .unwrap()
             .1;

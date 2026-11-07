@@ -236,7 +236,9 @@ mod tests {
         assert_eq!(keys.len(), 1);
         let resource = archive.resource(&keys[0]).unwrap();
         let found = slots(&LAYOUT, &resource).unwrap();
-        let table = crate::builds::embedded(enshwick::abi::Side::CLIENT);
+        let Some(table) = crate::builds::kept(enshwick::abi::Side::CLIENT) else {
+            return;
+        };
         let named = table.attributes();
         assert!(!named.is_empty(), "the client table names no attribute");
         for (id, name) in named {

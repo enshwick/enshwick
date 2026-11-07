@@ -27,8 +27,8 @@ fn a_function_s_bytes_are_checked_whenever_the_table_has_them() {
 fn the_tables_layouts_fit_the_loader_s_buffers() {
     let tables = enshwick_gamedata::kept()
         .unwrap()
-        .iter()
-        .map(|(_, text)| enshwick_gamedata::Table::parse(text).unwrap());
+        .into_iter()
+        .map(|(_, text)| enshwick_gamedata::Table::parse(&text).unwrap());
     for table in tables.filter(|t| t.side() == enshwick_gamedata::Side::Client) {
         let lookup = |id: &str| constant(&table, id);
         let layout = Layout::read(&lookup).unwrap();

@@ -4,7 +4,7 @@
 
 use rustc_hash::FxHashSet;
 
-use crate::{Routes, Side, Table, embedded};
+use crate::{Routes, Side, Table, kept};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]

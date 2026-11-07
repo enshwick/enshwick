@@ -359,9 +359,11 @@ pub fn reported(side: Side, fingerprint: Fingerprint) -> bool {
 }
 
 /// The environment variable naming the folder of the kept builds' game
-/// data, read from a developer's own game files and kept outside this
-/// repository: their tables in `tables/` and their typed catalogues in
-/// `typed/`. The tests that compare with them skip without it.
+/// data, which the tests that compare with it read and skip without.
+///
+/// The folder lies outside this repository and holds what a developer's own
+/// game files give: the builds' tables in `tables/` and their typed
+/// catalogues in `typed/`.
 pub const DATA_VAR: &str = "ENSH_GAMEDATA";
 
 /// The folder [`DATA_VAR`] names; `None` when it is unset.
@@ -401,8 +403,11 @@ pub fn tables_in(dir: &std::path::Path) -> std::io::Result<Vec<(String, String)>
     let mut tables = Vec::new();
     for entry in entries {
         let path = entry?.path();
+        let toml = path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("toml"));
         let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
-        if let Some(name) = name.filter(|n| n.ends_with(".toml")) {
+        if let Some(name) = name.filter(|_| toml) {
             tables.push((name, std::fs::read_to_string(&path)?));
         }
     }

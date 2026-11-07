@@ -23,10 +23,10 @@ fn every_reflected_name_a_route_takes_is_in_the_typed_catalogue() {
     let mut checked = 0;
     for (_, text) in kept().unwrap() {
         let table = Table::parse(&text).unwrap();
-        let Some(path) = crate::typed::snapshot_path(&table.file_name()) else {
+        let Some(file) = crate::typed::snapshot_path(&table.file_name()) else {
             continue;
         };
-        let Ok(snapshot) = std::fs::read_to_string(path) else {
+        let Ok(snapshot) = std::fs::read_to_string(&file) else {
             continue;
         };
         let catalogue = crate::typed::Catalogue::from_snapshot(&snapshot).unwrap();

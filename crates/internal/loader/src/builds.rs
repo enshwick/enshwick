@@ -298,11 +298,12 @@ fn side(side: Side) -> Option<tables::Side> {
     }
 }
 
-/// Every kept build's table, for tests that compare with what a build pins.
+/// Every kept build's table, for tests that compare with what a build pins;
+/// none without the game data folder.
 ///
 /// # Panics
 ///
-/// When an embedded table does not read.
+/// When a kept table does not read.
 #[cfg(test)]
 #[must_use]
 pub fn load() -> Vec<tables::Table> {
@@ -491,24 +492,25 @@ pub const fn reflection_read(types: usize, systems: usize) -> bool {
     types > 0 && systems > 0
 }
 
-/// What the newest kept build of `side` pins, for tests.
+/// What the newest kept build of `side` pins, for tests; `None` without
+/// the kept tables, and the test skips.
 ///
 /// # Panics
 ///
-/// When no table of `running`'s side is embedded.
+/// When `running` is no side.
 #[cfg(test)]
 #[must_use]
-pub fn embedded(running: Side) -> KnownBuild {
+pub fn kept(running: Side) -> Option<KnownBuild> {
     let tables = load();
     let side = side(running).unwrap();
-    let table = tables::newest(&tables, side).unwrap();
-    KnownBuild {
+    let table = tables::newest(&tables, side)?;
+    Some(KnownBuild {
         name: table.name().to_owned(),
         table: table.resolve(),
         unanchored: Vec::new(),
         conflicts: Vec::new(),
         lacking: OnceLock::new(),
-    }
+    })
 }
 
 /// What `ids` read on the executables `ENSH_SERVER_EXE` and
@@ -574,7 +576,9 @@ fn constants_on_executables_by(
             None,
         )
         .unwrap();
-        let own = tables::exact(&tables, side, image.fingerprint().unwrap()).unwrap();
+        let Some(own) = tables::exact(&tables, side, image.fingerprint().unwrap()) else {
+            continue;
+        };
         let read = |resolved: &Resolved| ids.iter().map(|id| resolved.constant(id)).collect();
         if keep(own) {
             rows.push((format!("{var}: own"), read(&own.resolve())));
