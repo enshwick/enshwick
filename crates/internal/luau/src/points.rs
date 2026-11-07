@@ -556,6 +556,27 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn every_type_a_pack_point_takes_has_a_luau_form() {
+        let pack = |ty: &str| {
+            enshwick::packs::PackManifest::parse(&format!(
+                "id = \"you.post\"\nversion = \"1.0.0\"\n[[point]]\nname = \"p\"\nmode = \"observe\"\noutput = \"{ty}\"\n"
+            ))
+        };
+        // The refusal of an unknown type lists every type a point takes.
+        let refused = pack("nope").unwrap_err().to_string();
+        let (_, list) = refused.split_once("no type a point takes: ").unwrap();
+        let names: Vec<&str> = list.lines().next().unwrap().split(", ").collect();
+        assert!(names.len() > 10, "{refused}");
+        for name in names {
+            let manifest = pack(name).unwrap();
+            assert!(
+                OwnedDesc::of("you.post", &manifest.point[0]).is_some(),
+                "{name} has no Luau form"
+            );
+        }
+    }
+
     fn primitive() -> impl Strategy<Value = Primitive> {
         prop::sample::select(vec![
             Primitive::U8,

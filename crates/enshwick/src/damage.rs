@@ -559,6 +559,13 @@ impl Load<'_> {
         use crate::Relock as _;
         use core::sync::atomic::{AtomicBool, Ordering};
         use std::sync::Arc;
+        /// Frees the kept copy on a panic too, which the hit's guard catches.
+        struct Free<'a>(&'a AtomicBool);
+        impl Drop for Free<'_> {
+            fn drop(&mut self) {
+                self.0.store(false, Ordering::Release);
+            }
+        }
         let kept = std::sync::OnceLock::new();
         let busy = AtomicBool::new(false);
         self.on_damage(move |damage| {
@@ -571,11 +578,11 @@ impl Load<'_> {
                 *damage.check = *copy.0.relock();
                 return;
             }
+            let _free = Free(&busy);
             let copy: &Arc<ScriptDamage> = kept.get_or_init(fresh);
             *copy.0.relock() = *damage.check;
             filter(Arc::clone(copy));
             *damage.check = *copy.0.relock();
-            busy.store(false, Ordering::Release);
         })
     }
 }

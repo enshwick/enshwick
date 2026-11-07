@@ -217,8 +217,7 @@ fn cargo_aliases(text: &str) -> anyhow::Result<Vec<(String, String)>> {
 /// # Errors
 ///
 /// When the manifest names no such dependency, no DLL there carries the
-/// schema of the one asked for or of any, a schema does not read, or a file
-/// does not write.
+/// schema of the one asked for or of any, or a file does not write.
 pub(crate) fn run(
     alias: Option<&str>,
     from: &Path,
@@ -230,8 +229,13 @@ pub(crate) fn run(
     let wanted = deps.wanted(alias)?;
     let mut found = Vec::new();
     let mut unread = Vec::new();
-    for (dll, text) in schemas(from, &mut unread)? {
-        found.push(Schema::parse(&text).with_context(|| dll.display().to_string())?);
+    // A schema that does not read leaves out only its owner, as a section
+    // that does not read does.
+    for (path, text) in schemas(from, &mut unread)? {
+        match Schema::parse(&text) {
+            Ok(schema) => found.push(schema),
+            Err(e) => unread.push(format!("{}: {e}", path.display())),
+        }
     }
     let left_out = if unread.is_empty() {
         String::new()
@@ -486,6 +490,25 @@ input = [{ name = "player", type = "enshwick.player_key" }, { name = "item", typ
             error.contains("left out, whose sections do not read") && error.contains("pack.toml"),
             "{error}"
         );
+    }
+
+    #[test]
+    fn a_pack_whose_schema_does_not_read_leaves_out_only_itself() {
+        let game = folder("deps-bad-schema", "readme.txt", "");
+        std::fs::create_dir_all(game.join("mods/you.lockers")).unwrap();
+        std::fs::write(game.join("mods/you.lockers/pack.toml"), OWNER).unwrap();
+        std::fs::create_dir_all(game.join("mods/you.odd")).unwrap();
+        let odd = "id = \"you.odd\"\nversion = \"1.0.0\"\nexports = [\"point:self\"]\n\n[[point]]\nname = \"self\"\nmode = \"observe\"\noutput = \"u32\"\n";
+        std::fs::write(game.join("mods/you.odd/pack.toml"), odd).unwrap();
+        let rust = folder("deps-bad-schema-mod", "Cargo.toml", CARGO);
+        let done = run(
+            Some("lockers"),
+            &game,
+            Some(&rust.join("Cargo.toml")),
+            false,
+        )
+        .unwrap();
+        assert!(done.starts_with("wrote you.lockers 1.2.0"), "{done}");
     }
 
     #[test]

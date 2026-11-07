@@ -416,27 +416,32 @@ impl super::PackManifest {
         Ok(())
     }
 
-    /// The schema of the pack's points, in the form a mod's manifest carries
-    /// and `cargo enshwick deps` reads; `None` without any.
+    /// The schema of the points the pack exports, in the form a mod's
+    /// manifest carries and `cargo enshwick deps` reads; `None` without any.
     ///
     /// # Examples
     ///
     /// ```
     /// use enshwick::packs::PackManifest;
     ///
-    /// let manifest = PackManifest::parse("id = \"you.post\"\nversion = \"1.0.0\"\n[[point]]\nname = \"price\"\nmode = \"advise\"\noutput = \"u32\"\ninput = [{ name = \"item\", type = \"u32\" }]\n")?;
+    /// let manifest = PackManifest::parse("id = \"you.post\"\nversion = \"1.0.0\"\nexports = [\"point:price\"]\n[[point]]\nname = \"price\"\nmode = \"advise\"\noutput = \"u32\"\ninput = [{ name = \"item\", type = \"u32\" }]\n")?;
     /// let schema = manifest.points_schema().ok_or("no points")?;
     /// assert!(schema.contains("name = \"you.post:price\""));
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[must_use]
     pub fn points_schema(&self) -> Option<String> {
-        if self.point.is_empty() {
+        let exported = |point: &&PackPoint| {
+            self.exports
+                .iter()
+                .any(|name| name.strip_prefix("point:") == Some(point.name.as_str()))
+        };
+        if !self.point.iter().any(|point| exported(&point)) {
             return None;
         }
         let mut points = Vec::new();
         let mut types = Vec::new();
-        for point in &self.point {
+        for point in self.point.iter().filter(exported) {
             let layout = point.layout()?;
             let mut entry = toml::Table::new();
             entry.insert("name".into(), format!("{}:{}", self.id, point.name).into());
@@ -503,6 +508,61 @@ mod tests {
     fn manifest(points: &str) -> Result<PackManifest, String> {
         PackManifest::parse(&format!("id = \"you.post\"\nversion = \"1.0.0\"\n{points}"))
             .map_err(|e| e.to_string())
+    }
+
+    fn with_field(name: &str) -> Result<PackManifest, String> {
+        manifest(&format!(
+            "[[point]]\nname = \"price\"\nmode = \"override\"\noutput = \"u32\"\ninput = [{{ name = \"{name}\", type = \"u32\" }}]\n"
+        ))
+    }
+
+    #[test]
+    fn a_field_name_is_lower_case_and_not_output() {
+        assert!(with_field("item_2").is_ok());
+        for name in ["Item", "2item", "it-em", "output", "self"] {
+            assert!(with_field(name).is_err(), "{name}");
+        }
+    }
+
+    #[test]
+    fn the_schema_holds_only_the_points_the_pack_exports() {
+        let point = |name: &str| {
+            format!("[[point]]\nname = \"{name}\"\nmode = \"observe\"\noutput = \"u32\"\n")
+        };
+        let both = format!("{}{}", point("price"), point("tax"));
+        assert_eq!(manifest(&both).unwrap().points_schema(), None);
+        let schema = manifest(&format!("exports = [\"point:price\"]\n{both}"))
+            .unwrap()
+            .points_schema()
+            .unwrap();
+        assert!(schema.contains("name = \"you.post:price\""), "{schema}");
+        assert!(schema.contains("output_layout"), "{schema}");
+        assert!(schema.contains("mode = \"observe\""), "{schema}");
+        assert!(schema.contains("input = \"Price\""), "{schema}");
+        assert!(!schema.contains("you.post:tax"), "{schema}");
+    }
+
+    #[test]
+    fn an_input_type_is_the_name_in_upper_camel_case_starting_with_a_letter() {
+        let point = |name: &str| {
+            manifest(&format!(
+                "[[point]]\nname = \"{name}\"\nmode = \"advise\"\noutput = \"u32\"\n"
+            ))
+            .unwrap()
+            .point[0]
+                .input_type()
+        };
+        assert_eq!(point("max-stack"), "MaxStack");
+        assert_eq!(point("2x.rate"), "P2xRate");
+    }
+
+    #[test]
+    fn an_export_of_a_point_the_pack_does_not_declare_is_refused() {
+        let error = manifest(
+            "exports = [\"point:prise\"]\n[[point]]\nname = \"price\"\nmode = \"observe\"\noutput = \"u32\"\n",
+        )
+        .unwrap_err();
+        assert!(error.contains("names no [[point]]"), "{error}");
     }
 
     #[test]

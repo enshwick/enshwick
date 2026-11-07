@@ -131,6 +131,8 @@ pub mod point_schema;
 mod points_declared;
 #[cfg(feature = "unstable")]
 mod points_described;
+#[cfg(feature = "unstable")]
+mod points_described_owned;
 mod points_links;
 mod points_owner;
 mod poisoned_locks;

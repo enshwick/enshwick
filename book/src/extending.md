@@ -439,9 +439,10 @@ A Luau mod declares each point it owns in `pack.toml`, as a `[[point]]`
 table. The table gives the local name, the mode, `refusable`, the input's
 fields and the answer's type. A type is a number, a boolean, a GUID or an id
 type, such as `enshwick.item_id`. The fields are laid out in their
-order, as `#[point]` lays out a Rust struct. A field that would need padding
-is refused, so list the widest first. `exports` names the point, so other
-mods may link it:
+order, as `#[point]` lays out a Rust struct. Padding is refused, before a
+field or at the input's end. List the widest fields first, and add a field
+when the end still needs padding. `exports` names the point, so other mods
+may link it; a point it does not name stays the pack's own:
 
 ```toml
 id = "you.trading-post"

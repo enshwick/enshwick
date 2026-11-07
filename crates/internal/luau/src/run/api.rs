@@ -424,17 +424,24 @@ impl Inner {
             "decide",
             lua.create_function(
                 move |lua, (_, input, answer): (LuaValue, LuaValue, LuaValue)| {
-                    let mut bytes = vec![0u8; size];
-                    encode(&input, &desc.input, &mut bytes, 0)
+                    let mut small = Aligned([0u8; SMALL_INPUT]);
+                    let mut large = Vec::new();
+                    let bytes = if let Some(bytes) = small.0.get_mut(..size) {
+                        bytes
+                    } else {
+                        large.resize(size, 0u8);
+                        large.as_mut_slice()
+                    };
+                    encode(&input, &desc.input, bytes, 0)
                         .map_err(|e| mlua::Error::runtime(format!("{what}: the input: {e}")))?;
-                    let mut out = [0u8; 16];
-                    let out = out.get_mut(..answer_size).unwrap_or_default();
+                    let mut out = Aligned([0u8; 16]);
+                    let out = out.0.get_mut(..answer_size).unwrap_or_default();
                     encode(&answer, &desc.output, out, 0)
                         .map_err(|e| mlua::Error::runtime(format!("{what}: the answer: {e}")))?;
                     let Some(point) = asked.get() else {
                         return Ok((answer, kept.clone()));
                     };
-                    Ok(match point.decide(&bytes, out) {
+                    Ok(match point.decide(bytes, out) {
                         Decision::Changed(()) => {
                             (decode(lua, out, 0, &desc.output)?, changed.clone())
                         }
@@ -657,3 +664,12 @@ fn requested<'scope, 'env>(
     };
     table.raw_set(getter.name(), start_only(vm, ask, during)?)
 }
+
+/// The input size a script's `decide` lays out on the stack; a larger one
+/// goes to the heap.
+const SMALL_INPUT: usize = 64;
+
+/// Bytes aligned for any field a Rust link reads, so `decide` hands them to
+/// the links without a copy.
+#[repr(C, align(16))]
+struct Aligned<const N: usize>([u8; N]);

@@ -381,7 +381,9 @@ impl DescribedOwnedPoint {
     /// [`OwnedPoint::decide`](super::OwnedPoint::decide) does: on
     /// [`Decision::Changed`] `answer` holds the links' value, on
     /// [`Decision::Kept`] it is untouched. Bytes of another size than the
-    /// description's keep the answer without running a link.
+    /// description's keep the answer without running a link. Bytes aligned
+    /// to 16 bytes reach the links as they are; others are copied
+    /// to aligned memory first, since typed links read them as their types.
     ///
     /// # Examples
     ///
@@ -394,6 +396,35 @@ impl DescribedOwnedPoint {
         {
             return Decision::Kept(());
         }
+        if is_aligned(input) && is_aligned(answer) {
+            self.run(input, answer)
+        } else {
+            self.run_copied(input, answer)
+        }
+    }
+
+    /// Runs the links over copies of `input` and `answer` aligned to
+    /// 16 bytes, then copies a changed answer back.
+    #[cold]
+    fn run_copied(&self, input: &[u8], answer: &mut [u8]) -> Decision<()> {
+        let input_words = aligned_copy(input);
+        let mut answer_words = aligned_copy(answer);
+        let input_bytes = bytemuck::cast_slice::<u128, u8>(&input_words)
+            .get(..input.len())
+            .unwrap_or_default();
+        let answer_bytes = bytemuck::cast_slice_mut::<u128, u8>(&mut answer_words)
+            .get_mut(..answer.len())
+            .unwrap_or_default();
+        let decision = self.run(input_bytes, answer_bytes);
+        if decision == Decision::Changed(()) {
+            answer.copy_from_slice(answer_bytes);
+        }
+        decision
+    }
+
+    /// Asks the loader to run the links over aligned bytes of the
+    /// description's sizes.
+    fn run(&self, input: &[u8], answer: &mut [u8]) -> Decision<()> {
         let mut verdict = PointVerdict::PASS;
         let status = (self.host.api().run_point)(
             self.host.handle(),
@@ -419,6 +450,24 @@ impl DescribedOwnedPoint {
     pub fn is_extended(&self) -> bool {
         self.live.load(Ordering::Relaxed) != 0
     }
+}
+
+/// The alignment [`DescribedOwnedPoint::decide`] hands the links, enough for
+/// any field a typed link reads.
+const ALIGN: usize = 16;
+
+/// Whether `bytes` start at [`ALIGN`]; empty bytes are read by nobody.
+fn is_aligned(bytes: &[u8]) -> bool {
+    bytes.is_empty() || bytes.as_ptr().addr().is_multiple_of(ALIGN)
+}
+
+/// `bytes` copied to the start of words aligned to [`ALIGN`].
+fn aligned_copy(bytes: &[u8]) -> Vec<u128> {
+    let mut words = vec![0u128; bytes.len().div_ceil(ALIGN)];
+    if let Some(start) = bytemuck::cast_slice_mut::<u128, u8>(&mut words).get_mut(..bytes.len()) {
+        start.copy_from_slice(bytes);
+    }
+    words
 }
 
 /// Runs a described link; `user` is the [`Link`] boxed by

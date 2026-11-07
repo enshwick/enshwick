@@ -601,18 +601,21 @@ pub(crate) trait Spread {
     fn spread(self) -> (usize, impl Iterator<Item = LuaValue>);
 }
 
+/// How many of `values` the script passed: trailing nils count as not
+/// passed, as on every path a call takes.
+fn passed<'a>(
+    mut values: impl DoubleEndedIterator<Item = &'a LuaValue> + ExactSizeIterator,
+) -> usize {
+    values.rposition(|v| !v.is_nil()).map_or(0, |at| at + 1)
+}
+
 impl Spread for LuaArgs {
-    /// A trailing nil among the first four counts as not passed.
     fn spread(self) -> (usize, impl Iterator<Item = LuaValue>) {
         let (a, b, c, d, rest) = self;
         let first = [a, b, c, d];
-        let given = if rest.is_empty() {
-            first
-                .iter()
-                .rposition(|v| !v.is_nil())
-                .map_or(0, |at| at + 1)
-        } else {
-            first.len() + rest.len()
+        let given = match passed(rest.iter()) {
+            0 => passed(first.iter()),
+            past => first.len() + past,
         };
         (given, first.into_iter().chain(rest))
     }
@@ -620,7 +623,7 @@ impl Spread for LuaArgs {
 
 impl Spread for MultiValue {
     fn spread(self) -> (usize, impl Iterator<Item = LuaValue>) {
-        (self.len(), self.into_iter())
+        (passed(self.iter()), self.into_iter())
     }
 }
 
@@ -717,6 +720,10 @@ mod tests {
         let (given, values) = (n(1.0), nil(), nil(), nil(), rest).spread();
         assert_eq!(given, 6);
         assert_eq!(values.count(), 6);
+        let nils: MultiValue = [nil(), nil()].into_iter().collect();
+        assert_eq!((n(1.0), nil(), nil(), nil(), nils.clone()).spread().0, 1);
+        let start: MultiValue = [n(1.0), nil(), nil(), nil(), nil()].into_iter().collect();
+        assert_eq!(start.spread().0, 1);
     }
 
     #[test]

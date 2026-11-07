@@ -212,6 +212,9 @@ mod tests {
         };
         let dir = std::env::temp_dir().join(format!("enshwick-book-luau-{}", std::process::id()));
         let blocks = lay_out(&dir);
+        // A known error, so a luau-lsp that checked nothing fails the test.
+        let canary = dir.join("canary.luau");
+        std::fs::write(&canary, "local wrong: number = \"canary\"\n").unwrap();
         let out = Command::new(tool)
             .arg("analyze")
             .arg("--formatter=plain")
@@ -224,6 +227,7 @@ mod tests {
                 dir.join("enshwick.typed.d.luau").display()
             ))
             .args(blocks.iter().map(|(file, _, _)| file))
+            .arg(&canary)
             .output()
             .unwrap();
         let text = format!(
@@ -231,8 +235,14 @@ mod tests {
             String::from_utf8_lossy(&out.stdout),
             String::from_utf8_lossy(&out.stderr)
         );
-        let errors = type_errors(&text, &blocks);
+        let (canaries, rest): (Vec<&str>, Vec<&str>) =
+            text.lines().partition(|line| line.contains("canary.luau"));
+        let errors = type_errors(&rest.join("\n"), &blocks);
         let _gone = std::fs::remove_dir_all(&dir);
+        assert!(
+            canaries.iter().any(|line| line.contains("TypeError")),
+            "luau-lsp did not report the known error, so it checked nothing:\n{text}"
+        );
         assert!(
             errors.is_empty(),
             "{} type errors in the book's Luau examples:\n{}",

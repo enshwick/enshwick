@@ -394,7 +394,8 @@ impl PackManifest {
     ];
 
     /// Refuses an export that is not `<kind>:<local name>` of a kind in
-    /// [`EXPORT_KINDS`](Self::EXPORT_KINDS), or given twice,
+    /// [`EXPORT_KINDS`](Self::EXPORT_KINDS), a point the pack does not
+    /// declare, or given twice,
     /// as `declare_mod!` refuses one in `[package.metadata.enshwick]`.
     fn check_exports(&self, text: &str) -> Result<(), PackError> {
         let mut seen = std::collections::BTreeSet::new();
@@ -412,6 +413,10 @@ impl PackManifest {
                 format!(
                     "exports: {name:?}: the name is 1 to 128 of [a-z0-9_./-], without the pack's id"
                 )
+            } else if let Some((crate::schema_section::Kind::Point, local)) = parsed
+                && !self.point.iter().any(|point| point.name == local)
+            {
+                format!("exports: {name:?} names no [[point]] of this pack")
             } else if !seen.insert(name) {
                 format!("exports: {name:?} is given twice")
             } else {

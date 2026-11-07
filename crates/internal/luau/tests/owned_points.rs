@@ -125,6 +125,26 @@ mod tests {
     }
 
     #[test]
+    fn a_rust_link_reads_the_script_s_input_and_answer_aligned() {
+        let loader = run(ASK);
+        assert!(loader.extend_point(|price: &Price, answer: &u32| {
+            let input = core::ptr::from_ref(price).addr();
+            let answer_at = core::ptr::from_ref(answer).addr();
+            if input.is_multiple_of(16) && answer_at.is_multiple_of(16) {
+                Verdict::Set(answer + 1)
+            } else {
+                Verdict::Pass
+            }
+        }));
+        let _saved = loader.raise::<WorldSaved>(&());
+        assert!(
+            logged(&loader, "price 11 changed extended true"),
+            "{:?}",
+            loader.logs()
+        );
+    }
+
+    #[test]
     fn a_point_defined_twice_in_a_start_is_one_point() {
         let loader = run(&format!(
             "local again = enshwick.points.define_point(\"price\")\n{ASK}"

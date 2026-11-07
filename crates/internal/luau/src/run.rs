@@ -459,7 +459,16 @@ pub fn start_pack(
     let points = manifest
         .point
         .iter()
-        .filter_map(|point| OwnedDesc::of(&manifest.id, point))
+        .filter_map(|point| {
+            let desc = OwnedDesc::of(&manifest.id, point);
+            if desc.is_none() {
+                enshwick::warn!(
+                    "point {}: a type of its fields has no Luau form, so the script cannot define it",
+                    point.name
+                );
+            }
+            desc
+        })
         .map(Arc::new)
         .collect();
     begin(
