@@ -15,21 +15,31 @@ use super::{Blob, EngineFacts, Guid, Id, types};
 #[derive(Debug, Default)]
 struct Added {
     meters: Vec<FuelSetup>,
-    items: Vec<NewItem>,
+    /// Each item with the data pack that added it, `None` for the mod
+    /// itself, since the loader's copy holds every pack's.
+    #[cfg(feature = "typed")]
+    items: Vec<(Option<crate::abi::ModHandle>, NewItem)>,
 }
 
 static ADDED: crate::fresh::Fresh<Mutex<Added>> = crate::fresh::Fresh::new();
 
-/// The item this mod added under `guid`, its current id.
+/// The data pack this thread runs, or `None` for the mod itself.
+#[cfg(feature = "typed")]
+fn adder() -> Option<crate::abi::ModHandle> {
+    crate::host::pack().map(|host| host.handle())
+}
+
+/// The item this mod or data pack added under `guid`, its current id.
 #[cfg(feature = "typed")]
 pub(crate) fn added(guid: Guid) -> Option<NewItem> {
+    let by = adder();
     ADDED
         .get_or_init(Mutex::default)
         .relock()
         .items
         .iter()
-        .find(|item| item.id.guid() == guid)
-        .cloned()
+        .find(|(owner, item)| *owner == by && item.id.guid() == guid)
+        .map(|(_, item)| item.clone())
 }
 
 /// [`clone_item`] as the game may read it now: without its icon until this
@@ -586,9 +596,18 @@ impl Load<'_> {
             self.add_one_item(item.clone(), old, debug_name)?;
         }
         let (guid, debug_name) = (item.id.guid(), item.debug_name.clone());
-        self.add_one_item(item.clone(), guid, debug_name)?;
-        ADDED.get_or_init(Mutex::default).relock().items.push(item);
-        Ok(())
+        #[cfg(feature = "typed")]
+        {
+            self.add_one_item(item.clone(), guid, debug_name)?;
+            ADDED
+                .get_or_init(Mutex::default)
+                .relock()
+                .items
+                .push((adder(), item));
+            Ok(())
+        }
+        #[cfg(not(feature = "typed"))]
+        self.add_one_item(item, guid, debug_name)
     }
 
     fn add_one_item(&mut self, item: NewItem, guid: Guid, debug_name: String) -> Result<(), Off> {

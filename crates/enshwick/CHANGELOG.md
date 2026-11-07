@@ -11,7 +11,8 @@ Each entry names the pull request that made the change.
 - `content`: `Load::rekey_item(old, new)` and `enshwick.content.rekey_item`
   take an item the mod added with `add_item` before the call as `new`: `old`
   is served with that item's data, cloned from its base item with its name,
-  tooltip lines, meter and icon (#972).
+  tooltip lines and icon; an item with a meter re-keys only an item with an
+  entity of its own (#972).
 - `test`: `FakeHost::pack_log_level(pack, level)` sets one data pack's log
   level (#972).
 - `actions`: `Actions::control(id, key)` puts a declared action without

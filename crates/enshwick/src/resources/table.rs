@@ -452,21 +452,26 @@ impl Host {
     /// }
     /// ```
     pub fn game_value(&self, key: crate::abi::ResourceKey) -> Result<super::Value, Off> {
-        let registry = Registry::game()?;
-        let ty = registry.hashed(key.type_hash).ok_or_else(|| {
-            Off::new(format!(
-                "resource type {:#010x} is not a type of this build",
-                key.type_hash
-            ))
-        })?;
         let bytes = self.game_resource(key).ok_or_else(|| {
             Off::new(format!(
                 "resource {}: not in the archive",
                 crate::content::Guid(key.guid)
             ))
         })?;
-        Ok(registry.decode(ty.qualified_name(), &bytes)?)
+        decode(key, &bytes)
     }
+}
+
+/// The value of `bytes`, a resource of `key`'s type.
+pub(crate) fn decode(key: crate::abi::ResourceKey, bytes: &[u8]) -> Result<super::Value, Off> {
+    let registry = Registry::game()?;
+    let ty = registry.hashed(key.type_hash).ok_or_else(|| {
+        Off::new(format!(
+            "resource type {:#010x} is not a type of this build",
+            key.type_hash
+        ))
+    })?;
+    Ok(registry.decode(ty.qualified_name(), bytes)?)
 }
 
 /// Serves the resource `key`, built from the resource `base` the first time

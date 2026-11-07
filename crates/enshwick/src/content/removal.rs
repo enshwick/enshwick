@@ -274,11 +274,7 @@ impl Load<'_> {
                 Box::new(move || {
                     let bytes = items::served_clone(&layout, &like, &item, new)
                         .ok_or_else(|| Off::new("the mod's item does not clone from its base"))?;
-                    let registry = Registry::game()?;
-                    let ty = registry
-                        .hashed(key.type_hash)
-                        .ok_or_else(|| Off::new("item data: not a type of this build"))?;
-                    Ok(registry.decode(ty.qualified_name(), &bytes)?)
+                    crate::resources::decode(key, &bytes)
                 })
             }
         };

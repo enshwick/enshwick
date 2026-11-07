@@ -213,4 +213,23 @@ mod tests {
             "the base item's 50 over the old item's 30"
         );
     }
+
+    #[test]
+    fn a_pack_cannot_rekey_to_an_item_another_pack_added() {
+        use enshwick::abi::ModHandle;
+
+        let loader = FakeHost::new().items().removal().install();
+        // SAFETY: the fake host's table lives for the process.
+        unsafe { enshwick::__private::install_host(loader.api(), ModHandle(9)) };
+        let init = |me, call: fn(&mut Load<'_>) -> Result<(), Off>| {
+            // SAFETY: the fake host's table lives for the process.
+            unsafe { enshwick::__private::init_pack(loader.api(), ModHandle(me), call) }
+        };
+        let added = init(1, |load| load.add_item(NewItem::new(LANTERN, OTHER_ITEM)));
+        assert_eq!(added, Status::OK, "{:?}", loader.logs());
+        let rekeyed = init(2, |load| load.rekey_item(SPARE_ITEM, LANTERN.guid()));
+        assert_ne!(rekeyed, Status::OK, "the lantern is the first pack's");
+        let own = init(1, |load| load.rekey_item(SPARE_ITEM, LANTERN.guid()));
+        assert_eq!(own, Status::OK, "{:?}", loader.logs());
+    }
 }
