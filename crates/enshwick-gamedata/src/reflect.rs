@@ -609,10 +609,12 @@ pub const fn fnv1a32(bytes: &[u8]) -> u32 {
 
 /// Every reflected type and ECS system of an image, looked up by name.
 ///
+/// The default is empty, every lookup failing, for code run without a game.
+///
 /// # Examples
 ///
 /// See the [module documentation](crate::reflect).
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Reflection<'a> {
     types: FxHashMap<&'a str, Vec<TypeInfo<'a>>>,
     systems: FxHashMap<&'a str, Vec<System<'a>>>,
