@@ -437,8 +437,8 @@ written again.
 
 A Luau mod declares each point it owns in `pack.toml`, as a `[[point]]`
 table. The table gives the local name, the mode, `refusable`, the input's
-fields and the answer's type. A type is a number, `bool`, `enshwick.guid` or
-an id type such as `enshwick.item_id`. The fields are laid out in their
+fields and the answer's type. A type is a number, a boolean, a GUID or an id
+type, such as `enshwick.item_id`. The fields are laid out in their
 order, as `#[point]` lays out a Rust struct. A field that would need padding
 is refused, so list the widest first. `exports` names the point, so other
 mods may link it:
@@ -462,8 +462,8 @@ input = [
 
 `enshwick.points.define_point` defines the point at the top level of
 `main.luau`. `decide` takes the input as a table and the mod's own answer.
-It returns the answer with `"kept"` or `"changed"`, or `nil` with
-`"refused"`:
+It returns the answer and how the links left it, `"kept"` or `"changed"`.
+After a refusal it returns nil and `"refused"`:
 
 ```luau
 local price = enshwick.points.define_point("price")
