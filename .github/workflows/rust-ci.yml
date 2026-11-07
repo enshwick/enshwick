@@ -38,8 +38,7 @@ jobs:
     outputs:
       skip: ${{ steps.scope.outputs.skip }}
     steps:
-      - if: github.event.pull_request.draft != true
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -48,25 +47,19 @@ jobs:
       # is its pull request's own head passed that pull request's check, and
       # a change to files that never build (documents outside the book,
       # repository settings, other workflows) has nothing to compile or test.
-      # A draft cannot merge, and its work in progress would only fail.
       - name: What is left to prove
         id: scope
         env:
           # A merge queue entry is checked against the entry before it (its
           # group's parent): only its own pull request's changes are new.
           BASE: ${{ github.event.merge_group.base_sha || format('origin/{0}', github.base_ref || github.event.repository.default_branch) }}
-          DRAFT: ${{ github.event.pull_request.draft == true }}
           EVENT: ${{ github.event_name }}
           FULL: ${{ inputs.full || (github.event_name != 'pull_request' && github.event_name != 'merge_group') }}
           HEAD_REF: ${{ github.event.merge_group.head_ref }}
           GH_TOKEN: ${{ github.token }}
         run: |
+          git cat-file -e "$BASE^{commit}" 2> /dev/null || git fetch -q origin "$BASE"
           reason=""
-          if [ "$DRAFT" = true ]; then
-            reason="the pull request is a draft; marking it ready runs the check"
-          else
-            git cat-file -e "$BASE^{commit}" 2> /dev/null || git fetch -q origin "$BASE"
-          fi
           if [ "$EVENT" = merge_group ]; then
             number=$(sed -nE 's|.*/pr-([0-9]+)-[0-9a-f]+$|\1|p' <<< "$HEAD_REF")
             if [ -n "$number" ]; then
