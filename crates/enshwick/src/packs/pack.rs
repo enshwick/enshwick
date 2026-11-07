@@ -109,6 +109,7 @@ pub struct Pack {
     /// Each drop's chance, which may follow a setting.
     pub(super) drop_chances: Vec<super::values::Number<f64>>,
     pub(super) rewards: Vec<super::rewards::PackReward>,
+    pub(super) sounds: Vec<super::sounds::PackSound>,
     /// The `[[setting]]` tables of `pack.toml`.
     pub(super) settings: Vec<super::manifest::PackSetting>,
     /// Their schema, the mod's settings.
@@ -229,6 +230,7 @@ impl Pack {
             drops: Vec::new(),
             drop_chances: Vec::new(),
             rewards: Vec::new(),
+            sounds: Vec::new(),
             settings: Vec::new(),
             settings_schema: None,
             changes: Vec::new(),
@@ -259,6 +261,7 @@ impl Pack {
             super::changes::recipe_changes(&mut reader, &recipes_file, &recipes_text);
         pack.changes.extend(recipe_changes);
         pack.recipe_selections = recipe_selections;
+        pack.sounds = super::sounds::sounds(&mut reader);
         pack.skipped = reader.skipped;
         pack.named = reader.named.into_iter().collect();
         if reader.errors.is_empty() {

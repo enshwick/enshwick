@@ -1,0 +1,77 @@
+<!--
+type: how-to
+description: A mod plays the game's sound containers on a client, changes their volume, pitch and distances, and adds its own sounds from WAV files in its folder.
+-->
+
+# Sounds
+
+A sound container is what the game plays for one event: a set of sounds
+and how it plays them. A mod names one by its GUID, a
+[`SoundContainerId`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/sound.rs),
+and plays it, changes it or adds its own.
+
+## Play a container on a client
+
+Inside a frame of the interface, `frame.play(id)` plays a container as an
+interface sound: only that client hears it, and it comes from no place in
+the world. The [interface chapter](interface.md) lists it with the widgets.
+
+## Change a vanilla sound
+
+`load.change_sound(id, change)` sets the values a
+[`SoundChange`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/sound.rs)
+gives and keeps the rest. The client applies the changes of every mod in
+load order when it first reads the container; nothing is written to the
+game's files or a save. A server checks the values and does nothing more,
+since servers play no sound.
+
+| Value | Bound |
+| --- | --- |
+| `volume`, `volume_randomness` | 0 to 4 |
+| `pitch` | 0.25 to 4 |
+| `pitch_randomness` | 0 to 4 |
+| `min_distance`, `max_distance` | 0 to 500 metres, the least not past the greatest |
+| `looped` | true or false |
+| `priority` | 0 to 65535 |
+
+```rust
+use enshwick::content::Guid;
+use enshwick::sound::{SoundChange, SoundContainerId};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let bell = SoundContainerId::from_guid(Guid::named("you.bells:bell"));
+    load.change_sound(bell, SoundChange { volume: Some(0.2), ..SoundChange::default() })
+}
+```
+
+```luau
+enshwick.sound.change("<container GUID>", { volume = 0.2 })
+```
+
+## Add a sound of your own
+
+With the `unstable` feature, `load.add_sound(NewSound::new(id!("horn"),
+"sounds/horn.wav"))` adds the WAV file at that path in the mod's folder
+and a container that plays it, and returns the container. Its GUID is the
+content id's, so other mods play it by `you.horns:horn`. A data pack lists
+its sounds in [`sounds.toml`](content/packs.md#soundstoml).
+
+The client holds the sound as the game holds its own uncompressed sounds,
+streamed from memory. A server checks the file and holds nothing.
+
+| A WAV file | |
+| --- | --- |
+| Samples | 16-bit PCM |
+| Channels | mono or stereo |
+| Rate | 48000 Hz, the rate of every sound the game plays |
+| Size | at most 16 MiB a file and 64 MiB a mod |
+| Length | at most 600 seconds |
+
+A mod with sounds runs on both sides (`side = "both"`), so a client without
+it cannot join. A file past a bound, of another format or outside the
+mod's folder refuses the call; wrapped in `load.feature("horn", ...)`, it
+turns off that sound alone, with the reason in the log and on the Mods
+screen.
+
+A sound that misleads players in a fight, such as an attack that does not
+happen, does not belong in a mod.

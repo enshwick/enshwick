@@ -377,6 +377,12 @@ pub fn schemas() -> Vec<(&'static str, String)> {
     struct Rewards {
         reward: Option<Vec<super::rewards::RewardEntry>>,
     }
+    #[derive(schemars::JsonSchema)]
+    #[schemars(deny_unknown_fields)]
+    #[expect(dead_code, reason = "only its schema is read")]
+    struct Sounds {
+        sound: Option<Vec<super::sounds::SoundEntry>>,
+    }
     let json = |schema: schemars::Schema| serde_json::to_string_pretty(&schema).unwrap_or_default();
     vec![
         (MANIFEST_FILE, json(schemars::schema_for!(PackManifest))),
@@ -385,5 +391,6 @@ pub fn schemas() -> Vec<(&'static str, String)> {
         (WORKSHOPS_FILE, json(schemars::schema_for!(Workshops))),
         (LOOT_FILE, json(schemars::schema_for!(Loot))),
         (super::REWARDS_FILE, json(schemars::schema_for!(Rewards))),
+        (super::SOUNDS_FILE, json(schemars::schema_for!(Sounds))),
     ]
 }

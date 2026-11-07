@@ -530,6 +530,26 @@ stack size. An `items.toml` change may have raised that stack size.
 The pack's texts, in the form of a mod's [texts file](texts.md): a table per
 language, `en` the fallback.
 
+## `sounds.toml`
+
+The pack's own [sounds](../sounds.md), each a WAV file in the pack's folder.
+It needs Enshwick's `unstable` feature, and a pack with sounds runs on both
+sides.
+
+```toml
+[[sound]]
+id = "horn"
+file = "sounds/horn.wav"
+scene = "sfx"
+volume = 0.8
+```
+
+`id` is the sound's name in the pack; other mods play it as
+`<pack>:<id>`. `file` is relative to the pack's folder and stays inside it.
+`scene` is `sfx` when left out, or `music`, `ui` or `voice`; `volume` is 0
+to 4, 1 when left out. A file that does not read turns off that sound
+alone.
+
 ## Let an admin tune a pack per world
 
 Some values may name a setting of `pack.toml` in place of a number, as

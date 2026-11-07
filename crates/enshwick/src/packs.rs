@@ -55,9 +55,11 @@ pub const LOOT_FILE: &str = "loot.toml";
 pub const REWARDS_FILE: &str = "rewards.toml";
 /// The texts file, in the form of a mod's [texts](crate::i18n).
 pub const TEXTS_FILE: &str = "texts.toml";
-/// Every file a pack folder may hold besides its icons, in the order the
-/// loader reads them.
-pub const FILES: [&str; 7] = [
+/// The sounds file, the pack's own sounds from WAV files in its folder.
+pub const SOUNDS_FILE: &str = "sounds.toml";
+/// Every file a pack folder may hold besides its icons and sounds, in the
+/// order the loader reads them.
+pub const FILES: [&str; 8] = [
     MANIFEST_FILE,
     ITEMS_FILE,
     RECIPES_FILE,
@@ -65,6 +67,7 @@ pub const FILES: [&str; 7] = [
     LOOT_FILE,
     REWARDS_FILE,
     TEXTS_FILE,
+    SOUNDS_FILE,
 ];
 /// The extension of a script, a Luau file the loader runs for a pack that
 /// has a [`SCRIPT_MAIN`].
@@ -239,6 +242,27 @@ impl Load<'_> {
                 "{REWARDS_FILE}: rewards need enshwick's `unstable` feature"
             )));
         }
+        #[cfg(feature = "unstable")]
+        for sound in &pack.sounds {
+            // A sound whose file does not read turns off alone.
+            let new = crate::sound::NewSound {
+                scene: sound
+                    .scene
+                    .map_or_else(Default::default, sounds::SceneEntry::scene),
+                container: crate::sound::SoundChange {
+                    volume: sound.volume,
+                    ..crate::sound::SoundChange::default()
+                },
+                ..crate::sound::NewSound::new(id(&sound.id)?, sound.file.clone())
+            };
+            let _added = self.feature(&format!("sound {}", sound.id), |load| load.add_sound(new));
+        }
+        #[cfg(not(feature = "unstable"))]
+        if !pack.sounds.is_empty() {
+            return Err(Off::new(format!(
+                "{SOUNDS_FILE}: sounds need enshwick's `unstable` feature"
+            )));
+        }
         self.follow_pack_settings(pack)
     }
 
@@ -329,6 +353,7 @@ mod manifest;
 mod pack;
 mod reader;
 mod rewards;
+mod sounds;
 #[cfg(test)]
 mod tests;
 mod values;

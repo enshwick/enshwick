@@ -9,6 +9,7 @@ use super::*;
 
 mod folders;
 mod rewards;
+mod sounds;
 
 const CHEST: &str = "6943053a-32c1-4718-ae22-e61427ddf54d";
 
