@@ -786,6 +786,39 @@ fn a_panicking_handler_changes_nothing_and_is_skipped_once_its_mod_is_off() {
     assert_eq!(PANICS.load(Ordering::Relaxed), 1);
 }
 
+/// The callback [`blame`] found running: the marker of
+/// [`crate::profile::marker`].
+static BLAMED: AtomicU32 = AtomicU32::new(0);
+
+/// Keeps the callback this thread runs, as a crash filter would read it.
+///
+/// # Safety
+///
+/// None: it reads neither argument.
+unsafe extern "system" fn blame(_registers: *mut Registers, _user: *mut c_void) {
+    BLAMED.store(crate::profile::marker(), Ordering::Relaxed);
+}
+
+#[test]
+fn a_handler_runs_as_its_mod_s_mid_hook_for_crash_blame() {
+    let mut mids = Mids::default();
+    assert_eq!(mids.add(0x10, link(ModIndex::new(3), blame, 0)), Status::OK);
+    let site = mids.sites(|_| false)[0];
+    let target = function(&SUM);
+    install(
+        target + 2,
+        (dispatch as *const ()).expose_provenance(),
+        core::ptr::from_ref(site).expose_provenance(),
+    )
+    .unwrap();
+    assert_eq!(callable(target)(1), 7);
+    assert_eq!(
+        crate::profile::decode(BLAMED.load(Ordering::Relaxed)),
+        Some((3, crate::profile::Feature::Hooks))
+    );
+    assert_eq!(crate::profile::current_callback(), None, "cleared after");
+}
+
 #[test]
 fn an_address_whose_bytes_leave_before_the_jump_ends_is_refused() {
     // add eax, 1; ret; padding: hooked at the `ret`.
