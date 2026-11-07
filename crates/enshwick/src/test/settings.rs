@@ -157,6 +157,25 @@ impl Installed {
         });
     }
 
+    /// Makes `level` the most detailed log level of every handle without a
+    /// level of its own, as an edit of the loader's settings would; raise
+    /// [`events::LoaderSettingsChanged`](crate::events::LoaderSettingsChanged)
+    /// for the mod to read it, as the loader does after the edit.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::Level;
+    /// use enshwick::events;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.set_log_level(Level::DEBUG);
+    /// assert_eq!(loader.raise::<events::LoaderSettingsChanged>(&()), 0);
+    /// ```
+    pub fn set_log_level(&self, level: Level) {
+        table::with((), |s| s.host.log_level = level);
+    }
+
     /// The schema of the mod's settings file `file` as the mod handed it
     /// the loader, which [`Load::on_settings`](crate::Load::on_settings)
     /// does; `None` before.

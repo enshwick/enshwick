@@ -181,6 +181,9 @@ fn changed(loader: &Loader, owner: Option<usize>) {
         crate::diag::configure(&settings);
         crate::log::set_levels(settings);
         crate::log!(INFO, "loader settings reloaded");
+        // Its own copy of the API, which runs the data packs, subscribes to
+        // nothing.
+        enshwick::__private::refresh_levels();
         loader.emit(Event::LOADER_SETTINGS_CHANGED, None, core::ptr::null());
         return;
     }

@@ -179,7 +179,7 @@ pub(crate) extern "system" fn game_event(
 ) -> Status {
     with(Status::MISSING, |s| {
         s.game_events
-            .push((type_hash, callback, user.expose_provenance(), me));
+            .push((type_hash, Registered::new(callback, user, me)));
         Status::OK
     })
 }

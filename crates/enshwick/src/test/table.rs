@@ -98,30 +98,16 @@ pub(crate) struct OpenRequest {
 /// A defined mod event: name, layout and the size of its data.
 pub(crate) type DefinedEvent = (String, Vec<(String, u64)>, u32);
 
-/// A mod event handler: name, layout, the bytes it reads, handler and the
-/// mod's pointer.
-pub(crate) type ModEventSubscription = (
-    String,
-    Vec<(String, u64)>,
-    u32,
-    ModEventFn,
-    usize,
-    ModHandle,
-);
-
-/// Runs a callback the mod `owner` registered as that mod, as the loader
-/// runs a data pack's callback as the pack.
-pub(crate) fn as_owner<R>(owner: ModHandle, call: impl FnOnce() -> R) -> R {
-    // SAFETY: `TABLE` is the fake's table, a static.
-    unsafe { crate::__private::as_pack(&raw const TABLE, owner, call) }
-}
+/// A mod event handler: name, layout, the bytes it reads and the handler.
+pub(crate) type ModEventSubscription = (String, Vec<(String, u64)>, u32, Registered<ModEventFn>);
 
 /// A callback the mod registered with its pointer and the handle that
-/// registered it, so the fake calls it as that mod or data pack.
+/// registered it, so the fake calls it as that mod or data pack, and only
+/// through [`run`](Self::run).
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Registered<F> {
-    pub(crate) callback: F,
-    pub(crate) user: usize,
+    callback: F,
+    user: usize,
     /// `None` for a test's stand-in for another mod, which runs as the
     /// loader, as another DLL's callback runs outside the pack's scope.
     owner: Option<ModHandle>,
@@ -145,6 +131,11 @@ impl<F: Copy> Registered<F> {
         }
     }
 
+    /// The handle that registered the callback; `None` for a stand-in.
+    pub(crate) const fn owner(&self) -> Option<ModHandle> {
+        self.owner
+    }
+
     /// Runs `call` with the callback and its pointer as the owner, as the
     /// loader runs a callback in its owner's profile scope.
     pub(crate) fn run<R>(&self, call: impl FnOnce(F, *mut core::ffi::c_void) -> R) -> R {
@@ -153,7 +144,10 @@ impl<F: Copy> Registered<F> {
             core::ptr::with_exposed_provenance_mut(self.user),
         );
         match self.owner {
-            Some(owner) => as_owner(owner, || call(callback, user)),
+            // SAFETY: `TABLE` is the fake's table, a static.
+            Some(owner) => unsafe {
+                crate::__private::as_pack(&raw const TABLE, owner, || call(callback, user))
+            },
             None => crate::__private::as_loader(|| call(callback, user)),
         }
     }
@@ -175,11 +169,10 @@ pub(crate) struct State {
     pub(crate) registration: Registration,
     /// Mid-function hooks: address, handler and the mod's pointer.
     pub(crate) mid_hooks: Vec<(u64, Registered<MidHookFn>)>,
-    /// Loader event handlers: event, handler, pointer and owner.
-    pub(crate) subscriptions: Vec<(Event, EventFn, usize, ModHandle)>,
-    /// Game event handlers: type hash (0 for every type), handler, pointer
-    /// and owner.
-    pub(crate) game_events: Vec<(u32, GameEventFn, usize, ModHandle)>,
+    /// Loader event handlers, by event.
+    pub(crate) subscriptions: Vec<(Event, Registered<EventFn>)>,
+    /// Game event handlers, by type hash (0 for every type).
+    pub(crate) game_events: Vec<(u32, Registered<GameEventFn>)>,
     pub(crate) served: Vec<(ServedResource, Registered<ResourcePatchFn>)>,
     /// Every rebuild of a served resource the mod asked for, at init and
     /// after.
@@ -193,7 +186,7 @@ pub(crate) struct State {
     pub(crate) published: Vec<super::FakeService>,
     /// Mod events the mod defined: name and layout, by id.
     pub(crate) defined_events: Vec<DefinedEvent>,
-    /// Mod event handlers: name, layout, handler, pointer and owner.
+    /// Mod event handlers: name, layout, the bytes read and the handler.
     pub(crate) mod_event_subscriptions: Vec<ModEventSubscription>,
     /// The names of the mod events the mod sent, in order.
     pub(crate) sent_events: Vec<(String, Vec<u8>)>,
@@ -282,13 +275,12 @@ pub(crate) struct State {
     pub(crate) fog_opened: bool,
     /// The schemas of the mod's settings files, by name, as TOML.
     pub(crate) config_schemas: std::collections::BTreeMap<String, String>,
-    /// Frame callbacks: callback, pointer and the handle that registered it.
-    pub(crate) frames: Vec<(UiFrameFn, usize, ModHandle)>,
-    /// HUD callbacks: callback, pointer and the handle that registered it.
-    pub(crate) huds: Vec<(UiFrameFn, usize, ModHandle)>,
-    /// Extensions of game screens: screen name, edge, callback, pointer and
-    /// the handle that registered it.
-    pub(crate) extensions: Vec<(String, u32, UiFrameFn, usize, ModHandle)>,
+    /// Frame callbacks.
+    pub(crate) frames: Vec<Registered<UiFrameFn>>,
+    /// HUD callbacks.
+    pub(crate) huds: Vec<Registered<UiFrameFn>>,
+    /// Extensions of game screens: screen name, edge and callback.
+    pub(crate) extensions: Vec<(String, u32, Registered<UiFrameFn>)>,
     /// The handle whose callback draws now: the loader refuses a widget
     /// from any other.
     pub(crate) drawing: Option<ModHandle>,

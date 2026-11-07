@@ -307,14 +307,42 @@ mod tests {
         debug("kept at warn");
         assert_eq!(
             loader.raise::<LoaderSettingsChanged>(&()),
-            1,
-            "the pack's own refresh"
+            0,
+            "the loader refreshes the pack; the pack subscribes to nothing"
         );
         debug("at debug");
         assert_eq!(
             loader.sent(),
             [(ModHandle(2), Level::DEBUG, "at debug".to_owned())],
             "the level is read once, and again after the change"
+        );
+    }
+
+    #[test]
+    fn the_loader_s_own_level_follows_its_settings_also_inside_a_pack_s_call() {
+        use enshwick::abi::Level;
+        use enshwick::events::LoaderSettingsChanged;
+
+        let loader = FakeHost::new()
+            .pack_log_level(ModHandle(2), Level::INFO)
+            .install();
+        // SAFETY: the fake host's table lives for the process.
+        unsafe { enshwick::__private::install_host(loader.api(), ModHandle(9)) };
+        let as_loader_in_pack = |line: &'static str| {
+            // SAFETY: the fake host's table lives for the process.
+            unsafe {
+                enshwick::__private::as_pack(loader.api(), ModHandle(2), || {
+                    enshwick::__private::as_loader(|| enshwick::debug!("{line}"));
+                });
+            }
+        };
+        as_loader_in_pack("at info");
+        loader.set_log_level(Level::DEBUG);
+        assert_eq!(loader.raise::<LoaderSettingsChanged>(&()), 0);
+        as_loader_in_pack("at debug");
+        assert_eq!(
+            loader.sent(),
+            [(ModHandle(9), Level::DEBUG, "at debug".to_owned())]
         );
     }
 

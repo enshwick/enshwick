@@ -271,14 +271,16 @@ pub(crate) unsafe extern "system" fn dispatch(registers: *mut Registers, site: *
         return;
     };
     for link in &site.links {
-        if !(site.off)(ModIndex::new(link.owner.get())) {
+        if !(site.off)(link.owner) {
             let user = core::ptr::with_exposed_provenance_mut::<c_void>(link.user);
-            // SAFETY: `site.off` says the mod is on, so its DLL and the
-            // handler in it are loaded; the handler gets the pointer its mod
-            // registered and the stub's saved registers, valid by this
-            // function's `# Safety`; an `extern "system"` function aborts
-            // rather than unwinds.
-            unsafe { (link.handler)(registers, user) };
+            crate::profile::call(link.owner, crate::profile::Feature::Hooks, || {
+                // SAFETY: `site.off` says the mod is on, so its DLL and the
+                // handler in it are loaded; the handler gets the pointer its
+                // mod registered and the stub's saved registers, valid by
+                // this function's `# Safety`; an `extern "system"` function
+                // aborts rather than unwinds.
+                unsafe { (link.handler)(registers, user) }
+            });
         }
     }
 }

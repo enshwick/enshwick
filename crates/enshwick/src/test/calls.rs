@@ -177,13 +177,9 @@ pub(crate) extern "system" fn call(
         // mod's field by field and in size, and the safe layer passes input
         // and answer that large, live for the call; the state lock is not
         // held, so the handler may call the fake.
-        Ok(server) => unsafe {
-            (server.handler.callback)(
-                input,
-                output,
-                core::ptr::with_exposed_provenance_mut(server.handler.user),
-            )
-        },
+        Ok(server) => server
+            .handler
+            .run(|callback, user| unsafe { callback(input, output, user) }),
         Err(status) => status,
     }
 }

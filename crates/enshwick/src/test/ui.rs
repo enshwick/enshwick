@@ -61,20 +61,15 @@ impl Installed {
     pub fn draw_frame(&self) -> Vec<Drawn> {
         let (frames, open) = table::with((Vec::new(), ""), |s| (s.frames.clone(), s.open_screen));
         let mut drawn = Vec::new();
-        for (token, (callback, user, owner)) in (1u64..).zip(frames) {
+        for (token, handler) in (1u64..).zip(frames) {
             table::with((), |s| {
                 s.frame = Some((token, false, Vec::new()));
-                s.drawing = Some(owner);
+                s.drawing = handler.owner();
             });
             let reads = reads();
             let frame = in_game(token, open, &reads);
             // SAFETY: a callback the mod registered with its own pointer.
-            table::as_owner(owner, || unsafe {
-                callback(
-                    &raw const frame,
-                    core::ptr::with_exposed_provenance_mut(user),
-                );
-            });
+            handler.run(|callback, user| unsafe { callback(&raw const frame, user) });
             let list = table::with(None, |s| {
                 s.drawing = None;
                 s.frame.take()
@@ -101,20 +96,15 @@ impl Installed {
     pub fn draw_hud(&self) -> Vec<(u32, Drawn)> {
         let (huds, open) = table::with((Vec::new(), ""), |s| (s.huds.clone(), s.open_screen));
         let mut drawn = Vec::new();
-        for (token, (callback, user, owner)) in (1u64..).zip(huds) {
+        for (token, handler) in (1u64..).zip(huds) {
             table::with((), |s| {
                 s.hud = Some((token, Vec::new()));
-                s.drawing = Some(owner);
+                s.drawing = handler.owner();
             });
             let reads = reads();
             let frame = in_game(token, open, &reads);
             // SAFETY: a callback the mod registered with its own pointer.
-            table::as_owner(owner, || unsafe {
-                callback(
-                    &raw const frame,
-                    core::ptr::with_exposed_provenance_mut(user),
-                );
-            });
+            handler.run(|callback, user| unsafe { callback(&raw const frame, user) });
             let list = table::with(None, |s| {
                 s.drawing = None;
                 s.hud.take()
@@ -146,27 +136,22 @@ impl Installed {
     #[must_use]
     pub fn draw_screen(&self, screen: crate::ui::HudScreenType) -> Vec<(u32, Vec<Drawn>)> {
         let mut extensions = table::with(Vec::new(), |s| s.extensions.clone());
-        extensions.sort_by_key(|&(_, edge, _, _, _)| edge);
+        extensions.sort_by_key(|&(_, edge, _)| edge);
         let open = screen.name();
         let mut drawn = Vec::new();
-        for (token, (name, edge, callback, user, owner)) in (1u64..).zip(extensions) {
+        for (token, (name, edge, handler)) in (1u64..).zip(extensions) {
             if name != screen.name() {
                 continue;
             }
             table::with((), |s| {
                 s.frame = Some((token, true, Vec::new()));
                 s.extending = Some(token);
-                s.drawing = Some(owner);
+                s.drawing = handler.owner();
             });
             let reads = reads();
             let frame = in_game(token, open, &reads);
             // SAFETY: a callback the mod registered with its own pointer.
-            table::as_owner(owner, || unsafe {
-                callback(
-                    &raw const frame,
-                    core::ptr::with_exposed_provenance_mut(user),
-                );
-            });
+            handler.run(|callback, user| unsafe { callback(&raw const frame, user) });
             let list = table::with(None, |s| {
                 s.extending = None;
                 s.drawing = None;
