@@ -27,6 +27,7 @@ enum What {
     Count { count: u64, max: u64 },
     Vtable { at: usize },
     Hash { found: u32, wanted: u32 },
+    Fails { wanted: &'static str },
 }
 
 impl Broken {
@@ -53,6 +54,7 @@ impl Broken {
             What::Hash { found, wanted } => format!(
                 "gives type hash {found:#010x} on the live object, not reflection's {wanted:#010x}"
             ),
+            What::Fails { wanted } => format!("does not give {wanted} on the live object"),
         }
     }
 }
@@ -156,14 +158,35 @@ pub(crate) fn hash(
     offset: usize,
     wanted: u32,
 ) -> Result<(), Broken> {
-    let at = object.wrapping_add(offset);
-    let found = pages::read::<4>(at)
-        .map(u32::from_le_bytes)
-        .ok_or(Broken::new(entry, What::Unreadable { at }))?;
+    let found = u32::from_le_bytes(bytes(entry, object, offset)?);
     if found == wanted {
         Ok(())
     } else {
         Err(Broken::new(entry, What::Hash { found, wanted }))
+    }
+}
+
+/// The `N` bytes at `entry`'s `offset` in `object`, which must all read.
+pub(crate) fn bytes<const N: usize>(
+    entry: &'static str,
+    object: usize,
+    offset: usize,
+) -> Result<[u8; N], Broken> {
+    let at = object.wrapping_add(offset);
+    pages::read::<N>(at).ok_or(Broken::new(entry, What::Unreadable { at }))
+}
+
+/// Checks an invariant a part tested on what it read through `entry`:
+/// `held`, or a failure saying the object did not give `wanted`.
+pub(crate) const fn holds(
+    entry: &'static str,
+    held: bool,
+    wanted: &'static str,
+) -> Result<(), Broken> {
+    if held {
+        Ok(())
+    } else {
+        Err(Broken::new(entry, What::Fails { wanted }))
     }
 }
 
@@ -280,6 +303,17 @@ mod tests {
             "{}",
             wrong.reason()
         );
+    }
+
+    #[test]
+    fn an_invariant_that_fails_says_what_the_object_did_not_give() {
+        assert_eq!(holds("t.range", true, "finite extents"), Ok(()));
+        let failed = holds("t.range", false, "finite extents").unwrap_err();
+        assert_eq!(
+            failed.to_string(),
+            "t.range does not give finite extents on the live object"
+        );
+        assert!(bytes::<4>("t.range", 0x10, 0).is_err());
     }
 
     #[test]
