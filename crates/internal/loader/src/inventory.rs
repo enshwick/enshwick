@@ -633,7 +633,7 @@ pub(crate) fn submit(
     done: InventoryResultFn,
     user: *mut c_void,
 ) -> Status {
-    if executor(loader).is_none() || !WANTED.load(Ordering::Acquire) {
+    if executor(loader).is_none() || !WANTED.load(Ordering::Acquire) || INVENTORY_FUSE.is_off() {
         return Status::MISSING;
     }
     if SETTLED.load(Ordering::Acquire) && !ARMED.load(Ordering::Acquire) {
@@ -852,7 +852,18 @@ unsafe extern "system" fn row(registers: *mut Registers, _user: *mut c_void) {
     let view = usize::try_from(registers.rbp)
         .unwrap_or(0)
         .wrapping_sub(executor.view_frame);
-    // SAFETY: at the table's `inventory.actions_row`, the system's view lies
+    let build = crate::host::loader().map_or("", |loader| loader.build.name.as_str());
+    if !INVENTORY_FUSE.verify(build, || run::view_holds(executor, view)) {
+        if INVENTORY_FUSE.is_off() && QUEUE.pending.load(Ordering::Acquire) {
+            let gone = QUEUE.drain(|_| true);
+            finish(
+                gone.iter()
+                    .map(|r| Finished::without_run(r, InventoryResult::UNAVAILABLE)),
+            );
+        }
+        return;
+    }
+    // SAFETY: the live check above read this pointer on the view; at the table's `inventory.actions_row`, the system's view lies
     // `inventory.view_frame` below `rbp` in its live frame, filled before the
     // row loop (`inventory.view_fill` checked by `Loader::code_holds`); it holds the
     // item registry pointer at the table's `inventory.view_item_registry`.

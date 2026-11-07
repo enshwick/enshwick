@@ -10,6 +10,13 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- A route row bounds its constant with `range = [least, greatest]` and
+  `align`, and a `field` route names the type its last field holds with
+  `type`; every constant route and every field route of `routes.toml`
+  states them, set from the values the kept builds give (#982).
+- `Routed::Outside` is a constant a route took outside its range or
+  alignment, which finds no entry (#982).
+
 - Engine routes find the interaction prompt's title, valid byte and verb
   and the open screen's host entity in the interface's play data
   (`ui.prompt_title`, `ui.prompt_valid`, `ui.prompt_verb`,
@@ -67,6 +74,10 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- Breaking: `catalogue::Fact::Offset` names the reflected type its field
+  holds (`holds`), and `catalogue::constant` gives no offset for a field
+  that holds another type; a route takes an address outside `.text` only
+  inside `.data` or `.rdata` (#982).
 - The tables of the kept builds are the frozen record the tests compare the
   routes and anchors with; a new build gets its compatibility report and no
   table (#951).

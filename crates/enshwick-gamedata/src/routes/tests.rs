@@ -1,3 +1,4 @@
+mod bounds;
 mod builds;
 
 use iced_x86::{Decoder, DecoderOptions, Instruction};

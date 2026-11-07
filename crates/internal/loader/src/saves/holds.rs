@@ -133,6 +133,9 @@ pub(crate) fn hold(loader: &Loader, owner: ModIndex, hold: bool) -> Status {
     if layout(loader).is_none() {
         return Status::MISSING;
     }
+    if hold && HOLDS_FUSE.is_off() {
+        return Status::UNAVAILABLE;
+    }
     let id = mod_id(loader, owner);
     let mut saving = SAVING.relock();
     match saving.change(owner, hold, Instant::now()) {
@@ -181,6 +184,19 @@ pub(super) unsafe fn after_step(loader: &Loader, layout: &Layout, server: usize)
     }
 }
 
+/// The switch of [`enforce`]'s writes, off once the live server's save
+/// block does not hold its found offset; saves then run as vanilla runs
+/// them.
+static HOLDS_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("save holds");
+
+/// Checks the live `server` before the first write to its save block: the
+/// byte at `blocked` reads and is a flag, 0 or 1, as [`block`] writes it.
+fn blocked_holds(server: usize, blocked: usize) -> Result<(), crate::live::Broken> {
+    let entry = crate::pinned::server::SAVE_BLOCKED.id();
+    let [byte] = crate::live::bytes::<1>(entry, server, blocked)?;
+    crate::live::holds(entry, byte <= 1, "a flag, 0 or 1")
+}
+
 /// Sets the game's save block while a running mod holds saves and gives the
 /// byte back once none does; the holds and how long each has lasted when a
 /// warning about saves held long is due.
@@ -195,6 +211,10 @@ unsafe fn enforce(layout: &Layout, server: usize) -> Option<Vec<(ModIndex, Durat
     saving.holds.retain(|h| !crate::host::is_off(h.owner));
     if saving.holds.is_empty() {
         saving.warn_at = None;
+    }
+    let build = crate::host::loader().map_or("", |loader| loader.build.name.as_str());
+    if !HOLDS_FUSE.verify(build, || blocked_holds(server, layout.blocked)) {
+        return None;
     }
     // SAFETY: `server` is the live server on its game thread outside a step
     // by this function's `# Safety`; its byte that refuses saves sits at the
@@ -350,6 +370,20 @@ mod tests {
         assert_eq!(saving.change(a, false, now), Change::LetGo);
         assert!(saving.holds.is_empty() && saving.warn_at.is_none());
         assert_eq!(saving.change(a, false, now), Change::Same);
+    }
+
+    #[test]
+    fn a_live_save_block_holds_only_while_it_reads_as_a_flag() {
+        let server = [7u8, 0, 1, 2];
+        let at = server.as_ptr().addr();
+        assert_eq!(blocked_holds(at, 1), Ok(()));
+        assert_eq!(blocked_holds(at, 2), Ok(()));
+        let why = blocked_holds(at, 3).unwrap_err();
+        assert_eq!(why.entry, crate::pinned::server::SAVE_BLOCKED.id());
+        assert!(
+            blocked_holds(0x10, 0).is_err(),
+            "a server that does not read"
+        );
     }
 
     #[test]

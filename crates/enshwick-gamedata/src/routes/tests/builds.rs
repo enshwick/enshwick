@@ -227,7 +227,7 @@ fn every_route_holds_on_every_kept_build() {
                 let (value, constant) = match routed {
                     Some(Routed::Symbol(v) | Routed::Reached(v)) => (Some(v), false),
                     Some(Routed::Constant(v)) => (Some(v), true),
-                    None => (None, false),
+                    Some(Routed::Outside(_)) | None => (None, false),
                 };
                 let entry = |table: &crate::Resolved| {
                     if constant {
@@ -267,6 +267,54 @@ fn every_route_holds_on_every_kept_build() {
             wrong.join("\n")
         );
     }
+}
+
+/// On every [`executables`] entry, every constant route of its side finds
+/// a value inside its `range` and `align`; a route without a range, or one
+/// the values leave, fails with the row the kept values propose, for a
+/// person to review.
+#[test]
+#[cfg_attr(miri, ignore = "reading a game executable takes hours under Miri")]
+fn every_kept_build_s_constant_lies_in_its_route_s_range() {
+    let routes = Routes::embedded().unwrap();
+    let mut seen = std::collections::BTreeMap::<&str, (u64, u64)>::default();
+    let mut outside = Vec::new();
+    for (path, side) in executables() {
+        let bytes = std::fs::read(&path).unwrap();
+        let image = Image::parse(&bytes, Layout::File, None).unwrap();
+        let reflection = Reflection::scan(&image);
+        for (id, routed) in routes.find(&image, &reflection, side, &empty()) {
+            let value = match routed {
+                Some(Routed::Constant(v)) => v,
+                Some(Routed::Outside(v)) => {
+                    outside.push(format!("{id}: {v:#x} on {}", path.display()));
+                    v
+                }
+                _ => continue,
+            };
+            let (lo, hi) = seen.entry(id).or_insert((value, value));
+            *lo = (*lo).min(value);
+            *hi = (*hi).max(value);
+        }
+    }
+    let unbounded: Vec<String> = routes
+        .routes
+        .iter()
+        .filter(|r| r.is_entry() && r.finds_constant() && r.range.is_none())
+        .filter_map(|r| {
+            let &(lo, hi) = seen.get(r.id.as_str())?;
+            Some(match super::super::proposed_range(lo, hi) {
+                (0, u64::MAX) => format!("{}: unbounded = true", r.id),
+                (lo, hi) => format!("{}: range = [{lo:#x}, {hi:#x}]", r.id),
+            })
+        })
+        .collect();
+    assert!(
+        outside.is_empty() && unbounded.is_empty(),
+        "outside their range:\n{}\nwithout one, as the kept values propose:\n{}",
+        outside.join("\n"),
+        unbounded.join("\n")
+    );
 }
 
 /// A [`ROUTED_ONLY`] or [`ROUTED_EVERYWHERE`] row with a table or route id

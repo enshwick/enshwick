@@ -5,6 +5,7 @@ use enshwick::abi::{Header, PropPlace, SpawnRequest, Status};
 use enshwick_gamedata::catalogue;
 
 use crate::host::Loader;
+use crate::live;
 use crate::prop_holds::Stash;
 use crate::transactions::props::{
     FactoryRead, LINKS, Prop, SLOTS, Setup, StateReads, fuel_held, holds_items, wired,
@@ -405,6 +406,29 @@ pub(super) fn release(loader: &Loader, entity: u32) {
     }
 }
 
+/// The switch of [`set_deposit`]'s writes, off once a live Quick Stash
+/// switch does not hold its found fields; the rest of a transaction runs on.
+static SWITCH_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("Quick Stash switches");
+
+/// Checks the live switch `data` before the first write to it: both bools
+/// at their reflected offsets read, each 0 or 1 as the engine writes them.
+fn switch_holds(data: *const u8, set_at: usize, on_at: usize) -> Result<(), live::Broken> {
+    for (entry, at) in [
+        (
+            catalogue::ids::DYNAMIC_INVENTORY_CRAFTING_STOCK_OVERRIDE_IS_SET,
+            set_at,
+        ),
+        (
+            catalogue::ids::DYNAMIC_INVENTORY_CRAFTING_STOCK_OVERRIDE,
+            on_at,
+        ),
+    ] {
+        let [value] = live::bytes::<1>(entry, data.addr(), at)?;
+        live::holds(entry, value <= 1, "a bool, 0 or 1")?;
+    }
+    Ok(())
+}
+
 /// Writes `value` into the Quick Stash switch of the magic chest `entity`,
 /// when it has one; nothing off the game thread or inside a step, where
 /// systems may read it.
@@ -426,6 +450,9 @@ pub(crate) fn set_deposit(loader: &Loader, entity: u32, Stash([set, on]): Stash)
         return;
     };
     if let Ok(Some(data)) = inline(loader, entity, switch) {
+        if !SWITCH_FUSE.verify(&loader.build.name, || switch_holds(data, set_at, on_at)) {
+            return;
+        }
         // SAFETY: `data` is the entity's own live
         // `DynamicInventoryCraftingStock`, the dynamic half the raw read
         // returns, two bytes in its row, with its bool "set by a player" at the reflected
@@ -567,4 +594,22 @@ pub(super) fn start_state(loader: &Loader, entity: u32) -> Result<Option<Vec<u8>
         bytes.extend_from_slice(&level.unwrap_or(u32::MAX).to_le_bytes());
     }
     Ok(Some(bytes))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_switch_holds_only_while_both_of_its_fields_read_as_bools() {
+        let switch = [0u8, 1];
+        assert_eq!(switch_holds(switch.as_ptr(), 0, 1), Ok(()));
+        let broken = [1u8, 2];
+        let why = switch_holds(broken.as_ptr(), 0, 1).unwrap_err();
+        assert_eq!(
+            why.entry,
+            catalogue::ids::DYNAMIC_INVENTORY_CRAFTING_STOCK_OVERRIDE
+        );
+        assert!(switch_holds(core::ptr::without_provenance(0x10), 0, 1).is_err());
+    }
 }

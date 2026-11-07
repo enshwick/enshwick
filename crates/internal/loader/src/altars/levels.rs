@@ -1,9 +1,10 @@
 use enshwick::raw::{read_at, write_at};
 
 use crate::ecs::{Engine, Query};
+use crate::live;
 
 use super::geometry::Placed;
-use super::{BUILT, LEVELS, PLACED};
+use super::{BUILT, LEVELS, PLACED, RANGES_FUSE};
 use super::{
     FIELDS, HALF, MAX_LEVELS, Sizes, TARGETS, UPGRADE_ATTRIBUTES, UPGRADE_BALANCING,
     UPGRADE_ENTITY, UPGRADE_KIND, UPGRADE_LEVEL, UPGRADE_SHAPE, UPGRADE_STAMP_A, UPGRADE_STAMP_B,
@@ -151,24 +152,43 @@ pub(super) unsafe fn read_levels_into(
 }
 
 /// Vanilla's `upgrade_building_range`, writing the controlling mod's ranges
-/// where it has one for the altar's level.
+/// where it has one for the altar's level; false, before its first write,
+/// when the first shape it would write does not read as a shape on `build`.
 ///
 /// # Safety
 ///
 /// - `ctx` is the live context of `upgrade_building_range`, used on its
 ///   thread in place of the system's own run.
-pub(super) unsafe fn write_ranges(engine: &Engine, ctx: *mut u64) {
+pub(super) unsafe fn write_ranges(engine: &Engine, ctx: *mut u64, build: &str) -> bool {
     drop_stale_buffers();
     LEVELS.with_borrow_mut(|levels| {
         // SAFETY: the caller guarantees the live context of
         // `upgrade_building_range` on its thread, in place of its run.
-        unsafe { write_ranges_into(engine, ctx, levels) };
+        let held = unsafe { write_ranges_into(engine, ctx, levels, build) };
         merge(&mut Vec::new(), &mut Vec::new(), levels);
-    });
+        held
+    })
+}
+
+/// The reflected field the range pass writes, as the log names it.
+const RANGE: &str = "keen::ecs::TriggerShape.rangeX";
+
+/// Checks the live `shape` before the first write to it: its half extents
+/// at `range_at` read, and are finite and not negative, as every trigger
+/// shape's are.
+fn shape_holds(shape: *const u8, range_at: usize) -> Result<(), live::Broken> {
+    let extents: [u8; 12] = live::bytes(RANGE, shape.addr(), range_at)?;
+    let held = extents
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|&half| f32::from_le_bytes(half))
+        .all(|half| half.is_finite() && half >= 0.0);
+    live::holds(RANGE, held, "half extents that are finite and not negative")
 }
 
 /// Writes each row's range as [`write_ranges`] describes, into `levels` the
-/// sizes it saw.
+/// sizes it saw; false when [`RANGES_FUSE`] refused the first write.
 ///
 /// # Safety
 ///
@@ -178,10 +198,14 @@ pub(super) unsafe fn write_ranges_into(
     engine: &Engine,
     ctx: *mut u64,
     levels: &mut Vec<(u32, Sizes)>,
-) {
+    build: &str,
+) -> bool {
     let Some(range_at) = FIELDS.get().map(|fields| fields.range) else {
-        return;
+        return true;
     };
+    if RANGES_FUSE.is_off() {
+        return false;
+    }
     let targets = TARGETS.load();
     // SAFETY: the caller guarantees the system's live context on its thread;
     // its iterator is `UPGRADE_WORDS` words, checked against the system's
@@ -211,6 +235,9 @@ pub(super) unsafe fn write_ranges_into(
         if shape.is_null() {
             continue;
         }
+        if !RANGES_FUSE.verify(build, || shape_holds(shape, range_at)) {
+            return false;
+        }
         // SAFETY: `shape` is the row's non-null `TriggerShape` by the check
         // before it; its half extents sit at the reflected `rangeX` field.
         let written: [f32; 3] = unsafe { read_at(shape, range_at) };
@@ -233,6 +260,7 @@ pub(super) unsafe fn write_ranges_into(
             unsafe { write_at(shape, range_at, target) };
         }
     }
+    true
 }
 
 /// The altar level of the current row, or `None` for a row that is no altar.
@@ -278,4 +306,37 @@ pub(super) unsafe fn level_sizes(
         None => size_of(level)?,
     };
     Some((current, sizes))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn shape(extents: [f32; 3]) -> [u8; 16] {
+        let mut shape = [0; 16];
+        for (at, half) in extents.into_iter().enumerate() {
+            shape[4 + at * 4..8 + at * 4].copy_from_slice(&half.to_le_bytes());
+        }
+        shape
+    }
+
+    #[test]
+    fn a_shape_with_finite_extents_holds() {
+        let good = shape([1.5, 0.0, 30.0]);
+        assert_eq!(shape_holds(good.as_ptr(), 4), Ok(()));
+    }
+
+    #[test]
+    fn a_shape_whose_field_reads_as_no_extents_does_not_hold() {
+        for broken in [
+            [f32::NAN, 1.0, 1.0],
+            [1.0, -2.0, 1.0],
+            [1.0, 1.0, f32::INFINITY],
+        ] {
+            let shape = shape(broken);
+            let why = shape_holds(shape.as_ptr(), 4).unwrap_err();
+            assert_eq!(why.entry, RANGE, "{broken:?}");
+        }
+        assert!(shape_holds(core::ptr::without_provenance(0x10), 4).is_err());
+    }
 }

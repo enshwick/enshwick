@@ -708,11 +708,29 @@ impl<'a> Reflection<'a> {
         }
     }
 
+    /// The offset of `field` in the type named `type_name` while the field
+    /// still holds the type named `holds`; `None` when it is missing,
+    /// ambiguous or holds another type, so a field that changed width or
+    /// became a pointer finds nothing rather than an offset read wrongly.
+    pub(crate) fn field_holding(&self, type_name: &str, field: &str, holds: &str) -> Option<u64> {
+        let info = self.type_info(type_name).ok()?;
+        let mut found = info.fields.iter().filter(|f| f.name == field);
+        match (found.next(), found.next()) {
+            (Some(f), None) if f.type_name == Some(holds) => Some(f.offset),
+            _ => None,
+        }
+    }
+
     /// The offset of the last field of `path` from the start of the first
     /// type, each step a type and its field; `None` when a field is missing
-    /// or ambiguous, or does not hold the next step's type inline, so a
-    /// changed layout finds nothing rather than a wrong sum.
-    pub(crate) fn field_path<S: AsRef<str>>(&self, path: &[(S, S)]) -> Option<u64> {
+    /// or ambiguous, or does not hold the next step's type inline, or the
+    /// last does not hold `last`, when given, so a changed layout finds
+    /// nothing rather than a wrong sum.
+    pub(crate) fn field_path<S: AsRef<str>>(
+        &self,
+        path: &[(S, S)],
+        last: Option<&str>,
+    ) -> Option<u64> {
         let mut sum = 0u64;
         for (at, (ty, field)) in path.iter().enumerate() {
             let info = self.type_info(ty.as_ref()).ok()?;
@@ -720,9 +738,8 @@ impl<'a> Reflection<'a> {
             let (Some(held), None) = (found.next(), found.next()) else {
                 return None;
             };
-            if let Some((next, _)) = path.get(at + 1)
-                && held.type_name != Some(next.as_ref())
-            {
+            let next = path.get(at + 1).map(|(next, _)| next.as_ref()).or(last);
+            if next.is_some_and(|next| held.type_name != Some(next)) {
                 return None;
             }
             sum = sum.checked_add(held.offset)?;

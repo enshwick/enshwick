@@ -239,6 +239,9 @@ static WORLD: AtomicU64 = AtomicU64::new(0);
 /// Set when the loader's own work in a link went wrong: from then on the
 /// links run vanilla.
 static OFF: AtomicBool = AtomicBool::new(false);
+/// The switch of the range pass's writes, off once a live trigger shape
+/// does not hold its found field; the other altar passes stay on.
+static RANGES_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("altar ranges");
 // SAFETY: `SystemFn` is the signature of every system entry, here the
 // reflected `add_buildzones_server`'s, and `link` uses this slot only as that
 // function's next.
@@ -688,7 +691,7 @@ unsafe extern "system" fn upgrade(ctx: *mut u64) {
         // SAFETY: `ctx` is the hooked system's own live context, on its
         // thread.
         .filter(|(loader, engine)| unsafe { server_world(loader, engine, ctx) });
-    let Some((_, engine)) = ready else {
+    let Some((loader, engine)) = ready else {
         // SAFETY: this detour runs only as the `upgrade_building_range` link,
         // so the slot holds the next system entry; the system's own context
         // passes unchanged.
@@ -696,12 +699,15 @@ unsafe extern "system" fn upgrade(ctx: *mut u64) {
         return;
     };
     if running_sizers().next().is_some() {
+        let build = &loader.build.name;
         // SAFETY: `ctx` is the live context of `upgrade_building_range`, on
         // its thread, and vanilla has not run this tick.
-        if std::panic::catch_unwind(|| unsafe { write_ranges(engine, ctx) }).is_ok() {
-            return;
+        match std::panic::catch_unwind(|| unsafe { write_ranges(engine, ctx, build) }) {
+            Ok(true) => return,
+            // RANGES_FUSE logged it: only the ranges go vanilla.
+            Ok(false) => {}
+            Err(_) => turn_off("the range pass panicked"),
         }
-        turn_off("the range pass panicked");
         // Hand the tick to vanilla from the first row.
         // SAFETY: `ctx` is the hooked system's own live context, which only
         // its thread writes.

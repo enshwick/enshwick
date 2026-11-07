@@ -46,6 +46,11 @@ pub struct Section {
     raw_size: u64,
 }
 
+/// The sections that hold an image's data rather than its code or its
+/// tables for the system: what a route may take an address in outside
+/// `.text`.
+const DATA_SECTIONS: [&str; 2] = [".data", ".rdata"];
+
 impl Section {
     /// The section's name, such as `.rdata`.
     ///
@@ -318,6 +323,18 @@ impl<'a> Image<'a> {
     #[must_use]
     pub fn section(&self, name: &str) -> Option<&Section> {
         self.sections.iter().find(|s| s.name == name)
+    }
+
+    /// Whether virtual address `va` lies in the image's data: `.data`, with
+    /// its uninitialised part past the file's bytes, or `.rdata`.
+    pub(crate) fn in_data(&self, va: u64) -> bool {
+        self.sections
+            .iter()
+            .filter(|s| DATA_SECTIONS.contains(&s.name.as_str()))
+            .any(|s| {
+                let start = self.base.saturating_add(s.rva);
+                (start..start.saturating_add(s.virtual_size.max(s.raw_size))).contains(&va)
+            })
     }
 
     /// The virtual addresses a section's readable bytes cover.

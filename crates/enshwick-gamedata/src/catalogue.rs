@@ -30,7 +30,8 @@ pub enum Fact {
     /// A type, by its reflected name: answers type, size and hash lookups
     /// by the id.
     Type(&'static str),
-    /// The offset of `field` in `ty`, plus `plus` bytes into the field.
+    /// The offset of `field` in `ty`, plus `plus` bytes into the field,
+    /// while the field holds the type `holds`.
     Offset {
         /// The reflected type.
         ty: &'static str,
@@ -38,6 +39,10 @@ pub enum Fact {
         field: &'static str,
         /// Bytes past the field's start.
         plus: u64,
+        /// The reflected type the field holds, as the API reads it there: a
+        /// field that changed type, such as from `keen::uint32` to
+        /// `keen::uint64` or from a value to a pointer, has no offset.
+        holds: &'static str,
     },
     /// The sum of the offsets of fields nested one in the next: each pair
     /// is a reflected type and its field, the field holding the next type.
@@ -209,8 +214,13 @@ pub fn recipe_kind_slots(reflection: &Reflection<'_>) -> Vec<(u64, RecipeKind)> 
         .collect()
 }
 
-const fn offset(ty: &'static str, field: &'static str) -> Fact {
-    Fact::Offset { ty, field, plus: 0 }
+const fn offset(ty: &'static str, field: &'static str, holds: &'static str) -> Fact {
+    Fact::Offset {
+        ty,
+        field,
+        plus: 0,
+        holds,
+    }
 }
 
 const fn enum_constant(ty: &'static str, name: &'static str) -> Fact {
@@ -333,18 +343,17 @@ pub const fn type_hash(id: &str) -> Option<u32> {
     }
 }
 
-/// The offset `fact` names, with `field` reading a reflected type's field
-/// offset; `None` for a type or a field `field` does not find.
-fn offset_of(fact: Fact, field: impl Fn(&str, &str) -> Option<u64>) -> Option<u64> {
+fn offset_of(fact: Fact, field: impl Fn(&str, &str, Option<&str>) -> Option<u64>) -> Option<u64> {
     match fact {
         Fact::Offset {
             ty,
             field: name,
             plus,
-        } => field(ty, name)?.checked_add(plus),
-        Fact::Path(steps) => steps
-            .iter()
-            .try_fold(0u64, |sum, &(ty, name)| sum.checked_add(field(ty, name)?)),
+            holds,
+        } => field(ty, name, Some(holds))?.checked_add(plus),
+        Fact::Path(steps) => steps.iter().try_fold(0u64, |sum, &(ty, name)| {
+            sum.checked_add(field(ty, name, None)?)
+        }),
         Fact::Type(_) | Fact::Constant { .. } => None,
     }
 }
@@ -388,7 +397,10 @@ pub fn event_types<'r, 'a>(
 pub fn constant(id: &str, reflection: &Reflection<'_>) -> Option<u64> {
     match fact(id)? {
         Fact::Constant { ty, name } => reflection.enum_value(ty, name).ok(),
-        fact => offset_of(fact, |ty, field| reflection.field_offset(ty, field).ok()),
+        fact => offset_of(fact, |ty, field, holds| match holds {
+            Some(holds) => reflection.field_holding(ty, field, holds),
+            None => reflection.field_offset(ty, field).ok(),
+        }),
     }
 }
 
@@ -520,7 +532,7 @@ mod tests {
         let fact = fact("damage_type.magical_fire");
         assert!(matches!(fact, Some(Fact::Constant { .. })));
         assert_eq!(type_hash("damage_type.magical_fire"), None);
-        assert_eq!(offset_of(fact.unwrap(), |_, _| Some(8)), None);
+        assert_eq!(offset_of(fact.unwrap(), |_, _, _| Some(8)), None);
     }
 
     #[test]
@@ -539,7 +551,7 @@ mod tests {
     #[test]
     fn a_path_adds_the_offsets_of_its_fields() {
         let path = Fact::Path(&[("A", "b"), ("B", "c"), ("C", "d")]);
-        let field = |ty: &str, name: &str| match (ty, name) {
+        let field = |ty: &str, name: &str, _: Option<&str>| match (ty, name) {
             ("A", "b") => Some(0x10),
             ("B", "c") => Some(0x08),
             ("C", "d") => Some(0x04),
@@ -556,9 +568,10 @@ mod tests {
             ty: "A",
             field: "b",
             plus: 4,
+            holds: "C",
         };
-        assert_eq!(offset_of(fact, |_, _| Some(8)), Some(12));
-        assert_eq!(offset_of(Fact::Type("A"), |_, _| Some(8)), None);
+        assert_eq!(offset_of(fact, |_, _, _| Some(8)), Some(12));
+        assert_eq!(offset_of(Fact::Type("A"), |_, _, _| Some(8)), None);
     }
 
     #[test]
@@ -831,6 +844,51 @@ mod tests {
                     .any(|reflection| event_types(reflection).any(|ty| ty.name() == engine));
                 assert!(listed, "{id} is not a listed event type");
             }
+        }
+    }
+
+    /// On every executable `ENSH_SERVER_EXE`, `ENSH_CLIENT_EXE` and the
+    /// opt-in `ENSH_EXES` path list name (such as every kept build), each
+    /// offset's field holds the type the catalogue states wherever that
+    /// build reflects the field: the client alone has its interface.
+    #[test]
+    #[cfg_attr(miri, ignore = "reading a game executable takes hours under Miri")]
+    fn every_offset_s_field_holds_its_stated_type_on_every_kept_build() {
+        let named = ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"]
+            .into_iter()
+            .filter_map(|var| std::env::var_os(var).map(std::path::PathBuf::from));
+        let listed: Vec<std::path::PathBuf> = std::env::var_os("ENSH_EXES")
+            .map(|list| std::env::split_paths(&list).collect())
+            .unwrap_or_default();
+        for path in named.chain(listed) {
+            let bytes = std::fs::read(&path).unwrap();
+            let image =
+                crate::reflect::Image::parse(&bytes, crate::reflect::Layout::File, None).unwrap();
+            let reflection = Reflection::scan(&image);
+            let wrong: Vec<String> = FACTS
+                .iter()
+                .filter_map(|&(id, fact)| {
+                    let Fact::Offset {
+                        ty, field, holds, ..
+                    } = fact
+                    else {
+                        return None;
+                    };
+                    let info = reflection.type_info(ty).ok()?;
+                    let held = info
+                        .fields()
+                        .iter()
+                        .find(|f| f.name() == field)?
+                        .type_name();
+                    (held != Some(holds)).then(|| format!("{id}: {holds}, reflected {held:?}"))
+                })
+                .collect();
+            assert!(
+                wrong.is_empty(),
+                "{}:\n{}",
+                path.display(),
+                wrong.join("\n")
+            );
         }
     }
 }
