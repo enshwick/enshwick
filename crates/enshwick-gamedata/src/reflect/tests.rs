@@ -231,6 +231,36 @@ fn a_field_path_sums_offsets_only_through_fields_that_hold_the_next_type() {
     assert_eq!(path(&[("demo::Outer", "missing")]), None);
 }
 
+#[test]
+fn a_field_s_offset_counts_only_while_it_holds_the_type_read_there() {
+    let mut fake = Fake::new();
+    let (narrow, wide, outer) = (rdata(0x100), rdata(0x200), rdata(0x300));
+    put_struct(&mut fake, narrow, rdata(0x400), "demo::uint32", &[]);
+    put_struct(&mut fake, wide, rdata(0x800), "demo::uint64", &[]);
+    put_struct(
+        &mut fake,
+        outer,
+        rdata(0xc00),
+        "demo::Outer",
+        &[("count", 8, wide)],
+    );
+    let image = Image::parse(&fake.bytes, Layout::File, None).unwrap();
+    let reflection = Reflection::scan(&image);
+    assert_eq!(
+        reflection.field_holding("demo::Outer", "count", "demo::uint64"),
+        Some(8)
+    );
+    assert_eq!(
+        reflection.field_holding("demo::Outer", "count", "demo::uint32"),
+        None,
+        "a field that grew from 32 to 64 bits"
+    );
+    assert_eq!(
+        reflection.field_holding("demo::Outer", "missing", "demo::uint64"),
+        None
+    );
+}
+
 /// Writes a descriptor of `kind` named `name` at `at`, deriving from
 /// or holding the descriptor at `inner`, with its strings at `strings`.
 fn describe(fake: &mut Fake, at: u64, strings: u64, name: &str, kind: u8, inner: Option<u64>) {

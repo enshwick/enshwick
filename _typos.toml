@@ -23,6 +23,8 @@ Fo = "Fo"
 Droped = "Droped"
 # The game's spelling of its attack and behaviour types, AttackDesscription.
 Desscription = "Desscription"
+# The game's spelling of its impact number formats, ImpcatValueNumberFormat.
+Impcat = "Impcat"
 
 [default]
 # Byte patterns of game code: hex bytes and `??`, such as "48 8B BA".
