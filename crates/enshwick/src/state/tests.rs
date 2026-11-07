@@ -174,6 +174,21 @@ fn a_flush_lands_after_a_background_write() {
 }
 
 #[test]
+fn a_background_write_alone_writes_the_changed_value() {
+    let dir = std::env::temp_dir().join(format!("enshwick-world-alone-{}", std::process::id()));
+    let _gone = std::fs::remove_dir_all(&dir);
+    let store: WorldStore<Count> = WorldStore::new("count").unwrap();
+    store.open("world0", &world(&dir, "world0")).unwrap();
+    store.update(|c| c.n = 42);
+    store.flush_in_background();
+    drop(store.wait_for_writes());
+    let file = world(&dir, "world0").join("count.toml");
+    let saved: Count = toml::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(saved.n, 42);
+    let _gone = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn a_failed_background_write_is_retried_at_the_next_save() {
     let dir = std::env::temp_dir().join(format!("enshwick-world-retry-{}", std::process::id()));
     let _gone = std::fs::remove_dir_all(&dir);
