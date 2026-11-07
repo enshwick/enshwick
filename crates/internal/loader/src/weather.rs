@@ -19,6 +19,8 @@
 //! from unloading to unloaded once they are gone. The loader wraps it and
 //! reports the turns of the server's world after the step.
 
+mod check;
+
 use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{ChunkData, Event, Header, HookFlags, Status, WeatherFront};
@@ -29,6 +31,7 @@ use crate::host::{Loader, Target};
 use crate::locks::Relock;
 use crate::memory::{BlobArray, read, write};
 use crate::pinned::{self, Symbol};
+use check::writable;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -619,6 +622,9 @@ enum RemapError {
     /// The weather system or its resource is not there.
     #[error("the weather is not loaded ({0:?})")]
     Unloaded(Status),
+    /// The live weather system did not hold its found offsets.
+    #[error("weather changes are off on this world")]
+    Off,
     /// The file beside the save does not read.
     #[error("{path} does not read: {why}", path = .0.display(), why = .1)]
     Unread(std::path::PathBuf, String),
@@ -628,6 +634,7 @@ enum RemapError {
 /// [`as_saved`] for a save without them.
 fn remap(loader: &Loader, path: &std::path::Path) -> Result<(), RemapError> {
     let layout = layout(loader).ok_or(RemapError::Unloaded(Status::MISSING))?;
+    writable(loader, layout).map_err(|_| RemapError::Off)?;
     let (system, _) = system(layout).map_err(RemapError::Unloaded)?;
     let resource = Resource::lock(layout, system).ok_or(RemapError::Unloaded(Status::MISSING))?;
     let served = phenomena(layout, &resource).ok_or(RemapError::Unloaded(Status::MISSING))?;
@@ -730,6 +737,7 @@ pub(crate) fn set(loader: &Loader, effect: u32, duration: i64) -> Result<(), Sta
         return Err(Status::BAD_ARGS);
     }
     let layout = layout(loader).ok_or(Status::MISSING)?;
+    writable(loader, layout)?;
     let (system, now) = system(layout)?;
     let resource = Resource::lock(layout, system).ok_or(Status::MISSING)?;
     // SAFETY: `resource` holds the weather resource locked, and its
