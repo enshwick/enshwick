@@ -533,6 +533,39 @@ fn every_covered_type_crosses_into_a_script_and_back() {
     assert!(wrong.is_empty(), "{wrong:#?}");
 }
 
+/// Every committed file of the typed API carries the generated header, and
+/// all of them name one build, so a hand-written or half-regenerated module
+/// fails on every machine, with the game data or without it.
+#[test]
+fn every_committed_typed_file_carries_the_header_of_one_build() {
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../enshwick/src");
+    let (before, after) = rust::header("\0")
+        .split_once('\0')
+        .map(|(b, a)| (b.to_owned(), a.to_owned()))
+        .unwrap();
+    let mut files = vec![src.join("typed.rs")];
+    for entry in std::fs::read_dir(src.join("typed")).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_some_and(|e| e == "rs") && !path.ends_with("runtime.rs") {
+            files.push(path);
+        }
+    }
+    let mut builds = std::collections::BTreeSet::new();
+    for path in &files {
+        let text = std::fs::read_to_string(path).unwrap();
+        let build = text
+            .split_once(&before)
+            .and_then(|(_, rest)| rest.split_once(&after))
+            .map(|(build, _)| build.to_owned());
+        match build {
+            Some(build) => builds.insert(build),
+            None => panic!("{}: no generated header", path.display()),
+        };
+    }
+    assert!(files.len() > 10, "{files:?}");
+    assert_eq!(builds.len(), 1, "{builds:?}");
+}
+
 /// The committed typed API is what the committed snapshot generates, file
 /// for file: a hand edit, a stale module or a generator change not run
 /// again fails here, on every run that touches either crate.

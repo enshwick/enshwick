@@ -105,11 +105,24 @@ mod tests {
             .collect()
     }
 
-    /// Every id a table pins or an engine route finds.
-    fn pinned_or_routed() -> BTreeSet<String> {
-        let mut found = pinned();
-        found.extend(tables::Routes::embedded().unwrap().ids().map(str::to_owned));
-        found
+    /// Every id the loader finds on a build: by an anchor's pattern on
+    /// either side, or by an engine route; the loader never reads the kept
+    /// tables, so they count for nothing here.
+    fn anchored_or_routed() -> BTreeSet<String> {
+        let anchored = [tables::Side::Server, tables::Side::Client]
+            .into_iter()
+            .flat_map(|side| {
+                let anchors = tables::anchors(side).unwrap();
+                let symbols = anchors.symbols().iter().map(|s| s.id().to_owned());
+                let constants = anchors.constants().iter().map(|c| c.id().to_owned());
+                symbols.chain(constants).collect::<Vec<_>>()
+            });
+        let routed = tables::Routes::embedded()
+            .unwrap()
+            .ids()
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        anchored.chain(routed).collect()
     }
 
     fn listed() -> BTreeSet<&'static str> {
@@ -155,20 +168,16 @@ mod tests {
             .collect()
     }
 
-    /// Skipped without the kept tables, whose rows the routes stand beside.
     #[test]
-    fn every_listed_id_is_pinned_or_routed() {
-        if pinned().is_empty() {
-            return;
-        }
-        let found = pinned_or_routed();
+    fn every_listed_id_is_anchored_or_routed() {
+        let found = anchored_or_routed();
         let stale: Vec<_> = listed()
             .into_iter()
             .filter(|id| !found.contains(*id))
             .collect();
         assert!(
             stale.is_empty(),
-            "listed but in no table or route: {stale:?}"
+            "listed but in no anchor or route: {stale:?}"
         );
     }
 
@@ -205,20 +214,16 @@ mod tests {
         ids
     }
 
-    /// Skipped without the kept tables, whose rows the routes stand beside.
     #[test]
-    fn every_catalogued_id_is_pinned_or_routed() {
-        if pinned().is_empty() {
-            return;
-        }
-        let found = pinned_or_routed();
+    fn every_catalogued_id_is_anchored_or_routed() {
+        let found = anchored_or_routed();
         let stale: Vec<_> = catalogue()
             .into_values()
             .filter(|id| !found.contains(id))
             .collect();
         assert!(
             stale.is_empty(),
-            "catalogued but in no table or route: {stale:?}"
+            "catalogued but in no anchor or route: {stale:?}"
         );
     }
 
