@@ -735,6 +735,34 @@ shape = ["movzx eax,[rdi+*]", "mov [rsp+0x30],rbx"]
 take = "value"
 
 [[route]]
+id = "ui.prompt_valid"
+sides = ["client"]
+system = "player_ui"
+shape = ["mov byte [rsi+*],0x1", "mov eax,[rsp+?]", "mov [rsi+?],eax", "movzx eax,[rbp+?]", "mov [rsi+?],al"]
+take = "value"
+
+[[route]]
+id = "ui.prompt_verb"
+sides = ["client"]
+system = "player_ui"
+shape = ["mov byte [rsi+?],0x1", "mov eax,[rsp+?]", "mov [rsi+*],eax", "movzx eax,[rbp+?]", "mov [rsi+?],al"]
+take = "value"
+
+[[route]]
+id = "ui.prompt_title"
+sides = ["client"]
+system = "player_ui"
+shape = ["mov rax,[rbp+?]", "movups [rsi+*],xmm0", "movsd xmm0,[rbp+?]", "movsd [rsi+?],xmm0", "mov rcx,[rax]"]
+take = "value"
+
+[[route]]
+id = "ui.screen_host"
+sides = ["client"]
+system = "player_ui"
+shape = ["mov eax,[rax]", "mov [rsi+*],eax", "movzx edx,[rdx]", "call ?"]
+take = "value"
+
+[[route]]
 id = "bases.answer_error"
 in = "bases.base_at"
 shape = ["mov [r10],?", "mov rbx,[rsp+?]"]

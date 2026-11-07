@@ -163,20 +163,21 @@ impl Load<'_> {
     where
         F: FnMut(&ScreenChanged) + Send + 'static,
     {
-        let mut seen: &'static str = "";
+        let mut seen: (&'static str, Option<crate::Entity>) = ("", None);
         let mut before = None;
+        let mut before_host = None;
         self.on_frame(move |frame| {
-            // SAFETY: the loader keeps the name for the life of the process
-            // (`UiFrame`'s `hud_screen`).
-            let name: &'static str = unsafe { frame.hud_screen.as_str() }.unwrap_or("");
-            if name == seen {
+            let name = frame.hud_screen_name();
+            let host = frame.screen_host();
+            if (name, host) == seen {
                 return;
             }
-            seen = name;
+            seen = (name, host);
             let now = HudScreenType::from_name(name);
-            if now != before {
-                let change = ScreenChanged { before, now };
+            if (now, host) != (before, before_host) {
+                let change = ScreenChanged { before, now, host };
                 before = now;
+                before_host = host;
                 handler(&change);
             }
         })
@@ -200,6 +201,12 @@ pub struct ScreenChanged {
     /// The screen open now, read the same way.
     #[script(default)]
     pub now: Option<HudScreenType>,
+    /// The entity the screen open now belongs to, as
+    /// [`Frame::screen_host`](super::Frame::screen_host) reads it: a
+    /// change of host alone, such as from one chest to the next, is a
+    /// change too.
+    #[script(default)]
+    pub host: Option<crate::Entity>,
 }
 
 #[cfg(test)]

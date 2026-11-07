@@ -96,6 +96,16 @@ widgets draw only inside one. The widgets:
 | `dropdown`               | the settings choice, at most 64 options       | true when changed         |
 | `progress`               | the game's bar, from 0 to 1                   |                           |
 | `sound`                  | plays a click, confirmation, back or refusal  |                           |
+| `play`                   | plays a sound container by its GUID           | `Off` for an unknown GUID |
+
+`sound` and `play` need no window. `play` takes a
+[`SoundContainerId`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/sound.rs),
+the GUID of one of the game's sound containers, as its archive names it, or
+of a mod's own. It plays the container as an interface sound: only this
+client hears it, and it comes from no place in the world. The loader refuses
+a GUID the game's archive does not hold before it reaches the game. A sound
+that misleads players in a fight, such as an attack that does not happen,
+does not belong in a mod.
 
 Rows take `read_only(true)`: they show the value and do not take changes.
 A slider whose range has an end that is not finite draws nothing. A reversed
@@ -272,8 +282,45 @@ enshwick.ui.on_screen_changed(function(change)
 end)
 ```
 
-The screen names its kind only, not the object it belongs to, such as
-which chest.
+### Which object the screen belongs to
+
+`frame.screen_host()` returns the entity the open screen belongs to, such as
+the chest whose inventory shows. It returns `None` for a screen of no object,
+such as the map or a build tool. It also returns `None` outside a game. The
+entity is the client's own: the server names the same object by another id.
+
+`ScreenChanged` also holds `host`, the entity the screen now open belongs to.
+Moving from one chest to the next counts as a change, though the screen stays
+`StorageChest`.
+
+### What the prompt offers
+
+`frame.prompt()` returns what the player's interaction prompt offers in that
+frame. Its `title` is the name the game shows, such as a chest's, in the
+player's language. Its `verb` is the game's `LocaTagId` of the prompt's verb.
+It returns `None` while the prompt offers nothing.
+
+```rust
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    load.on_frame(|frame| {
+        if let Some(prompt) = frame.prompt() {
+            frame.label(format!("Looking at {}", prompt.title).as_str());
+        }
+    })
+}
+```
+
+```luau
+enshwick.ui.on_frame(function(frame)
+    local prompt = frame:prompt()
+    if prompt ~= nil then
+        frame:label(`Looking at {prompt.title}`)
+    end
+end)
+```
+
+The prompt and the screen's host come from the client's last step. Both are
+unstable, and neither is seen in the game yet (see [Stability](stability.md)).
 
 ## A prompt on the mod's object
 

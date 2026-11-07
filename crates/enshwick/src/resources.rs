@@ -38,6 +38,8 @@ pub use script::{Bytes, Resources};
 pub use table::TypeTable;
 #[cfg(feature = "typed")]
 pub(crate) use table::decode;
+#[cfg(feature = "unstable")]
+pub(crate) use table::serve_new;
 pub(crate) use table::serve_value;
 pub use types::{Attribute, Constant, Field, Type, crc32, crc64, fnv1a32};
 pub use value::{Value, Variant};

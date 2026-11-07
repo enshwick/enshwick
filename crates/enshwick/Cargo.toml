@@ -23,6 +23,7 @@ const_format.workspace = true
 document-features.workspace = true
 zune-core.workspace = true
 zune-png.workspace = true
+hound = { workspace = true, optional = true }
 fastrand.workspace = true
 memchr.workspace = true
 postcard.workspace = true
@@ -50,7 +51,7 @@ schema = ["dep:schemars", "dep:serde_json"]
 ## `unstable`: the parts of the API that may still change in any release:
 ## young APIs and calls that rest on engine facts not yet checked in the
 ## running game. Every item it adds is marked in the docs.
-unstable = []
+unstable = ["dep:hound"]
 ## `typed`: every component, event and resource the game reflects as typed
 ## items generated from its reflection, a few thousand of them; it builds on
 ## `unstable`.

@@ -52,6 +52,42 @@ fn a_rebuild_runs_the_mods_of_the_first_build_although_they_are_off() {
     assert_eq!((len, by), (6, both.to_vec()));
 }
 
+#[test]
+fn a_change_of_a_new_resource_chains_onto_its_maker_in_either_order() {
+    let key = |guid: u8| ResourceKey {
+        guid: [guid; 16],
+        type_hash: 1,
+        part: 0,
+    };
+    let patch = |owner: usize| Patch {
+        owner: ModIndex::new(owner),
+        apply: no_patch,
+        user: 0,
+    };
+    let owners = |served: &Served| served.patches.iter().map(|p| p.owner).collect::<Vec<_>>();
+    let (new, base, other) = (key(2), key(1), key(3));
+    for maker_first in [true, false] {
+        let mut pending = Vec::new();
+        let (first, second) = if maker_first {
+            ((base, 1), (new, 2))
+        } else {
+            ((new, 2), (base, 1))
+        };
+        assert_eq!(add(&mut pending, new, first.0, patch(first.1)), Status::OK);
+        assert_eq!(
+            add(&mut pending, new, second.0, patch(second.1)),
+            Status::OK
+        );
+        assert_eq!(pending[0].base, base, "maker first: {maker_first}");
+        assert_eq!(owners(&pending[0]), [ModIndex::new(1), ModIndex::new(2)]);
+        assert_eq!(
+            add(&mut pending, new, other, patch(3)),
+            Status::REFUSED,
+            "a second maker"
+        );
+    }
+}
+
 unsafe extern "system" fn no_patch(
     _: *const u8,
     _: usize,

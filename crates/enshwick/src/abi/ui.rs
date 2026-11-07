@@ -19,6 +19,9 @@ use crate::abi::{Header, Status, Str};
 ///     screen: UiFrame::IN_GAME,
 ///     reserved: 0,
 ///     hud_screen: Str::new("StorageChest"),
+///     prompt_title: Str::EMPTY,
+///     prompt_verb: 0,
+///     screen_host: enshwick::Entity(512),
 /// };
 /// assert_eq!(frame.screen, UiFrame::IN_GAME);
 /// ```
@@ -40,6 +43,19 @@ pub struct UiFrame {
     /// and on a build where the loader does not find it. The loader keeps
     /// the text for the life of the process.
     pub hud_screen: Str,
+    /// The title of what the player's interaction prompt offers now, such
+    /// as a chest's name, as the game shows it; empty while it offers
+    /// nothing, outside a game and on a build where the loader does not
+    /// find it. The game's own text, borrowed for the callback. ABI 11.14.
+    pub prompt_title: Str,
+    /// The game's text id (`LocaTagId`) of the prompt's verb, such as the
+    /// one for "Open"; 0 while the prompt offers nothing. ABI 11.14.
+    pub prompt_verb: u32,
+    /// The entity of the client's world the open screen belongs to, such
+    /// as the chest whose inventory shows; entity 0 for a screen of no
+    /// object, outside a game and on a build where the
+    /// loader does not find it. ABI 11.14.
+    pub screen_host: crate::Entity,
 }
 
 impl_headed!(UiFrame, born = 24);
@@ -129,7 +145,7 @@ pub struct UiWidget {
     /// Size and version of this struct.
     pub header: Header,
     /// What to draw: one of the kind constants, [`UiWidget::WINDOW`] to
-    /// [`UiWidget::SOUND`].
+    /// [`UiWidget::PLAY`].
     pub kind: u32,
     /// [`UiWidget::READ_ONLY`], [`UiWidget::WRAP`], [`UiWidget::CENTER`].
     pub flags: u32,
@@ -162,9 +178,12 @@ pub struct UiWidget {
     pub anchor: u32,
     /// Zero.
     pub reserved: u32,
+    /// The sound container a [`UiWidget::PLAY`] widget plays, its GUID in
+    /// memory order. ABI 11.14.
+    pub sound: [u8; 16],
 }
 
-impl_headed!(UiWidget);
+impl_headed!(UiWidget, born = 96);
 
 impl UiWidget {
     /// A window in the game's style, a panel over the screen that takes the
@@ -189,6 +208,11 @@ impl UiWidget {
     pub const PROGRESS: u32 = 8;
     /// Plays the interface sound `style`.
     pub const SOUND: u32 = 9;
+    /// Plays the sound container `sound` as an interface sound, heard only
+    /// on this client and from no place in the world;
+    /// [`Status::MISSING`](super::Status::MISSING) for a container neither
+    /// the client's archive nor a mod holds. Needs no window. ABI 11.14.
+    pub const PLAY: u32 = 10;
 
     /// The row shows its value and does not take changes; a button does not
     /// take clicks.
@@ -242,6 +266,7 @@ impl UiWidget {
         result: 0,
         anchor: 0,
         reserved: 0,
+        sound: [0; 16],
     };
 
     /// The HUD's top left corner.
@@ -525,9 +550,22 @@ pub struct FogInfo {
     /// Counts the fogs the loader has seen, one per world the client
     /// enters; a new one starts from the save of that world.
     pub session: u64,
+    /// Counts the closed windows of uncovering in this session: the
+    /// loader closes the pixels uncovered since the last window into a
+    /// new one at most once a second; 0 before the first. ABI 11.14.
+    pub uncovered: u64,
+    /// The pixels the last window turned from hidden to shown. ABI 11.14.
+    pub uncovered_pixels: u32,
+    /// Zero.
+    pub reserved: u32,
+    /// The lowest pixel of the box around the last window's pixels, as
+    /// x and row. ABI 11.14.
+    pub uncovered_min: [u32; 2],
+    /// The box's width and height in pixels. ABI 11.14.
+    pub uncovered_size: [u32; 2],
 }
 
-impl_headed!(FogInfo);
+impl_headed!(FogInfo, born = 40);
 
 impl FogInfo {
     /// No fog, its header set.
@@ -539,5 +577,10 @@ impl FogInfo {
         size_z: 0.0,
         version: 0,
         session: 0,
+        uncovered: 0,
+        uncovered_pixels: 0,
+        reserved: 0,
+        uncovered_min: [0; 2],
+        uncovered_size: [0; 2],
     };
 }

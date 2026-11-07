@@ -1,5 +1,6 @@
 //! What happens on the map, as a server mod hears it: a player's waypoint
-//! set, moved or cleared, and a ping.
+//! set, moved or cleared, and a ping; and on a client, fog of war the local
+//! player uncovered.
 
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -52,6 +53,50 @@ pub struct MapPinged {
     pub entity: Entity,
     /// Where, in metres.
     pub position: [f64; 3],
+}
+
+/// The least time between two looks at the fog of war; the loader closes
+/// a window of uncovering at most once a second.
+const FOG_EVERY: Duration = Duration::from_millis(250);
+
+/// Fog of war the local player uncovered since the window before, closed
+/// at most once a second, from [`Load::on_fog_uncovered`]. The name is the game's
+/// `FogOfWar` with a verb of enshwick's.
+///
+/// # Examples
+///
+/// See [`Load::on_fog_uncovered`].
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
+pub struct FogOfWarUncovered {
+    /// The lowest corner of the box around the uncovered ground: world x
+    /// and z in metres.
+    pub min: [f64; 2],
+    /// Its highest corner.
+    pub max: [f64; 2],
+    /// How many pixels of the fog's image turned from hidden to shown.
+    pub pixels: u32,
+}
+
+/// The event of `info`'s last window when it is new to `seen`, the session
+/// and window a mod saw last, which it moves on. The first look of a
+/// session raises none: its last window came before the mod looked.
+fn uncovering(
+    seen: &mut Option<(u64, u64)>,
+    info: &crate::abi::FogInfo,
+) -> Option<FogOfWarUncovered> {
+    let now = (info.session, info.uncovered);
+    let before = seen.replace(now);
+    let new = before.is_some_and(|(session, window)| session == now.0 && window != now.1);
+    let metres = f64::from(info.metres_per_pixel);
+    let size_z = f64::from(info.size_z);
+    let [x, row] = info.uncovered_min.map(f64::from);
+    let [width, height] = info.uncovered_size.map(f64::from);
+    new.then_some(FogOfWarUncovered {
+        min: [x * metres, size_z - (row + height) * metres],
+        max: [(x + width) * metres, size_z - row * metres],
+        pixels: info.uncovered_pixels,
+    })
 }
 
 /// What [`Load::on_waypoint`] keeps between its looks.
@@ -158,6 +203,50 @@ impl Load<'_> {
         Ok(())
     }
 
+    /// Calls `handler` on the thread that draws the interface when the
+    /// local player uncovered fog of war, at most once a second, with the
+    /// box around the new ground and how many pixels of the fog it was.
+    /// Client only: the fog of war is the client's own. The fog is looked
+    /// at four times a second inside the interface's frames, so a window
+    /// shows within that; a world's first copy of its saved fog counts as
+    /// none.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] on a server, after `init` or on a game build without the
+    /// fog of war.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     load.on_fog_uncovered(|new| {
+    ///         enshwick::info!("{} pixels of new ground near {:?}", new.pixels, new.min);
+    ///     })
+    /// }
+    /// ```
+    #[script]
+    pub fn on_fog_uncovered<F>(&mut self, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&FogOfWarUncovered) + Send + Sync + 'static,
+    {
+        let fog = self.fog_of_war()?;
+        let mut seen = None;
+        let mut looked: Option<Instant> = None;
+        self.on_frame(move |_| {
+            let now = Instant::now();
+            if looked.is_some_and(|at| now.duration_since(at) < FOG_EVERY) {
+                return;
+            }
+            looked = Some(now);
+            if let Ok(info) = fog.info()
+                && let Some(event) = uncovering(&mut seen, &info)
+            {
+                handler(&event);
+            }
+        })
+    }
+
     /// Calls `handler` on the server's game thread for each ping a player
     /// makes on the map or in the world, and each one a mod raises with
     /// [`Effects::ping`](crate::effects::Effects::ping). A sender is heard
@@ -221,6 +310,45 @@ impl Load<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_a_new_window_of_the_same_session_raises_uncovered_fog() {
+        let info = |session, window, min, size, pixels| crate::abi::FogInfo {
+            metres_per_pixel: 8.0,
+            size_z: 1024.0,
+            session,
+            uncovered: window,
+            uncovered_pixels: pixels,
+            uncovered_min: min,
+            uncovered_size: size,
+            ..crate::abi::FogInfo::EMPTY
+        };
+        let mut seen = None;
+        assert_eq!(
+            uncovering(&mut seen, &info(1, 4, [0, 0], [1, 1], 1)),
+            None,
+            "the mod's first look"
+        );
+        assert_eq!(
+            uncovering(&mut seen, &info(1, 4, [0, 0], [1, 1], 1)),
+            None,
+            "the same window"
+        );
+        assert_eq!(
+            uncovering(&mut seen, &info(1, 5, [2, 10], [3, 2], 6)),
+            Some(FogOfWarUncovered {
+                min: [16.0, 1024.0 - 12.0 * 8.0],
+                max: [40.0, 1024.0 - 10.0 * 8.0],
+                pixels: 6,
+            })
+        );
+        assert_eq!(
+            uncovering(&mut seen, &info(2, 1, [0, 0], [1, 1], 1)),
+            None,
+            "a new world's first look"
+        );
+        assert!(uncovering(&mut seen, &info(2, 2, [0, 0], [1, 1], 1)).is_some());
+    }
 
     #[test]
     fn a_position_counts_as_on_the_map_inside_its_frame_or_without_one() {

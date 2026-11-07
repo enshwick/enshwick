@@ -61,6 +61,10 @@ mod fake_second_install;
 mod features;
 #[cfg(feature = "unstable")]
 mod fog;
+#[cfg(feature = "unstable")]
+mod fog_uncovered;
+#[cfg(feature = "unstable")]
+mod frame_reads;
 mod game_event_kinds;
 mod game_events;
 mod game_names;
@@ -73,6 +77,8 @@ mod icons_hidden;
 mod init_off;
 #[cfg(feature = "unstable")]
 mod input;
+#[cfg(feature = "unstable")]
+mod interaction_targets;
 mod inventory;
 mod item_changes;
 #[cfg(feature = "unstable")]
@@ -163,6 +169,11 @@ mod sides;
 #[cfg(feature = "typed")]
 mod skill_tree;
 mod skills;
+mod sound_changes;
+#[cfg(feature = "unstable")]
+mod sound_files;
+mod sound_made;
+mod sounds;
 #[cfg(feature = "typed")]
 mod spawns;
 #[cfg(feature = "unstable")]

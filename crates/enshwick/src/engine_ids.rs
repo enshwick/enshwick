@@ -291,6 +291,19 @@ ids! {
     PLAYER_INPUT = "player_input";
     PLAYER_INPUT_DIGITAL = "player_input.digital";
     PLAYER_INPUT_TYPE = "player_input_type";
+    /// The id of the client's own input component on its local player.
+    CLIENT_PLAYER_INPUT = "client_player_input";
+    /// The id of its `u64` of the game controls held, a `Bitmask64` of
+    /// `PlayerInputType`.
+    CLIENT_PLAYER_INPUT_DIGITAL = "client_player_input.digital";
+    /// The id of the server-only component of a player's targets, one
+    /// `TargetInfo` per `TargetType`.
+    SELECTED_TARGETS = "selected_targets";
+    SELECTED_TARGETS_TARGETS = "selected_targets.targets";
+    TARGET_INFO = "target_info";
+    /// The id of a target's `u32` entity, 0 for none.
+    TARGET_INFO_ENTITY = "target_info.entity";
+    TARGET_TYPE = "target_type";
     HUD_SCREEN_TYPE = "hud_screen_type";
     HUD_SCREEN_IN_GAME = "hud_screen_type.in_game";
     BOSS = "boss";
@@ -515,6 +528,13 @@ ids! {
     /// The id of the marker type registry's resource type, of which the
     /// client's archive holds one.
     MAP_MARKER_REGISTRY = "map_marker_registry";
+    /// The id of a sound container's resource type, which a client plays
+    /// by its GUID.
+    SOUND_CONTAINER = "sound_container";
+    /// The id of a sound's resource type: its samples and their format.
+    SOUND = "sound";
+    /// The id of a sound container's entry that plays one sound.
+    SOUND_CONTAINER_SOUND_ENTRY = "sound_container_sound_entry";
     /// The id of a marker type's name text tag, a GUID.
     MAP_MARKER_TYPE_TYPE_NAME = "map_marker_type.type_name";
     /// The id of a marker type's sorting, a byte of [`MARKER_TYPE_SORTING`].

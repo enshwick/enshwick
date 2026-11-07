@@ -1,4 +1,4 @@
-abi 11.13
+abi 11.14
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
 ActionCall size 184 align 8 born 144
@@ -294,7 +294,7 @@ ExperienceRow size 20 align 4
 Fingerprint size 20 align 4
     guid at 0 size 16 type [u8; 16]
     age at 16 size 4 type u32
-FogInfo size 40 align 8 born 40
+FogInfo size 72 align 8 born 40
     header at 0 size 8 type Header
     width at 8 size 4 type u32
     height at 12 size 4 type u32
@@ -302,6 +302,11 @@ FogInfo size 40 align 8 born 40
     size_z at 20 size 4 type f32
     version at 24 size 8 type u64
     session at 32 size 8 type u64
+    uncovered at 40 size 8 type u64
+    uncovered_pixels at 48 size 4 type u32
+    reserved at 52 size 4 type u32
+    uncovered_min at 56 size 8 type [u32; 2]
+    uncovered_size at 64 size 8 type [u32; 2]
 GameEventData size 24 align 8 born 24
     header at 0 size 8 type Header
     type_hash at 8 size 4 type u32
@@ -319,7 +324,7 @@ HookSpec size 32 align 8
     next at 16 size 8 type *const Atomic<usize>
     priority at 24 size 4 type i32
     flags at 28 size 4 type HookFlags
-HostApi size 1544 align 8
+HostApi size 1552 align 8
     header at 0 size 8 type Header
     host_version at 8 size 16 type Str
     build at 24 size 8 type extern "system" fn(*mut BuildInfo)
@@ -512,6 +517,7 @@ HostApi size 1544 align 8
     crafting_prop at 1520 size 8 type extern "system" fn(ModHandle, *const [u8; 16], u8, u8, *mut u8) -> Status
     set_saved at 1528 size 8 type extern "system" fn(ModHandle, Entity, u8) -> Status
     run_action_at at 1536 size 8 type extern "system" fn(ModHandle, Str, Str, *const ActionTarget) -> Status
+    local_held at 1544 size 8 type extern "system" fn(ModHandle, *mut u64) -> Status
 Interaction size 56 align 8 born 56
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
@@ -984,19 +990,22 @@ UiExtension size 32 align 8 born 32
     screen at 8 size 16 type Str
     edge at 24 size 4 type u32
     reserved at 28 size 4 type u32
-UiFrame size 40 align 8 born 24
+UiFrame size 64 align 8 born 24
     header at 0 size 8 type Header
     token at 8 size 8 type u64
     screen at 16 size 4 type u32
     reserved at 20 size 4 type u32
     hud_screen at 24 size 16 type Str
+    prompt_title at 40 size 16 type Str
+    prompt_verb at 56 size 4 type u32
+    screen_host at 60 size 4 type Entity
 UiMarker size 56 align 8 born 56
     header at 0 size 8 type Header
     position at 8 size 24 type [i64; 3]
     label at 32 size 16 type Str
     color at 48 size 4 type u32
     marker_type at 52 size 4 type u32
-UiWidget size 96 align 8 born 96
+UiWidget size 112 align 8 born 96
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
     flags at 12 size 4 type u32
@@ -1013,6 +1022,7 @@ UiWidget size 96 align 8 born 96
     result at 84 size 4 type u32
     anchor at 88 size 4 type u32
     reserved at 92 size 4 type u32
+    sound at 96 size 16 type [u8; 16]
 Voxel size 4 align 1
     kind at 0 size 1 type u8
     material at 1 size 1 type u8

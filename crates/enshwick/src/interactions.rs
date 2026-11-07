@@ -23,8 +23,180 @@
 use core::ffi::c_void;
 
 use crate::abi::Interaction as RawInteraction;
+#[cfg(feature = "unstable")]
+use crate::abi::Status;
+#[cfg(feature = "unstable")]
+use crate::content::EngineFacts as _;
 use crate::{Entity, ItemId};
+#[cfg(feature = "unstable")]
+use crate::{Host, WorldError, ecs::ComponentType, engine_ids as ids, resources::Registry};
 use crate::{Load, Off};
+
+/// The game's name of the target its prompt offers, among its `TargetType`.
+#[cfg(feature = "unstable")]
+const INTERACTION_TARGET: &str = "Interaction";
+
+/// The players' prompt targets in the server's world, from
+/// [`Load::interaction_targets`]; `Copy`, for any thread, read on the game
+/// thread.
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
+/// # Examples
+///
+/// ```
+/// use std::time::Duration;
+///
+/// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+///     let targets = load.interaction_targets()?;
+///     let world = load.world()?;
+///     load.on_tick(Duration::from_secs(1), move |_| {
+///         for player in world.players() {
+///             if let Ok(Some(target)) = targets.target(player.entity) {
+///                 enshwick::info!("{} looks at {target:?}", player.name);
+///             }
+///         }
+///     })?;
+///     Ok(())
+/// }
+/// ```
+#[cfg(feature = "unstable")]
+#[derive(Clone, Copy, Debug)]
+pub struct Targets(&'static TargetsAt);
+
+#[cfg(feature = "unstable")]
+impl crate::script::Bound for Targets {
+    const NAME: &'static str = "interactions";
+    const DOC: &'static str =
+        "Players' interactions with entities, and what each player's prompt offers.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_TARGET];
+
+    fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
+        load.interaction_targets()
+    }
+}
+
+/// Where `SelectedTargets` keeps the entity of the prompt's target on the
+/// running build.
+#[cfg(feature = "unstable")]
+#[derive(Debug)]
+struct TargetsAt {
+    host: Host,
+    ty: ComponentType,
+    entity_at: usize,
+}
+
+#[cfg(feature = "unstable")]
+static TARGETS: crate::state::ModLocal<TargetsAt> = crate::state::ModLocal::new();
+
+#[cfg(feature = "unstable")]
+impl TargetsAt {
+    fn resolve(load: &Load<'_>) -> Result<Self, Off> {
+        let ty = ComponentType::resolve(load, ids::SELECTED_TARGETS)?;
+        let slot = Registry::game()?
+            .hashed(load.hash(ids::TARGET_TYPE)?)
+            .and_then(|kinds| {
+                kinds
+                    .constants()
+                    .iter()
+                    .find(|c| c.name() == INTERACTION_TARGET)
+                    .map(crate::resources::Constant::value)
+            })
+            .and_then(|value| usize::try_from(value).ok())
+            .ok_or_else(|| Off::new("interactions: the type registry lacks the prompt's target"))?;
+        let (targets, info, entity) = (
+            load.offset(ids::SELECTED_TARGETS_TARGETS)?,
+            load.size(ids::TARGET_INFO)?,
+            load.offset(ids::TARGET_INFO_ENTITY)?,
+        );
+        let entity_at = slot
+            .checked_mul(info)
+            .and_then(|at| at.checked_add(targets))
+            .and_then(|at| at.checked_add(entity));
+        let size = load.size(ids::SELECTED_TARGETS)?;
+        match entity_at {
+            Some(at)
+                if at
+                    .checked_add(size_of::<u32>())
+                    .is_some_and(|end| end <= size) =>
+            {
+                Ok(Self {
+                    host: load.host(),
+                    ty,
+                    entity_at: at,
+                })
+            }
+            _ => Err(Off::new(format!(
+                "interactions: the prompt's target lies past SelectedTargets' {size} bytes"
+            ))),
+        }
+    }
+}
+
+#[cfg(feature = "unstable")]
+#[crate::script(target)]
+impl Targets {
+    pub(crate) fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
+        if let Some(at) = TARGETS.get() {
+            return Ok(Self(at));
+        }
+        let at = TargetsAt::resolve(load)?;
+        Ok(Self(TARGETS.get_or_init(|| at)))
+    }
+
+    /// The entity whose interaction `player`'s prompt offers now; `None`
+    /// when it offers none or for an entity that is no player. Read on the
+    /// server's game thread between steps, in the server's world, so a
+    /// vanilla client's player reads the same.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::WrongThread`] off the server's game thread or inside a
+    /// step; [`WorldError::Missing`] before a world runs.
+    ///
+    /// # Examples
+    ///
+    /// See [`Targets`].
+    #[script]
+    pub fn target(self, player: Entity) -> Result<Option<Entity>, WorldError> {
+        let host = self.0.host;
+        WorldError::from_status((host.api().world_quiet)(host.handle()))?;
+        let mut out: *const c_void = core::ptr::null();
+        let status = (host.api().component)(host.handle(), player, self.0.ty.hash(), &raw mut out);
+        if status == Status::MISSING {
+            return Ok(None);
+        }
+        WorldError::from_status(status)?;
+        if out.is_null() {
+            return Ok(None);
+        }
+        // SAFETY: `out` is the player's live, non-null SelectedTargets, read
+        // right after `world_quiet` answered that this is the game thread at
+        // a quiet moment, so no system writes it now; `resolve` checked that
+        // the u32 at `entity_at` lies inside the type's size.
+        let entity = unsafe { crate::raw::read_at::<u32>(out.cast(), self.0.entity_at) };
+        Ok((entity != 0).then_some(Entity(entity)))
+    }
+}
+
+#[cfg(feature = "unstable")]
+impl Load<'_> {
+    /// The players' prompt targets in the game server, dedicated or hosted
+    /// by the client.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the game build lacks the target's read.
+    ///
+    /// # Examples
+    ///
+    /// See [`Targets`].
+    pub fn interaction_targets(&mut self) -> Result<Targets, Off> {
+        Targets::resolve(self)
+    }
+}
 
 /// What a player does with the target.
 ///

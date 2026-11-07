@@ -89,4 +89,20 @@ impl Engine {
         // bundle, and the game queues a copy.
         unsafe { (self.sound)(context, self.bundle(context) + offset) };
     }
+
+    /// Plays the sound container with GUID `container` as an interface
+    /// sound.
+    ///
+    /// # Safety
+    ///
+    /// As [`Engine::sound`].
+    pub(in crate::ui) unsafe fn play(&self, context: usize, container: &[u8; 16]) {
+        // SAFETY: `self.sound` is the game's `ui.sound`, checked in
+        // `Engine::resolve`, on the frame's `context` by this function's
+        // `# Safety`. On client 26430625 it reads the 16 bytes behind its
+        // second argument only as a value, a GUID it looks up as a sound
+        // container and copies into its queue, so a borrowed GUID serves as
+        // the bundle's reference does.
+        unsafe { (self.sound)(context, core::ptr::from_ref(container) as usize) };
+    }
 }

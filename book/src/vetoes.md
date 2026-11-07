@@ -156,6 +156,46 @@ server or a hosting client. They run on the thread of the system that checks
 the interaction, so keep them quick and never block. Several mods may filter; any
 refusal wins.
 
+### What a player's prompt offers now
+
+With the `unstable` feature, `load.interaction_targets()` returns the
+players' prompt targets in the server's world. Its `target(player)` returns
+the entity whose interaction the player's prompt offers now. It returns
+`None` while the prompt offers nothing, and for an entity that is no player.
+
+It reads the target the game keeps for each player, so a player without
+Enshwick reads the same. It runs on the server's game thread between steps,
+as `held` does in [the controls a player holds](input.md). The client
+chooses what its prompt shows, so check what matters on the server.
+
+```rust
+use std::time::Duration;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let targets = load.interaction_targets()?;
+    let world = load.world()?;
+    load.on_tick(Duration::from_secs(1), move |_| {
+        for player in world.players() {
+            if let Ok(Some(target)) = targets.target(player.entity) {
+                enshwick::info!("{} looks at {target:?}", player.name);
+            }
+        }
+    })?;
+    Ok(())
+}
+```
+
+```luau
+enshwick.on_tick(1, function()
+    for _, player in enshwick.world.players() do
+        local target = enshwick.interactions.target(player.entity)
+        if target ~= nil then
+            enshwick.log.info(`{player.name} looks at {target}`)
+        end
+    end
+end)
+```
+
 ## Worked example
 
 [`enshwick-personal-safes`](https://github.com/enshwick/mods/tree/main/personal-safes)

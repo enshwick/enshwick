@@ -85,4 +85,39 @@ mod tests {
             assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
         }
     }
+
+    #[test]
+    fn a_script_hears_fog_its_player_uncovered() {
+        let fog = |window| enshwick::abi::FogInfo {
+            width: 4,
+            height: 3,
+            metres_per_pixel: 8.0,
+            size_z: 24.0,
+            session: 1,
+            uncovered: window,
+            uncovered_pixels: 2,
+            uncovered_min: [1, 1],
+            uncovered_size: [2, 1],
+            ..enshwick::abi::FogInfo::EMPTY
+        };
+        let loader = run(
+            FakeHost::new()
+                .side(enshwick::abi::Side::CLIENT)
+                .fog(fog(1), vec![0; 12]),
+            r"
+            enshwick.map.on_fog_uncovered(function(new)
+                enshwick.log.info(`uncovered {new.pixels} from {new.min[1]},{new.min[2]} to {new.max[1]},{new.max[2]}`)
+            end)
+            ",
+        );
+        let _first_look = loader.draw_frame();
+        loader.set_fog(fog(2), vec![0; 12]);
+        std::thread::sleep(Duration::from_millis(260));
+        let _new_window = loader.draw_frame();
+        assert!(
+            logged(&loader, "uncovered 2 from 8,8 to 24,16"),
+            "{:?}",
+            loader.logs()
+        );
+    }
 }

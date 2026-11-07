@@ -53,7 +53,7 @@
 //! | Game rules | [`damage`], [`loot`], [`stats`], [`affixes`], [`survivors`], [`vetoes`] |
 //! | Content | [`content`], [`packs`] |
 //! | Between mods | [`services`], [`points`], [`net`], [`shape`] |
-//! | Interface | [`ui`] |
+//! | Interface | [`ui`], [`sound`] |
 #![cfg_attr(
     feature = "unstable",
     doc = "| Unstable, with the `unstable` feature | [`world`], [`map`], [`input`], [`item_data`], [`entity_data`], [`actions`], [`controls`], [`items`], [`rewards`], [`console`], [`rates`], [`script`](mod@script) |"
@@ -220,6 +220,7 @@ pub mod script;
 mod script;
 pub mod services;
 pub mod shape;
+pub mod sound;
 pub mod state;
 pub mod stats;
 pub mod status;

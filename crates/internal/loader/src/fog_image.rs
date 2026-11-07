@@ -155,14 +155,41 @@ pub enum ReadError {
     Short,
 }
 
-/// The loader's copy of one fog: its shape, its pixels and how often it
-/// changed.
+/// The loader's copy of one fog: its shape, its pixels, how often it
+/// changed and what puts uncovered.
 #[derive(Debug)]
 pub struct FogImage {
     shape: FogShape,
     pixels: Vec<u8>,
     version: u64,
+    /// The pixels uncovered since the last window closed: their count, the
+    /// lowest corner and the corner past the highest.
+    pending: Option<(u32, [u32; 2], [u32; 2])>,
+    closed: Uncovered,
+    /// When the last window closed, in the caller's milliseconds.
+    closed_ms: Option<u64>,
 }
+
+/// One window of uncovering: the pixels puts turned from hidden to shown
+/// and the box around them.
+///
+/// # Examples
+///
+/// See [`FogImage::close_uncovered`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Uncovered {
+    /// The windows closed in this image, this one counted; 0 for none.
+    pub seq: u64,
+    /// The pixels uncovered.
+    pub pixels: u32,
+    /// The box's lowest pixel, x and row.
+    pub min: [u32; 2],
+    /// The box's width and height.
+    pub size: [u32; 2],
+}
+
+/// The shortest time between two windows, in milliseconds.
+const WINDOW_MS: u64 = 1000;
 
 impl FogImage {
     /// A fog of `shape`, every pixel hidden, at version 0.
@@ -188,7 +215,57 @@ impl FogImage {
             shape,
             pixels: vec![0; width as usize * height as usize],
             version: 0,
+            pending: None,
+            closed: Uncovered::default(),
+            closed_ms: None,
         }
+    }
+
+    /// Closes the pixels uncovered since the last window into a new one,
+    /// at most once a [`WINDOW_MS`] by `now_ms`, and returns the last
+    /// closed window.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader::fog_image::{FogImage, FogShape};
+    ///
+    /// let mut image = FogImage::new(FogShape::new(2, 1, 4, 4.0).unwrap());
+    /// assert!(image.put_tile(1, 0, &[255; 16]));
+    /// let window = image.close_uncovered(0);
+    /// assert_eq!((window.seq, window.pixels, window.min, window.size), (1, 16, [4, 0], [4, 4]));
+    /// assert!(image.put_tile(0, 0, &[9; 16]));
+    /// assert_eq!(image.close_uncovered(999).seq, 1, "within a second of the last");
+    /// assert_eq!(image.close_uncovered(1000).min, [0, 0]);
+    /// ```
+    pub fn close_uncovered(&mut self, now_ms: u64) -> Uncovered {
+        let due = self
+            .closed_ms
+            .is_none_or(|at| now_ms.saturating_sub(at) >= WINDOW_MS);
+        if due && let Some((pixels, min, end)) = self.pending.take() {
+            self.closed = Uncovered {
+                seq: self.closed.seq + 1,
+                pixels,
+                min,
+                size: [end[0] - min[0], end[1] - min[1]],
+            };
+            self.closed_ms = Some(now_ms);
+        }
+        self.closed
+    }
+
+    /// Forgets what puts uncovered since the last window, as for a copy of
+    /// a fog the client loaded, not uncovered.
+    pub fn settle(&mut self) {
+        self.pending = None;
+    }
+
+    /// Counts pixel `x`, `y` as uncovered in the pending window.
+    fn uncover(&mut self, x: u32, y: u32) {
+        let (pixels, min, end) = self.pending.get_or_insert((0, [x, y], [x + 1, y + 1]));
+        *pixels = pixels.saturating_add(1);
+        *min = [min[0].min(x), min[1].min(y)];
+        *end = [end[0].max(x + 1), end[1].max(y + 1)];
     }
 
     /// Its shape.
@@ -218,11 +295,21 @@ impl FogImage {
         let mut changed = false;
         for (row, line) in tile.chunks_exact(edge).enumerate() {
             let start = (ty as usize * edge + row) * width + left;
-            let kept = &mut self.pixels[start..start + edge];
-            if kept != line {
-                kept.copy_from_slice(line);
-                changed = true;
+            if self.pixels[start..start + edge] == *line {
+                continue;
             }
+            let y = ty as usize * edge + row;
+            for (column, &new) in line.iter().enumerate() {
+                if self.pixels[start + column] == 0 && new != 0 {
+                    #[expect(
+                        clippy::cast_possible_truncation,
+                        reason = "a pixel of a fog whose size is two u32 holds in a u32"
+                    )]
+                    self.uncover((left + column) as u32, y as u32);
+                }
+            }
+            self.pixels[start..start + edge].copy_from_slice(line);
+            changed = true;
         }
         if changed {
             self.version += 1;

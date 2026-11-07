@@ -1,0 +1,76 @@
+---
+source: crates/enshwick/tests/pack_schemas.rs
+expression: shape
+---
+{
+  "$defs": {
+    "SceneEntry": {
+      "oneOf": [
+        {
+          "const": "sfx",
+          "type": "string"
+        },
+        {
+          "const": "music",
+          "type": "string"
+        },
+        {
+          "const": "ui",
+          "type": "string"
+        },
+        {
+          "const": "voice",
+          "type": "string"
+        }
+      ]
+    },
+    "SoundEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "scene": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SceneEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "volume": {
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "file"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "sound": {
+      "items": {
+        "$ref": "#/$defs/SoundEntry"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    }
+  },
+  "title": "Sounds",
+  "type": "object"
+}

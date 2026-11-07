@@ -736,7 +736,8 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 122 * 8);
-    assert!(size_of::<HostApi>() == 24 + 190 * 8);
+    assert!(size_of::<HostApi>() == 24 + 191 * 8);
+    assert!(core::mem::offset_of!(HostApi, local_held) == 24 + 190 * 8);
     assert!(core::mem::offset_of!(HostApi, crafting_prop) == 24 + 187 * 8);
     assert!(core::mem::offset_of!(HostApi, set_saved) == 24 + 188 * 8);
     assert!(core::mem::offset_of!(HostApi, run_action_at) == 24 + 189 * 8);
@@ -782,7 +783,7 @@ const _: () = {
     assert!(size_of::<MapMarkerInfo>() == 8 + 24 + 16 + 16);
     assert!(core::mem::offset_of!(HostApi, fog_open) == 24 + 158 * 8);
     assert!(core::mem::offset_of!(HostApi, fog_read) == 24 + 159 * 8);
-    assert!(size_of::<FogInfo>() == 8 + 16 + 16);
+    assert!(size_of::<FogInfo>() == 8 + 16 + 16 + 16 + 16);
     assert!(core::mem::offset_of!(HostApi, serve_call) == 24 + 160 * 8);
     assert!(core::mem::offset_of!(HostApi, call) == 24 + 162 * 8);
     assert!(size_of::<CallSpec>() == 8 + 16 + 8 + 16 + 16);
@@ -922,8 +923,8 @@ const _: () = {
     assert!(size_of::<NetMessage>() == 8 + 8 + 8 + 8 + 8);
     assert!(core::mem::offset_of!(HostApi, notify) == 24 + 67 * 8);
     assert!(core::mem::offset_of!(HostApi, ui_dialog) == 24 + 94 * 8);
-    assert!(size_of::<UiFrame>() == 40);
-    assert!(size_of::<UiWidget>() == 8 + 16 + 32 + 8 + 32);
+    assert!(size_of::<UiFrame>() == 64);
+    assert!(size_of::<UiWidget>() == 8 + 16 + 32 + 8 + 32 + 16);
     assert!(size_of::<UiMarker>() == 8 + 24 + 16 + 8);
     assert!(core::mem::offset_of!(HostApi, texts) == 24 + 98 * 8);
     assert!(core::mem::offset_of!(HostApi, config_check) == 24 + 97 * 8);

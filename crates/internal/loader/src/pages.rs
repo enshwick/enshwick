@@ -115,7 +115,7 @@ fn copy<const N: usize>(address: usize) -> Option<[u8; N]> {
 }
 
 /// Fills `bytes` from `address` like [`copy`]; whether all of them read.
-fn copy_into(address: usize, bytes: &mut [u8]) -> bool {
+pub(crate) fn copy_into(address: usize, bytes: &mut [u8]) -> bool {
     let mut copied = 0;
     // SAFETY: `GetCurrentProcess` takes no arguments and returns a
     // pseudo-handle that needs no closing.

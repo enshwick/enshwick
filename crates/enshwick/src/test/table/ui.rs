@@ -36,6 +36,25 @@ pub(crate) extern "system" fn ui_frame(
     })
 }
 
+/// The local player's held controls, as the test set them; the loader's
+/// answers: [`Status::MISSING`] on a server or outside a game.
+pub(crate) extern "system" fn local_held(_me: ModHandle, out: *mut u64) -> Status {
+    if out.is_null() {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        match s.local_held.filter(|_| s.host.side != Side::SERVER) {
+            Some(bits) => {
+                // SAFETY: the safe layer passes a writable `u64` for the call,
+                // non-null by the check above.
+                unsafe { out.write(bits) };
+                Status::OK
+            }
+            None => Status::MISSING,
+        }
+    })
+}
+
 /// The input waiting for the widget labelled `text`, taken.
 pub(crate) fn input(s: &mut State, text: &str) -> Option<crate::test::Input> {
     let at = s.inputs.iter().position(|(t, _)| t == text)?;
@@ -118,6 +137,20 @@ pub(crate) extern "system" fn ui_widget(
     }
 }
 
+/// Whether the archive or the mod holds a sound container with GUID `guid`,
+/// as the loader checks before it plays one.
+fn holds_sound(s: &State, guid: [u8; 16]) -> bool {
+    s.host
+        .type_hashes
+        .get(crate::engine_ids::SOUND_CONTAINER)
+        .is_some_and(|&hash| {
+            s.host.resources.contains_key(&(guid, hash, 0))
+                || s.served
+                    .iter()
+                    .any(|served| served.0.key.guid == guid && served.0.key.type_hash == hash)
+        })
+}
+
 /// Draws the widget `w` in `frame` and writes its answer into it.
 fn draw(frame: u64, w: &mut UiWidget) -> Status {
     use crate::test::{Drawn, Input};
@@ -148,6 +181,12 @@ fn draw(frame: u64, w: &mut UiWidget) -> Status {
             },
             UiWidget::END if open && s.extending != Some(frame) => Drawn::End,
             UiWidget::SOUND => Drawn::Sound(w.style),
+            UiWidget::PLAY => {
+                if !holds_sound(s, w.sound) {
+                    return Status::MISSING;
+                }
+                Drawn::Play(crate::content::Guid(w.sound))
+            }
             UiWidget::WINDOW | UiWidget::END => return Status::REFUSED,
             _ if !open => return Status::REFUSED,
             UiWidget::LABEL => Drawn::Label {

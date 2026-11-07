@@ -23,17 +23,18 @@ pub(crate) extern "system" fn serve_resource(
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
-        if s.served
-            .iter()
-            .any(|served| served.0.key == key && served.0.base != base)
-        {
-            return Status::REFUSED;
-        }
-        s.served.push((
+        let entry = (
             ServedResource { key, base },
             patch,
             user.expose_provenance(),
-        ));
+        );
+        // As the loader: a change chains onto the key's maker, which goes
+        // first whenever it comes.
+        match s.served.iter().position(|served| served.0.key == key) {
+            Some(at) if s.served[at].0.base == key && base != key => s.served.insert(at, entry),
+            Some(at) if base != key && s.served[at].0.base != base => return Status::REFUSED,
+            _ => s.served.push(entry),
+        }
         Status::OK
     })
 }

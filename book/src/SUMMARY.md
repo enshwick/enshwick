@@ -44,6 +44,7 @@
 - [Controls](controls.md)
   - [The controls a player holds](input.md)
 - [The interface](interface.md)
+- [Sounds](sounds.md)
 - [Messages between server and client](messages.md)
 - [Character progress](progress.md)
 - [Stats](stats.md)

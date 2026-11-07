@@ -128,6 +128,31 @@ enshwick.map.on_ping(function(ping)
 end)
 ```
 
+### Fog the local player uncovered
+
+On a client, `load.on_fog_uncovered(handler)` calls the handler when its
+player uncovered fog of war. It is called at most once a second. The handler
+gets a `FogOfWarUncovered`: the box around the new ground and its `pixels`.
+The box's `min` and `max` are world x and z in metres.
+
+The loader counts the pixels of the [fog's copy](#the-fog-of-war-on-the-client) that turned
+from hidden to shown. The fog a world loads with counts as none. The handler
+runs on the interface thread and hears a window within a quarter of a second.
+
+```rust
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    load.on_fog_uncovered(|new| {
+        enshwick::info!("{} pixels of new ground near {:?}", new.pixels, new.min);
+    })
+}
+```
+
+```luau
+enshwick.map.on_fog_uncovered(function(new)
+    enshwick.log.info(`{new.pixels} pixels of new ground near {new.min}`)
+end)
+```
+
 ## The map's frame
 
 `map.frame()` returns a `MapFrame`: where the world's map starts, how far

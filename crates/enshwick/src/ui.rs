@@ -64,6 +64,8 @@ mod widgets;
 
 pub use dialog::{Dialog, Response};
 pub use frame::Frame;
+#[cfg(feature = "unstable")]
+pub use frame::Prompt;
 pub use widgets::{Button, Dropdown, Label, Screen, Slider, Sound, Style, Toggle};
 
 use dialog::{Answer, answered};

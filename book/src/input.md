@@ -1,6 +1,6 @@
 <!--
 type: reference
-description: A server mod reads which of the game's controls each player holds this step, as their client sent them, and what it may trust of that.
+description: A server mod reads which of the game's controls each player holds this step, a client mod reads its own player's, and what to trust of that.
 -->
 
 # The controls a player holds
@@ -66,6 +66,39 @@ end)
 
 In Luau, `held` returns the list of the held actions' game names. They are the
 names a [control's](controls.md) `link` uses, such as `"ContextualAction_Tap"`.
+
+## Reading what the local player holds
+
+On a client, `input.local_held()` returns the game actions its own player
+holds, as an `InputMask`. It is the mask the client read in its last step.
+It returns `None` on a server and outside a game. It also returns `None`
+while no step ran for a second, as in the pause menu.
+
+It holds the gameplay controls only. The client's own controls, such as the
+menu and map keys, are not in it. `local_held` runs on any thread, such as
+in a frame of the [interface](interface.md).
+
+```rust
+use enshwick::controls::GameAction;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let input = load.input()?;
+    load.on_frame(move |frame| {
+        if input.local_held().is_some_and(|held| held.contains(GameAction::Block)) {
+            frame.label("Blocking");
+        }
+    })
+}
+```
+
+```luau
+enshwick.ui.on_frame(function(frame)
+    local held = enshwick.input.local_held()
+    if held ~= nil and table.find(held, "Block") then
+        frame:label("Blocking")
+    end
+end)
+```
 
 ## Which bit is which
 

@@ -825,6 +825,31 @@ pub const FACTS: &[(&str, Fact)] = &[
         ids::PLAYER_INPUT_TYPE,
         Fact::Type("keen::ecs::PlayerInputType"),
     ),
+    (
+        ids::CLIENT_PLAYER_INPUT,
+        Fact::Type("keen::ecs::ClientPlayerInput"),
+    ),
+    (
+        ids::CLIENT_PLAYER_INPUT_DIGITAL,
+        Fact::Path(&[
+            ("keen::ecs::ClientPlayerInput", "data"),
+            ("keen::ecs::ClientPlayerInputData", "digitalInput"),
+        ]),
+    ),
+    (
+        ids::SELECTED_TARGETS,
+        Fact::Type("keen::ecs::SelectedTargets"),
+    ),
+    (
+        ids::SELECTED_TARGETS_TARGETS,
+        offset("keen::ecs::SelectedTargets", "targets"),
+    ),
+    (ids::TARGET_INFO, Fact::Type("keen::ecs::TargetInfo")),
+    (
+        ids::TARGET_INFO_ENTITY,
+        offset("keen::ecs::TargetInfo", "targetEntityId"),
+    ),
+    (ids::TARGET_TYPE, Fact::Type("keen::ecs::TargetType")),
     (ids::HUD_SCREEN_TYPE, Fact::Type("keen::HudScreenType")),
     (
         ids::HUD_SCREEN_IN_GAME,
@@ -1552,6 +1577,15 @@ pub const FACTS: &[(&str, Fact)] = &[
     (
         ids::MAP_MARKER_REGISTRY,
         Fact::Type("keen::MapMarkerRegistryResource"),
+    ),
+    (
+        ids::SOUND_CONTAINER,
+        Fact::Type("keen::SoundContainerResource"),
+    ),
+    (ids::SOUND, Fact::Type("keen::SoundResource")),
+    (
+        ids::SOUND_CONTAINER_SOUND_ENTRY,
+        Fact::Type("keen::SoundContainerResourceSoundEntry"),
     ),
     (
         ids::MAP_MARKER_TYPE_TYPE_NAME,

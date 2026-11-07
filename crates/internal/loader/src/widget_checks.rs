@@ -13,7 +13,7 @@ pub const fn order(kind: u32, window_open: bool) -> Status {
     match kind {
         UiWidget::WINDOW if window_open => Status::REFUSED,
         UiWidget::END if !window_open => Status::REFUSED,
-        UiWidget::WINDOW | UiWidget::END | UiWidget::SOUND => Status::OK,
+        UiWidget::WINDOW | UiWidget::END | UiWidget::SOUND | UiWidget::PLAY => Status::OK,
         _ if !window_open => Status::REFUSED,
         kind if needs_window(kind) => Status::OK,
         _ => Status::MISSING,
@@ -90,8 +90,10 @@ mod tests {
             assert_eq!(order(kind, true), Status::OK, "{kind}");
             assert_eq!(order(kind, false), Status::REFUSED, "{kind}");
         }
-        assert_eq!(order(UiWidget::SOUND, false), Status::OK);
-        assert_eq!(order(UiWidget::SOUND, true), Status::OK);
+        for sound in [UiWidget::SOUND, UiWidget::PLAY] {
+            assert_eq!(order(sound, false), Status::OK, "{sound}");
+            assert_eq!(order(sound, true), Status::OK, "{sound}");
+        }
     }
 
     #[test]
@@ -99,7 +101,13 @@ mod tests {
         for kind in [UiWidget::LABEL, UiWidget::BUTTON, UiWidget::PROGRESS] {
             assert!(needs_window(kind), "{kind}");
         }
-        for kind in [UiWidget::WINDOW, UiWidget::END, UiWidget::SOUND, u32::MAX] {
+        for kind in [
+            UiWidget::WINDOW,
+            UiWidget::END,
+            UiWidget::SOUND,
+            UiWidget::PLAY,
+            u32::MAX,
+        ] {
             assert!(!needs_window(kind), "{kind}");
         }
     }

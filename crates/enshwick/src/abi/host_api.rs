@@ -1726,4 +1726,13 @@ pub struct HostApi {
         args: Str,
         target: *const ActionTarget,
     ) -> Status,
+    /// Writes to `out` the game controls the local player holds, the
+    /// `Bitmask64` of the game's `PlayerInputType` as the client's
+    /// interface read it in its last step: gameplay controls only, not the
+    /// client-only ones such as menu keys. Client only; [`Status::MISSING`]
+    /// outside a game, while no step read it for a second, or on a build
+    /// without the read; [`Status::BAD_ARGS`] for a null `out`. Any thread;
+    /// `out` is borrowed for the call. A panic in the loader returns
+    /// [`Status::REFUSED`]. ABI 11.14.
+    pub local_held: extern "system" fn(me: ModHandle, out: *mut u64) -> Status,
 }

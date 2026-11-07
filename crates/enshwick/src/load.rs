@@ -193,6 +193,9 @@ pub struct Load<'a> {
     joins: bool,
     /// The mod's `src/texts.toml`, as `declare_mod!` embedded it.
     embedded_texts: Option<&'static str>,
+    /// The bytes of the sound files the mod added so far.
+    #[cfg(feature = "unstable")]
+    pub(crate) sound_bytes: u64,
     _init: core::marker::PhantomData<&'a ()>,
 }
 
@@ -209,6 +212,8 @@ impl Load<'_> {
             host,
             joins,
             embedded_texts,
+            #[cfg(feature = "unstable")]
+            sound_bytes: 0,
             _init: core::marker::PhantomData,
         }
     }

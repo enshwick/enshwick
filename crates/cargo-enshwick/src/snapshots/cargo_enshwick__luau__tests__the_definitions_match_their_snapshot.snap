@@ -1,6 +1,5 @@
 ---
 source: crates/cargo-enshwick/src/luau.rs
-assertion_line: 589
 expression: definitions()
 ---
 --!strict
@@ -475,7 +474,7 @@ export type ChatLine = {
 	text: string,
 }
 
---- The data of the `ChunkLoaded` and `ChunkUnloaded` events.
+--- The data of the `ChunkLoaded` and `ChunkUnloaded` events: a chunk of the world's entities, never of its terrain's voxels.
 export type ChunkData = {
 	--- The chunk's index in the world's grid: `z * width + x`.
 	index: number,
@@ -783,6 +782,16 @@ export type FogOfWar = {
 	coverage: (self: FogOfWar, position: vector) -> number?,
 }
 
+--- Fog of war the local player uncovered since the window before, closed at most once a second, from `Load.on_fog_uncovered`. The name is the game's `FogOfWar` with a verb of enshwick's.
+export type FogOfWarUncovered = {
+	--- The lowest corner of the box around the uncovered ground: world x and z in metres.
+	min: {number},
+	--- Its highest corner.
+	max: {number},
+	--- How many pixels of the fog's image turned from hidden to shown.
+	pixels: number,
+}
+
 --- The fog's size, scale and how often it changed, as one read found it.
 export type FogState = {
 	--- The image's width in pixels.
@@ -825,8 +834,14 @@ export type Frame = {
 	progress: (self: Frame, fraction: number) -> (),
 	--- Plays one of the game's interface sounds, as `Frame.sound` does.
 	sound: (self: Frame, sound: Sound) -> (),
+	--- Plays the sound container with GUID `sound`, as `Frame.play` does.
+	play: (self: Frame, sound: string) -> (),
 	--- The game's screen the player has open in this frame, as `Frame.open_screen` says.
 	open_screen: (self: Frame) -> HudScreenType?,
+	--- What the player's interaction prompt offers in this frame, as `Frame.prompt` says.
+	prompt: (self: Frame) -> Prompt?,
+	--- The entity the open screen belongs to, as `Frame.screen_host` says.
+	screen_host: (self: Frame) -> number?,
 }
 
 --- A front of weather, from `Weather.fronts`.
@@ -1675,6 +1690,18 @@ export type NewSkillNode = {
 	kind: typed_SkillNodeType?,
 }
 
+--- A sound for `Load.add_sound`: a WAV file in the mod's folder and the values of the sound container that plays it.
+export type NewSound = {
+	--- The sound's content id; its container's GUID is the id's.
+	id: string,
+	--- The WAV file, relative to the mod's folder: 16-bit PCM, mono or stereo, at `SAMPLE_RATE`, at most `MAX_FILE_BYTES` and `MAX_SECONDS` long.
+	file: string,
+	--- The container's scene.
+	scene: SoundContainerScene?,
+	--- The container's values where they differ from those of a vanilla effect: volume and pitch 1, heard from 1 to 35 metres, priority 50.
+	container: SoundChange?,
+}
+
 --- A new entity template for `Load.add_template`: a copy of the vanilla template `like` under the mod's content id `id`, with `changes` applied in order. `id` is the mod's own and never changes: saves keep the template GUID of every placed object and creature made from it.
 export type NewTemplate = {
 	--- The new template's content id.
@@ -1870,6 +1897,14 @@ export type Progress = {
 	experience: number,
 	--- Experience the next level needs in all.
 	experience_needed: number,
+}
+
+--- What the player's interaction prompt offers in a frame, from `Frame.prompt`. The name is enshwick's.
+export type Prompt = {
+	--- What the prompt names, such as a chest's or a survivor's name, as the game shows it in the player's language.
+	title: string,
+	--- The game's `LocaTagId` of its verb, such as the one for "Open".
+	verb: number,
 }
 
 --- A placed prop, from `World.props_in` and `Capture`.
@@ -2165,6 +2200,8 @@ export type ScreenChanged = {
 	before: HudScreenType?,
 	--- The screen open now, read the same way.
 	now: HudScreenType?,
+	--- The entity the screen open now belongs to, as `Frame.screen_host` reads it: a change of host alone, such as from one chest to the next, is a change too.
+	host: number?,
 }
 
 --- An op and its value, as `aggregate` takes them from a script.
@@ -2325,6 +2362,29 @@ export type Slot = {
 
 --- One of the game's interface sounds.
 export type Sound = "Click" | "Confirm" | "Back" | "Error"
+
+--- New values for a sound container, each nil to keep the one it has: the game's, or the last earlier mod's.
+export type SoundChange = {
+	--- The game's volume factor, from 0 (silent) to `MAX_VOLUME`.
+	volume: number?,
+	--- The game's random spread of the volume, from 0 to `MAX_VOLUME`.
+	volume_randomness: number?,
+	--- The game's pitch factor, within `PITCH`.
+	pitch: number?,
+	--- The game's random spread of the pitch, from 0 to the top of `PITCH`.
+	pitch_randomness: number?,
+	--- The game's least distance of a placed sound, from 0 to `MAX_DISTANCE` metres.
+	min_distance: number?,
+	--- The game's greatest distance of a placed sound, from 0 to `MAX_DISTANCE` metres.
+	max_distance: number?,
+	--- Whether the container plays again from the start when it ends.
+	looped: boolean?,
+	--- The game's priority of the container among sounds playing at once.
+	priority: number?,
+}
+
+--- The game's scene of a sound container, `SoundContainerScene`.
+export type SoundContainerScene = "Sfx" | "Music" | "Ui" | "Voice"
 
 --- One modifier that counts toward a stat, with its origin.
 export type Source = {
@@ -3362,15 +3422,20 @@ declare enshwick: {
 		--- Only while the mod starts, at the top level of main.luau.
 		on_chat_said: (handler: (arg1: ChatLine) -> ()) -> (),
 	},
+	--- Players' interactions with entities, and what each player's prompt offers.
 	interactions: {
+		--- The entity whose interaction `player`'s prompt offers now; nil when it offers none or for an entity that is no player. Read on the server's game thread between steps, in the server's world, so a vanilla client's player reads the same.
+		target: (player: number) -> number?,
 		--- Runs `filter` before the game allows a player's interaction with an entity; returning `false` refuses it the game's own way. It runs in the server's world only, in the dedicated server or a hosting client, on the thread of the system that checks the interaction: keep it quick and never block. The game asks whether to offer an interaction for every entity in each player's reach on every frame, so `filter` runs many times a frame: it must not allocate, lock or log. Moves, sorts, stock draws, dismantling and upgrades ask once per action. An interaction without a player's character or without a target is allowed unasked.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_interaction: (filter: (arg1: Interaction) -> boolean?) -> (),
 	},
-	--- The game's controls each player holds, read in the server's world.
+	--- The game's controls each player holds, read in the server's world, and the local player's on a client.
 	input: {
 		--- The game's controls `player` holds this step, as their client last sent them; nil for an entity that is no player. Read on the server's game thread between steps, in the server's world, so a vanilla client's player reads the same. A script gets the list of the held actions' game names, as a control's `link` names them.
 		held: (player: number) -> {string}?,
+		--- The game's controls the local player holds, as this client's interface read them in its last step; nil on a server, outside a game and while no step ran for a second, as in the pause menu. Only the gameplay controls: the client-only ones, such as the menu and map keys, are not in it. Read on any thread.
+		local_held: () -> {string}?,
 	},
 	items: {
 		--- Runs `filter` on each player's action with any item in the server's world; returning `false` refuses a `Kind.Consume`, `Kind.Trash`, `Kind.Equip` or `Kind.Unequip` the game's own way, and is ignored for the others. It runs on the thread of the system that runs the action, once per action: keep it quick and never block.
@@ -3552,6 +3617,9 @@ declare enshwick: {
 		--- Calls `handler` on the server's game thread when a player sets, moves or clears the waypoint all players see. The waypoints are compared on a tick every tenth of a second, so a change shows within that; a player's waypoint when they join counts as no change. A waypoint outside the map is not handed on, and the log says so once. On a client it hears only a game that client hosts.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_waypoint: (handler: (arg1: WaypointChanged) -> ()) -> (),
+		--- Calls `handler` on the thread that draws the interface when the local player uncovered fog of war, at most once a second, with the box around the new ground and how many pixels of the fog it was. Client only: the fog of war is the client's own. The fog is looked at four times a second inside the interface's frames, so a window shows within that; a world's first copy of its saved fog counts as none.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_fog_uncovered: (handler: (arg1: FogOfWarUncovered) -> ()) -> (),
 		--- Calls `handler` on the server's game thread for each ping a player makes on the map or in the world, and each one a mod raises with `Effects.ping`. A sender is heard at most once a tenth of a second, and a ping outside the map is not handed on.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_ping: (handler: (arg1: MapPinged) -> ()) -> (),
@@ -3574,6 +3642,14 @@ declare enshwick: {
 		--- The mod's `ClockSpeed`: its factor on how fast the server's clock runs. The loader follows the game's speed for it from the start.
 		--- Only while the mod starts, at the top level of main.luau.
 		clock_speed: () -> ClockSpeed,
+	},
+	sound: {
+		--- Changes the sound container with GUID `sound`, as `Load.change_sound` does.
+		--- Only while the mod starts, at the top level of main.luau.
+		change: (sound: string, change: SoundChange) -> (),
+		--- Unstable: needs the `unstable` feature and may change in any release. Adds the sound in `new.file` and a container that plays it, under `new.id`, and returns the container, which `Frame.play`, `Load.change_sound` and other mods use. The client holds it as the game holds its own uncompressed sounds, built from one of them, streamed from memory; nothing is written to the archive or a save. A server checks the file and serves nothing. Wrap the call in `Load.feature` so a bad file turns off that sound alone, with the reason on the Mods screen.
+		--- Only while the mod starts, at the top level of main.luau.
+		add: (new: NewSound) -> string,
 	},
 	--- Flame Altars: their list, their bases, zones and limits.
 	altars: {

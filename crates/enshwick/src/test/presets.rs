@@ -402,6 +402,45 @@ impl FakeHost {
             .type_hash(ids::PLAYER_INPUT_TYPE, hash)
     }
 
+    /// Each player's `SelectedTargets`, sixteen 136-byte targets from byte
+    /// 0 with the entity at byte 100 of each, and the reflected enum of
+    /// targets with `Interaction` at 2; what `Targets::target` reads, with
+    /// the `unstable` feature.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::EngineFacts;
+    /// use enshwick::test::facts;
+    ///
+    /// let host = enshwick::test::FakeHost::new().interaction_targets();
+    /// assert_eq!(host.size(facts::SELECTED_TARGETS.id())?, 16 * 136 + 8);
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    #[must_use]
+    pub fn interaction_targets(self) -> Self {
+        use crate::resources::{Constant, Kind, Type};
+        let kinds = Type::new("demo::ecs::TargetType", Kind::Enum, 1, 1).with_constants(vec![
+            Constant::new("Combat", 0),
+            Constant::new("Teleport", 1),
+            Constant::new("Interaction", 2),
+        ]);
+        let hash = kinds.qualified_hash();
+        self.types([kinds])
+            .preset(
+                &[ids::SELECTED_TARGETS],
+                &[
+                    (ids::SELECTED_TARGETS, 16 * 136 + 8),
+                    (ids::TARGET_INFO, 136),
+                ],
+                &[
+                    (ids::SELECTED_TARGETS_TARGETS, 0),
+                    (ids::TARGET_INFO_ENTITY, 100),
+                ],
+            )
+            .type_hash(ids::TARGET_TYPE, hash)
+    }
+
     /// The events [`Effects`](crate::effects::Effects) raises for an NPC
     /// command, a threat and a ping; the toggle event stays off.
     ///

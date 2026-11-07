@@ -76,8 +76,8 @@ use transactions::{
     transaction_undo,
 };
 use ui::{
-    fog_open, fog_read, map_marker_types, ui_dialog, ui_extension, ui_frame, ui_hud, ui_markers,
-    ui_widget,
+    fog_open, fog_read, local_held, map_marker_types, ui_dialog, ui_extension, ui_frame, ui_hud,
+    ui_markers, ui_widget,
 };
 use world::{
     account_action, actions, build_rights, chat, chat_mute_has, chat_mute_set, component,
@@ -256,6 +256,12 @@ pub(crate) struct State {
     /// The game screen the player has open, as frames and HUDs hear it;
     /// empty for none.
     pub(crate) open_screen: &'static str,
+    /// The interaction prompt the frames hear: its title and verb.
+    pub(crate) prompt: Option<(String, u32)>,
+    /// The entity the open screen belongs to, 0 for none.
+    pub(crate) screen_host: u32,
+    /// The local player's held controls, `None` as outside a game.
+    pub(crate) local_held: Option<u64>,
     /// What the HUD drawing now drew, with each item's anchor, while one
     /// draws.
     pub(crate) hud: Option<(u64, Vec<(u32, super::Drawn)>)>,
@@ -682,6 +688,9 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         drawing: None,
         extending: None,
         open_screen: "",
+        prompt: None,
+        screen_host: 0,
+        local_held: None,
         hud: None,
         markers: Vec::new(),
         config_checks: std::collections::BTreeMap::new(),
@@ -1070,4 +1079,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     crafting_prop,
     set_saved,
     run_action_at,
+    local_held,
 };
