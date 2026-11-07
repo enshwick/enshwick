@@ -1,11 +1,22 @@
 //! Flame Altar kinds from mods: a prop copied from a vanilla altar whose
-//! altars take zones of their own.
+//! altars take zones and a maximum level of their own.
 
 use crate::content::items::NewItem;
 use crate::content::props::{NewProp, PropId};
-use crate::{Load, Off};
+use crate::content::recipes::RECIPE_REGISTRY;
+use crate::content::types;
+use crate::resources::Value;
+use crate::{Load, Off, RecipeId};
 
 use super::template_of;
+
+/// The game's names of the recipe registry's list and of the recipe fields
+/// the level limit reads (`RecipeRegistryResource`, `RecipeInfo`).
+const RECIPES: &str = "recipes";
+const RECIPE_ID: &str = "recipeId";
+const LEVEL: &str = "level";
+const IS_UPGRADE: &str = "isUpgrade";
+const ID_VALUE: &str = "value";
 
 /// A Flame Altar kind's zone at one level, as an altar zone filter sets it:
 /// see [`AltarZone`](super::AltarZone).
@@ -39,6 +50,31 @@ pub struct NewFlameAltar {
     /// With a cost, the altar is built by a copy of the vanilla altar's
     /// recipe whose ingredient counts are times this.
     pub recipe_cost: Option<u32>,
+    /// The highest level the kind's altars reach, below the game's own:
+    /// the server refuses an upgrade past it as it refuses a craft, so the
+    /// altar keeps its level and the player their items; 0 refuses even
+    /// the claim. `None` keeps the game's limit.
+    pub max_level: Option<u8>,
+}
+
+/// The ids of the upgrade recipes in `registry` that raise an altar from
+/// `max` or above: an upgrade recipe's level is the one it upgrades from
+/// (server 26430253).
+fn upgrades_from(registry: &Value, max: u8) -> Vec<RecipeId> {
+    let Some(Value::List(recipes)) = registry.field(RECIPES) else {
+        return Vec::new();
+    };
+    recipes
+        .iter()
+        .filter(|recipe| recipe.field(IS_UPGRADE) == Some(&Value::Bool(true)))
+        .filter(|recipe| {
+            matches!(recipe.field(LEVEL), Some(&Value::Uint(level)) if level >= u64::from(max))
+        })
+        .filter_map(|recipe| match recipe.field(RECIPE_ID)?.field(ID_VALUE)? {
+            &Value::Uint(id) => u32::try_from(id).ok().map(RecipeId),
+            _ => None,
+        })
+        .collect()
 }
 
 #[crate::script(flame_altars)]
@@ -49,11 +85,15 @@ impl Load<'_> {
     /// through an altar zone filter of this mod, chained with other mods'
     /// filters in load order (see [`Load::on_altar_zone`]).
     /// [`Altar::template`](super::Altar::template) tells the kind's altars
-    /// apart.
+    /// apart. With a [`max_level`](NewFlameAltar::max_level), a craft filter
+    /// of this mod (see [`Load::on_craft`]) refuses the vanilla upgrade
+    /// recipes past it at the kind's altars, on the server.
     ///
     /// # Errors
     ///
-    /// As [`Load::add_prop`] and [`Load::on_altar_zone`].
+    /// As [`Load::add_prop`], [`Load::on_altar_zone`] and
+    /// [`Load::on_craft`], and [`Off`] with a maximum level when the
+    /// vanilla recipe registry does not read.
     ///
     /// # Examples
     ///
@@ -67,6 +107,7 @@ impl Load<'_> {
     ///         item: NewItem::new(id!("wide-altar"), altar),
     ///         zones: vec![KindZone { grow: 20, height: 80 }],
     ///         recipe_cost: Some(2),
+    ///         max_level: Some(2),
     ///     })?;
     ///     enshwick::info!("wide altars are {}", wide.template.guid());
     ///     Ok(())
@@ -88,6 +129,18 @@ impl Load<'_> {
                 let sized = zones.get(level).copied().unwrap_or(last);
                 zone.grow = sized.grow.max(0).into();
                 zone.height = sized.height.into();
+            })?;
+        }
+        if let Some(max) = new.max_level {
+            let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY_RESOURCE)?;
+            let refused = upgrades_from(&self.host().game_value(registry)?, max);
+            let (host, kind) = (self.host(), prop.template.guid());
+            self.on_craft(move |craft| {
+                !(refused.contains(&craft.recipe_id)
+                    && craft
+                        .crafting_station_id
+                        .and_then(|at| template_of(host, at))
+                        == Some(kind))
             })?;
         }
         Ok(prop)

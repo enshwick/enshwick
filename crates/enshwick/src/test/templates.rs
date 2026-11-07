@@ -435,6 +435,8 @@ fn registry_types() -> Vec<Type<'static>> {
             field("recipeId", 0x10, "demo::HashKey32"),
             field("requiredProps", 0x38, "demo::BlobArray<demo::HashKey32>"),
             field("requiredPropsMask", 0x48, "demo::uint64"),
+            field("level", 0x80, "demo::uint32"),
+            field("isUpgrade", 0xa0, "demo::bool"),
         ]),
         Type::new(REQUIRED_PROP, Kind::Struct, 20, 4)
             .with_inner(COMPONENT)
@@ -577,6 +579,43 @@ impl FakeHost {
                 None,
             )
             .unwrap_or_default()
+    }
+
+    /// The vanilla recipe registry in the archive holding one upgrade
+    /// recipe per `(guid, level)`, a recipe that upgrades its station from
+    /// that level, beside [`FakeHost::props`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::Guid;
+    ///
+    /// let _host = enshwick::test::FakeHost::new().props().upgrade_recipes(&[(Guid([1; 16]), 1)]);
+    /// ```
+    #[must_use]
+    pub fn upgrade_recipes(self, recipes: &[(Guid, u32)]) -> Self {
+        let recipes = recipes
+            .iter()
+            .map(|&(guid, level)| {
+                Value::Struct(vec![
+                    ("recipeGuid".into(), Value::Guid(guid)),
+                    ("recipeId".into(), game_id(guid.fnv1a())),
+                    ("level".into(), Value::Uint(level.into())),
+                    ("isUpgrade".into(), Value::Bool(true)),
+                ])
+            })
+            .collect();
+        let mut types = types();
+        types.extend(registry_types());
+        let Ok(bytes) = Registry::new(types).encode(
+            RECIPE_REGISTRY,
+            &Value::Struct(vec![("recipes".into(), Value::List(recipes))]),
+            None,
+        ) else {
+            return self;
+        };
+        let key = crate::content::recipes::RECIPE_REGISTRY;
+        self.resource(key.key_by_hash(fnv1a32(RECIPE_REGISTRY.as_bytes())), bytes)
     }
 }
 
