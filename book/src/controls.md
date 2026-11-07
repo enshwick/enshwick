@@ -141,9 +141,9 @@ fires. The handler still runs on the client.
 `actions.control(id, key)` does all of that in one call, after
 `actions.add`. It declares a control named after the action, on that key,
 which runs the action at each press. Its label is the action's label, a key
-of the texts the mod gave `load.actions`, so the Controls page shows it in
-each player's language; a text the mod handed itself under the same key
-wins, as [Actions](actions.md) says. An action with arguments or a list of
+of the texts the mod gave `load.actions`. The Controls page shows it in each
+player's language. A text the mod handed itself under the same key wins, as
+[Actions](actions.md) says. An action with arguments or a list of
 players takes no key.
 
 ```rust

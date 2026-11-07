@@ -141,9 +141,9 @@ On the other it spans from `z * size` to `(z + 1) * size`, at any height. A mod 
 works on what lies in an area reads it once its chunk loaded.
 
 These chunks hold the world's entities, not its ground. The terrain's voxels
-load and unload on their own, with or without a player, and raise no event:
-on a dedicated server with no player, the ground of an edited spot unloaded
-and loaded again three times while neither event was raised (server 399). A
+load and unload on their own, with or without a player, and raise no event.
+On a dedicated server with no player, an edited spot's ground unloaded and
+loaded three times, and neither event was raised (server 399). A
 mod that works on the ground reads it as
 [Terrain and voxels](terrain.md) says.
 

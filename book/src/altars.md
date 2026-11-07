@@ -162,9 +162,9 @@ enshwick.log.info(`wide altars are {wide.template}`)
 
 `load.limit_altar_level(kind, max_level)` keeps a kind's altars at
 `max_level` or below. It is unstable: it needs the `unstable` feature. An
-altar's level rises by an upgrade recipe crafted at the altar. A craft filter
-of the mod refuses, on the server, the vanilla altar upgrade recipes that
-start at `max_level` or above at an altar of the kind. The filter runs before
+altar's level rises by an upgrade recipe crafted at the altar. On the server,
+a craft filter of the mod refuses the vanilla altar upgrades from
+`max_level` up at an altar of the kind. The filter runs before
 the crafting system reads the request, so the altar keeps its level and the
 player keeps the items. A `max_level` of 0 refuses even the claim. The
 Flame's own upgrades, upgrade recipes that mods add, other kinds and the
