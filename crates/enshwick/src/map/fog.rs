@@ -291,6 +291,12 @@ impl FogOfWar {
     /// See [`FogImage`].
     #[script]
     pub fn state(self) -> Result<FogState, FogError> {
+        Ok(FogState::from_abi(&self.info()?))
+    }
+
+    /// The loader's info of the fog, its last window of uncovering
+    /// included.
+    pub(crate) fn info(self) -> Result<FogInfo, FogError> {
         let mut info = FogInfo::EMPTY;
         let status = (self.host.api().fog_read)(
             self.host.handle(),
@@ -303,7 +309,7 @@ impl FogOfWar {
             0,
         );
         FogError::check(status)?;
-        Ok(FogState::from_abi(&info))
+        Ok(info)
     }
 
     /// Copies the box of `size` pixels at `min`.

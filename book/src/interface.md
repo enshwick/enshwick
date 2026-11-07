@@ -282,8 +282,45 @@ enshwick.ui.on_screen_changed(function(change)
 end)
 ```
 
-The screen names its kind only, not the object it belongs to, such as
-which chest.
+### Which object the screen belongs to
+
+`frame.screen_host()` returns the entity the open screen belongs to, such as
+the chest whose inventory shows. It returns `None` for a screen of no object,
+such as the map or a build tool. It also returns `None` outside a game. The
+entity is the client's own: the server names the same object by another id.
+
+`ScreenChanged` also holds `host`, the entity the screen now open belongs to.
+Moving from one chest to the next counts as a change, though the screen stays
+`StorageChest`.
+
+### What the prompt offers
+
+`frame.prompt()` returns what the player's interaction prompt offers in that
+frame. Its `title` is the name the game shows, such as a chest's, in the
+player's language. Its `verb` is the game's `LocaTagId` of the prompt's verb.
+It returns `None` while the prompt offers nothing.
+
+```rust
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    load.on_frame(|frame| {
+        if let Some(prompt) = frame.prompt() {
+            frame.label(&format!("Looking at {}", prompt.title));
+        }
+    })
+}
+```
+
+```luau
+enshwick.ui.on_frame(function(frame)
+    local prompt = frame:prompt()
+    if prompt ~= nil then
+        frame:label(`Looking at {prompt.title}`)
+    end
+end)
+```
+
+The prompt and the screen's host come from the client's last step. Both are
+unstable, and neither is seen in the game yet (see [Stability](stability.md)).
 
 ## A prompt on the mod's object
 

@@ -62,6 +62,8 @@ mod features;
 #[cfg(feature = "unstable")]
 mod fog;
 #[cfg(feature = "unstable")]
+mod fog_uncovered;
+#[cfg(feature = "unstable")]
 mod frame_reads;
 mod game_event_kinds;
 mod game_events;
