@@ -257,9 +257,9 @@ Each entry names the pull request that made the change.
   one warning naming the build, the entry and what did not hold, on the
   Mods screen and in the status summary; its calls, save holds and queued
   inventory requests then answer as unavailable. An object the game has not
-  made yet refuses the call as missing and is checked again on the next. An entry whose engine route takes a value
-  outside its range is missing, and the loader says it "is outside its
-  range" (#982).
+  made yet refuses the call as missing and is checked again on the next.
+  An entry whose engine route takes a value outside its range is missing,
+  and the loader says it "is outside its range" (#982).
 - `actions`: `Load::actions` hands its texts to the loader once, beneath the
   texts the mod hands itself, before or after; a runs-control's label reads
   from them in each player's language with the usual fallback, and a key both
