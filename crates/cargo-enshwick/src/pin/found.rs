@@ -171,15 +171,18 @@ mod tests {
 
     /// On each kept executable that has a table, the table found by its
     /// anchors and routes reads and agrees with the table on every entry
-    /// both have; skipped without `ENSH_EXES`.
+    /// both have; skipped without `ENSH_EXES` and the game data folder.
     #[test]
     fn the_table_found_on_a_build_agrees_with_its_own() {
         let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let Some(data) = enshwick_gamedata::data_dir() else {
+            return;
+        };
         for (side, path) in kept_executables() {
             let bytes = fs::read(&path).unwrap();
             let exe = Exe::parse(&bytes).unwrap();
             let fp = exe.fingerprint().unwrap();
-            let file = repo.join(table::DIR).join(table_file(side, fp));
+            let file = data.join(table::DIR).join(table_file(side, fp));
             let Ok(own) = fs::read_to_string(&file) else {
                 continue;
             };
@@ -222,7 +225,6 @@ mod tests {
         let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let held = std::env::temp_dir().join(format!("enshwick-pin-held-{}", std::process::id()));
         let _old = fs::remove_dir_all(&held);
-        fs::create_dir_all(held.join(table::DIR)).unwrap();
         let anchors = held.join(ANCHORS);
         fs::create_dir_all(anchors.parent().unwrap()).unwrap();
         fs::copy(repo.join(ANCHORS), &anchors).unwrap();
@@ -233,6 +235,7 @@ mod tests {
             new: Some(new.clone()),
             patterns: None,
             repo: held.clone(),
+            data: None,
             steam_build: None,
             game_version: None,
             write: false,

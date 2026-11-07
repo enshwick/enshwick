@@ -55,6 +55,11 @@ pub(crate) struct Args {
     /// The repository whose rows to port.
     #[arg(long, default_value = ".")]
     repo: PathBuf,
+    /// The game data folder outside the repository: the kept builds' tables
+    /// in `tables/`, ported when one is for the old build, and the typed
+    /// snapshots in `typed/`, where `--write` keeps the new build's.
+    #[arg(long, env = enshwick_gamedata::DATA_VAR)]
+    data: Option<PathBuf>,
     /// The new build's Steam build id, for the report's name of the ported
     /// table.
     #[arg(long)]
@@ -197,7 +202,7 @@ fn typed(
 
 /// With `--write` in the enshwick repository: the renames its diff found in
 /// the rename table, the new build's snapshot in the game data folder
-/// `ENSH_GAMEDATA` names and, for a server build, the typed API
+/// `--data` names and, for a server build, the typed API
 /// regenerated. Another repository, such as the mods', holds no typed API
 /// and is left alone.
 fn write_typed(args: &Args, typed: &Typed, new_fp: Fingerprint) -> anyhow::Result<()> {
@@ -205,9 +210,9 @@ fn write_typed(args: &Args, typed: &Typed, new_fp: Fingerprint) -> anyhow::Resul
     if !renames.is_file() {
         return Ok(());
     }
-    let data = enshwick_gamedata::data_dir().with_context(|| {
+    let data = args.data.as_deref().with_context(|| {
         format!(
-            "{} names no game data folder for the new build's snapshot",
+            "no game data folder for the new build's snapshot: pass --data or set {}",
             enshwick_gamedata::DATA_VAR
         )
     })?;
@@ -215,7 +220,7 @@ fn write_typed(args: &Args, typed: &Typed, new_fp: Fingerprint) -> anyhow::Resul
         let text = typed.renames.to_toml().context("the rename table")?;
         fs::write(&renames, text).with_context(|| renames.display().to_string())?;
     }
-    crate::generate::write_snapshot(&data, &typed.after, typed.side, new_fp)?;
+    crate::generate::write_snapshot(data, &typed.after, typed.side, new_fp)?;
     if typed.side == enshwick_gamedata::Side::Server {
         let steam = args
             .steam_build
@@ -253,7 +258,7 @@ fn port_tables(
         return Ok(Vec::new());
     };
     let mut sources = Vec::new();
-    for path in table_files(&args.repo)? {
+    for path in table_files(args.data.as_deref())? {
         let src = fs::read_to_string(&path).with_context(|| path.display().to_string())?;
         let row = table::parse(&src).with_context(|| path.display().to_string())?;
         if matches(&row, old_fp) {
@@ -274,7 +279,7 @@ fn port_tables(
         })?;
         let src = found_table(&args.repo, side, old)?;
         let row = table::parse(&src).context("the table found on the old build")?;
-        let path = args.repo.join(table::DIR).join(table_file(side, old_fp));
+        let path = Path::new(table::DIR).join(table_file(side, old_fp));
         sources.push((path, src, row, FOUND.to_owned()));
     }
     let mut sections = Vec::new();
@@ -440,7 +445,7 @@ fn patterns_only(args: &Args, exe_path: &Path) -> anyhow::Result<bool> {
     let fp = exe
         .fingerprint()
         .context("the executable has no fingerprint")?;
-    for path in table_files(&args.repo)? {
+    for path in table_files(args.data.as_deref())? {
         let src = fs::read_to_string(&path).with_context(|| path.display().to_string())?;
         let row = table::parse(&src).with_context(|| path.display().to_string())?;
         if !matches(&row, fp) {
@@ -541,11 +546,17 @@ fn table_file(side: Side, fingerprint: Fingerprint) -> String {
     )
 }
 
-/// The loader's table files, sorted.
-fn table_files(repo: &Path) -> anyhow::Result<Vec<PathBuf>> {
-    let dir = repo.join(table::DIR);
-    let entries = fs::read_dir(&dir)
-        .with_context(|| format!("{} is no Enshwick repository", repo.display()))?;
+/// The kept builds' table files in the game data folder `data`, sorted;
+/// none without it.
+fn table_files(data: Option<&Path>) -> anyhow::Result<Vec<PathBuf>> {
+    let Some(dir) = data.map(|data| data.join(table::DIR)) else {
+        return Ok(Vec::new());
+    };
+    let entries = match fs::read_dir(&dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(e).with_context(|| dir.display().to_string()),
+    };
     let mut out: Vec<PathBuf> = entries
         .filter_map(|e| e.ok().map(|e| e.path()))
         .filter(|p| {
@@ -638,6 +649,7 @@ mod tests {
             new: None,
             patterns: None,
             repo: Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."),
+            data: enshwick_gamedata::data_dir(),
             steam_build: None,
             game_version: None,
             write: true,
@@ -690,12 +702,15 @@ mod tests {
         assert!(old_side(None, unknown).is_err());
     }
 
+    /// The kept tables, when the game data folder is given, and the mods'
+    /// rows parse.
     #[test]
-    fn the_repository_rows_parse() {
+    fn the_kept_tables_and_the_repository_rows_parse() {
         let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let kept = table_files(enshwick_gamedata::data_dir().as_deref()).unwrap();
         let mut tables = Vec::new();
-        for path in table_files(&repo).unwrap() {
-            let row = table::parse(&fs::read_to_string(&path).unwrap()).unwrap();
+        for path in &kept {
+            let row = table::parse(&fs::read_to_string(path).unwrap()).unwrap();
             assert!(!row.symbols.is_empty());
             assert_eq!(
                 path.file_name().and_then(|n| n.to_str()),
@@ -710,7 +725,7 @@ mod tests {
                 tables.push(row.table);
             }
         }
-        assert!(tables.contains(&Table::Loader));
+        assert!(kept.is_empty() || tables.contains(&Table::Loader));
     }
 
     fn guid(hex: &str) -> [u8; 16] {
@@ -742,7 +757,7 @@ mod tests {
         let fp = Exe::parse(&bytes).unwrap().fingerprint().unwrap();
         let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let mut rows = Vec::new();
-        for file in table_files(&repo).unwrap() {
+        for file in table_files(enshwick_gamedata::data_dir().as_deref()).unwrap() {
             let src = fs::read_to_string(&file).unwrap();
             let row = table::parse(&src).unwrap();
             if matches(&row, fp) {

@@ -12,8 +12,8 @@ use super::exe::Exe;
 use super::patterns::{self, BodyPattern, ConstantPattern, SymbolPattern};
 use super::rows::{Edit, Entry, Row, Side, hex};
 
-/// Where the tables live, relative to the repository.
-pub(crate) const DIR: &str = "crates/enshwick-gamedata/tables";
+/// Where the tables live, relative to the game data folder.
+pub(crate) const DIR: &str = "tables";
 
 /// The table sections, in the order a row lists them.
 const SECTIONS: [&str; 3] = ["checks", "symbols", "constants"];
