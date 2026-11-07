@@ -307,9 +307,7 @@ impl PackPoint {
         out
     }
 
-    /// The layout, or why the point has none: an unknown type, a field
-    /// name that is no identifier or given twice, or a gap.
-    fn laid_out(&self) -> Result<PointLayout, String> {
+    fn laid_out(&self) -> Result<PointLayout, LayOutPointError> {
         let mut input = Vec::with_capacity(self.input.len());
         let mut end = 0usize;
         let mut align = 1usize;
@@ -320,18 +318,14 @@ impl PackPoint {
                     .bytes()
                     .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
             if !bare || KEYWORDS.contains(&name.as_str()) || name == "output" {
-                return Err(format!(
-                    "field {name:?}: a name is [a-z][a-z0-9_]*, no keyword and not `output`"
-                ));
+                return Err(LayOutPointError::Name(name.clone()));
             }
             if input.iter().any(|slot: &PointSlot| slot.name == *name) {
-                return Err(format!("field {name:?} is given twice"));
+                return Err(LayOutPointError::Twice(name.clone()));
             }
             let ty = field_type(&field.ty).ok_or_else(|| unknown(&field.ty))?;
             if !end.is_multiple_of(ty.align) {
-                return Err(format!(
-                    "field {name:?} would need padding before it; order the fields from the widest"
-                ));
+                return Err(LayOutPointError::Gap(name.clone()));
             }
             align = align.max(ty.align);
             input.push(PointSlot {
@@ -344,10 +338,7 @@ impl PackPoint {
             end += ty.size;
         }
         if !end.is_multiple_of(align) {
-            return Err(
-                "the input would need padding at its end; order the fields from the widest, or add one"
-                    .to_owned(),
-            );
+            return Err(LayOutPointError::GapAtEnd);
         }
         let ty = field_type(&self.output).ok_or_else(|| unknown(&self.output))?;
         let output = PointSlot {
@@ -357,7 +348,7 @@ impl PackPoint {
             size: ty.size,
             hash: crate::services::layout_hash("output", ty.shape, ty.size, ty.align, 0),
         };
-        let size = u32::try_from(end).map_err(|_| "the input is too large".to_owned())?;
+        let size = u32::try_from(end).map_err(|_| LayOutPointError::TooLarge)?;
         Ok(PointLayout {
             input,
             size,
@@ -366,10 +357,28 @@ impl PackPoint {
     }
 }
 
-/// Why a type name is refused, with the ones a point takes.
-fn unknown(name: &str) -> String {
+fn unknown(name: &str) -> LayOutPointError {
     let names: Vec<&str> = TYPES.iter().map(|t| t.name).collect();
-    format!("{name:?} is no type a point takes: {}", names.join(", "))
+    LayOutPointError::Type(name.to_owned(), names.join(", "))
+}
+
+/// Why a point's fields do not lay out.
+#[derive(Debug, thiserror::Error)]
+enum LayOutPointError {
+    #[error("field {0:?}: a name is [a-z][a-z0-9_]*, no keyword and not `output`")]
+    Name(String),
+    #[error("field {0:?} is given twice")]
+    Twice(String),
+    #[error("{0:?} is no type a point takes: {1}")]
+    Type(String, String),
+    #[error("field {0:?} would need padding before it; order the fields from the widest")]
+    Gap(String),
+    #[error(
+        "the input would need padding at its end; order the fields from the widest, or add one"
+    )]
+    GapAtEnd,
+    #[error("the input is too large")]
+    TooLarge,
 }
 
 impl super::PackManifest {
