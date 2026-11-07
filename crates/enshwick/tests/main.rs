@@ -198,6 +198,8 @@ mod ticks;
 mod transactions;
 #[cfg(feature = "typed")]
 mod typed;
+#[cfg(feature = "typed")]
+mod typed_blobs;
 mod ui;
 mod vanilla_items;
 mod vetoes;

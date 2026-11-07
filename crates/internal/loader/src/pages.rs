@@ -95,6 +95,15 @@ pub(crate) fn query(address: usize) -> Option<Region> {
     })
 }
 
+/// How many bytes from `address` on, at most `max`, lie in the region
+/// `address` lies in when it [`Region::reads`]; 0 otherwise. Reads none of
+/// them.
+pub(crate) fn readable(address: usize, max: usize) -> usize {
+    query(address)
+        .filter(Region::reads)
+        .map_or(0, |region| region.end.saturating_sub(address).min(max))
+}
+
 /// The `N` bytes at `address`; `None` unless all of them lie in one region
 /// that [`Region::reads`], and still read when copied, though another thread
 /// may free or protect the pages in between. Allocates nothing, for the

@@ -18,7 +18,7 @@ mod tests {
     const DIED: &str = "keen::ecs::EntityDiedEvent";
     const MAPPING: &str = "keen::BuildingMaterialMappingResource";
     const COMBAT_FLAGS: &str = "keen::ecs::CombatFlags";
-    const SPAWNER: &str = "keen::ecs::RandomSpawner";
+    const TAGS: &str = "keen::ecs::EntityTagContainer";
     const STONE: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
     const ENTITY: Entity = Entity(4096);
 
@@ -89,14 +89,29 @@ mod tests {
             Type::new(COMBAT_FLAGS, Kind::Struct, 1, 1)
                 .with_inner("keen::ecs::Component")
                 .with_fields(vec![field("isImmune", 0, "keen::bool")]),
-            Type::new("keen::BlobArray<keen::uint32>", Kind::BlobArray, 8, 4)
-                .with_inner("keen::uint32"),
-            Type::new(SPAWNER, Kind::Struct, 8, 4)
+            Type::new(
+                "keen::ObjectReference<keen::ecs::EntityTag>",
+                Kind::ObjectReference,
+                16,
+                4,
+            ),
+            Type::new("keen::ecs::EntityTagReference", Kind::Typedef, 16, 4)
+                .with_inner("keen::ObjectReference<keen::ecs::EntityTag>"),
+            Type::new("keen::ecs::EntityTagReferenceEntry", Kind::Struct, 16, 4)
+                .with_fields(vec![field("tag", 0, "keen::ecs::EntityTagReference")]),
+            Type::new(
+                "keen::BlobArray<keen::ecs::EntityTagReferenceEntry>",
+                Kind::BlobArray,
+                8,
+                4,
+            )
+            .with_inner("keen::ecs::EntityTagReferenceEntry"),
+            Type::new(TAGS, Kind::Struct, 8, 4)
                 .with_inner("keen::ecs::Component")
                 .with_fields(vec![field(
-                    "spawnEntries",
+                    "tags",
                     0,
-                    "keen::BlobArray<keen::uint32>",
+                    "keen::BlobArray<keen::ecs::EntityTagReferenceEntry>",
                 )]),
         ]
     }
@@ -107,6 +122,18 @@ mod tests {
 
     fn key() -> ResourceKey {
         STONE.key_by_hash(hash(MAPPING))
+    }
+
+    /// A tag container's set-up data: an offset of 8 from its one field, a
+    /// count of 2, then the two tags.
+    fn tags() -> Vec<u8> {
+        [
+            &8i32.to_le_bytes()[..],
+            &2u32.to_le_bytes(),
+            &[0x11; 16],
+            &[0x22; 16],
+        ]
+        .concat()
     }
 
     fn stone() -> Vec<u8> {
@@ -124,7 +151,9 @@ mod tests {
             .type_hash("ecs::Faction", hash(FACTION))
             .type_size("ecs::Faction", 1)
             .type_hash("ecs::CombatFlags", hash(COMBAT_FLAGS))
-            .type_hash("ecs::RandomSpawner", hash(SPAWNER))
+            .type_hash("ecs::EntityTagContainer", hash(TAGS))
+            .type_size("ecs::EntityTagContainer", 8)
+            .component(ENTITY, hash(TAGS), &tags())
             .type_hash("BuildingMaterialMappingResource", hash(MAPPING))
             .game_event_type("ecs::EntityDiedEvent", hash(DIED), 16)
             .component(ENTITY, hash(FACTION), &[faction])
@@ -293,25 +322,16 @@ mod tests {
     }
 
     #[test]
-    fn a_component_with_a_blob_array_is_refused_naming_the_field() {
+    fn a_script_reads_a_live_component_s_blob_array() {
         let loader = run(
             r#"
-            local ok, why = pcall(enshwick.typed.component_type, "ecs.RandomSpawner")
-            print(`spawner {ok} {why}`)
+            local container = enshwick.typed.component_type("ecs.EntityTagContainer")
+            local tags = container:read(4096).tags
+            print(`tags {#tags} {tags[1].tag} {tags[2].tag}`)
         "#,
             7,
         );
-        let logs = loader.logs();
-        let line = logs
-            .iter()
-            .find_map(|(_, line)| line.split_once("spawner ").map(|(_, rest)| rest.to_owned()))
-            .unwrap_or_else(|| panic!("{logs:?}"));
-        assert!(
-            line.starts_with("false")
-                && line.contains("ecs::RandomSpawner")
-                && line.contains("spawnEntries")
-                && line.contains("outside the component"),
-            "{line}"
-        );
+        let line = format!("tags 2 {} {}", Guid([0x11; 16]), Guid([0x22; 16]));
+        assert!(logged(&loader, &line), "{line}: {:?}", loader.logs());
     }
 }
