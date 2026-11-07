@@ -70,6 +70,8 @@ The types are in
 | `ChunkLoaded` | `ChunkData` | A 256 m chunk of the server's entities loaded as players came near. Its entities exist now. The terrain's voxels raise no event ([weather and the world's chunks](weather.md)). | game |
 | `ChunkUnloaded` | `ChunkData` | An entity chunk unloaded once no player was near. Its entities are gone. | game |
 | `PlayerDied` | `PlayerDeathData` | A player died from a hit, a fall, the shroud or drowning, and the data names the cause. For a hit, it also names the killer's template and the attacker of the last hit. It is raised after the step. Freezing and an administrator's kill raise none. Any other entity's death is the game event `Died`. Unstable. | game |
+| `TerrainPageLoaded` | `TerrainPageData` | A page of the terrain came into the server's memory, with players near or not ([hearing the terrain load and unload](terrain.md#hearing-the-terrain-load-and-unload)). Dedicated server only. | game |
+| `TerrainPageUnloaded` | `TerrainPageData` | A page of the terrain left the server's memory. Dedicated server only. | game |
 
 The data types have these fields:
 
@@ -118,6 +120,10 @@ The data types have these fields:
   - `was_deadly_fog`
   - `drowned`
   - `killer_entity`
+- `TerrainPageData` has three fields:
+  - `x`
+  - `z`
+  - `size`
 
 For typed settings, `on_settings` wraps `SettingsReplaced`.
 `on_settings_change` wraps both events; see [Settings](settings.md). The loader re-reads log levels on

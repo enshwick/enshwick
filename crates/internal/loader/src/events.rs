@@ -454,6 +454,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
     part!("own channel", crate::carrier::after_step(loader, now));
     crate::transactions::after_step(loader);
     part!("voxel edits", crate::voxels::changes::after_step(loader));
+    part!("terrain pages", crate::terrain_pages::after_step(loader));
     // SAFETY: `server` is null or the game's live server, and this runs on
     // the game thread after its step, both by this function's `# Safety`.
     unsafe { joins(loader, offsets, server) };
@@ -557,6 +558,7 @@ fn end_session() {
     crate::world::release();
     crate::transactions::forget();
     crate::voxels::changes::forget();
+    crate::terrain_pages::forget();
     crate::altars::forget();
     crate::survivors::forget();
     crate::interactions::forget();

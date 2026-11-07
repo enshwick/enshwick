@@ -264,7 +264,7 @@ pub(crate) extern "system" fn subscribe(
     user: *mut c_void,
 ) -> Status {
     // The loader refuses an event it never raises, as on an older loader.
-    if !(Event::SETTINGS_CHANGED.0..=Event::VOXELS_CHANGED.0).contains(&event.0) {
+    if !(Event::SETTINGS_CHANGED.0..=Event::TERRAIN_PAGE_UNLOADED.0).contains(&event.0) {
         return Status::MISSING;
     }
     with(Status::MISSING, |s| {

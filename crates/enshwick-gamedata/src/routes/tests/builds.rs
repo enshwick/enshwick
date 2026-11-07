@@ -94,6 +94,16 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ("1.0 client (26082781)", "voxel.commit", 0x10a_03d0),
     ("1.0 client (26320373)", "voxel.commit", 0x10b_bd80),
     ("1.0 client (26430625)", "voxel.commit", 0x10b_b030),
+    // The page cache's load end and eviction; on 26430253 checked live on
+    // a server copy, on the others byte for byte.
+    ("1.0 server (1269579)", "voxel.page_loaded", 0x84_86e7),
+    ("1.0 server (26083076)", "voxel.page_loaded", 0x84_ab17),
+    ("1.0 server (26319703)", "voxel.page_loaded", 0x85_48d7),
+    ("1.0 server (26430253)", "voxel.page_loaded", 0x85_48d7),
+    ("1.0 server (1269579)", "voxel.page_dropped", 0x84_8b0f),
+    ("1.0 server (26083076)", "voxel.page_dropped", 0x84_af3f),
+    ("1.0 server (26319703)", "voxel.page_dropped", 0x85_4cff),
+    ("1.0 server (26430253)", "voxel.page_dropped", 0x85_4cff),
 ];
 
 /// Entries no table pins, found only by their route, with the value the
@@ -105,6 +115,9 @@ const ROUTED_EVERYWHERE: &[(&str, u64)] = &[
     ("ecs.remove_components", 4),
     ("ecs.remove_components_hashes", 0xc),
     ("ecs.remove_components_size", 0x4c),
+    // The first column grid's slot pointer, beside `voxel.grid_depth` at
+    // 0x4c; on server 26430253 checked live.
+    ("voxel.grid_slots", 0x58),
 ];
 
 /// The interaction prompt's title, valid byte and verb in the interface's

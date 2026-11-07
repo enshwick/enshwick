@@ -96,6 +96,7 @@ fn link_features(loader: &'static Loader) {
     crate::ui::link(loader);
     crate::fog::link(loader);
     crate::voxels::changes::link(loader);
+    crate::terrain_pages::link(loader);
 }
 
 pub(crate) fn start(

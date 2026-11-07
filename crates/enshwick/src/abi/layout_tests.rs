@@ -150,6 +150,7 @@ shapes! {
         QuestData { header, entity, quest },
         KnowledgeInput { header, player, id, kind, scope, reserved, value, refusal, allowed },
         ChunkData { header, index, x, z, size },
+        TerrainPageData { header, x, z, size },
         BuildingData { header, entity, player, item, kind, replay, template, position },
         PlayerInfo { header, slot, entity, key, permissions, name_len, name },
         TickData { header, step, elapsed_steps, elapsed_nanos, step_nanos, cost_nanos, game },

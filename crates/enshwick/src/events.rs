@@ -19,7 +19,8 @@ use core::time::Duration;
 #[cfg(feature = "unstable")]
 use crate::abi::PlayerDeathData;
 use crate::abi::{
-    BuildingData, ChunkData, Event, KnowledgeData, PlayerData, QuestData, TickData, TickHandle,
+    BuildingData, ChunkData, Event, KnowledgeData, PlayerData, QuestData, TerrainPageData,
+    TickData, TickHandle,
 };
 
 pub(crate) mod sealed {
@@ -280,6 +281,10 @@ with_data! {
     ///
     /// Unstable: needs the `unstable` feature and may change in any release.
     PlayerDied = PLAYER_DIED: PlayerDeathData, core::mem::offset_of!(PlayerDeathData, killer_entity);
+    /// [`Event::TERRAIN_PAGE_LOADED`]; [`crate::voxels::Voxels`] reads the page.
+    TerrainPageLoaded = TERRAIN_PAGE_LOADED: TerrainPageData, size_of::<TerrainPageData>();
+    /// [`Event::TERRAIN_PAGE_UNLOADED`].
+    TerrainPageUnloaded = TERRAIN_PAGE_UNLOADED: TerrainPageData, size_of::<TerrainPageData>();
 }
 
 impl Ticked {

@@ -107,3 +107,7 @@ harness = false
 [[bench]]
 name = "linked_controls"
 harness = false
+
+[[bench]]
+name = "terrain_pages"
+harness = false

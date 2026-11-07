@@ -42,6 +42,13 @@ Each entry names the pull request that made the change.
   Luau `enshwick.altars.limit_altar_level`. The fake host's
   `upgrade_recipes` puts upgrade recipes of given workshops and levels in its
   recipe registry (#978).
+- `events`: `TerrainPageLoaded` and `TerrainPageUnloaded` tell a mod, after
+  the step, when the dedicated server loads a page of the finest voxels
+  into memory or drops it, 128 m a side on server 26430253, with or
+  without players near; a mod that keeps edits outside the bases writes
+  them again when a page loads. Luau: `enshwick.on("TerrainPageLoaded")`.
+  `Event::TERRAIN_PAGE_LOADED`, `Event::TERRAIN_PAGE_UNLOADED` and
+  `TerrainPageData`, ABI 11.14 (#984).
 - `content`: `Load::rekey_item(old, new)` and `enshwick.content.rekey_item`
   take an item the mod added with `add_item` before the call as `new`: `old`
   is served with that item's data, cloned from its base item with its name,

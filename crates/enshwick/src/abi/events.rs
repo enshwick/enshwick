@@ -124,6 +124,19 @@ impl Event {
     /// enshwick's. Raised on the game thread after the step. Server only.
     /// ABI 11.12.
     pub const VOXELS_CHANGED: Self = Self(23);
+    /// A page of the terrain came into the server's memory, so its voxels
+    /// usually read and edit; data is a [`TerrainPageData`]. The ground loads and
+    /// drops by page on its own, with players near or not, so a mod that
+    /// keeps its terrain edits outside the save writes them again here.
+    /// Raised on the game thread after the step. Dedicated server only.
+    /// ABI 11.14.
+    pub const TERRAIN_PAGE_LOADED: Self = Self(24);
+    /// A page of the terrain left the server's memory, the one used least
+    /// lately, and its voxels read as not loaded until a read loads it
+    /// again; data is a [`TerrainPageData`]. Raised on the game thread
+    /// after the step.
+    /// Dedicated server only. ABI 11.14.
+    pub const TERRAIN_PAGE_UNLOADED: Self = Self(25);
 }
 
 /// The data of the `PlayerDied` event.
@@ -358,6 +371,38 @@ pub struct ChunkData {
 }
 
 impl_headed!(ChunkData);
+
+/// The data of the [`TerrainPageLoaded`](crate::events::TerrainPageLoaded)
+/// and [`TerrainPageUnloaded`](crate::events::TerrainPageUnloaded) events: a
+/// page of the finest voxels, the ones
+/// [`Voxels`](crate::voxels::Voxels) reads. "Page" is enshwick's name.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, TerrainPageData};
+///
+/// let page = TerrainPageData { header: Header::of::<TerrainPageData>(), x: 3, z: 1, size: 128 };
+/// assert_eq!(page.x * page.size, 384, "it starts 384 m from the world's corner");
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable, crate::Script)]
+pub struct TerrainPageData {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// Its column in the world's grid of pages, from 0 at the world's
+    /// corner along the voxels' x axis.
+    pub x: u32,
+    /// Its row, from 0 along the voxels' z axis.
+    pub z: u32,
+    /// Its side in metres, 128 on server 26430253: it spans `x * size` to
+    /// `(x + 1) * size` metres along x and `z * size` to `(z + 1) * size`
+    /// along z, as [`VoxelPos::to_metres`](crate::voxels::VoxelPos::to_metres)
+    /// counts them, at every height.
+    pub size: u32,
+}
+
+impl_headed!(TerrainPageData);
 
 /// The data of the [`BuildingPlaced`](crate::events::BuildingPlaced) and
 /// [`BuildingRemoved`](crate::events::BuildingRemoved) events.
