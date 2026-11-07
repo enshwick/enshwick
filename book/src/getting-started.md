@@ -23,7 +23,7 @@ tool:
 
 ```bash
 rustup target add x86_64-pc-windows-msvc
-cargo install --git https://github.com/enshwick/enshwick cargo-enshwick
+cargo install --git https://github.com/enshwick/enshwick --tag v1.0.0-alpha.12 cargo-enshwick
 ```
 
 A Rust mod is a Windows DLL. On Windows it builds with the MSVC build

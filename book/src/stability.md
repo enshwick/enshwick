@@ -52,7 +52,7 @@ the mod's `Cargo.toml`:
 
 ```toml
 [dependencies]
-enshwick = { version = "1", features = ["unstable"] }
+enshwick = { git = "https://github.com/enshwick/enshwick", tag = "v1.0.0-alpha.12", features = ["unstable"] }
 ```
 
 An unstable item leaves the feature once it has settled and, where it rests on

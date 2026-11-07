@@ -64,6 +64,7 @@ loom = { version = "0.7.2", default-features = false }
 
 [dev-dependencies]
 criterion.workspace = true
+enshwick-gamedata = { workspace = true, features = ["test"] }
 insta.workspace = true
 proptest.workspace = true
 

@@ -213,7 +213,7 @@ fn dependency(version: &str, commit: Option<&Commit>) -> String {
             "# The platform from git, at a commit of its main branch.\nenshwick = {{ git = \"{PLATFORM_GIT}\", rev = \"{}\" }}\n",
             commit.0
         ),
-        None if version.contains('-') => format!(
+        None if semver::Version::parse(version).is_ok_and(|v| !v.pre.is_empty()) => format!(
             "# The platform's alpha from git: alphas are not on crates.io.\nenshwick = {{ git = \"{PLATFORM_GIT}\", tag = \"v{version}\" }}\n"
         ),
         None => format!("enshwick = \"={version}\"\n"),
@@ -498,33 +498,21 @@ mod tests {
     }
 
     #[test]
-    fn an_alpha_builds_on_the_tag_of_the_alpha_the_tool_is_from() {
-        let files = files("you.lockers", Side::Server, None, &Place::Alone).unwrap();
-        let cargo: toml::Table = text(&files, "Cargo.toml").parse().unwrap();
-        let enshwick = &cargo["workspace"]["dependencies"]["enshwick"];
-        if enshwick::VERSION.contains('-') {
-            assert_eq!(
-                enshwick["git"].as_str(),
-                Some("https://github.com/enshwick/enshwick")
-            );
-            let tag = format!("v{}", enshwick::VERSION);
-            assert_eq!(enshwick["tag"].as_str(), Some(tag.as_str()));
-        } else {
-            let pinned = format!("={}", enshwick::VERSION);
-            assert_eq!(enshwick.as_str(), Some(pinned.as_str()));
-        }
-    }
-
-    #[test]
     fn only_a_release_builds_on_crates_io() {
         let read = |line: String| -> toml::Value {
             line.parse::<toml::Table>().unwrap()["enshwick"].clone()
         };
         let alpha = read(dependency("1.0.0-alpha.12", None));
+        assert_eq!(
+            alpha["git"].as_str(),
+            Some("https://github.com/enshwick/enshwick")
+        );
         assert_eq!(alpha["tag"].as_str(), Some("v1.0.0-alpha.12"));
         assert!(alpha.get("version").is_none());
         let release = read(dependency("1.2.0", None));
         assert_eq!(release.as_str(), Some("=1.2.0"));
+        let metadata = read(dependency("1.2.0+win-x64", None));
+        assert_eq!(metadata.as_str(), Some("=1.2.0+win-x64"));
         let commit: Commit = COMMIT.parse().unwrap();
         let pinned = read(dependency("1.0.0-alpha.12", Some(&commit)));
         assert_eq!(pinned["rev"].as_str(), Some(COMMIT));

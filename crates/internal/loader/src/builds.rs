@@ -515,7 +515,7 @@ pub fn embedded(running: Side) -> KnownBuild {
 ///
 /// # Panics
 ///
-/// Never: the table it reads is a fixed, valid text.
+/// When `tables::Table::parse` stops taking its fixed text.
 #[cfg(test)]
 #[must_use]
 pub fn empty() -> KnownBuild {

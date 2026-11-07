@@ -167,11 +167,19 @@ fn a_developer_mod_gets_its_init_with_developer_tools_on() {
 }
 
 #[test]
-fn a_mod_turned_off_another_way_before_init_still_gets_its_init() {
-    let (loader, order) = loader(&[TestMod::plain("you.lanterns")], false);
-    loader.turn_off(ModIndex::new(0), "turned off by the test");
+fn a_mod_turned_off_another_way_before_init_gets_no_init() {
+    let (loader, order) = loader(
+        &[TestMod::plain("you.lanterns"), TestMod::plain("you.stalls")],
+        false,
+    );
+    let lanterns = loader
+        .mods
+        .iter()
+        .position(|m| m.id == "you.lanterns")
+        .unwrap();
+    loader.turn_off(ModIndex::new(lanterns), "turned off by the test");
     initialise(&loader, &order.iter().collect::<Vec<_>>(), None);
-    assert_eq!(called(), [("init", handle_of(&loader, "you.lanterns"))]);
+    assert_eq!(called(), [("init", handle_of(&loader, "you.stalls"))]);
     assert!(is_off(&loader, "you.lanterns"));
 }
 

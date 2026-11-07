@@ -299,6 +299,8 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- The loader calls no `init` of a mod already turned off before its turn,
+  as `ready` skips it (#979).
 - A data pack acts as itself everywhere the loader's copy of the API runs
   it: a thread the API spawns for it (the world store's write), its log
   level from `enshwick.toml`, each `info_once!` and `warn_every!` site, and

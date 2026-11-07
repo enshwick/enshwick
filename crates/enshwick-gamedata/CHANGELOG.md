@@ -8,8 +8,9 @@ Each entry names the pull request that made the change.
 
 ### Added
 
-- `Reflection` implements `Default`: an empty reflection, in which every
-  lookup fails, for code run without a game (#979).
+- The `test` feature: `Reflection` implements `Default`, an empty
+  reflection in which every lookup fails, for tests run without a game
+  (#979).
 - Engine routes find the entity command buffer's AddComponents and
   RemoveComponents kinds (`ecs.add_components`, `ecs.remove_components`)
   and the RemoveComponents layout (`ecs.remove_components_hashes`,
