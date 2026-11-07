@@ -40,7 +40,8 @@
 //! shape that matches a changed instruction gives nothing rather than a
 //! wrong value. Every constant entry states its range, as a property of
 //! the value: from half the least to twice the greatest the kept builds
-//! give, at least 16, and exactly the value for a name hash the code holds.
+//! give, at least 16, and exactly the value for a name hash the code holds;
+//! a 64-bit key that changes between builds states `unbounded = true`.
 //! An address a shape takes outside `.text` counts only inside `.data` or
 //! `.rdata`. `type` names the reflected type the last step of a `field`
 //! route holds, which that field must still hold.
@@ -247,6 +248,7 @@ struct RouteRow {
     nth: Option<u32>,
     of: Option<u32>,
     range: Option<[u64; 2]>,
+    unbounded: Option<bool>,
     align: Option<u64>,
     #[serde(rename = "type")]
     holds: Option<String>,
@@ -325,7 +327,7 @@ impl RouteRow {
             ));
         }
         let range = bounds(
-            self.range,
+            stated_range(self.range, self.unbounded).map_err(bad)?,
             self.align,
             constant && take != Take::Spelled || reflected,
         )
@@ -426,6 +428,19 @@ impl RouteRow {
         how.ok_or_else(|| {
             bad("a route is one of `called_by`, `calls`, `loads`, `system`, `field` or `size`, `vtable` with `slot`, or `system`, `in` or `callers` with `shape`, each not empty")
         })
+    }
+}
+
+/// A row's `range`, or every value for `unbounded = true`: TOML integers
+/// stop at `i64::MAX`, so a 64-bit key states it in words.
+fn stated_range(
+    range: Option<[u64; 2]>,
+    unbounded: Option<bool>,
+) -> Result<Option<[u64; 2]>, &'static str> {
+    match (range, unbounded) {
+        (Some(_), Some(true)) => Err("a row states `range` or `unbounded`, not both"),
+        (None, Some(true)) => Ok(Some([0, u64::MAX])),
+        (range, _) => Ok(range),
     }
 }
 

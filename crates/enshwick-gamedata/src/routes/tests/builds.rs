@@ -303,8 +303,10 @@ fn every_kept_build_s_constant_lies_in_its_route_s_range() {
         .filter(|r| r.is_entry() && r.finds_constant() && r.range.is_none())
         .filter_map(|r| {
             let &(lo, hi) = seen.get(r.id.as_str())?;
-            let (lo, hi) = super::super::proposed_range(lo, hi);
-            Some(format!("{}: range = [{lo:#x}, {hi:#x}]", r.id))
+            Some(match super::super::proposed_range(lo, hi) {
+                (0, u64::MAX) => format!("{}: unbounded = true", r.id),
+                (lo, hi) => format!("{}: range = [{lo:#x}, {hi:#x}]", r.id),
+            })
         })
         .collect();
     assert!(

@@ -6724,7 +6724,7 @@ sides = ["client"]
 in = "~fn:ui.text_field_editing"
 shape = ["mov r13,*", "mov [rbp+?],r12w"]
 take = "value"
-range = [0, 0xffffffffffffffff]
+unbounded = true
 
 [[route]]
 id = "ui.text_field_state_size"

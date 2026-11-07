@@ -151,6 +151,14 @@ fn a_range_bounds_only_a_constant_and_reads_least_first() {
     );
     assert!(row("take = \"value\"\nalign = 0").is_err());
     assert!(
+        row("take = \"value\"\nunbounded = true").is_ok(),
+        "a 64-bit key, past what a TOML integer holds"
+    );
+    assert!(
+        row("take = \"value\"\nunbounded = true\nrange = [1, 2]").is_err(),
+        "both"
+    );
+    assert!(
         row("take = \"address\"\nrange = [1, 2]").is_err(),
         "a symbol"
     );
