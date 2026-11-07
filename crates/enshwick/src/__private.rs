@@ -467,21 +467,25 @@ pub(crate) fn initialised() -> bool {
 
 /// A data pack's most detailed level the loader keeps, read at its first
 /// line and again at each change of the loader's settings, as
-/// [`MAX_LEVEL`] is for a mod; [`PackLevel::UNREAD`] until then.
-struct PackLevel(AtomicU8);
+/// [`MAX_LEVEL`] is for a mod: the mod life it was read in above the level's
+/// byte, so a value of an earlier life, or 0, reads as unread.
+#[derive(Default)]
+struct PackLevel(AtomicU64);
 
 impl PackLevel {
-    const UNREAD: u8 = u8::MAX;
-}
+    /// The kept word for `level` read in this mod life.
+    fn tagged(level: Level) -> u64 {
+        crate::fresh::life() << 8 | u64::from(level.0)
+    }
 
-impl Default for PackLevel {
-    fn default() -> Self {
-        Self(AtomicU8::new(Self::UNREAD))
+    /// The level kept in this mod life, if any.
+    fn read(word: u64) -> Option<u8> {
+        (word >> 8 == crate::fresh::life() & (u64::MAX >> 8)).then_some(word.to_le_bytes()[0])
     }
 }
 
 /// The site [`for_pack`] keeps one [`PackLevel`] of per data pack for.
-static PACK_LEVEL: PackLevel = PackLevel(AtomicU8::new(PackLevel::UNREAD));
+static PACK_LEVEL: PackLevel = PackLevel(AtomicU64::new(0));
 
 #[inline]
 #[must_use]
@@ -497,13 +501,20 @@ pub fn enabled(level: Level) -> bool {
 /// only.
 fn pack_level(pack: Host) -> u8 {
     let kept = &for_pack(&PACK_LEVEL).0;
-    match kept.load(Ordering::Relaxed) {
-        PackLevel::UNREAD => {
-            let level = pack.log_level().0;
-            kept.store(level, Ordering::Relaxed);
-            level
-        }
-        level => level,
+    let word = kept.load(Ordering::Relaxed);
+    if let Some(level) = PackLevel::read(word) {
+        return level;
+    }
+    let level = pack.log_level();
+    // A refresh that landed since the load is newer than this read.
+    match kept.compare_exchange(
+        word,
+        PackLevel::tagged(level),
+        Ordering::Relaxed,
+        Ordering::Relaxed,
+    ) {
+        Ok(_) => level.0,
+        Err(newer) => PackLevel::read(newer).unwrap_or(level.0),
     }
 }
 
@@ -515,7 +526,7 @@ unsafe extern "system" fn refresh_level(
     match crate::host::pack() {
         Some(pack) => for_pack(&PACK_LEVEL)
             .0
-            .store(pack.log_level().0, Ordering::Relaxed),
+            .store(PackLevel::tagged(pack.log_level()), Ordering::Relaxed),
         None => {
             if let Some(host) = crate::host() {
                 MAX_LEVEL.store(host.log_level().0, Ordering::Relaxed);
@@ -774,9 +785,7 @@ pub unsafe fn init_pack(
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         host.scope(|| {
             // A pack that runs again reads its level afresh.
-            for_pack(&PACK_LEVEL)
-                .0
-                .store(PackLevel::UNREAD, Ordering::Relaxed);
+            for_pack(&PACK_LEVEL).0.store(0, Ordering::Relaxed);
             init(&mut Load::new(host))
         })
     }));

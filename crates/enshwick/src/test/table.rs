@@ -122,7 +122,8 @@ pub(crate) fn as_owner<R>(owner: ModHandle, call: impl FnOnce() -> R) -> R {
 pub(crate) struct Registered<F> {
     pub(crate) callback: F,
     pub(crate) user: usize,
-    /// `None` for a test's stand-in for another mod, which runs as called.
+    /// `None` for a test's stand-in for another mod, which runs as the
+    /// loader, as another DLL's callback runs outside the pack's scope.
     owner: Option<ModHandle>,
 }
 
@@ -153,7 +154,7 @@ impl<F: Copy> Registered<F> {
         );
         match self.owner {
             Some(owner) => as_owner(owner, || call(callback, user)),
-            None => call(callback, user),
+            None => crate::__private::as_loader(|| call(callback, user)),
         }
     }
 }
