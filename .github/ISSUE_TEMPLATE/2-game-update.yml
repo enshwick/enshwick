@@ -5,7 +5,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        After an update the loader keeps running and turns off what it cannot find in the new build. The Mods screen lists what is off, and the loader's log in `logs/` names each missing entry.
+        After an update the loader keeps running and turns off what it cannot find in the new build. The loader's log in `logs/` names each feature that is off, and the game client's Mods screen lists them; a dedicated server has only the log.
+        The log lists each missing entry only at the `debug` level. To add that list, add `log_levels = { enshwick = "debug" }` to `enshwick.toml` in the game's folder and start the game again.
+        When the loader did not start, there is no loader's log, only `logs/start.log`. When the game's folder takes no files, that file is `enshwick/start.log` in the Windows temporary folder (`%TEMP%`).
   - type: textarea
     id: what
     attributes:
@@ -16,7 +18,7 @@ body:
     id: game
     attributes:
       label: Game version
-      description: "The `game:` line of the loader's log, `logs/enshwick_<date>_<time>.log`, names it."
+      description: "The `game:` line of the loader's log, `logs/enshwick_<date>_<time>.log`, names it. Without a `game:` line, copy the line that names the game build or says it could not be read. Without a loader's log, write `no loader's log`."
     validations:
       required: true
   - type: dropdown
@@ -33,13 +35,13 @@ body:
     id: loader
     attributes:
       label: Loader version
-      description: The loader's log names it.
+      description: The `Enshwick <version> starting` line of the loader's log names it. Without that line, give the release you installed.
     validations:
       required: true
   - type: textarea
     id: logs
     attributes:
       label: Logs
-      description: Drag the loader's log of the run after the update here, `logs/enshwick_<date>_<time>.log`. Paths in the log show your folders, so read it before you share it.
+      description: Drag the loader's log of the run after the update here, `logs/enshwick_<date>_<time>.log`. After a crash, add `logs/enshwick-crash_<date>_<time>.log`. When the loader did not start, attach `start.log` instead. Paths in the logs show your folders, so read them before you share them.
     validations:
       required: true

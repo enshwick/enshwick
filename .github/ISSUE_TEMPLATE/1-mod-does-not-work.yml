@@ -7,6 +7,7 @@ body:
       value: |
         Questions go to [Discussions](https://github.com/enshwick/.github/discussions).
         The logs are in `logs/` in the game's folder, beside `enshrouded.exe` or `enshrouded_server.exe`.
+        When the loader did not start, there is no loader's log, only `logs/start.log`. When the game's folder takes no files, that file is `enshwick/start.log` in the Windows temporary folder (`%TEMP%`).
   - type: textarea
     id: what
     attributes:
@@ -30,14 +31,14 @@ body:
     id: game
     attributes:
       label: Game version
-      description: "The `game:` line of the loader's log, `logs/enshwick_<date>_<time>.log`, names it."
+      description: "The `game:` line of the loader's log, `logs/enshwick_<date>_<time>.log`, names it. Without a `game:` line, copy the line that names the game build or says it could not be read. Without a loader's log, write `no loader's log`."
     validations:
       required: true
   - type: input
     id: loader
     attributes:
       label: Loader version
-      description: The loader's log names it.
+      description: The `Enshwick <version> starting` line of the loader's log names it. Without that line, give the release you installed.
     validations:
       required: true
   - type: textarea
@@ -49,6 +50,6 @@ body:
     id: logs
     attributes:
       label: Logs
-      description: Drag the loader's log of the run that went wrong here, `logs/enshwick_<date>_<time>.log`, and after a crash `logs/enshwick-crash_<date>_<time>.log` too. Paths in the log show your folders, so read it before you share it.
+      description: Drag the loader's log of the run that went wrong here, `logs/enshwick_<date>_<time>.log`. Add the log of the mod that went wrong, `logs/<mod id>_<date>_<time>.log`, and after a crash `logs/enshwick-crash_<date>_<time>.log`. When the loader did not start, attach `start.log` instead. Paths in the logs show your folders, so read them before you share them.
     validations:
       required: true
