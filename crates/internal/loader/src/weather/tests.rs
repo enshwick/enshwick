@@ -186,4 +186,23 @@ mod live {
             "a server that does not read"
         );
     }
+
+    #[test]
+    fn a_page_array_is_read_only_while_pages_exist_and_a_shift_stays_under_64() {
+        let layout = layout();
+        let slots = [[0usize; 4]; 3];
+        let mut system = [3, slots.as_ptr().addr(), 0, 0x10, 63];
+        let holds = |system: &[usize; 5]| {
+            let server = [system.as_ptr().addr()];
+            system_holds(&layout, server.as_ptr().addr())
+        };
+        assert_eq!(holds(&system), Ok(()), "no pages, no array to read");
+        system[2] = 1;
+        let dangling = holds(&system).unwrap_err();
+        assert_eq!(dangling.entry, crate::pinned::weather::PAGES.id());
+        system[2] = 0;
+        system[4] = 64;
+        let shift = holds(&system).unwrap_err();
+        assert_eq!(shift.entry, crate::pinned::weather::PAGE_SHIFT.id());
+    }
 }

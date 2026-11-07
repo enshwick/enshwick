@@ -198,6 +198,10 @@ mod tests {
 
     /// A vtable in the test executable's read-only data.
     static VTABLE: [fn(); 1] = [first_slot];
+    /// Read-only data of the test executable that holds no code address.
+    static NOT_CODE: [usize; 1] = [0x1234];
+    /// A table in the test executable's writable data.
+    static WRITABLE: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
 
     fn image() -> Image {
         // SAFETY: a null name asks for the executable's own module, which
@@ -273,6 +277,27 @@ mod tests {
             vtable("t.vtable", at(&object), image()).is_err(),
             "not a table"
         );
+        object.vtable = (&raw const NOT_CODE).addr();
+        assert!(
+            vtable("t.vtable", at(&object), image()).is_err(),
+            "read-only data whose first slot is no code"
+        );
+        WRITABLE.store(
+            (first_slot as fn() as *const ()).addr(),
+            core::sync::atomic::Ordering::Relaxed,
+        );
+        object.vtable = (&raw const WRITABLE).addr();
+        assert!(
+            vtable("t.vtable", at(&object), image()).is_err(),
+            "a table in the image's writable data"
+        );
+    }
+
+    #[test]
+    fn a_count_at_its_bound_holds() {
+        let target = 7;
+        let object = good(&target);
+        assert_eq!(count("t.count", at(&object), COUNT, 3), Ok(3));
     }
 
     #[test]
