@@ -7,6 +7,7 @@ use crate::content::Guid;
 use crate::resources::{Value, Variant};
 
 mod handles;
+mod outside;
 mod sample;
 pub(crate) mod script;
 pub(crate) mod shape;
@@ -125,6 +126,7 @@ pub enum Role {
 
 impl Role {
     /// The role as a refusal names it.
+    #[doc(hidden)]
     #[must_use]
     pub const fn noun(self) -> &'static str {
         match self {
@@ -415,6 +417,7 @@ impl Row {
     /// # Errors
     ///
     /// [`ShapeError`] when it does not.
+    #[doc(hidden)]
     pub fn check(&self, value: &Value) -> Result<(), ShapeError> {
         self.shape.check(value)
     }
@@ -424,6 +427,7 @@ impl Row {
     /// # Errors
     ///
     /// [`ShapeError`] when it does not read as the type.
+    #[doc(hidden)]
     pub fn to_script(&self, value: &Value) -> Result<crate::script::Value, ShapeError> {
         self.shape.shown(value)
     }
@@ -433,6 +437,7 @@ impl Row {
     /// # Errors
     ///
     /// [`Error`](crate::script::Error) when it does not read as the type.
+    #[doc(hidden)]
     pub fn to_codec(&self, value: crate::script::Value) -> Result<Value, crate::script::Error> {
         self.shape.taken(value)
     }

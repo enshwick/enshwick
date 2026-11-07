@@ -30,7 +30,7 @@ fn resolve(
     let ty = registry
         .hashed(ecs.hash())
         .ok_or_else(|| off(id, host, "the type registry lacks it"))?;
-    if live && let Some(field) = registry.outside_field(ty) {
+    if live && let Some(field) = super::outside::outside_field(registry, ty) {
         return Err(off(
             id,
             host,
