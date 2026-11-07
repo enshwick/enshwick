@@ -9,6 +9,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 pub struct Fuse {
     feature: &'static str,
     off: AtomicBool,
+    /// Whether a live check of [`Fuse::verify`] held this session.
+    checked: AtomicBool,
 }
 
 impl Fuse {
@@ -18,6 +20,49 @@ impl Fuse {
         Self {
             feature,
             off: AtomicBool::new(false),
+            checked: AtomicBool::new(false),
+        }
+    }
+
+    /// Whether the feature may write game memory: runs `check`, which reads
+    /// the offsets the feature found on a live object, until one holds, and
+    /// turns the feature off for the session when one fails, with one
+    /// warning naming the game `build` and what did not hold. A check that
+    /// held costs one load after it.
+    #[inline]
+    pub fn verify<E: core::fmt::Display>(
+        &self,
+        build: &str,
+        check: impl FnOnce() -> Result<(), E>,
+    ) -> bool {
+        if self.checked.load(Ordering::Acquire) {
+            return !self.is_off();
+        }
+        self.verify_first(build, check)
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn verify_first<E: core::fmt::Display>(
+        &self,
+        build: &str,
+        check: impl FnOnce() -> Result<(), E>,
+    ) -> bool {
+        if self.is_off() {
+            return false;
+        }
+        match check() {
+            Ok(()) => {
+                self.checked.store(true, Ordering::Release);
+                !self.is_off()
+            }
+            Err(why) => {
+                if !self.off.swap(true, Ordering::Relaxed) {
+                    crate::log!(WARN, "{} off on {build}: {why}", self.feature);
+                    crate::diag::part_off(self.feature, &why.to_string());
+                }
+                false
+            }
         }
     }
 
@@ -100,6 +145,39 @@ mod tests {
         assert_eq!(
             glow.map(|p| p.reason.as_str()),
             Some("the loader panicked in the glow pass: no oil")
+        );
+    }
+
+    #[test]
+    fn a_live_check_that_holds_runs_once_and_lets_writes_through() {
+        let fuse = Fuse::new("held check");
+        let runs = core::cell::Cell::new(0);
+        let check = || {
+            runs.set(runs.get() + 1);
+            Ok::<(), &str>(())
+        };
+        assert!(fuse.verify("build 1", check));
+        assert!(fuse.verify("build 1", check));
+        assert_eq!(runs.get(), 1);
+        let _caught = fuse.run("a later call", || -> u32 { panic!("broken") });
+        assert!(
+            !fuse.verify("build 1", check),
+            "a blown fuse refuses writes"
+        );
+    }
+
+    #[test]
+    fn a_failed_live_check_turns_the_feature_off_for_the_session_with_its_reason() {
+        let fuse = Fuse::new("failed check");
+        assert!(!fuse.verify("build 1", || Err("knowledge.state gives a null pointer")));
+        assert!(fuse.is_off());
+        assert!(!fuse.verify("build 1", || Ok::<(), &str>(())), "stays off");
+        assert_eq!(fuse.run("a later call", || 1), None);
+        let off = crate::diag::parts_off();
+        let part = off.iter().find(|p| p.part == "failed check");
+        assert_eq!(
+            part.map(|p| p.reason.as_str()),
+            Some("knowledge.state gives a null pointer")
         );
     }
 }

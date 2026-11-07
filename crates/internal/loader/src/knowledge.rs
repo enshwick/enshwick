@@ -26,6 +26,7 @@ use enshwick::abi::{Event, Header, KnowledgeData, KnowledgeInfo, QuestData, Stat
 use rustc_hash::FxHashSet;
 
 use crate::host::Loader;
+use crate::live::{self, Broken};
 use crate::memory::{BlobArray, read};
 use crate::pinned;
 use crate::pinned::{Constant, Symbol};
@@ -419,6 +420,29 @@ pub(crate) fn value(loader: &Loader, entity: Entity, id: u32) -> Result<Knowledg
     })
 }
 
+/// The switch of [`grant`], off once the live store it writes to does not
+/// hold its found offsets.
+static GRANTS_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("knowledge grants");
+
+/// Walks the live store of the running `server` the way [`store_of`] and
+/// [`grant`] do, through reads that cannot fault: each pointer reads, the
+/// record count is one a server keeps, and the trigger queue is there.
+fn store_holds(layout: &Layout, server: usize) -> Result<(), Broken> {
+    let game = live::pointer(pinned::server::PLAYER_INFOS.id(), server, layout.game)?;
+    let object = live::pointer(pinned::knowledge::OBJECT.id(), game, layout.object)?;
+    let state = live::pointer(pinned::knowledge::STATE.id(), object, layout.state)?;
+    let records = live::count(
+        pinned::knowledge::RECORD_COUNT.id(),
+        state,
+        layout.record_count,
+        MAX_RECORDS,
+    )?;
+    if records > 0 {
+        live::pointer(pinned::knowledge::RECORDS.id(), state, layout.records)?;
+    }
+    live::pointer(pinned::knowledge::QUEUE.id(), game, layout.queue).map(drop)
+}
+
 /// Queues a grant of `id` to the character `entity`, or to the world.
 pub(crate) fn grant(
     loader: &Loader,
@@ -428,7 +452,11 @@ pub(crate) fn grant(
     value: u32,
 ) -> Result<(), Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
-    let (game, state) = store(layout)?;
+    let server = crate::world::server()?;
+    if !GRANTS_FUSE.verify(&loader.build.name, || store_holds(layout, server)) {
+        return Err(Status::MISSING);
+    }
+    let (game, state) = store_of(layout, server)?;
     let (scope, def) = definition(layout, state, id).ok_or(Status::BAD_ARGS)?;
     // SAFETY: `def` is the definition `definition` found in the live blob;
     // its u8 kind sits at the reflected `type` field.

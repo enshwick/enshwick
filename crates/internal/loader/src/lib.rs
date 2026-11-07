@@ -141,6 +141,8 @@ mod knowledge;
 mod label;
 pub mod linked_controls;
 pub mod listing;
+#[cfg(windows)]
+mod live;
 #[cfg_attr(
     not(windows),
     expect(dead_code, reason = "only the client's join reads lobbies")
