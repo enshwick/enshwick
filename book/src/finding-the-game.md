@@ -116,9 +116,10 @@ A row applies only when its side and both parts of its fingerprint match the
 running binary. Rows for other builds are ignored, so a mod can carry rows for
 several builds at once.
 
-[`enshwick-research`](https://github.com/enshwick/mods/blob/main/devtools/enshwick-research/src/lib.rs)
-pins the client functions it studies in a `"client"` row. It pins two server
-functions in a `"server"` row.
+[`enshwick-research`](https://github.com/enshwick/mods/blob/main/devtools/enshwick-research/src/memory.rs)
+has no rows. It finds each function it hooks by its prologue with
+`code::find_each_unique` (see [Code patterns](#code-patterns)). It takes the
+engine functions it calls from the loader's own entries.
 
 When the game updates, a mod's new rows come from
 [`cargo enshwick pin`](https://github.com/enshwick/enshwick/blob/main/crates/cargo-enshwick/README.md#porting-build-rows-pin).
