@@ -90,16 +90,17 @@ enum Pin {
     DocsRs,
 }
 
-/// Whether `line` links the docs.rs pages of one of `names`.
+/// Whether `line` links the docs.rs pages of one of `names`, as
+/// `docs.rs/<name>` or `docs.rs/crate/<name>`.
 fn docs_rs(line: &str, names: &[&str]) -> Option<Pin> {
-    names
+    ["docs.rs/", "docs.rs/crate/"]
         .iter()
-        .any(|name| {
-            line.match_indices(&format!("docs.rs/{name}"))
-                .any(|(at, link)| {
-                    !line[at + link.len()..]
-                        .starts_with(|c: char| c.is_ascii_alphanumeric() || "-_".contains(c))
-                })
+        .flat_map(|host| names.iter().map(move |name| format!("{host}{name}")))
+        .any(|link| {
+            line.match_indices(&link).any(|(at, found)| {
+                !line[at + found.len()..]
+                    .starts_with(|c: char| c.is_ascii_alphanumeric() || "-_".contains(c))
+            })
         })
         .then_some(Pin::DocsRs)
 }
@@ -110,23 +111,41 @@ fn unpinned(text: &str, names: &[&str], alpha: bool) -> Vec<(usize, Pin)> {
     text.lines()
         .enumerate()
         .filter_map(|(index, line)| {
-            let pin = install_pin(line, names)
-                .or_else(|| dependency_pin(line, names))
-                .or_else(|| docs_rs(line, names))?;
+            let pins = [
+                install_pin(line, names),
+                dependency_pin(line, names),
+                docs_rs(line, names),
+            ];
+            // A git line fails in every case, so another kind on its line must not hide it.
+            let pin = if pins.contains(&Some(Pin::Git)) {
+                Pin::Git
+            } else {
+                pins.into_iter().flatten().next()?
+            };
             (pin == Pin::Git || alpha).then_some((index + 1, pin))
         })
         .collect()
 }
 
-/// What a `cargo install` of one of `names` on `line` lacks, if anything.
+/// What a `cargo install`, `binstall` or `add` of one of `names` on `line`
+/// lacks, if anything. Only the command's own words count: it ends with its
+/// code span or at a shell separator, and punctuation around a word is prose.
 fn install_pin(line: &str, names: &[&str]) -> Option<Pin> {
-    if !(line.contains("cargo install ") || line.contains("cargo binstall ")) {
-        return None;
+    let all: Vec<&str> = line.split_whitespace().collect();
+    let start = all.windows(2).position(|pair| {
+        pair[0].trim_start_matches('`') == "cargo"
+            && ["install", "binstall", "add"].contains(&pair[1])
+    })? + 2;
+    let mut words = Vec::new();
+    for word in &all[start..] {
+        if [";", "&&", "||", "|"].contains(word) {
+            break;
+        }
+        words.push(word.trim_matches(|c: char| "`.,;:()[]".contains(c)));
+        if word.contains('`') {
+            break;
+        }
     }
-    let words: Vec<&str> = line
-        .split_whitespace()
-        .map(|w| w.trim_matches('`'))
-        .collect();
     let names_one = words.iter().any(|word| {
         names
             .iter()
@@ -168,8 +187,7 @@ fn dependency_pin(line: &str, names: &[&str]) -> Option<Pin> {
                 return None;
             }
             let value = value.trim_start();
-            if let Some(text) = value.strip_prefix('"') {
-                let requirement = text.split('"').next()?;
+            if let Some(requirement) = quoted(value) {
                 return semver::VersionReq::parse(requirement)
                     .is_ok()
                     .then_some(Pin::Registry);
@@ -197,8 +215,14 @@ fn field<'a>(table: &'a str, key: &str) -> Option<&'a str> {
             return None;
         }
         let value = table[at + key.len()..].trim_start().strip_prefix('=')?;
-        value.trim_start().strip_prefix('"')?.split('"').next()
+        quoted(value.trim_start())
     })
+}
+
+/// The text of the TOML string `value` starts with, basic or literal.
+fn quoted(value: &str) -> Option<&str> {
+    let quote = value.chars().next().filter(|c| ['"', '\''].contains(c))?;
+    value[1..].split(quote).next()
 }
 
 /// `v` and the version of the package that names the release.
@@ -293,11 +317,14 @@ mod tests {
         }]
     }
 
-    /// A fresh git repository of its own for this test process, with `files`
-    /// as `(path, text)`, each added to its index; a reused process id finds
-    /// no index of an earlier run.
+    /// A fresh git repository of its own for this test, with `files` as
+    /// `(path, text)`, each added to its index; a reused process id finds no
+    /// index of an earlier run, and tests on threads of one process get one
+    /// each.
     fn repository(files: &[(&str, &str)]) -> std::path::PathBuf {
-        let root = std::env::temp_dir().join(format!("xtask-tag-lines-{}", std::process::id()));
+        let thread = format!("{:?}", std::thread::current().id()).replace(['(', ')'], "");
+        let root =
+            std::env::temp_dir().join(format!("xtask-tag-lines-{}-{thread}", std::process::id()));
         if root.exists() {
             std::fs::remove_dir_all(&root).unwrap();
         }
@@ -374,13 +401,52 @@ mod tests {
         let text = "[API](https://docs.rs/enshwick)\n\
                     [Load](https://docs.rs/enshwick/latest/enshwick/struct.Load.html)\n\
                     [cli](https://docs.rs/cargo-enshwick/)\n\
-                    [macros](https://docs.rs/enshwick-macros)\n\
+                    [longer name](https://docs.rs/enshwick-other)\n\
                     [arc-swap](https://docs.rs/arc-swap)\n";
         assert_eq!(
             unpinned(text, &NAMES, true),
             [(1, Pin::DocsRs), (2, Pin::DocsRs), (3, Pin::DocsRs)]
         );
         assert!(unpinned(text, &NAMES, false).is_empty());
+    }
+
+    #[test]
+    fn cargo_add_and_docs_rs_crate_pages_are_other_spellings_of_the_same_lines() {
+        let text = "cargo add enshwick --features unstable\n\
+                    cargo add --git https://github.com/enshwick/enshwick enshwick\n\
+                    cargo add --git https://github.com/enshwick/enshwick --tag v1.0.0-alpha.13 enshwick\n\
+                    [crate](https://docs.rs/crate/enshwick/latest)\n\
+                    cargo add serde\n";
+        assert_eq!(
+            unpinned(text, &NAMES, true),
+            [(1, Pin::Registry), (2, Pin::Git), (4, Pin::DocsRs)]
+        );
+    }
+
+    #[test]
+    fn only_the_install_command_and_its_own_words_count() {
+        let text = "Run `cargo install cargo-nextest`, then `cargo xtask check` in enshwick\n\
+                    Install it with `cargo install cargo-enshwick`.\n\
+                    `cargo install cargo-enshwick`, then add `enshwick = { git = \"https://github.com/enshwick/enshwick\" }`\n\
+                    cargo add serde && cd enshwick\n\
+                    cargo build -p cargo-enshwick\n";
+        let names = ["enshwick", "cargo-enshwick", "xtask"];
+        assert_eq!(
+            unpinned(text, &names, true),
+            [(2, Pin::Registry), (3, Pin::Git)]
+        );
+        assert_eq!(unpinned(text, &names, false), [(3, Pin::Git)]);
+    }
+
+    #[test]
+    fn toml_literal_strings_read_as_basic_ones() {
+        let text = "enshwick = { git = 'https://github.com/enshwick/enshwick', tag = 'v1.0.0-alpha.13' }\n\
+                    enshwick = { git = 'https://github.com/enshwick/enshwick' }\n\
+                    enshwick = '1'\n";
+        assert_eq!(
+            unpinned(text, &NAMES, true),
+            [(2, Pin::Git), (3, Pin::Registry)]
+        );
     }
 
     #[test]
