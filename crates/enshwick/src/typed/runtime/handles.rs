@@ -19,7 +19,7 @@ use crate::{Entity, Host, Load, Off};
 fn resolve(
     load: &Load<'_>,
     id: &'static str,
-    check: fn(&Value) -> Result<(), ShapeError>,
+    check: &dyn Fn(&Value) -> Result<(), ShapeError>,
 ) -> Result<(crate::ecs::ComponentType, &'static Type<'static>), Off> {
     let host = load.host();
     let ecs =
@@ -59,7 +59,7 @@ impl RawComponent {
     pub(crate) fn resolve(
         load: &Load<'_>,
         id: &'static str,
-        check: fn(&Value) -> Result<(), ShapeError>,
+        check: &dyn Fn(&Value) -> Result<(), ShapeError>,
     ) -> Result<Self, Off> {
         let (ecs, ty) = resolve(load, id, check)?;
         Ok(Self {
@@ -123,7 +123,7 @@ impl RawEvent {
     pub(crate) fn resolve(
         load: &Load<'_>,
         id: &'static str,
-        check: fn(&Value) -> Result<(), ShapeError>,
+        check: &dyn Fn(&Value) -> Result<(), ShapeError>,
     ) -> Result<Self, Off> {
         let (_, ty) = resolve(load, id, check)?;
         Ok(Self {
@@ -172,7 +172,7 @@ impl RawResource {
     pub(crate) fn resolve(
         load: &Load<'_>,
         id: &'static str,
-        check: fn(&Value) -> Result<(), ShapeError>,
+        check: &dyn Fn(&Value) -> Result<(), ShapeError>,
     ) -> Result<Self, Off> {
         let (_, ty) = resolve(load, id, check)?;
         Ok(Self {
@@ -295,7 +295,7 @@ impl<T: Component> ComponentType<T> {
     /// See [`ComponentType`].
     pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
         Ok(Self {
-            raw: RawComponent::resolve(load, T::ID, check::<T>)?,
+            raw: RawComponent::resolve(load, T::ID, &check::<T>)?,
             of: PhantomData,
         })
     }
@@ -394,7 +394,7 @@ impl<T: Event> EventType<T> {
     /// See [`EventType`].
     pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
         Ok(Self {
-            raw: RawEvent::resolve(load, T::ID, check::<T>)?,
+            raw: RawEvent::resolve(load, T::ID, &check::<T>)?,
             of: PhantomData,
         })
     }
@@ -470,7 +470,7 @@ impl<T: Resource> ResourceType<T> {
     /// See [`ResourceType`].
     pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
         Ok(Self {
-            raw: RawResource::resolve(load, T::ID, check::<T>)?,
+            raw: RawResource::resolve(load, T::ID, &check::<T>)?,
             of: PhantomData,
         })
     }

@@ -1,9 +1,10 @@
 //! The typed API as a script reaches it: a handle per role, opened by the
 //! generated type's id at start, whose values cross as tables by the
-//! generated items' Rust names, read and written through the generated
-//! Rust type itself.
+//! generated items' Rust names, read and written through the type's
+//! [`Shape`](super::Shape), which takes and refuses what the generated Rust
+//! type does.
 
-use super::{RawComponent, RawEvent, RawResource, Row};
+use super::{RawComponent, RawEvent, RawResource, Role, Row};
 use crate::content::Guid;
 use crate::resources::{Registry, Resources, Value as Data};
 use crate::script::{Answer, Class, Error, FromScript, IntoScript, Ty, Typed, Value};
@@ -40,8 +41,10 @@ impl Answer for Result<Fields, Error> {
 }
 
 /// `value`, of `ty`, with each record a table by its fields' names, as a
-/// script holds game data.
-fn by_name(value: Value, ty: &Ty) -> Value {
+/// script held game data before shapes: the path the tests hold every
+/// shape to.
+#[cfg(any(test, feature = "test"))]
+pub(crate) fn by_name(value: Value, ty: &Ty) -> Value {
     match (value, ty) {
         (Value::Record(values), Ty::Record(record)) => Value::Map(
             record
@@ -62,8 +65,9 @@ fn by_name(value: Value, ty: &Ty) -> Value {
 
 /// `value`, a script's game data of `ty`, with each table of a record in
 /// its fields' order; a field the table leaves out is nil, and a key no
-/// field has is refused.
-fn by_place(value: Value, ty: &Ty) -> Result<Value, Error> {
+/// field has is refused; the other half of [`by_name`].
+#[cfg(any(test, feature = "test"))]
+pub(crate) fn by_place(value: Value, ty: &Ty) -> Result<Value, Error> {
     match (value, ty) {
         (Value::Map(mut entries), Ty::Record(record)) => {
             let fields = record
@@ -106,7 +110,7 @@ fn by_place(value: Value, ty: &Ty) -> Result<Value, Error> {
 impl Row {
     /// The generated type of id `id`, its parts joined by `.` or `::`, with
     /// the role `role`.
-    fn find(id: &str, role: &str) -> Result<&'static Self, Off> {
+    fn find(id: &str, role: Role) -> Result<&'static Self, Off> {
         let id = id.replace('.', "::");
         crate::typed::NAMED
             .iter()
@@ -114,24 +118,25 @@ impl Row {
             .ok_or_else(|| {
                 Off::new(format!(
                     "typed {id}: no generated {} of that id",
-                    role.to_lowercase()
+                    role.noun()
                 ))
             })
     }
 
-    /// The codec's `value` as a script gets it, read through the generated
-    /// type.
+    /// The codec's `value` as a script gets it, read through the type's
+    /// shape.
     fn shown(&self, value: &Data) -> Result<Fields, Off> {
-        let value =
-            (self.to_script)(value).map_err(|e| Off::new(format!("typed {}: {e}", self.id)))?;
-        Ok(Fields(by_name(value, self.script)))
+        self.shape
+            .shown(value)
+            .map(Fields)
+            .map_err(|e| Off::new(format!("typed {}: {e}", self.id)))
     }
 
     /// A script's `fields` as the codec writes them, read through the
-    /// generated type.
+    /// type's shape.
     fn taken(&self, fields: Fields) -> Result<Data, Off> {
-        by_place(fields.0, self.script)
-            .and_then(self.from_script)
+        self.shape
+            .taken(fields.0)
             .map_err(|e| Off::new(format!("typed {}: {e}", self.id)))
     }
 
@@ -149,7 +154,7 @@ impl Row {
 
     /// The generated component of id `id`, its parts joined by `.` or `::`.
     pub(crate) fn component(id: &str) -> Result<&'static Self, Off> {
-        Self::find(id, "Component")
+        Self::find(id, Role::Component)
     }
 
     /// A script's table of every field of the type, as the codec writes it.
@@ -365,10 +370,10 @@ impl Load<'_> {
     /// naming the build.
     #[script(name = "component_type")]
     pub(crate) fn typed_component_type(&mut self, id: &str) -> Result<ComponentType, Off> {
-        let row = Row::find(id, "Component")?;
+        let row = Row::find(id, Role::Component)?;
         Ok(ComponentType {
             row,
-            raw: RawComponent::resolve(self, row.id, row.check)?,
+            raw: RawComponent::resolve(self, row.id, &|value| row.check(value))?,
             world: self.world(),
         })
     }
@@ -384,10 +389,10 @@ impl Load<'_> {
     /// build.
     #[script(name = "event_type")]
     pub(crate) fn typed_event_type(&mut self, id: &str) -> Result<EventType, Off> {
-        let row = Row::find(id, "Event")?;
+        let row = Row::find(id, Role::Event)?;
         Ok(EventType {
             row,
-            raw: RawEvent::resolve(self, row.id, row.check)?,
+            raw: RawEvent::resolve(self, row.id, &|value| row.check(value))?,
             host: self.host(),
         })
     }
@@ -403,10 +408,10 @@ impl Load<'_> {
     /// build.
     #[script(name = "resource_type")]
     pub(crate) fn typed_resource_type(&mut self, id: &str) -> Result<ResourceType, Off> {
-        let row = Row::find(id, "Resource")?;
+        let row = Row::find(id, Role::Resource)?;
         Ok(ResourceType {
             row,
-            raw: RawResource::resolve(self, row.id, row.check)?,
+            raw: RawResource::resolve(self, row.id, &|value| row.check(value))?,
             host: self.host(),
         })
     }

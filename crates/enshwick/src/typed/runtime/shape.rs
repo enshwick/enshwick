@@ -47,7 +47,7 @@ impl Leaf {
     /// The conversions of `T`.
     const fn of<T: Reflected + IntoScript + FromScript>() -> Self {
         Self {
-            shown: |value| T::from_value(value).map(IntoScript::into_value),
+            shown: |value| <T as Reflected>::from_value(value).map(IntoScript::into_value),
             taken: |value| <T as FromScript>::from_value(value).map(|typed| typed.to_value()),
         }
     }

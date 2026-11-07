@@ -258,7 +258,8 @@ impl FromScript for ComponentChange {
         let edit = edit.map(|fields| -> super::templates::ValueFn {
             std::sync::Arc::new(move |value: &Data| row.overlaid(value, &fields))
         });
-        Ok(ComponentChange::scripted(row.id, row.check, set, edit))
+        let check = std::sync::Arc::new(|value: &Data| row.check(value));
+        Ok(ComponentChange::scripted(row.id, check, set, edit))
     }
 }
 

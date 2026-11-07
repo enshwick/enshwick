@@ -88,7 +88,7 @@ pub(crate) type ValueFn = Arc<dyn Fn(&Value) -> Result<Value, Off> + Send + Sync
 
 /// Whether a value reads as a generated type.
 #[cfg(feature = "typed")]
-type Check = fn(&Value) -> Result<(), crate::typed::ShapeError>;
+type Check = Arc<dyn Fn(&Value) -> Result<(), crate::typed::ShapeError> + Send + Sync>;
 
 /// A component's byte edit: its bytes as the reflected type lays them out;
 /// `false` refuses them.
@@ -300,7 +300,7 @@ impl ComponentChange {
     pub fn set<T: crate::typed::Component>(value: &T) -> Self {
         Self {
             component: T::ID,
-            check: Some(crate::typed::check::<T>),
+            check: Some(Arc::new(crate::typed::check::<T>)),
             op: Op::Set(value.to_value()),
         }
     }
@@ -319,7 +319,7 @@ impl ComponentChange {
     #[must_use]
     pub fn remove<T: crate::typed::Component>() -> Self {
         Self {
-            check: Some(crate::typed::check::<T>),
+            check: Some(Arc::new(crate::typed::check::<T>)),
             ..Self::remove_named(T::ID)
         }
     }
@@ -342,7 +342,7 @@ impl ComponentChange {
     pub fn edit<T: crate::typed::Component>(edit: impl Fn(&mut T) + Send + Sync + 'static) -> Self {
         Self {
             component: T::ID,
-            check: Some(crate::typed::check::<T>),
+            check: Some(Arc::new(crate::typed::check::<T>)),
             op: Op::Edit(Arc::new(move |value| {
                 let mut typed = T::from_value(value)?;
                 edit(&mut typed);
@@ -588,7 +588,7 @@ impl Load<'_> {
                 .map_err(|why| Off::new(format!("{what}: {why}")))?;
             let name = ty.qualified_name();
             #[cfg(feature = "typed")]
-            if let Some(check) = change.check {
+            if let Some(check) = &change.check {
                 crate::typed::sample(registry, name)
                     .ok_or_else(|| Off::new(format!("{what}: {name} does not read")))
                     .and_then(|sample| check(&sample).map_err(Off::from))

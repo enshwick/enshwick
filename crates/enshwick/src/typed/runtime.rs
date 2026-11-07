@@ -9,9 +9,12 @@ use crate::resources::{Value, Variant};
 mod handles;
 mod sample;
 pub(crate) mod script;
+pub(crate) mod shape;
 pub use handles::{ComponentType, EventType, ResourceType};
 pub(crate) use handles::{RawComponent, RawEvent, RawResource};
 pub use sample::sample;
+#[doc(hidden)]
+pub use shape::{Shape, Shaped};
 
 /// Why a [`Value`] is not the shape a generated type expects: a field the
 /// build lacks, or a value of another kind.
@@ -104,9 +107,33 @@ pub trait Named: Reflected + sealed::Sealed + 'static {
     /// Enshwick's id for the type, which the loader maps to the running
     /// build's type.
     const ID: &'static str;
-    /// Its roles by their traits' names: `Component`, `Event`, `Resource`.
+    /// Its roles.
     #[doc(hidden)]
-    const ROLES: &'static [&'static str];
+    const ROLES: &'static [Role];
+}
+
+/// What a [`Named`] type is to a mod, one per role trait.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Role {
+    /// A [`Component`].
+    Component,
+    /// An [`Event`].
+    Event,
+    /// A [`Resource`].
+    Resource,
+}
+
+impl Role {
+    /// The role as a refusal names it.
+    #[must_use]
+    pub const fn noun(self) -> &'static str {
+        match self {
+            Self::Component => "component",
+            Self::Event => "event",
+            Self::Resource => "resource",
+        }
+    }
 }
 
 /// A generated ECS component, read and written through [`ComponentType`].
@@ -235,13 +262,9 @@ use crate::script::convert::{EXACT, EXACT_NUMBER};
 /// The variant of a generated enum that holds a constant it does not name.
 pub(crate) const OTHER: &str = "Other";
 
-/// Why `text` names no variant of the generated enum `ty`.
+/// Why `text` names no variant of the generated enum `name`.
 #[must_use]
-pub(crate) fn no_variant(text: &str, ty: &crate::script::Ty) -> crate::script::Error {
-    let name = match ty {
-        crate::script::Ty::Union(union) => union.name(),
-        _ => "",
-    };
+pub(crate) fn no_variant(text: &str, name: &str) -> crate::script::Error {
     crate::script::Error::new(format!(
         "{text:?} is no constant of {name}; a constant it does not name is {{ Other = <name or number> }}"
     ))
@@ -286,26 +309,30 @@ impl<E: Reflected> Reflected for Flags<E> {
     }
 
     fn to_value(&self) -> Value {
-        let values: Vec<Value> = self.0.iter().map(E::to_value).collect();
-        if !values.is_empty() && values.iter().all(|v| matches!(v, Value::Uint(_))) {
-            return Value::Uint(values.iter().fold(0, |bits, v| match v {
-                Value::Uint(bit) if *bit < 64 => bits | (1 << bit),
-                _ => bits,
-            }));
-        }
-        // A numbered flag among named ones has no name the codec can write:
-        // it stays as its number's text, which the codec refuses on writing,
-        // rather than silently dropping a flag.
-        Value::Flags(
-            values
-                .iter()
-                .map(|v| match v {
-                    Value::Name(name) => name.clone(),
-                    other => format!("{other:?}"),
-                })
-                .collect(),
-        )
+        flags_value(self.0.iter().map(E::to_value).collect())
     }
+}
+
+/// The codec's value of a bitmask whose set flags' values are `values`.
+fn flags_value(values: Vec<Value>) -> Value {
+    if !values.is_empty() && values.iter().all(|v| matches!(v, Value::Uint(_))) {
+        return Value::Uint(values.iter().fold(0, |bits, v| match v {
+            Value::Uint(bit) if *bit < 64 => bits | (1 << bit),
+            _ => bits,
+        }));
+    }
+    // A numbered flag among named ones has no name the codec can write:
+    // it stays as its number's text, which the codec refuses on writing,
+    // rather than silently dropping a flag.
+    Value::Flags(
+        values
+            .iter()
+            .map(|v| match v {
+                Value::Name(name) => name.clone(),
+                other => format!("{other:?}"),
+            })
+            .collect(),
+    )
 }
 
 /// A script's flags: the list of each set flag's constant.
@@ -356,63 +383,107 @@ pub(crate) fn fields_of(value: Value) -> Vec<(String, Value)> {
 pub fn check<T: Reflected>(value: &Value) -> Result<(), ShapeError> {
     T::from_value(value).map(drop)
 }
-
-/// A generated type with a role, its Rust type erased: its id, roles and
-/// script type, and its conversions, for a script runtime and for the tests
-/// that hold the generated items against a build's types.
+/// A generated type with a role, its Rust type erased: its id, roles,
+/// script type and shape, for a script runtime and for the tests that hold
+/// the generated items against a build's types.
+///
+/// A row holds no compiled conversion of its type: the loader links the
+/// shapes, which are data, instead of code for every generated type.
 #[doc(hidden)]
 #[derive(Debug)]
 pub struct Row {
     /// Enshwick's id for the type, its [`Named::ID`].
     pub id: &'static str,
     /// Its roles, as [`Named::ROLES`] names them.
-    pub roles: &'static [&'static str],
-    /// Whether a value reads as the type.
-    pub check: fn(&Value) -> Result<(), ShapeError>,
+    pub roles: &'static [Role],
     /// Its type in a script.
     pub script: &'static crate::script::Ty,
+    /// How it reads and crosses into a script.
+    pub shape: &'static Shape,
+}
+
+impl Row {
+    /// The row of `T`.
+    #[must_use]
+    pub(crate) const fn of<T: Named + Shaped + crate::script::Typed>() -> Self {
+        Self {
+            id: T::ID,
+            roles: T::ROLES,
+            script: <T as crate::script::Typed>::TY,
+            shape: T::SHAPE,
+        }
+    }
+
+    /// Whether `value` reads as the type.
+    ///
+    /// # Errors
+    ///
+    /// [`ShapeError`] when it does not.
+    pub fn check(&self, value: &Value) -> Result<(), ShapeError> {
+        self.shape.check(value)
+    }
+
+    /// `value` read as the type, as a script gets it.
+    ///
+    /// # Errors
+    ///
+    /// [`ShapeError`] when it does not read as the type.
+    pub fn to_script(&self, value: &Value) -> Result<crate::script::Value, ShapeError> {
+        self.shape.shown(value)
+    }
+}
+
+/// A generated type's compiled conversions, in the order of the table of
+/// [`Row`]s, for the tests that hold every row's shape to its Rust type.
+#[cfg(feature = "test")]
+#[doc(hidden)]
+#[derive(Debug)]
+pub struct Compiled {
     /// A value of the codec read as the type, as a script gets it.
     pub to_script: fn(&Value) -> Result<crate::script::Value, ShapeError>,
     /// A script's value read as the type, as the codec writes it.
     pub from_script: fn(crate::script::Value) -> Result<Value, crate::script::Error>,
 }
 
-impl Row {
-    /// The row of `T`.
-    #[doc(hidden)]
+#[cfg(feature = "test")]
+impl Compiled {
+    /// The conversions of `T`, the path script values took before shapes.
     #[must_use]
-    pub const fn of<T: Named + crate::script::IntoScript + crate::script::FromScript>() -> Self {
+    pub(crate) const fn of<
+        T: Reflected + crate::script::Typed + crate::script::IntoScript + crate::script::FromScript,
+    >() -> Self {
         Self {
-            id: T::ID,
-            roles: T::ROLES,
-            check: check::<T>,
-            script: <T as crate::script::Typed>::TY,
-            to_script: to_script::<T>,
-            from_script: from_script::<T>,
+            to_script: |value| {
+                <T as Reflected>::from_value(value).map(|typed| {
+                    script::by_name(
+                        crate::script::IntoScript::into_value(typed),
+                        <T as crate::script::Typed>::TY,
+                    )
+                })
+            },
+            from_script: |value| {
+                script::by_place(value, <T as crate::script::Typed>::TY)
+                    .and_then(<T as crate::script::FromScript>::from_value)
+                    .map(|typed| typed.to_value())
+            },
         }
     }
-}
-
-fn to_script<T: Reflected + crate::script::IntoScript>(
-    value: &Value,
-) -> Result<crate::script::Value, ShapeError> {
-    T::from_value(value).map(crate::script::IntoScript::into_value)
-}
-
-fn from_script<T: Reflected + crate::script::FromScript>(
-    value: crate::script::Value,
-) -> Result<Value, crate::script::Error> {
-    <T as crate::script::FromScript>::from_value(value).map(|typed| typed.to_value())
 }
 
 /// The table of every generated type with a role, a [`Row`] each.
 macro_rules! named_table {
     ($($id:literal => $ty:ty,)*) => {
         /// Every generated type with a role, by id, with its script type
-        /// and a check that a value reads as it.
+        /// and its shape.
         #[doc(hidden)]
         pub const NAMED: &[$crate::typed::runtime::Row] =
             &[$($crate::typed::runtime::Row::of::<$ty>()),*];
+
+        /// The compiled conversions of each type of [`NAMED`], in its order.
+        #[cfg(feature = "test")]
+        #[doc(hidden)]
+        pub const COMPILED: &[$crate::typed::runtime::Compiled] =
+            &[$($crate::typed::runtime::Compiled::of::<$ty>()),*];
     };
 }
 pub(crate) use named_table;
@@ -559,8 +630,32 @@ macro_rules! reflected_struct {
                 $crate::resources::Value::Struct(parts.into_iter().flatten().collect())
             }
         }
+
+        impl $crate::typed::runtime::Shaped for $name {
+            const SHAPE: &'static $crate::typed::runtime::Shape =
+                &$crate::typed::runtime::Shape::Struct(&$crate::typed::runtime::shape::Struct::new(
+                    ::core::concat!(::core::module_path!(), "::", ::core::stringify!($name)),
+                    $crate::typed::runtime::base_shape!($($base)?),
+                    &[$($crate::typed::runtime::shape::Field::new(
+                        $crate::typed::runtime::unraw(::core::stringify!($field)),
+                        $game,
+                        || <$ty as $crate::typed::runtime::Shaped>::SHAPE,
+                    ),)*],
+                ));
+        }
     };
 }
+
+/// The shape of a generated struct's base, or none.
+macro_rules! base_shape {
+    () => {
+        ::core::option::Option::None
+    };
+    ($base:ty) => {
+        ::core::option::Option::Some(|| <$base as $crate::typed::runtime::Shaped>::SHAPE)
+    };
+}
+pub(crate) use base_shape;
 pub(crate) use reflected_struct;
 
 /// A generated enum: a variant per constant the build names, and `Other`
@@ -614,7 +709,7 @@ macro_rules! reflected_enum {
                         $(::core::stringify!($variant) => ::core::result::Result::Ok(Self::$variant),)*
                         _ => ::core::result::Result::Err($crate::typed::runtime::no_variant(
                             &text,
-                            <Self as $crate::script::Typed>::TY,
+                            ::core::concat!(::core::module_path!(), "::", ::core::stringify!($name)),
                         )),
                     },
                     // A name the build gives a variant reads as that variant,
@@ -658,6 +753,14 @@ macro_rules! reflected_enum {
                 }
             }
         }
+
+        impl $crate::typed::runtime::Shaped for $name {
+            const SHAPE: &'static $crate::typed::runtime::Shape =
+                &$crate::typed::runtime::Shape::Enum(&$crate::typed::runtime::shape::Enum::new(
+                    ::core::concat!(::core::module_path!(), "::", ::core::stringify!($name)),
+                    &[$((::core::stringify!($variant), $game),)*],
+                ));
+        }
     };
 }
 pub(crate) use reflected_enum;
@@ -668,7 +771,8 @@ macro_rules! named {
         impl $crate::typed::runtime::sealed::Sealed for $name {}
         impl $crate::typed::Named for $name {
             const ID: &'static str = $id;
-            const ROLES: &'static [&'static str] = &[$(::core::stringify!($role)),+];
+            const ROLES: &'static [$crate::typed::runtime::Role] =
+                &[$($crate::typed::runtime::Role::$role),+];
         }
         $(impl $crate::typed::$role for $name {})+
     };
