@@ -8,9 +8,12 @@
 //! its base, the mods resolved and initialised as at a start, and nothing
 //! hooked. Each mod that turns off says why, as it would in game.
 
+#![forbid(unsafe_code)]
+
 use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
+use std::process::ExitCode;
 
 use enshwick_gamedata::reflect::{Fingerprint, Image, Layout, Reflection};
 use enshwick_gamedata::{self as tables, PartState, Resolved, Table};
@@ -92,8 +95,20 @@ enum Step {
     Run(RunArgs),
 }
 
+fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match compat(&args) {
+        Ok(true) => ExitCode::SUCCESS,
+        Ok(false) => ExitCode::from(BROKEN),
+        Err(error) => {
+            let _shown = writeln!(std::io::stderr(), "error: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
 /// Runs `cargo xtask compat` with `args`; whether everything works.
-pub(crate) fn main(args: &[String]) -> Result<bool, String> {
+fn compat(args: &[String]) -> Result<bool, String> {
     use clap::Parser as _;
     let cli = match Cli::try_parse_from(
         std::iter::once("cargo xtask compat".to_owned()).chain(args.iter().cloned()),
@@ -637,7 +652,7 @@ fn start_mods(args: &Args, dlls: &[PathBuf]) -> Result<Vec<ModOutcome>, String> 
     let me = std::env::current_exe().map_err(|e| e.to_string())?;
     let mut command = std::process::Command::new(me);
     command
-        .args(["compat", "run", "--exe"])
+        .args(["run", "--exe"])
         .arg(&args.exe)
         .arg("--game")
         .arg(&game);
