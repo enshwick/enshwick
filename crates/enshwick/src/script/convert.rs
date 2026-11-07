@@ -398,6 +398,7 @@ impl FromScript for String {
     fn from_value(value: Value) -> Result<Self, Error> {
         match value {
             Value::String(text) => Ok(text),
+            Value::Name(name) => Ok(name.to_owned()),
             other => Err(expected("a string", &other)),
         }
     }
@@ -609,7 +610,7 @@ pub fn record_fields(value: Value, count: usize) -> Result<std::vec::IntoIter<Va
 ///
 /// [`Error`] naming the parameter when the argument is not a `T`.
 pub fn argument<T: FromScript>(
-    args: &mut std::vec::IntoIter<Value>,
+    args: &mut impl Iterator<Item = Value>,
     name: &str,
 ) -> Result<T, Error> {
     T::from_value(args.next().unwrap_or(Value::Nil)).map_err(|e| e.within(name))
@@ -623,7 +624,7 @@ pub fn argument<T: FromScript>(
 ///
 /// As [`argument`].
 pub fn argument_or_default<T: FromScript + Default>(
-    args: &mut std::vec::IntoIter<Value>,
+    args: &mut impl Iterator<Item = Value>,
     name: &str,
 ) -> Result<T, Error> {
     match args.next() {

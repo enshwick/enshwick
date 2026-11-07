@@ -34,7 +34,7 @@ use super::{Declared, Error, FromScript, Function, IntoScript, Ty, Typed, Value}
 ///
 /// let Value::Object(handle) = Counter(3).into_value() else { unreachable!() };
 /// let get = handle.class().methods().into_iter().find(|m| m.name() == "get");
-/// let answer = handle.call(&get.ok_or(enshwick::script::Error::new("no get"))?, Vec::new())?;
+/// let answer = handle.call(&get.ok_or(enshwick::script::Error::new("no get"))?, &mut [])?;
 /// assert!(matches!(answer, Value::Number(n) if n == 3.0));
 /// # Ok::<(), enshwick::script::Error>(())
 /// ```
@@ -56,7 +56,7 @@ pub struct Class {
     name: &'static str,
     doc: &'static str,
     describe: fn() -> Vec<Declared>,
-    call: fn(&(dyn Any + Send + Sync), usize, Vec<Value>) -> Result<Value, Error>,
+    call: fn(&(dyn Any + Send + Sync), usize, &mut [Value]) -> Result<Value, Error>,
     lent: bool,
 }
 
@@ -159,7 +159,7 @@ impl Class {
 fn call<T: Object>(
     this: &(dyn Any + Send + Sync),
     index: usize,
-    args: Vec<Value>,
+    args: &mut [Value],
 ) -> Result<Value, Error> {
     let this = this
         .downcast_ref::<T>()
@@ -209,8 +209,66 @@ impl Handle {
     /// # Examples
     ///
     /// See [`Object`].
-    pub fn call(&self, method: &Declared, args: Vec<Value>) -> Result<Value, Error> {
+    pub fn call(&self, method: &Declared, args: &mut [Value]) -> Result<Value, Error> {
         (self.class.call)(&*self.this, method.index(), args)
+    }
+}
+
+/// An object a Rust caller already shares crosses as that same allocation:
+/// a hook that keeps one `Arc` and hands a script a clone on every call
+/// allocates nothing.
+///
+/// # Examples
+///
+/// ```rust,standalone_crate
+/// use std::sync::Arc;
+///
+/// use enshwick::script::{Class, FromScript, Function, IntoScript, Object};
+///
+/// #[derive(Clone, Copy, Debug)]
+/// pub struct Hit(f32);
+///
+/// #[enshwick::script(hits)]
+/// impl Hit {
+///     /// The damage.
+///     #[script]
+///     pub fn amount(&self) -> f32 {
+///         self.0
+///     }
+/// }
+///
+/// impl Object for Hit {
+///     const CLASS: &'static Class = &Class::lent::<Self>("Hit", "A hit.");
+///     const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_HITS];
+/// }
+///
+/// let kept = Arc::new(Hit(3.0));
+/// let back = Arc::<Hit>::from_value(Arc::clone(&kept).into_value())?;
+/// assert!(Arc::ptr_eq(&kept, &back));
+/// # Ok::<(), enshwick::script::Error>(())
+/// ```
+impl<T: Object> Typed for Arc<T> {
+    const TY: &'static Ty = &Ty::Object(T::CLASS);
+}
+
+impl<T: Object> IntoScript for Arc<T> {
+    fn into_value(self) -> Value {
+        Value::Object(Handle {
+            class: T::CLASS,
+            this: self,
+        })
+    }
+}
+
+impl<T: Object> FromScript for Arc<T> {
+    fn from_value(value: Value) -> Result<Self, Error> {
+        match value {
+            Value::Object(handle) => handle
+                .this
+                .downcast::<T>()
+                .map_err(|_| Error::new(format!("expected a {}", T::CLASS.name))),
+            _ => Err(Error::new(format!("expected a {}", T::CLASS.name))),
+        }
     }
 }
 

@@ -409,7 +409,7 @@ impl Param {
 /// # Examples
 ///
 /// See [`Function`], whose `#[script]` methods get one each.
-pub type Call<T> = fn(&T, Vec<Value>) -> Result<Value, Error>;
+pub type Call<T> = fn(&T, &mut [Value]) -> Result<Value, Error>;
 
 /// A method of `T` a script may call, from [`#[script]`](macro@crate::script).
 ///
@@ -443,7 +443,7 @@ pub type Call<T> = fn(&T, Vec<Value>) -> Result<Value, Error>;
 /// let roll = &Dice::SCRIPT_ROLLS[0];
 /// assert_eq!(roll.name(), "roll");
 /// assert_eq!(roll.signature().params()[0].name(), "count");
-/// let Ok(Value::Number(sum)) = roll.call(&Dice, vec![Value::Number(2.0)]) else { unreachable!() };
+/// let Ok(Value::Number(sum)) = roll.call(&Dice, &mut [Value::Number(2.0)]) else { unreachable!() };
 /// assert_eq!(sum, 8.0);
 /// ```
 pub struct Function<T: 'static> {
@@ -510,7 +510,7 @@ impl<T> Function<T> {
     }
 
     /// Calls the method on `this` with `args`, one per parameter, each of
-    /// the parameter's type.
+    /// the parameter's type; the method takes them out of the slice.
     ///
     /// # Errors
     ///
@@ -520,7 +520,7 @@ impl<T> Function<T> {
     /// # Examples
     ///
     /// See [`Function`].
-    pub fn call(&self, this: &T, args: Vec<Value>) -> Result<Value, Error> {
+    pub fn call(&self, this: &T, args: &mut [Value]) -> Result<Value, Error> {
         if args.len() > self.signature.params.len() {
             return Err(Error::new(format!(
                 "{} takes {} arguments, not {}",
@@ -539,7 +539,7 @@ impl<T> Function<T> {
 /// # Examples
 ///
 /// See [`InitFunction`].
-pub type InitCall = fn(&mut crate::Load<'_>, Vec<Value>) -> Result<Value, Error>;
+pub type InitCall = fn(&mut crate::Load<'_>, &mut [Value]) -> Result<Value, Error>;
 
 /// A method of [`Load`](crate::Load) a script may call while the mod
 /// starts, as a Rust mod calls it in `init`, from
@@ -556,7 +556,7 @@ pub type InitCall = fn(&mut crate::Load<'_>, Vec<Value>) -> Result<Value, Error>
 ///         .flat_map(|n| n.init_functions())
 ///         .find(|f| f.name() == "mod_dir")
 ///         .ok_or(enshwick::Off::new("no mod_dir"))?;
-///     let _dir: Value = log_dir.call(load, Vec::new())?;
+///     let _dir: Value = log_dir.call(load, &mut [])?;
 ///     Ok(())
 /// }
 /// ```
@@ -633,7 +633,7 @@ impl InitFunction {
     /// # Examples
     ///
     /// See [`InitFunction`].
-    pub fn call(&self, load: &mut crate::Load<'_>, args: Vec<Value>) -> Result<Value, Error> {
+    pub fn call(&self, load: &mut crate::Load<'_>, args: &mut [Value]) -> Result<Value, Error> {
         if args.len() > self.signature.params.len() {
             return Err(Error::new(format!(
                 "{} takes {} arguments, not {}",
@@ -746,6 +746,10 @@ pub enum Value {
     Number(f64),
     /// [`Ty::String`] and [`Ty::Choice`].
     String(String),
+    /// A name the API's own types give without allocating: a
+    /// [`Ty::Choice`], or a [`Ty::Union`] variant without a value. Reads as
+    /// [`Value::String`] wherever text is taken.
+    Name(&'static str),
     /// [`Ty::Vector`].
     Vector([f64; 3]),
     /// [`Ty::List`].
@@ -763,7 +767,7 @@ pub enum Value {
 }
 
 /// The function behind a [`Callback`].
-type CallbackFn = dyn Fn(Vec<Value>) -> Result<Value, Error> + Send + Sync;
+type CallbackFn = dyn Fn(&mut [Value]) -> Result<Value, Error> + Send + Sync;
 
 /// A function a script passed in, callable from Rust on any thread the
 /// runtime allows; the runtime reports the script's own errors.
@@ -777,7 +781,7 @@ type CallbackFn = dyn Fn(Vec<Value>) -> Result<Value, Error> + Send + Sync;
 ///     Some(Value::Number(n)) => Ok(Value::Number(n * 2.0)),
 ///     _ => Ok(Value::Nil),
 /// });
-/// assert!(matches!(double.call(vec![Value::Number(2.0)]), Ok(Value::Number(4.0))));
+/// assert!(matches!(double.call(&mut [Value::Number(2.0)]), Ok(Value::Number(4.0))));
 /// ```
 #[derive(Clone)]
 pub struct Callback {
@@ -801,7 +805,7 @@ impl Callback {
     ///
     /// See [`Callback`].
     pub fn new(
-        function: impl Fn(Vec<Value>) -> Result<Value, Error> + Send + Sync + 'static,
+        function: impl Fn(&mut [Value]) -> Result<Value, Error> + Send + Sync + 'static,
     ) -> Self {
         Self {
             function: Arc::new(function),
@@ -832,7 +836,8 @@ impl Callback {
         }
     }
 
-    /// Calls the function with `args`.
+    /// Calls the function with `args`, which it may take out of the slice:
+    /// an array on the stack holds them without allocating.
     ///
     /// # Errors
     ///
@@ -841,7 +846,7 @@ impl Callback {
     /// # Examples
     ///
     /// See [`Callback`].
-    pub fn call(&self, args: Vec<Value>) -> Result<Value, Error> {
+    pub fn call(&self, args: &mut [Value]) -> Result<Value, Error> {
         (self.function)(args)
     }
 

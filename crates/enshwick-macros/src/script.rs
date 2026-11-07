@@ -232,7 +232,7 @@ fn derive_choice(input: &DeriveInput, data: &syn::DataEnum) -> syn::Result<Token
 
         impl #script::IntoScript for #ident {
             fn into_value(self) -> #script::Value {
-                #script::Value::String(::std::string::String::from(match self { #(#into,)* }))
+                #script::Value::Name(match self { #(#into,)* })
             }
         }
 
@@ -277,9 +277,7 @@ fn derive_union(input: &DeriveInput, data: &syn::DataEnum) -> syn::Result<TokenS
         match &variant.fields {
             Fields::Unit => {
                 described.push(quote!(#(#cfg)* #script::Variant::new(#label, #variant_doc, ::core::option::Option::None)));
-                into.push(
-                    quote!(#(#cfg)* Self::#v => #script::Value::String(::std::string::String::from(#label))),
-                );
+                into.push(quote!(#(#cfg)* Self::#v => #script::Value::Name(#label)));
                 from_name.push(quote!(#(#cfg)* #label => ::core::result::Result::Ok(Self::#v)));
             }
             Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
@@ -356,13 +354,20 @@ fn derive_union(input: &DeriveInput, data: &syn::DataEnum) -> syn::Result<TokenS
 
         impl #script::FromScript for #ident {
             fn from_value(value: #script::Value) -> ::core::result::Result<Self, #script::Error> {
-                match value {
-                    #script::Value::String(text) => match text.as_str() {
+                let named = match &value {
+                    #script::Value::String(text) => ::core::option::Option::Some(text.as_str()),
+                    #script::Value::Name(text) => ::core::option::Option::Some(*text),
+                    _ => ::core::option::Option::None,
+                };
+                if let ::core::option::Option::Some(text) = named {
+                    return match text {
                         #(#from_name,)*
                         _ => ::core::result::Result::Err(#script::Error::new(::std::format!(
                             "{text:?} is no variant of {} without a value", #name
                         ))),
-                    },
+                    };
+                }
+                match value {
                     #script::Value::Map(mut entries) if entries.len() == 1 => {
                         let (key, value) = entries.remove(0);
                         match key.as_str() {
