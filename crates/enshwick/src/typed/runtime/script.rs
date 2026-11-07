@@ -698,6 +698,13 @@ mod tests {
         ] {
             same::<Outer>(&with(&value, name, wrong), Value::Nil);
         }
+        assert!(Leaves::SHAPE.check(&leaves).is_ok());
+        let wrong = with(&leaves, "small", Data::Int(-200));
+        assert_eq!(
+            Leaves::SHAPE.check(&wrong).map_err(|e| e.to_string()),
+            crate::typed::check::<Leaves>(&wrong).map_err(|e| e.to_string())
+        );
+        assert!(Leaves::SHAPE.check(&wrong).is_err());
         same::<Outer>(&Data::Struct(Vec::new()), Value::Nil);
         same::<Outer>(&Data::Uint(1), Value::Nil);
         same::<Empty>(&Data::Uint(1), Value::List(Vec::new()));

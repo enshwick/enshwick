@@ -82,4 +82,30 @@ mod tests {
         assert_eq!(outside("demo::Plain"), None);
         assert_eq!(outside("demo::Level"), None);
     }
+
+    #[test]
+    fn a_typedef_is_followed_and_a_loop_ends_without_a_field() {
+        let registry = Registry::new([
+            Type::new("demo::uint8", Kind::Uint8, 1, 1),
+            Type::new("demo::BlobArray<demo::uint8>", Kind::BlobArray, 8, 4)
+                .with_inner("demo::uint8"),
+            Type::new("demo::Entries", Kind::Typedef, 8, 4)
+                .with_inner("demo::BlobArray<demo::uint8>"),
+            Type::new("demo::Named", Kind::Struct, 8, 4).with_fields(vec![Field::new(
+                "entries",
+                0,
+                "demo::Entries",
+            )]),
+            Type::new("demo::Loop", Kind::Typedef, 1, 1).with_inner("demo::Loop"),
+            Type::new("demo::Nest", Kind::Struct, 1, 1).with_fields(vec![Field::new(
+                "again",
+                0,
+                "demo::Nest",
+            )]),
+        ]);
+        let outside = |name| outside_field(&registry, registry.named(name).unwrap());
+        assert_eq!(outside("demo::Named").as_deref(), Some("entries"));
+        assert_eq!(outside("demo::Loop"), None);
+        assert_eq!(outside("demo::Nest"), None);
+    }
 }
