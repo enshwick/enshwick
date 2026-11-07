@@ -98,10 +98,18 @@ fn every_entry_a_class_names_is_in_a_table() {
     let tables = tables();
     let routes = Routes::embedded().unwrap();
     let known: FxHashSet<&str> = tables.iter().flat_map(ids).chain(routes.ids()).collect();
+    // A route that checks its symbol's code stands for the symbol's bytes.
+    let checked = |id: &str| {
+        id.strip_suffix(".bytes").is_some_and(|id| {
+            [Side::Server, Side::Client]
+                .iter()
+                .any(|&s| routes.checks(id, s))
+        })
+    };
     let stale: Vec<String> = rows()
         .into_iter()
         .flat_map(|r| r.entries)
-        .filter(|e| !e.ends_with('*') && !known.contains(e.as_str()))
+        .filter(|e| !e.ends_with('*') && !known.contains(e.as_str()) && !checked(e))
         .collect();
     assert!(stale.is_empty(), "{stale:?}");
 }
