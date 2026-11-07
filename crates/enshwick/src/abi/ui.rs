@@ -129,7 +129,7 @@ pub struct UiWidget {
     /// Size and version of this struct.
     pub header: Header,
     /// What to draw: one of the kind constants, [`UiWidget::WINDOW`] to
-    /// [`UiWidget::SOUND`].
+    /// [`UiWidget::PLAY`].
     pub kind: u32,
     /// [`UiWidget::READ_ONLY`], [`UiWidget::WRAP`], [`UiWidget::CENTER`].
     pub flags: u32,
@@ -162,9 +162,12 @@ pub struct UiWidget {
     pub anchor: u32,
     /// Zero.
     pub reserved: u32,
+    /// The sound container a [`UiWidget::PLAY`] widget plays, its GUID in
+    /// memory order. ABI 11.14.
+    pub sound: [u8; 16],
 }
 
-impl_headed!(UiWidget);
+impl_headed!(UiWidget, born = 96);
 
 impl UiWidget {
     /// A window in the game's style, a panel over the screen that takes the
@@ -189,6 +192,11 @@ impl UiWidget {
     pub const PROGRESS: u32 = 8;
     /// Plays the interface sound `style`.
     pub const SOUND: u32 = 9;
+    /// Plays the sound container `sound` as an interface sound, heard only
+    /// on this client and from no place in the world;
+    /// [`Status::MISSING`](super::Status::MISSING) for a container neither
+    /// the client's archive nor a mod holds. Needs no window. ABI 11.14.
+    pub const PLAY: u32 = 10;
 
     /// The row shows its value and does not take changes; a button does not
     /// take clicks.
@@ -242,6 +250,7 @@ impl UiWidget {
         result: 0,
         anchor: 0,
         reserved: 0,
+        sound: [0; 16],
     };
 
     /// The HUD's top left corner.

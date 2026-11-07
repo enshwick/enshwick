@@ -515,6 +515,9 @@ ids! {
     /// The id of the marker type registry's resource type, of which the
     /// client's archive holds one.
     MAP_MARKER_REGISTRY = "map_marker_registry";
+    /// The id of a sound container's resource type, which a client plays
+    /// by its GUID.
+    SOUND_CONTAINER = "sound_container";
     /// The id of a marker type's name text tag, a GUID.
     MAP_MARKER_TYPE_TYPE_NAME = "map_marker_type.type_name";
     /// The id of a marker type's sorting, a byte of [`MARKER_TYPE_SORTING`].

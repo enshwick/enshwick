@@ -149,6 +149,8 @@ pub mod types {
     pub const UI_TEXTURE_RESOURCE: ResourceType = ResourceType(ids::UI_IMAGE);
     /// The client's UI data, the crafting menu among it.
     pub const FB_UI_BUNDLE: ResourceType = ResourceType(ids::UI_BUNDLE);
+    /// A sound container: the sounds one event plays and how it plays them.
+    pub const SOUND_CONTAINER_RESOURCE: ResourceType = ResourceType(ids::SOUND_CONTAINER);
 }
 
 /// Answers engine facts by enshwick id: the running game through [`Load`]

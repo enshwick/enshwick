@@ -1554,6 +1554,10 @@ pub const FACTS: &[(&str, Fact)] = &[
         Fact::Type("keen::MapMarkerRegistryResource"),
     ),
     (
+        ids::SOUND_CONTAINER,
+        Fact::Type("keen::SoundContainerResource"),
+    ),
+    (
         ids::MAP_MARKER_TYPE_TYPE_NAME,
         offset("keen::MapMarkerType", "typeName"),
     ),

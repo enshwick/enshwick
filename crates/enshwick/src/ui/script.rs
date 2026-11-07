@@ -260,6 +260,18 @@ impl ScriptFrame {
     pub(crate) fn sound_script(&self, sound: Sound) {
         self.frame().sound(sound);
     }
+
+    /// Plays the sound container with GUID `sound`, as [`Frame::play`]
+    /// does.
+    ///
+    /// # Errors
+    ///
+    /// As [`Frame::play`].
+    #[script(name = "play")]
+    pub(crate) fn play_script(&self, sound: crate::content::Guid) -> Result<(), crate::Off> {
+        self.frame()
+            .play(crate::sound::SoundContainerId::from_guid(sound))
+    }
 }
 
 /// The HUD of one frame as a script draws it, lent to the callback of

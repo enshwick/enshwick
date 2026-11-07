@@ -259,6 +259,13 @@ impl Archive {
         self.store.read(Part::Container(container), offset, len)
     }
 
+    /// Whether the archive holds resource `key`, without reading it.
+    #[must_use]
+    pub fn contains(&self, key: &ResourceKey) -> bool {
+        self.resources
+            .contains_key(&(key.guid, key.type_hash, key.part))
+    }
+
     /// The bytes of resource `key`, as the game reads them before it
     /// resolves their references; `None` for a key the archive lacks.
     #[must_use]
@@ -602,6 +609,8 @@ mod tests {
         assert_eq!(archive.resource(&key(7, 0)), Some(vec![6, 7, 8, 9]));
         assert_eq!(archive.resource(&key(8, 0)), Some(vec![10, 11, 12]));
         assert_eq!(archive.resource(&key(8, 1)), None);
+        assert!(archive.contains(&key(8, 0)));
+        assert!(!archive.contains(&key(8, 1)));
         archive.trim();
         assert_eq!(archive.resource(&key(7, 0)), Some(vec![6, 7, 8, 9]));
         std::fs::remove_dir_all(dir).unwrap();

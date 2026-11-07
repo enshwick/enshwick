@@ -4,10 +4,11 @@ use core::ffi::c_void;
 use core::marker::PhantomData;
 use std::sync::Mutex;
 
-use crate::Host;
 use crate::abi::{Str, UiFrame, UiWidget};
 use crate::locks::Relock;
+use crate::sound::SoundContainerId;
 use crate::ui::{Button, Dropdown, Label, MAX_OPTIONS, Screen, Slider, Sound, Toggle};
+use crate::{Host, Off};
 
 use super::widgets::read_only_flag;
 
@@ -261,6 +262,28 @@ impl Frame<'_> {
             style: sound.to_raw(),
             ..UiWidget::EMPTY
         });
+    }
+
+    /// Plays the sound container `sound`, the game's own or a mod's, as an
+    /// interface sound: heard only on this client, from no place in the
+    /// world.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] for a container neither the game's archive nor a mod holds,
+    /// and on a loader older than ABI 11.14.
+    ///
+    /// # Examples
+    ///
+    /// See the [`sound`](crate::sound) module.
+    pub fn play(&mut self, sound: SoundContainerId) -> Result<(), Off> {
+        let mut widget = UiWidget {
+            kind: UiWidget::PLAY,
+            sound: sound.guid().0,
+            ..UiWidget::EMPTY
+        };
+        let status = (self.host.api().ui_widget)(self.host.handle(), self.token, &raw mut widget);
+        crate::load::ok(status, (), || format!("sound container {}", sound.guid()))
     }
 }
 
