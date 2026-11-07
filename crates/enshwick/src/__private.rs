@@ -453,7 +453,8 @@ pub fn fault_in(hook: &str, payload: &(dyn core::any::Any + Send)) {
     crate::host::fault_with(&format!("panic in hook {hook}"), payload);
 }
 
-/// The most detailed level the loader keeps, read once at init.
+/// The most detailed level the loader keeps, read at init and again at each
+/// change of the loader's settings ([`refresh_levels`]).
 static MAX_LEVEL: AtomicU8 = AtomicU8::new(Level::INFO.0);
 
 /// Set once the mod's `init` has returned in this mod life.
@@ -465,27 +466,64 @@ pub(crate) fn initialised() -> bool {
     INITIALISED.get().is_some()
 }
 
-/// A data pack's most detailed level the loader keeps, read at its first
-/// line and again at each change of the loader's settings, as
-/// [`MAX_LEVEL`] is for a mod: the mod life it was read in above the level's
-/// byte, so a value of an earlier life, or 0, reads as unread.
-#[derive(Default)]
-struct PackLevel(AtomicU64);
+/// The kept word for a data pack's `level` read in this mod life: the life
+/// above the level's byte, so a word of an earlier life, or 0, reads as
+/// unread.
+fn tagged_level(level: Level) -> u64 {
+    crate::fresh::life() << 8 | u64::from(level.0)
+}
 
-impl PackLevel {
-    /// The kept word for `level` read in this mod life.
-    fn tagged(level: Level) -> u64 {
-        crate::fresh::life() << 8 | u64::from(level.0)
+/// The level a kept word holds, if it was read in this mod life.
+fn kept_level(word: u64) -> Option<u8> {
+    (word >> 8 == crate::fresh::life() & (u64::MAX >> 8)).then_some(word.to_le_bytes()[0])
+}
+
+/// Each data pack's kept level word, by handle: chunk `k` holds the `2^k`
+/// handles from `2^k - 1` on and is made at the first line of a pack in it,
+/// so a line finds its pack's word with one bit scan, no lock and no hash.
+struct PackLevels([OnceLock<Box<[AtomicU64]>>; usize::BITS as usize]);
+
+impl PackLevels {
+    /// The chunk of `pack` and its place there; `None` past every chunk.
+    fn place(pack: ModHandle) -> Option<(usize, usize)> {
+        let n = pack.0.checked_add(1)?;
+        let chunk = n.ilog2() as usize;
+        Some((chunk, n - (1 << chunk)))
     }
 
-    /// The level kept in this mod life, if any.
-    fn read(word: u64) -> Option<u8> {
-        (word >> 8 == crate::fresh::life() & (u64::MAX >> 8)).then_some(word.to_le_bytes()[0])
+    /// The word of `pack`, its chunk made at the first ask.
+    #[inline]
+    fn word(&self, pack: ModHandle) -> Option<&AtomicU64> {
+        let (chunk, at) = Self::place(pack)?;
+        let words = self.0.get(chunk)?;
+        match words.get() {
+            Some(words) => words.get(at),
+            None => Self::make(words, chunk).get(at),
+        }
+    }
+
+    /// Chunk `chunk`, made in `words`.
+    #[cold]
+    fn make(words: &OnceLock<Box<[AtomicU64]>>, chunk: usize) -> &[AtomicU64] {
+        words.get_or_init(|| (0..1usize << chunk).map(|_| AtomicU64::new(0)).collect())
+    }
+
+    /// Every word made so far, with its handle.
+    fn made(&self) -> impl Iterator<Item = (ModHandle, &AtomicU64)> {
+        self.0
+            .iter()
+            .enumerate()
+            .filter_map(|(chunk, words)| Some((chunk, words.get()?)))
+            .flat_map(|(chunk, words)| {
+                (0..)
+                    .zip(words.iter())
+                    .map(move |(at, word)| (ModHandle((1 << chunk) + at - 1), word))
+            })
     }
 }
 
-/// The site [`for_pack`] keeps one [`PackLevel`] of per data pack for.
-static PACK_LEVEL: PackLevel = PackLevel(AtomicU64::new(0));
+/// The data packs' levels the loader's own copy of the API keeps.
+static PACK_LEVELS: PackLevels = PackLevels([const { OnceLock::new() }; usize::BITS as usize]);
 
 #[inline]
 #[must_use]
@@ -498,23 +536,51 @@ pub fn enabled(level: Level) -> bool {
 }
 
 /// The level of the data pack `pack`, asked of the loader at its first line
-/// only.
+/// and after [`refresh_levels`] only; out of line, so a mod's check stays
+/// one load.
+#[inline(never)]
 fn pack_level(pack: Host) -> u8 {
-    let kept = &for_pack(&PACK_LEVEL).0;
+    let Some(kept) = PACK_LEVELS.word(pack.handle()) else {
+        return pack.log_level().0;
+    };
     let word = kept.load(Ordering::Relaxed);
-    if let Some(level) = PackLevel::read(word) {
-        return level;
+    match kept_level(word) {
+        Some(level) => level,
+        None => first_pack_level(pack, kept, word),
     }
+}
+
+/// Asks the loader for `pack`'s level and keeps it in `kept`, which held
+/// `word`.
+#[cold]
+fn first_pack_level(pack: Host, kept: &AtomicU64, word: u64) -> u8 {
     let level = pack.log_level();
     // A refresh that landed since the load is newer than this read.
     match kept.compare_exchange(
         word,
-        PackLevel::tagged(level),
+        tagged_level(level),
         Ordering::Relaxed,
         Ordering::Relaxed,
     ) {
         Ok(_) => level.0,
-        Err(newer) => PackLevel::read(newer).unwrap_or(level.0),
+        Err(newer) => kept_level(newer).unwrap_or(level.0),
+    }
+}
+
+/// Rereads the levels this copy of the API keeps from the loader: the
+/// process host's, and in the loader's own copy every data pack's.
+///
+/// A mod's copy runs it on each
+/// [`Event::LOADER_SETTINGS_CHANGED`](crate::abi::Event::LOADER_SETTINGS_CHANGED);
+/// the loader's own copy subscribes to nothing, so the loader calls it before
+/// it raises that event.
+pub fn refresh_levels() {
+    let Some(own) = as_loader(crate::host) else {
+        return;
+    };
+    MAX_LEVEL.store(own.log_level().0, Ordering::Relaxed);
+    for (pack, kept) in PACK_LEVELS.made() {
+        kept.store(tagged_level((own.api().log_level)(pack)), Ordering::Relaxed);
     }
 }
 
@@ -523,16 +589,7 @@ unsafe extern "system" fn refresh_level(
     _data: *const core::ffi::c_void,
     _user: *mut core::ffi::c_void,
 ) {
-    match crate::host::pack() {
-        Some(pack) => for_pack(&PACK_LEVEL)
-            .0
-            .store(PackLevel::tagged(pack.log_level()), Ordering::Relaxed),
-        None => {
-            if let Some(host) = crate::host() {
-                MAX_LEVEL.store(host.log_level().0, Ordering::Relaxed);
-            }
-        }
-    }
+    refresh_levels();
 }
 
 /// The state of the call site `site` for the data pack this thread runs,
@@ -551,12 +608,15 @@ fn for_pack<T: Default + Send + Sync + 'static>(site: &'static T) -> &'static T 
         return site;
     };
     let key = (core::ptr::from_ref(site).addr(), pack.handle().0);
-    let state = SEEN.with_borrow_mut(|seen| {
-        *seen.entry(key).or_insert_with(|| {
-            *crate::Relock::relock(&*SITES)
-                .entry(key)
-                .or_insert_with(|| Box::leak(Box::new(T::default())))
-        })
+    let seen = SEEN.with_borrow(|seen| seen.get(&key).copied());
+    // The lock is taken outside the borrow: a poisoned lock logs, and the
+    // line may reach this function again on this thread.
+    let state = seen.unwrap_or_else(|| {
+        let state = *crate::Relock::relock(&*SITES)
+            .entry(key)
+            .or_insert_with(|| Box::leak(Box::new(T::default())));
+        SEEN.with_borrow_mut(|seen| seen.insert(key, state));
+        state
     });
     state.downcast_ref().unwrap_or(site)
 }
@@ -777,17 +837,13 @@ pub unsafe fn init_pack(
     let Some(host) = (unsafe { Host::new(api, me) }) else {
         return Status::BAD_ARGS;
     };
-    let _watched = host.subscribe(
-        crate::abi::Event::LOADER_SETTINGS_CHANGED,
-        refresh_level,
-        core::ptr::null_mut(),
-    );
+    // A pack that runs again reads its level afresh; the loader refreshes it
+    // on a change of its settings (`refresh_levels`).
+    if let Some(kept) = PACK_LEVELS.word(me) {
+        kept.store(0, Ordering::Relaxed);
+    }
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        host.scope(|| {
-            // A pack that runs again reads its level afresh.
-            for_pack(&PACK_LEVEL).0.store(0, Ordering::Relaxed);
-            init(&mut Load::new(host))
-        })
+        host.scope(|| init(&mut Load::new(host)))
     }));
     match outcome {
         Ok(Ok(())) => Status::OK,
@@ -857,5 +913,84 @@ pub fn ready<M: Mod>(slot: &'static Slot<M>) {
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| state.ready(host)))
     {
         crate::host::fault_with("panic in ready", payload.as_ref());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn each_handle_has_its_own_place_and_the_chunks_double() {
+        let places: Vec<_> = (0..7)
+            .map(|h| PackLevels::place(ModHandle(h)).unwrap())
+            .collect();
+        assert_eq!(
+            places,
+            [(0, 0), (1, 0), (1, 1), (2, 0), (2, 1), (2, 2), (2, 3)]
+        );
+        assert_eq!(
+            PackLevels::place(ModHandle(usize::MAX - 1)),
+            Some((63, (1 << 63) - 1))
+        );
+        assert_eq!(PackLevels::place(ModHandle(usize::MAX)), None);
+    }
+
+    #[test]
+    fn every_made_word_lists_under_its_own_handle() {
+        let levels = PackLevels([const { OnceLock::new() }; usize::BITS as usize]);
+        for h in [2, 5] {
+            levels
+                .word(ModHandle(h))
+                .unwrap()
+                .store(h as u64, Ordering::Relaxed);
+        }
+        let made: Vec<_> = levels
+            .made()
+            .map(|(h, w)| (h.0, w.load(Ordering::Relaxed)))
+            .collect();
+        assert_eq!(made, [(1, 0), (2, 2), (3, 0), (4, 0), (5, 5), (6, 0)]);
+    }
+
+    /// A site state whose making panics, as a panic in `Box::new` would.
+    #[cfg(feature = "test")]
+    #[derive(Debug)]
+    struct Refused;
+
+    #[cfg(feature = "test")]
+    impl Default for Refused {
+        fn default() -> Self {
+            panic!("no state")
+        }
+    }
+
+    #[cfg(feature = "test")]
+    #[test]
+    fn a_pack_s_site_after_a_poisoned_lock_logs_the_lock_and_works() {
+        static BROKEN: Refused = Refused;
+        static SITE: Once = Once::new();
+        let loader = crate::test::FakeHost::new().install();
+        // SAFETY: the fake host's table lives for the process.
+        unsafe { install_host(loader.api(), ModHandle(9)) };
+        let panicked = std::panic::catch_unwind(|| {
+            // SAFETY: the fake host's table lives for the process.
+            unsafe {
+                as_pack(loader.api(), ModHandle(2), || {
+                    let _state = for_pack(&BROKEN);
+                });
+            }
+        });
+        assert!(panicked.is_err());
+        // SAFETY: the fake host's table lives for the process.
+        let first = unsafe { as_pack(loader.api(), ModHandle(2), || SITE.first()) };
+        assert!(first);
+        assert!(
+            loader
+                .sent()
+                .iter()
+                .any(|(by, _, line)| *by == ModHandle(2) && line.contains("panicked holding")),
+            "{:?}",
+            loader.sent()
+        );
     }
 }
