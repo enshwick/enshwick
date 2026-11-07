@@ -102,7 +102,7 @@ fn blocks(text: &str) -> Vec<(usize, String)> {
     let mut comment = false;
     for (index, raw) in text.lines().enumerate() {
         let line = index + 1;
-        let trimmed = raw.trim_start();
+        let trimmed = raw.trim_start().trim_start_matches(['>', ' ']);
         if comment {
             comment = !raw.contains("-->");
             continue;
@@ -123,7 +123,6 @@ fn blocks(text: &str) -> Vec<(usize, String)> {
             (Some(_), _) => continue,
             (None, None) => {}
         }
-        let trimmed = trimmed.trim_start_matches(['>', ' ']);
         if let Some(rest) = trimmed.strip_prefix("<!--") {
             found.extend(current.take());
             comment = !rest.contains("-->");
@@ -414,7 +413,7 @@ mod tests {
 
     #[test]
     fn code_blocks_headings_and_comments_hold_no_sentences() {
-        let text = "<!--\ntype: how-to\ndescription: a b c.\n-->\n\n# A long title here\n\n```rust\n// One two. Three four.\nlet x = 1;\n```\n\n~~~\n``` not a fence end\n~~~\n\n<!-- one -->\nWord.\n";
+        let text = "<!--\ntype: how-to\ndescription: a b c.\n-->\n\n# A long title here\n\n```rust\n// One two. Three four.\nlet x = 1;\n```\n\n~~~\n``` not a fence end\n~~~\n\n> ```text\n> One two. Three.\n> ```\n\n<!-- one -->\nWord.\n";
         assert_eq!(counts(text), [(1, 0)]);
     }
 
