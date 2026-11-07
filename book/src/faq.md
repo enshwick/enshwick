@@ -15,12 +15,14 @@ and [Levels](logging.md#levels) sets how much is written. One more file,
 `start.log`, stays there only when the loader did not start, and says why;
 see [Nothing loads at all](#nothing-loads-at-all).
 
-To ask for help, attach two files to an issue. The first is the loader's
-file of the run that went wrong, `logs/enshwick_<date>_<time>.log`. The
-second, after a crash, is the crash file,
-`logs/enshwick-crash_<date>_<time>.log`. The loader's file holds the
-versions, your system and every line the loader wrote. Paths in it show your
-folders, so read it before you share it.
+To ask for help, attach these files to an issue. The first is the loader's
+file of the run that went wrong, `logs/enshwick_<date>_<time>.log`. When a
+mod went wrong, add its own file, `logs/<mod id>_<date>_<time>.log`. After a
+crash, add the crash file, `logs/enshwick-crash_<date>_<time>.log`. When the
+loader did not start, its file is missing: attach `logs/start.log` instead,
+or `enshwick/start.log` from the Windows temporary folder. The loader's file
+holds the versions, your system and every line the loader wrote. Paths in
+the files show your folders, so read them before you share them.
 
 ## What is in a crash file?
 
