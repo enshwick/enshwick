@@ -38,8 +38,21 @@ mod tests {
                     ..SoundChange::default()
                 },
             )?;
+            assert!(
+                load.serve(
+                    BELL.key(types::SOUND_CONTAINER_RESOURCE)?,
+                    Guid::named("you.bells:other").key(types::SOUND_CONTAINER_RESOURCE)?,
+                    |base| Some(base.to_vec()),
+                )
+                .is_err(),
+                "a second maker from another base is refused"
+            );
             load.on_frame(move |frame| {
                 assert!(frame.play(bell).is_ok(), "a made container plays");
+                assert!(
+                    frame.play(SoundContainerId::from_guid(CHEST)).is_err(),
+                    "a container no one holds does not"
+                );
             })?;
             Ok(Self)
         }
