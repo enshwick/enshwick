@@ -61,7 +61,7 @@ mod tests {
 
     /// Two content ids of this mod whose game ids are one.
     fn clashing() -> (enshwick::content::Id, enshwick::content::Id) {
-        let mut seen = std::collections::HashMap::new();
+        let mut seen = rustc_hash::FxHashMap::default();
         for i in 0u32.. {
             let name: &'static str = Box::leak(format!("you.horns:n{i}").into_boxed_str());
             let game = enshwick::content::Guid::named(name).fnv1a();
