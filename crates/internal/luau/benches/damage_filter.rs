@@ -60,10 +60,7 @@ impl Mod for Bench {
         let _runtime = enshwick_luau::start(
             load,
             "enshwick.bench",
-            Scripts::new().with(
-                "main.luau",
-                std::env::var("PROBE_MAIN").unwrap_or(MAIN.to_owned()),
-            ),
+            Scripts::new().with("main.luau", MAIN),
             None,
             limits,
         )?;
@@ -100,11 +97,7 @@ fn filter(c: &mut Criterion) {
     let status = unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
     assert_eq!(status, Status::OK, "{:?}", loader.logs());
     let warm = loader.damage(fall());
-    assert!(
-        std::env::var("PROBE_MAIN").is_ok() || (warm.total - 20.0).abs() < 1e-6,
-        "{:?}",
-        loader.logs()
-    );
+    assert!((warm.total - 20.0).abs() < 1e-6, "{:?}", loader.logs());
 
     let before = ALLOCATIONS.load(Ordering::Relaxed);
     for _ in 0..HITS {

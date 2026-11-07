@@ -43,7 +43,7 @@ pub(crate) fn to_lua(
         (Value::Bool(b), _) => LuaValue::Boolean(b),
         (Value::Number(n), _) => LuaValue::Number(n),
         (Value::String(s), _) => LuaValue::String(lua.create_string(s)?),
-        (Value::Name(s), _) => LuaValue::String(lua.create_string(s)?),
+        (Value::Name(s), _) => LuaValue::String(Interned::name(lua, s)?),
         #[expect(
             clippy::cast_possible_truncation,
             reason = "a Luau vector holds three f32"
@@ -329,8 +329,52 @@ impl Lent {
     }
 }
 
-/// The registry key of the method functions [`Object`]'s `__index` made.
-const METHODS: &str = "enshwick.methods";
+/// What a VM keeps of the API's own names, so a hot call pushes no text:
+/// under a memory limit mlua pushes text in protected mode, which on Luau
+/// leaves a closure behind on every push.
+#[derive(Default)]
+struct Interned {
+    /// The script string of each name a choice or a variant crossed as.
+    names: Vec<(&'static str, mlua::LuaString)>,
+    /// Each class's table of method functions, by method name, filled as
+    /// `__index` makes them.
+    methods: Vec<(&'static str, mlua::Table)>,
+}
+
+impl Interned {
+    /// The entry of `key` in the list `pick` chooses, made by `make` and
+    /// kept on first use.
+    fn get<T: Clone>(
+        lua: &Lua,
+        key: &'static str,
+        pick: fn(&mut Self) -> &mut Vec<(&'static str, T)>,
+        make: impl FnOnce() -> mlua::Result<T>,
+    ) -> mlua::Result<T> {
+        if let Some(mut interned) = lua.app_data_mut::<Self>()
+            && let Some((_, kept)) = pick(&mut interned).iter().find(|(k, _)| *k == key)
+        {
+            return Ok(kept.clone());
+        }
+        let value = make()?;
+        if lua.app_data_ref::<Self>().is_none() {
+            let _none = lua.set_app_data(Self::default());
+        }
+        if let Some(mut interned) = lua.app_data_mut::<Self>() {
+            pick(&mut interned).push((key, value.clone()));
+        }
+        Ok(value)
+    }
+
+    /// The script string of the API's name `name`.
+    fn name(lua: &Lua, name: &'static str) -> mlua::Result<mlua::LuaString> {
+        Self::get(lua, name, |i| &mut i.names, || lua.create_string(name))
+    }
+
+    /// The table of method functions of the class `class`.
+    fn methods(lua: &Lua, class: &'static str) -> mlua::Result<mlua::Table> {
+        Self::get(lua, class, |i| &mut i.methods, || lua.create_table())
+    }
+}
 
 /// An [`Object`](enshwick::script::Object) as a script holds it: its
 /// class's methods, called as `object:method()`.
@@ -350,23 +394,7 @@ impl mlua::UserData for Object {
                 let class = this.handle.class();
                 // One function per class and method in a VM, made on first use:
                 // a filter on a hot path indexes methods on every hit.
-                let classes = if let Some(classes) =
-                    lua.named_registry_value::<Option<mlua::Table>>(METHODS)?
-                {
-                    classes
-                } else {
-                    let classes = lua.create_table()?;
-                    lua.set_named_registry_value(METHODS, &classes)?;
-                    classes
-                };
-                let cached =
-                    if let Some(cached) = classes.raw_get::<Option<mlua::Table>>(class.name())? {
-                        cached
-                    } else {
-                        let cached = lua.create_table()?;
-                        classes.raw_set(class.name(), &cached)?;
-                        cached
-                    };
+                let cached = Interned::methods(lua, class.name())?;
                 if let Some(function) = cached.raw_get::<Option<mlua::Function>>(&key)? {
                     return Ok(LuaValue::Function(function));
                 }
