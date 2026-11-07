@@ -61,6 +61,8 @@ mod fake_second_install;
 mod features;
 #[cfg(feature = "unstable")]
 mod fog;
+#[cfg(feature = "unstable")]
+mod frame_reads;
 mod game_event_kinds;
 mod game_events;
 mod game_names;

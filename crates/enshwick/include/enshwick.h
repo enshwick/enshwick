@@ -756,7 +756,8 @@ typedef struct EnshwickChatRewrite {
 #define EnshwickChatRewrite_REWRITTEN 2
 
 // The data of the `ChunkLoaded` and
-// `ChunkUnloaded` events.
+// `ChunkUnloaded` events: a chunk of the
+// world's entities, never of its terrain's voxels.
 typedef struct EnshwickChunkData {
   // Size and version of this struct.
   struct EnshwickHeader header;
@@ -1153,12 +1154,14 @@ typedef uint32_t EnshwickEvent;
 // `QuestData`. Raised on the game thread after the step. Server
 // only.
 #define EnshwickEvent_QUEST_COMPLETED 16
-// A chunk of the server's world loaded: players came near, and its
-// entities exist now; data is a `ChunkData`. Raised on the game
-// thread after the step. Server only.
+// A chunk of the server's entities loaded: players came near, and its
+// entities exist now; data is a `ChunkData`. The terrain's voxels
+// load apart from it, without a player, and raise no event. Raised on
+// the game thread after the step. Server only.
 #define EnshwickEvent_CHUNK_LOADED 17
-// A chunk of the server's world unloaded: no player is near, and its
-// entities are gone; data is a `ChunkData`. Raised on the game thread
+// A chunk of the server's entities unloaded: no player is near, and its
+// entities are gone; data is a `ChunkData`. The terrain's voxels
+// unload apart from it and raise no event. Raised on the game thread
 // after the step. Server only.
 #define EnshwickEvent_CHUNK_UNLOADED 18
 // The settings a mod reads were replaced whole: a world loaded in this
@@ -2138,6 +2141,19 @@ typedef struct EnshwickUiFrame {
   // and on a build where the loader does not find it. The loader keeps
   // the text for the life of the process.
   struct EnshwickStr hud_screen;
+  // The title of what the player's interaction prompt offers now, such
+  // as a chest's name, as the game shows it; empty while it offers
+  // nothing, outside a game and on a build where the loader does not
+  // find it. The game's own text, borrowed for the callback. ABI 11.14.
+  struct EnshwickStr prompt_title;
+  // The game's text id (`LocaTagId`) of the prompt's verb, such as the
+  // one for "Open"; 0 while the prompt offers nothing. ABI 11.14.
+  uint32_t prompt_verb;
+  // The entity of the client's world the open screen belongs to, such
+  // as the chest whose inventory shows; entity 0 for a screen of no
+  // object, outside a game and on a build where the
+  // loader does not find it. ABI 11.14.
+  EnshwickEntity screen_host;
 } EnshwickUiFrame;
 // The title screen and the menus before a game.
 #define EnshwickUiFrame_MENU 0
@@ -4794,6 +4810,15 @@ typedef struct EnshwickHostApi {
                                   struct EnshwickStr action,
                                   struct EnshwickStr args,
                                   const struct EnshwickActionTarget *target);
+  // Writes to `out` the game controls the local player holds, the
+  // `Bitmask64` of the game's `PlayerInputType` as the client's
+  // interface read it in its last step: gameplay controls only, not the
+  // client-only ones such as menu keys. Client only; `Status::MISSING`
+  // outside a game, while no step read it for a second, or on a build
+  // without the read; `Status::BAD_ARGS` for a null `out`. Any thread;
+  // `out` is borrowed for the call. A panic in the loader returns
+  // `Status::REFUSED`. ABI 11.14.
+  EnshwickStatus (*local_held)(EnshwickModHandle me, uint64_t *out);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.

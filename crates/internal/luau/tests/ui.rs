@@ -251,6 +251,38 @@ mod tests {
     }
 
     #[test]
+    fn a_script_reads_the_prompt_the_screen_s_host_and_the_local_held_controls() {
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT).player_input(),
+            r"
+            enshwick.ui.on_frame(function(frame)
+                local prompt = frame:prompt()
+                local held = enshwick.input.local_held()
+                enshwick.log.info(`prompt {prompt and prompt.title} {prompt and prompt.verb}`)
+                enshwick.log.info(`host {frame:screen_host()} held {held and table.concat(held, ',')}`)
+            end)
+            enshwick.ui.on_screen_changed(function(change)
+                enshwick.log.info(`changed to {change.now} of {change.host}`)
+            end)
+            ",
+        );
+        loader.show_prompt(Some(("Chest", 7)));
+        loader.hold_locally(Some(1 << 30));
+        let _drawn = loader.draw_frame();
+        loader.open_screen(Some(HudScreenType::StorageChest));
+        loader.host_screen(Some(enshwick::Entity(512)));
+        let _drawn = loader.draw_frame();
+        for line in [
+            "prompt Chest 7",
+            "host nil held Block",
+            "host 512 held Block",
+            "changed to StorageChest of 512",
+        ] {
+            assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
+        }
+    }
+
+    #[test]
     fn a_server_script_is_refused_the_interface() {
         let (loader, status) = start(FakeHost::new(), "enshwick.ui.on_frame(function() end)");
         assert!(!status.is_ok());

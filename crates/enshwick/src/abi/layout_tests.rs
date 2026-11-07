@@ -231,7 +231,7 @@ shapes! {
         VoxelWrite { header, min, size, voxels, count },
         VoxelRegion { header, min, size },
         BlockPlace { header, shape, material, position, rotation },
-        UiFrame { header, token, screen, reserved, hud_screen },
+        UiFrame { header, token, screen, reserved, hud_screen, prompt_title, prompt_verb, screen_host },
         UiWidget { header, kind, flags, style, steps, text, detail, options, option_count, index, value, min, max, result, anchor, reserved, sound },
         UiMarker { header, position, label, color, marker_type },
         UiDialog { header, title, message, detail, buttons, flags },

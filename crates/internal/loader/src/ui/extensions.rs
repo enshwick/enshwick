@@ -305,15 +305,13 @@ unsafe fn prompt(data: usize, at: PromptAt) -> (Str, u32) {
     if unsafe { crate::memory::read::<u8>(data, at.valid) } == 0 {
         return (Str::EMPTY, 0);
     }
-    // SAFETY: the caller's contract; the verb's u32 and the title's pointer
-    // and length words sit at `ui.prompt_verb` and `ui.prompt_title`.
-    let (verb, text, len) = unsafe {
-        (
-            crate::memory::read::<u32>(data, at.verb),
-            crate::memory::read::<usize>(data, at.title),
-            crate::memory::read::<usize>(data, at.title + size_of::<usize>()),
-        )
-    };
+    // SAFETY: the caller's contract; the verb's u32 sits at `ui.prompt_verb`.
+    let verb = unsafe { crate::memory::read::<u32>(data, at.verb) };
+    // SAFETY: the caller's contract; the title's `UiText` starts with its
+    // pointer word at `ui.prompt_title`.
+    let text = unsafe { crate::memory::read::<usize>(data, at.title) };
+    // SAFETY: the caller's contract; the length word follows the pointer.
+    let len = unsafe { crate::memory::read::<usize>(data, at.title + size_of::<usize>()) };
     if text == 0 || len == 0 {
         return (Str::EMPTY, verb);
     }
@@ -351,22 +349,23 @@ pub(super) unsafe fn frame_reads(engine: &Engine, context: usize) -> FrameReads 
         return FrameReads::NONE;
     };
     // SAFETY: `data` is the non-null play data of this frame, on the
-    // interface thread; the offsets are the table's `ui.hud_screen`,
-    // `ui.prompt_*` and `ui.screen_host` (every kept client).
-    unsafe {
-        let screen = crate::memory::read::<u8>(data, linked.hud_screen);
-        let (prompt_title, prompt_verb) =
-            linked.prompt.map_or((Str::EMPTY, 0), |at| prompt(data, at));
-        FrameReads {
-            hud_screen: screen_name(linked, Some(screen)),
-            prompt_title,
-            prompt_verb,
-            screen_host: enshwick::Entity(
-                linked
-                    .screen_host
-                    .map_or(0, |at| crate::memory::read::<u32>(data, at)),
-            ),
-        }
+    // interface thread, whose HUD screen byte sits at `ui.hud_screen`.
+    let screen = unsafe { crate::memory::read::<u8>(data, linked.hud_screen) };
+    // SAFETY: `data` is the live play data of this frame, on the interface
+    // thread, with the prompt at the table's `ui.prompt_*`.
+    let (prompt_title, prompt_verb) = linked
+        .prompt
+        .map_or((Str::EMPTY, 0), |at| unsafe { prompt(data, at) });
+    // SAFETY: `data` is the live play data of this frame, whose screen host
+    // `u32` sits at the table's `ui.screen_host` (every kept client).
+    let host = linked
+        .screen_host
+        .map_or(0, |at| unsafe { crate::memory::read::<u32>(data, at) });
+    FrameReads {
+        hud_screen: screen_name(linked, Some(screen)),
+        prompt_title,
+        prompt_verb,
+        screen_host: enshwick::Entity(host),
     }
 }
 
@@ -509,11 +508,12 @@ mod tests {
     #[test]
     fn the_open_screen_is_read_only_in_a_game() {
         for menu_or_loading in [0, 3, 4, 5, 6, 8] {
-            let read = in_game_only(menu_or_loading, || panic!("read the last game's play data"));
+            let read: Option<usize> =
+                in_game_only(menu_or_loading, || panic!("read the last game's play data"));
             assert_eq!(read, None, "app state {menu_or_loading}");
         }
         assert_eq!(in_game_only(7, || Some(12)), Some(12));
-        assert_eq!(in_game_only(7, || None), None, "no play data");
+        assert_eq!(in_game_only::<usize>(7, || None), None, "no play data");
     }
 
     #[test]

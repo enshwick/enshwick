@@ -100,7 +100,7 @@ impl TargetsAt {
                     .constants()
                     .iter()
                     .find(|c| c.name() == INTERACTION_TARGET)
-                    .map(|c| c.value())
+                    .map(crate::resources::Constant::value)
             })
             .and_then(|value| usize::try_from(value).ok())
             .ok_or_else(|| Off::new("interactions: the type registry lacks the prompt's target"))?;

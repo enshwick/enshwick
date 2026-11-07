@@ -88,7 +88,7 @@ fn layout(loader: &Loader) -> Result<Layout, &'static str> {
         return Err(catalogue::ids::CLIENT_PLAYER_INPUT_DIGITAL);
     }
     Ok(Layout {
-        components: Components::resolve(loader).ok_or("ecs.component_read_raw")?,
+        components: Components::resolve(loader).ok_or(pinned::ecs::COMPONENT_READ_RAW.id())?,
         // SAFETY: the build table pins `ecs.row_entity` to this signature.
         row_entity: unsafe { core::mem::transmute::<usize, RowEntity>(row) },
         input: catalogue::type_hash(catalogue::ids::CLIENT_PLAYER_INPUT)
@@ -160,7 +160,7 @@ unsafe extern "system" fn player_ui(ctx: *mut u64) -> u64 {
         // SAFETY: `ctx` is non-null by the check before it and is the
         // system's own context, at its entry on its thread.
         let _read = FUSE.run("the local player's held controls", || unsafe {
-            read(ctx, layout)
+            read(ctx, layout);
         });
     }
     // SAFETY: this detour runs only as the `player_ui` system's link, so the

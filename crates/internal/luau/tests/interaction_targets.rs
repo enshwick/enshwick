@@ -21,12 +21,12 @@ mod tests {
         bytes[at..][..4].copy_from_slice(&512u32.to_le_bytes());
         let loader = run(
             fake.component(Entity(40), ty, &bytes),
-            r#"
+            r"
             enshwick.on_tick(0.1, function()
                 local target = enshwick.interactions.target(40)
                 enshwick.log.info(`target {target} {enshwick.interactions.target(99) == nil}`)
             end)
-            "#,
+            ",
         );
         let _ran = loader.tick(Duration::from_millis(100));
         assert!(logged(&loader, "target 512 true"), "{:?}", loader.logs());

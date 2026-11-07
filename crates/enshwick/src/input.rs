@@ -1,6 +1,8 @@
 //! The game's own controls as players use them: which ones a player holds
-//! this step, read in the server's world for every player, vanilla clients
-//! included, and on a client the ones its local player holds.
+//! this step, for every player and on a client for its own.
+//!
+//! The server reads them in its world for every player, vanilla clients
+//! included; a client reads its local player's.
 //!
 //! Unstable: needs the `unstable` feature and may change in any release.
 //!

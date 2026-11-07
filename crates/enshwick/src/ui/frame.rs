@@ -92,6 +92,7 @@ impl Frame<'_> {
 
     /// The game screen's name, kept by the loader for the process
     /// (`UiFrame`'s `hud_screen`); empty for none.
+    #[cfg(feature = "unstable")]
     pub(super) fn hud_screen_name(&self) -> &'static str {
         // SAFETY: the loader keeps the text for the process, and a frame of
         // an older loader reads it zero, which is empty.
