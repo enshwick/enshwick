@@ -372,20 +372,32 @@ mod tests {
             local wide = enshwick.altars.add_flame_altar({{
                 item = {{ id = "you.luau:wide", like = "{PROP_ITEM}" }},
                 zones = {{ {{ grow = 4, height = 20 }} }},
+                max_level = 1,
             }})
             enshwick.log.info(`altars of {{wide.template}}`)
             "#
         );
         let kind = Guid::named("you.luau:wide.template");
+        let upgrade = Guid([0xc1; 16]);
         let host = FakeHost::new()
             .enemies()
             .props()
+            .upgrade_recipes(&[(upgrade, 1)])
             .template(enshwick::Entity(10), kind.0);
         let (loader, status) = start_with(host, &main, Scripts::new(), None);
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         let line = format!("altars of {kind}");
         assert!(logged(&loader, &line), "{line}: {:?}", loader.logs());
         assert_eq!(loader.altar_zone(enshwick::Entity(10), 1, 30), (4, 20));
+        let craft = enshwick::abi::CraftCheck {
+            header: Header::of::<enshwick::abi::CraftCheck>(),
+            crafting_operator_id: enshwick::Entity(2),
+            crafting_station_id: enshwick::Entity(10),
+            recipe_id: enshwick::RecipeId(upgrade.fnv1a()),
+            recipe_amount: 1,
+            reserved: 0,
+        };
+        assert!(!loader.craft(&craft), "an upgrade past the kind's maximum");
     }
 
     #[test]

@@ -87,7 +87,7 @@ mod tests {
         assert!(craft(&loader, KIND_ALTAR, claim), "below the maximum");
         assert!(!craft(&loader, KIND_ALTAR, upgrade), "past the maximum");
         assert!(craft(&loader, OTHER_ALTAR, upgrade), "another kind's altar");
-        assert!(craft(&loader, Entity::NONE, upgrade), "by hand");
+        assert!(craft(&loader, Entity(0), upgrade), "by hand");
         assert!(
             !craft(&loader, OTHER_ALTAR, RecipeId(TORCH)),
             "the later filter's own refusal"

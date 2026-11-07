@@ -125,6 +125,15 @@ the height, in the terms of a zone filter. A level past the list takes the last 
 altars through a zone filter of the mod, so filters that run after it see the
 kind's size. Each altar's `template` names its kind.
 
+With `max_level`, the kind's altars stop at that level, below the game's
+own. The game raises an altar's level by an upgrade recipe crafted at the
+altar, so a craft filter of the mod refuses, on the server, the vanilla
+upgrade recipes that start at `max_level` or above when they are crafted at
+an altar of the kind. The refused craft is refused before the crafting
+system reads it: the altar keeps its level and the player keeps the items.
+A `max_level` of 0 refuses even the claim. Other kinds and the vanilla altar
+keep the game's limit.
+
 On a server copy, a level-1 altar of a kind with `grow = 20` and
 `height = 80` had a zone 121 cells wide and 80 high. The game's level-1 altar
 had 80 by 80. The kind looks like the vanilla altar: a new look needs client
@@ -140,6 +149,7 @@ fn init(load: &mut enshwick::Load<'_>, altar: Guid) -> Result<(), enshwick::Off>
         item: NewItem::new(id!("wide-altar"), altar),
         zones: vec![KindZone { grow: 20, height: 80 }],
         recipe_cost: Some(2),
+        max_level: Some(2),
     })?;
     Ok(())
 }
@@ -154,6 +164,7 @@ local wide = enshwick.altars.add_flame_altar({
     item = { id = "you.altars:wide-altar", like = altar },
     zones = { { grow = 20, height = 80 } },
     recipe_cost = 2,
+    max_level = 2,
 })
 enshwick.log.info(`wide altars are {wide.template}`)
 ```
