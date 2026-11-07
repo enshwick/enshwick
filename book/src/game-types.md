@@ -42,7 +42,10 @@ every item with its fields, size and role.
 Resolve the component type once at `init`. The resolve checks the type's shape
 on the running build, and it fails only for that type. Read an entity's
 component on the game thread; `write` writes it back, marked changed the
-game's way:
+game's way. A read copies the component's own bytes. Some fields keep their
+data outside them, such as an array the game keeps as a `BlobArray`. The
+data of a kind this API does not know may lie anywhere too. A component
+type with such a field does not resolve, and the refusal names the field:
 
 ```rust
 use enshwick::events::PlayerJoined;
@@ -149,9 +152,9 @@ names. An array is a list, its first item at index 1. An optional is its
 value or nil. Inside a list, an absent item is `enshwick.resources.none()`,
 since nil would end the list.
 
-A value read through `enshwick.typed` goes through the generated Rust item.
-So a Luau mod reads and writes what a Rust mod does. A type whose shape a
-game update changed is refused the same way.
+A value read through `enshwick.typed` takes and refuses what the generated
+Rust item does. So a Luau mod reads and writes what a Rust mod does. A type
+whose shape a game update changed is refused the same way.
 
 A Luau mod differs in three places. `ComponentType:read` and `write` take no
 world: the handle holds the server's world from the start. A write and a

@@ -51,11 +51,15 @@ fn class_of<'r>(rows: &'r [Row], id: &str) -> Option<&'r Row> {
     })
 }
 
+/// The anchors of both sides, which the repository holds, and the kept
+/// builds' tables where the game data folder is given.
 fn tables() -> Vec<Table> {
+    let anchors = [Side::Server, Side::Client].map(|side| crate::anchors(side).unwrap());
     kept()
         .unwrap()
         .iter()
         .map(|(_, text)| Table::parse(text).unwrap())
+        .chain(anchors)
         .collect()
 }
 
@@ -87,18 +91,25 @@ fn every_entry_of_every_table_has_a_class_and_a_reason() {
     assert!(unclassed.is_empty(), "{unclassed:#?}");
 }
 
-/// Skipped without the kept tables.
+/// A class entry no anchor, route or kept table holds is stale; without
+/// the game data folder there are no kept tables.
 #[test]
 fn every_entry_a_class_names_is_in_a_table() {
     let tables = tables();
-    if tables.is_empty() {
-        return;
-    }
-    let known: FxHashSet<&str> = tables.iter().flat_map(ids).collect();
+    let routes = Routes::embedded().unwrap();
+    let known: FxHashSet<&str> = tables.iter().flat_map(ids).chain(routes.ids()).collect();
+    // A route that checks its symbol's code stands for the symbol's bytes.
+    let checked = |id: &str| {
+        id.strip_suffix(".bytes").is_some_and(|id| {
+            [Side::Server, Side::Client]
+                .iter()
+                .any(|&s| routes.checks(id, s))
+        })
+    };
     let stale: Vec<String> = rows()
         .into_iter()
         .flat_map(|r| r.entries)
-        .filter(|e| !e.ends_with('*') && !known.contains(e.as_str()))
+        .filter(|e| !e.ends_with('*') && !known.contains(e.as_str()) && !checked(e))
         .collect();
     assert!(stale.is_empty(), "{stale:?}");
 }

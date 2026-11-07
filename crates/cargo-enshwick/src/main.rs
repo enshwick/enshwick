@@ -144,9 +144,10 @@ enum Command {
         #[arg(long)]
         luau: Option<PathBuf>,
     },
-    /// Writes the typed API, `enshwick::typed`, from the newest kept server
+    /// Writes the typed API, `enshwick::typed`, from the newest server
     /// build's snapshot of the game's reflection in the game data folder;
-    /// with `--from`, snapshots that executable's reflection there first.
+    /// with `--from`, snapshots that executable's reflection there first and
+    /// writes from it when it is the server's.
     Generate {
         /// The game executable, or the game folder holding it, to snapshot.
         #[arg(long, conflicts_with = "check")]

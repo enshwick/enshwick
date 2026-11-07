@@ -1,9 +1,10 @@
 //! The typed API as a script reaches it: a handle per role, opened by the
 //! generated type's id at start, whose values cross as tables by the
-//! generated items' Rust names, read and written through the generated
-//! Rust type itself.
+//! generated items' Rust names, read and written through the type's
+//! [`Shape`](super::Shape), which takes and refuses what the generated Rust
+//! type does.
 
-use super::{RawComponent, RawEvent, RawResource, Row};
+use super::{RawComponent, RawEvent, RawResource, Role, Row};
 use crate::content::Guid;
 use crate::resources::{Registry, Resources, Value as Data};
 use crate::script::{Answer, Class, Error, FromScript, IntoScript, Ty, Typed, Value};
@@ -40,8 +41,9 @@ impl Answer for Result<Fields, Error> {
 }
 
 /// `value`, of `ty`, with each record a table by its fields' names, as a
-/// script holds game data.
-fn by_name(value: Value, ty: &Ty) -> Value {
+/// script holds game data: the compiled path the tests hold every shape to.
+#[cfg(any(test, feature = "test"))]
+pub(crate) fn by_name(value: Value, ty: &Ty) -> Value {
     match (value, ty) {
         (Value::Record(values), Ty::Record(record)) => Value::Map(
             record
@@ -62,8 +64,9 @@ fn by_name(value: Value, ty: &Ty) -> Value {
 
 /// `value`, a script's game data of `ty`, with each table of a record in
 /// its fields' order; a field the table leaves out is nil, and a key no
-/// field has is refused.
-fn by_place(value: Value, ty: &Ty) -> Result<Value, Error> {
+/// field has is refused; the other half of [`by_name`].
+#[cfg(any(test, feature = "test"))]
+pub(crate) fn by_place(value: Value, ty: &Ty) -> Result<Value, Error> {
     match (value, ty) {
         (Value::Map(mut entries), Ty::Record(record)) => {
             let fields = record
@@ -106,7 +109,7 @@ fn by_place(value: Value, ty: &Ty) -> Result<Value, Error> {
 impl Row {
     /// The generated type of id `id`, its parts joined by `.` or `::`, with
     /// the role `role`.
-    fn find(id: &str, role: &str) -> Result<&'static Self, Off> {
+    fn find(id: &str, role: Role) -> Result<&'static Self, Off> {
         let id = id.replace('.', "::");
         crate::typed::NAMED
             .iter()
@@ -114,24 +117,25 @@ impl Row {
             .ok_or_else(|| {
                 Off::new(format!(
                     "typed {id}: no generated {} of that id",
-                    role.to_lowercase()
+                    role.noun()
                 ))
             })
     }
 
-    /// The codec's `value` as a script gets it, read through the generated
-    /// type.
+    /// The codec's `value` as a script gets it, read through the type's
+    /// shape.
     fn shown(&self, value: &Data) -> Result<Fields, Off> {
-        let value =
-            (self.to_script)(value).map_err(|e| Off::new(format!("typed {}: {e}", self.id)))?;
-        Ok(Fields(by_name(value, self.script)))
+        self.shape
+            .shown(value)
+            .map(Fields)
+            .map_err(|e| Off::new(format!("typed {}: {e}", self.id)))
     }
 
     /// A script's `fields` as the codec writes them, read through the
-    /// generated type.
+    /// type's shape.
     fn taken(&self, fields: Fields) -> Result<Data, Off> {
-        by_place(fields.0, self.script)
-            .and_then(self.from_script)
+        self.shape
+            .taken(fields.0)
             .map_err(|e| Off::new(format!("typed {}: {e}", self.id)))
     }
 
@@ -149,7 +153,7 @@ impl Row {
 
     /// The generated component of id `id`, its parts joined by `.` or `::`.
     pub(crate) fn component(id: &str) -> Result<&'static Self, Off> {
-        Self::find(id, "Component")
+        Self::find(id, Role::Component)
     }
 
     /// A script's table of every field of the type, as the codec writes it.
@@ -361,14 +365,15 @@ impl Load<'_> {
     /// # Errors
     ///
     /// [`Off`] for an id of no generated component, and when the build
-    /// lacks the type or its shape differs from the generated struct,
-    /// naming the build.
+    /// lacks the type, its shape differs from the generated struct, or a
+    /// field's data lies outside the component, such as a `BlobArray`'s,
+    /// naming the field and the build.
     #[script(name = "component_type")]
     pub(crate) fn typed_component_type(&mut self, id: &str) -> Result<ComponentType, Off> {
-        let row = Row::find(id, "Component")?;
+        let row = Row::find(id, Role::Component)?;
         Ok(ComponentType {
             row,
-            raw: RawComponent::resolve(self, row.id, row.check)?,
+            raw: RawComponent::resolve(self, row.id, &|value| row.check(value))?,
             world: self.world(),
         })
     }
@@ -384,10 +389,10 @@ impl Load<'_> {
     /// build.
     #[script(name = "event_type")]
     pub(crate) fn typed_event_type(&mut self, id: &str) -> Result<EventType, Off> {
-        let row = Row::find(id, "Event")?;
+        let row = Row::find(id, Role::Event)?;
         Ok(EventType {
             row,
-            raw: RawEvent::resolve(self, row.id, row.check)?,
+            raw: RawEvent::resolve(self, row.id, &|value| row.check(value))?,
             host: self.host(),
         })
     }
@@ -403,10 +408,10 @@ impl Load<'_> {
     /// build.
     #[script(name = "resource_type")]
     pub(crate) fn typed_resource_type(&mut self, id: &str) -> Result<ResourceType, Off> {
-        let row = Row::find(id, "Resource")?;
+        let row = Row::find(id, Role::Resource)?;
         Ok(ResourceType {
             row,
-            raw: RawResource::resolve(self, row.id, row.check)?,
+            raw: RawResource::resolve(self, row.id, &|value| row.check(value))?,
             host: self.host(),
         })
     }
@@ -415,7 +420,7 @@ impl Load<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::typed::runtime::{reflected_enum, reflected_struct};
+    use crate::typed::runtime::{Compiled, Shaped, reflected_enum, reflected_struct};
 
     reflected_enum! {
         /// A test enum.
@@ -570,5 +575,224 @@ mod tests {
                 .ends_with("typed::runtime::script::tests::Outer")
         );
         assert_eq!(record.fields()[3].name(), "type");
+    }
+
+    reflected_struct! {
+        /// A test struct with a field of every leaf kind and a bitmask.
+        Leaves {
+            /// A small signed number.
+            small: i8 = "small",
+            /// A wider unsigned one.
+            wide: u16 = "wide",
+            /// A switch.
+            flag: bool = "flag",
+            /// A ratio.
+            ratio: f32 = "ratio",
+            /// A name.
+            name: String = "name",
+            /// A reference.
+            id: Guid = "id",
+            /// Untyped data.
+            raw: Data = "raw",
+            /// A variant or none.
+            held: Option<crate::resources::Variant> = "held",
+            /// Moods as flags.
+            moods: crate::typed::Flags<Mood> = "moods",
+        }
+    }
+
+    fn leaves() -> Data {
+        Data::Struct(vec![
+            ("small".into(), Data::Int(-3)),
+            ("wide".into(), Data::Uint(700)),
+            ("flag".into(), Data::Uint(2)),
+            ("ratio".into(), Data::Float(0.1)),
+            ("name".into(), Data::Bytes(b"wolf".to_vec())),
+            ("id".into(), Data::Guid(Guid([7; 16]))),
+            ("raw".into(), Data::List(vec![Data::Uint(u64::MAX)])),
+            (
+                "held".into(),
+                Data::Variant(Box::new(crate::resources::Variant::new(
+                    "demo::Sphere",
+                    Data::Float(1.5),
+                ))),
+            ),
+            ("moods".into(), Data::Flags(vec!["Calm".into()])),
+        ])
+    }
+
+    /// `value` with the field `name` set to `to`.
+    fn with(value: &Data, name: &str, to: Data) -> Data {
+        let mut value = value.clone();
+        if let Some(held) = value.field_mut(name) {
+            *held = to;
+        }
+        value
+    }
+
+    /// The shape of `T` reads `data` and takes back `script` as its
+    /// compiled conversions do, refusals by the same words.
+    fn same<T>(data: &Data, script: Value)
+    where
+        T: Shaped + crate::typed::Reflected + Typed + IntoScript + FromScript,
+    {
+        let compiled = Compiled::of::<T>();
+        let shape = T::SHAPE;
+        assert_eq!(
+            format!("{:?}", shape.shown(data)),
+            format!("{:?}", (compiled.to_script)(data)),
+            "{data:?}"
+        );
+        let shown = format!("{script:?}");
+        assert_eq!(
+            format!(
+                "{:?}",
+                shape.taken(script.clone()).map_err(|e| e.to_string())
+            ),
+            format!(
+                "{:?}",
+                (compiled.from_script)(script).map_err(|e| e.to_string())
+            ),
+            "{shown}"
+        );
+    }
+
+    #[test]
+    fn a_shape_reads_and_refuses_the_codec_s_values_as_the_rust_type_does() {
+        let value = crate::typed::Reflected::to_value(&outer());
+        let shown = by_name(outer().into_value(), Outer::TY);
+        same::<Outer>(&value, shown);
+        let leaves = leaves();
+        let leaves_shown = Leaves::SHAPE.shown(&leaves).unwrap();
+        same::<Leaves>(&leaves, leaves_shown);
+        for (name, wrong) in [
+            ("small", Data::Int(-200)),
+            ("small", Data::Uint(5)),
+            ("wide", Data::Int(-1)),
+            ("wide", Data::Float(1.0)),
+            ("flag", Data::Text("yes".into())),
+            ("ratio", Data::Int(1)),
+            ("name", Data::Uint(1)),
+            (
+                "id",
+                Data::Text("6943053a-32c1-4718-ae22-e61427ddf54d".into()),
+            ),
+            ("held", Data::Nil),
+            ("held", Data::Int(1)),
+            ("moods", Data::Uint(0b101)),
+            ("moods", Data::Flags(vec!["Wild".into()])),
+            ("moods", Data::Name("Calm".into())),
+        ] {
+            same::<Leaves>(&with(&leaves, name, wrong), Value::Nil);
+        }
+        for (name, wrong) in [
+            ("mood", Data::Name("Wild".into())),
+            ("mood", Data::Uint(9)),
+            ("mood", Data::Text("Calm".into())),
+            ("inners", Data::Bytes(vec![0, 5, 0, 0])),
+            ("inners", Data::List(vec![Data::Struct(Vec::new())])),
+            ("type", Data::Int(-1)),
+            ("spare", Data::Struct(vec![("level".into(), Data::Uint(1))])),
+            ("spare", Data::Uint(1)),
+        ] {
+            same::<Outer>(&with(&value, name, wrong), Value::Nil);
+        }
+        assert!(Leaves::SHAPE.check(&leaves).is_ok());
+        let wrong = with(&leaves, "small", Data::Int(-200));
+        assert_eq!(
+            Leaves::SHAPE.check(&wrong).map_err(|e| e.to_string()),
+            crate::typed::check::<Leaves>(&wrong).map_err(|e| e.to_string())
+        );
+        assert!(Leaves::SHAPE.check(&wrong).is_err());
+        same::<Outer>(&Data::Struct(Vec::new()), Value::Nil);
+        same::<Outer>(&Data::Uint(1), Value::Nil);
+        same::<Empty>(&Data::Uint(1), Value::List(Vec::new()));
+    }
+
+    #[test]
+    fn a_shape_takes_and_refuses_a_script_s_tables_as_the_rust_type_does() {
+        let value = crate::typed::Reflected::to_value(&outer());
+        let Value::Map(fields) = by_name(outer().into_value(), Outer::TY) else {
+            unreachable!()
+        };
+        let set = |name: &str, to: Value| {
+            let mut fields = fields.clone();
+            match fields.iter_mut().find(|(field, _)| field == name) {
+                Some((_, held)) => *held = to,
+                None => fields.push((name.to_owned(), to)),
+            }
+            Value::Map(fields)
+        };
+        let inner = |level: Value| Value::Map(vec![("level".into(), level)]);
+        for script in [
+            set("mood", Value::String("Calm".into())),
+            set("mood", Value::String("Angry".into())),
+            set(
+                "mood",
+                Value::Map(vec![("Other".into(), Value::String("Calm".into()))]),
+            ),
+            set(
+                "mood",
+                Value::Map(vec![("Other".into(), Value::Number(4.0))]),
+            ),
+            set("mood", Value::Number(1.0)),
+            set("type", Value::Number(42.0)),
+            set("type", Value::String("x".into())),
+            set("type", Value::Number(2f64.powi(54))),
+            set("inners", Value::List(vec![inner(Value::Number(300.0))])),
+            set("inners", Value::List(vec![inner(Value::Nil)])),
+            set("inners", Value::Map(Vec::new())),
+            set("spare", inner(Value::Number(1.0))),
+            set("spare", Value::String("none".into())),
+            set("base", Value::List(Vec::new())),
+            set("base", Value::Nil),
+            set("rank", Value::Number(1.0)),
+            Value::Map(Vec::new()),
+            Value::String("outer".into()),
+            Value::List(vec![Value::Nil]),
+        ] {
+            same::<Outer>(&value, script);
+        }
+        let leaves = leaves();
+        let Ok(Value::Map(fields)) = Leaves::SHAPE.shown(&leaves) else {
+            unreachable!()
+        };
+        let set = |name: &str, to: Value| {
+            let mut fields = fields.clone();
+            if let Some((_, held)) = fields.iter_mut().find(|(field, _)| field == name) {
+                *held = to;
+            }
+            Value::Map(fields)
+        };
+        for script in [
+            set("small", Value::Number(-129.0)),
+            set("wide", Value::Number(1.5)),
+            set("flag", Value::Number(1.0)),
+            set("ratio", Value::String("0.1".into())),
+            set("name", Value::Number(1.0)),
+            set("id", Value::String("not a guid".into())),
+            set("raw", Value::Vector([0.0; 3])),
+            set(
+                "held",
+                Value::Map(vec![("value".into(), Value::Number(1.0))]),
+            ),
+            set("held", Value::Nil),
+            set("moods", Value::List(vec![Value::String("Calm".into())])),
+            set(
+                "moods",
+                Value::List(vec![Value::Map(vec![("Other".into(), Value::Number(3.0))])]),
+            ),
+            set(
+                "moods",
+                Value::List(vec![
+                    Value::String("Calm".into()),
+                    Value::Map(vec![("Other".into(), Value::Number(3.0))]),
+                ]),
+            ),
+            set("moods", Value::List(vec![Value::String("Angry".into())])),
+            set("moods", Value::String("Calm".into())),
+        ] {
+            same::<Leaves>(&leaves, script);
+        }
     }
 }

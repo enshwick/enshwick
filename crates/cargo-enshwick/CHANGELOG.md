@@ -38,6 +38,11 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- `cargo enshwick generate` also takes a snapshot of a build no table is
+  kept for: such a build is newer than every kept one, and among them the
+  snapshot written last wins. `--from` snapshots a build no table is kept
+  for, its side from the executable's name, and writes the typed API from
+  it (#986).
 - `cargo enshwick new` writes `enshwick` as a git dependency on the tag of
   the alpha the tool is from, since alphas are not on crates.io; a release
   still pins its crates.io version (#979).

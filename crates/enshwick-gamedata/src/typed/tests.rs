@@ -444,18 +444,109 @@ fn every_id_of_the_committed_table_names_one_engine_type() {
 }
 
 /// The snapshot the committed typed API was generated from, the newest
-/// kept server build's, and that build's name; `None` without the game data
-/// folder, and the test that needs it skips.
+/// server build's as `cargo enshwick generate` picks it, and that build's
+/// name; `None` without the game data folder, and the test that needs it
+/// skips.
 fn committed() -> Option<(Catalogue, String)> {
     let tables: Vec<crate::Table> = crate::kept()
         .unwrap()
         .iter()
         .map(|(_, text)| crate::Table::parse(text).unwrap())
         .collect();
-    let table = crate::newest(&tables, crate::Side::Server)?;
-    let path = snapshot_path(&table.file_name())?;
+    let path = newest_snapshot(&crate::data_dir()?, &tables, crate::Side::Server).unwrap()?;
     let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path:?}: {e}"));
-    Some((Catalogue::from_snapshot(&text).unwrap(), build_name(table)))
+    let build = snapshot_build(&path, &tables);
+    Some((Catalogue::from_snapshot(&text).unwrap(), build))
+}
+
+#[test]
+fn the_newest_snapshot_ranks_kept_builds_by_steam_build_and_puts_an_untabled_one_first() {
+    let dir = std::env::temp_dir().join(format!("ensh-newest-snapshot-{}", std::process::id()));
+    drop(std::fs::remove_dir_all(&dir));
+    let table = |guid: u8, age: u32, steam: u32| {
+        crate::Table::parse(&format!(
+            "name = \"t\"\nside = \"server\"\nguid = \"{}\"\nage = {age}\nsteam_build = {steam}\n",
+            format!("{guid:02x}").repeat(16)
+        ))
+        .unwrap()
+    };
+    // The older build has the higher linker age, as on the kept server builds.
+    let tables = [table(0x1c, 479, 26_319_703), table(0xf1, 224, 26_430_253)];
+    for table in &tables {
+        let path = snapshot_in(&dir, &table.file_name());
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, "").unwrap();
+    }
+    std::fs::write(dir.join("typed").join("notes.jsonl"), "").unwrap();
+    let newest = newest_snapshot(&dir, &tables, crate::Side::Server)
+        .unwrap()
+        .unwrap();
+    assert_eq!(newest, snapshot_in(&dir, &tables[1].file_name()));
+    assert_eq!(snapshot_build(&newest, &tables), build_name(&tables[1]));
+    let untabled = snapshot_in(&dir, &table(0x22, 3, 1).file_name());
+    std::fs::write(&untabled, "").unwrap();
+    let newest = newest_snapshot(&dir, &tables, crate::Side::Server)
+        .unwrap()
+        .unwrap();
+    assert_eq!(newest, untabled);
+    assert_eq!(snapshot_build(&newest, &tables), "server build 3");
+    assert_eq!(
+        newest_snapshot(&dir, &tables, crate::Side::Client).unwrap(),
+        None
+    );
+    drop(std::fs::remove_dir_all(&dir));
+}
+
+#[test]
+fn among_untabled_snapshots_the_one_written_last_wins_and_a_missing_folder_has_none() {
+    let dir = std::env::temp_dir().join(format!("ensh-written-last-{}", std::process::id()));
+    drop(std::fs::remove_dir_all(&dir));
+    assert_eq!(
+        newest_snapshot(&dir, &[], crate::Side::Server).unwrap(),
+        None
+    );
+    let start = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1 << 30);
+    let snapshot = |guid: &str, age: u32, hours: u64| {
+        let path = dir
+            .join("typed")
+            .join(format!("server-{}-{age}.jsonl", guid.repeat(16)));
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let file = std::fs::File::create(&path).unwrap();
+        file.set_modified(start + std::time::Duration::from_secs(hours * 3600))
+            .unwrap();
+        path
+    };
+    snapshot("aa", 9, 1);
+    let last = snapshot("bb", 2, 5);
+    snapshot("cc", 7, 3);
+    assert_eq!(
+        newest_snapshot(&dir, &[], crate::Side::Server).unwrap(),
+        Some(last)
+    );
+    drop(std::fs::remove_dir_all(&dir));
+    // A `typed` that is a file, not a folder, does not read.
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("typed"), "").unwrap();
+    assert!(newest_snapshot(&dir, &[], crate::Side::Server).is_err());
+    drop(std::fs::remove_dir_all(&dir));
+}
+
+#[test]
+fn a_snapshot_is_named_only_by_its_side_guid_and_age() {
+    let guid = "ab".repeat(16);
+    assert_eq!(
+        snapshot_age(&format!("server-{guid}-410.jsonl"), crate::Side::Server),
+        Some(410)
+    );
+    for other in [
+        format!("client-{guid}-410.jsonl"),
+        format!("server-{guid}-410.toml"),
+        format!("server-{}-410.jsonl", "ab".repeat(15)),
+        format!("server-{guid}-new.jsonl"),
+        "server-410.jsonl".to_owned(),
+    ] {
+        assert_eq!(snapshot_age(&other, crate::Side::Server), None, "{other}");
+    }
 }
 
 /// Every covered type of the committed snapshot has a generated item, and
@@ -482,7 +573,7 @@ fn every_covered_type_reads_as_its_generated_item() {
         let name = engine_name(row.id).unwrap();
         let read = enshwick::typed::sample(&registry, name)
             .ok_or_else(|| "no sample".to_owned())
-            .and_then(|value| (row.check)(&value).map_err(|e| e.to_string()));
+            .and_then(|value| row.check(&value).map_err(|e| e.to_string()));
         if let Err(why) = read {
             wrong.push(format!("{}: {why}", row.id));
         }
@@ -508,8 +599,10 @@ fn every_covered_type_crosses_into_a_script_and_back() {
         .count();
     let mut described = 0;
     let mut wrong = Vec::new();
-    for row in enshwick::typed::NAMED {
-        let enshwick::script::Ty::Record(record) = row.script else {
+    let script = enshwick::typed::SCRIPT_TYPES.iter();
+    assert_eq!(script.len(), enshwick::typed::NAMED.len());
+    for (row, ty) in enshwick::typed::NAMED.iter().zip(script) {
+        let enshwick::script::Ty::Record(record) = ty else {
             wrong.push(format!("{}: not a record", row.id));
             continue;
         };
@@ -521,7 +614,7 @@ fn every_covered_type_crosses_into_a_script_and_back() {
         described += 1;
         let sample = enshwick::typed::sample(&registry, engine_name(row.id).unwrap()).unwrap();
         let shown = |value: &enshwick::resources::Value| {
-            (row.to_script)(value).map(|script| format!("{script:?}"))
+            row.to_script(value).map(|script| format!("{script:?}"))
         };
         match row.through_script(&sample) {
             Ok(back) if shown(&back).ok() == shown(&sample).ok() => {}
@@ -531,6 +624,87 @@ fn every_covered_type_crosses_into_a_script_and_back() {
     }
     assert_eq!(described, covered, "a script twin for every covered type");
     assert!(wrong.is_empty(), "{wrong:#?}");
+}
+
+/// Every covered type's shape, the one walk a script's values cross by,
+/// reads a sample of the build's type as its compiled Rust conversions do,
+/// and takes back what they take: the same table, the same value, the same
+/// refusal of a table with a key no field has.
+#[test]
+#[cfg_attr(miri, ignore = "converts thousands of types")]
+fn every_shape_crosses_a_sample_as_its_rust_type_does() {
+    let Some((catalogue, _)) = committed() else {
+        return;
+    };
+    let registry = catalogue.registry();
+    let (named, compiled) = (enshwick::typed::NAMED, enshwick::typed::COMPILED);
+    assert_eq!(named.len(), compiled.len());
+    let mut wrong = Vec::new();
+    for (row, rust) in named.iter().zip(compiled) {
+        let sample = enshwick::typed::sample(&registry, engine_name(row.id).unwrap()).unwrap();
+        let shown = row.to_script(&sample);
+        let expected = (rust.to_script)(&sample);
+        if format!("{shown:?}") != format!("{expected:?}") {
+            wrong.push(format!("{}: shown {shown:?}, not {expected:?}", row.id));
+            continue;
+        }
+        let Ok(enshwick::script::Value::Map(mut table)) = shown else {
+            continue;
+        };
+        let taken = |table: Vec<(String, enshwick::script::Value)>| {
+            let value = enshwick::script::Value::Map(table);
+            let by_shape = row.to_codec(value.clone()).map_err(|e| e.to_string());
+            let by_rust = (rust.from_script)(value).map_err(|e| e.to_string());
+            (by_shape, by_rust)
+        };
+        let (by_shape, by_rust) = taken(table.clone());
+        if by_shape != by_rust {
+            wrong.push(format!("{}: taken {by_shape:?}, not {by_rust:?}", row.id));
+        }
+        table.push(("no_such_field".to_owned(), enshwick::script::Value::Nil));
+        let (by_shape, by_rust) = taken(table);
+        if by_shape.is_ok() || by_shape != by_rust {
+            wrong.push(format!(
+                "{}: a stray key gave {by_shape:?}, not {by_rust:?}",
+                row.id
+            ));
+        }
+    }
+    assert!(wrong.is_empty(), "{wrong:#?}");
+}
+
+/// Every committed file of the typed API, the game screens and the loader's
+/// id table carries the generated header, and all of them name one build, so a hand-written or half-regenerated module
+/// fails on every machine, with the game data or without it.
+#[test]
+fn every_committed_typed_file_carries_the_header_of_one_build() {
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../enshwick/src");
+    let (before, after) = rust::header("\0")
+        .split_once('\0')
+        .map(|(b, a)| (b.to_owned(), a.to_owned()))
+        .unwrap();
+    let ids = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/typed/ids.rs");
+    let mut files = vec![src.join("typed.rs"), src.join("ui/screens.rs"), ids];
+    for entry in std::fs::read_dir(src.join("typed")).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_some_and(|e| e == "rs") && !path.ends_with("runtime.rs") {
+            files.push(path);
+        }
+    }
+    let mut builds = BTreeSet::new();
+    for path in &files {
+        let text = std::fs::read_to_string(path).unwrap();
+        let build = text
+            .split_once(&before)
+            .and_then(|(_, rest)| rest.split_once(&after))
+            .map(|(build, _)| build.to_owned());
+        match build {
+            Some(build) => builds.insert(build),
+            None => panic!("{}: no generated header", path.display()),
+        };
+    }
+    assert!(files.len() > 10, "{files:?}");
+    assert_eq!(builds.len(), 1, "{builds:?}");
 }
 
 /// The committed typed API is what the committed snapshot generates, file

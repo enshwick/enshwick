@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use super::{Answer, Callback, Error, FromScript, IntoScript, Signature, Ty, Typed, Value};
 
-fn expected(what: &str, value: &Value) -> Error {
+pub(crate) fn expected(what: &str, value: &Value) -> Error {
     let got = match value {
         Value::Nil => "nil",
         Value::Bool(_) => "a boolean",

@@ -308,7 +308,7 @@ fn port_tables(
 }
 
 /// The side the game executable's file name names.
-fn side_of_exe(path: &Path) -> Option<Side> {
+pub(crate) fn side_of_exe(path: &Path) -> Option<Side> {
     let name = path.file_name()?.to_str()?.to_ascii_lowercase();
     match name.as_str() {
         "enshrouded_server.exe" => Some(Side::Server),
@@ -317,7 +317,7 @@ fn side_of_exe(path: &Path) -> Option<Side> {
     }
 }
 
-const fn gamedata_side(side: Side) -> enshwick_gamedata::Side {
+pub(crate) const fn gamedata_side(side: Side) -> enshwick_gamedata::Side {
     match side {
         Side::Server => enshwick_gamedata::Side::Server,
         Side::Client => enshwick_gamedata::Side::Client,

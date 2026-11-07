@@ -7,9 +7,10 @@ mod tests {
     use std::sync::atomic::AtomicU32;
 
     use enshwick::abi::{InventoryOp, InventoryOpResult, InventoryResult, Status};
+    use enshwick::content::Guid;
     use enshwick::events::WorldSaved;
     use enshwick::test::{FakeHost, Installed};
-    use enshwick::{Load, Mod, Off};
+    use enshwick::{ItemId, Load, Mod, Off, RecipeId};
     use enshwick_luau::{Limits, Scripts};
 
     const SETUP: u32 = 0xc24d_f82a;
@@ -78,8 +79,12 @@ mod tests {
     }
 
     fn run(main: &str) -> Installed {
+        run_on(world(), main)
+    }
+
+    fn run_on(host: FakeHost, main: &str) -> Installed {
         *CASE.lock().unwrap() = Some(Scripts::new().with("main.luau", main));
-        let loader = world().install();
+        let loader = host.install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Luau)`.
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
@@ -151,5 +156,50 @@ mod tests {
             "{:?}",
             loader.logs()
         );
+    }
+
+    #[test]
+    fn a_script_gives_a_vanilla_item_by_its_name() {
+        let torch = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+        let host = world()
+            .items()
+            .workshops()
+            .vanilla_items(&[(torch, "Tool_Torch01")]);
+        let loader = run_on(
+            host,
+            r#"enshwick.on("WorldSaved", function()
+                local torch = enshwick.content.item_id(enshwick.content.item("Tool_Torch01"))
+                print(`torch {torch}`)
+                enshwick.inventory.give(2, torch, 1, function() end)
+            end)"#,
+        );
+        let _handled = loader.raise::<WorldSaved>(&());
+        let id = ItemId::from_guid(torch);
+        assert!(
+            logged(&loader, &format!("torch {id}")),
+            "{:?}",
+            loader.logs()
+        );
+        let requests = loader.inventory_requests();
+        assert_eq!(requests[0].ops[0].item, id);
+    }
+
+    #[test]
+    fn an_item_or_recipe_id_takes_a_guid_or_a_content_id_and_nothing_else() {
+        let loader = run(r#"
+            local guid = "6943053a-32c1-4718-ae22-e61427ddf54d"
+            print(`item {enshwick.content.item_id(guid)} recipe {enshwick.content.recipe_id(guid)}`)
+            print(`own {enshwick.content.item_id("you.luau:tonic")}`)
+            print(`bad {pcall(enshwick.content.recipe_id, "Tool_Torch01")}`)
+        "#);
+        let guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+        let (item, recipe) = (ItemId::from_guid(guid), RecipeId::from_guid(guid));
+        for line in [
+            format!("item {item} recipe {recipe}"),
+            format!("own {}", ItemId::named("you.luau:tonic")),
+            "bad false".to_owned(),
+        ] {
+            assert!(logged(&loader, &line), "{line}: {:?}", loader.logs());
+        }
     }
 }

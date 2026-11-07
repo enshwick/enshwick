@@ -466,7 +466,12 @@ pub fn newest(tables: &[Table], side: Side) -> Option<&Table> {
     tables
         .iter()
         .filter(|t| t.side == side)
-        .max_by_key(|t| (t.steam_build, t.game_version, t.revision))
+        .max_by_key(|t| rank(t))
+}
+
+/// The key [`newest`] ranks a table by.
+pub(crate) fn rank(table: &Table) -> impl Ord + use<> {
+    (table.steam_build, table.game_version, table.revision)
 }
 
 #[cfg(test)]

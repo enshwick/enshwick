@@ -1,17 +1,19 @@
 //! `cargo enshwick generate`: the typed API from a build's reflection. With
 //! an executable it snapshots the build's covered types in the game data
 //! folder, outside the repository; it then writes the API crate's `typed`
-//! modules and game screens and the loader's id table from the newest kept
-//! server build's snapshot, or with `--check` fails when they differ from
-//! what is committed.
+//! modules and game screens and the loader's id table from the newest server
+//! build's snapshot there, or with `--check` fails when they differ from what
+//! is committed.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, anyhow, bail};
 use enshwick_gamedata::reflect::{Image, Layout, Reflection};
-use enshwick_gamedata::typed::{Catalogue, RENAMES, Renames, build_name, snapshot_in};
-use enshwick_gamedata::{Side, Table, exact, file_name, newest, tables_in};
+use enshwick_gamedata::typed::{
+    Catalogue, RENAMES, Renames, newest_snapshot, snapshot_build, snapshot_in,
+};
+use enshwick_gamedata::{Side, Table, exact, file_name, tables_in};
 
 /// The one hand-written file among the generated modules.
 const RUNTIME: &str = "crates/enshwick/src/typed/runtime.rs";
@@ -136,15 +138,17 @@ pub(crate) fn write_snapshot(
 }
 
 /// Snapshots `from` into the game data folder `data` when given, then
-/// writes the typed API from the newest kept server build's snapshot, or
+/// writes the typed API from that snapshot when `from` is the server's,
+/// else from the newest server build's snapshot there, or
 /// with `check` fails when the committed files differ from what it would
 /// write.
 ///
 /// # Errors
 ///
 /// When `root` is not the enshwick repository, a file does not read or
-/// write, the build has no table, the snapshot is missing, or with `check`,
-/// when a generated file differs.
+/// write, the executable's side shows neither in its name nor in a kept
+/// table, no server snapshot is kept, or with `check`, when a generated
+/// file differs.
 pub(crate) fn run(
     root: &Path,
     data: &Path,
@@ -159,25 +163,43 @@ pub(crate) fn run(
     }
     let tables = tables_of(data)?;
     let mut done = Vec::new();
+    let mut snapshotted = None;
     if let Some(exe) = from {
         let exe = crate::types::executable(exe)?;
         let bytes = std::fs::read(&exe).with_context(|| exe.display().to_string())?;
         let fingerprint = Image::parse(&bytes, Layout::File, None)?
             .fingerprint()
             .ok_or_else(|| anyhow!("{} names no build", exe.display()))?;
-        let side = side_of(&tables, fingerprint)
-            .ok_or_else(|| anyhow!("{}: no build table; pin it first", exe.display()))?;
+        let side = crate::pin::side_of_exe(&exe)
+            .map(crate::pin::gamedata_side)
+            .or_else(|| side_of(&tables, fingerprint))
+            .ok_or_else(|| {
+                anyhow!(
+                    "{}: its side shows only in its name: keep it as enshrouded_server.exe or enshrouded.exe",
+                    exe.display()
+                )
+            })?;
         let catalogue = catalogue(&bytes).with_context(|| exe.display().to_string())?;
         let path = write_snapshot(data, &catalogue, side, fingerprint)?;
         done.push(format!("snapshot {}", path.display()));
+        snapshotted = (side == Side::Server).then_some(path);
     }
-    let table = newest(&tables, Side::Server)
-        .ok_or_else(|| anyhow!("{}: no server build table", data.display()))?;
-    let path = snapshot_in(data, &table.file_name());
-    let text = std::fs::read_to_string(&path)
-        .with_context(|| format!("{}: run with --from the build's executable", path.display()))?;
+    let newest = || {
+        newest_snapshot(data, &tables, Side::Server)
+            .with_context(|| data.join("typed").display().to_string())
+    };
+    let path = match snapshotted {
+        Some(path) => path,
+        None => newest()?.ok_or_else(|| {
+            anyhow!(
+                "{}: no server build snapshot; run with --from the server's executable",
+                data.join("typed").display()
+            )
+        })?,
+    };
+    let text = std::fs::read_to_string(&path).with_context(|| path.display().to_string())?;
     let catalogue = Catalogue::from_snapshot(&text).with_context(|| path.display().to_string())?;
-    let build = build_name(table);
+    let build = snapshot_build(&path, &tables);
     if check {
         let (files, stale) = generated(root, &catalogue, &build)?;
         let mut differ: Vec<String> = files
@@ -289,15 +311,62 @@ mod tests {
     }
 
     #[test]
-    fn a_data_folder_without_a_server_table_is_named_in_the_error() {
-        let root = repo("tableless");
-        let empty = root.join("gamedata-without-tables");
+    fn a_data_folder_without_a_server_snapshot_is_named_in_the_error() {
+        let root = repo("snapshotless");
+        let empty = root.join("gamedata-without-snapshots");
         std::fs::create_dir_all(&empty).unwrap();
         let error = run(&root, &empty, None, false).unwrap_err().to_string();
         assert!(
-            error.contains("gamedata-without-tables") && error.contains("no server build table"),
+            error.contains("gamedata-without-snapshots")
+                && error.contains("no server build snapshot"),
             "{error}"
         );
+        drop(std::fs::remove_dir_all(&root));
+    }
+
+    #[test]
+    fn a_data_folder_with_two_snapshots_and_no_table_takes_the_one_written_last() {
+        let root = repo("untabled");
+        let data = root.join("untabled-data");
+        let fixture = include_str!("../../enshwick-gamedata/src/typed/fixture.jsonl");
+        let fingerprint = |byte, age| enshwick_gamedata::Fingerprint::new([byte; 16], age);
+        let start = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1 << 30);
+        // A new GUID starts the linker age over: the later build has the lower age.
+        for (side, fingerprint, hours) in [
+            (Side::Server, fingerprint(1, 12), 0),
+            (Side::Server, fingerprint(2, 7), 2),
+            (Side::Client, fingerprint(3, 40), 3),
+        ] {
+            let path = snapshot_in(&data, &file_name(side, fingerprint));
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, fixture).unwrap();
+            let file = std::fs::File::options().write(true).open(&path).unwrap();
+            file.set_modified(start + std::time::Duration::from_secs(hours * 3600))
+                .unwrap();
+        }
+        std::fs::write(data.join("typed").join("notes.jsonl"), "").unwrap();
+        let wrote = run(&root, &data, None, false).unwrap();
+        assert!(wrote.ends_with("from server build 7"), "{wrote}");
+        let header = std::fs::read_to_string(root.join(TYPED).join("ecs.rs")).unwrap();
+        assert!(header.contains("server build 7"), "{header}");
+        drop(std::fs::remove_dir_all(&root));
+    }
+
+    /// `--from` snapshots a build no table is kept for, its side from the
+    /// executable's name; it needs the server executable (`ENSH_SERVER_EXE`).
+    #[test]
+    #[cfg_attr(miri, ignore = "scans a game executable")]
+    fn from_an_executable_without_a_table_snapshots_it_and_writes_its_api() {
+        let Some(exe) = std::env::var_os("ENSH_SERVER_EXE").map(PathBuf::from) else {
+            return;
+        };
+        let root = repo("from");
+        let data = root.join("tableless-data");
+        let wrote = run(&root, &data, Some(&exe), false).unwrap();
+        assert!(wrote.starts_with("snapshot "), "{wrote}");
+        assert!(wrote.contains("wrote "), "{wrote}");
+        let snapshots = std::fs::read_dir(data.join("typed")).unwrap().count();
+        assert_eq!(snapshots, 1, "one snapshot, of the server");
         drop(std::fs::remove_dir_all(&root));
     }
 }

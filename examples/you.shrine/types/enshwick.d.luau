@@ -3782,8 +3782,10 @@ declare enshwick: {
 	content: {
 		--- The vanilla item named `name`, as the game's data names it, such as `Chest_Wood`; an error names the nearest names.
 		item: (name: string) -> string,
-		--- The item id of the content id `id` in full (`<mod>:<name>`), as `ItemId.named` gives it in Rust, for a mod's own items in `enshwick.items`.
+		--- The item id of `id`, a GUID such as `item` gives for a vanilla item, or a content id in full (`<mod>:<name>`) for a mod's own item, as `ItemId.from_guid` and `ItemId.named` give it in Rust: the number `inventory` and `items` take.
 		item_id: (id: string) -> number,
+		--- The recipe id of `id`, a GUID such as `recipe` gives for a vanilla recipe, or a content id in full for a mod's own, as `RecipeId.from_guid` and `RecipeId.named` give it in Rust: the number recipe events carry.
+		recipe_id: (id: string) -> number,
 		--- The vanilla recipe named `name`.
 		recipe: (name: string) -> string,
 		--- The vanilla loot table named `name` and how many containers roll it.
