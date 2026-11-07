@@ -195,21 +195,27 @@ fn typed(
     })
 }
 
-/// With `--write` in the enshwick repository: the new build's snapshot,
-/// the renames its diff found in the rename table and, for a server build,
-/// the typed API regenerated. Another repository, such as the mods', holds
-/// no typed API and is left alone.
+/// With `--write` in the enshwick repository: the renames its diff found in
+/// the rename table, the new build's snapshot in the game data folder
+/// `ENSH_GAMEDATA` names and, for a server build, the typed API
+/// regenerated. Another repository, such as the mods', holds no typed API
+/// and is left alone.
 fn write_typed(args: &Args, typed: &Typed, new_fp: Fingerprint) -> anyhow::Result<()> {
-    let snapshots = args.repo.join(enshwick_gamedata::typed::SNAPSHOTS);
-    if !snapshots.is_dir() {
+    let renames = args.repo.join(enshwick_gamedata::typed::RENAMES);
+    if !renames.is_file() {
         return Ok(());
     }
+    let data = enshwick_gamedata::data_dir().with_context(|| {
+        format!(
+            "{} names no game data folder for the new build's snapshot",
+            enshwick_gamedata::DATA_VAR
+        )
+    })?;
     if typed.renames != crate::generate::renames(&args.repo)? {
-        let path = snapshots.join(enshwick_gamedata::typed::RENAMES);
         let text = typed.renames.to_toml().context("the rename table")?;
-        fs::write(&path, text).with_context(|| path.display().to_string())?;
+        fs::write(&renames, text).with_context(|| renames.display().to_string())?;
     }
-    crate::generate::write_snapshot(&args.repo, &typed.after, typed.side, new_fp)?;
+    crate::generate::write_snapshot(&data, &typed.after, typed.side, new_fp)?;
     if typed.side == enshwick_gamedata::Side::Server {
         let steam = args
             .steam_build

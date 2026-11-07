@@ -425,10 +425,10 @@ fn a_namespace_named_like_a_runtime_module_is_refused_at_any_depth() {
 /// rules' ticket.
 #[test]
 fn the_previous_build_diffs_against_the_committed_one() {
-    let Some(old) = server(387) else {
+    let (Some(old), Some((new, _))) = (server(387), committed()) else {
         return;
     };
-    let diff = old.diff(&committed(), &Renames::default());
+    let diff = old.diff(&new, &Renames::default());
     let report = diff.to_string();
     std::fs::write(std::env::temp_dir().join("typed-387-diff.txt"), &report).unwrap();
     assert!(!diff.changes.is_empty());
@@ -443,19 +443,19 @@ fn every_id_of_the_committed_table_names_one_engine_type() {
     }
 }
 
-/// The snapshot the committed typed API was generated from: the newest
-/// server build's.
-fn committed() -> Catalogue {
+/// The snapshot the committed typed API was generated from, the newest
+/// kept server build's, and that build's name; `None` without the game data
+/// folder, and the test that needs it skips.
+fn committed() -> Option<(Catalogue, String)> {
     let tables: Vec<crate::Table> = crate::kept()
         .unwrap()
         .iter()
         .map(|(_, text)| crate::Table::parse(text).unwrap())
         .collect();
-    let table = crate::newest(&tables, crate::Side::Server).unwrap();
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("typed")
-        .join(std::path::Path::new(&table.file_name()).with_extension("jsonl"));
-    Catalogue::from_snapshot(&std::fs::read_to_string(path).unwrap()).unwrap()
+    let table = crate::newest(&tables, crate::Side::Server)?;
+    let path = snapshot_path(&table.file_name())?;
+    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path:?}: {e}"));
+    Some((Catalogue::from_snapshot(&text).unwrap(), build_name(table)))
 }
 
 /// Every covered type of the committed snapshot has a generated item, and
@@ -465,7 +465,9 @@ fn committed() -> Catalogue {
 #[test]
 #[cfg_attr(miri, ignore = "decodes thousands of types")]
 fn every_covered_type_reads_as_its_generated_item() {
-    let catalogue = committed();
+    let Some((catalogue, _)) = committed() else {
+        return;
+    };
     let registry = catalogue.registry();
     let named = enshwick::typed::NAMED;
     let covered = catalogue
@@ -495,7 +497,9 @@ fn every_covered_type_reads_as_its_generated_item() {
 #[test]
 #[cfg_attr(miri, ignore = "converts thousands of types")]
 fn every_covered_type_crosses_into_a_script_and_back() {
-    let catalogue = committed();
+    let Some((catalogue, _)) = committed() else {
+        return;
+    };
     let registry = catalogue.registry();
     let covered = catalogue
         .types
@@ -535,18 +539,15 @@ fn every_covered_type_crosses_into_a_script_and_back() {
 #[test]
 #[cfg_attr(miri, ignore = "generates thousands of items")]
 fn the_committed_typed_api_is_what_its_snapshot_generates() {
+    let Some((catalogue, build)) = committed() else {
+        return;
+    };
     let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let tables: Vec<crate::Table> = crate::kept()
-        .unwrap()
-        .iter()
-        .map(|(_, text)| crate::Table::parse(text).unwrap())
-        .collect();
-    let build = build_name(crate::newest(&tables, crate::Side::Server).unwrap());
-    let renames = std::fs::read_to_string(repo.join(SNAPSHOTS).join(RENAMES)).map_or_else(
+    let renames = std::fs::read_to_string(repo.join(RENAMES)).map_or_else(
         |_| Renames::default(),
         |text| Renames::parse(&text).unwrap(),
     );
-    let files = committed().files(&build, &renames).unwrap();
+    let files = catalogue.files(&build, &renames).unwrap();
     let mut differ: Vec<String> = files
         .iter()
         .filter(|(path, text)| {
