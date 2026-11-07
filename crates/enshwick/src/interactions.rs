@@ -163,10 +163,13 @@ impl Targets {
         WorldError::from_status((host.api().world_quiet)(host.handle()))?;
         let mut out: *const c_void = core::ptr::null();
         let status = (host.api().component)(host.handle(), player, self.0.ty.hash(), &raw mut out);
-        if status == Status::MISSING || out.is_null() {
+        if status == Status::MISSING {
             return Ok(None);
         }
         WorldError::from_status(status)?;
+        if out.is_null() {
+            return Ok(None);
+        }
         // SAFETY: `out` is the player's live, non-null SelectedTargets, read
         // right after `world_quiet` answered that this is the game thread at
         // a quiet moment, so no system writes it now; `resolve` checked that
