@@ -30,8 +30,8 @@ Each entry names the pull request that made the change.
   them, as its mod: a crash there names the mod, and with diagnostics on
   the status report times them as "mid hooks", at about 4 ns a handler
   (#993).
-- A data pack's log level check is one load, about 1.7 ns instead of 6.9 ns
-  (#993).
+- A data pack's log level check reads a word kept by its handle, with no
+  lock or hash: about 1.7 ns instead of 6.9 ns (#993).
 
 ### Fixed
 

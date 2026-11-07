@@ -191,10 +191,28 @@ pub(crate) extern "system" fn mod_dir(me: ModHandle, out: *mut Str) -> Status {
 
 pub(crate) extern "system" fn log_level(me: ModHandle) -> Level {
     entry("log_level", || {
+        // The loader's own copy of the API, as `log` names it.
+        if me == crate::host::LOADER_HANDLE {
+            return crate::log::level(crate::settings::LOADER_ID);
+        }
         loader()
             .and_then(|loader| loader.record(me))
             .map_or(Level::INFO, |(_, record)| crate::log::level(&record.id))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_loader_s_own_copy_reads_the_loader_s_level() {
+        crate::log::set_levels(crate::settings::Settings {
+            log_level: Level::DEBUG,
+            ..crate::settings::Settings::default()
+        });
+        assert_eq!(log_level(crate::host::LOADER_HANDLE), Level::DEBUG);
+    }
 }
 
 pub(crate) extern "system" fn type_hash(type_name: Str, out: *mut u32) -> Status {
