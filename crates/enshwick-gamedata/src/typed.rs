@@ -478,8 +478,10 @@ impl Catalogue {
 
     /// The catalogue as the codec's type registry, as the running game's
     /// would hold these types.
-    #[cfg(test)]
-    pub(crate) fn registry(&self) -> enshwick::resources::Registry<'_> {
+    #[cfg(any(test, feature = "test"))]
+    #[doc(hidden)]
+    #[must_use]
+    pub fn registry(&self) -> enshwick::resources::Registry<'_> {
         use enshwick::resources::{Constant, Field as CodecField, Registry, Type};
 
         Registry::new(self.types.values().map(|ty| {

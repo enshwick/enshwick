@@ -52,3 +52,8 @@ harness = false
 [[bench]]
 name = "routes"
 harness = false
+
+[[bench]]
+name = "typed_cross"
+harness = false
+required-features = ["test"]
