@@ -2,9 +2,10 @@
 //! them: no sentence over [`MAX_WORDS`] words or [`MAX_CODE_SPANS`] code
 //! spans, and a chapter's sentences averaging [`AVERAGE_WORDS`] words or
 //! fewer. A code span counts as one word. Code blocks, headings and HTML
-//! comments hold no sentences; list items and table cells end one. Code
-//! spans with no prose word between them, such as a table's column of
-//! paths, are a list of names, not a sentence.
+//! comments hold no sentences; list items and table cells end one. A list
+//! item or table cell of code spans alone, such as a table's column of
+//! paths, is a list of names, not a sentence, and table cells, mostly
+//! fragments, leave the average alone.
 
 use std::path::Path;
 
@@ -51,6 +52,16 @@ struct Sentence {
     code_spans: usize,
     /// Its first words, code spans shown as `` `…` ``.
     opening: String,
+    /// Whether it sits in a table cell.
+    in_cell: bool,
+}
+
+/// What a prose block of a chapter is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Block {
+    Paragraph,
+    Item,
+    Cell,
 }
 
 /// The problems with the sentences of the chapter at `at`.
@@ -63,6 +74,7 @@ fn problems(at: &str, text: &str) -> Vec<String> {
             words,
             code_spans,
             opening,
+            ..
         } = sentence;
         if *words > MAX_WORDS {
             found.push(format!(
@@ -75,11 +87,16 @@ fn problems(at: &str, text: &str) -> Vec<String> {
             ));
         }
     }
-    let total: usize = sentences.iter().map(|sentence| sentence.words).sum();
-    if total > AVERAGE_WORDS * sentences.len() {
+    let counted: Vec<usize> = sentences
+        .iter()
+        .filter(|sentence| !sentence.in_cell)
+        .map(|sentence| sentence.words)
+        .collect();
+    let total: usize = counted.iter().sum();
+    if total > AVERAGE_WORDS * counted.len() {
         found.push(format!(
             "{at}: {} sentences have {total} words, above an average of {AVERAGE_WORDS}",
-            sentences.len()
+            counted.len()
         ));
     }
     found
@@ -89,16 +106,16 @@ fn problems(at: &str, text: &str) -> Vec<String> {
 fn sentences(text: &str) -> Vec<Sentence> {
     blocks(text)
         .into_iter()
-        .flat_map(|(line, block)| split(line, &flatten(&block)))
+        .flat_map(|(line, kind, block)| split(line, kind, &flatten(&block)))
         .collect()
 }
 
 /// The prose blocks of a chapter with the line each starts on: paragraphs,
 /// list items and table cells, outside code fences, headings and comments.
-fn blocks(text: &str) -> Vec<(usize, String)> {
+fn blocks(text: &str) -> Vec<(usize, Block, String)> {
     let mut found = Vec::new();
-    let mut current: Option<(usize, String)> = None;
-    let mut fence: Option<&str> = None;
+    let mut current: Option<(usize, Block, String)> = None;
+    let mut fence: Option<(char, usize)> = None;
     let mut comment = false;
     for (index, raw) in text.lines().enumerate() {
         let line = index + 1;
@@ -107,16 +124,14 @@ fn blocks(text: &str) -> Vec<(usize, String)> {
             comment = !raw.contains("-->");
             continue;
         }
-        let marker = ["```", "~~~"]
-            .into_iter()
-            .find(|marker| trimmed.starts_with(marker));
+        let marker = fence_marker(trimmed);
         match (fence, marker) {
-            (None, Some(marker)) => {
+            (None, Some((mark, run, _))) => {
                 found.extend(current.take());
-                fence = Some(marker);
+                fence = Some((mark, run));
                 continue;
             }
-            (Some(open), Some(marker)) if open == marker => {
+            (Some((open, length)), Some((mark, run, true))) if open == mark && run >= length => {
                 fence = None;
                 continue;
             }
@@ -129,7 +144,7 @@ fn blocks(text: &str) -> Vec<(usize, String)> {
             continue;
         }
         if trimmed.is_empty()
-            || trimmed.starts_with('#')
+            || is_heading(trimmed)
             || trimmed.starts_with("{{#")
             || is_reference_definition(trimmed)
         {
@@ -139,25 +154,42 @@ fn blocks(text: &str) -> Vec<(usize, String)> {
         if trimmed.starts_with('|') {
             found.extend(current.take());
             if !trimmed.chars().all(|c| matches!(c, '|' | '-' | ':' | ' ')) {
-                found.extend(cells(trimmed).map(|cell| (line, cell.to_owned())));
+                found.extend(cells(trimmed).map(|cell| (line, Block::Cell, cell.to_owned())));
             }
             continue;
         }
-        if let Some(item) = list_item(trimmed) {
+        let paragraph = matches!(current, Some((_, Block::Paragraph, _)));
+        if let Some(item) = list_item(trimmed, paragraph) {
             found.extend(current.take());
-            current = Some((line, item.to_owned()));
+            current = Some((line, Block::Item, item.to_owned()));
             continue;
         }
         match &mut current {
-            Some((_, block)) => {
+            Some((_, _, block)) => {
                 block.push('\n');
                 block.push_str(trimmed);
             }
-            None => current = Some((line, trimmed.to_owned())),
+            None => current = Some((line, Block::Paragraph, trimmed.to_owned())),
         }
     }
     found.extend(current);
     found
+}
+
+/// The character, length and bareness of the code fence `line` starts
+/// with, if any: a run of three or more backticks or tildes, bare when
+/// nothing but spaces follows, as a closing fence must be.
+fn fence_marker(line: &str) -> Option<(char, usize, bool)> {
+    let mark = line.chars().next().filter(|c| matches!(c, '`' | '~'))?;
+    let run = line.chars().take_while(|&c| c == mark).count();
+    (run >= 3).then(|| (mark, run, line[run..].trim().is_empty()))
+}
+
+/// Whether `line` is an ATX heading: one to six `#` and then a space or
+/// the line's end.
+fn is_heading(line: &str) -> bool {
+    let hashes = line.chars().take_while(|&c| c == '#').count();
+    (1..=6).contains(&hashes) && line[hashes..].chars().next().is_none_or(|c| c == ' ')
 }
 
 /// Whether `line` defines a link reference, `[name]: target`.
@@ -166,8 +198,9 @@ fn is_reference_definition(line: &str) -> bool {
 }
 
 /// The text after a list item's marker (`-`, `*`, `+`, `1.`, `1)`), if
-/// `line` starts one.
-fn list_item(line: &str) -> Option<&str> {
+/// `line` starts one. Inside a paragraph only a bullet or `1` starts one,
+/// as in CommonMark, so a wrapped line opening on `255.` stays prose.
+fn list_item(line: &str, in_paragraph: bool) -> Option<&str> {
     if let Some(rest) = line
         .strip_prefix("- ")
         .or_else(|| line.strip_prefix("* "))
@@ -177,7 +210,7 @@ fn list_item(line: &str) -> Option<&str> {
     }
     let digits = line.find(|c: char| !c.is_ascii_digit())?;
     let rest = &line[digits..];
-    (digits > 0)
+    (digits > 0 && (!in_paragraph || &line[..digits] == "1"))
         .then(|| rest.strip_prefix(". ").or_else(|| rest.strip_prefix(") ")))
         .flatten()
 }
@@ -227,7 +260,10 @@ fn flatten(block: &str) -> String {
             (']', Some('(')) => skip_past(&chars, at + 1, '(', ')'),
             (']', Some('[')) => skip_past(&chars, at + 1, '[', ']'),
             ('[' | ']', _) => at + 1,
-            ('<', Some(next)) if next.is_ascii_alphabetic() || matches!(next, '/' | '!') => {
+            ('<', Some(next))
+                if (next.is_ascii_alphabetic() || matches!(next, '/' | '!'))
+                    && chars[at..].contains(&'>') =>
+            {
                 let end = chars[at..]
                     .iter()
                     .position(|&c| c == '>')
@@ -292,7 +328,7 @@ fn skip_past(chars: &[char], at: usize, open: char, close: char) -> usize {
 }
 
 /// The sentences of a flattened block that starts on `line`.
-fn split(line: usize, prose: &str) -> Vec<Sentence> {
+fn split(line: usize, kind: Block, prose: &str) -> Vec<Sentence> {
     let chars: Vec<char> = prose.chars().collect();
     let mut found = Vec::new();
     let mut start = 0;
@@ -308,7 +344,7 @@ fn split(line: usize, prose: &str) -> Vec<Sentence> {
             }
             let at_space = chars.get(end).is_none_or(|c| c.is_whitespace());
             if at_space && ends_sentence(&chars, start, at, end) {
-                found.extend(sentence(line, &chars, start, end));
+                found.extend(sentence(line, kind, &chars, start, end));
                 start = end;
             }
             at = end;
@@ -316,7 +352,7 @@ fn split(line: usize, prose: &str) -> Vec<Sentence> {
             at += 1;
         }
     }
-    found.extend(sentence(line, &chars, start, chars.len()));
+    found.extend(sentence(line, kind, &chars, start, chars.len()));
     found
 }
 
@@ -344,9 +380,15 @@ fn ends_sentence(chars: &[char], start: usize, mark: usize, end: usize) -> bool 
     true
 }
 
-/// The sentence `chars[start..end]` of a block starting on `line`, if it
-/// has a word.
-fn sentence(line: usize, chars: &[char], start: usize, end: usize) -> Option<Sentence> {
+/// The sentence `chars[start..end]` of a block of `kind` starting on
+/// `line`, if it has a word; in a list item or table cell, a prose word.
+fn sentence(
+    line: usize,
+    kind: Block,
+    chars: &[char],
+    start: usize,
+    end: usize,
+) -> Option<Sentence> {
     let text: String = chars[start..end].iter().collect();
     let words: Vec<&str> = text
         .split_whitespace()
@@ -355,7 +397,7 @@ fn sentence(line: usize, chars: &[char], start: usize, end: usize) -> Option<Sen
     let names_only = words
         .iter()
         .all(|word| !word.chars().any(char::is_alphanumeric));
-    if names_only {
+    if words.is_empty() || (names_only && kind != Block::Paragraph) {
         return None;
     }
     let leading = chars[..start].iter().filter(|&&c| c == '\n').count()
@@ -372,6 +414,7 @@ fn sentence(line: usize, chars: &[char], start: usize, end: usize) -> Option<Sen
         words: words.len(),
         code_spans: text.chars().filter(|&c| c == CODE).count(),
         opening,
+        in_cell: kind == Block::Cell,
     })
 }
 
@@ -542,6 +585,54 @@ mod tests {
         let most = format!("{}.", ["word"; 25].join(" "));
         let text = format!("{most} {}. `a` and `b`.", ["word"; 13].join(" "));
         assert!(problems("book/src/x.md", &text).is_empty());
+    }
+
+    #[test]
+    fn a_fence_closes_only_on_a_bare_marker_as_long_as_its_opening() {
+        assert_eq!(
+            counts("````\n```rust\nlet a = b. c = d.\n```\n````\n\nWord.\n"),
+            [(1, 0)]
+        );
+        assert_eq!(counts("```\n```rust\nOne two.\n```\n\nWord.\n"), [(1, 0)]);
+    }
+
+    #[test]
+    fn a_wrapped_line_opening_on_a_hash_or_a_number_stays_prose() {
+        assert_eq!(
+            counts("Fixed in pull request\n#960 and more words here.\n"),
+            [(9, 0)]
+        );
+        assert_eq!(
+            counts("It allows up to 64, at most\n255. The game groups them.\n"),
+            [(8, 0), (4, 0)]
+        );
+        assert_eq!(
+            counts("Intro.\n1. first\n2. second\n"),
+            [(1, 0), (1, 0), (1, 0)]
+        );
+    }
+
+    #[test]
+    fn code_spans_alone_in_a_paragraph_are_a_sentence() {
+        assert_eq!(counts("Use these. `a`, `b`, `c`."), [(2, 0), (3, 3)]);
+    }
+
+    #[test]
+    fn table_cells_leave_the_average_alone() {
+        let sentence = format!("{}.", ["word"; 25].join(" "));
+        let text = format!("{sentence} {sentence} {sentence}\n\n| a | 1 |\n| b | 2 |\n");
+        assert_eq!(
+            problems("book/src/x.md", &text),
+            ["book/src/x.md: 3 sentences have 75 words, above an average of 20"]
+        );
+    }
+
+    #[test]
+    fn an_angle_bracket_that_never_closes_stays_prose() {
+        assert_eq!(
+            counts("When x <y the rest one. Four five."),
+            [(6, 0), (2, 0)]
+        );
     }
 
     #[test]
