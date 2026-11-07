@@ -366,8 +366,8 @@ impl Load<'_> {
     ///
     /// [`Off`] for an id of no generated component, and when the build
     /// lacks the type, its shape differs from the generated struct, or a
-    /// field's data lies outside the component, such as a `BlobArray`'s,
-    /// naming the field and the build.
+    /// field's data lies where a read does not reach, such as a designer
+    /// data kind's, naming the field and the build.
     #[script(name = "component_type")]
     pub(crate) fn typed_component_type(&mut self, id: &str) -> Result<ComponentType, Off> {
         let row = Row::find(id, Role::Component)?;
