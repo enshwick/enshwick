@@ -328,7 +328,7 @@ impl PackPoint {
                 return Err(format!("field {name:?} is given twice"));
             }
             let ty = field_type(&field.ty).ok_or_else(|| unknown(&field.ty))?;
-            if end % ty.align != 0 {
+            if !end.is_multiple_of(ty.align) {
                 return Err(format!(
                     "field {name:?} would need padding before it; order the fields from the widest"
                 ));
@@ -343,7 +343,7 @@ impl PackPoint {
             });
             end += ty.size;
         }
-        if end % align != 0 {
+        if !end.is_multiple_of(align) {
             return Err(
                 "the input would need padding at its end; order the fields from the widest, or add one"
                     .to_owned(),

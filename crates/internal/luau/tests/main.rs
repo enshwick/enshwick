@@ -22,6 +22,7 @@ mod inventory;
 mod items;
 mod map;
 mod mods;
+mod owned_points;
 mod parity;
 mod ported;
 mod progress;

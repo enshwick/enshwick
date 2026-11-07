@@ -22,8 +22,9 @@ use enshwick::packs::SCRIPT_MAIN as MAIN;
 
 use crate::calls::{CallDesc, ServedCall};
 use crate::files::Scripts;
-use crate::points::{EventDesc, PointDesc, Read, decode};
+use crate::points::{EventDesc, OwnedDesc, PointDesc, Read, decode};
 use crate::subscribe::{RawReader, Subscription, raw_table};
+use enshwick::points::DescribedOwnedPoint;
 use enshwick::services::{DescribedCall, DescribedCaller, DescribedEmitter};
 use sandbox::describe;
 use std::sync::OnceLock;
@@ -165,6 +166,11 @@ pub(crate) struct Inner {
     /// The calls the scripts ask for, each with the caller the loader
     /// hands over once `main.luau` ran at start.
     asked: Mutex<Vec<Asked>>,
+    /// The points `pack.toml` declares, which the scripts may define.
+    declared_points: Vec<Arc<OwnedDesc>>,
+    /// The points the scripts define, each with the handle the loader
+    /// gives once `main.luau` ran at start.
+    owned: Mutex<Vec<Owned>>,
     /// Whether the start is over, so a new definition waits for the next.
     started: AtomicBool,
     /// The game event types of the build, with their sizes, read at start.
@@ -192,6 +198,12 @@ struct Defined {
 struct Asked {
     desc: CallDesc,
     caller: Arc<OnceLock<DescribedCaller>>,
+}
+
+/// A point the scripts define, and its handle once the start is over.
+struct Owned {
+    desc: Arc<OwnedDesc>,
+    handle: Arc<OnceLock<DescribedOwnedPoint>>,
 }
 
 /// A running Luau mod.
@@ -382,7 +394,7 @@ pub fn start(
     settings: Option<enshwick::config::Schema>,
     limits: Limits,
 ) -> Result<Runtime, Off> {
-    begin(load, id, scripts, settings, Vec::new(), limits)
+    begin(load, id, scripts, settings, Vec::new(), Vec::new(), limits)
 }
 
 /// Starts the scripts of the pack `manifest` describes, as [`start`] does,
@@ -418,24 +430,32 @@ pub fn start_pack(
         .filter(|(relation, _, _)| *relation != Relation::BREAKS)
         .map(|(_, alias, dependency)| (alias.to_owned(), dependency.id.clone()))
         .collect();
+    let points = manifest
+        .point
+        .iter()
+        .filter_map(|point| OwnedDesc::of(&manifest.id, point))
+        .map(Arc::new)
+        .collect();
     begin(
         load,
         &manifest.id,
         scripts,
         manifest.settings_schema(),
         deps,
+        points,
         limits,
     )
 }
 
 /// What [`start`] and [`start_pack`] do, with the dependencies `deps`, each
-/// an alias and a mod id.
+/// an alias and a mod id, and the points `pack.toml` declares.
 fn begin(
     load: &mut Load<'_>,
     id: &str,
     scripts: Scripts,
     settings: Option<enshwick::config::Schema>,
     deps: Vec<(String, String)>,
+    declared_points: Vec<Arc<OwnedDesc>>,
     limits: Limits,
 ) -> Result<Runtime, Off> {
     let host = load.host();
@@ -467,6 +487,8 @@ fn begin(
         vm: ArcSwapOption::empty(),
         defined: Mutex::new(Vec::new()),
         asked: Mutex::new(Vec::new()),
+        declared_points,
+        owned: Mutex::new(Vec::new()),
         started: AtomicBool::new(false),
         event_types,
         off: AtomicBool::new(false),
@@ -499,6 +521,29 @@ fn begin(
     let events = vm.events();
     inner.vm.store(Some(vm));
     subscribe(&inner, load, events)?;
+    settle(&inner, load)?;
+    inner.started.store(true, Ordering::Release);
+
+    // The status keeps the runtime for the mod's life: a function the
+    // scripts handed the API, such as a resource patch, runs after start.
+    let kept = Arc::clone(&inner);
+    load.add_status(move || {
+        let usage = kept.usage();
+        format!(
+            "Luau: {} KiB, peak {} KiB, {} calls, {} past their budget",
+            usage.memory >> 10,
+            usage.peak >> 10,
+            usage.calls,
+            usage.overruns
+        )
+    })?;
+    Ok(Runtime(inner))
+}
+
+/// Defines with the loader what the scripts of `inner` defined or asked for
+/// while `main.luau` ran: their mod events, the calls they make and their
+/// points.
+fn settle(inner: &Inner, load: &mut Load<'_>) -> Result<(), Off> {
     let defined: Vec<(
         enshwick::services::DescribedEvent,
         Arc<OnceLock<DescribedEmitter>>,
@@ -534,22 +579,22 @@ fn begin(
         // function `caller` made for this description.
         let _first = caller.set(unsafe { load.described_caller(&call) }?);
     }
-    inner.started.store(true, Ordering::Release);
-
-    // The status keeps the runtime for the mod's life: a function the
-    // scripts handed the API, such as a resource patch, runs after start.
-    let kept = Arc::clone(&inner);
-    load.add_status(move || {
-        let usage = kept.usage();
-        format!(
-            "Luau: {} KiB, peak {} KiB, {} calls, {} past their budget",
-            usage.memory >> 10,
-            usage.peak >> 10,
-            usage.calls,
-            usage.overruns
-        )
-    })?;
-    Ok(Runtime(inner))
+    let owned: Vec<(Arc<OwnedDesc>, Arc<OnceLock<DescribedOwnedPoint>>)> = inner
+        .owned
+        .relock()
+        .iter()
+        .map(|o| (Arc::clone(&o.desc), Arc::clone(&o.handle)))
+        .collect();
+    for (desc, handle) in owned {
+        // SAFETY: `OwnedDesc::of` takes only a layout `pack.toml`'s check
+        // accepts, primitive fields with no padding byte, whose hashes it
+        // worked out from their types and offsets; every ask goes through
+        // the table `define_point` made, which `encode`s each field and the
+        // answer into zeroed bytes as that primitive's valid bytes, a bool
+        // as 0 or 1.
+        let _first = handle.set(unsafe { load.define_described_point(&desc.point) }?);
+    }
+    Ok(())
 }
 
 /// Subscribes what the scripts of `inner` asked for at start: loader
