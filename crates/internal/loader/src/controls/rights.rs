@@ -40,7 +40,13 @@ pub(crate) fn resend_on_rights(loader: &Loader) {
     if declared.iter().all(|d| d.action.is_empty()) {
         return;
     }
-    let players = crate::world::players(loader).unwrap_or_default();
+    if with_rights(|rights| rights.sent.is_empty()) {
+        return;
+    }
+    // A failed read is no list of who left: it would forget every client.
+    let Ok(players) = crate::world::players(loader) else {
+        return;
+    };
     for player in with_rights(|rights| rights.changed(&players)) {
         let _sent = send_carried(loader, declared, player.key.get(), Some(&player));
     }
@@ -66,25 +72,27 @@ fn send_carried(
     key: u64,
     player: Option<&PlayerInfo>,
 ) -> bool {
-    let sent = crate::texts::for_player(key, || {
-        carried_messages(loader, declared, |owner| {
-            player
-                .and_then(|p| crate::actions::allowed(loader, owner, p))
-                .unwrap_or_default()
-        })
-        .iter()
-        .all(|message| crate::net::to_player(key, message))
-    });
+    // A client that just said hello holds nothing to take back.
+    let sent = player.is_none()
+        || crate::texts::for_player(key, || {
+            carried_messages(loader, declared, |owner| {
+                player
+                    .and_then(|p| crate::actions::allowed(loader, owner, p))
+                    .unwrap_or_default()
+            })
+            .iter()
+            .all(|message| crate::net::to_player(key, message))
+        });
     if sent {
         with_rights(|rights| rights.sent(key, player.map(|p| p.permissions)));
     }
     sent
 }
 
-/// One [`Message::Controls`] per running mod of side server with controls
-/// that run an action, its texts in the reader's language: those of the
-/// actions `allowed` names for the mod, none to take back what a client got
-/// before.
+/// One [`Message::Controls`] per mod of side server with controls that run
+/// an action, its texts in the reader's language: those of the actions
+/// `allowed` names for the mod, none for a mod that is off or to take back
+/// what a client got before.
 fn carried_messages(
     loader: &Loader,
     declared: &[Declared],
@@ -93,7 +101,6 @@ fn carried_messages(
     let mut messages = Vec::new();
     for (index, record) in loader.mods.iter().enumerate() {
         if record.manifest.side != Side::SERVER
-            || record.off.load(Ordering::Acquire)
             || !declared
                 .iter()
                 .any(|d| d.owner.get() == index && !d.action.is_empty())

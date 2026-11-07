@@ -15,8 +15,6 @@ Each entry names the pull request that made the change.
 - The loader's release check on a stable loader reads the repository's tags
   instead of the newest twenty releases, so a newer stable release is found
   however many releases follow it (#988).
-- The loader's Ukrainian texts are tested for apostrophes the game font does
-  not draw (#988).
 
 ## [1.0.0-alpha.13] - 2026-11-07
 

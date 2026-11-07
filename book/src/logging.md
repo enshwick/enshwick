@@ -133,8 +133,8 @@ The keys of `enshwick.toml`:
 | `build_patterns`     | `true`   | run a build no compatibility report covers; read at start     |
 | `release_check`      | `true`   | ask GitHub once per start for a newer release; read at start  |
 
-With `release_check` on, the loader asks GitHub for the list of Enshwick
-releases once per start. It asks on a thread of its own, with a 5-second
+With `release_check` on, the loader asks GitHub once per start. A release
+asks for the Enshwick tags, and a prerelease for the newest releases. It asks on a thread of its own, with a 5-second
 limit per step. A newer release shows as one dimmed line on the Mods screen
 with its version and the address of its page. The loader downloads and installs
 nothing. A dedicated server only logs it. A prerelease counts only while the

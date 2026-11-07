@@ -17,8 +17,8 @@ const RELEASES: &str = "/repos/enshwick/enshwick/releases?per_page=20";
 const TAGS: &str = "/repos/enshwick/enshwick/git/matching-refs/tags/";
 /// The prefix of a tag's name in a Git reference.
 const TAG_REF: &str = "refs/tags/";
-/// The most bytes of an answer read; twenty releases with their notes take
-/// well under it.
+/// The most bytes of an answer read; twenty releases with their notes, or
+/// some ten thousand tags, take under it.
 #[cfg_attr(not(windows), expect(dead_code, reason = "only Windows asks GitHub"))]
 const LIMIT: usize = 4 << 20;
 
@@ -70,8 +70,10 @@ pub fn path(running: &Version) -> &'static str {
 /// The newest loader release in `answer`, GitHub's JSON answer to
 /// [`path`], that is newer than `running` by SemVer precedence.
 ///
-/// A prerelease, by its version or GitHub's flag, counts only while
-/// `running` is one; a tag that is no loader version is skipped.
+/// A prerelease counts only while `running` is one: by its version, and in
+/// the list of releases an alpha reads also by GitHub's flag. A running
+/// release reads tags, so a loader tag with a release version counts as
+/// released. A tag that is no loader version is skipped.
 ///
 /// # Errors
 ///
@@ -104,7 +106,13 @@ pub fn newer(answer: &[u8], running: &Version) -> Result<Option<Release>, serde_
             (!pre || !running.pre.is_empty()).then_some(Release { version, prefix })
         })
         .filter(|release| release.version.cmp_precedence(running).is_gt())
-        .max_by(|a, b| a.version.cmp_precedence(&b.version)))
+        // One version under both prefixes links release-plz's tag, which
+        // carries the GitHub release.
+        .max_by(|a, b| {
+            a.version
+                .cmp_precedence(&b.version)
+                .then_with(|| (a.prefix != "v").cmp(&(b.prefix != "v")))
+        }))
 }
 
 /// The running loader's version.
@@ -173,7 +181,7 @@ mod fetch {
     /// Bytes read per call.
     const CHUNK: usize = 16 * 1024;
 
-    /// Why the list of releases did not arrive.
+    /// Why GitHub's answer did not arrive.
     #[derive(Debug, thiserror::Error)]
     pub(super) enum FetchReleasesError {
         /// A Windows HTTP call failed: no network, no answer in time, or TLS.
@@ -428,6 +436,17 @@ mod tests {
         assert_eq!(found(&list, "1.0.0"), Some(version("1.0.2")));
         let list = tags(&["enshwick-loader-v1.0.1", "v1.0.2-alpha.1"]);
         assert_eq!(found(&list, "1.0.0"), Some(version("1.0.1")));
+    }
+
+    #[test]
+    fn a_version_under_both_prefixes_links_the_release_plz_tag() {
+        for names in [
+            ["enshwick-loader-v1.1.0", "v1.1.0"],
+            ["v1.1.0", "enshwick-loader-v1.1.0"],
+        ] {
+            let release = newer(&tags(&names), &version("1.0.0")).unwrap().unwrap();
+            assert_eq!(release.page(), format!("{PAGE}enshwick-loader-v1.1.0"));
+        }
     }
 
     #[test]
