@@ -23,7 +23,8 @@ mod tests {
     const REWORKED: &[&str] = &[];
 
     /// Logs every name of the `enshwick` table, and of each table in it, as
-    /// `api <name>` and `api <table>.<name>`.
+    /// `api <name>` and `api <table>.<name>`, then the methods of the point
+    /// `define_point` gives as `api OwnedPoint:<name>`.
     const LIST_API: &str = r"
         for name, value in enshwick do
             enshwick.log.info(`api {name}`)
@@ -33,7 +34,21 @@ mod tests {
                 end
             end
         end
+        for name in enshwick.points.define_point('probe') do
+            enshwick.log.info(`api OwnedPoint:{name}`)
+        end
     ";
+
+    /// A pack that declares the point `LIST_API` defines.
+    const MANIFEST: &str = r#"
+        id = "you.luau"
+        version = "1.0.0"
+
+        [[point]]
+        name = "probe"
+        mode = "observe"
+        output = "u32"
+    "#;
 
     static CASE: Mutex<Option<Scripts>> = Mutex::new(None);
 
@@ -42,8 +57,8 @@ mod tests {
     impl Mod for Luau {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let scripts = CASE.lock().unwrap().take().unwrap();
-            let _runtime =
-                enshwick_luau::start(load, "you.luau", scripts, None, Limits::default())?;
+            let manifest = enshwick::packs::PackManifest::parse(MANIFEST).unwrap();
+            let _runtime = enshwick_luau::start_pack(load, &manifest, scripts, Limits::default())?;
             Ok(Self)
         }
     }

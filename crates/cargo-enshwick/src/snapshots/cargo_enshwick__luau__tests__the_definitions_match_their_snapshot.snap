@@ -2985,6 +2985,14 @@ declare enshwick: {
 	caller: (call: { name: string }) -> (input: any) -> (any, string?),
 	--- Defines a mod event of this mod for others to hear, at the top level of main.luau, by its local name (`greeted` for `<mod id>:greeted`); `send` hands every subscriber the data.
 	define_event: (event: { name: string }) -> { send: (data: any) -> () },
+	--- The extension points this mod owns, which `pack.toml` declares under `[[point]]` for other mods to extend.
+	points: {
+		--- Defines the point `pack.toml` declares by the local name `name` (`price` for `<mod id>:price`), at the top level of main.luau; other mods' links run once every mod has started. `decide` runs them over this mod's own answer and returns the answer with `"kept"` or `"changed"`, or nil with `"refused"`; `is_extended` says whether a link runs.
+		define_point: (name: string) -> {
+			decide: (self: any, input: { [string]: any }, answer: any) -> (any, "kept" | "changed" | "refused"),
+			is_extended: (self: any) -> boolean,
+		},
+	},
 	--- Serves a call of this mod for other mods, at the top level of main.luau, by its local name (`price-of` for `<mod id>:price-of`), as a Rust mod serves a `#[call]` type: the input's fields and the answer read numbers, booleans, entities or GUIDs, laid out as Rust lays them out, so a Rust caller of the same type matches. `handler` gets the input and returns the answer; nil fails the call.
 	serve_call: (call: { name: string, major: number?, fields: { { name: string, read: string } }, output: string }, handler: (input: { [string]: any }) -> any) -> (),
 	--- Calls `handler` with the mod's settings now and as each world loads and stops, as a Rust mod's `on_settings` does.

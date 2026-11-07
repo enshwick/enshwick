@@ -100,9 +100,9 @@ enum Command {
         /// The dependency, by its alias in `requires` or `after`; every one
         /// when omitted.
         alias: Option<String>,
-        /// The owners' DLL, a folder (such as the game's) with their DLLs in
-        /// it or in its `mods/`, or a schema file (`.toml`) an owner
-        /// published.
+        /// The owners' DLL, a Luau mod's `pack.toml` or pack folder, a
+        /// folder (such as the game's) with their DLLs and packs in it or in
+        /// its `mods/`, or a schema file (`.toml`) an owner published.
         #[arg(long)]
         from: PathBuf,
         /// The mod's `Cargo.toml`, or with `--luau` its `pack.toml`; the one

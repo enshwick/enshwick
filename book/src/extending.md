@@ -388,8 +388,9 @@ Their tests link each point through the fake host.
 
 ## From Luau
 
-A [Luau mod](luau.md) links into another mod's point as a Rust mod does; it
-owns no points of its own. `cargo enshwick deps <alias> --from <owner's DLL> --luau`
+A [Luau mod](luau.md) links into another mod's point as a Rust mod does. It
+also [owns points](#defining-a-point-in-luau) of its own.
+`cargo enshwick deps <alias> --from <owner's DLL> --luau`
 writes a module for each point, call and event of a dependency.
 `pack.toml` names that dependency `<alias>`. It does so in `[requires]` or
 `[after]`. Each module is `deps/<alias>/<name>.luau`, with the owner's local
@@ -431,3 +432,51 @@ as an event handler. An error or an answer of the wrong type turns the mod
 off, and the answer stays as it was. An owner version with another layout
 leaves the link idle, with the reason in the log, until the module is
 written again.
+
+### Defining a point in Luau
+
+A Luau mod declares each point it owns in `pack.toml`, as a `[[point]]`
+table. The table gives the local name, the mode, `refusable`, the input's
+fields and the answer's type. A type is a number, `bool`, `enshwick.guid` or
+an id type such as `enshwick.item_id`. The fields are laid out in their
+order, as `#[point]` lays out a Rust struct. A field that would need padding
+is refused, so list the widest first. `exports` names the point, so other
+mods may link it:
+
+```toml
+id = "you.trading-post"
+version = "1.0.0"
+exports = ["point:price"]
+
+[[point]]
+name = "price"
+mode = "override"
+refusable = true
+doc = "The price of an item at the trading post, in coins."
+output = "u32"
+input = [
+    { name = "item", type = "enshwick.item_id" },
+    { name = "count", type = "u32" },
+]
+```
+
+`enshwick.points.define_point` defines the point at the top level of
+`main.luau`. `decide` takes the input as a table and the mod's own answer.
+It returns the answer with `"kept"` or `"changed"`, or `nil` with
+`"refused"`:
+
+```luau
+local price = enshwick.points.define_point("price")
+
+local function price_of(item: number): number?
+    local coins, how = price:decide({ item = item, count = 1 }, 10)
+    if how == "refused" then
+        return nil
+    end
+    return coins
+end
+```
+
+Other mods write their definitions from the pack's `pack.toml`, with
+`cargo enshwick deps <alias> --from <pack folder>`. A Rust mod's link
+matches by the layout hashes, as for a Rust owner.
