@@ -145,3 +145,8 @@ required-features = ["test"]
 name = "pack_logs"
 harness = false
 required-features = ["test"]
+
+[[bench]]
+name = "typed"
+harness = false
+required-features = ["test", "typed"]

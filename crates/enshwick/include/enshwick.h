@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 15
+#define ENSHWICK_ABI_MINOR 16
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -4845,6 +4845,16 @@ typedef struct EnshwickHostApi {
   // `out` is borrowed for the call. A panic in the loader returns
   // `Status::REFUSED`. ABI 11.14.
   EnshwickStatus (*local_held)(EnshwickModHandle me, uint64_t *out);
+  // Writes to `out` how many bytes from `address` on, at most `max`,
+  // read without a fault: the run of committed, readable pages that
+  // `address` lies in, cut at `max`; 0 when `address` does not read. It
+  // reads no byte of that memory, so any `address` is allowed. The count
+  // holds only while nothing frees or protects those pages, which the
+  // caller knows of the memory it asks about.
+  // `Status::BAD_ARGS` for a null `out`. Any thread, re-entrant;
+  // `out` is borrowed for the call. A panic in the loader returns
+  // `Status::REFUSED`. ABI 11.16.
+  EnshwickStatus (*readable)(EnshwickModHandle me, size_t address, size_t max, size_t *out);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.

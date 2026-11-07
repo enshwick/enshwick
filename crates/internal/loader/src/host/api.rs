@@ -25,7 +25,8 @@ use super::entries::gameplay::{
     survivor_bed_check, survivor_lookup, survivor_status,
 };
 use super::entries::hooks::{
-    code_range, hook, hook_at, loop_wait, patch_code, server_wait, task_workers, workshop_recipes,
+    code_range, hook, hook_at, loop_wait, patch_code, readable, server_wait, task_workers,
+    workshop_recipes,
 };
 use super::entries::inventory::{inventory_open, inventory_submit, item_info};
 use super::entries::items::item_filter;
@@ -254,4 +255,5 @@ pub(crate) static API: HostApi = HostApi {
     set_saved,
     run_action_at,
     local_held,
+    readable,
 };

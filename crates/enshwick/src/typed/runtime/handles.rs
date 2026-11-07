@@ -15,8 +15,9 @@ use crate::{Entity, Host, Load, Off};
 /// shape checked: a [`sample`] of the build's type must pass `check`, so a
 /// field the build renamed, removed, or retyped to a value the generated
 /// type cannot hold, such as a wider integer, at any depth, turns off only
-/// that type. For a type read `live` from an entity, a field whose data
-/// lies outside the component's own bytes turns it off too, by name.
+/// that type. For a type read `live` from an entity, a field whose data a
+/// read never reaches, such as a designer data kind's on the heap, turns it
+/// off too, by name.
 fn resolve(
     load: &Load<'_>,
     id: &'static str,
@@ -35,7 +36,7 @@ fn resolve(
             id,
             host,
             &format!(
-                "its field {field} keeps its data outside the component, where a read of a live component does not reach"
+                "its field {field} keeps its data outside the component's set-up data, where a read of a live component does not reach"
             ),
         ));
     }
@@ -61,8 +62,16 @@ pub(crate) struct RawComponent {
     ty: crate::ecs::ComponentType,
     name: &'static str,
     size: usize,
+    /// Whether a field's data follows the component, which a read reaches
+    /// past the component's own bytes.
+    blob: bool,
     writable: Option<WritableType>,
 }
+
+/// How far past a component a read of its blob data reaches at most. On
+/// server 26430253 every blob of a live component lay within 0xc4 bytes of
+/// it; the cap keeps a damaged offset or count from reading on.
+const BLOB_REACH: usize = 1 << 20;
 
 impl RawComponent {
     /// The component type `id` on the running build, its shape held to
@@ -73,27 +82,66 @@ impl RawComponent {
         check: &dyn Fn(&Value) -> Result<(), ShapeError>,
     ) -> Result<Self, Off> {
         let (ecs, ty) = resolve(load, id, check, true)?;
+        let blob = super::outside::blob_field(Registry::game()?, ty).is_some();
         Ok(Self {
             id,
             ty: ecs,
             name: ty.qualified_name(),
             size: usize::try_from(ty.size()).unwrap_or(usize::MAX),
+            blob,
             writable: WritableType::resolve(load, id).ok(),
         })
     }
 
     /// `entity`'s component on the game thread; `None` when the entity has
     /// none or off the game thread.
+    ///
+    /// A type with blob fields reads from the template's set-up data the
+    /// component lies in, whose blobs follow it (server 26430253): the
+    /// decode runs over the readable bytes from the component on, at most
+    /// [`BLOB_REACH`], and refuses an offset or count past them.
     pub(crate) fn read(&self, world: World, entity: Entity) -> Result<Option<Value>, Off> {
         let Some(data) = world.component(entity, self.ty) else {
             return Ok(None);
         };
-        let mut bytes = vec![0; self.size];
-        // SAFETY: `World::component` returned the entity's live component,
-        // valid until the game thread moves on and read at once; `size` is
-        // the reflected size of its type on the running build.
-        unsafe { crate::raw::read_bytes_at(data.cast(), 0, &mut bytes) };
-        Ok(Some(Registry::game()?.decode(self.name, &bytes)?))
+        let registry = Registry::game()?;
+        if !self.blob {
+            let mut bytes = vec![0; self.size];
+            // SAFETY: `World::component` returned the entity's live component,
+            // valid until the game thread moves on and read at once; `size` is
+            // the reflected size of its type on the running build.
+            unsafe { crate::raw::read_bytes_at(data.cast(), 0, &mut bytes) };
+            return Ok(Some(registry.decode(self.name, &bytes)?));
+        }
+        let host = crate::host().ok_or_else(|| self.unread(registry))?;
+        let mut len = 0;
+        let status = (host.api().readable)(host.handle(), data.addr(), BLOB_REACH, &raw mut len);
+        if status != crate::abi::Status::OK || len < self.size {
+            return Err(self.unread(registry));
+        }
+        // SAFETY: the loader found `len` bytes from the component on
+        // committed and readable, in one run of pages; they are the
+        // template's read-only set-up data (server 26430253), which no thread
+        // writes or frees while the game thread is here, and the borrow ends
+        // with this call.
+        let bytes = unsafe { core::slice::from_raw_parts(data.cast::<u8>(), len) };
+        registry
+            .decode(self.name, bytes)
+            .map(Some)
+            .map_err(|why| Off::new(format!("typed {}: {why}", self.id)))
+    }
+
+    /// Why a component with blob fields does not read, naming the first.
+    #[cold]
+    fn unread(&self, registry: &Registry<'_>) -> Off {
+        let field = registry
+            .named(self.name)
+            .and_then(|ty| super::outside::blob_field(registry, ty))
+            .unwrap_or_default();
+        Off::new(format!(
+            "typed {}: the component does not read as far as its field {field}",
+            self.id
+        ))
     }
 
     /// Writes `value` to `entity`'s component, marked changed the game's
@@ -256,10 +304,11 @@ impl RawResource {
 /// A generated component type resolved on the running build: reads and
 /// writes of an entity's component as its generated struct.
 ///
-/// A read copies the component's own bytes. A type with a field whose data
-/// lies outside them, at any depth, such as a `BlobArray`, does not resolve:
-/// its refusal names the field. A template's components hold such fields
-/// and read through [`ComponentChange`](crate::content::templates::ComponentChange).
+/// A field whose data follows the component, such as a `BlobArray`, reads
+/// from the template's set-up data the component lies in, through a check
+/// that the memory reads; a blob past it fails that read, naming the field.
+/// A type with a field whose data lies elsewhere, at any depth, such as a
+/// designer data kind, does not resolve: its refusal names the field.
 ///
 /// # Examples
 ///
@@ -304,7 +353,8 @@ impl<T: Component> ComponentType<T> {
     /// # Errors
     ///
     /// [`Off`] when the build lacks the type, its shape differs from `T`,
-    /// or a field's data lies outside the component, naming the build.
+    /// or a field's data lies where a read does not reach, such as a
+    /// designer data kind's, naming the build.
     ///
     /// # Examples
     ///
@@ -321,7 +371,8 @@ impl<T: Component> ComponentType<T> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the component's bytes do not read as `T`.
+    /// [`Off`] when the component's bytes, or the blob data that follows
+    /// them, do not read as `T`, naming the field.
     ///
     /// # Examples
     ///

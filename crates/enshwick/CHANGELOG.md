@@ -6,6 +6,16 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `typed`: `ComponentType::read` and Luau `component_type` read a live
+  component's `BlobArray`, `BlobString`, `BlobOptional` and `BlobVariant`
+  fields, such as `RandomSpawner.spawnEntries`, from the template's set-up
+  data that follows the component, after the loader checks that the memory
+  reads; a blob past it fails that read, naming the field. Only a type
+  with a designer data field, or a kind the API does not know, still does
+  not resolve. `HostApi::readable`, ABI 11.16.
+
 ### Fixed
 
 - `actions`: a server sends a joining player only the controls of a server
