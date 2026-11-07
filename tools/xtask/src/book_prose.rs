@@ -207,7 +207,6 @@ fn cells(row: &str) -> impl Iterator<Item = &str> {
 
 /// A block's prose with Markdown removed: each code span becomes [`CODE`],
 /// a link its text, an image and an HTML tag nothing, an autolink one word.
-
 fn flatten(block: &str) -> String {
     let chars: Vec<char> = block.chars().collect();
     let mut out = String::new();
