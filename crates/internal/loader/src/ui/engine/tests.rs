@@ -25,7 +25,8 @@ fn a_function_s_bytes_are_checked_whenever_the_table_has_them() {
 /// build whose label grew past them keeps the interface off.
 #[test]
 fn the_tables_layouts_fit_the_loader_s_buffers() {
-    let tables = enshwick_gamedata::embedded()
+    let tables = enshwick_gamedata::kept()
+        .unwrap()
         .iter()
         .map(|(_, text)| enshwick_gamedata::Table::parse(text).unwrap());
     for table in tables.filter(|t| t.side() == enshwick_gamedata::Side::Client) {
@@ -56,7 +57,8 @@ fn the_tables_layouts_fit_the_loader_s_buffers() {
 
 /// The client tables, parsed.
 fn client_tables() -> Vec<enshwick_gamedata::Table> {
-    enshwick_gamedata::embedded()
+    enshwick_gamedata::kept()
+        .unwrap()
         .iter()
         .map(|(_, text)| enshwick_gamedata::Table::parse(text).unwrap())
         .filter(|t| t.side() == enshwick_gamedata::Side::Client)
@@ -239,7 +241,8 @@ fn client_tables_pin_the_scroll_area_and_the_text_field_whole() {
         pinned::ui::FRAME_HIT,
         pinned::ui::NODE_MIN_HEIGHT,
     ];
-    let tables: Vec<_> = enshwick_gamedata::embedded()
+    let tables: Vec<_> = enshwick_gamedata::kept()
+        .unwrap()
         .iter()
         .map(|(_, text)| enshwick_gamedata::Table::parse(text).unwrap())
         .filter(|t| t.side() == enshwick_gamedata::Side::Client)

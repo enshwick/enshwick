@@ -144,7 +144,8 @@ fn executables() -> Vec<(std::path::PathBuf, Side)> {
 }
 
 fn tables() -> Vec<Table> {
-    embedded()
+    kept()
+        .unwrap()
         .iter()
         .map(|(_, text)| Table::parse(text).unwrap())
         .collect()

@@ -52,7 +52,8 @@ fn class_of<'r>(rows: &'r [Row], id: &str) -> Option<&'r Row> {
 }
 
 fn tables() -> Vec<Table> {
-    embedded()
+    kept()
+        .unwrap()
         .iter()
         .map(|(_, text)| Table::parse(text).unwrap())
         .collect()

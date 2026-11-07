@@ -626,7 +626,8 @@ mod tests {
         let image = Image::parse(&bytes, Layout::File, None).unwrap();
         let tables = crate::builds::load();
         let table = exact(&tables, TableSide::Server, image.fingerprint().unwrap()).unwrap();
-        let text = enshwick_gamedata::embedded()
+        let text = enshwick_gamedata::kept()
+            .unwrap()
             .iter()
             .find(|(file, _)| *file == table.file_name())
             .unwrap()

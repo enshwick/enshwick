@@ -1,9 +1,10 @@
 //! Tests of what a table carried to a build without its own takes.
 
-use crate::{Side, Table, embedded, exact, reflect};
+use crate::{Side, Table, exact, kept, reflect};
 
 fn tables() -> Vec<Table> {
-    embedded()
+    kept()
+        .unwrap()
         .iter()
         .map(|(_, text)| Table::parse(text).unwrap())
         .collect()

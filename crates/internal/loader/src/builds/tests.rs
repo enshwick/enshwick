@@ -54,7 +54,8 @@ fn a_table_without_its_routed_rows_gets_them_from_the_engine() {
         let full = tables::exact(&load(), side, image.fingerprint().unwrap())
             .unwrap()
             .clone();
-        let text = tables::embedded()
+        let text = tables::kept()
+            .unwrap()
             .iter()
             .find(|(file, _)| *file == full.file_name())
             .unwrap()
@@ -149,7 +150,8 @@ fn routed_symbols_without_table_checks_serve_their_features() {
         let full = tables::exact(&load(), side, image.fingerprint().unwrap())
             .unwrap()
             .clone();
-        let text = tables::embedded()
+        let text = tables::kept()
+            .unwrap()
             .iter()
             .find(|(file, _)| *file == full.file_name())
             .unwrap()

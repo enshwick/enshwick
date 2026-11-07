@@ -9,7 +9,8 @@ use enshwick_gamedata::reflect::{Image, Layout};
 use enshwick_gamedata::{Side, Table, embedded, newest};
 
 fn fall_back(c: &mut Criterion) {
-    let tables: Vec<Table> = embedded()
+    let tables: Vec<Table> = kept()
+        .unwrap()
         .iter()
         .filter_map(|(_, text)| Table::parse(text).ok())
         .collect();

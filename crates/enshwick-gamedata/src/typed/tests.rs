@@ -446,7 +446,8 @@ fn every_id_of_the_committed_table_names_one_engine_type() {
 /// The snapshot the committed typed API was generated from: the newest
 /// server build's.
 fn committed() -> Catalogue {
-    let tables: Vec<crate::Table> = crate::embedded()
+    let tables: Vec<crate::Table> = crate::kept()
+        .unwrap()
         .iter()
         .map(|(_, text)| crate::Table::parse(text).unwrap())
         .collect();
@@ -535,7 +536,8 @@ fn every_covered_type_crosses_into_a_script_and_back() {
 #[cfg_attr(miri, ignore = "generates thousands of items")]
 fn the_committed_typed_api_is_what_its_snapshot_generates() {
     let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let tables: Vec<crate::Table> = crate::embedded()
+    let tables: Vec<crate::Table> = crate::kept()
+        .unwrap()
         .iter()
         .map(|(_, text)| crate::Table::parse(text).unwrap())
         .collect();

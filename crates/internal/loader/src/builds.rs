@@ -306,7 +306,8 @@ fn side(side: Side) -> Option<tables::Side> {
 #[cfg(test)]
 #[must_use]
 pub fn load() -> Vec<tables::Table> {
-    tables::embedded()
+    tables::kept()
+        .unwrap()
         .iter()
         .map(|(_, text)| tables::Table::parse(text).unwrap())
         .collect()

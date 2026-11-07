@@ -91,7 +91,8 @@ mod tests {
     /// Every symbol and constant id of the embedded tables, without the
     /// expected bytes the tables keep beside a symbol.
     fn pinned() -> BTreeSet<String> {
-        tables::embedded()
+        tables::kept()
+            .unwrap()
             .iter()
             .map(|(file, text)| Table::parse(text).unwrap_or_else(|e| panic!("{file}: {e}")))
             .flat_map(|t| {
