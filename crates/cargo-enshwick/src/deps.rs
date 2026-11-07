@@ -487,4 +487,15 @@ input = [{ name = "player", type = "enshwick.player_key" }, { name = "item", typ
             "{error}"
         );
     }
+
+    #[test]
+    fn the_dlls_of_a_folder_and_its_mods_are_found_in_order() {
+        let game = folder("deps-dlls", "b.dll", "");
+        std::fs::create_dir_all(game.join("mods")).unwrap();
+        std::fs::write(game.join("mods/a.DLL"), "").unwrap();
+        std::fs::write(game.join("notes.txt"), "").unwrap();
+        let found = dlls(&game);
+        assert_eq!(found, [game.join("b.dll"), game.join("mods").join("a.DLL")]);
+        assert_eq!(dlls(&game.join("b.dll")), [game.join("b.dll")]);
+    }
 }
