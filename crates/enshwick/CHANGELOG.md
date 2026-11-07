@@ -8,6 +8,32 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `sound`: `SoundContainerId` and `ui::Frame::play` play any sound container
+  the client's archive holds as an interface sound and refuse a GUID it
+  lacks; `Load::change_sound` and `SoundChange` change a vanilla container's
+  volume, pitch, randomness, distances, looping and priority within bounds,
+  in load order on the client; unstable `Load::add_sound` and `NewSound` add
+  a 16-bit PCM WAV at 48000 Hz from the mod's folder as a streamed
+  uncompressed sound and a container that plays it; `sounds.toml` in data
+  packs; Luau `frame:play`, `enshwick.sound.change` and `enshwick.sound.add`.
+  `UiWidget::PLAY` and `UiWidget::sound`, ABI 11.14 (#977).
+- `interactions`: unstable `Load::interaction_targets` and `Targets::target`
+  read the entity a player's prompt offers in the server's world; Luau
+  `enshwick.interactions.target` (#977).
+- `input`: unstable `Input::local_held` reads the gameplay controls a
+  client's own player holds; Luau `enshwick.input.local_held`.
+  `HostApi::local_held`, ABI 11.14 (#977).
+- `ui`: unstable `Frame::prompt` and `Prompt` read the title and verb of
+  the player's interaction prompt; `Frame::screen_host` and
+  `ScreenChanged::host` name the client-world entity the open screen
+  belongs to; Luau `frame:prompt()`, `frame:screen_host()` and
+  `change.host`. `UiFrame::prompt_title`, `prompt_verb` and `screen_host`,
+  ABI 11.14 (#977).
+- `map`: unstable `Load::on_fog_uncovered` and `FogOfWarUncovered` tell a
+  client mod at most once a second where and how much fog of war its player
+  uncovered; Luau `enshwick.map.on_fog_uncovered`. `FogInfo::uncovered` and
+  its window fields, ABI 11.14 (#977).
+
 - `altars`: `Load::limit_altar_level(kind, max_level)`, unstable, gives a
   Flame Altar kind a maximum level below the game's own: a craft filter of
   the mod refuses, on the server, the vanilla altar upgrade recipes that
@@ -311,6 +337,8 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- `abi`: `ChunkData` and `Event::CHUNK_LOADED` and `CHUNK_UNLOADED` say they
+  name chunks of the world's entities, never of its terrain's voxels (#977).
 - `events`: `ChunkLoaded` and `ChunkUnloaded` say they follow the chunks of
   the world's entities, which load only near players; the terrain's voxels
   load and unload without them and raise no event (#978).

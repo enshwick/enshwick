@@ -8,6 +8,15 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- Engine routes find the interaction prompt's title, valid byte and verb
+  and the open screen's host entity in the interface's play data
+  (`ui.prompt_title`, `ui.prompt_valid`, `ui.prompt_verb`,
+  `ui.screen_host`), the same on every kept client build; the catalogue
+  names `SelectedTargets`, `TargetInfo`, `TargetType` and
+  `ClientPlayerInput` (#977).
+- The archive reader and the catalogue name what a sound and its container
+  hold, for added and changed sounds (#977).
+
 - The `test` feature: `Reflection` implements `Default`, an empty
   reflection in which every lookup fails, for tests run without a game
   (#979).
