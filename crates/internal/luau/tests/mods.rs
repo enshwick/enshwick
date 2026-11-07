@@ -372,8 +372,8 @@ mod tests {
             local wide = enshwick.altars.add_flame_altar({{
                 item = {{ id = "you.luau:wide", like = "{PROP_ITEM}" }},
                 zones = {{ {{ grow = 4, height = 20 }} }},
-                max_level = 1,
             }})
+            enshwick.altars.limit_altar_level(wide, 1)
             enshwick.log.info(`altars of {{wide.template}}`)
             "#
         );
@@ -382,7 +382,7 @@ mod tests {
         let host = FakeHost::new()
             .enemies()
             .props()
-            .upgrade_recipes(&[(upgrade, 1)])
+            .upgrade_recipes(&[(Guid([0xc0; 16]), 7, 0), (upgrade, 7, 1)])
             .template(enshwick::Entity(10), kind.0);
         let (loader, status) = start_with(host, &main, Scripts::new(), None);
         assert_eq!(status, Status::OK, "{:?}", loader.logs());

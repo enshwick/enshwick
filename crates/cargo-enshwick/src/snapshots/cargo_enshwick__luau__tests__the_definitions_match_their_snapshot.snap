@@ -1,5 +1,6 @@
 ---
 source: crates/cargo-enshwick/src/luau.rs
+assertion_line: 589
 expression: definitions()
 ---
 --!strict
@@ -1528,8 +1529,6 @@ export type NewFlameAltar = {
 	zones: {KindZone}?,
 	--- With a cost, the altar is built by a copy of the vanilla altar's recipe whose ingredient counts are times this.
 	recipe_cost: number?,
-	--- The highest level the kind's altars reach, below the game's own: the server refuses an upgrade past it as it refuses a craft, so the altar keeps its level and the player their items; 0 refuses even the claim. nil keeps the game's limit.
-	max_level: number?,
 }
 
 --- A new item for `Load.add_item`.
@@ -3612,9 +3611,12 @@ declare enshwick: {
 		--- As `Load.raise_base_limit`, up to `zones` altars a Flame level in up to `bases` bases; values below the game's own count as the game's, and the largest request of every mod holds. Bases past 16 need more of the game's code; where the loader cannot arm all of it, the game keeps 16 bases with the zones raised, which `base_limit` tells. A world lowers the bases below the request with `set_base_cap`. Unstable: needs the `unstable` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		request_base_limits: (zones: number, bases: number) -> boolean,
-		--- Adds a kind of Flame Altar, on the server and the client alike: a prop copied from the vanilla altar whose item is `item.like`, as `Load.add_prop` adds one, whose altars take the kind's zones through an altar zone filter of this mod, chained with other mods' filters in load order (see `Load.on_altar_zone`). `Altar.template` tells the kind's altars apart. With a `max_level`, a craft filter of this mod (see `Load.on_craft`) refuses the vanilla upgrade recipes past it at the kind's altars, on the server.
+		--- Adds a kind of Flame Altar, on the server and the client alike: a prop copied from the vanilla altar whose item is `item.like`, as `Load.add_prop` adds one, whose altars take the kind's zones through an altar zone filter of this mod, chained with other mods' filters in load order (see `Load.on_altar_zone`). `Altar.template` tells the kind's altars apart.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_flame_altar: (new: NewFlameAltar) -> PropId,
+		--- Keeps the altars of the kind `kind` at `max_level` or below, under the game's own limit: a craft filter of this mod (see `Load.on_craft`) refuses, on the server, the vanilla altar upgrade recipes from `max_level` up crafted at an altar of the kind, so the altar keeps its level and the player their items. A `max_level` of 0 refuses even the claim. The Flame's own upgrades, upgrade recipes added by mods and other kinds keep the game's limit. Unstable: needs the `unstable` feature and may change in any release.
+		--- Only while the mod starts, at the top level of main.luau.
+		limit_altar_level: (kind: PropId, max_level: number) -> (),
 	},
 	--- Mod items in random loot, and the game's loot passes.
 	loot: {

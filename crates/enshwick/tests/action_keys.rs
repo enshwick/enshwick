@@ -17,6 +17,8 @@ mod tests {
 
     impl Mod for Weather {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+            // A text the mod hands before its actions stays over theirs too.
+            load.texts_from("[uk]\n\"dusk\" = \"Вечоріє\"\n")?;
             let actions = load.actions(Texts::parse(TEXTS)?)?;
             // A text the mod hands after its actions stays over theirs.
             load.texts_from("[uk]\n\"day\" = \"Хай буде день\"\n")?;
@@ -31,7 +33,7 @@ mod tests {
                 Action::per_player("friends", "friends", |_, _| Vec::new()),
                 |_| Outcome::done("Friends"),
             )?;
-            // Its label is in the actions' texts alone.
+            // Its label is in the actions' texts alone, but in Ukrainian.
             actions.add(Action::new("dusk", "dusk").admins(), |_| {
                 Outcome::done("Evening")
             })?;
@@ -95,7 +97,7 @@ mod tests {
                     "Хай буде день".to_owned(),
                     [Some(f8), None]
                 ),
-                ("dusk".to_owned(), "Сутінки".to_owned(), [Some(f7), None])
+                ("dusk".to_owned(), "Вечоріє".to_owned(), [Some(f7), None])
             ]
         );
         assert_eq!(loader.keys(&[f8], Duration::from_millis(16)), 1);

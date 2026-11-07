@@ -4,6 +4,8 @@
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicU8, Ordering};
+
     use enshwick::abi::{CraftCheck, Header, Status};
     use enshwick::altars::{KindZone, NewFlameAltar};
     use enshwick::content::items::NewItem;
@@ -16,13 +18,19 @@ mod tests {
     const OTHER_ALTAR: Entity = Entity(11);
     const CLAIM: Guid = Guid([0xc0; 16]);
     const UPGRADE: Guid = Guid([0xc1; 16]);
+    const FLAME: Guid = Guid([0xc2; 16]);
+    const ALTAR_WORKSHOP: u32 = 0x0a17;
+    const FLAME_WORKSHOP: u32 = 0x0f1a;
     const TORCH: u32 = 0x7042;
+
+    /// The kind's maximum level; each test runs in a process of its own.
+    static MAX: AtomicU8 = AtomicU8::new(1);
 
     struct Kinds;
 
     impl Mod for Kinds {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            load.add_flame_altar(NewFlameAltar {
+            let wide = load.add_flame_altar(NewFlameAltar {
                 item: NewItem::new(WIDE, PROP_ITEM),
                 zones: vec![
                     KindZone {
@@ -35,8 +43,8 @@ mod tests {
                     },
                 ],
                 recipe_cost: Some(1),
-                max_level: Some(1),
             })?;
+            load.limit_altar_level(wide, MAX.load(Ordering::Relaxed))?;
             // A later filter sees the kind's size and builds on it.
             load.on_altar_zone(|zone| zone.grow += 1)?;
             // A later craft filter keeps its own say beside the limit.
@@ -53,17 +61,26 @@ mod tests {
         "#
     );
 
-    fn start() -> Installed {
+    fn start_with(recipes: &[(Guid, u32, u32)]) -> (Installed, Status) {
         let kind = WIDE.part("template").guid().0;
         let loader = FakeHost::new()
             .props()
-            .upgrade_recipes(&[(CLAIM, 0), (UPGRADE, 1)])
+            .upgrade_recipes(recipes)
             .template(KIND_ALTAR, kind)
             .template(OTHER_ALTAR, [7; 16])
             .install();
         // SAFETY: the three functions are the exports of this file's `declare_mod!(Kinds)`.
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        (loader, status)
+    }
+
+    fn start() -> Installed {
+        let (loader, status) = start_with(&[
+            (CLAIM, ALTAR_WORKSHOP, 0),
+            (UPGRADE, ALTAR_WORKSHOP, 1),
+            (FLAME, FLAME_WORKSHOP, 1),
+        ]);
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         loader
     }
@@ -89,8 +106,36 @@ mod tests {
         assert!(craft(&loader, OTHER_ALTAR, upgrade), "another kind's altar");
         assert!(craft(&loader, Entity(0), upgrade), "by hand");
         assert!(
+            craft(&loader, KIND_ALTAR, RecipeId(FLAME.fnv1a())),
+            "the Flame's own upgrade at the kind's altar"
+        );
+        assert!(
             !craft(&loader, OTHER_ALTAR, RecipeId(TORCH)),
             "the later filter's own refusal"
+        );
+    }
+
+    #[test]
+    fn a_maximum_level_of_0_refuses_even_the_claim() {
+        MAX.store(0, Ordering::Relaxed);
+        let loader = start();
+
+        assert!(!craft(&loader, KIND_ALTAR, RecipeId(CLAIM.fnv1a())));
+        assert!(craft(&loader, OTHER_ALTAR, RecipeId(CLAIM.fnv1a())));
+    }
+
+    #[test]
+    fn a_registry_without_an_altar_claim_turns_the_limit_off_with_a_reason() {
+        let (loader, status) = start_with(&[(FLAME, FLAME_WORKSHOP, 1)]);
+
+        assert_ne!(status, Status::OK);
+        assert!(
+            loader
+                .logs()
+                .iter()
+                .any(|(_, line)| line.contains("no altar claim recipe")),
+            "{:?}",
+            loader.logs()
         );
     }
 

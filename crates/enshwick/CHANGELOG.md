@@ -8,12 +8,14 @@ Each entry names the pull request that made the change.
 
 ### Added
 
-- `altars`: `NewFlameAltar.max_level` gives a Flame Altar kind a maximum
-  level below the game's own: a craft filter of the mod refuses, on the
-  server, the vanilla upgrade recipes that start at that level or above at
-  the kind's altars, so the altar keeps its level and the player the items;
-  Luau `max_level`. The fake host's `upgrade_recipes` puts upgrade recipes at
-  given levels in its recipe registry (#978).
+- `altars`: `Load::limit_altar_level(kind, max_level)`, unstable, gives a
+  Flame Altar kind a maximum level below the game's own: a craft filter of
+  the mod refuses, on the server, the vanilla altar upgrade recipes that
+  start at that level or above at the kind's altars, so the altar keeps its
+  level and the player the items; the Flame's own upgrades stay allowed;
+  Luau `enshwick.altars.limit_altar_level`. The fake host's
+  `upgrade_recipes` puts upgrade recipes of given workshops and levels in its
+  recipe registry (#978).
 - `content`: `Load::rekey_item(old, new)` and `enshwick.content.rekey_item`
   take an item the mod added with `add_item` before the call as `new`: `old`
   is served with that item's data, cloned from its base item with its name,
