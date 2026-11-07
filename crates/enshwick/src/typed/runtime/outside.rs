@@ -3,28 +3,20 @@
 
 use crate::resources::{Kind, Registry, Type};
 
-/// Nesting deeper than this is taken for a loop in bad data, as the codec
-/// takes it.
-const MAX_DEPTH: usize = 64;
-
 /// The path, by the game's field names, of the first field of `ty` at any
 /// depth of its own bytes whose data lies outside them: a blob kind, whose
 /// offset points past them, or a designer data kind, which points to the
 /// heap.
 pub(super) fn outside_field(registry: &Registry<'_>, ty: &Type<'_>) -> Option<String> {
-    outside(registry, ty, 0, &mut Vec::new())
+    outside(registry, ty, &mut Vec::new())
 }
 
 /// `seen` holds every type walked so far, none of which holds such a field:
-/// a type met again adds nothing, so a type holding itself twice ends.
-fn outside(
-    registry: &Registry<'_>,
-    ty: &Type<'_>,
-    depth: usize,
-    seen: &mut Vec<*const ()>,
-) -> Option<String> {
+/// a type met again adds nothing, so a loop ends and each type is walked
+/// once.
+fn outside(registry: &Registry<'_>, ty: &Type<'_>, seen: &mut Vec<*const ()>) -> Option<String> {
     let at = core::ptr::from_ref(ty).cast::<()>();
-    if depth > MAX_DEPTH || seen.contains(&at) {
+    if seen.contains(&at) {
         return None;
     }
     seen.push(at);
@@ -47,13 +39,13 @@ fn outside(
         | Kind::DsVariant
         // A kind this API does not know may keep its data anywhere.
         | Kind::Other(_) => Some(String::new()),
-        Kind::Typedef => outside(registry, inner()?, depth + 1, seen),
+        Kind::Typedef => outside(registry, inner()?, seen),
         Kind::Struct => registry.all_fields(ty).into_iter().find_map(|field| {
             let held = registry.named(field.type_name()?)?;
-            outside(registry, held, depth + 1, seen).map(|rest| join(field.name(), rest))
+            outside(registry, held, seen).map(|rest| join(field.name(), rest))
         }),
         Kind::StaticArray => {
-            outside(registry, inner()?, depth + 1, seen).map(|rest| join("0", rest))
+            outside(registry, inner()?, seen).map(|rest| join("0", rest))
         }
         _ => None,
     }
@@ -98,7 +90,7 @@ mod tests {
 
     #[test]
     fn a_typedef_is_followed_a_loop_ends_and_an_unknown_kind_counts_as_outside() {
-        // Forty fields of its own type, walked to the depth limit, never end.
+        // Forty fields of its own type: a walk by depth alone would not end.
         let branches: Vec<String> = (0..40).map(|i| format!("branch{i}")).collect();
         let registry = Registry::new([
             Type::new("demo::uint8", Kind::Uint8, 1, 1),

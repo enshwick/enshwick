@@ -498,6 +498,40 @@ fn the_newest_snapshot_ranks_kept_builds_by_steam_build_and_puts_an_untabled_one
 }
 
 #[test]
+fn among_untabled_snapshots_the_one_written_last_wins_and_a_missing_folder_has_none() {
+    let dir = std::env::temp_dir().join(format!("ensh-written-last-{}", std::process::id()));
+    drop(std::fs::remove_dir_all(&dir));
+    assert_eq!(
+        newest_snapshot(&dir, &[], crate::Side::Server).unwrap(),
+        None
+    );
+    let start = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1 << 30);
+    let snapshot = |guid: &str, age: u32, hours: u64| {
+        let path = dir
+            .join("typed")
+            .join(format!("server-{}-{age}.jsonl", guid.repeat(16)));
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let file = std::fs::File::create(&path).unwrap();
+        file.set_modified(start + std::time::Duration::from_secs(hours * 3600))
+            .unwrap();
+        path
+    };
+    snapshot("aa", 9, 1);
+    let last = snapshot("bb", 2, 5);
+    snapshot("cc", 7, 3);
+    assert_eq!(
+        newest_snapshot(&dir, &[], crate::Side::Server).unwrap(),
+        Some(last)
+    );
+    drop(std::fs::remove_dir_all(&dir));
+    // A `typed` that is a file, not a folder, does not read.
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("typed"), "").unwrap();
+    assert!(newest_snapshot(&dir, &[], crate::Side::Server).is_err());
+    drop(std::fs::remove_dir_all(&dir));
+}
+
+#[test]
 fn a_snapshot_is_named_only_by_its_side_guid_and_age() {
     let guid = "ab".repeat(16);
     assert_eq!(
