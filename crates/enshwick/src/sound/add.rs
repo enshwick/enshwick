@@ -470,14 +470,12 @@ mod tests {
             file_in(dir, "sounds/horn.wav"),
             Ok(dir.join("sounds/horn.wav"))
         );
-        for bad in [
-            "",
-            "../other/horn.wav",
-            "/horn.wav",
-            "C:/horn.wav",
-            "./horn.wav",
-        ] {
+        for bad in ["", "../other/horn.wav", "/horn.wav", "./horn.wav"] {
             assert!(file_in(dir, bad).is_err(), "{bad}");
+        }
+        // Elsewhere a drive letter is an ordinary folder name inside the mod's.
+        if cfg!(windows) {
+            assert!(file_in(dir, "C:/horn.wav").is_err());
         }
     }
 
