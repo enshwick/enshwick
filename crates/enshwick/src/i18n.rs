@@ -620,54 +620,39 @@ impl Texts {
 static HANDED: crate::fresh::Fresh<std::sync::Mutex<Vec<(crate::abi::ModHandle, Texts)>>> =
     crate::fresh::Fresh::new();
 
-/// Adds `texts` to what the loader keeps of the mod `host` names, which
+/// Adds `texts` over what the loader keeps of the mod `host` names, which
 /// labels its settings and controls in each reader's language.
 pub(crate) fn hand(host: Host, texts: &Texts) {
+    keep(host, texts, true);
+}
+
+/// Adds `texts` beneath what the loader keeps of the mod `host` names: a
+/// text the mod handed itself, before or after, stays.
+#[cfg(feature = "unstable")]
+pub(crate) fn hand_under(host: Host, texts: &Texts) {
+    keep(host, texts, false);
+}
+
+/// Merges `texts` with the mod's kept texts, over or beneath them, and
+/// hands the loader the result.
+fn keep(host: Host, texts: &Texts, over: bool) {
     // The loader keeps the last texts it was given, so it gets all of this
     // mod's, a pack's added to the mod's own.
     let me = host.handle();
     let mut handed = HANDED.get_or_init(std::sync::Mutex::default).relock();
     let all = if let Some((_, kept)) = handed.iter_mut().find(|(owner, _)| *owner == me) {
-        kept.merge(texts.clone());
+        if over {
+            kept.merge(texts.clone());
+        } else {
+            let own = core::mem::replace(kept, texts.clone());
+            kept.merge(own);
+        }
         kept.to_toml()
     } else {
         handed.push((me, texts.clone()));
         texts.to_toml()
     };
     let _kept = (host.api().texts)(me, crate::abi::Str::new(&all));
-}
-
-/// Hands the loader the texts of `key` in `texts` in each language the mod
-/// `host` names has not handed it yet, so a text handed since stays.
-#[cfg(feature = "unstable")]
-#[cfg(feature = "unstable")]
-pub(crate) fn hand_missing(host: Host, texts: &Texts, key: &str) {
-    let me = host.handle();
-    let mut missing = Texts::default();
-    {
-        let handed = HANDED.get_or_init(std::sync::Mutex::default).relock();
-        let kept = handed
-            .iter()
-            .find(|(owner, _)| *owner == me)
-            .map(|(_, k)| k);
-        for (language, entries) in &texts.by_language {
-            let handed_already = kept
-                .and_then(|k| k.by_language.get(language))
-                .is_some_and(|e| e.contains_key(key));
-            if let Some(text) = entries.get(key)
-                && !handed_already
-            {
-                missing
-                    .by_language
-                    .entry(*language)
-                    .or_default()
-                    .insert(key.to_owned(), text.clone());
-            }
-        }
-    }
-    if !missing.by_language.is_empty() {
-        hand(host, &missing);
-    }
 }
 
 impl Load<'_> {

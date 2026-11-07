@@ -853,6 +853,16 @@ pub(crate) fn link(loader: &'static Loader) {
 /// The switch of the chunk events.
 static CHUNKS_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("chunk events");
 
+/// The event a chunk's step from state `before` to `after` raises: only a
+/// finished load or unload of its entities, never a step that stays.
+const fn turn(before: u8, after: u8) -> Option<Event> {
+    match (before, after) {
+        (LOADING, LOADED) => Some(Event::CHUNK_LOADED),
+        (UNLOADING, UNLOADED) => Some(Event::CHUNK_UNLOADED),
+        _ => None,
+    }
+}
+
 unsafe extern "system" fn chunk_step(entities: *mut u8, chunk: *mut u8, budget: *mut u32) -> u8 {
     let before = if chunk.is_null() {
         0xff
@@ -871,10 +881,8 @@ unsafe extern "system" fn chunk_step(entities: *mut u8, chunk: *mut u8, budget: 
     // SAFETY: `chunk` is non-null by the check before it and is the step's
     // chunk argument, live for the call, which starts with its u8 state.
     let after = unsafe { read_at::<u8>(chunk, 0) };
-    let event = match (before, after) {
-        (LOADING, LOADED) => Event::CHUNK_LOADED,
-        (UNLOADING, UNLOADED) => Event::CHUNK_UNLOADED,
-        _ => return done,
+    let Some(event) = turn(before, after) else {
+        return done;
     };
     let _caught = CHUNKS_FUSE.run("the chunk step", || {
         // SAFETY: `entities` and `chunk` are the step's own arguments,

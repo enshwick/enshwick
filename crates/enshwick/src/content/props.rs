@@ -48,7 +48,7 @@ const CRAFTING_PROP: &str = "crafting-prop";
 /// their mask, the component that marks a placed crafting prop, and the
 /// crafting menu's mask of props in range, whose width bounds them.
 const PROPS: &str = "craftingProps";
-const RECIPES: &str = "recipes";
+pub(crate) const RECIPES: &str = "recipes";
 const RECIPE_GUID: &str = "recipeGuid";
 const REQUIRED: &str = "requiredProps";
 const REQUIRED_MASK: &str = "requiredPropsMask";

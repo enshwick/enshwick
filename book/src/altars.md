@@ -158,6 +158,36 @@ local wide = enshwick.altars.add_flame_altar({
 enshwick.log.info(`wide altars are {wide.template}`)
 ```
 
+### A maximum level for a kind
+
+`load.limit_altar_level(kind, max_level)` keeps a kind's altars at
+`max_level` or below. It is unstable: it needs the `unstable` feature. An
+altar's level rises by an upgrade recipe crafted at the altar. On the server,
+a craft filter of the mod refuses the vanilla altar upgrades from
+`max_level` up at an altar of the kind. The filter runs before
+the crafting system reads the request, so the altar keeps its level and the
+player keeps the items. A `max_level` of 0 refuses even the claim. The
+Flame's own upgrades, upgrade recipes that mods add, other kinds and the
+vanilla altar keep the game's limit. The upgrade path was read from the code
+of server 26430253 and the recipes from the data of client 26430625.
+
+```rust
+use enshwick::altars::NewFlameAltar;
+use enshwick::content::{Guid, id};
+use enshwick::content::items::NewItem;
+
+fn init(load: &mut enshwick::Load<'_>, altar: Guid) -> Result<(), enshwick::Off> {
+    let small = load.add_flame_altar(NewFlameAltar {
+        item: NewItem::new(id!("small-altar"), altar),
+        zones: Vec::new(),
+        recipe_cost: None,
+    })?;
+    load.limit_altar_level(small, 2)
+}
+```
+
+In Luau: `enshwick.altars.limit_altar_level(small, 2)`.
+
 ## Altars per level and bases past 16
 
 This mod lets a server admin set how many Flame Altars every Flame level

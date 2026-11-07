@@ -1,4 +1,23 @@
-use super::{as_saved, remapped};
+use enshwick::abi::Event;
+
+use super::{LOADED, LOADING, UNLOADED, UNLOADING, as_saved, remapped, turn};
+
+#[test]
+fn only_a_finished_load_or_unload_of_a_chunk_raises_its_event() {
+    assert_eq!(turn(LOADING, LOADED), Some(Event::CHUNK_LOADED));
+    assert_eq!(turn(UNLOADING, UNLOADED), Some(Event::CHUNK_UNLOADED));
+    for (before, after) in [
+        (LOADING, LOADING),
+        (LOADED, LOADED),
+        (LOADED, UNLOADING),
+        (UNLOADING, UNLOADING),
+        (UNLOADED, LOADING),
+        (UNLOADED, UNLOADED),
+        (0xff, LOADED),
+    ] {
+        assert_eq!(turn(before, after), None, "{before} to {after}");
+    }
+}
 
 const A: [u8; 16] = [1; 16];
 const B: [u8; 16] = [2; 16];

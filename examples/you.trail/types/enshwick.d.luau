@@ -3609,6 +3609,9 @@ declare enshwick: {
 		--- Adds a kind of Flame Altar, on the server and the client alike: a prop copied from the vanilla altar whose item is `item.like`, as `Load.add_prop` adds one, whose altars take the kind's zones through an altar zone filter of this mod, chained with other mods' filters in load order (see `Load.on_altar_zone`). `Altar.template` tells the kind's altars apart.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_flame_altar: (new: NewFlameAltar) -> PropId,
+		--- Keeps the altars of the kind `kind` at `max_level` or below, under the game's own limit: a craft filter of this mod (see `Load.on_craft`) refuses, on the server, the vanilla altar upgrade recipes from `max_level` up crafted at an altar of the kind, so the altar keeps its level and the player their items. A `max_level` of 0 refuses even the claim. The Flame's own upgrades, upgrade recipes added by mods and other kinds keep the game's limit. Unstable: needs the `unstable` feature and may change in any release.
+		--- Only while the mod starts, at the top level of main.luau.
+		limit_altar_level: (kind: PropId, max_level: number) -> (),
 	},
 	--- Mod items in random loot, and the game's loot passes.
 	loot: {

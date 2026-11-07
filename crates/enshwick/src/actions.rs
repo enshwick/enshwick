@@ -444,7 +444,6 @@ impl Actions {
             }
             found.action.label.clone()
         };
-        crate::i18n::hand_missing(self.registry.host, &self.registry.texts, &label);
         let control = Control::new(action, &label).key(key).runs(action);
         crate::controls::declare(self.registry.host, &control, |_| {})
     }
@@ -520,7 +519,11 @@ impl Load<'_> {
     /// The mod's player actions: declare each with [`Actions::add`]. `texts`
     /// holds the labels' texts, as [`Load::texts`] reads them; the
     /// platform's own replies are in it under `actions.*` too, so a mod may
-    /// change them.
+    /// change them. The loader keeps these texts beneath the ones the mod
+    /// hands itself (see [`Load::texts`]), before or after: a key of both
+    /// reads as the mod handed it, and an action's control
+    /// ([`Actions::control`]) reads its label from them in each player's
+    /// language, a missing variety falling back as any text does.
     ///
     /// # Errors
     ///
@@ -543,6 +546,7 @@ impl Load<'_> {
             |user| (host.api().actions)(host.handle(), answer, user),
             "actions",
         )?;
+        crate::i18n::hand_under(host, &registry.texts);
         Ok(Actions { registry })
     }
 }

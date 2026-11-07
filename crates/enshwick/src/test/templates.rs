@@ -433,8 +433,11 @@ fn registry_types() -> Vec<Type<'static>> {
         Type::new(RECIPE, Kind::Struct, 0xa8, 8).with_fields(vec![
             field("recipeGuid", 0, "demo::Guid"),
             field("recipeId", 0x10, "demo::HashKey32"),
+            field("workshopId", 0x24, "demo::HashKey32"),
             field("requiredProps", 0x38, "demo::BlobArray<demo::HashKey32>"),
             field("requiredPropsMask", 0x48, "demo::uint64"),
+            field("level", 0x80, "demo::uint32"),
+            field("isUpgrade", 0xa0, "demo::bool"),
         ]),
         Type::new(REQUIRED_PROP, Kind::Struct, 20, 4)
             .with_inner(COMPONENT)
@@ -568,16 +571,57 @@ impl FakeHost {
                 ])
             })
             .collect();
-        let mut types = types();
-        types.extend(registry_types());
-        Registry::new(types)
-            .encode(
-                RECIPE_REGISTRY,
-                &Value::Struct(vec![("recipes".into(), Value::List(recipes))]),
-                None,
-            )
-            .unwrap_or_default()
+        encode_recipes(recipes)
     }
+
+    /// The vanilla recipe registry in the archive holding one upgrade
+    /// recipe per `(guid, workshop, level)`: a recipe of the workshop with
+    /// game id `workshop` that upgrades its station from that level, beside
+    /// [`FakeHost::props`]. The altar's own upgrades share the workshop of
+    /// the one at level 0, the claim.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::Guid;
+    ///
+    /// let claim = (Guid([1; 16]), 7, 0);
+    /// let _host = enshwick::test::FakeHost::new().props().upgrade_recipes(&[claim]);
+    /// ```
+    #[must_use]
+    pub fn upgrade_recipes(self, recipes: &[(Guid, u32, u32)]) -> Self {
+        let recipes = recipes
+            .iter()
+            .map(|&(guid, workshop, level)| {
+                Value::Struct(vec![
+                    ("recipeGuid".into(), Value::Guid(guid)),
+                    ("recipeId".into(), game_id(guid.fnv1a())),
+                    ("workshopId".into(), game_id(workshop)),
+                    ("level".into(), Value::Uint(level.into())),
+                    ("isUpgrade".into(), Value::Bool(true)),
+                ])
+            })
+            .collect();
+        let key = crate::content::recipes::RECIPE_REGISTRY;
+        self.resource(
+            key.key_by_hash(fnv1a32(RECIPE_REGISTRY.as_bytes())),
+            encode_recipes(recipes),
+        )
+    }
+}
+
+/// The recipe registry holding `recipes`, as the fake reflects it; empty when
+/// they do not fit its recipe type, so the mod that reads it fails there.
+fn encode_recipes(recipes: Vec<Value>) -> Vec<u8> {
+    let mut types = types();
+    types.extend(registry_types());
+    Registry::new(types)
+        .encode(
+            RECIPE_REGISTRY,
+            &Value::Struct(vec![("recipes".into(), Value::List(recipes))]),
+            None,
+        )
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
