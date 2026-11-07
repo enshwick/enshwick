@@ -47,8 +47,32 @@ mod tests {
                     .unwrap()
                     .push(added.map(|_| ()).map_err(|off| off.to_string()));
             }
+            let (first, second) = clashing();
+            for name in [first, second] {
+                let added = load.add_sound(NewSound::new(name, "horn.wav"));
+                RESULTS
+                    .lock()
+                    .unwrap()
+                    .push(added.map(|_| ()).map_err(|off| off.to_string()));
+            }
             Ok(Self)
         }
+    }
+
+    /// Two content ids of this mod whose game ids are one.
+    fn clashing() -> (enshwick::content::Id, enshwick::content::Id) {
+        let mut seen = std::collections::HashMap::new();
+        for i in 0u32.. {
+            let name: &'static str = Box::leak(format!("you.horns:n{i}").into_boxed_str());
+            let game = enshwick::content::Guid::named(name).fnv1a();
+            if let Some(first) = seen.insert(game, name) {
+                return (
+                    enshwick::content::Id::new(first),
+                    enshwick::content::Id::new(name),
+                );
+            }
+        }
+        unreachable!("a 32-bit hash repeats")
     }
 
     enshwick::test::declare_mod!(
@@ -76,13 +100,18 @@ mod tests {
         let results = RESULTS.lock().unwrap().clone();
         assert_eq!(results[0], Ok(()));
         for (result, why) in
-            results[1..]
+            results[1..4]
                 .iter()
                 .zip(["48000 Hz", "inside the mod's folder", "gone.wav"])
         {
             let refused = result.as_ref().unwrap_err();
             assert!(refused.contains(why), "{refused}");
         }
+        assert_eq!(results[4], Ok(()));
+        assert!(
+            results[5].is_err(),
+            "an id whose game id another holds is refused"
+        );
         assert!(loader.resources().is_empty(), "a server plays no sound");
         std::fs::remove_dir_all(dir).unwrap();
     }

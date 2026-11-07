@@ -48,6 +48,42 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 enshwick.sound.change("<container GUID>", { volume = 0.2 })
 ```
 
+## Choose which sound a notifier plays
+
+A notifier's `NotifierResource` names the container it plays in
+`defaultSound`. Other game data names one too, such as an ambient entry's
+`soundContainer`. A mod changes which container plays by serving a changed
+[resource value](resource-values.md#serve-a-change). Any container's GUID
+fits there, a vanilla one or one from `add_sound`.
+
+```rust
+use enshwick::resources::{Registry, Value};
+use enshwick::sound::SoundContainerId;
+
+const NOTIFIER: &str = "keen::NotifierResource";
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let bell = SoundContainerId::from_guid(enshwick::content::Guid::named("you.bells:bell"));
+    let registry = Registry::game()?;
+    let ty = registry.named(NOTIFIER).ok_or_else(|| enshwick::Off::new("no notifiers"))?;
+    let Some(key) = load.host().resource_keys(Some(ty))?.into_iter().next() else {
+        return Ok(());
+    };
+    load.serve(key, key, move |base| {
+        let mut notifier = registry.decode(NOTIFIER, base).ok()?;
+        *notifier.field_mut("defaultSound")? = Value::Guid(bell.guid());
+        registry.encode(NOTIFIER, &notifier, Some(base)).ok()
+    })
+}
+```
+
+```luau
+local key = enshwick.resources.resource_keys("keen::NotifierResource")[1]
+enshwick.resources.serve(key, key, function(notifier)
+    return { defaultSound = "<container GUID>" }
+end)
+```
+
 ## Add a sound of your own
 
 With the `unstable` feature, `load.add_sound(NewSound::new(id!("horn"),
