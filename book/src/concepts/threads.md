@@ -88,11 +88,11 @@ A panic turns off only the feature it hit. So a lock that a panicking thread
 held stays poisoned while the rest of the mod runs. Take a `std` lock through
 one of these traits:
 
-- [`Relock`](https://docs.rs/enshwick/latest/enshwick/trait.Relock.html), with
+- [`Relock`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/locks.rs), with
   `relock()`
-- [`RelockRw`](https://docs.rs/enshwick/latest/enshwick/trait.RelockRw.html),
+- [`RelockRw`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/locks.rs),
   with `relock_read()` and more
-- [`RelockWait`](https://docs.rs/enshwick/latest/enshwick/trait.RelockWait.html),
+- [`RelockWait`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/locks.rs),
   with `relock_wait(guard)`
 
 They keep the state the panicking thread left and clear the poison. They also

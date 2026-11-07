@@ -3,8 +3,11 @@
 //! the platform's GitHub address: each names the version the workspace
 //! carries, the alpha the text describes. A tag of another repository stays.
 //! `cargo xtask tag-lines` moves them to it after a version bump, and the
-//! check fails a line naming another tag. Changelogs keep the tags of their
-//! time.
+//! check fails a line naming another tag. The check also fails a line that
+//! installs or depends on a crate of the workspace without a pin: the
+//! platform's git without a tag or commit, or crates.io while the workspace
+//! carries an alpha, which crates.io never has; a link to a crate's docs.rs
+//! pages fails then too. Changelogs keep the tags of their time.
 
 use std::path::Path;
 
@@ -36,7 +39,8 @@ pub(crate) fn run(args: &[String]) -> Result<bool, String> {
 }
 
 /// A line of the tracked Markdown under `root` that names another tag than
-/// the workspace version's, one problem each.
+/// the workspace version's, or installs or depends on a crate of the
+/// workspace without a pin, one problem each.
 pub(crate) fn check(root: &Path, packages: &[Package]) -> Vec<String> {
     let tag = match tag(packages) {
         Ok(tag) => tag,
@@ -46,21 +50,187 @@ pub(crate) fn check(root: &Path, packages: &[Package]) -> Vec<String> {
         Ok(files) => files,
         Err(why) => return vec![why],
     };
+    let names: Vec<&str> = packages.iter().map(|p| p.name.as_str()).collect();
+    let alpha = tag.contains('-');
     let mut problems = Vec::new();
     for file in files {
-        match std::fs::read_to_string(root.join(&file)) {
-            Ok(text) => problems.extend(rewrite(&text, &tag).1.into_iter().map(|line| {
-                format!(
-                    "{file}:{line}: names another tag than {tag}; `cargo xtask tag-lines` moves it"
-                )
-            })),
-            Err(error) => problems.push(format!("{file}: {error}")),
-        }
+        let text = match std::fs::read_to_string(root.join(&file)) {
+            Ok(text) => text,
+            Err(error) => {
+                problems.push(format!("{file}: {error}"));
+                continue;
+            }
+        };
+        problems.extend(rewrite(&text, &tag).1.into_iter().map(|line| {
+            format!("{file}:{line}: names another tag than {tag}; `cargo xtask tag-lines` moves it")
+        }));
+        problems.extend(unpinned(&text, &names, alpha).into_iter().map(|(line, pin)| {
+            let why = match pin {
+                Pin::Git => format!("takes the platform's git without a tag; name {tag}"),
+                Pin::Registry => format!(
+                    "takes a crate from crates.io, which has no alpha; take it from git at {tag}"
+                ),
+                Pin::DocsRs => "links docs.rs, which has no alpha; link the source on GitHub".to_owned(),
+            };
+            format!("{file}:{line}: {why}")
+        }));
     }
     problems
 }
 
+/// What an install or dependency line lacks.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+enum Pin {
+    /// It names the platform's git address but no tag or commit.
+    Git,
+    /// It takes the crate from crates.io while the workspace carries an alpha.
+    Registry,
+    /// It links the crate's docs.rs pages while the workspace carries an
+    /// alpha, which docs.rs never builds.
+    DocsRs,
+}
+
+/// Whether `line` links the docs.rs pages of one of `names`, as
+/// `docs.rs/<name>` or `docs.rs/crate/<name>`.
+fn docs_rs(line: &str, names: &[&str]) -> Option<Pin> {
+    ["docs.rs/", "docs.rs/crate/"]
+        .iter()
+        .flat_map(|host| names.iter().map(move |name| format!("{host}{name}")))
+        .any(|link| {
+            line.match_indices(&link).any(|(at, found)| {
+                !line[at + found.len()..]
+                    .starts_with(|c: char| c.is_ascii_alphanumeric() || "-_".contains(c))
+            })
+        })
+        .then_some(Pin::DocsRs)
+}
+
+/// The lines of `text`, from 1, that install or depend on one of `names`
+/// without a pin; crates.io counts as a pin only when `alpha` is false.
+fn unpinned(text: &str, names: &[&str], alpha: bool) -> Vec<(usize, Pin)> {
+    text.lines()
+        .enumerate()
+        .filter_map(|(index, line)| {
+            let pins = [
+                install_pin(line, names),
+                dependency_pin(line, names),
+                docs_rs(line, names),
+            ];
+            // A git line fails in every case, so another kind on its line must not hide it.
+            let pin = if pins.contains(&Some(Pin::Git)) {
+                Pin::Git
+            } else {
+                pins.into_iter().flatten().next()?
+            };
+            (pin == Pin::Git || alpha).then_some((index + 1, pin))
+        })
+        .collect()
+}
+
+/// What a `cargo install`, `binstall` or `add` of one of `names` on `line`
+/// lacks, if anything. Only the command's own words count: it ends with its
+/// code span or at a shell separator, and punctuation around a word is prose.
+fn install_pin(line: &str, names: &[&str]) -> Option<Pin> {
+    let all: Vec<&str> = line.split_whitespace().collect();
+    let start = all.windows(2).position(|pair| {
+        pair[0].trim_start_matches('`') == "cargo"
+            && ["install", "binstall", "add"].contains(&pair[1])
+    })? + 2;
+    let mut words = Vec::new();
+    for word in &all[start..] {
+        if [";", "&&", "||", "|"].contains(word) {
+            break;
+        }
+        words.push(word.trim_matches(|c: char| "`.,;:()[]".contains(c)));
+        if word.contains('`') {
+            break;
+        }
+    }
+    let names_one = words.iter().any(|word| {
+        names
+            .iter()
+            .any(|name| word == name || word.strip_prefix(name).is_some_and(|v| v.starts_with('@')))
+    });
+    if !names_one {
+        return None;
+    }
+    let after = |flag: &str| {
+        words
+            .iter()
+            .position(|w| *w == flag || w.starts_with(&format!("{flag}=")))
+            .map(|at| {
+                words[at]
+                    .split_once('=')
+                    .map_or(words.get(at + 1).copied(), |(_, v)| Some(v))
+            })
+    };
+    match after("--git") {
+        Some(git) if !git.unwrap_or_default().contains(REPOSITORY) => None,
+        Some(_) => (after("--tag").is_none() && after("--rev").is_none()).then_some(Pin::Git),
+        None if after("--path").is_some() => None,
+        None => Some(Pin::Registry),
+    }
+}
+
+/// What a dependency on one of `names` on `line` lacks, if anything: a
+/// `name = "<version>"` or `name = { ... }` entry. A value that is no version
+/// requirement, such as a log level, is no dependency.
+fn dependency_pin(line: &str, names: &[&str]) -> Option<Pin> {
+    names.iter().find_map(|name| {
+        line.match_indices(name).find_map(|(at, _)| {
+            let before = line[..at].chars().next_back();
+            if before.is_some_and(|c| c.is_ascii_alphanumeric() || "-_@:./".contains(c)) {
+                return None;
+            }
+            let value = line[at + name.len()..].trim_start().strip_prefix('=')?;
+            if value.starts_with('=') {
+                return None;
+            }
+            let value = value.trim_start();
+            if let Some(requirement) = quoted(value) {
+                return semver::VersionReq::parse(requirement)
+                    .is_ok()
+                    .then_some(Pin::Registry);
+            }
+            let table = value.strip_prefix('{')?;
+            let table = table.split('}').next().unwrap_or(table);
+            if table.contains("workspace = true") || field(table, "path").is_some() {
+                return None;
+            }
+            match field(table, "git") {
+                Some(git) if !git.contains(REPOSITORY) => None,
+                Some(_) => (field(table, "tag").is_none() && field(table, "rev").is_none())
+                    .then_some(Pin::Git),
+                None => field(table, "version").map(|_| Pin::Registry),
+            }
+        })
+    })
+}
+
+/// The string value of `key` in the inline table `table`.
+fn field<'a>(table: &'a str, key: &str) -> Option<&'a str> {
+    table.match_indices(key).find_map(|(at, _)| {
+        let before = table[..at].chars().next_back();
+        if before.is_some_and(|c| !(c.is_whitespace() || c == ',')) {
+            return None;
+        }
+        let value = table[at + key.len()..].trim_start().strip_prefix('=')?;
+        quoted(value.trim_start())
+    })
+}
+
+/// The text of the TOML string `value` starts with, basic or literal.
+fn quoted(value: &str) -> Option<&str> {
+    let quote = value.chars().next().filter(|c| ['"', '\''].contains(c))?;
+    value[1..].split(quote).next()
+}
+
 /// `v` and the version of the package that names the release.
+///
+/// Plain `v<version>` on purpose: alpha.yml tags each alpha so, and only
+/// alphas need a git tag in the text. release-plz's `<package>-v<version>`
+/// tags mark real releases, which go to crates.io, so their lines name a
+/// crates.io version and no tag.
 fn tag(packages: &[Package]) -> Result<String, String> {
     packages
         .iter()
@@ -147,11 +317,14 @@ mod tests {
         }]
     }
 
-    /// A fresh git repository of its own for this test process, with `files`
-    /// as `(path, text)`, each added to its index; a reused process id finds
-    /// no index of an earlier run.
+    /// A fresh git repository of its own for this test, with `files` as
+    /// `(path, text)`, each added to its index; a reused process id finds no
+    /// index of an earlier run, and tests on threads of one process get one
+    /// each.
     fn repository(files: &[(&str, &str)]) -> std::path::PathBuf {
-        let root = std::env::temp_dir().join(format!("xtask-tag-lines-{}", std::process::id()));
+        let thread = format!("{:?}", std::thread::current().id()).replace(['(', ')'], "");
+        let root =
+            std::env::temp_dir().join(format!("xtask-tag-lines-{}-{thread}", std::process::id()));
         if root.exists() {
             std::fs::remove_dir_all(&root).unwrap();
         }
@@ -184,6 +357,135 @@ mod tests {
                 "book/a.md:2: names another tag than v1.0.0-alpha.13; `cargo xtask tag-lines` moves it",
             ]
         );
+    }
+
+    const NAMES: [&str; 2] = ["enshwick", "cargo-enshwick"];
+
+    #[test]
+    fn the_check_names_an_unpinned_line_of_a_tracked_file() {
+        let root = repository(&[("README.md", "a\n```toml\nenshwick = \"1\"\n```\n")]);
+        let mut packages = loader("1.0.0-alpha.13");
+        let mut api = packages[0].clone();
+        api.name = "enshwick".to_owned();
+        packages.push(api);
+        let problems = check(&root, &packages);
+        std::fs::remove_dir_all(&root).unwrap();
+        assert_eq!(
+            problems,
+            [
+                "README.md:3: takes a crate from crates.io, which has no alpha; take it from git at v1.0.0-alpha.13"
+            ]
+        );
+    }
+
+    #[test]
+    fn crates_io_lines_are_unpinned_only_while_the_workspace_carries_an_alpha() {
+        let text = "cargo install cargo-enshwick\n\
+                    enshwick = \"1\"\n\
+                    `enshwick = { version = \"1.0\", features = [\"test\"] }`\n\
+                    cargo binstall cargo-enshwick@1.0.0\n";
+        assert_eq!(
+            unpinned(text, &NAMES, true),
+            [
+                (1, Pin::Registry),
+                (2, Pin::Registry),
+                (3, Pin::Registry),
+                (4, Pin::Registry)
+            ]
+        );
+        assert!(unpinned(text, &NAMES, false).is_empty());
+    }
+
+    #[test]
+    fn a_docs_rs_link_of_a_workspace_crate_fails_only_while_the_workspace_carries_an_alpha() {
+        let text = "[API](https://docs.rs/enshwick)\n\
+                    [Load](https://docs.rs/enshwick/latest/enshwick/struct.Load.html)\n\
+                    [cli](https://docs.rs/cargo-enshwick/)\n\
+                    [longer name](https://docs.rs/enshwick-other)\n\
+                    [arc-swap](https://docs.rs/arc-swap)\n";
+        assert_eq!(
+            unpinned(text, &NAMES, true),
+            [(1, Pin::DocsRs), (2, Pin::DocsRs), (3, Pin::DocsRs)]
+        );
+        assert!(unpinned(text, &NAMES, false).is_empty());
+    }
+
+    #[test]
+    fn cargo_add_and_docs_rs_crate_pages_are_other_spellings_of_the_same_lines() {
+        let text = "cargo add enshwick --features unstable\n\
+                    cargo add --git https://github.com/enshwick/enshwick enshwick\n\
+                    cargo add --git https://github.com/enshwick/enshwick --tag v1.0.0-alpha.13 enshwick\n\
+                    [crate](https://docs.rs/crate/enshwick/latest)\n\
+                    cargo add serde\n";
+        assert_eq!(
+            unpinned(text, &NAMES, true),
+            [(1, Pin::Registry), (2, Pin::Git), (4, Pin::DocsRs)]
+        );
+    }
+
+    #[test]
+    fn only_the_install_command_and_its_own_words_count() {
+        let text = "Run `cargo install cargo-nextest`, then `cargo xtask check` in enshwick\n\
+                    Install it with `cargo install cargo-enshwick`.\n\
+                    `cargo install cargo-enshwick`, then add `enshwick = { git = \"https://github.com/enshwick/enshwick\" }`\n\
+                    cargo add serde && cd enshwick\n\
+                    cargo build -p cargo-enshwick\n";
+        let names = ["enshwick", "cargo-enshwick", "xtask"];
+        assert_eq!(
+            unpinned(text, &names, true),
+            [(2, Pin::Registry), (3, Pin::Git)]
+        );
+        assert_eq!(unpinned(text, &names, false), [(3, Pin::Git)]);
+    }
+
+    #[test]
+    fn toml_literal_strings_read_as_basic_ones() {
+        let text = "enshwick = { git = 'https://github.com/enshwick/enshwick', tag = 'v1.0.0-alpha.13' }\n\
+                    enshwick = { git = 'https://github.com/enshwick/enshwick' }\n\
+                    enshwick = '1'\n";
+        assert_eq!(
+            unpinned(text, &NAMES, true),
+            [(2, Pin::Git), (3, Pin::Registry)]
+        );
+    }
+
+    #[test]
+    fn a_line_of_the_platform_git_without_a_tag_or_commit_is_unpinned() {
+        let text = "cargo install --git https://github.com/enshwick/enshwick cargo-enshwick\n\
+                    enshwick = { git = \"https://github.com/enshwick/enshwick\" }\n\
+                    enshwick = { git = \"https://github.com/enshwick/enshwick\", branch = \"main\" }\n";
+        assert_eq!(
+            unpinned(text, &NAMES, false),
+            [(1, Pin::Git), (2, Pin::Git), (3, Pin::Git)]
+        );
+    }
+
+    #[test]
+    fn pinned_inherited_local_and_unrelated_lines_pass() {
+        let text = [
+            "cargo install --git https://github.com/enshwick/enshwick --tag v1.0.0-alpha.13 cargo-enshwick",
+            "cargo install --git https://github.com/enshwick/enshwick --rev abc cargo-enshwick",
+            "cargo install --path crates/cargo-enshwick",
+            "cargo install --path crates/cargo-enshwick cargo-enshwick",
+            "cargo install --git https://github.com/someone/fork cargo-enshwick",
+            "enshwick = { git = \"https://github.com/someone/fork\" }",
+            "enshwick = { path = \"../enshwick\", version = \"1\" }",
+            "enshwick = { version = \"1\",path = \"../enshwick\" }",
+            "cargo install --git https://github.com/rust-cross/cargo-xwin cargo-xwin",
+            "cargo install cargo-nextest",
+            "enshwick = { git = \"https://github.com/enshwick/enshwick\", tag = \"v1.0.0-alpha.N\" }",
+            "enshwick = { git = \"https://github.com/enshwick/enshwick\", rev = \"<commit>\" }",
+            "  enshwick = { workspace = true, features = [\"unstable\"] }",
+            "enshwick = { path = \"../enshwick\" }",
+            "enshwick.workspace = true",
+            "log_levels = { enshwick = \"debug\" }",
+            "luau-lsp analyze --definitions:@enshwick=types/enshwick.d.luau main.luau",
+            "if enshwick == 1",
+            "my-enshwick = \"1\"",
+            "other = { git = \"https://github.com/someone/else\" }",
+        ]
+        .join("\n");
+        assert!(unpinned(&text, &NAMES, true).is_empty());
     }
 
     #[test]

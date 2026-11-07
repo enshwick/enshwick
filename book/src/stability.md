@@ -48,8 +48,7 @@ change in any release, a patch included.
 | `input`. `Frame::open_screen` and `Load::on_screen_changed`.                                                                                               | young; which control each bit stands for and which screen is open are not yet seen in the game           |
 | `Frame::prompt` and `Frame::screen_host`. Also `interactions::Targets` and `Load::on_fog_uncovered`.                                                        | the prompt, the screen's host, a player's prompt target and the uncovered fog are not yet seen in the game |
 
-The API reference marks each of these items "Unstable". Turn the feature on in
-the mod's `Cargo.toml`:
+Turn the feature on in the mod's `Cargo.toml`:
 
 ```toml
 [dependencies]
