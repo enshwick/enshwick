@@ -229,6 +229,51 @@ pub(super) unsafe fn describe(
     unsafe { write(desc, executor.desc_other, source) };
 }
 
+pub(super) fn view_holds(executor: &Executor, view: usize) -> Result<(), crate::live::Broken> {
+    use crate::pinned::inventory;
+    // The descriptor's copies have no entry of their own to name; the view
+    // they read lies where `inventory.view_frame` puts it.
+    let handles = [
+        (inventory::VIEW_OWNERS.id(), executor.view_owners),
+        (inventory::VIEW_ACTORS.id(), executor.view_actors),
+    ]
+    .into_iter()
+    .chain(
+        executor
+            .copies
+            .iter()
+            .map(|&(_, from)| (inventory::VIEW_FRAME.id(), from)),
+    );
+    words_hold(
+        view,
+        executor.view_item_registry,
+        executor.view_replication,
+        handles,
+    )
+}
+
+/// [`view_holds`] on the view's offsets: the item registry pointer at
+/// `registry` reads, the replication resource at `replication` reads unless
+/// null, and each of `handles` is there.
+fn words_hold(
+    view: usize,
+    registry: usize,
+    replication: usize,
+    handles: impl IntoIterator<Item = (&'static str, usize)>,
+) -> Result<(), crate::live::Broken> {
+    use crate::live;
+    use crate::pinned::inventory;
+    live::pointer(inventory::VIEW_ITEM_REGISTRY.id(), view, registry)?;
+    let resource = inventory::VIEW_REPLICATION.id();
+    if live::bytes::<8>(resource, view, replication)? != [0; 8] {
+        live::pointer(resource, view, replication)?;
+    }
+    for (entry, at) in handles {
+        live::bytes::<8>(entry, view, at)?;
+    }
+    Ok(())
+}
+
 /// Runs one operation in the transaction.
 ///
 /// # Safety
@@ -342,5 +387,44 @@ pub(super) unsafe fn apply(
     InventoryOpResult {
         error: u32::from(res[0] as u8),
         remaining: res[1] as u32,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::words_hold;
+    use crate::pinned::inventory;
+
+    // A view as words: the item registry, the replication resource and two
+    // handles.
+    const REGISTRY: usize = 0;
+    const REPLICATION: usize = 8;
+    const HANDLES: [(&str, usize); 2] = [("t.owners", 16), ("t.actors", 24)];
+
+    #[test]
+    fn a_live_inventory_view_holds_only_while_its_pointers_read() {
+        let target = 7u64;
+        let at = (&raw const target).addr();
+        let mut view = [at, 0, 1, 2];
+        let holds =
+            |view: &[usize; 4]| words_hold(view.as_ptr().addr(), REGISTRY, REPLICATION, HANDLES);
+        assert_eq!(holds(&view), Ok(()), "no replication resource is fine");
+        view[1] = at;
+        assert_eq!(holds(&view), Ok(()));
+        view[1] = 0x10;
+        let dangling = holds(&view).unwrap_err();
+        assert_eq!(dangling.entry, inventory::VIEW_REPLICATION.id());
+        view[1] = 0;
+        view[0] = 0;
+        let null = holds(&view).unwrap_err();
+        assert_eq!(null.entry, inventory::VIEW_ITEM_REGISTRY.id());
+        view[0] = at;
+        let past = words_hold(
+            view.as_ptr().addr(),
+            REGISTRY,
+            REPLICATION,
+            [("t.far", 1 << 40)],
+        );
+        assert_eq!(past.unwrap_err().entry, "t.far");
     }
 }

@@ -633,7 +633,7 @@ pub(crate) fn submit(
     done: InventoryResultFn,
     user: *mut c_void,
 ) -> Status {
-    if executor(loader).is_none() || !WANTED.load(Ordering::Acquire) {
+    if executor(loader).is_none() || !WANTED.load(Ordering::Acquire) || INVENTORY_FUSE.is_off() {
         return Status::MISSING;
     }
     if SETTLED.load(Ordering::Acquire) && !ARMED.load(Ordering::Acquire) {
@@ -879,6 +879,15 @@ unsafe extern "system" fn row(registers: *mut Registers, _user: *mut c_void) {
     let Some(_turn) = Turn::take(&BUSY) else {
         return;
     };
+    let build = crate::host::loader().map_or("", |loader| loader.build.name.as_str());
+    if !INVENTORY_FUSE.verify(build, || run::view_holds(executor, view)) {
+        let gone = QUEUE.drain(|_| true);
+        finish(
+            gone.iter()
+                .map(|r| Finished::without_run(r, InventoryResult::UNAVAILABLE)),
+        );
+        return;
+    }
     let _outcome = INVENTORY_FUSE.run("the row", || {
         while let Some(request) = QUEUE.claim() {
             if crate::host::is_off(request.owner) {
