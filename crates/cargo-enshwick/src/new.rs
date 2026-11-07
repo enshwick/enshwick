@@ -10,8 +10,8 @@ pub(crate) mod data;
 pub(crate) mod luau;
 
 /// Creates the crate for mod `id`, `<author>.<name>`, in `<dir>/<name>`, on
-/// the crates.io release or on `commit` of the platform; what was made, for
-/// the user.
+/// the platform release this tool is from or on `commit` of the platform;
+/// what was made, for the user.
 ///
 /// Inside a Cargo workspace the crate joins it: its folder is added to the
 /// workspace's `members` unless a member pattern already covers it, and the
@@ -204,6 +204,22 @@ fn crate_name(id: &str) -> anyhow::Result<&str> {
     }
 }
 
+/// The `enshwick` line of `[workspace.dependencies]` for a tool of
+/// `version`: `commit` from git when given, else an alpha's tag from git,
+/// since alphas are not on crates.io, else the crates.io release.
+fn dependency(version: &str, commit: Option<&Commit>) -> String {
+    match commit {
+        Some(commit) => format!(
+            "# The platform from git, at a commit of its main branch.\nenshwick = {{ git = \"{PLATFORM_GIT}\", rev = \"{}\" }}\n",
+            commit.0
+        ),
+        None if version.contains('-') => format!(
+            "# The platform's alpha from git: alphas are not on crates.io.\nenshwick = {{ git = \"{PLATFORM_GIT}\", tag = \"v{version}\" }}\n"
+        ),
+        None => format!("enshwick = \"={version}\"\n"),
+    }
+}
+
 /// The crate's files for mod `id`, relative to its root.
 fn files(
     id: &str,
@@ -218,13 +234,7 @@ fn files(
     };
     let shown = display_name(name);
     let description = format!("What {shown} does, in one sentence");
-    let enshwick = match commit {
-        None => format!("enshwick = \"={}\"\n", enshwick::VERSION),
-        Some(commit) => format!(
-            "# The platform from git, at a commit of its main branch.\nenshwick = {{ git = \"{PLATFORM_GIT}\", rev = \"{}\" }}\n",
-            commit.0
-        ),
-    };
+    let enshwick = dependency(enshwick::VERSION, commit);
     let fill = |template: &str| {
         template
             .replace("{id}", id)
@@ -326,7 +336,7 @@ fn as_member(cargo: &str, root: &str) -> anyhow::Result<String> {
 }
 
 /// A full commit hash of the platform repository, to build a mod on its
-/// `main` branch from git instead of the crates.io release.
+/// `main` branch from git instead of the release this tool is from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Commit(String);
 
@@ -434,8 +444,8 @@ mod tests {
         let cargo = text(&files, "Cargo.toml");
         assert!(cargo.contains("name = \"street-lanterns\""));
         assert!(cargo.contains(&format!(
-            "[workspace.dependencies]\nenshwick = \"={}\"\n",
-            enshwick::VERSION
+            "[workspace.dependencies]\n{}",
+            dependency(enshwick::VERSION, None)
         )));
         let table: toml::Table = cargo.parse().unwrap();
         let metadata = &table["package"]["metadata"]["enshwick"];
@@ -485,6 +495,40 @@ mod tests {
         );
         assert_eq!(enshwick["rev"].as_str(), Some(COMMIT));
         assert!(enshwick.get("version").is_none());
+    }
+
+    #[test]
+    fn an_alpha_builds_on_the_tag_of_the_alpha_the_tool_is_from() {
+        let files = files("you.lockers", Side::Server, None, &Place::Alone).unwrap();
+        let cargo: toml::Table = text(&files, "Cargo.toml").parse().unwrap();
+        let enshwick = &cargo["workspace"]["dependencies"]["enshwick"];
+        if enshwick::VERSION.contains('-') {
+            assert_eq!(
+                enshwick["git"].as_str(),
+                Some("https://github.com/enshwick/enshwick")
+            );
+            let tag = format!("v{}", enshwick::VERSION);
+            assert_eq!(enshwick["tag"].as_str(), Some(tag.as_str()));
+        } else {
+            let pinned = format!("={}", enshwick::VERSION);
+            assert_eq!(enshwick.as_str(), Some(pinned.as_str()));
+        }
+    }
+
+    #[test]
+    fn only_a_release_builds_on_crates_io() {
+        let read = |line: String| -> toml::Value {
+            line.parse::<toml::Table>().unwrap()["enshwick"].clone()
+        };
+        let alpha = read(dependency("1.0.0-alpha.12", None));
+        assert_eq!(alpha["tag"].as_str(), Some("v1.0.0-alpha.12"));
+        assert!(alpha.get("version").is_none());
+        let release = read(dependency("1.2.0", None));
+        assert_eq!(release.as_str(), Some("=1.2.0"));
+        let commit: Commit = COMMIT.parse().unwrap();
+        let pinned = read(dependency("1.0.0-alpha.12", Some(&commit)));
+        assert_eq!(pinned["rev"].as_str(), Some(COMMIT));
+        assert!(pinned.get("tag").is_none());
     }
 
     #[test]
@@ -545,12 +589,22 @@ mod tests {
         for table in ["profile", "workspace", "lints"] {
             assert!(cargo.get(table).is_none(), "the member has [{table}]");
         }
-        let pin = format!("={}", enshwick::VERSION);
-        assert_eq!(cargo["dependencies"]["enshwick"].as_str(), Some(&*pin));
-        assert_eq!(
-            cargo["dev-dependencies"]["enshwick"]["version"].as_str(),
-            Some(&*pin)
-        );
+        let shared = dependency(enshwick::VERSION, None)
+            .parse::<toml::Table>()
+            .unwrap()["enshwick"]
+            .clone();
+        assert_eq!(cargo["dependencies"]["enshwick"], shared);
+        let dev = cargo["dev-dependencies"]["enshwick"].as_table().unwrap();
+        match &shared {
+            toml::Value::String(version) => {
+                assert_eq!(dev["version"].as_str(), Some(version.as_str()));
+            }
+            spec => {
+                for (key, value) in spec.as_table().unwrap() {
+                    assert_eq!(dev.get(key), Some(value), "{key}");
+                }
+            }
+        }
         assert!(member.join("src/texts.toml").is_file());
         assert!(!member.join("rust-toolchain.toml").exists());
         assert!(!member.join(".cargo").exists());
@@ -636,11 +690,12 @@ mod tests {
         let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let api = workspace.join("crates/enshwick");
         let manifest = root.join("Cargo.toml");
-        let pinned = format!("enshwick = \"={}\"", enshwick::VERSION);
+        let written = dependency(enshwick::VERSION, None);
+        let pinned = written.lines().last().unwrap();
         let cargo = std::fs::read_to_string(&manifest).unwrap();
-        assert!(cargo.contains(&pinned), "{cargo}");
+        assert!(cargo.contains(pinned), "{cargo}");
         let local = format!("enshwick = {{ path = {:?} }}", api.display().to_string());
-        std::fs::write(&manifest, cargo.replace(&pinned, &local)).unwrap();
+        std::fs::write(&manifest, cargo.replace(pinned, &local)).unwrap();
         // The workspace's lock holds every version the crate needs, so the
         // check runs offline.
         std::fs::copy(workspace.join("Cargo.lock"), root.join("Cargo.lock")).unwrap();

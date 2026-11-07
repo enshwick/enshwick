@@ -54,10 +54,15 @@ one:
   when an append moves it within a major.
 
 A mod keeps loading across every release of its major, so a mod author
-rebuilds only for a new major. In a mod's `Cargo.toml`, pin the crate
-with an exact version, such as `enshwick = "=1.0.0-alpha.12"`.
-`cargo enshwick new` writes it so. A caret requirement lets `cargo update`
-move the mod to a release of a newer minor, which older loaders refuse.
+rebuilds only for a new major. Alphas are not on crates.io, so a mod pins
+`enshwick` to an alpha's tag from git, as `cargo enshwick new` writes it:
+
+```toml
+[dependencies]
+enshwick = { git = "https://github.com/enshwick/enshwick", tag = "v1.0.0-alpha.12" }
+```
+
+A tag never moves, so `cargo update` keeps the mod on that alpha.
 
 Some loaders are built from a commit of `main` between two alphas, such as
 one from `cargo xtask dist`. Such a loader loads a mod built against `main`

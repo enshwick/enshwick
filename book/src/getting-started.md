@@ -192,7 +192,9 @@ The crate holds:
 
 - `Cargo.toml`, with the mod's id, side and name in
   `[package.metadata.enshwick]`, its
-  [manifest](concepts/loader-and-abi.md#the-manifest);
+  [manifest](concepts/loader-and-abi.md#the-manifest), and `enshwick` from
+  git at the tag of the alpha `cargo enshwick` is from, since alphas are not
+  on crates.io;
 - `src/lib.rs`, a mod with one setting, `enabled`, and two tests: every
   text exists in every language, and the mod starts on the
   [fake loader](testing.md);
