@@ -11,10 +11,10 @@ const TAG_PREFIXES: [&str; 2] = ["v", "enshwick-loader-v"];
 /// What a prerelease asks GitHub: the newest releases, among which the next
 /// alpha always is.
 const RELEASES: &str = "/repos/enshwick/enshwick/releases?per_page=20";
-/// What a release asks GitHub: every release-plz loader tag, a few hundred
-/// bytes each and never paged, so a stable release is found however many
-/// releases of other packages came after it.
-const LOADER_TAGS: &str = "/repos/enshwick/enshwick/git/matching-refs/tags/enshwick-loader-v";
+/// What a release asks GitHub: every tag, a few hundred bytes each and never
+/// paged, so a stable release under either prefix is found however many
+/// releases came after it.
+const TAGS: &str = "/repos/enshwick/enshwick/git/matching-refs/tags/";
 /// The prefix of a tag's name in a Git reference.
 const TAG_REF: &str = "refs/tags/";
 /// The most bytes of an answer read; twenty releases with their notes take
@@ -61,7 +61,7 @@ impl Release {
 #[must_use]
 pub fn path(running: &Version) -> &'static str {
     if running.pre.is_empty() {
-        LOADER_TAGS
+        TAGS
     } else {
         RELEASES
     }
@@ -396,7 +396,7 @@ mod tests {
 
     #[test]
     fn a_release_asks_for_loader_tags_and_an_alpha_for_the_newest_releases() {
-        assert_eq!(path(&version("1.0.0")), LOADER_TAGS);
+        assert_eq!(path(&version("1.0.0")), TAGS);
         assert_eq!(path(&version("1.0.0-alpha.12")), RELEASES);
     }
 
@@ -420,6 +420,14 @@ mod tests {
         names.sort();
         let names: Vec<&str> = names.iter().map(String::as_str).collect();
         assert_eq!(found(&tags(&names), "1.0.0"), Some(version("1.1.0")));
+    }
+
+    #[test]
+    fn a_running_release_finds_a_stable_release_under_either_prefix() {
+        let list = tags(&["enshwick-v3.0.0", "v1.0.0-alpha.13", "v1.0.2"]);
+        assert_eq!(found(&list, "1.0.0"), Some(version("1.0.2")));
+        let list = tags(&["enshwick-loader-v1.0.1", "v1.0.2-alpha.1"]);
+        assert_eq!(found(&list, "1.0.0"), Some(version("1.0.1")));
     }
 
     #[test]
