@@ -207,5 +207,10 @@ mod tests {
             Some(&Value::Uint(u64::from(OTHER_ITEM.0[15]))),
             "the data of the lantern's base item"
         );
+        assert_eq!(
+            item.field("maxStackSize"),
+            Some(&Value::Uint(50)),
+            "the base item's 50 over the old item's 30"
+        );
     }
 }
