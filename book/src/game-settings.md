@@ -87,8 +87,10 @@ Most values act at once. Some act on what comes next:
 - enemy health, damage and stamina on enemies spawned after the change;
 - food buffs on food eaten after it;
 - the tombstone mode on the next death;
-- the weather frequency on the next change of weather. A new day or night length keeps the clock's hour and only
-changes its pace ([time of day](daytime.md)).
+- the weather frequency on the next change of weather.
+
+A new day or night length keeps the clock's hour and only changes its pace
+([time of day](daytime.md)).
 
 A change lasts until the server stops, and the configuration's values return
 with the next start, unless the game saves its configuration first. A

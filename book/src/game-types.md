@@ -256,7 +256,7 @@ unsafe fn health(component: *const u8) -> Health {
 }
 ```
 
-Rust may not be able to place a field where the game has it, such as an
+Rust cannot place some fields where the game has them, such as an
 eight-byte integer at an offset of four. Such a field comes out as bytes. A
 field the game does not describe stays in padding, and the struct's
 documentation names it.

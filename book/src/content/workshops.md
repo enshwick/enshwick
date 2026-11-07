@@ -113,8 +113,8 @@ the station needs derives from it:
    The menu has one group with one empty set, where its recipes go
    ([The crafting menu](recipes.md#the-crafting-menu));
 7. with `recipe_cost`, a copy of the vanilla station's recipe that makes
-   the new station. It is made at the workshop where the vanilla station is
-   crafted, with its ingredient counts times the cost.
+   the new station. The copy is made at the workshop where the vanilla station
+   is crafted, with the recipe's ingredient counts times the cost.
 
 The new workshop starts with no recipes. Only recipes you send there are
 made at it.

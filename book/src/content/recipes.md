@@ -77,9 +77,9 @@ A `like` that no recipe makes is found out only when the game first reads
 the registry. Then the patch fails and the mod is turned off, not at
 `init`.
 
-The cost may come from a setting that changes, such as a world's or a
-server's join value. Then `load.add_recipe_with(|| NewRecipe { .. })` asks the
-closure each time the registry is built.
+When the cost comes from a setting that changes, such as a world's or a
+server's join value, use `load.add_recipe_with(|| NewRecipe { .. })`. It asks
+the closure each time the registry is built.
 `content::recipes::rebuild_recipes()` from the settings handler builds it
 again with the new cost ([Rebuilding](resources.md#rebuilding)).
 

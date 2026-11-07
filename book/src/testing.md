@@ -128,8 +128,10 @@ these:
 - one hook slot on two functions;
 - a code patch outside the game's code or over another patch;
 - a point not named after the mod's id;
-- a rate clients count from a mod without `join: true`. Hooks, code patches, points and rates asked for after
-`init` returns come too late.
+- a rate clients count from a mod without `join: true`.
+
+Hooks, code patches, points and rates asked for after `init` returns come too
+late.
 
 A test of the path where the game build lacks what the mod needs:
 

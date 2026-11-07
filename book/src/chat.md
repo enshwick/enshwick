@@ -179,7 +179,7 @@ The answer goes back to the caller, not to any chat.
 A line typed into a dedicated server's own console window, or its terminal,
 runs the same way. Its answer shows there and in the loader's log. In
 Docker the container needs input. Start it with `docker run -it`. In Compose,
-set `stdin_open: true` and `tty: true`. Then type after `docker attach`. A server started
+set `stdin_open: true` and `tty: true` instead. Then type after `docker attach`. A server started
 without input, such as a Windows service, runs only the lines mods run.
 
 ### The loader's tools

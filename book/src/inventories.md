@@ -35,8 +35,8 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
-`load.inventories()` can return `Err(Off)`. It does so after `init`, or on a
-game build that lacks a piece the reads or the transactions need.
+`load.inventories()` works only during `init`. After it, or on a game build
+that lacks a piece the reads or the transactions need, it returns `Err(Off)`.
 
 ## How inventories are built
 

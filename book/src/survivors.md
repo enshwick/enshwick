@@ -97,8 +97,9 @@ A `Summon` names the used item:
 - `pide`, its own entity;
 - `meter`, for an item with a [meter](content/items.md#meters), as clients
   see it;
-- `consumed`, after the use, whether the game took it. A
-staff with charges takes the item on its last charge from `on_summon` and
+- `consumed`, after the use, whether the game took it.
+
+A staff with charges takes the item on its last charge from `on_summon`. It
 spends one in `on_summoned` otherwise. Both run inside the game's step, on
 the thread of the use: hand world writes to the [scheduler](events.md#the-scheduler).
 

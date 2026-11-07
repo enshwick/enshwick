@@ -58,8 +58,8 @@ end)
 ## How the game makes weather
 
 The weather comes in fronts. The world has a few weather layers. Each has a
-current phenomenon at a place with a radius: rain, a blizzard, or clouds
-without either. The phenomenon lasts its time, after which the game picks the
+current phenomenon, rain, a blizzard or clouds without either, at a place
+with a radius. The phenomenon lasts its time, after which the game picks the
 next. Rain falls as snow where it is cold. How often rain and storms come is
 the server's `weatherFrequency` game setting.
 

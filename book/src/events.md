@@ -129,8 +129,8 @@ the mods the player lacks, are in
 
 ## Ticks
 
-On dedicated server build 399, the server's code runs fixed simulation ticks
-of 1/60 s. One step runs 1 to 3 of them. With nobody
+On dedicated server build 399, the simulation runs fixed ticks of 1/60 s,
+and one step runs 1 to 3 of them. Both were read from the server's code. With nobody
 online the server made 20 steps a second over 229 minutes of its own
 statistics. With players its loop waits only 1 ms, which allows up to 60
 steps a second. A client hosting a world with one player in it made 60

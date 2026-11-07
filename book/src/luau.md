@@ -130,7 +130,7 @@ These belong to the `enshwick` table itself:
 | `enshwick.extend(point, handler, order)` | a link into another mod's [extension point](extending.md#from-luau) |
 | `enshwick.on_mod_event(event, handler)`, `enshwick.define_event(event)` | [mod events](services.md#mod-events), heard and sent |
 | `enshwick.caller(call)` | a function that runs [another mod's call](calls.md#from-luau); unstable |
-| `enshwick.deps` | the dependencies of `pack.toml`, [by alias](services.md#other-mods-by-alias). These are its `requires` and `after` tables. |
+| `enshwick.deps` | the mods the pack's `requires` and `after` tables name, [by alias](services.md#other-mods-by-alias) |
 | `enshwick.settings()` | the mod's [settings](settings.md#settings-of-a-luau-mod) in force, as a table |
 | `require("./name")` | another script of the same folder, as Luau resolves it |
 

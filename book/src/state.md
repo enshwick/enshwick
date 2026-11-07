@@ -40,9 +40,9 @@ edit `<stem>-mod-data`.
 The stem is a slot, not the world's name. The game gives a deleted world's
 `world2` to the next new world. It leaves the old world's folders where they
 were (client 26320373). So the loader records the world's GUID from the
-save's header in `<stem>-mod-data/enshwick/world.toml`. A world's save may
-hold another GUID as it loads, or the recorded world's save may be gone. Then
-the loader renames both folders to `<name>.old-<date>-<time>` and logs one
+save's header in `<stem>-mod-data/enshwick/world.toml`. As a world loads,
+its save may hold another GUID, or the recorded world's save may be gone.
+In either case the loader renames both folders to `<name>.old-<date>-<time>` and logs one
 line. The world starts from each mod's defaults. Nothing is deleted. A copy of
 a save keeps its GUID, so a copied world keeps its folders.
 

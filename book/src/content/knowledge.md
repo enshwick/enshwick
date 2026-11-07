@@ -54,8 +54,8 @@ pages and skill nodes ask for knowledge. It is one of:
 - `KnowledgeQuery::is_set(id, scope)`, which holds when a bool is set;
 - `KnowledgeQuery::at_least(id, scope, count)`, which holds when a counter
   reaches `count`.
- A player's entry is tested for the player the game
-asks about.
+
+A player's entry is tested for the player the game asks about.
 
 ## From Luau
 

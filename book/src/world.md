@@ -102,8 +102,8 @@ gear included. Each is a `Meter`. A meter has `current` and `max`.
 - `experience` toward the next level
 - `experience_needed` for it
 
-  Health is there for every entity that has
-vitals; stamina and mana only for those that have them, such as characters.
+Health is there for every entity that has vitals. Stamina and mana are there
+only for those that have them, such as characters.
 
 ```rust
 use enshwick::events::PlayerJoined;
@@ -232,8 +232,8 @@ first.
 
 `entities(ty)` returns every entity with a component of type `ty` and a place
 in the world. Each comes as `Placed { entity, position }`, position in
-metres. `near(point, radius, ty)` returns those near a point, nearest first.
-They lie within `radius` metres of `point`. `transform_type()` is the component every placed
+metres. `near(point, radius, ty)` returns those near `point`, nearest first. They
+lie within `radius` metres of it. `transform_type()` is the component every placed
 entity has. So `near(point, radius, world.transform_type())` finds
 everything there.
 
@@ -307,9 +307,9 @@ held.
 
 When a dedicated server or a hosted game shuts down, every hold lets go and
 the final save runs. The log names each mod that held saves and for how
-long. `ShutdownStarted` says that the next save is the final one. A mod may
-call `hold_saves(true)` inside its handler for that event. The mod then
-refuses the final save, and the log names it. A hold asked for after that handler is not
+long. `ShutdownStarted` says that the next save is the final one. A mod that
+calls `hold_saves(true)` inside its handler for that event refuses the final
+save, and the log names it. A hold asked for after that handler is not
 taken, so a mod that keeps calling `hold_saves(true)` does not stop the final
 save.
 

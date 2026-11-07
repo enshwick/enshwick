@@ -64,7 +64,7 @@ A player's save keeps a fixed count of unlocked nodes: 256 on server 399, as
 the running server's reflection reports. The game's tree takes 243 of them,
 so 13 nodes fit for every mod together, in load order. A node beyond the room
 returns `Err(Off)` when the game's own tree is full already. When other mods'
-nodes fill the room, the loader leaves the node out as the game first reads the
+nodes fill the room, the loader leaves the node out when the game first reads the
 tree. On a
 server copy of server 399, the 14th node of a mod was left out this way.
 

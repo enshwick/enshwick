@@ -134,7 +134,8 @@ changed does not.
   finds its entries by the engine routes and the anchors, as on every build.
   The
   [anchors](https://github.com/enshwick/enshwick/blob/main/crates/enshwick-gamedata/README.md#patterns)
-  describe their patterns. It searches on every start and writes nothing.
+  describe their patterns. The loader searches on every start and writes
+  nothing.
   What neither finds is missing, so only the loader features and the mods
   that need it turn off. The log names the build. With `build_patterns = false` in
   `enshwick.toml` in the game's folder, a build that no compatibility report
