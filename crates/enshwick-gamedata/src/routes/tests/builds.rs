@@ -4,7 +4,7 @@
 use super::super::{Routed, Routes};
 use super::empty;
 use crate::reflect::{Image, Layout, Reflection};
-use crate::{Side, Table, embedded, exact};
+use crate::{Side, Table, exact, kept};
 
 /// Entries a route finds on a table build that its own table does not pin
 /// and no pattern of the newest table finds there either, by table name.
@@ -144,7 +144,8 @@ fn executables() -> Vec<(std::path::PathBuf, Side)> {
 }
 
 fn tables() -> Vec<Table> {
-    embedded()
+    kept()
+        .unwrap()
         .iter()
         .map(|(_, text)| Table::parse(text).unwrap())
         .collect()
@@ -164,9 +165,10 @@ fn every_route_holds_on_every_kept_build() {
         let bytes = std::fs::read(&path).unwrap();
         let image = Image::parse(&bytes, Layout::File, None).unwrap();
         let reflection = Reflection::scan(&image);
-        let own = exact(&tables, side, image.fingerprint().unwrap())
-            .unwrap()
-            .resolve();
+        let Some(own) = exact(&tables, side, image.fingerprint().unwrap()) else {
+            continue;
+        };
+        let own = own.resolve();
         let text = image.range(image.section(".text").unwrap());
         let code = image.read(text.start, text.end - text.start).unwrap();
         let carried = crate::newest(&tables, side).unwrap().fall_back(
@@ -234,6 +236,9 @@ fn every_route_holds_on_every_kept_build() {
 #[test]
 fn every_routed_only_row_names_a_kept_table_and_a_route() {
     let tables = tables();
+    if tables.is_empty() {
+        return;
+    }
     let routes = Routes::embedded().unwrap();
     for &(name, id, _) in ROUTED_ONLY {
         let table = tables.iter().find(|t| t.name() == name);
@@ -265,7 +270,9 @@ fn the_anchors_and_routes_find_every_pinned_entry_without_a_table() {
         let bytes = std::fs::read(&path).unwrap();
         let image = Image::parse(&bytes, Layout::File, None).unwrap();
         let reflection = Reflection::scan(&image);
-        let own = exact(&tables, side, image.fingerprint().unwrap()).unwrap();
+        let Some(own) = exact(&tables, side, image.fingerprint().unwrap()) else {
+            continue;
+        };
         let text = image.range(image.section(".text").unwrap());
         let code = image.read(text.start, text.end - text.start).unwrap();
         let base = image.base();

@@ -75,8 +75,9 @@ the kept table ports, which shows a route or anchor that needs fixing. A
 mod's own rows are per build, and `pin` writes them where it can prove each
 entry and lists the rest for a human. It never guesses.
 
-It reads the kept builds' tables, one TOML file per build in
-[`crates/enshwick-gamedata/tables`](https://github.com/enshwick/enshwick/tree/main/crates/enshwick-gamedata/tables), and the
+It reads the kept builds' tables, one TOML file per build in `tables/` of
+the game data folder outside the repository that `--data` or
+`ENSH_GAMEDATA` names, and the
 `[[package.metadata.enshwick.builds]]` rows of every mod's `Cargo.toml`
 under `mods/`. A row gives its symbols and constants as
 `[package.metadata.enshwick.builds.symbols]` and
@@ -131,8 +132,8 @@ row.
    `--write` puts each new mod row right after its old one and writes the
    refreshed check shapes; the report names the build by `--steam-build` and
    `--game-version` when they are given. Without `--write` the report carries
-   the ported table and the new rows instead. An old build without a table
-   in `tables/` ports from what its anchors and engine routes find on it, and
+   the ported table and the new rows instead. An old build without a kept table
+   in the game data folder ports from what its anchors and engine routes find on it, and
    the report says where each section's old values come from. It writes every file or none:
    when one cannot be written, the others stay as they were. The exit code is 0 when nothing
    needs a human, 2 when something does, and 1 on an error.
@@ -232,8 +233,9 @@ included, and rewrites one function. Every other symbol in code must follow
 the move, and the rewritten one must come out `missing`.
 `a_moved_field_is_read_on_the_new_build` moves three fields the table reads
 from code by 8 bytes: porting and the patterns alone must both give the new
-offsets. The same command works with `enshrouded.exe`. With `ENSH_SERVER_EXE`
-and `ENSH_CLIENT_EXE` set, `cargo nextest run -p enshwick-gamedata`
+offsets. The same command works with `enshrouded.exe`. With `ENSH_SERVER_EXE`,
+`ENSH_CLIENT_EXE` and the game data folder `ENSH_GAMEDATA` set,
+`cargo nextest run -p enshwick-gamedata`
 checks that every pattern of each table matches exactly once on its own
 build and yields the table's value, and that the patterns cover at least as
 many entries as they do today.

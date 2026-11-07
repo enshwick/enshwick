@@ -4,7 +4,7 @@
 
 use rustc_hash::FxHashSet;
 
-use crate::{Routes, Side, Table, embedded};
+use crate::{Routes, Side, Table, kept};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -52,7 +52,8 @@ fn class_of<'r>(rows: &'r [Row], id: &str) -> Option<&'r Row> {
 }
 
 fn tables() -> Vec<Table> {
-    embedded()
+    kept()
+        .unwrap()
         .iter()
         .map(|(_, text)| Table::parse(text).unwrap())
         .collect()
@@ -86,9 +87,13 @@ fn every_entry_of_every_table_has_a_class_and_a_reason() {
     assert!(unclassed.is_empty(), "{unclassed:#?}");
 }
 
+/// Skipped without the kept tables.
 #[test]
 fn every_entry_a_class_names_is_in_a_table() {
     let tables = tables();
+    if tables.is_empty() {
+        return;
+    }
     let known: FxHashSet<&str> = tables.iter().flat_map(ids).collect();
     let stale: Vec<String> = rows()
         .into_iter()

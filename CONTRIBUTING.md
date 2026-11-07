@@ -87,9 +87,12 @@ It asks for the game system, what the mod needs to do, its language and an
 example. Before a large pull request, open one first, so nobody builds the
 same thing twice.
 
-Never add game code or data: no decompiled code, no dumps, no binaries. Engine
-facts go in documents as addresses and names, with the game build they were
-found on.
+Never add game code or data: no decompiled code, no dumps, no binaries, no
+reflection catalogues and no build tables. Engine facts go in documents as
+addresses and names, with the game build they were found on. Keep the
+catalogues and tables in your game data folder, which `ENSH_GAMEDATA` names,
+outside the repository. The README lists
+[what the repository holds of the game](README.md#what-the-repository-holds-of-the-game).
 
 Security issues go through [SECURITY.md](SECURITY.md), not public issues.
 

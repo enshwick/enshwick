@@ -4,10 +4,11 @@
 //! The [`Routes`] find entries in the game's own code through what the
 //! engine names, the same way on every build ([`Resolved::route`]); the
 //! [`anchors`] find the rest by their code patterns ([`Table::fall_back`]),
-//! and what neither finds stays missing. The tables of `tables/`, each a
-//! TOML file named after a kept build's fingerprint ([`file_name`],
-//! [`embedded`]), are a frozen record the tests check the routes and anchors
-//! against; the loader never reads them, and [`reported`] says which
+//! and what neither finds stays missing. The kept builds' tables, each a
+//! TOML file named after a build's fingerprint ([`file_name`]), are a record
+//! the tests check the routes and anchors against, read from the folder
+//! [`DATA_VAR`] names ([`kept`]) and never part of this crate; the loader
+//! never reads them, and [`reported`] says which
 //! builds a compatibility report covers. The game's own archive reads with
 //! [`archive::Archive`], and the engine's reflection data with
 //! [`reflect::Reflection`].
@@ -36,7 +37,9 @@ pub use parts::{Part, PartState};
 
 pub use entries::{Body, Constant, Locate, Operand, Symbol, Witness};
 pub use reflect::Fingerprint;
-pub use resolve::{Kind, Resolved, Routing, anchors, embedded, exact, newest, reported};
+pub use resolve::{
+    DATA_VAR, Kind, Resolved, Routing, anchors, data_dir, exact, kept, newest, reported, tables_in,
+};
 pub use routes::{Routed, Routes, ShapeNames, check_holds, make_check, shape_checks};
 pub use table::{MAX_PATTERN, Table, TableError, file_name};
 pub use version::{GameVersion, SteamBuild};
@@ -116,21 +119,24 @@ mod tests {
         assert_eq!(found[99], Some(99));
     }
 
-    fn tables() -> Vec<Table> {
-        embedded()
+    /// The kept builds' tables, each named after its build; `None` without.
+    fn tables() -> Option<Vec<Table>> {
+        let tables: Vec<Table> = kept()
+            .unwrap()
             .iter()
             .map(|(file, text)| {
                 let table = Table::parse(text).unwrap_or_else(|e| panic!("{file}: {e}"));
                 assert_eq!(table.file_name(), *file);
                 table
             })
-            .collect()
+            .collect();
+        (!tables.is_empty()).then_some(tables)
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "parsing every embedded table takes minutes under Miri")]
-    fn every_embedded_table_reads_and_is_named_after_its_build() {
-        let tables = tables();
+    #[cfg_attr(miri, ignore = "parsing every kept table takes minutes under Miri")]
+    fn every_kept_table_reads_and_is_named_after_its_build() {
+        let Some(tables) = tables() else { return };
         assert!(tables.iter().any(|t| t.side() == Side::Server));
         assert!(tables.iter().any(|t| t.side() == Side::Client));
         for table in &tables {
@@ -140,9 +146,9 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "parsing every embedded table takes minutes under Miri")]
+    #[cfg_attr(miri, ignore = "parsing every kept table takes minutes under Miri")]
     fn the_client_table_carries_every_server_constant_and_symbol() {
-        let tables = tables();
+        let Some(tables) = tables() else { return };
         let server = newest(&tables, Side::Server).unwrap().resolve();
         let client = newest(&tables, Side::Client).unwrap().resolve();
         for (id, value) in server.constants() {
@@ -199,9 +205,9 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "parsing every embedded table takes minutes under Miri")]
+    #[cfg_attr(miri, ignore = "parsing every kept table takes minutes under Miri")]
     fn every_entry_of_the_newest_tables_resolves_on_a_build_without_a_table() {
-        let tables = tables();
+        let Some(tables) = tables() else { return };
         for side in [Side::Server, Side::Client] {
             let only = found_only_on_their_own_build(&tables, side);
             assert!(only.is_empty(), "{side:?}: {only:?}");
@@ -434,12 +440,12 @@ mod tests {
         assert!(Table::parse(&constant).is_err());
     }
 
-    /// No embedded table spells a pattern longer than a window, read from
-    /// the text so a table never carries one past the parser.
+    /// No kept table spells a pattern longer than a window, read from the
+    /// text so a table never carries one past the parser.
     #[test]
-    fn no_embedded_pattern_spans_more_than_a_window() {
+    fn no_kept_pattern_spans_more_than_a_window() {
         let mut long = Vec::new();
-        for (file, text) in embedded() {
+        for (file, text) in kept().unwrap() {
             for (line, row) in text.lines().enumerate() {
                 for pattern in row.split("pattern = \"").skip(1) {
                     let tokens = pattern
@@ -807,9 +813,9 @@ age = 1
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "parsing every embedded table takes minutes under Miri")]
-    fn the_newest_embedded_tables_name_their_steam_builds() {
-        let tables = tables();
+    #[cfg_attr(miri, ignore = "parsing every kept table takes minutes under Miri")]
+    fn the_newest_kept_tables_name_their_steam_builds() {
+        let Some(tables) = tables() else { return };
         let steam = |side| newest(&tables, side).and_then(Table::steam_build);
         assert_eq!(steam(Side::Client), Some(SteamBuild::new(26_430_625)));
         assert_eq!(steam(Side::Server), Some(SteamBuild::new(26_430_253)));
@@ -839,7 +845,7 @@ age = 1
     /// build is: not another age of its executable, nor another guid.
     #[test]
     fn a_report_covers_exactly_its_own_build_and_side() {
-        for table in tables() {
+        for table in tables().unwrap_or_default() {
             let fingerprint = table.fingerprint();
             let other = match table.side() {
                 Side::Server => Side::Client,
@@ -913,22 +919,22 @@ age = 1
     /// skipped without it), the patterns of their own table find every
     /// patterned entry where the table pins it.
     #[test]
-    #[cfg_attr(miri, ignore = "parsing every embedded table takes minutes under Miri")]
+    #[cfg_attr(miri, ignore = "parsing every kept table takes minutes under Miri")]
     fn patterns_find_their_entries_on_their_own_build() {
-        for var in ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"] {
+        for (var, side) in [
+            ("ENSH_SERVER_EXE", Side::Server),
+            ("ENSH_CLIENT_EXE", Side::Client),
+        ] {
             let Ok(path) = std::env::var(var) else {
                 continue;
             };
             let bytes = std::fs::read(path).unwrap();
             let image = reflect::Image::parse(&bytes, reflect::Layout::File, None).unwrap();
             let fingerprint = image.fingerprint().unwrap();
-            let tables = tables();
-            let side = if var == "ENSH_SERVER_EXE" {
-                Side::Server
-            } else {
-                Side::Client
+            let Some(tables) = tables() else { return };
+            let Some(table) = exact(&tables, side, fingerprint) else {
+                continue;
             };
-            let table = exact(&tables, side, fingerprint).unwrap();
             let text = image.section(".text").unwrap();
             let range = image.range(text);
             let code = image.read(range.start, range.end - range.start).unwrap();

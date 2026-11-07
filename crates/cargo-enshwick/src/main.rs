@@ -144,9 +144,9 @@ enum Command {
         #[arg(long)]
         luau: Option<PathBuf>,
     },
-    /// Writes the typed API, `enshwick::typed`, from the newest server
-    /// build's snapshot of the game's reflection; with `--from`, snapshots
-    /// that executable's reflection first.
+    /// Writes the typed API, `enshwick::typed`, from the newest kept server
+    /// build's snapshot of the game's reflection in the game data folder;
+    /// with `--from`, snapshots that executable's reflection there first.
     Generate {
         /// The game executable, or the game folder holding it, to snapshot.
         #[arg(long, conflicts_with = "check")]
@@ -154,6 +154,10 @@ enum Command {
         /// The enshwick repository to write in.
         #[arg(long, default_value = ".")]
         root: PathBuf,
+        /// The game data folder outside the repository that holds the kept
+        /// builds' tables in `tables/` and their snapshots in `typed/`.
+        #[arg(long, env = enshwick_gamedata::DATA_VAR)]
+        data: PathBuf,
         /// Writes nothing and fails when the committed files differ.
         #[arg(long)]
         check: bool,
@@ -279,7 +283,12 @@ fn main() -> ExitCode {
             rust,
             luau,
         } => types::run(&from, &names, rust.as_deref(), luau.as_deref()),
-        Command::Generate { from, root, check } => generate::run(&root, from.as_deref(), check),
+        Command::Generate {
+            from,
+            root,
+            data,
+            check,
+        } => generate::run(&root, &data, from.as_deref(), check),
     };
     match outcome {
         Ok(done) => {

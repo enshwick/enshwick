@@ -15,6 +15,7 @@
 use anyhow::{Context as _, anyhow, bail};
 mod anchor;
 mod checks;
+mod data;
 mod exe;
 mod found;
 mod patterns;
@@ -34,6 +35,7 @@ use enshwick_gamedata::Resolved;
 use enshwick_gamedata::reflect::Fingerprint;
 use rustc_hash::FxHashMap;
 
+use self::data::{old_side, snapshot_dir, table_files};
 use self::exe::Exe;
 use self::found::{ANCHORS, FOUND, found_table};
 use self::rows::{Row, Side, guid_hex};
@@ -55,6 +57,11 @@ pub(crate) struct Args {
     /// The repository whose rows to port.
     #[arg(long, default_value = ".")]
     repo: PathBuf,
+    /// The game data folder outside the repository: the kept builds' tables
+    /// in `tables/`, ported when one is for the old build, and the typed
+    /// snapshots in `typed/`, where `--write` keeps the new build's.
+    #[arg(long, env = enshwick_gamedata::DATA_VAR)]
+    data: Option<PathBuf>,
     /// The new build's Steam build id, for the report's name of the ported
     /// table.
     #[arg(long)]
@@ -114,6 +121,7 @@ pub(crate) fn run(args: &Args) -> anyhow::Result<bool> {
     if args.write && old_fp == new_fp {
         bail!("both executables are the same build; nothing to write");
     }
+    let snapshots = snapshot_dir(args)?;
     let mut staged = Staged::default();
     let mut ported = Vec::new();
     let mut sections = port_tables(args, &old, &new, &mut ported)?;
@@ -123,8 +131,12 @@ pub(crate) fn run(args: &Args) -> anyhow::Result<bool> {
         bail!("no row is for the old build {}", spell(old_fp));
     }
     // The typed part never costs the table report: a failure is a line of it.
-    let compared = old_side(ported.first().map(|(side, ..)| *side), old_fp)
-        .and_then(|side| typed(args, side, &old_bytes, &new_bytes, old_fp, new_fp));
+    let compared = old_side(
+        args.data.as_deref(),
+        ported.first().map(|(side, ..)| *side),
+        old_fp,
+    )
+    .and_then(|side| typed(args, side, &old_bytes, &new_bytes, old_fp, new_fp));
     let (typed_text, typed_settled) = match &compared {
         Ok(typed) => (typed.report.clone(), typed.settled),
         Err(why) => (format!("Typed API: not compared: {why:#}\n"), false),
@@ -134,27 +146,14 @@ pub(crate) fn run(args: &Args) -> anyhow::Result<bool> {
         report::render(&spell(old_fp), &spell(new_fp), &sections)
     );
     finish(staged, args.report.as_deref(), &text)?;
-    if let (true, Ok(typed)) = (args.write, &compared) {
-        write_typed(args, typed, new_fp)?;
+    if let (Some(data), Ok(typed)) = (snapshots, &compared) {
+        write_typed(args, data, typed, new_fp)?;
     }
     Ok(typed_settled
         && sections
             .iter()
             .flat_map(|s| &s.lines)
             .all(|l| !l.status.needs_human()))
-}
-
-/// The side of the old build `fingerprint`: the side of the repository's
-/// table rows that ported, else of a table compiled into this binary.
-fn old_side(
-    ported: Option<Side>,
-    fingerprint: Fingerprint,
-) -> anyhow::Result<enshwick_gamedata::Side> {
-    if let Some(side) = ported {
-        return Ok(gamedata_side(side));
-    }
-    crate::generate::side_of(&crate::generate::tables()?, fingerprint)
-        .with_context(|| format!("no table is for the old build {}", spell(fingerprint)))
 }
 
 /// The typed API's part of a pin: the report of what the new build changed
@@ -195,21 +194,16 @@ fn typed(
     })
 }
 
-/// With `--write` in the enshwick repository: the new build's snapshot,
-/// the renames its diff found in the rename table and, for a server build,
-/// the typed API regenerated. Another repository, such as the mods', holds
-/// no typed API and is left alone.
-fn write_typed(args: &Args, typed: &Typed, new_fp: Fingerprint) -> anyhow::Result<()> {
-    let snapshots = args.repo.join(enshwick_gamedata::typed::SNAPSHOTS);
-    if !snapshots.is_dir() {
-        return Ok(());
-    }
+/// With `--write` in the enshwick repository: the new build's snapshot in
+/// the game data folder `data`, the renames its diff found in the rename
+/// table and, for a server build, the typed API regenerated.
+fn write_typed(args: &Args, data: &Path, typed: &Typed, new_fp: Fingerprint) -> anyhow::Result<()> {
+    crate::generate::write_snapshot(data, &typed.after, typed.side, new_fp)?;
+    let renames = args.repo.join(enshwick_gamedata::typed::RENAMES);
     if typed.renames != crate::generate::renames(&args.repo)? {
-        let path = snapshots.join(enshwick_gamedata::typed::RENAMES);
         let text = typed.renames.to_toml().context("the rename table")?;
-        fs::write(&path, text).with_context(|| path.display().to_string())?;
+        fs::write(&renames, text).with_context(|| renames.display().to_string())?;
     }
-    crate::generate::write_snapshot(&args.repo, &typed.after, typed.side, new_fp)?;
     if typed.side == enshwick_gamedata::Side::Server {
         let steam = args
             .steam_build
@@ -247,8 +241,7 @@ fn port_tables(
         return Ok(Vec::new());
     };
     let mut sources = Vec::new();
-    for path in table_files(&args.repo)? {
-        let src = fs::read_to_string(&path).with_context(|| path.display().to_string())?;
+    for (path, src) in table_files(args.data.as_deref())? {
         let row = table::parse(&src).with_context(|| path.display().to_string())?;
         if matches(&row, old_fp) {
             let source = format!("the table `{}`", relative(&args.repo, &path));
@@ -268,7 +261,7 @@ fn port_tables(
         })?;
         let src = found_table(&args.repo, side, old)?;
         let row = table::parse(&src).context("the table found on the old build")?;
-        let path = args.repo.join(table::DIR).join(table_file(side, old_fp));
+        let path = Path::new(table::DIR).join(table_file(side, old_fp));
         sources.push((path, src, row, FOUND.to_owned()));
     }
     let mut sections = Vec::new();
@@ -434,8 +427,7 @@ fn patterns_only(args: &Args, exe_path: &Path) -> anyhow::Result<bool> {
     let fp = exe
         .fingerprint()
         .context("the executable has no fingerprint")?;
-    for path in table_files(&args.repo)? {
-        let src = fs::read_to_string(&path).with_context(|| path.display().to_string())?;
+    for (path, src) in table_files(args.data.as_deref())? {
         let row = table::parse(&src).with_context(|| path.display().to_string())?;
         if !matches(&row, fp) {
             continue;
@@ -535,22 +527,6 @@ fn table_file(side: Side, fingerprint: Fingerprint) -> String {
     )
 }
 
-/// The loader's table files, sorted.
-fn table_files(repo: &Path) -> anyhow::Result<Vec<PathBuf>> {
-    let dir = repo.join(table::DIR);
-    let entries = fs::read_dir(&dir)
-        .with_context(|| format!("{} is no Enshwick repository", repo.display()))?;
-    let mut out: Vec<PathBuf> = entries
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| {
-            p.extension()
-                .is_some_and(|e| e.eq_ignore_ascii_case("toml"))
-        })
-        .collect();
-    out.sort();
-    Ok(out)
-}
-
 /// Every mod's `Cargo.toml` under `mods/`, which may hold build rows.
 fn mod_sources(repo: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
@@ -632,6 +608,7 @@ mod tests {
             new: None,
             patterns: None,
             repo: Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."),
+            data: enshwick_gamedata::data_dir(),
             steam_build: None,
             game_version: None,
             write: true,
@@ -674,22 +651,15 @@ mod tests {
         );
     }
 
+    /// The kept tables, when the game data folder is given, and the mods'
+    /// rows parse.
     #[test]
-    fn the_old_build_s_side_comes_from_the_repository_row_this_binary_may_not_know() {
-        let unknown = Fingerprint::new([0xcd; 16], 1);
-        assert_eq!(
-            old_side(Some(Side::Client), unknown).unwrap(),
-            enshwick_gamedata::Side::Client
-        );
-        assert!(old_side(None, unknown).is_err());
-    }
-
-    #[test]
-    fn the_repository_rows_parse() {
+    fn the_kept_tables_and_the_repository_rows_parse() {
         let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let kept = table_files(enshwick_gamedata::data_dir().as_deref()).unwrap();
         let mut tables = Vec::new();
-        for path in table_files(&repo).unwrap() {
-            let row = table::parse(&fs::read_to_string(&path).unwrap()).unwrap();
+        for (path, src) in &kept {
+            let row = table::parse(src).unwrap();
             assert!(!row.symbols.is_empty());
             assert_eq!(
                 path.file_name().and_then(|n| n.to_str()),
@@ -704,7 +674,7 @@ mod tests {
                 tables.push(row.table);
             }
         }
-        assert!(tables.contains(&Table::Loader));
+        assert!(kept.is_empty() || tables.contains(&Table::Loader));
     }
 
     fn guid(hex: &str) -> [u8; 16] {
@@ -736,8 +706,7 @@ mod tests {
         let fp = Exe::parse(&bytes).unwrap().fingerprint().unwrap();
         let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let mut rows = Vec::new();
-        for file in table_files(&repo).unwrap() {
-            let src = fs::read_to_string(&file).unwrap();
+        for (_, src) in table_files(enshwick_gamedata::data_dir().as_deref()).unwrap() {
             let row = table::parse(&src).unwrap();
             if matches(&row, fp) {
                 rows.push((src, row));

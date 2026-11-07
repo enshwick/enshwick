@@ -48,10 +48,12 @@ type's name under its new one.
 
 `cargo enshwick pin --old <old exe> --new <new exe>` prints what the new build
 changed in the covered types. With `--write` it also writes the typed API
-again. That run also keeps a snapshot of the new build's types in `typed/` of
-`enshwick-gamedata`. The report marks what needs a person. One case is a type
-that changed its kind, base, inner type or roles, or its size other than by
-added fields. The other is a rename the table cannot decide. A release of the API crate then carries the
+again. That run also keeps a snapshot of the new build's types in the game
+data folder that `--data` or `ENSH_GAMEDATA` names, outside the repository.
+It refuses to run without that folder. The report marks what needs a person.
+One case is a type that changed its kind, base, inner type or roles, or its
+size other than by added fields. The other is a rename the table cannot
+decide. A release of the API crate then carries the
 new items.
 
 Before 1.0 the items follow the newest build and may change between

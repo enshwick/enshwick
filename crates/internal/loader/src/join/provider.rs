@@ -388,9 +388,12 @@ mod tests {
         .unwrap();
         let tables = crate::builds::load();
         let fingerprint = image.fingerprint().unwrap();
-        let table = enshwick_gamedata::exact(&tables, enshwick_gamedata::Side::Client, fingerprint)
-            .unwrap()
-            .resolve();
+        let Some(table) =
+            enshwick_gamedata::exact(&tables, enshwick_gamedata::Side::Client, fingerprint)
+        else {
+            return;
+        };
+        let table = table.resolve();
         let base = image.base();
         let text = image.range(image.section(".text").unwrap());
         let read = |va| image.u64(va);

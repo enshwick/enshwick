@@ -1,15 +1,16 @@
 //! How long carrying the newest table of a side over to a build takes, the
 //! loader's start on a build without a table: `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name the executables,
-//! and a bench without its executable is skipped.
+//! `ENSH_GAMEDATA` the kept tables, and a bench without them is skipped.
 
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use enshwick_gamedata::reflect::{Image, Layout};
-use enshwick_gamedata::{Side, Table, embedded, newest};
+use enshwick_gamedata::{Side, Table, kept, newest};
 
 fn fall_back(c: &mut Criterion) {
-    let tables: Vec<Table> = embedded()
+    let tables: Vec<Table> = kept()
+        .unwrap_or_default()
         .iter()
         .filter_map(|(_, text)| Table::parse(text).ok())
         .collect();

@@ -450,11 +450,12 @@ mod tests {
             } else {
                 enshwick_gamedata::Side::Server
             };
-            let found = enshwick_gamedata::newest(&tables, side_of)
-                .unwrap()
-                .fall_back(code, range.start - image.base(), |rva| {
-                    image.u32(image.base() + rva)
-                });
+            let Some(newest) = enshwick_gamedata::newest(&tables, side_of) else {
+                continue;
+            };
+            let found = newest.fall_back(code, range.start - image.base(), |rva| {
+                image.u32(image.base() + rva)
+            });
             let divide = found
                 .symbol(pinned::pacing::WAIT_DIVIDE.id())
                 .unwrap_or_else(|| panic!("{variable}: no division"));

@@ -12,8 +12,8 @@ use super::exe::Exe;
 use super::patterns::{self, BodyPattern, ConstantPattern, SymbolPattern};
 use super::rows::{Edit, Entry, Row, Side, hex};
 
-/// Where the tables live, relative to the repository.
-pub(crate) const DIR: &str = "crates/enshwick-gamedata/tables";
+/// Where the tables live, relative to the game data folder.
+pub(crate) const DIR: &str = "tables";
 
 /// The table sections, in the order a row lists them.
 const SECTIONS: [&str; 3] = ["checks", "symbols", "constants"];
@@ -870,7 +870,8 @@ revision = 1
         assert!(row.contains("\", rel = 4, body = {"), "{row}");
     }
 
-    /// On the server `ENSH_SERVER_EXE` names (skipped without it), its own
+    /// On the server `ENSH_SERVER_EXE` names (skipped without it or its
+    /// kept table), its own
     /// table rendered from the executable gives every held operand value the
     /// witness the committed table has, and carried to the same executable
     /// each witnessed value reads where the table pins it.
@@ -882,12 +883,19 @@ revision = 1
         let bytes = std::fs::read(path).unwrap();
         let exe = Exe::parse(&bytes).unwrap();
         let fp = exe.fingerprint().unwrap();
-        let tables = enshwick_gamedata::embedded();
-        let (src, committed) = tables
+        let tables = enshwick_gamedata::kept().unwrap();
+        let Some((src, committed)) = tables
             .iter()
-            .map(|(_, text)| (*text, enshwick_gamedata::Table::parse(text).unwrap()))
+            .map(|(_, text)| {
+                (
+                    text.as_str(),
+                    enshwick_gamedata::Table::parse(text).unwrap(),
+                )
+            })
             .find(|(_, t)| t.side() == enshwick_gamedata::Side::Server && t.fingerprint() == fp)
-            .unwrap();
+        else {
+            return;
+        };
         // The table without its witnesses, so only the render can write them.
         let mut bare: DocumentMut = src.parse().unwrap();
         for (_, item) in bare["constants"].as_table_like_mut().unwrap().iter_mut() {

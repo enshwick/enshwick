@@ -2,7 +2,8 @@
 //! [`Catalogue`].
 //!
 //! A catalogue holds every covered type and every type it reaches, read
-//! from a build's reflection and kept as a snapshot beside the build tables.
+//! from a build's reflection and kept as a snapshot in the game data folder
+//! [`DATA_VAR`](crate::DATA_VAR) names, outside this repository.
 //! The generator writes the API crate's `typed` modules from it, so a new
 //! build needs no hand change.
 
@@ -53,30 +54,42 @@ pub fn engine_name(id: &str) -> Option<&'static str> {
         .map(|at| ids::IDS[at].1)
 }
 
-/// Where the snapshots and the rename table live, below the enshwick
-/// repository root.
-pub const SNAPSHOTS: &str = "crates/enshwick-gamedata/typed";
+/// The rename table, below the enshwick repository root: the type and
+/// field renames between builds, which the generator keeps names by.
+pub const RENAMES: &str = "crates/enshwick-gamedata/typed/renames.toml";
 
-/// The rename table's file in [`SNAPSHOTS`].
-pub const RENAMES: &str = "renames.toml";
-
-/// The snapshot file of the build a table of `table_file` is for, below
-/// the repository root.
+/// The snapshot file of the build a table of `table_file` is for, in the
+/// game data folder `dir`.
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick_gamedata::typed::snapshot_path;
+/// use std::path::Path;
+/// use enshwick_gamedata::typed::snapshot_in;
 ///
 /// assert_eq!(
-///     snapshot_path("server-00-1.toml"),
-///     "crates/enshwick-gamedata/typed/server-00-1.jsonl"
+///     snapshot_in(Path::new("data"), "server-00-1.toml"),
+///     Path::new("data/typed/server-00-1.jsonl")
 /// );
 /// ```
 #[must_use]
-pub fn snapshot_path(table_file: &str) -> String {
+pub fn snapshot_in(dir: &std::path::Path, table_file: &str) -> std::path::PathBuf {
     let stem = table_file.strip_suffix(".toml").unwrap_or(table_file);
-    format!("{SNAPSHOTS}/{stem}.jsonl")
+    dir.join("typed").join(format!("{stem}.jsonl"))
+}
+
+/// The snapshot file of the build a table of `table_file` is for, in the
+/// folder [`DATA_VAR`](crate::DATA_VAR) names; `None` without it.
+///
+/// # Examples
+///
+/// ```
+/// let path = enshwick_gamedata::typed::snapshot_path("server-00-1.toml");
+/// assert!(path.is_none_or(|p| p.ends_with("typed/server-00-1.jsonl")));
+/// ```
+#[must_use]
+pub fn snapshot_path(table_file: &str) -> Option<std::path::PathBuf> {
+    crate::data_dir().map(|dir| snapshot_in(&dir, table_file))
 }
 
 /// The words a generated file's header names the build of `table` by.
@@ -84,12 +97,11 @@ pub fn snapshot_path(table_file: &str) -> String {
 /// # Examples
 ///
 /// ```
-/// let tables: Vec<_> = enshwick_gamedata::embedded()
-///     .iter()
-///     .filter_map(|(_, text)| enshwick_gamedata::Table::parse(text).ok())
-///     .collect();
-/// let server = enshwick_gamedata::newest(&tables, enshwick_gamedata::Side::Server);
-/// assert!(server.is_some_and(|t| enshwick_gamedata::typed::build_name(t).starts_with("server build")));
+/// let table = enshwick_gamedata::Table::parse(
+///     "name = \"t\"\nside = \"server\"\nguid = \"00000000000000000000000000000001\"\nage = 2\n",
+/// )?;
+/// assert_eq!(enshwick_gamedata::typed::build_name(&table), "server build 2");
+/// # Ok::<(), enshwick_gamedata::TableError>(())
 /// ```
 #[must_use]
 pub fn build_name(table: &crate::Table) -> String {

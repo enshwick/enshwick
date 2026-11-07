@@ -17,7 +17,7 @@ fn the_join_target_copies_read_on_each_client() {
         .iter()
         .filter(|(table, _)| table.starts_with("ENSH_CLIENT_EXE"))
         .collect();
-    if std::env::var("ENSH_CLIENT_EXE").is_ok() {
+    if named_executables().contains(&"ENSH_CLIENT_EXE") {
         assert!(clients.len() >= 2, "{rows:?}");
     }
     for (table, values) in clients {
@@ -51,11 +51,12 @@ fn a_table_without_its_routed_rows_gets_them_from_the_engine() {
             None,
         )
         .unwrap();
-        let full = tables::exact(&load(), side, image.fingerprint().unwrap())
+        let Some(full) = tables::exact(&load(), side, image.fingerprint().unwrap()).cloned() else {
+            continue;
+        };
+        let text = tables::kept()
             .unwrap()
-            .clone();
-        let text = tables::embedded()
-            .iter()
+            .into_iter()
             .find(|(file, _)| *file == full.file_name())
             .unwrap()
             .1;
@@ -146,11 +147,12 @@ fn routed_symbols_without_table_checks_serve_their_features() {
             None,
         )
         .unwrap();
-        let full = tables::exact(&load(), side, image.fingerprint().unwrap())
+        let Some(full) = tables::exact(&load(), side, image.fingerprint().unwrap()).cloned() else {
+            continue;
+        };
+        let text = tables::kept()
             .unwrap()
-            .clone();
-        let text = tables::embedded()
-            .iter()
+            .into_iter()
             .find(|(file, _)| *file == full.file_name())
             .unwrap()
             .1;
@@ -254,7 +256,7 @@ fn the_texture_ring_record_reads_on_each_client() {
         .iter()
         .filter(|(table, _)| table.starts_with("ENSH_CLIENT_EXE"))
         .collect();
-    if std::env::var("ENSH_CLIENT_EXE").is_ok() {
+    if named_executables().contains(&"ENSH_CLIENT_EXE") {
         assert!(clients.len() >= 2, "{rows:?}");
     }
     for (table, values) in clients {
@@ -283,7 +285,7 @@ fn the_slider_extent_reads_on_each_client() {
         .iter()
         .filter(|(table, _)| table.starts_with("ENSH_CLIENT_EXE"))
         .collect();
-    if std::env::var("ENSH_CLIENT_EXE").is_ok() {
+    if named_executables().contains(&"ENSH_CLIENT_EXE") {
         assert!(clients.len() >= 2, "{rows:?}");
     }
     assert!(misreads(&rows).is_empty(), "{rows:?}");
@@ -346,7 +348,7 @@ fn the_texture_key_size_reads_on_each_client() {
         .iter()
         .filter(|(table, _)| table.starts_with("ENSH_CLIENT_EXE"))
         .collect();
-    if std::env::var("ENSH_CLIENT_EXE").is_ok() {
+    if named_executables().contains(&"ENSH_CLIENT_EXE") {
         assert!(clients.len() >= 2, "{rows:?}");
     }
     for (table, values) in clients {
@@ -360,10 +362,7 @@ fn the_texture_key_size_reads_on_each_client() {
 #[test]
 fn the_chat_handle_slot_and_line_overhead_read_on_each_executable() {
     let rows = constants_on_executables(&["chat.handle_slot", "chat.line_overhead"]);
-    let named = ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"]
-        .iter()
-        .filter(|var| std::env::var(var).is_ok())
-        .count();
+    let named = named_executables().len();
     assert!(rows.len() >= named * 2, "{rows:?}");
     for (table, values) in rows {
         assert_eq!(values, [Some(0x7f), Some(0x17)], "{table}");
@@ -375,10 +374,7 @@ fn the_chat_handle_slot_and_line_overhead_read_on_each_executable() {
 #[test]
 fn the_zone_size_valid_byte_reads_on_each_executable() {
     let rows = constants_on_executables(&["balancing.zone_size_valid"]);
-    let named = ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"]
-        .iter()
-        .filter(|var| std::env::var(var).is_ok())
-        .count();
+    let named = named_executables().len();
     assert!(rows.len() >= named * 2, "{rows:?}");
     for (table, values) in rows {
         assert_eq!(values, [Some(0xc)], "{table}");
@@ -421,10 +417,7 @@ fn the_offer_out_record_reads_on_each_executable() {
         "access.offer_out_tail",
     ];
     let rows = constants_on_executables(&ids);
-    let named = ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"]
-        .iter()
-        .filter(|var| std::env::var(var).is_ok())
-        .count();
+    let named = named_executables().len();
     assert!(rows.len() >= named * 2, "{rows:?}");
     for (table, values) in rows {
         assert_eq!(values, [Some(0x4), Some(0x8), Some(0x10)], "{table}");
@@ -581,7 +574,9 @@ fn on_no_code() -> KnownBuild {
 #[cfg(windows)]
 #[test]
 fn a_build_names_the_loader_features_it_lacks_once() {
-    assert_eq!(embedded(Side::SERVER).lacking(crate::TABLE_IDS), "");
+    if let Some(build) = kept(Side::SERVER) {
+        assert_eq!(build.lacking(crate::TABLE_IDS), "");
+    }
     let carried = on_no_code();
     let lacking = carried.lacking(crate::TABLE_IDS);
     assert!(lacking.split(", ").any(|name| name == "bases"), "{lacking}");
@@ -606,9 +601,10 @@ fn a_build_runs_on_its_anchors_when_allowed_and_given_code() {
     assert!(select(Side::SERVER, unknown, "server".into(), None, |_| None).is_none());
     assert!(select(Side::BOTH, unknown, "both".into(), at, |_| None).is_none());
     let tables = load();
-    let reported = tables::newest(&tables, tables::Side::Server)
-        .unwrap()
-        .fingerprint();
+    let Some(newest) = tables::newest(&tables, tables::Side::Server) else {
+        return;
+    };
+    let reported = newest.fingerprint();
     configure(false);
     assert!(select(Side::SERVER, unknown, "server".into(), at, |_| None).is_none());
     assert!(select(Side::SERVER, reported, "server".into(), at, |_| None).is_some());
@@ -755,14 +751,15 @@ fn no_server_table_or_anchor_holds_a_client_only_bases_row() {
 #[test]
 fn a_build_warns_only_when_entries_are_missing() {
     use enshwick::abi::Level;
-    let complete = embedded(Side::SERVER);
-    let (level, line) = complete.start_line();
-    assert_eq!(level, Level::INFO);
-    assert!(
-        line.starts_with(&format!("game: {}, ", complete.name))
-            && line.ends_with("entries found by engine routes and anchors"),
-        "{line}"
-    );
+    if let Some(complete) = kept(Side::SERVER) {
+        let (level, line) = complete.start_line();
+        assert_eq!(level, Level::INFO);
+        assert!(
+            line.starts_with(&format!("game: {}, ", complete.name))
+                && line.ends_with("entries found by engine routes and anchors"),
+            "{line}"
+        );
+    }
     let (level, line) = on_no_code().start_line();
     assert_eq!(level, Level::WARN);
     assert!(
@@ -786,8 +783,10 @@ fn checked_symbols_read_their_bytes_in_the_client() {
     )
     .unwrap();
     let tables = load();
-    let client =
-        tables::exact(&tables, tables::Side::Client, image.fingerprint().unwrap()).unwrap();
+    let Some(client) = tables::exact(&tables, tables::Side::Client, image.fingerprint().unwrap())
+    else {
+        return;
+    };
     let mut checked = 0;
     for symbol in client.symbols() {
         let resolved = client.resolve();

@@ -358,18 +358,92 @@ pub fn reported(side: Side, fingerprint: Fingerprint) -> bool {
     })
 }
 
-/// Every table this crate embeds, as `(file name, text)`: the tables of the
-/// kept builds, which the tests compare the routes and anchors with.
+/// The environment variable naming the folder of the kept builds' game
+/// data, which the tests that compare with it read and skip without.
+///
+/// The folder lies outside this repository and holds what a developer's own
+/// game files give: the builds' tables in `tables/` and their typed
+/// catalogues in `typed/`.
+pub const DATA_VAR: &str = "ENSH_GAMEDATA";
+
+/// The folder [`DATA_VAR`] names; `None` when it is unset.
 ///
 /// # Examples
 ///
 /// ```
-/// let tables = enshwick_gamedata::embedded();
-/// assert!(tables.iter().all(|(file, _)| file.ends_with(".toml")));
+/// let tables = enshwick_gamedata::data_dir().map(|dir| dir.join("tables"));
+/// # let _ = tables;
 /// ```
 #[must_use]
-pub fn embedded() -> &'static [(&'static str, &'static str)] {
-    include!(concat!(env!("OUT_DIR"), "/embedded.rs"))
+pub fn data_dir() -> Option<std::path::PathBuf> {
+    std::env::var_os(DATA_VAR).map(std::path::PathBuf::from)
+}
+
+/// Every table in `dir`'s `tables/`, as `(file name, text)` sorted by file
+/// name; empty when `dir` has no `tables/`.
+///
+/// # Errors
+///
+/// When the folder or a table in it does not read.
+///
+/// # Examples
+///
+/// ```
+/// let tables = enshwick_gamedata::tables_in(std::path::Path::new("no such folder"))?;
+/// assert!(tables.is_empty());
+/// # Ok::<(), std::io::Error>(())
+/// ```
+pub fn tables_in(dir: &std::path::Path) -> std::io::Result<Vec<(String, String)>> {
+    let dir = dir.join("tables");
+    let entries = match std::fs::read_dir(&dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(e),
+    };
+    let mut tables = Vec::new();
+    for entry in entries {
+        let path = entry?.path();
+        let toml = path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("toml"));
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
+        if let Some(name) = name.filter(|_| toml) {
+            tables.push((name, std::fs::read_to_string(&path)?));
+        }
+    }
+    tables.sort();
+    Ok(tables)
+}
+
+/// The kept builds' tables in the folder [`DATA_VAR`] names, which the
+/// tests compare the routes and anchors with; empty without it.
+///
+/// # Errors
+///
+/// When the folder or a table in it does not read.
+///
+/// # Examples
+///
+/// ```
+/// let tables = enshwick_gamedata::kept()?;
+/// assert!(tables.iter().all(|(file, _)| file.ends_with(".toml")));
+/// # Ok::<(), std::io::Error>(())
+/// ```
+pub fn kept() -> std::io::Result<Vec<(String, String)>> {
+    kept_in(data_dir().as_deref())
+}
+
+/// The tables in the game data folder `dir`; a folder that is named but
+/// missing is an error, so a mistyped path never skips the tests silently.
+fn kept_in(dir: Option<&std::path::Path>) -> std::io::Result<Vec<(String, String)>> {
+    match dir {
+        None => Ok(Vec::new()),
+        Some(dir) if dir.is_dir() => tables_in(dir),
+        Some(dir) => Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("{DATA_VAR} names {}, which is no folder", dir.display()),
+        )),
+    }
 }
 
 /// The table for a build among `tables`: the highest revision of those made
@@ -393,4 +467,18 @@ pub fn newest(tables: &[Table], side: Side) -> Option<&Table> {
         .iter()
         .filter(|t| t.side == side)
         .max_by_key(|t| (t.steam_build, t.game_version, t.revision))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::kept_in;
+
+    #[test]
+    fn a_named_data_folder_that_is_missing_is_an_error_and_no_folder_is_none() {
+        assert!(kept_in(None).unwrap().is_empty());
+        let missing = std::env::temp_dir().join(format!("no-gamedata-{}", std::process::id()));
+        let error = kept_in(Some(&missing)).unwrap_err();
+        assert!(error.to_string().contains("no-gamedata"), "{error}");
+        assert!(kept_in(Some(&std::env::temp_dir())).is_ok());
+    }
 }

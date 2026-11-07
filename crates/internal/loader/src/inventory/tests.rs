@@ -79,7 +79,9 @@ fn every_table_offers_a_check_for_the_code_the_hook_relies_on() {
 
 #[test]
 fn the_server_row_has_every_piece_the_executor_reads() {
-    let server = crate::builds::embedded(Side::SERVER);
+    let Some(server) = crate::builds::kept(Side::SERVER) else {
+        return;
+    };
     let symbols = [
         pinned::inventory::ACTIONS_ROW,
         pinned::inventory::VIEW_FILL,

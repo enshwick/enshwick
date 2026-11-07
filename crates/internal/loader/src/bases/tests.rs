@@ -42,7 +42,10 @@ fn the_newest_tables_read_as_the_fake_object_s_layout() {
 
     let tables = crate::builds::load();
     for (side, balancing) in [(TableSide::Server, 0x170), (TableSide::Client, 0x180)] {
-        let resolved = newest(&tables, side).unwrap().resolve();
+        let Some(newest) = newest(&tables, side) else {
+            continue;
+        };
+        let resolved = newest.resolve();
         let offset = |id: Constant| {
             resolved
                 .constant(id.id())
@@ -73,7 +76,10 @@ fn a_server_table_without_the_client_s_rows_reads_the_layout() {
     use enshwick_gamedata::{Side as TableSide, newest};
 
     let tables = crate::builds::load();
-    let resolved = newest(&tables, TableSide::Server).unwrap().resolve();
+    let Some(newest) = newest(&tables, TableSide::Server) else {
+        return;
+    };
+    let resolved = newest.resolve();
     let offset = |id: Constant| {
         if id == pinned::bases::CLIENT_SIZE || id == pinned::bases::RECORD_BASE_ID {
             return None;
@@ -100,7 +106,10 @@ fn a_table_that_puts_the_window_on_a_vanilla_field_keeps_16_bases() {
     use enshwick_gamedata::{Side as TableSide, newest};
 
     let tables = crate::builds::load();
-    let resolved = newest(&tables, TableSide::Server).unwrap().resolve();
+    let Some(newest) = newest(&tables, TableSide::Server) else {
+        return;
+    };
+    let resolved = newest.resolve();
     let offset = |id: Constant| {
         if id == pinned::bases::SLOT {
             return Some(0x10);
@@ -238,9 +247,10 @@ fn the_cursor_s_body_fixes_the_offsets_its_detour_reads() {
         };
         let bytes = std::fs::read(path).unwrap();
         let image = Image::parse(&bytes, Layout::File, None).unwrap();
-        let resolved = exact(&tables, side, image.fingerprint().unwrap())
-            .unwrap()
-            .resolve();
+        let Some(own) = exact(&tables, side, image.fingerprint().unwrap()) else {
+            continue;
+        };
+        let resolved = own.resolve();
         let id = pinned::bases::CURSOR.id();
         // The oldest tables have no cursor entry; the feature is off there.
         let Some(symbol) = resolved.symbol(id) else {

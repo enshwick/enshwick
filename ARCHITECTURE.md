@@ -14,7 +14,7 @@ safe API.
 | `enshwick-luau`        | `crates/internal/luau`     | Luau mods: one sandboxed VM per mod with memory and time budgets, the API bound from the `enshwick` crate's script descriptions                                                                                       | no                      |
 | `enshwick`             | `crates/enshwick`          | the ABI types (`enshwick::abi`), the safe API mods use, and the fake loader for tests (`test` feature)                                                                                                                | yes                     |
 | `enshwick-macros`      | `crates/enshwick-macros`   | `#[hook]`, `#[config]` and the other macros of the API                                                                                                                                                                | yes                     |
-| `enshwick-gamedata`    | `crates/enshwick-gamedata` | the engine routes and anchors, the kept builds' tables, the engine's reflection reader (`reflect`) and the game archive reader (`archive`)                                                                            | yes                     |
+| `enshwick-gamedata`    | `crates/enshwick-gamedata` | the engine routes and anchors, the compatibility reports, the engine's reflection reader (`reflect`) and the game archive reader (`archive`)                                                                          | yes                     |
 | `cargo-enshwick`       | `crates/cargo-enshwick`    | the one tool for mod authors: new mods, install, manifests, content packs, point definitions, the game's types from reflection, porting a table to a new build; its library reads point schemas for tests and fuzzing | yes                     |
 | `xtask`                | `tools/xtask`              | repository checks, the release archive and alpha notes, and `cargo xtask compat`, the maintainers' report of what works on a game build                                                                               | no                      |
 | `enshwick-fuzz`        | `fuzz`                     | the fuzz targets for untrusted input, a workspace of their own                                                                                                                                                        | no                      |
@@ -76,10 +76,11 @@ cargo-enshwick ──▶ enshwick, enshwick-gamedata
   first; a route that finds another address than its anchor turns the entry
   off. No file is made per build: what neither a route nor an anchor finds
   turns off, and a build where nothing is missing runs without a warning.
-- The tables under `crates/enshwick-gamedata/tables/` are the frozen record
-  of the kept builds, which the tests compare the routes and anchors with;
-  the loader does not read them. `reports/` holds the public compatibility
-  report of each build.
+- The tables of the kept builds, and the reflection catalogues the typed API
+  is generated from, lie outside the repository, in the game data folder
+  `ENSH_GAMEDATA` names; the tests compare the routes and anchors with them
+  and skip without them, and the loader does not read them. `reports/`
+  holds the public compatibility report of each build.
 - `crates/enshwick-gamedata/anchors/classes.toml` classes every table entry:
   found from the engine, or a pattern because research found no route, each
   with its reason; a test fails on an entry without one.

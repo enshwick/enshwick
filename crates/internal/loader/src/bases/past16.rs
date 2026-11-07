@@ -549,7 +549,9 @@ mod tests {
             };
             let bytes = std::fs::read(path).unwrap();
             let image = Image::parse(&bytes, Layout::File, None).unwrap();
-            let table = exact(&tables, side, image.fingerprint().unwrap()).unwrap();
+            let Some(table) = exact(&tables, side, image.fingerprint().unwrap()) else {
+                continue;
+            };
             let text = image.section(".text").unwrap();
             let range = image.range(text);
             let code = image.read(range.start, range.end - range.start).unwrap();
@@ -625,9 +627,12 @@ mod tests {
         let bytes = std::fs::read(path).unwrap();
         let image = Image::parse(&bytes, Layout::File, None).unwrap();
         let tables = crate::builds::load();
-        let table = exact(&tables, TableSide::Server, image.fingerprint().unwrap()).unwrap();
-        let text = enshwick_gamedata::embedded()
-            .iter()
+        let Some(table) = exact(&tables, TableSide::Server, image.fingerprint().unwrap()) else {
+            return;
+        };
+        let text = enshwick_gamedata::kept()
+            .unwrap()
+            .into_iter()
             .find(|(file, _)| *file == table.file_name())
             .unwrap()
             .1;

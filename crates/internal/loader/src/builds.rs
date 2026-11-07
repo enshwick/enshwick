@@ -298,15 +298,17 @@ fn side(side: Side) -> Option<tables::Side> {
     }
 }
 
-/// Every kept build's table, for tests that compare with what a build pins.
+/// Every kept build's table, for tests that compare with what a build pins;
+/// none without the game data folder.
 ///
 /// # Panics
 ///
-/// When an embedded table does not read.
+/// When a kept table does not read.
 #[cfg(test)]
 #[must_use]
 pub fn load() -> Vec<tables::Table> {
-    tables::embedded()
+    tables::kept()
+        .unwrap()
         .iter()
         .map(|(_, text)| tables::Table::parse(text).unwrap())
         .collect()
@@ -490,24 +492,25 @@ pub const fn reflection_read(types: usize, systems: usize) -> bool {
     types > 0 && systems > 0
 }
 
-/// What the newest kept build of `side` pins, for tests.
+/// What the newest kept build of `side` pins, for tests; `None` without
+/// the kept tables, and the test skips.
 ///
 /// # Panics
 ///
-/// When no table of `running`'s side is embedded.
+/// When `running` is no side.
 #[cfg(test)]
 #[must_use]
-pub fn embedded(running: Side) -> KnownBuild {
+pub fn kept(running: Side) -> Option<KnownBuild> {
     let tables = load();
     let side = side(running).unwrap();
-    let table = tables::newest(&tables, side).unwrap();
-    KnownBuild {
+    let table = tables::newest(&tables, side)?;
+    Some(KnownBuild {
         name: table.name().to_owned(),
         table: table.resolve(),
         unanchored: Vec::new(),
         conflicts: Vec::new(),
         lacking: OnceLock::new(),
-    }
+    })
 }
 
 /// A build that knows no entry, for tests that run the loader without a
@@ -565,13 +568,30 @@ pub(crate) fn executables_without_rows<'a>(
         .collect()
 }
 
-/// The executable variables this test run names.
+/// The executable variables this test run names whose build has a kept
+/// table; the tests that compare with it skip the others.
 #[cfg(test)]
 pub(crate) fn named_executables() -> Vec<&'static str> {
-    ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"]
-        .into_iter()
-        .filter(|var| std::env::var(var).is_ok())
-        .collect()
+    let tables = load();
+    [
+        ("ENSH_SERVER_EXE", tables::Side::Server),
+        ("ENSH_CLIENT_EXE", tables::Side::Client),
+    ]
+    .into_iter()
+    .filter(|&(var, side)| {
+        std::env::var_os(var).is_some_and(|path| {
+            let bytes = std::fs::read(path).unwrap();
+            let image = enshwick_gamedata::reflect::Image::parse(
+                &bytes,
+                enshwick_gamedata::reflect::Layout::File,
+                None,
+            )
+            .unwrap();
+            tables::exact(&tables, side, image.fingerprint().unwrap()).is_some()
+        })
+    })
+    .map(|(var, _)| var)
+    .collect()
 }
 
 #[cfg(test)]
@@ -595,7 +615,9 @@ fn constants_on_executables_by(
             None,
         )
         .unwrap();
-        let own = tables::exact(&tables, side, image.fingerprint().unwrap()).unwrap();
+        let Some(own) = tables::exact(&tables, side, image.fingerprint().unwrap()) else {
+            continue;
+        };
         let read = |resolved: &Resolved| ids.iter().map(|id| resolved.constant(id)).collect();
         if keep(own) {
             rows.push((format!("{var}: own"), read(&own.resolve())));

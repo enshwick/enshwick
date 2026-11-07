@@ -5,7 +5,7 @@ use iced_x86::{Decoder, DecoderOptions, Instruction};
 use super::shape::{self, Step};
 use super::{How, Routed, Routes};
 use crate::reflect::{Image, Layout, Reflection};
-use crate::{Side, Table, embedded};
+use crate::{Side, Table, kept};
 
 #[test]
 fn the_embedded_routes_read() {
@@ -21,13 +21,12 @@ fn the_embedded_routes_read() {
 fn every_reflected_name_a_route_takes_is_in_the_typed_catalogue() {
     let routes = Routes::embedded().unwrap();
     let mut checked = 0;
-    for (_, text) in embedded() {
-        let table = Table::parse(text).unwrap();
-        let file = std::path::Path::new(&table.file_name()).with_extension("jsonl");
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("typed")
-            .join(&file);
-        let Ok(snapshot) = std::fs::read_to_string(path) else {
+    for (_, text) in kept().unwrap() {
+        let table = Table::parse(&text).unwrap();
+        let Some(file) = crate::typed::snapshot_path(&table.file_name()) else {
+            continue;
+        };
+        let Ok(snapshot) = std::fs::read_to_string(&file) else {
             continue;
         };
         let catalogue = crate::typed::Catalogue::from_snapshot(&snapshot).unwrap();
@@ -63,7 +62,10 @@ fn every_reflected_name_a_route_takes_is_in_the_typed_catalogue() {
             checked += 1;
         }
     }
-    assert!(checked > 0, "no reflected route met a snapshot");
+    assert!(
+        checked > 0 || crate::data_dir().is_none(),
+        "no reflected route met a snapshot"
+    );
 }
 
 #[test]
