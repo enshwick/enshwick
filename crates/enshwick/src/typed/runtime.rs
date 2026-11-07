@@ -115,6 +115,7 @@ pub trait Named: Reflected + sealed::Sealed + 'static {
 /// What a [`Named`] type is to a mod, one per role trait.
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Role {
     /// A [`Component`].
     Component,
@@ -457,7 +458,7 @@ pub struct Compiled {
 
 #[cfg(any(test, feature = "test"))]
 impl Compiled {
-    /// The conversions of `T`, the path script values took before shapes.
+    /// The conversions of `T` through its Rust type, which its shape must match.
     #[must_use]
     pub(crate) const fn of<
         T: Reflected + crate::script::Typed + crate::script::IntoScript + crate::script::FromScript,

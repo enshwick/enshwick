@@ -92,6 +92,88 @@ pub fn snapshot_path(table_file: &str) -> Option<std::path::PathBuf> {
     crate::data_dir().map(|dir| snapshot_in(&dir, table_file))
 }
 
+/// The newest snapshot of `side` in the game data folder `dir`, ranked as
+/// its build's kept table among `tables` ranks, or first without one.
+///
+/// A build no table is kept for is newer than every kept one, since the
+/// tables are frozen, and among such builds the snapshot written last wins.
+/// The linker age in a file name ranks nothing: it starts over with each
+/// new GUID.
+///
+/// # Errors
+///
+/// When the folder or a file's time does not read.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_gamedata::{Side, typed::newest_snapshot};
+///
+/// let none = newest_snapshot(std::path::Path::new("no-such-folder"), &[], Side::Server)?;
+/// assert!(none.is_none());
+/// # Ok::<(), std::io::Error>(())
+/// ```
+pub fn newest_snapshot(
+    dir: &std::path::Path,
+    tables: &[crate::Table],
+    side: crate::Side,
+) -> std::io::Result<Option<std::path::PathBuf>> {
+    let entries = match std::fs::read_dir(dir.join("typed")) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e),
+    };
+    let mut written_last: Option<(std::time::SystemTime, std::path::PathBuf)> = None;
+    let mut kept = Vec::new();
+    for entry in entries {
+        let entry = entry?;
+        let name = entry.file_name();
+        let Some(name) = name.to_str().filter(|n| snapshot_age(n, side).is_some()) else {
+            continue;
+        };
+        let stem = name.strip_suffix(".jsonl");
+        if let Some(table) = tables
+            .iter()
+            .find(|t| t.side() == side && t.file_name().strip_suffix(".toml") == stem)
+        {
+            kept.push(table);
+            continue;
+        }
+        // shortcut: a build without a table ranks by when it was
+        // snapshotted, as nothing else orders it; upgrade when a snapshot
+        // records its Steam build.
+        let written = entry.metadata()?.modified()?;
+        if written_last.as_ref().is_none_or(|(at, _)| written > *at) {
+            written_last = Some((written, entry.path()));
+        }
+    }
+    Ok(written_last.map(|(_, path)| path).or_else(|| {
+        kept.into_iter()
+            .max_by_key(|t| crate::resolve::rank(t))
+            .map(|t| snapshot_in(dir, &t.file_name()))
+    }))
+}
+
+/// The linker age the snapshot file `name` of `side` names its build by
+/// (`<side>-<guid>-<age>.jsonl`); `None` for any other file.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_gamedata::{Side, typed::snapshot_age};
+///
+/// let name = format!("server-{}-224.jsonl", "ab".repeat(16));
+/// assert_eq!(snapshot_age(&name, Side::Server), Some(224));
+/// assert_eq!(snapshot_age(&name, Side::Client), None);
+/// ```
+#[must_use]
+pub fn snapshot_age(name: &str, side: crate::Side) -> Option<u32> {
+    let rest = name.strip_suffix(".jsonl")?.strip_prefix(side.as_str())?;
+    let (guid, age) = rest.strip_prefix('-')?.rsplit_once('-')?;
+    let hex = guid.len() == 32 && guid.bytes().all(|b| b.is_ascii_hexdigit());
+    hex.then(|| age.parse().ok()).flatten()
+}
+
 /// The words a generated file's header names the build of `table` by.
 ///
 /// # Examples
@@ -111,6 +193,42 @@ pub fn build_name(table: &crate::Table) -> String {
         || format!("{side} build {age}"),
         |steam| format!("{side} build {age} (Steam {steam})"),
     )
+}
+
+/// The words a generated file's header names the build of the snapshot
+/// `path` by: its kept table's [`build_name`] among `tables`, else its side
+/// and the linker age in its file name.
+///
+/// # Examples
+///
+/// ```
+/// let path = format!("data/typed/server-{}-224.jsonl", "ab".repeat(16));
+/// let name = enshwick_gamedata::typed::snapshot_build(path.as_ref(), &[]);
+/// assert_eq!(name, "server build 224");
+/// ```
+#[must_use]
+pub fn snapshot_build(path: &std::path::Path, tables: &[crate::Table]) -> String {
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default();
+    let stem = name.strip_suffix(".jsonl");
+    if let Some(table) = tables
+        .iter()
+        .find(|t| t.file_name().strip_suffix(".toml") == stem)
+    {
+        return build_name(table);
+    }
+    [crate::Side::Server, crate::Side::Client]
+        .into_iter()
+        .find_map(|side| {
+            Some(format!(
+                "{} build {}",
+                side.as_str(),
+                snapshot_age(name, side)?
+            ))
+        })
+        .unwrap_or_else(|| name.to_owned())
 }
 
 /// What a covered type is to a mod: a component an entity holds, an event

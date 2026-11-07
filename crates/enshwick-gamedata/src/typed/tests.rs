@@ -444,18 +444,75 @@ fn every_id_of_the_committed_table_names_one_engine_type() {
 }
 
 /// The snapshot the committed typed API was generated from, the newest
-/// kept server build's, and that build's name; `None` without the game data
-/// folder, and the test that needs it skips.
+/// server build's as `cargo enshwick generate` picks it, and that build's
+/// name; `None` without the game data folder, and the test that needs it
+/// skips.
 fn committed() -> Option<(Catalogue, String)> {
     let tables: Vec<crate::Table> = crate::kept()
         .unwrap()
         .iter()
         .map(|(_, text)| crate::Table::parse(text).unwrap())
         .collect();
-    let table = crate::newest(&tables, crate::Side::Server)?;
-    let path = snapshot_path(&table.file_name())?;
+    let path = newest_snapshot(&crate::data_dir()?, &tables, crate::Side::Server).unwrap()?;
     let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path:?}: {e}"));
-    Some((Catalogue::from_snapshot(&text).unwrap(), build_name(table)))
+    let build = snapshot_build(&path, &tables);
+    Some((Catalogue::from_snapshot(&text).unwrap(), build))
+}
+
+#[test]
+fn the_newest_snapshot_ranks_kept_builds_by_steam_build_and_puts_an_untabled_one_first() {
+    let dir = std::env::temp_dir().join(format!("ensh-newest-snapshot-{}", std::process::id()));
+    drop(std::fs::remove_dir_all(&dir));
+    let table = |guid: u8, age: u32, steam: u32| {
+        crate::Table::parse(&format!(
+            "name = \"t\"\nside = \"server\"\nguid = \"{}\"\nage = {age}\nsteam_build = {steam}\n",
+            format!("{guid:02x}").repeat(16)
+        ))
+        .unwrap()
+    };
+    // The older build has the higher linker age, as on the kept server builds.
+    let tables = [table(0x1c, 479, 26_319_703), table(0xf1, 224, 26_430_253)];
+    for table in &tables {
+        let path = snapshot_in(&dir, &table.file_name());
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, "").unwrap();
+    }
+    std::fs::write(dir.join("typed").join("notes.jsonl"), "").unwrap();
+    let newest = newest_snapshot(&dir, &tables, crate::Side::Server)
+        .unwrap()
+        .unwrap();
+    assert_eq!(newest, snapshot_in(&dir, &tables[1].file_name()));
+    assert_eq!(snapshot_build(&newest, &tables), build_name(&tables[1]));
+    let untabled = snapshot_in(&dir, &table(0x22, 3, 1).file_name());
+    std::fs::write(&untabled, "").unwrap();
+    let newest = newest_snapshot(&dir, &tables, crate::Side::Server)
+        .unwrap()
+        .unwrap();
+    assert_eq!(newest, untabled);
+    assert_eq!(snapshot_build(&newest, &tables), "server build 3");
+    assert_eq!(
+        newest_snapshot(&dir, &tables, crate::Side::Client).unwrap(),
+        None
+    );
+    drop(std::fs::remove_dir_all(&dir));
+}
+
+#[test]
+fn a_snapshot_is_named_only_by_its_side_guid_and_age() {
+    let guid = "ab".repeat(16);
+    assert_eq!(
+        snapshot_age(&format!("server-{guid}-410.jsonl"), crate::Side::Server),
+        Some(410)
+    );
+    for other in [
+        format!("client-{guid}-410.jsonl"),
+        format!("server-{guid}-410.toml"),
+        format!("server-{}-410.jsonl", "ab".repeat(15)),
+        format!("server-{guid}-new.jsonl"),
+        "server-410.jsonl".to_owned(),
+    ] {
+        assert_eq!(snapshot_age(&other, crate::Side::Server), None, "{other}");
+    }
 }
 
 /// Every covered type of the committed snapshot has a generated item, and
@@ -582,8 +639,8 @@ fn every_shape_crosses_a_sample_as_its_rust_type_does() {
     assert!(wrong.is_empty(), "{wrong:#?}");
 }
 
-/// Every committed file of the typed API carries the generated header, and
-/// all of them name one build, so a hand-written or half-regenerated module
+/// Every committed file of the typed API, the game screens and the loader's
+/// id table carries the generated header, and all of them name one build, so a hand-written or half-regenerated module
 /// fails on every machine, with the game data or without it.
 #[test]
 fn every_committed_typed_file_carries_the_header_of_one_build() {
@@ -592,7 +649,8 @@ fn every_committed_typed_file_carries_the_header_of_one_build() {
         .split_once('\0')
         .map(|(b, a)| (b.to_owned(), a.to_owned()))
         .unwrap();
-    let mut files = vec![src.join("typed.rs")];
+    let ids = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/typed/ids.rs");
+    let mut files = vec![src.join("typed.rs"), src.join("ui/screens.rs"), ids];
     for entry in std::fs::read_dir(src.join("typed")).unwrap() {
         let path = entry.unwrap().path();
         if path.extension().is_some_and(|e| e == "rs") && !path.ends_with("runtime.rs") {

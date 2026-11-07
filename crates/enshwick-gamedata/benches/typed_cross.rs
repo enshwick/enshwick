@@ -7,8 +7,8 @@ use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use enshwick::resources::Value;
-use enshwick_gamedata::typed::{Catalogue, engine_name, snapshot_path};
-use enshwick_gamedata::{Side, Table, kept, newest};
+use enshwick_gamedata::typed::{Catalogue, engine_name, newest_snapshot};
+use enshwick_gamedata::{Side, Table, data_dir, kept};
 
 fn typed_cross(c: &mut Criterion) {
     let tables: Vec<Table> = kept()
@@ -16,8 +16,8 @@ fn typed_cross(c: &mut Criterion) {
         .iter()
         .filter_map(|(_, text)| Table::parse(text).ok())
         .collect();
-    let Some(text) = newest(&tables, Side::Server)
-        .and_then(|table| snapshot_path(&table.file_name()))
+    let Some(text) = data_dir()
+        .and_then(|dir| newest_snapshot(&dir, &tables, Side::Server).ok().flatten())
         .and_then(|path| std::fs::read_to_string(path).ok())
     else {
         return;

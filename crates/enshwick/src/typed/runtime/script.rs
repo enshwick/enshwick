@@ -41,8 +41,7 @@ impl Answer for Result<Fields, Error> {
 }
 
 /// `value`, of `ty`, with each record a table by its fields' names, as a
-/// script held game data before shapes: the path the tests hold every
-/// shape to.
+/// script holds game data: the compiled path the tests hold every shape to.
 #[cfg(any(test, feature = "test"))]
 pub(crate) fn by_name(value: Value, ty: &Ty) -> Value {
     match (value, ty) {

@@ -10,7 +10,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, anyhow, bail};
 use enshwick_gamedata::reflect::{Image, Layout, Reflection};
-use enshwick_gamedata::typed::{Catalogue, RENAMES, Renames, build_name, snapshot_in};
+use enshwick_gamedata::typed::{
+    Catalogue, RENAMES, Renames, newest_snapshot, snapshot_build, snapshot_in,
+};
 use enshwick_gamedata::{Side, Table, exact, file_name, tables_in};
 
 /// The one hand-written file among the generated modules.
@@ -136,7 +138,8 @@ pub(crate) fn write_snapshot(
 }
 
 /// Snapshots `from` into the game data folder `data` when given, then
-/// writes the typed API from the newest server build's snapshot there, or
+/// writes the typed API from that snapshot when `from` is the server's,
+/// else from the newest server build's snapshot there, or
 /// with `check` fails when the committed files differ from what it would
 /// write.
 ///
@@ -160,6 +163,7 @@ pub(crate) fn run(
     }
     let tables = tables_of(data)?;
     let mut done = Vec::new();
+    let mut snapshotted = None;
     if let Some(exe) = from {
         let exe = crate::types::executable(exe)?;
         let bytes = std::fs::read(&exe).with_context(|| exe.display().to_string())?;
@@ -178,20 +182,24 @@ pub(crate) fn run(
         let catalogue = catalogue(&bytes).with_context(|| exe.display().to_string())?;
         let path = write_snapshot(data, &catalogue, side, fingerprint)?;
         done.push(format!("snapshot {}", path.display()));
+        snapshotted = (side == Side::Server).then_some(path);
     }
-    let (path, age) = newest_snapshot(data, Side::Server)?.ok_or_else(|| {
-        anyhow!(
-            "{}: no server build snapshot; run with --from the server's executable",
-            data.join("typed").display()
-        )
-    })?;
+    let newest = || {
+        newest_snapshot(data, &tables, Side::Server)
+            .with_context(|| data.join("typed").display().to_string())
+    };
+    let path = match snapshotted {
+        Some(path) => path,
+        None => newest()?.ok_or_else(|| {
+            anyhow!(
+                "{}: no server build snapshot; run with --from the server's executable",
+                data.join("typed").display()
+            )
+        })?,
+    };
     let text = std::fs::read_to_string(&path).with_context(|| path.display().to_string())?;
     let catalogue = Catalogue::from_snapshot(&text).with_context(|| path.display().to_string())?;
-    let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned());
-    let build = tables
-        .iter()
-        .find(|table| stem.as_deref() == table.file_name().strip_suffix(".toml"))
-        .map_or_else(|| format!("server build {age}"), build_name);
+    let build = snapshot_build(&path, &tables);
     if check {
         let (files, stale) = generated(root, &catalogue, &build)?;
         let mut differ: Vec<String> = files
@@ -213,47 +221,6 @@ pub(crate) fn run(
         "wrote {written} files of the typed API from {build}"
     ));
     Ok(done.join("\n"))
-}
-
-/// The newest snapshot of `side` in the game data folder `data`, by the
-/// linker age its file name carries (`<side>-<guid>-<age>.jsonl`), and that
-/// age; `None` when there is none.
-///
-/// # Errors
-///
-/// When the folder does not read.
-fn newest_snapshot(data: &Path, side: Side) -> anyhow::Result<Option<(PathBuf, u32)>> {
-    let dir = data.join("typed");
-    let entries = match std::fs::read_dir(&dir) {
-        Ok(entries) => entries,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(e).with_context(|| dir.display().to_string()),
-    };
-    let mut newest = None;
-    for entry in entries {
-        let path = entry.with_context(|| dir.display().to_string())?.path();
-        let age = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .and_then(|name| snapshot_age(name, side));
-        if let Some(age) = age
-            && newest
-                .as_ref()
-                .is_none_or(|(held, at): &(PathBuf, u32)| (age, &path) > (*at, held))
-        {
-            newest = Some((path, age));
-        }
-    }
-    Ok(newest)
-}
-
-/// The linker age of the snapshot file `name` of `side`; `None` for any
-/// other file.
-fn snapshot_age(name: &str, side: Side) -> Option<u32> {
-    let rest = name.strip_suffix(".jsonl")?.strip_prefix(side.as_str())?;
-    let (guid, age) = rest.strip_prefix('-')?.rsplit_once('-')?;
-    let hex = guid.len() == 32 && guid.bytes().all(|b| b.is_ascii_hexdigit());
-    hex.then(|| age.parse().ok()).flatten()
 }
 
 #[cfg(test)]
@@ -358,44 +325,31 @@ mod tests {
     }
 
     #[test]
-    fn a_data_folder_with_two_snapshots_and_no_table_takes_the_newer() {
+    fn a_data_folder_with_two_snapshots_and_no_table_takes_the_one_written_last() {
         let root = repo("untabled");
         let data = root.join("untabled-data");
         let fixture = include_str!("../../enshwick-gamedata/src/typed/fixture.jsonl");
         let fingerprint = |byte, age| enshwick_gamedata::Fingerprint::new([byte; 16], age);
-        for (side, fingerprint) in [
-            (Side::Server, fingerprint(1, 7)),
-            (Side::Server, fingerprint(2, 12)),
-            (Side::Client, fingerprint(3, 40)),
+        let start = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1 << 30);
+        // A new GUID starts the linker age over: the later build has the lower age.
+        for (side, fingerprint, hours) in [
+            (Side::Server, fingerprint(1, 12), 0),
+            (Side::Server, fingerprint(2, 7), 2),
+            (Side::Client, fingerprint(3, 40), 3),
         ] {
             let path = snapshot_in(&data, &file_name(side, fingerprint));
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(&path, fixture).unwrap();
+            let file = std::fs::File::options().write(true).open(&path).unwrap();
+            file.set_modified(start + std::time::Duration::from_secs(hours * 3600))
+                .unwrap();
         }
         std::fs::write(data.join("typed").join("notes.jsonl"), "").unwrap();
         let wrote = run(&root, &data, None, false).unwrap();
-        assert!(wrote.ends_with("from server build 12"), "{wrote}");
+        assert!(wrote.ends_with("from server build 7"), "{wrote}");
         let header = std::fs::read_to_string(root.join(TYPED).join("ecs.rs")).unwrap();
-        assert!(header.contains("server build 12"), "{header}");
+        assert!(header.contains("server build 7"), "{header}");
         drop(std::fs::remove_dir_all(&root));
-    }
-
-    #[test]
-    fn a_snapshot_is_named_only_by_its_side_guid_and_age() {
-        let guid = "ab".repeat(16);
-        assert_eq!(
-            snapshot_age(&format!("server-{guid}-410.jsonl"), Side::Server),
-            Some(410)
-        );
-        for other in [
-            format!("client-{guid}-410.jsonl"),
-            format!("server-{guid}-410.toml"),
-            format!("server-{}-410.jsonl", "ab".repeat(15)),
-            format!("server-{guid}-new.jsonl"),
-            "server-410.jsonl".to_owned(),
-        ] {
-            assert_eq!(snapshot_age(&other, Side::Server), None, "{other}");
-        }
     }
 
     /// `--from` snapshots a build no table is kept for, its side from the
