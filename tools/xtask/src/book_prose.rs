@@ -199,7 +199,7 @@ fn is_reference_definition(line: &str) -> bool {
 
 /// The text after a list item's marker (`-`, `*`, `+`, `1.`, `1)`), if
 /// `line` starts one. Inside a paragraph only a bullet or `1` starts one,
-/// as in CommonMark, so a wrapped line opening on `255.` stays prose.
+/// as Markdown has it, so a wrapped line opening on `255.` stays prose.
 fn list_item(line: &str, in_paragraph: bool) -> Option<&str> {
     if let Some(rest) = line
         .strip_prefix("- ")
