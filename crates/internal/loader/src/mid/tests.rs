@@ -171,12 +171,17 @@ fn copy(function: Unary) -> usize {
 /// Hooks the first [`MARK`] in a copy of `function` with `handler` and
 /// returns the copy.
 fn hook_mark(function: Unary, handler: usize, vectors: Vectors) -> Unary {
+    hook_mark_with(function, handler, 0, vectors)
+}
+
+/// [`hook_mark`] with `context` as the handler's second argument.
+fn hook_mark_with(function: Unary, handler: usize, context: usize, vectors: Vectors) -> Unary {
     let target = copy(function);
     // SAFETY: `copy` wrote `BODY` bytes into a fresh page of 4096 at
     // `target`, which no thread writes now.
     let code = unsafe { core::slice::from_raw_parts(target as *const u8, BODY) };
     let at = code.windows(MARK.len()).position(|w| w == MARK).unwrap();
-    install_with(target + at, handler, 0, vectors).unwrap();
+    install_with(target + at, handler, context, vectors).unwrap();
     callable(target)
 }
 
@@ -687,7 +692,25 @@ fn measures_the_stub_cost() {
             println!("{state}, {name}: {hooked:.2} ns (+{:.2})", hooked - bare);
         }
     }
+    let mut mids = Mids::default();
+    assert_eq!(mids.add(0x10, link(ModIndex::new(0), empty, 0)), Status::OK);
+    let site = core::ptr::from_ref(mids.sites(|_| false)[0]).expose_provenance();
+    let vectors = Vectors::current();
+    let alone = per_call(hook_mark(plain_clear, callback, vectors));
+    let dispatching = (dispatch as *const ()).addr();
+    let dispatched = per_call(hook_mark_with(plain_clear, dispatching, site, vectors));
+    println!(
+        "clear, one handler through dispatch: {dispatched:.2} ns (+{:.2} over the stub alone)",
+        dispatched - alone
+    );
 }
+
+/// A handler that does nothing, as a mod's would at the least.
+///
+/// # Safety
+///
+/// None: it reads neither argument.
+unsafe extern "system" fn empty(_registers: *mut Registers, _user: *mut c_void) {}
 
 static PANICS: AtomicU32 = AtomicU32::new(0);
 static FAULTED: AtomicBool = AtomicBool::new(false);
