@@ -71,7 +71,15 @@ pub(super) unsafe extern "system" fn group(bases: *mut u8, world: *mut u8) {
     if let Some(kind) = kind {
         PLANNED[kind_index(kind)].store(window::VANILLA, Ordering::Relaxed);
     }
-    if let Some(sites) = SITES.get().filter(|_| raised() && !bases.is_null()) {
+    if let Some(sites) = SITES.get().filter(|_| raised() && !bases.is_null())
+        && let Some(loader) = crate::host::loader()
+        && BASES_FUSE.verify(&loader.build.name, || {
+            let image = usize::try_from(loader.base)
+                .ok()
+                .and_then(crate::live::Image::at);
+            members::object_holds(bases.addr(), &sites.fields, image)
+        })
+    {
         // SAFETY: `bases` is the grouping's own live object, non-null by the
         // filter, before the game's grouping copies the world's zone list.
         let _done = BASES_FUSE.run("the zone list", || unsafe {
