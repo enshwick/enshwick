@@ -552,7 +552,7 @@ fn closure(param: &str, local: &Ident, inputs: &[Type], output: &Type) -> syn::R
             (
                 quote!(&#script::Ty::Optional(<#elem as #script::Context>::CHANGE)),
                 quote! {
-                    match callback.call(::std::vec![#(#values),*]) {
+                    match callback.call(&mut [#(#values),*]) {
                         ::core::result::Result::Ok(#script::Value::Nil) | ::core::result::Result::Err(_) => {}
                         ::core::result::Result::Ok(change) => {
                             if let ::core::result::Result::Err(error) = #script::Context::apply(#name, change) {
@@ -567,7 +567,7 @@ fn closure(param: &str, local: &Ident, inputs: &[Type], output: &Type) -> syn::R
             quote!(<#output as #script::Answer>::TY),
             quote! {
                 <#output as #script::Answer>::from_answer(
-                    callback.call(::std::vec![#(#values),*]),
+                    callback.call(&mut [#(#values),*]),
                 )
             },
         ),
@@ -693,7 +693,7 @@ fn function(
     let take = if parameters.is_empty() {
         quote!(let _no_arguments = args;)
     } else {
-        quote!(let mut args = args.into_iter();)
+        quote!(let mut args = args.iter_mut().map(|value| ::core::mem::replace(value, #script::Value::Nil));)
     };
     let (kind, this) = if starting {
         (quote!(InitFunction), quote!(&mut ::enshwick::Load<'_>))
@@ -705,7 +705,7 @@ fn function(
             #label,
             #doc,
             #script::Signature::new(&[#(#describes),*], #ret),
-            |this: #this, args: ::std::vec::Vec<#script::Value>| {
+            |this: #this, args: &mut [#script::Value]| {
                 #take
                 #(#reads)*
                 #body

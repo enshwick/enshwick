@@ -92,7 +92,7 @@ impl AllowFn {
     /// fails closed.
     fn allows(&self, player: &Player) -> bool {
         matches!(
-            self.0.call(vec![player.clone().into_value()]),
+            self.0.call(&mut [player.clone().into_value()]),
             Ok(script::Value::Bool(true))
         )
     }
@@ -111,7 +111,7 @@ pub(crate) struct AtFn(Callback);
 
 impl AtFn {
     fn find(&self, ask: ScriptAsk) -> Result<Subject, FindSubjectError> {
-        match Option::<Found>::from_answer(self.0.call(vec![ask.into_value()])) {
+        match Option::<Found>::from_answer(self.0.call(&mut [ask.into_value()])) {
             Some(Found::Ok(subject)) => Ok(subject),
             Some(Found::Err(reason)) => Err(reason.into()),
             None => Err(FindSubjectError::from("")),
@@ -132,7 +132,7 @@ pub(crate) struct PerPlayerFn(Callback);
 
 impl PerPlayerFn {
     fn players(&self, ask: ScriptAsk, subject: Option<Subject>) -> Vec<(PlayerKey, String)> {
-        let answer = self.0.call(vec![ask.into_value(), subject.into_value()]);
+        let answer = self.0.call(&mut [ask.into_value(), subject.into_value()]);
         Option::<Vec<Listed>>::from_answer(answer)
             .unwrap_or_default()
             .into_iter()

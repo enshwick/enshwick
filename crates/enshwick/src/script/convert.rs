@@ -8,7 +8,7 @@ pub(crate) fn expected(what: &str, value: &Value) -> Error {
         Value::Nil => "nil",
         Value::Bool(_) => "a boolean",
         Value::Number(_) => "a number",
-        Value::String(_) => "a string",
+        Value::String(_) | Value::Name(_) => "a string",
         Value::Vector(_) => "a vector",
         Value::List(_) => "a list",
         Value::Record(_) => "a table",

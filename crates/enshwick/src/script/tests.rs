@@ -163,7 +163,7 @@ fn a_task_from_a_script_runs_until_it_answers_false() {
         Ty::Function(s) if matches!(s.ret(), Ty::Optional(Ty::Bool))
     ));
     every
-        .call(&scheduler, vec![Value::Number(0.0), Value::Function(task)])
+        .call(&scheduler, &mut [Value::Number(0.0), Value::Function(task)])
         .unwrap();
     for _ in 0..4 {
         scheduler.run_due(1);
@@ -178,11 +178,14 @@ fn a_call_names_the_argument_of_the_wrong_type() {
         .find(|f| f.name() == "after")
         .unwrap();
     let error = after
-        .call(&scheduler, vec![Value::String("soon".into())])
+        .call(&scheduler, &mut [Value::String("soon".into())])
         .unwrap_err();
     assert!(error.to_string().starts_with("delay: "), "{error}");
     let error = after
-        .call(&scheduler, vec![Value::Number(1.0), Value::Nil, Value::Nil])
+        .call(
+            &scheduler,
+            &mut [Value::Number(1.0), Value::Nil, Value::Nil],
+        )
         .unwrap_err();
     assert!(error.to_string().contains("takes 2 arguments"), "{error}");
 }

@@ -43,6 +43,7 @@ pub(crate) fn to_lua(
         (Value::Bool(b), _) => LuaValue::Boolean(b),
         (Value::Number(n), _) => LuaValue::Number(n),
         (Value::String(s), _) => LuaValue::String(lua.create_string(s)?),
+        (Value::Name(s), _) => LuaValue::String(lua.create_string(s)?),
         #[expect(
             clippy::cast_possible_truncation,
             reason = "a Luau vector holds three f32"
@@ -100,9 +101,11 @@ pub(crate) fn to_lua(
         (Value::Nil, Ty::Data) => LuaValue::NULL,
         (Value::Function(callback), Ty::Function(signature)) => {
             let scope = scope.clone();
-            LuaValue::Function(lua.create_function(move |lua, args: MultiValue| {
-                let values = arguments(lua, &scope, args, signature, "function")?;
-                let answer = callback.call(values).map_err(mlua::Error::runtime)?;
+            LuaValue::Function(lua.create_function(move |lua, args: LuaArgs| {
+                let mut values = arguments(&scope, args, signature, "function")?;
+                let answer = callback
+                    .call(values.slots())
+                    .map_err(mlua::Error::runtime)?;
                 to_lua(lua, &scope, answer, signature.ret())
             })?)
         }
@@ -374,7 +377,7 @@ impl mlua::UserData for Object {
                 let scope = this.scope.clone();
                 let what = format!("{}:{key}", class.name());
                 let function = lua.create_function(
-                    move |lua, (object, args): (mlua::AnyUserData, MultiValue)| {
+                    move |lua, (object, args): (mlua::AnyUserData, LuaArgs)| {
                         let this = object.borrow::<Self>()?;
                         if this.ended {
                             return Err(mlua::Error::runtime(format!(
@@ -392,9 +395,9 @@ impl mlua::UserData for Object {
                             )));
                         }
                         let signature = method.signature();
-                        let values = arguments(lua, &scope, args, signature, &what)?;
+                        let mut values = arguments(&scope, args, signature, &what)?;
                         let answer = handle
-                            .call(&method, values)
+                            .call(&method, values.slots())
                             .map_err(|e| mlua::Error::runtime(format!("{what}: {e}")))?;
                         to_lua(lua, &scope, answer, signature.ret())
                     },
@@ -485,38 +488,97 @@ fn data(value: LuaValue, depth: usize) -> Result<Value, Error> {
     })
 }
 
-/// The API values of the Luau arguments `args` of a call to `what`, one per
-/// parameter of `signature`.
 pub(crate) fn arguments(
-    _lua: &Lua,
     scope: &Scope,
-    args: MultiValue,
+    args: impl Spread,
     signature: &'static Signature,
     what: &str,
-) -> mlua::Result<Vec<Value>> {
+) -> mlua::Result<Args> {
     let params = signature.params();
-    if args.len() > params.len() {
+    let (given, mut values) = args.spread();
+    if given > params.len() {
         return Err(mlua::Error::runtime(format!(
-            "{what} takes {} arguments, not {}",
+            "{what} takes {} arguments, not {given}",
             params.len(),
-            args.len()
         )));
     }
-    let mut args = args.into_iter();
-    params
-        .iter()
-        .map(|param| {
-            let value = args.next().unwrap_or(LuaValue::Nil);
-            from_lua(scope, value, param.ty()).map_err(|e| {
-                let name = if param.name().is_empty() {
-                    "argument"
-                } else {
-                    param.name()
-                };
-                mlua::Error::runtime(format!("{what}: {name}: {e}"))
-            })
-        })
-        .collect()
+    let mut out = Args::new(params.len());
+    for (slot, param) in out.slots().iter_mut().zip(params) {
+        let value = values.next().unwrap_or(LuaValue::Nil);
+        *slot = from_lua(scope, value, param.ty()).map_err(|e| {
+            let name = if param.name().is_empty() {
+                "argument"
+            } else {
+                param.name()
+            };
+            mlua::Error::runtime(format!("{what}: {name}: {e}"))
+        })?;
+    }
+    Ok(out)
+}
+
+/// The arguments of a call into the API as mlua hands them over: the first
+/// four straight from the stack, any past them in the list, which stays
+/// empty, and so unallocated, for a call of four or fewer.
+pub(crate) type LuaArgs = (LuaValue, LuaValue, LuaValue, LuaValue, MultiValue);
+
+/// Arguments from Luau: how many the script passed, and the values in order.
+pub(crate) trait Spread {
+    fn spread(self) -> (usize, impl Iterator<Item = LuaValue>);
+}
+
+impl Spread for LuaArgs {
+    /// A trailing nil among the first four counts as not passed.
+    fn spread(self) -> (usize, impl Iterator<Item = LuaValue>) {
+        let (a, b, c, d, rest) = self;
+        let first = [a, b, c, d];
+        let given = if rest.is_empty() {
+            first
+                .iter()
+                .rposition(|v| !v.is_nil())
+                .map_or(0, |at| at + 1)
+        } else {
+            first.len() + rest.len()
+        };
+        (given, first.into_iter().chain(rest))
+    }
+}
+
+impl Spread for MultiValue {
+    fn spread(self) -> (usize, impl Iterator<Item = LuaValue>) {
+        (self.len(), self.into_iter())
+    }
+}
+
+/// The API values of a call's arguments: eight in place, more in a list.
+pub(crate) struct Args {
+    near: [Value; 8],
+    far: Vec<Value>,
+    len: usize,
+}
+
+impl Args {
+    fn new(len: usize) -> Self {
+        let far = if len > 8 {
+            (0..len).map(|_| Value::Nil).collect()
+        } else {
+            Vec::new()
+        };
+        Self {
+            near: [const { Value::Nil }; 8],
+            far,
+            len,
+        }
+    }
+
+    /// One value per parameter, which the API takes out of the slice.
+    pub(crate) fn slots(&mut self) -> &mut [Value] {
+        if self.len > self.near.len() {
+            &mut self.far
+        } else {
+            &mut self.near[..self.len]
+        }
+    }
 }
 
 /// The Luau value of the TOML value `value`, such as a setting's; a date

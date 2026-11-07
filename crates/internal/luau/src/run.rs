@@ -314,7 +314,7 @@ impl Scope {
     pub(crate) fn call_function(
         &self,
         function: &Function,
-        args: Vec<Value>,
+        args: &mut [Value],
         signature: &'static Signature,
         lent: &[Lent],
     ) -> Result<Value, script::Error> {
@@ -336,24 +336,44 @@ impl Scope {
             // The lent slots this call holds, a bit each; a signature has few
             // parameters, and one past the 64th gets an object of its own.
             let mut held = 0_u64;
-            let lua_args = args
-                .into_iter()
+            // The first four go straight onto the stack, so a call of four or
+            // fewer allocates no argument list.
+            let mut first = [const { LuaValue::Nil }; 4];
+            let mut more = MultiValue::new();
+            let passed = args.len().min(signature.params().len());
+            let converted = args
+                .iter_mut()
                 .zip(signature.params())
                 .enumerate()
-                .map(
-                    |(at, (value, param))| match (value, param.ty(), lent.get(at)) {
+                .try_for_each(|(at, (value, param))| {
+                    let value = core::mem::replace(value, Value::Nil);
+                    let lua_value = match (value, param.ty(), lent.get(at)) {
                         (Value::Object(handle), Ty::Object(class), Some(slot))
                             if class.is_lent() && at < 64 =>
                         {
                             let (object, kept) = slot.lend(&vm.lua, self, handle)?;
                             held |= u64::from(kept) << at;
-                            Ok(object)
+                            object
                         }
-                        (value, ty, _) => to_lua(&vm.lua, self, value, ty),
-                    },
-                )
-                .collect::<mlua::Result<MultiValue>>();
-            let answer = lua_args.and_then(|lua_args| function.call::<LuaValue>(lua_args));
+                        (value, ty, _) => to_lua(&vm.lua, self, value, ty)?,
+                    };
+                    match first.get_mut(at) {
+                        Some(near) => *near = lua_value,
+                        None => more.push_back(lua_value),
+                    }
+                    mlua::Result::Ok(())
+                });
+            let answer = converted.and_then(|()| {
+                let [a, b, c, d] = first;
+                match passed {
+                    0 => function.call::<LuaValue>(()),
+                    1 => function.call::<LuaValue>((a,)),
+                    2 => function.call::<LuaValue>((a, b)),
+                    3 => function.call::<LuaValue>((a, b, c)),
+                    4 => function.call::<LuaValue>((a, b, c, d)),
+                    _ => function.call::<LuaValue>((a, b, c, d, more)),
+                }
+            });
             for (at, slot) in lent.iter().enumerate().take(64) {
                 if held & (1 << at) != 0 {
                     slot.give_back();

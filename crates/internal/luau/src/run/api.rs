@@ -11,7 +11,7 @@ use enshwick::{Load, Relock as _};
 use mlua::{Function, Lua, MultiValue, Table, Value as LuaValue};
 
 use super::{Asked, Defined, Inner, Owned, Scope, Vm};
-use crate::bridge::{arguments, to_lua};
+use crate::bridge::{LuaArgs, arguments, to_lua};
 use crate::calls::{CallDesc, ServedCall};
 use crate::files::{Requirer, Scripts};
 use crate::points::{EventDesc, PointDesc, Read, decode, encode};
@@ -265,10 +265,10 @@ impl Inner {
                 let signature = declared.signature();
                 table.raw_set(
                     declared.name(),
-                    lua.create_function(move |lua, args: MultiValue| {
-                        let values = arguments(lua, &scope, args, signature, &what)?;
+                    lua.create_function(move |lua, args: LuaArgs| {
+                        let mut values = arguments(&scope, args, signature, &what)?;
                         let answer = opened
-                            .call(&declared, values)
+                            .call(&declared, values.slots())
                             .map_err(|e| mlua::Error::runtime(format!("{what}: {e}")))?;
                         to_lua(lua, &scope, answer, signature.ret())
                     })?,
@@ -562,14 +562,14 @@ impl Inner {
                 let during = {
                     let (bridge, what) = (bridge.clone(), what.clone());
                     scope.create_function(move |lua, args: MultiValue| {
-                        let values = arguments(lua, &bridge, args, signature, &what)?;
+                        let mut values = arguments(&bridge, args, signature, &what)?;
                         let mut load = load.try_relock().ok_or_else(|| {
                             mlua::Error::runtime(format!(
                                 "{what}: called from inside another start call"
                             ))
                         })?;
                         let answer = function
-                            .call(&mut load, values)
+                            .call(&mut load, values.slots())
                             .map_err(|e| mlua::Error::runtime(format!("{what}: {e}")))?;
                         to_lua(lua, &bridge, answer, signature.ret())
                     })?
@@ -627,15 +627,15 @@ fn requested<'scope, 'env>(
         let signature = declared.signature();
         table.raw_set(
             declared.name(),
-            lua.create_function(move |lua, args: MultiValue| {
+            lua.create_function(move |lua, args: LuaArgs| {
                 let opened = slot.get().ok_or_else(|| {
                     mlua::Error::runtime(format!(
                         "{what}: call {ask}() at the top level of main.luau first"
                     ))
                 })?;
-                let values = arguments(lua, &bridge, args, signature, &what)?;
+                let mut values = arguments(&bridge, args, signature, &what)?;
                 let answer = opened
-                    .call(&declared, values)
+                    .call(&declared, values.slots())
                     .map_err(|e| mlua::Error::runtime(format!("{what}: {e}")))?;
                 to_lua(lua, &bridge, answer, signature.ret())
             })?,
