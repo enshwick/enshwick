@@ -223,12 +223,15 @@ fn a_field_path_sums_offsets_only_through_fields_that_hold_the_next_type() {
     put_struct(&mut fake, other, rdata(0xc00), "demo::Other", &[]);
     let image = Image::parse(&fake.bytes, Layout::File, None).unwrap();
     let reflection = Reflection::scan(&image);
-    let path = |steps: &[(&str, &str)]| reflection.field_path(steps);
+    let path = |steps: &[(&str, &str)]| reflection.field_path(steps, None);
     let value = ("demo::Inner", "value");
     assert_eq!(path(&[("demo::Outer", "inner"), value]), Some(12));
     assert_eq!(path(&[("demo::Outer", "inner")]), Some(4));
     assert_eq!(path(&[("demo::Outer", "other"), value]), None);
     assert_eq!(path(&[("demo::Outer", "missing")]), None);
+    let typed = |last| reflection.field_path(&[("demo::Outer", "inner"), value], Some(last));
+    assert_eq!(typed("demo::Other"), Some(12), "the last field's type held");
+    assert_eq!(typed("demo::Inner"), None, "the last field changed type");
 }
 
 #[test]

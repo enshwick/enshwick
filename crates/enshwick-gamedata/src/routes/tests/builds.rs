@@ -227,7 +227,7 @@ fn every_route_holds_on_every_kept_build() {
                 let (value, constant) = match routed {
                     Some(Routed::Symbol(v) | Routed::Reached(v)) => (Some(v), false),
                     Some(Routed::Constant(v)) => (Some(v), true),
-                    None => (None, false),
+                    Some(Routed::Outside(_)) | None => (None, false),
                 };
                 let entry = |table: &crate::Resolved| {
                     if constant {

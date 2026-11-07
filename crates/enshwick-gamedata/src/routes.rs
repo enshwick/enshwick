@@ -35,6 +35,16 @@
 //! a taken constant `v` into `1 << v`, and `plus` then adds to it. `sides`
 //! limits a route to some sides; it defaults to every side.
 //!
+//! `range = [least, greatest]` and `align` bound a constant a route takes
+//! or reflects: one outside them is [`Routed::Outside`] and no entry, so a
+//! shape that matches a changed instruction gives nothing rather than a
+//! wrong value. Every constant entry states its range, as a property of
+//! the value: from half the least to twice the greatest the kept builds
+//! give, at least 16, and exactly the value for a name hash the code holds.
+//! An address a shape takes outside `.text` counts only inside `.data` or
+//! `.rdata`. `type` names the reflected type the last step of a `field`
+//! route holds, which that field must still hold.
+//!
 //! `nth` lets a `system` or `in` shape match more than once and takes its
 //! `nth` run, from 1, in address order, when there are exactly `of` runs;
 //! with `after`, a shape that must match once in the function, it counts
@@ -94,6 +104,9 @@ pub enum Routed {
     Reached(u64),
     /// A constant.
     Constant(u64),
+    /// A constant outside the range or alignment its route states: the
+    /// route finds no entry, and the value says what the code gave.
+    Outside(u64),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
@@ -156,12 +169,40 @@ struct Route {
     /// there must be, where it takes one of several rather than the only
     /// one.
     nth: Option<(u32, u32)>,
+    /// The least and the greatest value a constant may have, both included.
+    range: Option<(u64, u64)>,
+    /// What a constant must be a multiple of; 1 for any.
+    align: u64,
+    /// The reflected type the last step of a `field` route must hold.
+    holds: Option<String>,
 }
 
 impl Route {
     /// Whether the route finds an entry rather than a waypoint.
     fn is_entry(&self) -> bool {
         !self.id.starts_with('~') && self.id.contains('.')
+    }
+
+    /// Whether the route finds a constant: one it takes from code, or a
+    /// reflected offset or size.
+    #[cfg(test)]
+    fn finds_constant(&self) -> bool {
+        matches!(self.take, Take::Value | Take::Cell | Take::Scale)
+            || matches!(self.how, How::Field(_) | How::Size(_))
+    }
+
+    /// `found`, or [`Routed::Outside`] for a constant outside the route's
+    /// range or alignment.
+    fn bounded(&self, found: Routed) -> Routed {
+        match found {
+            Routed::Constant(v)
+                if self.range.is_some_and(|(lo, hi)| !(lo..=hi).contains(&v))
+                    || !v.is_multiple_of(self.align) =>
+            {
+                Routed::Outside(v)
+            }
+            found => found,
+        }
     }
 
     /// Whether the route's match checks the code at the symbol it finds:
@@ -205,6 +246,10 @@ struct RouteRow {
     after: Option<Vec<String>>,
     nth: Option<u32>,
     of: Option<u32>,
+    range: Option<[u64; 2]>,
+    align: Option<u64>,
+    #[serde(rename = "type")]
+    holds: Option<String>,
 }
 
 impl RouteRow {
@@ -279,6 +324,17 @@ impl RouteRow {
                 "`nth` counts from 1 the `of` runs of a `system` or `in` shape, after the one match of `after`, a shape without `*`, when it is given",
             ));
         }
+        let range = bounds(
+            self.range,
+            self.align,
+            constant && take != Take::Spelled || reflected,
+        )
+        .map_err(|why| bad(why))?;
+        if self.holds.is_some() && !matches!(how, How::Field(_)) {
+            return Err(bad(
+                "`type` names what the last step of a `field` route holds",
+            ));
+        }
         Ok(Route {
             sides: self
                 .sides
@@ -292,6 +348,9 @@ impl RouteRow {
             value,
             after,
             nth: ordinal,
+            range,
+            align: self.align.unwrap_or(1),
+            holds: self.holds,
         })
     }
 
@@ -367,6 +426,25 @@ impl RouteRow {
         how.ok_or_else(|| {
             bad("a route is one of `called_by`, `calls`, `loads`, `system`, `field` or `size`, `vtable` with `slot`, or `system`, `in` or `callers` with `shape`, each not empty")
         })
+    }
+}
+
+/// A row's `range` as least and greatest, after checking it and `align`
+/// bound a constant route (`constant`) and read as bounds.
+fn bounds(
+    range: Option<[u64; 2]>,
+    align: Option<u64>,
+    constant: bool,
+) -> Result<Option<(u64, u64)>, &'static str> {
+    if (range.is_some() || align.is_some()) && !constant {
+        return Err(
+            "`range` and `align` bound a `value`, `cell` or `scale` take or a `field` or `size` route",
+        );
+    }
+    match range {
+        Some([lo, hi]) if lo > hi => Err("a `range` is `[least, greatest]`"),
+        _ if align == Some(0) => Err("an `align` is 1 or more"),
+        range => Ok(range.map(|[lo, hi]| (lo, hi))),
     }
 }
 

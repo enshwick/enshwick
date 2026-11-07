@@ -82,6 +82,7 @@ fn a_table_without_its_routed_rows_gets_them_from_the_engine() {
             table: stripped.resolve(),
             unanchored: Vec::new(),
             conflicts: Vec::new(),
+            outside: Vec::new(),
             lacking: OnceLock::new(),
         };
         let reflection = enshwick_gamedata::reflect::Reflection::scan(&image);
@@ -170,6 +171,7 @@ fn routed_symbols_without_table_checks_serve_their_features() {
             table: stripped.resolve(),
             unanchored: Vec::new(),
             conflicts: Vec::new(),
+            outside: Vec::new(),
             lacking: OnceLock::new(),
         };
         let reflection = enshwick_gamedata::reflect::Reflection::scan(&image);
@@ -613,8 +615,8 @@ fn a_build_runs_on_its_anchors_when_allowed_and_given_code() {
 
 /// A build is named by its side, Steam build, game version and executable,
 /// each where it reads, and an absent entry says why: its anchor's pattern
-/// found nothing, nothing finds it, the game's data did not give it, or its
-/// route and anchor disagree.
+/// found nothing, nothing finds it, the game's data did not give it, its
+/// route and anchor disagree, or its route took a value outside its range.
 #[test]
 fn a_build_is_named_by_the_game_and_tells_why_an_entry_is_absent() {
     let fingerprint = Fingerprint::new([0xee; 16], 1);
@@ -656,6 +658,12 @@ fn a_build_is_named_by_the_game_and_tells_why_an_entry_is_absent() {
     assert_eq!(
         found.reason("chat.post", &absent),
         "is found elsewhere by its engine route than by its anchor"
+    );
+    found.outside.push("ecs.add_components".to_owned());
+    found.unfound("ecs.add_components");
+    assert_eq!(
+        found.reason("ecs.add_components", &absent),
+        "is outside its range"
     );
     let moved = Unhooked::Moved.to_string();
     assert_eq!(found.reason("npc.lookup", &moved), moved);

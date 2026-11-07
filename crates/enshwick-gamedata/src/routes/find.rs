@@ -79,7 +79,10 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
         }
         self.states[i] = State::Running;
         let route = self.routes[i];
-        let found = self.run(route).and_then(|found| self.checked(route, found));
+        let found = self
+            .run(route)
+            .and_then(|found| self.checked(route, found))
+            .map(|found| route.bounded(found));
         self.states[i] = State::Done(found);
         found
     }
@@ -104,7 +107,12 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
             How::Slot { vtable, slot } => self.slot(vtable, *slot)?,
             How::Shape { within, steps } => return self.shaped(within, steps, route),
             How::Callers { callee, steps } => return self.called_from(callee, steps, route),
-            How::Field(path) => return self.reflection.field_path(path).map(Routed::Constant),
+            How::Field(path) => {
+                return self
+                    .reflection
+                    .field_path(path, route.holds.as_deref())
+                    .map(Routed::Constant);
+            }
             How::Size(ty) => {
                 let info = self.reflection.type_info(ty).ok()?;
                 return Some(Routed::Constant(u64::from(info.size())));
@@ -326,11 +334,16 @@ impl<'f, 'i, 'a> Finder<'f, 'i, 'a> {
         let code = self.code;
         let base = code.base();
         let rva = |va: u64| va.checked_sub(base);
-        // An address taken in the code must start a function there.
+        // An address taken in the code must start a function there, and
+        // one outside it must lie in the image's data.
         let taken_address = |va: u64| {
             let at = rva(va)?;
-            let function = u32::try_from(at).is_ok_and(|f| code.is_function(f));
-            (!code.in_text(va) || function).then_some(Routed::Reached(at))
+            let held = if code.in_text(va) {
+                u32::try_from(at).is_ok_and(|f| code.is_function(f))
+            } else {
+                code.image().in_data(va)
+            };
+            held.then_some(Routed::Reached(at))
         };
         let constant = |v: u64| {
             let v = if route.shift {

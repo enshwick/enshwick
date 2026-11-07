@@ -224,12 +224,12 @@ impl Resolved {
     /// # Ok::<(), enshwick_gamedata::TableError>(())
     /// ```
     pub fn route(&mut self, id: &str, found: Option<Routed>) -> Routing {
-        let Some(found) = found else {
-            return Routing::Unresolved;
-        };
-        let (entries, engine) = match found {
-            Routed::Symbol(rva) | Routed::Reached(rva) => (&mut self.symbols, rva),
-            Routed::Constant(value) => (&mut self.constants, value),
+        let (entries, engine, found) = match found {
+            None | Some(Routed::Outside(_)) => return Routing::Unresolved,
+            Some(found @ (Routed::Symbol(rva) | Routed::Reached(rva))) => {
+                (&mut self.symbols, rva, found)
+            }
+            Some(found @ Routed::Constant(value)) => (&mut self.constants, value, found),
         };
         let routing = match entries.binary_search_by(|(have, _)| have.as_str().cmp(id)) {
             Ok(i) if entries[i].1 == engine => Routing::Agrees,

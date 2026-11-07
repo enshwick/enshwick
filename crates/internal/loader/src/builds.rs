@@ -36,6 +36,8 @@ pub struct KnownBuild {
     unanchored: Vec<String>,
     /// The entries whose engine route and anchor disagree.
     conflicts: Vec<String>,
+    /// The constants whose engine route took a value outside its range.
+    outside: Vec<String>,
     /// The names of the parts [`Self::lacking`] found, once asked.
     lacking: OnceLock<String>,
 }
@@ -148,6 +150,8 @@ impl KnownBuild {
             reason
         } else if has(&self.conflicts) {
             "is found elsewhere by its engine route than by its anchor"
+        } else if has(&self.outside) {
+            "is outside its range"
         } else if self.attributes().iter().any(|(slot, _)| slot == id) {
             "is not read from the game's data"
         } else if has(self.missing()) && !has(&self.unanchored) {
@@ -232,6 +236,15 @@ impl KnownBuild {
                     );
                 }
                 _ => {
+                    if let Some(enshwick_gamedata::Routed::Outside(value)) = found {
+                        self.outside.push(id.to_owned());
+                        crate::log!(
+                            WARN,
+                            "{id} is outside its range on {}: its engine route takes {value:#x} ({})",
+                            self.name,
+                            crate::errors::FEATURES_OFF
+                        );
+                    }
                     self.unfound(id);
                     unfound.push(id);
                 }
@@ -356,6 +369,7 @@ pub fn by_patterns(
         table: anchors.fall_back(code.0, code.1, cell),
         unanchored: Vec::new(),
         conflicts: Vec::new(),
+        outside: Vec::new(),
         lacking: OnceLock::new(),
     })
 }
@@ -509,6 +523,7 @@ pub fn kept(running: Side) -> Option<KnownBuild> {
         table: table.resolve(),
         unanchored: Vec::new(),
         conflicts: Vec::new(),
+        outside: Vec::new(),
         lacking: OnceLock::new(),
     })
 }
@@ -531,6 +546,7 @@ pub fn empty() -> KnownBuild {
         table: table.resolve(),
         unanchored: Vec::new(),
         conflicts: Vec::new(),
+        outside: Vec::new(),
         lacking: OnceLock::new(),
     }
 }
