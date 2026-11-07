@@ -128,6 +128,7 @@ These belong to the `enshwick` table itself:
 | `enshwick.on(event, handler)` | calls `handler` on each loader [event](events.md) or typed [game event](game-events.md#from-luau), with its data as a table; only at the top level of `main.luau` |
 | `enshwick.on_game_type(type, fields, handler)` | a game event by its reflected type, with the fields named |
 | `enshwick.extend(point, handler, order)` | a link into another mod's [extension point](extending.md#from-luau) |
+| `enshwick.points.define_point(name)` | an [extension point](extending.md#defining-a-point-in-luau) of the mod's own, declared in `pack.toml` |
 | `enshwick.on_mod_event(event, handler)`, `enshwick.define_event(event)` | [mod events](services.md#mod-events), heard and sent |
 | `enshwick.caller(call)` | a function that runs [another mod's call](calls.md#from-luau); unstable |
 | `enshwick.deps` | the mods the pack's `requires` and `after` tables name, [by alias](services.md#other-mods-by-alias) |
@@ -206,8 +207,8 @@ mirror, unless this table names it and says why.
 | `Load::publish`, `Load::service`, `Load::optional_service` | A service is a table of native functions. A Luau mod offers and uses another mod's work through calls and events. It serves a call with `enshwick.serve_call` and runs one with `enshwick.caller`. It sends events through `enshwick.define_event` and hears them with `enshwick.on_mod_event`. |
 | `services::Caller::call`, `services::Emitter::send` | Luau's caller is the function `enshwick.caller` returns. Its emitter is the table `enshwick.define_event` returns, with `send`. |
 | `services::DescribedCall::*`, `services::DescribedCaller::*`, `services::DescribedEvent::*`, `services::DescribedEmitter::*`, `services::Load::define_described_event`, `services::Load::described_caller`, `services::Load::on_described_mod_event`, `services::Load::serve_described_call`, `services::compare`, `services::layout_hash`, `services::read_layout` | The layouts and hashes the runtime builds a script's calls and events from. A script writes the description as a table, and the runtime lays it out and hashes it. |
-| `points::Load::extend_point`, `points::Load::observe_point`, `points::Load::extend_described_point`, `points::DescribedPoint::*`, `points::DescribedField::*` | A point's input and answer are Rust types. A script links with `enshwick.extend(point, handler, order)`. There `point` is the module `cargo enshwick deps --luau` writes with the point's layout hashes. The point's mode decides whether the link changes the answer or observes it. |
-| `points::Load::define_point`, `points::OwnedPoint::*`, `points::Decision::*` | A point's owner declares it from a Rust type with `#[point]`, and its manifest carries the schema other mods link against. A pack declares no points, so a Luau mod links into points but owns none. |
+| `points::Load::extend_point`, `points::Load::observe_point`, `points::Load::extend_described_point`, `points::Load::define_described_point`, `points::DescribedPoint::*`, `points::DescribedField::*`, `points::DescribedOwnedPoint::*` | A point's input and answer are Rust types. A script links with `enshwick.extend(point, handler, order)`. There `point` is the module `cargo enshwick deps --luau` writes with the point's layout hashes. The point's mode decides whether the link changes the answer or observes it. A script's own point is a `[[point]]` of `pack.toml`, which the runtime lays out and hashes. |
+| `points::Decision::*` | `decide` returns two values in place of the enum: the answer and a word for what the links did. That word is "kept", "changed" or "refused", with nil for the answer after a refusal. |
 | `config::*` | Settings from a Rust type or a schema built in code. A Luau mod declares its settings in `pack.toml`, which the loader reads into the same schema. `enshwick.settings()` returns the values in force, and `SettingsChanged` says when they change. |
 | `packs::*` | Reading a pack's folder and files. The loader reads a Luau mod's own folder as its pack, and a script adds content from code through `enshwick.content` and `enshwick.affixes`. |
 | `typed::ComponentType::read`, `typed::ComponentType::write` | The handle `enshwick.typed.component_type` returns holds the server's world from the start. So its `read` and `write` take no world. A value is a table by the Rust item's field names, and a write names every field ([The game's own types](game-types.md#can-a-luau-mod-use-them)). |
@@ -285,7 +286,9 @@ world are allowed (see [Threads](concepts/threads.md)).
 A hook or filter a script sets, such as `enshwick.damage.on_damage`, runs
 where the Rust one runs, inside the game's step. The mod's scripts run one
 call at a time, and each call counts against the budgets, so keep such a
-function short.
+function short. Once warm, a damage filter's call allocates nothing. The
+hit, its methods' arguments and a cause's name cross without the heap.
+A table or text the script builds still allocates in Luau.
 
 ## What a mod costs
 

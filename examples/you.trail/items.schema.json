@@ -1,0 +1,419 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Items",
+  "type": "object",
+  "properties": {
+    "change": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/ItemChangeEntry"
+      }
+    },
+    "item": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/ItemEntry"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "FormatEntry": {
+      "description": "The number format of a tooltip line.",
+      "type": "string",
+      "enum": [
+        "number",
+        "signed",
+        "percent"
+      ]
+    },
+    "IconEntry": {
+      "type": "object",
+      "properties": {
+        "amount": {
+          "description": "How far toward the colour, in percent; 50 when left out.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "like": {
+          "description": "The vanilla icon to recolour; the item's `like` when left out.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "png": {
+          "description": "A PNG of the pack's own under `icons/`, such as `icons/lantern.png`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tint": {
+          "description": "Recolour the vanilla icon toward this colour, red, green, blue.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0
+          },
+          "maxItems": 3,
+          "minItems": 3
+        }
+      },
+      "additionalProperties": false
+    },
+    "ItemChangeEntry": {
+      "description": "A change of vanilla items' values.",
+      "type": "object",
+      "properties": {
+        "armor": {
+          "description": "Every armour value, scaled: `{ times = x }` only.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "burn_time": {
+          "description": "How long the item burns as fuel, in seconds.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "category": {
+          "description": "Every vanilla item of these categories, by the game's names, such as\n`Materials`.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "comfort_amount": {
+          "description": "The comfort the placed item gives.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "damage_mod": {
+          "description": "A weapon's damage factor, from 0 to 100.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "energy_output": {
+          "description": "The energy the item gives as fuel.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "items": {
+          "description": "The items changed: debug names, GUIDs or content ids; or\n`\"stackable\"`, every item one slot holds more of, `\"containers\"`,\nevery item that places a container, or `\"backpacks\"`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ItemsEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_stack": {
+          "description": "How many of the item one inventory slot holds, 1 to 65535.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "slots": {
+          "description": "How many slots the container the item places holds, 8 to 128 in\nsteps of 8.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "speed_mod": {
+          "description": "A weapon's attack speed factor, from 0 to 10.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "ItemEntry": {
+      "type": "object",
+      "properties": {
+        "debug_name": {
+          "description": "Its name in the registry's debug list.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "description": "The text key of its description.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IconEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "description": "The item's name in the pack.",
+          "type": "string"
+        },
+        "like": {
+          "description": "The item it is cloned from: a vanilla GUID or a content id.",
+          "type": "string"
+        },
+        "meter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MeterEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "description": "The text key of its name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "on": {
+          "description": "The functions of the pack's `main.luau` that run on players' actions\nwith the item.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OnEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stats": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StatEntry"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "like"
+      ]
+    },
+    "ItemsEntry": {
+      "description": "The items a change names: a list of names, or a word that selects\nvanilla items from the game's data.",
+      "anyOf": [
+        {
+          "description": "`stackable`, `containers` or `backpacks`.",
+          "type": "string"
+        },
+        {
+          "description": "Debug names, GUIDs or content ids.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "MeterEntry": {
+      "type": "object",
+      "properties": {
+        "max": {
+          "description": "The most it holds, 1 or more.",
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "start": {
+          "description": "What a new item holds; `max` when left out.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "max"
+      ]
+    },
+    "OnEntry": {
+      "description": "An item's functions in the pack's `main.luau`, one per kind of action,\neach the name of a global function.",
+      "type": "object",
+      "properties": {
+        "consume": {
+          "description": "Runs when a player eats, drinks or uses the item; `false` refuses it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "consumed": {
+          "description": "Runs once the game took the item of a use every filter allowed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "equip": {
+          "description": "Runs when a player equips the item; `false` refuses it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pickup": {
+          "description": "Runs after a player picked the item up.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "place": {
+          "description": "Runs after a player placed the item.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "trash": {
+          "description": "Runs when a player throws the item away; `false` refuses it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "unequip": {
+          "description": "Runs when a player takes the item off; `false` refuses it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "ScaleEntry": {
+      "type": "object",
+      "properties": {
+        "times": {
+          "description": "The factor, from 0 to 100.",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "times"
+      ]
+    },
+    "StatEntry": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "$ref": "#/$defs/FormatEntry"
+        },
+        "label": {
+          "description": "The text key of the line's label.",
+          "type": "string"
+        },
+        "value": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "value"
+      ]
+    },
+    "ValueEntry": {
+      "description": "A new value: a number sets it, `{ times = x }` scales it.",
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "$ref": "#/$defs/ScaleEntry"
+        }
+      ]
+    }
+  }
+}

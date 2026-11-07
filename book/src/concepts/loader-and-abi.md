@@ -286,8 +286,8 @@ refused, and the log says
   not checked: inside the game's data the loader does not see whose it is.
 
 A [data pack or Luau mod](../content/packs.md) lists its exports, its
-scripts' events and its content, as `exports` in its `pack.toml`. For
-example: `exports = ["event:greeted", "content:lantern"]`.
+scripts' events and points and its content, as `exports` in its `pack.toml`.
+For example: `exports = ["event:greeted", "point:price", "content:lantern"]`.
 
 ### Schemas for other mods
 

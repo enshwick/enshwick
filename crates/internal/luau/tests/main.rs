@@ -3,6 +3,7 @@
 
 mod actions;
 mod affixes;
+mod allocations;
 mod altars;
 mod book;
 mod calls;
@@ -22,6 +23,7 @@ mod inventory;
 mod items;
 mod map;
 mod mods;
+mod owned_points;
 mod parity;
 mod ported;
 mod progress;

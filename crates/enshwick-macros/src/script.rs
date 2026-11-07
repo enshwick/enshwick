@@ -232,14 +232,22 @@ fn derive_choice(input: &DeriveInput, data: &syn::DataEnum) -> syn::Result<Token
 
         impl #script::IntoScript for #ident {
             fn into_value(self) -> #script::Value {
-                #script::Value::String(::std::string::String::from(match self { #(#into,)* }))
+                #script::Value::Name(match self { #(#into,)* })
             }
         }
 
         impl #script::FromScript for #ident {
             fn from_value(value: #script::Value) -> ::core::result::Result<Self, #script::Error> {
-                let text = <::std::string::String as #script::FromScript>::from_value(value)?;
-                ::core::result::Result::Ok(match text.as_str() {
+                let owned;
+                let text: &str = match &value {
+                    #script::Value::Name(name) => name,
+                    #script::Value::String(text) => text,
+                    _ => {
+                        owned = <::std::string::String as #script::FromScript>::from_value(value)?;
+                        &owned
+                    }
+                };
+                ::core::result::Result::Ok(match text {
                     #(#from,)*
                     _ => return ::core::result::Result::Err(#script::Error::new(
                         ::std::format!("{text:?} is not one of {}", #names),
@@ -277,9 +285,7 @@ fn derive_union(input: &DeriveInput, data: &syn::DataEnum) -> syn::Result<TokenS
         match &variant.fields {
             Fields::Unit => {
                 described.push(quote!(#(#cfg)* #script::Variant::new(#label, #variant_doc, ::core::option::Option::None)));
-                into.push(
-                    quote!(#(#cfg)* Self::#v => #script::Value::String(::std::string::String::from(#label))),
-                );
+                into.push(quote!(#(#cfg)* Self::#v => #script::Value::Name(#label)));
                 from_name.push(quote!(#(#cfg)* #label => ::core::result::Result::Ok(Self::#v)));
             }
             Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
@@ -356,13 +362,20 @@ fn derive_union(input: &DeriveInput, data: &syn::DataEnum) -> syn::Result<TokenS
 
         impl #script::FromScript for #ident {
             fn from_value(value: #script::Value) -> ::core::result::Result<Self, #script::Error> {
-                match value {
-                    #script::Value::String(text) => match text.as_str() {
+                let named = match &value {
+                    #script::Value::String(text) => ::core::option::Option::Some(text.as_str()),
+                    #script::Value::Name(text) => ::core::option::Option::Some(*text),
+                    _ => ::core::option::Option::None,
+                };
+                if let ::core::option::Option::Some(text) = named {
+                    return match text {
                         #(#from_name,)*
                         _ => ::core::result::Result::Err(#script::Error::new(::std::format!(
                             "{text:?} is no variant of {} without a value", #name
                         ))),
-                    },
+                    };
+                }
+                match value {
                     #script::Value::Map(mut entries) if entries.len() == 1 => {
                         let (key, value) = entries.remove(0);
                         match key.as_str() {
@@ -547,7 +560,7 @@ fn closure(param: &str, local: &Ident, inputs: &[Type], output: &Type) -> syn::R
             (
                 quote!(&#script::Ty::Optional(<#elem as #script::Context>::CHANGE)),
                 quote! {
-                    match callback.call(::std::vec![#(#values),*]) {
+                    match callback.call(&mut [#(#values),*]) {
                         ::core::result::Result::Ok(#script::Value::Nil) | ::core::result::Result::Err(_) => {}
                         ::core::result::Result::Ok(change) => {
                             if let ::core::result::Result::Err(error) = #script::Context::apply(#name, change) {
@@ -562,7 +575,7 @@ fn closure(param: &str, local: &Ident, inputs: &[Type], output: &Type) -> syn::R
             quote!(<#output as #script::Answer>::TY),
             quote! {
                 <#output as #script::Answer>::from_answer(
-                    callback.call(::std::vec![#(#values),*]),
+                    callback.call(&mut [#(#values),*]),
                 )
             },
         ),
@@ -688,7 +701,7 @@ fn function(
     let take = if parameters.is_empty() {
         quote!(let _no_arguments = args;)
     } else {
-        quote!(let mut args = args.into_iter();)
+        quote!(let mut args = args.iter_mut().map(|value| ::core::mem::replace(value, #script::Value::Nil));)
     };
     let (kind, this) = if starting {
         (quote!(InitFunction), quote!(&mut ::enshwick::Load<'_>))
@@ -700,7 +713,7 @@ fn function(
             #label,
             #doc,
             #script::Signature::new(&[#(#describes),*], #ret),
-            |this: #this, args: ::std::vec::Vec<#script::Value>| {
+            |this: #this, args: &mut [#script::Value]| {
                 #take
                 #(#reads)*
                 #body

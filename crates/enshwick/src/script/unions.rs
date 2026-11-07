@@ -23,7 +23,7 @@ use super::Ty;
 ///
 /// let Ty::Union(union) = Change::TY else { unreachable!() };
 /// assert_eq!(union.variants()[1].name(), "Times");
-/// assert!(matches!(Change::Keep.into_value(), Value::String(s) if s == "Keep"));
+/// assert!(matches!(Change::Keep.into_value(), Value::Name("Keep")));
 /// let doubled = Value::Map(vec![("Times".into(), Value::Number(2.0))]);
 /// assert_eq!(Change::from_value(doubled)?, Change::Times(2.0));
 /// # Ok::<(), enshwick::script::Error>(())

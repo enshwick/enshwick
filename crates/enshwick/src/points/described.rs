@@ -3,10 +3,11 @@
 //! with the input and the answer as bytes in the owner's layout.
 
 use core::ffi::c_void;
+use core::sync::atomic::{AtomicU32, Ordering};
 
-use crate::abi::{Header, Layout, LayoutField, PointFlags, PointVerdict, Str};
-use crate::load::hand_over;
-use crate::points::{Mode, Order};
+use crate::abi::{Header, Layout, LayoutField, PointFlags, PointVerdict, Status, Str};
+use crate::load::{hand_over, ok};
+use crate::points::{Decision, Mode, Order};
 use crate::{Load, Off};
 
 /// A field of a described input or answer: its name and the layout hash the
@@ -204,7 +205,99 @@ impl Load<'_> {
     where
         F: Fn(&[u8], &[u8]) -> DescribedVerdict + Send + Sync + 'static,
     {
-        let input: Vec<LayoutField> = point
+        let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
+        let before: Vec<Str> = order.before.iter().map(|id| Str::new(id)).collect();
+        let after: Vec<Str> = order.after.iter().map(|id| Str::new(id)).collect();
+        let host = self.host();
+        let link = Link {
+            input_size: usize::try_from(point.input_size).unwrap_or(0),
+            output_size: usize::try_from(point.output_size).unwrap_or(0),
+            changes: point.mode.changes(),
+            refusable: point.refusable,
+            run: link,
+        };
+        point.with_spec(|spec| {
+            let raw = crate::abi::PointLink {
+                header: Header::of::<crate::abi::PointLink>(),
+                point: spec,
+                before: before.as_ptr(),
+                after: after.as_ptr(),
+                before_count: count(before.len()),
+                after_count: count(after.len()),
+                priority: order.priority,
+            };
+            hand_over(
+                link,
+                |user| {
+                    (host.api().attach_point)(
+                        host.handle(),
+                        &raw const raw,
+                        run_described::<F>,
+                        user,
+                    )
+                },
+                &format!("point {}", point.name),
+            )
+        })
+    }
+
+    /// Defines the extension point `point` describes for other mods to
+    /// extend, as [`define_point`](Self::define_point) does for a type, and
+    /// returns the handle that asks it with bytes.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the name is outside this mod's id or defined twice, or
+    /// when called after `init`.
+    ///
+    /// # Safety
+    ///
+    /// - The input and the answer of every [`DescribedOwnedPoint::decide`]
+    ///   are valid values of the types the hashes name, since links read them
+    ///   as those types: a `bool` is 0 or 1, an enum one of its variants, and
+    ///   no byte is padding.
+    ///
+    /// # Examples
+    ///
+    /// See [`DescribedOwnedPoint`].
+    pub unsafe fn define_described_point(
+        &mut self,
+        point: &DescribedPoint,
+    ) -> Result<DescribedOwnedPoint, Off> {
+        let host = self.host();
+        let mut handle = crate::abi::PointHandle::EMPTY;
+        let status =
+            point.with_spec(|spec| (host.api().define_point)(host.handle(), spec, &raw mut handle));
+        // SAFETY: the loader's count lives for the process.
+        let live = unsafe { handle.live.as_ref() }.unwrap_or(&super::NONE_LIVE);
+        ok(
+            status,
+            DescribedOwnedPoint {
+                host,
+                id: handle.id,
+                live,
+                input_size: usize::try_from(point.input_size).unwrap_or(0),
+                output_size: usize::try_from(point.output_size).unwrap_or(0),
+            },
+            || {
+                if status == Status::REFUSED {
+                    format!(
+                        "point {}: named after another mod or defined twice",
+                        point.name
+                    )
+                } else {
+                    format!("point {}", point.name)
+                }
+            },
+        )
+    }
+}
+
+impl DescribedPoint {
+    /// Calls `f` with the point as the ABI carries it, its fields borrowed
+    /// for the call.
+    fn with_spec<R>(&self, f: impl FnOnce(*const crate::abi::PointSpec) -> R) -> R {
+        let input: Vec<LayoutField> = self
             .input
             .iter()
             .map(|f| LayoutField {
@@ -214,56 +307,167 @@ impl Load<'_> {
             .collect();
         let output = [LayoutField {
             name: Str::new("output"),
-            hash: point.output_hash,
+            hash: self.output_hash,
         }];
-        let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
         let spec = crate::abi::PointSpec {
             header: Header::of::<crate::abi::PointSpec>(),
-            name: Str::new(&point.name),
-            mode: point.mode.to_abi(),
-            flags: if point.refusable {
+            name: Str::new(&self.name),
+            mode: self.mode.to_abi(),
+            flags: if self.refusable {
                 PointFlags::REFUSE
             } else {
                 PointFlags::NONE
             },
             input: Layout {
                 fields: input.as_ptr(),
-                count: count(input.len()),
-                size: point.input_size,
+                count: u32::try_from(input.len()).unwrap_or(u32::MAX),
+                size: self.input_size,
             },
             output: Layout {
                 fields: output.as_ptr(),
                 count: 1,
-                size: point.output_size,
+                size: self.output_size,
             },
         };
-        let before: Vec<Str> = order.before.iter().map(|id| Str::new(id)).collect();
-        let after: Vec<Str> = order.after.iter().map(|id| Str::new(id)).collect();
-        let raw = crate::abi::PointLink {
-            header: Header::of::<crate::abi::PointLink>(),
-            point: &raw const spec,
-            before: before.as_ptr(),
-            after: after.as_ptr(),
-            before_count: count(before.len()),
-            after_count: count(after.len()),
-            priority: order.priority,
-        };
-        let host = self.host();
-        let link = Link {
-            input_size: usize::try_from(point.input_size).unwrap_or(0),
-            output_size: usize::try_from(point.output_size).unwrap_or(0),
-            changes: point.mode.changes(),
-            refusable: point.refusable,
-            run: link,
-        };
-        hand_over(
-            link,
-            |user| {
-                (host.api().attach_point)(host.handle(), &raw const raw, run_described::<F>, user)
-            },
-            &format!("point {}", point.name),
-        )
+        f(&raw const spec)
     }
+}
+
+/// A described point this mod defined, from
+/// [`Load::define_described_point`]: asks the links with the input and the
+/// answer as bytes, from any thread.
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::points::{DescribedField, DescribedPoint, Mode};
+/// use enshwick::services::layout_hash;
+/// use enshwick::Shape as _;
+///
+/// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+///     let price = DescribedPoint::new("you.hello:price", Mode::Override)
+///         .with_input(vec![DescribedField::new("item", layout_hash("item", u32::SHAPE, 4, 4, 0))], 4)
+///         .with_output(layout_hash("output", u32::SHAPE, 4, 4, 0), 4);
+///     // SAFETY: every input and answer asked is a `u32`, valid for any bytes.
+///     let price = unsafe { load.define_described_point(&price) }?;
+///     let mut coins = 10u32.to_le_bytes();
+///     let decision = price.decide(&7u32.to_le_bytes(), &mut coins);
+///     enshwick::info!("item 7: {decision:?}, {} coins", u32::from_le_bytes(coins));
+///     Ok(())
+/// }
+/// ```
+#[derive(Clone, Copy)]
+pub struct DescribedOwnedPoint {
+    host: crate::Host,
+    id: u32,
+    live: &'static AtomicU32,
+    input_size: usize,
+    output_size: usize,
+}
+
+impl core::fmt::Debug for DescribedOwnedPoint {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("DescribedOwnedPoint")
+            .field("id", &self.id)
+            .field("live", &self.live.load(Ordering::Relaxed))
+            .finish_non_exhaustive()
+    }
+}
+
+impl DescribedOwnedPoint {
+    /// Runs the live links over `answer`, this mod's own, with `input`, as
+    /// [`OwnedPoint::decide`](super::OwnedPoint::decide) does: on
+    /// [`Decision::Changed`] `answer` holds the links' value, on
+    /// [`Decision::Kept`] it is untouched. Bytes of another size than the
+    /// description's keep the answer without running a link. Bytes aligned
+    /// to 16 bytes reach the links as they are; others are copied
+    /// to aligned memory first, since typed links read them as their types.
+    ///
+    /// # Examples
+    ///
+    /// See [`DescribedOwnedPoint`].
+    #[inline]
+    pub fn decide(&self, input: &[u8], answer: &mut [u8]) -> Decision<()> {
+        if self.live.load(Ordering::Relaxed) == 0
+            || input.len() != self.input_size
+            || answer.len() != self.output_size
+        {
+            return Decision::Kept(());
+        }
+        if is_aligned(input) && is_aligned(answer) {
+            self.run(input, answer)
+        } else {
+            self.run_copied(input, answer)
+        }
+    }
+
+    /// Runs the links over copies of `input` and `answer` aligned to
+    /// 16 bytes, then copies a changed answer back.
+    #[cold]
+    fn run_copied(&self, input: &[u8], answer: &mut [u8]) -> Decision<()> {
+        let input_words = aligned_copy(input);
+        let mut answer_words = aligned_copy(answer);
+        let input_bytes = bytemuck::cast_slice::<u128, u8>(&input_words)
+            .get(..input.len())
+            .unwrap_or_default();
+        let answer_bytes = bytemuck::cast_slice_mut::<u128, u8>(&mut answer_words)
+            .get_mut(..answer.len())
+            .unwrap_or_default();
+        let decision = self.run(input_bytes, answer_bytes);
+        if decision == Decision::Changed(()) {
+            answer.copy_from_slice(answer_bytes);
+        }
+        decision
+    }
+
+    /// Asks the loader to run the links over aligned bytes of the
+    /// description's sizes.
+    fn run(&self, input: &[u8], answer: &mut [u8]) -> Decision<()> {
+        let mut verdict = PointVerdict::PASS;
+        let status = (self.host.api().run_point)(
+            self.host.handle(),
+            self.id,
+            input.as_ptr().cast(),
+            answer.as_mut_ptr().cast(),
+            &raw mut verdict,
+        );
+        match verdict {
+            _ if !status.is_ok() => Decision::Kept(()),
+            PointVerdict::SET => Decision::Changed(()),
+            PointVerdict::REFUSE => Decision::Refused,
+            _ => Decision::Kept(()),
+        }
+    }
+
+    /// Whether any link runs.
+    ///
+    /// # Examples
+    ///
+    /// See [`OwnedPoint::is_extended`](super::OwnedPoint::is_extended).
+    #[must_use]
+    pub fn is_extended(&self) -> bool {
+        self.live.load(Ordering::Relaxed) != 0
+    }
+}
+
+/// The alignment [`DescribedOwnedPoint::decide`] hands the links, enough for
+/// any field a typed link reads.
+const ALIGN: usize = 16;
+
+/// Whether `bytes` start at [`ALIGN`]; empty bytes are read by nobody.
+fn is_aligned(bytes: &[u8]) -> bool {
+    bytes.is_empty() || bytes.as_ptr().addr().is_multiple_of(ALIGN)
+}
+
+/// `bytes` copied to the start of words aligned to [`ALIGN`].
+fn aligned_copy(bytes: &[u8]) -> Vec<u128> {
+    let mut words = vec![0u128; bytes.len().div_ceil(ALIGN)];
+    if let Some(start) = bytemuck::cast_slice_mut::<u128, u8>(&mut words).get_mut(..bytes.len()) {
+        start.copy_from_slice(bytes);
+    }
+    words
 }
 
 /// Runs a described link; `user` is the [`Link`] boxed by

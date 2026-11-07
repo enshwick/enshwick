@@ -18,6 +18,25 @@ pub const TYPED_DEFINITIONS_FILE: &str = "enshwick.typed.d.luau";
 /// The Rust path every generated type of the typed API starts with.
 const TYPED: &str = "enshwick::typed::";
 
+/// The words Luau keeps for itself, which a table type names only in
+/// brackets.
+const LUAU_KEYWORDS: [&str; 22] = [
+    "and", "break", "continue", "do", "else", "elseif", "end", "false", "for", "function", "if",
+    "in", "local", "nil", "not", "or", "repeat", "return", "then", "true", "until", "while",
+];
+
+/// A field's key in a table type: its name, or `["name"]` for a keyword or
+/// a name that is no identifier, such as a game field named `function`.
+fn field_key(name: &str) -> Cow<'_, str> {
+    let ident = name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+    if ident && !LUAU_KEYWORDS.contains(&name) {
+        Cow::Borrowed(name)
+    } else {
+        Cow::Owned(format!("[{name:?}]"))
+    }
+}
+
 /// The Luau name of the type named `name`: a generated type of the typed
 /// API by its path there, `typed_ecs_Health` for `ecs::Health`, since every
 /// Luau type shares one namespace; any other by its own name.
@@ -54,7 +73,7 @@ impl Named {
                     } else {
                         ty
                     };
-                    let _written = writeln!(out, "\t{}: {ty},", field.name());
+                    let _written = writeln!(out, "\t{}: {ty},", field_key(field.name()));
                 }
                 out.push_str("}\n");
             }
@@ -407,6 +426,7 @@ pub fn definitions() -> String {
     out.push_str("\t--- Calls `handler` with the data of another mod's event, as `cargo enshwick deps <alias> --luau` describes it or a description of the script's own (fields with `name` and `read`, laid out as Rust lays them out). Subscribe at the top level of main.luau.\n\ton_mod_event: (event: { name: string }, handler: (data: any) -> ()) -> (),\n");
     out.push_str("\t--- The function that runs another mod's call, as `cargo enshwick deps <alias> --luau` describes it: it takes the input and returns the answer, or nil and why not (`unmatched` also before the start is over, `off` or `failed`). Ask at the top level of main.luau. Unstable: may change in any release.\n\tcaller: (call: { name: string }) -> (input: any) -> (any, string?),\n");
     out.push_str("\t--- Defines a mod event of this mod for others to hear, at the top level of main.luau, by its local name (`greeted` for `<mod id>:greeted`); `send` hands every subscriber the data.\n\tdefine_event: (event: { name: string }) -> { send: (data: any) -> () },\n");
+    out.push_str("\t--- The extension points this mod owns, which `pack.toml` declares under `[[point]]` for other mods to extend.\n\tpoints: {\n\t\t--- Defines the point `pack.toml` declares by the local name `name` (`price` for `<mod id>:price`), at the top level of main.luau; other mods' links run once every mod has started. `decide` runs them over this mod's own answer and returns the answer with `\"kept\"` or `\"changed\"`, or nil with `\"refused\"`; `is_extended` says whether a link runs.\n\t\tdefine_point: (name: string) -> {\n\t\t\tdecide: (self: any, input: { [string]: any }, answer: any) -> (any, \"kept\" | \"changed\" | \"refused\"),\n\t\t\tis_extended: (self: any) -> boolean,\n\t\t},\n\t},\n");
     out.push_str("\t--- Serves a call of this mod for other mods, at the top level of main.luau, by its local name (`price-of` for `<mod id>:price-of`), as a Rust mod serves a `#[call]` type: the input's fields and the answer read numbers, booleans, entities or GUIDs, laid out as Rust lays them out, so a Rust caller of the same type matches. `handler` gets the input and returns the answer; nil fails the call.\n\tserve_call: (call: { name: string, major: number?, fields: { { name: string, read: string } }, output: string }, handler: (input: { [string]: any }) -> any) -> (),\n");
     out.push_str("\t--- Calls `handler` with the mod's settings now and as each world loads and stops, as a Rust mod's `on_settings` does.\n\ton_settings: (handler: (settings: { [string]: any }) -> ()) -> (),\n");
     out.push_str("\t--- Calls `handler` as `on_settings` does, and again on every change in game, as a Rust mod's `on_settings_change` does.\n\ton_settings_change: (handler: (settings: { [string]: any }) -> ()) -> (),\n");
@@ -572,6 +592,17 @@ mod tests {
         );
         assert_eq!(luau_name("enshwick::typed::root::Guid"), "typed_Guid");
         assert_eq!(luau_name("Player"), "Player");
+    }
+
+    #[test]
+    fn a_field_named_after_a_luau_keyword_is_written_in_brackets() {
+        assert_eq!(field_key("health"), "health");
+        assert_eq!(field_key("function"), "[\"function\"]");
+        assert_eq!(field_key("2d"), "[\"2d\"]");
+        assert!(
+            !typed_definitions().contains("\tfunction:"),
+            "a keyword field reads as a field"
+        );
     }
 
     #[test]

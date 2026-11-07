@@ -554,27 +554,35 @@ impl Load<'_> {
     #[script(name = "on_damage")]
     pub(crate) fn on_damage_script(
         &mut self,
-        filter: impl Fn(ScriptDamage) + Send + Sync + 'static,
+        filter: impl Fn(std::sync::Arc<ScriptDamage>) + Send + Sync + 'static,
     ) -> Result<(), Off> {
         use crate::Relock as _;
         use core::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+        /// Frees the kept copy on a panic too, which the hit's guard catches.
+        struct Free<'a>(&'a AtomicBool);
+        impl Drop for Free<'_> {
+            fn drop(&mut self) {
+                self.0.store(false, Ordering::Release);
+            }
+        }
         let kept = std::sync::OnceLock::new();
         let busy = AtomicBool::new(false);
         self.on_damage(move |damage| {
-            let fresh = || ScriptDamage(std::sync::Arc::new(std::sync::Mutex::new(*damage.check)));
+            let fresh = || Arc::new(ScriptDamage(Arc::new(std::sync::Mutex::new(*damage.check))));
             // A hit while the kept copy is out, on another thread or inside
             // the filter, gets a copy of its own.
             if busy.swap(true, Ordering::Acquire) {
                 let copy = fresh();
-                filter(copy.clone());
+                filter(Arc::clone(&copy));
                 *damage.check = *copy.0.relock();
                 return;
             }
-            let copy: &ScriptDamage = kept.get_or_init(fresh);
+            let _free = Free(&busy);
+            let copy: &Arc<ScriptDamage> = kept.get_or_init(fresh);
             *copy.0.relock() = *damage.check;
-            filter(copy.clone());
+            filter(Arc::clone(copy));
             *damage.check = *copy.0.relock();
-            busy.store(false, Ordering::Release);
         })
     }
 }

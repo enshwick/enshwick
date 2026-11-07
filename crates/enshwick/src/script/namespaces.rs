@@ -91,7 +91,7 @@ impl Declared {
 
 /// The function behind an [`Opened`] namespace: the function's place in its
 /// namespace, from [`Declared`], and its arguments.
-type OpenedFn = dyn Fn(usize, Vec<Value>) -> Result<Value, Error> + Send + Sync;
+type OpenedFn = dyn Fn(usize, &mut [Value]) -> Result<Value, Error> + Send + Sync;
 
 /// A [`Namespace`] opened for one mod: calls its functions by index.
 ///
@@ -119,7 +119,7 @@ impl Opened {
     /// # Examples
     ///
     /// See [`Namespace::open`].
-    pub fn call(&self, function: &Declared, args: Vec<Value>) -> Result<Value, Error> {
+    pub fn call(&self, function: &Declared, args: &mut [Value]) -> Result<Value, Error> {
         (self.0)(function.index, args)
     }
 }
@@ -268,7 +268,7 @@ impl Namespace {
     ///     let log = NAMESPACES.iter().find(|n| n.name() == "log").ok_or(enshwick::Off::new("no log"))?;
     ///     let functions = log.functions();
     ///     let info = functions.iter().find(|f| f.name() == "info").ok_or(enshwick::Off::new("no info"))?;
-    ///     log.open(load)?.call(info, vec![Value::String("hello".into())])?;
+    ///     log.open(load)?.call(info, &mut [Value::String("hello".into())])?;
     ///     Ok(())
     /// }
     /// ```

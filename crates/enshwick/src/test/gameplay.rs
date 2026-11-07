@@ -104,10 +104,13 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn damage(&self, mut check: crate::abi::DamageCheck) -> crate::abi::DamageCheck {
-        let filters = table::with(Vec::new(), |s| s.damage_filters.clone());
-        for filter in filters {
+        // One filter at a time, outside the lock, without copying the list:
+        // a bench of a filter counts its own allocations alone.
+        let mut at = 0;
+        while let Some(filter) = table::with(None, |s| s.damage_filters.get(at).copied()) {
             // SAFETY: the filter the mod registered, with its pointer.
             filter.run(|callback, user| unsafe { callback(&raw mut check, user) });
+            at += 1;
         }
         check
     }

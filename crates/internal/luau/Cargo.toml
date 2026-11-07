@@ -24,6 +24,7 @@ enshwick = { workspace = true, features = ["test"] }
 criterion.workspace = true
 proptest.workspace = true
 enshwick-gamedata.workspace = true
+cargo-enshwick.workspace = true
 syn = { version = "=3.0.9", default-features = false, features = ["full", "parsing"] }
 
 [lints]

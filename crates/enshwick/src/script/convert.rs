@@ -8,7 +8,7 @@ pub(crate) fn expected(what: &str, value: &Value) -> Error {
         Value::Nil => "nil",
         Value::Bool(_) => "a boolean",
         Value::Number(_) => "a number",
-        Value::String(_) => "a string",
+        Value::String(_) | Value::Name(_) => "a string",
         Value::Vector(_) => "a vector",
         Value::List(_) => "a list",
         Value::Record(_) => "a table",
@@ -234,7 +234,7 @@ impl IntoScript for crate::abi::Side {
             Side::BOTH => "both",
             _ => "server",
         };
-        Value::String(name.to_owned())
+        Value::Name(name)
     }
 }
 
@@ -268,7 +268,7 @@ impl Typed for crate::abi::Level {
 
 impl IntoScript for crate::abi::Level {
     fn into_value(self) -> Value {
-        Value::String(self.name().to_owned())
+        Value::Name(self.name())
     }
 }
 
@@ -398,6 +398,7 @@ impl FromScript for String {
     fn from_value(value: Value) -> Result<Self, Error> {
         match value {
             Value::String(text) => Ok(text),
+            Value::Name(name) => Ok(name.to_owned()),
             other => Err(expected("a string", &other)),
         }
     }
@@ -609,7 +610,7 @@ pub fn record_fields(value: Value, count: usize) -> Result<std::vec::IntoIter<Va
 ///
 /// [`Error`] naming the parameter when the argument is not a `T`.
 pub fn argument<T: FromScript>(
-    args: &mut std::vec::IntoIter<Value>,
+    args: &mut impl Iterator<Item = Value>,
     name: &str,
 ) -> Result<T, Error> {
     T::from_value(args.next().unwrap_or(Value::Nil)).map_err(|e| e.within(name))
@@ -623,7 +624,7 @@ pub fn argument<T: FromScript>(
 ///
 /// As [`argument`].
 pub fn argument_or_default<T: FromScript + Default>(
-    args: &mut std::vec::IntoIter<Value>,
+    args: &mut impl Iterator<Item = Value>,
     name: &str,
 ) -> Result<T, Error> {
     match args.next() {
@@ -669,7 +670,8 @@ mod tests {
             (Side::CLIENT, "client"),
             (Side::BOTH, "both"),
         ] {
-            assert!(matches!(side.into_value(), Value::String(ref text) if text == name));
+            assert!(matches!(side.into_value(), Value::Name(text) if text == name));
+            assert_eq!(Side::from_value(Value::Name(name)).ok(), Some(side));
             assert_eq!(
                 Side::from_value(Value::String(name.into())).ok(),
                 Some(side)

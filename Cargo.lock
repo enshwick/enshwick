@@ -550,6 +550,7 @@ name = "enshwick-luau"
 version = "1.0.0-alpha.13"
 dependencies = [
  "arc-swap",
+ "cargo-enshwick",
  "criterion",
  "enshwick",
  "enshwick-gamedata",

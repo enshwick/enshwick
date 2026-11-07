@@ -3,7 +3,7 @@
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick::script::{Callback, Class, Error, Handle, Signature, Ty, Union, Value};
+use enshwick::script::{Callback, Choice, Class, Error, Handle, Signature, Ty, Union, Value};
 use mlua::{Lua, MultiValue, Value as LuaValue};
 
 use crate::run::Scope;
@@ -43,6 +43,7 @@ pub(crate) fn to_lua(
         (Value::Bool(b), _) => LuaValue::Boolean(b),
         (Value::Number(n), _) => LuaValue::Number(n),
         (Value::String(s), _) => LuaValue::String(lua.create_string(s)?),
+        (Value::Name(s), _) => LuaValue::String(Interned::name(lua, s)?),
         #[expect(
             clippy::cast_possible_truncation,
             reason = "a Luau vector holds three f32"
@@ -100,9 +101,11 @@ pub(crate) fn to_lua(
         (Value::Nil, Ty::Data) => LuaValue::NULL,
         (Value::Function(callback), Ty::Function(signature)) => {
             let scope = scope.clone();
-            LuaValue::Function(lua.create_function(move |lua, args: MultiValue| {
-                let values = arguments(lua, &scope, args, signature, "function")?;
-                let answer = callback.call(values).map_err(mlua::Error::runtime)?;
+            LuaValue::Function(lua.create_function(move |lua, args: LuaArgs| {
+                let mut values = arguments(&scope, args, signature, "function")?;
+                let answer = callback
+                    .call(values.slots())
+                    .map_err(mlua::Error::runtime)?;
                 to_lua(lua, &scope, answer, signature.ret())
             })?)
         }
@@ -127,7 +130,8 @@ pub(crate) fn from_lua(scope: &Scope, value: LuaValue, ty: &'static Ty) -> Resul
             LuaValue::Number(n) => Ok(Value::Number(n)),
             other => Err(expected("a number", &other)),
         },
-        Ty::String | Ty::Choice(_) => match value {
+        Ty::Choice(choice) => choice_from_lua(scope, value, choice),
+        Ty::String => match value {
             LuaValue::String(s) => Ok(Value::String(
                 s.to_str()
                     .map_err(|_| Error::new("expected text in UTF-8"))?
@@ -208,6 +212,28 @@ pub(crate) fn from_lua(scope: &Scope, value: LuaValue, ty: &'static Ty) -> Resul
         Ty::Object(class) => object_from_lua(&value, class),
         _ => Err(Error::new("a type this runtime does not know")),
     }
+}
+
+/// The API value of `value`, a variant of `choice`: the variant's own
+/// static name, which also checks it.
+fn choice_from_lua(scope: &Scope, value: LuaValue, choice: &Choice) -> Result<Value, Error> {
+    let LuaValue::String(s) = value else {
+        return Err(expected("a string", &value));
+    };
+    if let Some(Some(name)) = scope.with_lua(|lua| Interned::variant(lua, choice, &s)) {
+        return Ok(Value::Name(name));
+    }
+    let text = s
+        .to_str()
+        .map_err(|_| Error::new("expected text in UTF-8"))?;
+    choice
+        .names()
+        .find(|name| *name == &*text)
+        .map(Value::Name)
+        .ok_or_else(|| {
+            let names: Vec<String> = choice.names().map(|name| format!("{name:?}")).collect();
+            Error::new(format!("{:?} is not one of {}", &*text, names.join(", ")))
+        })
 }
 
 /// The API value of `value`, a variant of `union`: its name, or a table of
@@ -326,8 +352,75 @@ impl Lent {
     }
 }
 
-/// The registry key of the method functions [`Object`]'s `__index` made.
-const METHODS: &str = "enshwick.methods";
+/// What a VM keeps of the API's own names, so a hot call pushes no text:
+/// under a memory limit mlua pushes text in protected mode, which on Luau
+/// leaves a closure behind on every push.
+#[derive(Default)]
+struct Interned {
+    /// The script string of each name a choice or a variant crossed as.
+    names: Vec<(&'static str, mlua::LuaString)>,
+    /// Each class's table of method functions, by method name, filled as
+    /// `__index` makes them.
+    methods: Vec<(&'static str, mlua::Table)>,
+    /// Each choice's table from a variant's script string to its place, by
+    /// its variants, since two choices may share a name.
+    choices: Vec<(&'static [(&'static str, &'static str)], mlua::Table)>,
+}
+
+impl Interned {
+    /// The entry of `key` in the list `pick` chooses, made by `make` and
+    /// kept on first use.
+    fn get<K: Copy + PartialEq, T: Clone>(
+        lua: &Lua,
+        key: K,
+        pick: fn(&mut Self) -> &mut Vec<(K, T)>,
+        make: impl FnOnce() -> mlua::Result<T>,
+    ) -> mlua::Result<T> {
+        if let Some(mut interned) = lua.app_data_mut::<Self>()
+            && let Some((_, kept)) = pick(&mut interned).iter().find(|(k, _)| *k == key)
+        {
+            return Ok(kept.clone());
+        }
+        let value = make()?;
+        if lua.app_data_ref::<Self>().is_none() {
+            let _none = lua.set_app_data(Self::default());
+        }
+        if let Some(mut interned) = lua.app_data_mut::<Self>() {
+            pick(&mut interned).push((key, value.clone()));
+        }
+        Ok(value)
+    }
+
+    /// The script string of the API's name `name`.
+    fn name(lua: &Lua, name: &'static str) -> mlua::Result<mlua::LuaString> {
+        Self::get(lua, name, |i| &mut i.names, || lua.create_string(name))
+    }
+
+    /// The table of method functions of the class `class`.
+    fn methods(lua: &Lua, class: &'static str) -> mlua::Result<mlua::Table> {
+        Self::get(lua, class, |i| &mut i.methods, || lua.create_table())
+    }
+
+    /// The variant of `choice` the script string `text` names, read without
+    /// borrowing its bytes: borrowing a fresh string's bytes allocates.
+    fn variant(lua: &Lua, choice: &Choice, text: &mlua::LuaString) -> Option<&'static str> {
+        let table = Self::get(
+            lua,
+            choice.values(),
+            |i| &mut i.choices,
+            || {
+                let table = lua.create_table_with_capacity(0, choice.values().len())?;
+                for (at, name) in choice.names().enumerate() {
+                    table.raw_set(name, at)?;
+                }
+                Ok(table)
+            },
+        )
+        .ok()?;
+        let at = table.raw_get::<Option<usize>>(text).ok()??;
+        choice.names().nth(at)
+    }
+}
 
 /// An [`Object`](enshwick::script::Object) as a script holds it: its
 /// class's methods, called as `object:method()`.
@@ -347,23 +440,7 @@ impl mlua::UserData for Object {
                 let class = this.handle.class();
                 // One function per class and method in a VM, made on first use:
                 // a filter on a hot path indexes methods on every hit.
-                let classes = if let Some(classes) =
-                    lua.named_registry_value::<Option<mlua::Table>>(METHODS)?
-                {
-                    classes
-                } else {
-                    let classes = lua.create_table()?;
-                    lua.set_named_registry_value(METHODS, &classes)?;
-                    classes
-                };
-                let cached =
-                    if let Some(cached) = classes.raw_get::<Option<mlua::Table>>(class.name())? {
-                        cached
-                    } else {
-                        let cached = lua.create_table()?;
-                        classes.raw_set(class.name(), &cached)?;
-                        cached
-                    };
+                let cached = Interned::methods(lua, class.name())?;
                 if let Some(function) = cached.raw_get::<Option<mlua::Function>>(&key)? {
                     return Ok(LuaValue::Function(function));
                 }
@@ -374,7 +451,7 @@ impl mlua::UserData for Object {
                 let scope = this.scope.clone();
                 let what = format!("{}:{key}", class.name());
                 let function = lua.create_function(
-                    move |lua, (object, args): (mlua::AnyUserData, MultiValue)| {
+                    move |lua, (object, args): (mlua::AnyUserData, LuaArgs)| {
                         let this = object.borrow::<Self>()?;
                         if this.ended {
                             return Err(mlua::Error::runtime(format!(
@@ -392,9 +469,9 @@ impl mlua::UserData for Object {
                             )));
                         }
                         let signature = method.signature();
-                        let values = arguments(lua, &scope, args, signature, &what)?;
+                        let mut values = arguments(&scope, args, signature, &what)?;
                         let answer = handle
-                            .call(&method, values)
+                            .call(&method, values.slots())
                             .map_err(|e| mlua::Error::runtime(format!("{what}: {e}")))?;
                         to_lua(lua, &scope, answer, signature.ret())
                     },
@@ -485,38 +562,100 @@ fn data(value: LuaValue, depth: usize) -> Result<Value, Error> {
     })
 }
 
-/// The API values of the Luau arguments `args` of a call to `what`, one per
-/// parameter of `signature`.
 pub(crate) fn arguments(
-    _lua: &Lua,
     scope: &Scope,
-    args: MultiValue,
+    args: impl Spread,
     signature: &'static Signature,
     what: &str,
-) -> mlua::Result<Vec<Value>> {
+) -> mlua::Result<Args> {
     let params = signature.params();
-    if args.len() > params.len() {
+    let (given, mut values) = args.spread();
+    if given > params.len() {
         return Err(mlua::Error::runtime(format!(
-            "{what} takes {} arguments, not {}",
+            "{what} takes {} arguments, not {given}",
             params.len(),
-            args.len()
         )));
     }
-    let mut args = args.into_iter();
-    params
-        .iter()
-        .map(|param| {
-            let value = args.next().unwrap_or(LuaValue::Nil);
-            from_lua(scope, value, param.ty()).map_err(|e| {
-                let name = if param.name().is_empty() {
-                    "argument"
-                } else {
-                    param.name()
-                };
-                mlua::Error::runtime(format!("{what}: {name}: {e}"))
-            })
-        })
-        .collect()
+    let mut out = Args::new(params.len());
+    for (slot, param) in out.slots().iter_mut().zip(params) {
+        let value = values.next().unwrap_or(LuaValue::Nil);
+        *slot = from_lua(scope, value, param.ty()).map_err(|e| {
+            let name = if param.name().is_empty() {
+                "argument"
+            } else {
+                param.name()
+            };
+            mlua::Error::runtime(format!("{what}: {name}: {e}"))
+        })?;
+    }
+    Ok(out)
+}
+
+/// The arguments of a call into the API as mlua hands them over: the first
+/// four straight from the stack, any past them in the list, which stays
+/// empty, and so unallocated, for a call of four or fewer.
+pub(crate) type LuaArgs = (LuaValue, LuaValue, LuaValue, LuaValue, MultiValue);
+
+/// Arguments from Luau: how many the script passed, and the values in order.
+pub(crate) trait Spread {
+    fn spread(self) -> (usize, impl Iterator<Item = LuaValue>);
+}
+
+/// How many of `values` the script passed: trailing nils count as not
+/// passed, as on every path a call takes.
+fn passed<'a>(
+    mut values: impl DoubleEndedIterator<Item = &'a LuaValue> + ExactSizeIterator,
+) -> usize {
+    values.rposition(|v| !v.is_nil()).map_or(0, |at| at + 1)
+}
+
+impl Spread for LuaArgs {
+    fn spread(self) -> (usize, impl Iterator<Item = LuaValue>) {
+        let (a, b, c, d, rest) = self;
+        let first = [a, b, c, d];
+        let given = match passed(rest.iter()) {
+            0 => passed(first.iter()),
+            past => first.len() + past,
+        };
+        (given, first.into_iter().chain(rest))
+    }
+}
+
+impl Spread for MultiValue {
+    fn spread(self) -> (usize, impl Iterator<Item = LuaValue>) {
+        (passed(self.iter()), self.into_iter())
+    }
+}
+
+/// The API values of a call's arguments: eight in place, more in a list.
+pub(crate) struct Args {
+    near: [Value; 8],
+    far: Vec<Value>,
+    len: usize,
+}
+
+impl Args {
+    fn new(len: usize) -> Self {
+        let far = if len > 8 {
+            (0..len).map(|_| Value::Nil).collect()
+        } else {
+            Vec::new()
+        };
+        Self {
+            near: [const { Value::Nil }; 8],
+            far,
+            len,
+        }
+    }
+
+    /// One value per parameter, which the API takes out of the slice.
+    pub(crate) fn slots(&mut self) -> &mut [Value] {
+        if self.len > self.near.len() {
+            &mut self.far
+        } else {
+            &mut self.near[..self.len]
+        }
+    }
 }
 
 /// The Luau value of the TOML value `value`, such as a setting's; a date
@@ -567,6 +706,43 @@ mod tests {
         Done(Count),
         /// Not yet.
         Waiting,
+    }
+
+    #[test]
+    fn spread_counts_up_to_the_last_value_passed() {
+        let n = |v: f64| LuaValue::Number(v);
+        let nil = || LuaValue::Nil;
+        let none = MultiValue::new();
+        assert_eq!((nil(), nil(), nil(), nil(), none.clone()).spread().0, 0);
+        assert_eq!((n(1.0), nil(), n(3.0), nil(), none.clone()).spread().0, 3);
+        assert_eq!((n(1.0), n(2.0), n(3.0), n(4.0), none).spread().0, 4);
+        let rest: MultiValue = [n(5.0), n(6.0)].into_iter().collect();
+        let (given, values) = (n(1.0), nil(), nil(), nil(), rest).spread();
+        assert_eq!(given, 6);
+        assert_eq!(values.count(), 6);
+        let nils: MultiValue = [nil(), nil()].into_iter().collect();
+        assert_eq!((n(1.0), nil(), nil(), nil(), nils.clone()).spread().0, 1);
+        let start: MultiValue = [n(1.0), nil(), nil(), nil(), nil()].into_iter().collect();
+        assert_eq!(start.spread().0, 1);
+    }
+
+    #[test]
+    fn two_choices_of_one_name_keep_their_own_variants() {
+        const A: Choice = Choice::new("Same", "", &[("X", ""), ("Y", "")]);
+        const B: Choice = Choice::new("Same", "", &[("Y", ""), ("Z", "")]);
+        let lua = Lua::new();
+        let y = lua.create_string("Y").unwrap();
+        assert_eq!(Interned::variant(&lua, &A, &y), Some("Y"));
+        assert_eq!(Interned::variant(&lua, &B, &y), Some("Y"));
+        let w = lua.create_string("W").unwrap();
+        assert_eq!(Interned::variant(&lua, &B, &w), None);
+    }
+
+    #[test]
+    fn args_hold_eight_in_place_and_more_in_a_list() {
+        for len in [0, 1, 7, 8, 9, 20] {
+            assert_eq!(Args::new(len).slots().len(), len, "{len}");
+        }
     }
 
     #[test]

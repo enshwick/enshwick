@@ -5,16 +5,16 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use enshwick::abi::Level;
-use enshwick::points::Order;
+use enshwick::points::{Decision, DescribedOwnedPoint, Order};
 use enshwick::script;
 use enshwick::{Load, Relock as _};
 use mlua::{Function, Lua, MultiValue, Table, Value as LuaValue};
 
-use super::{Asked, Defined, Inner, Scope, Vm};
-use crate::bridge::{arguments, to_lua};
+use super::{Asked, Defined, Inner, Owned, Scope, Vm};
+use crate::bridge::{LuaArgs, arguments, to_lua};
 use crate::calls::{CallDesc, ServedCall};
 use crate::files::{Requirer, Scripts};
-use crate::points::{EventDesc, PointDesc, Read, encode};
+use crate::points::{EventDesc, PointDesc, Read, decode, encode};
 use crate::subscribe::Subscription;
 
 impl Vm {
@@ -79,6 +79,16 @@ impl Inner {
                     .upgrade()
                     .ok_or_else(|| mlua::Error::runtime("the mod has stopped"))?;
                 inner.define_event(lua, &event)
+            })?,
+        )?;
+        let me = Weak::clone(&self.me);
+        namespace_table(lua, api, "points")?.raw_set(
+            "define_point",
+            lua.create_function(move |lua, name: String| {
+                let inner = me
+                    .upgrade()
+                    .ok_or_else(|| mlua::Error::runtime("the mod has stopped"))?;
+                inner.define_point(lua, &name)
             })?,
         )?;
         let me = Weak::clone(&self.me);
@@ -255,10 +265,10 @@ impl Inner {
                 let signature = declared.signature();
                 table.raw_set(
                     declared.name(),
-                    lua.create_function(move |lua, args: MultiValue| {
-                        let values = arguments(lua, &scope, args, signature, &what)?;
+                    lua.create_function(move |lua, args: LuaArgs| {
+                        let mut values = arguments(&scope, args, signature, &what)?;
                         let answer = opened
-                            .call(&declared, values)
+                            .call(&declared, values.slots())
                             .map_err(|e| mlua::Error::runtime(format!("{what}: {e}")))?;
                         to_lua(lua, &scope, answer, signature.ret())
                     })?,
@@ -360,6 +370,91 @@ impl Inner {
                     emitter.send(&bytes);
                 }
                 Ok(())
+            })?,
+        )?;
+        table.set_readonly(true);
+        Ok(table)
+    }
+
+    /// The table of the point `pack.toml` declares under the local name
+    /// `name`: defined with the loader once `main.luau` ran at start, or the
+    /// one defined before under that name. Its `decide(input, answer)`
+    /// returns the answer and `"kept"` or `"changed"`, or nil and
+    /// `"refused"`, as `OwnedPoint::decide` gives a `Decision`.
+    fn define_point(&self, lua: &Lua, name: &str) -> mlua::Result<Table> {
+        let what = "enshwick.points.define_point";
+        let desc = self
+            .declared_points
+            .iter()
+            .find(|d| d.local == name)
+            .cloned()
+            .ok_or_else(|| {
+                mlua::Error::runtime(format!(
+                    "{what}: pack.toml declares no [[point]] named {name:?}"
+                ))
+            })?;
+        let handle = {
+            let mut owned = self.owned.relock();
+            match owned.iter().find(|o| o.desc.local == name) {
+                Some(known) => Arc::clone(&known.handle),
+                None if self.started.load(Ordering::Acquire) => {
+                    return Err(mlua::Error::runtime(format!(
+                        "{what}: {} is defined from the next start, at the top level of main.luau",
+                        desc.point.name
+                    )));
+                }
+                None => {
+                    let handle = Arc::new(OnceLock::new());
+                    owned.push(Owned {
+                        desc: Arc::clone(&desc),
+                        handle: Arc::clone(&handle),
+                    });
+                    handle
+                }
+            }
+        };
+        let words = ["kept", "changed", "refused"].map(|word| lua.create_string(word));
+        let [kept, changed, refused] = words;
+        let (kept, changed, refused) = (kept?, changed?, refused?);
+        let size = usize::try_from(desc.point.input_size).unwrap_or(0);
+        let answer_size = usize::try_from(desc.point.output_size).unwrap_or(0);
+        let asked = Arc::clone(&handle);
+        let table = lua.create_table_with_capacity(0, 2)?;
+        table.raw_set(
+            "decide",
+            lua.create_function(
+                move |lua, (_, input, answer): (LuaValue, LuaValue, LuaValue)| {
+                    let mut small = Aligned([0u8; SMALL_INPUT]);
+                    let mut large = Vec::new();
+                    let bytes = if let Some(bytes) = small.0.get_mut(..size) {
+                        bytes
+                    } else {
+                        large.resize(size, 0u8);
+                        large.as_mut_slice()
+                    };
+                    encode(&input, &desc.input, bytes, 0)
+                        .map_err(|e| mlua::Error::runtime(format!("{what}: the input: {e}")))?;
+                    let mut out = Aligned([0u8; 16]);
+                    let out = out.0.get_mut(..answer_size).unwrap_or_default();
+                    encode(&answer, &desc.output, out, 0)
+                        .map_err(|e| mlua::Error::runtime(format!("{what}: the answer: {e}")))?;
+                    let Some(point) = asked.get() else {
+                        return Ok((answer, kept.clone()));
+                    };
+                    Ok(match point.decide(bytes, out) {
+                        Decision::Changed(()) => {
+                            (decode(lua, out, 0, &desc.output)?, changed.clone())
+                        }
+                        Decision::Refused => (LuaValue::Nil, refused.clone()),
+                        _ => (answer, kept.clone()),
+                    })
+                },
+            )?,
+        )?;
+        table.raw_set(
+            "is_extended",
+            lua.create_function(move |_, _: LuaValue| {
+                Ok(handle.get().is_some_and(DescribedOwnedPoint::is_extended))
             })?,
         )?;
         table.set_readonly(true);
@@ -474,14 +569,14 @@ impl Inner {
                 let during = {
                     let (bridge, what) = (bridge.clone(), what.clone());
                     scope.create_function(move |lua, args: MultiValue| {
-                        let values = arguments(lua, &bridge, args, signature, &what)?;
+                        let mut values = arguments(&bridge, args, signature, &what)?;
                         let mut load = load.try_relock().ok_or_else(|| {
                             mlua::Error::runtime(format!(
                                 "{what}: called from inside another start call"
                             ))
                         })?;
                         let answer = function
-                            .call(&mut load, values)
+                            .call(&mut load, values.slots())
                             .map_err(|e| mlua::Error::runtime(format!("{what}: {e}")))?;
                         to_lua(lua, &bridge, answer, signature.ret())
                     })?
@@ -539,15 +634,15 @@ fn requested<'scope, 'env>(
         let signature = declared.signature();
         table.raw_set(
             declared.name(),
-            lua.create_function(move |lua, args: MultiValue| {
+            lua.create_function(move |lua, args: LuaArgs| {
                 let opened = slot.get().ok_or_else(|| {
                     mlua::Error::runtime(format!(
                         "{what}: call {ask}() at the top level of main.luau first"
                     ))
                 })?;
-                let values = arguments(lua, &bridge, args, signature, &what)?;
+                let mut values = arguments(&bridge, args, signature, &what)?;
                 let answer = opened
-                    .call(&declared, values)
+                    .call(&declared, values.slots())
                     .map_err(|e| mlua::Error::runtime(format!("{what}: {e}")))?;
                 to_lua(lua, &bridge, answer, signature.ret())
             })?,
@@ -569,3 +664,12 @@ fn requested<'scope, 'env>(
     };
     table.raw_set(getter.name(), start_only(vm, ask, during)?)
 }
+
+/// The input size a script's `decide` lays out on the stack; a larger one
+/// goes to the heap.
+const SMALL_INPUT: usize = 64;
+
+/// Bytes aligned for any field a Rust link reads, so `decide` hands them to
+/// the links without a copy.
+#[repr(C, align(16))]
+struct Aligned<const N: usize>([u8; N]);

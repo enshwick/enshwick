@@ -1,5 +1,6 @@
 //! `cargo enshwick deps`: what each dependency of a mod offers, written as
-//! the declarations the mod compiles, from the owners' DLLs or schema files.
+//! the declarations the mod compiles, from the owners' DLLs, packs or schema
+//! files.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -7,20 +8,43 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context as _, anyhow, bail};
 use cargo_enshwick::points::{Schema, from_dll, luau_deps, rust_deps};
 use enshwick::abi::Relation;
-use enshwick::packs::{PackDependency, PackManifest};
+use enshwick::packs::{MANIFEST_FILE, PackDependency, PackManifest};
 
-/// The schema texts `from` holds: of a schema file, of a DLL, or of every
-/// DLL in a folder and in its `mods/`, each with where it came from. Each
-/// mod DLL whose section does not read, which its owner must rebuild, adds
-/// a line to `unread`.
+/// The schema texts `from` holds: of a schema file, of a pack's
+/// `pack.toml`, of a DLL, or of every DLL and pack in a folder and in its
+/// `mods/`, each with where it came from. Each mod DLL whose section does
+/// not read, which its owner must rebuild, and each `pack.toml` there that
+/// does not read, adds a line to `unread`.
 fn schemas(from: &Path, unread: &mut Vec<String>) -> anyhow::Result<Vec<(PathBuf, String)>> {
     let read = |path: &Path| std::fs::read(path).with_context(|| path.display().to_string());
     if from.extension().is_some_and(|e| e == "toml") {
         let text = String::from_utf8(read(from)?).with_context(|| from.display().to_string())?;
+        if from.file_name().is_some_and(|name| name == MANIFEST_FILE) {
+            let schema = pack_schema(&text).with_context(|| from.display().to_string())?;
+            return Ok(schema
+                .map(|text| (from.to_path_buf(), text))
+                .into_iter()
+                .collect());
+        }
         return Ok(vec![(from.to_path_buf(), text)]);
     }
     let mut found = Vec::new();
-    for dll in dlls(from)? {
+    for manifest in packs(from) {
+        let text = std::fs::read_to_string(&manifest);
+        match text
+            .map_err(anyhow::Error::from)
+            .and_then(|text| pack_schema(&text))
+        {
+            Ok(Some(text)) => found.push((manifest, text)),
+            Ok(None) => {}
+            Err(e) => unread.push(format!("{}: {e:#}", manifest.display())),
+        }
+    }
+    let dlls = dlls(from);
+    if dlls.is_empty() && found.is_empty() && unread.is_empty() {
+        return Err(anyhow!("no mod DLL or pack in {}", from.display()));
+    }
+    for dll in dlls {
         match from_dll(&read(&dll)?) {
             Ok(Some(text)) => found.push((dll, text)),
             // A DLL of a folder whose section does not read; the one DLL asked
@@ -38,11 +62,40 @@ fn schemas(from: &Path, unread: &mut Vec<String>) -> anyhow::Result<Vec<(PathBuf
     Ok(found)
 }
 
+/// The schema of the points the `pack.toml` text `text` declares; `None`
+/// without any.
+fn pack_schema(text: &str) -> anyhow::Result<Option<String>> {
+    Ok(PackManifest::parse(text)?.points_schema())
+}
+
+/// The `pack.toml` of the pack folder `from`, or of every pack folder in it
+/// and in its `mods/`.
+fn packs(from: &Path) -> Vec<PathBuf> {
+    let own = from.join(MANIFEST_FILE);
+    if own.is_file() {
+        return vec![own];
+    }
+    let mut found = Vec::new();
+    for dir in [from.to_path_buf(), from.join("mods")] {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        found.extend(
+            entries
+                .flatten()
+                .map(|entry| entry.path().join(MANIFEST_FILE))
+                .filter(|manifest| manifest.is_file()),
+        );
+    }
+    found.sort();
+    found
+}
+
 /// The DLLs `from` names: the file itself, or every DLL in the folder and in
 /// its `mods/`.
-fn dlls(from: &Path) -> anyhow::Result<Vec<PathBuf>> {
+fn dlls(from: &Path) -> Vec<PathBuf> {
     if from.is_file() {
-        return Ok(vec![from.to_path_buf()]);
+        return vec![from.to_path_buf()];
     }
     let mut found = Vec::new();
     for dir in [from.to_path_buf(), from.join("mods")] {
@@ -60,10 +113,7 @@ fn dlls(from: &Path) -> anyhow::Result<Vec<PathBuf>> {
         }
     }
     found.sort();
-    if found.is_empty() {
-        return Err(anyhow!("no mod DLL in {}", from.display()));
-    }
-    Ok(found)
+    found
 }
 
 /// The dependencies a mod's manifest names by alias in `requires` and
@@ -160,15 +210,14 @@ fn cargo_aliases(text: &str) -> anyhow::Result<Vec<(String, String)>> {
 }
 
 /// Writes what each dependency `alias` names, or every one, offers, read
-/// from the owners' DLLs or schema file in `from`: into `src/deps/<alias>.rs`
+/// from the owners' DLLs, packs or schema file in `from`: into `src/deps/<alias>.rs`
 /// beside the `Cargo.toml` at `manifest`, or with `luau` into
 /// `deps/<alias>/<name>.luau` beside the `pack.toml`.
 ///
 /// # Errors
 ///
 /// When the manifest names no such dependency, no DLL there carries the
-/// schema of the one asked for or of any, a schema does not read, or a file
-/// does not write.
+/// schema of the one asked for or of any, or a file does not write.
 pub(crate) fn run(
     alias: Option<&str>,
     from: &Path,
@@ -180,8 +229,13 @@ pub(crate) fn run(
     let wanted = deps.wanted(alias)?;
     let mut found = Vec::new();
     let mut unread = Vec::new();
-    for (dll, text) in schemas(from, &mut unread)? {
-        found.push(Schema::parse(&text).with_context(|| dll.display().to_string())?);
+    // A schema that does not read leaves out only its owner, as a section
+    // that does not read does.
+    for (path, text) in schemas(from, &mut unread)? {
+        match Schema::parse(&text) {
+            Ok(schema) => found.push(schema),
+            Err(e) => unread.push(format!("{}: {e}", path.display())),
+        }
     }
     let left_out = if unread.is_empty() {
         String::new()
@@ -196,7 +250,7 @@ pub(crate) fn run(
     for (alias, id) in wanted {
         let Some(schema) = found.iter().find(|s| s.owner() == id) else {
             lines.push(format!(
-                "{alias}: no DLL in {} carries what {id} offers{left_out}",
+                "{alias}: no DLL or pack in {} carries what {id} offers{left_out}",
                 from.display()
             ));
             continue;
@@ -337,7 +391,7 @@ old = "you.old"
         .unwrap_err()
         .to_string();
         assert!(
-            error.contains("trading_post: no DLL in") && error.contains("you.trading-post"),
+            error.contains("trading_post: no DLL or pack in") && error.contains("you.trading-post"),
             "{error}"
         );
         let every = run(None, &schema("lockers.points.toml"), Some(&manifest), false).unwrap();
@@ -380,5 +434,91 @@ old = "you.old"
             format!("{error:#}").contains("[package.metadata.enshwick]"),
             "{error:#}"
         );
+    }
+
+    const OWNER: &str = r#"id = "you.lockers"
+version = "1.2.0"
+exports = ["point:price"]
+
+[[point]]
+name = "price"
+mode = "override"
+refusable = true
+doc = "A locker's price, in coins."
+output = "u32"
+input = [{ name = "player", type = "enshwick.player_key" }, { name = "item", type = "enshwick.item_id", doc = "The item stored." }, { name = "count", type = "u32" }]
+"#;
+
+    #[test]
+    fn a_luau_mod_s_points_are_read_from_its_pack_toml_or_folder() {
+        let owner = folder("deps-owner", "pack.toml", OWNER);
+        let rust = folder("deps-of-pack", "Cargo.toml", CARGO);
+        let done = run(
+            Some("lockers"),
+            &owner.join("pack.toml"),
+            Some(&rust.join("Cargo.toml")),
+            false,
+        )
+        .unwrap();
+        assert!(done.starts_with("wrote you.lockers 1.2.0"), "{done}");
+        let code = std::fs::read_to_string(rust.join("src/deps/lockers.rs")).unwrap();
+        assert!(code.contains("name = \"price\", of = lockers"), "{code}");
+        assert!(code.contains("pub item: enshwick::ItemId"), "{code}");
+        let pack =
+            "id = \"you.lamps\"\nversion = \"1.0.0\"\n\n[after]\nlockers = \"you.lockers\"\n";
+        let luau = folder("deps-of-pack-luau", "pack.toml", pack);
+        run(None, &owner, Some(&luau.join("pack.toml")), true).unwrap();
+        let price = std::fs::read_to_string(luau.join("deps/lockers/price.luau")).unwrap();
+        assert!(price.contains("read = \"item_id\""), "{price}");
+    }
+
+    #[test]
+    fn a_pack_that_does_not_read_is_left_out_with_why() {
+        let game = folder("deps-broken-pack", "readme.txt", "");
+        std::fs::create_dir_all(game.join("mods/you.lockers")).unwrap();
+        std::fs::write(game.join("mods/you.lockers/pack.toml"), "id = 1").unwrap();
+        let rust = folder("deps-broken-pack-mod", "Cargo.toml", CARGO);
+        let error = run(
+            Some("lockers"),
+            &game,
+            Some(&rust.join("Cargo.toml")),
+            false,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            error.contains("left out, whose sections do not read") && error.contains("pack.toml"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn a_pack_whose_schema_does_not_read_leaves_out_only_itself() {
+        let game = folder("deps-bad-schema", "readme.txt", "");
+        std::fs::create_dir_all(game.join("mods/you.lockers")).unwrap();
+        std::fs::write(game.join("mods/you.lockers/pack.toml"), OWNER).unwrap();
+        std::fs::create_dir_all(game.join("mods/you.odd")).unwrap();
+        let odd = "id = \"you.odd\"\nversion = \"1.0.0\"\nexports = [\"point:self\"]\n\n[[point]]\nname = \"self\"\nmode = \"observe\"\noutput = \"u32\"\n";
+        std::fs::write(game.join("mods/you.odd/pack.toml"), odd).unwrap();
+        let rust = folder("deps-bad-schema-mod", "Cargo.toml", CARGO);
+        let done = run(
+            Some("lockers"),
+            &game,
+            Some(&rust.join("Cargo.toml")),
+            false,
+        )
+        .unwrap();
+        assert!(done.starts_with("wrote you.lockers 1.2.0"), "{done}");
+    }
+
+    #[test]
+    fn the_dlls_of_a_folder_and_its_mods_are_found_in_order() {
+        let game = folder("deps-dlls", "b.dll", "");
+        std::fs::create_dir_all(game.join("mods")).unwrap();
+        std::fs::write(game.join("mods/a.DLL"), "").unwrap();
+        std::fs::write(game.join("notes.txt"), "").unwrap();
+        let found = dlls(&game);
+        assert_eq!(found, [game.join("b.dll"), game.join("mods").join("a.DLL")]);
+        assert_eq!(dlls(&game.join("b.dll")), [game.join("b.dll")]);
     }
 }

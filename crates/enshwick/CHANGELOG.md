@@ -6,6 +6,25 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `packs`: `pack.toml` declares a Luau mod's own extension points under
+  `[[point]]` (`PackPoint`, `PackPointField`, `PointLayout`, `PointSlot`),
+  laid out and hashed as `#[point]` lays out a struct, and `exports` takes
+  `point:<name>` of a declared point; Luau
+  `enshwick.points.define_point(name)` defines one, whose
+  `decide(input, answer)` runs other mods' links. Unstable
+  `Load::define_described_point` and `DescribedOwnedPoint` define a point
+  from its description and ask it with bytes at any address (#989).
+
+### Changed
+
+- `script`: **Breaking.** `Callback::call`, `Function::call`,
+  `InitFunction::call`, `Opened::call` and `Handle::call` take
+  `&mut [Value]`; a choice and a union's variant without a value cross as
+  `Value::Name`; an `Arc` of an `Object` crosses as its own handle. A Luau
+  damage filter allocates nothing per hit once warm (#989).
+
 ### Fixed
 
 - `actions`: a server sends a joining player only the controls of a server

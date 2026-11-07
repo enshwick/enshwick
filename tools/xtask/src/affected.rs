@@ -47,11 +47,14 @@ const GLOBAL_DIRS: &[&str] = &[".cargo/", ".config/"];
 /// The book's chapters, compiled as doctests of the API crate.
 const BOOK_DIR: &str = "book/src/";
 const BOOK_HARNESS: &str = "enshwick";
+/// The package whose tests compile and type-check the book's Luau examples.
+const BOOK_LUAU: &str = "enshwick-luau";
 
 /// Sorts changed files (relative to the root, `/` separators) into a scope.
 pub(crate) fn scope(files: &[String], packages: &[Package]) -> Scope {
     let mut changed = BTreeSet::new();
     let mut docs = BTreeSet::new();
+    let mut book = false;
     for file in files {
         if GLOBAL_FILES.contains(&file.as_str())
             || GLOBAL_DIRS.iter().any(|dir| file.starts_with(dir))
@@ -60,11 +63,16 @@ pub(crate) fn scope(files: &[String], packages: &[Package]) -> Scope {
         }
         if file.starts_with(BOOK_DIR) {
             docs.insert(BOOK_HARNESS.to_owned());
+            book = true;
         } else if let Some(package) = owner(file, packages) {
             changed.insert(package.name.clone());
         }
     }
-    let code = dependents(&changed, packages);
+    let mut code = dependents(&changed, packages);
+    // Its own tests read the chapters; what depends on it does not.
+    if book && packages.iter().any(|package| package.name == BOOK_LUAU) {
+        code.insert(BOOK_LUAU.to_owned());
+    }
     docs.retain(|name| !code.contains(name));
     Scope::Some { code, docs }
 }
@@ -170,6 +178,28 @@ mod tests {
             scope(&files(&["book/src/hooks.md"]), &workspace()),
             Scope::Some {
                 code: names(&[]),
+                docs: names(&["enshwick"]),
+            }
+        );
+    }
+
+    #[test]
+    fn a_book_chapter_also_tests_the_luau_runtime_that_checks_its_examples() {
+        let mut packages = workspace();
+        packages.push(package(
+            "enshwick-luau",
+            "crates/internal/luau",
+            &["enshwick"],
+        ));
+        packages.push(package(
+            "loader-on-luau",
+            "crates/internal/loader2",
+            &["enshwick-luau"],
+        ));
+        assert_eq!(
+            scope(&files(&["book/src/luau.md"]), &packages),
+            Scope::Some {
+                code: names(&["enshwick-luau"]),
                 docs: names(&["enshwick"]),
             }
         );

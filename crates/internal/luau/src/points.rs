@@ -232,6 +232,48 @@ impl PointDesc {
     }
 }
 
+/// A point the scripts own, as a `[[point]]` table of `pack.toml` declares
+/// it, with how its input and answer write.
+#[derive(Clone, Debug)]
+pub(crate) struct OwnedDesc {
+    /// Its local name, which `define_point` takes.
+    pub(crate) local: String,
+    pub(crate) point: DescribedPoint,
+    pub(crate) input: Read,
+    pub(crate) output: Read,
+}
+
+impl OwnedDesc {
+    /// The point `declared` of the pack `id`; `None` for one whose layout
+    /// `pack.toml`'s check refuses.
+    pub(crate) fn of(id: &str, declared: &enshwick::packs::PackPoint) -> Option<Self> {
+        let layout = declared.layout()?;
+        let read = |ty: &str| {
+            Primitive::parse(ty.strip_prefix("enshwick.").unwrap_or(ty)).map(Read::Primitive)
+        };
+        let fields = layout
+            .input
+            .iter()
+            .map(|slot| Some((slot.name.clone(), slot.offset, read(&slot.ty)?)))
+            .collect::<Option<Vec<_>>>()?;
+        let described = layout
+            .input
+            .iter()
+            .map(|slot| DescribedField::new(&slot.name, slot.hash))
+            .collect();
+        let point = DescribedPoint::new(&format!("{id}:{}", declared.name), declared.mode)
+            .refusable(declared.refusable)
+            .with_input(described, layout.size)
+            .with_output(layout.output.hash, u32::try_from(layout.output.size).ok()?);
+        Some(Self {
+            local: declared.name.clone(),
+            point,
+            input: Read::Struct(fields),
+            output: read(&layout.output.ty)?,
+        })
+    }
+}
+
 /// `bytes` at `offset` read as `read`, as a Luau value; nil past the end.
 pub(crate) fn decode(
     lua: &Lua,
@@ -514,6 +556,27 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn every_type_a_pack_point_takes_has_a_luau_form() {
+        let pack = |ty: &str| {
+            enshwick::packs::PackManifest::parse(&format!(
+                "id = \"you.post\"\nversion = \"1.0.0\"\n[[point]]\nname = \"p\"\nmode = \"observe\"\noutput = \"{ty}\"\n"
+            ))
+        };
+        // The refusal of an unknown type lists every type a point takes.
+        let refused = pack("nope").unwrap_err().to_string();
+        let (_, list) = refused.split_once("no type a point takes: ").unwrap();
+        let names: Vec<&str> = list.lines().next().unwrap().split(", ").collect();
+        assert!(names.len() > 10, "{refused}");
+        for name in names {
+            let manifest = pack(name).unwrap();
+            assert!(
+                OwnedDesc::of("you.post", &manifest.point[0]).is_some(),
+                "{name} has no Luau form"
+            );
+        }
+    }
+
     fn primitive() -> impl Strategy<Value = Primitive> {
         prop::sample::select(vec![
             Primitive::U8,
@@ -590,6 +653,51 @@ mod tests {
             let read = decode(&lua, &bytes, 0, &Read::Primitive(Primitive::U32)).unwrap();
             prop_assert_eq!(read.as_f64(), Some(f64::from(value)));
         }
+    }
+
+    #[test]
+    fn every_type_a_pack_point_takes_reads_as_a_primitive() {
+        let types = [
+            "u64",
+            "i64",
+            "f64",
+            "enshwick.player_key",
+            "u32",
+            "i32",
+            "f32",
+            "enshwick.entity",
+            "enshwick.item_id",
+            "enshwick.recipe_id",
+            "enshwick.knowledge_id",
+            "enshwick.skill_node",
+            "enshwick.buff_type_id",
+            "enshwick.npc_id",
+            "u16",
+            "i16",
+            "u8",
+            "i8",
+            "bool",
+            "u8",
+            "enshwick.guid",
+        ];
+        let fields: Vec<String> = types
+            .iter()
+            .enumerate()
+            .map(|(i, ty)| format!("{{ name = \"f{i}\", type = \"{ty}\" }}"))
+            .collect();
+        let manifest = enshwick::packs::PackManifest::parse(&format!(
+            "id = \"you.post\"\nversion = \"1.0.0\"\n[[point]]\nname = \"all\"\nmode = \"override\"\noutput = \"enshwick.guid\"\ninput = [{}]\n",
+            fields.join(", ")
+        ))
+        .unwrap();
+        let desc = OwnedDesc::of("you.post", &manifest.point[0]).unwrap();
+        let Read::Struct(read) = &desc.input else {
+            panic!("{:?}", desc.input);
+        };
+        assert_eq!(read.len(), types.len());
+        assert_eq!(desc.output, Read::Primitive(Primitive::Guid));
+        assert_eq!(desc.point.input_size, 96);
+        assert_eq!(desc.point.name, "you.post:all");
     }
 
     #[test]
