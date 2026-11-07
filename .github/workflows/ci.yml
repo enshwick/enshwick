@@ -5,7 +5,7 @@
 name: ci
 
 on:
-  # A draft reports the check without running it; marking it ready runs it.
+  # A draft runs nothing; marking it ready runs the check.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   push:
@@ -22,7 +22,11 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Skipped here, a draft reports no `rust / check` at all: a passing one
+  # would still count once the pull request is marked ready, before the
+  # ready run's own check exists, and on a re-run of the draft's run.
   rust:
+    if: github.event.pull_request.draft != true
     uses: ./.github/workflows/rust-ci.yml
     permissions:
       contents: read
