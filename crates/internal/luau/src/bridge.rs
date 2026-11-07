@@ -362,17 +362,18 @@ struct Interned {
     /// Each class's table of method functions, by method name, filled as
     /// `__index` makes them.
     methods: Vec<(&'static str, mlua::Table)>,
-    /// Each choice's table from a variant's script string to its place.
-    choices: Vec<(&'static str, mlua::Table)>,
+    /// Each choice's table from a variant's script string to its place, by
+    /// its variants, since two choices may share a name.
+    choices: Vec<(&'static [(&'static str, &'static str)], mlua::Table)>,
 }
 
 impl Interned {
     /// The entry of `key` in the list `pick` chooses, made by `make` and
     /// kept on first use.
-    fn get<T: Clone>(
+    fn get<K: Copy + PartialEq, T: Clone>(
         lua: &Lua,
-        key: &'static str,
-        pick: fn(&mut Self) -> &mut Vec<(&'static str, T)>,
+        key: K,
+        pick: fn(&mut Self) -> &mut Vec<(K, T)>,
         make: impl FnOnce() -> mlua::Result<T>,
     ) -> mlua::Result<T> {
         if let Some(mut interned) = lua.app_data_mut::<Self>()
@@ -405,7 +406,7 @@ impl Interned {
     fn variant(lua: &Lua, choice: &Choice, text: &mlua::LuaString) -> Option<&'static str> {
         let table = Self::get(
             lua,
-            choice.name(),
+            choice.values(),
             |i| &mut i.choices,
             || {
                 let table = lua.create_table_with_capacity(0, choice.values().len())?;
@@ -716,6 +717,18 @@ mod tests {
         let (given, values) = (n(1.0), nil(), nil(), nil(), rest).spread();
         assert_eq!(given, 6);
         assert_eq!(values.count(), 6);
+    }
+
+    #[test]
+    fn two_choices_of_one_name_keep_their_own_variants() {
+        const A: Choice = Choice::new("Same", "", &[("X", ""), ("Y", "")]);
+        const B: Choice = Choice::new("Same", "", &[("Y", ""), ("Z", "")]);
+        let lua = Lua::new();
+        let y = lua.create_string("Y").unwrap();
+        assert_eq!(Interned::variant(&lua, &A, &y), Some("Y"));
+        assert_eq!(Interned::variant(&lua, &B, &y), Some("Y"));
+        let w = lua.create_string("W").unwrap();
+        assert_eq!(Interned::variant(&lua, &B, &w), None);
     }
 
     #[test]
