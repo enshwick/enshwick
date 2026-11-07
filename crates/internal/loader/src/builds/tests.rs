@@ -17,7 +17,7 @@ fn the_join_target_copies_read_on_each_client() {
         .iter()
         .filter(|(table, _)| table.starts_with("ENSH_CLIENT_EXE"))
         .collect();
-    if std::env::var("ENSH_CLIENT_EXE").is_ok() {
+    if named_executables().contains(&"ENSH_CLIENT_EXE") {
         assert!(clients.len() >= 2, "{rows:?}");
     }
     for (table, values) in clients {
@@ -256,7 +256,7 @@ fn the_texture_ring_record_reads_on_each_client() {
         .iter()
         .filter(|(table, _)| table.starts_with("ENSH_CLIENT_EXE"))
         .collect();
-    if std::env::var("ENSH_CLIENT_EXE").is_ok() {
+    if named_executables().contains(&"ENSH_CLIENT_EXE") {
         assert!(clients.len() >= 2, "{rows:?}");
     }
     for (table, values) in clients {
@@ -285,7 +285,7 @@ fn the_slider_extent_reads_on_each_client() {
         .iter()
         .filter(|(table, _)| table.starts_with("ENSH_CLIENT_EXE"))
         .collect();
-    if std::env::var("ENSH_CLIENT_EXE").is_ok() {
+    if named_executables().contains(&"ENSH_CLIENT_EXE") {
         assert!(clients.len() >= 2, "{rows:?}");
     }
     assert!(misreads(&rows).is_empty(), "{rows:?}");
@@ -348,7 +348,7 @@ fn the_texture_key_size_reads_on_each_client() {
         .iter()
         .filter(|(table, _)| table.starts_with("ENSH_CLIENT_EXE"))
         .collect();
-    if std::env::var("ENSH_CLIENT_EXE").is_ok() {
+    if named_executables().contains(&"ENSH_CLIENT_EXE") {
         assert!(clients.len() >= 2, "{rows:?}");
     }
     for (table, values) in clients {
@@ -362,10 +362,7 @@ fn the_texture_key_size_reads_on_each_client() {
 #[test]
 fn the_chat_handle_slot_and_line_overhead_read_on_each_executable() {
     let rows = constants_on_executables(&["chat.handle_slot", "chat.line_overhead"]);
-    let named = ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"]
-        .iter()
-        .filter(|var| std::env::var(var).is_ok())
-        .count();
+    let named = named_executables().len();
     assert!(rows.len() >= named * 2, "{rows:?}");
     for (table, values) in rows {
         assert_eq!(values, [Some(0x7f), Some(0x17)], "{table}");
@@ -377,10 +374,7 @@ fn the_chat_handle_slot_and_line_overhead_read_on_each_executable() {
 #[test]
 fn the_zone_size_valid_byte_reads_on_each_executable() {
     let rows = constants_on_executables(&["balancing.zone_size_valid"]);
-    let named = ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"]
-        .iter()
-        .filter(|var| std::env::var(var).is_ok())
-        .count();
+    let named = named_executables().len();
     assert!(rows.len() >= named * 2, "{rows:?}");
     for (table, values) in rows {
         assert_eq!(values, [Some(0xc)], "{table}");
@@ -423,10 +417,7 @@ fn the_offer_out_record_reads_on_each_executable() {
         "access.offer_out_tail",
     ];
     let rows = constants_on_executables(&ids);
-    let named = ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"]
-        .iter()
-        .filter(|var| std::env::var(var).is_ok())
-        .count();
+    let named = named_executables().len();
     assert!(rows.len() >= named * 2, "{rows:?}");
     for (table, values) in rows {
         assert_eq!(values, [Some(0x4), Some(0x8), Some(0x10)], "{table}");

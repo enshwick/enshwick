@@ -1,7 +1,7 @@
 [package]
 name = "enshwick-gamedata"
 version = "1.0.0-alpha.12"
-description = "Internal, not for mods: the per-build tables of engine addresses the Enshwick loader pins, and the reader of the engine's reflection data"
+description = "Internal, not for mods: the anchors and engine routes the Enshwick loader finds its entries by on every game build, and the reader of the engine's reflection data"
 keywords = ["enshrouded", "modding", "address-library", "reflection"]
 categories = ["game-development"]
 readme = "README.md"

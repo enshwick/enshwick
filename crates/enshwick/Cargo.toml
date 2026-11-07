@@ -139,8 +139,3 @@ required-features = ["unstable"]
 name = "tick"
 harness = false
 required-features = ["test"]
-
-[[bench]]
-name = "typed"
-harness = false
-required-features = ["test", "typed"]

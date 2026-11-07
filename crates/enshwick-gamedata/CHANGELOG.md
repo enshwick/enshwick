@@ -53,9 +53,17 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
-- The tables in `tables/` are the frozen record of the kept builds, which
-  the tests compare the routes and anchors with; a new build gets its
-  compatibility report and no table (#951).
+- The tables of the kept builds are the frozen record the tests compare the
+  routes and anchors with; a new build gets its compatibility report and no
+  table (#951).
+- Breaking: the crate no longer carries the kept builds' tables or their
+  typed catalogues. `kept` reads the tables from the folder `ENSH_GAMEDATA`
+  names (`DATA_VAR`, `data_dir`, `tables_in`), an error when it names no
+  folder; `embedded` and `typed::SNAPSHOTS` are gone, `typed::snapshot_in`
+  names a snapshot in such a folder, `typed::snapshot_path` returns `None`
+  without one, and `typed::RENAMES` is the rename table's path in the
+  repository. The tests that compare with the tables skip without them, or
+  when an executable's build has none (#980).
 
 ### Fixed
 

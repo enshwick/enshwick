@@ -546,13 +546,30 @@ pub(crate) fn executables_without_rows<'a>(
         .collect()
 }
 
-/// The executable variables this test run names.
+/// The executable variables this test run names whose build has a kept
+/// table; the tests that compare with it skip the others.
 #[cfg(test)]
 pub(crate) fn named_executables() -> Vec<&'static str> {
-    ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"]
-        .into_iter()
-        .filter(|var| std::env::var(var).is_ok())
-        .collect()
+    let tables = load();
+    [
+        ("ENSH_SERVER_EXE", tables::Side::Server),
+        ("ENSH_CLIENT_EXE", tables::Side::Client),
+    ]
+    .into_iter()
+    .filter(|&(var, side)| {
+        std::env::var_os(var).is_some_and(|path| {
+            let bytes = std::fs::read(path).unwrap();
+            let image = enshwick_gamedata::reflect::Image::parse(
+                &bytes,
+                enshwick_gamedata::reflect::Layout::File,
+                None,
+            )
+            .unwrap();
+            tables::exact(&tables, side, image.fingerprint().unwrap()).is_some()
+        })
+    })
+    .map(|(var, _)| var)
+    .collect()
 }
 
 #[cfg(test)]

@@ -457,9 +457,12 @@ mod tests {
         .unwrap();
         let tables = crate::builds::load();
         let fingerprint = image.fingerprint().unwrap();
-        let own = enshwick_gamedata::exact(&tables, enshwick_gamedata::Side::Client, fingerprint)
-            .unwrap()
-            .resolve();
+        let Some(own) =
+            enshwick_gamedata::exact(&tables, enshwick_gamedata::Side::Client, fingerprint)
+        else {
+            return;
+        };
+        let own = own.resolve();
         assert_eq!(Layout::from_table(|id| own.constant(id)), Ok(layout()));
         let base = image.base();
         let text = image.range(image.section(".text").unwrap());

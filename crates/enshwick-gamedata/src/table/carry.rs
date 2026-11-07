@@ -118,7 +118,7 @@ fn a_carried_table_finds_no_wrong_value_on_any_kept_build() {
     }
     let tables = tables();
     let mut wrong = Vec::new();
-    let named = !paths.is_empty();
+    let named = !paths.is_empty() && !tables.is_empty();
     let mut compared = 0;
     for (path, side) in paths {
         let bytes = std::fs::read(&path).unwrap();

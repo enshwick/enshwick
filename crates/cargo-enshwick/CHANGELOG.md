@@ -21,6 +21,11 @@ Each entry names the pull request that made the change.
 
 - The crate's description names Enshwick as the modding framework for
   Enshrouded (#968).
+- Breaking: `generate` and `pin` read the kept builds' tables and typed
+  snapshots from a game data folder outside the repository, `--data` or
+  `ENSH_GAMEDATA`; `generate` needs one, and `pin --write` in the enshwick
+  repository refuses to run without one before it writes anything. The pin
+  report names a kept table by its path in that folder (#980).
 - `pin --old` ports an old build that has no table in `tables/` from what
   its anchors and engine routes find on it, and refreshes the check shapes
   from that; the report names where each section's old values come from,

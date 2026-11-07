@@ -75,8 +75,9 @@ the kept table ports, which shows a route or anchor that needs fixing. A
 mod's own rows are per build, and `pin` writes them where it can prove each
 entry and lists the rest for a human. It never guesses.
 
-It reads the kept builds' tables, one TOML file per build in
-[`crates/enshwick-gamedata/tables`](https://github.com/enshwick/enshwick/tree/main/crates/enshwick-gamedata/tables), and the
+It reads the kept builds' tables, one TOML file per build in `tables/` of
+the game data folder outside the repository that `--data` or
+`ENSH_GAMEDATA` names, and the
 `[[package.metadata.enshwick.builds]]` rows of every mod's `Cargo.toml`
 under `mods/`. A row gives its symbols and constants as
 `[package.metadata.enshwick.builds.symbols]` and

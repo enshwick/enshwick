@@ -160,8 +160,9 @@ the other nine, the slots of attributes: on a build without a table every
 entry is found, and every loader feature and mod of this repository runs.
 `cargo xtask compat --patterns <exe>` shows what the patterns alone find
 on any executable, and a test of this crate checks, when
-`ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name the game's executables, that
-every pattern matches exactly once and yields its table's value.
+`ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name the game's executables and
+`ENSH_GAMEDATA` holds their kept tables, that every pattern matches exactly
+once and yields its table's value.
 
 ### Adding a pattern
 

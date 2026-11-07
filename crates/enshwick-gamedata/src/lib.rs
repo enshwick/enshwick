@@ -921,7 +921,10 @@ age = 1
     #[test]
     #[cfg_attr(miri, ignore = "parsing every kept table takes minutes under Miri")]
     fn patterns_find_their_entries_on_their_own_build() {
-        for var in ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"] {
+        for (var, side) in [
+            ("ENSH_SERVER_EXE", Side::Server),
+            ("ENSH_CLIENT_EXE", Side::Client),
+        ] {
             let Ok(path) = std::env::var(var) else {
                 continue;
             };
@@ -929,12 +932,9 @@ age = 1
             let image = reflect::Image::parse(&bytes, reflect::Layout::File, None).unwrap();
             let fingerprint = image.fingerprint().unwrap();
             let Some(tables) = tables() else { return };
-            let side = if var == "ENSH_SERVER_EXE" {
-                Side::Server
-            } else {
-                Side::Client
+            let Some(table) = exact(&tables, side, fingerprint) else {
+                continue;
             };
-            let table = exact(&tables, side, fingerprint).unwrap();
             let text = image.section(".text").unwrap();
             let range = image.range(text);
             let code = image.read(range.start, range.end - range.start).unwrap();

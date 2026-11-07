@@ -549,7 +549,9 @@ mod tests {
             };
             let bytes = std::fs::read(path).unwrap();
             let image = Image::parse(&bytes, Layout::File, None).unwrap();
-            let table = exact(&tables, side, image.fingerprint().unwrap()).unwrap();
+            let Some(table) = exact(&tables, side, image.fingerprint().unwrap()) else {
+                continue;
+            };
             let text = image.section(".text").unwrap();
             let range = image.range(text);
             let code = image.read(range.start, range.end - range.start).unwrap();

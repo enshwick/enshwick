@@ -31,16 +31,6 @@ pub(crate) fn tables_of(data: &Path) -> anyhow::Result<Vec<Table>> {
         .collect()
 }
 
-/// The kept builds' tables in the folder `ENSH_GAMEDATA` names; none
-/// without it.
-///
-/// # Errors
-///
-/// When the folder or a table does not read.
-pub(crate) fn tables() -> anyhow::Result<Vec<Table>> {
-    enshwick_gamedata::data_dir().map_or_else(|| Ok(Vec::new()), |data| tables_of(&data))
-}
-
 /// The side whose table among `tables` is for the build `fingerprint`.
 pub(crate) fn side_of(
     tables: &[Table],
@@ -300,11 +290,12 @@ mod tests {
 
     #[test]
     fn a_data_folder_without_a_server_table_is_named_in_the_error() {
-        let root = repo("empty");
-        let empty = root.join("empty");
+        let root = repo("tableless");
+        let empty = root.join("gamedata-without-tables");
+        std::fs::create_dir_all(&empty).unwrap();
         let error = run(&root, &empty, None, false).unwrap_err().to_string();
         assert!(
-            error.contains("empty") && error.contains("no server build table"),
+            error.contains("gamedata-without-tables") && error.contains("no server build table"),
             "{error}"
         );
         drop(std::fs::remove_dir_all(&root));

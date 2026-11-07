@@ -247,9 +247,10 @@ fn the_cursor_s_body_fixes_the_offsets_its_detour_reads() {
         };
         let bytes = std::fs::read(path).unwrap();
         let image = Image::parse(&bytes, Layout::File, None).unwrap();
-        let resolved = exact(&tables, side, image.fingerprint().unwrap())
-            .unwrap()
-            .resolve();
+        let Some(own) = exact(&tables, side, image.fingerprint().unwrap()) else {
+            continue;
+        };
+        let resolved = own.resolve();
         let id = pinned::bases::CURSOR.id();
         // The oldest tables have no cursor entry; the feature is off there.
         let Some(symbol) = resolved.symbol(id) else {
