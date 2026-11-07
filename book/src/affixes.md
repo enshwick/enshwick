@@ -123,7 +123,7 @@ comes in.
   from `load.affixes()`. With `once`, an item that rolled before stays as it
   is.
 
-An item rolls once. The rules above skip items that rolled before, even
+An item rolls once. The loot and craft rules skip items that rolled before, even
 those that rolled nothing, and an item no affix fits is left unmarked. Rolls
 run on the server. The item's category comes from the game's item data,
 which the server has once a player has been online.
