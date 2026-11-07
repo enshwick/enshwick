@@ -71,8 +71,9 @@ size 500 and category ammunition, and every held stack of logs stayed.
   mod.
 - Mods that re-key or serve `old` chain in load order, and the last
   re-key's data wins. A build that fails keeps `old` as it was.
-- An item with an entity of its own (`ItemFlag::HasPIDE`), such as one with
-  durability, re-keys only to another such item. Otherwise the call returns
+- An item with an entity of its own (`ItemFlag::HasPIDE`) re-keys only to
+  another such item. An item with durability has one, and so does a mod item
+  with a meter. Otherwise the call returns
   `Err(Off)`, since the game would make or clear that entity in every held
   stack.
 
