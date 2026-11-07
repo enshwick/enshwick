@@ -10,6 +10,11 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `deps --from` reads a Luau mod's points from its `pack.toml`, its folder
+  or the packs in a game folder's `mods/`; the Luau definitions gain
+  `points.define_point`. A game field named after a Luau keyword is written
+  in brackets in `enshwick.typed.d.luau`, which luau-lsp could not parse
+  (#989).
 - `cargo enshwick luau --typed <file>` writes `enshwick.typed.d.luau`, a
   Luau type per generated item named by its path, such as
   `typed_ecs_Health`; `new --luau` writes it into `types/` and points the

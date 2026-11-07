@@ -20,6 +20,13 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `packs`: `pack.toml` declares a Luau mod's own extension points under
+  `[[point]]` (`PackPoint`, `PackPointField`, `PointLayout`, `PointSlot`),
+  laid out and hashed as `#[point]` lays out a struct, and `exports` takes
+  `point:<name>`; Luau `enshwick.points.define_point(name)` defines one,
+  whose `decide(input, answer)` runs other mods' links. Unstable
+  `Load::define_described_point` and `DescribedOwnedPoint` define a point
+  from its description and ask it with bytes (#989).
 - `sound`: `SoundContainerId` and `ui::Frame::play` play any sound container
   the client's archive holds as an interface sound and refuse a GUID it
   lacks; `Load::change_sound` and `SoundChange` change a vanilla container's
@@ -239,6 +246,11 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- `script`: **Breaking.** `Callback::call`, `Function::call`,
+  `InitFunction::call`, `Opened::call` and `Handle::call` take
+  `&mut [Value]`; a choice and a union's variant without a value cross as
+  `Value::Name`; an `Arc` of an `Object` crosses as its own handle. A Luau
+  damage filter allocates nothing per hit once warm (#989).
 - `typed`: `enshwick.typed` values cross into Luau and back through one walk
   over a static shape of each generated type instead of compiled conversions
   per type, taking and refusing what the Rust item does; the release loader
