@@ -8,6 +8,12 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `altars`: `NewFlameAltar.max_level` gives a Flame Altar kind a maximum
+  level below the game's own: a craft filter of the mod refuses, on the
+  server, the vanilla upgrade recipes that start at that level or above at
+  the kind's altars, so the altar keeps its level and the player the items;
+  Luau `max_level`. The fake host's `upgrade_recipes` puts upgrade recipes at
+  given levels in its recipe registry (#978).
 - `content`: `Load::rekey_item(old, new)` and `enshwick.content.rekey_item`
   take an item the mod added with `add_item` before the call as `new`: `old`
   is served with that item's data, cloned from its base item with its name,
@@ -183,6 +189,10 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- `actions`: `Load::actions` hands its texts to the loader once, beneath the
+  texts the mod hands itself, before or after; a runs-control's label reads
+  from them in each player's language with the usual fallback, and a key both
+  give reads as the mod handed it (#978).
 - Every book chapter reads in sentences of at most 25 words with at most
   two code spans, 20 words on average. Long runs of names became lists and
   tables, and every fact and code example stayed (#976).
@@ -299,6 +309,9 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- `events`: `ChunkLoaded` and `ChunkUnloaded` say they follow the chunks of
+  the world's entities, which load only near players; the terrain's voxels
+  load and unload without them and raise no event (#978).
 - The loader calls no `init` of a mod already turned off before its turn,
   as `ready` skips it (#979).
 - A data pack acts as itself everywhere the loader's copy of the API runs
