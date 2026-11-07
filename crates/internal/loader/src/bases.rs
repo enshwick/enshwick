@@ -33,6 +33,7 @@ use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::pinned::Constant;
 
+mod check;
 mod cursor;
 mod detours;
 #[cfg(test)]

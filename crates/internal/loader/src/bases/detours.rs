@@ -77,7 +77,7 @@ pub(super) unsafe extern "system" fn group(bases: *mut u8, world: *mut u8) {
             let image = usize::try_from(loader.base)
                 .ok()
                 .and_then(crate::live::Image::at);
-            members::object_holds(bases.addr(), &sites.fields, image)
+            super::check::object_holds(bases.addr(), &sites.fields, image)
         })
     {
         // SAFETY: `bases` is the grouping's own live object, non-null by the

@@ -329,7 +329,7 @@ impl RouteRow {
             self.align,
             constant && take != Take::Spelled || reflected,
         )
-        .map_err(|why| bad(why))?;
+        .map_err(bad)?;
         if self.holds.is_some() && !matches!(how, How::Field(_)) {
             return Err(bad(
                 "`type` names what the last step of a `field` route holds",
@@ -445,6 +445,20 @@ fn bounds(
         Some([lo, hi]) if lo > hi => Err("a `range` is `[least, greatest]`"),
         _ if align == Some(0) => Err("an `align` is 1 or more"),
         range => Ok(range.map(|[lo, hi]| (lo, hi))),
+    }
+}
+
+/// The range a constant route's row states for the least and greatest
+/// values the kept builds give, as the routes module docs set it out: a
+/// name hash the code holds, the same everywhere, exactly; a 64-bit value
+/// that changes, unbounded; else half the least to twice the greatest, at
+/// least 16.
+#[cfg(test)]
+fn proposed_range(least: u64, greatest: u64) -> (u64, u64) {
+    match (least, greatest) {
+        (_, g) if g >= 1 << 32 && least != g => (0, u64::MAX),
+        (l, g) if g >= 1 << 20 && l == g => (l, g),
+        (l, g) => (l / 2, g.saturating_mul(2).max(16)),
     }
 }
 

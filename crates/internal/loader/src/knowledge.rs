@@ -676,6 +676,80 @@ pub(crate) fn forget() {
 mod tests {
     use super::*;
 
+    unsafe extern "system" fn player_value(_: *const u8, _: *const u32, _: u32) -> u64 {
+        0
+    }
+    unsafe extern "system" fn world_value(_: *const u8, _: *const u32) -> u64 {
+        0
+    }
+    unsafe extern "system" fn push(_: *mut u8, _: *const [u8; 16]) -> u8 {
+        0
+    }
+
+    /// A store reached as words: the game at 0 of the server, its object at
+    /// 0 and its queue at 8, the state at 0 of the object, the records at 0
+    /// of the state and their count at 8.
+    fn store_layout() -> Layout {
+        Layout {
+            player_value,
+            world_value,
+            push,
+            game: 0,
+            object: 0,
+            state: 0,
+            defs: 0,
+            defs_blob: 0,
+            queue: 8,
+            records: 0,
+            record_count: 8,
+            record_size: 0,
+            record_active: 0,
+            step: 0,
+            world_log: 0,
+            world_log_count: 0,
+            record_log: 0,
+            record_log_count: 0,
+            log_entry: 0,
+            log_entry_id: 0,
+            log_entry_value: 0,
+            request_kind: 0,
+            request_value: 0,
+            request_target: 0,
+            journal: 0,
+            journal_blob: 0,
+            world_map: 0,
+            player_map: 0,
+            world_def: 0,
+            player_def: 0,
+            def_kind: 0,
+            def_flags: 0,
+            quests: 0,
+            quest_size: 0,
+            quest_id: 0,
+        }
+    }
+
+    #[test]
+    fn a_live_store_holds_only_while_its_pointers_read_and_its_count_is_a_server_s() {
+        let layout = store_layout();
+        let records = [0u64; 4];
+        let queue = [0u64; 2];
+        let holds = |state: &[usize; 2]| {
+            let object = [state.as_ptr().addr()];
+            let game = [object.as_ptr().addr(), queue.as_ptr().addr()];
+            let server = [game.as_ptr().addr()];
+            store_holds(&layout, server.as_ptr().addr())
+        };
+        let at = records.as_ptr().addr();
+        assert_eq!(holds(&[at, 2]), Ok(()));
+        let past = holds(&[at, 5000]).unwrap_err();
+        assert_eq!(past.entry, pinned::knowledge::RECORD_COUNT.id());
+        let null = holds(&[0, 2]).unwrap_err();
+        assert_eq!(null.entry, pinned::knowledge::RECORDS.id());
+        let lost = store_holds(&layout, 0x10).unwrap_err();
+        assert_eq!(lost.entry, pinned::server::PLAYER_INFOS.id());
+    }
+
     #[test]
     fn a_bucket_names_only_entries_the_arrays_hold() {
         assert_eq!(bucket_entries(2, 3, 10), 2..5);
