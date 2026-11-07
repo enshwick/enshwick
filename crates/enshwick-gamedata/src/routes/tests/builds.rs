@@ -235,6 +235,9 @@ fn every_route_holds_on_every_kept_build() {
 #[test]
 fn every_routed_only_row_names_a_kept_table_and_a_route() {
     let tables = tables();
+    if tables.is_empty() {
+        return;
+    }
     let routes = Routes::embedded().unwrap();
     for &(name, id, _) in ROUTED_ONLY {
         let table = tables.iter().find(|t| t.name() == name);

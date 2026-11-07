@@ -62,7 +62,10 @@ fn every_reflected_name_a_route_takes_is_in_the_typed_catalogue() {
             checked += 1;
         }
     }
-    assert!(checked > 0, "no reflected route met a snapshot");
+    assert!(
+        checked > 0 || crate::data_dir().is_none(),
+        "no reflected route met a snapshot"
+    );
 }
 
 #[test]

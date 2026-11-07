@@ -87,9 +87,13 @@ fn every_entry_of_every_table_has_a_class_and_a_reason() {
     assert!(unclassed.is_empty(), "{unclassed:#?}");
 }
 
+/// Skipped without the kept tables.
 #[test]
 fn every_entry_a_class_names_is_in_a_table() {
     let tables = tables();
+    if tables.is_empty() {
+        return;
+    }
     let known: FxHashSet<&str> = tables.iter().flat_map(ids).collect();
     let stale: Vec<String> = rows()
         .into_iter()
