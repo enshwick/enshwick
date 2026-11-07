@@ -16,6 +16,8 @@ Each entry names the pull request that made the change.
   `decide(input, answer)` runs other mods' links. Unstable
   `Load::define_described_point` and `DescribedOwnedPoint` define a point
   from its description and ask it with bytes at any address (#989).
+- `test`: `Installed::set_log_level(level)` changes the level of every
+  handle without its own, as an edit of `enshwick.toml` would (#993).
 
 ### Changed
 
@@ -24,6 +26,12 @@ Each entry names the pull request that made the change.
   `&mut [Value]`; a choice and a union's variant without a value cross as
   `Value::Name`; an `Arc` of an `Object` crosses as its own handle. A Luau
   damage filter allocates nothing per hit once warm (#989).
+- The loader runs each mid-function hook handler, the pacing waits among
+  them, as its mod: a crash there names the mod, and with diagnostics on
+  the status report times them as "mid hooks", at about 2 ns a handler
+  (#993).
+- A data pack's log level check is one load, about 1.7 ns instead of 6.9 ns
+  (#993).
 
 ### Fixed
 
@@ -34,6 +42,10 @@ Each entry names the pull request that made the change.
 - The loader's release check on a stable loader reads the repository's tags
   instead of the newest twenty releases, so a newer stable release is found
   however many releases follow it (#988).
+- The loader's own log level, and a data pack's, follow each edit of
+  `enshwick.toml`; packs no longer subscribe to
+  `Event::LOADER_SETTINGS_CHANGED`, so the loader refreshes them itself
+  (#993).
 
 ## [1.0.0-alpha.13] - 2026-11-07
 
