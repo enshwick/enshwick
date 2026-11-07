@@ -21,7 +21,10 @@ use crate::host::{Loader, Target};
 use crate::pinned;
 
 /// The build table ids this part of the loader names.
-pub(crate) const TABLE_IDS: &[&str] = &[pinned::ecs::ROW_ENTITY.id()];
+pub(crate) const TABLE_IDS: &[&str] = &[
+    pinned::ecs::COMPONENT_READ_RAW.id(),
+    pinned::ecs::ROW_ENTITY.id(),
+];
 
 /// The system whose entry reads the mask.
 const SYSTEM: &str = "player_ui";
