@@ -468,7 +468,11 @@ pub(crate) fn initialised() -> bool {
 #[inline]
 #[must_use]
 pub fn enabled(level: Level) -> bool {
-    level.0 <= MAX_LEVEL.load(Ordering::Relaxed)
+    let max = match crate::host::pack() {
+        Some(pack) => pack.log_level().0,
+        None => MAX_LEVEL.load(Ordering::Relaxed),
+    };
+    level.0 <= max
 }
 
 unsafe extern "system" fn refresh_level(
@@ -479,6 +483,32 @@ unsafe extern "system" fn refresh_level(
     if let Some(host) = crate::host() {
         MAX_LEVEL.store(host.log_level().0, Ordering::Relaxed);
     }
+}
+
+/// The state of the call site `site` for the data pack this thread runs,
+/// so the first pack to reach a site of the loader's copy does not silence
+/// it for the others; `site` itself outside a pack.
+fn for_pack<T: Default + Send + Sync + 'static>(site: &'static T) -> &'static T {
+    type Sites = rustc_hash::FxHashMap<(usize, usize), &'static (dyn core::any::Any + Send + Sync)>;
+    static SITES: std::sync::LazyLock<std::sync::Mutex<Sites>> =
+        std::sync::LazyLock::new(std::sync::Mutex::default);
+    thread_local! {
+        // The states this thread already found, so a line after the first
+        // takes no lock.
+        static SEEN: core::cell::RefCell<Sites> = core::cell::RefCell::default();
+    }
+    let Some(pack) = crate::host::pack() else {
+        return site;
+    };
+    let key = (core::ptr::from_ref(site).addr(), pack.handle().0);
+    let state = SEEN.with_borrow_mut(|seen| {
+        *seen.entry(key).or_insert_with(|| {
+            *crate::Relock::relock(&*SITES)
+                .entry(key)
+                .or_insert_with(|| Box::leak(Box::new(T::default())))
+        })
+    });
+    state.downcast_ref().unwrap_or(site)
 }
 
 /// A call site that logs its first time in each mod life: holds the
@@ -494,9 +524,10 @@ impl Once {
 
     #[inline]
     #[must_use]
-    pub fn first(&self) -> bool {
+    pub fn first(&'static self) -> bool {
+        let this = for_pack(self);
         let life = crate::fresh::life();
-        self.0.load(Ordering::Relaxed) != life && self.0.swap(life, Ordering::Relaxed) != life
+        this.0.load(Ordering::Relaxed) != life && this.0.swap(life, Ordering::Relaxed) != life
     }
 }
 
@@ -527,19 +558,20 @@ impl Every {
 
     /// The lines skipped since the last one when a line is due now.
     #[must_use]
-    pub fn due(&self, period: Duration) -> Option<u64> {
+    pub fn due(&'static self, period: Duration) -> Option<u64> {
         static EPOCH: OnceLock<Instant> = OnceLock::new();
+        let this = for_pack(self);
         let now = u64::try_from(EPOCH.get_or_init(Instant::now).elapsed().as_millis())
             .unwrap_or(u64::MAX);
         let life = crate::fresh::life();
-        if self.life.swap(life, Ordering::Relaxed) != life {
-            self.next.store(0, Ordering::Relaxed);
-            self.skipped.store(0, Ordering::Relaxed);
+        if this.life.swap(life, Ordering::Relaxed) != life {
+            this.next.store(0, Ordering::Relaxed);
+            this.skipped.store(0, Ordering::Relaxed);
         }
-        let next = self.next.load(Ordering::Relaxed);
+        let next = this.next.load(Ordering::Relaxed);
         let period = u64::try_from(period.as_millis()).unwrap_or(u64::MAX);
         if now < next
-            || self
+            || this
                 .next
                 .compare_exchange(
                     next,
@@ -549,10 +581,10 @@ impl Every {
                 )
                 .is_err()
         {
-            self.skipped.fetch_add(1, Ordering::Relaxed);
+            this.skipped.fetch_add(1, Ordering::Relaxed);
             return None;
         }
-        Some(self.skipped.swap(0, Ordering::Relaxed))
+        Some(this.skipped.swap(0, Ordering::Relaxed))
     }
 }
 
@@ -748,6 +780,14 @@ pub unsafe fn as_pack<R>(api: *const HostApi, me: ModHandle, call: impl FnOnce()
         Some(host) => host.scope(call),
         None => call(),
     }
+}
+
+/// Runs `call`, the loader's call into its own code or a mod DLL's, as the
+/// process's host, also inside a data pack's call.
+///
+/// A panic or a line there is then not the pack's.
+pub fn as_loader<R>(call: impl FnOnce() -> R) -> R {
+    crate::host::running_as(None, call)
 }
 
 pub fn ready<M: Mod>(slot: &'static Slot<M>) {

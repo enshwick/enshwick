@@ -101,7 +101,21 @@ pub(crate) type DefinedEvent = (String, Vec<(String, u64)>, u32);
 
 /// A mod event handler: name, layout, the bytes it reads, handler and the
 /// mod's pointer.
-pub(crate) type ModEventSubscription = (String, Vec<(String, u64)>, u32, ModEventFn, usize);
+pub(crate) type ModEventSubscription = (
+    String,
+    Vec<(String, u64)>,
+    u32,
+    ModEventFn,
+    usize,
+    ModHandle,
+);
+
+/// Runs a callback the mod `owner` registered as that mod, as the loader
+/// runs a data pack's callback as the pack.
+pub(crate) fn as_owner<R>(owner: ModHandle, call: impl FnOnce() -> R) -> R {
+    // SAFETY: `TABLE` is the fake's table, a static.
+    unsafe { crate::__private::as_pack(&raw const TABLE, owner, call) }
+}
 
 /// What the installed fake answers and what it has recorded.
 pub(crate) struct State {
@@ -119,9 +133,11 @@ pub(crate) struct State {
     pub(crate) registration: Registration,
     /// Mid-function hooks: address, handler and the mod's pointer.
     pub(crate) mid_hooks: Vec<(u64, MidHookFn, usize)>,
-    pub(crate) subscriptions: Vec<(Event, EventFn, usize)>,
-    /// Game event handlers: type hash (0 for every type), handler, pointer.
-    pub(crate) game_events: Vec<(u32, GameEventFn, usize)>,
+    /// Loader event handlers: event, handler, pointer and owner.
+    pub(crate) subscriptions: Vec<(Event, EventFn, usize, ModHandle)>,
+    /// Game event handlers: type hash (0 for every type), handler, pointer
+    /// and owner.
+    pub(crate) game_events: Vec<(u32, GameEventFn, usize, ModHandle)>,
     pub(crate) served: Vec<(ServedResource, ResourcePatchFn, usize)>,
     /// Every rebuild of a served resource the mod asked for, at init and
     /// after.
@@ -135,7 +151,7 @@ pub(crate) struct State {
     pub(crate) published: Vec<super::FakeService>,
     /// Mod events the mod defined: name and layout, by id.
     pub(crate) defined_events: Vec<DefinedEvent>,
-    /// Mod event handlers: name, layout, handler, pointer.
+    /// Mod event handlers: name, layout, handler, pointer and owner.
     pub(crate) mod_event_subscriptions: Vec<ModEventSubscription>,
     /// The names of the mod events the mod sent, in order.
     pub(crate) sent_events: Vec<(String, Vec<u8>)>,

@@ -296,6 +296,8 @@ pub struct FakeHost {
     data_dir: String,
     mod_dir: String,
     log_level: Level,
+    /// The levels of data packs that differ from `log_level`.
+    pack_log_levels: Vec<(ModHandle, Level)>,
     caller_frame: CallerFrame,
     components: FxHashMap<(u32, u32), (usize, usize)>,
     templates: FxHashMap<u32, [u8; 16]>,
@@ -393,6 +395,7 @@ impl FakeHost {
             data_dir: "world0-mod-data/test".to_owned(),
             mod_dir: "mods/test".to_owned(),
             log_level: Level::INFO,
+            pack_log_levels: Vec::new(),
             caller_frame: CallerFrame::default(),
             components: FxHashMap::default(),
             templates: FxHashMap::default(),

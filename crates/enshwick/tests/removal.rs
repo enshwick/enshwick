@@ -7,7 +7,8 @@ mod tests {
 
     use enshwick::abi::{RecipeRuleKind, Status};
     use enshwick::content::changes::{Field, Value as ChangeValue};
-    use enshwick::content::{EngineFacts, Guid};
+    use enshwick::content::items::NewItem;
+    use enshwick::content::{EngineFacts, Guid, Id};
     use enshwick::resources::{Registry, Value};
     use enshwick::test::{
         ENTITY_ITEM, FILL_TABLE, FakeHost, Installed, LOOT_ITEM, OTHER_ITEM, RANDOM_LOOT,
@@ -16,6 +17,8 @@ mod tests {
     use enshwick::{Load, Mod, Off};
 
     static REFUSED: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    /// The mod's own item, cloned from `OTHER_ITEM`.
+    const LANTERN: Id = Id::new("you.removal:lantern");
 
     struct Removal;
 
@@ -27,6 +30,8 @@ mod tests {
             load.rekey_item(OTHER_ITEM, LOOT_ITEM)?;
             // A second re-key of the same item chains on the first.
             load.rekey_item(OTHER_ITEM, SPARE_ITEM)?;
+            load.add_item(NewItem::new(LANTERN, OTHER_ITEM))?;
+            load.rekey_item(SPARE_ITEM, LANTERN.guid())?;
             let mut refused = REFUSED.lock().unwrap();
             for result in [
                 load.rekey_item(LOOT_ITEM, ENTITY_ITEM),
@@ -49,7 +54,9 @@ mod tests {
     );
 
     fn start() -> Installed {
-        let loader = FakeHost::new().removal().install();
+        // The item offsets: a plain clone writes only the id at 0 and the
+        // GUID at 4, where the removal preset's items hold them.
+        let loader = FakeHost::new().items().removal().install();
         // SAFETY: the three functions are the exports of this file's `declare_mod!(Removal)`.
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
@@ -178,5 +185,51 @@ mod tests {
             refused.iter().any(|r| r.contains("entity of its own")),
             "{refused:?}"
         );
+    }
+
+    #[test]
+    fn an_item_rekeyed_to_the_mod_s_own_item_takes_that_item_s_data_under_its_own_id() {
+        let loader = start();
+        let item = built(
+            &loader,
+            SPARE_ITEM,
+            SPARE_ITEM,
+            "item_info",
+            "demo::ItemInfo",
+        );
+        assert_eq!(
+            id(item.field("itemId")),
+            Some(u64::from(SPARE_ITEM.fnv1a()))
+        );
+        assert_eq!(item.field("objectId"), Some(&Value::Guid(SPARE_ITEM)));
+        assert_eq!(
+            item.field("category"),
+            Some(&Value::Uint(u64::from(OTHER_ITEM.0[15]))),
+            "the data of the lantern's base item"
+        );
+        assert_eq!(
+            item.field("maxStackSize"),
+            Some(&Value::Uint(50)),
+            "the base item's 50 over the old item's 30"
+        );
+    }
+
+    #[test]
+    fn a_pack_cannot_rekey_to_an_item_another_pack_added() {
+        use enshwick::abi::ModHandle;
+
+        let loader = FakeHost::new().items().removal().install();
+        // SAFETY: the fake host's table lives for the process.
+        unsafe { enshwick::__private::install_host(loader.api(), ModHandle(9)) };
+        let init = |me, call: fn(&mut Load<'_>) -> Result<(), Off>| {
+            // SAFETY: the fake host's table lives for the process.
+            unsafe { enshwick::__private::init_pack(loader.api(), ModHandle(me), call) }
+        };
+        let added = init(1, |load| load.add_item(NewItem::new(LANTERN, OTHER_ITEM)));
+        assert_eq!(added, Status::OK, "{:?}", loader.logs());
+        let rekeyed = init(2, |load| load.rekey_item(SPARE_ITEM, LANTERN.guid()));
+        assert_ne!(rekeyed, Status::OK, "the lantern is the first pack's");
+        let own = init(1, |load| load.rekey_item(SPARE_ITEM, LANTERN.guid()));
+        assert_eq!(own, Status::OK, "{:?}", loader.logs());
     }
 }

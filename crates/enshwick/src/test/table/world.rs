@@ -173,14 +173,14 @@ pub(crate) extern "system" fn run_console(_me: ModHandle, line: Str, out: *mut S
 }
 
 pub(crate) extern "system" fn game_event(
-    _me: ModHandle,
+    me: ModHandle,
     type_hash: u32,
     callback: GameEventFn,
     user: *mut c_void,
 ) -> Status {
     with(Status::MISSING, |s| {
         s.game_events
-            .push((type_hash, callback, user.expose_provenance()));
+            .push((type_hash, callback, user.expose_provenance(), me));
         Status::OK
     })
 }

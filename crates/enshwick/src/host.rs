@@ -48,6 +48,43 @@ pub fn host() -> Option<Host> {
     RUNNING.get().or_else(|| HOST.get().copied())
 }
 
+/// The data pack whose code this thread runs in the loader's copy of the
+/// API; `None` in a mod's own copy and in the loader's own code.
+pub(crate) fn pack() -> Option<Host> {
+    RUNNING
+        .get()
+        .filter(|running| HOST.get().is_none_or(|own| own.me != running.me))
+}
+
+/// Runs `call` with `running` as the answer of [`host`] on this thread, the
+/// process's host for `None`, and restores the answer after, also on a panic.
+pub(crate) fn running_as<R>(running: Option<Host>, call: impl FnOnce() -> R) -> R {
+    struct Restore(Option<Host>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            RUNNING.set(self.0);
+        }
+    }
+    let _restore = Restore(RUNNING.replace(running));
+    call()
+}
+
+/// Spawns `body` on a new thread named `name` that answers [`host`] as the
+/// calling thread does, so a data pack's thread logs and faults as the pack.
+///
+/// # Errors
+///
+/// When the system cannot start a thread.
+pub(crate) fn spawn(
+    name: &str,
+    body: impl FnOnce() + Send + 'static,
+) -> std::io::Result<std::thread::JoinHandle<()>> {
+    let running = RUNNING.get();
+    std::thread::Builder::new()
+        .name(name.to_owned())
+        .spawn(move || running_as(running, body))
+}
+
 /// Runs a mod's callback for the loader; a panic faults the mod with
 /// `reason` and the panic's message, and `fallback` answers in its place.
 #[inline]
@@ -155,14 +192,7 @@ impl Host {
     /// Runs `call` with this as the answer of [`host`] on this thread, so a
     /// data pack's code logs, reads and faults as the pack.
     pub(crate) fn scope<R>(self, call: impl FnOnce() -> R) -> R {
-        struct Restore(Option<Host>);
-        impl Drop for Restore {
-            fn drop(&mut self) {
-                RUNNING.set(self.0);
-            }
-        }
-        let _restore = Restore(RUNNING.replace(Some(self)));
-        call()
+        running_as(Some(self), call)
     }
 
     /// The raw table, for calls the safe layer does not wrap.
@@ -378,6 +408,24 @@ mod tests {
                 "off: panic in a loot pass handler: the pack's".to_owned()
             )]
         );
+    }
+
+    #[cfg(feature = "test")]
+    #[test]
+    fn a_thread_spawned_in_a_pack_s_scope_runs_as_the_pack() {
+        let loader = crate::test::FakeHost::new().install();
+        // SAFETY: the fake host's table lives for the process.
+        unsafe { crate::__private::install_host(loader.api(), ModHandle(9)) };
+        // SAFETY: the fake host's table lives for the process.
+        let pack = unsafe { Host::new(loader.api(), ModHandle(2)) }.expect("the fake's table");
+        let (sender, seen) = std::sync::mpsc::channel();
+        let spawned = pack.scope(|| {
+            spawn("pack-thread", move || {
+                let _sent = sender.send(host().map(|host| host.handle()));
+            })
+        });
+        spawned.expect("a thread").join().expect("no panic");
+        assert_eq!(seen.recv().ok(), Some(Some(ModHandle(2))));
     }
 
     #[test]

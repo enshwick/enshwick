@@ -8,6 +8,13 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `content`: `Load::rekey_item(old, new)` and `enshwick.content.rekey_item`
+  take an item the mod added with `add_item` before the call as `new`: `old`
+  is served with that item's data, cloned from its base item with its name,
+  tooltip lines and icon; an item with a meter re-keys only an item with an
+  entity of its own (#972).
+- `test`: `FakeHost::pack_log_level(pack, level)` sets one data pack's log
+  level (#972).
 - `actions`: `Actions::control(id, key)` puts a declared action without
   arguments on a key in one call: a control of the same name that runs the
   action at each press, labelled with the action's label in each player's
@@ -286,6 +293,12 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- A data pack acts as itself everywhere the loader's copy of the API runs
+  it: a thread the API spawns for it (the world store's write), its log
+  level from `enshwick.toml`, each `info_once!` and `warn_every!` site, and
+  under `FakeHost` its event, tick, game event, mod event, frame and HUD
+  callbacks. A callback of the loader or a mod DLL that runs inside a pack's
+  call no longer runs as the pack (#972).
 - The terrain docs said the save keeps every terrain edit; it keeps one
   only inside a base, a Flame Altar's building zone (#963).
 - A recipe rule a mod sets during init is kept until the loader resolves the

@@ -600,14 +600,12 @@ where
         };
         let path = open.store.path.clone();
         let unwritten = std::sync::Arc::clone(&self.unwritten);
-        let spawned = std::thread::Builder::new()
-            .name("world-store".to_owned())
-            .spawn(move || {
-                if let Err(error) = write_atomically(&path, &text) {
-                    unwritten.store(true, Ordering::Relaxed);
-                    crate::error!("{error}; kept for the next save");
-                }
-            });
+        let spawned = crate::host::spawn("world-store", move || {
+            if let Err(error) = write_atomically(&path, &text) {
+                unwritten.store(true, Ordering::Relaxed);
+                crate::error!("{error}; kept for the next save");
+            }
+        });
         match spawned {
             Ok(handle) => {
                 open.changed = false;
