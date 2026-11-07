@@ -144,8 +144,36 @@ pub(crate) fn declaring(loader: &Loader) -> Vec<ModIndex> {
     running(loader).into_iter().map(|r| r.owner).collect()
 }
 
+/// The ids of mod `owner`'s actions `player` may run now, from the sheet
+/// the mod gives for them; `None` when the mod is off or declared no
+/// actions.
+pub(crate) fn allowed(
+    loader: &Loader,
+    owner: ModIndex,
+    player: &PlayerInfo,
+) -> Option<Vec<String>> {
+    let registered = running(loader).into_iter().find(|r| r.owner == owner)?;
+    let sheet = ask(
+        registered,
+        ActionCall::SHEET,
+        player,
+        0,
+        ("", ""),
+        ActionTarget::NONE,
+    );
+    Some(sheet_ids(&sheet))
+}
+
+/// The action ids a mod's sheet lists.
+fn sheet_ids(sheet: &str) -> Vec<String> {
+    enshwick::actions::sheet::decode(sheet)
+        .into_iter()
+        .map(|entry| entry.id)
+        .collect()
+}
+
 /// The connected player with account key `key`.
-fn player(loader: &Loader, key: u64) -> Option<PlayerInfo> {
+pub(crate) fn player(loader: &Loader, key: u64) -> Option<PlayerInfo> {
     crate::world::players(loader)
         .ok()?
         .into_iter()
@@ -313,6 +341,22 @@ mod tests {
     fn a_reply_of_several_lines_shows_every_line_in_its_notice() {
         assert_eq!(one_line("3 players\nAnn\r\nBob"), "3 players Ann Bob");
         assert_eq!(one_line("Сейф"), "Сейф");
+    }
+
+    #[test]
+    fn the_actions_a_sheet_lists_are_the_ones_carried() {
+        use enshwick::actions::sheet::{Entry, encode};
+
+        let entry = |id: &str| Entry {
+            id: id.into(),
+            label: format!("{id}\tlabel"),
+            ..Entry::default()
+        };
+        assert_eq!(
+            sheet_ids(&encode(&[entry("greet"), entry("wipe")])),
+            ["greet", "wipe"]
+        );
+        assert_eq!(sheet_ids(""), Vec::<String>::new());
     }
 
     fn places(entity: enshwick::Entity) -> Option<[f64; 3]> {

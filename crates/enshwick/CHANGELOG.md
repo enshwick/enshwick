@@ -6,6 +6,16 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Fixed
+
+- `actions`: a server sends a joining player only the controls of a server
+  mod whose action that player may run, by the action's `allow` or
+  `admins`, and sends them again when the server changes the player's
+  permissions; before, every player saw every such key (#988).
+- The loader's release check on a stable loader reads the repository's tags
+  instead of the newest twenty releases, so a newer stable release is found
+  however many releases follow it (#988).
+
 ## [1.0.0-alpha.13] - 2026-11-07
 
 ### Added

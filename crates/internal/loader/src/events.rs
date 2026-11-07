@@ -431,6 +431,10 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         crate::interactions::after_step(loader, step)
     );
     part!("control firings", crate::controls::after_step(loader));
+    part!(
+        "carried controls",
+        crate::controls::resend_on_rights(loader)
+    );
     part!("build refusals", crate::build_reasons::after_step(loader));
     part!("stat steps", crate::stats::after_step(loader, step, now));
     part!(
@@ -688,6 +692,7 @@ unsafe extern "system" fn remove(server: *mut u8, slot: *mut u8) {
             crate::net::forget_peer(data.key.get());
             crate::remote::forget_player(data.key.get());
             crate::admission::left(data.key.get());
+            crate::controls::left(data.key.get());
             guarded(&REMOVE_FUSE, "the player removal link", || {
                 // Before the game removes the character: its items still read.
                 crate::item_data::player_left(loader, data.entity);

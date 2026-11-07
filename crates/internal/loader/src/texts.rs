@@ -252,6 +252,51 @@ mod tests {
         assert_eq!(shipped().untranslated(), []);
     }
 
+    /// Apostrophes other than `'`, the one the game's Ukrainian texts use:
+    /// 2,074 times, U+2019 261 times and the others never (game texts of
+    /// build 1269579). The game font draws U+02BC as a box (client 26430625).
+    const OTHER_APOSTROPHES: [char; 9] = [
+        '\u{2018}', '\u{2019}', '\u{201B}', '\u{02B9}', '\u{02BB}', '\u{02BC}', '\u{02BD}',
+        '\u{2032}', '\u{FF07}',
+    ];
+
+    /// The keys of `file`'s Ukrainian texts with an apostrophe other than
+    /// `'`; other languages keep their own typography.
+    fn other_apostrophes(file: &str) -> Vec<String> {
+        let table: toml::Table = file.parse().unwrap();
+        table
+            .get(Language::UK_UA.code())
+            .and_then(toml::Value::as_table)
+            .into_iter()
+            .flatten()
+            .filter(|(_, text)| {
+                text.as_str()
+                    .is_some_and(|text| text.contains(OTHER_APOSTROPHES))
+            })
+            .map(|(key, _)| key.clone())
+            .collect()
+    }
+
+    #[test]
+    fn ukrainian_texts_use_the_apostrophe_the_game_font_draws() {
+        for file in EMBEDDED {
+            assert_eq!(other_apostrophes(file), Vec::<String>::new());
+        }
+    }
+
+    #[test]
+    fn an_apostrophe_the_game_font_lacks_is_found_in_ukrainian_texts_only() {
+        let code = Language::UK_UA.code();
+        let file = format!(
+            "[{code}]\n\"a\" = \"здоров'я\"\n\"b\" = \"ім\u{2019}я\"\n\"c\" = \"ім\\u02BCя\"\n"
+        );
+        assert_eq!(other_apostrophes(&file), ["b", "c"]);
+        assert_eq!(
+            other_apostrophes("[fr]\n\"a\" = \"l\u{2019}arbre\"\n"),
+            Vec::<String>::new()
+        );
+    }
+
     #[test]
     fn every_built_in_stat_kind_has_a_name_in_every_language() {
         let texts = shipped();

@@ -8,10 +8,26 @@ const PAGE: &str = "https://github.com/enshwick/enshwick/releases/tag/";
 /// The tag prefixes of a loader release: an alpha's, and release-plz's for
 /// the loader package.
 const TAG_PREFIXES: [&str; 2] = ["v", "enshwick-loader-v"];
-/// The most bytes of the list read; twenty releases with their notes take
-/// well under it.
+/// What a prerelease asks GitHub: the newest releases, among which the next
+/// alpha always is.
+const RELEASES: &str = "/repos/enshwick/enshwick/releases?per_page=20";
+/// What a release asks GitHub: every tag, a few hundred bytes each and never
+/// paged, so a stable release under either prefix is found however many
+/// releases came after it.
+const TAGS: &str = "/repos/enshwick/enshwick/git/matching-refs/tags/";
+/// The prefix of a tag's name in a Git reference.
+const TAG_REF: &str = "refs/tags/";
+/// The most bytes of an answer read; twenty releases with their notes, or
+/// some ten thousand tags, take under it.
 #[cfg_attr(not(windows), expect(dead_code, reason = "only Windows asks GitHub"))]
 const LIMIT: usize = 4 << 20;
+
+/// One Git reference as GitHub lists it; the other fields are ignored.
+#[derive(serde::Deserialize)]
+struct Ref {
+    #[serde(rename = "ref")]
+    name: String,
+}
 
 /// One release as GitHub lists it; the other fields are ignored.
 #[derive(serde::Deserialize)]
@@ -41,17 +57,43 @@ impl Release {
     }
 }
 
-/// The newest loader release in `listing`, GitHub's JSON list of releases,
-/// that is newer than `running` by SemVer precedence.
+/// The path on `api.github.com` whose answer [`newer`] reads for `running`.
+#[must_use]
+pub fn path(running: &Version) -> &'static str {
+    if running.pre.is_empty() {
+        TAGS
+    } else {
+        RELEASES
+    }
+}
+
+/// The newest loader release in `answer`, GitHub's JSON answer to
+/// [`path`], that is newer than `running` by SemVer precedence.
 ///
-/// A prerelease, by its version or GitHub's flag, counts only while
-/// `running` is one; a tag that is no loader version is skipped.
+/// A prerelease counts only while `running` is one: by its version, and in
+/// the list of releases an alpha reads also by GitHub's flag. A running
+/// release reads tags, so a loader tag with a release version counts as
+/// released. A tag that is no loader version is skipped.
 ///
 /// # Errors
 ///
-/// When `listing` is no JSON list of releases.
-pub fn newer(listing: &[u8], running: &Version) -> Result<Option<Release>, serde_json::Error> {
-    let listed: Vec<Listed> = serde_json::from_slice(listing)?;
+/// When `answer` is no JSON list of releases, or of Git references for a
+/// running release.
+pub fn newer(answer: &[u8], running: &Version) -> Result<Option<Release>, serde_json::Error> {
+    let listed: Vec<Listed> = if running.pre.is_empty() {
+        serde_json::from_slice::<Vec<Ref>>(answer)?
+            .into_iter()
+            .filter_map(|tag| {
+                Some(Listed {
+                    tag_name: tag.name.strip_prefix(TAG_REF)?.to_owned(),
+                    draft: false,
+                    prerelease: false,
+                })
+            })
+            .collect()
+    } else {
+        serde_json::from_slice(answer)?
+    };
     Ok(listed
         .into_iter()
         .filter(|release| !release.draft)
@@ -64,7 +106,13 @@ pub fn newer(listing: &[u8], running: &Version) -> Result<Option<Release>, serde
             (!pre || !running.pre.is_empty()).then_some(Release { version, prefix })
         })
         .filter(|release| release.version.cmp_precedence(running).is_gt())
-        .max_by(|a, b| a.version.cmp_precedence(&b.version)))
+        // One version under both prefixes links release-plz's tag, which
+        // carries the GitHub release.
+        .max_by(|a, b| {
+            a.version
+                .cmp_precedence(&b.version)
+                .then_with(|| (a.prefix != "v").cmp(&(b.prefix != "v")))
+        }))
 }
 
 /// The running loader's version.
@@ -90,8 +138,8 @@ pub(crate) fn start(loader: &'static crate::host::Loader) {
         .name("enshwick-releases".into())
         .spawn(move || {
             let running = running();
-            match fetch::list() {
-                Ok(listing) => match newer(&listing, &running) {
+            match fetch::answer(path(&running)) {
+                Ok(answer) => match newer(&answer, &running) {
                     Ok(Some(release)) => {
                         crate::log!(
                             INFO,
@@ -133,7 +181,7 @@ mod fetch {
     /// Bytes read per call.
     const CHUNK: usize = 16 * 1024;
 
-    /// Why the list of releases did not arrive.
+    /// Why GitHub's answer did not arrive.
     #[derive(Debug, thiserror::Error)]
     pub(super) enum FetchReleasesError {
         /// A Windows HTTP call failed: no network, no answer in time, or TLS.
@@ -182,9 +230,10 @@ mod fetch {
         if ok == 0 { Err(failed(call)) } else { Ok(()) }
     }
 
-    /// GitHub's JSON list of the newest releases, over HTTPS with the system's
+    /// GitHub's JSON answer to a GET of `path`, over HTTPS with the system's
     /// proxy settings.
-    pub(super) fn list() -> Result<Vec<u8>, FetchReleasesError> {
+    pub(super) fn answer(path: &str) -> Result<Vec<u8>, FetchReleasesError> {
+        let path: Vec<u16> = path.encode_utf16().chain([0]).collect();
         let agent: PCWSTR = w!("enshwick (https://github.com/enshwick)");
         // SAFETY: `agent` is NUL-terminated; null proxy names go with the
         // automatic proxy type.
@@ -217,7 +266,7 @@ mod fetch {
             WinHttpOpenRequest(
                 connect.0,
                 w!("GET"),
-                w!("/repos/enshwick/enshwick/releases?per_page=20"),
+                path.as_ptr(),
                 null(),
                 null(),
                 null(),
@@ -344,18 +393,71 @@ mod tests {
         );
     }
 
+    /// GitHub's answer of Git references for `tags`, in its name order.
+    fn tags(tags: &[&str]) -> Vec<u8> {
+        let refs: Vec<String> = tags
+            .iter()
+            .map(|tag| format!(r#"{{"ref":"refs/tags/{tag}","object":{{"type":"commit"}}}}"#))
+            .collect();
+        format!("[{}]", refs.join(",")).into_bytes()
+    }
+
+    #[test]
+    fn a_release_asks_for_loader_tags_and_an_alpha_for_the_newest_releases() {
+        assert_eq!(path(&version("1.0.0")), TAGS);
+        assert_eq!(path(&version("1.0.0-alpha.12")), RELEASES);
+    }
+
     #[test]
     fn a_release_runs_ahead_of_alphas_but_ignores_them() {
-        let list = listing(&[("v1.1.0-alpha.1", false), ("v1.0.1", false)]);
+        let list = tags(&["enshwick-loader-v1.0.1", "enshwick-loader-v1.1.0-alpha.1"]);
         assert_eq!(found(&list, "1.0.0"), Some(version("1.0.1")));
-        let list = listing(&[("v1.1.0-alpha.1", false)]);
+        let list = tags(&["enshwick-loader-v1.1.0-alpha.1"]);
         assert_eq!(found(&list, "1.0.0"), None);
     }
 
     #[test]
-    fn a_release_github_marks_prerelease_is_ignored_while_a_release_runs() {
+    fn a_running_release_finds_a_stable_release_whatever_came_after_it() {
+        let mut names: Vec<String> = (1..=40)
+            .map(|n| format!("enshwick-loader-v1.2.0-alpha.{n}"))
+            .collect();
+        names.extend([
+            "enshwick-loader-v1.0.0".into(),
+            "enshwick-loader-v1.1.0".into(),
+        ]);
+        names.sort();
+        let names: Vec<&str> = names.iter().map(String::as_str).collect();
+        assert_eq!(found(&tags(&names), "1.0.0"), Some(version("1.1.0")));
+    }
+
+    #[test]
+    fn a_running_release_finds_a_stable_release_under_either_prefix() {
+        let list = tags(&["enshwick-v3.0.0", "v1.0.0-alpha.13", "v1.0.2"]);
+        assert_eq!(found(&list, "1.0.0"), Some(version("1.0.2")));
+        let list = tags(&["enshwick-loader-v1.0.1", "v1.0.2-alpha.1"]);
+        assert_eq!(found(&list, "1.0.0"), Some(version("1.0.1")));
+    }
+
+    #[test]
+    fn a_version_under_both_prefixes_links_the_release_plz_tag() {
+        for names in [
+            ["enshwick-loader-v1.1.0", "v1.1.0"],
+            ["v1.1.0", "enshwick-loader-v1.1.0"],
+        ] {
+            let release = newer(&tags(&names), &version("1.0.0")).unwrap().unwrap();
+            assert_eq!(release.page(), format!("{PAGE}enshwick-loader-v1.1.0"));
+        }
+    }
+
+    #[test]
+    fn a_reference_that_is_no_tag_is_skipped() {
+        let list = br#"[{"ref":"refs/heads/enshwick-loader-v9.0.0"}]"#;
+        assert_eq!(found(list, "1.0.0"), None);
+    }
+
+    #[test]
+    fn a_release_github_marks_prerelease_counts_while_an_alpha_runs() {
         let list = flagged(&[("v1.1.0", false, true)]);
-        assert_eq!(found(&list, "1.0.0"), None);
         assert_eq!(found(&list, "1.0.0-alpha.12"), Some(version("1.1.0")));
     }
 
@@ -405,6 +507,9 @@ mod tests {
         assert!(newer(br#"{"message":"API rate limit exceeded"}"#, &running).is_err());
         assert!(newer(b"<html>", &running).is_err());
         assert_eq!(newer(b"[]", &running).unwrap(), None);
+        let running = version("1.0.0");
+        assert!(newer(br#"{"message":"Not Found"}"#, &running).is_err());
+        assert!(newer(&listing(&[("v1.0.1", false)]), &running).is_err());
     }
 
     #[test]
