@@ -27,6 +27,25 @@ pub(crate) extern "system" fn component(
     found(address.map(core::ptr::with_exposed_provenance), out)
 }
 
+/// The bytes from `address` to the end of the test's component that holds
+/// it, at most `max`; 0 outside every component, as the loader answers for
+/// memory that does not read.
+pub(crate) extern "system" fn readable(
+    _me: ModHandle,
+    address: usize,
+    max: usize,
+    out: *mut usize,
+) -> Status {
+    let len = with(0, |s| {
+        s.host
+            .components
+            .values()
+            .find(|&&(start, len)| (start..start + len).contains(&address))
+            .map_or(0, |&(start, len)| (start + len - address).min(max))
+    });
+    put(out, len)
+}
+
 pub(crate) extern "system" fn entity_template(
     _me: ModHandle,
     entity: crate::Entity,
