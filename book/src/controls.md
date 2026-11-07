@@ -142,8 +142,9 @@ fires. The handler still runs on the client.
 `actions.add`. It declares a control named after the action, on that key,
 which runs the action at each press. Its label is the action's label, a key
 of the texts the mod gave `load.actions`, so the Controls page shows it in
-each player's language. An action with arguments or a list of players
-takes no key.
+each player's language; a text the mod handed itself under the same key
+wins, as [Actions](actions.md) says. An action with arguments or a list of
+players takes no key.
 
 ```rust
 use enshwick::actions::{Action, Outcome};

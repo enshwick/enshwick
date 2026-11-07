@@ -86,6 +86,11 @@ returns the mod's `Actions`. Call it once,
 during `init`, on both sides of a mod of side `both` alike. Texts are keys of
 `texts`, the mod's [translations](settings.md), shown in each player's
 language. A key without a text shows as it is, so plain English works too.
+The loader keeps these texts for the mod's controls as well. They sit beneath
+the texts the mod hands it with `load.texts` or `load.texts_from`, before or
+after, so a key both give reads as the mod handed it. A language without the
+text falls back as any text does: Brazilian Portuguese falls back to
+Portuguese, then to English.
 `actions.add(action, handler)` declares one action:
 
 | Builder                             | What it does                                                                                     |
