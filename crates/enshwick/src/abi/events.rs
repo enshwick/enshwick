@@ -129,13 +129,13 @@ impl Event {
     /// drops by page on its own, with players near or not, so a mod that
     /// keeps its terrain edits outside the save writes them again here.
     /// Raised on the game thread after the step. Dedicated server only.
-    /// ABI 11.14.
+    /// ABI 11.15.
     pub const TERRAIN_PAGE_LOADED: Self = Self(24);
     /// A page of the terrain left the server's memory, the one used least
     /// lately, and its voxels read as not loaded until a read loads it
     /// again; data is a [`TerrainPageData`]. Raised on the game thread
     /// after the step.
-    /// Dedicated server only. ABI 11.14.
+    /// Dedicated server only. ABI 11.15.
     pub const TERRAIN_PAGE_UNLOADED: Self = Self(25);
 }
 

@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 14
+#define ENSHWICK_ABI_MINOR 15
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -1199,13 +1199,13 @@ typedef uint32_t EnshwickEvent;
 // drops by page on its own, with players near or not, so a mod that
 // keeps its terrain edits outside the save writes them again here.
 // Raised on the game thread after the step. Dedicated server only.
-// ABI 11.14.
+// ABI 11.15.
 #define EnshwickEvent_TERRAIN_PAGE_LOADED 24
 // A page of the terrain left the server's memory, the one used least
 // lately, and its voxels read as not loaded until a read loads it
 // again; data is a `TerrainPageData`. Raised on the game thread
 // after the step.
-// Dedicated server only. ABI 11.14.
+// Dedicated server only. ABI 11.15.
 #define EnshwickEvent_TERRAIN_PAGE_UNLOADED 25
 
 // A mod event a mod defines, or the one it subscribes to.
