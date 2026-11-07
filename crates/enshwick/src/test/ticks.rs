@@ -7,14 +7,12 @@ use core::time::Duration;
 use crate::abi::{Event, EventFn, ModHandle, Status, TickData, TickHandle};
 
 use super::Installed;
-use super::table::{put, with};
+use super::table::{Registered, put, with};
 
 /// A periodic tick handler the mod subscribed.
 struct FakeTick {
-    owner: ModHandle,
     every: u64,
-    callback: EventFn,
-    user: usize,
+    handler: Registered<EventFn>,
     /// The step and time of its last call; `None` before the first.
     last: Option<(u64, u64)>,
 }
@@ -49,10 +47,8 @@ pub(crate) extern "system" fn subscribe_tick(
             return Status::REFUSED;
         };
         s.ticks.ticks.push(FakeTick {
-            owner: me,
             every: every_nanos,
-            callback,
-            user: user.expose_provenance(),
+            handler: Registered::new(callback, user, me),
             last: None,
         });
         put(out, TickHandle(handle))
@@ -68,7 +64,7 @@ pub(crate) extern "system" fn set_tick_every(
         let Some(tick) = s.ticks.ticks.get_mut(handle.0 as usize) else {
             return Status::MISSING;
         };
-        if tick.owner != me {
+        if tick.handler.owner() != Some(me) {
             return Status::REFUSED;
         }
         tick.every = every_nanos;
@@ -104,7 +100,7 @@ impl Installed {
     #[must_use = "the count says whether the mod handles the step"]
     pub fn tick(&self, elapsed: Duration) -> usize {
         let elapsed = u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX);
-        let calls: Vec<(EventFn, usize, ModHandle, TickData)> = with(Vec::new(), |s| {
+        let calls: Vec<(Registered<EventFn>, TickData)> = with(Vec::new(), |s| {
             let ticks = &mut s.ticks;
             ticks.step += 1;
             ticks.nanos = ticks.nanos.saturating_add(elapsed);
@@ -119,7 +115,7 @@ impl Installed {
                 .subscriptions
                 .iter()
                 .filter(|sub| sub.0 == Event::TICKED)
-                .map(|sub| (sub.1, sub.2, sub.3, tick));
+                .map(|sub| (sub.1, tick));
             let periodic = ticks
                 .ticks
                 .iter_mut()
@@ -134,19 +130,15 @@ impl Installed {
                         elapsed_nanos: nanos,
                         ..tick
                     };
-                    (t.callback, t.user, t.owner, data)
+                    (t.handler, data)
                 });
             every_step.chain(periodic).collect()
         });
-        for (callback, user, owner, data) in &calls {
+        for (handler, data) in &calls {
             // SAFETY: `data` lives for the call and `user` is the pointer the
             // mod subscribed `callback` with.
-            super::table::as_owner(*owner, || unsafe {
-                callback(
-                    Event::TICKED,
-                    (&raw const *data).cast(),
-                    core::ptr::with_exposed_provenance_mut(*user),
-                );
+            handler.run(|callback, user| unsafe {
+                callback(Event::TICKED, (&raw const *data).cast(), user);
             });
         }
         calls.len()
@@ -177,8 +169,8 @@ impl Installed {
 impl FakeTicks {
     /// The mod's periodic tick handlers and their pointers, for a raw raise
     /// of [`Event::TICKED`], which reaches every tick handler.
-    pub(crate) fn handlers(&self) -> impl Iterator<Item = (EventFn, usize, ModHandle)> + '_ {
-        self.ticks.iter().map(|t| (t.callback, t.user, t.owner))
+    pub(crate) fn handlers(&self) -> impl Iterator<Item = Registered<EventFn>> + '_ {
+        self.ticks.iter().map(|t| t.handler)
     }
 
     /// The fake server's time: of the last step, in nanoseconds from the first.

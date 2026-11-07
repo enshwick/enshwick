@@ -31,7 +31,7 @@ pub(crate) extern "system" fn ui_frame(
         if s.host.side == Side::SERVER {
             return Status::MISSING;
         }
-        s.frames.push((callback, user.expose_provenance(), me));
+        s.frames.push(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -258,7 +258,7 @@ pub(crate) extern "system" fn ui_hud(
         if s.host.side == Side::SERVER {
             return Status::MISSING;
         }
-        s.huds.push((callback, user.expose_provenance(), me));
+        s.huds.push(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -287,7 +287,7 @@ pub(crate) extern "system" fn ui_extension(
             return Status::MISSING;
         }
         s.extensions
-            .push((screen, spec.edge, callback, user.expose_provenance(), me));
+            .push((screen, spec.edge, Registered::new(callback, user, me)));
         Status::OK
     })
 }

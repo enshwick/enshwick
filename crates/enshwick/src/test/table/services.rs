@@ -5,7 +5,7 @@ use core::ffi::c_void;
 use crate::abi::{
     Event, EventFn, EventSpec, ModEventFn, ModHandle, ServiceFound, ServiceSpec, Status, Str,
 };
-use crate::test::table::{put, text, with};
+use crate::test::table::{Registered, put, text, with};
 
 /// The `(name, hash)` fields of a layout the safe layer passed.
 pub(crate) fn layout_of(layout: &crate::abi::Layout) -> Option<Vec<(String, u64)>> {
@@ -140,9 +140,7 @@ pub(crate) extern "system" fn subscribe_event(
             name,
             fields,
             spec.layout.size,
-            callback,
-            user.expose_provenance(),
-            me,
+            Registered::new(callback, user, me),
         ));
         Status::OK
     })
@@ -269,7 +267,7 @@ pub(crate) extern "system" fn subscribe(
     }
     with(Status::MISSING, |s| {
         s.subscriptions
-            .push((event, callback, user.expose_provenance(), me));
+            .push((event, Registered::new(callback, user, me)));
         Status::OK
     })
 }
