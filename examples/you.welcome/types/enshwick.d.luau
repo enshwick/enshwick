@@ -778,6 +778,16 @@ export type FogOfWar = {
 	coverage: (self: FogOfWar, position: vector) -> number?,
 }
 
+--- Fog of war the local player uncovered in one window of at most a second, from `Load.on_fog_uncovered`. The name is the game's `FogOfWar` with a verb of enshwick's.
+export type FogOfWarUncovered = {
+	--- The lowest corner of the box around the uncovered ground: world x and z in metres.
+	min: {number},
+	--- Its highest corner.
+	max: {number},
+	--- How many pixels of the fog's image turned from hidden to shown.
+	pixels: number,
+}
+
 --- The fog's size, scale and how often it changed, as one read found it.
 export type FogState = {
 	--- The image's width in pixels.
@@ -3603,6 +3613,9 @@ declare enshwick: {
 		--- Calls `handler` on the server's game thread when a player sets, moves or clears the waypoint all players see. The waypoints are compared on a tick every tenth of a second, so a change shows within that; a player's waypoint when they join counts as no change. A waypoint outside the map is not handed on, and the log says so once. On a client it hears only a game that client hosts.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_waypoint: (handler: (arg1: WaypointChanged) -> ()) -> (),
+		--- Calls `handler` on the thread that draws the interface when the local player uncovered fog of war, at most once a second, with the box around the new ground and how many pixels of the fog it was. Client only: the fog of war is the client's own. The fog is looked at four times a second inside the interface's frames, so a window shows within that; a world's first copy of its saved fog counts as none.
+		--- Only while the mod starts, at the top level of main.luau.
+		on_fog_uncovered: (handler: (arg1: FogOfWarUncovered) -> ()) -> (),
 		--- Calls `handler` on the server's game thread for each ping a player makes on the map or in the world, and each one a mod raises with `Effects.ping`. A sender is heard at most once a tenth of a second, and a ping outside the map is not handed on.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_ping: (handler: (arg1: MapPinged) -> ()) -> (),

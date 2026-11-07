@@ -1277,6 +1277,19 @@ typedef struct EnshwickFogInfo {
   // Counts the fogs the loader has seen, one per world the client
   // enters; a new one starts from the save of that world.
   uint64_t session;
+  // Counts the closed windows of uncovering in this session: the
+  // loader closes the pixels uncovered since the last window into a
+  // new one at most once a second; 0 before the first. ABI 11.14.
+  uint64_t uncovered;
+  // The pixels the last window turned from hidden to shown. ABI 11.14.
+  uint32_t uncovered_pixels;
+  // Zero.
+  uint32_t reserved;
+  // The lowest pixel of the box around the last window's pixels, as
+  // x and row. ABI 11.14.
+  uint32_t uncovered_min[2];
+  // The box's width and height in pixels. ABI 11.14.
+  uint32_t uncovered_size[2];
 } EnshwickFogInfo;
 
 // A game event handed to a `GameEventFn`, from the ECS event streams
