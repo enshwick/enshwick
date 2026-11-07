@@ -825,6 +825,20 @@ pub const FACTS: &[(&str, Fact)] = &[
         ids::PLAYER_INPUT_TYPE,
         Fact::Type("keen::ecs::PlayerInputType"),
     ),
+    (
+        ids::SELECTED_TARGETS,
+        Fact::Type("keen::ecs::SelectedTargets"),
+    ),
+    (
+        ids::SELECTED_TARGETS_TARGETS,
+        offset("keen::ecs::SelectedTargets", "targets"),
+    ),
+    (ids::TARGET_INFO, Fact::Type("keen::ecs::TargetInfo")),
+    (
+        ids::TARGET_INFO_ENTITY,
+        offset("keen::ecs::TargetInfo", "targetEntityId"),
+    ),
+    (ids::TARGET_TYPE, Fact::Type("keen::ecs::TargetType")),
     (ids::HUD_SCREEN_TYPE, Fact::Type("keen::HudScreenType")),
     (
         ids::HUD_SCREEN_IN_GAME,

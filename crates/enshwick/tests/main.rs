@@ -73,6 +73,8 @@ mod icons_hidden;
 mod init_off;
 #[cfg(feature = "unstable")]
 mod input;
+#[cfg(feature = "unstable")]
+mod interaction_targets;
 mod inventory;
 mod item_changes;
 #[cfg(feature = "unstable")]

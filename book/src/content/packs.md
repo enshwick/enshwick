@@ -546,8 +546,14 @@ volume = 0.8
 
 `id` is the sound's name in the pack; other mods play it as
 `<pack>:<id>`. `file` is relative to the pack's folder and stays inside it.
-`scene` is `sfx` when left out, or `music`, `ui` or `voice`; `volume` is 0
-to 4, 1 when left out. A file that does not read turns off that sound
+`scene` takes one of these values, `sfx` when left out:
+
+- `sfx`
+- `music`
+- `ui`
+- `voice`
+
+`volume` is 0 to 4, 1 when left out. A file that does not read turns off that sound
 alone.
 
 ## Let an admin tune a pack per world

@@ -84,12 +84,14 @@ impl Event {
     /// [`QuestData`]. Raised on the game thread after the step. Server
     /// only.
     pub const QUEST_COMPLETED: Self = Self(16);
-    /// A chunk of the server's world loaded: players came near, and its
-    /// entities exist now; data is a [`ChunkData`]. Raised on the game
-    /// thread after the step. Server only.
+    /// A chunk of the server's entities loaded: players came near, and its
+    /// entities exist now; data is a [`ChunkData`]. The terrain's voxels
+    /// load apart from it, without a player, and raise no event. Raised on
+    /// the game thread after the step. Server only.
     pub const CHUNK_LOADED: Self = Self(17);
-    /// A chunk of the server's world unloaded: no player is near, and its
-    /// entities are gone; data is a [`ChunkData`]. Raised on the game thread
+    /// A chunk of the server's entities unloaded: no player is near, and its
+    /// entities are gone; data is a [`ChunkData`]. The terrain's voxels
+    /// unload apart from it and raise no event. Raised on the game thread
     /// after the step. Server only.
     pub const CHUNK_UNLOADED: Self = Self(18);
     /// The settings a mod reads were replaced whole: a world loaded in this
@@ -328,7 +330,8 @@ pub type KnowledgeInputFn =
     unsafe extern "system" fn(call: *const KnowledgeInput, user: *mut c_void) -> u8;
 
 /// The data of the [`ChunkLoaded`](crate::events::ChunkLoaded) and
-/// [`ChunkUnloaded`](crate::events::ChunkUnloaded) events.
+/// [`ChunkUnloaded`](crate::events::ChunkUnloaded) events: a chunk of the
+/// world's entities, never of its terrain's voxels.
 ///
 /// # Examples
 ///

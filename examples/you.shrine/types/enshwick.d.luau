@@ -470,7 +470,7 @@ export type ChatLine = {
 	text: string,
 }
 
---- The data of the `ChunkLoaded` and `ChunkUnloaded` events.
+--- The data of the `ChunkLoaded` and `ChunkUnloaded` events: a chunk of the world's entities, never of its terrain's voxels.
 export type ChunkData = {
 	--- The chunk's index in the world's grid: `z * width + x`.
 	index: number,

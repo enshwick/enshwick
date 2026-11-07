@@ -291,6 +291,14 @@ ids! {
     PLAYER_INPUT = "player_input";
     PLAYER_INPUT_DIGITAL = "player_input.digital";
     PLAYER_INPUT_TYPE = "player_input_type";
+    /// The id of the server-only component of a player's targets, one
+    /// `TargetInfo` per `TargetType`.
+    SELECTED_TARGETS = "selected_targets";
+    SELECTED_TARGETS_TARGETS = "selected_targets.targets";
+    TARGET_INFO = "target_info";
+    /// The id of a target's `u32` entity, 0 for none.
+    TARGET_INFO_ENTITY = "target_info.entity";
+    TARGET_TYPE = "target_type";
     HUD_SCREEN_TYPE = "hud_screen_type";
     HUD_SCREEN_IN_GAME = "hud_screen_type.in_game";
     BOSS = "boss";

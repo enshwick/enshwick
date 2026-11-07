@@ -178,6 +178,17 @@ pub const PLAYER_INPUT: Fact = Fact(ids::PLAYER_INPUT);
 pub const PLAYER_INPUT_DIGITAL: Fact = Fact(ids::PLAYER_INPUT_DIGITAL);
 /// The game's enum of controls, whose constants name the held bits.
 pub const PLAYER_INPUT_TYPE: Fact = Fact(ids::PLAYER_INPUT_TYPE);
+/// A player's targets, set by
+/// [`FakeHost::interaction_targets`](super::FakeHost::interaction_targets).
+pub const SELECTED_TARGETS: Fact = Fact(ids::SELECTED_TARGETS);
+/// Where `SelectedTargets` keeps its array of targets.
+pub const SELECTED_TARGETS_TARGETS: Fact = Fact(ids::SELECTED_TARGETS_TARGETS);
+/// One target of the array, by its size.
+pub const TARGET_INFO: Fact = Fact(ids::TARGET_INFO);
+/// Where a target keeps its `u32` entity.
+pub const TARGET_INFO_ENTITY: Fact = Fact(ids::TARGET_INFO_ENTITY);
+/// The game's enum of targets, whose constants index the array.
+pub const TARGET_TYPE: Fact = Fact(ids::TARGET_TYPE);
 /// The marker of an NPC.
 pub const NPC: Fact = Fact(ids::NPC);
 /// The marker of an animal.

@@ -403,6 +403,8 @@ pub const NAMESPACES: &[Namespace] = &[
     ),
     Namespace::starting("vetoes", "", &[crate::Load::SCRIPT_VETOES]),
     Namespace::starting("chat", "", &[crate::Load::SCRIPT_CHAT]),
+    #[cfg(feature = "unstable")]
+    Namespace::of::<crate::interactions::Targets>(),
     Namespace::starting("interactions", "", &[crate::Load::SCRIPT_INTERACTIONS]),
     #[cfg(feature = "unstable")]
     Namespace::of::<crate::input::Input>(),
