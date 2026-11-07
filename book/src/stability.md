@@ -72,10 +72,11 @@ may change in any release, as their Rust counterparts do.
 The loader and the mods talk through one C ABI, whatever features a mod turns
 on. An unstable call is a slot of the same table as a stable one.
 
-Until 1.0 the ABI version is a hash of the layout of every ABI type. A
-loader loads only mods built for its own version (see
-[ABI reference](abi-reference.md#versions)). A release that changes the
-layout needs every mod rebuilt against it. A release that only adds game
+The ABI version is a major and a minor (see
+[ABI reference](abi-reference.md#versions)). A loader loads mods built for
+its own major, at its own minor or an older one. A release that changes the
+layout other than by appending is a new major, and every mod is rebuilt
+against it. A release that only adds game
 builds keeps the layout and the mods.
 
 From 1.0 the layout is frozen. The loader's table and its structs grow only

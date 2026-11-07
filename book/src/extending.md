@@ -87,7 +87,8 @@ A type's `kind` is one of four values:
 
 A type in the schema is one of these:
 
-- an integer number: `u8-u64` or `i8-i64`
+- an unsigned integer, `u8` to `u64`
+- a signed integer, `i8` to `i64`
 - a float number: `f32` or `f64`
 - `bool`
 - `enshwick.entity` or `enshwick.guid`
@@ -99,7 +100,7 @@ answer's, as decimal text: a definition checks itself against them.
 ## Extending a point
 
 [`load.extend_point(order, link)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/points.rs)
-attaches `link`. It runs during `init`. The link gets the point's input and
+attaches `link`. A mod calls it during `init`. The link gets the point's input and
 the answer so far. That answer is the owner's own, or what the links before
 it left. The link returns a
 [`Verdict`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/points.rs):

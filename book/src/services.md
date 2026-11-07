@@ -341,7 +341,7 @@ A Luau mod hears another mod's events and sends its own.
 `cargo enshwick deps <alias> --luau` writes the description of each event the
 owner declares, beside its points. A description may also be written by hand. It gives each field a `name` and
 how it reads. A field reads as a number, `bool`, `guid` or an id. The
-integers are `u8-i64`. The floats are `f32` and `f64`. The ids are these:
+integers are `u8` to `i64`. The floats are `f32` and `f64`. The ids are these:
 
 - `entity`
 - `item_id`
