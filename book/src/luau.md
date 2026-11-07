@@ -286,7 +286,9 @@ world are allowed (see [Threads](concepts/threads.md)).
 A hook or filter a script sets, such as `enshwick.damage.on_damage`, runs
 where the Rust one runs, inside the game's step. The mod's scripts run one
 call at a time, and each call counts against the budgets, so keep such a
-function short.
+function short. Once warm, a damage filter's call allocates nothing. The
+hit, its methods' arguments and a cause's name cross without the heap.
+A table or text the script builds still allocates in Luau.
 
 ## What a mod costs
 

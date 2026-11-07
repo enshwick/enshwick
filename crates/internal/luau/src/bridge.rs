@@ -130,27 +130,7 @@ pub(crate) fn from_lua(scope: &Scope, value: LuaValue, ty: &'static Ty) -> Resul
             LuaValue::Number(n) => Ok(Value::Number(n)),
             other => Err(expected("a number", &other)),
         },
-        // A choice crosses as its own static name, which also checks it.
-        Ty::Choice(choice) => match value {
-            LuaValue::String(s) => {
-                if let Some(Some(name)) = scope.with_lua(|lua| Interned::variant(lua, choice, &s)) {
-                    return Ok(Value::Name(name));
-                }
-                let text = s
-                    .to_str()
-                    .map_err(|_| Error::new("expected text in UTF-8"))?;
-                choice
-                    .names()
-                    .find(|name| *name == &*text)
-                    .map(Value::Name)
-                    .ok_or_else(|| {
-                        let names: Vec<String> =
-                            choice.names().map(|name| format!("{name:?}")).collect();
-                        Error::new(format!("{:?} is not one of {}", &*text, names.join(", ")))
-                    })
-            }
-            other => Err(expected("a string", &other)),
-        },
+        Ty::Choice(choice) => choice_from_lua(scope, value, choice),
         Ty::String => match value {
             LuaValue::String(s) => Ok(Value::String(
                 s.to_str()
@@ -232,6 +212,28 @@ pub(crate) fn from_lua(scope: &Scope, value: LuaValue, ty: &'static Ty) -> Resul
         Ty::Object(class) => object_from_lua(&value, class),
         _ => Err(Error::new("a type this runtime does not know")),
     }
+}
+
+/// The API value of `value`, a variant of `choice`: the variant's own
+/// static name, which also checks it.
+fn choice_from_lua(scope: &Scope, value: LuaValue, choice: &Choice) -> Result<Value, Error> {
+    let LuaValue::String(s) = value else {
+        return Err(expected("a string", &value));
+    };
+    if let Some(Some(name)) = scope.with_lua(|lua| Interned::variant(lua, choice, &s)) {
+        return Ok(Value::Name(name));
+    }
+    let text = s
+        .to_str()
+        .map_err(|_| Error::new("expected text in UTF-8"))?;
+    choice
+        .names()
+        .find(|name| *name == &*text)
+        .map(Value::Name)
+        .ok_or_else(|| {
+            let names: Vec<String> = choice.names().map(|name| format!("{name:?}")).collect();
+            Error::new(format!("{:?} is not one of {}", &*text, names.join(", ")))
+        })
 }
 
 /// The API value of `value`, a variant of `union`: its name, or a table of

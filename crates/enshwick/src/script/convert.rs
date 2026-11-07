@@ -670,7 +670,8 @@ mod tests {
             (Side::CLIENT, "client"),
             (Side::BOTH, "both"),
         ] {
-            assert!(matches!(side.into_value(), Value::String(ref text) if text == name));
+            assert!(matches!(side.into_value(), Value::Name(text) if text == name));
+            assert_eq!(Side::from_value(Value::Name(name)).ok(), Some(side));
             assert_eq!(
                 Side::from_value(Value::String(name.into())).ok(),
                 Some(side)

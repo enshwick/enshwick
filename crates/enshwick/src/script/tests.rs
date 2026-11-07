@@ -110,7 +110,12 @@ fn a_player_comes_back_from_its_record() {
 
 #[test]
 fn a_choice_is_its_variant_s_name() {
-    assert!(matches!(Notice::Chat.into_value(), Value::String(s) if s == "Chat"));
+    assert!(matches!(Notice::Chat.into_value(), Value::Name("Chat")));
+    assert_eq!(
+        Notice::from_value(Value::Name("Chat")).unwrap(),
+        Notice::Chat
+    );
+    assert!(Notice::from_value(Value::Number(1.0)).is_err());
     assert_eq!(
         Notice::from_value(Value::String("OnScreen".into())).unwrap(),
         Notice::OnScreen
