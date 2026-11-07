@@ -113,6 +113,7 @@ mod unstable {
         Chat => "chat.md",
         Messages => "messages.md",
         Interface => "interface.md",
+        Sounds => "sounds.md",
         Loot => "content/loot.md",
         Stats => "stats.md",
         Affixes => "affixes.md",

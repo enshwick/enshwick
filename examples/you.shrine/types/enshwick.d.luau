@@ -820,6 +820,8 @@ export type Frame = {
 	progress: (self: Frame, fraction: number) -> (),
 	--- Plays one of the game's interface sounds, as `Frame.sound` does.
 	sound: (self: Frame, sound: Sound) -> (),
+	--- Plays the sound container with GUID `sound`, as `Frame.play` does.
+	play: (self: Frame, sound: string) -> (),
 	--- The game's screen the player has open in this frame, as `Frame.open_screen` says.
 	open_screen: (self: Frame) -> HudScreenType?,
 }
@@ -1670,6 +1672,18 @@ export type NewSkillNode = {
 	kind: typed_SkillNodeType?,
 }
 
+--- A sound for `Load.add_sound`: a WAV file in the mod's folder and the values of the sound container that plays it.
+export type NewSound = {
+	--- The sound's content id; its container's GUID is the id's.
+	id: string,
+	--- The WAV file, relative to the mod's folder: 16-bit PCM, mono or stereo, at `SAMPLE_RATE`, at most `MAX_FILE_BYTES` and `MAX_SECONDS` long.
+	file: string,
+	--- The container's scene.
+	scene: SoundContainerScene?,
+	--- The container's values where they differ from those of a vanilla effect: volume and pitch 1, heard from 1 to 35 metres, priority 50.
+	container: SoundChange?,
+}
+
 --- A new entity template for `Load.add_template`: a copy of the vanilla template `like` under the mod's content id `id`, with `changes` applied in order. `id` is the mod's own and never changes: saves keep the template GUID of every placed object and creature made from it.
 export type NewTemplate = {
 	--- The new template's content id.
@@ -2320,6 +2334,29 @@ export type Slot = {
 
 --- One of the game's interface sounds.
 export type Sound = "Click" | "Confirm" | "Back" | "Error"
+
+--- New values for a sound container, each nil to keep the one it has: the game's, or the last earlier mod's.
+export type SoundChange = {
+	--- The game's volume factor, from 0 (silent) to `MAX_VOLUME`.
+	volume: number?,
+	--- The game's random spread of the volume, from 0 to `MAX_VOLUME`.
+	volume_randomness: number?,
+	--- The game's pitch factor, within `PITCH`.
+	pitch: number?,
+	--- The game's random spread of the pitch, from 0 to the top of `PITCH`.
+	pitch_randomness: number?,
+	--- The game's least distance of a placed sound, from 0 to `MAX_DISTANCE` metres.
+	min_distance: number?,
+	--- The game's greatest distance of a placed sound, from 0 to `MAX_DISTANCE` metres.
+	max_distance: number?,
+	--- Whether the container plays again from the start when it ends.
+	looped: boolean?,
+	--- The game's priority of the container among sounds playing at once.
+	priority: number?,
+}
+
+--- The game's scene of a sound container, `SoundContainerScene`.
+export type SoundContainerScene = "Sfx" | "Music" | "Ui" | "Voice"
 
 --- One modifier that counts toward a stat, with its origin.
 export type Source = {
@@ -3569,6 +3606,14 @@ declare enshwick: {
 		--- The mod's `ClockSpeed`: its factor on how fast the server's clock runs. The loader follows the game's speed for it from the start.
 		--- Only while the mod starts, at the top level of main.luau.
 		clock_speed: () -> ClockSpeed,
+	},
+	sound: {
+		--- Changes the sound container with GUID `sound`, as `Load.change_sound` does.
+		--- Only while the mod starts, at the top level of main.luau.
+		change: (sound: string, change: SoundChange) -> (),
+		--- Unstable: needs the `unstable` feature and may change in any release. Adds the sound in `new.file` and a container that plays it, under `new.id`, and returns the container, which `Frame.play`, `Load.change_sound` and other mods use. The client holds it as the game holds its own uncompressed sounds, built from one of them, streamed from memory; nothing is written to the archive or a save. A server checks the file and serves nothing. Wrap the call in `Load.feature` so a bad file turns off that sound alone, with the reason on the Mods screen.
+		--- Only while the mod starts, at the top level of main.luau.
+		add: (new: NewSound) -> string,
 	},
 	--- Flame Altars: their list, their bases, zones and limits.
 	altars: {

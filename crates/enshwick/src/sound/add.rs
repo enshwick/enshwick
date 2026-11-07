@@ -197,14 +197,19 @@ pub(crate) fn read_wav(wav: &[u8]) -> Result<Pcm, ReadWavError> {
     })
 }
 
+/// A path that leaves the mod's folder.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("{0:?} is no path inside the mod's folder")]
+pub(crate) struct OutsideFolderError(String);
+
 /// The file `file` names inside `dir`: a relative path that stays inside it.
-fn file_in(dir: &std::path::Path, file: &str) -> Result<std::path::PathBuf, String> {
+fn file_in(dir: &std::path::Path, file: &str) -> Result<std::path::PathBuf, OutsideFolderError> {
     let path = std::path::Path::new(file);
     let inside = path
         .components()
         .all(|part| matches!(part, std::path::Component::Normal(_)));
     if file.is_empty() || !inside {
-        return Err(format!("{file:?} is no path inside the mod's folder"));
+        return Err(OutsideFolderError(file.to_owned()));
     }
     Ok(dir.join(path))
 }
@@ -346,11 +351,11 @@ impl Load<'_> {
         if !self.joins() {
             return Err(fail("a mod with sounds runs on both sides".to_owned()));
         }
-        let fields = change.fields().map_err(fail)?;
+        let fields = change.fields().map_err(|why| fail(why.to_string()))?;
         let sound_id = id
             .try_part(ENTRY_SOUND)
             .ok_or_else(|| fail("the id has no room for its sound's part".to_owned()))?;
-        let path = file_in(&self.mod_dir()?, &file).map_err(fail)?;
+        let path = file_in(&self.mod_dir()?, &file).map_err(|why| fail(why.to_string()))?;
         let size = std::fs::metadata(&path)
             .map_err(|error| fail(format!("{file}: {error}")))?
             .len();

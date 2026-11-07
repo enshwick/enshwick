@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sounds",
+  "type": "object",
+  "properties": {
+    "sound": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/SoundEntry"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "SceneEntry": {
+      "description": "A sound container's scene.",
+      "oneOf": [
+        {
+          "description": "A sound effect.",
+          "type": "string",
+          "const": "sfx"
+        },
+        {
+          "description": "Music.",
+          "type": "string",
+          "const": "music"
+        },
+        {
+          "description": "An interface sound.",
+          "type": "string",
+          "const": "ui"
+        },
+        {
+          "description": "A voice.",
+          "type": "string",
+          "const": "voice"
+        }
+      ]
+    },
+    "SoundEntry": {
+      "description": "One sound.",
+      "type": "object",
+      "properties": {
+        "file": {
+          "description": "The WAV file, relative to the pack's folder: 16-bit PCM, mono or\nstereo, at 48000 Hz, at most 16 MiB and 600 s.",
+          "type": "string"
+        },
+        "id": {
+          "description": "Its name in the pack; its container's content id is\n`<pack>:<id>`, which other mods play.",
+          "type": "string"
+        },
+        "scene": {
+          "description": "What it plays as: `sfx` when left out, `music`, `ui` or `voice`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SceneEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "volume": {
+          "description": "Its volume, from 0 to 4; 1 when left out.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "file"
+      ]
+    }
+  }
+}

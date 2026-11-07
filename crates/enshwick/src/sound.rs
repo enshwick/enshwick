@@ -123,14 +123,41 @@ pub struct SoundChange {
     pub priority: Option<u16>,
 }
 
+/// Why a [`SoundChange`] is refused.
+#[derive(Clone, Debug, PartialEq, thiserror::Error)]
+pub(crate) enum ChangeSoundError {
+    /// A value lies outside its bound.
+    #[error("{field} {value} is outside {range:?}")]
+    OutOfBounds {
+        /// The value's reflected name.
+        field: &'static str,
+        /// The value given.
+        value: f32,
+        /// Its bound.
+        range: RangeInclusive<f32>,
+    },
+    /// The least distance is past the greatest.
+    #[error("the least distance {min} is past the greatest {max}")]
+    Reversed {
+        /// The least distance given.
+        min: f32,
+        /// The greatest distance given.
+        max: f32,
+    },
+}
+
 impl SoundChange {
     /// The fields to write over the container, by their reflected names.
-    fn fields(&self) -> Result<Vec<(String, Value)>, String> {
+    fn fields(&self) -> Result<Vec<(String, Value)>, ChangeSoundError> {
         let mut fields = Vec::new();
-        let mut float = |name: &str, value: Option<f32>, range: RangeInclusive<f32>| {
+        let mut float = |name: &'static str, value: Option<f32>, range: RangeInclusive<f32>| {
             if let Some(value) = value {
                 if !range.contains(&value) {
-                    return Err(format!("{name} {value} is outside {range:?}"));
+                    return Err(ChangeSoundError::OutOfBounds {
+                        field: name,
+                        value,
+                        range,
+                    });
                 }
                 fields.push((name.to_owned(), Value::Float(f64::from(value))));
             }
@@ -145,9 +172,7 @@ impl SoundChange {
         if let (Some(min), Some(max)) = (self.min_distance, self.max_distance)
             && min > max
         {
-            return Err(format!(
-                "the least distance {min} is past the greatest {max}"
-            ));
+            return Err(ChangeSoundError::Reversed { min, max });
         }
         if let Some(looped) = self.looped {
             fields.push((LOOP.to_owned(), Value::Bool(looped)));
