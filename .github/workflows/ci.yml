@@ -5,7 +5,9 @@
 name: ci
 
 on:
+  # A draft reports the check without running it; marking it ready runs it.
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
   # The merge queue checks each group of pull requests on top of main.
