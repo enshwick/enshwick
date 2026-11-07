@@ -27,6 +27,7 @@ use std::sync::{Mutex, OnceLock};
 use enshwick::abi::{Event, Status};
 
 use crate::host::Loader;
+use crate::live;
 use crate::locks::Relock;
 use crate::pinned;
 
@@ -163,9 +164,43 @@ pub(crate) fn read(loader: &Loader, out: &mut [u8]) -> Result<u8, Status> {
     Ok(unsafe { crate::memory::read(server, layout.preset) })
 }
 
+/// The switch of [`write`], off once the live settings do not hold their
+/// found offsets.
+static WRITES_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("game settings changes");
+
+/// Checks the live settings of `server` before the first write to them:
+/// their pointer and their whole reflected size read, the day and night
+/// lengths the clock divides by are positive, and the preset and resend
+/// bytes read.
+fn settings_hold(layout: &Layout, server: usize) -> Result<(), live::Broken> {
+    let entry = pinned::server::GAME_SETTINGS.id();
+    let settings = live::pointer(entry, server, layout.settings)?;
+    live::bytes::<1>(entry, settings, layout.size.saturating_sub(1))?;
+    for at in [layout.day_length, layout.night_length] {
+        let length = i64::from_le_bytes(live::bytes::<8>(entry, settings, at)?);
+        live::holds(entry, length > 0, "day and night lengths above zero")?;
+    }
+    live::bytes::<1>(
+        pinned::server::GAME_SETTINGS_PRESET.id(),
+        server,
+        layout.preset,
+    )?;
+    live::bytes::<1>(
+        pinned::server::GAME_SETTINGS_RESEND.id(),
+        server,
+        layout.resend,
+    )
+    .map(drop)
+}
+
 /// Replaces the live settings with `bytes`, their whole reflected layout,
 /// and tells the clients.
 pub(crate) fn write(loader: &Loader, bytes: &[u8]) -> Result<(), Status> {
+    let checked = layout(loader).ok_or(Status::MISSING)?;
+    let server = crate::world::server()?;
+    if !WRITES_FUSE.verify(&loader.build.name, || settings_hold(checked, server)) {
+        return Err(Status::MISSING);
+    }
     let (layout, server, settings) = live(loader)?;
     if bytes.len() != layout.size {
         return Err(Status::BAD_ARGS);
@@ -179,6 +214,7 @@ pub(crate) fn write(loader: &Loader, bytes: &[u8]) -> Result<(), Status> {
     if length(layout.day_length) <= 0 || length(layout.night_length) <= 0 {
         return Err(Status::BAD_ARGS);
     }
+
     for (at, &byte) in bytes.iter().enumerate() {
         // SAFETY: `settings` is non-zero (checked by `live`) and the live
         // settings span their reflected size, `bytes.len()` (`bytes.len() !=
@@ -473,6 +509,35 @@ mod tests {
         assert_eq!(
             layout().fields,
             vec![("a".into(), 0, 4), ("b".into(), 4, 5), ("c".into(), 9, 3)]
+        );
+    }
+
+    #[test]
+    fn live_settings_hold_only_with_positive_lengths_behind_a_pointer_that_reads() {
+        let mut settings = [0u8; 16];
+        settings[..8].copy_from_slice(&600i64.to_le_bytes());
+        settings[8..].copy_from_slice(&300i64.to_le_bytes());
+        let checked = Layout {
+            size: 16,
+            night_length: 8,
+            preset: 8,
+            resend: 9,
+            ..layout()
+        };
+        let server = |pointer: usize| [pointer, 0];
+        let good = server(settings.as_ptr().addr());
+        assert_eq!(settings_hold(&checked, good.as_ptr().addr()), Ok(()));
+        let null = server(0);
+        assert!(
+            settings_hold(&checked, null.as_ptr().addr()).is_err(),
+            "a null pointer"
+        );
+        let mut no_night = settings;
+        no_night[8..].copy_from_slice(&0i64.to_le_bytes());
+        let short = server(no_night.as_ptr().addr());
+        assert!(
+            settings_hold(&checked, short.as_ptr().addr()).is_err(),
+            "a night of zero"
         );
     }
 

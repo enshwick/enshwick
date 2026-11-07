@@ -20,6 +20,13 @@ pub(crate) struct Broken {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the vtable and hash checks wait for the bases and inventory parts"
+    )
+)]
 enum What {
     Unreadable { at: usize },
     Null,
@@ -67,11 +74,25 @@ impl core::fmt::Display for Broken {
 
 /// The game's image as it is mapped, for the vtable check.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the vtable check waits for the bases and inventory parts"
+    )
+)]
 pub(crate) struct Image {
     base: usize,
     end: usize,
 }
 
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the vtable check waits for the bases and inventory parts"
+    )
+)]
 impl Image {
     /// The image mapped at `base`, its size read from its PE headers; `None`
     /// when they do not read.
@@ -132,6 +153,13 @@ pub(crate) fn count(
 /// Checks that `object`, found through `entry`, starts with a vtable: a
 /// pointer into `image`'s read-only pages whose first slot is code of the
 /// image that runs.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the bases and inventory parts check their vtables"
+    )
+)]
 pub(crate) fn vtable(entry: &'static str, object: usize, image: Image) -> Result<(), Broken> {
     let at = word(entry, object, 0)?;
     let read_only = image.holds(at)
@@ -152,6 +180,13 @@ pub(crate) fn vtable(entry: &'static str, object: usize, image: Image) -> Result
 
 /// Checks that the `u32` type hash at `entry`'s `offset` in `object` is
 /// `wanted`, the one reflection gives.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the bases and inventory parts check their type hashes"
+    )
+)]
 pub(crate) fn hash(
     entry: &'static str,
     object: usize,
