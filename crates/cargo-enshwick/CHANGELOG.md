@@ -38,6 +38,10 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- `cargo enshwick generate` takes the newest server snapshot in the game data
+  folder's `typed/` by the age in its file name, not the newest kept table's,
+  and `--from` snapshots a build no table is kept for, its side from the
+  executable's name (#986).
 - `cargo enshwick new` writes `enshwick` as a git dependency on the tag of
   the alpha the tool is from, since alphas are not on crates.io; a release
   still pins its crates.io version (#979).

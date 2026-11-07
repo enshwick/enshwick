@@ -33,7 +33,10 @@ Each entry names the pull request that made the change.
   client mod at most once a second where and how much fog of war its player
   uncovered; Luau `enshwick.map.on_fog_uncovered`. `FogInfo::uncovered` and
   its window fields, ABI 11.14 (#977).
-
+- `content`: Luau `enshwick.content.item_id` takes a GUID, such as
+  `enshwick.content.item` gives for a vanilla item, as well as a content id,
+  and `enshwick.content.recipe_id` gives a recipe's id the same way, as
+  `ItemId::from_guid` and `RecipeId::from_guid` do in Rust (#986).
 - `altars`: `Load::limit_altar_level(kind, max_level)`, unstable, gives a
   Flame Altar kind a maximum level below the game's own: a craft filter of
   the mod refuses, on the server, the vanilla altar upgrade recipes that
@@ -217,6 +220,15 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- `typed`: `enshwick.typed` values cross into Luau and back through one walk
+  over a static shape of each generated type instead of compiled conversions
+  per type, taking and refusing what the Rust item does; the release loader
+  shrinks from 29.8 MB to 15.9 MB. The rows of `typed::NAMED` hold the shape
+  and give `check` and `to_script`; the script types are `typed::SCRIPT_TYPES`
+  (#986).
+- `typed`: a component type with a field whose data lies outside the
+  component, such as a `BlobArray`, does not resolve for live reads and
+  writes; the refusal names the field (#986).
 - `actions`: `Load::actions` hands its texts to the loader once, beneath the
   texts the mod hands itself, before or after; a runs-control's label reads
   from them in each player's language with the usual fallback, and a key both
