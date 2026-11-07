@@ -16,7 +16,7 @@ The items come with the `typed` feature, which builds on `unstable` (see
 
 ```toml
 [dependencies]
-enshwick = { git = "https://github.com/enshwick/enshwick", tag = "v1.0.0-alpha.12", features = ["typed"] }
+enshwick = { git = "https://github.com/enshwick/enshwick", tag = "v1.0.0-alpha.13", features = ["typed"] }
 ```
 
 The feature adds a few thousand items, so it adds some seconds to a build.

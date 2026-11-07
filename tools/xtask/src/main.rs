@@ -16,7 +16,9 @@
 //!
 //! `cargo xtask dist` writes `enshwick.zip`, the loader that players unpack
 //! into the game folder ([`dist`]), and `cargo xtask notes` the notes of its
-//! alpha release ([`notes`]). `cargo xtask header` rewrites the ABI's
+//! alpha release ([`notes`]). `cargo xtask tag-lines` moves the install and
+//! dependency lines of the Markdown to the workspace version's tag, which the
+//! check holds ([`tag_lines`]). `cargo xtask header` rewrites the ABI's
 //! C header, which the check holds to the ABI module and its golden layout
 //! ([`header`]).
 //!
@@ -39,6 +41,7 @@ mod header;
 mod notes;
 mod ranges;
 mod rules;
+mod tag_lines;
 mod wine;
 
 use std::collections::BTreeSet;
@@ -49,7 +52,7 @@ use std::time::Instant;
 
 use affected::{Package, Scope};
 
-const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|windows-lint|windows-tests|fuzz]... [--list-windows-tests] (--all fuzzes only with --part fuzz) | dist [--out <dir>] | notes [--out <file>] [--known-issues <text>] | header | compat <exe> [--mods <path>...] [--report <file>] [--patterns] [--data <file>]";
+const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|windows-lint|windows-tests|fuzz]... [--list-windows-tests] (--all fuzzes only with --part fuzz) | dist [--out <dir>] | notes [--out <file>] [--known-issues <text>] | tag-lines | header | compat <exe> [--mods <path>...] [--report <file>] [--patterns] [--data <file>]";
 const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// Turned on by name: most of the API crate's test targets need its fake
 /// loader, and without the feature cargo skips them without a word; the
@@ -82,6 +85,7 @@ fn run(args: &[String]) -> Result<bool, String> {
         "check" => {}
         "dist" => return dist::run(rest),
         "notes" => return notes::run(rest),
+        "tag-lines" => return tag_lines::run(rest),
         "header" if rest.is_empty() => return header::run(&workspace_root()),
         _ => return Err(USAGE.to_owned()),
     }
@@ -168,7 +172,8 @@ fn run(args: &[String]) -> Result<bool, String> {
 }
 
 /// The problems the checks that compile nothing find in the tree: manifest
-/// ranges, the book, its links and sentence lengths, and the crate rules.
+/// ranges, the book, its links and sentence lengths, the tag lines and the
+/// crate rules.
 fn tree_problems(root: &std::path::Path, packages: &[Package]) -> Result<Vec<String>, String> {
     let mut problems: Vec<String> = ranges::check(root, packages)
         .into_iter()
@@ -194,6 +199,11 @@ fn tree_problems(root: &std::path::Path, packages: &[Package]) -> Result<Vec<Str
             .problems
             .into_iter()
             .map(|problem| format!("book link: {problem}")),
+    );
+    problems.extend(
+        tag_lines::check(root, packages)
+            .into_iter()
+            .map(|problem| format!("tag line: {problem}")),
     );
     problems.extend(
         crate_rules::check()?

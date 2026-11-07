@@ -59,7 +59,7 @@ rebuilds only for a new major. Alphas are not on crates.io, so a mod pins
 
 ```toml
 [dependencies]
-enshwick = { git = "https://github.com/enshwick/enshwick", tag = "v1.0.0-alpha.12" }
+enshwick = { git = "https://github.com/enshwick/enshwick", tag = "v1.0.0-alpha.13" }
 ```
 
 A tag never moves, so `cargo update` keeps the mod on that alpha.

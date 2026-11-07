@@ -6,6 +6,8 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.13] - 2026-11-07
+
 ### Added
 
 - `sound`: `SoundContainerId` and `ui::Frame::play` play any sound container

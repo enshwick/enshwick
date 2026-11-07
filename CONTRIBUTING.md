@@ -106,6 +106,9 @@ that players, admins or mod authors get, at most one a day:
 1. A pull request moves every crate to the next `1.0.0-alpha.N`, with the
    exact `=` pins between the published crates, and closes each
    `CHANGELOG.md`'s Unreleased section as `## [1.0.0-alpha.N] - <date>`.
+   `cargo xtask tag-lines` moves the install and dependency lines of the
+   Markdown (`--tag v…`, `tag = "v…"`) to the new tag; `cargo xtask check`
+   fails a line that names another one.
 2. Once it merges, the [alpha workflow](.github/workflows/alpha.yml), run by
    hand on `main`, makes the GitHub prerelease `v1.0.0-alpha.N`:
    `enshwick.zip` with the PDB and CycloneDX SBOM of each DLL and their build

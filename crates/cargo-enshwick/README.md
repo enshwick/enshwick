@@ -5,7 +5,7 @@ mods. It starts a Rust mod, a Luau mod or a data pack, and it installs a mod
 into the game.
 
 ```sh
-cargo install --git https://github.com/enshwick/enshwick --tag v1.0.0-alpha.12 cargo-enshwick
+cargo install --git https://github.com/enshwick/enshwick --tag v1.0.0-alpha.13 cargo-enshwick
 cargo enshwick new you.my-mod --side server
 cd my-mod
 cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Enshrouded"
