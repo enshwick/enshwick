@@ -107,6 +107,33 @@ const ROUTED_EVERYWHERE: &[(&str, u64)] = &[
     ("ecs.remove_components_size", 0x4c),
 ];
 
+/// The interaction prompt's title, valid byte and verb in the interface's
+/// play data, and the open screen's host entity, the same on every kept
+/// client (static, research of 2026-11-06).
+const PLAY_DATA_READS: [(&str, u64); 4] = [
+    ("ui.prompt_title", 0x2bc0),
+    ("ui.prompt_valid", 0x2bdd),
+    ("ui.prompt_verb", 0x2bd8),
+    ("ui.screen_host", 0x2c50),
+];
+
+/// The kept client tables, by name.
+const CLIENT_TABLES: [&str; 4] = [
+    "1.0 client (1269579)",
+    "1.0 client (26082781)",
+    "1.0 client (26320373)",
+    "1.0 client (26430625)",
+];
+
+/// [`ROUTED_ONLY`] and the [`PLAY_DATA_READS`] of each of [`CLIENT_TABLES`].
+fn routed_only() -> impl Iterator<Item = (&'static str, &'static str, u64)> {
+    ROUTED_ONLY.iter().copied().chain(
+        CLIENT_TABLES
+            .into_iter()
+            .flat_map(|table| PLAY_DATA_READS.map(|(id, value)| (table, id, value))),
+    )
+}
+
 /// Entries a kept build's table pins that the loader needs on no build of
 /// that side, by side: the server keeps the client's base set-up code but
 /// never runs it (`anchors/classes.toml`).
@@ -197,10 +224,9 @@ fn every_route_holds_on_every_kept_build() {
                     }
                 };
                 let pinned = own.symbol(id).is_some() || own.constant(id).is_some();
-                let routed_only = ROUTED_ONLY
-                    .iter()
-                    .find(|&&(name, routed, _)| name == own.name() && routed == id)
-                    .map(|&(_, _, known)| known)
+                let routed_only = routed_only()
+                    .find(|&(name, routed, _)| name == own.name() && routed == id)
+                    .map(|(_, _, known)| known)
                     .or_else(|| {
                         ROUTED_EVERYWHERE
                             .iter()
@@ -240,7 +266,7 @@ fn every_routed_only_row_names_a_kept_table_and_a_route() {
         return;
     }
     let routes = Routes::embedded().unwrap();
-    for &(name, id, _) in ROUTED_ONLY {
+    for (name, id, _) in routed_only() {
         let table = tables.iter().find(|t| t.name() == name);
         assert!(
             table.is_some_and(|t| routes.routes(id, t.side())),

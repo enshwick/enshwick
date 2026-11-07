@@ -736,7 +736,8 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 122 * 8);
-    assert!(size_of::<HostApi>() == 24 + 190 * 8);
+    assert!(size_of::<HostApi>() == 24 + 191 * 8);
+    assert!(core::mem::offset_of!(HostApi, local_held) == 24 + 190 * 8);
     assert!(core::mem::offset_of!(HostApi, crafting_prop) == 24 + 187 * 8);
     assert!(core::mem::offset_of!(HostApi, set_saved) == 24 + 188 * 8);
     assert!(core::mem::offset_of!(HostApi, run_action_at) == 24 + 189 * 8);
@@ -922,7 +923,7 @@ const _: () = {
     assert!(size_of::<NetMessage>() == 8 + 8 + 8 + 8 + 8);
     assert!(core::mem::offset_of!(HostApi, notify) == 24 + 67 * 8);
     assert!(core::mem::offset_of!(HostApi, ui_dialog) == 24 + 94 * 8);
-    assert!(size_of::<UiFrame>() == 40);
+    assert!(size_of::<UiFrame>() == 64);
     assert!(size_of::<UiWidget>() == 8 + 16 + 32 + 8 + 32 + 16);
     assert!(size_of::<UiMarker>() == 8 + 24 + 16 + 8);
     assert!(core::mem::offset_of!(HostApi, texts) == 24 + 98 * 8);

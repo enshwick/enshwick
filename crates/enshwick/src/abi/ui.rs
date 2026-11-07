@@ -19,6 +19,9 @@ use crate::abi::{Header, Status, Str};
 ///     screen: UiFrame::IN_GAME,
 ///     reserved: 0,
 ///     hud_screen: Str::new("StorageChest"),
+///     prompt_title: Str::EMPTY,
+///     prompt_verb: 0,
+///     screen_host: enshwick::Entity(512),
 /// };
 /// assert_eq!(frame.screen, UiFrame::IN_GAME);
 /// ```
@@ -40,6 +43,19 @@ pub struct UiFrame {
     /// and on a build where the loader does not find it. The loader keeps
     /// the text for the life of the process.
     pub hud_screen: Str,
+    /// The title of what the player's interaction prompt offers now, such
+    /// as a chest's name, as the game shows it; empty while it offers
+    /// nothing, outside a game and on a build where the loader does not
+    /// find it. The game's own text, borrowed for the callback. ABI 11.14.
+    pub prompt_title: Str,
+    /// The game's text id (`LocaTagId`) of the prompt's verb, such as the
+    /// one for "Open"; 0 while the prompt offers nothing. ABI 11.14.
+    pub prompt_verb: u32,
+    /// The entity of the client's world the open screen belongs to, such
+    /// as the chest whose inventory shows; entity 0 for a screen of no
+    /// object, outside a game and on a build where the
+    /// loader does not find it. ABI 11.14.
+    pub screen_host: crate::Entity,
 }
 
 impl_headed!(UiFrame, born = 24);
