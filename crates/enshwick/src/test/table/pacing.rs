@@ -5,10 +5,10 @@
 use core::ffi::c_void;
 
 use crate::abi::{LoopWaitFn, LoopWaitSites, ModHandle, ServerWaitFn, Side, Status};
-use crate::test::table::{put, with};
+use crate::test::table::{Registered, put, with};
 
 pub(crate) extern "system" fn loop_wait(
-    _me: ModHandle,
+    me: ModHandle,
     callback: LoopWaitFn,
     user: *mut c_void,
     found: *mut LoopWaitSites,
@@ -18,7 +18,7 @@ pub(crate) extern "system" fn loop_wait(
         if first {
             s.pacing
                 .loop_waits
-                .push((callback, user.expose_provenance()));
+                .push(Registered::new(callback, user, me));
         }
         (s.host.side, first)
     });
@@ -33,7 +33,7 @@ pub(crate) extern "system" fn loop_wait(
 }
 
 pub(crate) extern "system" fn server_wait(
-    _me: ModHandle,
+    me: ModHandle,
     callback: ServerWaitFn,
     user: *mut c_void,
     found: *mut u32,
@@ -43,7 +43,7 @@ pub(crate) extern "system" fn server_wait(
         if first {
             s.pacing
                 .server_waits
-                .push((callback, user.expose_provenance()));
+                .push(Registered::new(callback, user, me));
         }
         first
     });

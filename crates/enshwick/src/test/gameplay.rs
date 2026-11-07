@@ -105,9 +105,9 @@ impl Installed {
     #[must_use]
     pub fn damage(&self, mut check: crate::abi::DamageCheck) -> crate::abi::DamageCheck {
         let filters = table::with(Vec::new(), |s| s.damage_filters.clone());
-        for (callback, user) in filters {
+        for filter in filters {
             // SAFETY: the filter the mod registered, with its pointer.
-            unsafe { callback(&raw mut check, core::ptr::with_exposed_provenance_mut(user)) };
+            filter.run(|callback, user| unsafe { callback(&raw mut check, user) });
         }
         check
     }
@@ -139,14 +139,10 @@ impl Installed {
     #[must_use]
     pub fn knowledge_input(&self, mut request: crate::abi::KnowledgeInput) -> bool {
         let filters = table::with(Vec::new(), |s| s.knowledge_input_filters.clone());
-        for (callback, user) in filters {
+        for filter in filters {
             // SAFETY: the filter the mod registered, with its pointer.
-            let verdict = unsafe {
-                callback(
-                    &raw const request,
-                    core::ptr::with_exposed_provenance_mut(user),
-                )
-            };
+            let verdict =
+                filter.run(|callback, user| unsafe { callback(&raw const request, user) });
             request.allowed = u32::from(verdict != 0);
         }
         request.allowed != 0
@@ -280,10 +276,10 @@ impl Installed {
             grow: 0,
             height,
         };
-        for (callback, user) in filters {
+        for filter in filters {
             let before = zone;
             // SAFETY: a valid registration; `user` is the mod's pointer.
-            unsafe { callback(&raw mut zone, core::ptr::with_exposed_provenance_mut(user)) };
+            filter.run(|callback, user| unsafe { callback(&raw mut zone, user) });
             zone.grow = zone.grow.max(0);
             if zone.height <= 0 {
                 zone.height = before.height;
@@ -326,10 +322,9 @@ impl Installed {
             object,
             margin,
         };
-        filters.iter().any(|&(callback, user)| {
-            let user = core::ptr::with_exposed_provenance_mut(user);
+        filters.iter().any(|filter| {
             // SAFETY: a valid call; `user` is the pointer the mod registered with.
-            unsafe { callback(&raw const call, user) != 0 }
+            filter.run(|callback, user| unsafe { callback(&raw const call, user) != 0 })
         })
     }
 
@@ -374,7 +369,7 @@ impl Installed {
                 .map_or(Entity::NONE, |(_, bed)| *bed)
         }
         use crate::survivors::Answer;
-        let Some((answer, user)) = table::with(None, |s| s.survivor_lookup) else {
+        let Some(registered) = table::with(None, |s| s.survivor_lookup) else {
             return Answer::Vanilla;
         };
         let mut beds = beds;
@@ -389,9 +384,9 @@ impl Installed {
             token: (&raw mut beds).cast(),
         };
         let mut out = Entity::NONE;
-        let user = core::ptr::with_exposed_provenance_mut(user);
         // SAFETY: a valid call and out pointer; `user` is the mod's pointer.
-        let answered = unsafe { answer(&raw const lookup, user, &raw mut out) };
+        let answered =
+            registered.run(|answer, user| unsafe { answer(&raw const lookup, user, &raw mut out) });
         match (answered != 0, Entity::from_raw(out.0)) {
             (false, _) => Answer::Vanilla,
             (true, Some(entity)) => Answer::Entity(entity),
@@ -414,10 +409,9 @@ impl Installed {
     #[must_use]
     pub fn survivor_bed_check(&self, check: &BedCheck) -> bool {
         let filters = table::with(Vec::new(), |s| s.bed_checks.clone());
-        filters.iter().all(|&(callback, user)| {
-            let user = core::ptr::with_exposed_provenance_mut(user);
+        filters.iter().all(|filter| {
             // SAFETY: a valid check; `user` is the mod's pointer.
-            unsafe { callback(check, user) != 0 }
+            filter.run(|callback, user| unsafe { callback(check, user) != 0 })
         })
     }
 
@@ -449,10 +443,9 @@ impl Installed {
     pub fn summon(&self, summon: &Summon) -> u8 {
         let filters = table::with(Vec::new(), |s| s.summons.clone());
         let mut verdict = 0;
-        for &(callback, user) in &filters {
-            let user = core::ptr::with_exposed_provenance_mut(user);
+        for filter in &filters {
             // SAFETY: a valid summon; `user` is the mod's pointer.
-            match unsafe { callback(summon, user) } {
+            match filter.run(|callback, user| unsafe { callback(summon, user) }) {
                 Summon::REFUSE => return Summon::REFUSE,
                 0 => {}
                 _ => verdict = Summon::TAKE,
@@ -487,10 +480,9 @@ impl Installed {
     #[must_use]
     pub fn summoned(&self, summon: &Summon) -> usize {
         let handlers = table::with(Vec::new(), |s| s.summoned.clone());
-        for &(callback, user) in &handlers {
-            let user = core::ptr::with_exposed_provenance_mut(user);
+        for handler in &handlers {
             // SAFETY: a valid summon; `user` is the mod's pointer.
-            unsafe { callback(summon, user) };
+            handler.run(|callback, user| unsafe { callback(summon, user) });
         }
         handlers.len()
     }
@@ -568,10 +560,11 @@ impl Installed {
         survivor: crate::survivors::NpcId,
         statuses: &[u8],
     ) -> Option<u8> {
-        let (callback, user) = table::with(None, |s| s.survivor_status)?;
-        let user = core::ptr::with_exposed_provenance_mut(user);
+        let registered = table::with(None, |s| s.survivor_status)?;
         // SAFETY: valid statuses for the call; `user` is the mod's pointer.
-        let answer = unsafe { callback(survivor, statuses.as_ptr(), statuses.len(), user) };
+        let answer = registered.run(|callback, user| unsafe {
+            callback(survivor, statuses.as_ptr(), statuses.len(), user)
+        });
         (answer & crate::abi::SURVIVOR_STATUS_SET != 0).then(|| answer.to_le_bytes()[0])
     }
 
@@ -599,10 +592,9 @@ impl Installed {
     #[must_use]
     pub fn interaction(&self, call: &Interaction) -> bool {
         let filters = table::with(Vec::new(), |s| s.interaction_filters.clone());
-        filters.iter().all(|&(callback, user)| {
-            let user = core::ptr::with_exposed_provenance_mut(user);
+        filters.iter().all(|filter| {
             // SAFETY: a valid call; `user` is the mod's pointer.
-            unsafe { callback(call, user) != 0 }
+            filter.run(|callback, user| unsafe { callback(call, user) != 0 })
         })
     }
 
@@ -624,11 +616,10 @@ impl Installed {
         let skills = table::with(Vec::new(), |s| s.skills.clone());
         skills
             .iter()
-            .filter(|(node, _, _)| *node == check.node)
-            .map(|&(_, callback, user)| {
-                let user = core::ptr::with_exposed_provenance_mut(user);
+            .filter(|(node, _)| *node == check.node)
+            .map(|(_, skill)| {
                 // SAFETY: a valid check; `user` is the mod's pointer.
-                unsafe { callback(check, user) }
+                skill.run(|callback, user| unsafe { callback(check, user) })
             })
             .find(|&answer| answer != SkillCheck::VANILLA)
             .unwrap_or(SkillCheck::VANILLA)
@@ -650,14 +641,11 @@ impl Installed {
     #[must_use]
     pub fn comfort(&self, comfort: &Comfort) -> i32 {
         let filters = table::with(Vec::new(), |s| s.comfort_filters.clone());
-        let filtered = filters
-            .iter()
-            .fold(comfort.value, |value, &(callback, user)| {
-                let call = Comfort { value, ..*comfort };
-                let user = core::ptr::with_exposed_provenance_mut(user);
-                // SAFETY: a valid registration; `user` is the mod's pointer.
-                unsafe { callback(&raw const call, user) }
-            });
+        let filtered = filters.iter().fold(comfort.value, |value, filter| {
+            let call = Comfort { value, ..*comfort };
+            // SAFETY: a valid registration; `user` is the mod's pointer.
+            filter.run(|callback, user| unsafe { callback(&raw const call, user) })
+        });
         let factor = self.rate_of(crate::abi::RateId::COMFORT).unwrap_or(1.0);
         let scaled = crate::rates::scale_whole(i64::from(filtered), factor);
         i32::try_from(scaled).unwrap_or(if scaled < 0 { i32::MIN } else { i32::MAX })
@@ -695,7 +683,7 @@ impl Installed {
         }
         let filters = table::with(Vec::new(), |s| s.experience_filters.clone());
         let mut need = need;
-        for &(callback, user) in &filters {
+        for filter in &filters {
             let mut pass = ExperiencePass {
                 header: Header::of::<ExperiencePass>(),
                 rows: rows.as_mut_ptr().cast::<ExperienceRow>(),
@@ -704,9 +692,8 @@ impl Installed {
                 need_for: Some(need_for),
                 token: (&raw mut need).cast(),
             };
-            let user = core::ptr::with_exposed_provenance_mut(user);
             // SAFETY: a valid pass; `user` is the mod's pointer.
-            unsafe { callback(&raw mut pass, user) };
+            filter.run(|callback, user| unsafe { callback(&raw mut pass, user) });
         }
     }
 
@@ -730,9 +717,9 @@ impl Installed {
             allowed: vanilla,
             reserved: [0; 2],
         };
-        for (callback, user) in filters {
+        for filter in filters {
             // SAFETY: a valid limit; `user` is the mod's pointer.
-            unsafe { callback(&raw mut limit, core::ptr::with_exposed_provenance_mut(user)) };
+            filter.run(|callback, user| unsafe { callback(&raw mut limit, user) });
             limit.flame_level = flame_level;
             limit.vanilla = vanilla;
         }
@@ -781,9 +768,9 @@ impl Installed {
     #[must_use]
     pub fn craft(&self, call: &crate::abi::CraftCheck) -> bool {
         let filters = table::with(Vec::new(), |s| s.craft_filters.clone());
-        filters.iter().all(|&(callback, user)| {
+        filters.iter().all(|filter| {
             // SAFETY: a filter the mod registered with its own pointer.
-            unsafe { callback(call, core::ptr::with_exposed_provenance_mut(user)) != 0 }
+            filter.run(|callback, user| unsafe { callback(call, user) != 0 })
         })
     }
 
@@ -813,18 +800,13 @@ impl Installed {
     /// ```
     pub fn build(&self, call: &crate::abi::BuildCheck) -> Result<(), Option<String>> {
         let filters = table::with(Vec::new(), |s| s.build_filters.clone());
-        for (callback, user) in filters {
+        for filter in filters {
             let mut reason = crate::abi::Str::new("");
             let mut asked = *call;
             asked.reason = &raw mut reason;
             // SAFETY: a filter the mod registered with its own pointer; `asked`
             // and its `reason` slot live on this stack for the call.
-            let allowed = unsafe {
-                callback(
-                    &raw const asked,
-                    core::ptr::with_exposed_provenance_mut(user),
-                )
-            };
+            let allowed = filter.run(|callback, user| unsafe { callback(&raw const asked, user) });
             if allowed == 0 {
                 // SAFETY: the refusing filter wrote a text it keeps until its
                 // next call on this thread, or left the empty one.

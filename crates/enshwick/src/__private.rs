@@ -465,14 +465,46 @@ pub(crate) fn initialised() -> bool {
     INITIALISED.get().is_some()
 }
 
+/// A data pack's most detailed level the loader keeps, read at its first
+/// line and again at each change of the loader's settings, as
+/// [`MAX_LEVEL`] is for a mod; [`PackLevel::UNREAD`] until then.
+struct PackLevel(AtomicU8);
+
+impl PackLevel {
+    const UNREAD: u8 = u8::MAX;
+}
+
+impl Default for PackLevel {
+    fn default() -> Self {
+        Self(AtomicU8::new(Self::UNREAD))
+    }
+}
+
+/// The site [`for_pack`] keeps one [`PackLevel`] of per data pack for.
+static PACK_LEVEL: PackLevel = PackLevel(AtomicU8::new(PackLevel::UNREAD));
+
 #[inline]
 #[must_use]
 pub fn enabled(level: Level) -> bool {
     let max = match crate::host::pack() {
-        Some(pack) => pack.log_level().0,
+        Some(pack) => pack_level(pack),
         None => MAX_LEVEL.load(Ordering::Relaxed),
     };
     level.0 <= max
+}
+
+/// The level of the data pack `pack`, asked of the loader at its first line
+/// only.
+fn pack_level(pack: Host) -> u8 {
+    let kept = &for_pack(&PACK_LEVEL).0;
+    match kept.load(Ordering::Relaxed) {
+        PackLevel::UNREAD => {
+            let level = pack.log_level().0;
+            kept.store(level, Ordering::Relaxed);
+            level
+        }
+        level => level,
+    }
 }
 
 unsafe extern "system" fn refresh_level(
@@ -480,8 +512,15 @@ unsafe extern "system" fn refresh_level(
     _data: *const core::ffi::c_void,
     _user: *mut core::ffi::c_void,
 ) {
-    if let Some(host) = crate::host() {
-        MAX_LEVEL.store(host.log_level().0, Ordering::Relaxed);
+    match crate::host::pack() {
+        Some(pack) => for_pack(&PACK_LEVEL)
+            .0
+            .store(pack.log_level().0, Ordering::Relaxed),
+        None => {
+            if let Some(host) = crate::host() {
+                MAX_LEVEL.store(host.log_level().0, Ordering::Relaxed);
+            }
+        }
     }
 }
 
@@ -727,8 +766,19 @@ pub unsafe fn init_pack(
     let Some(host) = (unsafe { Host::new(api, me) }) else {
         return Status::BAD_ARGS;
     };
+    let _watched = host.subscribe(
+        crate::abi::Event::LOADER_SETTINGS_CHANGED,
+        refresh_level,
+        core::ptr::null_mut(),
+    );
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        host.scope(|| init(&mut Load::new(host)))
+        host.scope(|| {
+            // A pack that runs again reads its level afresh.
+            for_pack(&PACK_LEVEL)
+                .0
+                .store(PackLevel::UNREAD, Ordering::Relaxed);
+            init(&mut Load::new(host))
+        })
     }));
     match outcome {
         Ok(Ok(())) => Status::OK,

@@ -161,12 +161,12 @@ impl Installed {
             let reads = reads();
             let frame = in_game(token, open, &reads);
             // SAFETY: a callback the mod registered with its own pointer.
-            unsafe {
+            table::as_owner(owner, || unsafe {
                 callback(
                     &raw const frame,
                     core::ptr::with_exposed_provenance_mut(user),
                 );
-            }
+            });
             let list = table::with(None, |s| {
                 s.extending = None;
                 s.drawing = None;
@@ -290,7 +290,7 @@ impl Installed {
     #[must_use]
     pub fn dialogs(&self) -> Vec<ShownDialog> {
         table::with(Vec::new(), |s| {
-            s.dialogs.iter().map(|(d, _, _)| d.clone()).collect()
+            s.dialogs.iter().map(|(d, _)| d.clone()).collect()
         })
     }
 
@@ -309,12 +309,12 @@ impl Installed {
         let first = table::with(None, |s| {
             (!s.dialogs.is_empty()).then(|| s.dialogs.remove(0))
         });
-        let Some((_, callback, user)) = first else {
+        let Some((_, answered)) = first else {
             return false;
         };
         let raw = answer.map_or(crate::abi::UiDialog::CLOSED, crate::ui::Response::to_raw);
         // SAFETY: the mod's answer callback with its own pointer, once.
-        unsafe { callback(raw, core::ptr::with_exposed_provenance_mut(user)) };
+        answered.run(|callback, user| unsafe { callback(raw, user) });
         true
     }
 }

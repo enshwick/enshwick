@@ -3,10 +3,10 @@
 use core::ffi::c_void;
 
 use crate::abi::{ModHandle, NetMessageFn, Status, Str};
-use crate::test::table::{put, text, with};
+use crate::test::table::{Registered, put, text, with};
 
 pub(crate) extern "system" fn net_channel(
-    _me: ModHandle,
+    me: ModHandle,
     name: Str,
     callback: NetMessageFn,
     user: *mut c_void,
@@ -21,7 +21,7 @@ pub(crate) extern "system" fn net_channel(
         }
         let id = u32::try_from(s.channels.len() + 1).unwrap_or(u32::MAX);
         s.channels
-            .push((name, id, callback, user.expose_provenance()));
+            .push((name, id, Registered::new(callback, user, me)));
         Some(id)
     });
     match id {

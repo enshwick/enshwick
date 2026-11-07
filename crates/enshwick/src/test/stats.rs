@@ -12,7 +12,7 @@ use crate::affixes::{AffixDef, AffixKey, Candidate, ItemRarity, RollRules, lines
 use crate::inventory::ItemInstance;
 use crate::stats::{ItemStats, Op, Stat, StatDef, StatKey, aggregate, builtin, key_of, name_key};
 
-use super::table::with;
+use super::table::{Registered, with};
 
 /// One kind: its full id, kept for the process, and its definition.
 pub(crate) struct Kind {
@@ -30,7 +30,7 @@ pub(crate) struct FakeStats {
     kinds: Vec<Kind>,
     modifiers: Modifiers,
     buffs: Vec<(u32, StatModifierData)>,
-    handlers: Vec<(StatChangeFn, usize)>,
+    handlers: Vec<Registered<StatChangeFn>>,
     watched: BTreeSet<u32>,
     /// What each entity wears.
     pub(crate) worn: BTreeMap<u32, Vec<ItemInstance>>,
@@ -339,14 +339,14 @@ pub(crate) extern "system" fn stat_buff(
 }
 
 pub(crate) extern "system" fn stats_changed(
-    _me: ModHandle,
+    me: ModHandle,
     callback: StatChangeFn,
     user: *mut c_void,
 ) -> Status {
     with(Status::MISSING, |s| {
         state_stats(s)
             .handlers
-            .push((callback, user.expose_provenance()));
+            .push(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -422,12 +422,12 @@ pub(crate) fn settle() -> usize {
         (changes, s.stats.handlers.clone())
     });
     for change in &changes {
-        for &(callback, user) in &handlers {
+        for handler in &handlers {
             // SAFETY: `change` is a live `StatChange` borrowed for the call, and
             // `user` is the pointer the mod registered with `callback`, as
             // `StatChangeFn` expects; the thread that drives the fake stands
             // for the game thread.
-            unsafe { callback(change, core::ptr::with_exposed_provenance_mut(user)) };
+            handler.run(|callback, user| unsafe { callback(change, user) });
         }
     }
     changes.len()

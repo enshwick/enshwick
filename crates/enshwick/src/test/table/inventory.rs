@@ -4,7 +4,7 @@ use core::ffi::c_void;
 
 use crate::abi::{InventoryRequest, InventoryResultFn, ItemData, ModHandle, Status};
 use crate::test::SubmittedRequest;
-use crate::test::table::{OpenRequest, with};
+use crate::test::table::{OpenRequest, Registered, with};
 
 pub(crate) extern "system" fn inventory_open(_me: ModHandle) -> Status {
     with(Status::MISSING, |s| {
@@ -25,7 +25,7 @@ pub(crate) extern "system" fn item_info(
 }
 
 pub(crate) extern "system" fn inventory_submit(
-    _me: ModHandle,
+    me: ModHandle,
     request: *const InventoryRequest,
     done: InventoryResultFn,
     user: *mut c_void,
@@ -52,8 +52,7 @@ pub(crate) extern "system" fn inventory_submit(
                 flags: request.flags,
                 actor: request.actor.0,
             },
-            done,
-            user: user.expose_provenance(),
+            done: Registered::new(done, user, me),
         });
         Status::OK
     })

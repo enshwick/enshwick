@@ -145,6 +145,32 @@ const DEVELOPER: TestMod = TestMod {
 };
 
 #[test]
+fn a_pack_s_callback_runs_as_the_pack_and_a_dll_s_as_the_loader() {
+    let (mut loader, _) = loader(
+        &[TestMod::plain("you.lanterns"), TestMod::plain("you.pack")],
+        false,
+    );
+    let at = |id: &str| ModIndex::new(loader.mods.iter().position(|m| m.id == id).unwrap());
+    let (dll, pack) = (at("you.lanterns"), at("you.pack"));
+    loader.mods[pack.get()].pack = true;
+    assert_eq!(
+        crate::profile::pack_handle(&loader.mods, pack),
+        Some(host::handle(pack)),
+        "a pack runs in the loader's copy as itself"
+    );
+    assert_eq!(
+        crate::profile::pack_handle(&loader.mods, dll),
+        None,
+        "a DLL has its own copy; the loader's runs as the loader"
+    );
+    assert_eq!(
+        crate::profile::pack_handle(&loader.mods, ModIndex::new(loader.mods.len())),
+        None,
+        "an owner past the loaded mods"
+    );
+}
+
+#[test]
 fn a_developer_mod_is_off_before_its_init_without_developer_tools() {
     let (loader, order) = loader(&[TestMod::plain("you.lanterns"), DEVELOPER], false);
     initialise(&loader, &order.iter().collect::<Vec<_>>(), None);

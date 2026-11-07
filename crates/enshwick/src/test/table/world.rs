@@ -7,7 +7,7 @@ use crate::abi::{
     PlayerInfo, RenameCallFn, Side, SpawnRequest, Status, StatusFn, Str, TeleportRequest,
     TerrainEdit, TerrainMaterialInfo, Voxel, WeatherFront,
 };
-use crate::test::table::{found, put, text, with};
+use crate::test::table::{Registered, found, put, text, with};
 
 /// Whether the entity calls cannot run here, where the loader answers
 /// [`Status::UNAVAILABLE`]: no server runs, or the build lacks the commands.
@@ -70,7 +70,7 @@ pub(crate) extern "system" fn server_world() -> u64 {
 }
 
 pub(crate) extern "system" fn actions(
-    _me: ModHandle,
+    me: ModHandle,
     callback: crate::abi::ActionFn,
     user: *mut c_void,
 ) -> Status {
@@ -78,7 +78,7 @@ pub(crate) extern "system" fn actions(
         if s.actions.is_some() {
             return Status::REFUSED;
         }
-        s.actions = Some((callback, user.expose_provenance()));
+        s.actions = Some(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -104,12 +104,12 @@ pub(crate) extern "system" fn set_label(
 }
 
 pub(crate) extern "system" fn rename_filter(
-    _me: ModHandle,
+    me: ModHandle,
     callback: RenameCallFn,
     user: *mut c_void,
 ) -> Status {
     with(Status::MISSING, |s| {
-        s.rename_filters.push((callback, user.expose_provenance()));
+        s.rename_filters.push(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -130,12 +130,12 @@ pub(crate) extern "system" fn feature(_me: ModHandle, name: Str, off: Str) -> St
 }
 
 pub(crate) extern "system" fn status(
-    _me: ModHandle,
+    me: ModHandle,
     callback: StatusFn,
     user: *mut c_void,
 ) -> Status {
     with(Status::MISSING, |s| {
-        s.status_sources.push((callback, user.expose_provenance()));
+        s.status_sources.push(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -150,10 +150,9 @@ pub(crate) extern "system" fn run_console(_me: ModHandle, line: Str, out: *mut S
         // The mod's own actions, asked with the table unlocked: they may call
         // back.
         None => match with(None, |s| s.actions) {
-            Some((callback, user)) => {
+            Some(actions) => {
                 let reply = crate::test::ask(
-                    callback,
-                    user,
+                    actions,
                     crate::abi::ActionCall::CONSOLE,
                     &crate::test::console(),
                     0,

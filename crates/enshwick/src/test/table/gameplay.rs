@@ -9,7 +9,7 @@ use crate::abi::{
     Side, SkillCheckFn, Status, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
 };
 use crate::test::table::mods::list;
-use crate::test::table::{Registration, put, with};
+use crate::test::table::{Registered, Registration, put, with};
 
 pub(crate) extern "system" fn altars_open(_me: ModHandle) -> Status {
     with(Status::MISSING, |s| {
@@ -32,7 +32,7 @@ pub(crate) extern "system" fn altars(
 }
 
 pub(crate) extern "system" fn altar_zone_filter(
-    _me: ModHandle,
+    me: ModHandle,
     callback: AltarZoneFn,
     user: *mut c_void,
 ) -> Status {
@@ -41,7 +41,7 @@ pub(crate) extern "system" fn altar_zone_filter(
         s.zone_control = true;
         s.zone_sizing
             .filters
-            .push((callback, user.expose_provenance()));
+            .push(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -57,18 +57,18 @@ pub(crate) extern "system" fn altar_zones_changed(_me: ModHandle) -> Status {
 }
 
 pub(crate) extern "system" fn building_zone_check_filter(
-    _me: ModHandle,
+    me: ModHandle,
     callback: BuildingZoneCheckFn,
     user: *mut c_void,
 ) -> Status {
     with(Status::MISSING, |s| {
-        s.zone_filters.push((callback, user.expose_provenance()));
+        s.zone_filters.push(Registered::new(callback, user, me));
         Status::OK
     })
 }
 
 pub(crate) extern "system" fn survivor_lookup(
-    _me: ModHandle,
+    me: ModHandle,
     callback: SurvivorLookupFn,
     user: *mut c_void,
 ) -> Status {
@@ -76,40 +76,40 @@ pub(crate) extern "system" fn survivor_lookup(
         if s.survivor_lookup.is_some() {
             return Status::REFUSED;
         }
-        s.survivor_lookup = Some((callback, user.expose_provenance()));
+        s.survivor_lookup = Some(Registered::new(callback, user, me));
         Status::OK
     })
 }
 
 pub(crate) extern "system" fn survivor_bed_check(
-    _me: ModHandle,
+    me: ModHandle,
     callback: BedCheckFn,
     user: *mut c_void,
 ) -> Status {
     with(Status::MISSING, |s| {
-        s.bed_checks.push((callback, user.expose_provenance()));
+        s.bed_checks.push(Registered::new(callback, user, me));
         Status::OK
     })
 }
 
 pub(crate) extern "system" fn summon_filter(
-    _me: ModHandle,
+    me: ModHandle,
     callback: SummonFn,
     user: *mut c_void,
 ) -> Status {
     with(Status::MISSING, |s| {
-        s.summons.push((callback, user.expose_provenance()));
+        s.summons.push(Registered::new(callback, user, me));
         Status::OK
     })
 }
 
 pub(crate) extern "system" fn summoned(
-    _me: ModHandle,
+    me: ModHandle,
     callback: SummonFn,
     user: *mut c_void,
 ) -> Status {
     with(Status::MISSING, |s| {
-        s.summoned.push((callback, user.expose_provenance()));
+        s.summoned.push(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -126,7 +126,7 @@ pub(crate) extern "system" fn summon_item(
 }
 
 pub(crate) extern "system" fn survivor_status(
-    _me: ModHandle,
+    me: ModHandle,
     callback: SurvivorStatusFn,
     user: *mut c_void,
 ) -> Status {
@@ -134,65 +134,65 @@ pub(crate) extern "system" fn survivor_status(
         if s.host.side != Side::CLIENT || s.survivor_status.is_some() {
             return Status::REFUSED;
         }
-        s.survivor_status = Some((callback, user.expose_provenance()));
+        s.survivor_status = Some(Registered::new(callback, user, me));
         Status::OK
     })
 }
 
 pub(crate) extern "system" fn interaction_filter(
-    _me: ModHandle,
+    me: ModHandle,
     callback: InteractionFn,
     user: *mut c_void,
 ) -> Status {
     with(Status::MISSING, |s| {
         s.interaction_filters
-            .push((callback, user.expose_provenance()));
+            .push(Registered::new(callback, user, me));
         Status::OK
     })
 }
 
 pub(crate) extern "system" fn skill_override(
-    _me: ModHandle,
+    me: ModHandle,
     node: crate::abi::SkillNode,
     callback: SkillCheckFn,
     user: *mut c_void,
 ) -> Status {
     with(Status::MISSING, |s| {
-        s.skills.push((node, callback, user.expose_provenance()));
+        s.skills.push((node, Registered::new(callback, user, me)));
         Status::OK
     })
 }
 
 pub(crate) extern "system" fn comfort_filter(
-    _me: ModHandle,
+    me: ModHandle,
     callback: ComfortFn,
     user: *mut c_void,
 ) -> Status {
     with(Status::MISSING, |s| {
-        s.comfort_filters.push((callback, user.expose_provenance()));
+        s.comfort_filters.push(Registered::new(callback, user, me));
         Status::OK
     })
 }
 
 pub(crate) extern "system" fn experience_filter(
-    _me: ModHandle,
+    me: ModHandle,
     callback: ExperiencePassFn,
     user: *mut c_void,
 ) -> Status {
     with(Status::MISSING, |s| {
         s.experience_filters
-            .push((callback, user.expose_provenance()));
+            .push(Registered::new(callback, user, me));
         Status::OK
     })
 }
 
 pub(crate) extern "system" fn altar_limit_filter(
-    _me: ModHandle,
+    me: ModHandle,
     callback: AltarLimitFilterFn,
     user: *mut c_void,
 ) -> Status {
     with(Status::MISSING, |s| {
-        s.altar_limits.push((callback, user.expose_provenance()));
+        s.altar_limits.push(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -309,23 +309,23 @@ pub(crate) extern "system" fn base_zones(
 }
 
 pub(crate) extern "system" fn craft_filter(
-    _me: ModHandle,
+    me: ModHandle,
     callback: CraftCheckFn,
     user: *mut c_void,
 ) -> Status {
     with(Status::MISSING, |s| {
-        s.craft_filters.push((callback, user.expose_provenance()));
+        s.craft_filters.push(Registered::new(callback, user, me));
         Status::OK
     })
 }
 
 pub(crate) extern "system" fn build_filter(
-    _me: ModHandle,
+    me: ModHandle,
     callback: BuildCheckFn,
     user: *mut c_void,
 ) -> Status {
     with(Status::MISSING, |s| {
-        s.build_filters.push((callback, user.expose_provenance()));
+        s.build_filters.push(Registered::new(callback, user, me));
         Status::OK
     })
 }
@@ -359,24 +359,24 @@ pub(crate) extern "system" fn account_knowledge(
 }
 
 pub(crate) extern "system" fn damage_filter(
-    _me: ModHandle,
+    me: ModHandle,
     callback: DamageFilterFn,
     user: *mut c_void,
 ) -> Status {
     with(Status::MISSING, |s| {
-        s.damage_filters.push((callback, user.expose_provenance()));
+        s.damage_filters.push(Registered::new(callback, user, me));
         Status::OK
     })
 }
 
 pub(crate) extern "system" fn knowledge_input_filter(
-    _me: ModHandle,
+    me: ModHandle,
     callback: KnowledgeInputFn,
     user: *mut c_void,
 ) -> Status {
     with(Status::MISSING, |s| {
         s.knowledge_input_filters
-            .push((callback, user.expose_provenance()));
+            .push(Registered::new(callback, user, me));
         Status::OK
     })
 }

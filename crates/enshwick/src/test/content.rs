@@ -417,27 +417,27 @@ impl Installed {
             s.served
                 .iter()
                 .filter(|s| s.0.key == *key)
-                .map(|s| (s.1, s.2))
+                .map(|s| s.1)
                 .collect()
         });
         if patches.is_empty() {
             return Err(Status::MISSING);
         }
         let mut bytes = base.to_vec();
-        for (patch, user) in patches {
+        for patch in patches {
             let mut out = core::ptr::null();
             let mut out_len = 0;
             // SAFETY: `bytes` is readable for the call, the outs are valid,
             // and `user` is the pointer the mod served with.
-            let status = unsafe {
+            let status = patch.run(|patch, user| unsafe {
                 patch(
                     bytes.as_ptr(),
                     bytes.len(),
-                    core::ptr::with_exposed_provenance_mut(user),
+                    user,
                     &raw mut out,
                     &raw mut out_len,
                 )
-            };
+            });
             if !status.is_ok() {
                 return Err(status);
             }

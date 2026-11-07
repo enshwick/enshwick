@@ -41,7 +41,7 @@ impl Installed {
         }
         let mut text = text.to_owned();
         let mut buffer = vec![0u8; MAX_TEXT];
-        for (callback, user) in filters {
+        for filter in filters {
             let line = line(player, ChatLine::PLAYER, &text);
             let mut rewrite = ChatRewrite {
                 header: Header::of::<ChatRewrite>(),
@@ -49,10 +49,11 @@ impl Installed {
                 capacity: u32::try_from(MAX_TEXT).unwrap_or(u32::MAX),
                 len: 0,
             };
-            let user = core::ptr::with_exposed_provenance_mut(user);
             // SAFETY: a valid line and rewrite buffer for the call; `user` is
             // the mod's pointer.
-            match unsafe { callback(&raw const line, &raw mut rewrite, user) } {
+            let rewritten = filter
+                .run(|callback, user| unsafe { callback(&raw const line, &raw mut rewrite, user) });
+            match rewritten {
                 ChatRewrite::DROP => return None,
                 ChatRewrite::REWRITTEN => {
                     let written = buffer.get(..rewrite.len as usize);

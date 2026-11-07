@@ -4,10 +4,10 @@ use core::ffi::c_void;
 
 use crate::abi::{ModHandle, ResourceKey, ResourcePatchFn, Status, Str};
 use crate::test::ServedResource;
-use crate::test::table::{found, put, put_list, text, with};
+use crate::test::table::{Registered, found, put, put_list, text, with};
 
 pub(crate) extern "system" fn serve_resource(
-    _me: ModHandle,
+    me: ModHandle,
     key: *const ResourceKey,
     base: *const ResourceKey,
     patch: ResourcePatchFn,
@@ -25,8 +25,7 @@ pub(crate) extern "system" fn serve_resource(
     with(Status::MISSING, |s| {
         let entry = (
             ServedResource { key, base },
-            patch,
-            user.expose_provenance(),
+            Registered::new(patch, user, me),
         );
         // As the loader: a change chains onto the key's maker, which goes
         // first whenever it comes.
