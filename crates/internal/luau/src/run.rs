@@ -394,6 +394,12 @@ impl Scope {
             inner.fail(&format!("a function passed to the API answered {error}"));
         }
     }
+
+    /// Runs `with` on the Luau state of this scope's VM; `None` once the VM
+    /// is gone.
+    pub(crate) fn with_lua<R>(&self, with: impl FnOnce(&Lua) -> R) -> Option<R> {
+        self.vm.upgrade().map(|vm| with(&vm.lua))
+    }
 }
 
 /// Starts the Luau mod `id` for the mod `load` initialises: builds its

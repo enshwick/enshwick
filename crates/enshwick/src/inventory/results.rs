@@ -308,16 +308,13 @@ impl Typed for Done {
 
 impl IntoScript for Done {
     fn into_value(self) -> Value {
-        Value::String(
-            match self {
-                Self::Committed => "Committed",
-                Self::RolledBack => "RolledBack",
-                Self::Unavailable => "Unavailable",
-                Self::TimedOut => "TimedOut",
-                Self::Refused(_) => "Refused",
-            }
-            .to_owned(),
-        )
+        Value::Name(match self {
+            Self::Committed => "Committed",
+            Self::RolledBack => "RolledBack",
+            Self::Unavailable => "Unavailable",
+            Self::TimedOut => "TimedOut",
+            Self::Refused(_) => "Refused",
+        })
     }
 }
 
@@ -361,15 +358,12 @@ impl Typed for OpError {
 
 impl IntoScript for OpError {
     fn into_value(self) -> Value {
-        Value::String(
-            match self {
-                Self::NotRun => "NotRun",
-                Self::InvalidState => "InvalidState",
-                Self::OutOfMemory => "OutOfMemory",
-                Self::Other(_) => "Other",
-            }
-            .to_owned(),
-        )
+        Value::Name(match self {
+            Self::NotRun => "NotRun",
+            Self::InvalidState => "InvalidState",
+            Self::OutOfMemory => "OutOfMemory",
+            Self::Other(_) => "Other",
+        })
     }
 }
 

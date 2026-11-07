@@ -238,8 +238,16 @@ fn derive_choice(input: &DeriveInput, data: &syn::DataEnum) -> syn::Result<Token
 
         impl #script::FromScript for #ident {
             fn from_value(value: #script::Value) -> ::core::result::Result<Self, #script::Error> {
-                let text = <::std::string::String as #script::FromScript>::from_value(value)?;
-                ::core::result::Result::Ok(match text.as_str() {
+                let owned;
+                let text: &str = match &value {
+                    #script::Value::Name(name) => name,
+                    #script::Value::String(text) => text,
+                    _ => {
+                        owned = <::std::string::String as #script::FromScript>::from_value(value)?;
+                        &owned
+                    }
+                };
+                ::core::result::Result::Ok(match text {
                     #(#from,)*
                     _ => return ::core::result::Result::Err(#script::Error::new(
                         ::std::format!("{text:?} is not one of {}", #names),

@@ -3,7 +3,7 @@
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick::script::{Callback, Class, Error, Handle, Signature, Ty, Union, Value};
+use enshwick::script::{Callback, Choice, Class, Error, Handle, Signature, Ty, Union, Value};
 use mlua::{Lua, MultiValue, Value as LuaValue};
 
 use crate::run::Scope;
@@ -130,7 +130,28 @@ pub(crate) fn from_lua(scope: &Scope, value: LuaValue, ty: &'static Ty) -> Resul
             LuaValue::Number(n) => Ok(Value::Number(n)),
             other => Err(expected("a number", &other)),
         },
-        Ty::String | Ty::Choice(_) => match value {
+        // A choice crosses as its own static name, which also checks it.
+        Ty::Choice(choice) => match value {
+            LuaValue::String(s) => {
+                if let Some(Some(name)) = scope.with_lua(|lua| Interned::variant(lua, choice, &s)) {
+                    return Ok(Value::Name(name));
+                }
+                let text = s
+                    .to_str()
+                    .map_err(|_| Error::new("expected text in UTF-8"))?;
+                choice
+                    .names()
+                    .find(|name| *name == &*text)
+                    .map(Value::Name)
+                    .ok_or_else(|| {
+                        let names: Vec<String> =
+                            choice.names().map(|name| format!("{name:?}")).collect();
+                        Error::new(format!("{:?} is not one of {}", &*text, names.join(", ")))
+                    })
+            }
+            other => Err(expected("a string", &other)),
+        },
+        Ty::String => match value {
             LuaValue::String(s) => Ok(Value::String(
                 s.to_str()
                     .map_err(|_| Error::new("expected text in UTF-8"))?
@@ -339,6 +360,8 @@ struct Interned {
     /// Each class's table of method functions, by method name, filled as
     /// `__index` makes them.
     methods: Vec<(&'static str, mlua::Table)>,
+    /// Each choice's table from a variant's script string to its place.
+    choices: Vec<(&'static str, mlua::Table)>,
 }
 
 impl Interned {
@@ -373,6 +396,26 @@ impl Interned {
     /// The table of method functions of the class `class`.
     fn methods(lua: &Lua, class: &'static str) -> mlua::Result<mlua::Table> {
         Self::get(lua, class, |i| &mut i.methods, || lua.create_table())
+    }
+
+    /// The variant of `choice` the script string `text` names, read without
+    /// borrowing its bytes: borrowing a fresh string's bytes allocates.
+    fn variant(lua: &Lua, choice: &Choice, text: &mlua::LuaString) -> Option<&'static str> {
+        let table = Self::get(
+            lua,
+            choice.name(),
+            |i| &mut i.choices,
+            || {
+                let table = lua.create_table_with_capacity(0, choice.values().len())?;
+                for (at, name) in choice.names().enumerate() {
+                    table.raw_set(name, at)?;
+                }
+                Ok(table)
+            },
+        )
+        .ok()?;
+        let at = table.raw_get::<Option<usize>>(text).ok()??;
+        choice.names().nth(at)
     }
 }
 

@@ -234,7 +234,7 @@ impl IntoScript for crate::abi::Side {
             Side::BOTH => "both",
             _ => "server",
         };
-        Value::String(name.to_owned())
+        Value::Name(name)
     }
 }
 
@@ -268,7 +268,7 @@ impl Typed for crate::abi::Level {
 
 impl IntoScript for crate::abi::Level {
     fn into_value(self) -> Value {
-        Value::String(self.name().to_owned())
+        Value::Name(self.name())
     }
 }
 

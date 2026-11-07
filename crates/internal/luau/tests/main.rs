@@ -3,6 +3,7 @@
 
 mod actions;
 mod affixes;
+mod allocations;
 mod altars;
 mod book;
 mod calls;
