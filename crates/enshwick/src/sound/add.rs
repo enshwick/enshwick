@@ -52,7 +52,7 @@ pub enum SoundContainerScene {
     Sfx,
     /// Music.
     Music,
-    /// An interface sound.
+    /// An interface sound, heard from no place in the world.
     Ui,
     /// A voice.
     Voice,
@@ -221,7 +221,10 @@ fn container_value(
         (SCENE.to_owned(), Value::Name(scene.name().to_owned())),
         float(VOLUME, 1.0),
         float(PITCH_FIELD, 1.0),
-        (HAS_POSITION.to_owned(), Value::Bool(true)),
+        (
+            HAS_POSITION.to_owned(),
+            Value::Bool(scene != SoundContainerScene::Ui),
+        ),
         float(MIN_DISTANCE, 1.0),
         float(MAX_DISTANCE_FIELD, 35.0),
         float(SPEAKER_VOLUME, 1.0),
@@ -581,6 +584,9 @@ mod tests {
         let value = container_value(sound, SoundContainerScene::Ui, "demo::Entry", fields);
         assert_eq!(value.field(VOLUME), Some(&Value::Float(0.5)));
         assert_eq!(value.field(SCENE), Some(&Value::Name("Ui".into())));
+        assert_eq!(value.field(HAS_POSITION), Some(&Value::Bool(false)));
+        let effect = container_value(sound, SoundContainerScene::Sfx, "demo::Entry", Vec::new());
+        assert_eq!(effect.field(HAS_POSITION), Some(&Value::Bool(true)));
         let Some(Value::List(entries)) = value.field(ENTRIES) else {
             panic!("no entries");
         };

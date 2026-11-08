@@ -1,6 +1,6 @@
 //! The loaded mods and the mod's own folder as the script namespace `mods`.
 
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use crate::abi::Side;
 use crate::resources::Bytes;

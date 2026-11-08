@@ -57,6 +57,9 @@ struct Linked {
     /// Where the play data keeps the open screen's `u32` host entity, on a
     /// build whose table has it.
     screen_host: Option<usize>,
+    /// The screen byte of the world with no screen open, `InGame`, on a
+    /// build whose reflection names it.
+    in_game: Option<u8>,
 }
 
 /// The interaction prompt's offsets in the play data: its title, a
@@ -80,10 +83,13 @@ pub(super) struct FrameReads {
     pub(super) prompt_title: Str,
     pub(super) prompt_verb: u32,
     pub(super) screen_host: enshwick::Entity,
+    /// The HUD screen byte, `None` outside a game.
+    screen: Option<u8>,
 }
 
 impl FrameReads {
     const NONE: Self = Self {
+        screen: None,
         hud_screen: Str::EMPTY,
         prompt_title: Str::EMPTY,
         prompt_verb: 0,
@@ -184,6 +190,8 @@ pub(super) fn link(loader: &Loader) {
             names: screen_names(loader),
             prompt: prompt_at(loader),
             screen_host: loader.offset(pinned::ui::SCREEN_HOST),
+            in_game: catalogue::constant(catalogue::ids::HUD_SCREEN_IN_GAME, &loader.reflection)
+                .and_then(|value| u8::try_from(value).ok()),
         })
     })();
     match found {
@@ -277,20 +285,6 @@ unsafe fn play(engine: &Engine, context: usize, linked: &Linked) -> Option<usize
     })
 }
 
-/// The HUD screen byte of the game the player is in; `None` outside one.
-///
-/// # Safety
-///
-/// - `context` is 0 or the live interface context of the frame being
-///   drawn, on the interface thread.
-unsafe fn screen_byte(engine: &Engine, context: usize, linked: &Linked) -> Option<u8> {
-    // SAFETY: the caller's contract.
-    let data = unsafe { play(engine, context, linked) }?;
-    // SAFETY: `data` is the non-null play data, whose HUD screen byte sits at
-    // `ui.hud_screen` (clients 410, 426 and 520).
-    Some(unsafe { crate::memory::read::<u8>(data, linked.hud_screen) })
-}
-
 /// The prompt's title and verb in the play data `data`; empty and 0 while
 /// the prompt offers nothing. The title is copied into [`TITLE`] and cut at
 /// its last whole character within [`TITLE_MAX`] bytes.
@@ -357,17 +351,27 @@ pub(super) unsafe fn frame_reads(engine: &Engine, context: usize) -> FrameReads 
     let (prompt_title, prompt_verb) = linked
         .prompt
         .map_or((Str::EMPTY, 0), |at| unsafe { prompt(data, at) });
-    // SAFETY: `data` is the live play data of this frame, whose screen host
-    // `u32` sits at the table's `ui.screen_host` (every kept client).
-    let host = linked
-        .screen_host
-        .map_or(0, |at| unsafe { crate::memory::read::<u32>(data, at) });
+    let host = open_host(screen, linked.in_game, || {
+        // SAFETY: `data` is the live play data of this frame, whose screen
+        // host `u32` sits at the table's `ui.screen_host` (every kept client).
+        linked
+            .screen_host
+            .map_or(0, |at| unsafe { crate::memory::read::<u32>(data, at) })
+    });
     FrameReads {
+        screen: Some(screen),
         hud_screen: screen_name(linked, Some(screen)),
         prompt_title,
         prompt_verb,
         screen_host: enshwick::Entity(host),
     }
+}
+
+/// The open screen's host as `read` gives it, or 0 in the world with no
+/// screen open (`screen` is `in_game`), whatever the play data still holds
+/// of a screen that closed.
+fn open_host(screen: u8, in_game: Option<u8>, read: impl FnOnce() -> u32) -> u32 {
+    if in_game == Some(screen) { 0 } else { read() }
 }
 
 /// The game's name of screen byte `screen`; empty for `None`.
@@ -396,21 +400,14 @@ fn by_edge<T>(
 /// - Called inside a frame of the game's interface update, on its thread.
 /// - `context` is the non-zero context `Engine::context` read in this frame.
 /// - No other window of the loader's or a mod's is open.
-pub(super) unsafe fn draw(engine: &Engine, context: usize) {
-    let (Some(extensions), Some(linked)) = (EXTENSIONS.sealed(), LINKED.get()) else {
+/// - `reads` are [`frame_reads`] of this frame.
+pub(super) unsafe fn draw(engine: &Engine, context: usize, reads: FrameReads) {
+    let Some(extensions) = EXTENSIONS.sealed() else {
         return;
     };
-    if extensions.is_empty() {
-        return;
-    }
-    // SAFETY: the caller passes the frame's live interface context on the
-    // interface thread.
-    let Some(screen) = (unsafe { screen_byte(engine, context, linked) }) else {
+    let Some(screen) = reads.screen.filter(|_| !extensions.is_empty()) else {
         return;
     };
-    // SAFETY: the caller passes the frame's live interface context on the
-    // interface thread.
-    let reads = unsafe { frame_reads(engine, context) };
     for extension in by_edge(extensions, screen, |e| (e.screen, e.edge)) {
         if extension.registered.live() {
             // SAFETY: this function's `# Safety` gives the frame, its thread
@@ -515,6 +512,14 @@ mod tests {
         }
         assert_eq!(in_game_only(7, || Some(12)), Some(12));
         assert_eq!(in_game_only::<usize>(7, || None), None, "no play data");
+    }
+
+    #[test]
+    fn the_world_with_no_screen_open_has_no_host_whatever_the_play_data_holds() {
+        let in_game = Some(3);
+        assert_eq!(open_host(3, in_game, || 77), 0);
+        assert_eq!(open_host(9, in_game, || 77), 77);
+        assert_eq!(open_host(3, None, || 77), 77);
     }
 
     #[test]

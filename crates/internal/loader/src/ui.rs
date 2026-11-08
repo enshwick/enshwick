@@ -555,15 +555,20 @@ unsafe extern "system" fn detour(state: *mut u8) {
     UI_THREAD.store(thread_id(), Ordering::Release);
     let frame = mods::next_frame();
     map::note(context);
+    // SAFETY: the game draws its popup inside the frame on the interface
+    // thread, and `context` is the frame's own, non-zero by the guard
+    // before it.
+    let reads = unsafe { extensions::frame_reads(engine, context) };
     // A window that panicked between its begin and end leaves the game's
     // window stack unbalanced, so a panic ends this frame's windows; its own
     // fuse keeps it off from the next frame on.
-    let _drawn = drew(&FRAMES_FUSE, "the mods' frames", || frames(engine, context))
+    let _drawn = drew(&FRAMES_FUSE, "the mods' frames", || frames(engine, context, reads))
         // SAFETY: the game draws its popup inside the frame on the interface
-        // thread, `context` is non-zero (checked by the guard before it), and
-        // `frames` closed every window a mod's callback left open.
+        // thread, `context` is non-zero (checked by the guard before it),
+        // `frames` closed every window a mod's callback left open, and
+        // `reads` are this frame's.
         && drew(&EXTENSIONS_FUSE, "the screen extensions' draw", || unsafe {
-            extensions::draw(engine, context);
+            extensions::draw(engine, context, reads);
         })
         // SAFETY: the game draws its popup inside the frame on the interface
         // thread, `context` is non-zero (checked by the guard before it), and
@@ -778,14 +783,11 @@ fn screen(state: u8) -> u32 {
     }
 }
 
-fn frames(engine: &Engine, context: usize) {
+fn frames(engine: &Engine, context: usize, reads: extensions::FrameReads) {
     let Some(frames) = FRAMES.sealed() else {
         return;
     };
     let screen = screen(engine.app_state(context));
-    // SAFETY: `detour` calls this inside the frame on the interface thread
-    // with the frame's own `context`.
-    let reads = unsafe { extensions::frame_reads(engine, context) };
     for registered in frames.iter().filter(|r| r.live()) {
         let token = NEXT_TOKEN.fetch_add(1, Ordering::Relaxed);
         DRAWING.set(Some(Drawing {
