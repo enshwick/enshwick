@@ -84,8 +84,8 @@ mod tests {
             .unwrap()
     }
 
-    fn category(item: Guid) -> Option<Value> {
-        Some(Value::Uint(u64::from(item.0[15])))
+    fn category(item: Guid) -> Value {
+        Value::Uint(u64::from(item.0[15]))
     }
 
     #[test]
@@ -105,10 +105,10 @@ mod tests {
         let loader = start();
         let loot = built(&loader, LOOT_ITEM);
         assert_eq!(loot.field("objectId"), Some(&Value::Guid(LOOT_ITEM)));
-        assert_eq!(loot.field("category").cloned(), category(OTHER_ITEM));
+        assert_eq!(loot.field("category"), Some(&category(OTHER_ITEM)));
         let other = built(&loader, OTHER_ITEM);
         assert_eq!(other.field("objectId"), Some(&Value::Guid(OTHER_ITEM)));
-        assert_eq!(other.field("category").cloned(), category(LOOT_ITEM));
+        assert_eq!(other.field("category"), Some(&category(LOOT_ITEM)));
     }
 
     #[test]

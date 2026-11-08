@@ -69,8 +69,8 @@ size 500 and category ammunition, and every held stack of logs stayed.
   item's stack size and saves the cut.
 - Saves keep `old`'s id and GUID, so a world opens as vanilla without the
   mod.
-- `old` takes `new` as the game reads it, so other mods' changes of `new`
-  reach `old`. Two items that mods re-key to each other swap.
+- `old` takes the data of `new` as the game reads it. Other mods' changes
+  of that item reach `old`. Two items that mods re-key to each other swap.
 - Mods that re-key or serve `old` chain in load order, and the last
   re-key's data wins. A build that fails keeps `old` as it was.
 - An item with an entity of its own (`ItemFlag::HasPIDE`) re-keys only to

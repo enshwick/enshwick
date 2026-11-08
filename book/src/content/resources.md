@@ -197,9 +197,9 @@ if let Some(item) = key.ok().and_then(game_resource) {
 }
 ```
 
-`host.served_resource(key)` reads a resource as the game reads it now: a
-served key built with every mod's patches, other mods' included, and any
-other key from the archive. Call it after `init`, such as in a builder of
+`host.served_resource(key)` reads a resource as the game reads it now. A
+served key comes built with every mod's patches; any other key comes from
+the archive. Call it after `init`, such as in a builder of
 another key. It returns `Err(Off)` during `init`, while not every mod's
 patches are in, and inside a build of the same key.
 
