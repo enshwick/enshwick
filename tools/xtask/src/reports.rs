@@ -47,20 +47,14 @@ const SEAL: &str = "sealed = ";
 const REFRESH: &str =
     "rewrite the reports with `cargo xtask compat refresh` on the kept executables, never by hand";
 
-/// The digest of the inputs in the repository at `root` as its working tree
-/// holds them, untracked files included and line endings as LF.
+/// The digest of the tracked inputs in the repository at `root` as its
+/// working tree holds them, line endings as LF; an untracked file, which CI
+/// never has, is no input.
 pub(crate) fn inputs(root: &Path) -> Result<Sha256, String> {
     let output = Command::new("git")
         .arg("-C")
         .arg(root)
-        .args([
-            "ls-files",
-            "-z",
-            "--cached",
-            "--others",
-            "--exclude-standard",
-            "--",
-        ])
+        .args(["ls-files", "-z", "--cached", "--"])
         .args(INPUTS)
         .output()
         .map_err(|e| format!("git: {e}"))?;
@@ -195,10 +189,29 @@ mod tests {
         root
     }
 
+    /// Writes `file` in the repository at `root` and tracks it.
     fn write(root: &Path, file: &str, text: &str) {
         let path = root.join(file);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, text).unwrap();
+        assert!(
+            Command::new("git")
+                .arg("-C")
+                .arg(root)
+                .args(["add", "--", file])
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
+
+    #[test]
+    fn an_untracked_file_among_the_inputs_leaves_the_reports_sealed() {
+        let root = repository("untracked");
+        let scratch = root.join("crates/enshwick-gamedata/src/routes/find.rs.orig");
+        std::fs::write(scratch, "fn old() {}\n").unwrap();
+        assert_eq!(check(&root), Vec::<String>::new());
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
