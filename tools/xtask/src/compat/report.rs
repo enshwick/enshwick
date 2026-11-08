@@ -1,13 +1,14 @@
 //! A build's compatibility report data: what the loader finds on it, as
 //! the `reports/` files hold it.
 
+use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::Path;
 
 use enshwick_gamedata as tables;
 
-use super::{Args, Build, MODULE_IDS, build, build_name};
+use super::{Args, Build, MODULE_IDS, ROOT, build, build_name, reports};
 
 /// The report data of `build` as TOML: names, counts and ids only. An entry
 /// is missing when a route or an anchor of the side names it and this build
@@ -19,10 +20,6 @@ pub(super) fn data(build: &Build) -> Result<String, String> {
         return Err("only a Windows build of this tool knows the loader's features".to_owned());
     }
     let table = &build.table;
-    let mut known: std::collections::BTreeSet<&str> =
-        build.route_ids.iter().map(String::as_str).collect();
-    known.extend(build.anchors.symbols().iter().map(tables::Symbol::id));
-    known.extend(build.anchors.constants().iter().map(tables::Constant::id));
     // Without the game's archive the slots are unknown, not missing: the
     // game always has its archive, a kept executable may not. An archive
     // that is there but does not give them leaves them missing.
@@ -34,19 +31,18 @@ pub(super) fn data(build: &Build) -> Result<String, String> {
             .collect(),
         _ => Vec::new(),
     };
-    // An `<id>.bytes` check is not an entry, and a route drops it.
-    known.retain(|id| id.rsplit('.').next() != Some("bytes") && !unread.contains(id));
+    let known = known(
+        build.route_ids.iter().map(String::as_str),
+        &build.anchors,
+        &unread,
+    );
     let missing: Vec<&str> = known
         .iter()
         .copied()
         .filter(|&id| table.symbol(id).is_none() && table.constant(id).is_none())
         .collect();
-    let list = |ids: &[&str]| {
-        let quoted: Vec<String> = ids.iter().map(|id| format!("{id:?}")).collect();
-        format!("[{}]", quoted.join(", "))
-    };
     let mut out = String::from(
-        "# What the loader finds on this game build; `cargo xtask compat <exe> --data <file>`\n# writes it.\n\n",
+        "# What the loader finds on this game build; `cargo xtask compat refresh` writes it.\n# `sealed` ties it to the code that finds it, so a report edited by hand or\n# left behind by that code fails `cargo xtask check`.\n\n",
     );
     let _w = writeln!(out, "build = {:?}", build.name);
     let _w = writeln!(out, "side = {:?}", build.side.as_str());
@@ -66,6 +62,29 @@ pub(super) fn data(build: &Build) -> Result<String, String> {
     if !unread.is_empty() {
         let _w = writeln!(out, "unread = {}", list(&unread));
     }
+    out.push_str(&features(&known, &missing));
+    Ok(reports::sealed(&reports::inputs(Path::new(ROOT))?, &out))
+}
+
+/// The entries a build's report counts: those the routes of its side look
+/// for (`route_ids`) and its `anchors` name, but no `<id>.bytes` check, which
+/// is not an entry, and no `unread` slot.
+pub(super) fn known<'a>(
+    route_ids: impl Iterator<Item = &'a str>,
+    anchors: &'a tables::Table,
+    unread: &[&str],
+) -> BTreeSet<&'a str> {
+    let mut known: BTreeSet<&str> = route_ids.collect();
+    known.extend(anchors.symbols().iter().map(tables::Symbol::id));
+    known.extend(anchors.constants().iter().map(tables::Constant::id));
+    known.retain(|id| id.rsplit('.').next() != Some("bytes") && !unread.contains(id));
+    known
+}
+
+/// The report's `[[feature]]` tables: each loader feature that lacks a
+/// `missing` entry of those it names among the `known` ones.
+pub(super) fn features(known: &BTreeSet<&str>, missing: &[&str]) -> String {
+    let mut out = String::new();
     for &(name, ids) in MODULE_IDS {
         let named = ids.iter().filter(|id| known.contains(**id)).count();
         let lacks: Vec<&str> = ids
@@ -82,7 +101,13 @@ pub(super) fn data(build: &Build) -> Result<String, String> {
             list(&lacks)
         );
     }
-    Ok(out)
+    out
+}
+
+/// `ids` as a TOML array of strings.
+fn list(ids: &[&str]) -> String {
+    let quoted: Vec<String> = ids.iter().map(|id| format!("{id:?}")).collect();
+    format!("[{}]", quoted.join(", "))
 }
 
 /// The state a report gives a loader feature that names `named` entries of

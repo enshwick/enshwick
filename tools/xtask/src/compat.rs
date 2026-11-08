@@ -20,6 +20,8 @@ use enshwick_gamedata::{self as tables, PartState, Resolved, Table};
 
 #[path = "compat/report.rs"]
 mod report;
+#[path = "reports.rs"]
+mod reports;
 #[cfg(all(test, windows))]
 use report::report_data;
 use report::{data, refresh};
@@ -106,6 +108,8 @@ enum Step {
     Refresh,
 }
 
+/// The repository root.
+const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
 /// The compatibility reports, one TOML file per build.
 const REPORTS: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -140,7 +144,16 @@ fn compat(args: &[String]) -> Result<bool, String> {
     match (cli.step, cli.args) {
         (Some(Step::Run(args)), _) => run_loader(&args).map(|()| true),
         (Some(Step::Refresh), _) => {
-            refresh(Path::new(REPORTS), std::env::var_os("ENSH_EXES")).map(|()| true)
+            refresh(Path::new(REPORTS), std::env::var_os("ENSH_EXES"))?;
+            let stale = reports::check(Path::new(ROOT));
+            if stale.is_empty() {
+                Ok(true)
+            } else {
+                Err(format!(
+                    "reports no executable in ENSH_EXES rewrote:\n{}",
+                    stale.join("\n")
+                ))
+            }
         }
         (None, Some(args)) => run(&args),
         (None, None) => Err("name a game executable; --help lists the options".to_owned()),
@@ -775,8 +788,42 @@ mod tests {
         }
     }
 
-    /// Each report in `reports/` is named after its build, says its side and
-    /// names only the loader's features; on each executable the opt-in
+    /// The `[[feature]]` tables of the report `file` (its `text`, read as
+    /// `data`) follow from its own entries and the loader's feature table,
+    /// which the seal does not cover, as `cargo xtask compat refresh` would
+    /// write them now.
+    #[cfg(windows)]
+    fn features_agree(file: &str, text: &str, data: &toml::Table) {
+        let ids = |key: &str| -> Vec<&str> {
+            data.get(key)
+                .and_then(toml::Value::as_array)
+                .into_iter()
+                .flatten()
+                .map(|id| id.as_str().unwrap())
+                .collect()
+        };
+        let exe = match data["side"].as_str().unwrap() {
+            "server" => "enshrouded_server.exe",
+            _ => "enshrouded.exe",
+        };
+        let side = side_of(Path::new(exe)).unwrap();
+        let routes = tables::Routes::embedded().unwrap();
+        let anchors = tables::anchors(side).unwrap();
+        let known = report::known(
+            routes.ids().filter(|id| routes.routes(id, side)),
+            &anchors,
+            &ids("unread"),
+        );
+        let start = text.find("\n[[feature]]").unwrap_or(text.len());
+        assert_eq!(
+            &text[start..],
+            report::features(&known, &ids("missing")),
+            "{file}: the loader's features changed; `cargo xtask compat refresh` rewrites the report"
+        );
+    }
+
+    /// Each report in `reports/` is named after its build, says its side,
+    /// has the feature tables the loader's features give it; on each executable the opt-in
     /// `ENSH_EXES` path list names, the report of its build is what this
     /// tool writes now, taking the Steam build and game version the report
     /// states where no file beside the executable does (skipped without it).
@@ -808,14 +855,7 @@ mod tests {
                 format!("{side}-{}.toml", executable.replace('/', "-")),
                 "a report is filed under the build it names"
             );
-            let features = data.get("feature").and_then(toml::Value::as_array);
-            for feature in features.into_iter().flatten() {
-                let name = feature["name"].as_str().unwrap();
-                let (_, ids) = MODULE_IDS.iter().find(|(n, _)| *n == name).unwrap();
-                for id in feature["missing"].as_array().unwrap() {
-                    assert!(ids.contains(&id.as_str().unwrap()), "{file}: {name} {id}");
-                }
-            }
+            features_agree(file, &read(file).unwrap(), &data);
         }
         let Some(list) = std::env::var_os("ENSH_EXES") else {
             return;

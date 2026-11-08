@@ -119,17 +119,8 @@ fn run(args: &[String]) -> Result<bool, String> {
     }
     let packages = packages()?;
     let root = workspace_root();
-    let mut problems = tree_problems(&root, &packages)?;
+    let problems = tree_problems(&root, &packages)?;
     let changed = changed_files(&base);
-    let stale = (reports::gates(std::env::var_os("GITHUB_EVENT_NAME").as_deref()) && !list)
-        .then(|| {
-            changed
-                .as_ref()
-                .zip(reports::reason(&root.to_string_lossy(), &base))
-        })
-        .flatten()
-        .and_then(|(files, reason)| reports::stale(files, &reason));
-    problems.extend(stale.map(|problem| format!("compatibility reports: {problem}")));
     if parts.contains(&Part::Host) && !list {
         for problem in &problems {
             say(problem);
@@ -183,8 +174,8 @@ fn run(args: &[String]) -> Result<bool, String> {
 }
 
 /// The problems the checks that compile nothing find in the tree: manifest
-/// ranges, the book, its links and sentence lengths, the tag lines and the
-/// crate rules.
+/// ranges, the book, its links and sentence lengths, the tag lines, the
+/// crate rules and the seals of the compatibility reports.
 fn tree_problems(root: &std::path::Path, packages: &[Package]) -> Result<Vec<String>, String> {
     let mut problems: Vec<String> = ranges::check(root, packages)
         .into_iter()
@@ -220,6 +211,11 @@ fn tree_problems(root: &std::path::Path, packages: &[Package]) -> Result<Vec<Str
         crate_rules::check()?
             .into_iter()
             .map(|problem| format!("crate rule: {problem}")),
+    );
+    problems.extend(
+        reports::check(root)
+            .into_iter()
+            .map(|problem| format!("compatibility report: {problem}")),
     );
     Ok(problems)
 }
