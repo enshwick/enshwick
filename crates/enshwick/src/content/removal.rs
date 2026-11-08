@@ -20,6 +20,7 @@
 //! }
 //! ```
 
+use crate::abi::Status;
 use crate::content::changes::{self, Change, Field};
 use crate::content::recipes::{self, RecipeRule};
 use crate::engine_ids as ids;
@@ -281,7 +282,14 @@ impl Load<'_> {
         // failed build keeps the vanilla item rather than none; `new` reads
         // as served, with every mod's patches of it.
         crate::resources::serve_value(host, key, key, move |item| {
-            let served = host.served_resource(new_key)?;
+            let served = match host.read_resource(host.api().resource_served, new_key) {
+                // Inside a build of `old`, which `new` re-keys back to: `old`
+                // stays, so two items re-keyed to each other swap.
+                Err(Status::REFUSED) => return Ok(Value::Nil),
+                read => {
+                    read.map_err(|status| Off::status(&format!("re-key {old} to {new}"), status))?
+                }
+            };
             rekeyed(&item, &crate::resources::decode(new_key, &served)?)
         })
     }

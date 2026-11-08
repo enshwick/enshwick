@@ -109,6 +109,11 @@ mod tests {
         let other = built(&loader, OTHER_ITEM);
         assert_eq!(other.field("objectId"), Some(&Value::Guid(OTHER_ITEM)));
         assert_eq!(other.field("category"), Some(&category(LOOT_ITEM)));
+        let logs = loader.logs();
+        assert!(
+            !logs.iter().any(|(_, line)| line.contains("refused")),
+            "a swap is no failure: {logs:?}"
+        );
     }
 
     #[test]

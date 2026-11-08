@@ -89,11 +89,12 @@ impl crate::Host {
     /// ```
     pub fn served_resource(&self, key: ResourceKey) -> Result<Vec<u8>, Off> {
         self.read_resource(self.api().resource_served, key)
+            .map_err(|status| Off::status(&format!("read resource {key:?}"), status))
     }
 
     /// Reads `key` through `read`, one of the loader's copy calls, into a
     /// buffer grown to the length it asks for.
-    fn read_resource(
+    pub(crate) fn read_resource(
         &self,
         read: extern "system" fn(
             crate::abi::ModHandle,
@@ -103,7 +104,7 @@ impl crate::Host {
             *mut u32,
         ) -> Status,
         key: ResourceKey,
-    ) -> Result<Vec<u8>, Off> {
+    ) -> Result<Vec<u8>, Status> {
         let mut buffer = vec![0u8; 64 << 10];
         loop {
             let mut len = 0u32;
@@ -121,7 +122,7 @@ impl crate::Host {
                 return Ok(buffer);
             }
             if status != Status::BAD_ARGS || len <= buffer.len() {
-                return Err(Off::status(&format!("read resource {key:?}"), status));
+                return Err(status);
             }
             buffer.resize(len, 0);
         }
