@@ -235,33 +235,58 @@ fn a_field_path_sums_offsets_only_through_fields_that_hold_the_next_type() {
 }
 
 #[test]
-fn a_field_s_offset_counts_only_while_it_holds_the_type_read_there() {
+fn a_catalogue_offset_or_path_counts_only_while_each_field_holds_the_type_read_there() {
+    use crate::catalogue::{Fact, offset_of};
+
     let mut fake = Fake::new();
-    let (narrow, wide, outer) = (rdata(0x100), rdata(0x200), rdata(0x300));
-    put_struct(&mut fake, narrow, rdata(0x400), "demo::uint32", &[]);
-    put_struct(&mut fake, wide, rdata(0x800), "demo::uint64", &[]);
+    let at = |i: u64| rdata(0x100 * i);
+    let (narrow, wide, pointer, inner, outer) = (at(1), at(2), at(3), at(4), at(5));
+    put_struct(&mut fake, narrow, rdata(0xc00), "demo::uint32", &[]);
+    put_struct(&mut fake, wide, rdata(0xd00), "demo::uint64", &[]);
+    put_struct(&mut fake, pointer, rdata(0xe00), "demo::Inner*", &[]);
+    put_struct(
+        &mut fake,
+        inner,
+        rdata(0x600),
+        "demo::Inner",
+        &[("count", 8, wide)],
+    );
     put_struct(
         &mut fake,
         outer,
-        rdata(0xc00),
+        rdata(0x900),
         "demo::Outer",
-        &[("count", 8, wide)],
+        &[("inner", 4, inner), ("held", 0x10, pointer)],
     );
     let image = Image::parse(&fake.bytes, Layout::File, None).unwrap();
     let reflection = Reflection::scan(&image);
+    let offset = |fact| {
+        offset_of(fact, |steps, holds| {
+            reflection.field_path(steps, Some(holds))
+        })
+    };
+    let inline: &'static [(&str, &str)] = &[("demo::Outer", "inner"), ("demo::Inner", "count")];
+    let pointed: &'static [(&str, &str)] = &[("demo::Outer", "held"), ("demo::Inner", "count")];
+    let path = |steps, holds| Fact::Path { steps, holds };
+    assert_eq!(offset(path(inline, "demo::uint64")), Some(12));
     assert_eq!(
-        reflection.field_holding("demo::Outer", "count", "demo::uint64"),
-        Some(8)
-    );
-    assert_eq!(
-        reflection.field_holding("demo::Outer", "count", "demo::uint32"),
+        offset(path(inline, "demo::uint32")),
         None,
-        "a field that grew from 32 to 64 bits"
+        "a last field that grew from 32 to 64 bits"
     );
     assert_eq!(
-        reflection.field_holding("demo::Outer", "missing", "demo::uint64"),
-        None
+        offset(path(pointed, "demo::uint64")),
+        None,
+        "a step that became a pointer"
     );
+    let field = |holds| Fact::Offset {
+        ty: "demo::Inner",
+        field: "count",
+        plus: 2,
+        holds,
+    };
+    assert_eq!(offset(field("demo::uint64")), Some(10));
+    assert_eq!(offset(field("demo::uint32")), None);
 }
 
 /// Writes a descriptor of `kind` named `name` at `at`, deriving from
