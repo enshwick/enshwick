@@ -7,7 +7,7 @@ use std::path::Path;
 
 use enshwick_gamedata as tables;
 
-use super::{Args, Build, MODULE_IDS, REPORTS, build, build_name};
+use super::{Args, Build, MODULE_IDS, build, build_name};
 
 /// The report data of `build` as TOML: names, counts and ids only. An entry
 /// is missing when a route or an anchor of the side names it and this build
@@ -73,10 +73,8 @@ pub(super) fn data(build: &Build) -> Result<String, String> {
             .copied()
             .filter(|id| missing.contains(id))
             .collect();
-        let state = match lacks.len() {
-            0 => continue,
-            n if n == named => "off",
-            _ => "partly",
+        let Some(state) = feature_state(lacks.len(), named) else {
+            continue;
         };
         let _w = writeln!(
             out,
@@ -87,13 +85,27 @@ pub(super) fn data(build: &Build) -> Result<String, String> {
     Ok(out)
 }
 
-/// The `refresh` step: rewrites the report of each executable `ENSH_EXES`
-/// names.
-pub(super) fn refresh() -> Result<(), String> {
-    let list = std::env::var_os("ENSH_EXES").ok_or("ENSH_EXES names no game executable")?;
-    let dir = Path::new(REPORTS);
-    for exe in std::env::split_paths(&list) {
-        let (file, text) = report_data(dir, &exe)?;
+/// The state a report gives a loader feature that names `named` entries of
+/// the build and lacks `lacking` of them; `None` when it lacks none.
+fn feature_state(lacking: usize, named: usize) -> Option<&'static str> {
+    match lacking {
+        0 => None,
+        n if n == named => Some("off"),
+        _ => Some("partly"),
+    }
+}
+
+/// The `refresh` step: rewrites the report in `dir` of each executable the
+/// `ENSH_EXES` path list (`exes`) names, only once every one of them reads,
+/// so a failed run leaves no report half refreshed.
+pub(super) fn refresh(dir: &Path, exes: Option<std::ffi::OsString>) -> Result<(), String> {
+    let list = exes
+        .filter(|list| !list.is_empty())
+        .ok_or("ENSH_EXES names no game executable")?;
+    let reports = std::env::split_paths(&list)
+        .map(|exe| report_data(dir, &exe).map(|report| (exe, report)))
+        .collect::<Result<Vec<_>, _>>()?;
+    for (exe, (file, text)) in reports {
         let path = dir.join(&file);
         std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
         let _shown = writeln!(std::io::stderr(), "{file}: {}", exe.display());
@@ -133,4 +145,56 @@ pub(super) fn report_data(dir: &Path, exe: &Path) -> Result<(String, String), St
         );
     }
     Ok((file, data(&build)?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_feature_lacking_all_it_names_is_off_and_some_partly() {
+        assert_eq!(feature_state(0, 3), None);
+        assert_eq!(feature_state(3, 3), Some("off"));
+        assert_eq!(feature_state(1, 3), Some("partly"));
+    }
+
+    /// A folder of its own for this test.
+    fn empty_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("xtask-{name}-{}", std::process::id()));
+        if dir.exists() {
+            std::fs::remove_dir_all(&dir).unwrap();
+        }
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn refresh_without_a_readable_executable_fails() {
+        let dir = empty_dir("refresh-none");
+        assert!(refresh(&dir, None).is_err());
+        assert!(refresh(&dir, Some("".into())).is_err());
+        let missing = dir.join("no-such-dir").join("enshrouded.exe");
+        assert!(refresh(&dir, Some(missing.into_os_string())).is_err());
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
+    }
+
+    /// With `ENSH_SERVER_EXE`: one unreadable executable in the
+    /// list leaves every report as it was.
+    #[cfg(windows)]
+    #[test]
+    fn refresh_writes_no_report_when_one_executable_fails() {
+        let Some(server) = std::env::var_os("ENSH_SERVER_EXE") else {
+            return;
+        };
+        let dir = empty_dir("refresh-partial");
+        let list =
+            std::env::join_paths([std::path::PathBuf::from(server), dir.join("missing.exe")])
+                .unwrap();
+        assert!(refresh(&dir, Some(list)).is_err());
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
+        let one = std::env::var_os("ENSH_SERVER_EXE");
+        refresh(&dir, one).unwrap();
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }

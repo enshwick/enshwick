@@ -139,7 +139,9 @@ fn compat(args: &[String]) -> Result<bool, String> {
     };
     match (cli.step, cli.args) {
         (Some(Step::Run(args)), _) => run_loader(&args).map(|()| true),
-        (Some(Step::Refresh), _) => refresh().map(|()| true),
+        (Some(Step::Refresh), _) => {
+            refresh(Path::new(REPORTS), std::env::var_os("ENSH_EXES")).map(|()| true)
+        }
         (None, Some(args)) => run(&args),
         (None, None) => Err("name a game executable; --help lists the options".to_owned()),
     }
