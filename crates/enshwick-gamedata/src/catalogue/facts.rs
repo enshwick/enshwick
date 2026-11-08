@@ -1542,6 +1542,8 @@ pub const FACTS: &[(&str, Fact)] = &[
         ids::EXPERIENCE_SOURCE_ITEM_SET_COMPLETED,
         enum_constant(EXPERIENCE_SOURCE, "ItemSetCompleted"),
     ),
+    (ids::EXPERIENCE_SOURCE, Fact::Type(EXPERIENCE_SOURCE)),
+    (ids::BALANCING_TABLE, Fact::Type("keen::BalancingTable")),
     (
         ids::ALTAR_ACTION_ABANDON,
         enum_constant(ALTAR_ACTION, "Abandon"),

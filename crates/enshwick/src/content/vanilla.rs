@@ -3,7 +3,8 @@
 //! the station's item, read from the game's archive.
 //!
 //! [`item`], [`recipe`], [`loot_table`], [`station`] and [`workshop`] name
-//! the running game's content, so a mod's code holds no vanilla GUID;
+//! the running game's content, and [`experience_values`] lists its
+//! experience values, so a mod's code holds no vanilla GUID or id;
 //! [`deps!`](crate::deps) offers them as `deps::vanilla`. [`Vanilla::game`]
 //! reads the running game's data; [`Vanilla::new`] reads any game's through
 //! a function of the caller's, as a tool outside the game does.
@@ -20,6 +21,10 @@ use super::loot_tables::{FillTableLayout, template_table};
 use super::recipes::{RECIPE_REGISTRY, RecipeLayout};
 use super::workshops::{Station, WORKSHOP_REGISTRY, WorkshopId, WorkshopLayout, stations};
 use super::{Blob, EngineFacts, Guid, types};
+
+mod experience;
+
+pub use experience::{Experience, experience_values};
 
 /// Reads one resource of the game's archive.
 type Reader = Box<dyn Fn(ResourceKey) -> Option<Vec<u8>> + Send + Sync>;

@@ -18,6 +18,16 @@ const TREE: &str = "demo::SkillTreeResource";
 const PERK: &str = "demo::Perk";
 const PERKS: &str = "demo::PerkCollectionResource";
 const UNLOCKS: &str = "demo::ecs::UnlockedSkillNodes";
+const BALANCING: &str = "demo::BalancingTable";
+const BALANCE_VALUE: &str = "demo::ExperienceBalanceValue";
+const EXPERIENCE_SOURCE: &str = "demo::ExperienceSourceType";
+
+/// A vanilla experience value of the fake's balancing table: 5 of mining.
+pub const VANILLA_EXPERIENCE: u32 = 0x0000_0e05;
+/// A vanilla experience value of the fake's balancing table: 600 of a quest,
+/// whose id is the content id `vanilla:quest-xp`'s, so a test can add a
+/// value the game holds.
+pub const VANILLA_QUEST_EXPERIENCE: u32 = Guid::named("vanilla:quest-xp").fnv1a();
 
 /// The unlocked nodes the fake's saves keep: room for two nodes beside its
 /// tree's two.
@@ -175,7 +185,72 @@ fn knowledge_types() -> Vec<Type<'static>> {
     types.extend(map("demo::PlayerKnowledgeMap", PLAYER_OBJECT));
     types.extend(journal_types());
     types.extend(skill_types());
+    types.extend(balancing_types());
     types
+}
+
+/// The balancing table with its experience values, laid out as the game
+/// lays them out (server 224), the sources numbered as the game numbers
+/// them.
+fn balancing_types() -> Vec<Type<'static>> {
+    let field = Field::new;
+    vec![
+        enumeration(
+            EXPERIENCE_SOURCE,
+            &[
+                "None",
+                "Exploration",
+                "Lore",
+                "Quest",
+                "Combat",
+                "Mining",
+                "ItemSetCompleted",
+            ],
+        ),
+        named(
+            BALANCE_VALUE,
+            12,
+            4,
+            vec![
+                field("source", 0, EXPERIENCE_SOURCE),
+                field("experienceValueId", 4, "demo::HashKey32"),
+                field("experienceGain", 8, "demo::uint32"),
+            ],
+        ),
+        blobs(BALANCE_VALUE),
+        named(
+            BALANCING,
+            8,
+            4,
+            vec![field(
+                "experienceValues",
+                0,
+                "demo::BlobArray<demo::ExperienceBalanceValue>",
+            )],
+        ),
+    ]
+}
+
+/// The fake's vanilla balancing table: [`VANILLA_EXPERIENCE`] and
+/// [`VANILLA_QUEST_EXPERIENCE`].
+fn balancing_value() -> Value {
+    let value = |source: &str, id: u32, gain: u64| {
+        fields(vec![
+            ("source", Value::Name(source.into())),
+            (
+                "experienceValueId",
+                fields(vec![("value", Value::Uint(id.into()))]),
+            ),
+            ("experienceGain", Value::Uint(gain)),
+        ])
+    };
+    fields(vec![(
+        "experienceValues",
+        Value::List(vec![
+            value("Mining", VANILLA_EXPERIENCE, 5),
+            value("Quest", VANILLA_QUEST_EXPERIENCE, 600),
+        ]),
+    )])
 }
 
 /// The skill tree, the perks and the saved unlocks, with the fields the
@@ -629,8 +704,9 @@ impl FakeHost {
     /// Progression: the game's knowledge reflected, and in the archive a
     /// vanilla knowledge of one world counter,
     /// [`VANILLA_WORLD_KNOWLEDGE`], and one player bool,
-    /// [`VANILLA_PLAYER_KNOWLEDGE`], with its skill point. What
-    /// `Load::add_knowledge` resolves.
+    /// [`VANILLA_PLAYER_KNOWLEDGE`], with its skill point, and a balancing
+    /// table of [`VANILLA_EXPERIENCE`] and [`VANILLA_QUEST_EXPERIENCE`].
+    /// What `Load::add_knowledge` and `Load::add_experience` resolve.
     ///
     /// # Examples
     ///
@@ -670,13 +746,27 @@ impl FakeHost {
             ("108ac23f-a77d-4f18-bfac-acc397edaaf0", TREE, tree_value()),
             ("c0ffee00-0000-4000-8000-00000000be4c", PERK, perk),
             ("bcaac92e-70bf-4fdb-8119-001678e7a616", PERKS, perks),
+            // The game's balancing table (server 387).
+            (
+                "82706b40-61b1-4b8f-8b23-dcec6971bda1",
+                BALANCING,
+                balancing_value(),
+            ),
         ];
         for (guid, ty, value) in served {
             if let Ok(bytes) = registry.encode(ty, &value, None) {
                 host = host.resource(Guid::parse(guid).key_by_hash(hash(ty)), bytes);
             }
         }
-        host.type_hash("SkillTreeResource", hash(TREE))
+        for (raw, (_, id)) in (0..).zip(crate::game_events::ExperienceSourceType::IDS) {
+            host = host.constant(id, raw);
+        }
+        host.type_hash(crate::engine_ids::BALANCING_TABLE, hash(BALANCING))
+            .type_hash(
+                crate::engine_ids::EXPERIENCE_SOURCE,
+                hash(EXPERIENCE_SOURCE),
+            )
+            .type_hash("SkillTreeResource", hash(TREE))
             .type_hash("Perk", hash(PERK))
             .type_hash("PerkCollectionResource", hash(PERKS))
             .type_hash("ecs::UnlockedSkillNodes", hash(UNLOCKS))

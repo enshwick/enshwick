@@ -418,6 +418,12 @@ ids! {
     EXPERIENCE_SOURCE_COMBAT = "experience_source.combat";
     EXPERIENCE_SOURCE_MINING = "experience_source.mining";
     EXPERIENCE_SOURCE_ITEM_SET_COMPLETED = "experience_source.item_set_completed";
+    /// The id of the enum of where experience comes from, whose constants
+    /// name each source.
+    EXPERIENCE_SOURCE = "experience_source";
+    /// The id of the game's balancing table, of which the archive holds one:
+    /// the experience values knowledge entries and quests name.
+    BALANCING_TABLE = "balancing_table";
     ALTAR_ACTION_ABANDON = "altar_action.abandon";
     ALTAR_ACTION_RECLAIM = "altar_action.reclaim";
     ALTAR_ACTION_REMOVE_WATER = "altar_action.remove_water";
