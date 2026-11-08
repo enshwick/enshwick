@@ -183,6 +183,19 @@ mod tests {
         assert_eq!(feature_state(1, 3), Some("partly"));
     }
 
+    #[test]
+    fn a_report_counts_neither_byte_checks_nor_unread_slots() {
+        let anchors = tables::anchors(tables::Side::Server).unwrap();
+        let known = known(
+            ["x.route", "x.route.bytes", "x.slot"].into_iter(),
+            &anchors,
+            &["x.slot"],
+        );
+        assert!(known.contains("x.route"));
+        assert!(!known.contains("x.route.bytes"));
+        assert!(!known.contains("x.slot"));
+    }
+
     /// A folder of its own for this test.
     fn empty_dir(name: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!("xtask-{name}-{}", std::process::id()));

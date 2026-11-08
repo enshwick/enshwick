@@ -208,6 +208,16 @@ mod tests {
     }
 
     #[test]
+    fn a_tracked_input_deleted_from_the_tree_leaves_the_report_stale() {
+        let root = repository("deleted");
+        std::fs::remove_file(root.join("crates/enshwick-gamedata/src/routes/find.rs")).unwrap();
+        let problems = check(&root);
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].starts_with("server-ab-1.toml"), "{problems:?}");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
     fn an_untracked_file_among_the_inputs_leaves_the_reports_sealed() {
         let root = repository("untracked");
         let scratch = root.join("crates/enshwick-gamedata/src/routes/find.rs.orig");
