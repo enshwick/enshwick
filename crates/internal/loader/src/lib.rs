@@ -191,7 +191,7 @@ mod pacing;
 #[cfg(windows)]
 mod packs;
 #[cfg(windows)]
-mod pages;
+pub mod pages;
 #[cfg(windows)]
 mod patch;
 #[cfg_attr(

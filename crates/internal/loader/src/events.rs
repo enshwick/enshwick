@@ -578,6 +578,7 @@ fn end_session() {
     crate::inventory::forget();
     crate::recipes::left();
     crate::admission::forget();
+    crate::pages::forget();
     forget_joined();
     BUILDING.relock().clear();
     crate::log!(
