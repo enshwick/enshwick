@@ -243,8 +243,11 @@ impl Load<'_> {
     /// item's and saves the cut; saves keep `old`'s id, so a world opens as
     /// vanilla without the mod. `old` takes `new` as the game reads it, with
     /// every mod's changes of `new`; inside that read, a re-key of `new`
-    /// back to `old` is skipped, so two items re-keyed to each other swap. Mods that serve `old` chain in load order, and the last
-    /// re-key's data wins; a build that fails keeps `old` as it was.
+    /// back to `old` is skipped, so two items re-keyed to each other swap.
+    /// A ring of three or more re-keys does not rotate: each item takes the
+    /// data of the item two steps on. Mods that serve `old` chain in load
+    /// order, and the last re-key's data wins; a build that fails keeps
+    /// `old` as it was.
     ///
     /// # Errors
     ///
@@ -285,7 +288,7 @@ impl Load<'_> {
             let served = match host.read_resource(host.api().resource_served, new_key) {
                 // Inside a build of `old`, which `new` re-keys back to: `old`
                 // stays, so two items re-keyed to each other swap.
-                Err(Status::REFUSED) => return Ok(Value::Nil),
+                Err(Status::BUILDING) => return Ok(Value::Nil),
                 read => {
                     read.map_err(|status| Off::status(&format!("re-key {old} to {new}"), status))?
                 }

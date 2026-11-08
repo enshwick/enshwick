@@ -45,8 +45,9 @@ mod tests {
         "#
     );
 
-    /// Two other mods first: one changes the lantern's category, one
-    /// re-keys `OTHER_ITEM` back to `LOOT_ITEM`; then this file's mod.
+    /// Three other mods first: one fails to patch the lantern, one changes
+    /// its category, one re-keys `OTHER_ITEM` back to `LOOT_ITEM`; then
+    /// this file's mod.
     fn start() -> Installed {
         let loader = FakeHost::new().items().removal().install();
         let pack = |me, call: fn(&mut Load<'_>) -> Result<(), Off>| {
@@ -55,6 +56,11 @@ mod tests {
                 unsafe { enshwick::__private::init_pack(loader.api(), ModHandle(me), call) };
             assert_eq!(status, Status::OK, "{:?}", loader.logs());
         };
+        // A patch that always fails, which a served read skips.
+        pack(6, |load| {
+            let key = LANTERN.guid().key(types::ITEM_INFO)?;
+            load.serve(key, key, |_| None)
+        });
         pack(7, |load| {
             let key = LANTERN.guid().key(types::ITEM_INFO)?;
             load.serve(key, key, |item| {
@@ -113,6 +119,20 @@ mod tests {
         assert!(
             !logs.iter().any(|(_, line)| line.contains("refused")),
             "a swap is no failure: {logs:?}"
+        );
+    }
+
+    #[test]
+    fn a_served_read_skips_a_failed_patch_and_keeps_the_others() {
+        let _loader = start();
+        let host = enshwick::host().unwrap();
+        let lantern = host
+            .served_value(LANTERN.guid().key(types::ITEM_INFO).unwrap())
+            .unwrap();
+        assert_eq!(
+            lantern.field("category"),
+            Some(&Value::Uint(u64::from(CHANGED_CATEGORY))),
+            "the change after the failed patch still applies"
         );
     }
 

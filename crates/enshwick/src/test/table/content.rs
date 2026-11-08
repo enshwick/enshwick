@@ -268,20 +268,9 @@ pub(crate) extern "system" fn item_data_get(
     let Some(value) = value else {
         return Status::MISSING;
     };
-    let size = u32::try_from(value.len()).unwrap_or(u32::MAX);
-    if !len.is_null() {
-        // SAFETY: `len` is non-null, checked just before; the safe layer
-        // passes it pointing at a writable, aligned `u32` for the call.
-        unsafe { len.write(size) };
-    }
-    if size > capacity || out.is_null() {
-        return Status::BAD_ARGS;
-    }
-    // SAFETY: `out` is non-null and the copy is at most `capacity` bytes, both
-    // checked just before; the safe layer passes `capacity` writable bytes at
-    // `out`, apart from the fake's own buffer.
-    unsafe { out.copy_from_nonoverlapping(value.as_ptr(), value.len()) };
-    Status::OK
+    // SAFETY: the safe layer passes `len` null or a writable, aligned `u32`,
+    // and `out` null or `capacity` writable bytes apart from the fake's own.
+    unsafe { crate::__private::copy_out(&value, out, capacity, len) }
 }
 
 pub(crate) extern "system" fn item_data_set(
@@ -358,20 +347,9 @@ pub(crate) extern "system" fn content_read(
     }) else {
         return Status::MISSING;
     };
-    let size = u32::try_from(data.len()).unwrap_or(u32::MAX);
-    if !len.is_null() {
-        // SAFETY: `len` is non-null, checked just before; the safe layer
-        // passes it pointing at a writable, aligned `u32` for the call.
-        unsafe { len.write(size) };
-    }
-    if size > capacity || out.is_null() {
-        return Status::BAD_ARGS;
-    }
-    // SAFETY: `out` is non-null and the copy is at most `capacity` bytes, both
-    // checked just before; the safe layer passes `capacity` writable bytes at
-    // `out`, apart from the fake's own buffer.
-    unsafe { out.copy_from_nonoverlapping(data.as_ptr(), data.len()) };
-    Status::OK
+    // SAFETY: the safe layer passes `len` null or a writable, aligned `u32`,
+    // and `out` null or `capacity` writable bytes apart from the fake's own.
+    unsafe { crate::__private::copy_out(&data, out, capacity, len) }
 }
 
 pub(crate) extern "system" fn icons_ready(_me: ModHandle) -> Status {
@@ -455,20 +433,10 @@ unsafe fn copy_resource(
         Ok(data) => data,
         Err(status) => return status,
     };
-    let size = u32::try_from(data.len()).unwrap_or(u32::MAX);
-    if !len.is_null() {
-        // SAFETY: `len` is non-null, checked just before, and the caller
-        // guarantees it writable and aligned.
-        unsafe { len.write(size) };
-    }
-    if size > capacity || out.is_null() {
-        return Status::BAD_ARGS;
-    }
-    // SAFETY: `out` is non-null and the copy is at most `capacity` bytes,
-    // both checked just before; the caller guarantees `capacity` writable
-    // bytes at `out`, apart from `data`, which this function owns.
-    unsafe { out.copy_from_nonoverlapping(data.as_ptr(), data.len()) };
-    Status::OK
+    // SAFETY: the caller guarantees `len` null or writable and aligned, and
+    // `out` null or `capacity` writable bytes apart from `data`, which this
+    // function owns.
+    unsafe { crate::__private::copy_out(&data, out, capacity, len) }
 }
 
 thread_local! {
@@ -478,11 +446,12 @@ thread_local! {
 }
 
 /// Builds the served resource `key` from `base` with every mod's patches,
-/// in order, as the game's first read of it would; refused, as the loader
-/// refuses it, for a key whose patches already run on this thread.
+/// in order, as the game's first read of it would: a failed patch is
+/// skipped, and [`Status::MISSING`] when none built. As the loader,
+/// [`Status::BUILDING`] for a key whose patches already run on this thread.
 pub(crate) fn build(key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, Status> {
     if BUILDING.with_borrow(|building| building.contains(key)) {
-        return Err(Status::REFUSED);
+        return Err(Status::BUILDING);
     }
     let patches: Vec<_> = with(Vec::new(), |s| {
         s.served
@@ -491,38 +460,52 @@ pub(crate) fn build(key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, Status> {
             .map(|s| s.1)
             .collect()
     });
-    if patches.is_empty() {
-        return Err(Status::MISSING);
-    }
-    BUILDING.with_borrow_mut(|building| building.push(*key));
-    let mut bytes = Ok(base.to_vec());
+    let _building = Building::enter(*key);
+    let mut bytes = base.to_vec();
+    let mut built = false;
     for patch in patches {
-        let Ok(current) = &bytes else { break };
         let mut out = core::ptr::null();
         let mut out_len = 0;
-        // SAFETY: `current` is readable for the call, the outs are valid,
-        // and `user` is the pointer the mod served with.
+        // SAFETY: `bytes` is readable for the call, the outs are valid, and
+        // `user` is the pointer the mod served with.
         let status = patch.run(|patch, user| unsafe {
             patch(
-                current.as_ptr(),
-                current.len(),
+                bytes.as_ptr(),
+                bytes.len(),
                 user,
                 &raw mut out,
                 &raw mut out_len,
             )
         });
-        bytes = if !status.is_ok() {
-            Err(status)
-        } else if out.is_null() {
-            Ok(Vec::new())
-        } else {
+        if status.is_ok() && !out.is_null() {
             // SAFETY: on success the patch wrote bytes that live for the
             // process.
-            Ok(unsafe { core::slice::from_raw_parts(out, out_len) }.to_vec())
-        };
+            bytes = unsafe { core::slice::from_raw_parts(out, out_len) }.to_vec();
+            built = true;
+        }
     }
-    BUILDING.with_borrow_mut(Vec::pop);
-    bytes
+    if built {
+        Ok(bytes)
+    } else {
+        Err(Status::MISSING)
+    }
+}
+
+/// Marks a key's patches running on this thread until dropped, unwinding
+/// included, as the loader's.
+struct Building;
+
+impl Building {
+    fn enter(key: ResourceKey) -> Self {
+        BUILDING.with_borrow_mut(|building| building.push(key));
+        Self
+    }
+}
+
+impl Drop for Building {
+    fn drop(&mut self) {
+        BUILDING.with_borrow_mut(Vec::pop);
+    }
 }
 
 pub(crate) extern "system" fn game_text(

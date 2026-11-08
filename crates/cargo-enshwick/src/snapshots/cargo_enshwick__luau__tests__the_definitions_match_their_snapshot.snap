@@ -3213,6 +3213,8 @@ declare enshwick: {
 		crc64: (bytes: buffer) -> any,
 		--- The value of the game's own resource `key`, read from its archive.
 		game_value: (key: any) -> any,
+		--- The value of resource `key` as the game's first read would build it now, with every mod's patches; after init only, and refused inside a patch of the same key.
+		served_value: (key: any) -> any,
 		--- Serves the resource `key`, built from the resource `base` the first time the game reads it: `patch` gets the base's value and returns the value to serve, which may name only the fields it changes; nil serves the base unchanged. A patch that fails, returns what is not game data or does not fit the type is logged; a game resource patched in place is then served unchanged, and a new resource turns the mod off. Allowed while the mod initialises.
 		serve: (key: any, base: any, patch: (arg1: any) -> any) -> (),
 	},
@@ -3925,7 +3927,7 @@ declare enshwick: {
 		--- Serves the vanilla loot table `table`, random or a container's fill table, giving nothing while the mod runs. Loot players hold is plain stacks and stays.
 		--- Only while the mod starts, at the top level of main.luau.
 		remove_loot_table: (table: string) -> (),
-		--- Serves the vanilla item `old` with the data of the item `new` while the mod runs, under `old`'s own id and GUID. `new` is a vanilla item or one this mod added with `Load.add_item` before the call. Saves, recipes and loot that name `old` get `new`'s look and use. The stack size is at least `old`'s, since the game cuts a held stack above its item's and saves the cut; saves keep `old`'s id, so a world opens as vanilla without the mod. `old` takes `new` as the game reads it, with every mod's changes of `new`; inside that read, a re-key of `new` back to `old` is skipped, so two items re-keyed to each other swap. Mods that serve `old` chain in load order, and the last re-key's data wins; a build that fails keeps `old` as it was.
+		--- Serves the vanilla item `old` with the data of the item `new` while the mod runs, under `old`'s own id and GUID. `new` is a vanilla item or one this mod added with `Load.add_item` before the call. Saves, recipes and loot that name `old` get `new`'s look and use. The stack size is at least `old`'s, since the game cuts a held stack above its item's and saves the cut; saves keep `old`'s id, so a world opens as vanilla without the mod. `old` takes `new` as the game reads it, with every mod's changes of `new`; inside that read, a re-key of `new` back to `old` is skipped, so two items re-keyed to each other swap. A ring of three or more re-keys does not rotate: each item takes the data of the item two steps on. Mods that serve `old` chain in load order, and the last re-key's data wins; a build that fails keeps `old` as it was.
 		--- Only while the mod starts, at the top level of main.luau.
 		rekey_item: (old: string, new: string) -> (),
 		--- Serves `icon`'s UI image, built from the vanilla one it starts from when the client first shows it. `Load.add_item` does it for an item's icon.

@@ -120,6 +120,10 @@ fn changed_item(patch: &ItemPatch, bytes: &mut [u8]) {
         merged.value(Key::new(patch.item, field), base, live)
     });
     keep_stack(patch, bytes, vanilla);
+    if crate::content::scratch() {
+        // A mod's served read: the game's own build logs and notes raises.
+        return;
+    }
     for field in &edit.lacking {
         crate::log!(
             WARN,
@@ -178,10 +182,10 @@ fn keep_stack(patch: &ItemPatch, bytes: &mut [u8], vanilla: Option<u16>) {
         .as_ref()
         .and_then(|kept| kept.of(patch.item));
     let (size, won) = served(merged, kept);
-    if won {
-        if let Some(slot) = bytes.get_mut(at..at + 2) {
-            slot.copy_from_slice(&size.to_le_bytes());
-        }
+    if won && let Some(slot) = bytes.get_mut(at..at + 2) {
+        slot.copy_from_slice(&size.to_le_bytes());
+    }
+    if won && !crate::content::scratch() {
         crate::log!(
             INFO,
             "stacks of {} stay at {size}, not {merged}: a saved world may hold stacks that large",

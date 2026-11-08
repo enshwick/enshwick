@@ -267,7 +267,9 @@ unsafe extern "system" fn build_recipes(
     let Ok(Some((built, changed))) = built else {
         return Status::REFUSED;
     };
-    crate::log!(INFO, "{changed} recipes changed by data changes");
+    if !crate::content::scratch() {
+        crate::log!(INFO, "{changed} recipes changed by data changes");
+    }
     // The game reads the resource for the life of the process.
     let built: &'static [u8] = Box::leak(built.into_boxed_slice());
     // SAFETY: `run_patches` passes `out` pointing at a local `*const u8`,

@@ -294,20 +294,10 @@ pub(crate) extern "system" fn item_data_get(
             Ok(value) => value,
             Err(status) => return status,
         };
-        let size = u32::try_from(value.len()).unwrap_or(u32::MAX);
-        if !len.is_null() {
-            // SAFETY: `len` is non-null, checked just before; the ABI has the
-            // mod pass it pointing at a writable, aligned `u32`.
-            unsafe { len.write(size) };
-        }
-        if size > capacity || out.is_null() {
-            return Status::BAD_ARGS;
-        }
-        // SAFETY: `out` is non-null and the copy is at most `capacity` bytes,
-        // both checked just before; the ABI has the mod pass `capacity`
-        // writable bytes at `out`, apart from the loader's own buffer.
-        unsafe { out.copy_from_nonoverlapping(value.as_ptr(), value.len()) };
-        Status::OK
+        // SAFETY: `HostApi::item_data_get` has the mod pass `len` null or a
+        // writable, aligned `u32`, and `out` null or `capacity` writable
+        // bytes apart from the loader's own buffer.
+        unsafe { enshwick::__private::copy_out(&value, out, capacity, len) }
     })
 }
 
@@ -388,20 +378,10 @@ pub(crate) extern "system" fn content_read(
             Ok(data) => data,
             Err(status) => return status,
         };
-        let size = u32::try_from(data.len()).unwrap_or(u32::MAX);
-        if !len.is_null() {
-            // SAFETY: `len` is non-null, checked just before; the ABI has the
-            // mod pass it pointing at a writable, aligned `u32`.
-            unsafe { len.write(size) };
-        }
-        if size > capacity || out.is_null() {
-            return Status::BAD_ARGS;
-        }
-        // SAFETY: `out` is non-null and the copy is at most `capacity` bytes,
-        // both checked just before; the ABI has the mod pass `capacity`
-        // writable bytes at `out`, apart from the loader's own buffer.
-        unsafe { out.copy_from_nonoverlapping(data.as_ptr(), data.len()) };
-        Status::OK
+        // SAFETY: `HostApi::content_read` has the mod pass `len` null or a
+        // writable, aligned `u32`, and `out` null or `capacity` writable
+        // bytes apart from the loader's own buffer.
+        unsafe { enshwick::__private::copy_out(&data, out, capacity, len) }
     })
 }
 
@@ -415,7 +395,7 @@ pub(crate) extern "system" fn resource_read(
     entry("resource_read", || {
         // SAFETY: the ABI's guarantees for these arguments are `copy_resource`'s.
         unsafe {
-            copy_resource(me, key, out, capacity, len, |key| {
+            copy_resource("resource_read", me, key, out, capacity, len, |key| {
                 crate::archive::game()
                     .and_then(|archive| archive.resource(&key))
                     .ok_or(Status::MISSING)
@@ -433,12 +413,23 @@ pub(crate) extern "system" fn resource_served(
 ) -> Status {
     entry("resource_served", || {
         // SAFETY: the ABI's guarantees for these arguments are `copy_resource`'s.
-        unsafe { copy_resource(me, key, out, capacity, len, crate::content::served_now) }
+        unsafe {
+            copy_resource(
+                "resource_served",
+                me,
+                key,
+                out,
+                capacity,
+                len,
+                crate::content::served_now,
+            )
+        }
     })
 }
 
 /// Copies the bytes `read` gives for the key at `key` to `out`, writing
-/// their length to `len`; [`Status::BAD_ARGS`] when `capacity` is short.
+/// their length to `len`; [`Status::BAD_ARGS`] when `capacity` is short,
+/// keeping the bytes for this thread's retry of the same `call`.
 ///
 /// # Safety
 ///
@@ -446,6 +437,7 @@ pub(crate) extern "system" fn resource_served(
 /// - `len` is null or points at a writable, aligned `u32`.
 /// - `out` is null or writable for `capacity` bytes, apart from `read`'s.
 unsafe fn copy_resource(
+    call: &'static str,
     me: ModHandle,
     key: *const enshwick::abi::ResourceKey,
     out: *mut u8,
@@ -461,24 +453,38 @@ unsafe fn copy_resource(
     let Some(key) = (unsafe { key.as_ref() }).copied() else {
         return Status::BAD_ARGS;
     };
-    let data = match read(key) {
+    let data = match short_or(call, key, read) {
         Ok(data) => data,
         Err(status) => return status,
     };
-    let size = u32::try_from(data.len()).unwrap_or(u32::MAX);
-    if !len.is_null() {
-        // SAFETY: `len` is non-null, checked just before, and the caller
-        // guarantees it writable and aligned.
-        unsafe { len.write(size) };
+    // SAFETY: the caller guarantees `len` null or writable and aligned, and
+    // `out` null or `capacity` writable bytes apart from `data`, which this
+    // function owns.
+    let status = unsafe { enshwick::__private::copy_out(&data, out, capacity, len) };
+    if status == Status::BAD_ARGS {
+        SHORT.set(Some((call, key, data)));
     }
-    if size > capacity || out.is_null() {
-        return Status::BAD_ARGS;
+    status
+}
+
+thread_local! {
+    /// The last read on this thread whose buffer was short, kept for the
+    /// retry with a buffer that fits, so a served key builds once.
+    static SHORT: core::cell::RefCell<Option<(&'static str, enshwick::abi::ResourceKey, Vec<u8>)>> =
+        const { core::cell::RefCell::new(None) };
+}
+
+/// `key`'s bytes for `call`: the short read this thread kept for the same
+/// call and key, else `read`'s. Any kept read goes either way.
+fn short_or(
+    call: &'static str,
+    key: enshwick::abi::ResourceKey,
+    read: impl FnOnce(enshwick::abi::ResourceKey) -> Result<Vec<u8>, Status>,
+) -> Result<Vec<u8>, Status> {
+    match SHORT.take() {
+        Some((kept_call, kept_key, data)) if kept_call == call && kept_key == key => Ok(data),
+        _ => read(key),
     }
-    // SAFETY: `out` is non-null and the copy is at most `capacity` bytes,
-    // both checked just before; the caller guarantees `capacity` writable
-    // bytes at `out`, apart from `data`, which this function owns.
-    unsafe { out.copy_from_nonoverlapping(data.as_ptr(), data.len()) };
-    Status::OK
 }
 
 pub(crate) extern "system" fn game_text(
@@ -618,4 +624,44 @@ pub(crate) extern "system" fn game_version(me: ModHandle, out: *mut Str) -> Stat
             None => Status::MISSING,
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use core::cell::Cell;
+
+    use enshwick::abi::ResourceKey;
+
+    use super::*;
+
+    const KEY: ResourceKey = ResourceKey {
+        guid: [4; 16],
+        type_hash: 2,
+        part: 0,
+    };
+
+    #[test]
+    fn a_retry_after_a_short_read_takes_the_kept_bytes_without_reading_again() {
+        let reads = Cell::new(0);
+        let read = |_| {
+            reads.set(reads.get() + 1);
+            Ok(vec![1, 2, 3])
+        };
+        SHORT.set(Some(("resource_served", KEY, vec![9])));
+        assert_eq!(short_or("resource_served", KEY, read), Ok(vec![9]));
+        assert_eq!(reads.get(), 0, "the kept bytes answer the retry");
+        assert_eq!(short_or("resource_served", KEY, read), Ok(vec![1, 2, 3]));
+        assert_eq!(reads.get(), 1, "a kept read answers once");
+    }
+
+    #[test]
+    fn a_kept_read_answers_neither_another_call_nor_another_key() {
+        let read = |_| Ok(vec![1]);
+        SHORT.set(Some(("resource_served", KEY, vec![9])));
+        assert_eq!(short_or("resource_read", KEY, read), Ok(vec![1]));
+        let other = ResourceKey { part: 1, ..KEY };
+        SHORT.set(Some(("resource_served", KEY, vec![9])));
+        assert_eq!(short_or("resource_served", other, read), Ok(vec![1]));
+        assert!(SHORT.take().is_none(), "a miss drops the kept read");
+    }
 }

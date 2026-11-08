@@ -27,8 +27,8 @@ use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{HookFlags, ResourceKey, ResourcePatchFn, Status};
 use enshwick::raw::{read_at, write_at};
-use patches::run_patches;
-pub(crate) use patches::{rebuild, served_now};
+use patches::{Build, run_patches};
+pub(crate) use patches::{rebuild, scratch, served_now};
 use texts::{TEXTS, seal_texts};
 
 use crate::chains::Next;
@@ -500,6 +500,27 @@ fn renamed(key: &ResourceKey) -> Option<ResourceKey> {
     Some(ResourceKey { guid: *new, ..*key })
 }
 
+/// A served resource with its index, a renamed key and a template's
+/// vanilla source, as [`route`] finds them.
+type Route = (
+    Option<(usize, &'static Served)>,
+    Option<ResourceKey>,
+    Option<ResourceKey>,
+);
+
+/// Where an open of `key` leads: the served resource of `key` or of the key
+/// a mod renamed it to; else that renamed key, or the vanilla source of a
+/// cloned template no mod serves, to open from the archive.
+fn route(key: &ResourceKey) -> Route {
+    if let Some(found) = find(key) {
+        return (Some(found), None, None);
+    }
+    match renamed(key) {
+        Some(new) => (find(&new), Some(new), None),
+        None => (None, None, alias(key)),
+    }
+}
+
 /// The served resource at `key` whose mods are on, with its index.
 fn find(key: &ResourceKey) -> Option<(usize, &'static Served)> {
     SERVED_LIST
@@ -605,18 +626,7 @@ unsafe extern "system" fn open(
         Some(unsafe { read_key(key) })
     };
     let decided = RESOURCES_FUSE.run("a resource open", || {
-        let mut found = wanted.as_ref().and_then(find);
-        let mut new = None;
-        if found.is_none() {
-            new = wanted.as_ref().and_then(renamed);
-            found = new.as_ref().and_then(find);
-        }
-        let aliased = if found.is_none() && new.is_none() {
-            wanted.as_ref().and_then(alias)
-        } else {
-            None
-        };
-        (found, new, aliased)
+        wanted.as_ref().map_or((None, None, None), route)
     });
     let Some((found, new, aliased)) = decided else {
         // SAFETY: this detour runs only as the `resource.open` link, so the
@@ -734,7 +744,8 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
         // The base is not resident yet; the game asks again.
         return None;
     }
-    let Some((current, current_len, applied)) = run_patches(entry, data, len, None) else {
+    let Some((current, current_len, applied)) = run_patches(entry, data, len, None, Build::Game)
+    else {
         state.failed = true;
         return None;
     };

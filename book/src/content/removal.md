@@ -71,6 +71,8 @@ size 500 and category ammunition, and every held stack of logs stayed.
   mod.
 - `old` takes the data of `new` as the game reads it. Other mods' changes
   of that item reach `old`. Two items that mods re-key to each other swap.
+  A ring of three or more re-keys does not rotate: each item takes the data
+  of the item two steps on.
 - Mods that re-key or serve `old` chain in load order, and the last
   re-key's data wins. A build that fails keeps `old` as it was.
 - An item with an entity of its own (`ItemFlag::HasPIDE`) re-keys only to

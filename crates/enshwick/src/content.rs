@@ -64,14 +64,19 @@ impl crate::Host {
         self.read_resource(self.api().resource_read, key).ok()
     }
 
-    /// A resource's bytes as the game reads it now: a served one built
-    /// with every mod's patches, others' included, any other from the
-    /// archive. Call it after init, such as in a patch of another key.
+    /// A resource's bytes as the game's first read would build them now: a
+    /// served one with every mod's patches, others' included, any other
+    /// from the archive. Call it after init, such as in a patch of another
+    /// key, and once per need: each read builds the key again, and every
+    /// patch's bytes stay for the process. To give an item another's data,
+    /// use [`Load::rekey_item`](crate::Load::rekey_item), which keeps its
+    /// ids.
     ///
     /// # Errors
     ///
     /// [`Off`] during init, for a key neither served nor in the archive,
-    /// and in a patch of a key whose patches already run, as reading it
+    /// and in a patch of a key whose patches already run on this thread
+    /// ([`Status::BUILDING`](crate::abi::Status::BUILDING)), as reading it
     /// would build it again without end.
     ///
     /// # Examples
@@ -83,8 +88,14 @@ impl crate::Host {
     ///     let resin = Guid::parse("2f04a05f-697d-489b-a32f-76bb3439f5bc").key(types::ITEM_INFO)?;
     ///     let wood = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d").key(types::ITEM_INFO)?;
     ///     let host = load.host();
-    ///     // Resin takes wood's bytes as served, other mods' changes included.
-    ///     load.serve(resin, resin, move |_| host.served_resource(wood).ok())
+    ///     load.serve(resin, resin, move |resin| {
+    ///         // Wood as other mods serve it; inside a build of wood, resin
+    ///         // stays as it is rather than failing.
+    ///         if let Ok(wood) = host.served_resource(wood) {
+    ///             enshwick::info!("wood is served as {} bytes", wood.len());
+    ///         }
+    ///         Some(resin.to_vec())
+    ///     })
     /// }
     /// ```
     pub fn served_resource(&self, key: ResourceKey) -> Result<Vec<u8>, Off> {

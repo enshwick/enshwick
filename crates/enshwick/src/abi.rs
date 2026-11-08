@@ -520,6 +520,11 @@ impl Status {
     /// is not there. A mod built for an older minor reads it as any status
     /// it does not know.
     pub const UNAVAILABLE: Self = Self(13);
+    /// The resource asked about is being built on this thread, by a patch
+    /// further up the call, so reading it would build it again without
+    /// end. A mod built for an older minor reads it as any status it does
+    /// not know.
+    pub const BUILDING: Self = Self(14);
 
     /// Whether this is [`Status::OK`].
     ///

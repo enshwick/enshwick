@@ -460,6 +460,31 @@ impl Host {
         })?;
         decode(key, &bytes)
     }
+
+    /// The value of resource `key` as the game's first read would build it
+    /// now, with every mod's patches; see
+    /// [`Host::served_resource`](crate::Host::served_resource).
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] where [`Host::served_resource`](crate::Host::served_resource)
+    /// fails, and when the resource does not read as its type.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::{Guid, types};
+    ///
+    /// if let Some(host) = enshwick::host() {
+    ///     let wood = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+    ///     if let Ok(key) = wood.key(types::ITEM_INFO) {
+    ///         let _value = host.served_value(key);
+    ///     }
+    /// }
+    /// ```
+    pub fn served_value(&self, key: crate::abi::ResourceKey) -> Result<super::Value, Off> {
+        decode(key, &self.served_resource(key)?)
+    }
 }
 
 /// The value of `bytes`, a resource of `key`'s type.

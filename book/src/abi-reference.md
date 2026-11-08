@@ -150,6 +150,7 @@ reason of the form `<what>: <why>`. For example:
 | 11   | `NOT_A_PROP`    | The entity is no prop: a creature, a flame altar or not placed             | `not a prop`                       |
 | 12   | `NOT_KEPT`      | Nothing finds the entity after a load: a player, or no place in the world  | `not found again after a load`     |
 | 13   | `UNAVAILABLE`   | The call cannot run here: no server runs, or the build lacks its pieces    | `not available here or on this game build` |
+| 14   | `BUILDING`      | The resource is being built on this thread, further up the call            | `being built further up this call` |
 
 `enshwick_mod_init` itself returns one of three codes. The loader logs a
 refusal or a fault under the mod's id:

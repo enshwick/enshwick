@@ -272,8 +272,8 @@ fn hash_of(data: &Data) -> Result<[u32; 4], Off> {
 /// type and as values, and resources served from a script's edit.
 ///
 /// The Rust API offers the same through [`Registry::game`],
-/// [`Host::resource_keys`], [`Host::game_value`] and
-/// [`Load::serve`](crate::Load::serve).
+/// [`Host::resource_keys`], [`Host::game_value`], [`Host::served_value`]
+/// and [`Load::serve`](crate::Load::serve).
 ///
 /// # Examples
 ///
@@ -630,6 +630,20 @@ impl Resources {
     #[script]
     pub fn game_value(self, key: &Data) -> Result<Data, Off> {
         self.host.game_value(Self::key_of(key)?)
+    }
+
+    /// The value of resource `key` as the game's first read would build it
+    /// now, with every mod's patches; after init only, and refused inside
+    /// a patch of the same key.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] for a malformed key, during init, for a key neither served
+    /// nor archived, inside a build of the same key, and a resource that
+    /// does not read as its type.
+    #[script]
+    pub fn served_value(self, key: &Data) -> Result<Data, Off> {
+        self.host.served_value(Self::key_of(key)?)
     }
 
     /// Serves the resource `key`, built from the resource `base` the first

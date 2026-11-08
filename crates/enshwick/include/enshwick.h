@@ -1389,6 +1389,11 @@ typedef uint32_t EnshwickStatus;
 // is not there. A mod built for an older minor reads it as any status
 // it does not know.
 #define EnshwickStatus_UNAVAILABLE 13
+// The resource asked about is being built on this thread, by a patch
+// further up the call, so reading it would build it again without
+// end. A mod built for an older minor reads it as any status it does
+// not know.
+#define EnshwickStatus_BUILDING 14
 
 // An opaque handle the loader gives each mod; every call names its caller
 // with it.
@@ -1459,6 +1464,15 @@ typedef struct EnshwickResourceKey {
 // stay valid and writable for the life of the process: a rebuild
 // (`HostApi::rebuild_resource`) writes
 // over the last patch's bytes.
+//
+// The loader calls it on the thread that builds: the game's resource
+// thread for the game's first build, the calling thread for a rebuild or a
+// served read (`HostApi::resource_served`).
+// It runs again for each served read, possibly on two threads at once,
+// and nested inside another key's patch on the same thread, though never
+// inside a build of its own key there. A failure returned from
+// the game's build turns the mod off; a panic must not leave the
+// function. `user` is the pointer the mod served with.
 typedef EnshwickStatus (*EnshwickResourcePatchFn)(const uint8_t *base,
                                                   size_t base_len,
                                                   void *user,
@@ -4851,25 +4865,30 @@ typedef struct EnshwickHostApi {
   // not lie in one. It reads no byte of that memory, so any `address` is
   // allowed. No thread writes those pages without changing their
   // protection, and the count holds only while nothing frees or protects
-  // them, which the caller knows of the memory it asks about. The
-  // loader may answer from a read-only run it found earlier in the same
-  // world, until the world goes away.
+  // them, which the caller knows of the memory it asks about.
   // `Status::BAD_ARGS` for a null `out`. Any thread, re-entrant;
   // `out` is borrowed for the call. A panic in the loader returns
   // `Status::REFUSED`. ABI 11.16.
   EnshwickStatus (*read_only)(EnshwickModHandle me, size_t address, size_t max, size_t *out);
-  // Copies resource `key` as the game reads it now into `out`, at most
-  // `capacity` bytes, and writes its length to `len`. A key mods serve
-  // is built now from its base in the archive with the patches of every
-  // mod on, as the game's first read builds it, and the build is kept
-  // nowhere; a patch that fails turns its mod off, as in the game's
-  // build. Any other key copies as `HostApi::resource_read` copies it.
-  // `Status::MISSING` for a key neither served nor in the archive, or
-  // whose every patch failed; `Status::BAD_ARGS` when `capacity` is
-  // short, with `len` written; `Status::REFUSED` during
-  // `enshwick_mod_init`, while not every patch is in, and from a patch
-  // for a key whose patches run on this thread, which would build it
-  // again without end. Any thread. ABI 11.17.
+  // Copies resource `key` as the game's first read would build it now
+  // into `out`, at most `capacity` bytes, and writes its length to
+  // `len`. A key mods serve, or the key a mod renamed it to, is built
+  // from its base in the archive with the patches of every mod on, on
+  // the calling thread; a patch that fails is skipped and its mod stays
+  // on. The build is kept nowhere, so a mod turned off since the game's
+  // own build is left out, and each patch's output stays for the
+  // process as `ResourcePatchFn` requires.
+  // Any other key, and every key while served resources are off, copies
+  // as the game opens it from the archive. `Status::MISSING` for a key
+  // neither served nor in the archive, or whose every patch failed;
+  // `Status::BAD_ARGS` when `capacity` is short or `out` null, with
+  // `len` written and the build kept for this thread's next call with
+  // the same key; `Status::REFUSED` during `enshwick_mod_init`, while
+  // not every patch is in; `Status::BUILDING` from a patch for a key
+  // whose patches run on this thread, which would build it again without
+  // end. Any thread; re-entrant from a patch for another key. `key` and
+  // `len` are borrowed for the call. A panic in the loader returns
+  // `Status::REFUSED`. ABI 11.17.
   EnshwickStatus (*resource_served)(EnshwickModHandle me,
                                     const struct EnshwickResourceKey *key,
                                     uint8_t *out,

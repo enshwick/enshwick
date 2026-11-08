@@ -160,6 +160,31 @@ mod tests {
     }
 
     #[test]
+    fn a_script_reads_another_resource_as_served_but_not_its_own_inside_its_build() {
+        let loader = run(r#"
+            local r = enshwick.resources
+            local key = r.resource_keys("demo::balance::Table")[1]
+            local extra = r.resource_keys("demo::Extra")[1]
+            local early = pcall(r.served_value, key)
+            print(`at init {early}`)
+            r.serve(extra, extra, function()
+                return { bonus = 4 }
+            end)
+            r.serve(key, key, function()
+                local own = pcall(r.served_value, key)
+                local bonus = r.served_value(extra).bonus
+                print(`own {own} extra bonus {bonus}`)
+                return { damage = bonus }
+            end)
+        "#);
+        let built = loader.build_resource(&key(), &bytes(2.5, 7)).unwrap();
+        assert_eq!(built, bytes(4.0, 7), "{:?}", loader.logs());
+        for line in ["at init false", "own false extra bonus 4"] {
+            assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
+        }
+    }
+
+    #[test]
     fn a_script_reads_content_bytes_and_codes_a_resource_through_a_buffer() {
         let loader = run(r#"
             local data = enshwick.resources.game_content(enshwick.resources.content_hashes()[1])
