@@ -20,7 +20,7 @@ use enshwick_gamedata::{self as tables, PartState, Resolved, Table};
 
 #[path = "compat/report.rs"]
 mod report;
-#[cfg(test)]
+#[cfg(all(test, windows))]
 use report::report_data;
 use report::{data, refresh};
 
