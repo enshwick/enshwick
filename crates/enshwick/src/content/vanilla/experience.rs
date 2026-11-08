@@ -16,7 +16,7 @@ use super::VanillaError;
 ///
 /// See [`experience_values`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
-pub struct Experience {
+pub struct ExperienceBalanceValue {
     /// The value, as a knowledge entry or a quest reward names it.
     pub value: ExperienceValue,
     /// The source the game counts it under.
@@ -45,7 +45,7 @@ pub struct Experience {
 ///     enshwick::info!("{} quest rewards of experience", quests.count());
 /// }
 /// ```
-pub fn experience_values() -> Result<Vec<Experience>, VanillaError> {
+pub fn experience_values() -> Result<Vec<ExperienceBalanceValue>, VanillaError> {
     let unreadable = |_| VanillaError::Unreadable("balancing table");
     let host = crate::host().ok_or(VanillaError::Unreadable("data"))?;
     let table = host
@@ -69,7 +69,7 @@ pub fn experience_values() -> Result<Vec<Experience>, VanillaError> {
         .iter()
         .map(|value| {
             let (id, source, gain) = balance_parts(value)?;
-            Some(Experience {
+            Some(ExperienceBalanceValue {
                 value: ExperienceValue::new(id),
                 source: source_of(&host, raw(source)?),
                 gain,

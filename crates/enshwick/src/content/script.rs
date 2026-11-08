@@ -386,6 +386,7 @@ impl Content {
     /// # Errors
     ///
     /// As [`vanilla::experience_values`].
+    #[cfg(feature = "typed")]
     #[script]
     pub fn experience_values(self) -> Result<Vec<vanilla::Experience>, vanilla::VanillaError> {
         vanilla::experience_values()

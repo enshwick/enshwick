@@ -66,6 +66,33 @@ mod tests {
     }
 
     #[test]
+    fn a_script_lists_vanilla_experience_and_gives_a_value_of_its_own_to_knowledge() {
+        let loader = run(
+            FakeHost::new().progression(),
+            r#"
+            local vanilla = enshwick.content.experience_values()
+            enshwick.log.info(`{#vanilla} vanilla, first {vanilla[1].gain} of {vanilla[1].source}`)
+            local xp = enshwick.content.add_experience({ id = "you.luau:shrine-xp", source = "Exploration", gain = 250 })
+            enshwick.log.info(`experience {xp}`)
+            enshwick.content.add_knowledge({
+                id = "you.luau:shrine", scope = "Player", kind = "Bool", experience = xp,
+            })
+            local ok = pcall(enshwick.content.add_experience, { id = "you.luau:bad", source = "Sleeping", gain = 1 })
+            enshwick.log.info(`unknown source refused {not ok}`)
+            "#,
+        );
+        let logs = format!("{:?}", loader.logs());
+        assert!(logged(&loader, "2 vanilla, first 5 of Mining"), "{logs}");
+        let xp = Id::new("you.luau:shrine-xp").guid().fnv1a();
+        assert!(logged(&loader, &format!("experience {xp}")), "{logs}");
+        assert!(logged(&loader, "unknown source refused true"), "{logs}");
+        let host = FakeHost::new().progression();
+        let table = Guid::parse("82706b40-61b1-4b8f-8b23-dcec6971bda1")
+            .key_by_hash(host.hash("balancing_table").unwrap());
+        assert!(loader.resources().iter().any(|r| r.key == table), "{logs}");
+    }
+
+    #[test]
     fn a_script_adds_a_quest_and_a_page_and_changes_a_vanilla_quest() {
         let loader = run(
             FakeHost::new().progression(),

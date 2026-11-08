@@ -9,7 +9,7 @@ mod tests {
 
     use enshwick::abi::Status;
     use enshwick::content::knowledge::{ExperienceValue, NewExperience, NewKnowledge};
-    use enshwick::content::vanilla::{self, Experience};
+    use enshwick::content::vanilla::{self, ExperienceBalanceValue};
     use enshwick::content::{EngineFacts, Guid, Id};
     use enshwick::game_events::ExperienceSourceType;
     use enshwick::knowledge::{KnowledgeType, Scope};
@@ -21,7 +21,7 @@ mod tests {
     const ODD: Id = Id::new("you.lore:odd-xp");
 
     static ADDED: Mutex<Vec<ExperienceValue>> = Mutex::new(Vec::new());
-    static VANILLA: Mutex<Vec<Experience>> = Mutex::new(Vec::new());
+    static VANILLA: Mutex<Vec<ExperienceBalanceValue>> = Mutex::new(Vec::new());
     static REFUSED: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
     struct Lore;
@@ -134,12 +134,12 @@ mod tests {
         assert_eq!(
             vanilla,
             [
-                Experience {
+                ExperienceBalanceValue {
                     value: ExperienceValue::new(VANILLA_EXPERIENCE),
                     source: ExperienceSourceType::Mining,
                     gain: 5,
                 },
-                Experience {
+                ExperienceBalanceValue {
                     value: ExperienceValue::new(VANILLA_QUEST_EXPERIENCE),
                     source: ExperienceSourceType::Quest,
                     gain: 600,

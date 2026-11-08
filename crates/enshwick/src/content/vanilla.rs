@@ -22,8 +22,10 @@ use super::recipes::{RECIPE_REGISTRY, RecipeLayout};
 use super::workshops::{Station, WORKSHOP_REGISTRY, WorkshopId, WorkshopLayout, stations};
 use super::{Blob, EngineFacts, Guid, types};
 
+#[cfg(feature = "typed")]
 mod experience;
 
+#[cfg(feature = "typed")]
 pub use experience::{Experience, experience_values};
 
 /// Reads one resource of the game's archive.

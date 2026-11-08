@@ -595,7 +595,7 @@ impl Load<'_> {
     /// a knowledge entry's [`NewKnowledge::experience`] or a quest's
     /// experience reward. The game counts the experience under its source,
     /// whose experience rate in the world settings scales it, as it does a
-    /// vanilla value's; [`vanilla::experience_values`](super::vanilla::experience_values)
+    /// vanilla value's; [`experience_values`](super::vanilla::experience_values)
     /// lists those. Adding the same id again replaces its source and gain.
     ///
     /// # Errors
