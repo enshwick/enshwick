@@ -413,31 +413,72 @@ pub(crate) extern "system" fn resource_read(
     len: *mut u32,
 ) -> Status {
     entry("resource_read", || {
-        if let Err(status) = caller(me) {
-            return status;
+        // SAFETY: the ABI's guarantees for these arguments are `copy_resource`'s.
+        unsafe {
+            copy_resource(me, key, out, capacity, len, |key| {
+                crate::archive::game()
+                    .and_then(|archive| archive.resource(&key))
+                    .ok_or(Status::MISSING)
+            })
         }
-        // SAFETY: the caller passes a key for the call; `as_ref` turns away null.
-        let Some(key) = (unsafe { key.as_ref() }).copied() else {
-            return Status::BAD_ARGS;
-        };
-        let Some(data) = crate::archive::game().and_then(|archive| archive.resource(&key)) else {
-            return Status::MISSING;
-        };
-        let size = u32::try_from(data.len()).unwrap_or(u32::MAX);
-        if !len.is_null() {
-            // SAFETY: `len` is non-null, checked just before; the ABI has the
-            // mod pass it pointing at a writable, aligned `u32`.
-            unsafe { len.write(size) };
-        }
-        if size > capacity || out.is_null() {
-            return Status::BAD_ARGS;
-        }
-        // SAFETY: `out` is non-null and the copy is at most `capacity` bytes,
-        // both checked just before; the ABI has the mod pass `capacity`
-        // writable bytes at `out`, apart from the loader's own buffer.
-        unsafe { out.copy_from_nonoverlapping(data.as_ptr(), data.len()) };
-        Status::OK
     })
+}
+
+pub(crate) extern "system" fn resource_served(
+    me: ModHandle,
+    key: *const enshwick::abi::ResourceKey,
+    out: *mut u8,
+    capacity: u32,
+    len: *mut u32,
+) -> Status {
+    entry("resource_served", || {
+        // SAFETY: the ABI's guarantees for these arguments are `copy_resource`'s.
+        unsafe { copy_resource(me, key, out, capacity, len, crate::content::served_now) }
+    })
+}
+
+/// Copies the bytes `read` gives for the key at `key` to `out`, writing
+/// their length to `len`; [`Status::BAD_ARGS`] when `capacity` is short.
+///
+/// # Safety
+///
+/// - `key` is null or points at a `ResourceKey` readable for the call.
+/// - `len` is null or points at a writable, aligned `u32`.
+/// - `out` is null or writable for `capacity` bytes, apart from `read`'s.
+unsafe fn copy_resource(
+    me: ModHandle,
+    key: *const enshwick::abi::ResourceKey,
+    out: *mut u8,
+    capacity: u32,
+    len: *mut u32,
+    read: impl FnOnce(enshwick::abi::ResourceKey) -> Result<Vec<u8>, Status>,
+) -> Status {
+    if let Err(status) = caller(me) {
+        return status;
+    }
+    // SAFETY: the caller guarantees `key` null or readable; `as_ref` turns
+    // away null.
+    let Some(key) = (unsafe { key.as_ref() }).copied() else {
+        return Status::BAD_ARGS;
+    };
+    let data = match read(key) {
+        Ok(data) => data,
+        Err(status) => return status,
+    };
+    let size = u32::try_from(data.len()).unwrap_or(u32::MAX);
+    if !len.is_null() {
+        // SAFETY: `len` is non-null, checked just before, and the caller
+        // guarantees it writable and aligned.
+        unsafe { len.write(size) };
+    }
+    if size > capacity || out.is_null() {
+        return Status::BAD_ARGS;
+    }
+    // SAFETY: `out` is non-null and the copy is at most `capacity` bytes,
+    // both checked just before; the caller guarantees `capacity` writable
+    // bytes at `out`, apart from `data`, which this function owns.
+    unsafe { out.copy_from_nonoverlapping(data.as_ptr(), data.len()) };
+    Status::OK
 }
 
 pub(crate) extern "system" fn game_text(

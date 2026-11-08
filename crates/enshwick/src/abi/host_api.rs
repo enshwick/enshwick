@@ -1747,4 +1747,23 @@ pub struct HostApi {
     /// [`Status::REFUSED`]. ABI 11.16.
     pub read_only:
         extern "system" fn(me: ModHandle, address: usize, max: usize, out: *mut usize) -> Status,
+    /// Copies resource `key` as the game reads it now into `out`, at most
+    /// `capacity` bytes, and writes its length to `len`. A key mods serve
+    /// is built now from its base in the archive with the patches of every
+    /// mod on, as the game's first read builds it, and the build is kept
+    /// nowhere; a patch that fails turns its mod off, as in the game's
+    /// build. Any other key copies as [`HostApi::resource_read`] copies it.
+    /// [`Status::MISSING`] for a key neither served nor in the archive, or
+    /// whose every patch failed; [`Status::BAD_ARGS`] when `capacity` is
+    /// short, with `len` written; [`Status::REFUSED`] during
+    /// `enshwick_mod_init`, while not every patch is in, and from a patch
+    /// for a key whose patches run on this thread, which would build it
+    /// again without end. Any thread. ABI 11.17.
+    pub resource_served: extern "system" fn(
+        me: ModHandle,
+        key: *const ResourceKey,
+        out: *mut u8,
+        capacity: u32,
+        len: *mut u32,
+    ) -> Status,
 }

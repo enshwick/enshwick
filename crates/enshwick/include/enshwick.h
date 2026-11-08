@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 16
+#define ENSHWICK_ABI_MINOR 17
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -4856,6 +4856,23 @@ typedef struct EnshwickHostApi {
   // `out` is borrowed for the call. A panic in the loader returns
   // `Status::REFUSED`. ABI 11.16.
   EnshwickStatus (*read_only)(EnshwickModHandle me, size_t address, size_t max, size_t *out);
+  // Copies resource `key` as the game reads it now into `out`, at most
+  // `capacity` bytes, and writes its length to `len`. A key mods serve
+  // is built now from its base in the archive with the patches of every
+  // mod on, as the game's first read builds it, and the build is kept
+  // nowhere; a patch that fails turns its mod off, as in the game's
+  // build. Any other key copies as `HostApi::resource_read` copies it.
+  // `Status::MISSING` for a key neither served nor in the archive, or
+  // whose every patch failed; `Status::BAD_ARGS` when `capacity` is
+  // short, with `len` written; `Status::REFUSED` during
+  // `enshwick_mod_init`, while not every patch is in, and from a patch
+  // for a key whose patches run on this thread, which would build it
+  // again without end. Any thread. ABI 11.17.
+  EnshwickStatus (*resource_served)(EnshwickModHandle me,
+                                    const struct EnshwickResourceKey *key,
+                                    uint8_t *out,
+                                    uint32_t capacity,
+                                    uint32_t *len);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.

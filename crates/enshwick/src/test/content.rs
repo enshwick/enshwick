@@ -413,43 +413,7 @@ impl Installed {
     /// assert_eq!(loader.build_resource(&key, &[]), Err(Status::MISSING));
     /// ```
     pub fn build_resource(&self, key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, Status> {
-        let patches: Vec<_> = table::with(Vec::new(), |s| {
-            s.served
-                .iter()
-                .filter(|s| s.0.key == *key)
-                .map(|s| s.1)
-                .collect()
-        });
-        if patches.is_empty() {
-            return Err(Status::MISSING);
-        }
-        let mut bytes = base.to_vec();
-        for patch in patches {
-            let mut out = core::ptr::null();
-            let mut out_len = 0;
-            // SAFETY: `bytes` is readable for the call, the outs are valid,
-            // and `user` is the pointer the mod served with.
-            let status = patch.run(|patch, user| unsafe {
-                patch(
-                    bytes.as_ptr(),
-                    bytes.len(),
-                    user,
-                    &raw mut out,
-                    &raw mut out_len,
-                )
-            });
-            if !status.is_ok() {
-                return Err(status);
-            }
-            bytes = if out.is_null() {
-                Vec::new()
-            } else {
-                // SAFETY: on success the patch wrote bytes that live for the
-                // process.
-                unsafe { core::slice::from_raw_parts(out, out_len) }.to_vec()
-            };
-        }
-        Ok(bytes)
+        table::content::build(key, base)
     }
 
     /// The texts the mod added, as `(tag, language, text)`, in order.

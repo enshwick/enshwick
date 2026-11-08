@@ -736,7 +736,8 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 122 * 8);
-    assert!(size_of::<HostApi>() == 24 + 192 * 8);
+    assert!(size_of::<HostApi>() == 24 + 193 * 8);
+    assert!(core::mem::offset_of!(HostApi, resource_served) == 24 + 192 * 8);
     assert!(core::mem::offset_of!(HostApi, read_only) == 24 + 191 * 8);
     assert!(core::mem::offset_of!(HostApi, local_held) == 24 + 190 * 8);
     assert!(core::mem::offset_of!(HostApi, crafting_prop) == 24 + 187 * 8);

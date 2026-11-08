@@ -1,5 +1,6 @@
 use crate::locks::Relock;
 
+use super::patches::write_differences;
 use super::*;
 
 unsafe extern "system" fn add_one(

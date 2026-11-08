@@ -61,25 +61,67 @@ impl crate::Host {
     /// ```
     #[must_use]
     pub fn game_resource(&self, key: ResourceKey) -> Option<Vec<u8>> {
-        let api = self.api();
+        self.read_resource(self.api().resource_read, key).ok()
+    }
+
+    /// A resource's bytes as the game reads it now: a served one built
+    /// with every mod's patches, others' included, any other from the
+    /// archive. Call it after init, such as in a patch of another key.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] during init, for a key neither served nor in the archive,
+    /// and in a patch of a key whose patches already run, as reading it
+    /// would build it again without end.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::{Guid, types};
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let resin = Guid::parse("2f04a05f-697d-489b-a32f-76bb3439f5bc").key(types::ITEM_INFO)?;
+    ///     let wood = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d").key(types::ITEM_INFO)?;
+    ///     let host = load.host();
+    ///     // Resin takes wood's bytes as served, other mods' changes included.
+    ///     load.serve(resin, resin, move |_| host.served_resource(wood).ok())
+    /// }
+    /// ```
+    pub fn served_resource(&self, key: ResourceKey) -> Result<Vec<u8>, Off> {
+        self.read_resource(self.api().resource_served, key)
+    }
+
+    /// Reads `key` through `read`, one of the loader's copy calls, into a
+    /// buffer grown to the length it asks for.
+    fn read_resource(
+        &self,
+        read: extern "system" fn(
+            crate::abi::ModHandle,
+            *const ResourceKey,
+            *mut u8,
+            u32,
+            *mut u32,
+        ) -> Status,
+        key: ResourceKey,
+    ) -> Result<Vec<u8>, Off> {
         let mut buffer = vec![0u8; 64 << 10];
         loop {
             let mut len = 0u32;
-            let capacity = u32::try_from(buffer.len()).ok()?;
-            let status = (api.resource_read)(
+            let capacity = u32::try_from(buffer.len()).unwrap_or(u32::MAX);
+            let status = read(
                 self.handle(),
                 &raw const key,
                 buffer.as_mut_ptr(),
                 capacity,
                 &raw mut len,
             );
-            let len = usize::try_from(len).ok()?;
+            let len = usize::try_from(len).unwrap_or(usize::MAX);
             if status.is_ok() {
                 buffer.truncate(len);
-                return Some(buffer);
+                return Ok(buffer);
             }
             if status != Status::BAD_ARGS || len <= buffer.len() {
-                return None;
+                return Err(Off::status(&format!("read resource {key:?}"), status));
             }
             buffer.resize(len, 0);
         }

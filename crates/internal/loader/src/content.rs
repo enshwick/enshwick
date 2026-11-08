@@ -27,6 +27,8 @@ use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{HookFlags, ResourceKey, ResourcePatchFn, Status};
 use enshwick::raw::{read_at, write_at};
+use patches::run_patches;
+pub(crate) use patches::{rebuild, served_now};
 use texts::{TEXTS, seal_texts};
 
 use crate::chains::Next;
@@ -157,93 +159,6 @@ fn add(pending: &mut Vec<Served>, key: ResourceKey, base: ResourceKey, patch: Pa
         }),
     }
     Status::OK
-}
-
-/// For mod `owner`, which serves `key`: during init, keeps its base when it
-/// is first built; afterwards, builds it again from that base and writes the
-/// bytes that differ over the resource the game holds.
-pub(crate) fn rebuild(owner: ModIndex, key: ResourceKey) -> Status {
-    let serves = |s: &Served| s.key == key && s.patches.iter().any(|p| p.owner == owner);
-    let Some(list) = SERVED_LIST.get() else {
-        let pending = PENDING.relock();
-        return match pending.iter().find(|s| serves(s)) {
-            Some(entry) => {
-                entry.keeps_base.store(true, Ordering::Relaxed);
-                Status::OK
-            }
-            None => Status::BAD_ARGS,
-        };
-    };
-    let Some(entry) = list.iter().find(|s| serves(s)) else {
-        return Status::BAD_ARGS;
-    };
-    let _one_at_a_time = entry.rebuilding.relock();
-    // The game resolves the resource meanwhile: the patches run outside the
-    // state's lock, on a copy of the base.
-    let (data, len, base, built_by) = {
-        let state = entry.state.relock();
-        let Some((data, len)) = state.built else {
-            // The first build takes the values in force.
-            return Status::OK;
-        };
-        let Some(base) = state.base.clone() else {
-            return Status::MISSING;
-        };
-        (data, len, base, state.built_by.clone())
-    };
-    let Some((built, built_len, _)) = run_patches(
-        entry,
-        base.as_ptr().expose_provenance(),
-        base.len(),
-        Some(&built_by),
-    ) else {
-        return Status::MISSING;
-    };
-    if built_len != len {
-        crate::log!(
-            WARN,
-            "served resource {:08x}:{} not rebuilt: {built_len} bytes, the game holds {len}",
-            entry.key.type_hash,
-            hex(&entry.key.guid)
-        );
-        return Status::REFUSED;
-    }
-    let changed = write_differences(data, built, len);
-    crate::log!(
-        INFO,
-        "served resource {:08x}:{} rebuilt, {changed} bytes changed",
-        entry.key.type_hash,
-        hex(&entry.key.guid)
-    );
-    Status::OK
-}
-
-/// Writes the bytes of the `len` bytes at `new` that differ over those at
-/// `held`, which the game reads meanwhile; how many differed.
-fn write_differences(held: usize, new: usize, len: usize) -> usize {
-    // SAFETY: `new` is a patch's build of `len` bytes, valid for the
-    // process.
-    let new =
-        unsafe { core::slice::from_raw_parts(core::ptr::with_exposed_provenance::<u8>(new), len) };
-    let held = core::ptr::with_exposed_provenance_mut::<u8>(held);
-    let mut changed = 0;
-    for (at, &byte) in new.iter().enumerate() {
-        let slot = held.wrapping_add(at);
-        // SAFETY: `held` is the resource the game reads, `len` bytes a patch
-        // built and left writable for the process (`ResourcePatchFn`), and
-        // `at` is below `len`. A volatile read, which `enshwick::raw` has
-        // not: the bytes are the patch's own, read while the game reads them.
-        // ast-grep-ignore: game-memory-through-raw
-        let old = unsafe { slot.read_volatile() };
-        if old != byte {
-            // SAFETY: `held` is the patch's build of `len` bytes, writable for
-            // the process (`ResourcePatchFn`), and `at` is below `len`; one
-            // byte at a time, so a read meanwhile sees each byte old or new.
-            unsafe { slot.write_volatile(byte) };
-            changed += 1;
-        }
-    }
-    changed
 }
 
 /// Ends registration and links the database when anything is served.
@@ -885,64 +800,6 @@ fn record_item(data: u64, len: u64) {
     }
 }
 
-/// Runs the patches of the mods still on, or of the mods `only` names,
-/// over the `len` bytes at `data`, each on the result of the one before; a
-/// failed one turns its mod off and is skipped. The bytes built, their
-/// length and who built them; `None` when no patch did.
-fn run_patches(
-    entry: &Served,
-    data: usize,
-    len: usize,
-    only: Option<&[ModIndex]>,
-) -> Option<(usize, usize, Vec<ModIndex>)> {
-    let (mut current, mut current_len) = (data, len);
-    let mut applied = Vec::new();
-    let runs = |owner: ModIndex| only.map_or_else(|| mod_on(owner), |only| only.contains(&owner));
-    for patch in entry.patches.iter().filter(|p| runs(p.owner)) {
-        let (mut built, mut built_len) = (core::ptr::null::<u8>(), 0usize);
-        // SAFETY: `patch.apply` is a live mod's or the loader's
-        // `ResourcePatchFn`, given the `current_len` bytes so far at
-        // `current`, valid for the call, the user pointer it registered and
-        // out pointers to locals on this stack.
-        let mut apply = || unsafe {
-            (patch.apply)(
-                core::ptr::with_exposed_provenance(current),
-                current_len,
-                core::ptr::with_exposed_provenance_mut(patch.user),
-                &raw mut built,
-                &raw mut built_len,
-            )
-        };
-        let status = if patch.owner == ModIndex::LOADER {
-            apply()
-        } else {
-            crate::profile::call(patch.owner, crate::profile::Feature::Resources, apply)
-        };
-        if status != Status::OK || built.is_null() {
-            if patch.owner == ModIndex::LOADER {
-                crate::log!(
-                    WARN,
-                    "the loader's own patch of {} failed to build",
-                    key_name(&entry.key)
-                );
-            } else if let Some(loader) = LOADED.get() {
-                loader.turn_off(
-                    patch.owner,
-                    &format!(
-                        "served {} failed to build ({})",
-                        key_name(&entry.key),
-                        status.0
-                    ),
-                );
-            }
-            continue;
-        }
-        (current, current_len) = (built.expose_provenance(), built_len);
-        applied.push(patch.owner);
-    }
-    (!applied.is_empty()).then_some((current, current_len, applied))
-}
-
 fn hex(bytes: &[u8]) -> String {
     use core::fmt::Write as _;
     bytes
@@ -973,6 +830,7 @@ unsafe extern "system" fn key_of(out: *mut u8, database: *mut u8, handle: u32) -
     out
 }
 
+mod patches;
 #[cfg(test)]
 mod tests;
 mod texts;
