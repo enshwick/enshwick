@@ -207,3 +207,73 @@ pub(super) fn run_patches(
     }
     (!applied.is_empty()).then_some((current, current_len, applied))
 }
+
+#[cfg(test)]
+mod tests {
+    use core::ffi::c_void;
+    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    use super::super::{Patch, State};
+    use super::*;
+
+    const KEY: ResourceKey = ResourceKey {
+        guid: [9; 16],
+        type_hash: 1,
+        part: 0,
+    };
+
+    static SEEN_BUILDING: AtomicBool = AtomicBool::new(false);
+
+    unsafe extern "system" fn note_building(
+        base: *const u8,
+        base_len: usize,
+        _user: *mut c_void,
+        out: *mut *const u8,
+        out_len: *mut usize,
+    ) -> Status {
+        SEEN_BUILDING.store(
+            BUILDING.with_borrow(|building| building.contains(&KEY)),
+            Ordering::Relaxed,
+        );
+        // SAFETY: `run_patches` passes out pointers to locals, writable for
+        // the call, and its own base, which outlives the build.
+        unsafe {
+            out.write(base);
+            out_len.write(base_len);
+        }
+        Status::OK
+    }
+
+    #[test]
+    fn a_key_counts_as_building_only_while_its_patches_run() {
+        let owner = ModIndex::new(3);
+        let entry = Served {
+            key: KEY,
+            base: KEY,
+            patches: vec![Patch {
+                owner,
+                apply: note_building,
+                user: 0,
+            }],
+            keeps_base: AtomicBool::new(false),
+            state: Mutex::new(State::default()),
+            rebuilding: Mutex::new(()),
+        };
+        let base = [1u8; 4];
+        let built = run_patches(
+            &entry,
+            base.as_ptr().expose_provenance(),
+            base.len(),
+            Some(&[owner]),
+        );
+        assert!(built.is_some());
+        assert!(SEEN_BUILDING.load(Ordering::Relaxed), "inside its build");
+        assert!(BUILDING.with_borrow(Vec::is_empty), "after its build");
+    }
+
+    #[test]
+    fn a_served_read_is_refused_before_the_registrations_seal() {
+        assert_eq!(served_now(KEY), Err(Status::REFUSED));
+    }
+}

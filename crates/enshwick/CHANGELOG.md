@@ -26,8 +26,16 @@ Each entry names the pull request that made the change.
   a component does not write. Only a type with a designer data field, at
   any depth, or a kind the API does not know, still does not resolve.
   `HostApi::read_only`, ABI 11.16 (#994).
+- `content`: `Host::served_resource(key)` reads a resource as the game
+  reads it now, a served key built with every mod's patches.
+  `HostApi::resource_served`, ABI 11.17 (#998).
 
 ### Changed
+
+- `content`: `Load::rekey_item(old, new)` and Luau
+  `enshwick.content.rekey_item` read `new` as served at each build of
+  `old`, so other mods' changes of `new`, a mod's own item included, reach
+  `old`, and two items re-keyed to each other swap (#998).
 
 - `script`: **Breaking.** `Callback::call`, `Function::call`,
   `InitFunction::call`, `Opened::call` and `Handle::call` take
