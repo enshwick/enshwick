@@ -221,8 +221,7 @@ impl UiWidget {
     /// none. `result` 1 when the game drew a key, 0 when the action has no
     /// binding; [`Status::MISSING`](super::Status::MISSING) for an action
     /// this build does not name, or on a build where the loader does not
-    /// find the game's hint. Client only. An older loader answers
-    /// [`Status::MISSING`](super::Status::MISSING).
+    /// find the game's hint. Client only. ABI 11.18.
     pub const INPUT_HINT: u32 = 11;
 
     /// The row shows its value and does not take changes; a button does not

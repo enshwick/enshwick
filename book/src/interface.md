@@ -97,6 +97,7 @@ widgets draw only inside one. The widgets:
 | `progress`               | the game's bar, from 0 to 1                   |                           |
 | `sound`                  | plays a click, confirmation, back or refusal  |                           |
 | `play`                   | plays a sound container by its GUID           | `Off` for an unknown GUID |
+| `input_hint`             | the key bound to a game action, with a label  | true when a key is bound  |
 
 `sound` and `play` need no window. `play` takes a
 [`SoundContainerId`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/sound.rs),
@@ -106,6 +107,34 @@ client hears it, and it comes from no place in the world. The loader refuses
 a GUID the game's archive does not hold before it reaches the game. A sound
 that misleads players in a fight, such as an attack that does not happen,
 does not belong in a mod.
+
+`input_hint` draws the key or button the player bound to a game action,
+the same glyph the game draws beside its own prompts. It follows the
+player's rebinds. The action is a `GameplayAction` by its reflected name,
+such as `ContextualAction`, and the label beside the key may be empty. It
+returns false when no key is bound to the action. It returns `Off` for an
+action this game build does not name, and on a build where the loader does
+not find the game's hint. It needs the `typed` feature in Rust.
+
+```rust
+use enshwick::typed::input_mapping::runtime::GameplayAction;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    load.on_frame(|frame| {
+        frame.window("help", "Help", |frame| {
+            let _bound = frame.input_hint(&GameplayAction::ContextualAction, "Open");
+        });
+    })
+}
+```
+
+```luau
+enshwick.ui.on_frame(function(frame)
+    frame:window("help", "Help", function(frame)
+        frame:input_hint("ContextualAction", "Open")
+    end)
+end)
+```
 
 Rows take `read_only(true)`: they show the value and do not take changes.
 A slider whose range has an end that is not finite draws nothing. A reversed

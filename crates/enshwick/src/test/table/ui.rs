@@ -96,6 +96,18 @@ pub(crate) fn slider(
     })
 }
 
+/// Draws the key hint of the game action `action` as the loader does;
+/// `None` for an action the fake build does not name.
+fn input_hint(s: &State, w: &mut UiWidget, action: String) -> Option<crate::test::Drawn> {
+    let &(_, bound) = s.game_actions.iter().find(|(name, _)| *name == action)?;
+    w.result = u32::from(bound);
+    Some(crate::test::Drawn::InputHint {
+        action,
+        label: text(w.detail),
+        bound,
+    })
+}
+
 /// Records a HUD callback's widget; `None` outside a HUD callback.
 pub(crate) fn hud_widget(s: &mut State, frame: u64, w: &UiWidget, label: &str) -> Option<Status> {
     let (token, list) = s.hud.as_mut()?;
@@ -235,18 +247,10 @@ fn draw(frame: u64, w: &mut UiWidget) -> Status {
                 Some(fraction) => Drawn::Progress { fraction },
                 None => return Status::BAD_ARGS,
             },
-            UiWidget::INPUT_HINT => {
-                let Some(&(_, bound)) = s.game_actions.iter().find(|(name, _)| *name == label)
-                else {
-                    return Status::MISSING;
-                };
-                w.result = u32::from(bound);
-                Drawn::InputHint {
-                    action: label,
-                    label: text(w.detail),
-                    bound,
-                }
-            }
+            UiWidget::INPUT_HINT => match input_hint(s, w, label) {
+                Some(drawn) => drawn,
+                None => return Status::MISSING,
+            },
             _ => return Status::MISSING,
         };
         if let Some((_, open, list)) = s.frame.as_mut() {

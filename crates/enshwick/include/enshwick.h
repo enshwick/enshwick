@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 17
+#define ENSHWICK_ABI_MINOR 18
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -2285,8 +2285,7 @@ typedef struct EnshwickUiWidget {
 // none. `result` 1 when the game drew a key, 0 when the action has no
 // binding; `Status::MISSING` for an action
 // this build does not name, or on a build where the loader does not
-// find the game's hint. Client only. An older loader answers
-// `Status::MISSING`.
+// find the game's hint. Client only. ABI 11.18.
 #define EnshwickUiWidget_INPUT_HINT 11
 // The row shows its value and does not take changes; a button does not
 // take clicks.
