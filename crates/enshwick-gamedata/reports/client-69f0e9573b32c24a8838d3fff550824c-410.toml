@@ -1,6 +1,8 @@
-# What the loader finds on this game build; `cargo xtask compat <exe> --data <file>`
-# writes it.
+# What the loader finds on this game build; `cargo xtask compat refresh` writes it.
+# `sealed` ties it to the code that finds it, so a report edited by hand or
+# left behind by that code fails `cargo xtask check`.
 
+sealed = "1aea3fd5f3681689b18aebf921c729a37912f714b58bb3e9ad7a543568a60111"
 build = "client, game 1269579, executable 69f0e9573b32c24a8838d3fff550824c/410"
 side = "client"
 game_version = 1269579
