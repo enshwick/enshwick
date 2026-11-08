@@ -886,11 +886,11 @@ mod tests {
                     let wanted = steps.iter().skip(1).map(|&(ty, _)| ty).chain([holds]);
                     steps.iter().zip(wanted).find_map(|(&(ty, field), wanted)| {
                         let info = reflection.type_info(ty).ok()?;
-                        let held = info
-                            .fields()
-                            .iter()
-                            .find(|f| f.name() == field)?
-                            .type_name();
+                        let mut named = info.fields().iter().filter(|f| f.name() == field);
+                        let held = named.next()?.type_name();
+                        if named.next().is_some() {
+                            return Some(format!("{id}: {ty}.{field} reflected more than once"));
+                        }
                         (held != Some(wanted))
                             .then(|| format!("{id}: {ty}.{field} {wanted}, reflected {held:?}"))
                     })

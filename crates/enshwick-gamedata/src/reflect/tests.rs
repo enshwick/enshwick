@@ -240,8 +240,7 @@ fn a_catalogue_offset_or_path_counts_only_while_each_field_holds_the_type_read_t
 
     let mut fake = Fake::new();
     let at = |i: u64| rdata(0x100 * i);
-    let (narrow, wide, pointer, inner, outer) = (at(1), at(2), at(3), at(4), at(5));
-    put_struct(&mut fake, narrow, rdata(0xc00), "demo::uint32", &[]);
+    let (wide, pointer, inner, outer) = (at(2), at(3), at(4), at(5));
     put_struct(&mut fake, wide, rdata(0xd00), "demo::uint64", &[]);
     put_struct(&mut fake, pointer, rdata(0xe00), "demo::Inner*", &[]);
     put_struct(
