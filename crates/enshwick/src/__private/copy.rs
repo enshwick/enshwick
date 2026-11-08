@@ -44,7 +44,7 @@ mod tests {
         // SAFETY: `out` holds 3 writable bytes and `len` is a local `u32`.
         let short = unsafe { copy_out(&data, out.as_mut_ptr(), 2, &raw mut len) };
         assert_eq!((short, len, out), (Status::BAD_ARGS, 3, [0; 3]));
-        // SAFETY: as above, `out` holds 3 writable bytes and `len` is a local.
+        // SAFETY: `out` holds 3 writable bytes and `len` is a local `u32`.
         let copied = unsafe { copy_out(&data, out.as_mut_ptr(), 3, &raw mut len) };
         assert_eq!((copied, len, out), (Status::OK, 3, data));
     }

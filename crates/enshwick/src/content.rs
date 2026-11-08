@@ -69,7 +69,7 @@ impl crate::Host {
     /// from the archive. Call it after init, such as in a patch of another
     /// key, and once per need: each read builds the key again, and every
     /// patch's bytes stay for the process. To give an item another's data,
-    /// use [`Load::rekey_item`](crate::Load::rekey_item), which keeps its
+    /// use `Load::rekey_item`, which keeps its
     /// ids.
     ///
     /// # Errors
