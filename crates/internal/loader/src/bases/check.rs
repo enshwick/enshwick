@@ -6,6 +6,9 @@ use crate::base_groups::window;
 use crate::live::{self, Broken};
 use crate::pinned::bases;
 
+/// The class of the world allocator the bases object holds, or a base of it.
+pub(super) const ALLOCATOR_CLASS: &str = "keen::Unknown";
+
 /// Reads the live bases object `obj` the way
 /// [`super::members::let_zone_list_grow`] and [`super::members::settle`]
 /// do, through reads that cannot fault, before the first write: the count
@@ -55,7 +58,7 @@ pub(super) fn object_holds(
         return Ok(());
     }
     match image {
-        Some(image) => live::vtable(bases::ALLOCATOR.id(), allocator, image),
+        Some(image) => live::vtable(bases::ALLOCATOR.id(), allocator, image, ALLOCATOR_CLASS),
         None => live::holds(
             bases::ALLOCATOR.id(),
             false,
@@ -73,9 +76,6 @@ mod tests {
 
     fn first_slot() {}
 
-    /// An allocator's vtable in the test executable's read-only data.
-    static VTABLE: [fn(); 1] = [first_slot];
-
     #[test]
     fn a_live_bases_object_holds_only_with_its_count_list_and_allocator_in_shape() {
         // SAFETY: a null name asks for the executable's own module, which
@@ -90,7 +90,8 @@ mod tests {
         // fake before it are seen.
         let obj = |fake: &mut Fake| fake.ptr().addr();
         assert_eq!(object_holds(obj(&mut fake), &FIELDS, image), Ok(()));
-        let allocator = [(&raw const VTABLE).addr()];
+        let (_filled, table) = live::fake::vtable("keen::BasesTestAllocator", ALLOCATOR_CLASS);
+        let allocator = [table];
         let at = allocator.as_ptr().addr();
         fake.obj.0[..8].copy_from_slice(&at.to_le_bytes());
         assert_eq!(object_holds(obj(&mut fake), &FIELDS, image), Ok(()));
