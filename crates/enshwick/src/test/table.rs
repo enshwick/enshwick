@@ -294,6 +294,9 @@ pub(crate) struct State {
     pub(crate) prompt: Option<(String, u32)>,
     /// The entity the open screen belongs to, 0 for none.
     pub(crate) screen_host: u32,
+    /// The game actions the fake build names, each with whether a key is
+    /// bound to it.
+    pub(crate) game_actions: Vec<(String, bool)>,
     /// The local player's held controls, `None` as outside a game.
     pub(crate) local_held: Option<u64>,
     /// What the HUD drawing now drew, with each item's anchor, while one
@@ -724,6 +727,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         open_screen: "",
         prompt: None,
         screen_host: 0,
+        game_actions: Vec::new(),
         local_held: None,
         hud: None,
         markers: Vec::new(),

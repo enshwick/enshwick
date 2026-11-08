@@ -77,6 +77,8 @@ mod icons_hidden;
 mod init_off;
 #[cfg(feature = "unstable")]
 mod input;
+#[cfg(feature = "typed")]
+mod input_hint;
 #[cfg(feature = "unstable")]
 mod interaction_targets;
 mod inventory;

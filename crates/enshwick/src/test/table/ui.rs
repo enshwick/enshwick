@@ -235,6 +235,18 @@ fn draw(frame: u64, w: &mut UiWidget) -> Status {
                 Some(fraction) => Drawn::Progress { fraction },
                 None => return Status::BAD_ARGS,
             },
+            UiWidget::INPUT_HINT => {
+                let Some(&(_, bound)) = s.game_actions.iter().find(|(name, _)| *name == label)
+                else {
+                    return Status::MISSING;
+                };
+                w.result = u32::from(bound);
+                Drawn::InputHint {
+                    action: label,
+                    label: text(w.detail),
+                    bound,
+                }
+            }
             _ => return Status::MISSING,
         };
         if let Some((_, open, list)) = s.frame.as_mut() {

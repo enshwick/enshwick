@@ -176,11 +176,10 @@ impl ScriptFrame {
     #[script(name = "input_hint")]
     pub(crate) fn input_hint_script(
         &self,
-        action: crate::typed::input_mapping::runtime::GameplayAction,
-        label: Option<String>,
+        action: &crate::typed::input_mapping::runtime::GameplayAction,
+        label: &str,
     ) -> Result<bool, Off> {
-        self.frame()
-            .input_hint(&action, label.as_deref().unwrap_or(""))
+        self.frame().input_hint(action, label)
     }
 }
 

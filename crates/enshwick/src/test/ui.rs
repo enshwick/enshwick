@@ -220,6 +220,27 @@ impl Installed {
         table::with((), |s| s.screen_host = host.map_or(0, |e| e.0));
     }
 
+    /// Names the game action `action` on the fake build, its reflected
+    /// name, with a key `bound` to it or none, for the input hints drawn
+    /// from now on; an action never named is one the build lacks, which
+    /// the loader refuses.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::Side;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
+    /// loader.game_action("ContextualAction", true);
+    /// assert!(loader.draw_frame().is_empty());
+    /// ```
+    pub fn game_action(&self, action: &str, bound: bool) {
+        table::with((), |s| {
+            s.game_actions.retain(|(name, _)| name != action);
+            s.game_actions.push((action.to_owned(), bound));
+        });
+    }
+
     /// Makes `held`, a `Bitmask64` of the game's `PlayerInputType`, the
     /// controls the local player holds from now on, as the client's last
     /// step read them; `None` as outside a game.
@@ -385,6 +406,15 @@ pub enum Drawn {
     /// A sound container played with
     /// [`Frame::play`](crate::ui::Frame::play), by its GUID.
     Play(crate::content::Guid),
+    /// The key hint of a game action.
+    InputHint {
+        /// The action's reflected name.
+        action: String,
+        /// The label beside the key, empty for none.
+        label: String,
+        /// Whether a key is bound to the action, so the game drew one.
+        bound: bool,
+    },
 }
 
 /// A marker the mod set on the map, as [`Installed::markers`] reports it.
