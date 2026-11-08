@@ -1692,7 +1692,7 @@ export type NewSkillNode = {
 export type NewSound = {
 	--- The sound's content id; its container's GUID is the id's.
 	id: string,
-	--- The WAV file, relative to the mod's folder: 16-bit PCM, mono or stereo, at `SAMPLE_RATE`, at most `MAX_FILE_BYTES` and `MAX_SECONDS` long.
+	--- The WAV file, relative to the mod's folder: 16-bit PCM, mono or stereo, at `SAMPLE_RATE`, at most `MAX_FILE_BYTES`.
 	file: string,
 	--- The container's scene.
 	scene: SoundContainerScene?,
