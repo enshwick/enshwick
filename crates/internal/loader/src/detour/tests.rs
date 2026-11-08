@@ -673,6 +673,7 @@ fn a_code_patch_is_not_written_while_a_thread_stays_inside_it() {
 #[test]
 fn a_one_check_commit_does_not_wait_for_a_thread_to_leave() {
     static FLAGS: [AtomicU32; 2] = [AtomicU32::new(0), AtomicU32::new(0)];
+    let _turn = Turn::take();
     let target = function(&[
         0xff, 0xd2, // call rdx <- returns inside the patch
         0xb8, 0x01, 0x00, 0x00, 0x00, // mov eax, 1
@@ -802,7 +803,36 @@ fn only_instructions_after_the_first_move_and_only_returns_after_calls_count() {
 
 /// Taken by every [`Threads`] of the test process, so tests suspend one at a
 /// time.
-pub(super) static SUSPENDING: Mutex<()> = Mutex::new(());
+static SUSPENDING: Mutex<()> = Mutex::new(());
+
+thread_local! {
+    /// Whether this thread holds [`SUSPENDING`].
+    static TAKEN: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+}
+
+/// This thread's turn to suspend the others, until dropped; a test whose
+/// timing must not wait behind another test's holds one throughout, and the
+/// [`Threads`] it makes meanwhile take nothing more.
+pub(super) struct Turn(Option<std::sync::MutexGuard<'static, ()>>);
+
+impl Turn {
+    pub(super) fn take() -> Self {
+        if TAKEN.get() {
+            return Self(None);
+        }
+        let guard = SUSPENDING.relock();
+        TAKEN.set(true);
+        Self(Some(guard))
+    }
+}
+
+impl Drop for Turn {
+    fn drop(&mut self) {
+        if self.0.is_some() {
+            TAKEN.set(false);
+        }
+    }
+}
 
 /// How long a resumed thread may take to run again on a loaded machine.
 const RUNS_AGAIN_WITHIN: std::time::Duration = std::time::Duration::from_secs(10);

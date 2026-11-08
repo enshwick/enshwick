@@ -990,7 +990,7 @@ struct Threads {
     /// never does (its writes run under the chains lock); two at once would
     /// each suspend the other for good.
     #[cfg(test)]
-    _alone: std::sync::MutexGuard<'static, ()>,
+    _turn: tests::Turn,
 }
 
 impl Threads {
@@ -999,7 +999,7 @@ impl Threads {
         Self {
             held: Vec::with_capacity(MAX_THREADS),
             #[cfg(test)]
-            _alone: tests::SUSPENDING.relock(),
+            _turn: tests::Turn::take(),
         }
     }
 
