@@ -20,6 +20,8 @@ use enshwick_gamedata::{self as tables, PartState, Resolved, Table};
 
 #[path = "compat/report.rs"]
 mod report;
+#[path = "reports.rs"]
+mod reports;
 #[cfg(all(test, windows))]
 use report::report_data;
 use report::{data, refresh};
@@ -106,11 +108,8 @@ enum Step {
     Refresh,
 }
 
-/// The compatibility reports, one TOML file per build.
-const REPORTS: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../crates/enshwick-gamedata/reports"
-);
+/// The repository root.
+const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -140,7 +139,7 @@ fn compat(args: &[String]) -> Result<bool, String> {
     match (cli.step, cli.args) {
         (Some(Step::Run(args)), _) => run_loader(&args).map(|()| true),
         (Some(Step::Refresh), _) => {
-            refresh(Path::new(REPORTS), std::env::var_os("ENSH_EXES")).map(|()| true)
+            refresh(Path::new(ROOT), std::env::var_os("ENSH_EXES")).map(|()| true)
         }
         (None, Some(args)) => run(&args),
         (None, None) => Err("name a game executable; --help lists the options".to_owned()),
@@ -358,11 +357,11 @@ fn supply_slots(
 }
 
 fn spell(fingerprint: Fingerprint) -> String {
-    let guid: String = fingerprint.guid().iter().fold(String::new(), |mut out, b| {
-        let _infallible = write!(out, "{b:02x}");
-        out
-    });
-    format!("{guid}/{}", fingerprint.age())
+    format!(
+        "{}/{}",
+        reports::hex(&fingerprint.guid()),
+        fingerprint.age()
+    )
 }
 
 /// How one mod fared when the loader started it.
@@ -419,7 +418,9 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
         } else {
             path.clone()
         };
-        std::fs::write(&path, data(&build)?).map_err(|e| format!("{}: {e}", path.display()))?;
+        let inputs = report::sealing_inputs(Path::new(ROOT))?;
+        std::fs::write(&path, data(&build, &inputs)?)
+            .map_err(|e| format!("{}: {e}", path.display()))?;
     }
     write_features(&mut out, &build.table);
     works &= write_mods(&mut out, args)?;
@@ -752,13 +753,14 @@ mod tests {
             .first()
             .map(|(id, _)| format!("{id:?}"))
             .unwrap();
-        let without = data(&build(false)).unwrap();
+        let inputs = [0; 32];
+        let without = data(&build(false), &inputs).unwrap();
         let unread = without
             .lines()
             .find(|l| l.starts_with("unread = "))
             .unwrap();
         assert!(unread.contains(&slot), "{without}");
-        let with = data(&build(true)).unwrap();
+        let with = data(&build(true), &inputs).unwrap();
         assert!(!with.contains("unread = "), "{with}");
         let missing = with.lines().find(|l| l.starts_with("missing = ")).unwrap();
         assert!(missing.contains(&slot), "{with}");
@@ -775,15 +777,48 @@ mod tests {
         }
     }
 
-    /// Each report in `reports/` is named after its build, says its side and
-    /// names only the loader's features; on each executable the opt-in
-    /// `ENSH_EXES` path list names, the report of its build is what this
-    /// tool writes now, taking the Steam build and game version the report
-    /// states where no file beside the executable does (skipped without it).
+    /// The `[[feature]]` tables of the report `file` (its `text`, read as
+    /// `data`) follow from its own entries and the loader's feature table,
+    /// which the seal does not cover, as `cargo xtask compat refresh` would
+    /// write them now.
+    #[cfg(windows)]
+    fn features_agree(file: &str, text: &str, data: &toml::Table) {
+        let ids = |key: &str| -> Vec<&str> {
+            data.get(key)
+                .and_then(toml::Value::as_array)
+                .into_iter()
+                .flatten()
+                .map(|id| id.as_str().unwrap())
+                .collect()
+        };
+        let side = [tables::Side::Server, tables::Side::Client]
+            .into_iter()
+            .find(|side| data["side"].as_str() == Some(side.as_str()))
+            .unwrap();
+        let routes = tables::Routes::embedded().unwrap();
+        let anchors = tables::anchors(side).unwrap();
+        let known = report::known(
+            routes.ids().filter(|id| routes.routes(id, side)),
+            &anchors,
+            &ids("unread"),
+        );
+        let start = text.find("\n[[feature]]").unwrap_or(text.len());
+        assert_eq!(
+            &text[start..],
+            report::features(&known, &ids("missing")),
+            "{file}: the loader's features changed; `cargo xtask compat refresh` rewrites the report"
+        );
+    }
+
+    /// Each report in `reports/` has the feature tables the loader's
+    /// features give it; on each executable the opt-in `ENSH_EXES` path list
+    /// names, the report of its build is what this tool writes now, taking
+    /// the Steam build and game version the report states where no file
+    /// beside the executable does (skipped without it).
     #[cfg(windows)]
     #[test]
     fn every_report_agrees_with_its_build() {
-        let dir = Path::new(REPORTS);
+        let dir = &Path::new(ROOT).join(reports::REPORTS);
         let read = |file: &str| {
             std::fs::read_to_string(dir.join(file)).map(|text| text.replace("\r\n", "\n"))
         };
@@ -796,26 +831,9 @@ mod tests {
         let number =
             |data: &toml::Table, key: &str| data.get(key).and_then(toml::Value::as_integer);
         for file in &files {
-            let data: toml::Table = read(file).unwrap().parse().unwrap();
-            let side = data["side"].as_str().unwrap();
-            assert!(file.starts_with(&format!("{side}-")), "{file}");
-            assert_eq!(file.split('-').count(), 3, "{file}");
-            let name = data["build"].as_str().unwrap();
-            assert!(name.starts_with(side), "{file}");
-            let executable = name.rsplit("executable ").next().unwrap();
-            assert_eq!(
-                *file,
-                format!("{side}-{}.toml", executable.replace('/', "-")),
-                "a report is filed under the build it names"
-            );
-            let features = data.get("feature").and_then(toml::Value::as_array);
-            for feature in features.into_iter().flatten() {
-                let name = feature["name"].as_str().unwrap();
-                let (_, ids) = MODULE_IDS.iter().find(|(n, _)| *n == name).unwrap();
-                for id in feature["missing"].as_array().unwrap() {
-                    assert!(ids.contains(&id.as_str().unwrap()), "{file}: {name} {id}");
-                }
-            }
+            let text = read(file).unwrap();
+            let data: toml::Table = text.parse().unwrap();
+            features_agree(file, &text, &data);
         }
         let Some(list) = std::env::var_os("ENSH_EXES") else {
             return;
@@ -867,7 +885,7 @@ mod tests {
                 && !stated.contains_key("unread");
             assert_eq!(works, complete, "{}", exe.display());
             assert_eq!(
-                report_data(Path::new(REPORTS), &exe).unwrap(),
+                report_data(dir, &exe, &reports::inputs(Path::new(ROOT)).unwrap()).unwrap(),
                 (file, want),
                 "{}: `cargo xtask compat refresh` rewrites the report",
                 exe.display()

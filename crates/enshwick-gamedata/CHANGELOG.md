@@ -12,6 +12,10 @@ Each entry names the pull request that made the change.
   type its last field holds; a path offset counts only while each step holds
   the next type inline and the last field holds `holds`, so a step that
   became a pointer or a field that widened leaves it missing (#996).
+- Each compatibility report in `reports/` records in `sealed` a digest of
+  its text and of the anchors and code that decide it, and
+  `cargo xtask check` fails a report whose seal no longer matches, in place
+  of the gate on `anchors/` and its `Reports-unchanged` trailer (#1000).
 
 ## [1.0.0-alpha.13] - 2026-11-07
 
