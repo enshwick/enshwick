@@ -986,6 +986,11 @@ unsafe extern "system" {
 /// The other threads of the process, suspended together.
 struct Threads {
     held: Vec<(HANDLE, u32)>,
+    /// Tests suspend from several threads of one process, which the loader
+    /// never does (its writes run under the chains lock); two at once would
+    /// each suspend the other for good.
+    #[cfg(test)]
+    _alone: std::sync::MutexGuard<'static, ()>,
 }
 
 impl Threads {
@@ -993,6 +998,8 @@ impl Threads {
     fn new() -> Self {
         Self {
             held: Vec::with_capacity(MAX_THREADS),
+            #[cfg(test)]
+            _alone: tests::SUSPENDING.relock(),
         }
     }
 
