@@ -266,7 +266,7 @@ fn a_catalogue_offset_or_path_counts_only_while_each_field_holds_the_type_read_t
         })
     };
     let inline: &'static [(&str, &str)] = &[("demo::Outer", "inner"), ("demo::Inner", "count")];
-    let pointed: &'static [(&str, &str)] = &[("demo::Outer", "held"), ("demo::Inner", "count")];
+    let via_pointer: &'static [(&str, &str)] = &[("demo::Outer", "held"), ("demo::Inner", "count")];
     let path = |steps, holds| Fact::Path { steps, holds };
     assert_eq!(offset(path(inline, "demo::uint64")), Some(12));
     assert_eq!(
@@ -275,7 +275,7 @@ fn a_catalogue_offset_or_path_counts_only_while_each_field_holds_the_type_read_t
         "a last field that grew from 32 to 64 bits"
     );
     assert_eq!(
-        offset(path(pointed, "demo::uint64")),
+        offset(path(via_pointer, "demo::uint64")),
         None,
         "a step that became a pointer"
     );
