@@ -6,6 +6,13 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Changed
+
+- Breaking: `catalogue::Fact::Path` is `Path { steps, holds }`, naming the
+  type its last field holds; a path offset counts only while each step holds
+  the next type inline and the last field holds `holds`, so a step that
+  became a pointer or a field that widened leaves it missing (#996).
+
 ## [1.0.0-alpha.13] - 2026-11-07
 
 ### Added
