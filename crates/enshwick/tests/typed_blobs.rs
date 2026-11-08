@@ -18,6 +18,8 @@ mod tests {
     const ENTRY: &str = "keen::ecs::EntityTagReferenceEntry";
     const WHOLE: Entity = Entity(4096);
     const CUT: Entity = Entity(4097);
+    const SHORT: Entity = Entity(4098);
+    const EMPTY: Entity = Entity(4099);
 
     static RESOLVED: OnceLock<(World, ComponentType<EntityTagContainer>)> = OnceLock::new();
 
@@ -86,7 +88,7 @@ mod tests {
     );
 
     #[test]
-    fn a_live_component_reads_its_blob_array_and_a_cut_one_is_refused_by_name() {
+    fn a_live_component_reads_its_blob_array_and_a_cut_or_short_one_is_refused_by_name() {
         let hash = fnv1a32(TAGS.as_bytes());
         let (bandit, vukah) = (Guid([0x11; 16]), Guid([0x22; 16]));
         let loader = enshwick::test::FakeHost::new()
@@ -96,6 +98,8 @@ mod tests {
             .type_size("ecs::EntityTagContainer", 8)
             .component(WHOLE, hash, &container(2, &[bandit, vukah]))
             .component(CUT, hash, &container(3, &[bandit]))
+            .component(SHORT, hash, &8i32.to_le_bytes())
+            .component(EMPTY, hash, &container(0, &[]))
             .install();
         // SAFETY: the three functions are the exports of this file's `declare_mod!(Blobs)`.
         let status =
@@ -109,6 +113,13 @@ mod tests {
 
         let refused = tags.read(*world, CUT).unwrap_err().to_string();
         assert!(refused.contains("tags"), "{refused}");
+        let short = tags.read(*world, SHORT).unwrap_err().to_string();
+        assert!(
+            short.contains("does not read as far as its field tags"),
+            "{short}"
+        );
+        let empty = tags.read(*world, EMPTY).unwrap().unwrap();
+        assert!(empty.tags.is_empty(), "a component of its own size reads");
         assert_eq!(tags.read(*world, Entity(1)).unwrap(), None);
     }
 }
