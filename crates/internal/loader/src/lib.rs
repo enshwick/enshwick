@@ -191,7 +191,10 @@ mod pacing;
 #[cfg(windows)]
 mod packs;
 #[cfg(windows)]
-pub mod pages;
+mod pages;
+#[cfg(windows)]
+#[doc(hidden)]
+pub use pages::{forget as forget_read_only, read_only};
 #[cfg(windows)]
 mod patch;
 #[cfg_attr(

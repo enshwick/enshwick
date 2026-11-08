@@ -13,7 +13,7 @@ const REACH: usize = 1 << 20;
 fn read_only(c: &mut Criterion) {
     use std::hint::black_box;
 
-    use enshwick_loader::pages;
+    use enshwick_loader::{forget_read_only, read_only};
     use windows_sys::Win32::System::Memory::{
         MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_READONLY, PAGE_READWRITE, VirtualAlloc,
         VirtualFree, VirtualProtect,
@@ -53,12 +53,12 @@ fn read_only(c: &mut Criterion) {
     group.sample_size(10);
     group.bench_function("asked_490_mb", |b| {
         b.iter(|| {
-            pages::forget();
-            black_box(pages::read_only(black_box(address), REACH))
+            forget_read_only();
+            black_box(read_only(black_box(address), REACH))
         });
     });
     group.bench_function("found_490_mb", |b| {
-        b.iter(|| black_box(pages::read_only(black_box(address), REACH)));
+        b.iter(|| black_box(read_only(black_box(address), REACH)));
     });
     group.finish();
     // SAFETY: `base` is the bench's own allocation, released once.
