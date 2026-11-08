@@ -22,9 +22,10 @@ Each entry names the pull request that made the change.
   component's `BlobArray`, `BlobString`, `BlobOptional` and `BlobVariant`
   fields, such as `RandomSpawner.spawnEntries`, from the template's set-up
   data that follows the component, after the loader checks that the memory
-  reads; a blob past it fails that read, naming the field. Only a type
-  with a designer data field, or a kind the API does not know, still does
-  not resolve. `HostApi::readable`, ABI 11.16 (#994).
+  is read-only; a blob past it fails that read, naming the field, and such
+  a component does not write. Only a type with a designer data field, at
+  any depth, or a kind the API does not know, still does not resolve.
+  `HostApi::read_only`, ABI 11.16 (#994).
 
 ### Changed
 

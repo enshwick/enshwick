@@ -518,7 +518,7 @@ HostApi size 1560 align 8
     set_saved at 1528 size 8 type extern "system" fn(ModHandle, Entity, u8) -> Status
     run_action_at at 1536 size 8 type extern "system" fn(ModHandle, Str, Str, *const ActionTarget) -> Status
     local_held at 1544 size 8 type extern "system" fn(ModHandle, *mut u64) -> Status
-    readable at 1552 size 8 type extern "system" fn(ModHandle, usize, usize, *mut usize) -> Status
+    read_only at 1552 size 8 type extern "system" fn(ModHandle, usize, usize, *mut usize) -> Status
 Interaction size 56 align 8 born 56
     header at 0 size 8 type Header
     kind at 8 size 4 type u32

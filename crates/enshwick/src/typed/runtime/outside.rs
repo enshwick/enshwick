@@ -55,12 +55,18 @@ fn walk(
     let inner = || ty.inner().and_then(|name| registry.named(name));
     match ty.kind() {
         kind if wanted(kind) => Some(String::new()),
-        Kind::Typedef => walk(registry, inner()?, wanted, seen),
+        // A variant may hold a type derived from its inner one; the inner
+        // one's fields are the ones a read is sure to meet.
+        Kind::Typedef | Kind::BlobOptional | Kind::BlobVariant => {
+            walk(registry, inner()?, wanted, seen)
+        }
         Kind::Struct => registry.all_fields(ty).into_iter().find_map(|field| {
             let held = registry.named(field.type_name()?)?;
             walk(registry, held, wanted, seen).map(|rest| join(field.name(), rest))
         }),
-        Kind::StaticArray => walk(registry, inner()?, wanted, seen).map(|rest| join("0", rest)),
+        Kind::StaticArray | Kind::BlobArray => {
+            walk(registry, inner()?, wanted, seen).map(|rest| join("0", rest))
+        }
         _ => None,
     }
 }
@@ -117,6 +123,36 @@ mod tests {
         let held = registry.named("demo::Held").unwrap();
         assert_eq!(outside_field(&registry, held).as_deref(), Some("list"));
         assert_eq!(blob_field(&registry, held), None);
+    }
+
+    #[test]
+    fn a_designer_data_field_inside_a_blob_element_is_never_reached() {
+        let registry = Registry::new([
+            Type::new("demo::uint8", Kind::Uint8, 1, 1),
+            Type::new("demo::DsString", Kind::DsString, 16, 8),
+            Type::new("demo::Entry", Kind::Struct, 16, 8).with_fields(vec![Field::new(
+                "name",
+                0,
+                "demo::DsString",
+            )]),
+            Type::new("demo::BlobArray<demo::Entry>", Kind::BlobArray, 8, 4)
+                .with_inner("demo::Entry"),
+            Type::new("demo::BlobOptional<demo::Entry>", Kind::BlobOptional, 4, 4)
+                .with_inner("demo::Entry"),
+            Type::new("demo::Listed", Kind::Struct, 8, 4).with_fields(vec![Field::new(
+                "entries",
+                0,
+                "demo::BlobArray<demo::Entry>",
+            )]),
+            Type::new("demo::Maybe", Kind::Struct, 4, 4).with_fields(vec![Field::new(
+                "entry",
+                0,
+                "demo::BlobOptional<demo::Entry>",
+            )]),
+        ]);
+        let outside = |name| outside_field(&registry, registry.named(name).unwrap());
+        assert_eq!(outside("demo::Listed").as_deref(), Some("entries.0.name"));
+        assert_eq!(outside("demo::Maybe").as_deref(), Some("entry.name"));
     }
 
     #[test]

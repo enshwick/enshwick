@@ -53,6 +53,11 @@ impl Region {
         self.reads() && self.protect & EXECUTABLE != 0
     }
 
+    /// Whether the pages are committed, unguarded and read-only.
+    pub(crate) const fn is_read_only(&self) -> bool {
+        self.state == MEM_COMMIT && self.protect == PAGE_READONLY
+    }
+
     /// Whether the pages are committed, plain read-write memory, as a
     /// thread's stack is.
     pub(crate) const fn is_read_write(&self) -> bool {
@@ -95,13 +100,20 @@ pub(crate) fn query(address: usize) -> Option<Region> {
     })
 }
 
-/// How many bytes from `address` on, at most `max`, lie in the region
-/// `address` lies in when it [`Region::reads`]; 0 otherwise. Reads none of
-/// them.
-pub(crate) fn readable(address: usize, max: usize) -> usize {
-    query(address)
-        .filter(Region::reads)
-        .map_or(0, |region| region.end.saturating_sub(address).min(max))
+/// How many bytes from `address` on, at most `max`, lie in the run of
+/// committed, unguarded `PAGE_READONLY` regions that starts there, which no
+/// thread of the process writes without first changing their protection; 0
+/// when `address` does not lie in one. Reads none of them.
+pub(crate) fn read_only(address: usize, max: usize) -> usize {
+    let wanted = address.saturating_add(max);
+    let mut end = address;
+    while end < wanted {
+        match query(end) {
+            Some(next) if next.is_read_only() && next.end > end => end = next.end,
+            _ => break,
+        }
+    }
+    end.min(wanted) - address
 }
 
 /// The `N` bytes at `address`; `None` unless all of them lie in one region
@@ -326,16 +338,35 @@ mod tests {
     }
 
     #[test]
-    fn the_readable_count_ends_at_the_region_or_the_cap_and_is_zero_where_nothing_reads() {
+    fn the_read_only_count_runs_over_read_only_regions_to_the_cap_and_is_zero_on_writable_pages() {
         const PAGE: usize = 4096;
-        let page = allocate(None, PAGE).expect("a fresh page");
-        let start = page.as_ptr().expose_provenance();
-        assert_eq!(readable(start, usize::MAX), PAGE);
-        assert_eq!(readable(start + 100, usize::MAX), PAGE - 100);
-        assert_eq!(readable(start, 16), 16, "the cap");
-        assert_eq!(readable(0, 16), 0);
-        // SAFETY: `page` is the test's own allocation, released once.
-        unsafe { VirtualFree(page.as_ptr().cast(), 0, MEM_RELEASE) };
-        assert_eq!(readable(start, 16), 0, "released");
+        let pages = allocate(None, 3 * PAGE).expect("fresh pages");
+        let start = pages.as_ptr().expose_provenance();
+        assert_eq!(read_only(start, usize::MAX), 0, "read-write pages");
+        // SAFETY: the pages are the test's own allocation, used by no one else.
+        unsafe { protect(start, PAGE, PAGE_READONLY) }.expect("first page read-only");
+        // SAFETY: the pages are the test's own allocation, used by no one else.
+        unsafe {
+            protect(start + PAGE, PAGE, PAGE_READONLY | PAGE_GUARD).expect("second page guarded");
+        }
+        assert_eq!(
+            read_only(start, usize::MAX),
+            PAGE,
+            "a guarded page ends the run"
+        );
+        // SAFETY: the three pages are the test's own allocation, used by no
+        // one else.
+        unsafe { protect(start + PAGE, 2 * PAGE, PAGE_READONLY).expect("all read-only") };
+        assert_eq!(
+            read_only(start, usize::MAX),
+            3 * PAGE,
+            "one run, as Windows merges it"
+        );
+        assert_eq!(read_only(start + 100, 3 * PAGE), 3 * PAGE - 100);
+        assert_eq!(read_only(start, 16), 16, "the cap");
+        assert_eq!(read_only(0, 16), 0);
+        // SAFETY: `pages` is the test's own allocation, released once.
+        unsafe { VirtualFree(pages.as_ptr().cast(), 0, MEM_RELEASE) };
+        assert_eq!(read_only(start, 16), 0, "released");
     }
 }

@@ -334,4 +334,26 @@ mod tests {
         let line = format!("tags 2 {} {}", Guid([0x11; 16]), Guid([0x22; 16]));
         assert!(logged(&loader, &line), "{line}: {:?}", loader.logs());
     }
+
+    #[test]
+    fn a_script_s_read_of_a_blob_array_cut_by_unreadable_memory_fails_naming_the_field() {
+        let cut = [&8i32.to_le_bytes()[..], &3u32.to_le_bytes(), &[0x11; 16]].concat();
+        let loader = run_on(
+            FakeHost::new()
+                .world()
+                .component(Entity(4097), hash(TAGS), &cut),
+            r#"
+            local container = enshwick.typed.component_type("ecs.EntityTagContainer")
+            local ok, why = pcall(container.read, container, 4097)
+            print(`cut {ok} {why}`)
+        "#,
+            7,
+        );
+        let logs = loader.logs();
+        let line = logs
+            .iter()
+            .find_map(|(_, line)| line.split_once("cut ").map(|(_, rest)| rest.to_owned()))
+            .unwrap_or_else(|| panic!("{logs:?}"));
+        assert!(line.starts_with("false") && line.contains("tags"), "{line}");
+    }
 }

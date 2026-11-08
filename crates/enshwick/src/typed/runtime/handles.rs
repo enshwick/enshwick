@@ -98,8 +98,9 @@ impl RawComponent {
     ///
     /// A type with blob fields reads from the template's set-up data the
     /// component lies in, whose blobs follow it (server 26430253): the
-    /// decode runs over the readable bytes from the component on, at most
-    /// [`BLOB_REACH`], and refuses an offset or count past them.
+    /// decode runs over the read-only bytes from the component on, at most
+    /// [`BLOB_REACH`], and refuses an offset or count past them. The check
+    /// costs one `VirtualQuery`, about 2 µs on a desktop PC.
     pub(crate) fn read(&self, world: World, entity: Entity) -> Result<Option<Value>, Off> {
         let Some(data) = world.component(entity, self.ty) else {
             return Ok(None);
@@ -113,17 +114,24 @@ impl RawComponent {
             unsafe { crate::raw::read_bytes_at(data.cast(), 0, &mut bytes) };
             return Ok(Some(registry.decode(self.name, &bytes)?));
         }
-        let host = crate::host().ok_or_else(|| self.unread(registry))?;
+        let host = world.host();
         let mut len = 0;
-        let status = (host.api().readable)(host.handle(), data.addr(), BLOB_REACH, &raw mut len);
-        if status != crate::abi::Status::OK || len < self.size {
+        let status = (host.api().read_only)(host.handle(), data.addr(), BLOB_REACH, &raw mut len);
+        if status != crate::abi::Status::OK {
+            return Err(Off::new(format!(
+                "typed {}: the loader refused to measure the component's set-up data ({status:?})",
+                self.id
+            )));
+        }
+        if len < self.size {
             return Err(self.unread(registry));
         }
-        // SAFETY: the loader found `len` bytes from the component on
-        // committed and readable, in one run of pages; they are the
-        // template's read-only set-up data (server 26430253), which no thread
-        // writes or frees while the game thread is here, and the borrow ends
-        // with this call.
+        // SAFETY: the loader found `len` bytes from the component on in
+        // committed, unguarded `PAGE_READONLY` pages, which no thread writes
+        // without changing their protection; they are the template's set-up
+        // data (server 26430253), which stays while the entity's template is
+        // loaded, so on the game thread here nothing frees them before the
+        // borrow ends with this call.
         let bytes = unsafe { core::slice::from_raw_parts(data.cast::<u8>(), len) };
         registry
             .decode(self.name, bytes)
@@ -148,6 +156,11 @@ impl RawComponent {
     /// way, keeping the bytes of what `value` leaves out.
     pub(crate) fn write(&self, world: World, entity: Entity, value: &Value) -> Result<(), Off> {
         let id = self.id;
+        if self.blob {
+            return Err(Off::new(format!(
+                "typed {id}: a component with blob fields lies in the template's read-only set-up data, which no write changes"
+            )));
+        }
         let writable = self
             .writable
             .ok_or_else(|| Off::new(format!("typed {id}: mods may not write it")))?;
@@ -306,8 +319,9 @@ impl RawResource {
 ///
 /// A field whose data follows the component, such as a `BlobArray`, reads
 /// from the template's set-up data the component lies in, through a check
-/// that the memory reads; a blob past it fails that read, naming the field.
-/// A type with a field whose data lies elsewhere, at any depth, such as a
+/// that the memory is read-only; a blob past it fails that read, naming the
+/// field. Such a component is shared by the template's entities and does
+/// not write. A type with a field whose data lies elsewhere, at any depth, such as a
 /// designer data kind, does not resolve: its refusal names the field.
 ///
 /// # Examples
@@ -379,7 +393,9 @@ impl<T: Component> ComponentType<T> {
     /// See [`ComponentType`].
     pub fn read(&self, world: World, entity: Entity) -> Result<Option<T>, Off> {
         match self.raw.read(world, entity)? {
-            Some(value) => Ok(Some(T::from_value(&value)?)),
+            Some(value) => T::from_value(&value)
+                .map(Some)
+                .map_err(|why| Off::new(format!("typed {}: {why}", self.raw.id))),
             None => Ok(None),
         }
     }
@@ -390,8 +406,9 @@ impl<T: Component> ComponentType<T> {
     ///
     /// # Errors
     ///
-    /// [`Off`] for a type the loader does not let mods write, a value that
-    /// does not fit the type, or as [`World::update`] fails.
+    /// [`Off`] for a type the loader does not let mods write or with blob
+    /// fields, a value that does not fit the type, or as [`World::update`]
+    /// fails.
     ///
     /// # Examples
     ///

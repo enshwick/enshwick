@@ -213,8 +213,9 @@ impl ComponentType {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the component's bytes do not read as the generated
-    /// struct, or on a build that lacks the world's reads.
+    /// [`Off`] when the component's bytes, or the blob data that follows
+    /// them, do not read as the generated struct, naming the field, or on a
+    /// build that lacks the world's reads.
     #[script]
     pub(crate) fn read(&self, entity: Entity) -> Result<Option<Fields>, Off> {
         self.raw
@@ -229,8 +230,9 @@ impl ComponentType {
     ///
     /// # Errors
     ///
-    /// [`Off`] for a type the loader does not let mods write, a value that
-    /// does not fit the type, off the game thread, or on a build that lacks
+    /// [`Off`] for a type the loader does not let mods write or with blob
+    /// fields, a value that does not fit the type, off the game thread, or
+    /// on a build that lacks
     /// the world's reads.
     #[script]
     pub(crate) fn write(&self, entity: Entity, value: Fields) -> Result<(), Off> {

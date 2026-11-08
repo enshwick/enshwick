@@ -28,9 +28,9 @@ pub(crate) extern "system" fn component(
 }
 
 /// The bytes from `address` to the end of the test's component that holds
-/// it, at most `max`; 0 outside every component, as the loader answers for
-/// memory that does not read.
-pub(crate) extern "system" fn readable(
+/// it, at most `max`, as the loader counts the read-only set-up data a
+/// component lies in; 0 outside every component.
+pub(crate) extern "system" fn read_only(
     _me: ModHandle,
     address: usize,
     max: usize,

@@ -83,7 +83,7 @@ use world::{
     account_action, actions, build_rights, chat, chat_mute_has, chat_mute_set, component,
     component_write, destroy, emit, entities, entity_template, event_types, feature,
     forget_game_settings, game_event, game_settings, hosting, keep_game_settings, map_frame,
-    map_markers, notify, player, players, readable, rename_filter, run_console, save_world,
+    map_markers, notify, player, players, read_only, rename_filter, run_console, save_world,
     server_world, set_game_settings, set_label, set_time_of_day, set_time_speed, set_weather,
     spawn, status, teleport, terrain_edit, terrain_materials, time_of_day, time_speed_control,
     voxel_read, weather_at, weather_fronts, world_key, world_persists, world_quiet,
@@ -1114,5 +1114,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     set_saved,
     run_action_at,
     local_held,
-    readable,
+    read_only,
 };

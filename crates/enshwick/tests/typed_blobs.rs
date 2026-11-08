@@ -112,7 +112,10 @@ mod tests {
         assert_eq!(held, [bandit, vukah]);
 
         let refused = tags.read(*world, CUT).unwrap_err().to_string();
-        assert!(refused.contains("tags"), "{refused}");
+        assert!(
+            refused.contains("typed ecs::EntityTagContainer") && refused.contains("tags"),
+            "{refused}"
+        );
         let short = tags.read(*world, SHORT).unwrap_err().to_string();
         assert!(
             short.contains("does not read as far as its field tags"),
@@ -121,5 +124,28 @@ mod tests {
         let empty = tags.read(*world, EMPTY).unwrap().unwrap();
         assert!(empty.tags.is_empty(), "a component of its own size reads");
         assert_eq!(tags.read(*world, Entity(1)).unwrap(), None);
+    }
+
+    #[test]
+    fn a_write_of_a_component_with_blob_fields_is_refused_and_leaves_its_bytes() {
+        let hash = fnv1a32(TAGS.as_bytes());
+        let bytes = container(1, &[Guid([0x11; 16])]);
+        let loader = enshwick::test::FakeHost::new()
+            .world()
+            .types(types())
+            .type_hash("ecs::EntityTagContainer", hash)
+            .type_size("ecs::EntityTagContainer", 8)
+            .component(WHOLE, hash, &bytes)
+            .install();
+        // SAFETY: the three functions are the exports of this file's `declare_mod!(Blobs)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+
+        let (world, tags) = RESOLVED.get().unwrap();
+        let read = tags.read(*world, WHOLE).unwrap().unwrap();
+        let refused = tags.write(*world, WHOLE, &read).unwrap_err().to_string();
+        assert!(refused.contains("read-only set-up data"), "{refused}");
+        assert_eq!(loader.component_bytes(WHOLE, hash), Some(bytes));
     }
 }

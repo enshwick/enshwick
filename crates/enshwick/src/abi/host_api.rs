@@ -1736,14 +1736,15 @@ pub struct HostApi {
     /// [`Status::REFUSED`]. ABI 11.14.
     pub local_held: extern "system" fn(me: ModHandle, out: *mut u64) -> Status,
     /// Writes to `out` how many bytes from `address` on, at most `max`,
-    /// read without a fault: the run of committed, readable pages that
-    /// `address` lies in, cut at `max`; 0 when `address` does not read. It
-    /// reads no byte of that memory, so any `address` is allowed. The count
-    /// holds only while nothing frees or protects those pages, which the
-    /// caller knows of the memory it asks about.
+    /// lie in committed, unguarded, read-only pages: the run of such
+    /// regions that `address` starts, cut at `max`; 0 when `address` does
+    /// not lie in one. It reads no byte of that memory, so any `address` is
+    /// allowed. No thread writes those pages without changing their
+    /// protection, and the count holds only while nothing frees or protects
+    /// them, which the caller knows of the memory it asks about.
     /// [`Status::BAD_ARGS`] for a null `out`. Any thread, re-entrant;
     /// `out` is borrowed for the call. A panic in the loader returns
     /// [`Status::REFUSED`]. ABI 11.16.
-    pub readable:
+    pub read_only:
         extern "system" fn(me: ModHandle, address: usize, max: usize, out: *mut usize) -> Status,
 }
