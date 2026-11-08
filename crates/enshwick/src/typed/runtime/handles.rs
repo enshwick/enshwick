@@ -102,7 +102,8 @@ impl RawComponent {
     /// [`BLOB_REACH`], and refuses an offset or count past them. The loader
     /// remembers the read-only run it found until the world goes away, so
     /// the check costs a few nanoseconds; the first read into the run asks
-    /// Windows, about 3 ms on the game's 490 MB of set-up data.
+    /// Windows twice, 0.8 to 1.4 ms each on the game's 490 MB of set-up
+    /// data.
     pub(crate) fn read(&self, world: World, entity: Entity) -> Result<Option<Value>, Off> {
         let Some(data) = world.component(entity, self.ty) else {
             return Ok(None);

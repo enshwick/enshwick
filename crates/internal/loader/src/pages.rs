@@ -113,7 +113,7 @@ pub(crate) fn query(address: usize) -> Option<Region> {
 /// them.
 ///
 /// Each thread remembers the runs it found until a world goes away
-/// ([`forget`]), since a query costs about 1.4 ms on the game's 490 MB
+/// ([`forget`]), since a query costs 0.8 to 1.4 ms on the game's 490 MB
 /// region of template set-up data, which stays read-only for a world's life
 /// (server 26430253); a pointer into a remembered run makes no query.
 #[must_use]
@@ -215,7 +215,8 @@ fn run_end(address: usize) -> Option<usize> {
 
 /// The start and end of the run of read-only pages `address` lies in, from
 /// its allocation's base when the run starts there, so that a pointer
-/// below `address` in the same run finds it remembered.
+/// below `address` in the same run finds it remembered: Windows reports a
+/// region from the page it is asked about, not from where the run begins.
 fn find(address: usize) -> Option<(usize, usize)> {
     let region = query(address).filter(Region::is_read_only)?;
     if region.base == region.allocation {
