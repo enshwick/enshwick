@@ -40,6 +40,7 @@ mod fuzz;
 mod header;
 mod notes;
 mod ranges;
+mod reports;
 mod rules;
 mod tag_lines;
 mod wine;
@@ -52,7 +53,7 @@ use std::time::Instant;
 
 use affected::{Package, Scope};
 
-const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|windows-lint|windows-tests|fuzz]... [--list-windows-tests] (--all fuzzes only with --part fuzz) | dist [--out <dir>] | notes [--out <file>] [--known-issues <text>] | tag-lines | header | compat <exe> [--mods <path>...] [--report <file>] [--patterns] [--data <file>]";
+const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|windows-lint|windows-tests|fuzz]... [--list-windows-tests] (--all fuzzes only with --part fuzz) | dist [--out <dir>] | notes [--out <file>] [--known-issues <text>] | tag-lines | header | compat <exe> [--mods <path>...] [--report <file>] [--patterns] [--data <file>] | compat refresh (ENSH_EXES lists the executables)";
 const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// Turned on by name: most of the API crate's test targets need its fake
 /// loader, and without the feature cargo skips them without a word; the
@@ -118,7 +119,17 @@ fn run(args: &[String]) -> Result<bool, String> {
     }
     let packages = packages()?;
     let root = workspace_root();
-    let problems = tree_problems(&root, &packages)?;
+    let mut problems = tree_problems(&root, &packages)?;
+    let changed = changed_files(&base);
+    let stale = (reports::gates(std::env::var_os("GITHUB_EVENT_NAME").as_deref()) && !list)
+        .then(|| {
+            changed
+                .as_ref()
+                .zip(reports::reason(&root.to_string_lossy(), &base))
+        })
+        .flatten()
+        .and_then(|(files, reason)| reports::stale(files, &reason));
+    problems.extend(stale.map(|problem| format!("compatibility reports: {problem}")));
     if parts.contains(&Part::Host) && !list {
         for problem in &problems {
             say(problem);
@@ -129,8 +140,8 @@ fn run(args: &[String]) -> Result<bool, String> {
     }
     let scope = if all {
         Scope::All
-    } else if let Some(files) = changed_files(&base) {
-        affected::scope(&files, &packages)
+    } else if let Some(files) = &changed {
+        affected::scope(files, &packages)
     } else {
         say(&format!("no merge base with {base}; checking everything"));
         Scope::All
@@ -333,7 +344,9 @@ fn changed_files(base: &str) -> Option<Vec<String>> {
     let merge_base = git(&["merge-base", "HEAD", base])?;
     let mut files: Vec<String> = git(&["diff", "--name-only", merge_base.trim()])?
         .lines()
-        .chain(git(&["ls-files", "--others", "--exclude-standard"])?.lines())
+        // `:/` and --full-name: every untracked file, named from the root
+        // as diff names it, wherever the check runs from.
+        .chain(git(&["ls-files", "--others", "--exclude-standard", "--full-name", ":/"])?.lines())
         .map(str::to_owned)
         .collect();
     files.sort();

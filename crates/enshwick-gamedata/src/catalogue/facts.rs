@@ -612,33 +612,45 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::ITEM_INFO_PLACED_ENTITY,
-        Fact::Path(&[
-            ("keen::ItemInfo", "equipment"),
-            ("keen::EquipmentSetup", "placedEntity"),
-        ]),
+        Fact::Path {
+            steps: &[
+                ("keen::ItemInfo", "equipment"),
+                ("keen::EquipmentSetup", "placedEntity"),
+            ],
+            holds: "keen::ecs::TemplateReference",
+        },
     ),
     (
         ids::ITEM_INFO_BUILDING_VOXEL,
-        Fact::Path(&[
-            ("keen::ItemInfo", "equipment"),
-            ("keen::EquipmentSetup", "voxelData"),
-            ("keen::ChangeVoxelData", "isBuildingVoxel"),
-        ]),
+        Fact::Path {
+            steps: &[
+                ("keen::ItemInfo", "equipment"),
+                ("keen::EquipmentSetup", "voxelData"),
+                ("keen::ChangeVoxelData", "isBuildingVoxel"),
+            ],
+            holds: "keen::bool",
+        },
     ),
     (
         ids::ITEM_INFO_PLACE_VOXEL_MATERIAL_ID,
-        Fact::Path(&[
-            ("keen::ItemInfo", "equipment"),
-            ("keen::EquipmentSetup", "voxelData"),
-            ("keen::ChangeVoxelData", "placeVoxelMaterialId"),
-        ]),
+        Fact::Path {
+            steps: &[
+                ("keen::ItemInfo", "equipment"),
+                ("keen::EquipmentSetup", "voxelData"),
+                ("keen::ChangeVoxelData", "placeVoxelMaterialId"),
+            ],
+            holds: "keen::uint8",
+        },
     ),
     (
         ids::ITEM_INFO_EQUIPMENT_SLOT,
-        Fact::Path(&[
-            ("keen::ItemInfo", "equipment"),
-            ("keen::EquipmentSetup", "slot"),
-        ]),
+        Fact::Path {
+            steps: &[
+                ("keen::ItemInfo", "equipment"),
+                ("keen::EquipmentSetup", "slot"),
+            ],
+            holds: "keen::EquipmentSlotType",
+        },
     ),
     (
         ids::ITEM_INFO_TAGS,
@@ -650,73 +662,103 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::ITEM_INFO_DAMAGE_MOD,
-        Fact::Path(&[
-            ("keen::ItemInfo", "damageSetup"),
-            ("keen::ItemDamageSetup", "dmgMod"),
-        ]),
+        Fact::Path {
+            steps: &[
+                ("keen::ItemInfo", "damageSetup"),
+                ("keen::ItemDamageSetup", "dmgMod"),
+            ],
+            holds: "keen::float32",
+        },
     ),
     (
         ids::ITEM_INFO_SPEED_MOD,
-        Fact::Path(&[
-            ("keen::ItemInfo", "damageSetup"),
-            ("keen::ItemDamageSetup", "speedMod"),
-        ]),
+        Fact::Path {
+            steps: &[
+                ("keen::ItemInfo", "damageSetup"),
+                ("keen::ItemDamageSetup", "speedMod"),
+            ],
+            holds: "keen::float32",
+        },
     ),
     (
         ids::ITEM_INFO_DAMAGE_SET,
-        Fact::Path(&[
-            ("keen::ItemInfo", "damageSetup"),
-            ("keen::ItemDamageSetup", "isSet"),
-        ]),
+        Fact::Path {
+            steps: &[
+                ("keen::ItemInfo", "damageSetup"),
+                ("keen::ItemDamageSetup", "isSet"),
+            ],
+            holds: "keen::bool",
+        },
     ),
     (
         ids::ITEM_INFO_ARMOR,
-        Fact::Path(&[
-            ("keen::ItemInfo", "armorSetup"),
-            ("keen::ItemArmorSetup", "distribution"),
-        ]),
+        Fact::Path {
+            steps: &[
+                ("keen::ItemInfo", "armorSetup"),
+                ("keen::ItemArmorSetup", "distribution"),
+            ],
+            holds: "keen::impact::ArmorDistribution",
+        },
     ),
     (
         ids::ITEM_INFO_ARMOR_SET,
-        Fact::Path(&[
-            ("keen::ItemInfo", "armorSetup"),
-            ("keen::ItemArmorSetup", "isSet"),
-        ]),
+        Fact::Path {
+            steps: &[
+                ("keen::ItemInfo", "armorSetup"),
+                ("keen::ItemArmorSetup", "isSet"),
+            ],
+            holds: "keen::bool",
+        },
     ),
     (
         ids::ITEM_INFO_BURN_TIME,
-        Fact::Path(&[
-            ("keen::ItemInfo", "fuelSetup"),
-            ("keen::ItemFuelData", "burnTime"),
-        ]),
+        Fact::Path {
+            steps: &[
+                ("keen::ItemInfo", "fuelSetup"),
+                ("keen::ItemFuelData", "burnTime"),
+            ],
+            holds: "keen::Time",
+        },
     ),
     (
         ids::ITEM_INFO_ENERGY_OUTPUT,
-        Fact::Path(&[
-            ("keen::ItemInfo", "fuelSetup"),
-            ("keen::ItemFuelData", "energyOutput"),
-        ]),
+        Fact::Path {
+            steps: &[
+                ("keen::ItemInfo", "fuelSetup"),
+                ("keen::ItemFuelData", "energyOutput"),
+            ],
+            holds: "keen::uint32",
+        },
     ),
     (
         ids::ITEM_INFO_FUEL_SET,
-        Fact::Path(&[
-            ("keen::ItemInfo", "fuelSetup"),
-            ("keen::ItemFuelData", "isSet"),
-        ]),
+        Fact::Path {
+            steps: &[
+                ("keen::ItemInfo", "fuelSetup"),
+                ("keen::ItemFuelData", "isSet"),
+            ],
+            holds: "keen::bool",
+        },
     ),
     (
         ids::ITEM_INFO_COMFORT_AMOUNT,
-        Fact::Path(&[
-            ("keen::ItemInfo", "comfortSetup"),
-            ("keen::ItemComfortSetup", "comfortAmount"),
-        ]),
+        Fact::Path {
+            steps: &[
+                ("keen::ItemInfo", "comfortSetup"),
+                ("keen::ItemComfortSetup", "comfortAmount"),
+            ],
+            holds: "keen::uint32",
+        },
     ),
     (
         ids::ITEM_INFO_COMFORT_SET,
-        Fact::Path(&[
-            ("keen::ItemInfo", "comfortSetup"),
-            ("keen::ItemComfortSetup", "isSet"),
-        ]),
+        Fact::Path {
+            steps: &[
+                ("keen::ItemInfo", "comfortSetup"),
+                ("keen::ItemComfortSetup", "isSet"),
+            ],
+            holds: "keen::bool",
+        },
     ),
     (
         ids::ARMOR_DISTRIBUTION,
@@ -975,11 +1017,14 @@ pub const FACTS: &[(&str, Fact)] = &[
     (ids::UI_BUNDLE, Fact::Type("keen::FbUiBundle")),
     (
         ids::UI_BUNDLE_CRAFTING_MENU,
-        Fact::Path(&[
-            ("keen::FbUiBundle", "menu"),
-            ("keen::FbUiMenu", "crafting"),
-            ("keen::FbUiCrafting", "recipes"),
-        ]),
+        Fact::Path {
+            steps: &[
+                ("keen::FbUiBundle", "menu"),
+                ("keen::FbUiMenu", "crafting"),
+                ("keen::FbUiCrafting", "recipes"),
+            ],
+            holds: "keen::FbUiCraftingRecipeCollection",
+        },
     ),
     (
         ids::CRAFTING_MENU_WORKSHOPS,
@@ -1180,10 +1225,13 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::INTERACTION_OFFER_ACCEPT_GUEST,
-        Fact::Path(&[
-            ("keen::ecs::InteractionOfferRuntime", "lastAcceptData"),
-            ("keen::ecs::InteractionAcceptData", "guestId"),
-        ]),
+        Fact::Path {
+            steps: &[
+                ("keen::ecs::InteractionOfferRuntime", "lastAcceptData"),
+                ("keen::ecs::InteractionAcceptData", "guestId"),
+            ],
+            holds: "keen::ecs::EntityId",
+        },
     ),
     (
         ids::INTERACTION_OFFER_DISABLED,
@@ -1196,10 +1244,13 @@ pub const FACTS: &[(&str, Fact)] = &[
     (ids::PLAYER_INPUT, Fact::Type("keen::ecs::PlayerInput")),
     (
         ids::PLAYER_INPUT_DIGITAL,
-        Fact::Path(&[
-            ("keen::ecs::PlayerInput", "fromClient"),
-            ("keen::ecs::ClientPlayerInputData", "digitalInput"),
-        ]),
+        Fact::Path {
+            steps: &[
+                ("keen::ecs::PlayerInput", "fromClient"),
+                ("keen::ecs::ClientPlayerInputData", "digitalInput"),
+            ],
+            holds: "keen::ecs::PlayerDigitalInput",
+        },
     ),
     (
         ids::PLAYER_INPUT_TYPE,
@@ -1211,10 +1262,13 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::CLIENT_PLAYER_INPUT_DIGITAL,
-        Fact::Path(&[
-            ("keen::ecs::ClientPlayerInput", "data"),
-            ("keen::ecs::ClientPlayerInputData", "digitalInput"),
-        ]),
+        Fact::Path {
+            steps: &[
+                ("keen::ecs::ClientPlayerInput", "data"),
+                ("keen::ecs::ClientPlayerInputData", "digitalInput"),
+            ],
+            holds: "keen::ecs::PlayerDigitalInput",
+        },
     ),
     (
         ids::SELECTED_TARGETS,
@@ -2039,10 +2093,13 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::MAP_MARKER_REGISTRY_TYPES,
-        Fact::Path(&[
-            ("keen::MapMarkerRegistryResource", "mapMarkers"),
-            ("keen::MapMarkerMap", "values"),
-        ]),
+        Fact::Path {
+            steps: &[
+                ("keen::MapMarkerRegistryResource", "mapMarkers"),
+                ("keen::MapMarkerMap", "values"),
+            ],
+            holds: "keen::BlobArray<keen::MapMarkerType>",
+        },
     ),
     (
         ids::MAP_MARKER_VISIBILITY_TYPE_VISIBLE,
@@ -2286,17 +2343,23 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::ITEM_INFO_PLACEMENT_BOX_MIN,
-        Fact::Path(&[
-            ("keen::ItemInfo", "equipment"),
-            ("keen::EquipmentSetup", "placementAABBmin"),
-        ]),
+        Fact::Path {
+            steps: &[
+                ("keen::ItemInfo", "equipment"),
+                ("keen::EquipmentSetup", "placementAABBmin"),
+            ],
+            holds: "keen::float3",
+        },
     ),
     (
         ids::ITEM_INFO_PLACEMENT_BOX_MAX,
-        Fact::Path(&[
-            ("keen::ItemInfo", "equipment"),
-            ("keen::EquipmentSetup", "placementAABBmax"),
-        ]),
+        Fact::Path {
+            steps: &[
+                ("keen::ItemInfo", "equipment"),
+                ("keen::EquipmentSetup", "placementAABBmax"),
+            ],
+            holds: "keen::float3",
+        },
     ),
     (
         ids::ITEM_FLAG_IS_LOGIC_ENTITY,
@@ -2354,10 +2417,13 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::ITEM_INFO_REQUIRES_ALTAR_SLOT,
-        Fact::Path(&[
-            ("keen::ItemInfo", "equipment"),
-            ("keen::EquipmentSetup", "requiresAltarSlot"),
-        ]),
+        Fact::Path {
+            steps: &[
+                ("keen::ItemInfo", "equipment"),
+                ("keen::EquipmentSetup", "requiresAltarSlot"),
+            ],
+            holds: "keen::bool",
+        },
     ),
     (
         ids::ACTIVE_NPC_STATE_SAVED,
@@ -2377,17 +2443,23 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::FUEL_SETUP_AUTOMATIC_REFILL_ENABLED,
-        Fact::Path(&[
-            ("keen::ecs::FuelSetup", "automaticRefill"),
-            ("keen::ecs::FuelRefillSetup", "enabled"),
-        ]),
+        Fact::Path {
+            steps: &[
+                ("keen::ecs::FuelSetup", "automaticRefill"),
+                ("keen::ecs::FuelRefillSetup", "enabled"),
+            ],
+            holds: "keen::bool",
+        },
     ),
     (
         ids::FUEL_SETUP_RAIN_REFILL_ENABLED,
-        Fact::Path(&[
-            ("keen::ecs::FuelSetup", "rainRefill"),
-            ("keen::ecs::FuelRefillSetup", "enabled"),
-        ]),
+        Fact::Path {
+            steps: &[
+                ("keen::ecs::FuelSetup", "rainRefill"),
+                ("keen::ecs::FuelRefillSetup", "enabled"),
+            ],
+            holds: "keen::bool",
+        },
     ),
     (
         ids::DYNAMIC_INVENTORY_CRAFTING_STOCK,

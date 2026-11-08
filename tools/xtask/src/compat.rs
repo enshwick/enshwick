@@ -18,6 +18,12 @@ use std::process::ExitCode;
 use enshwick_gamedata::reflect::{Fingerprint, Image, Layout, Reflection};
 use enshwick_gamedata::{self as tables, PartState, Resolved, Table};
 
+#[path = "compat/report.rs"]
+mod report;
+#[cfg(all(test, windows))]
+use report::report_data;
+use report::{data, refresh};
+
 /// Each part of the loader with the build table ids it names; only a
 /// Windows build carries the loader.
 #[cfg(windows)]
@@ -78,7 +84,8 @@ pub(crate) const BROKEN: u8 = 2;
 #[derive(Debug, clap::Parser)]
 #[command(
     name = "cargo xtask compat",
-    about = "What works on a game build: which loader features find every entry they name, and how given mods start"
+    about = "What works on a game build: which loader features find every entry they name, and how given mods start",
+    args_conflicts_with_subcommands = true
 )]
 struct Cli {
     #[command(flatten)]
@@ -93,7 +100,17 @@ enum Step {
     /// Runs the loader on a prepared game folder.
     #[command(hide = true)]
     Run(RunArgs),
+    /// Writes the report data of each executable the `ENSH_EXES` path list
+    /// names into the compatibility reports, keeping the Steam build and
+    /// game version a report states where no file beside the executable does.
+    Refresh,
 }
+
+/// The compatibility reports, one TOML file per build.
+const REPORTS: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../crates/enshwick-gamedata/reports"
+);
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -122,6 +139,9 @@ fn compat(args: &[String]) -> Result<bool, String> {
     };
     match (cli.step, cli.args) {
         (Some(Step::Run(args)), _) => run_loader(&args).map(|()| true),
+        (Some(Step::Refresh), _) => {
+            refresh(Path::new(REPORTS), std::env::var_os("ENSH_EXES")).map(|()| true)
+        }
         (None, Some(args)) => run(&args),
         (None, None) => Err("name a game executable; --help lists the options".to_owned()),
     }
@@ -456,84 +476,6 @@ fn write_build(out: &mut String, args: &Args, build: &Build) -> bool {
     table.missing().is_empty()
 }
 
-/// The report data of `build` as TOML: names, counts and ids only. An entry
-/// is missing when a route or an anchor of the side names it and this build
-/// does not have it, and unread when it is an attribute slot and no game
-/// archive beside the executable reads; each loader feature that names a
-/// missing entry is listed with them.
-fn data(build: &Build) -> Result<String, String> {
-    if MODULE_IDS.is_empty() {
-        return Err("only a Windows build of this tool knows the loader's features".to_owned());
-    }
-    let table = &build.table;
-    let mut known: std::collections::BTreeSet<&str> =
-        build.route_ids.iter().map(String::as_str).collect();
-    known.extend(build.anchors.symbols().iter().map(tables::Symbol::id));
-    known.extend(build.anchors.constants().iter().map(tables::Constant::id));
-    // Without the game's archive the slots are unknown, not missing: the
-    // game always has its archive, a kept executable may not. An archive
-    // that is there but does not give them leaves them missing.
-    let unread: Vec<&str> = match &build.slots {
-        Err(_) if !build.archive => table
-            .attributes()
-            .iter()
-            .map(|(id, _)| id.as_str())
-            .collect(),
-        _ => Vec::new(),
-    };
-    // An `<id>.bytes` check is not an entry, and a route drops it.
-    known.retain(|id| id.rsplit('.').next() != Some("bytes") && !unread.contains(id));
-    let missing: Vec<&str> = known
-        .iter()
-        .copied()
-        .filter(|&id| table.symbol(id).is_none() && table.constant(id).is_none())
-        .collect();
-    let list = |ids: &[&str]| {
-        let quoted: Vec<String> = ids.iter().map(|id| format!("{id:?}")).collect();
-        format!("[{}]", quoted.join(", "))
-    };
-    let mut out = String::from(
-        "# What the loader finds on this game build; `cargo xtask compat <exe> --data <file>`\n# writes it.\n\n",
-    );
-    let _w = writeln!(out, "build = {:?}", build.name);
-    let _w = writeln!(out, "side = {:?}", build.side.as_str());
-    if let Some(steam) = build.steam {
-        let _w = writeln!(out, "steam_build = {steam}");
-    }
-    if let Some(version) = build.game_version {
-        let _w = writeln!(out, "game_version = {version}");
-    }
-    let _w = writeln!(
-        out,
-        "entries = {}",
-        table.symbols().len() + table.constants().len()
-    );
-    let _w = writeln!(out, "routed = {}", build.routed);
-    let _w = writeln!(out, "missing = {}", list(&missing));
-    if !unread.is_empty() {
-        let _w = writeln!(out, "unread = {}", list(&unread));
-    }
-    for &(name, ids) in MODULE_IDS {
-        let named = ids.iter().filter(|id| known.contains(**id)).count();
-        let lacks: Vec<&str> = ids
-            .iter()
-            .copied()
-            .filter(|id| missing.contains(id))
-            .collect();
-        let state = match lacks.len() {
-            0 => continue,
-            n if n == named => "off",
-            _ => "partly",
-        };
-        let _w = writeln!(
-            out,
-            "\n[[feature]]\nname = {name:?}\nstate = {state:?}\nmissing = {}",
-            list(&lacks)
-        );
-    }
-    Ok(out)
-}
-
 /// The loader features table.
 fn write_features(out: &mut String, table: &Resolved) {
     let _w = writeln!(*out, "## Loader features\n");
@@ -713,6 +655,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn refresh_is_a_step_and_any_other_word_an_executable() {
+        use clap::Parser as _;
+        let parse = |word: &str| Cli::try_parse_from(["cargo xtask compat", word]).unwrap();
+        assert!(matches!(parse("refresh").step, Some(Step::Refresh)));
+        let named = parse("enshrouded.exe");
+        assert!(named.step.is_none());
+        assert_eq!(named.args.unwrap().exe, Path::new("enshrouded.exe"));
+    }
+
+    #[test]
     fn the_side_comes_from_the_file_name() {
         assert_eq!(
             side_of(Path::new("x/Enshrouded_Server.exe")),
@@ -831,12 +783,11 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn every_report_agrees_with_its_build() {
-        let dir =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../crates/enshwick-gamedata/reports");
+        let dir = Path::new(REPORTS);
         let read = |file: &str| {
             std::fs::read_to_string(dir.join(file)).map(|text| text.replace("\r\n", "\n"))
         };
-        let mut files: Vec<String> = std::fs::read_dir(&dir)
+        let mut files: Vec<String> = std::fs::read_dir(dir)
             .unwrap()
             .map(|e| e.unwrap().file_name().into_string().unwrap())
             .collect();
@@ -915,13 +866,10 @@ mod tests {
             let complete = stated["missing"].as_array().is_some_and(Vec::is_empty)
                 && !stated.contains_key("unread");
             assert_eq!(works, complete, "{}", exe.display());
-            args.report = None;
-            args.steam_build = number(&stated, "steam_build").and_then(|n| u64::try_from(n).ok());
-            args.game_version = number(&stated, "game_version").and_then(|n| u64::try_from(n).ok());
             assert_eq!(
-                data(&build(&args).unwrap()).unwrap(),
-                want,
-                "{}",
+                report_data(Path::new(REPORTS), &exe).unwrap(),
+                (file, want),
+                "{}: `cargo xtask compat refresh` rewrites the report",
                 exe.display()
             );
         }

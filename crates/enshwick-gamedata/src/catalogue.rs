@@ -44,9 +44,16 @@ pub enum Fact {
         /// `keen::uint64` or from a value to a pointer, has no offset.
         holds: &'static str,
     },
-    /// The sum of the offsets of fields nested one in the next: each pair
-    /// is a reflected type and its field, the field holding the next type.
-    Path(&'static [(&'static str, &'static str)]),
+    /// The sum of the offsets of fields nested one in the next, while each
+    /// field holds the next step's type inline and the last holds `holds`.
+    Path {
+        /// Each a reflected type and its field.
+        steps: &'static [(&'static str, &'static str)],
+        /// The reflected type the last field holds, as the API reads it
+        /// there: a step that became a pointer or a last field that changed
+        /// type leaves the path without an offset.
+        holds: &'static str,
+    },
     /// The value of the constant `name` of the reflected enum `ty`; for a
     /// mask, the index of its bit.
     Constant {
@@ -343,17 +350,20 @@ pub const fn type_hash(id: &str) -> Option<u32> {
     }
 }
 
-fn offset_of(fact: Fact, field: impl Fn(&str, &str, Option<&str>) -> Option<u64>) -> Option<u64> {
+/// The offset `fact` names, `path` giving the offset of a path of fields
+/// whose last holds the type it is given.
+pub(crate) fn offset_of(
+    fact: Fact,
+    path: impl Fn(&[(&str, &str)], &str) -> Option<u64>,
+) -> Option<u64> {
     match fact {
         Fact::Offset {
             ty,
-            field: name,
+            field,
             plus,
             holds,
-        } => field(ty, name, Some(holds))?.checked_add(plus),
-        Fact::Path(steps) => steps.iter().try_fold(0u64, |sum, &(ty, name)| {
-            sum.checked_add(field(ty, name, None)?)
-        }),
+        } => path(&[(ty, field)], holds)?.checked_add(plus),
+        Fact::Path { steps, holds } => path(steps, holds),
         Fact::Type(_) | Fact::Constant { .. } => None,
     }
 }
@@ -397,9 +407,8 @@ pub fn event_types<'r, 'a>(
 pub fn constant(id: &str, reflection: &Reflection<'_>) -> Option<u64> {
     match fact(id)? {
         Fact::Constant { ty, name } => reflection.enum_value(ty, name).ok(),
-        fact => offset_of(fact, |ty, field, holds| match holds {
-            Some(holds) => reflection.field_holding(ty, field, holds),
-            None => reflection.field_offset(ty, field).ok(),
+        fact => offset_of(fact, |steps, holds| {
+            reflection.field_path(steps, Some(holds))
         }),
     }
 }
@@ -532,7 +541,7 @@ mod tests {
         let fact = fact("damage_type.magical_fire");
         assert!(matches!(fact, Some(Fact::Constant { .. })));
         assert_eq!(type_hash("damage_type.magical_fire"), None);
-        assert_eq!(offset_of(fact.unwrap(), |_, _, _| Some(8)), None);
+        assert_eq!(offset_of(fact.unwrap(), |_, _| Some(8)), None);
     }
 
     #[test]
@@ -549,29 +558,26 @@ mod tests {
     }
 
     #[test]
-    fn a_path_adds_the_offsets_of_its_fields() {
-        let path = Fact::Path(&[("A", "b"), ("B", "c"), ("C", "d")]);
-        let field = |ty: &str, name: &str, _: Option<&str>| match (ty, name) {
-            ("A", "b") => Some(0x10),
-            ("B", "c") => Some(0x08),
-            ("C", "d") => Some(0x04),
-            _ => None,
+    fn a_path_and_an_offset_ask_for_every_step_and_the_last_type() {
+        let path = Fact::Path {
+            steps: &[("A", "b"), ("B", "c")],
+            holds: "C",
         };
-        assert_eq!(offset_of(path, field), Some(0x1c));
-        let broken = Fact::Path(&[("A", "b"), ("B", "missing")]);
-        assert_eq!(offset_of(broken, field), None);
-    }
-
-    #[test]
-    fn an_offset_adds_its_bytes_into_the_field() {
+        let asked = |steps: &[(&str, &str)], holds: &str| {
+            (steps == [("A", "b"), ("B", "c")] && holds == "C").then_some(0x1c)
+        };
+        assert_eq!(offset_of(path, asked), Some(0x1c));
         let fact = Fact::Offset {
             ty: "A",
             field: "b",
             plus: 4,
             holds: "C",
         };
-        assert_eq!(offset_of(fact, |_, _, _| Some(8)), Some(12));
-        assert_eq!(offset_of(Fact::Type("A"), |_, _, _| Some(8)), None);
+        let one = |steps: &[(&str, &str)], holds: &str| {
+            (steps == [("A", "b")] && holds == "C").then_some(8)
+        };
+        assert_eq!(offset_of(fact, one), Some(12));
+        assert_eq!(offset_of(Fact::Type("A"), |_, _| Some(8)), None);
     }
 
     #[test]
@@ -589,9 +595,10 @@ mod tests {
                 Fact::Type(ty) | Fact::Offset { ty, .. } | Fact::Constant { ty, .. } => {
                     assert!(ty.starts_with("keen::"), "{id}");
                 }
-                Fact::Path(steps) => {
+                Fact::Path { steps, holds } => {
                     assert!(steps.len() > 1, "{id}");
                     assert!(steps.iter().all(|(ty, _)| ty.starts_with("keen::")), "{id}");
+                    assert!(holds.starts_with("keen::"), "{id}");
                 }
             }
         }
@@ -608,7 +615,7 @@ mod tests {
         assert!(matches!(fact(ids::ITEM_INFO_ID), Some(Fact::Offset { .. })));
         assert!(matches!(
             fact(ids::ITEM_INFO_EQUIPMENT_SLOT),
-            Some(Fact::Path(_))
+            Some(Fact::Path { .. })
         ));
     }
 
@@ -708,7 +715,7 @@ mod tests {
             let image =
                 crate::reflect::Image::parse(&bytes, crate::reflect::Layout::File, None).unwrap();
             let reflection = Reflection::scan(&image);
-            let Some(Fact::Path(path)) = fact(ids::MAP_MARKER_REGISTRY_TYPES) else {
+            let Some(Fact::Path { steps: path, .. }) = fact(ids::MAP_MARKER_REGISTRY_TYPES) else {
                 panic!("{} is not a path", ids::MAP_MARKER_REGISTRY_TYPES);
             };
             assert_eq!(path[0].0, type_name(ids::MAP_MARKER_REGISTRY), "{var}");
@@ -830,7 +837,7 @@ mod tests {
         for &(id, fact) in FACTS {
             let found = reflections.iter().any(|reflection| match fact {
                 Fact::Type(engine) => reflection.type_info(engine).is_ok(),
-                Fact::Offset { .. } | Fact::Path(_) | Fact::Constant { .. } => {
+                Fact::Offset { .. } | Fact::Path { .. } | Fact::Constant { .. } => {
                     constant(id, reflection).is_some()
                 }
             });
@@ -849,11 +856,12 @@ mod tests {
 
     /// On every executable `ENSH_SERVER_EXE`, `ENSH_CLIENT_EXE` and the
     /// opt-in `ENSH_EXES` path list name (such as every kept build), each
-    /// offset's field holds the type the catalogue states wherever that
-    /// build reflects the field: the client alone has its interface.
+    /// offset's field and each step of a path holds the type the catalogue
+    /// states, the next step's type or the last type, wherever that build
+    /// reflects the field: the client alone has its interface.
     #[test]
     #[cfg_attr(miri, ignore = "reading a game executable takes hours under Miri")]
-    fn every_offset_s_field_holds_its_stated_type_on_every_kept_build() {
+    fn every_offset_and_path_step_holds_its_stated_type_on_every_kept_build() {
         let named = ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"]
             .into_iter()
             .filter_map(|var| std::env::var_os(var).map(std::path::PathBuf::from));
@@ -868,19 +876,24 @@ mod tests {
             let wrong: Vec<String> = FACTS
                 .iter()
                 .filter_map(|&(id, fact)| {
-                    let Fact::Offset {
-                        ty, field, holds, ..
-                    } = fact
-                    else {
-                        return None;
+                    let (steps, holds) = match fact {
+                        Fact::Offset {
+                            ty, field, holds, ..
+                        } => (vec![(ty, field)], holds),
+                        Fact::Path { steps, holds } => (steps.to_vec(), holds),
+                        Fact::Type(_) | Fact::Constant { .. } => return None,
                     };
-                    let info = reflection.type_info(ty).ok()?;
-                    let held = info
-                        .fields()
-                        .iter()
-                        .find(|f| f.name() == field)?
-                        .type_name();
-                    (held != Some(holds)).then(|| format!("{id}: {holds}, reflected {held:?}"))
+                    let wanted = steps.iter().skip(1).map(|&(ty, _)| ty).chain([holds]);
+                    steps.iter().zip(wanted).find_map(|(&(ty, field), wanted)| {
+                        let info = reflection.type_info(ty).ok()?;
+                        let mut named = info.fields().iter().filter(|f| f.name() == field);
+                        let held = named.next()?.type_name();
+                        if named.next().is_some() {
+                            return Some(format!("{id}: {ty}.{field} reflected more than once"));
+                        }
+                        (held != Some(wanted))
+                            .then(|| format!("{id}: {ty}.{field} {wanted}, reflected {held:?}"))
+                    })
                 })
                 .collect();
             assert!(
