@@ -939,3 +939,8 @@ entries = [
 ]
 class = "engine"
 reason = "an engine route finds it on a client; a dedicated server keeps the code that uses it but never runs it, so a server needs no row"
+
+[[class]]
+entries = ["ui.input_hint"]
+class = "pattern"
+reason = "the game's key hint wrapper: its three callers pass a build's own action number and a label from a text id, and no string, system or routed function reaches it"

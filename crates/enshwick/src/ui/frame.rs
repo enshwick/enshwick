@@ -370,6 +370,54 @@ impl Frame<'_> {
         let status = (self.host.api().ui_widget)(self.host.handle(), self.token, &raw mut widget);
         crate::load::ok(status, (), || format!("sound container {}", sound.guid()))
     }
+
+    /// Unstable: needs the `typed` feature and may change in any release.
+    ///
+    /// Draws the key or button the player bound to `action`, as the game
+    /// draws it beside its own prompts, with `label` beside it (empty for
+    /// none); it follows the player's rebinds. True when the game drew a
+    /// key, false when the action has no binding. Client only, inside a
+    /// window or a screen extension.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] for an action this build does not name, outside a window, in
+    /// a HUD callback, on a game build where the loader does not find the
+    /// game's hint and on a loader without it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::typed::input_mapping::runtime::GameplayAction;
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     load.on_frame(|frame| {
+    ///         frame.window("help", "Help", |frame| {
+    ///             let _shown = frame.input_hint(&GameplayAction::ContextualAction, "Open");
+    ///         });
+    ///     })
+    /// }
+    /// ```
+    #[cfg(feature = "typed")]
+    pub fn input_hint(
+        &mut self,
+        action: &crate::typed::input_mapping::runtime::GameplayAction,
+        label: &str,
+    ) -> Result<bool, Off> {
+        use crate::typed::Reflected as _;
+        let crate::resources::Value::Name(name) = action.to_value() else {
+            let unnamed = crate::abi::Status::MISSING;
+            return crate::load::ok(unnamed, false, || format!("game action {action:?}"));
+        };
+        let mut widget = UiWidget {
+            kind: UiWidget::INPUT_HINT,
+            text: Str::new(&name),
+            detail: Str::new(label),
+            ..UiWidget::EMPTY
+        };
+        let status = (self.host.api().ui_widget)(self.host.handle(), self.token, &raw mut widget);
+        crate::load::ok(status, widget.result != 0, || format!("game action {name}"))
+    }
 }
 
 /// A frame callback as the loader keeps it, with the host of the mod that

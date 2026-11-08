@@ -159,7 +159,29 @@ impl Object for ScriptFrame {
         Self::SCRIPT_FRAME,
         #[cfg(feature = "unstable")]
         Self::SCRIPT_OPEN_SCREEN,
+        #[cfg(feature = "typed")]
+        Self::SCRIPT_INPUT_HINT,
     ];
+}
+
+#[cfg(feature = "typed")]
+#[crate::script(input_hint)]
+impl ScriptFrame {
+    /// Draws the key the player bound to `action` with `label` beside it,
+    /// as [`Frame::input_hint`] does; true when the game drew a key.
+    ///
+    /// # Errors
+    ///
+    /// As [`Frame::input_hint`].
+    #[script(name = "input_hint")]
+    pub(crate) fn input_hint_script(
+        &self,
+        action: crate::typed::input_mapping::runtime::GameplayAction,
+        label: Option<String>,
+    ) -> Result<bool, Off> {
+        self.frame()
+            .input_hint(&action, label.as_deref().unwrap_or(""))
+    }
 }
 
 #[cfg(feature = "unstable")]

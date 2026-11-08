@@ -145,7 +145,7 @@ pub struct UiWidget {
     /// Size and version of this struct.
     pub header: Header,
     /// What to draw: one of the kind constants, [`UiWidget::WINDOW`] to
-    /// [`UiWidget::PLAY`].
+    /// [`UiWidget::INPUT_HINT`].
     pub kind: u32,
     /// [`UiWidget::READ_ONLY`], [`UiWidget::WRAP`], [`UiWidget::CENTER`].
     pub flags: u32,
@@ -155,9 +155,10 @@ pub struct UiWidget {
     /// A slider's stops between `min` and `max`, both included; 0 for a
     /// continuous slider.
     pub steps: u32,
-    /// The text: a label's, a button's, a row's label, a window's id.
+    /// The text: a label's, a button's, a row's label, a window's id, an
+    /// input hint's action.
     pub text: Str,
-    /// A window's title.
+    /// A window's title, an input hint's label.
     pub detail: Str,
     /// A dropdown's options, `option_count` of them, valid for the call.
     pub options: *const Str,
@@ -213,6 +214,16 @@ impl UiWidget {
     /// [`Status::MISSING`](super::Status::MISSING) for a container neither
     /// the client's archive nor a mod holds. Needs no window. ABI 11.14.
     pub const PLAY: u32 = 10;
+    /// The key or button the player bound to a game action, as the game
+    /// draws it beside its own prompts, so it follows a rebind: `text` is
+    /// the action's reflected `GameplayAction` name, such as
+    /// `ContextualAction`, and `detail` a label beside the key, empty for
+    /// none. `result` 1 when the game drew a key, 0 when the action has no
+    /// binding; [`Status::MISSING`](super::Status::MISSING) for an action
+    /// this build does not name, or on a build where the loader does not
+    /// find the game's hint. Client only. An older loader answers
+    /// [`Status::MISSING`](super::Status::MISSING).
+    pub const INPUT_HINT: u32 = 11;
 
     /// The row shows its value and does not take changes; a button does not
     /// take clicks.

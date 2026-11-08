@@ -109,6 +109,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::PROMPT_VERB.id(),
     pinned::ui::SCREEN_HOST.id(),
     pinned::ui::HUD_VISIBLE.id(),
+    pinned::ui::INPUT_HINT.id(),
     pinned::ui::LABEL_ALIGN.id(),
     pinned::ui::LABEL_DRAW.id(),
     pinned::ui::LABEL_EXTENT.id(),

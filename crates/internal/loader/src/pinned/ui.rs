@@ -53,6 +53,7 @@ pub(crate) const PROMPT_VALID: Constant = Constant::new("ui.prompt_valid");
 pub(crate) const PROMPT_VERB: Constant = Constant::new("ui.prompt_verb");
 pub(crate) const SCREEN_HOST: Constant = Constant::new("ui.screen_host");
 pub(crate) const HUD_VISIBLE: Symbol = Symbol::new("ui.hud_visible");
+pub(crate) const INPUT_HINT: Symbol = Symbol::new("ui.input_hint");
 pub(crate) const LABEL_ALIGN: Constant = Constant::new("ui.label_align");
 pub(crate) const LABEL_DRAW: Symbol = Symbol::new("ui.label_draw");
 pub(crate) const LABEL_EXTENT: Constant = Constant::new("ui.label_extent");

@@ -526,6 +526,8 @@ pub(crate) struct Engine {
     scroll: Option<scroll::Scrolling>,
     /// The text field's functions; `None` shows texts read-only.
     text_fields: Option<text_field::TextFields>,
+    /// The game's key hint; `None` refuses mods' input hints.
+    pub(super) hint: Option<hint::InputHints>,
     window_begin: WindowBeginFn,
     window_end: OneFn,
     frame_from_node: FrameFromNodeFn,
@@ -824,6 +826,7 @@ impl Engine {
             dialog,
             scroll,
             text_fields,
+            hint: hint::InputHints::resolve(loader),
             window_begin: function!(pinned::ui::WINDOW_BEGIN, WindowBeginFn),
             window_end: function!(pinned::ui::WINDOW_END, OneFn),
             frame_from_node: function!(pinned::ui::FRAME_FROM_NODE, FrameFromNodeFn),
@@ -976,6 +979,7 @@ fn slider_format(min: f32, max: f32, steps: u32) -> u32 {
     if unit { 2 } else { 4 }
 }
 
+mod hint;
 mod hud;
 mod menus;
 mod scroll;
