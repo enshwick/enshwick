@@ -279,8 +279,9 @@ pub(crate) struct State {
     pub(crate) frames: Vec<Registered<UiFrameFn>>,
     /// HUD callbacks.
     pub(crate) huds: Vec<Registered<UiFrameFn>>,
-    /// Extensions of game screens: screen name, edge and callback.
-    pub(crate) extensions: Vec<(String, u32, Registered<UiFrameFn>)>,
+    /// Extensions of game screens: screen name, edge, callback and the host
+    /// templates it shows for (empty for every host).
+    pub(crate) extensions: Vec<(String, u32, Registered<UiFrameFn>, Vec<[u8; 16]>)>,
     /// The handle whose callback draws now: the loader refuses a widget
     /// from any other.
     pub(crate) drawing: Option<ModHandle>,
@@ -294,6 +295,9 @@ pub(crate) struct State {
     pub(crate) prompt: Option<(String, u32)>,
     /// The entity the open screen belongs to, 0 for none.
     pub(crate) screen_host: u32,
+    /// The host's template and fixed-point position as the client's last
+    /// step read them, `None` before one did.
+    pub(crate) screen_host_read: Option<([u8; 16], [i64; 3])>,
     /// The game actions the fake build names, each with whether a key is
     /// bound to it.
     pub(crate) game_actions: Vec<(String, bool)>,
@@ -727,6 +731,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         open_screen: "",
         prompt: None,
         screen_host: 0,
+        screen_host_read: None,
         game_actions: Vec::new(),
         local_held: None,
         hud: None,

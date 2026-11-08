@@ -33,13 +33,22 @@ const NAMES: [&[u8]; 4] = [
 ];
 
 /// A mod's panel on one of the game's screens.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 struct Extension {
     registered: Registered<UiFrameFn>,
     /// The screen's value among the game's `HudScreenType`.
     screen: u8,
     /// [`UiExtension::LEFT`] to [`UiExtension::BOTTOM`].
     edge: u32,
+    /// The host templates the panel shows for; empty for every host.
+    hosts: Box<[[u8; 16]]>,
+}
+
+impl Extension {
+    /// Whether the panel shows for a screen whose host has `template`.
+    fn shows_for(&self, template: [u8; 16]) -> bool {
+        self.hosts.is_empty() || self.hosts.contains(&template)
+    }
 }
 
 /// Where the open screen is read; set at link on a build that has it.
@@ -83,6 +92,10 @@ pub(super) struct FrameReads {
     pub(super) prompt_title: Str,
     pub(super) prompt_verb: u32,
     pub(super) screen_host: enshwick::Entity,
+    /// The host's template, all zero before a step read it.
+    pub(super) screen_host_template: [u8; 16],
+    /// The host's fixed-point position, from the same step.
+    pub(super) screen_host_position: [i64; 3],
     /// The HUD screen byte, `None` outside a game.
     screen: Option<u8>,
 }
@@ -94,6 +107,8 @@ impl FrameReads {
         prompt_title: Str::EMPTY,
         prompt_verb: 0,
         screen_host: enshwick::Entity(0),
+        screen_host_template: [0; 16],
+        screen_host_position: [0; 3],
     };
 
     /// The in-game frame `token` with these reads.
@@ -107,6 +122,8 @@ impl FrameReads {
             prompt_title: self.prompt_title,
             prompt_verb: self.prompt_verb,
             screen_host: self.screen_host,
+            screen_host_template: self.screen_host_template,
+            screen_host_position: self.screen_host_position,
         }
     }
 }
@@ -141,6 +158,7 @@ pub(crate) fn register(
     owner: ModIndex,
     screen: &str,
     edge: u32,
+    hosts: &[[u8; 16]],
     callback: UiFrameFn,
     user: *mut c_void,
 ) -> Status {
@@ -169,6 +187,7 @@ pub(crate) fn register(
             registered: Registered::new(owner, callback, user),
             screen,
             edge,
+            hosts: hosts.into(),
         })
         .map_or(Status::TOO_LATE, |()| Status::OK)
 }
@@ -358,12 +377,15 @@ pub(super) unsafe fn frame_reads(engine: &Engine, context: usize) -> FrameReads 
             .screen_host
             .map_or(0, |at| unsafe { crate::memory::read::<u32>(data, at) })
     });
+    let (template, position) = crate::local_held::screen_host(host).unwrap_or_default();
     FrameReads {
         screen: Some(screen),
         hud_screen: screen_name(linked, Some(screen)),
         prompt_title,
         prompt_verb,
         screen_host: enshwick::Entity(host),
+        screen_host_template: template,
+        screen_host_position: position,
     }
 }
 
@@ -409,7 +431,7 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize, reads: FrameReads) {
         return;
     };
     for extension in by_edge(extensions, screen, |e| (e.screen, e.edge)) {
-        if extension.registered.live() {
+        if extension.registered.live() && extension.shows_for(reads.screen_host_template) {
             // SAFETY: this function's `# Safety` gives the frame, its thread
             // and its `context`; the only window open is the extensions' own,
             // which `open` and `close` keep one at a time.

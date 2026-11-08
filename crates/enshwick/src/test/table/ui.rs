@@ -292,6 +292,15 @@ pub(crate) extern "system" fn ui_extension(
         return Status::BAD_ARGS;
     };
     let screen = text(spec.screen);
+    let hosts = match (spec.host_count, spec.hosts.is_null()) {
+        (0, _) => Vec::new(),
+        (count, false) if count <= UiExtension::MAX_HOSTS => {
+            // SAFETY: the safe layer passes `host_count` GUIDs, non-null and
+            // within the bound (both checked by this arm).
+            unsafe { core::slice::from_raw_parts(spec.hosts, count as usize) }.to_vec()
+        }
+        _ => return Status::BAD_ARGS,
+    };
     with(Status::MISSING, |s| {
         if s.host.side == Side::SERVER {
             return Status::MISSING;
@@ -302,8 +311,12 @@ pub(crate) extern "system" fn ui_extension(
         if !screens::NAMES.contains(&screen.as_str()) {
             return Status::MISSING;
         }
-        s.extensions
-            .push((screen, spec.edge, Registered::new(callback, user, me)));
+        s.extensions.push((
+            screen,
+            spec.edge,
+            Registered::new(callback, user, me),
+            hosts,
+        ));
         Status::OK
     })
 }

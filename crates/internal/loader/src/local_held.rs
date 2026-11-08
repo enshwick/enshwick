@@ -8,9 +8,10 @@
 //! the system writes the new one as it runs.
 
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering, fence};
 use std::time::Instant;
 
+use enshwick::Entity;
 use enshwick::abi::{HookFlags, Side, Status};
 use enshwick_gamedata::catalogue;
 
@@ -19,6 +20,7 @@ use crate::ecs::Components;
 use crate::fuse::Fuse;
 use crate::host::{Loader, Target};
 use crate::pinned;
+use crate::world::TemplateWalk;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -43,6 +45,72 @@ struct Layout {
     row_entity: RowEntity,
     input: u32,
     digital: usize,
+    /// The open screen host's template and position reads; `None` on a
+    /// build whose table or reflection lacks them.
+    host: Option<HostLayout>,
+}
+
+/// Where the open screen host's template and position are read.
+#[derive(Debug)]
+struct HostLayout {
+    walk: TemplateWalk,
+    /// `CurrentTransform`'s type hash and the offset of its position, three
+    /// 32.32 fixed-point `i64`.
+    transform: u32,
+    position: usize,
+}
+
+/// The open screen host's last read: its entity, then its template's two
+/// words and its fixed-point position, behind a sequence count that is odd
+/// while the game thread writes, so the interface thread never takes half
+/// of one read without a lock.
+struct HostRead {
+    seq: AtomicU32,
+    entity: AtomicU32,
+    words: [AtomicU64; 5],
+}
+
+impl HostRead {
+    const fn new() -> Self {
+        Self {
+            seq: AtomicU32::new(0),
+            entity: AtomicU32::new(0),
+            words: [const { AtomicU64::new(0) }; 5],
+        }
+    }
+
+    /// Stores a read; only the system's thread writes.
+    fn write(&self, entity: u32, template: [u8; 16], position: [i64; 3]) {
+        let seq = self.seq.load(Ordering::Relaxed);
+        self.seq.store(seq.wrapping_add(1), Ordering::Relaxed);
+        fence(Ordering::Release);
+        self.entity.store(entity, Ordering::Relaxed);
+        let [lo, hi] = bytemuck::cast::<[u8; 16], [u64; 2]>(template);
+        let [x, y, z] = position.map(i64::cast_unsigned);
+        for (word, value) in self.words.iter().zip([lo, hi, x, y, z]) {
+            word.store(value, Ordering::Relaxed);
+        }
+        self.seq.store(seq.wrapping_add(2), Ordering::Release);
+    }
+
+    /// The last whole read, or `None` while the writer stays mid-write.
+    fn read(&self) -> Option<(u32, [u8; 16], [i64; 3])> {
+        for _ in 0..4 {
+            let before = self.seq.load(Ordering::Acquire);
+            if before % 2 == 1 {
+                core::hint::spin_loop();
+                continue;
+            }
+            let entity = self.entity.load(Ordering::Relaxed);
+            let [lo, hi, x, y, z] = self.words.each_ref().map(|w| w.load(Ordering::Relaxed));
+            fence(Ordering::Acquire);
+            if self.seq.load(Ordering::Relaxed) == before {
+                let template = bytemuck::cast::<[u64; 2], [u8; 16]>([lo, hi]);
+                return Some((entity, template, [x, y, z].map(u64::cast_signed)));
+            }
+        }
+        None
+    }
 }
 
 /// The reads' state: the layout once linked, whether a mod asked yet, the
@@ -54,6 +122,9 @@ struct State {
     start: OnceLock<Instant>,
     bits: AtomicU64,
     read_ms: AtomicU64,
+    /// The open screen's host the interface asks about, 0 for none.
+    host_wanted: AtomicU32,
+    host: HostRead,
 }
 
 static STATE: State = State {
@@ -62,6 +133,8 @@ static STATE: State = State {
     start: OnceLock::new(),
     bits: AtomicU64::new(0),
     read_ms: AtomicU64::new(0),
+    host_wanted: AtomicU32::new(0),
+    host: HostRead::new(),
 };
 static FUSE: Fuse = Fuse::new(FEATURE);
 // SAFETY: `SystemFn` is the signature of a system entry, here the reflected
@@ -100,7 +173,30 @@ fn layout(loader: &Loader) -> Result<Layout, &'static str> {
         input: catalogue::type_hash(catalogue::ids::CLIENT_PLAYER_INPUT)
             .ok_or(catalogue::ids::CLIENT_PLAYER_INPUT)?,
         digital,
+        host: host_layout(loader),
     })
+}
+
+/// The host reads on this build, or `None` with a log line.
+fn host_layout(loader: &Loader) -> Option<HostLayout> {
+    let found = TemplateWalk::resolve(loader).and_then(|walk| {
+        Some(HostLayout {
+            walk,
+            transform: catalogue::type_hash(catalogue::ids::CURRENT_TRANSFORM)?,
+            position: catalogue::constant(
+                catalogue::ids::CURRENT_TRANSFORM_TRANSFORM,
+                &loader.reflection,
+            )
+            .and_then(|at| usize::try_from(at).ok())?,
+        })
+    });
+    if found.is_none() {
+        crate::log!(
+            INFO,
+            "interface: mods read no screen host template or position on this build"
+        );
+    }
+    found
 }
 
 pub(crate) fn link(loader: &Loader) {
@@ -136,6 +232,17 @@ pub(crate) fn link(loader: &Loader) {
 /// - `ctx` is the `player_ui` system's live, non-null context, at its entry
 ///   on its thread.
 unsafe fn read(ctx: *mut u64, layout: &Layout) {
+    let host = STATE.host_wanted.load(Ordering::Relaxed);
+    if host != 0
+        && let Some(at) = &layout.host
+    {
+        // SAFETY: the caller's live context at the system's entry on its
+        // thread.
+        unsafe { read_host(ctx, layout, at, host) };
+    }
+    if !STATE.asked.load(Ordering::Relaxed) {
+        return;
+    }
     let mut entity = 0u32;
     // SAFETY: the game's `ecs.row_entity` on the system's live context, at
     // its entry on its thread, as `player_ui` calls it itself first thing
@@ -159,9 +266,46 @@ unsafe fn read(ctx: *mut u64, layout: &Layout) {
     STATE.read_ms.store(now_ms(), Ordering::Release);
 }
 
+/// Reads the template and position of the open screen's host, `host`, in
+/// the client's world, the one `player_ui` runs in (client 26430625).
+///
+/// # Safety
+///
+/// - `ctx` is the `player_ui` system's live, non-null context, at its entry
+///   on its thread.
+unsafe fn read_host(ctx: *mut u64, layout: &Layout, at: &HostLayout, host: u32) {
+    // SAFETY: the caller's live context, on its thread.
+    let world = unsafe { layout.components.world(ctx) };
+    // SAFETY: `world` is the running system's live entity world, read on
+    // its thread during the system's entry, before it changes any entity.
+    let template = world.and_then(|world| unsafe { at.walk.template(world, Entity(host)) });
+    // SAFETY: the caller's live context, on its thread.
+    let transform = unsafe { layout.components.component(ctx, host, at.transform) };
+    // SAFETY: `transform` is the host's live `CurrentTransform`, whose
+    // position, three fixed-point `i64`, sits at the reflected offset
+    // `at.position`.
+    let position =
+        transform.map(|data| unsafe { enshwick::raw::read_at::<[i64; 3]>(data, at.position) });
+    STATE.host.write(
+        host,
+        template.unwrap_or_default(),
+        position.unwrap_or_default(),
+    );
+}
+
+/// The template and fixed-point position of the open screen's host `host`
+/// as the client's last step read them, and asks the next step to read it;
+/// `None` for no host, before a step read this one and on a build without
+/// the reads.
+pub(crate) fn screen_host(host: u32) -> Option<([u8; 16], [i64; 3])> {
+    STATE.host_wanted.store(host, Ordering::Relaxed);
+    let (read, template, position) = STATE.host.read()?;
+    (host != 0 && read == host && template != [0; 16]).then_some((template, position))
+}
+
 unsafe extern "system" fn player_ui(ctx: *mut u64) -> u64 {
     // Until a mod asks, the system runs as the game's alone.
-    if STATE.asked.load(Ordering::Relaxed)
+    if (STATE.asked.load(Ordering::Relaxed) || STATE.host_wanted.load(Ordering::Relaxed) != 0)
         && let Some(layout) = STATE.layout.get()
         && !ctx.is_null()
     {
@@ -203,5 +347,29 @@ mod tests {
         );
         assert_eq!(held(), Err(Status::MISSING));
         assert!(STATE.asked.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn a_host_read_comes_back_whole_and_only_for_its_own_entity() {
+        let read = HostRead::new();
+        assert_eq!(read.read(), Some((0, [0; 16], [0; 3])));
+        let template = core::array::from_fn(|i| u8::try_from(i + 1).unwrap());
+        read.write(42, template, [1 << 32, -(5 << 32), 7]);
+        assert_eq!(read.read(), Some((42, template, [1 << 32, -(5 << 32), 7])));
+        read.seq.fetch_add(1, Ordering::Relaxed);
+        assert_eq!(read.read(), None, "mid-write");
+    }
+
+    #[test]
+    fn the_interface_asks_for_its_host_and_gets_it_once_a_step_read_it() {
+        assert_eq!(screen_host(42), None);
+        assert_eq!(STATE.host_wanted.load(Ordering::Relaxed), 42);
+        STATE.host.write(42, [9; 16], [3, 4, 5]);
+        assert_eq!(screen_host(42), Some(([9; 16], [3, 4, 5])));
+        assert_eq!(screen_host(43), None, "another host's read");
+        STATE.host.write(43, [0; 16], [0; 3]);
+        assert_eq!(screen_host(43), None, "no template read");
+        assert_eq!(screen_host(0), None);
+        assert_eq!(STATE.host_wanted.load(Ordering::Relaxed), 0);
     }
 }

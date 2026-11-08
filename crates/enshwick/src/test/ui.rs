@@ -12,6 +12,7 @@ struct Reads {
     title: String,
     verb: u32,
     host: u32,
+    host_read: Option<([u8; 16], [i64; 3])>,
 }
 
 fn reads() -> Reads {
@@ -22,6 +23,7 @@ fn reads() -> Reads {
             .map_or_else(String::new, |(t, _)| t.clone()),
         verb: s.prompt.as_ref().map_or(0, |&(_, v)| v),
         host: s.screen_host,
+        host_read: s.screen_host_read.filter(|_| s.screen_host != 0),
     })
 }
 
@@ -37,6 +39,8 @@ fn in_game(token: u64, open: &str, reads: &Reads) -> crate::abi::UiFrame {
         prompt_title: crate::abi::Str::new(&reads.title),
         prompt_verb: reads.verb,
         screen_host: crate::Entity(reads.host),
+        screen_host_template: reads.host_read.map_or([0; 16], |(t, _)| t),
+        screen_host_position: reads.host_read.map_or([0; 3], |(_, p)| p),
     }
 }
 
@@ -136,11 +140,13 @@ impl Installed {
     #[must_use]
     pub fn draw_screen(&self, screen: crate::ui::HudScreenType) -> Vec<(u32, Vec<Drawn>)> {
         let mut extensions = table::with(Vec::new(), |s| s.extensions.clone());
-        extensions.sort_by_key(|&(_, edge, _)| edge);
+        extensions.sort_by_key(|&(_, edge, ..)| edge);
         let open = screen.name();
+        let template = reads().host_read.map(|(t, _)| t);
         let mut drawn = Vec::new();
-        for (token, (name, edge, handler)) in (1u64..).zip(extensions) {
-            if name != screen.name() {
+        for (token, (name, edge, handler, hosts)) in (1u64..).zip(extensions) {
+            let for_host = hosts.is_empty() || template.is_some_and(|t| hosts.contains(&t));
+            if name != screen.name() || !for_host {
                 continue;
             }
             table::with((), |s| {

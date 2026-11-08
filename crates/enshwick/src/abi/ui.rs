@@ -22,6 +22,8 @@ use crate::abi::{Header, Status, Str};
 ///     prompt_title: Str::EMPTY,
 ///     prompt_verb: 0,
 ///     screen_host: enshwick::Entity(512),
+///     screen_host_template: [0; 16],
+///     screen_host_position: [0; 3],
 /// };
 /// assert_eq!(frame.screen, UiFrame::IN_GAME);
 /// ```
@@ -56,6 +58,15 @@ pub struct UiFrame {
     /// object, outside a game and on a build where the
     /// loader does not find it. ABI 11.14.
     pub screen_host: crate::Entity,
+    /// The template GUID of `screen_host` in the client's world, as the
+    /// client's last step read it; all zero for no host, before a step read
+    /// this host, and on a build where the loader does not find it.
+    /// ABI 11.18.
+    pub screen_host_template: [u8; 16],
+    /// Where `screen_host` stands in the client's world, in 32.32
+    /// fixed-point metres, y up, from the same step; meaningful only while
+    /// `screen_host_template` is not all zero. ABI 11.18.
+    pub screen_host_position: [i64; 3],
 }
 
 impl_headed!(UiFrame, born = 24);
@@ -92,6 +103,9 @@ pub type UiFrameFn = unsafe extern "system" fn(frame: *const UiFrame, user: *mut
 ///     screen: Str::new("StorageChest"),
 ///     edge: UiExtension::RIGHT,
 ///     reserved: 0,
+///     hosts: core::ptr::null(),
+///     host_count: 0,
+///     reserved_hosts: 0,
 /// };
 /// assert_eq!(spec.edge, UiExtension::RIGHT);
 /// ```
@@ -108,6 +122,16 @@ pub struct UiExtension {
     pub edge: u32,
     /// Zero.
     pub reserved: u32,
+    /// `host_count` template GUIDs: the panel shows only while the open
+    /// screen's host was made from one of them; null with a count of 0 for
+    /// a panel of every host. Borrowed for the call: the loader copies
+    /// them. ABI 11.18.
+    pub hosts: *const [u8; 16],
+    /// How many GUIDs `hosts` holds, at most [`UiExtension::MAX_HOSTS`].
+    /// ABI 11.18.
+    pub host_count: u32,
+    /// Zero.
+    pub reserved_hosts: u32,
 }
 
 impl_headed!(UiExtension);
@@ -121,6 +145,8 @@ impl UiExtension {
     pub const TOP: u32 = 2;
     /// The bottom edge, centred from left to right.
     pub const BOTTOM: u32 = 3;
+    /// The most host templates one panel names. ABI 11.18.
+    pub const MAX_HOSTS: u32 = 64;
 }
 
 /// One widget, drawn with [`HostApi::ui_widget`](super::HostApi::ui_widget): `kind` says which, and
