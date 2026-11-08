@@ -15,8 +15,8 @@ pub(crate) const REPORTS: &str = "crates/enshwick-gamedata/reports";
 
 /// The files that decide what a report says, as git pathspecs from the
 /// repository root: the anchors, the code that reads an executable and routes
-/// to its entries, slots and fields, the Steam build reader and the tool that
-/// writes the report, tests left out. The loader's feature table is spread
+/// to its entries and fields, the loader's attribute slot and Steam build
+/// readers and the tool that writes the report, tests left out. The loader's feature table is spread
 /// over its parts, so a test of the compat tool holds it instead.
 const INPUTS: &[&str] = &[
     "crates/enshwick-gamedata/anchors",
@@ -33,6 +33,8 @@ const INPUTS: &[&str] = &[
     "crates/enshwick-gamedata/src/routes",
     "crates/enshwick-gamedata/src/table.rs",
     "crates/enshwick-gamedata/src/table",
+    "crates/enshwick-gamedata/src/version.rs",
+    "crates/internal/loader/src/attribute_slots.rs",
     "crates/internal/loader/src/builds.rs",
     "tools/xtask/src/compat.rs",
     "tools/xtask/src/compat",
