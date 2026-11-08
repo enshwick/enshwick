@@ -236,12 +236,12 @@ mod tests {
             BUILDING.with_borrow(|building| building.contains(&KEY)),
             Ordering::Relaxed,
         );
-        // SAFETY: `run_patches` passes out pointers to locals, writable for
-        // the call, and its own base, which outlives the build.
-        unsafe {
-            out.write(base);
-            out_len.write(base_len);
-        }
+        // SAFETY: `run_patches` passes `out` pointing at a local, writable
+        // for the call; `base` is the test's own array, which outlives it.
+        unsafe { out.write(base) };
+        // SAFETY: `run_patches` passes `out_len` pointing at a local `usize`,
+        // writable for the call.
+        unsafe { out_len.write(base_len) };
         Status::OK
     }
 
