@@ -2194,6 +2194,15 @@ typedef struct EnshwickUiFrame {
   // object, outside a game and on a build where the
   // loader does not find it. ABI 11.14.
   EnshwickEntity screen_host;
+  // The template GUID of `screen_host` in the client's world, as the
+  // client's last step read it; all zero for no host, before a step read
+  // this host, and on a build where the loader does not find it.
+  // ABI 11.18.
+  uint8_t screen_host_template[16];
+  // Where `screen_host` stands in the client's world, in 32.32
+  // fixed-point metres, y up, from the same step; meaningful only while
+  // `screen_host_template` is not all zero. ABI 11.18.
+  int64_t screen_host_position[3];
 } EnshwickUiFrame;
 // The title screen and the menus before a game.
 #define EnshwickUiFrame_MENU 0
@@ -3159,6 +3168,16 @@ typedef struct EnshwickUiExtension {
   uint32_t edge;
   // Zero.
   uint32_t reserved;
+  // `host_count` template GUIDs: the panel shows only while the open
+  // screen's host was made from one of them; null with a count of 0 for
+  // a panel of every host. Borrowed for the call: the loader copies
+  // them. ABI 11.18.
+  const uint8_t (*hosts)[16];
+  // How many GUIDs `hosts` holds, at most `UiExtension::MAX_HOSTS`.
+  // ABI 11.18.
+  uint32_t host_count;
+  // Zero.
+  uint32_t reserved_hosts;
 } EnshwickUiExtension;
 // The left edge, centred from top to bottom.
 #define EnshwickUiExtension_LEFT 0
@@ -3168,6 +3187,8 @@ typedef struct EnshwickUiExtension {
 #define EnshwickUiExtension_TOP 2
 // The bottom edge, centred from left to right.
 #define EnshwickUiExtension_BOTTOM 3
+// The most host templates one panel names. ABI 11.18.
+#define EnshwickUiExtension_MAX_HOSTS 64
 
 // A player's action with an item, handed to the filters registered with
 // `HostApi::item_filter` in the server's

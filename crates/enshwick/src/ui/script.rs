@@ -206,6 +206,20 @@ impl ScriptFrame {
     pub(crate) fn screen_host_script(&self) -> Option<crate::Entity> {
         self.frame().screen_host()
     }
+
+    /// The template the open screen's host was made from, as
+    /// [`Frame::screen_host_template`] says.
+    #[script(name = "screen_host_template")]
+    pub(crate) fn screen_host_template_script(&self) -> Option<crate::content::Guid> {
+        self.frame().screen_host_template()
+    }
+
+    /// Where the open screen's host stands, as
+    /// [`Frame::screen_host_position`] says.
+    #[script(name = "screen_host_position")]
+    pub(crate) fn screen_host_position_script(&self) -> Option<[f64; 3]> {
+        self.frame().screen_host_position()
+    }
 }
 
 #[crate::script(frame)]
@@ -514,6 +528,29 @@ mod unstable {
             draw: impl Fn(ScriptFrame) + Send + Sync + 'static,
         ) -> Result<(), Off> {
             self.extend_screen(screen, edge, move |frame| draw(ScriptFrame::of(frame)))
+        }
+
+        /// Adds a panel that shows only for the screen hosts made from
+        /// `hosts`, as [`Load::extend_screen_for`] does.
+        ///
+        /// # Errors
+        ///
+        /// As [`Load::extend_screen_for`].
+        #[script(name = "extend_screen_for")]
+        #[expect(
+            clippy::needless_pass_by_value,
+            reason = "a script method takes its arguments owned from Luau"
+        )]
+        pub(crate) fn extend_screen_for_script(
+            &mut self,
+            screen: HudScreenType,
+            edge: Edge,
+            hosts: Vec<crate::content::Guid>,
+            draw: impl Fn(ScriptFrame) + Send + Sync + 'static,
+        ) -> Result<(), Off> {
+            self.extend_screen_for(screen, edge, &hosts, move |frame| {
+                draw(ScriptFrame::of(frame));
+            })
         }
 
         /// Calls `handler` with each change of the game's screen the player

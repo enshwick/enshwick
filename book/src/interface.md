@@ -322,6 +322,45 @@ entity is the client's own: the server names the same object by another id.
 Moving from one chest to the next counts as a change, though the screen stays
 `StorageChest`.
 
+`frame.screen_host_template()` returns the GUID of the template the host was
+made from, such as a mod's own survivor or altar kind. `frame.screen_host_position()`
+returns where the host stands, in metres, so a panel's
+[player action](actions.md) can name the object with `ActionTarget::at`. The
+client reads both in its last step, so both are `None` in the first frame of
+a new host.
+
+`load.extend_screen_for` adds a panel that shows only while the screen's
+host was made from one of the templates it names. Pass the mod's own kind by
+its content id:
+
+```rust
+use enshwick::content::id;
+use enshwick::ui::{Edge, HudScreenType};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let guards = [id!("guard").guid()];
+    load.extend_screen_for(HudScreenType::NpcDialog, Edge::Right, &guards, |panel| {
+        if panel.button("Stand watch") {
+            // Send the server one of the mod's player actions.
+        }
+    })
+}
+```
+
+```luau
+local guards = { enshwick.content.guid("you.guards:guard") }
+enshwick.ui.extend_screen_for("NpcDialog", "Right", guards, function(panel)
+    if panel:button("Stand watch") then
+        -- Send the server one of the mod's player actions.
+    end
+end)
+```
+
+The client knows only the host's entity, template and position. A panel
+that needs what only the server knows, such as a survivor's NPC id or an
+altar's base, asks the mod's server part with a
+[net message](messages.md).
+
 ### What the prompt offers
 
 `frame.prompt()` returns what the player's interaction prompt offers in that

@@ -545,6 +545,24 @@ mod tests {
     }
 
     #[test]
+    fn a_panel_with_hosts_shows_only_for_them_and_one_without_for_every_host() {
+        unsafe extern "system" fn nothing(_: *const UiFrame, _: *mut c_void) {}
+        let panel = |hosts: &[[u8; 16]]| Extension {
+            registered: Registered::new(ModIndex::new(0), nothing, core::ptr::null_mut()),
+            screen: 0,
+            edge: UiExtension::RIGHT,
+            hosts: hosts.into(),
+        };
+        assert!(panel(&[[7; 16]]).shows_for([7; 16]));
+        assert!(!panel(&[[7; 16]]).shows_for([8; 16]));
+        assert!(
+            !panel(&[[7; 16]]).shows_for([0; 16]),
+            "a host no step read yet"
+        );
+        assert!(panel(&[]).shows_for([0; 16]));
+    }
+
+    #[test]
     fn panels_of_the_open_screen_draw_edge_by_edge_in_registration_order() {
         let (left, right, top) = (UiExtension::LEFT, UiExtension::RIGHT, UiExtension::TOP);
         let panels = [(5, right), (5, left), (7, left), (5, right), (5, top)];

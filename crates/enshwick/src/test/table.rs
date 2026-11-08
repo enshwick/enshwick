@@ -153,6 +153,10 @@ impl<F: Copy> Registered<F> {
     }
 }
 
+/// An extension of a game screen: screen name, edge, callback and the host
+/// templates it shows for (empty for every host).
+pub(crate) type Extension = (String, u32, Registered<UiFrameFn>, Vec<[u8; 16]>);
+
 /// What the installed fake answers and what it has recorded.
 pub(crate) struct State {
     pub(crate) host: FakeHost,
@@ -281,7 +285,7 @@ pub(crate) struct State {
     pub(crate) huds: Vec<Registered<UiFrameFn>>,
     /// Extensions of game screens: screen name, edge, callback and the host
     /// templates it shows for (empty for every host).
-    pub(crate) extensions: Vec<(String, u32, Registered<UiFrameFn>, Vec<[u8; 16]>)>,
+    pub(crate) extensions: Vec<Extension>,
     /// The handle whose callback draws now: the loader refuses a widget
     /// from any other.
     pub(crate) drawing: Option<ModHandle>,

@@ -134,7 +134,7 @@ pub struct UiExtension {
     pub reserved_hosts: u32,
 }
 
-impl_headed!(UiExtension);
+impl_headed!(UiExtension, born = 32);
 
 impl UiExtension {
     /// The left edge, centred from top to bottom.

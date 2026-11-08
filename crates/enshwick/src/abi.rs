@@ -755,7 +755,7 @@ const _: () = {
     assert!(size_of::<ChatLine>() == 8 + 8 + 4 + 4 + 8 + 16);
     assert!(size_of::<ChatRewrite>() == 8 + 8 + 4 + 4);
     assert!(core::mem::offset_of!(HostApi, ui_extension) == 24 + 182 * 8);
-    assert!(size_of::<UiExtension>() == 8 + 16 + 8);
+    assert!(size_of::<UiExtension>() == 8 + 16 + 8 + 8 + 8);
     assert!(core::mem::offset_of!(HostApi, item_filter) == 24 + 183 * 8);
     assert!(size_of::<ItemAction>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, control) == 24 + 180 * 8);
@@ -931,7 +931,7 @@ const _: () = {
     assert!(size_of::<NetMessage>() == 8 + 8 + 8 + 8 + 8);
     assert!(core::mem::offset_of!(HostApi, notify) == 24 + 67 * 8);
     assert!(core::mem::offset_of!(HostApi, ui_dialog) == 24 + 94 * 8);
-    assert!(size_of::<UiFrame>() == 64);
+    assert!(size_of::<UiFrame>() == 64 + 16 + 24);
     assert!(size_of::<UiWidget>() == 8 + 16 + 32 + 8 + 32 + 16);
     assert!(size_of::<UiMarker>() == 8 + 24 + 16 + 8);
     assert!(core::mem::offset_of!(HostApi, texts) == 24 + 98 * 8);

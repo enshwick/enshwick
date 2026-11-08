@@ -226,6 +226,28 @@ impl Installed {
         table::with((), |s| s.screen_host = host.map_or(0, |e| e.0));
     }
 
+    /// Makes the open screen's host one made from `template`, standing at
+    /// `position` in metres, as the client's last step read it, for the
+    /// frames and panels drawn from now on while a host is set with
+    /// [`Installed::host_screen`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::Entity;
+    /// use enshwick::abi::Side;
+    /// use enshwick::content::Guid;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
+    /// loader.host_screen(Some(Entity(512)));
+    /// loader.read_screen_host(Guid::named("you.safes:safe"), [1.0, 2.0, 3.0]);
+    /// assert!(loader.draw_frame().is_empty());
+    /// ```
+    pub fn read_screen_host(&self, template: crate::content::Guid, position: [f64; 3]) {
+        let fixed = crate::ecs::fixed(position);
+        table::with((), |s| s.screen_host_read = Some((template.0, fixed)));
+    }
+
     /// Names the game action `action` on the fake build, its reflected
     /// name, with a key `bound` to it or none, for the input hints drawn
     /// from now on; an action never named is one the build lacks, which
