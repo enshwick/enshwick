@@ -45,7 +45,7 @@
       "type": "object",
       "properties": {
         "file": {
-          "description": "The WAV file, relative to the pack's folder: 16-bit PCM, mono or\nstereo, at 48000 Hz, at most 16 MiB and 600 s.",
+          "description": "The WAV file, relative to the pack's folder: 16-bit PCM, mono or\nstereo, at 48000 Hz, at most 16 MiB.",
           "type": "string"
         },
         "id": {
