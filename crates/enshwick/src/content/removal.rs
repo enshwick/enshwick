@@ -20,6 +20,7 @@
 //! }
 //! ```
 
+use crate::abi::Status;
 use crate::content::changes::{self, Change, Field};
 use crate::content::recipes::{self, RecipeRule};
 use crate::engine_ids as ids;
@@ -240,9 +241,13 @@ impl Load<'_> {
     /// recipes and loot that name `old` get `new`'s look and use. The stack
     /// size is at least `old`'s, since the game cuts a held stack above its
     /// item's and saves the cut; saves keep `old`'s id, so a world opens as
-    /// vanilla without the mod. Mods that serve `old` chain in load order,
-    /// and the last re-key's data wins; a build that fails keeps `old` as
-    /// it was.
+    /// vanilla without the mod. `old` takes `new` as the game reads it, with
+    /// every mod's changes of `new`; inside that read, a re-key of `new`
+    /// back to `old` is skipped, so two items re-keyed to each other swap.
+    /// A ring of three or more re-keys does not rotate: each item takes the
+    /// data of the item two steps on. Mods that serve `old` chain in load
+    /// order, and the last re-key's data wins; a build that fails keeps
+    /// `old` as it was.
     ///
     /// # Errors
     ///
@@ -257,11 +262,11 @@ impl Load<'_> {
     pub fn rekey_item(&mut self, old: Guid, new: Guid) -> Result<(), Off> {
         let host = self.host();
         let key = old.key(types::ITEM_INFO)?;
-        let data: Box<dyn Fn() -> Result<Value, Off> + Send + Sync> = match items::added(new) {
-            None => {
-                let data = host.game_value(new.key(types::ITEM_INFO)?)?;
-                Box::new(move || Ok(data.clone()))
-            }
+        let new_key = new.key(types::ITEM_INFO)?;
+        // At init nothing is served yet: the check reads `new` as the game
+        // archives it, or as this mod clones it.
+        let data = match items::added(new) {
+            None => host.game_value(new_key)?,
             Some(item) => {
                 let layout = ItemLayout::resolve(self)?;
                 let like = host
@@ -269,20 +274,27 @@ impl Load<'_> {
                     .ok_or_else(|| {
                         Off::new(format!("its base item {}: not in the game", item.like))
                     })?;
-                // Cloned again at each build, as the mod's own item is, so its
-                // icon shows once the client can.
-                Box::new(move || {
-                    let bytes = items::served_clone(&layout, &like, &item, new)
-                        .ok_or_else(|| Off::new("the mod's item does not clone from its base"))?;
-                    crate::resources::decode(key, &bytes)
-                })
+                let bytes = items::served_clone(&layout, &like, &item, new)
+                    .ok_or_else(|| Off::new("the mod's item does not clone from its base"))?;
+                crate::resources::decode(new_key, &bytes)?
             }
         };
-        rekeyed(&host.game_value(key)?, &data()?)
+        rekeyed(&host.game_value(key)?, &data)
             .map_err(|off| Off::new(format!("re-key {old} to {new}: {off}")))?;
         // Served from `old` itself, so other mods' patches of it chain and a
-        // failed build keeps the vanilla item rather than none.
-        crate::resources::serve_value(host, key, key, move |item| rekeyed(&item, &data()?))
+        // failed build keeps the vanilla item rather than none; `new` reads
+        // as served, with every mod's patches of it.
+        crate::resources::serve_value(host, key, key, move |item| {
+            let served = match host.read_resource(host.api().resource_served, new_key) {
+                // Inside a build of `old`, which `new` re-keys back to: `old`
+                // stays, so two items re-keyed to each other swap.
+                Err(Status::BUILDING) => return Ok(Value::Nil),
+                read => {
+                    read.map_err(|status| Off::status(&format!("re-key {old} to {new}"), status))?
+                }
+            };
+            rekeyed(&item, &crate::resources::decode(new_key, &served)?)
+        })
     }
 }
 

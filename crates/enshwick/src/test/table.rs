@@ -19,7 +19,7 @@ use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
 
 mod build;
 mod chat;
-mod content;
+pub(super) mod content;
 mod controls;
 pub(crate) mod gameplay;
 #[cfg(test)]
@@ -45,7 +45,7 @@ use content::{
     add_text, change_data, content_hashes, content_read, content_serve, declare_change,
     entity_data_open, game_text, game_version, icons_ready, item_data_get, item_data_open,
     item_data_set, rebuild_resource, recipe_disabled, recipe_kind, recipe_rule, resource_keys,
-    resource_read, serve_resource, set_change, types,
+    resource_read, resource_served, serve_resource, set_change, types,
 };
 use controls::{control, run_action, run_action_at};
 use gameplay::{
@@ -1115,4 +1115,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     run_action_at,
     local_held,
     read_only,
+    resource_served,
 };

@@ -152,6 +152,8 @@ mod recipe_kinds;
 mod recipe_menu;
 mod recipe_rules;
 #[cfg(feature = "typed")]
+mod rekey_served;
+#[cfg(feature = "typed")]
 mod removal;
 mod required_names;
 mod resource_types;

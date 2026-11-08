@@ -197,6 +197,14 @@ if let Some(item) = key.ok().and_then(game_resource) {
 }
 ```
 
+`host.served_resource(key)` reads a resource as the game's first read
+would build it now. A served key comes built with every mod's patches. Any
+other key comes from the archive. Call it after `init`, such as in a
+builder of another key. It fails during `init` and inside a build of the
+same key. Each call builds the key again and keeps every patch's bytes, so
+read it once per need. Luau reads the same as a value with
+`enshwick.resources.served_value(key)`.
+
 ## One text for one tag
 
 [`Load::add_text(tag, language, text)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)

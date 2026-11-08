@@ -25,6 +25,9 @@ pub mod ids {
     pub use crate::engine_ids::*;
 }
 
+mod copy;
+pub use copy::copy_out;
+
 /// The rules the loader and the fake host refuse a mod's requests by.
 pub mod rules {
     pub use crate::rules::*;

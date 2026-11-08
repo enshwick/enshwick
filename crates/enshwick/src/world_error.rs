@@ -105,7 +105,7 @@ mod tests {
 
     #[test]
     fn an_unavailable_call_and_any_status_a_mod_does_not_know_read_as_missing() {
-        for status in [Status::UNAVAILABLE, Status(14), Status(u32::MAX)] {
+        for status in [Status::UNAVAILABLE, Status(15), Status(u32::MAX)] {
             assert_eq!(
                 WorldError::check(status, WorldError::Gone),
                 Err(WorldError::Missing)

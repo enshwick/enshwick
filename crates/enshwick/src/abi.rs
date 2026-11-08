@@ -520,6 +520,11 @@ impl Status {
     /// is not there. A mod built for an older minor reads it as any status
     /// it does not know.
     pub const UNAVAILABLE: Self = Self(13);
+    /// The resource asked about is being built on this thread, by a patch
+    /// further up the call, so reading it would build it again without
+    /// end. A mod built for an older minor reads it as any status it does
+    /// not know.
+    pub const BUILDING: Self = Self(14);
 
     /// Whether this is [`Status::OK`].
     ///
@@ -736,7 +741,8 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 122 * 8);
-    assert!(size_of::<HostApi>() == 24 + 192 * 8);
+    assert!(size_of::<HostApi>() == 24 + 193 * 8);
+    assert!(core::mem::offset_of!(HostApi, resource_served) == 24 + 192 * 8);
     assert!(core::mem::offset_of!(HostApi, read_only) == 24 + 191 * 8);
     assert!(core::mem::offset_of!(HostApi, local_held) == 24 + 190 * 8);
     assert!(core::mem::offset_of!(HostApi, crafting_prop) == 24 + 187 * 8);

@@ -268,20 +268,9 @@ pub(crate) extern "system" fn item_data_get(
     let Some(value) = value else {
         return Status::MISSING;
     };
-    let size = u32::try_from(value.len()).unwrap_or(u32::MAX);
-    if !len.is_null() {
-        // SAFETY: `len` is non-null, checked just before; the safe layer
-        // passes it pointing at a writable, aligned `u32` for the call.
-        unsafe { len.write(size) };
-    }
-    if size > capacity || out.is_null() {
-        return Status::BAD_ARGS;
-    }
-    // SAFETY: `out` is non-null and the copy is at most `capacity` bytes, both
-    // checked just before; the safe layer passes `capacity` writable bytes at
-    // `out`, apart from the fake's own buffer.
-    unsafe { out.copy_from_nonoverlapping(value.as_ptr(), value.len()) };
-    Status::OK
+    // SAFETY: the safe layer passes `len` null or a writable, aligned `u32`,
+    // and `out` null or `capacity` writable bytes apart from the fake's own.
+    unsafe { crate::__private::copy_out(&value, out, capacity, len) }
 }
 
 pub(crate) extern "system" fn item_data_set(
@@ -358,20 +347,9 @@ pub(crate) extern "system" fn content_read(
     }) else {
         return Status::MISSING;
     };
-    let size = u32::try_from(data.len()).unwrap_or(u32::MAX);
-    if !len.is_null() {
-        // SAFETY: `len` is non-null, checked just before; the safe layer
-        // passes it pointing at a writable, aligned `u32` for the call.
-        unsafe { len.write(size) };
-    }
-    if size > capacity || out.is_null() {
-        return Status::BAD_ARGS;
-    }
-    // SAFETY: `out` is non-null and the copy is at most `capacity` bytes, both
-    // checked just before; the safe layer passes `capacity` writable bytes at
-    // `out`, apart from the fake's own buffer.
-    unsafe { out.copy_from_nonoverlapping(data.as_ptr(), data.len()) };
-    Status::OK
+    // SAFETY: the safe layer passes `len` null or a writable, aligned `u32`,
+    // and `out` null or `capacity` writable bytes apart from the fake's own.
+    unsafe { crate::__private::copy_out(&data, out, capacity, len) }
 }
 
 pub(crate) extern "system" fn icons_ready(_me: ModHandle) -> Status {
@@ -389,32 +367,145 @@ pub(crate) extern "system" fn resource_read(
     capacity: u32,
     len: *mut u32,
 ) -> Status {
-    // SAFETY: the safe layer passes a key for the call.
-    let Some(key) = (unsafe { key.as_ref() }).copied() else {
-        return Status::BAD_ARGS;
-    };
-    let Some(data) = with(None, |s| {
+    // SAFETY: the safe layer's arguments meet `copy_resource`'s guarantees.
+    unsafe { copy_resource(key, out, capacity, len, |key| archived(&key)) }
+}
+
+pub(crate) extern "system" fn resource_served(
+    _me: ModHandle,
+    key: *const ResourceKey,
+    out: *mut u8,
+    capacity: u32,
+    len: *mut u32,
+) -> Status {
+    // SAFETY: the safe layer's arguments meet `copy_resource`'s guarantees.
+    unsafe {
+        copy_resource(key, out, capacity, len, |key| {
+            // As the loader: no read before every patch is in.
+            if with(true, |s| s.registration == super::Registration::Open) {
+                return Err(Status::REFUSED);
+            }
+            match with(None, |s| {
+                s.served
+                    .iter()
+                    .find(|served| served.0.key == key)
+                    .map(|served| served.0.base)
+            }) {
+                Some(base) => build(&key, &archived(&base)?),
+                None => archived(&key),
+            }
+        })
+    }
+}
+
+/// The fake archive's resource `key`.
+fn archived(key: &ResourceKey) -> Result<Vec<u8>, Status> {
+    with(None, |s| {
         s.host
             .resources
             .get(&(key.guid, key.type_hash, key.part))
             .cloned()
-    }) else {
-        return Status::MISSING;
-    };
-    let size = u32::try_from(data.len()).unwrap_or(u32::MAX);
-    if !len.is_null() {
-        // SAFETY: `len` is non-null, checked just before; the safe layer
-        // passes it pointing at a writable, aligned `u32` for the call.
-        unsafe { len.write(size) };
-    }
-    if size > capacity || out.is_null() {
+    })
+    .ok_or(Status::MISSING)
+}
+
+/// Copies the bytes `read` gives for the key at `key` to `out`, writing
+/// their length to `len`; [`Status::BAD_ARGS`] when `capacity` is short.
+///
+/// # Safety
+///
+/// - `key` is null or points at a `ResourceKey` readable for the call.
+/// - `len` is null or points at a writable, aligned `u32`.
+/// - `out` is null or writable for `capacity` bytes, apart from `read`'s.
+unsafe fn copy_resource(
+    key: *const ResourceKey,
+    out: *mut u8,
+    capacity: u32,
+    len: *mut u32,
+    read: impl FnOnce(ResourceKey) -> Result<Vec<u8>, Status>,
+) -> Status {
+    // SAFETY: the caller guarantees `key` null or readable; `as_ref` turns
+    // away null.
+    let Some(key) = (unsafe { key.as_ref() }).copied() else {
         return Status::BAD_ARGS;
+    };
+    let data = match read(key) {
+        Ok(data) => data,
+        Err(status) => return status,
+    };
+    // SAFETY: the caller guarantees `len` null or writable and aligned, and
+    // `out` null or `capacity` writable bytes apart from `data`, which this
+    // function owns.
+    unsafe { crate::__private::copy_out(&data, out, capacity, len) }
+}
+
+thread_local! {
+    /// The served keys whose patches run on this thread, as the loader's.
+    static BUILDING: core::cell::RefCell<Vec<ResourceKey>> =
+        const { core::cell::RefCell::new(Vec::new()) };
+}
+
+/// Builds the served resource `key` from `base` with every mod's patches,
+/// in order, as the game's first read of it would: a failed patch is
+/// skipped, and [`Status::MISSING`] when none built. As the loader,
+/// [`Status::BUILDING`] for a key whose patches already run on this thread.
+pub(crate) fn build(key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, Status> {
+    if BUILDING.with_borrow(|building| building.contains(key)) {
+        return Err(Status::BUILDING);
     }
-    // SAFETY: `out` is non-null and the copy is at most `capacity` bytes, both
-    // checked just before; the safe layer passes `capacity` writable bytes at
-    // `out`, apart from the fake's own buffer.
-    unsafe { out.copy_from_nonoverlapping(data.as_ptr(), data.len()) };
-    Status::OK
+    let patches: Vec<_> = with(Vec::new(), |s| {
+        s.served
+            .iter()
+            .filter(|s| s.0.key == *key)
+            .map(|s| s.1)
+            .collect()
+    });
+    let _building = Building::enter(*key);
+    let mut bytes = base.to_vec();
+    let mut built = false;
+    for patch in patches {
+        let mut out = core::ptr::null();
+        let mut out_len = 0;
+        // SAFETY: `bytes` is readable for the call, the outs are valid, and
+        // `user` is the pointer the mod served with.
+        let status = patch.run(|patch, user| unsafe {
+            patch(
+                bytes.as_ptr(),
+                bytes.len(),
+                user,
+                &raw mut out,
+                &raw mut out_len,
+            )
+        });
+        if status.is_ok() && !out.is_null() {
+            // SAFETY: on success the patch wrote bytes that live for the
+            // process.
+            bytes = unsafe { core::slice::from_raw_parts(out, out_len) }.to_vec();
+            built = true;
+        }
+    }
+    if built {
+        Ok(bytes)
+    } else {
+        Err(Status::MISSING)
+    }
+}
+
+/// Marks a key's patches running on this thread until dropped, unwinding
+/// included, as the loader's.
+struct Building;
+
+impl Building {
+    fn enter(key: ResourceKey) -> Self {
+        BUILDING.with_borrow_mut(|building| building.push(key));
+        Self
+    }
+}
+
+impl Drop for Building {
+    fn drop(&mut self) {
+        BUILDING.with_borrow_mut(Vec::pop);
+    }
 }
 
 pub(crate) extern "system" fn game_text(

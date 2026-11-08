@@ -55,6 +55,15 @@ pub struct ContentRename {
 /// ([`HostApi::rebuild_resource`](super::HostApi::rebuild_resource)) writes
 /// over the last patch's bytes.
 ///
+/// The loader calls it on the thread that builds: the game's resource
+/// thread for the game's first build, the calling thread for a rebuild or a
+/// served read ([`HostApi::resource_served`](super::HostApi::resource_served)).
+/// It runs again for each served read, possibly on two threads at once,
+/// and nested inside another key's patch on the same thread, though never
+/// inside a build of its own key there. A failure returned from
+/// the game's build turns the mod off; a panic must not leave the
+/// function. `user` is the pointer the mod served with.
+///
 /// # Examples
 ///
 /// The safe layer wraps it in [`Load::serve`](crate::Load::serve).

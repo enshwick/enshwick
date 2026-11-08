@@ -26,8 +26,21 @@ Each entry names the pull request that made the change.
   a component does not write. Only a type with a designer data field, at
   any depth, or a kind the API does not know, still does not resolve.
   `HostApi::read_only`, ABI 11.16 (#994).
+- `content`: `Host::served_resource(key)` and `Host::served_value(key)`
+  read a resource as the game's first read would build it now, a served
+  key with every mod's patches; Luau `enshwick.resources.served_value`.
+  `HostApi::resource_served` and `Status::BUILDING`, ABI 11.17 (#998).
 
 ### Changed
+
+- `content`: `Load::rekey_item(old, new)` and Luau
+  `enshwick.content.rekey_item` read `new` as served at each build of
+  `old`, so other mods' changes of `new`, a mod's own item included, reach
+  `old`, and two items re-keyed to each other swap (#998).
+- Host calls that copy bytes to a mod refuse data past 4 GiB instead of
+  writing past the mod's buffer (#998).
+- The fake host's build of a served resource skips a failed patch and
+  builds the rest, as the loader does (#998).
 
 - `script`: **Breaking.** `Callback::call`, `Function::call`,
   `InitFunction::call`, `Opened::call` and `Handle::call` take

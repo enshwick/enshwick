@@ -12,7 +12,7 @@ use super::entries::content::{
     add_text, change_data, content_hashes, content_read, content_serve, declare_change,
     entity_data_open, game_text, game_version, icons_ready, item_data_get, item_data_open,
     item_data_set, rebuild_resource, recipe_disabled, recipe_kind, recipe_rule, resource_keys,
-    resource_read, serve_resource, set_change, types,
+    resource_read, resource_served, serve_resource, set_change, types,
 };
 use super::entries::gameplay::{
     account_knowledge, affix_info, affix_open, affix_roll, altar_limit_filter, altar_zone_filter,
@@ -256,4 +256,5 @@ pub(crate) static API: HostApi = HostApi {
     run_action_at,
     local_held,
     read_only,
+    resource_served,
 };

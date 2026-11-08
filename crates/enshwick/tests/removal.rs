@@ -31,7 +31,9 @@ mod tests {
             // A second re-key of the same item chains on the first.
             load.rekey_item(OTHER_ITEM, SPARE_ITEM)?;
             load.add_item(NewItem::new(LANTERN, OTHER_ITEM))?;
-            load.rekey_item(SPARE_ITEM, LANTERN.guid())?;
+            // `OTHER_ITEM` reads it as served: the lantern's data, until the
+            // second re-key above takes `SPARE_ITEM`'s.
+            load.rekey_item(LOOT_ITEM, LANTERN.guid())?;
             let mut refused = REFUSED.lock().unwrap();
             for result in [
                 load.rekey_item(LOOT_ITEM, ENTITY_ITEM),
@@ -190,18 +192,9 @@ mod tests {
     #[test]
     fn an_item_rekeyed_to_the_mod_s_own_item_takes_that_item_s_data_under_its_own_id() {
         let loader = start();
-        let item = built(
-            &loader,
-            SPARE_ITEM,
-            SPARE_ITEM,
-            "item_info",
-            "demo::ItemInfo",
-        );
-        assert_eq!(
-            id(item.field("itemId")),
-            Some(u64::from(SPARE_ITEM.fnv1a()))
-        );
-        assert_eq!(item.field("objectId"), Some(&Value::Guid(SPARE_ITEM)));
+        let item = built(&loader, LOOT_ITEM, LOOT_ITEM, "item_info", "demo::ItemInfo");
+        assert_eq!(id(item.field("itemId")), Some(u64::from(LOOT_ITEM.fnv1a())));
+        assert_eq!(item.field("objectId"), Some(&Value::Guid(LOOT_ITEM)));
         assert_eq!(
             item.field("category"),
             Some(&Value::Uint(u64::from(OTHER_ITEM.0[15]))),
@@ -210,7 +203,7 @@ mod tests {
         assert_eq!(
             item.field("maxStackSize"),
             Some(&Value::Uint(50)),
-            "the base item's 50 over the old item's 30"
+            "the base item's 50 over the old item's 20"
         );
     }
 

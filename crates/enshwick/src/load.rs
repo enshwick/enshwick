@@ -99,6 +99,7 @@ impl Off {
             Status::NOT_A_PROP => "not a prop",
             Status::NOT_KEPT => "not found again after a load",
             Status::UNAVAILABLE => "not available here or on this game build",
+            Status::BUILDING => "being built further up this call",
             _ => "failed",
         };
         Self::new(format!("{what}: {why}"))

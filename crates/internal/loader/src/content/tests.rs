@@ -1,5 +1,6 @@
 use crate::locks::Relock;
 
+use super::patches::{Build, write_differences};
 use super::*;
 
 unsafe extern "system" fn add_one(
@@ -46,9 +47,9 @@ fn a_rebuild_runs_the_mods_of_the_first_build_although_they_are_off() {
     let base = [7u8; 4];
     let at = base.as_ptr().expose_provenance();
     // No loader runs here, so every mod reads as off.
-    assert!(run_patches(&entry, at, base.len(), None).is_none());
+    assert!(run_patches(&entry, at, base.len(), None, Build::Game).is_none());
     let both = [ModIndex::new(3), ModIndex::new(4)];
-    let (_, len, by) = run_patches(&entry, at, base.len(), Some(&both)).unwrap();
+    let (_, len, by) = run_patches(&entry, at, base.len(), Some(&both), Build::Game).unwrap();
     assert_eq!((len, by), (6, both.to_vec()));
 }
 
