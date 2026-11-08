@@ -1023,7 +1023,7 @@ pub const FACTS: &[(&str, Fact)] = &[
                 ("keen::FbUiMenu", "crafting"),
                 ("keen::FbUiCrafting", "recipes"),
             ],
-            holds: "keen::unknown",
+            holds: "keen::FbUiCraftingRecipeCollection",
         },
     ),
     (
