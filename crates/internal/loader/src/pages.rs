@@ -324,4 +324,18 @@ mod tests {
             "a page released after the query is refused, not a fault"
         );
     }
+
+    #[test]
+    fn the_readable_count_ends_at_the_region_or_the_cap_and_is_zero_where_nothing_reads() {
+        const PAGE: usize = 4096;
+        let page = allocate(None, PAGE).expect("a fresh page");
+        let start = page.as_ptr().expose_provenance();
+        assert_eq!(readable(start, usize::MAX), PAGE);
+        assert_eq!(readable(start + 100, usize::MAX), PAGE - 100);
+        assert_eq!(readable(start, 16), 16, "the cap");
+        assert_eq!(readable(0, 16), 0);
+        // SAFETY: `page` is the test's own allocation, released once.
+        unsafe { VirtualFree(page.as_ptr().cast(), 0, MEM_RELEASE) };
+        assert_eq!(readable(start, 16), 0, "released");
+    }
 }
