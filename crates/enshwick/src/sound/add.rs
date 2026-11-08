@@ -16,8 +16,6 @@ pub const SAMPLE_RATE: u32 = 48_000;
 pub const MAX_FILE_BYTES: u64 = 16 << 20;
 /// The most bytes of WAV files one mod adds as sounds.
 pub const MAX_MOD_BYTES: u64 = 64 << 20;
-/// The longest sound a mod adds, in seconds.
-pub const MAX_SECONDS: u32 = 600;
 
 const FORMAT: &str = "format";
 const UNCOMPRESSED: &str = "Uncompressed";
@@ -92,8 +90,7 @@ pub struct NewSound {
     /// The sound's content id; its container's GUID is the id's.
     pub id: Id,
     /// The WAV file, relative to the mod's folder: 16-bit PCM, mono or
-    /// stereo, at [`SAMPLE_RATE`], at most [`MAX_FILE_BYTES`] and
-    /// [`MAX_SECONDS`] long.
+    /// stereo, at [`SAMPLE_RATE`], at most [`MAX_FILE_BYTES`].
     pub file: String,
     /// The container's scene.
     #[script(default)]
@@ -140,12 +137,6 @@ pub(crate) enum ReadWavError {
         /// Frames per second.
         rate: u32,
     },
-    /// The sound lasts too long.
-    #[error("{seconds} s long, past the {MAX_SECONDS} s a sound lasts at most")]
-    TooLong {
-        /// Its length, rounded down.
-        seconds: u32,
-    },
     /// The file holds no samples.
     #[error("no samples")]
     Empty,
@@ -180,10 +171,12 @@ pub(crate) fn read_wav(wav: &[u8]) -> Result<Pcm, ReadWavError> {
     if frames == 0 {
         return Err(ReadWavError::Empty);
     }
-    if frames > MAX_SECONDS * SAMPLE_RATE {
-        return Err(ReadWavError::TooLong {
-            seconds: frames / SAMPLE_RATE,
-        });
+    // The header's length is a claim: past the file's bytes it would size
+    // the buffer, and the game would read the sound past its end.
+    if u64::from(reader.len()) * 2 > u64::try_from(wav.len()).unwrap_or(u64::MAX) {
+        return Err(ReadWavError::Malformed(
+            "its header claims more samples than the file holds".to_owned(),
+        ));
     }
     let mut bytes = Vec::with_capacity(usize::try_from(reader.len()).unwrap_or(0) * 2);
     for sample in reader.into_samples::<i16>() {
@@ -204,14 +197,10 @@ pub(crate) struct OutsideFolderError(String);
 
 /// The file `file` names inside `dir`: a relative path that stays inside it.
 fn file_in(dir: &std::path::Path, file: &str) -> Result<std::path::PathBuf, OutsideFolderError> {
-    let path = std::path::Path::new(file);
-    let inside = path
-        .components()
-        .all(|part| matches!(part, std::path::Component::Normal(_)));
-    if file.is_empty() || !inside {
+    if file.is_empty() || !crate::mods::stays_inside(file) {
         return Err(OutsideFolderError(file.to_owned()));
     }
-    Ok(dir.join(path))
+    Ok(dir.join(file))
 }
 
 /// The value of a container that plays `sound` in `scene` with the values
@@ -326,8 +315,8 @@ impl Load<'_> {
     ///
     /// [`Off`] for a mod not of side both, a path outside the mod's folder,
     /// a file past [`MAX_FILE_BYTES`] or past the mod's [`MAX_MOD_BYTES`],
-    /// one that is not 16-bit PCM WAV at [`SAMPLE_RATE`] or lasts past
-    /// [`MAX_SECONDS`], a container value outside its bound, an id another
+    /// one that is not 16-bit PCM WAV at [`SAMPLE_RATE`], a container value
+    /// outside its bound, an id another
     /// content id holds, after init, and on a client whose game holds no
     /// streamed uncompressed sound to build from.
     ///
@@ -379,10 +368,10 @@ impl Load<'_> {
         let wav = std::fs::read(&path).map_err(|error| fail(format!("{file}: {error}")))?;
         let pcm = read_wav(&wav).map_err(|error| fail(format!("{file}: {error}")))?;
         drop(wav);
-        let container = self.declare(id)?;
-        let sound = self.declare(sound_id)?;
-        self.sound_bytes += size;
         if self.host().build().side != Side::CLIENT {
+            let container = self.declare(id)?;
+            self.declare(sound_id)?;
+            self.sound_bytes += size;
             return Ok(SoundContainerId::from_guid(container));
         }
         let host = self.host();
@@ -395,18 +384,25 @@ impl Load<'_> {
             .ok_or_else(|| fail("this game has no sound container entry".to_owned()))?
             .qualified_name()
             .to_owned();
-        // One of the game's few uncompressed sounds, all streamed, carries
-        // the content category a served sound needs.
-        let base = host
-            .resource_keys(Some(sound_type))?
-            .into_iter()
-            .find(|key| {
-                host.game_value(*key)
-                    .is_ok_and(|value| is_streamed_uncompressed(&value))
-            })
-            .ok_or_else(|| {
-                fail("the game holds no streamed uncompressed sound to build from".to_owned())
-            })?;
+        let base = match self.sound_base {
+            Some(base) => base,
+            // One of the game's few uncompressed sounds, all streamed, carries
+            // the content category a served sound needs.
+            None => host
+                .resource_keys(Some(sound_type))?
+                .into_iter()
+                .find(|key| {
+                    host.game_value(*key)
+                        .is_ok_and(|value| is_streamed_uncompressed(&value))
+                })
+                .ok_or_else(|| {
+                    fail("the game holds no streamed uncompressed sound to build from".to_owned())
+                })?,
+        };
+        self.sound_base = Some(base);
+        let container = self.declare(id)?;
+        let sound = self.declare(sound_id)?;
+        let host = self.host();
         let hash = host.serve_content(&pcm.bytes)?;
         let (stereo, frames, name) = (pcm.stereo, pcm.frames, id.to_string());
         drop(pcm);
@@ -422,6 +418,7 @@ impl Load<'_> {
             container.key(types::SOUND_CONTAINER_RESOURCE)?,
             &value,
         )?;
+        self.sound_bytes += size;
         Ok(SoundContainerId::from_guid(container))
     }
 }
@@ -473,13 +470,35 @@ mod tests {
     }
 
     #[test]
+    fn a_header_that_claims_more_samples_than_the_file_holds_is_refused() {
+        let mut lying = wav(1, SAMPLE_RATE, 16, &[1, 2, 3]);
+        let data = lying.len() - 6 - 4;
+        lying[data..data + 4].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert!(
+            matches!(read_wav(&lying), Err(ReadWavError::Malformed(_))),
+            "{:?}",
+            read_wav(&lying)
+        );
+        assert_eq!(
+            read_wav(&wav(1, SAMPLE_RATE, 16, &[1, 2, 3])).map(|p| p.frames),
+            Ok(3)
+        );
+    }
+
+    #[test]
     fn a_path_must_stay_inside_the_mod_s_folder() {
         let dir = std::path::Path::new("mods/you.horns");
         assert_eq!(
             file_in(dir, "sounds/horn.wav"),
             Ok(dir.join("sounds/horn.wav"))
         );
-        for bad in ["", "../other/horn.wav", "/horn.wav", "./horn.wav"] {
+        assert_eq!(file_in(dir, "./horn.wav"), Ok(dir.join("./horn.wav")));
+        for bad in [
+            "",
+            "../other/horn.wav",
+            "/horn.wav",
+            "sounds/../../horn.wav",
+        ] {
             assert!(file_in(dir, bad).is_err(), "{bad}");
         }
         // Elsewhere a drive letter is an ordinary folder name inside the mod's.

@@ -30,11 +30,7 @@ pub struct Mods {
 impl Mods {
     /// `relative` inside the mod's folder; `None` for a path that leaves it.
     fn inside(self, relative: &str) -> Option<PathBuf> {
-        let relative = Path::new(relative);
-        relative
-            .components()
-            .all(|part| matches!(part, Component::Normal(_) | Component::CurDir))
-            .then(|| self.dir.join(relative))
+        super::stays_inside(relative).then(|| self.dir.join(relative))
     }
 }
 

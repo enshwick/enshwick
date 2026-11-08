@@ -197,6 +197,10 @@ pub struct Load<'a> {
     /// The bytes of the sound files the mod added so far.
     #[cfg(feature = "unstable")]
     pub(crate) sound_bytes: u64,
+    /// The game's streamed uncompressed sound the mod's sounds build from,
+    /// once one was found.
+    #[cfg(feature = "unstable")]
+    pub(crate) sound_base: Option<crate::abi::ResourceKey>,
     _init: core::marker::PhantomData<&'a ()>,
 }
 
@@ -215,6 +219,8 @@ impl Load<'_> {
             embedded_texts,
             #[cfg(feature = "unstable")]
             sound_bytes: 0,
+            #[cfg(feature = "unstable")]
+            sound_base: None,
             _init: core::marker::PhantomData,
         }
     }

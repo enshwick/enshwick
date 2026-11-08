@@ -24,7 +24,7 @@ pub(super) struct SoundEntry {
     /// `<pack>:<id>`, which other mods play.
     pub(super) id: String,
     /// The WAV file, relative to the pack's folder: 16-bit PCM, mono or
-    /// stereo, at 48000 Hz, at most 16 MiB and 600 s.
+    /// stereo, at 48000 Hz, at most 16 MiB.
     pub(super) file: String,
     /// What it plays as: `sfx` when left out, `music`, `ui` or `voice`.
     pub(super) scene: Option<SceneEntry>,
@@ -78,10 +78,7 @@ pub(super) fn sounds(reader: &mut Reader<'_>) -> Vec<PackSound> {
         let at = entry.span().start;
         let e = entry.get_ref();
         reader.define(SOUNDS_FILE, text, at, &e.id, "sound");
-        let inside = std::path::Path::new(&e.file)
-            .components()
-            .all(|part| matches!(part, std::path::Component::Normal(_)));
-        if e.file.is_empty() || !inside {
+        if e.file.is_empty() || !crate::mods::stays_inside(&e.file) {
             reader.error(
                 SOUNDS_FILE,
                 text,

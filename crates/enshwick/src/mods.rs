@@ -362,6 +362,17 @@ pub(crate) fn folder(file: &str) -> Option<&str> {
         .map(|(folder, _)| folder)
 }
 
+/// Whether the relative path `relative` stays inside the folder it is joined
+/// to: no root, drive prefix or `..`.
+pub(crate) fn stays_inside(relative: &str) -> bool {
+    std::path::Path::new(relative).components().all(|part| {
+        matches!(
+            part,
+            std::path::Component::Normal(_) | std::path::Component::CurDir
+        )
+    })
+}
+
 /// [`HostApi::mods`] and [`HostApi::join_missing`].
 type Listing = extern "system" fn(
     me: crate::abi::ModHandle,

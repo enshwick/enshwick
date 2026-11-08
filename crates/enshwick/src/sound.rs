@@ -35,9 +35,7 @@ use crate::resources::Value;
 use crate::{Load, Off};
 
 #[cfg(feature = "unstable")]
-pub use add::{
-    MAX_FILE_BYTES, MAX_MOD_BYTES, MAX_SECONDS, NewSound, SAMPLE_RATE, SoundContainerScene,
-};
+pub use add::{MAX_FILE_BYTES, MAX_MOD_BYTES, NewSound, SAMPLE_RATE, SoundContainerScene};
 
 /// The loudest volume a change sets, as a factor of the recording's.
 pub const MAX_VOLUME: f32 = 4.0;
