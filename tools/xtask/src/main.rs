@@ -40,6 +40,7 @@ mod fuzz;
 mod header;
 mod notes;
 mod ranges;
+mod reports;
 mod rules;
 mod tag_lines;
 mod wine;
@@ -118,7 +119,11 @@ fn run(args: &[String]) -> Result<bool, String> {
     }
     let packages = packages()?;
     let root = workspace_root();
-    let problems = tree_problems(&root, &packages)?;
+    let mut problems = tree_problems(&root, &packages)?;
+    let stale = changed_files(&base)
+        .zip(branch_messages(&base))
+        .and_then(|(files, messages)| reports::stale(&files, &messages));
+    problems.extend(stale.map(|problem| format!("compatibility reports: {problem}")));
     if parts.contains(&Part::Host) && !list {
         for problem in &problems {
             say(problem);
@@ -339,6 +344,17 @@ fn changed_files(base: &str) -> Option<Vec<String>> {
     files.sort();
     files.dedup();
     Some(files)
+}
+
+/// The messages of the commits since the merge base with `base`; `None`
+/// without a merge base.
+fn branch_messages(base: &str) -> Option<String> {
+    let merge_base = git(&["merge-base", "HEAD", base])?;
+    git(&[
+        "log",
+        "--format=%B",
+        &format!("{}..HEAD", merge_base.trim()),
+    ])
 }
 
 fn git(args: &[&str]) -> Option<String> {

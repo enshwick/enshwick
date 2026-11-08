@@ -84,7 +84,10 @@ game update that moves a field changes this crate, not the mods.
   off or partly off. `cargo xtask compat <exe> --data reports` writes it
   from the executable as the loader finds the build, and a test checks each
   report against each executable that `ENSH_EXES` lists. It holds names,
-  counts and ids only.
+  counts and ids only. `cargo xtask compat refresh` rewrites the report of
+  each executable `ENSH_EXES` lists. CI has no game executables, so
+  `cargo xtask check` fails a branch that changes `anchors/` but no report,
+  unless one of its commits says why in a `Reports-unchanged: <why>` trailer.
 
 ## Patterns
 
