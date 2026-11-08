@@ -18,6 +18,14 @@ Each entry names the pull request that made the change.
   from its description and ask it with bytes at any address (#989).
 - `test`: `Installed::set_log_level(level)` changes the level of every
   handle without its own, as an edit of `enshwick.toml` would (#993).
+- `typed`: `ComponentType::read` and Luau `component_type` read a live
+  component's `BlobArray`, `BlobString`, `BlobOptional` and `BlobVariant`
+  fields, such as `RandomSpawner.spawnEntries`, from the template's set-up
+  data that follows the component, after the loader checks that the memory
+  is read-only; a blob past it fails that read, naming the field, and such
+  a component does not write. Only a type with a designer data field, at
+  any depth, or a kind the API does not know, still does not resolve.
+  `HostApi::read_only`, ABI 11.16 (#994).
 
 ### Changed
 

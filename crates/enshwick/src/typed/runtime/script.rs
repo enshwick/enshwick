@@ -213,8 +213,9 @@ impl ComponentType {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the component's bytes do not read as the generated
-    /// struct, or on a build that lacks the world's reads.
+    /// [`Off`] when the component's bytes, or the blob data that follows
+    /// them, do not read as the generated struct, naming the field, or on a
+    /// build that lacks the world's reads.
     #[script]
     pub(crate) fn read(&self, entity: Entity) -> Result<Option<Fields>, Off> {
         self.raw
@@ -229,8 +230,9 @@ impl ComponentType {
     ///
     /// # Errors
     ///
-    /// [`Off`] for a type the loader does not let mods write, a value that
-    /// does not fit the type, off the game thread, or on a build that lacks
+    /// [`Off`] for a type the loader does not let mods write or with blob
+    /// fields, a value that does not fit the type, off the game thread, or
+    /// on a build that lacks
     /// the world's reads.
     #[script]
     pub(crate) fn write(&self, entity: Entity, value: Fields) -> Result<(), Off> {
@@ -366,8 +368,8 @@ impl Load<'_> {
     ///
     /// [`Off`] for an id of no generated component, and when the build
     /// lacks the type, its shape differs from the generated struct, or a
-    /// field's data lies outside the component, such as a `BlobArray`'s,
-    /// naming the field and the build.
+    /// field's data lies where a read does not reach, such as a designer
+    /// data kind's, naming the field and the build.
     #[script(name = "component_type")]
     pub(crate) fn typed_component_type(&mut self, id: &str) -> Result<ComponentType, Off> {
         let row = Row::find(id, Role::Component)?;

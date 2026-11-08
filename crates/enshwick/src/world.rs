@@ -446,6 +446,11 @@ impl World {
         ty.read(self.0.host, entity)
     }
 
+    /// The host this world calls through.
+    pub(crate) const fn host(self) -> Host {
+        self.0.host
+    }
+
     /// Lets `write` change `entity`'s component of type `ty`, its reflected
     /// bytes, and marks it changed the game's way, so the game sends it to
     /// clients and saves it; returns what `write` returns. On the game
