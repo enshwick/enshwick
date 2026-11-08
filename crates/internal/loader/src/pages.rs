@@ -174,6 +174,7 @@ impl Found {
         let mut end = address;
         while end < wanted
             && let Some(next) = self.run_end(end)
+            && next > end
         {
             end = next;
         }
@@ -527,6 +528,26 @@ mod tests {
             found.read_only(0, start + 2 * PAGE, usize::MAX),
             2 * PAGE,
             "remembered"
+        );
+        // SAFETY: `pages` is the test's own allocation, released once.
+        unsafe { VirtualFree(pages.as_ptr().cast(), 0, MEM_RELEASE) };
+    }
+
+    #[test]
+    fn a_run_found_past_a_writable_page_does_not_reach_back_over_it_to_the_allocation_base() {
+        const PAGE: usize = 4096;
+        let found = Found::new();
+        let pages = allocate(None, 3 * PAGE).expect("fresh pages");
+        let start = pages.as_ptr().expose_provenance();
+        // SAFETY: the pages are the test's own allocation, used by no one else.
+        unsafe { protect(start, PAGE, PAGE_READONLY) }.expect("first page read-only");
+        // SAFETY: the pages are the test's own allocation, used by no one else.
+        unsafe { protect(start + 2 * PAGE, PAGE, PAGE_READONLY) }.expect("last page read-only");
+        assert_eq!(found.read_only(0, start + 2 * PAGE, usize::MAX), PAGE);
+        assert_eq!(
+            found.read_only(0, start + PAGE, usize::MAX),
+            0,
+            "the writable page between stays writable"
         );
         // SAFETY: `pages` is the test's own allocation, released once.
         unsafe { VirtualFree(pages.as_ptr().cast(), 0, MEM_RELEASE) };
