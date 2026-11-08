@@ -8,14 +8,14 @@ use std::path::Path;
 
 use enshwick_gamedata as tables;
 
-use super::{Args, Build, MODULE_IDS, ROOT, build, build_name, reports};
+use super::{Args, Build, MODULE_IDS, build, build_name, reports};
 
-/// The report data of `build` as TOML: names, counts and ids only. An entry
-/// is missing when a route or an anchor of the side names it and this build
-/// does not have it, and unread when it is an attribute slot and no game
-/// archive beside the executable reads; each loader feature that names a
-/// missing entry is listed with them.
-pub(super) fn data(build: &Build) -> Result<String, String> {
+/// The report data of `build` as TOML, sealed for `inputs`: names, counts
+/// and ids only. An entry is missing when a route or an anchor of the side
+/// names it and this build does not have it, and unread when it is an
+/// attribute slot and no game archive beside the executable reads; each
+/// loader feature that names a missing entry is listed with them.
+pub(super) fn data(build: &Build, inputs: &reports::Inputs) -> Result<String, String> {
     if MODULE_IDS.is_empty() {
         return Err("only a Windows build of this tool knows the loader's features".to_owned());
     }
@@ -63,7 +63,7 @@ pub(super) fn data(build: &Build) -> Result<String, String> {
         let _w = writeln!(out, "unread = {}", list(&unread));
     }
     out.push_str(&features(&known, &missing));
-    Ok(reports::sealed(&reports::inputs(Path::new(ROOT))?, &out))
+    Ok(reports::sealed(inputs, &out))
 }
 
 /// The entries a build's report counts: those the routes of its side look
@@ -120,20 +120,66 @@ fn feature_state(lacking: usize, named: usize) -> Option<&'static str> {
     }
 }
 
-/// The `refresh` step: rewrites the report in `dir` of each executable the
-/// `ENSH_EXES` path list (`exes`) names, only once every one of them reads,
-/// so a failed run leaves no report half refreshed.
-pub(super) fn refresh(dir: &Path, exes: Option<std::ffi::OsString>) -> Result<(), String> {
+/// The `refresh` step: rewrites the report in the repository at `root` of
+/// each executable the `ENSH_EXES` path list (`exes`) names, only once every
+/// one of them reads and no other report would stay stale, so a failed run
+/// leaves no report half refreshed.
+pub(super) fn refresh(root: &Path, exes: Option<std::ffi::OsString>) -> Result<(), String> {
     let list = exes
         .filter(|list| !list.is_empty())
         .ok_or("ENSH_EXES names no game executable")?;
-    let reports = std::env::split_paths(&list)
-        .map(|exe| report_data(dir, &exe).map(|report| (exe, report)))
+    let inputs = sealing_inputs(root)?;
+    let dir = root.join(reports::REPORTS);
+    let found = std::env::split_paths(&list)
+        .map(|exe| report_data(&dir, &exe, &inputs).map(|report| (exe, report)))
         .collect::<Result<Vec<_>, _>>()?;
-    for (exe, (file, text)) in reports {
-        let path = dir.join(&file);
-        std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
+    let written: Vec<(String, String)> = found.iter().map(|(_, report)| report.clone()).collect();
+    write(root, &written)?;
+    for (exe, (file, _)) in &found {
         let _shown = writeln!(std::io::stderr(), "{file}: {}", exe.display());
+    }
+    Ok(())
+}
+
+/// The [`reports::inputs`] to write new seals with.
+///
+/// # Errors
+///
+/// As [`reports::inputs`], and while an untracked file sits among the
+/// inputs: the new seals would leave it out, and once it is committed every
+/// report would be stale.
+pub(super) fn sealing_inputs(root: &Path) -> Result<reports::Inputs, String> {
+    let untracked = reports::listed(root, "--others")?;
+    if !untracked.is_empty() {
+        let files: Vec<&str> = untracked.iter().map(String::as_str).collect();
+        return Err(format!(
+            "add these files to git or move them away before sealing reports: {}",
+            files.join(", ")
+        ));
+    }
+    reports::inputs(root)
+}
+
+/// Writes `found`, each a file name and its sealed text, into the reports
+/// of the repository at `root`, only when no other report would stay stale.
+///
+/// # Errors
+///
+/// The reports that would stay stale, with nothing written, or a report
+/// that does not write.
+fn write(root: &Path, found: &[(String, String)]) -> Result<(), String> {
+    let names: Vec<String> = found.iter().map(|(file, _)| file.clone()).collect();
+    let left = reports::stale(root, &names);
+    if !left.is_empty() {
+        return Err(format!(
+            "no report written: these would stay stale, so name their executables in ENSH_EXES too:\n{}",
+            left.join("\n")
+        ));
+    }
+    let dir = root.join(reports::REPORTS);
+    for (file, text) in found {
+        let path = dir.join(file);
+        std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
     }
     Ok(())
 }
@@ -141,7 +187,11 @@ pub(super) fn refresh(dir: &Path, exes: Option<std::ffi::OsString>) -> Result<()
 /// The report data of `exe` and the name of its file in `dir`; where no
 /// file beside the executable states the Steam build or the game version,
 /// the report already there does.
-pub(super) fn report_data(dir: &Path, exe: &Path) -> Result<(String, String), String> {
+pub(super) fn report_data(
+    dir: &Path,
+    exe: &Path,
+    inputs: &reports::Inputs,
+) -> Result<(String, String), String> {
     let mut build = build(&Args {
         exe: exe.to_path_buf(),
         mods: Vec::new(),
@@ -169,7 +219,7 @@ pub(super) fn report_data(dir: &Path, exe: &Path) -> Result<(String, String), St
             build.fingerprint,
         );
     }
-    Ok((file, data(&build)?))
+    Ok((file, data(&build, inputs)?))
 }
 
 #[cfg(test)]
@@ -207,6 +257,48 @@ mod tests {
     }
 
     #[test]
+    fn an_untracked_file_among_the_inputs_refuses_new_seals() {
+        let root = reports::tests::repository("unstaged");
+        std::fs::write(
+            root.join("crates/enshwick-gamedata/src/routes/walk.rs"),
+            "fn walk() {}\n",
+        )
+        .unwrap();
+        let refused = sealing_inputs(&root).unwrap_err();
+        assert!(refused.contains("routes/walk.rs"), "{refused}");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn writing_some_reports_refuses_while_another_would_stay_stale() {
+        use reports::tests::{REPORT, ROUTE, repository, write_file};
+        let root = repository("partial");
+        let other = REPORT.replace("ab/1", "cd/1");
+        let report = reports::sealed(&reports::inputs(&root).unwrap(), &other);
+        write_file(
+            &root,
+            &format!("{}/server-cd-1.toml", reports::REPORTS),
+            &report,
+        );
+        write_file(&root, ROUTE, "fn find() { todo!() }\n");
+        let inputs = reports::inputs(&root).unwrap();
+        let first = (
+            "server-ab-1.toml".to_owned(),
+            reports::sealed(&inputs, REPORT),
+        );
+        let refused = write(&root, std::slice::from_ref(&first)).unwrap_err();
+        assert!(refused.contains("server-cd-1.toml"), "{refused}");
+        assert_eq!(reports::stale(&root, &[]).len(), 2, "nothing was written");
+        let second = (
+            "server-cd-1.toml".to_owned(),
+            reports::sealed(&inputs, &other),
+        );
+        write(&root, &[first, second]).unwrap();
+        assert_eq!(reports::stale(&root, &[]), Vec::<String>::new());
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
     fn refresh_without_a_readable_executable_fails() {
         let dir = empty_dir("refresh-none");
         assert!(refresh(&dir, None).is_err());
@@ -224,15 +316,25 @@ mod tests {
         let Some(server) = std::env::var_os("ENSH_SERVER_EXE") else {
             return;
         };
+        let root = Path::new(crate::ROOT);
+        let texts = || -> Vec<String> {
+            let mut files: Vec<_> = std::fs::read_dir(root.join(reports::REPORTS))
+                .unwrap()
+                .map(|e| e.unwrap().path())
+                .collect();
+            files.sort();
+            files
+                .iter()
+                .map(|f| std::fs::read_to_string(f).unwrap())
+                .collect()
+        };
+        let before = texts();
         let dir = empty_dir("refresh-partial");
         let list =
             std::env::join_paths([std::path::PathBuf::from(server), dir.join("missing.exe")])
                 .unwrap();
-        assert!(refresh(&dir, Some(list)).is_err());
-        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
-        let one = std::env::var_os("ENSH_SERVER_EXE");
-        refresh(&dir, one).unwrap();
-        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+        assert!(refresh(root, Some(list)).is_err());
+        assert_eq!(texts(), before);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

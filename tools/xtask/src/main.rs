@@ -213,7 +213,7 @@ fn tree_problems(root: &std::path::Path, packages: &[Package]) -> Result<Vec<Str
             .map(|problem| format!("crate rule: {problem}")),
     );
     problems.extend(
-        reports::check(root)
+        reports::stale(root, &[])
             .into_iter()
             .map(|problem| format!("compatibility report: {problem}")),
     );

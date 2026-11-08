@@ -6,13 +6,12 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
+use crate::reports::REPORTS;
 use crate::{Package, packages, say, workspace_root};
 
 const USAGE: &str = "usage: cargo xtask notes [--out <file>] [--known-issues <text>]";
 /// The package whose version names the release.
 pub(crate) const LOADER: &str = "enshwick-loader";
-/// The compatibility reports of the builds the loader supports.
-const REPORTS: &str = "crates/enshwick-gamedata/reports";
 /// GitHub refuses a release body longer than this, in characters.
 const MAX_BODY: usize = 125_000;
 const WARNING: &str = "\

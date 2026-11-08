@@ -110,11 +110,6 @@ enum Step {
 
 /// The repository root.
 const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
-/// The compatibility reports, one TOML file per build.
-const REPORTS: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../crates/enshwick-gamedata/reports"
-);
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -144,16 +139,7 @@ fn compat(args: &[String]) -> Result<bool, String> {
     match (cli.step, cli.args) {
         (Some(Step::Run(args)), _) => run_loader(&args).map(|()| true),
         (Some(Step::Refresh), _) => {
-            refresh(Path::new(REPORTS), std::env::var_os("ENSH_EXES"))?;
-            let stale = reports::check(Path::new(ROOT));
-            if stale.is_empty() {
-                Ok(true)
-            } else {
-                Err(format!(
-                    "reports no executable in ENSH_EXES rewrote:\n{}",
-                    stale.join("\n")
-                ))
-            }
+            refresh(Path::new(ROOT), std::env::var_os("ENSH_EXES")).map(|()| true)
         }
         (None, Some(args)) => run(&args),
         (None, None) => Err("name a game executable; --help lists the options".to_owned()),
@@ -371,11 +357,11 @@ fn supply_slots(
 }
 
 fn spell(fingerprint: Fingerprint) -> String {
-    let guid: String = fingerprint.guid().iter().fold(String::new(), |mut out, b| {
-        let _infallible = write!(out, "{b:02x}");
-        out
-    });
-    format!("{guid}/{}", fingerprint.age())
+    format!(
+        "{}/{}",
+        reports::hex(&fingerprint.guid()),
+        fingerprint.age()
+    )
 }
 
 /// How one mod fared when the loader started it.
@@ -432,7 +418,9 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
         } else {
             path.clone()
         };
-        std::fs::write(&path, data(&build)?).map_err(|e| format!("{}: {e}", path.display()))?;
+        let inputs = report::sealing_inputs(Path::new(ROOT))?;
+        std::fs::write(&path, data(&build, &inputs)?)
+            .map_err(|e| format!("{}: {e}", path.display()))?;
     }
     write_features(&mut out, &build.table);
     works &= write_mods(&mut out, args)?;
@@ -765,13 +753,14 @@ mod tests {
             .first()
             .map(|(id, _)| format!("{id:?}"))
             .unwrap();
-        let without = data(&build(false)).unwrap();
+        let inputs = [0; 32];
+        let without = data(&build(false), &inputs).unwrap();
         let unread = without
             .lines()
             .find(|l| l.starts_with("unread = "))
             .unwrap();
         assert!(unread.contains(&slot), "{without}");
-        let with = data(&build(true)).unwrap();
+        let with = data(&build(true), &inputs).unwrap();
         assert!(!with.contains("unread = "), "{with}");
         let missing = with.lines().find(|l| l.starts_with("missing = ")).unwrap();
         assert!(missing.contains(&slot), "{with}");
@@ -802,11 +791,10 @@ mod tests {
                 .map(|id| id.as_str().unwrap())
                 .collect()
         };
-        let exe = match data["side"].as_str().unwrap() {
-            "server" => "enshrouded_server.exe",
-            _ => "enshrouded.exe",
-        };
-        let side = side_of(Path::new(exe)).unwrap();
+        let side = [tables::Side::Server, tables::Side::Client]
+            .into_iter()
+            .find(|side| data["side"].as_str() == Some(side.as_str()))
+            .unwrap();
         let routes = tables::Routes::embedded().unwrap();
         let anchors = tables::anchors(side).unwrap();
         let known = report::known(
@@ -822,15 +810,15 @@ mod tests {
         );
     }
 
-    /// Each report in `reports/` is named after its build, says its side,
-    /// has the feature tables the loader's features give it; on each executable the opt-in
-    /// `ENSH_EXES` path list names, the report of its build is what this
-    /// tool writes now, taking the Steam build and game version the report
-    /// states where no file beside the executable does (skipped without it).
+    /// Each report in `reports/` has the feature tables the loader's
+    /// features give it; on each executable the opt-in `ENSH_EXES` path list
+    /// names, the report of its build is what this tool writes now, taking
+    /// the Steam build and game version the report states where no file
+    /// beside the executable does (skipped without it).
     #[cfg(windows)]
     #[test]
     fn every_report_agrees_with_its_build() {
-        let dir = Path::new(REPORTS);
+        let dir = &Path::new(ROOT).join(reports::REPORTS);
         let read = |file: &str| {
             std::fs::read_to_string(dir.join(file)).map(|text| text.replace("\r\n", "\n"))
         };
@@ -843,19 +831,9 @@ mod tests {
         let number =
             |data: &toml::Table, key: &str| data.get(key).and_then(toml::Value::as_integer);
         for file in &files {
-            let data: toml::Table = read(file).unwrap().parse().unwrap();
-            let side = data["side"].as_str().unwrap();
-            assert!(file.starts_with(&format!("{side}-")), "{file}");
-            assert_eq!(file.split('-').count(), 3, "{file}");
-            let name = data["build"].as_str().unwrap();
-            assert!(name.starts_with(side), "{file}");
-            let executable = name.rsplit("executable ").next().unwrap();
-            assert_eq!(
-                *file,
-                format!("{side}-{}.toml", executable.replace('/', "-")),
-                "a report is filed under the build it names"
-            );
-            features_agree(file, &read(file).unwrap(), &data);
+            let text = read(file).unwrap();
+            let data: toml::Table = text.parse().unwrap();
+            features_agree(file, &text, &data);
         }
         let Some(list) = std::env::var_os("ENSH_EXES") else {
             return;
@@ -907,7 +885,7 @@ mod tests {
                 && !stated.contains_key("unread");
             assert_eq!(works, complete, "{}", exe.display());
             assert_eq!(
-                report_data(Path::new(REPORTS), &exe).unwrap(),
+                report_data(dir, &exe, &reports::inputs(Path::new(ROOT)).unwrap()).unwrap(),
                 (file, want),
                 "{}: `cargo xtask compat refresh` rewrites the report",
                 exe.display()

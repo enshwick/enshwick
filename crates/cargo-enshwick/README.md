@@ -151,7 +151,10 @@ row.
    ```
 
    `--steam-build` and `--game-version` name the build when no Steam
-   appmanifest or game archive lies beside the executable.
+   appmanifest or game archive lies beside the executable. When steps 3 or 4
+   changed an anchor or a route, every kept report's seal is stale too:
+   rewrite them all with `cargo xtask compat refresh`, with `ENSH_EXES`
+   listing the new executable and every kept one.
 6. **Open a pull request** with the report data, the rows, any fixed route or
    anchor and the report's summary. Never commit an executable or anything
    else from the game.

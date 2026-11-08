@@ -87,11 +87,12 @@ game update that moves a field changes this crate, not the mods.
   counts and ids only. `cargo xtask compat refresh` rewrites the report of
   each executable `ENSH_EXES` lists. CI has no game executables. So each
   report records in `sealed` a digest of its own text and of the files that
-  decide it: the anchors, the route, slot and field code, and the tool that
-  writes it. `cargo xtask check` fails when a seal no longer matches, after
-  a change to those files or an edit by hand. The loader's features are
-  spread over its parts, so the test against the executables also checks
-  each report's features against the loader's.
+  decide it: the anchors, the pattern scanner, the route, slot and field
+  code, the decoder's version and the tool that writes it. `cargo xtask check`
+  fails when a seal no longer matches, after a change to those files or an
+  edit by hand, and when a report's file name is not the build it names.
+  The loader's features are spread over its parts, so a test that runs only
+  on Windows checks each report's features against the loader's instead.
 
 ## Patterns
 
