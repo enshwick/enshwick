@@ -732,6 +732,7 @@ mod tests {
             quests: 0,
             quest_size: 0,
             quest_id: 0,
+            query: None,
         }
     }
 

@@ -7,7 +7,7 @@ mod tests {
 
     use enshwick::abi::{Header, KnowledgeInfo, Status};
     use enshwick::content::journal::{NewQuest, QuestReward, QuestStep};
-    use enshwick::content::knowledge::{KnowledgeQuery, KnowledgeTest, NewKnowledge};
+    use enshwick::content::knowledge::{GameQuery, KnowledgeQuery, KnowledgeTest, NewKnowledge};
     use enshwick::content::{Guid, Id};
     use enshwick::knowledge::{KnowledgeId, KnowledgeType, Scope};
     use enshwick::quests::{Quests, TextKey};
@@ -16,6 +16,7 @@ mod tests {
     use enshwick::{Entity, Load, Mod, Off};
 
     const TRAIL: Id = Id::new("you.road:trail");
+    const MET: Id = Id::new("you.road:met");
     const TORCH: Guid = Guid::parse("c0ffee00-0000-4000-8000-0000000a7c01");
     const PLAYER: Entity = Entity(4096);
 
@@ -57,6 +58,13 @@ mod tests {
                     ],
                 )
             })?;
+            let met = KnowledgeQuery::game(GameQuery::new(77));
+            let unmet = KnowledgeQuery::game(GameQuery::new(78)).not().unwrap();
+            load.add_quest(NewQuest::new(
+                MET,
+                tag("met.name"),
+                vec![QuestStep::new(tag("m"), tag("m.text"), met, unmet)],
+            ))?;
             let _ = ENTRIES.set((given, wood));
             let _ = QUESTS.set(load.quests());
             Ok(Self)
@@ -109,7 +117,8 @@ mod tests {
         assert!(!all.is_empty(), "{:?}", loader.logs());
         let ids: Vec<KnowledgeId> = all.iter().map(|quest| quest.id).collect();
         let trail = KnowledgeId::from_guid(TRAIL.guid());
-        assert_eq!(ids, [KnowledgeId::new(VANILLA_QUEST), trail]);
+        let met = KnowledgeId::from_guid(MET.guid());
+        assert_eq!(ids, [KnowledgeId::new(VANILLA_QUEST), trail, met]);
         let quest = quests.quest(trail).unwrap();
         assert_eq!(quest.name, Some(TextKey::of(tag("trail.name"))));
         assert_eq!(quest.rewards, [QuestReward::Item(TORCH)]);
@@ -163,5 +172,27 @@ mod tests {
             "a player's entry reads as not held for the world"
         );
         assert!(quests.state(PLAYER, KnowledgeId::new(1)).is_none());
+    }
+
+    #[test]
+    fn a_step_that_asks_a_game_query_takes_the_game_s_answer() {
+        let loader = start();
+        let quests = QUESTS.get().unwrap();
+        let met = KnowledgeId::from_guid(MET.guid());
+        let step = &quests.quest(met).unwrap().steps[0];
+        assert_eq!(step.shown_when.map(|q| q.test), Some(KnowledgeTest::Holds));
+        assert_eq!(step.done_when.map(|q| q.test), Some(KnowledgeTest::Fails));
+        loader.set_game_queries(&[
+            (Some(PLAYER), 77, true),
+            (Some(PLAYER), 78, false),
+            (None, 77, false),
+        ]);
+        let state = quests.state(PLAYER, met).unwrap();
+        assert_eq!(state.steps[0].shown, Some(true));
+        assert_eq!(state.steps[0].done, Some(true), "78 does not hold");
+        assert!(state.started && state.done, "{state:?}");
+        let world = quests.world_state(met).unwrap();
+        assert_eq!(world.steps[0].shown, Some(false));
+        assert_eq!(world.steps[0].done, None, "the game has no answer");
     }
 }

@@ -32,13 +32,13 @@ struct Answer {
 /// payment passes `{2, 1}`, the player's own state (server 26430253).
 #[repr(C)]
 struct Mode {
-    mode: u32,
+    kind: u32,
     set: u8,
     end: [u8; 3],
 }
 
-const PERSONAL: Mode = Mode {
-    mode: 2,
+static PERSONAL: Mode = Mode {
+    kind: 2,
     set: 1,
     end: [0; 3],
 };

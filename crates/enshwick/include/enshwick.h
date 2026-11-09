@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 20
+#define ENSHWICK_ABI_MINOR 21
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -5056,6 +5056,21 @@ typedef struct EnshwickHostApi {
   // patch for another key; `out` is borrowed for the call. A panic in
   // the loader returns `Status::REFUSED`. ABI 11.20.
   EnshwickStatus (*resource_buffer)(EnshwickModHandle me, uint32_t len, uint8_t **out);
+  // Writes to `holds` 1 when the game query `query` (a query of the
+  // game's query database, which quest steps and recipes name by id)
+  // holds for the player whose character is `entity`, as the game reads
+  // it when it pays a quest (the player's own state), or for the world
+  // when `entity` is `Entity(0)`, and 0 when it does not.
+  // `Status::MISSING` on a build without the game's query calls, while
+  // no world runs, or for a query the game does not know or has not
+  // evaluated yet; `Status::REFUSED` for a player not in the game;
+  // `Status::WRONG_THREAD` off the game thread; `Status::BAD_ARGS`
+  // for a null `holds`. `holds` is borrowed for the call. A panic in the
+  // loader returns `Status::REFUSED`. ABI 11.21.
+  EnshwickStatus (*game_query)(EnshwickModHandle me,
+                               EnshwickEntity entity,
+                               uint32_t query,
+                               uint32_t *holds);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.
