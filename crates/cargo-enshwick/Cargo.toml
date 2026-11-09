@@ -12,6 +12,11 @@ repository.workspace = true
 homepage.workspace = true
 publish = true
 
+# The binaries each release carries, which `cargo binstall` installs.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }{ binary-ext }"
+pkg-fmt = "bin"
+
 [dependencies]
 anyhow.workspace = true
 clap = { workspace = true }

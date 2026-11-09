@@ -1,5 +1,6 @@
 //! The install and dependency lines of the tracked Markdown that name a
-//! release tag, `--tag v<version>` and `tag = "v<version>"`, on a line naming
+//! release, `--tag v<version>`, `tag = "v<version>"` and binstall's
+//! `<crate>@<version>`, on a line naming
 //! the platform's GitHub address: each names the version the workspace
 //! carries, the alpha the text describes. A tag of another repository stays.
 //! `cargo xtask tag-lines` moves them to it after a version bump, and the
@@ -14,8 +15,10 @@ use std::path::Path;
 use crate::{Package, git, packages, say, workspace_root};
 
 const USAGE: &str = "usage: cargo xtask tag-lines";
-/// What comes before a tag on an install or dependency line.
-const PREFIXES: [&str; 2] = ["--tag ", "tag = \""];
+/// What comes before a release on an install or dependency line, and what
+/// comes before its version there: a tag, or a `cargo binstall --git` line's
+/// `<crate>@<version>`, as binstall takes no tag.
+const PREFIXES: [(&str, &str); 3] = [("--tag ", "v"), ("tag = \"", "v"), ("@", "")];
 const CHANGELOG: &str = "CHANGELOG.md";
 /// What a line names when its tag is the platform's, as the site reads it.
 const REPOSITORY: &str = "github.com/enshwick/enshwick";
@@ -166,7 +169,15 @@ fn install_pin(line: &str, names: &[&str]) -> Option<Pin> {
     };
     match after("--git") {
         Some(git) if !git.unwrap_or_default().contains(REPOSITORY) => None,
-        Some(_) => (after("--tag").is_none() && after("--rev").is_none()).then_some(Pin::Git),
+        Some(_) => {
+            let at_version = words.iter().any(|word| {
+                names
+                    .iter()
+                    .any(|name| word.strip_prefix(name).is_some_and(|v| v.starts_with('@')))
+            });
+            (after("--tag").is_none() && after("--rev").is_none() && !at_version)
+                .then_some(Pin::Git)
+        }
         None if after("--path").is_some() => None,
         None => Some(Pin::Registry),
     }
@@ -262,9 +273,9 @@ fn rewrite(text: &str, tag: &str) -> (String, Vec<usize>) {
         }
         let mut rest = line;
         let mut changed = false;
-        while let Some((at, prefix)) = PREFIXES
+        while let Some((at, prefix, lead)) = PREFIXES
             .iter()
-            .filter_map(|prefix| rest.find(prefix).map(|at| (at, *prefix)))
+            .filter_map(|(prefix, lead)| rest.find(prefix).map(|at| (at, *prefix, *lead)))
             .min()
         {
             let start = at + prefix.len();
@@ -275,8 +286,15 @@ fn rewrite(text: &str, tag: &str) -> (String, Vec<usize>) {
             let value = rest[start..start + len].trim_end_matches(['.', '-', '+']);
             let len = value.len();
             out.push_str(&rest[..start]);
-            if is_version_tag(value) && value != tag {
-                out.push_str(tag);
+            let as_tag = value
+                .strip_prefix(lead)
+                .map(|version| format!("v{version}"));
+            if let Some(as_tag) = as_tag
+                && is_version_tag(&as_tag)
+                && as_tag != tag
+            {
+                out.push_str(lead);
+                out.push_str(tag.strip_prefix('v').unwrap_or(tag));
                 changed = true;
             } else {
                 out.push_str(value);
@@ -507,6 +525,21 @@ mod tests {
             moved,
             "a\ncargo install --git https://github.com/enshwick/enshwick --tag v1.0.0-alpha.13 cargo-enshwick\n"
         );
+    }
+
+    #[test]
+    fn a_binstall_line_pins_by_version_and_moves_with_the_workspace() {
+        let line = "cargo binstall --git https://github.com/enshwick/enshwick cargo-enshwick@1.0.0-alpha.12";
+        assert!(unpinned(line, &NAMES, true).is_empty());
+        let (moved, lines) = rewrite(&format!("{line}\n"), TAG);
+        assert_eq!(lines, [1]);
+        assert_eq!(
+            moved,
+            "cargo binstall --git https://github.com/enshwick/enshwick cargo-enshwick@1.0.0-alpha.13\n"
+        );
+        let unpinned_line =
+            "cargo binstall --git https://github.com/enshwick/enshwick cargo-enshwick";
+        assert_eq!(unpinned(unpinned_line, &NAMES, true), [(1, Pin::Git)]);
     }
 
     #[test]

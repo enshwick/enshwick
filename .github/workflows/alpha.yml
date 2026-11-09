@@ -1,6 +1,7 @@
 # An alpha release of the loader, run by hand on main until 1.0.0: the
 # version the workspace carries, `1.0.0-alpha.N`, becomes the GitHub
-# prerelease `v1.0.0-alpha.N` with `enshwick.zip`, its PDBs, SBOMs and build
+# prerelease `v1.0.0-alpha.N` with `enshwick.zip`, `cargo-enshwick` for
+# Windows and Linux, their PDBs, SBOMs, SHA-256 checksums and build
 # provenance, and notes from `cargo xtask notes`. The pull request before it
 # moves the crates to that version and closes their Unreleased changelog
 # sections as it; a version already released is refused. Nothing goes to
@@ -90,6 +91,31 @@ jobs:
         with:
           out: ${{ runner.temp }}/alpha
 
+      # The tool cargo-binstall installs, named as its metadata in
+      # crates/cargo-enshwick/Cargo.toml expects. Linux gets a static musl
+      # build, which runs on any distribution's glibc; cargo-binstall takes
+      # it on a gnu host too.
+      - name: cargo-enshwick
+        env:
+          OUT: ${{ runner.temp }}/alpha
+          LINUX: x86_64-unknown-linux-musl
+          WINDOWS: x86_64-pc-windows-msvc
+        run: |
+          rustup target add "$LINUX"
+          export CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS="--remap-path-prefix=$GITHUB_WORKSPACE=/build --remap-path-prefix=$CARGO_HOME=/cargo --remap-path-prefix=$RUSTUP_HOME=/rustup"
+          cargo auditable build --release --locked -p cargo-enshwick --target "$LINUX"
+          cargo auditable xwin build --release --locked -p cargo-enshwick --target "$WINDOWS"
+          cp "target/$LINUX/release/cargo-enshwick" "$OUT/cargo-enshwick-$LINUX"
+          cp "target/$WINDOWS/release/cargo-enshwick.exe" "$OUT/cargo-enshwick-$WINDOWS.exe"
+          cp crates/cargo-enshwick/cargo-enshwick.cdx.json "$OUT/"
+          "$OUT/cargo-enshwick-$LINUX" enshwick --version
+
+      # `cargo enshwick install --with-loader` checks enshwick.zip against
+      # this list before it unpacks it.
+      - name: Checksums
+        working-directory: ${{ runner.temp }}/alpha
+        run: sha256sum -- * > SHA256SUMS
+
       - name: VirusTotal
         if: env.HAS_VIRUSTOTAL_KEY == 'true'
         continue-on-error: true
@@ -127,7 +153,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         working-directory: ${{ runner.temp }}/alpha
         run: |
-          assets=(*.zip *.pdb *.cdx.json)
+          assets=(*.zip *.pdb *.cdx.json cargo-enshwick-* SHA256SUMS)
           gh release create "v$VERSION" "${assets[@]}" --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" --title "Enshwick $VERSION" --notes-file "$RUNNER_TEMP/notes.md" \
             --prerelease --latest=false

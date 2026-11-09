@@ -5,11 +5,18 @@ mods. It starts a Rust mod, a Luau mod or a data pack, and it installs a mod
 into the game.
 
 ```sh
-cargo install --git https://github.com/enshwick/enshwick --tag v1.0.0-alpha.13 cargo-enshwick
+cargo binstall --git https://github.com/enshwick/enshwick cargo-enshwick@1.0.0-alpha.13
 cargo enshwick new you.my-mod --side server
 cd my-mod
-cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Enshrouded"
+cargo enshwick install --with-loader
 ```
+
+[cargo-binstall](https://github.com/cargo-bins/cargo-binstall) downloads the
+tool from the release: Windows and Linux binaries, with their SHA-256
+checksums, SBOM and build provenance on the release. Without it,
+`cargo install --git https://github.com/enshwick/enshwick --tag v1.0.0-alpha.13 cargo-enshwick`
+builds the tool from source. The tool says when a newer release of itself
+is out, at most once a day; without a network it says nothing.
 
 - `new <id>` creates a mod crate for the id `<author>.<name>` in
   `<dir>/<name>` (`--dir`, default the current folder) for `--side server`,
@@ -37,8 +44,13 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
   when the DLL reports another version, which release pipelines can check.
 - `install` builds the mod in release as a Windows DLL, through
   [cargo-xwin](https://github.com/rust-cross/cargo-xwin) off Windows, and
-  copies it to `<game>/mods/<id>/<package>.dll`. The game folder is `--game` or `ENSHROUDED_DIR`;
-  in a workspace with several mods, `--package` names one.
+  copies it to `<game>/mods/<id>/<package>.dll`. The game folder is `--game` or `ENSHROUDED_DIR`,
+  else the one Steam installed: the dedicated server (app 2278520) when it is
+  installed, else the game (app 1203620); the others are listed. In a
+  workspace with several mods, `--package` names one. `--with-loader` puts
+  in the loader of the tool's release when the folder has none: the
+  release's `enshwick.zip` from GitHub, checked against its `SHA256SUMS`. A
+  loader of another release is named and left as it is.
 - `id <mod:name>...` prints the GUID and the game id of each
   [content id](https://github.com/enshwick/enshwick/blob/main/book/src/concepts/ids.md), as `Guid::named`
   derives them: `cargo enshwick id you.lanterns:lantern`.

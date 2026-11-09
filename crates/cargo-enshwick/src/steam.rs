@@ -353,6 +353,29 @@ mod tests {
         assert_eq!(registry_path("ERROR: not found"), None);
     }
 
+    /// On a machine whose `ENSH_CLIENT_EXE` is Steam's install, the search
+    /// finds that folder; it skips elsewhere.
+    #[test]
+    fn the_game_steam_installed_on_this_machine_is_found() {
+        let Some(exe) = std::env::var_os("ENSH_CLIENT_EXE").map(PathBuf::from) else {
+            return;
+        };
+        let Some(folder) = exe.parent().filter(|dir| {
+            dir.parent()
+                .is_some_and(|common| common.ends_with("steamapps/common"))
+        }) else {
+            return;
+        };
+        let folder = folder.canonicalize().unwrap();
+        let found = find(&steam_folders());
+        assert!(
+            found
+                .iter()
+                .any(|f| f.app == GAME_APP && f.folder.canonicalize().unwrap() == folder),
+            "{found:?}"
+        );
+    }
+
     #[test]
     fn steam_s_files_read_with_comments_escapes_and_bare_words() {
         let text = "// header\n\"a\" { \"b\" \"C:\\\\Steam\" bare word \"q\" \"say \\\"hi\\\"\" }";
