@@ -59,9 +59,8 @@ pub(super) struct OnEntry {
 }
 
 /// One thing a reward gives.
-#[derive(Clone, Debug, PartialEq, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(untagged)]
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema), serde(untagged))]
 pub(super) enum GiveEntry {
     /// Items.
     Items(ItemsEntry),
@@ -71,6 +70,35 @@ pub(super) enum GiveEntry {
     Knowledge(KnowledgeEntry),
     /// A buff.
     Buff(BuffEntry),
+}
+
+/// Every field a gift takes, for a gift that names none of its kinds.
+const GIVE_FIELDS: &[&str] = &["item", "count", "experience", "knowledge", "buff"];
+
+impl<'de> Deserialize<'de> for GiveEntry {
+    /// Told apart by the field that names the kind, so a misspelt field of
+    /// that kind is named.
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use super::values::shape;
+        use serde::de::Error as _;
+        let table = toml::Table::deserialize(deserializer)?;
+        let kind = ["item", "experience", "knowledge", "buff"]
+            .into_iter()
+            .find(|key| table.contains_key(*key));
+        let value = toml::Value::Table(table);
+        match kind {
+            Some("item") => shape(value).map(Self::Items),
+            Some("experience") => shape(value).map(Self::Experience),
+            Some("knowledge") => shape(value).map(Self::Knowledge),
+            Some(_) => shape(value).map(Self::Buff),
+            None => Err(match value.as_table().and_then(|t| t.keys().next()) {
+                Some(field) => D::Error::unknown_field(field, GIVE_FIELDS),
+                None => {
+                    D::Error::custom("a gift needs `item`, `experience`, `knowledge` or `buff`")
+                }
+            }),
+        }
+    }
 }
 
 /// `count` of `item`, all or nothing.

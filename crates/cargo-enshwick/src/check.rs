@@ -314,6 +314,26 @@ lib/count.luau:2.7-2.12: LocalUnused: Variable 'unused' is never used; prefix wi
     }
 
     #[test]
+    fn a_misspelt_field_of_a_reward_is_named_with_the_one_it_is_near() {
+        let dir = crate::pack::tests::pack("check-field", "");
+        std::fs::write(
+            dir.join("rewards.toml"),
+            "[[reward]]\nid = \"torch\"\non = { join = true }\ngive = [{ item = \"Tool_Torch99\", cout = 1 }]\n",
+        )
+        .unwrap();
+        let mut out = Vec::new();
+        assert!(run(&dir, None, true, &mut out).is_err());
+        let out = String::from_utf8(out).unwrap();
+        assert!(
+            out.starts_with(
+                "rewards.toml:4:8: error: unknown field `cout`, expected `item` or `count`; near: count"
+            ),
+            "{out}"
+        );
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn a_folder_without_a_mod_is_refused() {
         let dir = std::env::temp_dir().join(format!("enshwick-check-none-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();

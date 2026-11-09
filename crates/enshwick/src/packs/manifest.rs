@@ -196,14 +196,25 @@ pub struct PackDependency {
 }
 
 /// How `pack.toml` writes a [`PackDependency`].
-#[derive(Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(untagged, expecting = "a mod id, or a table with `id` and `version`")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema), serde(untagged))]
 enum DependencyEntry {
     /// The mod's id alone, for any version.
     Id(String),
     /// The mod's id with a version requirement.
     Table(DependencyTable),
+}
+
+impl<'de> Deserialize<'de> for DependencyEntry {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::Error as _;
+        match toml::Value::deserialize(deserializer)? {
+            toml::Value::String(id) => Ok(Self::Id(id)),
+            table @ toml::Value::Table(_) => super::values::shape(table).map(Self::Table),
+            _ => Err(D::Error::custom(
+                "a mod id, or a table with `id` and `version`",
+            )),
+        }
+    }
 }
 
 /// The table form of a [`DependencyEntry`].

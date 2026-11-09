@@ -7,6 +7,7 @@ use crate::loot::Kinds;
 
 use super::*;
 
+mod fields;
 mod folders;
 mod rewards;
 mod sounds;
@@ -804,8 +805,9 @@ fn a_wrong_alias_id_or_version_of_a_dependency_is_a_problem_at_its_line() {
         ),
         (
             "[requires]\nb = { id = \"you.b\", range = \"1\" }\n",
-            "a mod id, or a table",
+            "unknown field `range`, expected `id` or `version`",
         ),
+        ("[requires]\nb = 1\n", "a mod id, or a table"),
     ];
     for (dependencies, problem) in cases {
         let text = format!("{head}{dependencies}");
