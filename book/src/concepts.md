@@ -23,5 +23,4 @@ before the chapters on writing a mod; each is short.
 - [Threads](concepts/threads.md): which thread runs what, and what may be
   called where.
 - [Typed types across game builds](concepts/typed-stability.md): what a game
-  update does to the game's types a mod uses: most need nothing, the rest
-  turn off one type alone.
+  update does to the game's types a mod uses.

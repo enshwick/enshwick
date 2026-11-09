@@ -74,7 +74,8 @@ owner's [texts](content/texts.md), as content derives its name. The kind
 mod with the same name share that text, so give them different names.
 
 `load.define_stat(id!("luck"), &def)` defines a kind of the mod's own during
-`init`, and a malformed name fails the build. `load.open_stat(id)` opens a
+`init`, and a malformed name fails the build. Its full id is `<mod>:luck`, see
+[how ids are namespaced](concepts/ids.md). `load.open_stat(id)` opens a
 built-in kind or another mod's: `deps::<alias>::stat("luck")` names a kind of
 a dependency. The dependency's
 [`exports`](concepts/loader-and-abi.md#what-other-mods-may-use) must list

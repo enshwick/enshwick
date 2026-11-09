@@ -73,6 +73,9 @@ Enter.
 | `.link(GameAction)`           | fires on the server when the player's game action fires              |
 | `.runs(action)`               | runs the mod's action on the server each time the control fires      |
 
+The loader puts the mod's id in front of a control's name, as
+[how ids are namespaced](concepts/ids.md) describes.
+
 In Luau, a control is a table of the builder's fields:
 
 - `name` and `label`

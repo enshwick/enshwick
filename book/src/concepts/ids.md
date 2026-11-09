@@ -1,6 +1,6 @@
 <!--
 type: reference
-description: How Enshwick namespaces every id a mod declares under the mod's own id: the mod id, the full id, which kinds get the prefix, how to name other mods' and the game's ids, and what the loader refuses.
+description: Every id a mod declares goes under the mod's own id. The forms, the limits, naming other mods' and the game's ids, and what the loader refuses.
 -->
 
 # How ids are namespaced

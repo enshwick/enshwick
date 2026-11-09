@@ -87,7 +87,7 @@ game code again.
 ## Chains and priority
 
 The links on one function run by priority, lower first. Links with equal
-priority run in load order: dependencies first, then by mod id. The default
+priority run in [load order](concepts/lifecycle.md#in-what-order-do-mods-load). The default
 priority is 0.
 
 ```rust

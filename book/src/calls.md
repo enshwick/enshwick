@@ -48,7 +48,8 @@ impl enshwick::Mod for TradingPost {
 enshwick::declare_mod!(TradingPost);
 ```
 
-- Name it after the serving mod, `<id>:<call>`. The loader refuses other names.
+- Name it after the serving mod, `<id>:<call>`. The loader refuses other names,
+  as [how ids are namespaced](concepts/ids.md) sets out.
   A local `name = "price-of"` gets the mod's own id in front at build time. A
   caller writes `of = <alias>` with the alias its manifest gives the server
   (see [naming dependencies](concepts/loader-and-abi.md#the-manifest)).

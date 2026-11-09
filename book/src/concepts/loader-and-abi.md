@@ -26,8 +26,9 @@ report covers stays vanilla instead. See
 ## How mods are found
 
 Each mod lives in a folder of its own in `mods/`, and runs while that folder
-is there. The loader takes the folders in name order, all but its own
-`mods/enshwick/`. In each folder, the mod is the one DLL that exports the four
+is there. The loader reads every folder but its own `mods/enshwick/`. The
+order mods load in comes from their ids and dependencies, see
+[load order](lifecycle.md#in-what-order-do-mods-load). In each folder, the mod is the one DLL that exports the four
 functions of
 [`abi::exports`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs).
 The loader tells it apart by its export table before loading it.

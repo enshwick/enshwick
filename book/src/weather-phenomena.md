@@ -39,7 +39,7 @@ show as another phenomenon until it ends.
 
 ```rust
 use core::time::Duration;
-use enshwick::content::{Guid, Id};
+use enshwick::content::{Guid, id};
 use enshwick::weather::{NewPhenomenon, PhenomenonChange, WeatherPhenomenonEffect};
 
 fn init(load: &mut enshwick::Load<'_>, rain: Guid) -> Result<(), enshwick::Off> {
@@ -47,7 +47,7 @@ fn init(load: &mut enshwick::Load<'_>, rain: Guid) -> Result<(), enshwick::Off> 
         .probability(0.5)
         .duration(Duration::from_mins(2), Duration::from_mins(5))
         .effect(WeatherPhenomenonEffect::Rain);
-    let id = Id::new("you.drizzle:drizzle");
+    let id = id!("drizzle");
     load.add_weather_phenomenon(NewPhenomenon::new(id, rain).values(values))?;
     load.change_weather_phenomenon(rain, PhenomenonChange::new().probability(0.1))
 }

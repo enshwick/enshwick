@@ -56,8 +56,8 @@ pub struct Sold {
   layout is a hash per field of its name, the shape of its type, its size,
   alignment and offset.
 - The full name is `<id>:<what>`, with the id from the publisher's
-  `Cargo.toml`. Content ids and extension points use the same form. Here it
-  is `you.trading-post:prices`. An event's name must start with its definer's
+  `Cargo.toml`. Here it is `you.trading-post:prices`. Every id a mod declares
+  takes this form, see [how ids are namespaced](concepts/ids.md). An event's name must start with its definer's
   id; the loader refuses others.
 - `version` is the major version of the service, 1 when left out.
 - Every field's type implements [`Shape`](#shapes). Its structural hash

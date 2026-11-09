@@ -89,7 +89,7 @@ end)
 With the `unstable` feature, `load.add_sound(NewSound::new(id!("horn"),
 "sounds/horn.wav"))` adds that WAV file of the mod's folder and a
 container that plays it. It returns the container. Its GUID is the
-content id's, so other mods play it by `you.horns:horn`. A data pack lists
+[content id](concepts/ids.md)'s, so other mods play it by `you.horns:horn`. A data pack lists
 its sounds in [`sounds.toml`](content/packs.md#soundstoml).
 
 The client holds the sound as the game holds its own uncompressed sounds,
