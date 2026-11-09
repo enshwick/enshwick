@@ -375,6 +375,7 @@ impl Quests {
             return Arc::clone(journal);
         }
         let host = self.knowledge.host;
+        let start = std::time::Instant::now();
         let read = host
             .hash(JournalRegistryResource::ID)
             .map(|hash| JOURNAL_REGISTRY.key_by_hash(hash))
@@ -385,6 +386,15 @@ impl Quests {
             host.log(crate::abi::Level::WARN, &format!("quests: {off}"));
             Journal::default()
         });
+        host.log(
+            crate::abi::Level::INFO,
+            &format!(
+                "quests: read the journal, {} quests and {} pages, in {} ms",
+                journal.quests.len(),
+                journal.pages.len(),
+                start.elapsed().as_millis()
+            ),
+        );
         Arc::clone(held.insert(Arc::new(journal)))
     }
 
