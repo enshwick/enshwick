@@ -3837,9 +3837,9 @@ typedef struct EnshwickHostApi {
                                  float *amount);
   // Hands the loader the schema of the mod's settings file `file`, its
   // name without `.toml`: `schema`, the TOML text of a
-  // `config::Schema`, and `template`, the file
+  // `config::Schema`, and `defaults`, the file
   // written from the defaults with their comments. As each world loads,
-  // the loader writes the file from `template` beside the save, or adds
+  // the loader writes the file from `defaults` beside the save, or adds
   // the keys it lacks and removes the ones the schema lacks. The console
   // and the Mods screen read and check values against `schema`.
   // `Status::BAD_ARGS` for text that is not a schema or a file name
@@ -3849,7 +3849,7 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*config_schema)(EnshwickModHandle me,
                                   struct EnshwickStr file,
                                   struct EnshwickStr schema,
-                                  struct EnshwickStr template);
+                                  struct EnshwickStr defaults);
   // Calls `callback` with `user` after a summoning staff's use spawned or
   // moved a survivor, with `Summon::consumed` set; its return value is
   // ignored. On the thread of the use, as `HostApi::summon_filter`.

@@ -625,9 +625,9 @@ pub struct HostApi {
         extern "system" fn(me: ModHandle, edit: *const TerrainEdit, amount: *mut f32) -> Status,
     /// Hands the loader the schema of the mod's settings file `file`, its
     /// name without `.toml`: `schema`, the TOML text of a
-    /// [`config::Schema`](crate::config::Schema), and `template`, the file
+    /// [`config::Schema`](crate::config::Schema), and `defaults`, the file
     /// written from the defaults with their comments. As each world loads,
-    /// the loader writes the file from `template` beside the save, or adds
+    /// the loader writes the file from `defaults` beside the save, or adds
     /// the keys it lacks and removes the ones the schema lacks. The console
     /// and the Mods screen read and check values against `schema`.
     /// [`Status::BAD_ARGS`] for text that is not a schema or a file name
@@ -635,7 +635,7 @@ pub struct HostApi {
     /// [`Status::REFUSED`] for a file another schema names. Any time; a
     /// schema handed while a world runs is written as the next world loads.
     pub config_schema:
-        extern "system" fn(me: ModHandle, file: Str, schema: Str, template: Str) -> Status,
+        extern "system" fn(me: ModHandle, file: Str, schema: Str, defaults: Str) -> Status,
     /// Calls `callback` with `user` after a summoning staff's use spawned or
     /// moved a survivor, with [`Summon::consumed`](super::Summon::consumed) set; its return value is
     /// ignored. On the thread of the use, as [`HostApi::summon_filter`].

@@ -15,7 +15,7 @@ The ABI is made of `repr(C)` structs, integer enums, `extern "system"`
 functions, strings borrowed for the call, and no unwinding across the
 boundary. The exact types and signatures are in the
 [`abi` module's rustdoc](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs). The same types for
-C and other languages are in `enshwick.h`, see [Mods in C](mods-in-c.md).
+C and other languages are in `enshwick.h`, see [Mods in C and C++](mods-in-c.md).
 
 ## Versions
 

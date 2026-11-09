@@ -12,17 +12,19 @@ so players install one thing.
 
 ## What a mod is
 
-A mod takes one of three forms:
+A mod takes one of four forms:
 
 - a Rust mod: a `cdylib` built against one crate,
   [`enshwick`](https://github.com/enshwick/enshwick/tree/main/crates/enshwick),
   with a typed API;
 - a [Luau mod](luau.md): a folder of scripts, with no compiler;
-- a [data pack](content/packs.md): a folder of TOML files, with no code.
+- a [data pack](content/packs.md): a folder of TOML files, with no code;
+- a [C or C++ mod](mods-in-c.md): a DLL built against the C header of the
+  same ABI.
 
 One tool,
 [`cargo enshwick`](https://github.com/enshwick/enshwick/tree/main/crates/cargo-enshwick),
-starts each of them. The crates under
+starts each of the first three. The crates under
 [`crates/internal`](https://github.com/enshwick/enshwick/tree/main/crates/internal)
 are parts of the loader, and a mod never depends on them.
 
@@ -33,6 +35,14 @@ Its unit tests run without the game against a fake host ([Testing](testing.md)).
 Where the API has no call, a Rust mod links hooks into game functions. When a
 mod fails, the loader turns that mod off, and the game runs vanilla where the
 mod acted.
+
+## Supported languages for mods
+
+Rust and Luau reach the same API by the same names. A data pack needs no code.
+C and C++ mods include the C header `enshwick.h`. In CI, examples in both languages
+start on the fake host whenever the header changes ([Mods in C and C++](mods-in-c.md)).
+Any other language that builds a Windows DLL and can call a C ABI works the
+same way, but no other language is tested.
 
 ## How to read this book
 

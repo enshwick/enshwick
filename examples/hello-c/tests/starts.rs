@@ -1,4 +1,4 @@
-//! The C example builds into a DLL that reads as a mod and starts.
+//! The C and C++ examples build into DLLs that read as mods and start.
 
 #![cfg(windows)]
 
@@ -10,9 +10,9 @@ mod tests {
     use enshwick::test::{FakeHost, InitFn};
     use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 
-    /// The address of the export `name` of the C example, which stays loaded.
-    fn export(name: &str) -> unsafe extern "system" fn() -> isize {
-        let path = std::path::Path::new(env!("HELLO_C_DLL"));
+    /// The address of the export `name` of the DLL at `dll`, which stays loaded.
+    fn export(dll: &str, name: &str) -> unsafe extern "system" fn() -> isize {
+        let path = std::path::Path::new(dll);
         let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
         // SAFETY: `wide` ends in the NUL chained onto it and lives across the call.
         let module = unsafe { LoadLibraryW(wide.as_ptr()) };
@@ -24,6 +24,18 @@ mod tests {
 
     #[test]
     fn the_c_mod_reads_as_a_mod_and_starts() {
+        starts(env!("HELLO_C_DLL"), "you.hello-c", "hello from C");
+    }
+
+    #[test]
+    fn the_cpp_mod_reads_as_a_mod_and_starts() {
+        starts(env!("HELLO_CPP_DLL"), "you.hello-cpp", "hello from C++");
+    }
+
+    /// Loads the mod at `dll`, checks that its manifest names `id`, and starts
+    /// it on a fake host, where it logs `line`.
+    fn starts(dll: &str, id: &str, line: &str) {
+        let export = |name: &str| export(dll, name);
         // SAFETY: the ABI gives `exports::ABI` the signature `fn() -> u32`.
         let abi: unsafe extern "system" fn() -> u32 =
             unsafe { core::mem::transmute(export(exports::ABI)) };
@@ -47,17 +59,15 @@ mod tests {
             (ABI_MAJOR, ABI_MINOR)
         );
         // SAFETY: the manifest's strings are static literals of the DLL.
-        assert_eq!(unsafe { manifest.id.as_str() }, Some("you.hello-c"));
+        assert_eq!(unsafe { manifest.id.as_str() }, Some(id));
 
         // SAFETY: the ABI gives `exports::INIT` the signature of `InitFn`.
         let init: InitFn = unsafe { core::mem::transmute(export(exports::INIT)) };
         let loader = FakeHost::new().install();
-        // SAFETY: `init` is the C mod's `enshwick_mod_init`.
+        // SAFETY: `init` is the mod's `enshwick_mod_init`.
         assert_eq!(unsafe { loader.init(init) }, Status::OK);
         assert!(
-            loader
-                .logs()
-                .contains(&(Level::INFO, "hello from C".to_owned())),
+            loader.logs().contains(&(Level::INFO, line.to_owned())),
             "{:?}",
             loader.logs()
         );
