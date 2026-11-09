@@ -6,6 +6,8 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.14] - 2026-11-09
+
 ### Changed
 
 - Breaking: `catalogue::Fact::Path` is `Path { steps, holds }`, naming the

@@ -6,6 +6,8 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.14] - 2026-11-09
+
 ### Added
 
 - `deps --from` reads the points a Luau mod exports from its `pack.toml`,

@@ -6,6 +6,8 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.14] - 2026-11-09
+
 ### Added
 
 - `content`: `Load::add_experience(NewExperience)` adds an experience value
@@ -73,7 +75,6 @@ Each entry names the pull request that made the change.
 - `test`: `Installed::host_screen` with another host forgets the template
   read for the one before, as a new host reads none until a step does
   (#1002).
-
 - `content`: `Load::rekey_item(old, new)` and Luau
   `enshwick.content.rekey_item` read `new` as served at each build of
   `old`, so other mods' changes of `new`, a mod's own item included, reach
@@ -82,7 +83,6 @@ Each entry names the pull request that made the change.
   writing past the mod's buffer (#998).
 - The fake host's build of a served resource skips a failed patch and
   builds the rest, as the loader does (#998).
-
 - `script`: **Breaking.** `Callback::call`, `Function::call`,
   `InitFunction::call`, `Opened::call` and `Handle::call` take
   `&mut [Value]`; a choice and a union's variant without a value cross as

@@ -1,6 +1,6 @@
 [package]
 name = "enshwick"
-version = "1.0.0-alpha.13"
+version = "1.0.0-alpha.14"
 description = "The modding framework and API for Enshrouded: typed Rust, Luau and data packs, with a fake host for tests; the one crate a Rust mod depends on"
 keywords = ["enshrouded", "modding", "game", "ffi", "hooks"]
 categories = ["game-development", "api-bindings"]
@@ -14,7 +14,7 @@ publish = true
 autotests = false
 
 [dependencies]
-enshwick-macros = { path = "../enshwick-macros", version = "=1.0.0-alpha.13" }
+enshwick-macros = { path = "../enshwick-macros", version = "=1.0.0-alpha.14" }
 aho-corasick.workspace = true
 bcdec_rs.workspace = true
 bytemuck.workspace = true
