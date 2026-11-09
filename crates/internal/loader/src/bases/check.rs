@@ -69,7 +69,7 @@ mod tests {
     use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 
     use super::*;
-    use crate::bases::fake::{FIELDS, Fake, square};
+    use crate::bases::fake::{FIELDS, Fake, shared, square};
 
     fn first_slot() {}
 
@@ -82,6 +82,7 @@ mod tests {
         // stays loaded for the process.
         let base = unsafe { GetModuleHandleW(core::ptr::null()) };
         let image = live::Image::at(base.addr());
+        let _shared = shared();
         let mut fake = Fake::new(1, &[square(0.0, 0.0)]);
         // The fake leaves the capacity out; the game's list has inline room
         // for 16.

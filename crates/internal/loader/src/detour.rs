@@ -986,6 +986,11 @@ unsafe extern "system" {
 /// The other threads of the process, suspended together.
 struct Threads {
     held: Vec<(HANDLE, u32)>,
+    /// Tests suspend from several threads of one process, which the loader
+    /// never does (its writes run under the chains lock); two at once would
+    /// each suspend the other for good.
+    #[cfg(test)]
+    _turn: tests::Turn,
 }
 
 impl Threads {
@@ -993,6 +998,8 @@ impl Threads {
     fn new() -> Self {
         Self {
             held: Vec::with_capacity(MAX_THREADS),
+            #[cfg(test)]
+            _turn: tests::Turn::take(),
         }
     }
 
@@ -1129,6 +1136,13 @@ impl Threads {
             // nothing keeps it after this.
             unsafe { CloseHandle(thread) };
         }
+    }
+}
+
+impl Drop for Threads {
+    /// Resumes what a panic between suspending and resuming left held.
+    fn drop(&mut self) {
+        self.resume();
     }
 }
 

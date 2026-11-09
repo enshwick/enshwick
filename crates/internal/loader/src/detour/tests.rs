@@ -673,6 +673,7 @@ fn a_code_patch_is_not_written_while_a_thread_stays_inside_it() {
 #[test]
 fn a_one_check_commit_does_not_wait_for_a_thread_to_leave() {
     static FLAGS: [AtomicU32; 2] = [AtomicU32::new(0), AtomicU32::new(0)];
+    let _turn = Turn::take();
     let target = function(&[
         0xff, 0xd2, // call rdx <- returns inside the patch
         0xb8, 0x01, 0x00, 0x00, 0x00, // mov eax, 1
@@ -800,48 +801,119 @@ fn only_instructions_after_the_first_move_and_only_returns_after_calls_count() {
     assert_eq!(patch_returns(&patch), [(code + 2, 0)]);
 }
 
-/// Whether a thread counting on its own stands still while `threads`
-/// holds it, and counts again once they are resumed.
-fn stops_and_goes(suspend: impl FnOnce(&mut Threads) -> bool) -> bool {
+/// Taken by every [`Threads`] of the test process, so tests suspend one at a
+/// time.
+static SUSPENDING: Mutex<()> = Mutex::new(());
+
+thread_local! {
+    /// Whether this thread holds [`SUSPENDING`].
+    static TAKEN: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+}
+
+/// This thread's turn to suspend the others, until dropped; a test whose
+/// timing must not wait behind another test's holds one throughout, and the
+/// [`Threads`] this same thread makes meanwhile take nothing more. A thread
+/// the test starts takes its own turn, so a test holding one never waits on
+/// a thread of its own that suspends.
+#[must_use = "the turn ends when it is dropped"]
+pub(super) struct Turn(Option<std::sync::MutexGuard<'static, ()>>);
+
+impl Turn {
+    pub(super) fn take() -> Self {
+        if TAKEN.get() {
+            return Self(None);
+        }
+        let guard = SUSPENDING.relock();
+        TAKEN.set(true);
+        Self(Some(guard))
+    }
+}
+
+impl Drop for Turn {
+    fn drop(&mut self) {
+        if self.0.is_some() {
+            TAKEN.set(false);
+        }
+    }
+}
+
+/// How long a resumed thread may take to run again on a loaded machine.
+const RUNS_AGAIN_WITHIN: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Checks that `suspend` holds a thread counting on its own, that it stands
+/// still while held, and that it counts again once `let_go` has the threads.
+fn stops_and_goes(suspend: impl FnOnce(&mut Threads) -> bool, let_go: impl FnOnce(Threads)) {
     let count = std::sync::Arc::new(AtomicU32::new(0));
     let stop = std::sync::Arc::new(AtomicU32::new(0));
+    let id = std::sync::Arc::new(AtomicU32::new(0));
     let counting = {
-        let (count, stop) = (std::sync::Arc::clone(&count), std::sync::Arc::clone(&stop));
+        let (count, stop, id) = (
+            std::sync::Arc::clone(&count),
+            std::sync::Arc::clone(&stop),
+            std::sync::Arc::clone(&id),
+        );
         std::thread::spawn(move || {
+            // SAFETY: `GetCurrentThreadId` takes no arguments and only reads
+            // the calling thread's id.
+            id.store(unsafe { GetCurrentThreadId() }, Ordering::Release);
             while stop.load(Ordering::Relaxed) == 0 {
                 count.fetch_add(1, Ordering::Relaxed);
             }
         })
     };
-    while count.load(Ordering::Relaxed) == 0 {
+    while id.load(Ordering::Acquire) == 0 || count.load(Ordering::Relaxed) == 0 {
         std::thread::yield_now();
     }
+    let counter = id.load(Ordering::Relaxed);
     let mut threads = Threads::new();
+    // Nothing from here to `resume` allocates or panics: a suspended thread
+    // may hold the heap's lock.
     let suspended = suspend(&mut threads);
+    let held = threads.held.iter().any(|&(_, known)| known == counter);
     let before = count.load(Ordering::Relaxed);
     std::thread::sleep(std::time::Duration::from_millis(20));
     let still = count.load(Ordering::Relaxed) == before;
-    threads.resume();
-    std::thread::sleep(std::time::Duration::from_millis(20));
+    let_go(threads);
+    let deadline = std::time::Instant::now() + RUNS_AGAIN_WITHIN;
+    while count.load(Ordering::Relaxed) == before && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
     let moves = count.load(Ordering::Relaxed) != before;
     stop.store(1, Ordering::Relaxed);
+    assert!(suspended, "the other threads were not all suspended");
+    assert!(held, "the counting thread was not among the suspended");
+    assert!(still, "the counting thread ran while suspended");
+    // Before the join, which a counter still suspended would never end.
+    assert!(
+        moves,
+        "the counting thread did not run within {RUNS_AGAIN_WITHIN:?} of its resume"
+    );
     counting.join().unwrap();
-    suspended && still && moves
 }
 
 #[test]
 fn every_other_thread_stands_still_until_resumed() {
-    assert!(stops_and_goes(Threads::suspend));
+    stops_and_goes(Threads::suspend, |mut threads| threads.resume());
+}
+
+#[test]
+fn threads_dropped_without_a_resume_run_again() {
+    stops_and_goes(Threads::suspend, drop);
 }
 
 #[test]
 fn a_snapshot_suspends_the_other_threads_where_the_system_has_no_thread_walk() {
-    assert!(stops_and_goes(|threads| {
-        // SAFETY: `GetCurrentThreadId` takes no arguments and only reads
-        // the calling thread's id.
-        let me = unsafe { GetCurrentThreadId() };
-        threads.suspend_listed(me, THREAD_SUSPEND_RESUME)
-    }));
+    stops_and_goes(
+        |threads| {
+            // SAFETY: `GetCurrentThreadId` takes no arguments and only reads
+            // the calling thread's id.
+            let me = unsafe { GetCurrentThreadId() };
+            // Context rights as the loader asks: reading the context is what
+            // makes a suspension take hold before the count is read.
+            threads.suspend_listed(me, THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT)
+        },
+        |mut threads| threads.resume(),
+    );
 }
 
 #[test]

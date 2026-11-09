@@ -3,7 +3,10 @@ use super::*;
 /// Serialises the tests, which share the carrier's state.
 static SHARED: Mutex<()> = Mutex::new(());
 
-fn alone() -> std::sync::MutexGuard<'static, ()> {
+/// The carrier to this test alone, with no link and nothing hosted, until
+/// dropped; the net tests that change the server's link take it too, since
+/// whether a send goes depends on the carrier.
+pub(crate) fn alone() -> std::sync::MutexGuard<'static, ()> {
     let guard = SHARED.relock();
     forget();
     *CARRIER.server.relock() = None;

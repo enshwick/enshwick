@@ -1,6 +1,8 @@
 //! A bases object of the game's layout for tests, grown to hold the window,
 //! with the game's new base code as the research reads it.
 
+use std::sync::{Mutex, MutexGuard, TryLockError};
+
 use enshwick::raw::{read_at, write_at};
 
 use super::heap::Slots;
@@ -8,6 +10,18 @@ use super::loops::{Layout, MapFields, ObjectFields, RecordFields, SortFields, St
 use super::{Answer, Container, Fields};
 use crate::base_groups::limit::Aabb;
 use crate::base_groups::window;
+use crate::locks::Relock;
+
+/// Held by every test that makes a [`Fake`] or touches the window entries,
+/// the side tables or a test file's call log: the process keeps one window
+/// entry per live object and one side table per kind, so tests running at
+/// once would take each other's.
+static SHARED: Mutex<()> = Mutex::new(());
+
+/// This test's turn at the bases state the tests share, until dropped.
+pub(super) fn shared() -> MutexGuard<'static, ()> {
+    SHARED.relock()
+}
 
 /// The build table's bases fields on server 399 and client 426.
 pub(super) const FIELDS: Fields = Fields {
@@ -142,6 +156,10 @@ pub(super) struct Fake {
 impl Fake {
     /// An object of `kind` whose zone list holds `boxes`.
     pub(super) fn new(kind: u8, boxes: &[Aabb]) -> Self {
+        assert!(
+            matches!(SHARED.try_lock(), Err(TryLockError::WouldBlock)),
+            "a test takes `fake::shared()` before it makes a Fake"
+        );
         let zones: Vec<Entry> = boxes
             .iter()
             .map(|b| {
