@@ -6,6 +6,13 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `releases::newer` finds the newest Enshwick release on GitHub that is
+  newer than a running version, by the tag prefixes of a package
+  (`LOADER_TAGS`, `TOOL_TAGS`), so the loader and `cargo enshwick` share
+  it (#1018).
+
 ### Changed
 
 - Breaking: `catalogue::Fact::Path` is `Path { steps, holds }`, naming the

@@ -13,9 +13,9 @@ log and in the game.
 
 Every form needs the Enshwick loader in the game's folder. The Rust mod
 puts it in when it installs. For a data pack or a Luau script, take
-`enshwick.zip` of the newest alpha on the
-[releases page](https://github.com/enshwick/enshwick/releases) and extract
-it next to the game's executable.
+`enshwick.zip` of the newest alpha from the
+[releases page](https://github.com/enshwick/enshwick/releases). Extract it
+next to the game's executable.
 
 Starting a mod and building one in Rust also need Rust 1.99 or newer, from
 [rustup](https://rustup.rs). Install the Windows target and the

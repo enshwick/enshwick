@@ -8,6 +8,19 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- Each alpha carries `cargo-enshwick` for Windows and a static Linux build,
+  with checksums, SBOM and build provenance, which
+  `cargo binstall --git https://github.com/enshwick/enshwick cargo-enshwick@<version>`
+  installs in seconds (#1018).
+- `install` without `--game` or `ENSHROUDED_DIR` takes the folder Steam
+  installed: the dedicated server, else the game, naming it and listing the
+  others (#1018).
+- `install --with-loader` puts in the loader of the tool's release, checked
+  against the release's `SHA256SUMS`, and leaves a loader of another
+  release in place with a warning (#1018).
+- The tool says on stderr when a newer release of itself is out, asking
+  GitHub at most once a day without waiting for the answer (#1018).
+
 - `deps --from` reads the points a Luau mod exports from its `pack.toml`,
   its folder or the packs in a game folder's `mods/`, leaving out a pack
   whose points do not read; the Luau definitions gain
