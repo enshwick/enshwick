@@ -476,12 +476,16 @@ mod tests {
     fn a_header_that_claims_more_samples_than_the_file_holds_is_refused() {
         let mut lying = wav(1, SAMPLE_RATE, 16, &[1, 2, 3]);
         let data = lying.len() - 6 - 4;
-        lying[data..data + 4].copy_from_slice(&u32::MAX.to_le_bytes());
+        // Whole samples, so only the length check refuses it.
+        lying[data..data + 4].copy_from_slice(&0x7fff_fffe_u32.to_le_bytes());
         assert!(
-            matches!(read_wav(&lying), Err(ReadWavError::Malformed(_))),
+            matches!(&read_wav(&lying), Err(ReadWavError::Malformed(why)) if why.contains("claims more samples")),
             "{:?}",
             read_wav(&lying)
         );
+        // Exactly as many samples as the file holds pass.
+        let whole = wav(2, SAMPLE_RATE, 16, &[1, 2, 3, 4]);
+        assert_eq!(read_wav(&whole).map(|p| p.frames), Ok(2));
         assert_eq!(
             read_wav(&wav(1, SAMPLE_RATE, 16, &[1, 2, 3])).map(|p| p.frames),
             Ok(3)
