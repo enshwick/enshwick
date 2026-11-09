@@ -26,6 +26,7 @@ use crate::world::TemplateWalk;
 pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ecs::COMPONENT_READ_RAW.id(),
     pinned::ecs::ROW_ENTITY.id(),
+    pinned::ecs::ENTITY_SLOT.id(),
 ];
 
 /// The system whose entry reads the mask.
