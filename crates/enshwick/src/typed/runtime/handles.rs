@@ -17,13 +17,14 @@ use crate::{Entity, Host, Load, Off};
 /// type cannot hold, such as a wider integer, at any depth, turns off only
 /// that type. For a type read `live` from an entity, a field whose data a
 /// read never reaches, such as a designer data kind's on the heap, turns it
-/// off too, by name.
+/// off too, by name, and the last of the three tells whether a field's data
+/// follows the component; for any other type it is `false`.
 fn resolve(
     load: &Load<'_>,
     id: &'static str,
     check: &dyn Fn(&Value) -> Result<(), ShapeError>,
     live: bool,
-) -> Result<(crate::ecs::ComponentType, &'static Type<'static>), Off> {
+) -> Result<(crate::ecs::ComponentType, &'static Type<'static>, bool), Off> {
     let host = load.host();
     let ecs =
         crate::ecs::ComponentType::resolve(load, id).map_err(|e| off(id, host, &e.to_string()))?;
@@ -31,19 +32,24 @@ fn resolve(
     let ty = registry
         .hashed(ecs.hash())
         .ok_or_else(|| off(id, host, "the type registry lacks it"))?;
-    if live && let Some(field) = super::outside::outside_field(registry, ty) {
-        return Err(off(
-            id,
-            host,
-            &format!(
-                "its field {field} keeps its data outside the component's set-up data, where a read of a live component does not reach"
-            ),
-        ));
+    let mut blob = false;
+    if live {
+        let found = super::outside::Outside::of(registry, ty);
+        if let Some(field) = found.unreached {
+            return Err(off(
+                id,
+                host,
+                &format!(
+                    "its field {field} keeps its data outside the component's set-up data, where a read of a live component does not reach"
+                ),
+            ));
+        }
+        blob = found.blob.is_some();
     }
     let value = sample(registry, ty.qualified_name())
         .ok_or_else(|| off(id, host, "its value does not read"))?;
     check(&value).map_err(|e| off(id, host, &e.to_string()))?;
-    Ok((ecs, ty))
+    Ok((ecs, ty, blob))
 }
 
 /// Turns the type `id` off on the running build, naming the build and why.
@@ -81,8 +87,7 @@ impl RawComponent {
         id: &'static str,
         check: &dyn Fn(&Value) -> Result<(), ShapeError>,
     ) -> Result<Self, Off> {
-        let (ecs, ty) = resolve(load, id, check, true)?;
-        let blob = super::outside::blob_field(Registry::game()?, ty).is_some();
+        let (ecs, ty, blob) = resolve(load, id, check, true)?;
         Ok(Self {
             id,
             ty: ecs,
@@ -149,7 +154,7 @@ impl RawComponent {
     fn unread(&self, registry: &Registry<'_>) -> Off {
         let field = registry
             .named(self.name)
-            .and_then(|ty| super::outside::blob_field(registry, ty))
+            .and_then(|ty| super::outside::Outside::of(registry, ty).blob)
             .unwrap_or_default();
         Off::new(format!(
             "typed {}: the component does not read as far as its field {field}",
@@ -202,7 +207,7 @@ impl RawEvent {
         id: &'static str,
         check: &dyn Fn(&Value) -> Result<(), ShapeError>,
     ) -> Result<Self, Off> {
-        let (_, ty) = resolve(load, id, check, false)?;
+        let (_, ty, _) = resolve(load, id, check, false)?;
         Ok(Self {
             id,
             ty: load.game_event_type(id)?,
@@ -251,7 +256,7 @@ impl RawResource {
         id: &'static str,
         check: &dyn Fn(&Value) -> Result<(), ShapeError>,
     ) -> Result<Self, Off> {
-        let (_, ty) = resolve(load, id, check, false)?;
+        let (_, ty, _) = resolve(load, id, check, false)?;
         Ok(Self {
             id,
             hash: ty.qualified_hash(),

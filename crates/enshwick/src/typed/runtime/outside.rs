@@ -4,70 +4,111 @@
 
 use crate::resources::{Kind, Registry, Type};
 
-/// The path, by the game's field names, of the first field of `ty` at any
-/// depth of its own bytes whose data a read of the live component does not
-/// reach: a designer data kind, which points to the heap, or a kind this
-/// API does not know, which may keep its data anywhere.
-pub(super) fn outside_field(registry: &Registry<'_>, ty: &Type<'_>) -> Option<String> {
-    let unreached = |kind| {
-        matches!(
-            kind,
-            Kind::DsArray | Kind::DsString | Kind::DsOptional | Kind::DsVariant | Kind::Other(_)
-        )
-    };
-    walk(registry, ty, &unreached, &mut Vec::new())
+/// Where the fields of a type keep data outside its own bytes: each the
+/// path, by the game's field names, of the first such field at any depth.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(super) struct Outside {
+    /// A field whose data a read of the live component does not reach: a
+    /// designer data kind, which points to the heap, or a kind this API
+    /// does not know, which may keep its data anywhere.
+    pub(super) unreached: Option<String>,
+    /// A field whose data follows the component in its set-up data: a blob
+    /// kind, whose offset points past the component's own bytes.
+    pub(super) blob: Option<String>,
 }
 
-/// The path of the first field of `ty` at any depth of its own bytes whose
-/// data follows the component in its set-up data: a blob kind, whose offset
-/// points past the component's own bytes.
-pub(super) fn blob_field(registry: &Registry<'_>, ty: &Type<'_>) -> Option<String> {
-    let blob = |kind| {
-        matches!(
-            kind,
-            Kind::BlobArray | Kind::BlobString | Kind::BlobOptional | Kind::BlobVariant
-        )
-    };
-    walk(registry, ty, &blob, &mut Vec::new())
-}
-
-/// The path of the first field of `ty` of a kind `wanted` takes. `seen`
-/// holds every type walked so far, none of which holds such a field: a type
-/// met again adds nothing, so a loop ends and each type is walked once.
-fn walk(
-    registry: &Registry<'_>,
-    ty: &Type<'_>,
-    wanted: &dyn Fn(Kind) -> bool,
-    seen: &mut Vec<*const ()>,
-) -> Option<String> {
-    let at = core::ptr::from_ref(ty).cast::<()>();
-    if seen.contains(&at) {
-        return None;
+impl Outside {
+    /// The fields of `ty` that keep data outside its own bytes, found in
+    /// one walk. A variant may hold its inner type or any struct derived
+    /// from it, so the walk meets each of them; a derived one's fields are
+    /// named after the derived type, as in `shape.demo::Square.side`.
+    pub(super) fn of(registry: &Registry<'_>, ty: &Type<'_>) -> Self {
+        let mut walk = Walk {
+            registry,
+            seen: Vec::new(),
+            path: Vec::new(),
+            found: Self::default(),
+        };
+        walk.ty(ty);
+        walk.found
     }
-    seen.push(at);
-    let join = |head: &str, rest: String| {
-        if rest.is_empty() {
-            head.to_owned()
-        } else {
-            format!("{head}.{rest}")
+}
+
+/// One walk over a type's fields. `seen` holds every type met so far: a
+/// type met again adds nothing its first meeting did not, so a loop ends
+/// and each type is walked once.
+struct Walk<'r, 'a> {
+    registry: &'r Registry<'a>,
+    seen: Vec<*const ()>,
+    path: Vec<&'r str>,
+    found: Outside,
+}
+
+impl<'r, 'a> Walk<'r, 'a> {
+    /// Walks `ty`; `true` once both kinds of field are found, which ends
+    /// the walk.
+    fn ty(&mut self, ty: &'r Type<'a>) -> bool {
+        let at = core::ptr::from_ref(ty).cast::<()>();
+        if self.seen.contains(&at) {
+            return self.done();
         }
-    };
-    let inner = || ty.inner().and_then(|name| registry.named(name));
-    match ty.kind() {
-        kind if wanted(kind) => Some(String::new()),
-        // A variant may hold a type derived from its inner one; the inner
-        // one's fields are the ones a read is sure to meet.
-        Kind::Typedef | Kind::BlobOptional | Kind::BlobVariant => {
-            walk(registry, inner()?, wanted, seen)
+        self.seen.push(at);
+        let registry = self.registry;
+        let inner = ty.inner().and_then(|name| registry.named(name));
+        match ty.kind() {
+            Kind::DsArray
+            | Kind::DsString
+            | Kind::DsOptional
+            | Kind::DsVariant
+            | Kind::Other(_) => {
+                if self.found.unreached.is_none() {
+                    self.found.unreached = Some(self.path.join("."));
+                }
+                self.done()
+            }
+            Kind::BlobString => self.blob(),
+            Kind::BlobArray => self.blob() || self.within("0", inner),
+            Kind::BlobOptional => self.blob() || inner.is_some_and(|inner| self.ty(inner)),
+            Kind::BlobVariant => {
+                self.blob()
+                    || inner.is_some_and(|inner| {
+                        self.ty(inner)
+                            || registry
+                                .derived(inner)
+                                .any(|held| self.within(held.qualified_name(), Some(held)))
+                    })
+            }
+            Kind::Typedef => inner.is_some_and(|inner| self.ty(inner)),
+            Kind::StaticArray => self.within("0", inner),
+            Kind::Struct => registry.all_fields(ty).into_iter().any(|field| {
+                let held = field.type_name().and_then(|name| registry.named(name));
+                self.within(field.name(), held)
+            }),
+            _ => false,
         }
-        Kind::Struct => registry.all_fields(ty).into_iter().find_map(|field| {
-            let held = registry.named(field.type_name()?)?;
-            walk(registry, held, wanted, seen).map(|rest| join(field.name(), rest))
-        }),
-        Kind::StaticArray | Kind::BlobArray => {
-            walk(registry, inner()?, wanted, seen).map(|rest| join("0", rest))
+    }
+
+    /// Walks `held` one step down the path, at `step`.
+    fn within(&mut self, step: &'r str, held: Option<&'r Type<'a>>) -> bool {
+        let Some(held) = held else {
+            return false;
+        };
+        self.path.push(step);
+        let done = self.ty(held);
+        self.path.pop();
+        done
+    }
+
+    /// Notes a blob field at the path walked.
+    fn blob(&mut self) -> bool {
+        if self.found.blob.is_none() {
+            self.found.blob = Some(self.path.join("."));
         }
-        _ => None,
+        self.done()
+    }
+
+    fn done(&self) -> bool {
+        self.found.unreached.is_some() && self.found.blob.is_some()
     }
 }
 
@@ -101,8 +142,8 @@ mod tests {
                 "demo::Level",
             )]),
         ]);
-        let blob = |name| blob_field(&registry, registry.named(name).unwrap());
-        let outside = |name| outside_field(&registry, registry.named(name).unwrap());
+        let blob = |name| Outside::of(&registry, registry.named(name).unwrap()).blob;
+        let outside = |name| Outside::of(&registry, registry.named(name).unwrap()).unreached;
         assert_eq!(blob("demo::Outer").as_deref(), Some("pairs.0.entries"));
         assert_eq!(blob("demo::Inner").as_deref(), Some("entries"));
         assert_eq!(blob("demo::Plain"), None);
@@ -121,8 +162,9 @@ mod tests {
             ]),
         ]);
         let held = registry.named("demo::Held").unwrap();
-        assert_eq!(outside_field(&registry, held).as_deref(), Some("list"));
-        assert_eq!(blob_field(&registry, held), None);
+        let found = Outside::of(&registry, held);
+        assert_eq!(found.unreached.as_deref(), Some("list"));
+        assert_eq!(found.blob, None);
     }
 
     #[test]
@@ -150,9 +192,44 @@ mod tests {
                 "demo::BlobOptional<demo::Entry>",
             )]),
         ]);
-        let outside = |name| outside_field(&registry, registry.named(name).unwrap());
+        let outside = |name| Outside::of(&registry, registry.named(name).unwrap()).unreached;
         assert_eq!(outside("demo::Listed").as_deref(), Some("entries.0.name"));
         assert_eq!(outside("demo::Maybe").as_deref(), Some("entry.name"));
+    }
+
+    #[test]
+    fn a_designer_data_field_of_a_type_derived_from_a_variant_s_inner_type_is_never_reached() {
+        let registry = Registry::new([
+            Type::new("demo::uint8", Kind::Uint8, 1, 1),
+            Type::new("demo::DsString", Kind::DsString, 16, 8),
+            Type::new("demo::Shape", Kind::Struct, 1, 1).with_fields(vec![Field::new(
+                "sides",
+                0,
+                "demo::uint8",
+            )]),
+            Type::new("demo::Square", Kind::Struct, 2, 1)
+                .with_inner("demo::Shape")
+                .with_fields(vec![Field::new("side", 1, "demo::uint8")]),
+            Type::new("demo::Label", Kind::Struct, 24, 8)
+                .with_inner("demo::Square")
+                .with_fields(vec![Field::new("text", 8, "demo::DsString")]),
+            Type::new("demo::BlobVariant<demo::Shape>", Kind::BlobVariant, 12, 4)
+                .with_inner("demo::Shape"),
+            Type::new("demo::Drawn", Kind::Struct, 12, 4).with_fields(vec![Field::new(
+                "shape",
+                0,
+                "demo::BlobVariant<demo::Shape>",
+            )]),
+        ]);
+        let drawn = registry.named("demo::Drawn").unwrap();
+        assert_eq!(
+            Outside::of(&registry, drawn),
+            Outside {
+                unreached: Some("shape.demo::Label.text".to_owned()),
+                blob: Some("shape".to_owned()),
+            },
+            "a variant holds any type derived from its inner one, at any depth"
+        );
     }
 
     #[test]
@@ -189,8 +266,8 @@ mod tests {
                 "demo::Unknown",
             )]),
         ]);
-        let outside = |name| outside_field(&registry, registry.named(name).unwrap());
-        let blob = |name| blob_field(&registry, registry.named(name).unwrap());
+        let outside = |name| Outside::of(&registry, registry.named(name).unwrap()).unreached;
+        let blob = |name| Outside::of(&registry, registry.named(name).unwrap()).blob;
         assert_eq!(blob("demo::Named").as_deref(), Some("entries"));
         assert_eq!(blob("demo::Loop"), None);
         assert_eq!(outside("demo::Loop"), None);

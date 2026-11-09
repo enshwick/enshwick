@@ -8,66 +8,19 @@ mod tests {
 
     use enshwick::abi::Status;
     use enshwick::content::Guid;
-    use enshwick::resources::{Field, Kind, Type, fnv1a32};
+    use enshwick::resources::fnv1a32;
+    use enshwick::test::{FakeHost, TAG_CONTAINER};
     use enshwick::typed::ComponentType;
     use enshwick::typed::ecs::EntityTagContainer;
     use enshwick::world::World;
     use enshwick::{Entity, Load, Mod, Off};
 
-    const TAGS: &str = "keen::ecs::EntityTagContainer";
-    const ENTRY: &str = "keen::ecs::EntityTagReferenceEntry";
     const WHOLE: Entity = Entity(4096);
     const CUT: Entity = Entity(4097);
     const SHORT: Entity = Entity(4098);
     const EMPTY: Entity = Entity(4099);
 
     static RESOLVED: OnceLock<(World, ComponentType<EntityTagContainer>)> = OnceLock::new();
-
-    /// `EntityTagContainer` and what it holds, as server build 479 reflects
-    /// them.
-    fn types() -> Vec<Type<'static>> {
-        let field = |name, offset, ty| Field::new(name, offset, ty);
-        vec![
-            Type::new("keen::ecs::Component", Kind::Struct, 1, 1),
-            Type::new(
-                "keen::ObjectReference<keen::ecs::EntityTag>",
-                Kind::ObjectReference,
-                16,
-                4,
-            ),
-            Type::new("keen::ecs::EntityTagReference", Kind::Typedef, 16, 4)
-                .with_inner("keen::ObjectReference<keen::ecs::EntityTag>"),
-            Type::new(ENTRY, Kind::Struct, 16, 4).with_fields(vec![field(
-                "tag",
-                0,
-                "keen::ecs::EntityTagReference",
-            )]),
-            Type::new(
-                "keen::BlobArray<keen::ecs::EntityTagReferenceEntry>",
-                Kind::BlobArray,
-                8,
-                4,
-            )
-            .with_inner(ENTRY),
-            Type::new(TAGS, Kind::Struct, 8, 4)
-                .with_inner("keen::ecs::Component")
-                .with_fields(vec![field(
-                    "tags",
-                    0,
-                    "keen::BlobArray<keen::ecs::EntityTagReferenceEntry>",
-                )]),
-        ]
-    }
-
-    /// A container's set-up data: its 8 bytes, an offset of 8 from the
-    /// field and a count, then `held` of the `count` tags.
-    fn container(count: u32, held: &[Guid]) -> Vec<u8> {
-        let mut bytes = [8i32.to_le_bytes(), count.to_le_bytes()].concat();
-        for tag in held {
-            bytes.extend_from_slice(&tag.0);
-        }
-        bytes
-    }
 
     struct Blobs;
 
@@ -89,17 +42,15 @@ mod tests {
 
     #[test]
     fn a_live_component_reads_its_blob_array_and_a_cut_or_short_one_is_refused_by_name() {
-        let hash = fnv1a32(TAGS.as_bytes());
+        let hash = fnv1a32(TAG_CONTAINER.as_bytes());
         let (bandit, vukah) = (Guid([0x11; 16]), Guid([0x22; 16]));
-        let loader = enshwick::test::FakeHost::new()
+        let loader = FakeHost::new()
             .world()
-            .types(types())
-            .type_hash("ecs::EntityTagContainer", hash)
-            .type_size("ecs::EntityTagContainer", 8)
-            .component(WHOLE, hash, &container(2, &[bandit, vukah]))
-            .component(CUT, hash, &container(3, &[bandit]))
+            .entity_tags()
+            .tagged(WHOLE, 2, &[bandit, vukah])
+            .tagged(CUT, 3, &[bandit])
             .component(SHORT, hash, &8i32.to_le_bytes())
-            .component(EMPTY, hash, &container(0, &[]))
+            .tagged(EMPTY, 0, &[])
             .install();
         // SAFETY: the three functions are the exports of this file's `declare_mod!(Blobs)`.
         let status =
@@ -128,15 +79,13 @@ mod tests {
 
     #[test]
     fn a_write_of_a_component_with_blob_fields_is_refused_and_leaves_its_bytes() {
-        let hash = fnv1a32(TAGS.as_bytes());
-        let bytes = container(1, &[Guid([0x11; 16])]);
-        let loader = enshwick::test::FakeHost::new()
+        let hash = fnv1a32(TAG_CONTAINER.as_bytes());
+        let loader = FakeHost::new()
             .world()
-            .types(types())
-            .type_hash("ecs::EntityTagContainer", hash)
-            .type_size("ecs::EntityTagContainer", 8)
-            .component(WHOLE, hash, &bytes)
+            .entity_tags()
+            .tagged(WHOLE, 1, &[Guid([0x11; 16])])
             .install();
+        let bytes = loader.component_bytes(WHOLE, hash);
         // SAFETY: the three functions are the exports of this file's `declare_mod!(Blobs)`.
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
@@ -146,6 +95,6 @@ mod tests {
         let read = tags.read(*world, WHOLE).unwrap().unwrap();
         let refused = tags.write(*world, WHOLE, &read).unwrap_err().to_string();
         assert!(refused.contains("read-only set-up data"), "{refused}");
-        assert_eq!(loader.component_bytes(WHOLE, hash), Some(bytes));
+        assert_eq!(loader.component_bytes(WHOLE, hash), bytes);
     }
 }

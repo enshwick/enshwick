@@ -156,6 +156,23 @@ impl<'a> Registry<'a> {
             .flat_map(|ty| ty.fields().iter())
             .collect()
     }
+
+    /// Every struct derived from `base`, directly or through other bases; a
+    /// chain deeper than the bases [`all_fields`](Self::all_fields) follows
+    /// is taken for a loop and does not count.
+    pub(crate) fn derived<'r>(&'r self, base: &'r Type<'a>) -> impl Iterator<Item = &'r Type<'a>> {
+        self.types.iter().filter(move |ty| {
+            let mut current = *ty;
+            for _ in 0..MAX_BASES {
+                match current.base().and_then(|name| self.named(name)) {
+                    Some(next) if core::ptr::eq(next, base) => return true,
+                    Some(next) => current = next,
+                    None => return false,
+                }
+            }
+            false
+        })
+    }
 }
 
 /// Bases deeper than this are taken for a loop in bad data.

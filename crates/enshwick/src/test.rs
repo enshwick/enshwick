@@ -103,6 +103,8 @@ mod saves;
 mod settings;
 mod stats;
 pub(crate) mod table;
+#[cfg(feature = "typed")]
+mod tags;
 mod templates;
 mod ticks;
 mod transactions;
@@ -121,6 +123,8 @@ pub use progression::{
 #[cfg(feature = "typed")]
 pub use removal::{ENTITY_ITEM, FILL_TABLE, LOOT_ITEM, OTHER_ITEM, RANDOM_LOOT, SPARE_ITEM};
 pub use settings::SettingsRefused;
+#[cfg(feature = "typed")]
+pub use tags::TAG_CONTAINER;
 pub use templates::{
     BITE, BOSS_CREATURE, CRAFTING_PROP_ITEM, CREATURE, ENEMY, ENEMY_ARSENAL, HOWL, LUNGE, NEST,
     NEST_GROUP, OTHER_ARSENAL, PROP_ITEM, VANILLA_CRAFTING_PROPS,
