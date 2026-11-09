@@ -367,10 +367,20 @@ pub(crate) fn flush(address: usize, len: usize) {
 #[cfg(test)]
 mod tests {
     use windows_sys::Win32::System::Memory::{
-        MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READ, VirtualFree,
+        MEM_DECOMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READ, VirtualFree,
     };
 
     use super::*;
+
+    /// Decommits the test's own `pages`, which stay reserved: an address
+    /// released while other tests run may be theirs before the next line
+    /// asks about it.
+    fn decommit(pages: NonNull<u8>) {
+        // SAFETY: `pages` is the calling test's own allocation, which uses
+        // none of it afterwards.
+        let decommitted = unsafe { VirtualFree(pages.as_ptr().cast(), 0, MEM_DECOMMIT) };
+        assert_ne!(decommitted, 0);
+    }
 
     fn region(state: u32, protect: u32) -> Region {
         Region {
@@ -454,14 +464,15 @@ mod tests {
         assert_eq!(read::<8>(last), Some([1, 2, 3, 4, 5, 6, 7, 8]));
         assert_eq!(read::<8>(last + 1), None, "past the page");
         assert_eq!(read::<8>(0), None);
-        // SAFETY: `page` is the test's own allocation, released once.
-        unsafe { VirtualFree(page.as_ptr().cast(), 0, MEM_RELEASE) };
-        assert_eq!(read::<8>(start), None, "released");
+        decommit(page);
+        assert_eq!(read::<8>(start), None, "decommitted");
         assert_eq!(
             copy::<8>(start),
             None,
-            "a page released after the query is refused, not a fault"
+            "a page decommitted after the query is refused, not a fault"
         );
+        // SAFETY: `page` is the test's own allocation, released once.
+        unsafe { VirtualFree(page.as_ptr().cast(), 0, MEM_RELEASE) };
     }
 
     #[test]
@@ -493,13 +504,14 @@ mod tests {
         assert_eq!(found.read_only(0, start + 100, 3 * PAGE), 3 * PAGE - 100);
         assert_eq!(found.read_only(0, start, 16), 16, "the cap");
         assert_eq!(found.read_only(0, 0, 16), 0);
-        // SAFETY: `pages` is the test's own allocation, released once.
-        unsafe { VirtualFree(pages.as_ptr().cast(), 0, MEM_RELEASE) };
+        decommit(pages);
         assert_eq!(
             found.read_only(0, start, 16),
             0,
-            "released, too short to remember"
+            "decommitted, too short to remember"
         );
+        // SAFETY: `pages` is the test's own allocation, released once.
+        unsafe { VirtualFree(pages.as_ptr().cast(), 0, MEM_RELEASE) };
     }
 
     #[test]
@@ -588,7 +600,7 @@ mod tests {
     fn a_mapped_view_is_asked_afresh_since_another_view_may_write_it() {
         use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
         use windows_sys::Win32::System::Memory::{
-            CreateFileMappingW, FILE_MAP_READ, MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile,
+            CreateFileMappingW, FILE_MAP_WRITE, MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile,
             UnmapViewOfFile,
         };
         let found = Found::new();
@@ -608,15 +620,19 @@ mod tests {
         assert!(!section.is_null(), "a section");
         // SAFETY: `section` is the test's own open section of `LASTING` bytes;
         // the view is new pages nothing else uses.
-        let view = unsafe { MapViewOfFile(section, FILE_MAP_READ, 0, 0, LASTING) };
+        let view = unsafe { MapViewOfFile(section, FILE_MAP_WRITE, 0, 0, LASTING) };
         let start = view.Value.addr();
-        assert_ne!(start, 0, "a read-only view");
+        assert_ne!(start, 0, "a view");
+        // SAFETY: the view is the test's own, used by no one else.
+        unsafe { protect(start, LASTING, PAGE_READONLY) }.expect("read-only");
         assert_eq!(found.read_only(0, start, 16), 16);
+        // SAFETY: the view is the test's own, used by no one else.
+        unsafe { protect(start, LASTING, PAGE_READWRITE) }.expect("read-write");
+        assert_eq!(found.read_only(0, start, 16), 0, "not remembered");
         // SAFETY: `view` is the test's own view, unmapped once.
         unsafe { UnmapViewOfFile(MEMORY_MAPPED_VIEW_ADDRESS { Value: view.Value }) };
         // SAFETY: `section` is the test's own handle, closed once.
         unsafe { CloseHandle(section) };
-        assert_eq!(found.read_only(0, start, 16), 0, "unmapped, not remembered");
     }
 
     #[test]
