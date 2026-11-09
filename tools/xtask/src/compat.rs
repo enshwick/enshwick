@@ -471,7 +471,8 @@ fn write_build(out: &mut String, args: &Args, build: &Build) -> bool {
     } else {
         let _w = writeln!(
             out,
-            "No compatibility report of this loader covers the build: with `build_patterns = false` the loader keeps it vanilla. `--data crates/enshwick-gamedata/reports` writes its report data.\n"
+            "No compatibility report of this loader covers the build: with `build_patterns = false` the loader keeps it vanilla. `--data {}` writes its report data.\n",
+            reports::REPORTS
         );
     }
     table.missing().is_empty()
