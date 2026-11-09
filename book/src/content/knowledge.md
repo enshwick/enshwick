@@ -51,14 +51,14 @@ These calls need the `typed` feature.
 An entry's `experience` and a quest's `QuestReward::Experience` name an
 experience value of the game's balancing table: a source and an amount.
 
-`vanilla::experience_values()` lists the game's own values, each with its
-`value`, `source` and `gain`. `load.add_experience(NewExperience)` adds a value
-of the mod's own and returns it:
+`vanilla::experience_values()` lists the game's own values. Each has a value,
+a source and a gain. `load.add_experience(NewExperience)` adds a value of the
+mod's own and returns it:
 
 | Field | What it sets |
 | --- | --- |
 | `id` | the value's content id; the value is the FNV-1a of its GUID |
-| `source` | the `ExperienceSourceType` the game counts it under, such as `Quest` or `Exploration` |
+| `source` | the source the game counts it under, an `ExperienceSourceType` |
 | `gain` | the experience it gives |
 
 The experience rate of the source in the world settings scales the gain, as
