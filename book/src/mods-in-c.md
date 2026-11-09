@@ -15,7 +15,8 @@ The examples
 [`hello.c`](https://github.com/enshwick/enshwick/blob/main/examples/hello-c/hello.c)
 and
 [`hello.cpp`](https://github.com/enshwick/enshwick/blob/main/examples/hello-c/hello.cpp)
-start on the fake host on every change, so C and C++ are the tested languages.
+start on the fake host in CI whenever the header changes, so C and C++ are
+the tested languages.
 
 The header is
 [`enshwick.h`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/include/enshwick.h),
@@ -74,9 +75,12 @@ clang++ --target=x86_64-pc-windows-msvc -std=c++20 -O2 -shared -fuse-ld=lld \
 ```
 
 The header wraps the four exports in `extern "C"`, so their names stay
-unmangled. `hello.cpp` turns off exceptions and runtime type information
-(`-fno-exceptions -fno-rtti`) to build without the C++ runtime as well.
-A mod that uses the C++ standard library links its runtime as usual.
+unmangled. `hello.cpp` uses no exceptions and no runtime type information. So it
+also builds without the C++ runtime, with `-fno-exceptions -fno-rtti` beside
+the C mod's `-ffreestanding -nostdlib -Wl,/NOENTRY`. A mod that uses the C++ standard library links its runtime as
+usual. No exception may leave an exported function or a callback the mod
+hands the loader, since the loader cannot catch it and the game stops. So catch
+every exception at those edges.
 
 The loader loads your mod with
 [`LoadLibraryExW`](https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-loadlibraryexw).
