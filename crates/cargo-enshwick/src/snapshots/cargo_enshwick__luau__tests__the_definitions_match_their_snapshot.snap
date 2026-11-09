@@ -1556,7 +1556,7 @@ export type NewEnemy = {
 export type NewExperience = {
 	--- Its content id; its experience value is the FNV-1a of the id's GUID.
 	id: string,
-	--- The source the game counts it under, whose experience rate scales it.
+	--- The source the game counts it under; the world's experience factor of the source's `ExperienceGroup` scales it, and a source in no group has none.
 	source: string,
 	--- The experience it gives.
 	gain: number,
@@ -3934,7 +3934,7 @@ declare enshwick: {
 		--- Adds a knowledge entry beside the game's own, on the server and the client alike, and returns its knowledge id. The game grants, sends and saves it like a vanilla entry; a player's entry gives its skill points and experience when granted. A save keeps the values of the mod's entries while the mod runs; a save made without the mod drops them, so they read 0 when the mod comes back (server 399, read on a server copy).
 		--- Only while the mod starts, at the top level of main.luau.
 		add_knowledge: (new: NewKnowledge) -> number,
-		--- Adds an experience value beside the game's own and returns it, for a knowledge entry's `NewKnowledge.experience` or a quest's experience reward. The game counts the experience under its source, whose experience rate in the world settings scales it, as it does a vanilla value's; `experience_values` lists those. Adding the same id again replaces its source and gain.
+		--- Adds an experience value beside the game's own and returns it, for a knowledge entry's `NewKnowledge.experience` or a quest's experience reward. The game counts the experience under its source, as it does a vanilla value's; `experience_values` lists those. Adding the same id again replaces its source and gain. One patch of the balancing table serves all of a mod's values; it adds none when another mod's value there has the id of one of them.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_experience: (new: NewExperience) -> number,
 		--- Adds a quest to the journal beside the game's, on the server and the client alike, and returns its quest id: a player's bool the game sets when it pays the quest, as for its own. Each step shows while its `shown_when` holds and is done once its `done_when` holds; the game pays the rewards when the last step is done. A mod moves the quest on by granting the knowledge its steps ask for.
