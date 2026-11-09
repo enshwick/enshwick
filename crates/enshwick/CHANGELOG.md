@@ -6,6 +6,8 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.14] - 2026-11-09
+
 ### Added
 
 - `content`: `Load::add_experience(NewExperience)` adds an experience value
@@ -96,25 +98,19 @@ Each entry names the pull request that made the change.
   away, and `HostApi::read_only` may answer from one (#999).
 - `sound`: a container added with the `Ui` scene plays from no place in
   the world (#1002).
-- `sound`: `Load::add_sound` refuses a WAV file whose header claims more
-  samples than the file holds, and a client step that fails before it
-  serves the file no longer counts it against `MAX_MOD_BYTES`; the
-  unreachable `MAX_SECONDS` limit is removed (#1002).
+- `sound`: **Breaking.** `Load::add_sound` refuses a WAV file whose header
+  claims more samples than the file holds, and a client step that fails
+  before it serves the file no longer counts it against `MAX_MOD_BYTES`;
+  the unreachable `MAX_SECONDS` limit and its constant are removed (#1002).
 - `ui`: frames read no screen host while the player is in the world with
   no window open, the build tools included (#1002).
 - `test`: `Installed::host_screen` with another host forgets the template
   read for the one before, as a new host reads none until a step does
   (#1002).
-
 - `content`: `Load::rekey_item(old, new)` and Luau
   `enshwick.content.rekey_item` read `new` as served at each build of
   `old`, so other mods' changes of `new`, a mod's own item included, reach
   `old`, and two items re-keyed to each other swap (#998).
-- Host calls that copy bytes to a mod refuse data past 4 GiB instead of
-  writing past the mod's buffer (#998).
-- The fake host's build of a served resource skips a failed patch and
-  builds the rest, as the loader does (#998).
-
 - `script`: **Breaking.** `Callback::call`, `Function::call`,
   `InitFunction::call`, `Opened::call` and `Handle::call` take
   `&mut [Value]`; a choice and a union's variant without a value cross as
@@ -130,6 +126,17 @@ Each entry names the pull request that made the change.
   kind a mod declares, and every chapter that names an id links it;
   `cargo xtask check` holds the link. "The life of a mod" states the load
   order and the reasons the loader skips a mod when it resolves (#1010).
+- The loader's parts that write game memory read their found offsets on one
+  live object before their first write in a game process, through reads
+  that cannot fault: knowledge grants, altar ranges, Quick Stash, game
+  settings changes, save holds, weather changes, inventory requests and the
+  base grouping. A part whose object does not hold turns off alone, with
+  one warning naming the build, the entry and what did not hold, on the
+  Mods screen and in the status summary; its calls, save holds and queued
+  inventory requests then answer as unavailable. An object the game has not
+  made yet refuses the call as missing and is checked again on the next.
+  An entry whose engine route takes a value outside its range is missing,
+  and the loader says it "is outside its range" (#982).
 
 ### Fixed
 
@@ -144,6 +151,10 @@ Each entry names the pull request that made the change.
   resolved and read that field's heap pointer as data. A read of a
   `BlobVariant` that holds a type neither its inner one nor derived from
   it fails, naming both (#1004).
+- Host calls that copy bytes to a mod refuse data past 4 GiB instead of
+  writing past the mod's buffer (#998).
+- The fake host's build of a served resource skips a failed patch and
+  builds the rest, as the loader does (#998).
 - `actions`: a server sends a joining player only the controls of a server
   mod whose action that player may run, by the action's `allow` or
   `admins`, and sends them again when the server changes the player's
@@ -155,6 +166,11 @@ Each entry names the pull request that made the change.
   `enshwick.toml`; packs no longer subscribe to
   `Event::LOADER_SETTINGS_CHANGED`, so the loader refreshes them itself
   (#993).
+- `log`: a data pack's log check reads its own level from an atomic the pack
+  keeps and asks the loader again when the loader's settings change (#983).
+- `test`: the fake host runs every callback a mod or data pack registered as
+  its owner, as the loader does; `Installed::set_pack_log_level` sets a
+  pack's level in the fake (#983).
 
 ## [1.0.0-alpha.13] - 2026-11-07
 
@@ -389,17 +405,6 @@ Each entry names the pull request that made the change.
   component, such as a `BlobArray`, or of a kind this API does not know,
   does not resolve for live reads and writes; the refusal names the field
   (#986).
-- The loader's parts that write game memory read their found offsets on one
-  live object before their first write in a game process, through reads
-  that cannot fault: knowledge grants, altar ranges, Quick Stash, game
-  settings changes, save holds, weather changes, inventory requests and the
-  base grouping. A part whose object does not hold turns off alone, with
-  one warning naming the build, the entry and what did not hold, on the
-  Mods screen and in the status summary; its calls, save holds and queued
-  inventory requests then answer as unavailable. An object the game has not
-  made yet refuses the call as missing and is checked again on the next.
-  An entry whose engine route takes a value outside its range is missing,
-  and the loader says it "is outside its range" (#982).
 - `actions`: `Load::actions` hands its texts to the loader once, beneath the
   texts the mod hands itself, before or after; a runs-control's label reads
   from them in each player's language with the usual fallback, and a key both
@@ -520,11 +525,6 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
-- `log`: a data pack's log check reads its own level from an atomic the pack
-  keeps and asks the loader again when the loader's settings change (#983).
-- `test`: the fake host runs every callback a mod or data pack registered as
-  its owner, as the loader does; `Installed::set_pack_log_level` sets a
-  pack's level in the fake (#983).
 - `abi`: `ChunkData` and `Event::CHUNK_LOADED` and `CHUNK_UNLOADED` say they
   name chunks of the world's entities, never of its terrain's voxels (#977).
 - `events`: `ChunkLoaded` and `ChunkUnloaded` say they follow the chunks of

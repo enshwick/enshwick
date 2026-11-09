@@ -6,13 +6,19 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.14] - 2026-11-09
+
 ### Added
 
 - `deps --from` reads the points a Luau mod exports from its `pack.toml`,
   its folder or the packs in a game folder's `mods/`, leaving out a pack
   whose points do not read; the Luau definitions gain
-  `points.define_point`. A game field named after a Luau keyword is written
-  in brackets in `enshwick.typed.d.luau`, which luau-lsp could not parse
+  `points.define_point` (#989).
+
+### Fixed
+
+- `luau --typed` writes a game field named after a Luau keyword in brackets
+  in `enshwick.typed.d.luau`; before, luau-lsp could not parse the file
   (#989).
 
 ## [1.0.0-alpha.13] - 2026-11-07
