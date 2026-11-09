@@ -57,7 +57,7 @@ jobs:
           key: xwin-release-${{ runner.os }}-0.23.1-v1
       - uses: ./.github/actions/setup-rust
         with:
-          tools: cargo-cyclonedx@0.5.9,cargo-auditable@0.7.7
+          tools: cargo-cyclonedx@0.5.10,cargo-auditable@0.7.7
 
       # The archive, and the PDB and SBOM of every DLL.
       - uses: ./.github/actions/release-files

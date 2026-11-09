@@ -58,7 +58,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           gh: true
-          tools: cargo-cyclonedx@0.5.9,cargo-auditable@0.7.7
+          tools: cargo-cyclonedx@0.5.10,cargo-auditable@0.7.7
 
       # Before the build: a version released already, or one whose
       # changelogs are not closed, stops the run in seconds.
