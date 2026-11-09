@@ -220,6 +220,8 @@
 "join.refused.leaving" = "伺服器將在 {seconds} 秒後中斷你的連線。"
 "join.admitted" = "你的 Enshwick 模組現在與伺服器一致，你可以留下。"
 "join.off" = "此伺服器上已關閉：{names}。原因見伺服器日誌。"
+"join.taken" = "它們需要的遊戲程式碼已被 {owners} 佔用。"
+"join.taken.unknown" = "Enshwick 以外的程式"
 "join.dialog.title" = "缺少模組"
 "join.dialog.message" = "此伺服器執行的 Enshwick 模組在你的遊戲中缺少或版本不同。取得這些模組，重新啟動遊戲後再次加入。"
 "join.dialog.mod" = "{mod} {version}"

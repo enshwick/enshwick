@@ -220,6 +220,8 @@
 "join.refused.leaving" = "{seconds} 秒後にサーバーから切断されます。"
 "join.admitted" = "あなたの Enshwick の MOD がサーバーと一致したので、このまま参加できます。"
 "join.off" = "このサーバーでオフ：{names}。理由はサーバーのログにあります。"
+"join.taken" = "必要なゲームコードは {owners} が使用しています。"
+"join.taken.unknown" = "Enshwick 以外のもの"
 "join.dialog.title" = "MOD が不足しています"
 "join.dialog.message" = "このサーバーは、あなたのゲームにない、またはバージョンが異なる Enshwick の MOD を実行しています。MOD を入手し、ゲームを再起動してもう一度参加してください。"
 "join.dialog.mod" = "{mod} {version}"

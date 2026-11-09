@@ -484,7 +484,13 @@ fn kept_level(word: u64) -> Option<u8> {
 /// Each data pack's kept level word, by handle: chunk `k` holds the `2^k`
 /// handles from `2^k - 1` on and is made at the first line of a pack in it,
 /// so a line finds its pack's word with one bit scan, no lock and no hash.
-struct PackLevels([OnceLock<Box<[AtomicU64]>>; usize::BITS as usize]);
+/// A handle past the last chunk keeps no word and asks the loader each time.
+struct PackLevels([OnceLock<Box<[AtomicU64]>>; PACK_CHUNKS]);
+
+/// The chunks [`PackLevels`] makes at most: about a million handles, far
+/// past the mods a game loads, and at most 8 MiB, so no handle value makes
+/// it ask for more memory than that.
+const PACK_CHUNKS: usize = 20;
 
 impl PackLevels {
     /// The chunk of `pack` and its place there; `None` past every chunk.
@@ -526,7 +532,7 @@ impl PackLevels {
 }
 
 /// The data packs' levels the loader's own copy of the API keeps.
-static PACK_LEVELS: PackLevels = PackLevels([const { OnceLock::new() }; usize::BITS as usize]);
+static PACK_LEVELS: PackLevels = PackLevels([const { OnceLock::new() }; PACK_CHUNKS]);
 
 #[inline]
 #[must_use]
@@ -597,7 +603,9 @@ unsafe extern "system" fn refresh_level(
 
 /// The state of the call site `site` for the data pack this thread runs,
 /// so the first pack to reach a site of the loader's copy does not silence
-/// it for the others; `site` itself outside a pack.
+/// it for the others; `site` itself outside a pack, and for a call made while
+/// this thread takes the states' lock, such as a line the poisoned-lock
+/// warning logs, which would otherwise wait on that lock for ever.
 fn for_pack<T: Default + Send + Sync + 'static>(site: &'static T) -> &'static T {
     type Sites = rustc_hash::FxHashMap<(usize, usize), &'static (dyn core::any::Any + Send + Sync)>;
     static SITES: std::sync::LazyLock<std::sync::Mutex<Sites>> =
@@ -606,21 +614,36 @@ fn for_pack<T: Default + Send + Sync + 'static>(site: &'static T) -> &'static T 
         // The states this thread already found, so a line after the first
         // takes no lock.
         static SEEN: core::cell::RefCell<Sites> = core::cell::RefCell::default();
+        static LOCKING: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+    }
+    /// Clears [`LOCKING`] when the lock is given back, also on a panic.
+    struct Unlocking;
+    impl Drop for Unlocking {
+        fn drop(&mut self) {
+            LOCKING.set(false);
+        }
     }
     let Some(pack) = crate::host::pack() else {
         return site;
     };
     let key = (core::ptr::from_ref(site).addr(), pack.handle().0);
     let seen = SEEN.with_borrow(|seen| seen.get(&key).copied());
-    // The lock is taken outside the borrow: a poisoned lock logs, and the
-    // line may reach this function again on this thread.
-    let state = seen.unwrap_or_else(|| {
+    let state = if let Some(state) = seen {
+        state
+    } else {
+        if LOCKING.replace(true) {
+            return site;
+        }
+        let unlocking = Unlocking;
+        // The lock is taken outside the borrow: a poisoned lock logs, and the
+        // line may reach this function again on this thread.
         let state = *crate::Relock::relock(&*SITES)
             .entry(key)
             .or_insert_with(|| Box::leak(Box::new(T::default())));
+        drop(unlocking);
         SEEN.with_borrow_mut(|seen| seen.insert(key, state));
         state
-    });
+    };
     state.downcast_ref().unwrap_or(site)
 }
 
@@ -920,80 +943,4 @@ pub fn ready<M: Mod>(slot: &'static Slot<M>) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn each_handle_has_its_own_place_and_the_chunks_double() {
-        let places: Vec<_> = (0..7)
-            .map(|h| PackLevels::place(ModHandle(h)).unwrap())
-            .collect();
-        assert_eq!(
-            places,
-            [(0, 0), (1, 0), (1, 1), (2, 0), (2, 1), (2, 2), (2, 3)]
-        );
-        assert_eq!(
-            PackLevels::place(ModHandle(usize::MAX - 1)),
-            Some((63, (1 << 63) - 1))
-        );
-        assert_eq!(PackLevels::place(ModHandle(usize::MAX)), None);
-    }
-
-    #[test]
-    fn every_made_word_lists_under_its_own_handle() {
-        let levels = PackLevels([const { OnceLock::new() }; usize::BITS as usize]);
-        for h in [2, 5] {
-            levels
-                .word(ModHandle(h))
-                .unwrap()
-                .store(h as u64, Ordering::Relaxed);
-        }
-        let made: Vec<_> = levels
-            .made()
-            .map(|(h, w)| (h.0, w.load(Ordering::Relaxed)))
-            .collect();
-        assert_eq!(made, [(1, 0), (2, 2), (3, 0), (4, 0), (5, 5), (6, 0)]);
-    }
-
-    /// A site state whose making panics, as a panic in `Box::new` would.
-    #[cfg(feature = "test")]
-    #[derive(Debug)]
-    struct Refused;
-
-    #[cfg(feature = "test")]
-    impl Default for Refused {
-        fn default() -> Self {
-            panic!("no state")
-        }
-    }
-
-    #[cfg(feature = "test")]
-    #[test]
-    fn a_pack_s_site_after_a_poisoned_lock_logs_the_lock_and_works() {
-        static BROKEN: Refused = Refused;
-        static SITE: Once = Once::new();
-        let loader = crate::test::FakeHost::new().install();
-        // SAFETY: the fake host's table lives for the process.
-        unsafe { install_host(loader.api(), ModHandle(9)) };
-        let panicked = std::panic::catch_unwind(|| {
-            // SAFETY: the fake host's table lives for the process.
-            unsafe {
-                as_pack(loader.api(), ModHandle(2), || {
-                    let _state = for_pack(&BROKEN);
-                });
-            }
-        });
-        assert!(panicked.is_err());
-        // SAFETY: the fake host's table lives for the process.
-        let first = unsafe { as_pack(loader.api(), ModHandle(2), || SITE.first()) };
-        assert!(first);
-        assert!(
-            loader
-                .sent()
-                .iter()
-                .any(|(by, _, line)| *by == ModHandle(2) && line.contains("panicked holding")),
-            "{:?}",
-            loader.sent()
-        );
-    }
-}
+mod tests;

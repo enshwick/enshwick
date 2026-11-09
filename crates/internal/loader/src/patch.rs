@@ -591,7 +591,16 @@ fn hook(
     let mut taken: Vec<(usize, usize)> = Vec::with_capacity(pending.len());
     for (request, result) in requests.iter().zip(&pending) {
         let target = request.target as u64;
-        let result = result.as_ref().map_err(Clone::clone).and_then(|hook| {
+        // A target another program took fails before its own checks, which
+        // would read that program's jump as the game's code.
+        let span = result
+            .as_ref()
+            .map_or((request.target, crate::detour::PATCH), Pending::span);
+        let result = match crate::shipped::taken(span) {
+            Some(taken) => Err(crate::detour::PrepareError::Taken(taken)),
+            None => result.as_ref().map_err(Clone::clone),
+        };
+        let result = result.and_then(|hook| {
             let (start, len) = hook.span();
             if taken.iter().any(|&(s, l)| s < start + len && start < s + l) {
                 return Err(crate::detour::PrepareError::OverlapsAnotherHook);

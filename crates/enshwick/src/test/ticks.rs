@@ -40,7 +40,7 @@ pub(crate) extern "system" fn subscribe_tick(
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
-        if s.base_limit.armed {
+        if s.registration == super::table::Registration::Closed {
             return Status::TOO_LATE;
         }
         let Ok(handle) = u32::try_from(s.ticks.ticks.len()) else {

@@ -6,6 +6,12 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `reflect::Image::with_text` reads a given copy in place of an image's
+  `.text`, such as the executable's code on disk relocated to where the game
+  runs, and every other section as before (#1014).
+
 ## [1.0.0-alpha.14] - 2026-11-09
 
 ### Added

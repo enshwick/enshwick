@@ -271,6 +271,83 @@ fn the_owners_of_a_failed_mid_function_hook_count_as_failed() {
     );
 }
 
+#[test]
+fn a_target_another_program_took_stays_its_and_names_who_took_it() {
+    use crate::chains::Link;
+    use crate::mod_index::ModIndex;
+    use enshwick::abi::HookFlags;
+    use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
+
+    static NEXT: [AtomicUsize; 2] = [const { AtomicUsize::new(0) }; 2];
+    /// `mov eax, ecx; add eax, 1; ret`, as the game shipped both functions.
+    const FUNCTION: [u8; 6] = [0x89, 0xc8, 0x83, 0xc0, 0x01, 0xc3];
+    const LEN: usize = 0x80; // bound, not a game offset: the test page's code
+    const FREE: usize = 0x40; // bound, not a game offset: the test page's second function
+
+    // SAFETY: a fresh page, reserved and committed here, checked below and
+    // never freed, so the code on it outlives the hooks.
+    let page = unsafe {
+        VirtualAlloc(
+            core::ptr::null(),
+            PAGE,
+            MEM_COMMIT | MEM_RESERVE,
+            PAGE_EXECUTE_READWRITE,
+        )
+    }
+    .addr();
+    assert_ne!(page, 0);
+    let mut shipped = vec![0xcc; LEN];
+    shipped[..FUNCTION.len()].copy_from_slice(&FUNCTION);
+    shipped[FREE..FREE + FUNCTION.len()].copy_from_slice(&FUNCTION);
+    let kernel32: Vec<u16> = "kernel32.dll\0".encode_utf16().collect();
+    // SAFETY: `kernel32` is a NUL-terminated wide string; kernel32 is
+    // loaded in every process.
+    let other = unsafe { GetModuleHandleW(kernel32.as_ptr()) }.addr();
+    // Another program's `jmp [rip+0]` over the first function, into its DLL.
+    let mut live = shipped.clone();
+    live[..6].copy_from_slice(&[0xff, 0x25, 0, 0, 0, 0]);
+    live[6..14].copy_from_slice(&(other as u64).to_le_bytes());
+    // SAFETY: the page holds `PAGE` writable bytes, more than `LEN`, and no
+    // thread runs it yet.
+    unsafe { (page as *mut u8).copy_from_nonoverlapping(live.as_ptr(), LEN) };
+    crate::shipped::keep(page, shipped);
+
+    let mut chains = Chains::default();
+    for (target, next) in [(page, &NEXT[0]), (page + FREE, &NEXT[1])] {
+        let link = Link {
+            owner: ModIndex::new(1),
+            detour: 0x1,
+            next,
+            priority: 0,
+            flags: HookFlags::NONE,
+            hop: None,
+        };
+        assert!(chains.add(target as u64, link).is_ok());
+    }
+    let armed = arm(
+        &mut chains,
+        &Mids::default(),
+        None,
+        |_| false,
+        |_| {},
+        &[],
+        Count::Off,
+    );
+    let [failure] = &armed.failures[..] else {
+        panic!("one failure, not {:?}", armed.failures);
+    };
+    assert_eq!(failure.target, page as u64);
+    assert!(
+        failure.reason.eq_ignore_ascii_case("taken by kernel32.dll"),
+        "{}",
+        failure.reason
+    );
+    // SAFETY: the page's first `LEN` bytes, readable and never freed.
+    let now = unsafe { core::slice::from_raw_parts(page as *const u8, LEN) };
+    assert_eq!(now[..14], live[..14], "the other program's jump stays");
+    assert_eq!(now[FREE], 0xe9, "the function as shipped is hooked");
+}
+
 /// Four patches: one of a mod that is off, two of one mod, one of another.
 fn four_patches() -> [CodePatch; 4] {
     use crate::code::WHOLE_MOD;

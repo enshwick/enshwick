@@ -575,13 +575,20 @@ const SPIN: [u8; 16] = [
 
 type Calling = extern "system" fn(u32, usize, *const AtomicU32) -> u32;
 
+/// `flags[1]` once the thread [`waiting_in`] started has left `entry`.
+const LEFT: u32 = 2;
+
 /// A thread running `entry(5, spin, flags)`, once it waits inside the
-/// spin.
+/// spin; it sets `flags[1]` to [`LEFT`] when the call returns.
 fn waiting_in(entry: usize, flags: &'static [AtomicU32; 2]) -> std::thread::JoinHandle<u32> {
     let spin = function(&SPIN);
     // SAFETY: each caller's code takes these arguments.
     let call = unsafe { core::mem::transmute::<usize, Calling>(entry) };
-    let thread = std::thread::spawn(move || call(5, spin, flags.as_ptr()));
+    let thread = std::thread::spawn(move || {
+        let answer = call(5, spin, flags.as_ptr());
+        flags[1].store(LEFT, Ordering::Release);
+        answer
+    });
     while flags[1].load(Ordering::Acquire) == 0 {
         std::thread::yield_now();
     }
@@ -616,10 +623,13 @@ fn a_code_patch_waits_for_a_thread_that_returns_into_it() {
         0xcc, 0xcc,
     ]);
     let thread = waiting_in(target, &FLAGS);
-    let release = std::thread::spawn(|| {
-        std::thread::sleep(std::time::Duration::from_millis(30));
+    // Between the first check and the next, the thread returns and leaves.
+    BETWEEN_CHECKS.set(Some(|| {
         FLAGS[0].store(1, Ordering::Release);
-    });
+        while FLAGS[1].load(Ordering::Acquire) != LEFT {
+            std::thread::yield_now();
+        }
+    }));
     let patch = [Bytes {
         id: 0,
         address: target,
@@ -627,8 +637,8 @@ fn a_code_patch_waits_for_a_thread_that_returns_into_it() {
         replacement: &[0xb8, 0x02, 0x00, 0x00, 0x00, 0x90, 0x90],
     }];
     assert_eq!(commit(&[], &patch, || {}), Commit::Written);
+    assert_eq!(FLAGS[0].load(Ordering::Acquire), 1, "the commit waited");
     assert_eq!(thread.join().unwrap(), 1);
-    release.join().unwrap();
     assert_eq!(callable(target)(0), 2);
 }
 
@@ -681,11 +691,8 @@ fn a_one_check_commit_does_not_wait_for_a_thread_to_leave() {
         0xcc, 0xcc,
     ]);
     let thread = waiting_in(target, &FLAGS);
-    // Released while a waiting commit would still wait.
-    let release = std::thread::spawn(|| {
-        std::thread::sleep(std::time::Duration::from_millis(30));
-        FLAGS[0].store(1, Ordering::Release);
-    });
+    // A commit that waited would release the thread and then write.
+    BETWEEN_CHECKS.set(Some(|| FLAGS[0].store(1, Ordering::Release)));
     let patch = [Bytes {
         id: 0,
         address: target,
@@ -696,8 +703,13 @@ fn a_one_check_commit_does_not_wait_for_a_thread_to_leave() {
         commit_once(&patch, || {}, (&raw const marker).addr()),
         Commit::Busy(vec![0])
     );
+    assert_eq!(
+        FLAGS[0].load(Ordering::Acquire),
+        0,
+        "the commit never waited"
+    );
+    FLAGS[0].store(1, Ordering::Release);
     assert_eq!(thread.join().unwrap(), 1);
-    release.join().unwrap();
     assert_eq!(
         commit_once(&patch, || {}, (&raw const marker).addr()),
         Commit::Written

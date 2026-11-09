@@ -161,12 +161,7 @@ impl Watching {
     pub(crate) fn start(base: u64) -> Option<Self> {
         let (start, len) = text(base)?;
         let rva = text_start(base)?;
-        let ignored: Vec<(usize, usize)> = entry_rva(base)
-            .and_then(|entry| entry.checked_sub(rva))
-            .filter(|&at| at < len)
-            .map(|at| (at, ENTRY_HOLD))
-            .into_iter()
-            .collect();
+        let ignored = entry_hold(base, rva, len);
         let mut watching = Self {
             watch: crate::code_watch::Watch::new(&[], &[]),
             start,
@@ -174,7 +169,9 @@ impl Watching {
             rva,
         };
         let now = watching.now();
-        watching.watch = disk_text(base, rva, len)
+        // `shipped::read` already read the file; without its copy the file
+        // does not read as this code, so reading it again finds nothing.
+        watching.watch = crate::shipped::copy()
             .and_then(|disk| crate::code_watch::Watch::from_disk(disk, now, &ignored))
             .unwrap_or_else(|| {
                 crate::log!(
@@ -244,36 +241,77 @@ impl Watching {
     }
 }
 
-/// The game's entry point, from its mapped PE header, relative to `base`.
-pub(crate) fn entry_rva(base: u64) -> Option<usize> {
+/// The first `len` bytes of `.text`, mapped at `rva` from `base`, that the
+/// stub holds at the entry point and gives back, as offset and length.
+pub(crate) fn entry_hold(base: u64, rva: usize, len: usize) -> Vec<(usize, usize)> {
+    entry_rva(base)
+        .and_then(|entry| entry.checked_sub(rva))
+        .filter(|&at| at < len)
+        .map(|at| (at, ENTRY_HOLD))
+        .into_iter()
+        .collect()
+}
+
+/// The game's PE headers as mapped at `base`.
+fn mapped_headers(base: u64) -> Option<&'static [u8]> {
     let base = usize::try_from(base).ok().filter(|&b| b != 0)?;
     // SAFETY: `base` is the game executable's non-zero image base, where
     // Windows maps its PE headers as one readable page for the process.
-    let headers = unsafe { core::slice::from_raw_parts(base as *const u8, 0x1000) };
-    let word = |at: usize| -> Option<usize> {
-        usize::try_from(u32::from_le_bytes(
-            headers.get(at..at + 4)?.try_into().ok()?,
-        ))
-        .ok()
+    Some(unsafe { core::slice::from_raw_parts(base as *const u8, 0x1000) })
+}
+
+/// The `u32` at `at` of the PE `headers`.
+fn header_u32(headers: &[u8], at: usize) -> Option<u32> {
+    Some(u32::from_le_bytes(
+        headers.get(at..at.checked_add(4)?)?.try_into().ok()?,
+    ))
+}
+
+/// The offsets from the PE header of the link time (`TimeDateStamp`) and of
+/// the optional header's `SizeOfImage`, which Windows leaves as the file has
+/// them when it maps the image.
+const BUILD_FIELDS: [usize; 2] = [8, 24 + 56];
+
+/// Whether the `file` headers are of the image whose `mapped` headers the
+/// process runs, by link time and image size; the image base differs once
+/// Windows relocates it.
+pub(crate) fn same_build(file: &[u8], mapped: &[u8]) -> bool {
+    let fields = |headers: &[u8]| -> Option<[u32; 2]> {
+        let pe = usize::try_from(header_u32(headers, 0x3c)?).ok()?;
+        let [stamp, size] = BUILD_FIELDS;
+        Some([
+            header_u32(headers, pe.checked_add(stamp)?)?,
+            header_u32(headers, pe.checked_add(size)?)?,
+        ])
     };
-    let pe = word(0x3c)?;
+    fields(file).is_some_and(|file| fields(mapped) == Some(file))
+}
+
+/// The game's entry point, from its mapped PE header, relative to `base`.
+pub(crate) fn entry_rva(base: u64) -> Option<usize> {
+    let headers = mapped_headers(base)?;
+    let pe = usize::try_from(header_u32(headers, 0x3c)?).ok()?;
     // `AddressOfEntryPoint`, 16 bytes into the optional header.
-    word(pe + 24 + 16)
+    usize::try_from(header_u32(headers, pe + 24 + 16)?).ok()
 }
 
 /// Up to [`BRANCH_BYTES`](crate::code_watch::BRANCH_BYTES) bytes at `at`,
 /// for following a jump: as many as read before an unreadable page, even
 /// while another program's thread changes the pages.
-fn code_at(at: usize) -> Option<Vec<u8>> {
+pub(crate) fn code_at(at: usize) -> Option<Vec<u8>> {
     crate::pages::read_up_to(at, crate::code_watch::BRANCH_BYTES)
 }
 
 /// The game's `.text` as the executable on disk holds it, relocated to
 /// `base` and `len` bytes long as mapped; `None` when the file does not read
-/// or its section starts elsewhere than `rva`.
-fn disk_text(base: u64, rva: usize, len: usize) -> Option<Vec<u8>> {
+/// or its section starts elsewhere than `rva`, and when the file is no
+/// longer the build the process was mapped from.
+pub(crate) fn disk_text(base: u64, rva: usize, len: usize) -> Option<Vec<u8>> {
     use enshwick_gamedata::reflect::{Image, Layout};
     let bytes = std::fs::read(std::env::current_exe().ok()?).ok()?;
+    if !same_build(&bytes, mapped_headers(base)?) {
+        return None;
+    }
     let image = Image::parse(&bytes, Layout::File, None).ok()?;
     let section = image.section(".text")?;
     if usize::try_from(section.rva()).ok()? != rva {

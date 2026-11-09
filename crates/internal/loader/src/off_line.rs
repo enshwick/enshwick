@@ -8,29 +8,55 @@ use std::fmt::Write as _;
 const NAMES_BYTES: usize = 200;
 
 /// The line naming `off`, `None` when nothing is off. Names past
-/// [`NAMES_BYTES`] are counted as `+<n>`.
+/// [`NAMES_BYTES`] are counted as `+<n>`; `taken` names who took game code
+/// the hooks needed, in a sentence of its own.
 #[must_use]
-pub(crate) fn line(off: &[String]) -> Option<String> {
+pub(crate) fn line(off: &[String], taken: &[String]) -> Option<String> {
     if off.is_empty() {
         return None;
     }
-    let mut names = String::new();
+    let line = crate::texts::fill("join.off", &[("names", &listed(off))]);
+    if taken.is_empty() {
+        return Some(line);
+    }
+    let owners = crate::texts::fill("join.taken", &[("owners", &listed(taken))]);
+    Some(format!("{line} {owners}"))
+}
+
+/// `names` joined by commas up to [`NAMES_BYTES`], the rest counted as
+/// `+<n>`; the first is shown whole whatever its length.
+fn listed(names: &[String]) -> String {
+    let mut listed = String::new();
     let mut shown = 0;
-    for name in off {
-        let gap = if names.is_empty() { 0 } else { 2 };
-        if shown > 0 && names.len() + gap + name.len() > NAMES_BYTES {
+    for name in names {
+        let gap = if listed.is_empty() { 0 } else { 2 };
+        if shown > 0 && listed.len() + gap + name.len() > NAMES_BYTES {
             break;
         }
         if gap > 0 {
-            names.push_str(", ");
+            listed.push_str(", ");
         }
-        names.push_str(name);
+        listed.push_str(name);
         shown += 1;
     }
-    if shown < off.len() {
-        let _more = write!(names, " +{}", off.len() - shown);
+    if shown < names.len() {
+        let _more = write!(listed, " +{}", names.len() - shown);
     }
-    Some(crate::texts::fill("join.off", &[("names", &names)]))
+    listed
+}
+
+/// Who took game code a hook needed, each once: a module by its file name,
+/// else the words for something other than Enshwick.
+#[cfg(windows)]
+#[must_use]
+pub(crate) fn takers() -> Vec<String> {
+    crate::shipped::takers()
+        .into_iter()
+        .map(|taken| match taken {
+            crate::shipped::Taken::By(module) => module,
+            crate::shipped::Taken::Unknown => crate::texts::text("join.taken.unknown").to_owned(),
+        })
+        .collect()
 }
 
 /// What this server has off, by name: mods off, each mod's features off
@@ -71,20 +97,20 @@ mod tests {
 
     #[test]
     fn nothing_off_sends_no_line() {
-        assert_eq!(line(&[]), None);
+        assert_eq!(line(&[], &[]), None);
     }
 
     #[test]
     fn the_line_names_what_is_off() {
         let off = ["Better Altars".to_owned(), "map markers".to_owned()];
-        let line = line(&off).unwrap();
+        let line = line(&off, &[]).unwrap();
         assert!(line.contains("Better Altars, map markers"), "{line}");
     }
 
     #[test]
     fn names_past_the_budget_are_counted() {
         let off: Vec<String> = (0..40).map(|i| format!("feature number {i}")).collect();
-        let line = line(&off).unwrap();
+        let line = line(&off, &[]).unwrap();
         assert!(line.contains("feature number 0, "), "{line}");
         assert!(!line.contains("feature number 39"), "{line}");
         let shown = line.matches("feature number").count();
@@ -94,8 +120,32 @@ mod tests {
     #[test]
     fn one_long_name_is_shown_whole() {
         let off = ["x".repeat(NAMES_BYTES + 10)];
-        let line = line(&off).unwrap();
+        let line = line(&off, &[]).unwrap();
         assert!(line.contains(&off[0]), "{line}");
         assert!(!line.contains(" +"), "{line}");
+    }
+
+    #[test]
+    fn who_took_game_code_follows_what_is_off() {
+        let off = ["chat.receive".to_owned()];
+        let taken = ["hooks.dll".to_owned(), "other.dll".to_owned()];
+        let said = line(&off, &taken).unwrap();
+        let named = said.find("chat.receive").unwrap();
+        let owners = said.find("hooks.dll, other.dll").unwrap();
+        assert!(named < owners, "{said}");
+        assert_eq!(line(&[], &taken), None, "nothing off, nothing to say");
+    }
+
+    #[test]
+    fn owners_past_the_budget_are_counted() {
+        let off = ["chat.receive".to_owned()];
+        let taken: Vec<String> = (0..40)
+            .map(|i| format!("hooking-library-{i}.dll"))
+            .collect();
+        let said = line(&off, &taken).unwrap();
+        assert!(said.contains("hooking-library-0.dll"), "{said}");
+        assert!(!said.contains("hooking-library-39.dll"), "{said}");
+        let shown = said.matches("hooking-library-").count();
+        assert!(said.contains(&format!(" +{}", 40 - shown)), "{said}");
     }
 }
