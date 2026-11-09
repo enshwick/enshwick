@@ -15,7 +15,7 @@ pub(crate) fn of(loader: &crate::host::Loader) -> Vec<String> {
     let developer = loader
         .developer_tools
         .then(|| crate::developer_tools::warning().to_owned());
-    let off = crate::off_line::line(&crate::off_line::names(loader));
+    let off = crate::off_line::line(&crate::off_line::names(loader), &crate::off_line::takers());
     lines(developer, off)
 }
 

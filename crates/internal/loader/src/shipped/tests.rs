@@ -122,7 +122,8 @@ fn a_module_is_named_by_its_file_and_the_game_s_own_code_is_none() {
     let system = unsafe { GetModuleHandleW(kernel32.as_ptr()) }.addr();
     let name = module_of(system).expect("a system DLL");
     assert!(name.eq_ignore_ascii_case("kernel32.dll"), "{name}");
-    let own = (a_module_is_named_by_its_file_and_the_game_s_own_code_is_none as fn()).addr();
+    let own =
+        (a_module_is_named_by_its_file_and_the_game_s_own_code_is_none as fn() as *const ()).addr();
     assert_eq!(module_of(own), None, "the executable's own code");
     assert_eq!(module_of(0x10), None, "no module");
 }
