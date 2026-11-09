@@ -1231,8 +1231,8 @@ export type KnowledgeRequest = {
 	allowed: boolean,
 }
 
---- What a `KnowledgeQuery` asks of its entry. The name is enshwick's, not the game's.
-export type KnowledgeTest = "IsSet" | { AtLeast: number }
+--- What a `KnowledgeQuery` asks of its entry, or of the game query it names. The name is enshwick's, not the game's. The game tests a bool only for a value other than 0, a count with its operator, flags for any of the bits, and a game query for whether it holds (its own steps' forms, server 387; the client's compare, Kiln's notes on build 1287369).
+export type KnowledgeTest = "IsSet" | { AtLeast: number } | { Equals: number } | { Below: number } | { HasFlag: number } | "Holds" | "Fails"
 
 --- What a knowledge value is.
 export type KnowledgeType = "Bool" | "Counter" | "Flags" | { Other: number }
@@ -1817,6 +1817,22 @@ export type PageEntry = {
 	shown_when: KnowledgeQuery,
 }
 
+--- A lore page of the journal. The name is enshwick's; the game's is `JournalCollectionResource`.
+export type PageInfo = {
+	--- Its entry id.
+	id: number,
+	--- The text of the category the journal lists it under.
+	category: number?,
+	--- Its title's text.
+	name: number?,
+	--- Where the journal sorts it among the others.
+	priority: number,
+	--- Whether it belongs to the tutorial.
+	tutorial: boolean,
+	--- Its entries, in order.
+	entries: {StepInfo},
+}
+
 --- Who a message comes from or goes to.
 export type Peer = "Server" | { Player: string }
 
@@ -2036,8 +2052,44 @@ export type QuestData = {
 	quest: number,
 }
 
+--- A quest of the journal, the game's or a mod's. The name is enshwick's; the game's is `JournalQuestResource`.
+export type QuestInfo = {
+	--- Its quest id: the player's bool the game sets when it pays it.
+	id: number,
+	--- Its title's text.
+	name: number?,
+	--- Who gives it, which groups it in the journal.
+	source: typed_QuestSourceType,
+	--- Whether it is the world's, each player's, or the game's `Auto`.
+	kind: typed_QuestType,
+	--- Whether the journal lists it as a main quest.
+	main: boolean,
+	--- Whether one player's completion unlocks it for every player.
+	for_all_players: boolean,
+	--- Whether it belongs to the tutorial.
+	tutorial: boolean,
+	--- Where the journal sorts it among the others.
+	priority: number,
+	--- Its steps, in order.
+	steps: {StepInfo},
+	--- What it pays when its last step is done; a reward of the game's that gives an item and experience reads as two.
+	rewards: {QuestReward},
+}
+
 --- What a quest pays when its last step completes. The name is enshwick's, not the game's.
 export type QuestReward = { Item: string } | { Experience: number }
+
+--- Where a player or the world stands in a quest, from the knowledge its steps ask for.
+export type QuestState = {
+	--- Each step's, in order.
+	steps: {StepState},
+	--- Whether its first step shows, so the journal lists it.
+	started: boolean,
+	--- Whether its last step is done.
+	done: boolean,
+	--- Whether the game paid it: the quest's own bool is set.
+	rewarded: boolean,
+}
 
 --- One step of a quest: its title and text, shown while `shown_when` holds, done once `done_when` holds. The name is enshwick's; the game's is `JournalEntryResource`.
 export type QuestStep = {
@@ -2579,6 +2631,36 @@ export type StepChange = {
 	shown_when: KnowledgeQuery?,
 	--- When it is done.
 	done_when: KnowledgeQuery?,
+}
+
+--- A step of a quest or an entry of a lore page, as the journal holds it. The name is enshwick's; the game's is `JournalEntryResource`.
+export type StepInfo = {
+	--- Its entry id.
+	entry: number,
+	--- Its title's text.
+	name: number?,
+	--- Its text.
+	text: number?,
+	--- When the journal shows it; nil for always.
+	shown_when: KnowledgeQuery?,
+	--- When it is done; nil for never, as a lore page's entries.
+	done_when: KnowledgeQuery?,
+	--- The parts the journal counts as it moves on.
+	progress: {KnowledgeQuery},
+	--- The text tag of the map marker its "show on map" points at.
+	marker: number?,
+	--- The item whose icon it shows.
+	icon: number?,
+	--- The level it suits; 0 for none.
+	level: number,
+}
+
+--- Where a player or the world stands in one step: nil where only the game answers, for a step that asks a game query.
+export type StepState = {
+	--- Whether the journal shows it.
+	shown: boolean?,
+	--- Whether it is done.
+	done: boolean?,
 }
 
 --- One of the game's named text styles.
@@ -3597,6 +3679,19 @@ declare enshwick: {
 		--- Runs `filter` on each player's knowledge input, as `Load.on_knowledge_input` does; its answer replaces the verdict so far, and nil or an error keeps it.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_knowledge_input: (filter: (arg1: KnowledgeRequest) -> boolean?) -> (),
+	},
+	--- The journal's quests and lore pages, mods' included, and where each player stands in them.
+	quests: {
+		--- Every quest of the journal, the game's and mods', in its order; empty during init or while no world runs.
+		all: () -> {QuestInfo},
+		--- The quest `quest`, nil for no quest of the journal.
+		quest: (quest: number) -> QuestInfo?,
+		--- Every lore page of the journal, the game's and mods'.
+		pages: () -> {PageInfo},
+		--- Where the player whose character is `player` stands in `quest`, reading the player's entries and the world's as the game does for its rewards; nil for no quest of the journal.
+		state: (player: number, quest: number) -> QuestState?,
+		--- Where the world stands in `quest`, from the world's entries alone: a step that asks a player's entry reads as not held. `rewarded` is a player's and reads `false`.
+		world_state: (quest: number) -> QuestState?,
 	},
 	--- The server's game settings: read them, change them for now, or keep a change.
 	game_settings: {
