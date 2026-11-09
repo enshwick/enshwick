@@ -308,12 +308,10 @@ fn game_dir(loader: &Loader) -> std::path::PathBuf {
         .map_or_else(|| loader.mods_dir.clone(), std::path::Path::to_path_buf)
 }
 
-fn gate(loader: &Loader) -> Result<Gate, ReadGateError> {
-    let table = |id: pinned::Constant| loader.offset(id).ok_or(ReadGateError::Table(id.id()));
-    let in_game = catalogue::constant(catalogue::ids::HUD_SCREEN_IN_GAME, &loader.reflection)
-        .ok_or(ReadGateError::Reflection(
-            catalogue::ids::HUD_SCREEN_IN_GAME,
-        ))?;
+/// A bit for each HUD screen value with no window open, `InGame` and
+/// [`OPEN_SCREENS`]; `None` on a build whose reflection lacks `InGame`.
+pub(crate) fn open_screens(loader: &Loader) -> Option<u64> {
+    let in_game = catalogue::constant(catalogue::ids::HUD_SCREEN_IN_GAME, &loader.reflection)?;
     let screens = catalogue::type_name(catalogue::ids::HUD_SCREEN_TYPE);
     let open = OPEN_SCREENS
         .iter()
@@ -321,11 +319,20 @@ fn gate(loader: &Loader) -> Result<Gate, ReadGateError> {
         .chain([in_game])
         .filter_map(|value| 1u64.checked_shl(u32::try_from(value).ok()?))
         .fold(0, |open, bit| open | bit);
-    if open == 0 {
-        return Err(ReadGateError::Reflection(
-            catalogue::ids::HUD_SCREEN_IN_GAME,
-        ));
-    }
+    (open != 0).then_some(open)
+}
+
+/// Whether HUD screen byte `screen` is set in the mask of [`open_screens`].
+pub(crate) fn is_open_screen(open: u64, screen: u8) -> bool {
+    open.checked_shr(u32::from(screen))
+        .is_some_and(|bits| bits & 1 == 1)
+}
+
+fn gate(loader: &Loader) -> Result<Gate, ReadGateError> {
+    let table = |id: pinned::Constant| loader.offset(id).ok_or(ReadGateError::Table(id.id()));
+    let open = open_screens(loader).ok_or(ReadGateError::Reflection(
+        catalogue::ids::HUD_SCREEN_IN_GAME,
+    ))?;
     Ok(Gate {
         context_state: table(pinned::map::CONTEXT_STATE)?,
         state_play_data: table(pinned::map::STATE_PLAY_DATA)?,
@@ -575,8 +582,7 @@ unsafe fn in_game(context: usize, gate: &Gate) -> bool {
     // HUD screen byte sits at `ui.hud_screen`, as `ui.hud_visible` reads it
     // (clients 410, 426 and 520).
     let screen = unsafe { crate::memory::read::<u8>(data, gate.hud_screen) };
-    1u64.checked_shl(screen.into())
-        .is_some_and(|bit| gate.open & bit != 0)
+    is_open_screen(gate.open, screen)
 }
 
 /// Whether any declared control follows a game action on this build.

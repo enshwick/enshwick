@@ -626,15 +626,15 @@ impl Components {
         }
     }
 
-    /// Where `entity`'s component of type `hash` is, or `None` when it has
-    /// none.
+    /// The entity world a running system's context reads, or `None` for a
+    /// null context or one without a world.
     ///
     /// # Safety
     ///
     /// - `ctx` is null or the live context of a running system, used on its
     ///   thread.
-    unsafe fn find(&self, ctx: *mut u64, entity: u32, hash: u32) -> Option<Found> {
-        if ctx.is_null() || entity == 0 {
+    pub(crate) unsafe fn world(&self, ctx: *mut u64) -> Option<usize> {
+        if ctx.is_null() {
             return None;
         }
         // SAFETY: `ctx` is non-null by the check before it and live by the
@@ -647,10 +647,23 @@ impl Components {
         // SAFETY: `descriptor` is non-null by the check before it; its entity
         // world pointer sits at the build table's `ecs.context_entity_world`
         // offset.
-        let world = unsafe { read_ptr_at::<u8>(descriptor, self.entity_world) }.cast_const();
-        if world.is_null() {
+        let world = unsafe { read_ptr_at::<u8>(descriptor, self.entity_world) };
+        (!world.is_null()).then(|| world.expose_provenance())
+    }
+
+    /// Where `entity`'s component of type `hash` is, or `None` when it has
+    /// none.
+    ///
+    /// # Safety
+    ///
+    /// - `ctx` is null or the live context of a running system, used on its
+    ///   thread.
+    unsafe fn find(&self, ctx: *mut u64, entity: u32, hash: u32) -> Option<Found> {
+        if entity == 0 {
             return None;
         }
+        // SAFETY: the caller's contract is `world`'s.
+        let world: *const u8 = core::ptr::with_exposed_provenance(unsafe { self.world(ctx) }?);
         // SAFETY: `world` is non-null by the check before it, and the entity
         // world starts with its component registry pointer.
         let registry = unsafe { read_ptr_at::<u8>(world, 0) }.cast_const();

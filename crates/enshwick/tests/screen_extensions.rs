@@ -41,6 +41,9 @@ mod tests {
                     screen: Str::new(screen),
                     edge,
                     reserved: 0,
+                    hosts: core::ptr::null(),
+                    host_count: 0,
+                    reserved_hosts: 0,
                 };
                 (host.api().ui_extension)(host.handle(), &raw const spec, nothing, null_mut())
             };

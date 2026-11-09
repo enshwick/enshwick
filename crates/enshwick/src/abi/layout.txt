@@ -1,4 +1,4 @@
-abi 11.17
+abi 11.18
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
 ActionCall size 184 align 8 born 144
@@ -992,12 +992,15 @@ UiDialog size 64 align 8 born 64
     detail at 40 size 16 type Str
     buttons at 56 size 4 type u32
     flags at 60 size 4 type u32
-UiExtension size 32 align 8 born 32
+UiExtension size 48 align 8 born 32
     header at 0 size 8 type Header
     screen at 8 size 16 type Str
     edge at 24 size 4 type u32
     reserved at 28 size 4 type u32
-UiFrame size 64 align 8 born 24
+    hosts at 32 size 8 type *const [u8; 16]
+    host_count at 40 size 4 type u32
+    reserved_hosts at 44 size 4 type u32
+UiFrame size 104 align 8 born 24
     header at 0 size 8 type Header
     token at 8 size 8 type u64
     screen at 16 size 4 type u32
@@ -1006,6 +1009,8 @@ UiFrame size 64 align 8 born 24
     prompt_title at 40 size 16 type Str
     prompt_verb at 56 size 4 type u32
     screen_host at 60 size 4 type Entity
+    screen_host_template at 64 size 16 type [u8; 16]
+    screen_host_position at 80 size 24 type [i64; 3]
 UiMarker size 56 align 8 born 56
     header at 0 size 8 type Header
     position at 8 size 24 type [i64; 3]

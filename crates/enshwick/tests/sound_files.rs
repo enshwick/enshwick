@@ -115,4 +115,31 @@ mod tests {
         assert!(loader.resources().is_empty(), "a server plays no sound");
         std::fs::remove_dir_all(dir).unwrap();
     }
+
+    #[test]
+    fn a_client_without_a_sound_to_build_from_declares_nothing_for_a_refused_sound() {
+        let dir =
+            std::env::temp_dir().join(format!("enshwick-sound-client-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        write_wav(&dir.join("horn.wav"), SAMPLE_RATE);
+        let loader = FakeHost::new()
+            .side(Side::CLIENT)
+            .mod_dir(dir.to_str().unwrap())
+            .install();
+        // SAFETY: the three functions are the exports of this file's `declare_mod!(Horns)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        assert!(
+            RESULTS.lock().unwrap()[0].is_err(),
+            "no sound to build from"
+        );
+        let declared = loader.content_ids();
+        assert!(
+            !declared.iter().any(|id| id.starts_with("you.horns:horn")),
+            "{declared:?}"
+        );
+        assert!(loader.resources().is_empty());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 }

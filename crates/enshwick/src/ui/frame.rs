@@ -156,6 +156,59 @@ impl Frame<'_> {
         (self.raw.screen_host.0 != 0).then_some(self.raw.screen_host)
     }
 
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// The template the open screen's host was made from, such as a mod's
+    /// own survivor or altar kind by its content id's GUID, as the client's
+    /// last step read it; `None` for no host, in the first frame of a new
+    /// host, and on a game build where the loader does not find it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::id;
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     load.on_frame(|frame| {
+    ///         if frame.screen_host_template() == Some(id!("safe").guid()) {
+    ///             frame.label("A safe");
+    ///         }
+    ///     })
+    /// }
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[must_use]
+    pub fn screen_host_template(&self) -> Option<crate::content::Guid> {
+        let template = self.raw.screen_host_template;
+        (template != [0; 16]).then_some(crate::content::Guid(template))
+    }
+
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// Where the open screen's host stands in the client's world, in metres
+    /// with y up, as the client's last step read it, so a panel's action
+    /// can name the object with
+    /// [`ActionTarget::at`](crate::actions::ActionTarget::at); `None`
+    /// whenever [`Frame::screen_host_template`] is `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     load.on_frame(|frame| {
+    ///         if let Some([x, _, z]) = frame.screen_host_position() {
+    ///             frame.label(format!("At {x:.0}, {z:.0}").as_str());
+    ///         }
+    ///     })
+    /// }
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[must_use]
+    pub fn screen_host_position(&self) -> Option<[f64; 3]> {
+        self.screen_host_template()
+            .map(|_| crate::ecs::metres(self.raw.screen_host_position))
+    }
+
     fn draw(&mut self, widget: &mut UiWidget) -> bool {
         let status = (self.host.api().ui_widget)(self.host.handle(), self.token, widget);
         status.is_ok() && widget.result != 0
@@ -369,6 +422,54 @@ impl Frame<'_> {
         };
         let status = (self.host.api().ui_widget)(self.host.handle(), self.token, &raw mut widget);
         crate::load::ok(status, (), || format!("sound container {}", sound.guid()))
+    }
+
+    /// Unstable: needs the `typed` feature and may change in any release.
+    ///
+    /// Draws the key or button the player bound to `action`, as the game
+    /// draws it beside its own prompts, with `label` beside it (empty for
+    /// none); it follows the player's rebinds. True when the game drew a
+    /// key, false when the action has no binding. Client only, inside a
+    /// window or a screen extension.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] for an action this build does not name, outside a window, in
+    /// a HUD callback, on a game build where the loader does not find the
+    /// game's hint and on a loader without it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::typed::input_mapping::runtime::GameplayAction;
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     load.on_frame(|frame| {
+    ///         frame.window("help", "Help", |frame| {
+    ///             let _shown = frame.input_hint(&GameplayAction::ContextualAction, "Open");
+    ///         });
+    ///     })
+    /// }
+    /// ```
+    #[cfg(feature = "typed")]
+    pub fn input_hint(
+        &mut self,
+        action: &crate::typed::input_mapping::runtime::GameplayAction,
+        label: &str,
+    ) -> Result<bool, Off> {
+        use crate::typed::Reflected as _;
+        let crate::resources::Value::Name(name) = action.to_value() else {
+            let unnamed = crate::abi::Status::MISSING;
+            return crate::load::ok(unnamed, false, || format!("game action {action:?}"));
+        };
+        let mut widget = UiWidget {
+            kind: UiWidget::INPUT_HINT,
+            text: Str::new(&name),
+            detail: Str::new(label),
+            ..UiWidget::EMPTY
+        };
+        let status = (self.host.api().ui_widget)(self.host.handle(), self.token, &raw mut widget);
+        crate::load::ok(status, widget.result != 0, || format!("game action {name}"))
     }
 }
 

@@ -32,7 +32,7 @@ pub const ABI_MAJOR: u16 = 11;
 ///
 /// assert_eq!(Header::of::<Manifest>().abi_minor, ABI_MINOR);
 /// ```
-pub const ABI_MINOR: u16 = 17;
+pub const ABI_MINOR: u16 = 18;
 
 /// Why a loader or its tools refuse a mod built for another ABI, naming the
 /// mod's version, this build's and what to do.
@@ -150,7 +150,9 @@ mod tests {
 
     #[test]
     fn this_major_loads_up_to_this_minor() {
-        assert_eq!(check_abi(ABI_MAJOR, ABI_MINOR), Ok(()));
+        for minor in [0, ABI_MINOR - 1, ABI_MINOR] {
+            assert_eq!(check_abi(ABI_MAJOR, minor), Ok(()), "{minor}");
+        }
         assert_eq!(
             check_abi(ABI_MAJOR, ABI_MINOR + 1),
             Err(CheckAbiError::NewerMinor {

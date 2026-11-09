@@ -12,6 +12,7 @@ struct Reads {
     title: String,
     verb: u32,
     host: u32,
+    host_read: Option<([u8; 16], [i64; 3])>,
 }
 
 fn reads() -> Reads {
@@ -22,6 +23,7 @@ fn reads() -> Reads {
             .map_or_else(String::new, |(t, _)| t.clone()),
         verb: s.prompt.as_ref().map_or(0, |&(_, v)| v),
         host: s.screen_host,
+        host_read: s.screen_host_read.filter(|_| s.screen_host != 0),
     })
 }
 
@@ -37,6 +39,8 @@ fn in_game(token: u64, open: &str, reads: &Reads) -> crate::abi::UiFrame {
         prompt_title: crate::abi::Str::new(&reads.title),
         prompt_verb: reads.verb,
         screen_host: crate::Entity(reads.host),
+        screen_host_template: reads.host_read.map_or([0; 16], |(t, _)| t),
+        screen_host_position: reads.host_read.map_or([0; 3], |(_, p)| p),
     }
 }
 
@@ -136,11 +140,13 @@ impl Installed {
     #[must_use]
     pub fn draw_screen(&self, screen: crate::ui::HudScreenType) -> Vec<(u32, Vec<Drawn>)> {
         let mut extensions = table::with(Vec::new(), |s| s.extensions.clone());
-        extensions.sort_by_key(|&(_, edge, _)| edge);
+        extensions.sort_by_key(|&(_, edge, ..)| edge);
         let open = screen.name();
+        let template = reads().host_read.map(|(t, _)| t);
         let mut drawn = Vec::new();
-        for (token, (name, edge, handler)) in (1u64..).zip(extensions) {
-            if name != screen.name() {
+        for (token, (name, edge, handler, hosts)) in (1u64..).zip(extensions) {
+            let for_host = hosts.is_empty() || template.is_some_and(|t| hosts.contains(&t));
+            if name != screen.name() || !for_host {
                 continue;
             }
             table::with((), |s| {
@@ -217,7 +223,57 @@ impl Installed {
     /// assert!(loader.draw_frame().is_empty());
     /// ```
     pub fn host_screen(&self, host: Option<crate::Entity>) {
-        table::with((), |s| s.screen_host = host.map_or(0, |e| e.0));
+        table::with((), |s| {
+            let host = host.map_or(0, |e| e.0);
+            // As in game, a new host has no template until a step reads it.
+            if s.screen_host != host {
+                s.screen_host_read = None;
+            }
+            s.screen_host = host;
+        });
+    }
+
+    /// Makes the open screen's host one made from `template`, standing at
+    /// `position` in metres, as the client's last step read it, for the
+    /// frames and panels drawn from now on while a host is set with
+    /// [`Installed::host_screen`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::Entity;
+    /// use enshwick::abi::Side;
+    /// use enshwick::content::Guid;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
+    /// loader.host_screen(Some(Entity(512)));
+    /// loader.read_screen_host(Guid::named("you.safes:safe"), [1.0, 2.0, 3.0]);
+    /// assert!(loader.draw_frame().is_empty());
+    /// ```
+    pub fn read_screen_host(&self, template: crate::content::Guid, position: [f64; 3]) {
+        let fixed = crate::ecs::fixed(position);
+        table::with((), |s| s.screen_host_read = Some((template.0, fixed)));
+    }
+
+    /// Names the game action `action` on the fake build, its reflected
+    /// name, with a key `bound` to it or none, for the input hints drawn
+    /// from now on; an action never named is one the build lacks, which
+    /// the loader refuses.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::Side;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
+    /// loader.game_action("ContextualAction", true);
+    /// assert!(loader.draw_frame().is_empty());
+    /// ```
+    pub fn game_action(&self, action: &str, bound: bool) {
+        table::with((), |s| {
+            s.game_actions.retain(|(name, _)| name != action);
+            s.game_actions.push((action.to_owned(), bound));
+        });
     }
 
     /// Makes `held`, a `Bitmask64` of the game's `PlayerInputType`, the
@@ -385,6 +441,15 @@ pub enum Drawn {
     /// A sound container played with
     /// [`Frame::play`](crate::ui::Frame::play), by its GUID.
     Play(crate::content::Guid),
+    /// The key hint of a game action.
+    InputHint {
+        /// The action's reflected name.
+        action: String,
+        /// The label beside the key, empty for none.
+        label: String,
+        /// Whether a key is bound to the action, so the game drew one.
+        bound: bool,
+    },
 }
 
 /// A marker the mod set on the map, as [`Installed::markers`] reports it.

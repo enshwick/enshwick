@@ -1257,6 +1257,10 @@ pub const FACTS: &[(&str, Fact)] = &[
         Fact::Type("keen::ecs::PlayerInputType"),
     ),
     (
+        ids::GAMEPLAY_ACTION,
+        Fact::Type("keen::input_mapping::runtime::GameplayAction"),
+    ),
+    (
         ids::CLIENT_PLAYER_INPUT,
         Fact::Type("keen::ecs::ClientPlayerInput"),
     ),

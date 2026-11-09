@@ -77,6 +77,8 @@ mod icons_hidden;
 mod init_off;
 #[cfg(feature = "unstable")]
 mod input;
+#[cfg(feature = "typed")]
+mod input_hint;
 #[cfg(feature = "unstable")]
 mod interaction_targets;
 mod inventory;
@@ -167,6 +169,8 @@ mod saves;
 mod schedule;
 #[cfg(feature = "unstable")]
 mod screen_extensions;
+#[cfg(feature = "unstable")]
+mod screen_hosts;
 #[cfg(feature = "unstable")]
 mod server_controls;
 mod services;

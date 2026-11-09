@@ -244,14 +244,10 @@ type EntitySlot = unsafe extern "system" fn(map: *const u8, entity: *const u32) 
 struct Layout {
     type_index: TypeIndex,
     read_component: ReadComponent,
-    entity_slot: EntitySlot,
+    walk: TemplateWalk,
     server_world: usize,
     entity_world: usize,
     registry_maps: [usize; 2],
-    entity_map: usize,
-    entity_capacity: usize,
-    entity_records: usize,
-    record_template: usize,
     server_players: usize,
     permission_table: usize,
     permission_entries: usize,
@@ -290,7 +286,6 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             let function = |name: Symbol| symbol(name).and_then(|a| usize::try_from(a).ok());
             let type_index = function(pinned::ecs::TYPE_INDEX)?;
             let read_component = function(pinned::ecs::COMPONENT_READ_RAW)?;
-            let entity_slot = function(pinned::ecs::ENTITY_SLOT)?;
             // SAFETY: the table's `ecs.type_index` is the address of the game
             // function with the `TypeIndex` signature on this build, in the
             // image, which stays mapped.
@@ -300,24 +295,16 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             // build, in the image, which stays mapped.
             let read_component =
                 unsafe { core::mem::transmute::<usize, ReadComponent>(read_component) };
-            // SAFETY: the table's `ecs.entity_slot` is the address of the game
-            // function with the `EntitySlot` signature on this build, in the
-            // image, which stays mapped.
-            let entity_slot = unsafe { core::mem::transmute::<usize, EntitySlot>(entity_slot) };
             Some(Layout {
                 type_index,
                 read_component,
-                entity_slot,
+                walk: TemplateWalk::resolve(loader)?,
                 server_world: constant(pinned::server::WORLD)?,
                 entity_world: constant(pinned::world::ENTITIES)?,
                 registry_maps: [
                     constant(pinned::ecs::REGISTRY_TYPE_MAP)?,
                     constant(pinned::ecs::REGISTRY_TYPE_MAP_FALLBACK)?,
                 ],
-                entity_map: constant(pinned::ecs::ENTITY_MAP)?,
-                entity_capacity: constant(pinned::ecs::ENTITY_MAP_CAPACITY)?,
-                entity_records: constant(pinned::ecs::ENTITY_RECORDS)?,
-                record_template: constant(pinned::ecs::RECORD_TEMPLATE)?,
                 server_players: constant(pinned::server::PLAYER_INFOS)?,
                 permission_table: constant(pinned::server::PERMISSION_TABLE)?,
                 permission_entries: constant(pinned::server::PERMISSION_ENTRIES)?,
@@ -498,49 +485,96 @@ pub(crate) fn component(
 pub(crate) fn template(loader: &Loader, entity: Entity) -> Result<[u8; 16], Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let world = entity_world(layout, reader()?).ok_or(Status::MISSING)?;
-    // SAFETY: `entity_slot` is the table's `ecs.entity_slot`; `world` is the
-    // non-zero entity world and the table's `ecs.entity_map` offset its
-    // id-to-slot map; `entity` lives across the call, made on the game
-    // thread (checked by `reader`).
-    let slot = unsafe {
-        (layout.entity_slot)(
-            core::ptr::with_exposed_provenance(world + layout.entity_map),
-            &raw const entity.0,
-        )
-    };
-    // SAFETY: `world` is the non-zero entity world; the table's
-    // `ecs.entity_map_capacity` offset holds the map's capacity, which the
-    // lookup returns for a missing entity; read on the game thread (checked
-    // by `reader`), which alone writes it.
-    let capacity: u32 = unsafe { read(world, layout.entity_capacity) };
-    if slot >= capacity {
-        return Err(Status::MISSING);
+    // SAFETY: `world` is the server's non-zero entity world, read on the
+    // game thread (checked by `reader`), which alone writes it.
+    unsafe { layout.walk.template(world, entity) }.ok_or(Status::MISSING)
+}
+
+/// The walk from an entity to its template GUID through an entity world's
+/// records, on either side.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct TemplateWalk {
+    entity_slot: EntitySlot,
+    entity_map: usize,
+    entity_capacity: usize,
+    entity_records: usize,
+    record_template: usize,
+}
+
+impl TemplateWalk {
+    /// The walk on this build, if the table has it.
+    pub(crate) fn resolve(loader: &Loader) -> Option<Self> {
+        let constant = |name: Constant| {
+            loader
+                .build
+                .constant(name.id())
+                .and_then(|v| usize::try_from(v).ok())
+        };
+        let slot = loader
+            .build
+            .symbol(pinned::ecs::ENTITY_SLOT.id())
+            .and_then(|rva| usize::try_from(loader.base + rva).ok())?;
+        Some(Self {
+            // SAFETY: the table's `ecs.entity_slot` is the address of the
+            // game function with the `EntitySlot` signature on this build, in
+            // the image, which stays mapped.
+            entity_slot: unsafe { core::mem::transmute::<usize, EntitySlot>(slot) },
+            entity_map: constant(pinned::ecs::ENTITY_MAP)?,
+            entity_capacity: constant(pinned::ecs::ENTITY_MAP_CAPACITY)?,
+            entity_records: constant(pinned::ecs::ENTITY_RECORDS)?,
+            record_template: constant(pinned::ecs::RECORD_TEMPLATE)?,
+        })
     }
-    // SAFETY: `world` is the non-zero entity world; the table's
-    // `ecs.entity_records` offset holds the pointer to its record table; read
-    // on the game thread (checked by `reader`), which alone writes it.
-    let records: usize = unsafe { read(world, layout.entity_records) };
-    if records == 0 {
-        return Err(Status::MISSING);
+
+    /// `entity`'s template GUID in the entity world `world`; `None` for an
+    /// entity the world does not hold.
+    ///
+    /// # Safety
+    ///
+    /// - `world` is a live, non-zero entity world, read on the thread that
+    ///   writes it, for the whole call.
+    pub(crate) unsafe fn template(&self, world: usize, entity: Entity) -> Option<[u8; 16]> {
+        // SAFETY: `entity_slot` is the table's `ecs.entity_slot`; `world` is
+        // the caller's live entity world and the table's `ecs.entity_map`
+        // offset its id-to-slot map; `entity` lives across the call.
+        let slot = unsafe {
+            (self.entity_slot)(
+                core::ptr::with_exposed_provenance(world + self.entity_map),
+                &raw const entity.0,
+            )
+        };
+        // SAFETY: the table's `ecs.entity_map_capacity` offset of the
+        // caller's live world holds the map's capacity, which the lookup
+        // returns for a missing entity.
+        let capacity: u32 = unsafe { read(world, self.entity_capacity) };
+        if slot >= capacity {
+            return None;
+        }
+        // SAFETY: the table's `ecs.entity_records` offset of the caller's
+        // live world holds the pointer to its record table.
+        let records: usize = unsafe { read(world, self.entity_records) };
+        if records == 0 {
+            return None;
+        }
+        // SAFETY: `records` is non-zero (`records == 0` returns first) and
+        // holds `capacity` record pointers, `slot < capacity` (`slot >=
+        // capacity` returns first).
+        let record: usize = unsafe { read(records, slot as usize * size_of::<usize>()) };
+        if record == 0 {
+            return None;
+        }
+        // SAFETY: `record` is a non-zero (`record == 0` returns first) live
+        // record; the table's `ecs.record_template` offset holds its template
+        // GUID pointer.
+        let guid: usize = unsafe { read(record, self.record_template) };
+        if guid == 0 {
+            return None;
+        }
+        // SAFETY: `guid` is non-zero (`guid == 0` returns first) and points at
+        // the template's 16-byte GUID, which the template keeps while it is
+        // loaded.
+        Some(unsafe { read::<[u8; 16]>(guid, 0) })
     }
-    // SAFETY: `records` is non-zero (`records == 0` returns first); the record
-    // table holds `capacity` record pointers and `slot < capacity`
-    // (`slot >= capacity` returns first); read on the game thread (checked by
-    // `reader`), which alone writes it.
-    let record: usize = unsafe { read(records, slot as usize * size_of::<usize>()) };
-    if record == 0 {
-        return Err(Status::MISSING);
-    }
-    // SAFETY: `record` is a non-zero (`record == 0` returns first) live record;
-    // the table's `ecs.record_template` offset holds its template GUID pointer;
-    // read on the game thread (checked by `reader`).
-    let guid: usize = unsafe { read(record, layout.record_template) };
-    if guid == 0 {
-        return Err(Status::MISSING);
-    }
-    // SAFETY: `guid` is non-zero (`guid == 0` returns first) and points at the
-    // template's 16-byte GUID, which the template keeps while it is loaded.
-    Ok(unsafe { read::<[u8; 16]>(guid, 0) })
 }
 
 /// Where `entity` stands, in 32.32 fixed-point metres, from its

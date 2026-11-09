@@ -526,6 +526,8 @@ pub(crate) struct Engine {
     scroll: Option<scroll::Scrolling>,
     /// The text field's functions; `None` shows texts read-only.
     text_fields: Option<text_field::TextFields>,
+    /// The game's key hint; `None` refuses mods' input hints.
+    pub(super) hint: Option<hint::InputHints>,
     window_begin: WindowBeginFn,
     window_end: OneFn,
     frame_from_node: FrameFromNodeFn,
@@ -711,6 +713,7 @@ struct Optional {
     dialog: Option<DialogLayout>,
     scroll: Option<scroll::Scrolling>,
     text_fields: Option<text_field::TextFields>,
+    hint: Option<hint::InputHints>,
 }
 
 impl Optional {
@@ -743,6 +746,9 @@ impl Optional {
                 .ok(),
             text_fields: text_field::TextFields::resolve(loader)
                 .inspect_err(off("text settings on the Mods screen (read-only)"))
+                .ok(),
+            hint: hint::InputHints::resolve(loader)
+                .inspect_err(off("input hints"))
                 .ok(),
         }
     }
@@ -789,6 +795,7 @@ impl Engine {
             dialog,
             scroll,
             text_fields,
+            hint,
         } = Optional::resolve(loader, &mut parts_off);
         let on = |part: Part| !parts_off.iter().any(|(p, _)| *p == part);
         let menus = on(Part::MAIN_MENU) || on(Part::PAUSE_MENU);
@@ -824,6 +831,7 @@ impl Engine {
             dialog,
             scroll,
             text_fields,
+            hint,
             window_begin: function!(pinned::ui::WINDOW_BEGIN, WindowBeginFn),
             window_end: function!(pinned::ui::WINDOW_END, OneFn),
             frame_from_node: function!(pinned::ui::FRAME_FROM_NODE, FrameFromNodeFn),
@@ -976,6 +984,7 @@ fn slider_format(min: f32, max: f32, steps: u32) -> u32 {
     if unit { 2 } else { 4 }
 }
 
+mod hint;
 mod hud;
 mod menus;
 mod scroll;

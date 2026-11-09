@@ -22,6 +22,8 @@ use crate::abi::{Header, Status, Str};
 ///     prompt_title: Str::EMPTY,
 ///     prompt_verb: 0,
 ///     screen_host: enshwick::Entity(512),
+///     screen_host_template: [0; 16],
+///     screen_host_position: [0; 3],
 /// };
 /// assert_eq!(frame.screen, UiFrame::IN_GAME);
 /// ```
@@ -56,6 +58,15 @@ pub struct UiFrame {
     /// object, outside a game and on a build where the
     /// loader does not find it. ABI 11.14.
     pub screen_host: crate::Entity,
+    /// The template GUID of `screen_host` in the client's world, as the
+    /// client's last step read it; all zero for no host, before a step read
+    /// this host, and on a build where the loader does not find it.
+    /// ABI 11.18.
+    pub screen_host_template: [u8; 16],
+    /// Where `screen_host` stands in the client's world, in 32.32
+    /// fixed-point metres, y up, from the same step; meaningful only while
+    /// `screen_host_template` is not all zero. ABI 11.18.
+    pub screen_host_position: [i64; 3],
 }
 
 impl_headed!(UiFrame, born = 24);
@@ -92,6 +103,9 @@ pub type UiFrameFn = unsafe extern "system" fn(frame: *const UiFrame, user: *mut
 ///     screen: Str::new("StorageChest"),
 ///     edge: UiExtension::RIGHT,
 ///     reserved: 0,
+///     hosts: core::ptr::null(),
+///     host_count: 0,
+///     reserved_hosts: 0,
 /// };
 /// assert_eq!(spec.edge, UiExtension::RIGHT);
 /// ```
@@ -108,9 +122,19 @@ pub struct UiExtension {
     pub edge: u32,
     /// Zero.
     pub reserved: u32,
+    /// `host_count` template GUIDs: the panel shows only while the open
+    /// screen's host was made from one of them; null with a count of 0 for
+    /// a panel of every host. Borrowed for the call: the loader copies
+    /// them. ABI 11.18.
+    pub hosts: *const [u8; 16],
+    /// How many GUIDs `hosts` holds, at most [`UiExtension::MAX_HOSTS`].
+    /// ABI 11.18.
+    pub host_count: u32,
+    /// Zero.
+    pub reserved_hosts: u32,
 }
 
-impl_headed!(UiExtension);
+impl_headed!(UiExtension, born = 32);
 
 impl UiExtension {
     /// The left edge, centred from top to bottom.
@@ -121,6 +145,52 @@ impl UiExtension {
     pub const TOP: u32 = 2;
     /// The bottom edge, centred from left to right.
     pub const BOTTOM: u32 = 3;
+    /// The most host templates one panel names. ABI 11.18.
+    pub const MAX_HOSTS: u32 = 64;
+
+    /// The host templates the panel names, empty for every host, as the
+    /// loader reads them; `None` for a null list with a count or more than
+    /// [`UiExtension::MAX_HOSTS`]. A spec of an older minor reads zero
+    /// there, so it names no host.
+    ///
+    /// # Safety
+    ///
+    /// - `hosts` is null, or readable for `host_count` GUIDs while the
+    ///   returned slice lives.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{Header, Str, UiExtension};
+    ///
+    /// let ours = [[7u8; 16]];
+    /// let mut spec = UiExtension {
+    ///     header: Header::of::<UiExtension>(),
+    ///     screen: Str::new("StorageChest"),
+    ///     edge: UiExtension::RIGHT,
+    ///     reserved: 0,
+    ///     hosts: ours.as_ptr(),
+    ///     host_count: 1,
+    ///     reserved_hosts: 0,
+    /// };
+    /// // SAFETY: `hosts` points at `ours`, one GUID, alive below.
+    /// assert_eq!(unsafe { spec.host_list() }, Some(&ours[..]));
+    /// spec.hosts = core::ptr::null();
+    /// // SAFETY: a null list.
+    /// assert_eq!(unsafe { spec.host_list() }, None);
+    /// ```
+    #[must_use]
+    pub unsafe fn host_list(&self) -> Option<&[[u8; 16]]> {
+        match (self.host_count, self.hosts.is_null()) {
+            (0, _) => Some(&[]),
+            (count, false) if count <= Self::MAX_HOSTS => {
+                // SAFETY: the caller's contract, `hosts` non-null (checked by
+                // this arm).
+                Some(unsafe { core::slice::from_raw_parts(self.hosts, count as usize) })
+            }
+            _ => None,
+        }
+    }
 }
 
 /// One widget, drawn with [`HostApi::ui_widget`](super::HostApi::ui_widget): `kind` says which, and
@@ -145,7 +215,7 @@ pub struct UiWidget {
     /// Size and version of this struct.
     pub header: Header,
     /// What to draw: one of the kind constants, [`UiWidget::WINDOW`] to
-    /// [`UiWidget::PLAY`].
+    /// [`UiWidget::INPUT_HINT`].
     pub kind: u32,
     /// [`UiWidget::READ_ONLY`], [`UiWidget::WRAP`], [`UiWidget::CENTER`].
     pub flags: u32,
@@ -155,9 +225,10 @@ pub struct UiWidget {
     /// A slider's stops between `min` and `max`, both included; 0 for a
     /// continuous slider.
     pub steps: u32,
-    /// The text: a label's, a button's, a row's label, a window's id.
+    /// The text: a label's, a button's, a row's label, a window's id, an
+    /// input hint's action.
     pub text: Str,
-    /// A window's title.
+    /// A window's title, an input hint's label.
     pub detail: Str,
     /// A dropdown's options, `option_count` of them, valid for the call.
     pub options: *const Str,
@@ -213,6 +284,15 @@ impl UiWidget {
     /// [`Status::MISSING`](super::Status::MISSING) for a container neither
     /// the client's archive nor a mod holds. Needs no window. ABI 11.14.
     pub const PLAY: u32 = 10;
+    /// The key or button the player bound to a game action, as the game
+    /// draws it beside its own prompts, so it follows a rebind: `text` is
+    /// the action's reflected `GameplayAction` name, such as
+    /// `ContextualAction`, and `detail` a label beside the key, empty for
+    /// none. `result` 1 when the game drew a key, 0 when the action has no
+    /// binding; [`Status::MISSING`](super::Status::MISSING) for an action
+    /// this build does not name, or on a build where the loader does not
+    /// find the game's hint. Client only. ABI 11.18.
+    pub const INPUT_HINT: u32 = 11;
 
     /// The row shows its value and does not take changes; a button does not
     /// take clicks.

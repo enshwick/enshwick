@@ -291,6 +291,9 @@ ids! {
     PLAYER_INPUT = "player_input";
     PLAYER_INPUT_DIGITAL = "player_input.digital";
     PLAYER_INPUT_TYPE = "player_input_type";
+    /// The id of the client's enum of the game actions a key binds to,
+    /// whose numbers move between builds.
+    GAMEPLAY_ACTION = "gameplay_action";
     /// The id of the client's own input component on its local player.
     CLIENT_PLAYER_INPUT = "client_player_input";
     /// The id of its `u64` of the game controls held, a `Bitmask64` of

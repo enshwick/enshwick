@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 17
+#define ENSHWICK_ABI_MINOR 18
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -2194,6 +2194,15 @@ typedef struct EnshwickUiFrame {
   // object, outside a game and on a build where the
   // loader does not find it. ABI 11.14.
   EnshwickEntity screen_host;
+  // The template GUID of `screen_host` in the client's world, as the
+  // client's last step read it; all zero for no host, before a step read
+  // this host, and on a build where the loader does not find it.
+  // ABI 11.18.
+  uint8_t screen_host_template[16];
+  // Where `screen_host` stands in the client's world, in 32.32
+  // fixed-point metres, y up, from the same step; meaningful only while
+  // `screen_host_template` is not all zero. ABI 11.18.
+  int64_t screen_host_position[3];
 } EnshwickUiFrame;
 // The title screen and the menus before a game.
 #define EnshwickUiFrame_MENU 0
@@ -2213,7 +2222,7 @@ typedef struct EnshwickUiWidget {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // What to draw: one of the kind constants, `UiWidget::WINDOW` to
-  // `UiWidget::PLAY`.
+  // `UiWidget::INPUT_HINT`.
   uint32_t kind;
   // `UiWidget::READ_ONLY`, `UiWidget::WRAP`, `UiWidget::CENTER`.
   uint32_t flags;
@@ -2223,9 +2232,10 @@ typedef struct EnshwickUiWidget {
   // A slider's stops between `min` and `max`, both included; 0 for a
   // continuous slider.
   uint32_t steps;
-  // The text: a label's, a button's, a row's label, a window's id.
+  // The text: a label's, a button's, a row's label, a window's id, an
+  // input hint's action.
   struct EnshwickStr text;
-  // A window's title.
+  // A window's title, an input hint's label.
   struct EnshwickStr detail;
   // A dropdown's options, `option_count` of them, valid for the call.
   const struct EnshwickStr *options;
@@ -2277,6 +2287,15 @@ typedef struct EnshwickUiWidget {
 // `Status::MISSING` for a container neither
 // the client's archive nor a mod holds. Needs no window. ABI 11.14.
 #define EnshwickUiWidget_PLAY 10
+// The key or button the player bound to a game action, as the game
+// draws it beside its own prompts, so it follows a rebind: `text` is
+// the action's reflected `GameplayAction` name, such as
+// `ContextualAction`, and `detail` a label beside the key, empty for
+// none. `result` 1 when the game drew a key, 0 when the action has no
+// binding; `Status::MISSING` for an action
+// this build does not name, or on a build where the loader does not
+// find the game's hint. Client only. ABI 11.18.
+#define EnshwickUiWidget_INPUT_HINT 11
 // The row shows its value and does not take changes; a button does not
 // take clicks.
 #define EnshwickUiWidget_READ_ONLY 1
@@ -3149,6 +3168,16 @@ typedef struct EnshwickUiExtension {
   uint32_t edge;
   // Zero.
   uint32_t reserved;
+  // `host_count` template GUIDs: the panel shows only while the open
+  // screen's host was made from one of them; null with a count of 0 for
+  // a panel of every host. Borrowed for the call: the loader copies
+  // them. ABI 11.18.
+  const uint8_t (*hosts)[16];
+  // How many GUIDs `hosts` holds, at most `UiExtension::MAX_HOSTS`.
+  // ABI 11.18.
+  uint32_t host_count;
+  // Zero.
+  uint32_t reserved_hosts;
 } EnshwickUiExtension;
 // The left edge, centred from top to bottom.
 #define EnshwickUiExtension_LEFT 0
@@ -3158,6 +3187,8 @@ typedef struct EnshwickUiExtension {
 #define EnshwickUiExtension_TOP 2
 // The bottom edge, centred from left to right.
 #define EnshwickUiExtension_BOTTOM 3
+// The most host templates one panel names. ABI 11.18.
+#define EnshwickUiExtension_MAX_HOSTS 64
 
 // A player's action with an item, handed to the filters registered with
 // `HostApi::item_filter` in the server's

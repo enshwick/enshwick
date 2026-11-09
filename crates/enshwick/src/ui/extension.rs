@@ -114,13 +114,67 @@ impl Load<'_> {
     where
         F: FnMut(&mut super::Frame<'_>) + Send + 'static,
     {
+        self.extend_screen_for(screen, edge, &[], draw)
+    }
+
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// Adds a panel as [`Load::extend_screen`] does that shows only while
+    /// the open screen's host was made from one of the templates `hosts`,
+    /// such as the mod's own survivor or altar kind by its content id's
+    /// GUID; empty `hosts` show it for every host. The client reads the
+    /// host's template in its last step, so the panel shows from the second
+    /// frame of a screen on. A mod that needs what only the server knows of
+    /// the host, such as a survivor's NPC id, asks its server part.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::extend_screen`], and [`Off`] for more than
+    /// [`UiExtension::MAX_HOSTS`] templates.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::id;
+    /// use enshwick::ui::{Edge, HudScreenType};
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let ours = [id!("guard").guid()];
+    ///     load.extend_screen_for(HudScreenType::NpcDialog, Edge::Right, &ours, |panel| {
+    ///         let _hello = panel.button("Hello");
+    ///     })
+    /// }
+    /// ```
+    pub fn extend_screen_for<F>(
+        &mut self,
+        screen: HudScreenType,
+        edge: Edge,
+        hosts: &[crate::content::Guid],
+        draw: F,
+    ) -> Result<(), Off>
+    where
+        F: FnMut(&mut super::Frame<'_>) + Send + 'static,
+    {
         let host = self.host();
         client_only(host, "screen extensions")?;
+        let host_count = u32::try_from(hosts.len())
+            .ok()
+            .filter(|&count| count <= UiExtension::MAX_HOSTS)
+            .ok_or_else(|| {
+                Off::new(format!(
+                    "{} screen hosts, past {}",
+                    hosts.len(),
+                    UiExtension::MAX_HOSTS
+                ))
+            })?;
         let spec = UiExtension {
             header: Header::of::<UiExtension>(),
             screen: Str::new(screen.name()),
             edge: edge.to_raw(),
             reserved: 0,
+            hosts: hosts.as_ptr().cast(),
+            host_count,
+            reserved_hosts: 0,
         };
         crate::load::hand_over(
             Drawer {

@@ -106,7 +106,13 @@ pub(crate) extern "system" fn ui_extension(
         let Some(screen) = (unsafe { spec.screen.as_str() }) else {
             return Status::BAD_ARGS;
         };
-        crate::ui::register_extension(loader, index, screen, spec.edge, callback, user)
+        // SAFETY: `HostApi::ui_extension` has the mod pass `hosts` null or
+        // readable for `host_count` GUIDs for the call, which
+        // `register_extension` copies before it returns.
+        let Some(hosts) = (unsafe { spec.host_list() }) else {
+            return Status::BAD_ARGS;
+        };
+        crate::ui::register_extension(loader, index, screen, spec.edge, hosts, callback, user)
     })
 }
 

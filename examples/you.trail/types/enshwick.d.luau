@@ -838,6 +838,12 @@ export type Frame = {
 	prompt: (self: Frame) -> Prompt?,
 	--- The entity the open screen belongs to, as `Frame.screen_host` says.
 	screen_host: (self: Frame) -> number?,
+	--- The template the open screen's host was made from, as `Frame.screen_host_template` says.
+	screen_host_template: (self: Frame) -> string?,
+	--- Where the open screen's host stands, as `Frame.screen_host_position` says.
+	screen_host_position: (self: Frame) -> vector?,
+	--- Draws the key the player bound to `action` with `label` beside it, as `Frame.input_hint` does; true when the game drew a key.
+	input_hint: (self: Frame, action: typed_input_mapping_runtime_GameplayAction, label: string) -> boolean,
 }
 
 --- A front of weather, from `Weather.fronts`.
@@ -1690,7 +1696,7 @@ export type NewSkillNode = {
 export type NewSound = {
 	--- The sound's content id; its container's GUID is the id's.
 	id: string,
-	--- The WAV file, relative to the mod's folder: 16-bit PCM, mono or stereo, at `SAMPLE_RATE`, at most `MAX_FILE_BYTES` and `MAX_SECONDS` long.
+	--- The WAV file, relative to the mod's folder: 16-bit PCM, mono or stereo, at `SAMPLE_RATE`, at most `MAX_FILE_BYTES`.
 	file: string,
 	--- The container's scene.
 	scene: SoundContainerScene?,
@@ -2916,6 +2922,9 @@ export type ZoneSizes = {
 --- The game's enum `ecs.SpawnCondition`, 1 byte.
 export type typed_ecs_SpawnCondition = "IsDay" | "IsNight" | { Other: any }
 
+--- The game's enum `input_mapping.runtime.GameplayAction`, 1 byte.
+export type typed_input_mapping_runtime_GameplayAction = "MovementLeft" | "MovementRight" | "MovementUp" | "MovementDown" | "CameraLeft" | "CameraRight" | "CameraUp" | "CameraDown" | "CameraZoomIn" | "CameraZoomOut" | "MainhandAction" | "MainhandActionTap" | "MainhandActionHold" | "MainhandActionRelease" | "SecondaryBuildingAction" | "ContextualAction" | "ContextualActionTap" | "ContextualActionHold" | "AreaLoot" | "SpecialAbility" | "SpecialAbilityTap" | "SpecialAbilityHold" | "DropItem" | "CancelAction" | "AmmunitionSelectPrevious" | "AmmunitionSelectNext" | "AmmunitionSelect0" | "AmmunitionSelect1" | "AmmunitionSelect2" | "AmmunitionSelect3" | "AmmunitionSelect4" | "AmmunitionSelect5" | "AmmunitionSelect6" | "AmmunitionSelect7" | "ShowTutorial" | "BlueprintDistanceIncrease" | "BlueprintDistanceDecrease" | "BlueprintMaterialSelectPrevious" | "BlueprintMaterialSelectNext" | "BlueprintMaterialSelectFromCrosshair" | "BlueprintMaterialCycleSorting" | "BlueprintPageSelectPrevious" | "BlueprintPageSelectNext" | "BlueprintShapeSelectPrevious" | "BlueprintShapeSelectNext" | "BlueprintShapeSelect0" | "BlueprintShapeSelect1" | "BlueprintShapeSelect2" | "BlueprintShapeSelect3" | "BlueprintShapeSelect4" | "BlueprintShapeSelect5" | "BlueprintShapeSelect6" | "BlueprintShapeSelect7" | "BlueprintShapeSelect8" | "BlueprintShapeSelect9" | "QuickUse0" | "QuickUse1" | "QuickUse2" | "QuickUse3" | "QuickUse4" | "QuickUse5" | "QuickUse6" | "QuickUse7" | "QuickUse0Release" | "QuickUse1Release" | "QuickUse2Release" | "QuickUse3Release" | "QuickUse4Release" | "QuickUse5Release" | "QuickUse6Release" | "QuickUse7Release" | "Block" | "Evade" | "Jump" | "HeadDive" | "SwimStartDiving" | "DiveAscend" | "DiveDescend" | "Glider" | "Respawn" | "ShowActionbarWheel" | "ShowEmoteWheel" | "ActionbarSwapPage" | "ActionbarPreviousSlot" | "ActionbarNextSlot" | "LootSelectPrevious" | "LootSelectNext" | "LootTakeAll" | "SongSelectOpen" | "SongSelectPrevious" | "SongSelectNext" | "BuildingModeFirstPerson" | "BuildingModeFly" | "BuildingRotateLittleClockwise" | "BuildingRotateLittleCounterClockwise" | "BuildingRotateFarClockwise" | "BuildingRotateFarCounterClockwise" | "BuildingTiltLeft" | "BuildingTiltRight" | "BuildingTiltForward" | "BuildingTiltBackward" | "BuildingDetailRotationMode" | "BuildingOffsetIncrease" | "BuildingOffsetDecrease" | "BuildingDetailTranslationMode" | "BuildingScaleIncrease" | "BuildingScaleDecrease" | "BuildingUndo" | "BuildingBlueprintSnapping" | "BuildingVoxelGridSnapping" | "LockCombatTarget" | "CombatTargetSelect1dLeft" | "CombatTargetSelect1dRight" | "CombatTargetSelect2dLeft" | "CombatTargetSelect2dRight" | "CombatTargetSelect2dUp" | "CombatTargetSelect2dDown" | "RangedCombatArm" | "RangedCombatShoot" | "RangedCombatShootTap" | "Sprint" | "Walk" | "Sneak" | "VoiceOverPlayback" | "VoiceChatPushToTalk" | "VoiceChatMute" | "UiSystemMenu" | "UiInGameMenu" | "UiBackpack" | "UiBuildingMenu" | "UiBuildingMaterialCatalog" | "UiCharacter" | "UiCrafting" | "UiJournal" | "UiJumpToNotification" | "UiMap" | "UiSkills" | "UiUserFeedback" | "UiTextChat" | "UiSocial" | "Count" | { Other: any }
+
 --- The game's enum `FactionType`, 1 byte.
 export type typed_FactionType = "Environment" | "HitAll" | "Fogger" | "Vukah" | "Scavenger" | "Wildlife" | "WildBeast" | "Player" | "AutomatedPlayer" | "HitOthers" | "Skeleton" | "PlayerAlly" | "FarmAnimal" | "Cyclops" | "Drak" | "Ancients" | { Other: any }
 
@@ -3420,6 +3429,9 @@ declare enshwick: {
 		--- Adds a panel at `edge` of the game's screen `screen` and runs `draw` once per frame while it is open, with the frame lent to it, as `Load.extend_screen` does.
 		--- Only while the mod starts, at the top level of main.luau.
 		extend_screen: (screen: HudScreenType, edge: Edge, draw: (arg1: Frame) -> ()) -> (),
+		--- Adds a panel that shows only for the screen hosts made from `hosts`, as `Load.extend_screen_for` does.
+		--- Only while the mod starts, at the top level of main.luau.
+		extend_screen_for: (screen: HudScreenType, edge: Edge, hosts: {string}, draw: (arg1: Frame) -> ()) -> (),
 		--- Calls `handler` with each change of the game's screen the player has open, as `Load.on_screen_changed` does.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_screen_changed: (handler: (arg1: ScreenChanged) -> ()) -> (),

@@ -32,6 +32,7 @@ pub const fn needs_window(kind: u32) -> bool {
             | UiWidget::SLIDER
             | UiWidget::DROPDOWN
             | UiWidget::PROGRESS
+            | UiWidget::INPUT_HINT
     )
 }
 
@@ -86,6 +87,7 @@ mod tests {
             UiWidget::SLIDER,
             UiWidget::DROPDOWN,
             UiWidget::PROGRESS,
+            UiWidget::INPUT_HINT,
         ] {
             assert_eq!(order(kind, true), Status::OK, "{kind}");
             assert_eq!(order(kind, false), Status::REFUSED, "{kind}");

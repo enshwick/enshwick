@@ -287,6 +287,7 @@ pub(super) fn draw(
         UiWidget::TOGGLE | UiWidget::SLIDER | UiWidget::DROPDOWN => {
             row(engine, context, copy(&[text]), raw, read_only)
         }
+        UiWidget::INPUT_HINT => input_hint(engine, text, raw),
         UiWidget::PROGRESS => {
             let Some(value) = widget_checks::progress(raw.value, raw.min, raw.max) else {
                 return Status::BAD_ARGS;
@@ -297,6 +298,34 @@ pub(super) fn draw(
             Status::OK
         }
         _ => Status::MISSING,
+    }
+}
+
+/// Draws the key bound to the game action named `action`, with the
+/// widget's `detail` beside it; `result` 1 when the game drew a key.
+fn input_hint(engine: &Engine, action: &[u8], raw: &mut UiWidget) -> Status {
+    let Some(hint) = &engine.hint else {
+        return Status::MISSING;
+    };
+    let (Ok(action), Some(label)) = (core::str::from_utf8(action), read(raw.detail)) else {
+        return Status::BAD_ARGS;
+    };
+    let label = if label.is_empty() {
+        UiText::EMPTY
+    } else {
+        copy(&[label])
+    };
+    // SAFETY: `draw` calls this only with `window_open`, checked by
+    // `widget_checks::order`: this callback's window, or its screen
+    // extension's, is open in this frame on the interface thread, so its
+    // layout node is open; `label` is empty or its bytes live in the
+    // frame's arena, kept to the end of the frame.
+    match unsafe { hint.draw(action, &label) } {
+        Some(drawn) => {
+            raw.result = u32::from(drawn);
+            Status::OK
+        }
+        None => Status::MISSING,
     }
 }
 
