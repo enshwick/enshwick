@@ -109,5 +109,5 @@
 
 - [Stability](stability.md)
 - [ABI reference](abi-reference.md)
-- [Mods in C](mods-in-c.md)
+- [Mods in C and C++](mods-in-c.md)
 - [FAQ and troubleshooting](faq.md)

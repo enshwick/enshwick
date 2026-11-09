@@ -9,7 +9,7 @@ and none is released. The book's own examples cover the smaller cases.
 | [trading-post](trading-post/)                         | publishing a service, sending an event, defining a point    |
 | [chest-panel](chest-panel/)                           | a panel beside the storage chest screen that runs an action |
 | [haggling](haggling/)                                 | extending another mod's rule at its extension point         |
-| [hello-c](hello-c/)                                   | a mod written in C against `enshwick.h`                     |
+| [hello-c](hello-c/)                                   | a mod in C and one in C++, against `enshwick.h`             |
 | [horn](horn/)                                         | a control on G that runs an action, one that follows interact |
 | [waypoints](waypoints/)                               | a mod of side both whose server sends a mark its client draws |
 | [you.material-stacks](you.material-stacks/)           | a data pack that raises the stack size of materials         |
@@ -21,7 +21,7 @@ and none is released. The book's own examples cover the smaller cases.
 
 The book's chapter [Services between mods](../book/src/services.md) follows
 the trading post, [Extending other mods](../book/src/extending.md) the
-haggling, [Mods in C](../book/src/mods-in-c.md) the C mod,
+haggling, [Mods in C and C++](../book/src/mods-in-c.md) the C and C++ mods,
 [Messages between server and client](../book/src/messages.md) and
 [The interface](../book/src/interface.md) the waypoints and the chest panel,
 [Controls](../book/src/controls.md) the horn,

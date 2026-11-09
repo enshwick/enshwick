@@ -23,8 +23,8 @@ and it runs every mod.
   Luau mod or a data pack, checks it and installs it into the game.
 
 Parts of the API behind the `unstable` feature can change in any release.
-[Stability](book/src/stability.md) lists them. Mods in C, C++ or Zig use the C
-header ([Mods in C](book/src/mods-in-c.md)).
+[Stability](book/src/stability.md) lists them. Mods in C, C++ or any other
+language that can call a C ABI use the C header ([Mods in C and C++](book/src/mods-in-c.md)).
 
 Start with [the modding book](book/src/introduction.md). Contributions follow
 [CONTRIBUTING.md](CONTRIBUTING.md).
