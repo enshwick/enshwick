@@ -97,7 +97,7 @@ Each entry names the pull request that made the change.
 - The book's chapter "How ids are namespaced" states the id rule for every
   kind a mod declares, and every chapter that names an id links it;
   `cargo xtask check` holds the link. "The life of a mod" states the load
-  order and every reason the loader skips a mod (#1010).
+  order and the reasons the loader skips a mod when it resolves (#1010).
 
 ### Fixed
 

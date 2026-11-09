@@ -214,7 +214,7 @@ impl Load<'_> {
     ///
     /// `E` comes from [`#[event]`](macro@crate::event), named after this
     /// mod: `<id>:<what>`, see
-    /// [how ids are namespaced](https://enshwick.com/dev/concepts/ids/).
+    /// [how ids are namespaced](https://github.com/enshwick/enshwick/blob/main/book/src/concepts/ids.md).
     ///
     /// # Errors
     ///

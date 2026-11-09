@@ -345,7 +345,7 @@ impl Load<'_> {
     /// Unstable: needs the `unstable` feature and may change in any release.
     ///
     /// `C` comes from [`#[call]`](macro@crate::call), named after this mod:
-    /// `<id>:<call>`, as [how ids are namespaced](https://enshwick.com/dev/concepts/ids/)
+    /// `<id>:<call>`, as [how ids are namespaced](https://github.com/enshwick/enshwick/blob/main/book/src/concepts/ids.md)
     /// sets out. Mark it `export` so other mods may call it and its schema
     /// reaches their tools.
     ///

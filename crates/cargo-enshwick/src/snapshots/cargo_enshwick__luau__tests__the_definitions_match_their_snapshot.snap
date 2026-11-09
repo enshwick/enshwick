@@ -2508,7 +2508,7 @@ export type StatFormat = "Number" | "Signed" | "Percent"
 
 --- What a stat kind is called and how it reads, from `Stats.info`.
 export type StatInfo = {
-	--- The full id, `<mod>:<name>`, see how ids are namespaced.
+	--- The full id, `<mod>:<name>`.
 	id: string,
 	--- The text key that names it in its owner's texts, see `name_key`.
 	text: string,

@@ -150,27 +150,32 @@ const IDS_CHAPTER: &str = "concepts/ids.md";
 /// What marks a chapter as naming an id: a full id's form or the term.
 const ID_MARKS: [&str; 4] = ["`<mod>:", "`<id>:", "`<mod id>:", "content id"];
 
-/// The problem with a chapter that names an id and does not link
-/// [`IDS_CHAPTER`], which states the rule once for every page.
 fn ids_link_problem(chapter: &str, text: &str) -> Option<String> {
     let lower = text.to_ascii_lowercase();
-    let names_an_id = ID_MARKS.iter().any(|mark| lower.contains(mark));
-    // A chapter beside it links it by its file name, any other by its path.
-    let (folder, file) = IDS_CHAPTER.rsplit_once('/').unwrap_or(("", IDS_CHAPTER));
-    let links = [
-        format!("]({IDS_CHAPTER}"),
-        format!("](../{IDS_CHAPTER}"),
-        format!("]({file}"),
-    ];
-    let beside = chapter
-        .rsplit_once('/')
-        .is_some_and(|(dir, _)| dir == folder);
-    let linked = links
-        .iter()
-        .enumerate()
-        .any(|(i, link)| (i < 2 || beside) && text.contains(link.as_str()));
-    (chapter != IDS_CHAPTER && names_an_id && !linked)
-        .then(|| format!("{SOURCE}/{chapter}: names an id; link {IDS_CHAPTER} where it does"))
+    if chapter == IDS_CHAPTER || !ID_MARKS.iter().any(|mark| lower.contains(mark)) {
+        return None;
+    }
+    let folder = chapter.rsplit_once('/').map_or("", |(dir, _)| dir);
+    let linked = link_targets(text)
+        .map(|target| target.split_once('#').map_or(target, |(path, _)| path))
+        .any(|target| resolve(folder, target).as_deref() == Some(IDS_CHAPTER));
+    (!linked).then(|| format!("{SOURCE}/{chapter}: names an id; link {IDS_CHAPTER} where it does"))
+}
+
+/// The path, relative to [`SOURCE`], that the relative link `target` in a
+/// chapter of `folder` points to; `None` when it climbs out of the book.
+fn resolve(folder: &str, target: &str) -> Option<String> {
+    let mut parts: Vec<&str> = folder.split('/').filter(|part| !part.is_empty()).collect();
+    for part in target.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop()?;
+            }
+            _ => parts.push(part),
+        }
+    }
+    Some(parts.join("/"))
 }
 
 /// The words between the `# ` title and the first deeper heading, outside
@@ -255,15 +260,18 @@ fn problems(
     found
 }
 
-/// The `.md` targets of the summary's Markdown links, `](path.md)`.
 fn links(summary: &str) -> Vec<String> {
-    summary
-        .split("](")
-        .skip(1)
-        .filter_map(|rest| rest.split_once(')').map(|(target, _)| target))
+    link_targets(summary)
         .filter(|target| is_markdown(target))
         .map(str::to_owned)
         .collect()
+}
+
+/// The targets of the Markdown links in `text`, `](target)`.
+fn link_targets(text: &str) -> impl Iterator<Item = &str> {
+    text.split("](")
+        .skip(1)
+        .filter_map(|rest| rest.split_once(')').map(|(target, _)| target))
 }
 
 /// Whether `path` names a Markdown file.
@@ -378,6 +386,14 @@ mod tests {
         assert!(ids_link_problem("a.md", "A [content id](uuids.md).").is_some());
         assert!(ids_link_problem("a.md", "A [content id](ids.md).").is_some());
         assert!(ids_link_problem("concepts/a.md", "A [content id](ids.md#x).").is_none());
+        assert!(ids_link_problem("b/c/a.md", "A [content id](../../concepts/ids.md).").is_none());
+    }
+
+    #[test]
+    fn an_ids_link_at_the_wrong_depth_does_not_count() {
+        assert!(ids_link_problem("b/a.md", "A [content id](concepts/ids.md).").is_some());
+        assert!(ids_link_problem("a.md", "A [content id](../concepts/ids.md).").is_some());
+        assert!(ids_link_problem("b/c/a.md", "A [content id](../concepts/ids.md).").is_some());
     }
 
     #[test]

@@ -87,8 +87,10 @@ recipe, the station template, the workshop, each text tag and icon.
 
 The content calls take an `Id` for what they create and declare it to the
 loader. Content a mod serves itself with [`Load::serve`](content/resources.md)
-is declared with `load.declare(id)`. A vanilla name the game does not know
-turns the mod off, with the names that look like it in the log.
+is declared with `load.declare(id)`. An id outside the mod's namespace turns
+the mod off, so an `Id::new` with another mod's id never creates content. A
+vanilla name in `deps::vanilla` that the game does not know turns the mod off,
+with similar names in the log.
 
 ## Renamed content
 

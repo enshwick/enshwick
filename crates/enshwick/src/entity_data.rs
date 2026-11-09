@@ -189,10 +189,10 @@ where
 }
 
 impl Load<'_> {
-    /// Opens the entity data kind `id`: `name` for the mod's own,
-    /// `<mod>:<name>`, or `mod:name` for another mod's, each side 1 to 64 of
-    /// `[a-z0-9_-]`, see
-    /// [how ids are namespaced](https://enshwick.com/dev/concepts/ids/). Every mod that opens one id shares its values, so the
+    /// Opens the entity data kind `id`: `name` for the mod's own, or
+    /// `<mod>:<name>` for any mod's, the name 1 to 64 of `[a-z0-9_-]`, see
+    /// [how ids are namespaced](https://github.com/enshwick/enshwick/blob/main/book/src/concepts/ids.md).
+    /// Every mod that opens one id shares its values, so the
     /// value type must match; the kind is sent to clients once any mod
     /// opens it with [`Replication::Clients`]. Call it during `init`, on
     /// both sides.

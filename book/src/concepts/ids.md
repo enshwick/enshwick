@@ -27,23 +27,24 @@ invalid id fails the build. Two ids have no dot, so no mod can take them:
 ## What does a full id look like?
 
 A full id is `<mod id>:<name>`, joined by one colon. The mod writes only the
-name, and the platform puts its id in front. The name of a content id, stat
-kind or affix is 1 to 128 of `[a-z0-9_./-]`, so ids read like paths:
+name, and the platform puts its id in front. The name of a content id is 1
+to 128 of `[a-z0-9_./-]`, so ids read like paths:
 
 - `you.lockers:locker`
 - `you.lockers:locker.name`
 - `you.market-stalls:stall/blacksmith`
 
-A second colon makes the id invalid.
+A second colon makes a content id invalid. A stat kind or affix name is at
+most 123 characters, since its text key adds `.name`.
 
 ## Which names get the prefix?
 
 | Kind | Full id | The mod writes | Name rule |
 | --- | --- | --- | --- |
 | Content | `<mod>:<name>` | `id!("locker")`; a pack's name | 1 to 128 of `[a-z0-9_./-]` |
-| Stat kinds | `<mod>:<name>` | `id!("luck")` | as content |
-| Affixes | `<mod>:<name>` | `id!("sturdy")` | as content |
-| Services, events, points, calls | `<mod>:<name>` | `name = "price"` | as content |
+| Stat kinds | `<mod>:<name>` | `id!("luck")` | as content, at most 123 |
+| Affixes | `<mod>:<name>` | `id!("sturdy")` | as content, at most 123 |
+| Services, events, points, calls | `<mod>:<name>` | `name = "price"` | not empty; as content when exported or from Luau |
 | Item and entity data kinds | `<mod>:<name>` | `"charge"` | 1 to 64 of `[a-z0-9_-]` |
 | Controls | `<mod>:<name>` | `Control::new("horn", ..)` | 1 to 32 of `[a-z0-9-]` |
 
@@ -72,8 +73,9 @@ version 5 (name-based, SHA-1) UUID of the id's UTF-8 bytes. The namespace is
 
 The same id gives the same GUID on every machine and in every release:
 
-- Python's `uuid.uuid5(namespace, "you.lockers:locker")` prints
-  `67842cb8-d551-542b-8765-fe1af9c28aca`;
+- Python's
+  `uuid.uuid5(uuid.UUID("e2185889-0e5e-4977-9edd-d6e7bcd1393f"), "you.lockers:locker")`
+  prints `67842cb8-d551-542b-8765-fe1af9c28aca`;
 - `cargo enshwick id you.lockers:locker` prints it with its game id.
 
 Saves hold these GUIDs, so a content id is fixed once players have the
@@ -113,10 +115,11 @@ tools.
 | Rust, a call, point, service or event | `of = <alias>` on its declaration | none |
 | A data pack | `<alias>:<name>` or `<mod>:<name>` | a debug name without a colon |
 | A file of disabled recipes | `<mod>:<name>` | `enshrouded:<debug name>` |
-| Any of them | the GUID | the GUID |
+| Content, anywhere | the GUID | the GUID |
 
 The alias comes from the manifest's `requires` or `after`, see
-[the manifest](loader-and-abi.md#the-manifest). Another mod's name passes
+[the manifest](loader-and-abi.md#the-manifest). A data pack takes it from
+`requires` only, see [data packs](../content/packs.md). Another mod's name passes
 only when that mod [exports](loader-and-abi.md#what-other-mods-may-use) it.
 Item and entity data kinds are the exception. They are shared by design, and
 any mod opens any kind by its full id, see
@@ -124,7 +127,8 @@ any mod opens any kind by its full id, see
 
 `Id::new("you.lockers:locker")` and `Guid::named("you.lockers:locker")` take
 an id in full. They name content without depending on its mod, so the loader
-checks no export for them.
+checks no export for them. A call that creates content still turns the mod
+off when the `Id` lies outside the mod's namespace.
 
 ## What does the loader refuse?
 

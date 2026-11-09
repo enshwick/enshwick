@@ -36,19 +36,23 @@ The loader takes every mod through five steps, all at game start.
 Mods load with their dependencies first, and otherwise in mod id order. A
 mod's `requires` and `after` load before it. Load order sets the order of
 `init` and `ready`. Hooks of equal priority and filters run in it too. Links
-on an [extension point](../extending.md) run by priority, then by mod id.
+on an [extension point](../extending.md#order) run by their `after` and
+`before`, then by priority, then by mod id.
 
-The loader skips these mods, each with the reason in its log:
+When it resolves, the loader skips these mods, each with the reason in its
+log:
 
 | Mod | Log |
 | --- | --- |
-| a second file of one mod id | the highest version runs, then the newest file, then the first by name |
+| a second file of one mod id | `old.dll skipped: you.trading-post 0.1.0 is also in trading_post.dll, which runs 0.2.0; old.dll can be deleted` |
 | one whose `requires` is not loaded | `requires you.trading-post, which is not loaded` |
 | one whose `requires` is out of range | `requires you.trading-post ^0.2, found 0.1.3` |
 | one whose `breaks` names a loaded mod in range | `does not work beside you.old-market 0.4.0; remove one of them` |
 | mods that require each other in a circle | `in a dependency cycle` |
 
-A skipped mod can make the mods that require it skip in turn. A circle that
+Of two files with one mod id, the highest version runs, then the newest
+file, then the first by name. A skipped mod can make the mods that require
+it skip in turn. A circle that
 `after` closes gives way, and its mods load anyway.
 
 ## The mod
