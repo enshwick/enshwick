@@ -219,16 +219,42 @@ mod tests {
     }
 
     /// A release on GitHub as `get` serves it: `sums` for `SHA256SUMS` and
-    /// `archive` for `enshwick.zip` of `v1.0.0-alpha.14`, nothing else.
+    /// `archive` for `enshwick.zip` of `v1.0.0-alpha.14`, nothing else, each
+    /// refused past the byte limit asked for, as `net::get` refuses it.
     fn github(sums: String, archive: Vec<u8>) -> impl Fn(&str, usize) -> anyhow::Result<Vec<u8>> {
-        move |url, _| {
+        move |url, limit| {
             let base = format!("{DOWNLOADS}/v1.0.0-alpha.14/");
-            match url.strip_prefix(&base) {
-                Some(SUMS) => Ok(sums.clone().into_bytes()),
-                Some(ARCHIVE) => Ok(archive.clone()),
+            let body = match url.strip_prefix(&base) {
+                Some(SUMS) => sums.clone().into_bytes(),
+                Some(ARCHIVE) => archive.clone(),
                 _ => anyhow::bail!("404 for {url}"),
+            };
+            if body.len() > limit {
+                anyhow::bail!("{url}: longer than {limit} bytes");
             }
+            Ok(body)
         }
+    }
+
+    #[test]
+    fn each_release_file_is_read_with_its_own_limit() {
+        let archive = release();
+        let sum = format!("{}  {ARCHIVE}\n", hex(&Sha256::digest(&archive)));
+        let full = format!("{sum}{}", "0".repeat(SUMS_LIMIT));
+        let error = put_in_from(
+            &scratch("long-sums"),
+            "1.0.0-alpha.14",
+            None,
+            github(full, archive.clone()),
+        )
+        .unwrap_err();
+        assert!(
+            format!("{error:#}").contains("longer than 65536 bytes"),
+            "{error:#}"
+        );
+        let game = scratch("limits-fit");
+        put_in_from(&game, "1.0.0-alpha.14", None, github(sum, archive)).unwrap();
+        assert!(is_installed(&game));
     }
 
     #[test]
