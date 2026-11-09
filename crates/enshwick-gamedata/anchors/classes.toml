@@ -357,8 +357,6 @@ entries = [
   "knowledge.object",
   "knowledge.player_value",
   "knowledge.push",
-  "knowledge.query_player",
-  "knowledge.query_world",
   "knowledge.queue",
   "knowledge.record_active",
   "knowledge.record_changes",
@@ -915,6 +913,11 @@ reason = "an offset in an ECS system's view, the distance between two frame disp
 entries = ["save.path_parts"]
 class = "pattern"
 reason = "the count of an engine path's parts, which no instruction near its read spells"
+
+[[class]]
+entries = ["knowledge.query_player", "knowledge.query_world"]
+class = "pattern"
+reason = "thin wrappers around the game's query evaluator; on the client no system with a route calls them, so one pattern finds them on both sides"
 
 [[class]]
 entries = ["ui.context_bundle"]

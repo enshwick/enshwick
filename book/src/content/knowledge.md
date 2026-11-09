@@ -92,8 +92,8 @@ unstable.
 ## Testing an entry
 
 A `KnowledgeQuery` tests one entry, vanilla or a mod's, or one of the
-game's own queries, where quests, journal pages and skill nodes ask for
-knowledge. Its `test` is one of:
+game's own queries. Quests, journal pages and skill nodes ask for knowledge
+with it. Its `test` is one of:
 
 | Test | Holds when |
 | --- | --- |

@@ -1,6 +1,6 @@
 <!--
 type: how-to
-description: Mods add quests and lore pages to the journal on knowledge, change vanilla quests and their rewards, read the journal and where each player stands, and set a player's quest progression.
+description: Mods add quests and lore pages, change vanilla quests and their rewards, and read the journal and where each player stands in it.
 -->
 
 # Quests and journal pages
@@ -97,9 +97,10 @@ use:
 | `state(player, id)` | per step whether it shows and is done, and whether the quest started, is done and was paid |
 | `world_state(id)` | the same from the world's knowledge alone |
 
-A step that asks one of the game's own queries (`KnowledgeTest::Holds` or
-`Fails`) takes the game's answer, the one it reads when it pays a quest;
-before the game has evaluated the query, the step reads as unknown.
+A step can ask one of the game's own queries (`KnowledgeTest::Holds` or
+`Fails`). It then takes the game's answer, the one the game reads when it
+pays a quest. Before the game has evaluated the query, the step reads as
+unknown.
 
 ```rust
 fn report(load: &mut enshwick::Load<'_>, player: enshwick::Entity) {
@@ -125,8 +126,8 @@ Two more run while the world runs:
 - `enshwick.knowledge.quest_progression(player)`
 - `set_quest_progression(player, personal)`
 
-The journal reads under `enshwick.quests`: `all()`, `quest(id)`,
-`pages()`, `state(player, id)` and `world_state(id)`.
+The journal reads run under `enshwick.quests`, with the names of the Rust
+calls.
 
 ```luau
 local given = enshwick.content.add_knowledge({ id = "you.trail:given", scope = "Player", kind = "Bool" })

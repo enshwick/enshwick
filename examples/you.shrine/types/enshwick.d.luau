@@ -2651,7 +2651,7 @@ export type StepInfo = {
 	level: number,
 }
 
---- Where a player or the world stands in one step: nil where only the game answers, for a step that asks a game query.
+--- Where a player or the world stands in one step: nil for a step whose game query the game has not answered (not evaluated yet, or a build without the game's query calls).
 export type StepState = {
 	--- Whether the journal shows it.
 	shown: boolean?,
