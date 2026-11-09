@@ -201,6 +201,9 @@ pub struct Load<'a> {
     /// once one was found.
     #[cfg(feature = "unstable")]
     pub(crate) sound_base: Option<crate::abi::ResourceKey>,
+    /// The experience values the mod added, once it added one.
+    #[cfg(feature = "typed")]
+    pub(crate) experience: Option<crate::content::knowledge::AddedExperience>,
     _init: core::marker::PhantomData<&'a ()>,
 }
 
@@ -221,6 +224,8 @@ impl Load<'_> {
             sound_bytes: 0,
             #[cfg(feature = "unstable")]
             sound_base: None,
+            #[cfg(feature = "typed")]
+            experience: None,
             _init: core::marker::PhantomData,
         }
     }

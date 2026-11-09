@@ -1,7 +1,7 @@
 //! Mods add experience values beside the game's in its balancing table, for
 //! knowledge entries and quest rewards; the game's own values list by
 //! source and gain, a mod's second value of one id replaces its first, and
-//! an id the game holds is refused.
+//! an id the game holds or a source number the build lacks is refused.
 
 #[cfg(test)]
 mod tests {
@@ -10,12 +10,13 @@ mod tests {
     use enshwick::abi::Status;
     use enshwick::content::knowledge::{ExperienceValue, NewExperience, NewKnowledge};
     use enshwick::content::vanilla::{self, ExperienceBalanceValue};
-    use enshwick::content::{EngineFacts, Guid, Id};
+    use enshwick::content::{EngineFacts, Id};
     use enshwick::game_events::ExperienceSourceType;
     use enshwick::knowledge::{KnowledgeType, Scope};
     use enshwick::resources::{Registry, Value};
     use enshwick::test::{
-        FakeHost, VANILLA_EXPERIENCE, VANILLA_QUEST_EXPERIENCE, VANILLA_UNNAMED_EXPERIENCE,
+        BALANCING_TABLE, FakeHost, VANILLA_EXPERIENCE, VANILLA_QUEST_EXPERIENCE,
+        VANILLA_UNNAMED_EXPERIENCE,
     };
     use enshwick::{Load, Mod, Off};
 
@@ -40,7 +41,7 @@ mod tests {
                 250,
             ))?;
             let odd =
-                load.add_experience(NewExperience::new(ODD, ExperienceSourceType::Other(9), 7))?;
+                load.add_experience(NewExperience::new(ODD, ExperienceSourceType::Other(7), 7))?;
             load.add_knowledge(NewKnowledge {
                 experience: Some(shrine),
                 ..NewKnowledge::new(
@@ -52,12 +53,17 @@ mod tests {
             let again =
                 load.add_experience(NewExperience::new(SHRINE, ExperienceSourceType::Quest, 300))?;
             ADDED.lock().unwrap().extend([shrine, odd, again]);
-            if let Err(off) = load.add_experience(NewExperience::new(
-                Id::new("vanilla:quest-xp"),
-                ExperienceSourceType::Quest,
-                1,
-            )) {
-                REFUSED.lock().unwrap().push(off.to_string());
+            for refused in [
+                NewExperience::new(Id::new("vanilla:quest-xp"), ExperienceSourceType::Quest, 1),
+                NewExperience::new(
+                    Id::new("you.lore:no-source"),
+                    ExperienceSourceType::Other(9),
+                    1,
+                ),
+            ] {
+                if let Err(off) = load.add_experience(refused) {
+                    REFUSED.lock().unwrap().push(off.to_string());
+                }
             }
             Ok(Self)
         }
@@ -78,8 +84,7 @@ mod tests {
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         let host = enshwick::host().unwrap();
-        let key = Guid::parse("82706b40-61b1-4b8f-8b23-dcec6971bda1")
-            .key_by_hash(host.hash("balancing_table").unwrap());
+        let key = BALANCING_TABLE.key_by_hash(host.hash("balancing_table").unwrap());
         let base = host.game_resource(key).unwrap();
         let bytes = loader.build_resource(&key, &base).unwrap();
         Registry::game()
@@ -129,7 +134,7 @@ mod tests {
                 ),
                 (VANILLA_UNNAMED_EXPERIENCE.into(), Value::Uint(9), 2),
                 (added[0].get().into(), Value::Name("Quest".into()), 300),
-                (added[1].get().into(), Value::Uint(9), 7),
+                (added[1].get().into(), Value::Name("Gathering".into()), 7),
             ]
         );
 
@@ -156,7 +161,12 @@ mod tests {
         );
 
         let refused = REFUSED.lock().unwrap().clone();
-        assert_eq!(refused.len(), 1, "{refused:?}");
+        assert_eq!(refused.len(), 2, "{refused:?}");
         assert!(refused[0].contains("the game holds it"), "{}", refused[0]);
+        assert!(
+            refused[1].contains("lacks the source Other(9)"),
+            "a number the build's enum lacks: {}",
+            refused[1]
+        );
     }
 }

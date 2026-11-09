@@ -32,6 +32,9 @@ pub const VANILLA_QUEST_EXPERIENCE: u32 = Guid::named("vanilla:quest-xp").fnv1a(
 /// source 9, which the fake's source enum does not name, as a later build's
 /// new source reads.
 pub const VANILLA_UNNAMED_EXPERIENCE: u32 = 0x0000_0909;
+/// The fake's balancing table, the one resource of its type, under the
+/// game's own GUID (server 387).
+pub const BALANCING_TABLE: Guid = Guid::parse("82706b40-61b1-4b8f-8b23-dcec6971bda1");
 
 /// The unlocked nodes the fake's saves keep: room for two nodes beside its
 /// tree's two.
@@ -209,6 +212,8 @@ fn balancing_types() -> Vec<Type<'static>> {
                 "Combat",
                 "Mining",
                 "ItemSetCompleted",
+                // A source the crate does not name, as a later build's new one.
+                "Gathering",
             ],
         ),
         named(
@@ -751,17 +756,14 @@ impl FakeHost {
             ("108ac23f-a77d-4f18-bfac-acc397edaaf0", TREE, tree_value()),
             ("c0ffee00-0000-4000-8000-00000000be4c", PERK, perk),
             ("bcaac92e-70bf-4fdb-8119-001678e7a616", PERKS, perks),
-            // The game's balancing table (server 387).
-            (
-                "82706b40-61b1-4b8f-8b23-dcec6971bda1",
-                BALANCING,
-                balancing_value(),
-            ),
         ];
         for (guid, ty, value) in served {
             if let Ok(bytes) = registry.encode(ty, &value, None) {
                 host = host.resource(Guid::parse(guid).key_by_hash(hash(ty)), bytes);
             }
+        }
+        if let Ok(bytes) = registry.encode(BALANCING, &balancing_value(), None) {
+            host = host.resource(BALANCING_TABLE.key_by_hash(hash(BALANCING)), bytes);
         }
         for (raw, (_, id)) in (0..).zip(crate::game_events::ExperienceSourceType::IDS) {
             host = host.constant(id, raw);

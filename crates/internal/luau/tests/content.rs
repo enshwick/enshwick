@@ -8,7 +8,8 @@ mod tests {
     use enshwick::content::categories::ItemCategoryMask;
     use enshwick::content::changes::{Field, Items, Value};
     use enshwick::content::{EngineFacts as _, Guid, Id, types};
-    use enshwick::test::FakeHost;
+    use enshwick::resources::{Registry, Value as Data};
+    use enshwick::test::{BALANCING_TABLE, FakeHost};
 
     use crate::harness::{logged, run, start};
 
@@ -86,10 +87,31 @@ mod tests {
         let xp = Id::new("you.luau:shrine-xp").guid().fnv1a();
         assert!(logged(&loader, &format!("experience {xp}")), "{logs}");
         assert!(logged(&loader, "unknown source refused true"), "{logs}");
-        let host = FakeHost::new().progression();
-        let table = Guid::parse("82706b40-61b1-4b8f-8b23-dcec6971bda1")
-            .key_by_hash(host.hash("balancing_table").unwrap());
-        assert!(loader.resources().iter().any(|r| r.key == table), "{logs}");
+        let host = enshwick::host().unwrap();
+        let table = BALANCING_TABLE.key_by_hash(host.hash("balancing_table").unwrap());
+        let base = host.game_resource(table).unwrap();
+        let built = Registry::game()
+            .unwrap()
+            .decode(
+                "demo::BalancingTable",
+                &loader.build_resource(&table, &base).unwrap(),
+            )
+            .unwrap();
+        let Some(Data::List(values)) = built.field("experienceValues") else {
+            panic!("{built:?}")
+        };
+        let last = values.last().unwrap();
+        assert_eq!(
+            last.field("experienceValueId")
+                .and_then(|id| id.field("value")),
+            Some(&Data::Uint(xp.into())),
+            "{built:?}"
+        );
+        assert_eq!(
+            last.field("source"),
+            Some(&Data::Name("Exploration".into()))
+        );
+        assert_eq!(last.field("experienceGain"), Some(&Data::Uint(250)));
     }
 
     #[test]

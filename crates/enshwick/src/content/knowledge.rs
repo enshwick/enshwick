@@ -23,13 +23,19 @@
 //! }
 //! ```
 
-use crate::game_events::ExperienceSourceType;
 use crate::knowledge::{KnowledgeId, KnowledgeType, Scope};
-use crate::resources::{Registry, Value};
+use crate::resources::Value;
 use crate::typed::{GameKnowledgeResource, Named as _};
-use crate::{Host, Load, Off};
+use crate::{Load, Off};
 
 use super::{EngineFacts, Guid, Id};
+
+mod experience;
+
+pub use experience::NewExperience;
+pub(crate) use experience::{
+    AddedExperience, balance_parts, balancing_table, source_type, values_of,
+};
 
 /// The game's knowledge: every world and player entry and the skill
 /// points they unlock (server 387 and 399, `GameKnowledgeResource`).
@@ -48,10 +54,6 @@ const ID: &str = "id";
 const VALUE: &str = "value";
 const KNOWLEDGE_ID: &str = "knowledgeId";
 const AMOUNT: &str = "amount";
-const EXPERIENCE_VALUES: &str = "experienceValues";
-const SOURCE: &str = "source";
-const EXPERIENCE_VALUE_ID: &str = "experienceValueId";
-const EXPERIENCE_GAIN: &str = "experienceGain";
 
 /// An experience value of the game: how much experience of which source a
 /// knowledge entry or a quest gives, by its id in the game's balancing.
@@ -87,152 +89,6 @@ impl ExperienceValue {
     pub const fn get(self) -> u32 {
         self.0
     }
-}
-
-/// A new experience value for [`Load::add_experience`]: the experience of
-/// one source that a knowledge entry or a quest reward gives.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::content::id;
-/// use enshwick::content::knowledge::{NewExperience, NewKnowledge};
-/// use enshwick::game_events::ExperienceSourceType;
-/// use enshwick::knowledge::{KnowledgeType, Scope};
-///
-/// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     let found = load.add_experience(NewExperience::new(id!("shrine-xp"), ExperienceSourceType::Exploration, 250))?;
-///     load.add_knowledge(NewKnowledge {
-///         experience: Some(found),
-///         ..NewKnowledge::new(id!("found-the-shrine"), Scope::Player, KnowledgeType::Bool)
-///     })?;
-///     Ok(())
-/// }
-/// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
-pub struct NewExperience {
-    /// Its content id; its experience value is the FNV-1a of the id's GUID.
-    pub id: Id,
-    /// The source the game counts it under, whose experience rate scales it.
-    pub source: ExperienceSourceType,
-    /// The experience it gives.
-    pub gain: u32,
-}
-
-impl NewExperience {
-    /// The experience value `id` that gives `gain` experience of `source`.
-    ///
-    /// # Examples
-    ///
-    /// See [`NewExperience`].
-    #[must_use]
-    pub const fn new(id: Id, source: ExperienceSourceType, gain: u32) -> Self {
-        Self { id, source, gain }
-    }
-
-    /// Its experience value.
-    fn value(self) -> ExperienceValue {
-        ExperienceValue(self.id.guid().fnv1a())
-    }
-
-    /// The game's balance value of it, with the engine's value `source` of
-    /// its source.
-    fn to_value(self, source: u64) -> Value {
-        Value::Struct(vec![
-            (SOURCE.into(), Value::Uint(source)),
-            (EXPERIENCE_VALUE_ID.into(), hash_key(self.value().get())),
-            (EXPERIENCE_GAIN.into(), Value::Uint(self.gain.into())),
-        ])
-    }
-}
-
-/// The engine's value of `source` on the build `facts` describe; `None`
-/// when the build lacks its constant.
-pub(crate) fn source_value(
-    facts: &(impl EngineFacts + ?Sized),
-    source: ExperienceSourceType,
-) -> Option<u64> {
-    if let ExperienceSourceType::Other(raw) = source {
-        return Some(raw.into());
-    }
-    let (_, id) = ExperienceSourceType::IDS
-        .iter()
-        .find(|(known, _)| *known == source)?;
-    facts
-        .offset(id)
-        .ok()
-        .and_then(|raw| u64::try_from(raw).ok())
-}
-
-/// The source whose engine value is `raw` on the build `facts` describe.
-pub(crate) fn source_of(facts: &(impl EngineFacts + ?Sized), raw: u8) -> ExperienceSourceType {
-    ExperienceSourceType::IDS
-        .iter()
-        .map(|(source, _)| *source)
-        .find(|&source| source_value(facts, source) == Some(raw.into()))
-        .unwrap_or(ExperienceSourceType::Other(raw))
-}
-
-/// The key of the game's balancing table, the one resource of its type.
-pub(crate) fn balancing_table(host: Host) -> Result<crate::abi::ResourceKey, Off> {
-    let hash = host.hash(crate::engine_ids::BALANCING_TABLE)?;
-    let registry = Registry::game()?;
-    let ty = registry
-        .hashed(hash)
-        .ok_or_else(|| Off::new("balancing: the table's type is not reflected"))?;
-    match host.resource_keys(Some(ty))?.as_slice() {
-        [one] => Ok(*one),
-        keys => Err(Off::new(format!(
-            "balancing: {} tables in the archive, not one",
-            keys.len()
-        ))),
-    }
-}
-
-/// The experience values of the balancing table `table`.
-pub(crate) fn experience_values(table: &Value) -> Result<&[Value], Off> {
-    match table.field(EXPERIENCE_VALUES) {
-        Some(Value::List(values)) => Ok(values),
-        _ => Err(Off::new("balancing: no list of experience values")),
-    }
-}
-
-/// The value id, source and gain of the balance value `value`, its source
-/// as the decoder gives it.
-pub(crate) fn balance_parts(value: &Value) -> Option<(u32, &Value, u32)> {
-    let id = value.field(EXPERIENCE_VALUE_ID).and_then(key_of_hash)?;
-    let source = value.field(SOURCE)?;
-    let gain = match value.field(EXPERIENCE_GAIN)? {
-        Value::Uint(gain) => u32::try_from(*gain).ok()?,
-        _ => return None,
-    };
-    Some((id, source, gain))
-}
-
-/// Whether the balancing table `table` holds the experience value `key`.
-fn holds_experience(table: &Value, key: u32) -> Result<bool, Off> {
-    Ok(experience_values(table)?
-        .iter()
-        .any(|value| value.field(EXPERIENCE_VALUE_ID).and_then(key_of_hash) == Some(key)))
-}
-
-/// `table` with `value`, the balance value of `key`, after its experience
-/// values, which the game keeps in no order of id; the server builds the
-/// table with it (server 224, read on a server copy). A value of `key` the
-/// table holds is replaced: only the mod's own earlier value can be there,
-/// since vanilla ids and other mods' ids are refused before.
-fn add_experience_to(mut table: Value, key: u32, value: Value) -> Result<Value, Off> {
-    let Some(Value::List(values)) = table.field_mut(EXPERIENCE_VALUES) else {
-        return Err(Off::new("balancing: no list of experience values"));
-    };
-    match values
-        .iter_mut()
-        .find(|held| held.field(EXPERIENCE_VALUE_ID).and_then(key_of_hash) == Some(key))
-    {
-        Some(held) => *held = value,
-        None => values.push(value),
-    }
-    Ok(table)
 }
 
 /// What a [`KnowledgeQuery`] asks of its entry.
@@ -594,14 +450,19 @@ impl Load<'_> {
     /// Adds an experience value beside the game's own and returns it, for
     /// a knowledge entry's [`NewKnowledge::experience`] or a quest's
     /// experience reward. The game counts the experience under its source,
-    /// whose experience rate in the world settings scales it, as it does a
-    /// vanilla value's; [`experience_values`](super::vanilla::experience_values)
-    /// lists those. Adding the same id again replaces its source and gain.
+    /// as it does a vanilla value's;
+    /// [`experience_values`](super::vanilla::experience_values) lists those.
+    /// Adding the same id again replaces its source and gain. One patch of
+    /// the balancing table serves all of a mod's values; it adds none when
+    /// another mod's value there has the id of one of them.
     ///
     /// # Errors
     ///
-    /// [`Off`] for a source the build lacks, an experience value the game
-    /// already holds, or an id the loader refuses (see [`Load::declare`]).
+    /// [`Off`] for a source the build lacks (also a number its source enum
+    /// does not hold), an experience value the game already holds, an id
+    /// the loader refuses (see [`Load::declare`]), and on the first call a
+    /// balancing table that is not reflected, not one resource or does not
+    /// read.
     ///
     /// # Examples
     ///
@@ -618,28 +479,7 @@ impl Load<'_> {
     /// ```
     #[script]
     pub fn add_experience(&mut self, new: NewExperience) -> Result<ExperienceValue, Off> {
-        let host = self.host();
-        let source = source_value(&host, new.source).ok_or_else(|| {
-            Off::new(format!(
-                "experience {}: the build lacks the source {:?}",
-                new.id, new.source
-            ))
-        })?;
-        let resource = balancing_table(host)?;
-        let key = new.value().get();
-        if holds_experience(&host.game_value(resource)?, key)? {
-            return Err(Off::new(format!(
-                "experience {}: the game holds it",
-                new.id
-            )));
-        }
-        self.declare(new.id)?;
-        let value = new.to_value(source);
-        // shortcut: each value decodes and encodes the whole table once at its first build; batch a mod's values when a mod adds hundreds.
-        crate::resources::serve_value(host, resource, resource, move |table| {
-            add_experience_to(table, key, value.clone())
-        })?;
-        Ok(new.value())
+        experience::add(self, new)
     }
 }
 
@@ -825,78 +665,5 @@ mod tests {
                 .to_value()
                 .is_err()
         );
-    }
-
-    /// Engine facts that answer constants through the function they hold.
-    struct Sources(fn(&str) -> Option<usize>);
-
-    impl EngineFacts for Sources {
-        fn offset(&self, id: &str) -> Result<usize, Off> {
-            (self.0)(id).ok_or_else(|| Off::new(id.to_owned()))
-        }
-
-        fn size(&self, id: &str) -> Result<usize, Off> {
-            Err(Off::new(id.to_owned()))
-        }
-
-        fn hash(&self, id: &str) -> Result<u32, Off> {
-            Err(Off::new(id.to_owned()))
-        }
-    }
-
-    #[test]
-    fn a_source_maps_to_its_engine_value_and_back_and_an_unnamed_one_stays_its_number() {
-        use crate::engine_ids as ids;
-        let facts = Sources(|id| match id {
-            ids::EXPERIENCE_SOURCE_QUEST => Some(7),
-            ids::EXPERIENCE_SOURCE_LORE => Some(2),
-            _ => None,
-        });
-        assert_eq!(source_value(&facts, ExperienceSourceType::Quest), Some(7));
-        assert_eq!(
-            source_value(&facts, ExperienceSourceType::Mining),
-            None,
-            "the build lacks it"
-        );
-        assert_eq!(
-            source_value(&facts, ExperienceSourceType::Other(9)),
-            Some(9)
-        );
-        assert_eq!(source_of(&facts, 2), ExperienceSourceType::Lore);
-        assert_eq!(source_of(&facts, 7), ExperienceSourceType::Quest);
-        assert_eq!(source_of(&facts, 3), ExperienceSourceType::Other(3));
-    }
-
-    #[test]
-    fn an_experience_value_follows_the_table_s_own_and_a_second_of_its_id_replaces_it() {
-        let new = NewExperience::new(Id::new("you.lore:xp"), ExperienceSourceType::Quest, 1200);
-        let vanilla = Value::Struct(vec![
-            (SOURCE.into(), Value::Name("Mining".into())),
-            (EXPERIENCE_VALUE_ID.into(), hash_key(5)),
-            (EXPERIENCE_GAIN.into(), Value::Uint(10)),
-        ]);
-        let table = Value::Struct(vec![(EXPERIENCE_VALUES.into(), Value::List(vec![vanilla]))]);
-        let key = new.value().get();
-        let added = add_experience_to(table.clone(), key, new.to_value(3)).unwrap();
-        let values = experience_values(&added).unwrap();
-        assert_eq!(values.len(), 2);
-        assert_eq!(
-            balance_parts(&values[0]).map(|(id, ..)| id),
-            Some(5),
-            "vanilla first"
-        );
-        assert_eq!(
-            balance_parts(&values[1]),
-            Some((key, &Value::Uint(3), 1200))
-        );
-        assert!(holds_experience(&added, key).unwrap());
-        assert!(!holds_experience(&table, key).unwrap());
-        let again = NewExperience { gain: 5, ..new };
-        let replaced = add_experience_to(added, key, again.to_value(3)).unwrap();
-        let values = experience_values(&replaced).unwrap();
-        assert_eq!(values.len(), 2, "replaced, not added");
-        assert_eq!(balance_parts(&values[1]), Some((key, &Value::Uint(3), 5)));
-        assert!(experience_values(&Value::Struct(Vec::new())).is_err());
-        assert!(add_experience_to(Value::Struct(Vec::new()), key, Value::Nil).is_err());
     }
 }

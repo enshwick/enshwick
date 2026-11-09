@@ -1,11 +1,12 @@
 //! The game's own experience values, read from its balancing table.
 
-use crate::content::EngineFacts as _;
+use crate::Off;
 use crate::content::knowledge::{
-    ExperienceValue, balance_parts, balancing_table, experience_values as values_of, source_of,
+    ExperienceValue, balance_parts, balancing_table, source_type, values_of,
 };
+use crate::engine_enum::Values;
 use crate::game_events::ExperienceSourceType;
-use crate::resources::{Registry, Value};
+use crate::resources::Value;
 
 use super::VanillaError;
 
@@ -32,7 +33,7 @@ pub struct ExperienceBalanceValue {
 /// # Errors
 ///
 /// [`VanillaError::Unreadable`] outside the game and when the balancing
-/// table does not read.
+/// table or one of its rows does not read; the log names why.
 ///
 /// # Examples
 ///
@@ -46,18 +47,19 @@ pub struct ExperienceBalanceValue {
 /// }
 /// ```
 pub fn experience_values() -> Result<Vec<ExperienceBalanceValue>, VanillaError> {
-    let unreadable = |_| VanillaError::Unreadable("balancing table");
     let host = crate::host().ok_or(VanillaError::Unreadable("data"))?;
+    let unreadable = |off: Off| {
+        crate::warn!("vanilla experience values: {off}");
+        VanillaError::Unreadable("balancing table")
+    };
     let table = host
         .game_value(balancing_table(host).map_err(unreadable)?)
         .map_err(unreadable)?;
-    let sources = host
-        .hash(crate::engine_ids::EXPERIENCE_SOURCE)
-        .ok()
-        .and_then(|hash| Registry::game().ok()?.hashed(hash));
+    let sources = Values::resolve(&host, ExperienceSourceType::IDS);
+    let named = source_type(host);
     let raw = |source: &Value| match source {
         Value::Uint(raw) => u8::try_from(*raw).ok(),
-        Value::Name(name) => sources?
+        Value::Name(name) => named?
             .constants()
             .iter()
             .find(|constant| constant.name() == name)
@@ -68,13 +70,18 @@ pub fn experience_values() -> Result<Vec<ExperienceBalanceValue>, VanillaError> 
         .map_err(unreadable)?
         .iter()
         .map(|value| {
-            let (id, source, gain) = balance_parts(value)?;
-            Some(ExperienceBalanceValue {
+            let (id, source, gain) = balance_parts(value)
+                .ok_or_else(|| Off::new(format!("a malformed row {value:?}")))?;
+            let raw =
+                raw(source).ok_or_else(|| Off::new(format!("an unknown source {source:?}")))?;
+            Ok(ExperienceBalanceValue {
                 value: ExperienceValue::new(id),
-                source: source_of(&host, raw(source)?),
+                source: sources
+                    .variant(raw.into())
+                    .unwrap_or(ExperienceSourceType::Other(raw)),
                 gain,
             })
         })
-        .collect::<Option<_>>()
-        .ok_or(VanillaError::Unreadable("balancing table"))
+        .collect::<Result<_, Off>>()
+        .map_err(unreadable)
 }
