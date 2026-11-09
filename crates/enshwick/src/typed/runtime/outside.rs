@@ -141,6 +141,11 @@ mod tests {
                 0,
                 "demo::Level",
             )]),
+            Type::new("demo::BlobString", Kind::BlobString, 8, 4),
+            Type::new("demo::Named", Kind::Struct, 9, 4).with_fields(vec![
+                Field::new("level", 0, "demo::Level"),
+                Field::new("name", 4, "demo::BlobString"),
+            ]),
         ]);
         let blob = |name| Outside::of(&registry, registry.named(name).unwrap()).blob;
         let outside = |name| Outside::of(&registry, registry.named(name).unwrap()).unreached;
@@ -148,6 +153,7 @@ mod tests {
         assert_eq!(blob("demo::Inner").as_deref(), Some("entries"));
         assert_eq!(blob("demo::Plain"), None);
         assert_eq!(blob("demo::Level"), None);
+        assert_eq!(blob("demo::Named").as_deref(), Some("name"));
         assert_eq!(outside("demo::Outer"), None, "a blob is reached");
     }
 
@@ -213,8 +219,23 @@ mod tests {
             Type::new("demo::Label", Kind::Struct, 24, 8)
                 .with_inner("demo::Square")
                 .with_fields(vec![Field::new("text", 8, "demo::DsString")]),
+            Type::new("demo::Other", Kind::Struct, 1, 1),
+            Type::new("demo::Note", Kind::Struct, 24, 8)
+                .with_inner("demo::Other")
+                .with_fields(vec![Field::new("text", 8, "demo::DsString")]),
             Type::new("demo::BlobVariant<demo::Shape>", Kind::BlobVariant, 12, 4)
                 .with_inner("demo::Shape"),
+            Type::new("demo::Plain", Kind::Struct, 1, 1),
+            Type::new("demo::Fine", Kind::Struct, 2, 1)
+                .with_inner("demo::Plain")
+                .with_fields(vec![Field::new("level", 1, "demo::uint8")]),
+            Type::new("demo::BlobVariant<demo::Plain>", Kind::BlobVariant, 12, 4)
+                .with_inner("demo::Plain"),
+            Type::new("demo::Kept", Kind::Struct, 12, 4).with_fields(vec![Field::new(
+                "plain",
+                0,
+                "demo::BlobVariant<demo::Plain>",
+            )]),
             Type::new("demo::Drawn", Kind::Struct, 12, 4).with_fields(vec![Field::new(
                 "shape",
                 0,
@@ -229,6 +250,12 @@ mod tests {
                 blob: Some("shape".to_owned()),
             },
             "a variant holds any type derived from its inner one, at any depth"
+        );
+        let kept = registry.named("demo::Kept").unwrap();
+        assert_eq!(
+            Outside::of(&registry, kept).unreached,
+            None,
+            "a struct derived from another base is not held"
         );
     }
 
