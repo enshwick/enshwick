@@ -134,11 +134,7 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::XP_GAINED_EVENT_SOURCE,
-        offset(
-            "keen::ecs::XPGainedEvent",
-            "source",
-            "keen::ExperienceSourceType",
-        ),
+        offset("keen::ecs::XPGainedEvent", "source", EXPERIENCE_SOURCE),
     ),
     (
         ids::CRAFT_RECIPE_EVENT,
@@ -390,11 +386,7 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::FLAME_ALTAR_EVENT_TYPE,
-        offset(
-            "keen::ecs::FlameAltarEvent",
-            "type",
-            "keen::ecs::FlameAltarActionType",
-        ),
+        offset("keen::ecs::FlameAltarEvent", "type", ALTAR_ACTION),
     ),
     (
         ids::LOOT_INTERACTION_EVENT,
@@ -437,7 +429,7 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset(
             "keen::ecs::HandleEquipmentSlotChangedEvent",
             "equipmentSlot",
-            "keen::EquipmentSlot",
+            EQUIPMENT_SLOT,
         ),
     ),
     (
@@ -649,7 +641,7 @@ pub const FACTS: &[(&str, Fact)] = &[
                 ("keen::ItemInfo", "equipment"),
                 ("keen::EquipmentSetup", "slot"),
             ],
-            holds: "keen::EquipmentSlotType",
+            holds: EQUIPMENT_SLOT_TYPE,
         },
     ),
     (
@@ -764,7 +756,7 @@ pub const FACTS: &[(&str, Fact)] = &[
         ids::ARMOR_DISTRIBUTION,
         Fact::Type("keen::impact::ArmorDistribution"),
     ),
-    (ids::ITEM_SLOT_TYPE, Fact::Type("keen::EquipmentSlotType")),
+    (ids::ITEM_SLOT_TYPE, Fact::Type(EQUIPMENT_SLOT_TYPE)),
     (ids::ITEM_TAG_WEIGHT, Fact::Type("keen::ItemTagWeight")),
     (
         ids::ITEM_TAG_WEIGHT_TAG,
@@ -1520,7 +1512,7 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::GAME_SETTINGS_TOMBSTONE_MODE,
-        offset(GAME_SETTINGS, "tombstoneMode", "keen::ecs::TombstoneMode"),
+        offset(GAME_SETTINGS, "tombstoneMode", TOMBSTONE_MODE),
     ),
     (
         ids::GAME_SETTINGS_ENABLE_GLIDER_TURBULENCES,
@@ -1528,19 +1520,11 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::GAME_SETTINGS_WEATHER_FREQUENCY,
-        offset(
-            GAME_SETTINGS,
-            "weatherFrequency",
-            "keen::ecs::WeatherFrequency",
-        ),
+        offset(GAME_SETTINGS, "weatherFrequency", WEATHER_FREQUENCY),
     ),
     (
         ids::GAME_SETTINGS_FISHING_DIFFICULTY,
-        offset(
-            GAME_SETTINGS,
-            "fishingDifficulty",
-            "keen::ecs::GenericDifficulty",
-        ),
+        offset(GAME_SETTINGS, "fishingDifficulty", GENERIC_DIFFICULTY),
     ),
     (
         ids::GAME_SETTINGS_MINING_DAMAGE_FACTOR,
@@ -1588,19 +1572,11 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::GAME_SETTINGS_RANDOM_SPAWNER_AMOUNT,
-        offset(
-            GAME_SETTINGS,
-            "randomSpawnerAmount",
-            "keen::ecs::RandomSpawnerAmount",
-        ),
+        offset(GAME_SETTINGS, "randomSpawnerAmount", RANDOM_SPAWNER_AMOUNT),
     ),
     (
         ids::GAME_SETTINGS_AGGRO_POOL_AMOUNT,
-        offset(
-            GAME_SETTINGS,
-            "aggroPoolAmount",
-            "keen::ecs::AggroPoolAmount",
-        ),
+        offset(GAME_SETTINGS, "aggroPoolAmount", AGGRO_POOL_AMOUNT),
     ),
     (
         ids::GAME_SETTINGS_ENEMY_DAMAGE_FACTOR,
@@ -1639,7 +1615,7 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset(
             GAME_SETTINGS,
             "tamingStartleRepercussion",
-            "keen::ecs::TamingStartleRepercussion",
+            TAMING_STARTLE_REPERCUSSION,
         ),
     ),
     (
@@ -1652,7 +1628,7 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::GAME_SETTINGS_CURSE_MODIFIER,
-        offset(GAME_SETTINGS, "curseModifier", "keen::ecs::CurseModifier"),
+        offset(GAME_SETTINGS, "curseModifier", CURSE_MODIFIER),
     ),
     (
         ids::GAME_SETTINGS_FLAME_LEVEL_FOG_REMOVAL,
