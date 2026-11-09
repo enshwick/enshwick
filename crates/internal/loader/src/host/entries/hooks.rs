@@ -84,20 +84,6 @@ pub(crate) extern "system" fn code_range(start: *mut u64, len: *mut u64) -> Stat
     })
 }
 
-pub(crate) extern "system" fn read_only(
-    _me: ModHandle,
-    address: usize,
-    max: usize,
-    out: *mut usize,
-) -> Status {
-    entry("read_only", || {
-        // SAFETY: `HostApi::readable` has the mod pass `out` null or pointing
-        // at a writable, aligned `usize` that no other thread touches during
-        // the call.
-        unsafe { put(out, crate::pages::read_only(address, max)) }
-    })
-}
-
 pub(crate) extern "system" fn patch_code(
     me: ModHandle,
     address: u64,
