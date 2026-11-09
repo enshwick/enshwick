@@ -100,7 +100,7 @@ pub(super) fn calls(loader: &Loader) -> Option<Calls> {
     let compare = field("compareValue")?;
     let operator = field("compareOperator")?;
     let kind = field("type")?;
-    if size > DATA || [id, compare].iter().any(|&at| at + 4 > size) || operator.max(kind) >= size {
+    if !fields_fit(size, id, compare, operator, kind) {
         return None;
     }
     let mut data = [0; DATA];
@@ -119,6 +119,21 @@ pub(super) fn calls(loader: &Loader) -> Option<Calls> {
         data,
         id,
     })
+}
+
+/// Whether the query data's fields lie inside its `size` bytes, at most
+/// [`DATA`], and apart from each other: the u32 id and compare value at
+/// `id` and `compare`, the u8 operator and kind at `operator` and `kind`,
+/// so writing the id never changes what the query asks.
+fn fields_fit(size: usize, id: usize, compare: usize, operator: usize, kind: usize) -> bool {
+    let spans = [(id, 4), (compare, 4), (operator, 1), (kind, 1)];
+    size <= DATA
+        && spans.iter().all(|&(at, len)| at + len <= size)
+        && spans.iter().enumerate().all(|(i, &(a, a_len))| {
+            spans[i + 1..]
+                .iter()
+                .all(|&(b, b_len)| a + a_len <= b || b + b_len <= a)
+        })
 }
 
 /// Whether the game query `query` holds for the character `entity`, or for
@@ -159,4 +174,22 @@ pub(crate) fn holds(loader: &Loader, entity: Entity, query: u32) -> Result<bool,
         return Err(Status::MISSING);
     }
     Ok(answer.holds != 0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn query_data_fields_must_fit_and_stay_apart() {
+        assert!(fields_fit(12, 0, 4, 8, 9), "the build's layout");
+        assert!(
+            !fields_fit(12, 0, 2, 8, 9),
+            "the id runs into the compare value"
+        );
+        assert!(!fields_fit(12, 0, 4, 2, 9), "the operator inside the id");
+        assert!(!fields_fit(12, 0, 4, 8, 12), "the kind past the end");
+        assert!(!fields_fit(12, 0, 4, 8, 8), "operator and kind on one byte");
+        assert!(!fields_fit(DATA + 4, 0, 4, 8, 9), "more than the buffer");
+    }
 }

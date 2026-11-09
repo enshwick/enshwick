@@ -21,6 +21,7 @@ mod tests {
     const PLAYER: Entity = Entity(4096);
 
     static QUESTS: OnceLock<Quests> = OnceLock::new();
+    static EARLY: OnceLock<usize> = OnceLock::new();
     static ENTRIES: OnceLock<(KnowledgeId, KnowledgeId)> = OnceLock::new();
 
     fn tag(name: &str) -> Guid {
@@ -66,7 +67,10 @@ mod tests {
                 vec![QuestStep::new(tag("m"), tag("m.text"), met, unmet)],
             ))?;
             let _ = ENTRIES.set((given, wood));
-            let _ = QUESTS.set(load.quests());
+            let quests = load.quests();
+            // Init cannot read the journal; the failed read must not stick.
+            let _ = EARLY.set(quests.all().len());
+            let _ = QUESTS.set(quests);
             Ok(Self)
         }
     }
@@ -114,7 +118,8 @@ mod tests {
         let loader = start();
         let quests = QUESTS.get().unwrap();
         let all = quests.all();
-        assert!(!all.is_empty(), "{:?}", loader.logs());
+        assert_eq!(EARLY.get(), Some(&0), "nothing reads during init");
+        assert!(!all.is_empty(), "read after init: {:?}", loader.logs());
         let ids: Vec<KnowledgeId> = all.iter().map(|quest| quest.id).collect();
         let trail = KnowledgeId::from_guid(TRAIL.guid());
         let met = KnowledgeId::from_guid(MET.guid());

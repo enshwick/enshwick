@@ -342,6 +342,14 @@ impl Journal {
 const QUESTS: &str = "quests";
 const COLLECTIONS: &str = "collections";
 
+/// The journal a [`Quests`] read, kept once a read succeeds.
+#[derive(Debug, Default)]
+struct Read {
+    journal: Option<Arc<Journal>>,
+    /// Whether a failed read was logged.
+    warned: bool,
+}
+
 /// The quests and lore pages of the running game and where each player
 /// stands in them; get it from [`Load::quests`].
 ///
@@ -351,9 +359,9 @@ const COLLECTIONS: &str = "collections";
 #[derive(Clone, Copy, Debug)]
 pub struct Quests {
     knowledge: Knowledge,
-    /// The journal, `None` until it is first read; one per
-    /// [`Load::quests`] call, for the life of the process.
-    journal: &'static Mutex<Option<Arc<Journal>>>,
+    /// The journal once read; one per [`Load::quests`] call, for the life
+    /// of the process.
+    journal: &'static Mutex<Read>,
 }
 
 impl crate::script::Bound for Quests {
@@ -367,11 +375,11 @@ impl crate::script::Bound for Quests {
 }
 
 impl Quests {
-    /// The journal, read once: empty, with a warning, where it does not
-    /// read.
+    /// The journal, read once it reads, such as after init; empty until
+    /// then, with one warning.
     fn journal(&self) -> Arc<Journal> {
         let mut held = self.journal.relock();
-        if let Some(journal) = &*held {
+        if let Some(journal) = &held.journal {
             return Arc::clone(journal);
         }
         let host = self.knowledge.host;
@@ -381,21 +389,27 @@ impl Quests {
             .map(|hash| JOURNAL_REGISTRY.key_by_hash(hash))
             .and_then(|key| host.served_value(key))
             .and_then(|registry| Journal::of(&registry));
-        let journal = read.unwrap_or_else(|off| {
-            // Logged once: the empty journal is kept.
-            host.log(crate::abi::Level::WARN, &format!("quests: {off}"));
-            Journal::default()
-        });
-        host.log(
-            crate::abi::Level::INFO,
-            &format!(
-                "quests: read the journal, {} quests and {} pages, in {} ms",
-                journal.quests.len(),
-                journal.pages.len(),
-                start.elapsed().as_millis()
-            ),
-        );
-        Arc::clone(held.insert(Arc::new(journal)))
+        match read {
+            Ok(journal) => {
+                host.log(
+                    crate::abi::Level::INFO,
+                    &format!(
+                        "quests: read the journal, {} quests and {} pages, in {} ms",
+                        journal.quests.len(),
+                        journal.pages.len(),
+                        start.elapsed().as_millis()
+                    ),
+                );
+                Arc::clone(held.journal.insert(Arc::new(journal)))
+            }
+            Err(off) => {
+                // Not kept, so a read during init or before the world is tried again.
+                if !core::mem::replace(&mut held.warned, true) {
+                    host.log(crate::abi::Level::WARN, &format!("quests: {off}"));
+                }
+                Arc::default()
+            }
+        }
     }
 
     /// Whether `query` holds for the player `player`, or for the world when
