@@ -2,12 +2,12 @@
 # `sealed` ties it to the code that finds it, so a report edited by hand or
 # left behind by that code fails `cargo xtask check`.
 
-sealed = "a224f8a047c31cbbceaf0b6467358fb4a67436e08d668cc89597dbbe5254cf33"
+sealed = "91e210b2aadd9a0d3a76d213a8dd98234306dfb36c520f8c7698886888d8e34a"
 build = "client, Steam build 26320373, game 1283531, executable 69f0e9573b32c24a8838d3fff550824c/520"
 side = "client"
 steam_build = 26320373
 game_version = 1283531
-entries = 809
+entries = 811
 routed = 805
 missing = []
 unread = ["attribute.experience_needed_slot", "attribute.fuel_max_slot", "attribute.health_adder_slot", "attribute.health_max_slot", "attribute.mana_adder_slot", "attribute.mana_max_slot", "attribute.shroud_max_slot", "attribute.stamina_adder_slot", "attribute.stamina_max_slot"]
