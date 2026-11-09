@@ -111,3 +111,7 @@ harness = false
 [[bench]]
 name = "terrain_pages"
 harness = false
+
+[[bench]]
+name = "read_only"
+harness = false

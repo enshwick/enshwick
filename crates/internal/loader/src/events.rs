@@ -586,7 +586,18 @@ fn end_session() {
     );
 }
 
+/// Drops every thread's read-only runs where their pages may go: the game
+/// thread still reads after the shutdown (the final save) and frees the
+/// world only in the teardown, and a new hosted game maps its own (server
+/// 399, client 426).
+fn forget_pages_entering(state: u8) {
+    if matches!(state, STATE_TEAR_DOWN | STATE_INITIALIZE) {
+        crate::pages::forget();
+    }
+}
+
 unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
+    forget_pages_entering(state);
     if state == STATE_TEAR_DOWN && std::panic::catch_unwind(crate::world::tear_down).is_err() {
         crate::log!(
             ERROR,
@@ -843,6 +854,31 @@ mod tests {
             part!("test part after it", later += 1);
         }
         assert_eq!(later, 3);
+    }
+
+    #[test]
+    fn read_only_runs_found_after_the_shutdown_are_forgotten_at_the_teardown_and_the_next_start() {
+        use crate::pages::LASTING;
+        use windows_sys::Win32::System::Memory::{
+            MEM_RELEASE, PAGE_READONLY, PAGE_READWRITE, VirtualFree,
+        };
+        let page = crate::pages::allocate(None, LASTING).expect("fresh pages");
+        let start = page.as_ptr().expose_provenance();
+        for state in [STATE_TEAR_DOWN, STATE_INITIALIZE] {
+            // SAFETY: the pages are the test's own allocation, used by no one else.
+            unsafe { crate::pages::protect(start, LASTING, PAGE_READONLY) }.expect("read-only");
+            assert_eq!(
+                crate::pages::read_only(start, 16),
+                16,
+                "found in the final save"
+            );
+            // SAFETY: the pages are the test's own allocation, used by no one else.
+            unsafe { crate::pages::protect(start, LASTING, PAGE_READWRITE) }.expect("read-write");
+            forget_pages_entering(state);
+            assert_eq!(crate::pages::read_only(start, 16), 0, "state {state}");
+        }
+        // SAFETY: `page` is the test's own allocation, released once.
+        unsafe { VirtualFree(page.as_ptr().cast(), 0, MEM_RELEASE) };
     }
 
     #[test]

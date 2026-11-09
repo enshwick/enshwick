@@ -99,8 +99,11 @@ impl RawComponent {
     /// A type with blob fields reads from the template's set-up data the
     /// component lies in, whose blobs follow it (server 26430253): the
     /// decode runs over the read-only bytes from the component on, at most
-    /// [`BLOB_REACH`], and refuses an offset or count past them. The check
-    /// costs one `VirtualQuery`, about 2 µs on a desktop PC.
+    /// [`BLOB_REACH`], and refuses an offset or count past them. The loader
+    /// remembers the read-only run it found until the world goes away, so
+    /// the check costs a few nanoseconds; the first read into the run asks
+    /// Windows once or twice, 0.8 to 1.4 ms each on the game's 490 MB of
+    /// set-up data.
     pub(crate) fn read(&self, world: World, entity: Entity) -> Result<Option<Value>, Off> {
         let Some(data) = world.component(entity, self.ty) else {
             return Ok(None);
@@ -127,11 +130,13 @@ impl RawComponent {
             return Err(self.unread(registry));
         }
         // SAFETY: the loader found `len` bytes from the component on in
-        // committed, unguarded `PAGE_READONLY` pages, which no thread writes
-        // without changing their protection; they are the template's set-up
-        // data (server 26430253), which stays while the entity's template is
-        // loaded, so on the game thread here nothing frees them before the
-        // borrow ends with this call.
+        // committed, unguarded, private `PAGE_READONLY` pages, which no thread
+        // writes without changing their protection, now or, for a run of
+        // 16 MiB or more, earlier in this world; they are the template's
+        // set-up data, one region that stays read-only and in place for a
+        // world's life (server 26430253), so on
+        // the game thread here nothing frees them before the borrow ends
+        // with this call.
         let bytes = unsafe { core::slice::from_raw_parts(data.cast::<u8>(), len) };
         registry
             .decode(self.name, bytes)

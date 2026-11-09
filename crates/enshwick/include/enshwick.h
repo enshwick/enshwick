@@ -4865,10 +4865,13 @@ typedef struct EnshwickHostApi {
   // not lie in one. It reads no byte of that memory, so any `address` is
   // allowed. No thread writes those pages without changing their
   // protection, and the count holds only while nothing frees or protects
-  // them, which the caller knows of the memory it asks about.
-  // `Status::BAD_ARGS` for a null `out`. Any thread, re-entrant;
-  // `out` is borrowed for the call. A panic in the loader returns
-  // `Status::REFUSED`. ABI 11.16.
+  // them, which the caller knows of the memory it asks about. For a
+  // private run of 16 MiB or more the loader may answer from what it
+  // found earlier on the same thread in the same world, without asking
+  // Windows again, until the world goes away; smaller runs and mapped
+  // views are asked afresh. `Status::BAD_ARGS` for a null `out`. Any thread,
+  // re-entrant; `out` is borrowed for the call. A panic in the loader
+  // returns `Status::REFUSED`. ABI 11.16.
   EnshwickStatus (*read_only)(EnshwickModHandle me, size_t address, size_t max, size_t *out);
   // Copies resource `key` as the game's first read would build it now
   // into `out`, at most `capacity` bytes, and writes its length to

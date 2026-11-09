@@ -1,11 +1,13 @@
 //! The pages of the process: what Windows says about the region an address
 //! lies in, fresh pages, and changes of a range's protection.
 
+use core::cell::Cell;
 use core::ptr::NonNull;
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use windows_sys::Win32::System::Diagnostics::Debug::{FlushInstructionCache, ReadProcessMemory};
 use windows_sys::Win32::System::Memory::{
-    MEM_COMMIT, MEM_FREE, MEM_RESERVE, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE_READ,
+    MEM_COMMIT, MEM_FREE, MEM_PRIVATE, MEM_RESERVE, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE_READ,
     PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY, PAGE_GUARD, PAGE_NOACCESS, PAGE_READONLY,
     PAGE_READWRITE, PAGE_WRITECOPY, VirtualAlloc, VirtualProtect, VirtualQuery,
 };
@@ -29,8 +31,12 @@ pub(crate) struct Region {
     pub(crate) base: usize,
     /// The byte past its last.
     pub(crate) end: usize,
+    /// The first byte of the allocation it lies in, zero for free pages.
+    pub(crate) allocation: usize,
     /// `MEM_COMMIT`, `MEM_RESERVE` or `MEM_FREE`.
     pub(crate) state: u32,
+    /// `MEM_PRIVATE`, `MEM_MAPPED` or `MEM_IMAGE`, zero for free pages.
+    pub(crate) kind: u32,
     /// The `PAGE_*` protection of committed pages, zero otherwise.
     pub(crate) protect: u32,
 }
@@ -95,25 +101,144 @@ pub(crate) fn query(address: usize) -> Option<Region> {
     Some(Region {
         base,
         end: base.checked_add(info.RegionSize)?,
+        allocation: info.AllocationBase.addr(),
         state: info.State,
+        kind: info.Type,
         protect: info.Protect,
     })
 }
 
-/// How many bytes from `address` on, at most `max`, lie in the run of
-/// committed, unguarded `PAGE_READONLY` regions that starts there, which no
-/// thread of the process writes without first changing their protection; 0
-/// when `address` does not lie in one. Reads none of them.
-pub(crate) fn read_only(address: usize, max: usize) -> usize {
-    let wanted = address.saturating_add(max);
-    let mut end = address;
-    while end < wanted {
-        match query(end) {
-            Some(next) if next.is_read_only() && next.end > end => end = next.end,
-            _ => break,
+/// How many bytes from `address` on, at most `max`, lie in read-only pages.
+///
+/// They are the run of committed, unguarded `PAGE_READONLY` regions that
+/// starts there, which no thread of the process writes without first
+/// changing their protection; 0 when `address` lies in none. Reads none of
+/// them.
+///
+/// Each thread remembers the private runs of at least [`LASTING`] bytes it
+/// found until a world goes away ([`forget`]), since a query walks every
+/// page of the run: 0.8 to 1.4 ms on the game's 490 MB region of template
+/// set-up data, which stays read-only for a world's life (server
+/// 26430253). A pointer into a remembered run makes no query; smaller runs
+/// and mapped views, which another view may write, are asked afresh.
+#[must_use]
+pub fn read_only(address: usize, max: usize) -> usize {
+    let forgotten = FORGOTTEN.load(Ordering::Acquire);
+    FOUND
+        .try_with(|found| found.read_only(forgotten, address, max))
+        .unwrap_or_else(|_| Found::new().read_only(forgotten, address, max))
+}
+
+/// Drops the runs of read-only pages every thread remembers, when a world
+/// goes away and may free them.
+pub fn forget() {
+    FORGOTTEN.fetch_add(1, Ordering::Release);
+}
+
+/// How many times a world went away and may have freed the runs any
+/// thread remembers.
+static FORGOTTEN: AtomicUsize = AtomicUsize::new(0);
+
+thread_local! {
+    static FOUND: Found = const { Found::new() };
+}
+
+/// How many runs of read-only pages each thread remembers; the game keeps
+/// its template set-up data in one.
+const RUNS: usize = 8;
+
+/// The fewest bytes from the queried page on a run needs to be remembered:
+/// a query over 16 MiB of pages costs tens of microseconds, so smaller runs
+/// cost little to ask again.
+pub(crate) const LASTING: usize = 16 << 20;
+
+/// The runs of read-only pages one thread found under one count of
+/// forgetting.
+struct Found {
+    /// The count of forgetting the runs were found under.
+    forgotten: Cell<usize>,
+    /// Each run as its start and end; an empty one is unused.
+    runs: [Cell<(usize, usize)>; RUNS],
+    /// The slot the next new run takes.
+    next: Cell<usize>,
+}
+
+impl Found {
+    /// No runs, found under no forgetting yet.
+    const fn new() -> Self {
+        Self {
+            forgotten: Cell::new(0),
+            runs: [const { Cell::new((0, 0)) }; RUNS],
+            next: Cell::new(0),
         }
     }
-    end.min(wanted) - address
+
+    /// [`read_only`] with the runs remembered here, under `forgotten`, the
+    /// count of forgetting now: a run found under another count is dropped
+    /// first, even one a query that began before the count moved kept.
+    fn read_only(&self, forgotten: usize, address: usize, max: usize) -> usize {
+        if self.forgotten.replace(forgotten) != forgotten {
+            self.runs.iter().for_each(|run| run.set((0, 0)));
+        }
+        let wanted = address.saturating_add(max);
+        let mut end = address;
+        while end < wanted
+            && let Some(next) = self.run_end(end)
+            && next > end
+        {
+            end = next;
+        }
+        end.min(wanted) - address
+    }
+
+    /// The end of the run of read-only pages `address` lies in, remembered
+    /// or found, and remembered when it lasts; `None` when it lies in none.
+    fn run_end(&self, address: usize) -> Option<usize> {
+        if let Some(end) = self.end(address) {
+            return Some(end);
+        }
+        let region = query(address).filter(Region::is_read_only)?;
+        if region.kind == MEM_PRIVATE && region.end - region.base >= LASTING {
+            self.keep(run_start(region, address), region.end);
+        }
+        Some(region.end)
+    }
+
+    /// The end of the remembered run `address` lies in.
+    fn end(&self, address: usize) -> Option<usize> {
+        self.runs
+            .iter()
+            .map(Cell::get)
+            .find(|&(start, end)| start <= address && address < end)
+            .map(|(_, end)| end)
+    }
+
+    /// Remembers `start..end`; a remembered run with the same end is the
+    /// same run, and grows down.
+    fn keep(&self, start: usize, end: usize) {
+        if let Some(same) = self.runs.iter().find(|run| run.get().1 == end) {
+            same.set((same.get().0.min(start), end));
+            return;
+        }
+        let slot = self.next.get();
+        self.next.set((slot + 1) % RUNS);
+        if let Some(run) = self.runs.get(slot) {
+            run.set((start, end));
+        }
+    }
+}
+
+/// The start of the read-only `region` found at `address`: its allocation's
+/// base when the run starts there, so that a pointer below `address` in the
+/// same run finds it remembered, since Windows reports a region from the
+/// page it is asked about, not from where the run begins.
+fn run_start(region: Region, address: usize) -> usize {
+    if region.base == region.allocation {
+        return region.base;
+    }
+    query(region.allocation)
+        .filter(|first| first.is_read_only() && first.end > address)
+        .map_or(region.base, |first| first.base)
 }
 
 /// The `N` bytes at `address`; `None` unless all of them lie in one region
@@ -251,7 +376,9 @@ mod tests {
         Region {
             base: 0x1000,
             end: 0x3000,
+            allocation: 0x1000,
             state,
+            kind: MEM_PRIVATE,
             protect,
         }
     }
@@ -340,9 +467,10 @@ mod tests {
     #[test]
     fn the_read_only_count_runs_over_read_only_regions_to_the_cap_and_is_zero_on_writable_pages() {
         const PAGE: usize = 4096;
+        let found = Found::new();
         let pages = allocate(None, 3 * PAGE).expect("fresh pages");
         let start = pages.as_ptr().expose_provenance();
-        assert_eq!(read_only(start, usize::MAX), 0, "read-write pages");
+        assert_eq!(found.read_only(0, start, usize::MAX), 0, "read-write pages");
         // SAFETY: the pages are the test's own allocation, used by no one else.
         unsafe { protect(start, PAGE, PAGE_READONLY) }.expect("first page read-only");
         // SAFETY: the pages are the test's own allocation, used by no one else.
@@ -350,7 +478,7 @@ mod tests {
             protect(start + PAGE, PAGE, PAGE_READONLY | PAGE_GUARD).expect("second page guarded");
         }
         assert_eq!(
-            read_only(start, usize::MAX),
+            found.read_only(0, start, usize::MAX),
             PAGE,
             "a guarded page ends the run"
         );
@@ -358,15 +486,168 @@ mod tests {
         // one else.
         unsafe { protect(start + PAGE, 2 * PAGE, PAGE_READONLY).expect("all read-only") };
         assert_eq!(
-            read_only(start, usize::MAX),
+            found.read_only(0, start, usize::MAX),
             3 * PAGE,
             "one run, as Windows merges it"
         );
-        assert_eq!(read_only(start + 100, 3 * PAGE), 3 * PAGE - 100);
-        assert_eq!(read_only(start, 16), 16, "the cap");
-        assert_eq!(read_only(0, 16), 0);
+        assert_eq!(found.read_only(0, start + 100, 3 * PAGE), 3 * PAGE - 100);
+        assert_eq!(found.read_only(0, start, 16), 16, "the cap");
+        assert_eq!(found.read_only(0, 0, 16), 0);
         // SAFETY: `pages` is the test's own allocation, released once.
         unsafe { VirtualFree(pages.as_ptr().cast(), 0, MEM_RELEASE) };
-        assert_eq!(read_only(start, 16), 0, "released");
+        assert_eq!(
+            found.read_only(0, start, 16),
+            0,
+            "released, too short to remember"
+        );
+    }
+
+    #[test]
+    fn a_lasting_run_answers_from_its_allocation_base_without_a_query_until_forgotten() {
+        const PAGE: usize = 4096;
+        let found = Found::new();
+        let pages = allocate(None, LASTING + PAGE).expect("fresh pages");
+        let start = pages.as_ptr().expose_provenance();
+        // SAFETY: the pages are the test's own allocation, used by no one else.
+        unsafe { protect(start, LASTING + PAGE, PAGE_READONLY) }.expect("read-only");
+        assert_eq!(found.read_only(0, start + PAGE, usize::MAX), LASTING);
+        // SAFETY: the pages are the test's own allocation, used by no one else.
+        unsafe { protect(start, LASTING + PAGE, PAGE_READWRITE) }.expect("read-write");
+        assert_eq!(
+            found.read_only(0, start + 8, usize::MAX),
+            LASTING + PAGE - 8,
+            "remembered from the allocation's base, so no query saw the change"
+        );
+        assert_eq!(
+            found.read_only(1, start + 8, usize::MAX),
+            0,
+            "forgotten, so queried"
+        );
+        // SAFETY: `pages` is the test's own allocation, released once.
+        unsafe { VirtualFree(pages.as_ptr().cast(), 0, MEM_RELEASE) };
+    }
+
+    #[test]
+    fn a_lower_pointer_into_a_run_found_inside_an_allocation_is_remembered_too() {
+        const PAGE: usize = 4096;
+        let found = Found::new();
+        let pages = allocate(None, LASTING + 2 * PAGE).expect("fresh pages");
+        let start = pages.as_ptr().expose_provenance();
+        // SAFETY: the pages are the test's own allocation, used by no one else.
+        unsafe { protect(start + PAGE, LASTING + PAGE, PAGE_READONLY) }.expect("read-only");
+        assert_eq!(found.read_only(0, start + 2 * PAGE, usize::MAX), LASTING);
+        assert_eq!(found.read_only(0, start + PAGE, usize::MAX), LASTING + PAGE);
+        // SAFETY: the pages are the test's own allocation, used by no one else.
+        unsafe { protect(start + PAGE, LASTING + PAGE, PAGE_READWRITE) }.expect("read-write");
+        assert_eq!(
+            found.read_only(0, start + PAGE, usize::MAX),
+            LASTING + PAGE,
+            "remembered"
+        );
+        // SAFETY: `pages` is the test's own allocation, released once.
+        unsafe { VirtualFree(pages.as_ptr().cast(), 0, MEM_RELEASE) };
+    }
+
+    #[test]
+    fn a_run_found_past_a_writable_page_does_not_reach_back_over_it_to_the_allocation_base() {
+        const PAGE: usize = 4096;
+        let found = Found::new();
+        let pages = allocate(None, LASTING + 2 * PAGE).expect("fresh pages");
+        let start = pages.as_ptr().expose_provenance();
+        // SAFETY: the pages are the test's own allocation, used by no one else.
+        unsafe { protect(start, PAGE, PAGE_READONLY) }.expect("first page read-only");
+        // SAFETY: the pages are the test's own allocation, used by no one else.
+        unsafe { protect(start + 2 * PAGE, LASTING, PAGE_READONLY) }.expect("the rest read-only");
+        assert_eq!(found.read_only(0, start + 2 * PAGE, usize::MAX), LASTING);
+        assert_eq!(
+            found.read_only(0, start + PAGE, usize::MAX),
+            0,
+            "the writable page between stays writable"
+        );
+        // SAFETY: `pages` is the test's own allocation, released once.
+        unsafe { VirtualFree(pages.as_ptr().cast(), 0, MEM_RELEASE) };
+    }
+
+    #[test]
+    fn a_short_run_is_asked_afresh_so_a_change_shows_at_once() {
+        const PAGE: usize = 4096;
+        let found = Found::new();
+        let pages = allocate(None, LASTING).expect("fresh pages");
+        let start = pages.as_ptr().expose_provenance();
+        // SAFETY: the pages are the test's own allocation, used by no one else.
+        unsafe { protect(start, LASTING, PAGE_READONLY) }.expect("read-only");
+        assert_eq!(found.read_only(0, start + PAGE, 16), 16, "one page short");
+        // SAFETY: the pages are the test's own allocation, used by no one else.
+        unsafe { protect(start, LASTING, PAGE_READWRITE) }.expect("read-write");
+        assert_eq!(found.read_only(0, start + PAGE, 16), 0, "not remembered");
+        // SAFETY: `pages` is the test's own allocation, released once.
+        unsafe { VirtualFree(pages.as_ptr().cast(), 0, MEM_RELEASE) };
+    }
+
+    #[test]
+    fn a_mapped_view_is_asked_afresh_since_another_view_may_write_it() {
+        use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+        use windows_sys::Win32::System::Memory::{
+            CreateFileMappingW, FILE_MAP_READ, MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile,
+            UnmapViewOfFile,
+        };
+        let found = Found::new();
+        let size = u32::try_from(LASTING).expect("16 MiB");
+        // SAFETY: a nameless section backed by the paging file touches no
+        // memory of the process; Windows returns null when it refuses.
+        let section = unsafe {
+            CreateFileMappingW(
+                INVALID_HANDLE_VALUE,
+                core::ptr::null(),
+                PAGE_READWRITE,
+                0,
+                size,
+                core::ptr::null(),
+            )
+        };
+        assert!(!section.is_null(), "a section");
+        // SAFETY: `section` is the test's own open section of `LASTING` bytes;
+        // the view is new pages nothing else uses.
+        let view = unsafe { MapViewOfFile(section, FILE_MAP_READ, 0, 0, LASTING) };
+        let start = view.Value.addr();
+        assert_ne!(start, 0, "a read-only view");
+        assert_eq!(found.read_only(0, start, 16), 16);
+        // SAFETY: `view` is the test's own view, unmapped once.
+        unsafe { UnmapViewOfFile(MEMORY_MAPPED_VIEW_ADDRESS { Value: view.Value }) };
+        // SAFETY: `section` is the test's own handle, closed once.
+        unsafe { CloseHandle(section) };
+        assert_eq!(found.read_only(0, start, 16), 0, "unmapped, not remembered");
+    }
+
+    #[test]
+    fn a_thread_asks_windows_again_once_the_runs_are_forgotten() {
+        let pages = allocate(None, LASTING).expect("fresh pages");
+        let start = pages.as_ptr().expose_provenance();
+        // SAFETY: the pages are the test's own allocation, used by no one else.
+        unsafe { protect(start, LASTING, PAGE_READONLY) }.expect("read-only");
+        assert_eq!(read_only(start, 16), 16);
+        // SAFETY: the pages are the test's own allocation, used by no one else.
+        unsafe { protect(start, LASTING, PAGE_READWRITE) }.expect("read-write");
+        forget();
+        assert_eq!(read_only(start, 16), 0, "forgotten, so queried");
+        // SAFETY: `pages` is the test's own allocation, released once.
+        unsafe { VirtualFree(pages.as_ptr().cast(), 0, MEM_RELEASE) };
+    }
+
+    #[test]
+    fn a_run_with_a_remembered_end_grows_that_one_down_and_new_runs_replace_the_oldest() {
+        let found = Found::new();
+        assert_eq!(found.end(0x3000), None);
+        found.keep(0x3000, 0x4000);
+        found.keep(0x2000, 0x4000);
+        let used = |found: &Found| found.runs.iter().filter(|run| run.get().1 != 0).count();
+        assert_eq!(used(&found), 1);
+        assert_eq!(found.end(0x2000), Some(0x4000));
+        for run in 1..=RUNS {
+            found.keep(0x10000 * run, 0x10000 * run + 0x1000);
+        }
+        assert_eq!(used(&found), RUNS);
+        assert_eq!(found.end(0x2000), None, "the oldest run made room");
+        assert_eq!(found.end(0x10000), Some(0x11000));
     }
 }

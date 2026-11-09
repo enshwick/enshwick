@@ -193,6 +193,9 @@ mod packs;
 #[cfg(windows)]
 mod pages;
 #[cfg(windows)]
+#[doc(hidden)]
+pub use pages::{forget as forget_read_only, read_only};
+#[cfg(windows)]
 mod patch;
 #[cfg_attr(
     not(windows),
