@@ -92,8 +92,8 @@ Each entry names the pull request that made the change.
 ### Fixed
 
 - `enshwick.h` compiles as C++: the `template` parameter of
-  `config_schema` is `template_`, as cbindgen names a struct member that is
-  a C++ keyword, and `cargo xtask check` compiles the header as C++20 too.
+  `HostApi::config_schema` is `defaults`, which leaves the layout as it was,
+  and `cargo xtask check` holds the layout in C++20 too.
   `examples/hello-c` holds a C++ mod beside the C one (#1008).
 - `typed`: `ComponentType::resolve` and Luau `component_type` refuse a
   component whose `BlobVariant` field may hold a type derived from its

@@ -33,7 +33,7 @@ const MODS: [ModDll; 2] = [
             "/std:c++20",
             "/GR-",
             "/EHs-c-",
-            "-Wno-missing-designated-field-initializers",
+            "-Wno-missing-field-initializers",
         ],
     },
 ];
