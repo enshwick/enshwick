@@ -281,8 +281,8 @@ fn a_target_another_program_took_stays_its_and_names_who_took_it() {
     static NEXT: [AtomicUsize; 2] = [const { AtomicUsize::new(0) }; 2];
     /// `mov eax, ecx; add eax, 1; ret`, as the game shipped both functions.
     const FUNCTION: [u8; 6] = [0x89, 0xc8, 0x83, 0xc0, 0x01, 0xc3];
-    const LEN: usize = 0x80;
-    const FREE: usize = 0x40;
+    const LEN: usize = 0x80; // bound, not a game offset: the test page's code
+    const FREE: usize = 0x40; // bound, not a game offset: the test page's second function
 
     // SAFETY: a fresh page, reserved and committed here, checked below and
     // never freed, so the code on it outlives the hooks.

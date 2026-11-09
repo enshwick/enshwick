@@ -1,12 +1,12 @@
 use super::*;
 
 /// Where the fake code starts.
-const TEXT: usize = 0x1000;
+const TEXT: usize = 0x1000; // bound, not a game offset: a fake address
 /// A module other than the game, from here to [`MODULE_END`].
-const MODULE: usize = 0x9000;
-const MODULE_END: usize = 0xA000;
+const MODULE: usize = 0x9000; // bound, not a game offset: a fake address
+const MODULE_END: usize = 0xA000; // bound, not a game offset: a fake address
 /// Memory outside every module, where hook libraries put trampolines.
-const TRAMPOLINE: usize = 0x5000;
+const TRAMPOLINE: usize = 0x5000; // bound, not a game offset: a fake address
 
 fn module(at: usize) -> Option<String> {
     (MODULE..MODULE_END)
