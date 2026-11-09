@@ -1,13 +1,13 @@
-//! The journal's quests and lore pages as the game holds them, mods'
-//! included, and where each player and the world stand in each quest.
+//! The journal's quests and lore pages, mods' included, and where each
+//! player and the world stand in each quest.
 //!
-//! [`Load::quests`] gives the [`Quests`] of the running game. They read the
-//! journal as the game builds it, every mod's quests and changes in, on
-//! first use and keep it, as the game keeps the journal it first built for
-//! the process; they answer a quest's state from the knowledge its steps ask
-//! for: a step shows while its `shown_when` holds and is done once its
-//! `done_when` holds; the game pays a quest when its last step is done and
-//! sets the quest's own bool.
+//! [`Load::quests`] gives the [`Quests`] of the running game. On first use
+//! they read the journal as the game's first read builds it, every mod's
+//! quests and changes in, and keep it for the process, as the game keeps
+//! the journal it first built; they answer a quest's state from the
+//! knowledge its steps ask for: a step shows while its `shown_when` holds
+//! and is done once its `done_when` holds; the game pays a quest when its
+//! last step is done and sets the quest's own bool.
 //!
 //! ```
 //! use enshwick::quests::Quests;
@@ -34,7 +34,7 @@ use crate::typed::{
 };
 use crate::{Entity, ItemId, Load, Off};
 
-use crate::knowledge::{Knowledge, KnowledgeId};
+use crate::knowledge::{Knowledge, KnowledgeId, Scope};
 
 /// The key of a text the journal names, the FNV-1a of its text tag's GUID.
 ///
@@ -266,9 +266,13 @@ impl QuestInfo {
     }
 }
 
-/// Where a player or the world stands in one step: `None` for a step whose
-/// game query the game has not answered (not evaluated yet, or a build
-/// without the game's query calls).
+/// Where a player or the world stands in one step; `None` where the answer
+/// is not known.
+///
+/// Not known are a game query the game has not answered (not evaluated
+/// yet, or a build without the game's query calls), a form enshwick does
+/// not read, and knowledge that does not read, such as a player not in the
+/// game.
 ///
 /// # Examples
 ///
@@ -314,8 +318,8 @@ struct Journal {
 }
 
 impl Journal {
-    /// The quests and pages of the journal `registry`, each list read on
-    /// its own so a list the build changes leaves the others readable.
+    /// The quests and pages of the journal `registry`; a list that does not
+    /// read, such as one whose type a build changed, fails the whole read.
     fn of(registry: &Value) -> Result<Self, Off> {
         fn list<T: Reflected>(registry: &Value, name: &str) -> Result<Vec<T>, Off> {
             match registry.field(name) {
@@ -346,8 +350,20 @@ const COLLECTIONS: &str = "collections";
 #[derive(Debug, Default)]
 struct Read {
     journal: Option<Arc<Journal>>,
-    /// Whether a failed read was logged.
-    warned: bool,
+    /// The reason of the last failed read logged.
+    warned: Option<String>,
+}
+
+impl Read {
+    /// Whether to log a failed read for `why`: once per reason in a row, so
+    /// the expected refusal during init does not hide a later failure.
+    fn first(&mut self, why: &str) -> bool {
+        if self.warned.as_deref() == Some(why) {
+            return false;
+        }
+        self.warned = Some(why.to_owned());
+        true
+    }
 }
 
 /// The quests and lore pages of the running game and where each player
@@ -359,8 +375,7 @@ struct Read {
 #[derive(Clone, Copy, Debug)]
 pub struct Quests {
     knowledge: Knowledge,
-    /// The journal once read; one per [`Load::quests`] call, for the life
-    /// of the process.
+    /// The journal once read; one per mod, for the life of the process.
     journal: &'static Mutex<Read>,
 }
 
@@ -376,7 +391,7 @@ impl crate::script::Bound for Quests {
 
 impl Quests {
     /// The journal, read once it reads, such as after init; empty until
-    /// then, with one warning.
+    /// then, with a warning for each new reason it does not read.
     fn journal(&self) -> Arc<Journal> {
         let mut held = self.journal.relock();
         if let Some(journal) = &held.journal {
@@ -404,8 +419,9 @@ impl Quests {
             }
             Err(off) => {
                 // Not kept, so a read during init or before the world is tried again.
-                if !core::mem::replace(&mut held.warned, true) {
-                    host.log(crate::abi::Level::WARN, &format!("quests: {off}"));
+                let why = off.to_string();
+                if held.first(&why) {
+                    host.log(crate::abi::Level::WARN, &format!("quests: {why}"));
                 }
                 Arc::default()
             }
@@ -413,19 +429,22 @@ impl Quests {
     }
 
     /// Whether `query` holds for the player `player`, or for the world when
-    /// `player` is `None`: a player's entry is read for the player, the
-    /// world's for both, and an entry the holder does not have reads 0; a
-    /// game query is the game's answer, `None` where it has none.
+    /// `player` is `None`: a player's entry is read for the player, and for
+    /// the world a query of a player's entry does not hold; a game query is
+    /// the game's answer. `None` where the answer is not known: knowledge
+    /// that does not read, such as a player not in the game, a game query
+    /// the game has not answered, or a form enshwick does not read.
     fn holds(&self, player: Option<Entity>, query: KnowledgeQuery) -> Option<bool> {
         if let KnowledgeTest::Holds | KnowledgeTest::Fails = query.test {
             let held = self.game_query(player.unwrap_or(Entity(0)), query.id.get())?;
             return Some(held == (query.test == KnowledgeTest::Holds));
         }
-        let known = match player {
-            Some(player) => self.knowledge.get(player, query.id),
-            None => self.knowledge.world(query.id),
+        let known = match (player, query.scope) {
+            (Some(player), _) => self.knowledge.get(player, query.id)?,
+            (None, Scope::Player) => return Some(false),
+            (None, _) => self.knowledge.world(query.id)?,
         };
-        query.test.passes(known.map_or(0, |known| known.value))
+        query.test.passes(known.value)
     }
 
     /// Whether the game query `query` holds for the character `entity`, or
@@ -465,7 +484,7 @@ impl Quests {
 #[crate::script(quests)]
 impl Quests {
     /// Every quest of the journal, the game's and mods', in its order;
-    /// empty during init or while no world runs.
+    /// empty until the journal reads, such as during init.
     ///
     /// # Examples
     ///
@@ -538,7 +557,8 @@ impl Quests {
 }
 
 impl Load<'_> {
-    /// The [`Quests`] of the running game.
+    /// The [`Quests`] of the running game; every call of one mod gives the
+    /// same, which reads the journal once.
     ///
     /// # Examples
     ///
@@ -549,10 +569,15 @@ impl Load<'_> {
     /// ```
     #[must_use]
     pub fn quests(&mut self) -> Quests {
-        Quests {
+        if let Some(quests) = self.quests {
+            return quests;
+        }
+        let quests = Quests {
             knowledge: self.knowledge(),
             journal: Box::leak(Box::default()),
-        }
+        };
+        self.quests = Some(quests);
+        quests
     }
 }
 
@@ -561,6 +586,7 @@ mod tests {
     use super::*;
     use crate::content::knowledge::KnowledgeTest;
     use crate::knowledge::Scope;
+    use crate::typed::runtime::Constant;
     use crate::typed::{CompareOperator, HashKey32, KnowledgeQueryData, KnowledgeQueryDataType};
 
     fn data(
@@ -600,7 +626,6 @@ mod tests {
             read(Ty::SimpleCount, Op::LessThan, 3),
             Some(KnowledgeTest::Below(3))
         );
-        assert_eq!(read(Ty::SimpleCount, Op::LessThan, 0), None, "never holds");
         assert_eq!(
             read(Ty::SimpleFlag, Op::Equals, 2),
             Some(KnowledgeTest::HasFlag(2))
@@ -611,12 +636,41 @@ mod tests {
             Some(KnowledgeTest::Holds)
         );
         assert_eq!(read(Ty::Extern, Op::Equals, 0), Some(KnowledgeTest::Fails));
-        assert_eq!(read(Ty::Extern, Op::GreaterThan, 1), None, "never holds");
         assert_eq!(
             KnowledgeQuery::from_data(&data(0, Ty::Extern, Op::GreaterThan, 0)),
             None,
             "a lore entry's never"
         );
+    }
+
+    #[test]
+    fn a_form_enshwick_does_not_read_is_unknown_not_always_or_never() {
+        use CompareOperator as Op;
+        use KnowledgeQueryDataType as Ty;
+        let read =
+            |kind, op, value| KnowledgeQuery::from_data(&data(7, kind, op, value)).map(|q| q.test);
+        for (kind, op, value, why) in [
+            (Ty::SimpleCount, Op::LessThan, 0, "never holds"),
+            (Ty::SimpleCount, Op::GreaterThan, u32::MAX, "never holds"),
+            (Ty::Extern, Op::GreaterThan, 1, "never holds"),
+            (Ty::Extern, Op::LessThan, 2, "always holds"),
+            (Ty::SimpleFlag, Op::Equals, 0, "no bits"),
+            (
+                Ty::SimpleCount,
+                Op::Other(Constant::Number(9)),
+                1,
+                "an operator the build adds",
+            ),
+        ] {
+            assert_eq!(read(kind, op, value), Some(KnowledgeTest::Unknown), "{why}");
+        }
+        assert_eq!(KnowledgeTest::Unknown.passes(0), None);
+        let unknown = KnowledgeQuery {
+            id: KnowledgeId::new(7),
+            scope: Scope::World,
+            test: KnowledgeTest::Unknown,
+        };
+        assert_eq!(unknown.not(), None);
     }
 
     #[test]
@@ -654,6 +708,7 @@ mod tests {
             KnowledgeTest::AtLeast(0),
             KnowledgeTest::Below(0),
             KnowledgeTest::HasFlag(0),
+            KnowledgeTest::Unknown,
         ] {
             let query = KnowledgeQuery {
                 id,
@@ -662,6 +717,18 @@ mod tests {
             };
             assert!(query.to_value().is_err(), "{refused:?}");
         }
+    }
+
+    #[test]
+    fn a_failed_read_warns_once_per_reason_in_a_row() {
+        let mut read = Read::default();
+        assert!(read.first("refused during init"));
+        assert!(!read.first("refused during init"));
+        assert!(
+            read.first("journal quests: a field the build changed"),
+            "a later failure is not hidden by the init one"
+        );
+        assert!(!read.first("journal quests: a field the build changed"));
     }
 
     #[test]

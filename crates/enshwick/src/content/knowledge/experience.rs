@@ -11,7 +11,7 @@ use crate::resources::{Registry, Type, Value};
 use crate::{Host, Load, Off};
 
 use super::super::{EngineFacts as _, Id};
-use super::{ExperienceValue, hash_key, key_of_hash};
+use super::{ExperienceValue, hash_key, key_of_hash, serve_list};
 
 const EXPERIENCE_VALUES: &str = "experienceValues";
 const SOURCE: &str = "source";
@@ -101,11 +101,7 @@ impl AddedExperience {
             .filter_map(|value| value.field(EXPERIENCE_VALUE_ID).and_then(key_of_hash))
             .collect();
         vanilla.sort_unstable();
-        let added = Arc::new(Mutex::new(Vec::new()));
-        let served = Arc::clone(&added);
-        crate::resources::serve_value(host, resource, resource, move |table| {
-            add_experience_to(table, &served.relock())
-        })?;
+        let added = serve_list(host, resource, add_experience_to)?;
         Ok(Self {
             vanilla: vanilla.into(),
             sources: Values::resolve(&host, ExperienceSourceType::IDS),

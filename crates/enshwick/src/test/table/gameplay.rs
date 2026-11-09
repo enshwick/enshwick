@@ -499,14 +499,20 @@ pub(crate) extern "system" fn game_query(
         return Status::BAD_ARGS;
     }
     let holder = (entity != crate::Entity(0)).then_some(entity);
-    let found = with(None, |s| {
+    let answer = with(Err(Status::MISSING), |s| {
+        // As the loader, which refuses a character with no player record.
+        if holder.is_some() && !s.host.players.iter().any(|player| player.entity == entity) {
+            return Err(Status::REFUSED);
+        }
         s.game_queries
             .iter()
             .find(|(e, q, _)| *q == query && *e == holder)
             .map(|(_, _, held)| *held)
+            .ok_or(Status::MISSING)
     });
-    let Some(held) = found else {
-        return Status::MISSING;
+    let held = match answer {
+        Ok(held) => held,
+        Err(status) => return status,
     };
     // SAFETY: `holds` is non-null, checked above, and `HostApi::game_query`
     // has the mod pass it writable for the call.

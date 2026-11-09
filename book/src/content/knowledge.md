@@ -104,10 +104,12 @@ with it. Its `test` is one of:
 | `HasFlag(bits)` | flags hold any of `bits` |
 | `Holds` (`KnowledgeQuery::game`) | the game's query of the id holds |
 | `Fails` | the game's query of the id does not hold |
+| `Unknown` | only the game answers: a form of the game's that enshwick does not read |
 
 `query.not()` gives the opposite test, where the game has one: none for an
-exact count other than 0 or for flags. A player's entry is tested for the
-player the game asks about.
+exact count other than 0, for flags or for `Unknown`. A mod cannot write
+`Unknown`; it only reads back from the game's own steps. A player's entry is
+tested for the player the game asks about.
 
 ## From Luau
 

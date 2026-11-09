@@ -29,7 +29,8 @@ struct Answer {
 }
 
 /// Which state of a player the player wrapper reads: the game's quest
-/// payment passes `{2, 1}`, the player's own state (server 26430253).
+/// payment passes `{2, 1}`, the player's own state (server 26430253), from
+/// a writable stack slot as here.
 #[repr(C)]
 struct Mode {
     kind: u32,
@@ -37,11 +38,14 @@ struct Mode {
     end: [u8; 3],
 }
 
-static PERSONAL: Mode = Mode {
-    kind: 2,
-    set: 1,
-    end: [0; 3],
-};
+impl Mode {
+    /// The player's own state, as the quest payment reads it.
+    const PERSONAL: Self = Self {
+        kind: 2,
+        set: 1,
+        end: [0; 3],
+    };
+}
 
 type PlayerFn = unsafe extern "system" fn(
     out: *mut Answer,
@@ -158,15 +162,17 @@ pub(crate) fn holds(loader: &Loader, entity: Entity, query: u32) -> Result<bool,
     } else {
         // The evaluator indexes the player records with no bounds check.
         record(layout, state, entity)?;
+        let mut mode = Mode::PERSONAL;
         // SAFETY: as for the world call; `record` checked the character's
-        // record exists and is active, and `PERSONAL` is a static.
+        // record exists and is active, and `mode` lives writable on this
+        // stack for the call, as the game's own callers pass it.
         unsafe {
             (calls.player)(
                 &raw mut answer,
                 knowledge,
                 data.as_ptr(),
                 entity.0,
-                &raw const PERSONAL,
+                &raw mut mode,
             )
         };
     }

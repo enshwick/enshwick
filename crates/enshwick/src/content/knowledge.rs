@@ -100,10 +100,7 @@ impl ExperienceValue {
 /// What a [`KnowledgeQuery`] asks of its entry, or of the game query it
 /// names.
 ///
-/// The name is enshwick's, not the game's. The game tests a bool only for
-/// a value other than 0, a count with its operator, flags for any of the
-/// bits, and a game query for whether it holds (its own steps' forms,
-/// server 387; the client's compare, Kiln's notes on build 1287369).
+/// The name is enshwick's, not the game's.
 ///
 /// # Examples
 ///
@@ -125,11 +122,15 @@ pub enum KnowledgeTest {
     Holds,
     /// The game query of the id does not hold.
     Fails,
+    /// A form of the game's that enshwick does not read, such as a test
+    /// that never holds or one a later build adds; only the game answers
+    /// it, and a mod cannot write it.
+    Unknown,
 }
 
 impl KnowledgeTest {
     /// Whether an entry of `value` passes it; `None` for a game query's
-    /// test, which only the game answers.
+    /// test or an unknown form, which only the game answers.
     #[must_use]
     pub(crate) const fn passes(self, value: u32) -> Option<bool> {
         Some(match self {
@@ -138,7 +139,7 @@ impl KnowledgeTest {
             Self::Equals(count) => value == count,
             Self::Below(count) => value < count,
             Self::HasFlag(bits) => value & bits != 0,
-            Self::Holds | Self::Fails => return None,
+            Self::Holds | Self::Fails | Self::Unknown => return None,
         })
     }
 }
@@ -219,7 +220,8 @@ impl KnowledgeQuery {
     }
 
     /// The query that holds where this one does not; `None` for a test the
-    /// game has no opposite of: an exact count other than 0, or flags.
+    /// game has no opposite of: an exact count other than 0, flags, or an
+    /// unknown form.
     ///
     /// # Examples
     ///
@@ -239,7 +241,9 @@ impl KnowledgeQuery {
             KnowledgeTest::Below(count) => KnowledgeTest::AtLeast(count),
             KnowledgeTest::Holds => KnowledgeTest::Fails,
             KnowledgeTest::Fails => KnowledgeTest::Holds,
-            KnowledgeTest::Equals(_) | KnowledgeTest::HasFlag(_) => return None,
+            KnowledgeTest::Equals(_) | KnowledgeTest::HasFlag(_) | KnowledgeTest::Unknown => {
+                return None;
+            }
         };
         Some(Self { test, ..self })
     }
@@ -256,6 +260,7 @@ impl KnowledgeQuery {
                 return refuse("counts start at 1");
             }
             KnowledgeTest::HasFlag(0) => return refuse("flags need the bits they test"),
+            KnowledgeTest::Unknown => return refuse("a form enshwick does not write"),
             KnowledgeTest::AtLeast(count) => ("SimpleCount", "GreaterThan", count - 1),
             KnowledgeTest::Equals(count) => ("SimpleCount", "Equals", count),
             KnowledgeTest::Below(count) => ("SimpleCount", "LessThan", count),
@@ -277,10 +282,11 @@ impl KnowledgeQuery {
     }
 
     /// The query the game's query data `data` asks, `None` for one that
-    /// asks nothing (id 0, as a lore page's entries are never done), always
-    /// or never holds, or has a form the build adds. A Simple query's entry
-    /// is the player's when the query says so, else the world's: the game
-    /// reads a player's entry first in either case.
+    /// asks nothing (id 0, as a lore page's entries are never done). A form
+    /// enshwick does not read, one that always or never holds or that the
+    /// build adds, reads as [`KnowledgeTest::Unknown`]. A Simple query's
+    /// entry is the player's when the query says so, else the world's: the
+    /// game reads a player's entry first in either case.
     pub(crate) fn from_data(data: &KnowledgeQueryData) -> Option<Self> {
         let id = data.knowledge_or_query_id.value;
         if id == 0 {
@@ -294,21 +300,21 @@ impl KnowledgeQuery {
             CompareOperator::Other(_) => None,
         };
         let test = match data.r#type {
-            KnowledgeQueryDataType::SimpleBool => KnowledgeTest::IsSet,
-            KnowledgeQueryDataType::SimpleFlag if value != 0 => KnowledgeTest::HasFlag(value),
+            KnowledgeQueryDataType::SimpleBool => Some(KnowledgeTest::IsSet),
+            KnowledgeQueryDataType::SimpleFlag if value != 0 => Some(KnowledgeTest::HasFlag(value)),
             KnowledgeQueryDataType::SimpleCount => match data.compare_operator {
-                CompareOperator::GreaterThan => KnowledgeTest::AtLeast(value.checked_add(1)?),
-                CompareOperator::LessThan if value > 0 => KnowledgeTest::Below(value),
-                CompareOperator::Equals => KnowledgeTest::Equals(value),
-                _ => return None,
+                CompareOperator::GreaterThan => value.checked_add(1).map(KnowledgeTest::AtLeast),
+                CompareOperator::LessThan if value > 0 => Some(KnowledgeTest::Below(value)),
+                CompareOperator::Equals => Some(KnowledgeTest::Equals(value)),
+                _ => None,
             },
             // A game query's state is 0 or 1.
-            KnowledgeQueryDataType::Extern => match (compare(1)?, compare(0)?) {
-                (true, false) => KnowledgeTest::Holds,
-                (false, true) => KnowledgeTest::Fails,
-                _ => return None,
+            KnowledgeQueryDataType::Extern => match (compare(1), compare(0)) {
+                (Some(true), Some(false)) => Some(KnowledgeTest::Holds),
+                (Some(false), Some(true)) => Some(KnowledgeTest::Fails),
+                _ => None,
             },
-            _ => return None,
+            _ => None,
         };
         let scope = if data.is_explicit_player_knowledge_query {
             Scope::Player
@@ -318,7 +324,7 @@ impl KnowledgeQuery {
         Some(Self {
             id: KnowledgeId::new(id),
             scope,
-            test,
+            test: test.unwrap_or(KnowledgeTest::Unknown),
         })
     }
 }
@@ -452,23 +458,47 @@ impl NewKnowledge {
 /// The knowledge entries a mod added, which one patch of the game's
 /// knowledge serves, read when the game first builds it.
 #[derive(Debug)]
-pub(crate) struct AddedKnowledge(Arc<Mutex<Vec<NewKnowledge>>>);
+pub(crate) struct AddedKnowledge {
+    /// The ids of the game's own entries, in both maps, sorted.
+    vanilla: Box<[u32]>,
+    /// The mod's entries, in the order it added them.
+    added: Arc<Mutex<Vec<NewKnowledge>>>,
+}
 
 impl AddedKnowledge {
-    /// Serves the patch of the game's knowledge `resource` that adds the
-    /// mod's entries; an entry another mod's took is logged and left out.
+    /// Reads the ids of the game's knowledge `resource` and serves the
+    /// patch that adds the mod's entries; an entry another mod's took is
+    /// logged and left out.
     fn serve(host: Host, resource: crate::abi::ResourceKey) -> Result<Self, Off> {
-        let added = Arc::new(Mutex::new(Vec::new()));
-        let served = Arc::clone(&added);
-        crate::resources::serve_value(host, resource, resource, move |value| {
-            let (value, refused) = add_to(value, &served.relock())?;
+        let mut vanilla = known_ids(&host.game_value(resource)?);
+        vanilla.sort_unstable();
+        let added = serve_list(host, resource, move |value, added| {
+            let (value, refused) = add_to(value, added)?;
             for off in refused {
                 host.log(Level::WARN, &off.to_string());
             }
             Ok(value)
         })?;
-        Ok(Self(added))
+        Ok(Self {
+            vanilla: vanilla.into(),
+            added,
+        })
     }
+}
+
+/// Serves one patch of the resource `key` that makes all of a mod's
+/// changes `T` with `apply` each time the game builds it, one decode and
+/// one encode however many there are, and returns the list the mod adds
+/// its changes to.
+pub(crate) fn serve_list<T: Send + 'static>(
+    host: Host,
+    key: crate::abi::ResourceKey,
+    apply: impl Fn(Value, &[T]) -> Result<Value, Off> + Send + Sync + 'static,
+) -> Result<Arc<Mutex<Vec<T>>>, Off> {
+    let list = Arc::new(Mutex::new(Vec::new()));
+    let served = Arc::clone(&list);
+    crate::resources::serve_value(host, key, key, move |value| apply(value, &served.relock()))?;
+    Ok(list)
 }
 
 /// A `HashKey32` of `key`.
@@ -494,6 +524,23 @@ pub(crate) fn key_of(value: &Value) -> Option<u32> {
     value.field(ID).and_then(key_of_hash)
 }
 
+/// The keys of the map `map` of `knowledge`, empty for no such map.
+fn keys_in<'a>(knowledge: &'a Value, map: &str) -> &'a [Value] {
+    match knowledge.field(map).and_then(|map| map.field(KEYS)) {
+        Some(Value::List(keys)) => keys,
+        _ => &[],
+    }
+}
+
+/// The ids the world and the player map of `knowledge` hold.
+fn known_ids(knowledge: &Value) -> Vec<u32> {
+    [WORLD_KNOWLEDGE, PLAYER_KNOWLEDGE]
+        .iter()
+        .flat_map(|map| keys_in(knowledge, map))
+        .filter_map(key_of)
+        .collect()
+}
+
 /// Whether the world or the player map of `knowledge` holds `key`.
 fn knows(knowledge: &Value, key: u32) -> bool {
     [WORLD_KNOWLEDGE, PLAYER_KNOWLEDGE]
@@ -503,8 +550,9 @@ fn knows(knowledge: &Value, key: u32) -> bool {
 
 /// Whether the map `map` of `knowledge` holds `key`.
 fn knows_in(knowledge: &Value, map: &str, key: u32) -> bool {
-    matches!(knowledge.field(map).and_then(|map| map.field(KEYS)),
-        Some(Value::List(keys)) if keys.iter().any(|held| key_of(held) == Some(key)))
+    keys_in(knowledge, map)
+        .iter()
+        .any(|held| key_of(held) == Some(key))
 }
 
 /// The list in field `name` of `value`, taken out of it.
@@ -580,16 +628,17 @@ fn insert(map: &mut Value, added: Vec<(u32, Value)>) -> Result<(), Off> {
 
 /// `knowledge` with the entries `added` in its maps, one rebuild of each
 /// map for all of them, and their skill point unlocks in the list the game
-/// keeps ordered by id (server 387). An entry the game's other map holds is
-/// left out and returned with the reason, so the rest still serve.
+/// keeps ordered by id (server 387). An entry either map of the game holds
+/// already, or whose key an entry before it took, is left out and returned
+/// with the reason, so the rest still serve.
 fn add_to(mut knowledge: Value, added: &[NewKnowledge]) -> Result<(Value, Vec<Off>), Off> {
     let mut refused = Vec::new();
-    let mut kept = Vec::with_capacity(added.len());
+    let mut kept: Vec<&NewKnowledge> = Vec::with_capacity(added.len());
     for player in [false, true] {
-        let (map, other) = if player {
-            (PLAYER_KNOWLEDGE, WORLD_KNOWLEDGE)
+        let map = if player {
+            PLAYER_KNOWLEDGE
         } else {
-            (WORLD_KNOWLEDGE, PLAYER_KNOWLEDGE)
+            WORLD_KNOWLEDGE
         };
         let mut entries = Vec::new();
         for new in added
@@ -597,7 +646,7 @@ fn add_to(mut knowledge: Value, added: &[NewKnowledge]) -> Result<(Value, Vec<Of
             .filter(|new| (new.scope == Scope::Player) == player)
         {
             let key = new.key();
-            if knows_in(&knowledge, other, key) {
+            if knows(&knowledge, key) || kept.iter().any(|held| held.key() == key) {
                 refused.push(Off::new(format!("knowledge {}: the game knows it", new.id)));
                 continue;
             }
@@ -666,9 +715,9 @@ impl Load<'_> {
     #[script]
     pub fn add_knowledge(&mut self, new: NewKnowledge) -> Result<KnowledgeId, Off> {
         new.to_value(KnowledgeId::from_guid(new.id.guid()).get())?;
-        let resource = self.knowledge_without(new.id)?;
+        self.knowledge_without(new.id)?;
         self.declare(new.id)?;
-        self.serve_knowledge(resource, new)
+        self.serve_knowledge(new)
     }
 
     /// Adds an experience value beside the game's own and returns it, for
@@ -708,34 +757,33 @@ impl Load<'_> {
 }
 
 impl Load<'_> {
-    /// The game's knowledge's resource key, once it is known not to hold the
-    /// entry `id`: other mods' ids are refused by `declare`, the game's only
-    /// here, so a quest never goes in without its knowledge.
-    pub(super) fn knowledge_without(&self, id: Id) -> Result<crate::abi::ResourceKey, Off> {
-        let resource = GAME_KNOWLEDGE.key_by_hash(self.hash(GameKnowledgeResource::ID)?);
-        if knows(
-            &self.host().game_value(resource)?,
-            KnowledgeId::from_guid(id.guid()).get(),
-        ) {
-            return Err(Off::new(format!("knowledge {id}: the game knows it")));
+    /// The knowledge entries the mod added, reading the game's own ids and
+    /// serving the mod's one patch of its knowledge on the first call.
+    fn added_knowledge(&mut self) -> Result<&AddedKnowledge, Off> {
+        if self.knowledge.is_none() {
+            let resource = GAME_KNOWLEDGE.key_by_hash(self.hash(GameKnowledgeResource::ID)?);
+            self.knowledge = Some(AddedKnowledge::serve(self.host(), resource)?);
         }
-        Ok(resource)
+        self.knowledge
+            .as_ref()
+            .ok_or_else(|| Off::new("knowledge: the mod's entries are not served"))
     }
 
-    /// Adds `new`, whose id the mod declared, to the entries the one patch
-    /// of the game's knowledge `resource` serves for the mod, serving the
-    /// patch with the first.
-    pub(super) fn serve_knowledge(
-        &mut self,
-        resource: crate::abi::ResourceKey,
-        new: NewKnowledge,
-    ) -> Result<KnowledgeId, Off> {
-        let host = self.host();
-        let added = match &mut self.knowledge {
-            Some(added) => added,
-            empty => empty.insert(AddedKnowledge::serve(host, resource)?),
-        };
-        added.0.relock().push(new);
+    /// Refuses the entry `id` when the game's own knowledge holds it: other
+    /// mods' ids are refused by `declare`, the game's only here, so a quest
+    /// never goes in without its knowledge.
+    pub(super) fn knowledge_without(&mut self, id: Id) -> Result<(), Off> {
+        let key = KnowledgeId::from_guid(id.guid()).get();
+        if self.added_knowledge()?.vanilla.binary_search(&key).is_ok() {
+            return Err(Off::new(format!("knowledge {id}: the game knows it")));
+        }
+        Ok(())
+    }
+
+    /// Adds `new`, whose id the mod declared, to the entries the mod's one
+    /// patch of the game's knowledge serves.
+    pub(super) fn serve_knowledge(&mut self, new: NewKnowledge) -> Result<KnowledgeId, Off> {
+        self.added_knowledge()?.added.relock().push(new);
         Ok(KnowledgeId::new(new.key()))
     }
 }
@@ -797,6 +845,8 @@ mod tests {
         ]);
         assert!(knows(&knowledge, 3) && knows(&knowledge, 8));
         assert!(!knows(&knowledge, 5));
+        assert_eq!(known_ids(&knowledge), [3, 8]);
+        assert!(known_ids(&Value::Struct(Vec::new())).is_empty());
     }
 
     #[test]
@@ -871,6 +921,25 @@ mod tests {
         );
         assert!(knows_in(&added, PLAYER_KNOWLEDGE, player.key()));
         assert!(!knows_in(&added, WORLD_KNOWLEDGE, world.key()));
+    }
+
+    #[test]
+    fn an_entry_its_own_map_holds_is_left_out_and_the_rest_serve() {
+        let taken = NewKnowledge::new(Id::new("you.lore:t"), Scope::Player, KnowledgeType::Bool);
+        let free = NewKnowledge::new(Id::new("you.lore:f"), Scope::Player, KnowledgeType::Bool);
+        let (added, refused) =
+            add_to(knowledge(&[taken.key()], &[]), &[taken, free, free]).unwrap();
+        assert_eq!(
+            refused.len(),
+            2,
+            "the taken one and the second free: {refused:?}"
+        );
+        assert!(
+            refused[0].to_string().contains("you.lore:t"),
+            "{}",
+            refused[0]
+        );
+        assert!(knows_in(&added, PLAYER_KNOWLEDGE, free.key()));
     }
 
     #[test]

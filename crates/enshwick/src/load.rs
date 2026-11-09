@@ -210,6 +210,9 @@ pub struct Load<'a> {
     /// The quests, pages and quest changes the mod made, once it made one.
     #[cfg(feature = "typed")]
     pub(crate) journal: Option<crate::content::journal::AddedJournal>,
+    /// The mod's journal reads, once it asked for them.
+    #[cfg(feature = "typed")]
+    pub(crate) quests: Option<crate::quests::Quests>,
     _init: core::marker::PhantomData<&'a ()>,
 }
 
@@ -236,6 +239,8 @@ impl Load<'_> {
             knowledge: None,
             #[cfg(feature = "typed")]
             journal: None,
+            #[cfg(feature = "typed")]
+            quests: None,
             _init: core::marker::PhantomData,
         }
     }

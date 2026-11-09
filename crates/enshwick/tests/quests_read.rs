@@ -5,7 +5,7 @@
 mod tests {
     use std::sync::OnceLock;
 
-    use enshwick::abi::{Header, KnowledgeInfo, Status};
+    use enshwick::abi::{Header, KnowledgeInfo, PlayerInfo, Status};
     use enshwick::content::journal::{NewQuest, QuestReward, QuestStep};
     use enshwick::content::knowledge::{GameQuery, KnowledgeQuery, KnowledgeTest, NewKnowledge};
     use enshwick::content::{Guid, Id};
@@ -13,14 +13,16 @@ mod tests {
     use enshwick::quests::{Quests, TextKey};
     use enshwick::resources::fnv1a32;
     use enshwick::test::{FakeHost, PROGRESSION, VANILLA_QUEST};
-    use enshwick::{Entity, Load, Mod, Off};
+    use enshwick::{Entity, Load, Mod, Off, PlayerKey};
 
     const TRAIL: Id = Id::new("you.road:trail");
     const MET: Id = Id::new("you.road:met");
     const TORCH: Guid = Guid::parse("c0ffee00-0000-4000-8000-0000000a7c01");
     const PLAYER: Entity = Entity(4096);
+    const ABSENT: Entity = Entity(9999);
 
     static QUESTS: OnceLock<Quests> = OnceLock::new();
+    static AGAIN: OnceLock<Quests> = OnceLock::new();
     static EARLY: OnceLock<usize> = OnceLock::new();
     static ENTRIES: OnceLock<(KnowledgeId, KnowledgeId)> = OnceLock::new();
 
@@ -71,6 +73,7 @@ mod tests {
             // Init cannot read the journal; the failed read must not stick.
             let _ = EARLY.set(quests.all().len());
             let _ = QUESTS.set(quests);
+            let _ = AGAIN.set(load.quests());
             Ok(Self)
         }
     }
@@ -87,6 +90,15 @@ mod tests {
         let loader = FakeHost::new()
             .progression()
             .world()
+            .player(PlayerInfo {
+                header: Header::of::<PlayerInfo>(),
+                slot: 0,
+                entity: PLAYER,
+                key: PlayerKey::new(7),
+                permissions: 0,
+                name_len: 0,
+                name: [0; 64],
+            })
             .component(
                 PLAYER,
                 fnv1a32(PROGRESSION.as_bytes()),
@@ -141,6 +153,19 @@ mod tests {
     }
 
     #[test]
+    fn every_call_of_one_mod_gives_quests_that_read_the_journal_once() {
+        let loader = start();
+        let first = QUESTS.get().unwrap().all();
+        assert_eq!(AGAIN.get().unwrap().all(), first);
+        let reads = loader
+            .logs()
+            .iter()
+            .filter(|(_, line)| line.contains("read the journal"))
+            .count();
+        assert_eq!(reads, 1, "{:?}", loader.logs());
+    }
+
+    #[test]
     fn a_player_s_state_follows_the_knowledge_its_steps_ask_for() {
         let loader = start();
         let quests = QUESTS.get().unwrap();
@@ -176,7 +201,17 @@ mod tests {
             !world.started,
             "a player's entry reads as not held for the world"
         );
+        assert_eq!(
+            world.steps[1].done,
+            Some(false),
+            "a player's entry is not held, even where the step asks it unset"
+        );
         assert!(quests.state(PLAYER, KnowledgeId::new(1)).is_none());
+        let absent = quests.state(ABSENT, trail).unwrap();
+        assert!(
+            absent.steps.iter().all(|step| step.done.is_none()),
+            "a player not in the game reads as unknown: {absent:?}"
+        );
     }
 
     #[test]
@@ -188,9 +223,9 @@ mod tests {
         assert_eq!(step.shown_when.map(|q| q.test), Some(KnowledgeTest::Holds));
         assert_eq!(step.done_when.map(|q| q.test), Some(KnowledgeTest::Fails));
         loader.set_game_queries(&[
-            (Some(PLAYER), 77, true),
-            (Some(PLAYER), 78, false),
-            (None, 77, false),
+            (Some(PLAYER), GameQuery::new(77), true),
+            (Some(PLAYER), GameQuery::new(78), false),
+            (None, GameQuery::new(77), false),
         ]);
         let state = quests.state(PLAYER, met).unwrap();
         assert_eq!(state.steps[0].shown, Some(true));
@@ -199,5 +234,19 @@ mod tests {
         let world = quests.world_state(met).unwrap();
         assert_eq!(world.steps[0].shown, Some(false));
         assert_eq!(world.steps[0].done, None, "the game has no answer");
+    }
+
+    #[test]
+    fn the_fake_refuses_a_game_query_for_a_player_not_in_the_game() {
+        let loader = start();
+        loader.set_game_queries(&[(Some(PLAYER), GameQuery::new(77), true)]);
+        // SAFETY: the installed fake's table.
+        let api = unsafe { &*loader.api() };
+        let mut holds = 0;
+        let mut ask =
+            |entity, query| (api.game_query)(loader.handle(), entity, query, &raw mut holds);
+        assert_eq!(ask(PLAYER, 77), Status::OK);
+        assert_eq!(ask(PLAYER, 78), Status::MISSING, "not answered yet");
+        assert_eq!(ask(ABSENT, 77), Status::REFUSED, "not in the game");
     }
 }

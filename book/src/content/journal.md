@@ -85,9 +85,9 @@ These calls need the `typed` feature.
 
 ## Reading the journal and where a player stands
 
-`load.quests()` gives the `Quests` of the running game. They read the
-journal as the game built it, every mod's quests and changes in, on first
-use:
+`load.quests()` gives the `Quests` of the running game, the same for every
+call of one mod. On first use they read the journal as the game's first
+read builds it, every mod's quests and changes in:
 
 | Call | What it gives |
 | --- | --- |
@@ -99,8 +99,9 @@ use:
 
 A step can ask one of the game's own queries (`KnowledgeTest::Holds` or
 `Fails`). It then takes the game's answer, the one the game reads when it
-pays a quest. Before the game has evaluated the query, the step reads as
-unknown.
+pays a quest. A step reads as unknown before the game has evaluated its
+query. It also reads as unknown for a form enshwick does not read
+(`KnowledgeTest::Unknown`) and for a player not in the game.
 
 ```rust
 fn report(load: &mut enshwick::Load<'_>, player: enshwick::Entity) {
@@ -145,6 +146,15 @@ enshwick.content.add_quest({
     } },
     rewards = { { Item = "<the GUID of a vanilla item>" } },
 })
+
+local function report(player: number)
+    for _, quest in enshwick.quests.all() do
+        local state = enshwick.quests.state(player, quest.id)
+        if state and state.done then
+            enshwick.log.info(`quest {quest.id} done`)
+        end
+    end
+end
 ```
 
 ## Who needs the mod

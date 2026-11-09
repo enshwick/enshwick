@@ -208,17 +208,28 @@ impl Installed {
     }
 
     /// Sets whether each game query holds, `(character or None for the
-    /// world, query id, holds)`; a query not set is one the game has not
-    /// answered.
+    /// world, query, holds)`; a query not set is one the game has not
+    /// answered, and a character the fake lists no player for is one not
+    /// in the game.
     ///
     /// # Examples
     ///
     /// ```
+    /// use enshwick::content::knowledge::GameQuery;
+    ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// loader.set_game_queries(&[(None, 7, true)]);
+    /// loader.set_game_queries(&[(None, GameQuery::new(7), true)]);
     /// ```
-    pub fn set_game_queries(&self, answers: &[(Option<Entity>, u32, bool)]) {
-        table::with((), |s| s.game_queries = answers.to_vec());
+    #[cfg(feature = "typed")]
+    pub fn set_game_queries(
+        &self,
+        answers: &[(Option<Entity>, crate::content::knowledge::GameQuery, bool)],
+    ) {
+        let answers = answers
+            .iter()
+            .map(|&(holder, query, holds)| (holder, query.get(), holds))
+            .collect();
+        table::with((), |s| s.game_queries = answers);
     }
 
     /// The knowledge grants the mod asked for: character, id, kind, value.

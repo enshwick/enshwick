@@ -36,7 +36,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::abi::Level;
 use crate::content::knowledge::{
-    ExperienceValue, KnowledgeQuery, NewKnowledge, hash_key, key_of_hash,
+    ExperienceValue, KnowledgeQuery, NewKnowledge, hash_key, key_of_hash, serve_list,
 };
 use crate::knowledge::{KnowledgeId, KnowledgeType, Scope};
 use crate::locks::Relock as _;
@@ -522,10 +522,8 @@ impl AddedJournal {
     /// Serves the patch of the journal `key` that makes the mod's changes;
     /// a change that fails is logged and left out, and the rest are made.
     fn serve(host: Host, key: crate::abi::ResourceKey) -> Result<Self, Off> {
-        let edits = Arc::new(Mutex::new(Vec::<Edit>::new()));
-        let served = Arc::clone(&edits);
-        crate::resources::serve_value(host, key, key, move |mut registry| {
-            for edit in served.relock().iter() {
+        let edits = serve_list(host, key, move |mut registry, edits: &[Edit]| {
+            for edit in edits {
                 if let Err(off) = edit.apply(&mut registry) {
                     host.log(Level::WARN, &off.to_string());
                 }
@@ -583,13 +581,14 @@ impl Load<'_> {
         for (step, id) in new.steps.iter().zip(step_ids(new.id, new.steps.len())) {
             step.to_value(id)?;
         }
-        let resource = self.knowledge_without(new.id)?;
+        self.knowledge_without(new.id)?;
         let key = self.journal_key()?;
         self.declare(new.id)?;
-        let quest = self.serve_knowledge(
-            resource,
-            NewKnowledge::new(new.id, Scope::Player, KnowledgeType::Bool),
-        )?;
+        let quest = self.serve_knowledge(NewKnowledge::new(
+            new.id,
+            Scope::Player,
+            KnowledgeType::Bool,
+        ))?;
         self.edit_journal(key, Edit::Quest(new))?;
         Ok(quest)
     }
