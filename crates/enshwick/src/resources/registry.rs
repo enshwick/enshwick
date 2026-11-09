@@ -142,19 +142,37 @@ impl<'a> Registry<'a> {
     /// each field's offset from the start of `ty`.
     pub(crate) fn all_fields<'r>(&'r self, ty: &'r Type<'a>) -> Vec<&'r Field<'a>> {
         let mut chain = vec![ty];
-        let mut current = ty;
-        while let Some(base) = current.base().and_then(|name| self.named(name)) {
-            if chain.len() >= MAX_BASES || chain.iter().any(|seen| core::ptr::eq(*seen, base)) {
+        for base in self.bases(ty) {
+            if chain.iter().any(|seen| core::ptr::eq(*seen, base)) {
                 break;
             }
             chain.push(base);
-            current = base;
         }
         chain
             .iter()
             .rev()
             .flat_map(|ty| ty.fields().iter())
             .collect()
+    }
+
+    /// The bases of struct `ty`, nearest first, at most [`MAX_BASES`] of them.
+    fn bases<'r>(&'r self, ty: &'r Type<'a>) -> impl Iterator<Item = &'r Type<'a>> {
+        let base = |ty: &Type<'a>| ty.base().and_then(|name| self.named(name));
+        core::iter::successors(base(ty), move |ty| base(ty)).take(MAX_BASES)
+    }
+
+    /// Whether `ty` is a struct derived from `base`, directly or through
+    /// other bases.
+    pub(crate) fn derives_from(&self, ty: &Type<'a>, base: &Type<'a>) -> bool {
+        self.bases(ty).any(|next| core::ptr::eq(next, base))
+    }
+
+    /// Every struct derived from `base`, directly or through other bases.
+    #[cfg(feature = "typed")]
+    pub(crate) fn derived<'r>(&'r self, base: &'r Type<'a>) -> impl Iterator<Item = &'r Type<'a>> {
+        self.types
+            .iter()
+            .filter(move |ty| self.derives_from(ty, base))
     }
 }
 

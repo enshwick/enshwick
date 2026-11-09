@@ -127,6 +127,59 @@ fn sphere(id: u32, radius: f32) -> Value {
 }
 
 #[test]
+fn a_variant_reads_a_type_derived_from_its_inner_one_through_a_typedef_and_refuses_any_other() {
+    let registry = Registry::new([
+        Type::new("demo::uint8", Kind::Uint8, 1, 1),
+        Type::new("demo::Shape", Kind::Struct, 1, 1).with_fields(vec![Field::new(
+            "sides",
+            0,
+            "demo::uint8",
+        )]),
+        Type::new("demo::ShapeRef", Kind::Typedef, 1, 1).with_inner("demo::Shape"),
+        Type::new("demo::Square", Kind::Struct, 2, 1)
+            .with_inner("demo::Shape")
+            .with_fields(vec![Field::new("side", 1, "demo::uint8")]),
+        Type::new("demo::Other", Kind::Struct, 2, 1).with_fields(vec![Field::new(
+            "side",
+            1,
+            "demo::uint8",
+        )]),
+        Type::new(
+            "demo::BlobVariant<demo::ShapeRef>",
+            Kind::BlobVariant,
+            12,
+            4,
+        )
+        .with_inner("demo::ShapeRef"),
+    ]);
+    // The held type's hash, an offset of 8 from its own place, the size,
+    // then the value.
+    let held = |name: &str| {
+        let hash = registry.named(name).unwrap().qualified_hash();
+        [
+            &hash.to_le_bytes()[..],
+            &8i32.to_le_bytes(),
+            &2u32.to_le_bytes(),
+            &[4, 5],
+        ]
+        .concat()
+    };
+    let square = registry
+        .decode("demo::BlobVariant<demo::ShapeRef>", &held("demo::Square"))
+        .unwrap();
+    assert!(matches!(square, Value::Variant(_)), "{square:?}");
+    let other = registry
+        .decode("demo::BlobVariant<demo::ShapeRef>", &held("demo::Other"))
+        .unwrap_err();
+    assert!(
+        other
+            .to_string()
+            .contains("demo::Other, which is not derived from it"),
+        "{other}"
+    );
+}
+
+#[test]
 fn every_kind_writes_into_new_bytes_and_reads_back() {
     let registry = registry();
     let value = root(

@@ -10,6 +10,7 @@ pub(crate) mod inventory;
 pub(crate) mod items;
 pub(crate) mod mods;
 pub(crate) mod net;
+pub(crate) mod pages;
 pub(crate) mod saves;
 pub(crate) mod services;
 pub(crate) mod transactions;
