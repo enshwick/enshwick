@@ -509,6 +509,24 @@ mod tests {
     }
 
     #[test]
+    fn a_header_cpp_refuses_fails_only_the_cpp_compile() {
+        let dir = scratch_dir("test-header").unwrap();
+        let header = dir.join("enshwick.h");
+        std::fs::write(&header, "void enshwick_f(int template);\n").unwrap();
+        let c = compile(&header, Language::C, CPP_INCLUDE);
+        let cpp = compile(&header, Language::Cpp, CPP_INCLUDE);
+        std::fs::write(&header, "void enshwick_f(int template_);\n").unwrap();
+        let escaped = compile(&header, Language::Cpp, CPP_INCLUDE);
+        let _removed = std::fs::remove_dir_all(&dir);
+        assert_eq!(c, Vec::<String>::new());
+        assert!(
+            !cpp.is_empty() && cpp.iter().all(|line| line.contains("against C++")),
+            "{cpp:?}"
+        );
+        assert_eq!(escaped, Vec::<String>::new());
+    }
+
+    #[test]
     fn rustdoc_links_become_plain_code() {
         assert_eq!(
             plain_links("// the [`Header`] of [`HostApi::mods`](super::HostApi::mods)."),
