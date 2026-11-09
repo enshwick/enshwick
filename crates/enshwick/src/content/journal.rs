@@ -516,7 +516,7 @@ impl AddedJournal {
     /// Serves the patch of the journal `key` that makes the mod's changes;
     /// a change that fails is logged and left out, and the rest are made.
     fn serve(host: Host, key: crate::abi::ResourceKey) -> Result<Self, Off> {
-        let edits = Arc::new(Mutex::new(Vec::new()));
+        let edits = Arc::new(Mutex::new(Vec::<Edit>::new()));
         let served = Arc::clone(&edits);
         crate::resources::serve_value(host, key, key, move |mut registry| {
             for edit in served.relock().iter() {

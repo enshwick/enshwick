@@ -96,6 +96,8 @@ mod journal;
 mod knowledge;
 #[cfg(feature = "typed")]
 mod knowledge_content;
+#[cfg(feature = "typed")]
+mod knowledge_many;
 mod language;
 mod lifecycle;
 mod live_changes;

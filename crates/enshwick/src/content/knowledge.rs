@@ -377,11 +377,8 @@ fn insert(map: &mut Value, added: Vec<(u32, Value)>) -> Result<(), Off> {
     );
     let mut ids: Vec<u32> = pairs.iter().map(|(id, ..)| *id).collect();
     ids.sort_unstable();
-    if let Some(twice) = ids.windows(2).find(|pair| pair[0] == pair[1]) {
-        return Err(Off::new(format!(
-            "knowledge {}: the game knows it",
-            twice[0]
-        )));
+    if let Some(&[twice, _]) = ids.windows(2).find(|pair| pair[0] == pair[1]) {
+        return Err(Off::new(format!("knowledge {twice}: the game knows it")));
     }
     let mask = buckets - 1;
     // Stable: vanilla keys keep their order within a bucket.
@@ -705,8 +702,7 @@ mod tests {
             "{}",
             refused[0]
         );
-        let player_map = added.field(PLAYER_KNOWLEDGE).unwrap();
-        assert!(find(player_map, player.key()).is_some());
+        assert!(knows_in(&added, PLAYER_KNOWLEDGE, player.key()));
         assert!(!knows_in(&added, WORLD_KNOWLEDGE, world.key()));
     }
 
