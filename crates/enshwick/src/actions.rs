@@ -57,10 +57,10 @@ use std::cell::RefCell;
 use std::sync::{Arc, RwLock};
 
 use crate::PlayerKey;
-use crate::abi::{ActionCall, Str, read_headed};
+use crate::abi::{ActionCall, ActionReply, Str, read_headed};
 use crate::controls::{Control, Key};
 use crate::i18n::{Language, Texts};
-use crate::world::Player;
+use crate::world::{Player, PlayerPermission};
 use crate::{Load, Off};
 
 /// The platform's own texts for the console's answers; a mod's texts
@@ -114,6 +114,8 @@ pub struct Action {
     label: String,
     help: String,
     args: Vec<Arg>,
+    /// The permission bits a player needs, all of them.
+    needs: u8,
     allow: Option<Allow>,
     at: Option<At>,
     on: Option<On>,
@@ -125,6 +127,7 @@ impl core::fmt::Debug for Action {
             .field("id", &self.id)
             .field("label", &self.label)
             .field("args", &self.args)
+            .field("needs", &self.needs)
             .field("per_player", &self.on.is_some())
             .finish_non_exhaustive()
     }
@@ -144,6 +147,7 @@ impl Action {
             label: label.to_owned(),
             help: String::new(),
             args: Vec::new(),
+            needs: 0,
             allow: None,
             at: None,
             on: None,
@@ -238,6 +242,27 @@ impl Action {
     #[must_use]
     pub fn admins(self) -> Self {
         self.allow(Player::is_admin)
+    }
+
+    /// Only players the server gives `permission`, as the game's user
+    /// groups grant it, see the action and may run it. Each call adds one
+    /// the player needs; with [`allow`](Self::allow) both must hold. The
+    /// server checks it on every run, and carries a player only the
+    /// controls of actions they may run.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::actions::Action;
+    /// use enshwick::world::PlayerPermission;
+    ///
+    /// let action = Action::new("repair", "Repair the base").needs(PlayerPermission::CanEditBase);
+    /// assert_eq!(action.id(), "repair");
+    /// ```
+    #[must_use]
+    pub const fn needs(mut self, permission: PlayerPermission) -> Self {
+        self.needs |= permission.bit();
+        self
     }
 
     /// What the action acts on for a player, found on the server each time
@@ -447,11 +472,124 @@ impl Actions {
         let control = Control::new(action, &label).key(key).runs(action);
         crate::controls::declare(self.registry.host, &control, |_| {})
     }
+
+    /// Names the mod's actions as [commands](crate::commands) during init:
+    /// `/<name> <action> <values>`, or the same with the shorter `alias`,
+    /// then runs an action from a player's chat, the server's console or a
+    /// remote console, with the caller's rights, and `/<alias> help` lists
+    /// the actions the caller may run. Each is 1 to 32 of `[a-z0-9-]`, and
+    /// neither is `enshwick` or `help`.
+    ///
+    /// When another mod named one of the words first, the loader turns off
+    /// only this mod's commands, says so in the log and on the Mods screen
+    /// naming both mods, and the call returns `Ok`: the actions keep their
+    /// other paths.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] for a malformed word, an alias not shorter than the name, a
+    /// second call, or a call after init.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::actions::{Action, Outcome};
+    /// use enshwick::i18n::Texts;
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let actions = load.actions(Texts::default())?;
+    ///     actions.add(Action::new("online", "Players online"), |_| Outcome::done("2 online"))?;
+    ///     // `/admin-tools online` and `/adl online` run it.
+    ///     actions.commands("admin-tools", "adl")
+    /// }
+    /// ```
+    pub fn commands(&self, name: &str, alias: &str) -> Result<(), Off> {
+        if !crate::commands::names_fit(name, alias) {
+            return Err(Off::new(format!(
+                "commands /{name} /{alias}: each is 1 to 32 of [a-z0-9-], the alias shorter, neither enshwick nor help"
+            )));
+        }
+        if self
+            .registry
+            .commands
+            .swap(true, core::sync::atomic::Ordering::AcqRel)
+        {
+            return Err(Off::new("commands: named once already"));
+        }
+        let host = self.registry.host;
+        let status = (host.api().commands)(host.handle(), Str::new(name), Str::new(alias));
+        if status == crate::abi::Status::REFUSED {
+            crate::warn!("commands /{name} /{alias} are off: another mod named one of them first");
+            return Ok(());
+        }
+        crate::load::ok(status, (), || format!("commands /{name} /{alias}"))
+    }
+
+    /// Tells the platform that who may run the mod's actions changed, such
+    /// as when an [`allow`](Action::allow) rule reads settings that just
+    /// changed: the server carries each player the controls they may run
+    /// now, within two seconds. Every run checks the rules again anyway.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the loader refuses, as for a mod turned off.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    /// use std::sync::atomic::{AtomicBool, Ordering};
+    ///
+    /// use enshwick::actions::Actions;
+    ///
+    /// fn open_to_all(actions: &Actions, open: &Arc<AtomicBool>) -> Result<(), enshwick::Off> {
+    ///     open.store(true, Ordering::Relaxed);
+    ///     actions.rules_changed()
+    /// }
+    /// ```
+    pub fn rules_changed(&self) -> Result<(), Off> {
+        let host = self.registry.host;
+        let status = (host.api().actions_changed)(host.handle());
+        crate::load::ok(status, (), || "actions: rules changed".to_owned())
+    }
+}
+
+/// What the mod answers the loader: a text, such as its sheet, or how a run
+/// went.
+enum Answered {
+    Text(String),
+    Run(Outcome),
 }
 
 thread_local! {
     /// The last reply, alive until the next question on this thread.
     static REPLY: RefCell<String> = const { RefCell::new(String::new()) };
+}
+
+/// Runs a command line for `player`: a panic in a handler turns off only
+/// the mod's commands, with a warning, and every later command is refused
+/// without a text.
+fn run_command(
+    registry: &Registry,
+    player: &Player,
+    line: &str,
+    language: Language,
+    via: Via,
+) -> Outcome {
+    use core::sync::atomic::Ordering;
+
+    if registry.commands_off.load(Ordering::Acquire) {
+        return Outcome::refused("");
+    }
+    let run = || registry.run_from_console(player, line, language, via);
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(run)).unwrap_or_else(|payload| {
+        registry.commands_off.store(true, Ordering::Release);
+        crate::warn!(
+            "commands off: a handler panicked: {}",
+            crate::host::panic_text(payload.as_ref())
+        );
+        Outcome::refused("")
+    })
 }
 
 /// Answers one of the loader's questions about this mod's actions.
@@ -462,6 +600,9 @@ thread_local! {
 ///   header states, with no other writer during the call.
 /// - `call`'s strings are null or point at their `len` bytes, alive and
 ///   unchanged for the call.
+/// - `call`'s `reply`, where its header covers it, is null or writable for
+///   one [`ActionReply`], which the loader reads before it asks again on
+///   this thread.
 /// - `user` is the `Box<Arc<Registry>>` that [`Load::actions`] handed over,
 ///   which the loader keeps for the process.
 /// - `out` is null or writable for one [`Str`], which the loader reads
@@ -485,33 +626,75 @@ unsafe extern "system" fn answer(call: *const ActionCall, user: *mut c_void, out
     // SAFETY: the caller keeps the arguments' bytes alive and unchanged for
     // the call, and `args` is not used after it returns.
     let args = unsafe { call.args.as_str() }.unwrap_or("");
-    let reply = crate::host::guard("panic in an action", String::new, || match call.kind {
-        ActionCall::SHEET => registry.sheet(&player, language),
-        ActionCall::RUN => {
-            let covered = call.header.covers(
-                core::mem::offset_of!(ActionCall, target) + size_of::<crate::abi::ActionTarget>(),
-            );
-            let target = covered
-                .then(|| ActionTarget::from_raw(&call.target))
-                .flatten();
-            registry.run_from_interface(&player, action, args, language, target)
+    let answered = crate::host::guard(
+        "panic in an action",
+        || Answered::Text(String::new()),
+        || match call.kind {
+            ActionCall::SHEET => Answered::Text(registry.sheet(&player, language)),
+            ActionCall::RUN => {
+                let covered = call.header.covers(
+                    core::mem::offset_of!(ActionCall, target)
+                        + size_of::<crate::abi::ActionTarget>(),
+                );
+                let target = covered
+                    .then(|| ActionTarget::from_raw(&call.target))
+                    .flatten();
+                Answered::Run(registry.run_from_interface(&player, action, args, language, target))
+            }
+            ActionCall::CONSOLE => Answered::Run(registry.run_from_console(
+                &player,
+                action,
+                Language::FALLBACK,
+                Via::Console,
+            )),
+            ActionCall::CHAT => {
+                Answered::Run(run_command(registry, &player, action, language, Via::Chat))
+            }
+            ActionCall::REMOTE => Answered::Run(run_command(
+                registry,
+                &player,
+                action,
+                Language::FALLBACK,
+                Via::Remote,
+            )),
+            _ => Answered::Text(String::new()),
+        },
+    );
+    let slot = if call
+        .header
+        .covers(core::mem::offset_of!(ActionCall, reply) + size_of::<*mut ActionReply>())
+    {
+        call.reply
+    } else {
+        core::ptr::null_mut()
+    };
+    REPLY.with_borrow_mut(|kept| match answered {
+        Answered::Run(outcome) if !slot.is_null() => {
+            *kept = outcome.text;
+            let reply = ActionReply {
+                header: crate::abi::Header::of::<ActionReply>(),
+                done: u8::from(outcome.done),
+                text: Str::new(kept),
+            };
+            // SAFETY: `slot` is not null, as the guard checks, and the caller
+            // guarantees it writable for one `ActionReply`; its text lives in
+            // this thread's buffer until the next question, after the loader
+            // read it.
+            unsafe { slot.write(reply) };
         }
-        ActionCall::CONSOLE => {
-            let outcome = registry.run_from_console(&player, action);
-            format!("{}{}", u8::from(outcome.done), outcome.text)
+        answered if !out.is_null() => {
+            *kept = match answered {
+                Answered::Text(text) => text,
+                // A call without a reply slot reads a run as `1` or `0` and the text.
+                Answered::Run(outcome) => format!("{}{}", u8::from(outcome.done), outcome.text),
+            };
+            // SAFETY: `out` is not null, as the guard checks, and the caller
+            // guarantees it is writable for one `Str`; the text lives in this
+            // thread's buffer until the next question, after the loader read
+            // it.
+            unsafe { out.write(Str::new(kept)) };
         }
-        _ => String::new(),
-    });
-    if out.is_null() {
-        return;
-    }
-    REPLY.with_borrow_mut(|kept| {
-        *kept = reply;
-        // SAFETY: `out` is not null, as the early return ensures, and the
-        // caller guarantees it is writable for one `Str`; the text lives in
-        // this thread's buffer until the next question, after the loader read
-        // it.
-        unsafe { out.write(Str::new(kept)) };
+        _ => {}
     });
 }
 
@@ -540,6 +723,8 @@ impl Load<'_> {
             texts: all,
             host,
             declared: RwLock::new(Vec::new()),
+            commands: core::sync::atomic::AtomicBool::new(false),
+            commands_off: core::sync::atomic::AtomicBool::new(false),
         });
         crate::load::hand_over(
             Arc::clone(&registry),
@@ -595,3 +780,4 @@ use registry::Registry;
 pub use request::*;
 #[doc(hidden)]
 pub use script::ActionFns;
+pub(crate) use script::ScriptOutcome;

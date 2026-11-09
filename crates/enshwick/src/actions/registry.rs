@@ -34,6 +34,11 @@ pub(super) struct Registry {
     pub(super) texts: Texts,
     pub(super) host: Host,
     pub(super) declared: RwLock<Vec<Arc<Declared>>>,
+    /// Set once the mod named its actions as commands.
+    pub(super) commands: core::sync::atomic::AtomicBool,
+    /// Set once a handler panicked during a command: the mod's commands
+    /// stay off, its actions keep their other paths.
+    pub(super) commands_off: core::sync::atomic::AtomicBool,
 }
 
 impl Registry {
@@ -127,10 +132,16 @@ impl Registry {
         lines.join("\n")
     }
 
-    /// Runs the console line `line`, the part after the mod's id: `help`,
-    /// or an action's id and its values as words.
-    pub(super) fn run_from_console(&self, player: &Player, line: &str) -> Outcome {
-        let language = Language::FALLBACK;
+    /// Runs the text form `line`, the part after the mod's id or command
+    /// name, for `player` reading `language`, from `via`: `help`, or an
+    /// action's id and its values as words.
+    pub(super) fn run_from_console(
+        &self,
+        player: &Player,
+        line: &str,
+        language: Language,
+        via: Via,
+    ) -> Outcome {
         let words: Vec<&str> = line.split_whitespace().collect();
         let Some((&word, rest)) = words.split_first() else {
             return Outcome::done(self.help(player, language));
@@ -144,7 +155,7 @@ impl Registry {
             return Outcome::refused(self.say("actions.unknown", language, &[("word", &word)]));
         };
         match self.console_args(d, player, rest, language) {
-            Ok(values) => self.run(d, player, &values, language, Via::Console, None),
+            Ok(values) => self.run(d, player, &values, language, via, None),
             Err(why) => Outcome::refused(self.refusal(&why, &d.action, language)),
         }
     }
@@ -270,7 +281,8 @@ impl Registry {
     }
 
     fn allowed(d: &Declared, player: &Player) -> bool {
-        d.action.allow.as_ref().is_none_or(|allow| allow(player))
+        player.permissions & d.action.needs == d.action.needs
+            && d.action.allow.as_ref().is_none_or(|allow| allow(player))
     }
 
     /// Runs `d` for `player` with `values` after the checks.
@@ -393,7 +405,7 @@ impl Registry {
     }
 
     /// Runs action `id` for `player` from the interface, on the object
-    /// `target` the client named, if any; `1` or `0` and the text.
+    /// `target` the client named, if any.
     pub(super) fn run_from_interface(
         &self,
         player: &Player,
@@ -401,9 +413,9 @@ impl Registry {
         args: &str,
         language: Language,
         target: Option<ActionTarget>,
-    ) -> String {
+    ) -> Outcome {
         let declared = self.declared();
-        let outcome = match declared.iter().find(|d| d.action.id == id) {
+        match declared.iter().find(|d| d.action.id == id) {
             None => Outcome::refused(self.say("actions.unknown", language, &[("word", id)])),
             Some(d) => match sheet::decode_args(args) {
                 None => Outcome::refused(self.say("actions.denied", language, &[])),
@@ -414,8 +426,7 @@ impl Registry {
                     }
                 }
             },
-        };
-        format!("{}{}", u8::from(outcome.done), outcome.text)
+        }
     }
 
     /// Fills in the names of the players in `values`, which the interface

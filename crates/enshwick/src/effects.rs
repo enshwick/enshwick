@@ -14,10 +14,11 @@
 //! [`Scheduler`](crate::schedule::Scheduler) task or an action; on a client,
 //! while it hosts a game.
 //!
-//! Teleports and pings need the `unstable` feature and may change in any
-//! release: whether a client keeps a teleported player where the server put
-//! it, and whether it shows a ping the server raised, are not yet seen in
-//! the running game.
+//! Pings need the `unstable` feature and may change in any release: whether
+//! a client shows a ping the server raised is not yet seen in the running
+//! game. Teleports are stable: a player moved this way arrived where the
+//! server put them in a client-hosted game (client 26430625) and on a
+//! dedicated server (26430253), live.
 //!
 //! # Examples
 //!
@@ -35,10 +36,10 @@
 //! ```
 
 use crate::Entity;
+use crate::PlayerKey;
 use crate::WorldError;
-#[cfg(feature = "unstable")]
-use crate::abi::TeleportRequest;
-use crate::abi::{Header, SpawnRequest};
+use crate::abi::{Header, PlayerInfo, SpawnRequest, TeleportRequest};
+use crate::ecs::ComponentType;
 use crate::engine_ids as ids;
 use crate::game_events::{EventType, Field, Scalar};
 use crate::{Host, Load, Off};
@@ -47,12 +48,9 @@ use crate::{Host, Load, Off};
 ///
 /// The name is enshwick's: the game takes a whole arrival transform.
 ///
-/// Unstable: needs the `unstable` feature and may change in any release.
-///
 /// # Examples
 ///
 /// See [`Effects::teleport`].
-#[cfg(feature = "unstable")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct Teleport {
@@ -67,7 +65,6 @@ pub struct Teleport {
     pub facing: Option<[f32; 4]>,
 }
 
-#[cfg(feature = "unstable")]
 impl Teleport {
     /// Straight to the target, keeping the entity's orientation.
     ///
@@ -512,9 +509,6 @@ impl Effects {
     /// Asks the server to move `entity` to `position`, in metres, after the
     /// next step, as its admin teleport does: the entity jumps there and
     /// clients see it arrive.
-    ///
-    /// Unstable: needs the `unstable` feature and may change in any release.
-    ///
     /// # Errors
     ///
     /// [`WorldError::Gone`] for an entity not in the world or without a
@@ -534,7 +528,6 @@ impl Effects {
     /// }
     /// ```
     #[script]
-    #[cfg(feature = "unstable")]
     pub fn teleport(
         &self,
         entity: Entity,
@@ -559,6 +552,104 @@ impl Effects {
             (self.host.api().teleport)(self.host.handle(), &raw const request),
             WorldError::Gone,
         )
+    }
+
+    /// Asks the server to move the character of the connected player
+    /// `player` to `position`, in metres, as [`teleport`](Self::teleport)
+    /// moves an entity. With [`Teleport::search_best_spawn_position`] the
+    /// game picks a free spot near it, so the player never lands inside
+    /// terrain or a wall.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Gone`] for a player not connected or without a
+    /// character in the world; otherwise as [`teleport`](Self::teleport).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::PlayerKey;
+    /// use enshwick::effects::{Effects, Teleport};
+    ///
+    /// fn to_spawn(effects: &Effects, player: PlayerKey) -> Result<(), enshwick::WorldError> {
+    ///     effects.teleport_player(player, [0.0, 100.0, 0.0], Teleport::new().search_best_spawn_position())
+    /// }
+    /// ```
+    #[script]
+    pub fn teleport_player(
+        &self,
+        player: PlayerKey,
+        position: [f64; 3],
+        how: Teleport,
+    ) -> Result<(), WorldError> {
+        self.teleport(self.character(player)?, position, how)
+    }
+
+    /// Asks the server to move the character of the connected player
+    /// `player` to where the connected player `to` stands, as
+    /// [`teleport_player`](Self::teleport_player) does; the game always
+    /// picks a free spot beside them, so the two never stand in one place.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Gone`] when either player is not connected or has no
+    /// character with a place in the world; otherwise as
+    /// [`teleport`](Self::teleport).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::PlayerKey;
+    /// use enshwick::effects::{Effects, Teleport};
+    ///
+    /// fn join(effects: &Effects, guest: PlayerKey, host: PlayerKey) -> Result<(), enshwick::WorldError> {
+    ///     effects.teleport_player_to(guest, host, Teleport::new())
+    /// }
+    /// ```
+    #[script]
+    pub fn teleport_player_to(
+        &self,
+        player: PlayerKey,
+        to: PlayerKey,
+        how: Teleport,
+    ) -> Result<(), WorldError> {
+        let character = self.character(player)?;
+        let target = self.character(to)?;
+        let position = self.position(target).ok_or(WorldError::Gone)?;
+        self.teleport(character, position, how.search_best_spawn_position())
+    }
+
+    /// The character of the connected player `key`.
+    fn character(&self, key: PlayerKey) -> Result<Entity, WorldError> {
+        const MAX: usize = 64;
+        let blank = PlayerInfo {
+            header: Header::of::<PlayerInfo>(),
+            ..bytemuck::Zeroable::zeroed()
+        };
+        let mut infos = [blank; MAX];
+        let mut count = 0u32;
+        let status = (self.host.api().players)(
+            self.host.handle(),
+            infos.as_mut_ptr(),
+            u32::try_from(MAX).unwrap_or(0),
+            &raw mut count,
+        );
+        WorldError::check(status, WorldError::Missing)?;
+        let count = usize::try_from(count).map_or(MAX, |count| count.min(MAX));
+        infos[..count]
+            .iter()
+            .find(|info| info.key == key && info.entity != Entity(0))
+            .map(|info| info.entity)
+            .ok_or(WorldError::Gone)
+    }
+
+    /// Where `entity` stands, in metres, from its transform.
+    fn position(&self, entity: Entity) -> Option<[f64; 3]> {
+        let transform = ComponentType::named(self.host, ids::CURRENT_TRANSFORM).ok()?;
+        let data = transform.read(self.host, entity)?;
+        // SAFETY: `read` returned the entity's live CurrentTransform, valid
+        // until the game thread moves on, and it is read at once.
+        Some(unsafe { crate::ecs::transform_position(data.cast()) })
     }
 }
 

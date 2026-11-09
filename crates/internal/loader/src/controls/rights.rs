@@ -47,9 +47,16 @@ pub(crate) fn resend_on_rights(loader: &Loader) {
     let Ok(players) = crate::world::players(loader) else {
         return;
     };
-    for player in with_rights(|rights| rights.changed(&players)) {
+    let rules = STATE.rules_changed.swap(false, Ordering::AcqRel);
+    for player in with_rights(|rights| rights.changed(&players, rules)) {
         let _sent = send_carried(loader, declared, player.key.get(), Some(&player));
     }
+}
+
+/// A mod said who may run its actions changed: the next look sends every
+/// client its carried controls again.
+pub(crate) fn rules_changed() {
+    STATE.rules_changed.store(true, Ordering::Release);
 }
 
 /// Forgets what client `key` got, when its player leaves the server.
@@ -161,9 +168,10 @@ impl Rights {
     }
 
     /// The players among `players` whose client got controls and whose
-    /// permissions differ from those they were sent for; a client whose
+    /// permissions differ from those they were sent for, or every one whose
+    /// client got controls when a mod's `rules` changed; a client whose
     /// player left is forgotten.
-    pub(super) fn changed(&mut self, players: &[PlayerInfo]) -> Vec<PlayerInfo> {
+    pub(super) fn changed(&mut self, players: &[PlayerInfo], rules: bool) -> Vec<PlayerInfo> {
         let here = |key: u64| players.iter().any(|p| p.key == PlayerKey::new(key));
         self.sent
             .retain(|&key, permissions| permissions.is_none() || here(key));
@@ -172,7 +180,7 @@ impl Rights {
             .filter(|p| {
                 self.sent
                     .get(&p.key.get())
-                    .is_some_and(|sent| *sent != Some(p.permissions))
+                    .is_some_and(|sent| rules || *sent != Some(p.permissions))
             })
             .copied()
             .collect()
@@ -259,17 +267,46 @@ mod tests {
         };
         // 8 said hello before its player was in the world; 9 never did.
         let here = [player(7, 0), player(8, 0), player(9, 1)];
-        assert_eq!(keys(rights.changed(&here)), [8]);
+        assert_eq!(keys(rights.changed(&here, false)), [8]);
         rights.sent(8, Some(0));
-        assert_eq!(keys(rights.changed(&here)), Vec::<u64>::new());
-        assert_eq!(keys(rights.changed(&[player(7, 1), player(8, 0)])), [7]);
+        assert_eq!(keys(rights.changed(&here, false)), Vec::<u64>::new());
+        assert_eq!(
+            keys(rights.changed(&[player(7, 1), player(8, 0)], false)),
+            [7]
+        );
         // 7 left: a later player with its key starts without controls.
-        assert_eq!(keys(rights.changed(&[player(8, 0)])), Vec::<u64>::new());
-        assert_eq!(keys(rights.changed(&[player(7, 1)])), Vec::<u64>::new());
+        assert_eq!(
+            keys(rights.changed(&[player(8, 0)], false)),
+            Vec::<u64>::new()
+        );
+        assert_eq!(
+            keys(rights.changed(&[player(7, 1)], false)),
+            Vec::<u64>::new()
+        );
         // 10 said hello and left before its player was in the world.
         rights.sent(10, None);
         rights.left(10);
-        assert_eq!(keys(rights.changed(&[player(10, 0)])), Vec::<u64>::new());
+        assert_eq!(
+            keys(rights.changed(&[player(10, 0)], false)),
+            Vec::<u64>::new()
+        );
+    }
+
+    #[test]
+    fn controls_go_again_to_every_client_when_a_mod_s_rules_change() {
+        let mut rights = Rights::default();
+        rights.sent(7, Some(0));
+        rights.sent(8, Some(1));
+        let here = [player(7, 0), player(8, 1), player(9, 0)];
+        let keys = |changed: Vec<PlayerInfo>| -> Vec<u64> {
+            changed.iter().map(|p| p.key.get()).collect()
+        };
+        assert_eq!(keys(rights.changed(&here, false)), Vec::<u64>::new());
+        assert_eq!(
+            keys(rights.changed(&here, true)),
+            [7, 8],
+            "9 never said hello"
+        );
     }
 
     #[test]

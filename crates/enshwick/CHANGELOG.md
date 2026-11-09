@@ -14,6 +14,34 @@ Each entry names the pull request that made the change.
   game's own as `ExperienceBalanceValue`. Luau
   `enshwick.content.add_experience` and
   `enshwick.content.experience_values` mirror them (#1005).
+- `actions`: `Actions::commands(name, alias)` names a mod's actions as
+  commands, `/<name> <action> <values>` and the same with the alias, which
+  run from a player's chat, the server's console and remote consoles with
+  the caller's rights; `/<alias> help` lists what the caller may run. A
+  word another mod named first turns off only the later mod's commands, and
+  a handler that panics during a command turns off only that mod's
+  commands. `Via::Chat` and `Via::Remote` tell a handler where a command
+  came from (#1009).
+- `commands`: `run`, `run_later` and `list` run any mod's command line for
+  a remote `Caller` with the permissions it gives, from any thread through
+  the mod's scheduler, and list the mods' command sets; Luau
+  `enshwick.commands.run` and `list` (#1009).
+- `world`: `PlayerPermission` and `Player::has` read the game's user-group
+  permissions; `Action::needs` limits an action to players holding one, and
+  `Actions::rules_changed` carries each player the controls they may run
+  after a mod's own rule changed; Luau `needs` and `actions:rules_changed`
+  (#1009).
+- `effects`: `Effects::teleport_player` and `teleport_player_to` move a
+  connected player's character to a position or beside another player
+  (#1009).
+- `abi`: `HostApi::commands`, `run_command`, `command_list` and
+  `actions_changed` with `ActionCall::CHAT` and `REMOTE`, as ABI 11.19. A
+  run's answer crosses as an `ActionReply` struct, through the appended
+  `ActionCall::reply` and from `run_command`, and `command_list` writes
+  headed `CommandInfo` entries, so no caller parses text; a mod built for
+  an older minor still answers in the old text form (#1009).
+- `test`: `Installed::type_in_chat`, `Installed::rules_changed` and
+  `FakeHost::other_mod_commands` (#1009).
 - `packs`: `pack.toml` declares a Luau mod's own extension points under
   `[[point]]` (`PackPoint`, `PackPointField`, `PointLayout`, `PointSlot`),
   laid out and hashed as `#[point]` lays out a struct, and `exports` takes
@@ -58,6 +86,10 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- `effects`: `Effects::teleport` and `Teleport` are stable, out of the
+  `unstable` feature (#1009).
+- The server's console holds every permission the game has, not only kick
+  and ban (#1009).
 - `typed`: a read with blob fields costs about 0.8 µs instead of about
   0.8 ms on the game's template set-up data: the loader remembers each
   thread's private read-only runs of 16 MiB or more until the world goes

@@ -218,6 +218,89 @@ impl Player {
     pub const fn is_admin(&self) -> bool {
         self.permissions & PlayerInfo::CAN_KICK_BAN != 0
     }
+
+    /// Whether the server gives the player `permission`, as their user
+    /// group in the server's settings grants it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::Entity;
+    /// use enshwick::abi::PlayerInfo;
+    /// use enshwick::world::{Player, PlayerPermission};
+    ///
+    /// let friend = Player { entity: Entity(2), slot: 0, key: enshwick::PlayerKey::new(7), permissions: PlayerInfo::CAN_EDIT_BASE, name: "Ann".into() };
+    /// assert!(friend.has(PlayerPermission::CanEditBase));
+    /// assert!(!friend.has(PlayerPermission::CanKickBan));
+    /// ```
+    #[must_use]
+    pub const fn has(&self, permission: PlayerPermission) -> bool {
+        self.permissions & permission.bit() != 0
+    }
+}
+
+/// One of the server's permissions for a player, which the game's user
+/// groups grant.
+///
+/// The groups are `userGroups` in `enshrouded_server.json`, and a player
+/// holds the permissions of the group whose password they joined with. The
+/// names are the game's reflected `PlayerPermissions` on server 26430253.
+///
+/// # Examples
+///
+/// See [`Player::has`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[non_exhaustive]
+#[expect(
+    clippy::enum_variant_names,
+    reason = "the game's reflected names, which all start with Can"
+)]
+pub enum PlayerPermission {
+    /// May kick and ban: the server's administrators (`canKickBan`).
+    CanKickBan,
+    /// May open containers in bases (`canAccessInventories`).
+    CanAccessInventories,
+    /// May build, terraform and place water in bases (`canEditBase`).
+    CanEditBase,
+    /// May terraform and destroy outside bases (`canEditWorld`).
+    CanEditWorld,
+    /// May place, remove and upgrade Flame Altars (`canExtendBase`).
+    CanExtendBase,
+    /// Receives experience.
+    CanReceiveExp,
+}
+
+impl PlayerPermission {
+    /// Every permission, in the game's bit order.
+    pub const ALL: [Self; 6] = [
+        Self::CanKickBan,
+        Self::CanAccessInventories,
+        Self::CanEditBase,
+        Self::CanEditWorld,
+        Self::CanExtendBase,
+        Self::CanReceiveExp,
+    ];
+
+    /// The permission's bit in [`Player::permissions`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::world::PlayerPermission;
+    ///
+    /// assert_eq!(PlayerPermission::CanKickBan.bit(), 1);
+    /// ```
+    #[must_use]
+    pub const fn bit(self) -> u8 {
+        match self {
+            Self::CanKickBan => PlayerInfo::CAN_KICK_BAN,
+            Self::CanAccessInventories => PlayerInfo::CAN_ACCESS_INVENTORIES,
+            Self::CanEditBase => PlayerInfo::CAN_EDIT_BASE,
+            Self::CanEditWorld => PlayerInfo::CAN_EDIT_WORLD,
+            Self::CanExtendBase => PlayerInfo::CAN_EXTEND_BASE,
+            Self::CanReceiveExp => PlayerInfo::CAN_RECEIVE_EXP,
+        }
+    }
 }
 
 /// An entity with a place in the world, from [`World::entities`] and

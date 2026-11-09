@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 18
+#define ENSHWICK_ABI_MINOR 19
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -139,13 +139,31 @@ typedef struct EnshwickActionTarget {
 // `position` holds where it stands.
 #define EnshwickActionTarget_POSITION 2
 
+// A mod's answer to a run of one of its actions: whether it was done and
+// the text the caller reads.
+//
+// A mod writes it through `ActionCall::reply`, and
+// `HostApi::run_command` writes one for its
+// caller. ABI 11.19.
+typedef struct EnshwickActionReply {
+  // Size and version of this struct; zero until the writer fills it.
+  struct EnshwickHeader header;
+  // 1 when the action was done, 0 when it was refused or failed.
+  uint8_t done;
+  // The text the caller reads, empty for none; valid until the writer
+  // answers again on the same thread.
+  struct EnshwickStr text;
+} EnshwickActionReply;
+
 // A question the loader asks a mod about its player actions, registered
 // with `HostApi::actions`.
 typedef struct EnshwickActionCall {
   // Size and version of this struct.
   struct EnshwickHeader header;
-  // What the loader asks: `ActionCall::SHEET`, `ActionCall::RUN` or
-  // `ActionCall::CONSOLE`.
+  // What the loader asks: `ActionCall::SHEET`, `ActionCall::RUN`,
+  // `ActionCall::CONSOLE`, `ActionCall::CHAT` or
+  // `ActionCall::REMOTE`; a mod built for an older minor answers a kind
+  // it does not know with an empty reply.
   uint32_t kind;
   // The language the player reads the game in, a
   // `Language` value.
@@ -153,7 +171,9 @@ typedef struct EnshwickActionCall {
   // The player the question is about.
   struct EnshwickPlayerInfo player;
   // The action's id, for `ActionCall::RUN`; the console line after the
-  // mod's id, for `ActionCall::CONSOLE`; valid for the call.
+  // mod's id, for `ActionCall::CONSOLE`; the line after the command's
+  // name or alias, for `ActionCall::CHAT` and `ActionCall::REMOTE`;
+  // valid for the call.
   struct EnshwickStr action;
   // The action's arguments in the sheet's encoding, for
   // `ActionCall::RUN`; valid for the call.
@@ -161,12 +181,22 @@ typedef struct EnshwickActionCall {
   // The object the player's client named for `ActionCall::RUN`; no
   // flags for none, and for the other questions.
   struct EnshwickActionTarget target;
+  // Where the mod writes its answer to every question but
+  // `ActionCall::SHEET`, a zeroed `ActionReply` the loader owns for
+  // the call; null for `ActionCall::SHEET`. A mod writes the whole
+  // struct, its header first, and leaves the callback's `reply` text
+  // untouched. A mod built before ABI 11.19 does not see this field and
+  // answers in the `reply` text as `1` or `0` and then the text, which
+  // the loader reads only while this struct's header stays zero. ABI
+  // 11.19.
+  struct EnshwickActionReply *reply;
 } EnshwickActionCall;
 // The actions the player may use now, as a sheet: the reply is the
 // sheet's text.
 #define EnshwickActionCall_SHEET 0
-// The player runs an action from the interface: the reply is `1` or
-// `0`, whether it was done, and the text the player reads.
+// The player runs an action from the interface: the answer, whether it
+// was done and the text the player reads, goes in
+// `ActionCall::reply`.
 #define EnshwickActionCall_RUN 1
 // The server's console runs an action from its text form, such as
 // `access Ann on`, in `action`: the action's id and its values as
@@ -174,6 +204,16 @@ typedef struct EnshwickActionCall {
 // an administrator with no character. The reply is as for
 // `ActionCall::RUN`.
 #define EnshwickActionCall_CONSOLE 3
+// A player runs a command from chat, `/<name> ` and then what
+// `ActionCall::CONSOLE` takes in `action`; `player` is the sender and
+// `language` the language they read. The reply is as for
+// `ActionCall::RUN`. ABI 11.19.
+#define EnshwickActionCall_CHAT 4
+// A mod runs a command line for a remote caller, such as a remote
+// console, as `ActionCall::CHAT` does; `player` holds the caller's
+// label as its name, its permission bits, key 0 and no character. ABI
+// 11.19.
+#define EnshwickActionCall_REMOTE 5
 
 // A buff type of the game by its id, the
 // `Guid::fnv1a` of its GUID, to apply,
@@ -784,6 +824,19 @@ typedef struct EnshwickComfort {
   // Where the provider stands, in metres.
   float position[3];
 } EnshwickComfort;
+
+// A running mod's command names, from
+// `HostApi::command_list`. ABI 11.19.
+typedef struct EnshwickCommandInfo {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The full name, `admin-tools` in `/admin-tools online`.
+  struct EnshwickStr name;
+  // The shorter alias, `adl` in `/adl online`.
+  struct EnshwickStr alias;
+  // The id of the mod that named them.
+  struct EnshwickStr mod_id;
+} EnshwickCommandInfo;
 
 // One content rename for `HostApi::rename_content`:
 // content saved under `from` reads as the content now under `to`.
@@ -4928,6 +4981,56 @@ typedef struct EnshwickHostApi {
                                     uint8_t *out,
                                     uint32_t capacity,
                                     uint32_t *len);
+  // Names the calling mod's actions as commands: a
+  // line `/<name> <action> <values>`, or the same with `alias`, runs
+  // one of them from a player's chat, the server's console or
+  // `run_command`, with the caller's rights. Each
+  // is 1 to 32 of `[a-z0-9-]`, `alias` shorter than `name`; neither is
+  // `enshwick` or `help`. `Status::BAD_ARGS` for a malformed or
+  // unreadable one; `Status::REFUSED` for a second call, or when
+  // another mod named the same word first, which the loader logs and
+  // reports naming both mods, the mod running on without commands.
+  // Allowed during `enshwick_mod_init` only; the strings are borrowed for
+  // the call. A panic in the loader returns `Status::REFUSED`. ABI
+  // 11.19.
+  EnshwickStatus (*commands)(EnshwickModHandle me, struct EnshwickStr name, struct EnshwickStr alias);
+  // Runs the command line `line`, such as `/adl online`, as a remote
+  // caller named `label` (for the log and the handler, at most 64 bytes)
+  // with the game's permission bits `permissions` (as
+  // `PlayerInfo::permissions`), never as
+  // a player, and writes the mod's `ActionReply` to
+  // `out` as far as the header the caller filled reaches, its text valid
+  // until the next call on this thread. The
+  // leading `/` is optional. On the server's game thread only
+  // (`Status::WRONG_THREAD`); `Status::MISSING` when no running mod
+  // has the line's first word as its command name or alias;
+  // `Status::BAD_ARGS` for a line over 1,024 bytes, an empty line or
+  // an unreadable string. A panic in the loader returns
+  // `Status::REFUSED`. ABI 11.19.
+  EnshwickStatus (*run_command)(EnshwickModHandle me,
+                                struct EnshwickStr line,
+                                struct EnshwickStr label,
+                                uint32_t permissions,
+                                struct EnshwickActionReply *out);
+  // Up to `capacity` command sets of the running mods, in load order, and
+  // how many there are. Entries are `entry_size` bytes apart, the
+  // caller's `size_of::<CommandInfo>()`; the loader fills what both sides
+  // know of each and its own `Header`. The strings stay valid until the
+  // next call on this thread. `Status::BAD_ARGS` for a non-null `out`
+  // whose entries are shorter than a header. Any thread. A panic in the
+  // loader returns `Status::REFUSED`. ABI 11.19.
+  EnshwickStatus (*command_list)(EnshwickModHandle me,
+                                 struct EnshwickCommandInfo *out,
+                                 uint32_t entry_size,
+                                 uint32_t capacity,
+                                 uint32_t *count);
+  // Tells the loader that who may run the calling mod's actions changed,
+  // such as when a rule reads settings that just changed: the server
+  // asks the mod again and carries each player the controls they may
+  // run now, within two seconds. Any thread. `Status::MISSING` for a
+  // mod without actions. A panic in the loader returns
+  // `Status::REFUSED`. ABI 11.19.
+  EnshwickStatus (*actions_changed)(EnshwickModHandle me);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.

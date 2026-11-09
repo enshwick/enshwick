@@ -17,7 +17,7 @@ use crate::script::{
     self, Answer, Bound, Callback, Class, Error, FromScript, Function, IntoScript, Object, Param,
     Signature, Ty, Typed,
 };
-use crate::world::Player;
+use crate::world::{Player, PlayerPermission};
 use crate::{Load, Off, PlayerKey};
 
 /// An action as a script declares it: the fields of [`Action`]'s builder.
@@ -38,6 +38,10 @@ pub(crate) struct ScriptAction {
     /// [`Action::admins`] sets it.
     #[script(default)]
     pub admins: bool,
+    /// The permissions a player needs, all of them, as [`Action::needs`]
+    /// adds each.
+    #[script(default)]
+    pub needs: Vec<PlayerPermission>,
     /// Who sees and runs it, as [`Action::allow`] decides; only `true`
     /// allows, and with `admins` both must hold.
     pub allow: Option<AllowFn>,
@@ -66,6 +70,7 @@ impl ScriptAction {
         for arg in self.args {
             action = action.arg(arg);
         }
+        action = self.needs.into_iter().fold(action, Action::needs);
         let admins = self.admins;
         match self.allow {
             Some(allow) => {
@@ -446,6 +451,28 @@ impl Actions {
         key: crate::controls::Key,
     ) -> Result<(), Off> {
         self.control(action, key)
+    }
+
+    /// Names the mod's actions as commands `/<name>` and `/<alias>`, as
+    /// [`Actions::commands`] does.
+    ///
+    /// # Errors
+    ///
+    /// As [`Actions::commands`].
+    #[script(name = "commands")]
+    pub(crate) fn commands_script(&self, name: &str, alias: &str) -> Result<(), Off> {
+        self.commands(name, alias)
+    }
+
+    /// Tells the platform that who may run the mod's actions changed, as
+    /// [`Actions::rules_changed`] does.
+    ///
+    /// # Errors
+    ///
+    /// As [`Actions::rules_changed`].
+    #[script(name = "rules_changed")]
+    pub(crate) fn rules_changed_script(&self) -> Result<(), Off> {
+        self.rules_changed()
     }
 }
 

@@ -71,6 +71,7 @@ static STATE: State = State {
     players: Mutex::new(Players::new()),
     rights: Mutex::new(None),
     next_look: AtomicU64::new(0),
+    rules_changed: core::sync::atomic::AtomicBool::new(false),
 };
 /// The keys turn off at their first panic, the linked controls at theirs.
 static KEYS_FUSE: Fuse = Fuse::new("mod control keys");
@@ -99,6 +100,9 @@ struct State {
     /// The [`now_ms`] at which the server next compares its players'
     /// permissions with those, so a step between costs one atomic read.
     next_look: AtomicU64,
+    /// Set when a mod said who may run its actions changed, so the next
+    /// look sends every client its carried controls again.
+    rules_changed: core::sync::atomic::AtomicBool,
 }
 
 /// What the client's key reader reads, swapped whole.
@@ -907,7 +911,7 @@ pub(crate) enum SetKeyError {
 mod input;
 mod rights;
 
-pub(crate) use rights::{hello, left, resend_on_rights};
+pub(crate) use rights::{hello, left, resend_on_rights, rules_changed};
 
 pub(crate) use input::{capture_keys, focused, key_name};
 

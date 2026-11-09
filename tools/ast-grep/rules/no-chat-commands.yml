@@ -4,12 +4,16 @@ severity: error
 message: an action goes through the actions API with a UI path, not a typed chat command
 note: >-
   Players and admins act through a mod's own controls and panels, which run
-  its actions; a dedicated server's console and command file take the actions
-  API's own lines. A console's or command file's own `handle_command` or
-  `on_command` is allowed: both are for server admins and automation, not
-  players, so it carries `// ast-grep-ignore` with that reason. The rule refuses an item named for registering or
-  handling chat commands. That the loader posts typed `/` lines unchanged is
-  held by the chat module's tests.
+  its actions. The one typed path is the actions API's own: a mod names its
+  actions as commands with `Actions::commands`, and `/<name> <action>` runs
+  them from chat, the server's console or a remote console with the same
+  rights. A console's or command file's own `handle_command` or `on_command`
+  is allowed: both are for server admins and automation, not players, so it
+  carries `// ast-grep-ignore` with that reason. The rule refuses an item
+  named for registering or handling chat commands of its own. That the
+  loader takes only a running mod's declared names out of the chat, and
+  posts every other `/` line unchanged, is held by the loader's commands
+  tests.
 ignores:
   - "**/tests/**"
   - "**/tests.rs"

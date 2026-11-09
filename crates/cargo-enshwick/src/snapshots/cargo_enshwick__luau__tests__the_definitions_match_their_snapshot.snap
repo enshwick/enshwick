@@ -59,6 +59,10 @@ export type Actions = {
 	run_at: (self: Actions, action: string, args: {ActionValue}, target: ActionTarget) -> (),
 	--- Puts the declared action `action` on `key`, as `Actions.control` does.
 	control: (self: Actions, action: string, key: string) -> (),
+	--- Names the mod's actions as commands `/<name>` and `/<alias>`, as `Actions.commands` does.
+	commands: (self: Actions, name: string, alias: string) -> (),
+	--- Tells the platform that who may run the mod's actions changed, as `Actions.rules_changed` does.
+	rules_changed: (self: Actions) -> (),
 }
 
 --- Rolls on crafted items, for `Load.add_craft_affixes`.
@@ -500,6 +504,16 @@ export type Comfort = {
 	value: number,
 	--- Where the provider stands, in metres.
 	position: vector,
+}
+
+--- A running mod's command names, from `list`.
+export type CommandSet = {
+	--- The full name, `admin-tools` in `/admin-tools online`.
+	name: string,
+	--- The shorter alias, `adl` in `/adl online`.
+	alias: string,
+	--- The id of the mod that named them.
+	mod_id: string,
 }
 
 --- A change of one component of a template: `set` it whole, `edit` the fields a table names, or neither to remove it.
@@ -1874,6 +1888,8 @@ export type PlayerAction = {
 	args: {Arg}?,
 	--- Whether only the server's administrators see and run it, as `Action.admins` sets it.
 	admins: boolean?,
+	--- The permissions a player needs, all of them, as `Action.needs` adds each.
+	needs: {PlayerPermission}?,
 	--- Who sees and runs it, as `Action.allow` decides; only `true` allows, and with `admins` both must hold.
 	allow: ((player: Player) -> boolean?)?,
 	--- What it acts on for a player, as `Action.at` finds it.
@@ -1911,6 +1927,9 @@ export type PlayerDeathData = {
 	--- For a hit, the attacker of the last hit the player took, from its `HitHistory`, as `EntityDiedEvent` reads it; 0 for other causes, or when the history names none. The name is enshwick's.
 	killer_entity: number,
 }
+
+--- One of the server's permissions for a player, which the game's user groups grant. The groups are `userGroups` in `enshrouded_server.json`, and a player holds the permissions of the group whose password they joined with. The names are the game's reflected `PlayerPermissions` on server 26430253.
+export type PlayerPermission = "CanKickBan" | "CanAccessInventories" | "CanEditBase" | "CanEditWorld" | "CanExtendBase" | "CanReceiveExp"
 
 --- A permission the server grants a player through its user groups, one bit of the game's `PlayerPermissions`.
 export type PlayerPermissions = "CanEditBase" | "CanEditWorld"
@@ -2613,7 +2632,7 @@ export type TaskWorkers = {
 	background: number,
 }
 
---- How an entity arrives, for `Effects.teleport`. The name is enshwick's: the game takes a whole arrival transform. Unstable: needs the `unstable` feature and may change in any release.
+--- How an entity arrives, for `Effects.teleport`. The name is enshwick's: the game takes a whole arrival transform.
 export type Teleport = {
 	--- Let the game look for a free spot near the target to stand on, as it does for respawns.
 	search_best_spawn_position: boolean?,
@@ -2781,7 +2800,7 @@ export type UnlockedSkill = {
 export type Value = { Set: number } | { Times: number }
 
 --- Where a request came from.
-export type Via = "Interface" | "Console"
+export type Via = "Interface" | "Console" | "Chat" | "Remote"
 
 --- An entity's health, stamina and mana, from `World.vitals`. The name is enshwick's: read from the game's attribute sets.
 export type Vitals = {
@@ -3319,6 +3338,13 @@ declare enshwick: {
 		--- Runs the console line `line` and returns its answer, as `run` does.
 		run: (line: string) -> string,
 	},
+	--- Commands: a second way to run mods' actions, from chat, the console or a remote console.
+	commands: {
+		--- Runs the command line `line` for a caller named `label` holding `permissions`, as `run` does with a `Caller`; a script runs on the game thread, so it has no `run_later`.
+		run: (line: string, label: string, permissions: {PlayerPermission}) -> ActionOutcome,
+		--- The command names of the running mods, as `list` gives them.
+		list: () -> {CommandSet},
+	},
 	--- Messages between a mod's server part and its client part.
 	net: {
 		--- Whether `bytes` start like executable code, as `looks_like_code` says.
@@ -3360,8 +3386,12 @@ declare enshwick: {
 		add_threat: (attacker: number, target: number, threat: number) -> (),
 		--- Pings `position`, in metres, on the map as `sender` would; the players see it as a ping from them. Unstable: needs the `unstable` feature and may change in any release.
 		ping: (sender: number, position: vector) -> (),
-		--- Asks the server to move `entity` to `position`, in metres, after the next step, as its admin teleport does: the entity jumps there and clients see it arrive. Unstable: needs the `unstable` feature and may change in any release.
+		--- Asks the server to move `entity` to `position`, in metres, after the next step, as its admin teleport does: the entity jumps there and clients see it arrive.
 		teleport: (entity: number, position: vector, how: Teleport) -> (),
+		--- Asks the server to move the character of the connected player `player` to `position`, in metres, as `teleport` moves an entity. With `Teleport.search_best_spawn_position` the game picks a free spot near it, so the player never lands inside terrain or a wall.
+		teleport_player: (player: string, position: vector, how: Teleport) -> (),
+		--- Asks the server to move the character of the connected player `player` to where the connected player `to` stands, as `teleport_player` does; the game always picks a free spot beside them, so the two never stand in one place.
+		teleport_player_to: (player: string, to: string, how: Teleport) -> (),
 		--- Asks the server to spawn an entity of `template`, its GUID as `World.template` gives it, at `position` in metres, as its admin spawn does: an enemy, an animal, a survivor or a prop. The new entity's id comes back at once; the entity is in the world after the next step, and a template the game does not know spawns nothing.
 		spawn: (template: string, position: vector, how: Spawn) -> number,
 	},

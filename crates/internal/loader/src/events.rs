@@ -453,6 +453,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
     }
     part!("join admission", crate::admission::after_step(loader));
     part!("console lines", crate::console::after_step(loader));
+    part!("chat commands", crate::commands::after_step(loader));
     part!("chat sending", crate::chat::drain());
     part!("world saving", crate::saves::after_step(loader));
     part!("own channel", crate::carrier::after_step(loader, now));

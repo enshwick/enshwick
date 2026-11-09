@@ -3,6 +3,7 @@
 pub(crate) mod build;
 pub(crate) mod calls;
 pub(crate) mod chat;
+pub(crate) mod commands;
 pub(crate) mod content;
 pub(crate) mod gameplay;
 pub(crate) mod hooks;
