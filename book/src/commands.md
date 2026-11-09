@@ -75,8 +75,9 @@ the chat. It runs after the step, even while the player is muted in chat.
 Any other line posts as it would without the loader. A player runs at most
 eight commands a second, and the server drops a flood beyond that.
 
-A handler that panics during a command turns off only the mod's commands,
-with a warning in its log. Its actions keep their other paths.
+A handler that panics during a command or a console line turns off only the
+mod's typed lines, with a warning in its log. Each later one is refused
+with a line saying so. Its actions keep their other paths.
 
 The handler reads where a run came from in `request.via`. Commands typed in
 chat arrive as `Via::Chat`, and those another mod runs as `Via::Remote`.
@@ -98,10 +99,10 @@ and a `Caller`.
 
 ```rust
 use enshwick::commands::{self, Caller};
-use enshwick::world::PlayerPermission;
+use enshwick::world::PlayerPermissions;
 
 fn on_line(line: &str) -> String {
-    let operator = Caller::new("rcon 10.0.0.2").with(PlayerPermission::CanKickBan);
+    let operator = Caller::new("rcon 10.0.0.2").with(PlayerPermissions::CanKickBan);
     match commands::run(line, &operator) {
         Ok(reply) => reply.text().to_owned(),
         Err(why) => format!("not run: {why}"),
@@ -133,7 +134,7 @@ The game's user groups grant each player permissions, set in
 they joined with. `Action::needs` limits an action to players holding a
 permission. It applies wherever the action runs from.
 
-| `PlayerPermission` | The group's setting |
+| `PlayerPermissions` | The group's setting |
 | --- | --- |
 | `CanKickBan` | `canKickBan`, the server's administrators |
 | `CanAccessInventories` | `canAccessInventories` |
@@ -148,11 +149,11 @@ control does not reach their client, and a run is refused.
 
 ```rust
 use enshwick::actions::{Action, Outcome};
-use enshwick::world::PlayerPermission;
+use enshwick::world::PlayerPermissions;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let actions = load.actions(enshwick::i18n::Texts::default())?;
-    let repair = Action::new("repair", "Repair the base").needs(PlayerPermission::CanEditBase);
+    let repair = Action::new("repair", "Repair the base").needs(PlayerPermissions::CanEditBase);
     actions.add(repair, |_| Outcome::done("Repaired"))
 }
 ```

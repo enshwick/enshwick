@@ -2,11 +2,11 @@
 //! game thread.
 
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use enshwick::abi::{ActionCall, CommandInfo, Header, Status, Str};
 
-use super::{MAX_LINE, Named, Refusal, check, parse, remote_caller};
+use super::{MAX_LINE, Named, Refusal, Reply, Typed, check, parse, remote_caller, reply_by, typed};
 use crate::host::Loader;
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -35,6 +35,9 @@ struct State {
     /// Each account's rate of commands, the chat's own: at most eight a
     /// second, so only a flood loses one.
     rate: Mutex<Vec<crate::chat::Rate>>,
+    /// Commands dropped over a rate or a full queue, so the log names only
+    /// the first and every hundredth.
+    dropped: AtomicU32,
 }
 
 static NAMED: Registry<Named> = Registry::new();
@@ -43,6 +46,7 @@ static STATE: State = State {
     waiting: AtomicBool::new(false),
     any: AtomicBool::new(false),
     rate: Mutex::new(Vec::new()),
+    dropped: AtomicU32::new(0),
 };
 
 /// Names mod `owner`'s actions as the commands `/<name>` and `/<alias>`,
@@ -104,48 +108,71 @@ pub(crate) fn find(word: &str) -> Option<ModIndex> {
     parse(NAMED.sealed()?, word).map(|(owner, _)| owner)
 }
 
+/// Whether mod `owner` runs.
+fn running_mod(loader: &Loader, owner: ModIndex) -> bool {
+    loader
+        .mods
+        .get(owner.get())
+        .is_some_and(|m| !m.off.load(Ordering::Acquire))
+}
+
 /// The running mod whose command `text` names, and the rest of the line.
 fn owner_of<'a>(loader: &Loader, text: &'a str) -> Option<(ModIndex, &'a str)> {
     let (owner, rest) = parse(NAMED.sealed()?, text)?;
-    let running = loader
-        .mods
-        .get(owner.get())
-        .is_some_and(|m| !m.off.load(Ordering::Acquire));
-    running.then_some((owner, rest))
+    running_mod(loader, owner).then_some((owner, rest))
 }
 
 /// Takes the line `text` the player of account `key` typed when it is a
-/// running mod's command, a `/` and its name or alias first, and queues it
-/// for the end of the step; false for any other line. A command over a full
-/// queue is taken and dropped.
+/// mod's command, a `/` and its name or alias first, and queues it for the
+/// end of the step; false for any other line. A command of a mod that is
+/// off, or over the rate or a full queue, is taken and dropped.
 pub(crate) fn queue(loader: &Loader, key: u64, text: &str) -> bool {
-    if !text.starts_with('/') {
-        return false;
-    }
-    let Some((owner, rest)) = owner_of(loader, text) else {
+    let Some(named) = NAMED.sealed() else {
         return false;
     };
+    let (owner, rest) = match typed(named, text, |owner| running_mod(loader, owner)) {
+        Typed::Chat => return false,
+        Typed::Off => return true,
+        Typed::Run(owner, rest) => (owner, rest),
+    };
     let admitted = crate::chat::admit(&mut STATE.rate.relock(), key, std::time::Instant::now());
-    let mut pending = STATE.pending.relock();
-    if !admitted || pending.len() >= MAX_PENDING {
-        crate::log!(
-            DEBUG,
-            "{key:016x} sent a command over its rate or a full queue"
-        );
-        return true;
+    let queued = admitted && {
+        let mut pending = STATE.pending.relock();
+        let room = pending.len() < MAX_PENDING;
+        if room {
+            pending.push(Pending {
+                key,
+                owner,
+                rest: rest.to_owned(),
+            });
+            STATE.waiting.store(true, Ordering::Release);
+        }
+        room
+    };
+    if !queued {
+        let dropped = STATE.dropped.fetch_add(1, Ordering::Relaxed);
+        if dropped.is_multiple_of(100) {
+            crate::log!(
+                DEBUG,
+                "{key:016x} sent a command over its rate or a full queue ({} dropped)",
+                dropped + 1
+            );
+        }
     }
-    pending.push(Pending {
-        key,
-        owner,
-        rest: rest.to_owned(),
-    });
-    STATE.waiting.store(true, Ordering::Release);
     true
 }
 
+/// Forgets the commands waiting and each account's rate, when a hosted game
+/// ends, so none runs in the next one.
+pub(crate) fn forget() {
+    STATE.pending.relock().clear();
+    STATE.waiting.store(false, Ordering::Release);
+    STATE.rate.relock().clear();
+}
+
 /// Runs the chat commands queued during the step and tells each player the
-/// reply: one line as a notice, several in chat to that player alone; on
-/// the server's game thread, after the step.
+/// reply as [`reply_by`] sends it; on the server's game thread, after the
+/// step.
 pub(crate) fn after_step(loader: &Loader) {
     if !STATE.waiting.load(Ordering::Acquire) {
         return;
@@ -177,10 +204,12 @@ pub(crate) fn after_step(loader: &Loader) {
             command.owner.get(),
             if reply.done { "done" } else { "refused" }
         );
-        if text.lines().nth(1).is_some() {
-            let _queued = crate::chat::send(command.key, text);
-        } else if !text.is_empty() {
-            crate::actions::tell(loader, command.key, text);
+        match reply_by(text, crate::chat::to_one_player()) {
+            Reply::Chat(text) => {
+                let _queued = crate::chat::send(command.key, text);
+            }
+            Reply::Notice(text) => crate::actions::tell(loader, command.key, &text),
+            Reply::None => {}
         }
     }
 }
@@ -236,4 +265,22 @@ pub(crate) fn list(loader: &'static Loader) -> Vec<CommandInfo> {
             mod_id: Str::new(id),
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_command_typed_in_one_hosted_game_never_runs_in_the_next() {
+        STATE.pending.relock().push(Pending {
+            key: 7,
+            owner: ModIndex::new(0),
+            rest: "tp spawn".to_owned(),
+        });
+        STATE.waiting.store(true, Ordering::Release);
+        forget();
+        assert!(STATE.pending.relock().is_empty());
+        assert!(!STATE.waiting.load(Ordering::Acquire));
+    }
 }

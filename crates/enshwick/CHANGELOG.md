@@ -19,15 +19,15 @@ Each entry names the pull request that made the change.
   run from a player's chat, the server's console and remote consoles with
   the caller's rights; `/<alias> help` lists what the caller may run. A
   word another mod named first turns off only the later mod's commands, and
-  a handler that panics during a command turns off only that mod's
-  commands. `Via::Chat` and `Via::Remote` tell a handler where a command
+  a handler that panics during a command or a console line turns off only
+  that mod's typed lines, each later one refused saying so. `Via::Chat` and `Via::Remote` tell a handler where a command
   came from (#1009).
 - `commands`: `run`, `run_later` and `list` run any mod's command line for
   a remote `Caller` with the permissions it gives, from any thread through
   the mod's scheduler, and list the mods' command sets; Luau
   `enshwick.commands.run` and `list` (#1009).
-- `world`: `PlayerPermission` and `Player::has` read the game's user-group
-  permissions; `Action::needs` limits an action to players holding one, and
+- `world`: `PlayerPermissions` names all six of the game's user-group
+  permissions with their `bit`, and `Player::has` reads them; `Action::needs` limits an action to players holding one, and
   `Actions::rules_changed` carries each player the controls they may run
   after a mod's own rule changed; Luau `needs` and `actions:rules_changed`
   (#1009).

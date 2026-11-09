@@ -1,22 +1,81 @@
 //! Whether a player may edit a box of the world, by the server's own rule.
 
-use crate::abi::{BuildRights, Header};
+use crate::abi::{BuildRights, Header, PlayerInfo};
 
 use super::{Player, World, WorldError};
 
 /// A permission the server grants a player through its user groups, one bit
-/// of the game's `PlayerPermissions`.
+/// of the game's `PlayerPermissions` (server 26430253).
+///
+/// The groups are `userGroups` in `enshrouded_server.json`, and a player
+/// holds the permissions of the group whose password they joined with.
 ///
 /// # Examples
 ///
-/// See [`BuildRefusal`].
+/// See [`BuildRefusal`] and [`Player::has`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
+#[expect(
+    clippy::enum_variant_names,
+    reason = "the game's reflected names, which all start with Can"
+)]
 pub enum PlayerPermissions {
+    /// May kick and ban: the server's administrators.
+    CanKickBan,
+    /// May open containers in bases.
+    CanAccessInventories,
     /// Edits inside a base: a Flame Altar's building zone.
     CanEditBase,
     /// Every edit of the world, inside a base or not.
     CanEditWorld,
+    /// May place, remove and upgrade Flame Altars.
+    CanExtendBase,
+    /// Receives experience (the game's `CanReceiveEXP`).
+    CanReceiveExp,
+}
+
+impl PlayerPermissions {
+    /// Every permission, in the game's bit order.
+    pub const ALL: [Self; 6] = [
+        Self::CanKickBan,
+        Self::CanAccessInventories,
+        Self::CanEditBase,
+        Self::CanEditWorld,
+        Self::CanExtendBase,
+        Self::CanReceiveExp,
+    ];
+
+    /// Every permission's bit at once, as the server's console holds them.
+    pub const ALL_BITS: u8 = {
+        let mut bits = 0;
+        let mut i = 0;
+        while i < Self::ALL.len() {
+            bits |= Self::ALL[i].bit();
+            i += 1;
+        }
+        bits
+    };
+
+    /// The permission's bit in [`Player::permissions`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::world::PlayerPermissions;
+    ///
+    /// assert_eq!(PlayerPermissions::CanKickBan.bit(), 1);
+    /// ```
+    #[must_use]
+    pub const fn bit(self) -> u8 {
+        match self {
+            Self::CanKickBan => PlayerInfo::CAN_KICK_BAN,
+            Self::CanAccessInventories => PlayerInfo::CAN_ACCESS_INVENTORIES,
+            Self::CanEditBase => PlayerInfo::CAN_EDIT_BASE,
+            Self::CanEditWorld => PlayerInfo::CAN_EDIT_WORLD,
+            Self::CanExtendBase => PlayerInfo::CAN_EXTEND_BASE,
+            Self::CanReceiveExp => PlayerInfo::CAN_RECEIVE_EXP,
+        }
+    }
 }
 
 /// Why the server refuses a player's edit, from [`World::can_build`]; the

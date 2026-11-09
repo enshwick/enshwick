@@ -12,7 +12,7 @@ mod tests {
     use enshwick::commands::{self, Caller, CommandSet, MAX_LINE, RunCommandError};
     use enshwick::i18n::{Language, Texts};
     use enshwick::schedule::Scheduler;
-    use enshwick::world::PlayerPermission;
+    use enshwick::world::PlayerPermissions;
     use enshwick::{Load, Mod, Off};
 
     /// Each run: the action, where it came from and who ran it.
@@ -49,14 +49,17 @@ mod tests {
                 },
             )?;
             actions.add(
-                Action::new("repair", "Repair the base").needs(PlayerPermission::CanEditBase),
+                Action::new("repair", "Repair the base").needs(PlayerPermissions::CanEditBase),
                 |request| {
                     ran("repair", request);
                     Outcome::done("repaired")
                 },
             )?;
             actions.add(Action::new("boom", "Break"), |request| {
-                assert!(request.via != Via::Chat, "a handler that panics in chat");
+                assert!(
+                    !matches!(request.via, Via::Chat | Via::Console),
+                    "a handler that panics in a typed line"
+                );
                 Outcome::done("fine")
             })?;
             assert!(
@@ -246,7 +249,7 @@ mod tests {
             [("online".into(), Via::Remote, "rcon 10.0.0.2".into())]
         );
         assert!(!commands::run("adl kick Ann", &rcon).unwrap().is_done());
-        let admin = rcon.clone().with(PlayerPermission::CanKickBan);
+        let admin = rcon.clone().with(PlayerPermissions::CanKickBan);
         assert_eq!(
             commands::run("adl kick Ann", &admin).unwrap().text(),
             "kicked Ann"
@@ -341,12 +344,14 @@ mod tests {
         );
         assert_eq!(
             loader.type_in_chat(&ann, 0, "/adl online").as_deref(),
-            Some("0"),
-            "the mod's commands are off: refused without a text"
+            Some("0This mod's commands are off after an error."),
+            "the mod's commands are off: refused, saying why"
         );
         assert_eq!(
             commands::run("/adl online", &Caller::new("rcon")),
-            Ok(Outcome::refused("")),
+            Ok(Outcome::refused(
+                "This mod's commands are off after an error."
+            )),
             "for remote callers too"
         );
         let reply = loader
@@ -364,6 +369,27 @@ mod tests {
     }
 
     #[test]
+    fn a_handler_that_panics_on_the_console_turns_off_only_the_mod_s_commands() {
+        let ann = player(3, 7, "Ann", 0);
+        let console = player(0, 0, "console", 0x3f);
+        let loader = start(enshwick::test::FakeHost::new().player(ann));
+        assert_eq!(
+            loader
+                .ask_actions(ActionCall::CONSOLE, &console, 0, "boom", "")
+                .as_deref(),
+            Some("0")
+        );
+        let reply = loader
+            .ask_actions(ActionCall::RUN, &ann, 0, "boom", "")
+            .unwrap();
+        assert_eq!(reply, "1fine", "the mod runs on");
+        assert_eq!(
+            loader.type_in_chat(&ann, 0, "/adl online").as_deref(),
+            Some("0This mod's commands are off after an error.")
+        );
+    }
+
+    #[test]
     fn a_player_has_exactly_the_permissions_their_bits_hold() {
         let friend = enshwick::world::Player {
             entity: enshwick::Entity(2),
@@ -372,15 +398,15 @@ mod tests {
             permissions: PlayerInfo::CAN_EDIT_BASE | PlayerInfo::CAN_RECEIVE_EXP,
             name: "Ann".into(),
         };
-        let held: Vec<PlayerPermission> = PlayerPermission::ALL
+        let held: Vec<PlayerPermissions> = PlayerPermissions::ALL
             .into_iter()
             .filter(|p| friend.has(*p))
             .collect();
         assert_eq!(
             held,
             [
-                PlayerPermission::CanEditBase,
-                PlayerPermission::CanReceiveExp
+                PlayerPermissions::CanEditBase,
+                PlayerPermissions::CanReceiveExp
             ]
         );
     }

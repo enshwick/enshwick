@@ -16,21 +16,13 @@ use crate::mod_index::ModIndex;
 #[cfg(windows)]
 mod run;
 #[cfg(windows)]
-pub(crate) use run::{after_step, any, find, list, queue, register, run_remote, running, seal};
+pub(crate) use run::{
+    after_step, any, find, forget, list, queue, register, run_remote, running, seal,
+};
 
-/// The longest command line, from chat, the console or a remote caller.
-pub const MAX_LINE: usize = 1024;
-/// The longest command name or alias.
-const MAX_WORD: usize = 32;
-/// Words no mod may take: the loader's own and the help word.
-const RESERVED: [&str; 2] = [crate::settings::LOADER_ID, "help"];
+pub use enshwick::commands::MAX_LINE;
 /// Every permission bit the game gives, for the console's full rights.
-pub const ALL_PERMISSIONS: u8 = PlayerInfo::CAN_KICK_BAN
-    | PlayerInfo::CAN_ACCESS_INVENTORIES
-    | PlayerInfo::CAN_EDIT_BASE
-    | PlayerInfo::CAN_EDIT_WORLD
-    | PlayerInfo::CAN_EXTEND_BASE
-    | PlayerInfo::CAN_RECEIVE_EXP;
+pub const ALL_PERMISSIONS: u8 = enshwick::world::PlayerPermissions::ALL_BITS;
 
 /// A mod's command name and alias.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -41,15 +33,6 @@ pub struct Named {
     pub name: String,
     /// The shorter alias, `adl` in `/adl online`.
     pub alias: String,
-}
-
-/// Whether `word` can be a command name or alias: 1 to 32 of `[a-z0-9-]`.
-fn is_word(word: &str) -> bool {
-    !word.is_empty()
-        && word.len() <= MAX_WORD
-        && word
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
 /// Why a mod's command names are refused.
@@ -76,11 +59,7 @@ pub fn check(
     name: &str,
     alias: &str,
 ) -> Result<(), Refusal> {
-    let reserved = |w: &str| RESERVED.contains(&w);
-    if !is_word(name) || !is_word(alias) || alias.len() >= name.len() {
-        return Err(Refusal::Malformed);
-    }
-    if reserved(name) || reserved(alias) {
+    if !enshwick::commands::names_fit(name, alias) {
         return Err(Refusal::Malformed);
     }
     if named.iter().any(|n| n.owner == owner) {
@@ -120,6 +99,57 @@ pub fn parse<'a>(named: &[Named], line: &'a str) -> Option<(ModIndex, &'a str)> 
         .iter()
         .find(|n| n.name.eq_ignore_ascii_case(word) || n.alias.eq_ignore_ascii_case(word))
         .map(|n| (n.owner, rest))
+}
+
+/// What a line a player typed is to the commands.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Typed<'a> {
+    /// No command: the chat posts it.
+    Chat,
+    /// A command of a mod that is off: it leaves the chat, so its words
+    /// reach no other player, and runs nowhere.
+    Off,
+    /// A command of a running mod, and the rest of the line.
+    Run(ModIndex, &'a str),
+}
+
+/// What the line `text` is: a command when it starts with `/` and a name or
+/// alias in `named`, run when `running` says its mod runs.
+pub fn typed<'a>(named: &[Named], text: &'a str, running: impl Fn(ModIndex) -> bool) -> Typed<'a> {
+    if !text.starts_with('/') {
+        return Typed::Chat;
+    }
+    match parse(named, text) {
+        None => Typed::Chat,
+        Some((owner, rest)) if running(owner) => Typed::Run(owner, rest),
+        Some(_) => Typed::Off,
+    }
+}
+
+/// How a command's reply reaches the player who typed it.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Reply<'a> {
+    /// No text: nothing goes.
+    None,
+    /// One notice.
+    Notice(std::borrow::Cow<'a, str>),
+    /// Several lines in chat, to that player alone.
+    Chat(&'a str),
+}
+
+/// How the reply `text` goes: one line as a notice, several in chat while
+/// `chat_to_one` (lines to one player) works, else joined into one notice.
+#[must_use]
+pub fn reply_by(text: &str, chat_to_one: bool) -> Reply<'_> {
+    if text.is_empty() {
+        Reply::None
+    } else if text.lines().nth(1).is_none() {
+        Reply::Notice(text.into())
+    } else if chat_to_one {
+        Reply::Chat(text)
+    } else {
+        Reply::Notice(text.lines().collect::<Vec<_>>().join(" / ").into())
+    }
 }
 
 /// The remote caller `label` with the game's permission bits
@@ -210,6 +240,38 @@ mod tests {
         assert_eq!(parse(&all, "/me waves"), None);
         assert_eq!(parse(&all, "/"), None);
         assert_eq!(parse(&all, ""), None);
+    }
+
+    #[test]
+    fn a_command_of_a_mod_that_is_off_leaves_the_chat_and_runs_nowhere() {
+        let all = [named(3, "admin-tools", "adl"), named(5, "weather", "wx")];
+        let running = |owner: ModIndex| owner.get() == 5;
+        assert_eq!(
+            typed(&all, "/adl password hunter2", running),
+            Typed::Off,
+            "never posted for every player to read"
+        );
+        assert_eq!(
+            typed(&all, "/wx rain", running),
+            Typed::Run(ModIndex::new(5), "rain")
+        );
+        assert_eq!(typed(&all, "adl online", running), Typed::Chat);
+        assert_eq!(typed(&all, "/me waves", running), Typed::Chat);
+    }
+
+    #[test]
+    fn a_reply_of_several_lines_goes_as_one_notice_when_chat_to_one_player_is_off() {
+        let help = "online: players online\nkick: kick a player";
+        assert_eq!(reply_by(help, true), Reply::Chat(help));
+        assert_eq!(
+            reply_by(help, false),
+            Reply::Notice("online: players online / kick: kick a player".into())
+        );
+        assert_eq!(
+            reply_by("kicked Ann", true),
+            Reply::Notice("kicked Ann".into())
+        );
+        assert_eq!(reply_by("", false), Reply::None);
     }
 
     #[test]

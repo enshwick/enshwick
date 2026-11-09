@@ -48,7 +48,7 @@ impl Registry {
         self.declared.relock_read().clone()
     }
 
-    fn say(&self, key: &str, language: Language, values: &[(&str, &str)]) -> String {
+    pub(super) fn say(&self, key: &str, language: Language, values: &[(&str, &str)]) -> String {
         self.texts.fill(key, language, values)
     }
 

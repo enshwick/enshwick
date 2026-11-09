@@ -178,6 +178,11 @@ pub(crate) fn delivery() -> (u64, u64) {
     (DELIVERY.dropped.total(), DELIVERY.strayed.total())
 }
 
+/// Whether lines for one player go out: off once one reached others.
+pub(crate) fn to_one_player() -> bool {
+    !DELIVERY.one_player_off.load(Ordering::Relaxed)
+}
+
 /// Queues `text` for the player with account key `to`, or for everyone.
 pub(crate) fn send(to: u64, text: &str) -> Status {
     if LOADED.get().is_none() {

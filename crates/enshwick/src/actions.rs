@@ -60,7 +60,7 @@ use crate::PlayerKey;
 use crate::abi::{ActionCall, ActionReply, Str, read_headed};
 use crate::controls::{Control, Key};
 use crate::i18n::{Language, Texts};
-use crate::world::{Player, PlayerPermission};
+use crate::world::{Player, PlayerPermissions};
 use crate::{Load, Off};
 
 /// The platform's own texts for the console's answers; a mod's texts
@@ -76,6 +76,7 @@ const PLATFORM_TEXTS: &str = r#"
 "actions.player" = "player"
 "actions.on" = "on"
 "actions.off" = "off"
+"actions.commands_off" = "This mod's commands are off after an error."
 
 [uk]
 "actions.usage" = "Дії, кожна після id мода:"
@@ -87,6 +88,7 @@ const PLATFORM_TEXTS: &str = r#"
 "actions.player" = "гравець"
 "actions.on" = "on"
 "actions.off" = "off"
+"actions.commands_off" = "Команди цього мода вимкнено після помилки."
 "#;
 
 /// The longest action id.
@@ -254,13 +256,13 @@ impl Action {
     ///
     /// ```
     /// use enshwick::actions::Action;
-    /// use enshwick::world::PlayerPermission;
+    /// use enshwick::world::PlayerPermissions;
     ///
-    /// let action = Action::new("repair", "Repair the base").needs(PlayerPermission::CanEditBase);
+    /// let action = Action::new("repair", "Repair the base").needs(PlayerPermissions::CanEditBase);
     /// assert_eq!(action.id(), "repair");
     /// ```
     #[must_use]
-    pub const fn needs(mut self, permission: PlayerPermission) -> Self {
+    pub const fn needs(mut self, permission: PlayerPermissions) -> Self {
         self.needs |= permission.bit();
         self
     }
@@ -519,7 +521,9 @@ impl Actions {
         let host = self.registry.host;
         let status = (host.api().commands)(host.handle(), Str::new(name), Str::new(alias));
         if status == crate::abi::Status::REFUSED {
-            crate::warn!("commands /{name} /{alias} are off: another mod named one of them first");
+            crate::warn!(
+                "commands /{name} /{alias} are off: another mod's commands or id hold one of them"
+            );
             return Ok(());
         }
         crate::load::ok(status, (), || format!("commands /{name} /{alias}"))
@@ -566,9 +570,9 @@ thread_local! {
     static REPLY: RefCell<String> = const { RefCell::new(String::new()) };
 }
 
-/// Runs a command line for `player`: a panic in a handler turns off only
-/// the mod's commands, with a warning, and every later command is refused
-/// without a text.
+/// Runs a typed line for `player`, from chat, the console or a remote
+/// caller: a panic in a handler turns off only the mod's typed lines, with a
+/// warning, and every later one is refused saying so.
 fn run_command(
     registry: &Registry,
     player: &Player,
@@ -579,7 +583,7 @@ fn run_command(
     use core::sync::atomic::Ordering;
 
     if registry.commands_off.load(Ordering::Acquire) {
-        return Outcome::refused("");
+        return Outcome::refused(registry.say("actions.commands_off", language, &[]));
     }
     let run = || registry.run_from_console(player, line, language, via);
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(run)).unwrap_or_else(|payload| {
@@ -641,7 +645,8 @@ unsafe extern "system" fn answer(call: *const ActionCall, user: *mut c_void, out
                     .flatten();
                 Answered::Run(registry.run_from_interface(&player, action, args, language, target))
             }
-            ActionCall::CONSOLE => Answered::Run(registry.run_from_console(
+            ActionCall::CONSOLE => Answered::Run(run_command(
+                registry,
                 &player,
                 action,
                 Language::FALLBACK,

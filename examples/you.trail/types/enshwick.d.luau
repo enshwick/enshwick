@@ -1885,7 +1885,7 @@ export type PlayerAction = {
 	--- Whether only the server's administrators see and run it, as `Action.admins` sets it.
 	admins: boolean?,
 	--- The permissions a player needs, all of them, as `Action.needs` adds each.
-	needs: {PlayerPermission}?,
+	needs: {PlayerPermissions}?,
 	--- Who sees and runs it, as `Action.allow` decides; only `true` allows, and with `admins` both must hold.
 	allow: ((player: Player) -> boolean?)?,
 	--- What it acts on for a player, as `Action.at` finds it.
@@ -1924,11 +1924,8 @@ export type PlayerDeathData = {
 	killer_entity: number,
 }
 
---- One of the server's permissions for a player, which the game's user groups grant. The groups are `userGroups` in `enshrouded_server.json`, and a player holds the permissions of the group whose password they joined with. The names are the game's reflected `PlayerPermissions` on server 26430253.
-export type PlayerPermission = "CanKickBan" | "CanAccessInventories" | "CanEditBase" | "CanEditWorld" | "CanExtendBase" | "CanReceiveExp"
-
---- A permission the server grants a player through its user groups, one bit of the game's `PlayerPermissions`.
-export type PlayerPermissions = "CanEditBase" | "CanEditWorld"
+--- A permission the server grants a player through its user groups, one bit of the game's `PlayerPermissions` (server 26430253). The groups are `userGroups` in `enshrouded_server.json`, and a player holds the permissions of the group whose password they joined with.
+export type PlayerPermissions = "CanKickBan" | "CanAccessInventories" | "CanEditBase" | "CanEditWorld" | "CanExtendBase" | "CanReceiveExp"
 
 --- A character's level and experience, from `World.progress`. The name is enshwick's: read from the game's attribute sets.
 export type Progress = {
@@ -3337,7 +3334,7 @@ declare enshwick: {
 	--- Commands: a second way to run mods' actions, from chat, the console or a remote console.
 	commands: {
 		--- Runs the command line `line` for a caller named `label` holding `permissions`, as `run` does with a `Caller`; a script runs on the game thread, so it has no `run_later`.
-		run: (line: string, label: string, permissions: {PlayerPermission}) -> ActionOutcome,
+		run: (line: string, label: string, permissions: {PlayerPermissions}) -> ActionOutcome,
 		--- The command names of the running mods, as `list` gives them.
 		list: () -> {CommandSet},
 	},

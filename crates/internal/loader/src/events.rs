@@ -569,6 +569,7 @@ fn end_session() {
     crate::interactions::forget();
     crate::item_actions::forget();
     crate::actions::forget();
+    crate::commands::forget();
     crate::controls::forget();
     crate::bases::forget();
     crate::saves::forget();

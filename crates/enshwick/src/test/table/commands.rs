@@ -17,6 +17,19 @@ pub(crate) struct FakeCommands {
     pub(crate) listed: Vec<[Box<str>; 3]>,
 }
 
+#[cfg(feature = "unstable")]
+use crate::commands::MAX_LINE;
+/// The longest command line, as `commands::MAX_LINE` holds it where that
+/// module is built.
+#[cfg(not(feature = "unstable"))]
+const MAX_LINE: usize = 1024;
+/// The game's permission bits a remote caller may hold.
+#[cfg(feature = "unstable")]
+const ALL_BITS: u8 = crate::world::PlayerPermissions::ALL_BITS;
+/// Without the `world` module the fake keeps every bit a caller names.
+#[cfg(not(feature = "unstable"))]
+const ALL_BITS: u8 = u8::MAX;
+
 /// Whether `name` and `alias` are words the loader takes.
 fn fit(name: &str, alias: &str) -> bool {
     #[cfg(feature = "unstable")]
@@ -113,7 +126,7 @@ fn remote_caller(label: &str, permissions: u32) -> PlayerInfo {
         slot: u32::MAX,
         entity: crate::Entity(0),
         key: crate::PlayerKey::new(0),
-        permissions: u8::try_from(permissions & 0x3f).unwrap_or(0),
+        permissions: u8::try_from(permissions & u32::from(ALL_BITS)).unwrap_or(0),
         name_len: u8::try_from(label.len()).unwrap_or(64),
         name,
     }
@@ -127,7 +140,7 @@ pub(crate) extern "system" fn run_command(
     out: *mut ActionReply,
 ) -> Status {
     let line = text(line);
-    if line.len() > 1024 || line.trim().is_empty() {
+    if line.len() > MAX_LINE || line.trim().is_empty() {
         return Status::BAD_ARGS;
     }
     let caller = remote_caller(&text(label), permissions);

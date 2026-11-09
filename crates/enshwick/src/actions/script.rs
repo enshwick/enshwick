@@ -17,7 +17,7 @@ use crate::script::{
     self, Answer, Bound, Callback, Class, Error, FromScript, Function, IntoScript, Object, Param,
     Signature, Ty, Typed,
 };
-use crate::world::{Player, PlayerPermission};
+use crate::world::{Player, PlayerPermissions};
 use crate::{Load, Off, PlayerKey};
 
 /// An action as a script declares it: the fields of [`Action`]'s builder.
@@ -41,7 +41,7 @@ pub(crate) struct ScriptAction {
     /// The permissions a player needs, all of them, as [`Action::needs`]
     /// adds each.
     #[script(default)]
-    pub needs: Vec<PlayerPermission>,
+    pub needs: Vec<PlayerPermissions>,
     /// Who sees and runs it, as [`Action::allow`] decides; only `true`
     /// allows, and with `admins` both must hold.
     pub allow: Option<AllowFn>,

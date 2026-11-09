@@ -20,9 +20,9 @@
 //!
 //! ```
 //! use enshwick::commands::{Caller, run};
-//! use enshwick::world::PlayerPermission;
+//! use enshwick::world::PlayerPermissions;
 //!
-//! let operator = Caller::new("rcon 10.0.0.2").with(PlayerPermission::CanKickBan);
+//! let operator = Caller::new("rcon 10.0.0.2").with(PlayerPermissions::CanKickBan);
 //! // Outside the game no loader answers.
 //! assert!(run("/adl online", &operator).is_err());
 //! ```
@@ -30,7 +30,7 @@
 use crate::abi::{ActionReply, CommandInfo, Header, Status, Str};
 use crate::actions::Outcome;
 use crate::schedule::Scheduler;
-use crate::world::PlayerPermission;
+use crate::world::PlayerPermissions;
 
 /// The longest command line [`run`] takes, in bytes.
 pub const MAX_LINE: usize = 1024;
@@ -42,8 +42,11 @@ pub const MAX_NAME: usize = 32;
 const RESERVED: [&str; 2] = ["enshwick", "help"];
 
 /// Whether `name` and `alias` can name a mod's commands: each 1 to
-/// [`MAX_NAME`] of `[a-z0-9-]`, the alias shorter, neither reserved.
-pub(crate) fn names_fit(name: &str, alias: &str) -> bool {
+/// [`MAX_NAME`] of `[a-z0-9-]`, the alias shorter, neither reserved; the
+/// loader checks by the same rule.
+#[doc(hidden)]
+#[must_use]
+pub fn names_fit(name: &str, alias: &str) -> bool {
     let word = |w: &str| {
         !w.is_empty()
             && w.len() <= MAX_NAME
@@ -88,7 +91,7 @@ impl Caller {
     ///
     /// See the [module](self).
     #[must_use]
-    pub const fn with(mut self, permission: PlayerPermission) -> Self {
+    pub const fn with(mut self, permission: PlayerPermissions) -> Self {
         self.permissions |= permission.bit();
         self
     }
@@ -100,14 +103,14 @@ impl Caller {
     ///
     /// ```
     /// use enshwick::commands::Caller;
-    /// use enshwick::world::PlayerPermission;
+    /// use enshwick::world::PlayerPermissions;
     ///
     /// let owner = Caller::new("owner").with_all();
-    /// assert_eq!(owner, PlayerPermission::ALL.into_iter().fold(Caller::new("owner"), Caller::with));
+    /// assert_eq!(owner, PlayerPermissions::ALL.into_iter().fold(Caller::new("owner"), Caller::with));
     /// ```
     #[must_use]
     pub fn with_all(self) -> Self {
-        PlayerPermission::ALL.into_iter().fold(self, Self::with)
+        PlayerPermissions::ALL.into_iter().fold(self, Self::with)
     }
 }
 
@@ -322,7 +325,7 @@ impl CommandFns {
         self,
         line: &str,
         label: &str,
-        permissions: Vec<PlayerPermission>,
+        permissions: Vec<PlayerPermissions>,
     ) -> Result<crate::actions::ScriptOutcome, RunCommandError> {
         let caller = permissions
             .into_iter()
