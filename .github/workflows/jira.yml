@@ -15,7 +15,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: jira-${{ github.event.pull_request.number || github.event.workflow_run.id }}
+  group: jira-${{ github.event.pull_request.number || github.event.workflow_run.id }}-${{ github.event.pull_request.draft }} # a draft's late run never cancels a ready one
   cancel-in-progress: true
 
 jobs:
