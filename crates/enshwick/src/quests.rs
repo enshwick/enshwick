@@ -25,7 +25,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::content::EngineFacts as _;
 use crate::content::journal::{JOURNAL_REGISTRY, QuestReward};
-use crate::content::knowledge::{ExperienceValue, KnowledgeQuery};
+use crate::content::knowledge::{ExperienceValue, KnowledgeQuery, KnowledgeTest};
 use crate::locks::Relock as _;
 use crate::resources::Value;
 use crate::typed::{
@@ -266,8 +266,9 @@ impl QuestInfo {
     }
 }
 
-/// Where a player or the world stands in one step: `None` where only the
-/// game answers, for a step that asks a game query.
+/// Where a player or the world stands in one step: `None` for a step whose
+/// game query the game has not answered (not evaluated yet, or a build
+/// without the game's query calls).
 ///
 /// # Examples
 ///
@@ -389,14 +390,27 @@ impl Quests {
 
     /// Whether `query` holds for the player `player`, or for the world when
     /// `player` is `None`: a player's entry is read for the player, the
-    /// world's for both. `None` for a game query and an entry the holder
-    /// does not have.
+    /// world's for both, and an entry the holder does not have reads 0; a
+    /// game query is the game's answer, `None` where it has none.
     fn holds(&self, player: Option<Entity>, query: KnowledgeQuery) -> Option<bool> {
+        if let KnowledgeTest::Holds | KnowledgeTest::Fails = query.test {
+            let held = self.game_query(player.unwrap_or(Entity(0)), query.id.get())?;
+            return Some(held == (query.test == KnowledgeTest::Holds));
+        }
         let known = match player {
             Some(player) => self.knowledge.get(player, query.id),
             None => self.knowledge.world(query.id),
         };
         query.test.passes(known.map_or(0, |known| known.value))
+    }
+
+    /// Whether the game query `query` holds for the character `entity`, or
+    /// for the world for `Entity(0)`, as the game answers it.
+    fn game_query(&self, entity: Entity, query: u32) -> Option<bool> {
+        let host = self.knowledge.host;
+        let mut holds = 0u32;
+        let status = (host.api().game_query)(host.handle(), entity, query, &raw mut holds);
+        (status == crate::abi::Status::OK).then_some(holds != 0)
     }
 
     fn state_of(&self, player: Option<Entity>, quest: KnowledgeId) -> Option<QuestState> {

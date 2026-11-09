@@ -800,6 +800,29 @@ pub(crate) extern "system" fn knowledge(
     })
 }
 
+pub(crate) extern "system" fn game_query(
+    me: ModHandle,
+    entity: Entity,
+    query: u32,
+    holds: *mut u32,
+) -> Status {
+    entry("game_query", || {
+        if holds.is_null() {
+            return Status::BAD_ARGS;
+        }
+        match caller(me).and_then(|loader| crate::knowledge::query::holds(loader, entity, query)) {
+            Ok(held) => {
+                // SAFETY: `holds` is non-null, checked above, and
+                // `HostApi::game_query` has the mod pass it writable for the
+                // call.
+                unsafe { holds.write(u32::from(held)) };
+                Status::OK
+            }
+            Err(status) => status,
+        }
+    })
+}
+
 pub(crate) extern "system" fn revoke_knowledge(
     me: ModHandle,
     entity: Entity,

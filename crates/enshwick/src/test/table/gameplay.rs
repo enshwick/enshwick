@@ -489,6 +489,31 @@ pub(crate) extern "system" fn knowledge(
     }
 }
 
+pub(crate) extern "system" fn game_query(
+    _me: ModHandle,
+    entity: crate::Entity,
+    query: u32,
+    holds: *mut u32,
+) -> Status {
+    if holds.is_null() {
+        return Status::BAD_ARGS;
+    }
+    let holder = (entity != crate::Entity(0)).then_some(entity);
+    let found = with(None, |s| {
+        s.game_queries
+            .iter()
+            .find(|(e, q, _)| *q == query && *e == holder)
+            .map(|(_, _, held)| *held)
+    });
+    let Some(held) = found else {
+        return Status::MISSING;
+    };
+    // SAFETY: `holds` is non-null, checked above, and `HostApi::game_query`
+    // has the mod pass it writable for the call.
+    unsafe { holds.write(u32::from(held)) };
+    Status::OK
+}
+
 pub(crate) extern "system" fn grant_knowledge(
     _me: ModHandle,
     entity: crate::Entity,

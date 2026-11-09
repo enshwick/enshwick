@@ -207,6 +207,20 @@ impl Installed {
         });
     }
 
+    /// Sets whether each game query holds, `(character or None for the
+    /// world, query id, holds)`; a query not set is one the game has not
+    /// answered.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.set_game_queries(&[(None, 7, true)]);
+    /// ```
+    pub fn set_game_queries(&self, answers: &[(Option<Entity>, u32, bool)]) {
+        table::with((), |s| s.game_queries = answers.to_vec());
+    }
+
     /// The knowledge grants the mod asked for: character, id, kind, value.
     ///
     /// # Examples

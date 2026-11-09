@@ -49,6 +49,8 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::knowledge::OBJECT.id(),
     pinned::knowledge::PLAYER_VALUE.id(),
     pinned::knowledge::PUSH.id(),
+    pinned::knowledge::QUERY_PLAYER.id(),
+    pinned::knowledge::QUERY_WORLD.id(),
     pinned::knowledge::QUEUE.id(),
     pinned::knowledge::RECORD_ACTIVE.id(),
     pinned::knowledge::RECORD_CHANGES.id(),
@@ -76,6 +78,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 
 pub(crate) mod changes;
 pub(crate) mod guard;
+pub(crate) mod query;
 
 type PlayerValueFn =
     unsafe extern "system" fn(state: *const u8, id: *const u32, entity: u32) -> u64;
@@ -129,6 +132,8 @@ struct Layout {
     quests: usize,
     quest_size: usize,
     quest_id: usize,
+    /// The game's query calls, `None` on a build without them.
+    query: Option<query::Calls>,
 }
 
 impl Layout {
@@ -239,6 +244,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 quests: field("keen::JournalRegistryResource", "quests")?,
                 quest_size: size("keen::JournalQuestResource")?,
                 quest_id: field("keen::JournalCollectionResource", "entryId")?,
+                query: query::calls(loader),
             })
             .filter(Layout::entry_holds_its_fields)
             .filter(Layout::request_holds_its_fields)

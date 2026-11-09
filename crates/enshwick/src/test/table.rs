@@ -262,6 +262,8 @@ pub(crate) struct State {
     pub(crate) buffs: rustc_hash::FxHashMap<u32, Vec<ActiveBuff>>,
     /// Knowledge values by `(character or 0, id)`.
     pub(crate) knowledge: Vec<(Option<crate::Entity>, KnowledgeInfo)>,
+    /// Whether each game query holds, by `(character or 0, query)`.
+    pub(crate) game_queries: Vec<(Option<crate::Entity>, u32, bool)>,
     /// The grants the mod asked for: character, id, kind, value.
     pub(crate) grants: Vec<(Option<crate::Entity>, crate::abi::KnowledgeId, u32, u32)>,
     /// The revokes the mod asked for: character, id, kind, value.
@@ -722,6 +724,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         buff_types: Vec::new(),
         buffs: rustc_hash::FxHashMap::default(),
         knowledge: Vec::new(),
+        game_queries: Vec::new(),
         grants: Vec::new(),
         revokes: Vec::new(),
         account_changes: Vec::new(),
@@ -1143,4 +1146,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     command_list: commands::command_list,
     actions_changed: commands::actions_changed,
     resource_buffer,
+    game_query: gameplay::game_query,
 };

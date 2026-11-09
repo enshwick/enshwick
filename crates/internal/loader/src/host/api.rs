@@ -263,4 +263,5 @@ pub(crate) static API: HostApi = HostApi {
     command_list,
     actions_changed,
     resource_buffer,
+    game_query: super::entries::gameplay::game_query,
 };

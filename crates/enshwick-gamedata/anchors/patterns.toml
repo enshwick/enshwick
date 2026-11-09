@@ -12,6 +12,8 @@
 "ui.context" = { pattern = "40 57 48 83 EC 20 48 8B 05 ?? ?? ?? ?? 4C 8B 80 ?? ?? ?? ?? 49 8B 10 48 85 D2", rel = 9 }
 "bases.entity_hash" = { pattern = "48 85 C0 74 08 48 FF C0 48 89 44 24 ?? 44 8B 05 ?? ?? ?? ?? 48 8D 44 24 ?? 48 89 44 24 ?? 48 8D 4C 24 ?? 48 8D 05 ?? ?? ?? ?? 4C 89 6C 24 ??", rel = 16 }
 "ui.input_hint" = { pattern = "40 55 48 8D 6C 24 E0 48 81 EC ?? ?? 00 00 80 F9 ?? 72 ?? 32 C0" }
+"knowledge.query_player" = { pattern = "40 53 48 83 EC 30 48 8B 44 24 60 48 8B D9 48 89 44 24 28 44 89 4C 24 20 4D 8B C8 4C 8B 42 08 48 8B 52 10 E8" }
+"knowledge.query_world" = { pattern = "40 53 48 83 EC 20 4D 8B C8 48 8B D9 4C 8B 42 08 48 8B 52 10 E8" }
 
 [client.constants]
 "server.permission_entry_size" = { value = 0xa0, pattern = "3D ?? ?? ?? ?? 77 1D 4C 8D 0C 80 49 C1 E1 05 43 39 14 01", fixed = true }
@@ -32,6 +34,8 @@
 "skill.airborne_architect_cell" = { pattern = "74 1E 4C 8B 85 ?? ?? ?? ?? 48 8B 55 ?? 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 74 04 B3 01", rel = 15 }
 "knowledge.set_values" = { pattern = "40 56 41 54 41 55 41 56 41 57 48 83 EC 40 41 0F B6 40 ??" }
 "knowledge.set_world" = { pattern = "40 53 48 83 EC 20 48 83 7A ?? 00 4C 8B C2 48 8B D9" }
+"knowledge.query_player" = { pattern = "40 53 48 83 EC 30 48 8B 44 24 60 48 8B D9 48 89 44 24 28 44 89 4C 24 20 4D 8B C8 4C 8B 42 08 48 8B 52 10 E8" }
+"knowledge.query_world" = { pattern = "40 53 48 83 EC 20 4D 8B C8 48 8B D9 4C 8B 42 08 48 8B 52 10 E8" }
 "bases.holder_at" = { pattern = "48 89 5C 24 ?? 48 89 74 24 ?? 57 48 83 EC 20 8B 72 ?? 33 DB", body = { len = 0x1ac, open = [0x22, 0x4e, 0x5f, 0x70, 0x7f, 0x8e, 0x9d, 0xb9, 0x13c], hash = "74d814b25adf548a0779dbe956534b15" } }
 "bases.entity_hash" = { pattern = "48 85 C0 74 08 48 FF C0 48 89 44 24 ?? 44 8B 05 ?? ?? ?? ?? 48 8D 44 24 ?? 48 89 44 24 ?? 48 8D 4C 24 ?? 48 8D 05 ?? ?? ?? ?? 4C 89 6C 24 ??", rel = 16 }
 

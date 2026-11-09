@@ -357,6 +357,8 @@ entries = [
   "knowledge.object",
   "knowledge.player_value",
   "knowledge.push",
+  "knowledge.query_player",
+  "knowledge.query_world",
   "knowledge.queue",
   "knowledge.record_active",
   "knowledge.record_changes",
