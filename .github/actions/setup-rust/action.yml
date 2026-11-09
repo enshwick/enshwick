@@ -120,7 +120,7 @@ runs:
 
     # Every version here must be in install-action's manifests at this SHA:
     # a version it lacks falls back to cargo-binstall.
-    - uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
+    - uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
       with:
         tool: cargo-xwin@0.23.1${{ inputs.tools != '' && format(',{0}', inputs.tools) || '' }}
 
