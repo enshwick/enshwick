@@ -167,6 +167,8 @@ fn module_of(at: usize) -> Option<String> {
         GetModuleFileNameW, GetModuleHandleExW, GetModuleHandleW,
     };
 
+    const PATH: u32 = 1024;
+
     let mut module: HMODULE = core::ptr::null_mut();
     // SAFETY: with `FROM_ADDRESS` the name is any address, only compared
     // with the loaded modules' ranges; `module` is a writable local, and the
@@ -182,7 +184,6 @@ fn module_of(at: usize) -> Option<String> {
     if found == 0 || module == unsafe { GetModuleHandleW(core::ptr::null()) } {
         return None;
     }
-    const PATH: u32 = 1024;
     let mut path = [0u16; PATH as usize];
     // SAFETY: `module` is a loaded module's handle and `path` has room for
     // the `PATH` `u16`s the call may write.

@@ -16,7 +16,7 @@ fn module(at: usize) -> Option<String> {
 
 /// `jmp rel32` at `from` to `to`.
 fn near_jump(from: usize, to: usize) -> [u8; 5] {
-    let delta = i32::try_from(to as isize - (from as isize + 5)).unwrap();
+    let delta = i32::try_from(to.cast_signed() - (from + 5).cast_signed()).unwrap();
     let mut jump = [0xE9, 0, 0, 0, 0];
     jump[1..].copy_from_slice(&delta.to_le_bytes());
     jump

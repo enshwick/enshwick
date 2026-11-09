@@ -134,10 +134,12 @@ pub fn diff(old: &[u8], new: &[u8]) -> Vec<(usize, usize)> {
     ranges
 }
 
-/// The ranges where `now` differs from `disk`, the code as the image on disk
-/// holds it once relocated, as [`diff`] finds them; `None` when the lengths
-/// differ or the ranges are so many that the file's code is packed or
-/// encrypted rather than changed, and so no copy of the code that runs.
+/// The ranges where `now` differs from `disk`, the relocated code of the
+/// image on disk, as [`diff`] finds them.
+///
+/// `None` when the lengths differ or the ranges are so many that the file's
+/// code is packed or encrypted rather than changed, and so no copy of the
+/// code that runs.
 ///
 /// # Examples
 ///
