@@ -51,7 +51,7 @@ A Luau mod keeps the same file as `texts.toml` beside `main.luau`.
 ## Add the item
 
 The chest is a clone of the vanilla storage box under a
-[content id](content.md#content-ids) of its own. It looks and works like the
+[content id](concepts/ids.md) of its own. It looks and works like the
 box and takes its name from the texts:
 
 ```rust

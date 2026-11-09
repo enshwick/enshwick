@@ -94,6 +94,10 @@ Each entry names the pull request that made the change.
   (#993).
 - A data pack's log level check reads a word kept by its handle, with no
   lock or hash: about 1.7 ns instead of 6.9 ns (#993).
+- The book's chapter "How ids are namespaced" states the id rule for every
+  kind a mod declares, and every chapter that names an id links it;
+  `cargo xtask check` holds the link. "The life of a mod" states the load
+  order and the reasons the loader skips a mod when it resolves (#1010).
 
 ### Fixed
 

@@ -13,7 +13,7 @@ It may refuse the first four and hears when all mods allowed a use. The calls ar
 
 [`load.on_item(item, kind, handler)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/items.rs)
 runs `handler` when a player does that kind of action with the item. A mod's
-own item is `ItemId::from_guid` of its content id's GUID, and in Luau
+own item is `ItemId::from_guid` of its [content id](../concepts/ids.md)'s GUID, and in Luau
 `enshwick.content.item_id` of its full content id. The handler gets an
 `ItemAction` with these fields:
 

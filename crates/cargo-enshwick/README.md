@@ -40,7 +40,7 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
   copies it to `<game>/mods/<id>/<package>.dll`. The game folder is `--game` or `ENSHROUDED_DIR`;
   in a workspace with several mods, `--package` names one.
 - `id <mod:name>...` prints the GUID and the game id of each
-  [content id](https://github.com/enshwick/enshwick/blob/main/book/src/content.md#content-ids), as `Guid::named`
+  [content id](https://github.com/enshwick/enshwick/blob/main/book/src/concepts/ids.md), as `Guid::named`
   derives them: `cargo enshwick id you.lanterns:lantern`.
 - `deps [<alias>] --from <path> [--luau]` writes what each dependency
   offers, its

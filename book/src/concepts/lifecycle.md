@@ -13,13 +13,8 @@ The loader takes every mod through five steps, all at game start.
    id, version, side, dependencies, pinned build rows. No other code of the
    mod runs yet. A malformed manifest skips the mod, and so does a side
    other than `server` or `both`.
-2. **Resolve.** The loader skips, each with a reason in the loader's log:
-   - a second mod with an id already taken, in file name order;
-   - mods whose `requires` is missing, skipped or out of range, as in
-     `requires trading-post ^0.2, found 0.1.3`;
-   - mods in a dependency cycle.
-
-   The rest load with their dependencies first, otherwise in id order.
+2. **Resolve.** The loader skips some mods, each with a reason in the
+   loader's log, and puts the rest in [load order](#in-what-order-do-mods-load).
 3. **Init.** `Mod::init` runs once per mod, in load order, on the loader's
    start thread. It links hooks, reads settings, subscribes to events, finds
    game functions and services, and adds content. Nothing takes effect yet:
@@ -35,6 +30,30 @@ The loader takes every mod through five steps, all at game start.
    start-up has run by then.
 5. **Ready.** `Mod::ready` runs for every mod still on, in load order. Start
    background threads here.
+
+## In what order do mods load?
+
+Mods load with their dependencies first, and otherwise in mod id order. A
+mod's `requires` and `after` load before it. Load order sets the order of
+`init` and `ready`. Hooks of equal priority and filters run in it too. Links
+on an [extension point](../extending.md#order) run by their `after` and
+`before`, then by priority, then by mod id.
+
+When it resolves, the loader skips these mods, each with the reason in its
+log:
+
+| Mod | Log |
+| --- | --- |
+| a second file of one mod id | `old.dll skipped: you.trading-post 0.1.0 is also in trading_post.dll, which runs 0.2.0; old.dll can be deleted` |
+| one whose `requires` is not loaded | `requires you.trading-post, which is not loaded` |
+| one whose `requires` is out of range | `requires you.trading-post ^0.2, found 0.1.3` |
+| one whose `breaks` names a loaded mod in range | `does not work beside you.old-market 0.4.0; remove one of them` |
+| mods that require each other in a circle | `in a dependency cycle` |
+
+Of two files with one mod id, the highest version runs, then the newest
+file, then the first by name. A skipped mod can make the mods that require
+it skip in turn. A circle that
+`after` closes gives way, and its mods load anyway.
 
 ## The mod
 

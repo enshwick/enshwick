@@ -80,73 +80,17 @@ first time it reads it.
 
 ## Content ids
 
-Every piece of content a mod adds has a **content id**, `<mod>:<name>`.
-That covers the item, its recipe, the station template, the workshop, each
-text tag and icon. The mod side is the mod's own id. The name is 1 to 128 of
-`[a-z0-9_./-]`, so ids read like paths:
-
-- `you.lockers:locker`
-- `you.lockers:locker.name`
-- `you.market-stalls:stall/blacksmith`
-
-A mod writes only the name.
-[`id!`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/ids.rs)
-puts the mod's id in front. It reads the id from `[package.metadata.enshwick]`
-in the crate's `Cargo.toml`. `part` derives the ids that belong to one piece
-of content from its name. Both are constants, and a malformed name fails the
-build:
-
-```rust
-use enshwick::content::{Guid, Id, id};
-
-// In the mod `you.lockers`, this is `you.lockers:locker`.
-const LOCKER: Id = id!("locker");
-const LOCKER_NAME: Id = LOCKER.part("name");
-
-assert_eq!(LOCKER_NAME.to_string(), format!("{LOCKER}.name"));
-assert_eq!(LOCKER.guid(), Guid::named(&LOCKER.to_string()));
-```
-
-`Id::new("you.lockers:locker")` takes an id in full, for tests and tools
-that name content outside their own mod.
-
-The game knows content by GUID, so the id turns into one. It is a version 5
-(name-based, SHA-1) UUID of the id's UTF-8 bytes. The namespace is
-Enshwick's
-[`NAMESPACE`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs),
-`e2185889-0e5e-4977-9edd-d6e7bcd1393f`. The same id gives the same GUID on
-every machine, in every release and in any tool. Python's
-`uuid.uuid5(uuid.UUID("e2185889-0e5e-4977-9edd-d6e7bcd1393f"), "you.lockers:locker")`
-prints `67842cb8-d551-542b-8765-fe1af9c28aca`.
-`cargo enshwick id you.lockers:locker` prints it with its game id. Saves hold
-these GUIDs and the ids derived from them, so a content id is fixed for good
-once players have the content. To move content to another id,
-[rename it](#renamed-content).
+Every piece of content a mod adds has a content id, `<mod>:<name>`, which
+[how ids are namespaced](concepts/ids.md) defines with its GUID and limits. A
+mod writes only the name, as `id!("locker")`. That covers the item, its
+recipe, the station template, the workshop, each text tag and icon.
 
 The content calls take an `Id` for what they create and declare it to the
-loader. The loader turns the mod off in two cases:
-
-- the id lies outside the mod's own namespace, as an `Id::new` with another
-  mod's id does;
-- its game id, a 32-bit hash of the GUID, is another content id's.
-
-For a game id that two ids share, the log names both ids and both mods:
-
-```text
-error [lanterns] off: content id lanterns:lamp of lanterns has the key 0x1a2b3c4d of content id torches:torch of torches; one of them needs another name
-```
-
-Content a mod serves itself with [`Load::serve`](content/resources.md) is
-declared with `load.declare(id)`. References to existing content go through
-the mod's `deps` module. Such a reference is a vanilla item to clone or
-another mod's item for a recipe. The module offers `deps::<alias>::id(name)`
-and `deps::vanilla`, so the mod's code holds no GUID literal.
-[The manifest](concepts/loader-and-abi.md#the-manifest) shows both. A vanilla name the game does not know turns the mod off, with the
-names that look like it in the log. Another mod's content id passes only when
-that mod [exports](concepts/loader-and-abi.md#what-other-mods-may-use) it.
-`Guid::named("you.lockers:locker")` still names another mod's content
-without depending on that mod, and without that check. Stat kinds and affixes have `<mod>:<name>` ids
-too, and their keys come from the same GUIDs.
+loader. Content a mod serves itself with [`Load::serve`](content/resources.md)
+is declared with `load.declare(id)`. An id outside the mod's namespace turns
+the mod off, so an `Id::new` with another mod's id never creates content. A
+vanilla name in `deps::vanilla` that the game does not know turns the mod off,
+with similar names in the log.
 
 ## Renamed content
 

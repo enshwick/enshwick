@@ -87,7 +87,8 @@ from a pool is `enshwick.affixes.roll_pool`.
 
 ## Defining affixes
 
-`load.define_affix(id!("sturdy"), &def)` defines `<mod>:sturdy`. It runs
+`load.define_affix(id!("sturdy"), &def)` defines `<mod>:sturdy`, under the
+mod's own id as [how ids are namespaced](concepts/ids.md) requires. It runs
 during `init`, on both sides, so clients can name what items rolled. Its text
 is `sturdy.name` in the mod's [texts](content/texts.md). A stat kind or an
 item of the mod named `sturdy` reads the same text, so give them different

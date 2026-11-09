@@ -91,7 +91,8 @@ pub unsafe trait Service: Sync + 'static {
 /// assert_eq!(Sold::LAYOUT.len(), 2);
 /// ```
 pub unsafe trait ModEvent: Copy + 'static {
-    /// The event's name, `<defining mod id>:<what>`.
+    /// The event's name, `<defining mod id>:<what>`, see
+    /// [how ids are namespaced](https://github.com/enshwick/enshwick/blob/main/book/src/concepts/ids.md).
     const NAME: &'static str;
     /// The data's fields, in order.
     const LAYOUT: &'static [LayoutField];

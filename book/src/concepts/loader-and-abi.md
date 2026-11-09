@@ -26,8 +26,9 @@ report covers stays vanilla instead. See
 ## How mods are found
 
 Each mod lives in a folder of its own in `mods/`, and runs while that folder
-is there. The loader takes the folders in name order, all but its own
-`mods/enshwick/`. In each folder, the mod is the one DLL that exports the four
+is there. The loader reads every folder but its own `mods/enshwick/`. The
+order mods load in comes from their ids and dependencies, see
+[load order](lifecycle.md#in-what-order-do-mods-load). In each folder, the mod is the one DLL that exports the four
 functions of
 [`abi::exports`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs).
 The loader tells it apart by its export table before loading it.
@@ -111,7 +112,7 @@ stalls = { id = "you.market-stalls", version = ">=0.2, <1.0" }
 caravans = "you.caravans"
 
 [package.metadata.enshwick.breaks]
-old_market = { id = "old-market", version = "<0.5" }
+old_market = { id = "you.old-market", version = "<0.5" }
 
 [[package.metadata.enshwick.builds]]
 side = "server"
@@ -131,9 +132,9 @@ the build with its name. A changed `Cargo.toml` rebuilds the mod.
 - `id` is `<author>.<name>`, at most 64 characters in all. Each part uses
   only `[a-z0-9-]`. It names the mod in logs and names its folders in each
   world: settings in `<stem>-mod-settings/<id>`, data in
-  `<stem>-mod-data/<id>`. It is the namespace of its content, stats, points,
-  services and events (`you.trading-post:prices`). An invalid id fails the
-  build. `enshwick` is the loader's own and is refused.
+  `<stem>-mod-data/<id>`. It is the namespace of every id the mod declares,
+  such as `you.trading-post:prices`; see [how ids are namespaced](ids.md).
+  An invalid id fails the build. `enshwick` is the loader's own and is refused.
 - `side` takes one of two values. A `"server"` mod runs only where the
   world runs. Every player in the world must have a `"both"` mod too. See
   [Sides and hosting](sides-and-hosting.md) and

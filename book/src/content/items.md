@@ -7,7 +7,7 @@ description: Add an item to the game with Load::add_item: a clone of a vanilla i
 
 [`Load::add_item`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/items.rs)
 adds an item to the game. The item clones a vanilla one under a
-[content id](../content.md#content-ids) of its own, and looks and behaves
+[content id](../concepts/ids.md) of its own, and looks and behaves
 like it. It takes
 its own name and description if you give them.
 
@@ -269,7 +269,7 @@ local tonic = enshwick.content.item_id("you.tonics:tonic")
 ```
 
 Saves keep item ids, so a content id is fixed for good once players have the
-item: see [Content ids](../content.md#content-ids).
+item: see [Content ids](../concepts/ids.md).
 
 ## Errors
 

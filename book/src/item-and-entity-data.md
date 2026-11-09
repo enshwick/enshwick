@@ -97,7 +97,8 @@ a kind. They run during `init`, on both sides:
   `None`.
 
 The mod side of an id is a mod id; the name side is 1 to 64 of
-`[a-z0-9_-]`. One id is either an item kind or an entity kind; opening it as
+`[a-z0-9_-]`. These kinds are the one exception to the export rule of
+[how ids are namespaced](concepts/ids.md): any mod opens any kind. One id is either an item kind or an entity kind; opening it as
 both turns the second mod off. A value is encoded with `postcard` and takes
 at most 512 bytes.
 

@@ -45,8 +45,8 @@ the mod added before the call.
 The game keeps the crafting props of a base in one mask of 64 bits. Vanilla
 and every mod share it, and the game's own props take 51 of the bits. The loader
 gives each new crafting prop the next free bit, in load order, and refuses one
-past the last, which turns its mod off. Load order is by mod id and
-dependencies, so the same mods give the same bits. The server sends clients
+past the last, which turns its mod off. [Load order](../concepts/lifecycle.md#in-what-order-do-mods-load)
+follows mod ids and dependencies, so the same mods give the same bits. The server sends clients
 the bits of a base's crafting props, so only a mod of side both adds a
 crafting prop. A client takes the same bits when it runs the world's mods
 and no other mod with a crafting prop.

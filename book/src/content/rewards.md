@@ -51,7 +51,7 @@ In `rewards.toml` an item or a recipe is one of these, as in
 [the other pack files](packs.md):
 
 - the pack's own name
-- another mod's content id
+- another mod's [content id](../concepts/ids.md)
 - a vanilla name
 
 A knowledge entry or a buff is its GUID.

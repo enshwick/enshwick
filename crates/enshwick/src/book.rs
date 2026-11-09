@@ -15,6 +15,7 @@ chapters! {
     Introduction => "introduction.md",
     Concepts => "concepts.md",
     LoaderAndAbi => "concepts/loader-and-abi.md",
+    Ids => "concepts/ids.md",
     Lifecycle => "concepts/lifecycle.md",
     SidesAndHosting => "concepts/sides-and-hosting.md",
     JoinCheck => "concepts/join-check.md",

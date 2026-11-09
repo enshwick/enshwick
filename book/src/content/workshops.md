@@ -162,7 +162,7 @@ fn forge() -> Result<enshwick::content::workshops::Station, Off> {
 On build 1269579 that covers over thirty crafting stations, the Forge,
 Kiln, Smelter, Loom, Alchemy Station, Oven and Kitchen among them.
 
-Every [content id](../content.md#content-ids) is the mod's own and fixed for
+Every [content id](../concepts/ids.md) is the mod's own and fixed for
 good. That is because saves keep the template GUID of each placed station and
 the item id of each stack. `add_workshop` declares the item's, the template's and the
 workshop's ids. An id that is a part already, or too long to take

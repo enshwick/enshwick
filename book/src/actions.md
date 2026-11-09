@@ -281,7 +281,8 @@ A console line names the mod by its id, then the action and its values as
 words. Values are a player by name, a choice by its word, a number, or `on`
 or `off`. A list takes a player and `on` or `off`. For example:
 `you.trading-post access Ann on`. `<mod id> help` lists the actions with
-their words. The console is an administrator with no character. That is why
+their words. The mod's id in front keeps two mods' actions apart, see
+[how ids are namespaced](concepts/ids.md). The console is an administrator with no character. That is why
 `request.player.entity` is 0 and `.admins()` lets it in. It is also why an
 `.at` that looks for something near the player finds nothing. Answers are in
 English.

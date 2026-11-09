@@ -2,7 +2,8 @@
 //! every chapter is in `SUMMARY.md`, and every chapter is included by a
 //! doctest harness of the API crate, so its Rust examples compile. Every
 //! chapter opens with its page type and description and keeps its intro
-//! short.
+//! short, and a chapter that names an id links the page on how ids are
+//! namespaced.
 
 use std::path::Path;
 
@@ -37,6 +38,7 @@ pub(crate) fn check(root: &Path) -> Vec<String> {
             Ok(text) => {
                 found.extend(page_problems(chapter, &text));
                 found.extend(intro_problem(chapter, &text));
+                found.extend(ids_link_problem(chapter, &text));
             }
             Err(error) => found.push(format!("{SOURCE}/{chapter}: {error}")),
         }
@@ -143,6 +145,39 @@ fn intro_problem(chapter: &str, text: &str) -> Option<String> {
     })
 }
 
+/// The chapter that states how ids are namespaced, relative to [`SOURCE`].
+const IDS_CHAPTER: &str = "concepts/ids.md";
+/// What marks a chapter as naming an id: a full id's form or the term.
+const ID_MARKS: [&str; 4] = ["`<mod>:", "`<id>:", "`<mod id>:", "content id"];
+
+fn ids_link_problem(chapter: &str, text: &str) -> Option<String> {
+    let lower = text.to_ascii_lowercase();
+    if chapter == IDS_CHAPTER || !ID_MARKS.iter().any(|mark| lower.contains(mark)) {
+        return None;
+    }
+    let folder = chapter.rsplit_once('/').map_or("", |(dir, _)| dir);
+    let linked = link_targets(text)
+        .map(|target| target.split_once('#').map_or(target, |(path, _)| path))
+        .any(|target| resolve(folder, target).as_deref() == Some(IDS_CHAPTER));
+    (!linked).then(|| format!("{SOURCE}/{chapter}: names an id; link {IDS_CHAPTER} where it does"))
+}
+
+/// The path, relative to [`SOURCE`], that the relative link `target` in a
+/// chapter of `folder` points to; `None` when it climbs out of the book.
+fn resolve(folder: &str, target: &str) -> Option<String> {
+    let mut parts: Vec<&str> = folder.split('/').filter(|part| !part.is_empty()).collect();
+    for part in target.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop()?;
+            }
+            _ => parts.push(part),
+        }
+    }
+    Some(parts.join("/"))
+}
+
 /// The words between the `# ` title and the first deeper heading, outside
 /// code fences and HTML comments. A word is a run of non-space characters
 /// with a letter or digit in it.
@@ -225,15 +260,18 @@ fn problems(
     found
 }
 
-/// The `.md` targets of the summary's Markdown links, `](path.md)`.
 fn links(summary: &str) -> Vec<String> {
-    summary
-        .split("](")
-        .skip(1)
-        .filter_map(|rest| rest.split_once(')').map(|(target, _)| target))
+    link_targets(summary)
         .filter(|target| is_markdown(target))
         .map(str::to_owned)
         .collect()
+}
+
+/// The targets of the Markdown links in `text`, `](target)`.
+fn link_targets(text: &str) -> impl Iterator<Item = &str> {
+    text.split("](")
+        .skip(1)
+        .filter_map(|rest| rest.split_once(')').map(|(target, _)| target))
 }
 
 /// Whether `path` names a Markdown file.
@@ -334,6 +372,28 @@ mod tests {
 
     fn page(block: &str) -> String {
         format!("<!--\n{block}\n-->\n\n# Title\n")
+    }
+
+    #[test]
+    fn a_chapter_naming_an_id_without_the_ids_link_is_named() {
+        assert!(ids_link_problem("a.md", "Its content id is fixed.").is_some());
+        assert!(ids_link_problem("a.md", "The name is `<mod>:x`.").is_some());
+        assert!(ids_link_problem("a.md", "A [content id](concepts/ids.md).").is_none());
+        assert!(ids_link_problem("b/a.md", "A [content id](../concepts/ids.md).").is_none());
+        assert!(ids_link_problem(IDS_CHAPTER, "A content id.").is_none());
+        assert!(ids_link_problem("a.md", "No id here.").is_none());
+        assert!(ids_link_problem("a.md", "Content ID, see `ids.md`.").is_some());
+        assert!(ids_link_problem("a.md", "A [content id](uuids.md).").is_some());
+        assert!(ids_link_problem("a.md", "A [content id](ids.md).").is_some());
+        assert!(ids_link_problem("concepts/a.md", "A [content id](ids.md#x).").is_none());
+        assert!(ids_link_problem("b/c/a.md", "A [content id](../../concepts/ids.md).").is_none());
+    }
+
+    #[test]
+    fn an_ids_link_at_the_wrong_depth_does_not_count() {
+        assert!(ids_link_problem("b/a.md", "A [content id](concepts/ids.md).").is_some());
+        assert!(ids_link_problem("a.md", "A [content id](../concepts/ids.md).").is_some());
+        assert!(ids_link_problem("b/c/a.md", "A [content id](../concepts/ids.md).").is_some());
     }
 
     #[test]

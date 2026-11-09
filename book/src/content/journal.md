@@ -18,7 +18,7 @@ quest, as for its own quests; [Knowledge](../knowledge.md) reads it.
 
 | Field | What it sets |
 | --- | --- |
-| `id` | the quest's content id |
+| `id` | the quest's [content id](../concepts/ids.md) |
 | `name` | its title's text tag |
 | `source` | who gives it, which groups it in the journal |
 | `kind` | `PlayerQuest` or `WorldQuest`. The third kind is `Auto`. |
