@@ -6,8 +6,14 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.14] - 2026-11-09
+
 ### Added
 
+- `deps --from` reads the points a Luau mod exports from its `pack.toml`,
+  its folder or the packs in a game folder's `mods/`, leaving out a pack
+  whose points do not read; the Luau definitions gain
+  `points.define_point` (#989).
 - Each alpha carries `cargo-enshwick` for Windows and a static Linux build,
   with checksums, SBOM and build provenance, which
   `cargo binstall --git https://github.com/enshwick/enshwick cargo-enshwick@<version>`
@@ -22,15 +28,6 @@ Each entry names the pull request that made the change.
 - The tool says on stderr when a newer release of itself is out, asking
   GitHub at most once a day without waiting for the answer; `CI` or
   `CARGO_ENSHWICK_NO_UPDATE_CHECK` turns it off (#1018).
-
-## [1.0.0-alpha.14] - 2026-11-09
-
-### Added
-
-- `deps --from` reads the points a Luau mod exports from its `pack.toml`,
-  its folder or the packs in a game folder's `mods/`, leaving out a pack
-  whose points do not read; the Luau definitions gain
-  `points.define_point` (#989).
 
 ### Fixed
 
