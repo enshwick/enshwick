@@ -149,6 +149,7 @@ runs:
       if: inputs.ast-grep == 'true'
       shell: bash
       env:
+        # renovate: datasource=github-release-attachments depName=ast-grep/ast-grep
         AST_GREP_VERSION: 0.51.0
         AST_GREP_SHA256: a7eead5552d3a8daad70f5d50d935da44bd0c138e946b5b0a96b1d38169fa639
       run: | # zizmor: ignore[github-env] fixed paths only
@@ -171,6 +172,7 @@ runs:
       shell: bash
       env:
         NIGHTLY: nightly-2026-11-02
+        # renovate: datasource=github-release-attachments depName=rust-fuzz/cargo-fuzz
         CARGO_FUZZ_VERSION: 0.13.2
         CARGO_FUZZ_SHA256: b5b704018b63e0f151c17a057ac53b5111e1db545d1b9f72fee79f08a545931c
       run: | # zizmor: ignore[github-env] fixed paths only
