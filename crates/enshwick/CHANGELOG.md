@@ -58,6 +58,10 @@ Each entry names the pull request that made the change.
 - `HostApi::resource_served` keeps no bytes for a call that only asks the
   length, and answers no retry from bytes kept before a build began on that
   thread, so a later read there no longer gets stale bytes (#1006).
+- `files`: `write_atomically` keeps the `.bak` when another writer replaces
+  the file while the backup is linked, which Linux answers as not found,
+  and waits up to about a second, not 50 ms, for a file that is held
+  (#1025).
 
 ## [1.0.0-alpha.14] - 2026-11-09
 
