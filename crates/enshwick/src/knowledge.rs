@@ -50,6 +50,12 @@
 #[cfg(feature = "unstable")]
 use core::ffi::c_void;
 
+#[cfg(feature = "typed")]
+mod quests;
+
+#[cfg(feature = "typed")]
+pub use quests::{EntryId, PageInfo, QuestInfo, QuestState, Quests, StepInfo, StepState, TextKey};
+
 use crate::Off;
 use crate::WorldError;
 pub use crate::abi::KnowledgeId;

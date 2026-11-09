@@ -29,7 +29,9 @@ use crate::abi::Level;
 use crate::knowledge::{KnowledgeId, KnowledgeType, Scope};
 use crate::locks::Relock as _;
 use crate::resources::Value;
-use crate::typed::{GameKnowledgeResource, Named as _};
+use crate::typed::{
+    CompareOperator, GameKnowledgeResource, KnowledgeQueryData, KnowledgeQueryDataType, Named as _,
+};
 use crate::{Host, Load, Off};
 
 use super::{EngineFacts, Guid, Id};
@@ -95,9 +97,13 @@ impl ExperienceValue {
     }
 }
 
-/// What a [`KnowledgeQuery`] asks of its entry.
+/// What a [`KnowledgeQuery`] asks of its entry, or of the game query it
+/// names.
 ///
-/// The name is enshwick's, not the game's.
+/// The name is enshwick's, not the game's. The game tests a bool only for
+/// a value other than 0, a count with its operator, flags for any of the
+/// bits, and a game query for whether it holds (its own steps' forms,
+/// server 387; the client's compare, Kiln's notes on build 1287369).
 ///
 /// # Examples
 ///
@@ -105,11 +111,36 @@ impl ExperienceValue {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum KnowledgeTest {
-    /// A bool set; a counter is tested with `AtLeast`, since the game asks
-    /// this as a value equal to 1.
+    /// A bool set, or a counter or flags other than 0.
     IsSet,
     /// A counter at this count or above, from 1.
     AtLeast(u32),
+    /// A counter at exactly this count; `Equals(0)` is an entry not set.
+    Equals(u32),
+    /// A counter below this count, from 1.
+    Below(u32),
+    /// Flags holding any of these bits, not 0.
+    HasFlag(u32),
+    /// The game query of the id holds.
+    Holds,
+    /// The game query of the id does not hold.
+    Fails,
+}
+
+impl KnowledgeTest {
+    /// Whether an entry of `value` passes it; `None` for a game query's
+    /// test, which only the game answers.
+    #[must_use]
+    pub(crate) const fn passes(self, value: u32) -> Option<bool> {
+        Some(match self {
+            Self::IsSet => value != 0,
+            Self::AtLeast(count) => value >= count,
+            Self::Equals(count) => value == count,
+            Self::Below(count) => value < count,
+            Self::HasFlag(bits) => value & bits != 0,
+            Self::Holds | Self::Fails => return None,
+        })
+    }
 }
 
 /// A test of one knowledge entry, vanilla or a mod's, as quests, journal
@@ -166,18 +197,71 @@ impl KnowledgeQuery {
         }
     }
 
-    /// The game's query data: a bool equal to 1, or a counter greater than
-    /// one less than the count, as the game's own steps ask (server 387).
+    /// Whether the game query `query` holds: one of the game's named
+    /// queries, as its quest steps and recipes name them.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::knowledge::{GameQuery, KnowledgeQuery, KnowledgeTest};
+    ///
+    /// let met = KnowledgeQuery::game(GameQuery::new(0x5e11_c0de));
+    /// assert_eq!(met.test, KnowledgeTest::Holds);
+    /// assert_eq!(met.not().map(|q| q.test), Some(KnowledgeTest::Fails));
+    /// ```
+    #[must_use]
+    pub const fn game(query: GameQuery) -> Self {
+        Self {
+            id: KnowledgeId::new(query.get()),
+            scope: Scope::World,
+            test: KnowledgeTest::Holds,
+        }
+    }
+
+    /// The query that holds where this one does not; `None` for a test the
+    /// game has no opposite of: an exact count other than 0, or flags.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::knowledge::{KnowledgeQuery, KnowledgeTest};
+    /// use enshwick::knowledge::{KnowledgeId, Scope};
+    ///
+    /// let unseen = KnowledgeQuery::is_set(KnowledgeId::new(3), Scope::Player).not();
+    /// assert_eq!(unseen.map(|q| q.test), Some(KnowledgeTest::Equals(0)));
+    /// ```
+    #[must_use]
+    pub const fn not(self) -> Option<Self> {
+        let test = match self.test {
+            KnowledgeTest::IsSet => KnowledgeTest::Equals(0),
+            KnowledgeTest::Equals(0) => KnowledgeTest::IsSet,
+            KnowledgeTest::AtLeast(count) => KnowledgeTest::Below(count),
+            KnowledgeTest::Below(count) => KnowledgeTest::AtLeast(count),
+            KnowledgeTest::Holds => KnowledgeTest::Fails,
+            KnowledgeTest::Fails => KnowledgeTest::Holds,
+            KnowledgeTest::Equals(_) | KnowledgeTest::HasFlag(_) => return None,
+        };
+        Some(Self { test, ..self })
+    }
+
+    /// The game's query data, in the forms the game's own steps take
+    /// (server 387): a bool equal to 1, a count compared with its operator
+    /// (at least `n` as greater than `n - 1`), flags equal to their bits,
+    /// and a game query equal to 1 or 0.
     pub(crate) fn to_value(self) -> Result<Value, Off> {
+        let refuse = |why: &str| Err(Off::new(format!("knowledge query {}: {why}", self.id)));
         let (kind, operator, compare) = match self.test {
             KnowledgeTest::IsSet => ("SimpleBool", "Equals", 1),
-            KnowledgeTest::AtLeast(0) => {
-                return Err(Off::new(format!(
-                    "knowledge query {}: counts start at 1",
-                    self.id
-                )));
+            KnowledgeTest::AtLeast(0) | KnowledgeTest::Below(0) => {
+                return refuse("counts start at 1");
             }
+            KnowledgeTest::HasFlag(0) => return refuse("flags need the bits they test"),
             KnowledgeTest::AtLeast(count) => ("SimpleCount", "GreaterThan", count - 1),
+            KnowledgeTest::Equals(count) => ("SimpleCount", "Equals", count),
+            KnowledgeTest::Below(count) => ("SimpleCount", "LessThan", count),
+            KnowledgeTest::HasFlag(bits) => ("SimpleFlag", "Equals", bits),
+            KnowledgeTest::Holds => ("Extern", "Equals", 1),
+            KnowledgeTest::Fails => ("Extern", "Equals", 0),
         };
         Ok(Value::Struct(vec![
             ("knowledgeOrQueryId".into(), hash_key(self.id.get())),
@@ -190,6 +274,89 @@ impl KnowledgeQuery {
                 Value::Bool(self.scope == Scope::Player),
             ),
         ]))
+    }
+
+    /// The query the game's query data `data` asks, `None` for one that
+    /// asks nothing (id 0, as a lore page's entries are never done), always
+    /// or never holds, or has a form the build adds. A Simple query's entry
+    /// is the player's when the query says so, else the world's: the game
+    /// reads a player's entry first in either case.
+    pub(crate) fn from_data(data: &KnowledgeQueryData) -> Option<Self> {
+        let id = data.knowledge_or_query_id.value;
+        if id == 0 {
+            return None;
+        }
+        let value = data.compare_value;
+        let compare = |held: u32| match data.compare_operator {
+            CompareOperator::GreaterThan => Some(held > value),
+            CompareOperator::LessThan => Some(held < value),
+            CompareOperator::Equals => Some(held == value),
+            CompareOperator::Other(_) => None,
+        };
+        let test = match data.r#type {
+            KnowledgeQueryDataType::SimpleBool => KnowledgeTest::IsSet,
+            KnowledgeQueryDataType::SimpleFlag if value != 0 => KnowledgeTest::HasFlag(value),
+            KnowledgeQueryDataType::SimpleCount => match data.compare_operator {
+                CompareOperator::GreaterThan => KnowledgeTest::AtLeast(value.checked_add(1)?),
+                CompareOperator::LessThan if value > 0 => KnowledgeTest::Below(value),
+                CompareOperator::Equals => KnowledgeTest::Equals(value),
+                _ => return None,
+            },
+            // A game query's state is 0 or 1.
+            KnowledgeQueryDataType::Extern => match (compare(1)?, compare(0)?) {
+                (true, false) => KnowledgeTest::Holds,
+                (false, true) => KnowledgeTest::Fails,
+                _ => return None,
+            },
+            _ => return None,
+        };
+        let scope = if data.is_explicit_player_knowledge_query {
+            Scope::Player
+        } else {
+            Scope::World
+        };
+        Some(Self {
+            id: KnowledgeId::new(id),
+            scope,
+            test,
+        })
+    }
+}
+
+/// A query of the game's query database: one of the game's named queries
+/// or a mod's, by its id.
+///
+/// The name is enshwick's; the game's is `GameKnowledgeQueryResource`.
+///
+/// # Examples
+///
+/// See [`KnowledgeQuery::game`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+pub struct GameQuery(u32);
+
+impl GameQuery {
+    /// The game query of id `id`.
+    ///
+    /// # Examples
+    ///
+    /// See [`KnowledgeQuery::game`].
+    #[must_use]
+    pub const fn new(id: u32) -> Self {
+        Self(id)
+    }
+
+    /// Its id.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::knowledge::GameQuery;
+    ///
+    /// assert_eq!(GameQuery::new(7).get(), 7);
+    /// ```
+    #[must_use]
+    pub const fn get(self) -> u32 {
+        self.0
     }
 }
 

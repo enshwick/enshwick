@@ -366,9 +366,8 @@ fn holds(registry: &Value, id: u32) -> bool {
 /// registry is left as it was.
 fn add_quest_to(registry: &mut Value, new: &NewQuest) -> Result<(), Off> {
     let quest = KnowledgeId::from_guid(new.id.guid()).get();
-    let ids = step_ids(new.id, new.steps.len());
     if let Some(id) = core::iter::once(quest)
-        .chain(ids.iter().copied())
+        .chain(step_ids(new.id, new.steps.len()))
         .find(|&id| holds(registry, id))
     {
         return Err(Off::new(format!(
@@ -376,13 +375,21 @@ fn add_quest_to(registry: &mut Value, new: &NewQuest) -> Result<(), Off> {
             new.id
         )));
     }
+    let quest = quest_value(new, document(registry))?;
+    list_mut(registry, QUESTS)?.push(quest);
+    Ok(())
+}
+
+/// The game's journal quest of `new`, naming the journal's `document`.
+pub(crate) fn quest_value(new: &NewQuest, document: Value) -> Result<Value, Off> {
+    let quest = KnowledgeId::from_guid(new.id.guid()).get();
     let steps = new
         .steps
         .iter()
-        .zip(&ids)
-        .map(|(step, &id)| step.to_value(id))
+        .zip(step_ids(new.id, new.steps.len()))
+        .map(|(step, id)| step.to_value(id))
         .collect::<Result<_, _>>()?;
-    let mut fields = header(quest, 0, new.name, document(registry), steps);
+    let mut fields = header(quest, 0, new.name, document, steps);
     fields.extend([
         ("source".into(), new.source.to_value()),
         ("type".into(), new.kind.to_value()),
@@ -393,8 +400,7 @@ fn add_quest_to(registry: &mut Value, new: &NewQuest) -> Result<(), Off> {
             Value::List(new.rewards.iter().map(|reward| reward.to_value()).collect()),
         ),
     ]);
-    list_mut(registry, QUESTS)?.push(Value::Struct(fields));
-    Ok(())
+    Ok(Value::Struct(fields))
 }
 
 /// Adds the lore page `new` to `registry` after the game's; on an error the
