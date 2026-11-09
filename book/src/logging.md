@@ -321,7 +321,7 @@ and changes to game data rather than code, are not seen.
 ### Code another program hooked first
 
 The loader finds its entries in the game's code as the executable on disk
-holds it, so another program's hooks in the code in memory hide none of them.
+holds it. So another program's hooks in memory hide none of them.
 When the loader turns its hooks on, it compares the bytes each hook would
 replace with that copy. Where they differ, another program holds the function.
 The loader writes no hook over it, and only what needs that hook turns off:
@@ -333,9 +333,9 @@ The loader writes no hook over it, and only what needs that hook turns off:
 
 The Mods screen shows the same reason under the part or mod that turned off.
 A player who joins reads which DLL holds the code in the chat line that names
-what is off. When the executable's code on disk does not read as the code in
-memory, as for an encrypted executable, the loader searches the code in memory
-and makes no such comparison.
+what is off. An encrypted executable's code on disk does not read as the code
+in memory. Then the loader searches the code in memory and makes no such
+comparison.
 
 ## Faults
 
