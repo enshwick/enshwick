@@ -741,7 +741,11 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 122 * 8);
-    assert!(size_of::<HostApi>() == 24 + 193 * 8);
+    assert!(size_of::<HostApi>() == 24 + 197 * 8);
+    assert!(core::mem::offset_of!(HostApi, actions_changed) == 24 + 196 * 8);
+    assert!(core::mem::offset_of!(HostApi, command_list) == 24 + 195 * 8);
+    assert!(core::mem::offset_of!(HostApi, run_command) == 24 + 194 * 8);
+    assert!(core::mem::offset_of!(HostApi, commands) == 24 + 193 * 8);
     assert!(core::mem::offset_of!(HostApi, resource_served) == 24 + 192 * 8);
     assert!(core::mem::offset_of!(HostApi, read_only) == 24 + 191 * 8);
     assert!(core::mem::offset_of!(HostApi, local_held) == 24 + 190 * 8);
@@ -908,7 +912,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, actions) == 24 + 135 * 8);
     assert!(core::mem::offset_of!(HostApi, event_types) == 24 + 136 * 8);
     assert!(size_of::<EventTypeInfo>() == 8 + 16 + 4 + 4);
-    assert!(size_of::<ActionCall>() == 8 + 8 + 96 + 16 + 16 + 40);
+    assert!(size_of::<ActionCall>() == 8 + 8 + 96 + 16 + 16 + 40 + 8);
     assert!(core::mem::offset_of!(HostApi, altars_open) == 24 + 39 * 8);
     assert!(core::mem::offset_of!(HostApi, building_zone_check_filter) == 24 + 41 * 8);
     assert!(core::mem::offset_of!(HostApi, survivor_lookup) == 24 + 42 * 8);

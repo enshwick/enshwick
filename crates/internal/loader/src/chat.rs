@@ -6,15 +6,17 @@
 //! thread wait in a queue that the post-step drains; a line for one player
 //! is posted for that player alone, marked as delivered for every other
 //! connection; once a line reaches another connection all the same, lines
-//! for one player stay off. What players type, `/` lines included, the game posts as it
-//! would without the loader.
+//! for one player stay off. What players type the game posts as it would
+//! without the loader, except a `/` line that names a mod's commands, which
+//! leaves the chat and runs that command ([`crate::commands`]), even for a
+//! player muted in chat.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 mod said;
 
-pub(crate) use said::register;
+pub(crate) use said::{Rate, admit, register};
 
 use enshwick::abi::{ChatLine, HookFlags, Status};
 
@@ -176,6 +178,11 @@ pub(crate) fn delivery() -> (u64, u64) {
     (DELIVERY.dropped.total(), DELIVERY.strayed.total())
 }
 
+/// Whether lines for one player go out: off once one reached others.
+pub(crate) fn to_one_player() -> bool {
+    !DELIVERY.one_player_off.load(Ordering::Relaxed)
+}
+
 /// Queues `text` for the player with account key `to`, or for everyone.
 pub(crate) fn send(to: u64, text: &str) -> Status {
     if LOADED.get().is_none() {
@@ -308,6 +315,62 @@ pub(crate) fn link(loader: &'static Loader) {
 static CHAT_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("chat lines");
 /// The switch of the chat lines mods filter and hear, apart from the mute.
 static MODS_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("chat lines for mods");
+/// The switch of the mods' commands typed in chat.
+static COMMANDS_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("chat commands");
+
+/// Takes a line the player of account `key` typed out of the chat when it
+/// is a mod's command, queued to run after the step; false for any other
+/// line. Reads the text only when it starts with `/`.
+///
+/// # Safety
+///
+/// - `text` is null or the game's span of pointer and byte length, its bytes
+///   readable and unchanged for the call.
+unsafe fn command(loader: &'static Loader, text: *const [usize; 2], key: u64) -> bool {
+    let Some(&(_, layout)) = LOADED.get() else {
+        return false;
+    };
+    let mut first = [0u8; 1];
+    // SAFETY: the caller guarantees `text` null or readable for the call.
+    if unsafe { read_start(text, &mut first) } != Some(1) || first != *b"/" {
+        return false;
+    }
+    // SAFETY: the caller guarantees `text` null or readable for the call.
+    let line = unsafe { read_text(text, layout.max_text) };
+    crate::commands::queue(loader, key, &line)
+}
+
+/// Copies the first bytes of the game's span `text` into `start`, at most
+/// its length; how many, or `None` for a null span.
+///
+/// # Safety
+///
+/// - `text` is null or the game's span of pointer and byte length, its bytes
+///   readable and unchanged for the call.
+unsafe fn read_start(text: *const [usize; 2], start: &mut [u8]) -> Option<usize> {
+    if text.is_null() {
+        return None;
+    }
+    // SAFETY: `text` is non-null, checked by the guard before it, and is the
+    // game's span of two words, readable for the call by this function's
+    // `# Safety`.
+    let [ptr, len]: [usize; 2] = unsafe { enshwick::raw::read_at(text.cast(), 0) };
+    if ptr == 0 {
+        return None;
+    }
+    let count = len.min(start.len());
+    // SAFETY: `ptr` is non-null and the span holds `len` bytes, at least
+    // `count`, readable and unchanged for the call by this function's
+    // `# Safety`.
+    unsafe {
+        enshwick::raw::read_bytes_at(
+            core::ptr::with_exposed_provenance(ptr),
+            0,
+            &mut start[..count],
+        );
+    };
+    Some(count)
+}
 
 fn next() -> Option<PostFn> {
     POST_NEXT.wired()
@@ -337,6 +400,22 @@ unsafe extern "system" fn post(
     // SAFETY: this is the entry of the loader's link on `chat.post`, on the
     // game's calling thread, by this function's `# Safety`.
     let typed = unsafe { typed_line(out) };
+    if let Some(loader) = typed.filter(|_| crate::commands::any()) {
+        let taken = COMMANDS_FUSE
+            .run("the chat command check", || {
+                // SAFETY: `text` is the game's own argument at the entry of
+                // `chat.post`, by this function's `# Safety`.
+                unsafe { command(loader, text, hash) }
+            })
+            .unwrap_or(false);
+        if taken {
+            // SAFETY: `typed` is set only for a non-null `out`, a result
+            // record of at least 8 writable bytes by this function's
+            // `# Safety`.
+            unsafe { enshwick::raw::write_at(out, 0, 0u64) };
+            return out;
+        }
+    }
     let judged = match typed {
         None => Verdict::Pass(kind),
         // A check that panicked turns its fuse off: the mute is gone for the
@@ -494,22 +573,10 @@ const OLD_FRAME: &[u8] = b"/enshwick-net ";
 /// - `text` is null or the game's span of pointer and byte length, its bytes
 ///   readable and unchanged for the call.
 unsafe fn old_frame(text: *const [usize; 2]) -> bool {
-    if text.is_null() {
-        return false;
-    }
-    // SAFETY: `text` is non-null, checked by the guard before it, and is the
-    // game's span of two words, readable for the call by this function's
-    // `# Safety`.
-    let [ptr, len]: [usize; 2] = unsafe { enshwick::raw::read_at(text.cast(), 0) };
-    if ptr == 0 || len < OLD_FRAME.len() {
-        return false;
-    }
     let mut start = [0u8; OLD_FRAME.len()];
-    // SAFETY: `ptr` is non-null and the span holds at least `start`'s bytes,
-    // checked before, readable and unchanged for the call by this
-    // function's `# Safety`.
-    unsafe { enshwick::raw::read_bytes_at(core::ptr::with_exposed_provenance(ptr), 0, &mut start) };
-    start == OLD_FRAME
+    // SAFETY: the caller guarantees `text` null or readable for the call.
+    let read = unsafe { read_start(text, &mut start) };
+    read == Some(OLD_FRAME.len()) && start == OLD_FRAME
 }
 
 /// The verdict on a line the player of account `key` sent: dropped when

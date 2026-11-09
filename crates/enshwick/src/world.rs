@@ -218,6 +218,25 @@ impl Player {
     pub const fn is_admin(&self) -> bool {
         self.permissions & PlayerInfo::CAN_KICK_BAN != 0
     }
+
+    /// Whether the server gives the player `permission`, as their user
+    /// group in the server's settings grants it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::Entity;
+    /// use enshwick::abi::PlayerInfo;
+    /// use enshwick::world::{Player, PlayerPermissions};
+    ///
+    /// let friend = Player { entity: Entity(2), slot: 0, key: enshwick::PlayerKey::new(7), permissions: PlayerInfo::CAN_EDIT_BASE, name: "Ann".into() };
+    /// assert!(friend.has(PlayerPermissions::CanEditBase));
+    /// assert!(!friend.has(PlayerPermissions::CanKickBan));
+    /// ```
+    #[must_use]
+    pub const fn has(&self, permission: PlayerPermissions) -> bool {
+        self.permissions & permission.bit() != 0
+    }
 }
 
 /// An entity with a place in the world, from [`World::entities`] and

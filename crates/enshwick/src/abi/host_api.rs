@@ -4,22 +4,22 @@
 use core::ffi::c_void;
 
 use crate::abi::{
-    AccountActionType, ActionFn, ActionTarget, ActiveBuff, AffixDefData, AffixRoll, AltarInfo,
-    AltarLimitFilterFn, AltarZoneFn, BaseLimitInfo, BedCheckFn, BuffRequest, BuffTypeInfo,
-    BuildCheckFn, BuildInfo, BuildRights, BuildingZoneCheckFn, CallFn, CallSpec, CallerFrame,
-    ChangeId, ChangeOp, ChatFilterFn, ComfortFn, ConfigCheckFn, ContentRename, ControlFn,
-    ControlSpec, CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags,
-    EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, FogInfo, GameEventFn,
-    Header, HookSpec, InteractionFn, InventoryRequest, InventoryResultFn, ItemActionFn, ItemData,
-    ItemLine, KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MapFrameInfo,
-    MapMarkerInfo, MapMarkerTypeInfo, MidHookSpec, ModEventFn, ModHandle, ModInfo, NetMessageFn,
-    PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId, RecipeKind,
-    RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, SaveInfo, ServerWaitFn,
-    ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData,
-    StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn,
-    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
-    TickHandle, TransactionInfo, TransactionOp, TypeEntry, UiAnswerFn, UiDialog, UiExtension,
-    UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront,
+    AccountActionType, ActionFn, ActionReply, ActionTarget, ActiveBuff, AffixDefData, AffixRoll,
+    AltarInfo, AltarLimitFilterFn, AltarZoneFn, BaseLimitInfo, BedCheckFn, BuffRequest,
+    BuffTypeInfo, BuildCheckFn, BuildInfo, BuildRights, BuildingZoneCheckFn, CallFn, CallSpec,
+    CallerFrame, ChangeId, ChangeOp, ChatFilterFn, ComfortFn, CommandInfo, ConfigCheckFn,
+    ContentRename, ControlFn, ControlSpec, CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo,
+    EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperiencePassFn,
+    FogInfo, GameEventFn, Header, HookSpec, InteractionFn, InventoryRequest, InventoryResultFn,
+    ItemActionFn, ItemData, ItemLine, KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn,
+    LoopWaitSites, MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MidHookSpec, ModEventFn,
+    ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec,
+    PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn,
+    SaveInfo, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn,
+    StatDefData, StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn, Str,
+    SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
+    TerrainMaterialInfo, TickHandle, TransactionInfo, TransactionOp, TypeEntry, UiAnswerFn,
+    UiDialog, UiExtension, UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront,
 };
 use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, NpcId, PlayerKey, RecipeId};
 
@@ -1776,4 +1776,58 @@ pub struct HostApi {
         capacity: u32,
         len: *mut u32,
     ) -> Status,
+    /// Names the calling mod's [actions](HostApi::actions) as commands: a
+    /// line `/<name> <action> <values>`, or the same with `alias`, runs
+    /// one of them from a player's chat, the server's console or
+    /// [`run_command`](HostApi::run_command), with the caller's rights. Each
+    /// is 1 to 32 of `[a-z0-9-]`, `alias` shorter than `name`; neither is
+    /// `enshwick` or `help`. [`Status::BAD_ARGS`] for a malformed or
+    /// unreadable one; [`Status::REFUSED`] for a second call, or when
+    /// another mod named the same word first, which the loader logs and
+    /// reports naming both mods, the mod running on without commands.
+    /// Allowed during `enshwick_mod_init` only; the strings are borrowed for
+    /// the call. A panic in the loader returns [`Status::REFUSED`]. ABI
+    /// 11.19.
+    pub commands: extern "system" fn(me: ModHandle, name: Str, alias: Str) -> Status,
+    /// Runs the command line `line`, such as `/adl online`, as a remote
+    /// caller named `label` (for the log and the handler, at most 64 bytes)
+    /// with the game's permission bits `permissions` (as
+    /// [`PlayerInfo::permissions`](super::PlayerInfo::permissions)), never as
+    /// a player, and writes the mod's [`ActionReply`](super::ActionReply) to
+    /// `out` as far as the header the caller filled reaches, its text valid
+    /// until the next call on this thread. The
+    /// leading `/` is optional. On the server's game thread only
+    /// ([`Status::WRONG_THREAD`]); [`Status::MISSING`] when no running mod
+    /// has the line's first word as its command name or alias;
+    /// [`Status::BAD_ARGS`] for a line over 1,024 bytes, an empty line or
+    /// an unreadable string. A panic in the loader returns
+    /// [`Status::REFUSED`]. ABI 11.19.
+    pub run_command: extern "system" fn(
+        me: ModHandle,
+        line: Str,
+        label: Str,
+        permissions: u32,
+        out: *mut ActionReply,
+    ) -> Status,
+    /// Up to `capacity` command sets of the running mods, in load order, and
+    /// how many there are. Entries are `entry_size` bytes apart, the
+    /// caller's `size_of::<CommandInfo>()`; the loader fills what both sides
+    /// know of each and its own [`Header`]. The strings stay valid until the
+    /// next call on this thread. [`Status::BAD_ARGS`] for a non-null `out`
+    /// whose entries are shorter than a header. Any thread. A panic in the
+    /// loader returns [`Status::REFUSED`]. ABI 11.19.
+    pub command_list: extern "system" fn(
+        me: ModHandle,
+        out: *mut CommandInfo,
+        entry_size: u32,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
+    /// Tells the loader that who may run the calling mod's actions changed,
+    /// such as when a rule reads settings that just changed: the server
+    /// asks the mod again and carries each player the controls they may
+    /// run now, within two seconds. Any thread. [`Status::MISSING`] for a
+    /// mod without actions. A panic in the loader returns
+    /// [`Status::REFUSED`]. ABI 11.19.
+    pub actions_changed: extern "system" fn(me: ModHandle) -> Status,
 }

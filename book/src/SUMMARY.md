@@ -41,6 +41,7 @@
   - [Vanilla value changes from a mod](content/limits.md)
 - [Inventories](inventories.md)
 - [Player actions](actions.md)
+  - [Commands](commands.md)
 - [Controls](controls.md)
   - [The controls a player holds](input.md)
 - [The interface](interface.md)

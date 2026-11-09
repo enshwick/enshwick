@@ -66,7 +66,8 @@ fn refusal(line: &str, status: Status) -> String {
     }
 }
 
-/// The server's console as a player: an administrator with no character.
+/// The server's console as a player: every permission the game gives, and
+/// no character.
 pub(crate) fn the_console() -> PlayerInfo {
     let mut name = [0u8; 64];
     name[..7].copy_from_slice(b"console");
@@ -75,7 +76,7 @@ pub(crate) fn the_console() -> PlayerInfo {
         slot: u32::MAX,
         entity: Entity(0),
         key: enshwick::PlayerKey::new(0),
-        permissions: PlayerInfo::CAN_KICK_BAN,
+        permissions: crate::commands::ALL_PERMISSIONS,
         name_len: 7,
         name,
     }
@@ -83,14 +84,16 @@ pub(crate) fn the_console() -> PlayerInfo {
 
 /// Runs `line` as the server's console, on the game thread; the answer.
 /// [`Status::MISSING`] when no running mod with actions has the line's
-/// first word as its id.
+/// first word as its id, command name or alias (a leading `/` allowed).
 pub(crate) fn run(loader: &Loader, line: &str) -> Result<String, Status> {
     crate::world::server().map_err(|_| Status::WRONG_THREAD)?;
     match parse(line) {
         Line::Empty => Err(Status::BAD_ARGS),
         Line::Mod { id, rest } => {
-            let (index, _) = loader
+            let index = loader
                 .find_mod(&id.to_ascii_lowercase())
+                .map(|(index, _)| index)
+                .or_else(|| crate::commands::find(id).map(crate::mod_index::ModIndex::get))
                 .ok_or(Status::MISSING)?;
             crate::log!(DEBUG, "the console runs {id} {rest}");
             crate::actions::console(loader, index, rest).ok_or(Status::MISSING)
@@ -201,6 +204,11 @@ fn help(loader: &Loader) -> String {
     } else {
         texts::fill("enshwick.actions", &[("mods", &with.join(", "))])
     });
+    lines.extend(
+        crate::commands::running(loader)
+            .into_iter()
+            .map(|(n, id)| format!("/{} /{}: {id}", n.name, n.alias)),
+    );
     lines.join("\n")
 }
 

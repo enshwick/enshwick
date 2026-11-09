@@ -257,6 +257,28 @@ impl FakeHost {
         self
     }
 
+    /// Another running mod, `mod_id`, that named its actions as the
+    /// commands `name` and `alias`: the mod under test cannot take those
+    /// words, [`commands::list`](crate::commands::list) names them, and a
+    /// command line to them gets the [console answer](Self::console_answer)
+    /// of the word used, as done.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .other_mod_commands("you.weather", "weather", "wx")
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[must_use]
+    pub fn other_mod_commands(mut self, mod_id: &str, name: &str, alias: &str) -> Self {
+        self.other_commands
+            .push((mod_id.to_owned(), name.to_owned(), alias.to_owned()));
+        self
+    }
+
     /// A service another mod publishes.
     ///
     /// # Examples
@@ -340,6 +362,62 @@ impl Installed {
             args,
             crate::abi::ActionTarget::NONE,
         ))
+    }
+
+    /// `player`, reading `language`, types `line` in chat, as the loader
+    /// takes it: the mod's reply, `1` or `0` and the text, when the line is
+    /// a `/` and the mod's command name or alias; `None` for a line that
+    /// stays in chat.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{Header, PlayerInfo};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let player = PlayerInfo {
+    ///     header: Header::of::<PlayerInfo>(),
+    ///     slot: 0,
+    ///     entity: enshwick::Entity(2),
+    ///     key: enshwick::PlayerKey::new(7),
+    ///     permissions: 0,
+    ///     name_len: 0,
+    ///     name: [0; 64],
+    /// };
+    /// assert_eq!(loader.type_in_chat(&player, 0, "/adl online"), None);
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[must_use]
+    pub fn type_in_chat(&self, player: &PlayerInfo, language: u32, line: &str) -> Option<String> {
+        if !line.starts_with('/') {
+            return None;
+        }
+        let own = line[1..].split_whitespace().next().is_some_and(|word| {
+            table::with(false, |s| {
+                s.commands.named.as_ref().is_some_and(|(n, a)| {
+                    n.eq_ignore_ascii_case(word) || a.eq_ignore_ascii_case(word)
+                })
+            })
+        });
+        if !own {
+            return None;
+        }
+        table::commands::answer(line, crate::abi::ActionCall::CHAT, player, language)
+    }
+
+    /// How often the mod said who may run its actions changed, with
+    /// [`Actions::rules_changed`](crate::actions::Actions::rules_changed).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert_eq!(loader.rules_changed(), 0);
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[must_use]
+    pub fn rules_changed(&self) -> u32 {
+        table::with(0, |s| s.commands.rules_changed)
     }
 
     /// Runs the mod's action `action` with `args` for `player` as the
@@ -588,7 +666,12 @@ pub(crate) fn console() -> PlayerInfo {
         slot: u32::MAX,
         entity: crate::Entity(0),
         key: crate::PlayerKey::new(0),
-        permissions: PlayerInfo::CAN_KICK_BAN,
+        permissions: PlayerInfo::CAN_KICK_BAN
+            | PlayerInfo::CAN_ACCESS_INVENTORIES
+            | PlayerInfo::CAN_EDIT_BASE
+            | PlayerInfo::CAN_EDIT_WORLD
+            | PlayerInfo::CAN_EXTEND_BASE
+            | PlayerInfo::CAN_RECEIVE_EXP,
         name_len: 7,
         name,
     }
@@ -604,7 +687,7 @@ pub(crate) fn ask(
     args: &str,
     target: crate::abi::ActionTarget,
 ) -> String {
-    let call = crate::abi::ActionCall {
+    let mut call = crate::abi::ActionCall {
         header: Header::of::<crate::abi::ActionCall>(),
         kind,
         language,
@@ -612,10 +695,23 @@ pub(crate) fn ask(
         action: Str::new(action),
         args: Str::new(args),
         target,
+        reply: core::ptr::null_mut(),
     };
+    let mut written: crate::abi::ActionReply = bytemuck::Zeroable::zeroed();
+    if kind != crate::abi::ActionCall::SHEET {
+        call.reply = &raw mut written;
+    }
     let mut reply = Str::EMPTY;
-    // SAFETY: a valid call; `user` is the pointer the mod registered with.
+    // SAFETY: a valid call whose reply slot outlives it; `user` is the
+    // pointer the mod registered with.
     actions.run(|callback, user| unsafe { callback(&raw const call, user, &raw mut reply) });
+    if written.header.size != 0 {
+        // SAFETY: the mod wrote the reply, whose text stays valid until the
+        // callback runs again. The fake's helpers hand a run back as `1` or
+        // `0` and the text.
+        let text = unsafe { written.text.as_str() }.unwrap_or("");
+        return format!("{}{text}", written.done);
+    }
     // SAFETY: the reply stays valid until the callback runs again.
     unsafe { reply.as_str() }.unwrap_or("").to_owned()
 }

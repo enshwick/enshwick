@@ -52,6 +52,12 @@ pub(crate) fn resend_on_rights(loader: &Loader) {
     }
 }
 
+/// A mod said who may run its actions changed: the next look sends every
+/// client its carried controls again, until a send to it goes through.
+pub(crate) fn rules_changed() {
+    with_rights(Rights::stale);
+}
+
 /// Forgets what client `key` got, when its player leaves the server.
 pub(crate) fn left(key: u64) {
     if let Some(rights) = STATE.rights.relock().as_mut() {
@@ -158,6 +164,12 @@ impl Rights {
     /// Client `key` left, whether or not its player reached the world.
     pub(super) fn left(&mut self, key: u64) {
         self.sent.remove(&key);
+    }
+
+    /// Every client's controls go again at the next look, as when a mod's
+    /// rules changed; each stays due until a send to it goes through.
+    pub(super) fn stale(&mut self) {
+        self.sent.values_mut().for_each(|sent| *sent = None);
     }
 
     /// The players among `players` whose client got controls and whose
@@ -270,6 +282,23 @@ mod tests {
         rights.sent(10, None);
         rights.left(10);
         assert_eq!(keys(rights.changed(&[player(10, 0)])), Vec::<u64>::new());
+    }
+
+    #[test]
+    fn controls_go_again_to_every_client_when_a_mod_s_rules_change() {
+        let mut rights = Rights::default();
+        rights.sent(7, Some(0));
+        rights.sent(8, Some(1));
+        let here = [player(7, 0), player(8, 1), player(9, 0)];
+        let keys = |changed: Vec<PlayerInfo>| -> Vec<u64> {
+            changed.iter().map(|p| p.key.get()).collect()
+        };
+        assert_eq!(keys(rights.changed(&here)), Vec::<u64>::new());
+        rights.stale();
+        assert_eq!(keys(rights.changed(&here)), [7, 8], "9 never said hello");
+        // Only 7's send got through: 8 is picked again at the next look.
+        rights.sent(7, Some(0));
+        assert_eq!(keys(rights.changed(&here)), [8]);
     }
 
     #[test]
