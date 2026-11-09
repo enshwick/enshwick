@@ -1,7 +1,8 @@
-//! Whether a newer `cargo enshwick` is out: asked of GitHub at most once a
-//! day on a thread of its own, told at most once a day. A command never
-//! waits for the answer: one that arrives after the command is done is
-//! lost, and the next day asks again. Without a network nothing is said.
+//! Whether a newer `cargo enshwick` is out: asked of GitHub on a thread of
+//! its own, once a day after a question finishes, told at most once a day.
+//! A command never waits for the answer: one that arrives after the command
+//! is done is lost, and the next run asks again. Without a network nothing
+//! is said; `CI` or `CARGO_ENSHWICK_NO_UPDATE_CHECK` set turns it off.
 
 use std::path::PathBuf;
 use std::thread::JoinHandle;
@@ -18,7 +19,8 @@ const SECONDS: u32 = 5;
 /// What the last runs learned and said, kept in the user's cache folder.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 struct Seen {
-    /// When GitHub was last asked, in seconds since the Unix epoch.
+    /// When a question to GitHub last finished, in seconds since the Unix
+    /// epoch.
     #[serde(default)]
     checked: u64,
     /// When the newer release was last told.
@@ -35,10 +37,13 @@ struct Newer {
     page: String,
 }
 
-/// GitHub's answer: the newest release newer than the tool, if any.
+/// How a finished question ended.
 #[derive(Debug)]
-struct Answer {
-    newer: Option<Newer>,
+enum Answer {
+    /// GitHub's answer: the newest release newer than the tool, if any.
+    Read(Option<Newer>),
+    /// No answer that reads: no network, an error, or a changed format.
+    Unread,
 }
 
 /// A run's release check: what was seen before and, when due, the question
@@ -47,25 +52,33 @@ struct Answer {
 pub(crate) struct Check {
     seen: Seen,
     file: PathBuf,
-    asking: Option<JoinHandle<Option<Answer>>>,
+    asking: Option<JoinHandle<Answer>>,
     /// `seen` as read, so an unchanged one is not written again.
     read: Seen,
 }
 
+/// The variable that turns the check off when set; CI's `CI` does too.
+const OFF: &str = "CARGO_ENSHWICK_NO_UPDATE_CHECK";
+
+/// Whether the check runs, by the environment `var` reads.
+fn wanted(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> bool {
+    var("CI").is_none() && var(OFF).is_none()
+}
+
 /// Starts the run's check: reads what earlier runs saw and asks GitHub on a
-/// thread when a day has passed; `None` without a cache folder.
+/// thread when a day has passed; `None` without a cache folder or when
+/// [`wanted`] says no.
 pub(crate) fn start() -> Option<Check> {
+    if !wanted(|name| std::env::var_os(name)) {
+        return None;
+    }
     let file = cache_file()?;
-    let mut seen: Seen = std::fs::read_to_string(&file)
+    let seen: Seen = std::fs::read_to_string(&file)
         .ok()
         .and_then(|text| toml::from_str(&text).ok())
         .unwrap_or_default();
     let read = seen.clone();
-    let now = now();
-    let asking = a_day_after(seen.checked, now).then(|| {
-        seen.checked = now;
-        std::thread::spawn(ask)
-    });
+    let asking = a_day_after(seen.checked, now()).then(|| std::thread::spawn(ask));
     Some(Check {
         seen,
         file,
@@ -81,9 +94,10 @@ pub(crate) fn finish(check: Check) -> Option<String> {
         asking,
         read,
     } = check;
+    // A question still in flight is dropped and stays due for the next run.
     let answer = asking
         .filter(JoinHandle::is_finished)
-        .and_then(|asking| asking.join().ok().flatten());
+        .map(|asking| asking.join().unwrap_or(Answer::Unread));
     let (seen, notice) = settle(seen, now(), answer, &running());
     if seen != read
         && let (Some(dir), Ok(text)) = (file.parent(), toml::to_string(&seen))
@@ -100,16 +114,20 @@ fn a_day_after(then: u64, now: u64) -> bool {
     now.checked_sub(then).is_none_or(|since| since >= DAY)
 }
 
-/// `seen` with `answer`, when GitHub's arrived, and the notice of a newer
-/// release than `running` when a day has passed since the last one.
+/// `seen` with `answered`, `Some` when the question finished, and the
+/// notice of a newer release than `running` when a day has passed since the
+/// last one.
 fn settle(
     mut seen: Seen,
     now: u64,
-    answer: Option<Answer>,
+    answered: Option<Answer>,
     running: &Version,
 ) -> (Seen, Option<String>) {
-    if let Some(answer) = answer {
-        seen.newer = answer.newer;
+    if let Some(answer) = answered {
+        seen.checked = now;
+        if let Answer::Read(newer) = answer {
+            seen.newer = newer;
+        }
     }
     let newer = seen.newer.clone().filter(|newer| {
         Version::parse(&newer.version).is_ok_and(|v| v.cmp_precedence(running).is_gt())
@@ -124,11 +142,11 @@ fn settle(
     (seen, notice)
 }
 
-/// GitHub's answer, `None` when it gave none that reads.
-fn ask() -> Option<Answer> {
+/// GitHub's answer to the question.
+fn ask() -> Answer {
     let running = running();
     let url = format!("https://api.github.com{}", releases::path(&running));
-    let answer = crate::net::get(
+    let found = crate::net::get(
         &url,
         &[
             "Accept: application/vnd.github+json",
@@ -137,13 +155,13 @@ fn ask() -> Option<Answer> {
         LIMIT,
         SECONDS,
     )
-    .ok()?;
-    let found = releases::newer(&answer, &running, TOOL_TAGS).ok()?;
-    Some(Answer {
-        newer: found.map(|release| Newer {
+    .ok()
+    .and_then(|answer| releases::newer(&answer, &running, TOOL_TAGS).ok());
+    found.map_or(Answer::Unread, |found| {
+        Answer::Read(found.map(|release| Newer {
             page: release.page(),
-            version: release.version.to_string(),
-        }),
+            version: release.version().to_string(),
+        }))
     })
 }
 
@@ -159,15 +177,20 @@ fn now() -> u64 {
         .map_or(0, |since| since.as_secs())
 }
 
-/// Where the check keeps what it saw: the user's local application data on
-/// Windows, the XDG cache folder elsewhere.
+/// Where the check keeps what it saw.
 fn cache_file() -> Option<PathBuf> {
+    Some(cache_dir()?.join("cargo-enshwick.toml"))
+}
+
+/// The tool's cache folder: in the user's local application data on
+/// Windows, the XDG cache folder elsewhere.
+pub(crate) fn cache_dir() -> Option<PathBuf> {
     let base = std::env::var_os("LOCALAPPDATA")
         .or_else(|| std::env::var_os("XDG_CACHE_HOME"))
         .map(PathBuf::from)
         .filter(|base| base.is_absolute())
         .or_else(|| std::env::home_dir().map(|home| home.join(".cache")))?;
-    Some(base.join("enshwick").join("cargo-enshwick.toml"))
+    Some(base.join("enshwick"))
 }
 
 #[cfg(test)]
@@ -196,10 +219,23 @@ mod tests {
     }
 
     #[test]
+    fn a_question_still_in_flight_leaves_the_day_s_check_due() {
+        let (seen, _) = settle(Seen::default(), NOW, None, &running());
+        assert_eq!(seen.checked, 0);
+        let (seen, _) = settle(Seen::default(), NOW, Some(Answer::Unread), &running());
+        assert_eq!(seen.checked, NOW, "an answer that did not read counts");
+    }
+
+    #[test]
+    fn ci_or_the_switch_turns_the_check_off() {
+        assert!(wanted(|_| None));
+        assert!(!wanted(|name| (name == "CI").then(|| "true".into())));
+        assert!(!wanted(|name| (name == OFF).then(|| "1".into())));
+    }
+
+    #[test]
     fn a_newer_release_is_told_once_a_day() {
-        let found = Some(Answer {
-            newer: Some(newer("1.0.0-alpha.15")),
-        });
+        let found = Some(Answer::Read(Some(newer("1.0.0-alpha.15"))));
         let (seen, notice) = settle(Seen::default(), NOW, found, &running());
         assert_eq!(
             notice.as_deref(),
@@ -231,7 +267,7 @@ mod tests {
             newer: Some(newer("1.0.0-alpha.15")),
             ..Seen::default()
         };
-        let (seen, notice) = settle(seen, NOW, Some(Answer { newer: None }), &running());
+        let (seen, notice) = settle(seen, NOW, Some(Answer::Read(None)), &running());
         assert_eq!((seen.newer, notice), (None, None));
     }
 

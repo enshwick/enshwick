@@ -28,11 +28,13 @@ pub(crate) fn run(args: &[String]) -> Result<bool, String> {
         return Err(USAGE.to_owned());
     }
     let root = workspace_root();
-    let tag = tag(&packages()?)?;
+    let packages = packages()?;
+    let tag = tag(&packages)?;
+    let names: Vec<&str> = packages.iter().map(|p| p.name.as_str()).collect();
     for file in markdown(&root)? {
         let path = root.join(&file);
         let text = std::fs::read_to_string(&path).map_err(|e| format!("{file}: {e}"))?;
-        let (moved, lines) = rewrite(&text, &tag);
+        let (moved, lines) = rewrite(&names, &text, &tag);
         if !lines.is_empty() {
             std::fs::write(&path, moved).map_err(|e| format!("{file}: {e}"))?;
             say(&format!("{file}: moved {} line(s) to {tag}", lines.len()));
@@ -64,7 +66,7 @@ pub(crate) fn check(root: &Path, packages: &[Package]) -> Vec<String> {
                 continue;
             }
         };
-        problems.extend(rewrite(&text, &tag).1.into_iter().map(|line| {
+        problems.extend(rewrite(&names, &text, &tag).1.into_iter().map(|line| {
             format!("{file}:{line}: names another tag than {tag}; `cargo xtask tag-lines` moves it")
         }));
         problems.extend(unpinned(&text, &names, alpha).into_iter().map(|(line, pin)| {
@@ -149,11 +151,14 @@ fn install_pin(line: &str, names: &[&str]) -> Option<Pin> {
             break;
         }
     }
-    let names_one = words.iter().any(|word| {
+    let at_version = |word: &&str| {
         names
             .iter()
-            .any(|name| word == name || word.strip_prefix(name).is_some_and(|v| v.starts_with('@')))
-    });
+            .any(|name| word.strip_prefix(name).is_some_and(|v| v.starts_with('@')))
+    };
+    let names_one = words
+        .iter()
+        .any(|word| names.contains(word) || at_version(word));
     if !names_one {
         return None;
     }
@@ -170,12 +175,10 @@ fn install_pin(line: &str, names: &[&str]) -> Option<Pin> {
     match after("--git") {
         Some(git) if !git.unwrap_or_default().contains(REPOSITORY) => None,
         Some(_) => {
-            let at_version = words.iter().any(|word| {
-                names
-                    .iter()
-                    .any(|name| word.strip_prefix(name).is_some_and(|v| v.starts_with('@')))
-            });
-            (after("--tag").is_none() && after("--rev").is_none() && !at_version)
+            // binstall downloads the release `<crate>@<version>` names;
+            // `cargo install --git` builds the default branch whatever it names.
+            let by_version = all[start - 1] == "binstall" && words.iter().any(at_version);
+            (after("--tag").is_none() && after("--rev").is_none() && !by_version)
                 .then_some(Pin::Git)
         }
         None if after("--path").is_some() => None,
@@ -262,8 +265,8 @@ fn markdown(root: &Path) -> Result<Vec<String>, String> {
 }
 
 /// `text` with every tag line naming `tag`, and the lines that named
-/// another, from 1.
-fn rewrite(text: &str, tag: &str) -> (String, Vec<usize>) {
+/// another, from 1; a version after `@` counts only after one of `names`.
+fn rewrite(names: &[&str], text: &str, tag: &str) -> (String, Vec<usize>) {
     let mut out = String::with_capacity(text.len());
     let mut moved = Vec::new();
     for (index, line) in text.split_inclusive('\n').enumerate() {
@@ -289,7 +292,9 @@ fn rewrite(text: &str, tag: &str) -> (String, Vec<usize>) {
             let as_tag = value
                 .strip_prefix(lead)
                 .map(|version| format!("v{version}"));
+            let ours = !lead.is_empty() || names.iter().any(|name| crate_before(&rest[..at], name));
             if let Some(as_tag) = as_tag
+                && ours
                 && is_version_tag(&as_tag)
                 && as_tag != tag
             {
@@ -307,6 +312,13 @@ fn rewrite(text: &str, tag: &str) -> (String, Vec<usize>) {
         }
     }
     (out, moved)
+}
+
+/// Whether `before` ends with the whole crate name `name`.
+fn crate_before(before: &str, name: &str) -> bool {
+    before.strip_suffix(name).is_some_and(|rest| {
+        !rest.ends_with(|c: char| c.is_ascii_alphanumeric() || "-_".contains(c))
+    })
 }
 
 /// Whether `value` is a version's tag: `v` and a SemVer version without a
@@ -519,7 +531,7 @@ mod tests {
     #[test]
     fn an_install_line_of_an_older_alpha_moves_to_the_workspace_tag() {
         let text = "a\ncargo install --git https://github.com/enshwick/enshwick --tag v1.0.0-alpha.12 cargo-enshwick\n";
-        let (moved, lines) = rewrite(text, TAG);
+        let (moved, lines) = rewrite(&NAMES, text, TAG);
         assert_eq!(lines, [2]);
         assert_eq!(
             moved,
@@ -531,7 +543,7 @@ mod tests {
     fn a_binstall_line_pins_by_version_and_moves_with_the_workspace() {
         let line = "cargo binstall --git https://github.com/enshwick/enshwick cargo-enshwick@1.0.0-alpha.12";
         assert!(unpinned(line, &NAMES, true).is_empty());
-        let (moved, lines) = rewrite(&format!("{line}\n"), TAG);
+        let (moved, lines) = rewrite(&NAMES, &format!("{line}\n"), TAG);
         assert_eq!(lines, [1]);
         assert_eq!(
             moved,
@@ -543,9 +555,26 @@ mod tests {
     }
 
     #[test]
+    fn another_crate_s_version_on_a_platform_line_stays() {
+        let line = "cargo binstall cargo-xwin@0.19.0 && cargo binstall --git https://github.com/enshwick/enshwick cargo-enshwick@1.0.0-alpha.12\n";
+        let (moved, lines) = rewrite(&NAMES, line, TAG);
+        assert_eq!(lines, [1]);
+        assert_eq!(
+            moved,
+            "cargo binstall cargo-xwin@0.19.0 && cargo binstall --git https://github.com/enshwick/enshwick cargo-enshwick@1.0.0-alpha.13\n"
+        );
+    }
+
+    #[test]
+    fn cargo_install_from_git_at_a_version_still_needs_a_tag() {
+        let line = "cargo install --git https://github.com/enshwick/enshwick cargo-enshwick@1.0.0-alpha.13";
+        assert_eq!(unpinned(line, &NAMES, true), [(1, Pin::Git)]);
+    }
+
+    #[test]
     fn a_dependency_line_keeps_what_follows_its_tag() {
         let text = "enshwick = { git = \"https://github.com/enshwick/enshwick\", tag = \"v1.0.0-alpha.9\", features = [\"typed\"] }";
-        let (moved, lines) = rewrite(text, TAG);
+        let (moved, lines) = rewrite(&NAMES, text, TAG);
         assert_eq!(lines, [1]);
         assert_eq!(
             moved,
@@ -565,7 +594,7 @@ mod tests {
         ]
         .map(|line| format!("{REPOSITORY} {line}\n"))
         .concat();
-        let (moved, lines) = rewrite(&text, TAG);
+        let (moved, lines) = rewrite(&NAMES, &text, TAG);
         assert!(lines.is_empty());
         assert_eq!(moved, text);
     }
@@ -574,7 +603,7 @@ mod tests {
     fn a_tag_of_another_repository_stays() {
         let text = "cargo install --git https://github.com/rust-cross/cargo-xwin --tag v0.18.4 cargo-xwin\n\
                     run `--tag v1.0.0-alpha.12` without an address\n";
-        let (moved, lines) = rewrite(text, TAG);
+        let (moved, lines) = rewrite(&NAMES, text, TAG);
         assert!(lines.is_empty());
         assert_eq!(moved, text);
     }
@@ -582,6 +611,7 @@ mod tests {
     #[test]
     fn a_tag_ending_a_sentence_moves_and_keeps_the_period() {
         let (moved, lines) = rewrite(
+            &NAMES,
             &format!("From {REPOSITORY} with `--tag v1.0.0-alpha.12`. Or --tag v1.0.0-alpha.12."),
             TAG,
         );
@@ -595,6 +625,7 @@ mod tests {
     #[test]
     fn every_tag_of_a_line_moves() {
         let (moved, lines) = rewrite(
+            &NAMES,
             &format!("{REPOSITORY} --tag v1.0.0 and tag = \"v0.9.0\""),
             TAG,
         );

@@ -44,21 +44,30 @@ pub(crate) fn missing_note(game: &Path) -> String {
     )
 }
 
-/// Downloads the release's archive, checks it and unpacks it into `game`;
-/// what was done, or a warning that a different loader was left there.
+/// Unpacks the release's archive into `game`, downloaded and checked once
+/// and then kept in the user's cache folder; what was done, or a warning
+/// that a different loader was left there.
 pub(crate) fn put_in(game: &Path) -> anyhow::Result<String> {
-    put_in_from(game, version(), |url, limit| {
-        crate::net::get(url, &[], limit, SECONDS)
-    })
+    put_in_from(
+        game,
+        version(),
+        crate::update::cache_dir().as_deref(),
+        |url, limit| crate::net::get(url, &[], limit, SECONDS),
+    )
 }
 
-/// [`put_in`] of `version`'s loader, each release file read by `get` from
-/// its URL with a byte limit.
+/// [`put_in`] of `version`'s loader, kept in `cache` when given, each
+/// release file read by `get` from its URL with a byte limit.
 fn put_in_from(
     game: &Path,
     version: &str,
+    cache: Option<&Path>,
     get: impl Fn(&str, usize) -> anyhow::Result<Vec<u8>>,
 ) -> anyhow::Result<String> {
+    let kept = cache.map(|dir| dir.join(format!("enshwick-{version}.zip")));
+    if let Some(archive) = kept.as_ref().and_then(|kept| std::fs::read(kept).ok()) {
+        return unpack(&archive, game, version);
+    }
     let url = |file: &str| format!("{DOWNLOADS}/v{version}/{file}");
     let sums = get(&url(SUMS), SUMS_LIMIT)
         .with_context(|| format!("the checksums of Enshwick {version}"))?;
@@ -68,6 +77,13 @@ fn put_in_from(
         .with_context(|| format!("{ARCHIVE} of Enshwick {version}"))?;
     if hex(&Sha256::digest(&archive)) != expected {
         bail!("{ARCHIVE} of Enshwick {version} does not match its checksum; nothing was put in");
+    }
+    if let Some(kept) = &kept {
+        // A cache that cannot be written only downloads again next time.
+        let _kept = kept
+            .parent()
+            .map_or(Ok(()), std::fs::create_dir_all)
+            .and_then(|()| std::fs::write(kept, &archive));
     }
     unpack(&archive, game, version)
 }
@@ -84,7 +100,8 @@ fn checksum(sums: &str, file: &str) -> Option<String> {
     })
 }
 
-fn hex(bytes: &[u8]) -> String {
+/// `bytes` in lower case hex.
+pub(crate) fn hex(bytes: &[u8]) -> String {
     use std::fmt::Write as _;
     bytes.iter().fold(String::new(), |mut text, byte| {
         let _infallible = write!(text, "{byte:02x}");
@@ -93,7 +110,8 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 /// Unpacks `archive` into `game`, writing only files that are missing; when
-/// a file there differs from the archive's, nothing is written.
+/// the stub or the loader there differs from the archive's, nothing is
+/// written.
 fn unpack(archive: &[u8], game: &Path, version: &str) -> anyhow::Result<String> {
     let mut zip = zip::ZipArchive::new(Cursor::new(archive)).context(ARCHIVE)?;
     let mut entries: Vec<(PathBuf, Vec<u8>)> = Vec::new();
@@ -114,7 +132,10 @@ fn unpack(archive: &[u8], game: &Path, version: &str) -> anyhow::Result<String> 
     }
     let differ: Vec<&PathBuf> = entries
         .iter()
-        .filter(|(name, bytes)| std::fs::read(game.join(name)).is_ok_and(|have| have != *bytes))
+        .filter(|(name, bytes)| {
+            FILES.iter().any(|file| name == Path::new(file))
+                && std::fs::read(game.join(name)).is_ok_and(|have| have != *bytes)
+        })
         .map(|(name, _)| name)
         .collect();
     if !differ.is_empty() {
@@ -162,14 +183,7 @@ mod tests {
 
     use super::*;
 
-    /// A fresh folder for one test.
-    fn scratch(name: &str) -> PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("enshwick-loader-{name}-{}", std::process::id()));
-        let _old = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
+    use crate::scratch;
 
     fn archive(files: &[(&str, &[u8])]) -> Vec<u8> {
         let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
@@ -222,21 +236,32 @@ mod tests {
         let game = scratch("download");
         let archive = release();
         let sums = format!("{}  {ARCHIVE}\n", hex(&Sha256::digest(&archive)));
-        let done = put_in_from(&game, "1.0.0-alpha.14", github(sums, archive.clone())).unwrap();
+        let done =
+            put_in_from(&game, "1.0.0-alpha.14", None, github(sums, archive.clone())).unwrap();
         assert!(done.starts_with("put in"), "{done}");
         assert!(is_installed(&game));
 
         let other = scratch("tampered");
         let wrong = format!("{}  {ARCHIVE}\n", "0".repeat(64));
-        let error = put_in_from(&other, "1.0.0-alpha.14", github(wrong, archive.clone()))
-            .unwrap_err()
-            .to_string();
+        let error = put_in_from(
+            &other,
+            "1.0.0-alpha.14",
+            None,
+            github(wrong, archive.clone()),
+        )
+        .unwrap_err()
+        .to_string();
         assert!(error.contains("does not match its checksum"), "{error}");
         assert!(!other.join(FILES[0]).exists());
 
-        let unlisted = put_in_from(&other, "1.0.0-alpha.14", github(String::new(), archive))
-            .unwrap_err()
-            .to_string();
+        let unlisted = put_in_from(
+            &other,
+            "1.0.0-alpha.14",
+            None,
+            github(String::new(), archive),
+        )
+        .unwrap_err()
+        .to_string();
         assert!(unlisted.contains("lists no enshwick.zip"), "{unlisted}");
     }
 
@@ -250,6 +275,50 @@ mod tests {
         assert!(warned.contains("enshwick.dll"), "{warned}");
         assert_eq!(std::fs::read(game.join(FILES[1])).unwrap(), b"older loader");
         assert!(!game.join(FILES[0]).exists(), "nothing is written");
+    }
+
+    #[test]
+    fn an_unrelated_file_that_differs_does_not_stop_the_loader() {
+        let game = scratch("license");
+        std::fs::write(game.join("LICENSE"), b"another tool's").unwrap();
+        let done = unpack(&release(), &game, "1.0.0-alpha.14").unwrap();
+        assert!(done.starts_with("put in"), "{done}");
+        assert!(is_installed(&game));
+        assert_eq!(
+            std::fs::read(game.join("LICENSE")).unwrap(),
+            b"another tool's"
+        );
+    }
+
+    #[test]
+    fn a_checked_archive_is_kept_and_put_in_again_without_the_network() {
+        let cache = scratch("cache");
+        let archive = release();
+        let sums = format!("{}  {ARCHIVE}\n", hex(&Sha256::digest(&archive)));
+        let first = scratch("cached-first");
+        put_in_from(
+            &first,
+            "1.0.0-alpha.14",
+            Some(&cache),
+            github(sums, archive),
+        )
+        .unwrap();
+        let offline = |url: &str, _| anyhow::bail!("offline: {url}");
+        let second = scratch("cached-second");
+        let done = put_in_from(&second, "1.0.0-alpha.14", Some(&cache), offline).unwrap();
+        assert!(done.starts_with("put in"), "{done}");
+        assert!(is_installed(&second));
+    }
+
+    #[test]
+    fn the_tool_carries_the_version_of_the_loader_it_puts_in() {
+        let loader: toml::Table =
+            toml::from_str(include_str!("../../internal/loader/Cargo.toml")).unwrap();
+        assert_eq!(
+            loader["package"]["version"].as_str(),
+            Some(version()),
+            "alpha.yml tags the release by the loader's version"
+        );
     }
 
     #[test]

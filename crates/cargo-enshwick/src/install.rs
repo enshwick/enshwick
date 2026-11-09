@@ -53,8 +53,8 @@ struct Target {
 }
 
 /// Builds the chosen mod and copies it to `<game>/mods/<id>/<package>.dll`,
-/// `game` found through Steam when not given; with `with_loader`, puts the
-/// loader of this tool's release in first.
+/// `game` found through Steam when not given; with `with_loader`, then puts
+/// the loader of this tool's release in.
 pub(crate) fn install(
     game: Option<&Path>,
     package: Option<&str>,
@@ -70,9 +70,6 @@ pub(crate) fn install(
         );
     }
     let mut said: Vec<String> = chosen.into_iter().collect();
-    if with_loader {
-        said.push(crate::loader::put_in(game)?);
-    }
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let output = Command::new(&cargo)
         .args(["metadata", "--no-deps", "--format-version", "1"])
@@ -122,7 +119,9 @@ pub(crate) fn install(
     let to = folder.join(format!("{}.dll", package.name));
     std::fs::copy(&from, &to).with_context(|| format!("{} -> {}", from.display(), to.display()))?;
     said.push(format!("installed {}", to.display()));
-    if !crate::loader::is_installed(game) {
+    if with_loader {
+        said.push(crate::loader::put_in(game)?);
+    } else if !crate::loader::is_installed(game) {
         said.push(crate::loader::missing_note(game));
     }
     Ok(said.join("\n"))

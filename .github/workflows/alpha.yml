@@ -107,7 +107,11 @@ jobs:
           cargo auditable xwin build --release --locked -p cargo-enshwick --target "$WINDOWS"
           cp "target/$LINUX/release/cargo-enshwick" "$OUT/cargo-enshwick-$LINUX"
           cp "target/$WINDOWS/release/cargo-enshwick.exe" "$OUT/cargo-enshwick-$WINDOWS.exe"
+          cp "target/$WINDOWS/release/cargo_enshwick.pdb" "$OUT/cargo-enshwick.pdb"
           cp crates/cargo-enshwick/cargo-enshwick.cdx.json "$OUT/"
+          # The Linux build's own SBOM, without the Windows-only dependencies.
+          cargo cyclonedx --format json --target "$LINUX" --no-build-deps
+          cp crates/cargo-enshwick/cargo-enshwick.cdx.json "$OUT/cargo-enshwick.linux.cdx.json"
           "$OUT/cargo-enshwick-$LINUX" enshwick --version
 
       # `cargo enshwick install --with-loader` checks enshwick.zip against

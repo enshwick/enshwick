@@ -83,8 +83,8 @@ enum Command {
     /// Builds the mod in release and copies its DLL into the game's `mods/`.
     Install {
         /// The folder holding `enshrouded.exe` or `enshrouded_server.exe`;
-        /// `ENSHROUDED_DIR` when omitted, else Steam's dedicated server, else
-        /// Steam's game.
+        /// `ENSHROUDED_DIR` when omitted, else Steam's game, else Steam's
+        /// dedicated server.
         #[arg(long, env = "ENSHROUDED_DIR")]
         game: Option<PathBuf>,
         /// The package to install, when the workspace has several mods.
@@ -325,6 +325,20 @@ fn run(args: Args) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// A fresh temporary folder for one test, named after the calling file and
+/// `name`, so tests of different modules never share one.
+#[cfg(test)]
+#[track_caller]
+fn scratch(name: &str) -> PathBuf {
+    let file = std::panic::Location::caller()
+        .file()
+        .replace(['/', '\\', '.'], "-");
+    let dir = std::env::temp_dir().join(format!("enshwick-{file}-{name}-{}", std::process::id()));
+    let _old = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
 }
 
 #[cfg(test)]

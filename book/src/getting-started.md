@@ -36,6 +36,8 @@ cargo install --git https://github.com/enshwick/enshwick --tag v1.0.0-alpha.13 c
 ```
 
 The tool says when a newer release of itself is out, at most once a day.
+`CARGO_ENSHWICK_NO_UPDATE_CHECK` or `CI` set in the environment turns this
+off.
 
 A Rust mod is a Windows DLL. On Windows it builds with the MSVC build
 tools. On Linux or macOS it builds with
@@ -229,14 +231,14 @@ and the static C runtime there.
 through `cargo xwin` off Windows. It copies the DLL to
 `<game>/mods/<id>/`. The game folder is `--game` or the `ENSHROUDED_DIR`
 environment variable. Without either, the tool reads Steam's libraries and
-takes the dedicated server when it is installed, else the game. When Steam
+takes the game when it is installed, else the dedicated server. When Steam
 has several, the tool lists the others, and `--game` picks one. In a
 workspace with several mods, `-p` names one.
 
 `--with-loader` puts in the loader of the release the tool is from when the
 game folder has none. The tool downloads that release's `enshwick.zip` from
 GitHub and checks it against the release's `SHA256SUMS` before it extracts
-it. A loader of another release stays in place, and the tool warns about it.
+it. It keeps the checked archive in its cache folder for the next install. A loader of another release stays in place, and the tool warns about it.
 Remove that loader first to put this one in.
 
 `cargo enshwick manifest <dll>` prints what a built DLL says about itself:

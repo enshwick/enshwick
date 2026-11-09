@@ -36,7 +36,7 @@ pub(crate) fn start(loader: &'static crate::host::Loader) {
                         crate::log!(
                             INFO,
                             "Enshwick {} is available, this is {running}: {}",
-                            release.version,
+                            release.version(),
                             release.page()
                         );
                         let _first = loader.newer_release.set(release);

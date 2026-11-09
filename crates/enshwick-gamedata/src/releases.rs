@@ -52,18 +52,27 @@ struct Listed {
 /// let answer = br#"[{"tag_name":"v1.0.0-alpha.14","prerelease":true}]"#;
 /// let running = semver::Version::parse("1.0.0-alpha.13")?;
 /// let release = newer(answer, &running, LOADER_TAGS)?.ok_or("none newer")?;
-/// assert_eq!(release.version.to_string(), "1.0.0-alpha.14");
+/// assert_eq!(release.version().to_string(), "1.0.0-alpha.14");
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Release {
-    /// The release's version.
-    pub version: Version,
+    version: Version,
     /// The tag prefix it was published under, one of the prefixes asked for.
     prefix: &'static str,
 }
 
 impl Release {
+    /// The release's version, to compare with the running one or to show.
+    ///
+    /// # Examples
+    ///
+    /// See [`Release`].
+    #[must_use]
+    pub fn version(&self) -> &Version {
+        &self.version
+    }
+
     /// The release's page, built here rather than read from GitHub's answer,
     /// so no address the network chose is shown.
     ///

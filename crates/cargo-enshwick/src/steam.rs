@@ -184,7 +184,8 @@ fn installed(library: &Path, app: u32) -> Option<PathBuf> {
 }
 
 /// Every server and game install in the libraries of the Steam folders
-/// `steams`, servers first, each folder once.
+/// `steams`, the game first, since a mod of either side runs in a game that
+/// hosts, each folder once.
 pub(crate) fn find(steams: &[PathBuf]) -> Vec<Found> {
     let mut libraries: Vec<PathBuf> = Vec::new();
     let mut seen = Vec::new();
@@ -195,7 +196,7 @@ pub(crate) fn find(steams: &[PathBuf]) -> Vec<Found> {
             libraries.push(library);
         }
     }
-    [SERVER_APP, GAME_APP]
+    [GAME_APP, SERVER_APP]
         .into_iter()
         .flat_map(|app| {
             libraries.iter().filter_map(move |library| {
@@ -221,12 +222,10 @@ fn libraries_of(steam: &Path) -> Vec<PathBuf> {
 /// Flatpak installs on Linux and the macOS one.
 pub(crate) fn steam_folders() -> Vec<PathBuf> {
     if cfg!(windows) {
-        let registry = std::process::Command::new("reg")
-            .args(["query", r"HKCU\Software\Valve\Steam", "/v", "SteamPath"])
-            .output()
-            .ok()
-            .filter(|out| out.status.success())
-            .and_then(|out| registry_path(&String::from_utf8_lossy(&out.stdout)));
+        #[cfg(windows)]
+        let registry = registry_string(r"Software\Valve\Steam", "SteamPath");
+        #[cfg(not(windows))]
+        let registry: Option<PathBuf> = None;
         let default =
             std::env::var_os("ProgramFiles(x86)").map(|dir| PathBuf::from(dir).join("Steam"));
         registry.into_iter().chain(default).collect()
@@ -246,13 +245,41 @@ pub(crate) fn steam_folders() -> Vec<PathBuf> {
     }
 }
 
-/// The folder in `reg query`'s answer for a `REG_SZ` value.
-fn registry_path(answer: &str) -> Option<PathBuf> {
-    answer.lines().find_map(|line| {
-        let (_, path) = line.split_once("REG_SZ")?;
-        let path = path.trim();
-        (!path.is_empty()).then(|| PathBuf::from(path))
-    })
+/// The path in the `REG_SZ` value `value` of the current user's key `key`,
+/// read as UTF-16, so a folder outside ASCII reads whole.
+#[cfg(windows)]
+fn registry_string(key: &str, value: &str) -> Option<PathBuf> {
+    use std::os::windows::ffi::OsStringExt as _;
+
+    use windows_sys::Win32::Foundation::ERROR_SUCCESS;
+    use windows_sys::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_SZ, RegGetValueW};
+
+    let wide = |text: &str| text.encode_utf16().chain([0]).collect::<Vec<u16>>();
+    let (key, value) = (wide(key), wide(value));
+    // MAX_PATH and more: Steam's folder is a path.
+    let mut buffer = vec![0_u16; 4096];
+    let mut bytes = u32::try_from(buffer.len() * 2).ok()?;
+    // SAFETY: `key` and `value` are NUL-terminated UTF-16 that live across
+    // the call; `buffer` is valid for `bytes` bytes of writes, and `bytes`
+    // is a live u32 the call sets to the bytes written, NUL included
+    // (RegGetValueW's documented contract).
+    let status = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            key.as_ptr(),
+            value.as_ptr(),
+            RRF_RT_REG_SZ,
+            std::ptr::null_mut(),
+            buffer.as_mut_ptr().cast(),
+            &raw mut bytes,
+        )
+    };
+    if status != ERROR_SUCCESS {
+        return None;
+    }
+    let units = usize::try_from(bytes).ok()? / 2;
+    let text = buffer.get(..units)?.split(|&unit| unit == 0).next()?;
+    (!text.is_empty()).then(|| PathBuf::from(std::ffi::OsString::from_wide(text)))
 }
 
 #[cfg(test)]
@@ -260,14 +287,7 @@ mod tests {
     use super::*;
     use proptest::prelude::*;
 
-    /// A fresh folder for one test.
-    fn scratch(name: &str) -> PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("enshwick-steam-{name}-{}", std::process::id()));
-        let _old = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
+    use crate::scratch;
 
     fn write(path: &Path, text: &str) {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -300,7 +320,7 @@ mod tests {
     }
 
     #[test]
-    fn the_server_is_found_before_the_game_in_any_library() {
+    fn the_game_is_found_before_the_server_in_any_library() {
         let scratch = scratch("steam-both");
         let steam = steam(&scratch);
         let library = scratch.join("library");
@@ -319,16 +339,39 @@ mod tests {
             found,
             [
                 Found {
-                    folder: library.join("steamapps/common/EnshroudedServer"),
-                    app: SERVER_APP
-                },
-                Found {
                     folder: steam.join("steamapps/common/Enshrouded"),
                     app: GAME_APP
                 },
+                Found {
+                    folder: library.join("steamapps/common/EnshroudedServer"),
+                    app: SERVER_APP
+                },
             ]
         );
-        assert_eq!(found[0].what(), "the dedicated server");
+        assert_eq!(found[0].what(), "the game");
+        assert_eq!(found[1].what(), "the dedicated server");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_registry_path_outside_ascii_reads_whole() {
+        let key = format!(r"Software\enshwick-test-{}", std::process::id());
+        let path = r"D:\Ігри\Steam";
+        let reg = |args: &[&str]| {
+            let status = std::process::Command::new("reg")
+                .args(args)
+                .output()
+                .unwrap()
+                .status;
+            assert!(status.success(), "reg {args:?}");
+        };
+        let full = format!(r"HKCU\{key}");
+        reg(&["add", &full, "/v", "SteamPath", "/d", path, "/f"]);
+        let read = registry_string(&key, "SteamPath");
+        let missing = registry_string(&key, "Nothing");
+        reg(&["delete", &full, "/f"]);
+        assert_eq!(read, Some(PathBuf::from(path)));
+        assert_eq!(missing, None);
     }
 
     #[test]
@@ -341,16 +384,6 @@ mod tests {
         );
         assert_eq!(find(&[steam]), []);
         assert_eq!(find(&[scratch.join("no-steam")]), []);
-    }
-
-    #[test]
-    fn the_registry_answer_names_the_steam_folder() {
-        let answer = "\r\nHKEY_CURRENT_USER\\Software\\Valve\\Steam\r\n    SteamPath    REG_SZ    c:/program files (x86)/steam\r\n\r\n";
-        assert_eq!(
-            registry_path(answer),
-            Some(PathBuf::from("c:/program files (x86)/steam"))
-        );
-        assert_eq!(registry_path("ERROR: not found"), None);
     }
 
     /// On a machine whose `ENSH_CLIENT_EXE` is Steam's install, the search
