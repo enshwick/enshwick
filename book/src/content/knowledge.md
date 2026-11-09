@@ -46,6 +46,49 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 These calls need the `typed` feature.
 
+## Give an amount of experience
+
+An entry's `experience` and a quest's `QuestReward::Experience` name an
+experience value of the game's balancing table: a source and an amount.
+
+`vanilla::experience_values()` lists the game's own values. Each has a value,
+a source and a gain. `load.add_experience(NewExperience)` adds a value of the
+mod's own and returns it:
+
+| Field | What it sets |
+| --- | --- |
+| `id` | the value's content id; the value is the FNV-1a of its GUID |
+| `source` | the source the game counts it under, an `ExperienceSourceType` |
+| `gain` | the experience it gives |
+
+The world's experience factor of the source's `ExperienceGroup` scales the
+gain, as for a vanilla value. A source in no group, such as `None`, has no
+factor. Adding the same id again replaces its source and gain. A source the
+game build lacks returns `Err(Off)`. So does an `Other` number the build's
+source enum does not hold. These calls need the `typed` feature.
+
+```rust
+use enshwick::content::id;
+use enshwick::content::knowledge::{NewExperience, NewKnowledge};
+use enshwick::game_events::ExperienceSourceType;
+use enshwick::knowledge::{KnowledgeType, Scope};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let found = load.add_experience(NewExperience::new(id!("shrine-xp"), ExperienceSourceType::Exploration, 250))?;
+    load.add_knowledge(NewKnowledge {
+        experience: Some(found),
+        ..NewKnowledge::new(id!("found-the-shrine"), Scope::Player, KnowledgeType::Bool)
+    })?;
+    Ok(())
+}
+```
+
+On a server copy of server 224, the game built its balancing table with an
+added value at start, 182 values in place of 181. Whether a player gets the
+gain of an added value is not yet seen in the game, so the
+[stability](../stability.md) chapter lists `Load::add_experience` as
+unstable.
+
 ## Testing an entry
 
 A `KnowledgeQuery` tests one entry, vanilla or a mod's, where quests, journal
@@ -70,6 +113,14 @@ local shrine = enshwick.content.add_knowledge({
     skill_points = 1,
 })
 local found = { id = shrine, scope = "Player", test = "IsSet" }
+```
+
+Experience values are `enshwick.content.experience_values()` and
+`enshwick.content.add_experience{...}`:
+
+```luau
+local xp = enshwick.content.add_experience({ id = "you.lore:shrine-xp", source = "Exploration", gain = 250 })
+enshwick.content.add_knowledge({ id = "you.lore:found-it", scope = "Player", kind = "Bool", experience = xp })
 ```
 
 ## When the mod is removed

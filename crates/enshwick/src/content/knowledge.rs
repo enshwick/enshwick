@@ -30,6 +30,13 @@ use crate::{Load, Off};
 
 use super::{EngineFacts, Guid, Id};
 
+mod experience;
+
+pub use experience::NewExperience;
+pub(crate) use experience::{
+    AddedExperience, balance_parts, balancing_table, source_type, values_of,
+};
+
 /// The game's knowledge: every world and player entry and the skill
 /// points they unlock (server 387 and 399, `GameKnowledgeResource`).
 pub const GAME_KNOWLEDGE: Guid = Guid::parse("cb1eeb8b-f58a-4785-bf0f-6dd5437e9a5b");
@@ -438,6 +445,41 @@ impl Load<'_> {
         let resource = self.knowledge_without(new.id)?;
         self.declare(new.id)?;
         self.serve_knowledge(resource, new)
+    }
+
+    /// Adds an experience value beside the game's own and returns it, for
+    /// a knowledge entry's [`NewKnowledge::experience`] or a quest's
+    /// experience reward. The game counts the experience under its source,
+    /// as it does a vanilla value's;
+    /// [`experience_values`](super::vanilla::experience_values) lists those.
+    /// Adding the same id again replaces its source and gain. One patch of
+    /// the balancing table serves all of a mod's values; it adds none when
+    /// another mod's value there has the id of one of them.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] for a source the build lacks (also a number its source enum
+    /// does not hold), an experience value the game already holds, an id
+    /// the loader refuses (see [`Load::declare`]), and on the first call a
+    /// balancing table that is not reflected, not one resource or does not
+    /// read.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::id;
+    /// use enshwick::content::knowledge::NewExperience;
+    /// use enshwick::game_events::ExperienceSourceType;
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let reward = load.add_experience(NewExperience::new(id!("trail-xp"), ExperienceSourceType::Quest, 1200))?;
+    ///     enshwick::info!("trail reward: experience value {}", reward.get());
+    ///     Ok(())
+    /// }
+    /// ```
+    #[script]
+    pub fn add_experience(&mut self, new: NewExperience) -> Result<ExperienceValue, Off> {
+        experience::add(self, new)
     }
 }
 

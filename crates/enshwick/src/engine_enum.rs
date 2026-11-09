@@ -3,6 +3,7 @@
 //! compiled into a mod.
 
 use crate::Load;
+use crate::content::EngineFacts;
 
 /// The engine value of each variant of `T`; a variant whose constant the
 /// build lacks has none and is never decoded.
@@ -17,8 +18,14 @@ impl<T: Copy + PartialEq, const N: usize> Values<T, N> {
     }
 
     /// Each variant with the value the loader answers for its id.
-    pub(crate) fn resolve(load: &Load<'_>, ids: [(T, &str); N]) -> Self {
-        Self(ids.map(|(variant, id)| (variant, load.constant(id).ok())))
+    pub(crate) fn resolve(facts: &(impl EngineFacts + ?Sized), ids: [(T, &str); N]) -> Self {
+        Self(ids.map(|(variant, id)| {
+            let value = facts
+                .offset(id)
+                .ok()
+                .and_then(|raw| u64::try_from(raw).ok());
+            (variant, value)
+        }))
     }
 
     /// The variant whose engine value is `raw`.

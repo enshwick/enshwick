@@ -8,7 +8,8 @@ mod tests {
     use enshwick::content::categories::ItemCategoryMask;
     use enshwick::content::changes::{Field, Items, Value};
     use enshwick::content::{EngineFacts as _, Guid, Id, types};
-    use enshwick::test::FakeHost;
+    use enshwick::resources::{Registry, Value as Data};
+    use enshwick::test::{BALANCING_TABLE, FakeHost};
 
     use crate::harness::{logged, run, start};
 
@@ -63,6 +64,54 @@ mod tests {
             .unwrap();
         let knowledge = enshwick::content::knowledge::GAME_KNOWLEDGE.key_by_hash(hash);
         assert!(loader.resources().iter().any(|r| r.key == knowledge));
+    }
+
+    #[test]
+    fn a_script_lists_vanilla_experience_and_gives_a_value_of_its_own_to_knowledge() {
+        let loader = run(
+            FakeHost::new().progression(),
+            r#"
+            local vanilla = enshwick.content.experience_values()
+            enshwick.log.info(`{#vanilla} vanilla, first {vanilla[1].gain} of {vanilla[1].source}`)
+            local xp = enshwick.content.add_experience({ id = "you.luau:shrine-xp", source = "Exploration", gain = 250 })
+            enshwick.log.info(`experience {xp}`)
+            enshwick.content.add_knowledge({
+                id = "you.luau:shrine", scope = "Player", kind = "Bool", experience = xp,
+            })
+            local ok = pcall(enshwick.content.add_experience, { id = "you.luau:bad", source = "Sleeping", gain = 1 })
+            enshwick.log.info(`unknown source refused {not ok}`)
+            "#,
+        );
+        let logs = format!("{:?}", loader.logs());
+        assert!(logged(&loader, "3 vanilla, first 5 of Mining"), "{logs}");
+        let xp = Id::new("you.luau:shrine-xp").guid().fnv1a();
+        assert!(logged(&loader, &format!("experience {xp}")), "{logs}");
+        assert!(logged(&loader, "unknown source refused true"), "{logs}");
+        let host = enshwick::host().unwrap();
+        let table = BALANCING_TABLE.key_by_hash(host.hash("balancing_table").unwrap());
+        let base = host.game_resource(table).unwrap();
+        let built = Registry::game()
+            .unwrap()
+            .decode(
+                "demo::BalancingTable",
+                &loader.build_resource(&table, &base).unwrap(),
+            )
+            .unwrap();
+        let Some(Data::List(values)) = built.field("experienceValues") else {
+            panic!("{built:?}")
+        };
+        let last = values.last().unwrap();
+        assert_eq!(
+            last.field("experienceValueId")
+                .and_then(|id| id.field("value")),
+            Some(&Data::Uint(xp.into())),
+            "{built:?}"
+        );
+        assert_eq!(
+            last.field("source"),
+            Some(&Data::Name("Exploration".into()))
+        );
+        assert_eq!(last.field("experienceGain"), Some(&Data::Uint(250)));
     }
 
     #[test]

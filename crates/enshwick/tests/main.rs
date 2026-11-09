@@ -53,6 +53,8 @@ mod entity_calls_unavailable;
 mod entity_data;
 #[cfg(feature = "unstable")]
 mod events_described;
+#[cfg(feature = "typed")]
+mod experience_content;
 mod export_dir;
 mod exports;
 mod fake_per_test;

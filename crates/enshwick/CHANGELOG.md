@@ -8,6 +8,12 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `content`: `Load::add_experience(NewExperience)` adds an experience value
+  of a mod's own, a source and a gain, for a knowledge entry's `experience`
+  and a quest's experience reward; `vanilla::experience_values()` lists the
+  game's own as `ExperienceBalanceValue`. Luau
+  `enshwick.content.add_experience` and
+  `enshwick.content.experience_values` mirror them (#1005).
 - `packs`: `pack.toml` declares a Luau mod's own extension points under
   `[[point]]` (`PackPoint`, `PackPointField`, `PointLayout`, `PointSlot`),
   laid out and hashed as `#[point]` lays out a struct, and `exports` takes

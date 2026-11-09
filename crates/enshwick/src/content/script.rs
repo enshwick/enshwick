@@ -380,6 +380,20 @@ impl Content {
         vanilla::enemy(name)
     }
 
+    /// The vanilla experience values, each `{ value, source, gain }`, in the
+    /// balancing table's order.
+    ///
+    /// # Errors
+    ///
+    /// As [`vanilla::experience_values`].
+    #[cfg(feature = "typed")]
+    #[script]
+    pub fn experience_values(
+        self,
+    ) -> Result<Vec<vanilla::ExperienceBalanceValue>, vanilla::VanillaError> {
+        vanilla::experience_values()
+    }
+
     /// The workshop of the vanilla station item named `name`.
     ///
     /// # Errors
