@@ -190,13 +190,7 @@ const GAME_STEP_MISSING: &str =
 mod tests {
     use super::*;
 
-    fn scratch(name: &str) -> PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("enshwick-new-luau-{name}-{}", std::process::id()));
-        let _old = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
+    use crate::scratch;
 
     #[test]
     fn a_new_luau_mod_reads_as_a_pack_with_its_main_script() {

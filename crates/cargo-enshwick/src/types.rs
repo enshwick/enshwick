@@ -172,13 +172,7 @@ fn read(from: &Path) -> anyhow::Result<(Catalogue, String)> {
         .file_name()
         .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
     if let Some(fingerprint) = image.fingerprint() {
-        let guid = fingerprint
-            .guid()
-            .iter()
-            .fold(String::new(), |mut hex, byte| {
-                let _ = write!(hex, "{byte:02x}");
-                hex
-            });
+        let guid = crate::loader::hex(&fingerprint.guid());
         let _ = write!(source, " {guid}-{}", fingerprint.age());
     }
     Ok((catalogue, source))

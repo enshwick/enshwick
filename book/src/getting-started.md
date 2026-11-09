@@ -11,20 +11,33 @@ log and in the game.
 
 ## What you need
 
-Every form needs the Enshwick loader in the game's folder. Take
-`enshwick.zip` of the newest alpha on the
-[releases page](https://github.com/enshwick/enshwick/releases) and extract
-it next to the game's executable.
+Every form needs the Enshwick loader in the game's folder. The Rust mod
+puts it in when it installs. For a data pack or a Luau script, take
+`enshwick.zip` of the newest alpha from the
+[releases page](https://github.com/enshwick/enshwick/releases). Extract it
+next to the game's executable.
 
 Starting a mod and building one in Rust also need Rust 1.99 or newer, from
 [rustup](https://rustup.rs). Install the Windows target and the
 [`cargo enshwick`](https://github.com/enshwick/enshwick/tree/main/crates/cargo-enshwick)
-tool:
+tool. With [cargo-binstall](https://github.com/cargo-bins/cargo-binstall),
+the tool of this alpha downloads in seconds:
 
 ```bash
 rustup target add x86_64-pc-windows-msvc
+cargo binstall --git https://github.com/enshwick/enshwick cargo-enshwick@1.0.0-alpha.14
+```
+
+Without cargo-binstall, Cargo builds the tool from source in a few
+minutes:
+
+```bash
 cargo install --git https://github.com/enshwick/enshwick --tag v1.0.0-alpha.14 cargo-enshwick
 ```
+
+The tool says when a newer release of itself is out, at most once a day.
+`CARGO_ENSHWICK_NO_UPDATE_CHECK` or `CI` set in the environment turns this
+off.
 
 A Rust mod is a Windows DLL. On Windows it builds with the MSVC build
 tools. On Linux or macOS it builds with
@@ -123,11 +136,12 @@ crate. This one writes the same line and greets each player who joins.
 
 3. In `src/lib.rs`, keep the first line, the comment that `new` wrote.
    Replace the rest with the code that follows this list.
-4. Build the mod and install it into the game's folder:
+4. Build the mod and install it, with the loader, into the game's folder.
+   The tool finds the folder through Steam and names it:
 
    ```bash
    cd hello-rust
-   cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Enshrouded"
+   cargo enshwick install --with-loader
    ```
 
 5. Start the game and load a world. The mod's log, `logs/you.hello-rust_<date>_<time>.log`, has
@@ -216,7 +230,16 @@ and the static C runtime there.
 `cargo enshwick install` builds the mod in release for the Windows target,
 through `cargo xwin` off Windows. It copies the DLL to
 `<game>/mods/<id>/`. The game folder is `--game` or the `ENSHROUDED_DIR`
-environment variable. In a workspace with several mods, `-p` names one.
+environment variable. Without either, the tool reads Steam's libraries and
+takes the game when it is installed, else the dedicated server. When Steam
+has several, the tool lists the others, and `--game` picks one. In a
+workspace with several mods, `-p` names one.
+
+`--with-loader` puts in the loader of the release the tool is from when the
+game folder has none. The tool downloads that release's `enshwick.zip` from
+GitHub and checks it against the release's `SHA256SUMS` before it extracts
+it. It keeps the checked archive in its cache folder for the next install. A loader of another release stays in place, and the tool warns about it.
+Remove that loader first to put this one in.
 
 `cargo enshwick manifest <dll>` prints what a built DLL says about itself:
 id, version, side, join check and dependencies. It loads the DLL, so it
