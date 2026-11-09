@@ -9,7 +9,8 @@ mod tests {
     use enshwick::content::journal::{NewQuest, QuestReward, QuestStep};
     use enshwick::content::knowledge::{KnowledgeQuery, KnowledgeTest, NewKnowledge};
     use enshwick::content::{Guid, Id};
-    use enshwick::knowledge::{KnowledgeId, KnowledgeType, Quests, Scope, TextKey};
+    use enshwick::knowledge::{KnowledgeId, KnowledgeType, Scope};
+    use enshwick::quests::{Quests, TextKey};
     use enshwick::resources::fnv1a32;
     use enshwick::test::{FakeHost, PROGRESSION, VANILLA_QUEST};
     use enshwick::{Entity, Load, Mod, Off};
@@ -57,7 +58,7 @@ mod tests {
                 )
             })?;
             let _ = ENTRIES.set((given, wood));
-            let _ = QUESTS.set(load.quests()?);
+            let _ = QUESTS.set(load.quests());
             Ok(Self)
         }
     }

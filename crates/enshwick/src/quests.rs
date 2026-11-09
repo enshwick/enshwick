@@ -2,14 +2,15 @@
 //! included, and where each player and the world stand in each quest.
 //!
 //! [`Load::quests`] gives the [`Quests`] of the running game. They read the
-//! journal as the game builds it, every mod's quests and changes in, once
-//! per world, and answer a quest's state from the knowledge its steps ask
+//! journal as the game builds it, every mod's quests and changes in, on
+//! first use and keep it, as the game keeps the journal it first built for
+//! the process; they answer a quest's state from the knowledge its steps ask
 //! for: a step shows while its `shown_when` holds and is done once its
 //! `done_when` holds; the game pays a quest when its last step is done and
 //! sets the quest's own bool.
 //!
 //! ```
-//! use enshwick::knowledge::Quests;
+//! use enshwick::quests::Quests;
 //!
 //! fn report(quests: &Quests, player: enshwick::Entity) {
 //!     for quest in quests.all() {
@@ -33,7 +34,7 @@ use crate::typed::{
 };
 use crate::{Entity, ItemId, Load, Off};
 
-use super::{Knowledge, KnowledgeId};
+use crate::knowledge::{Knowledge, KnowledgeId};
 
 /// The key of a text the journal names, the FNV-1a of its text tag's GUID.
 ///
@@ -41,7 +42,7 @@ use super::{Knowledge, KnowledgeId};
 ///
 /// ```
 /// use enshwick::content::Guid;
-/// use enshwick::knowledge::TextKey;
+/// use enshwick::quests::TextKey;
 ///
 /// let tag = Guid::named("you.trail:trail.name");
 /// assert_eq!(TextKey::of(tag).get(), tag.fnv1a());
@@ -82,7 +83,7 @@ impl TextKey {
 /// # Examples
 ///
 /// ```
-/// use enshwick::knowledge::EntryId;
+/// use enshwick::quests::EntryId;
 ///
 /// assert_eq!(EntryId::new(9).get(), 9);
 /// ```
@@ -168,7 +169,7 @@ impl StepInfo {
 /// # Examples
 ///
 /// ```
-/// fn titled(quests: &enshwick::knowledge::Quests) -> usize {
+/// fn titled(quests: &enshwick::quests::Quests) -> usize {
 ///     quests.pages().iter().filter(|page| page.name.is_some()).count()
 /// }
 /// ```
@@ -286,7 +287,7 @@ pub struct StepState {
 /// # Examples
 ///
 /// ```
-/// fn at(quests: &enshwick::knowledge::Quests, player: enshwick::Entity, quest: enshwick::knowledge::KnowledgeId) -> Option<usize> {
+/// fn at(quests: &enshwick::quests::Quests, player: enshwick::Entity, quest: enshwick::knowledge::KnowledgeId) -> Option<usize> {
 ///     let state = quests.state(player, quest)?;
 ///     state.steps.iter().position(|step| step.done != Some(true))
 /// }
@@ -349,7 +350,7 @@ const COLLECTIONS: &str = "collections";
 #[derive(Clone, Copy, Debug)]
 pub struct Quests {
     knowledge: Knowledge,
-    /// The journal read this world, `None` until it is first read; one per
+    /// The journal, `None` until it is first read; one per
     /// [`Load::quests`] call, for the life of the process.
     journal: &'static Mutex<Option<Arc<Journal>>>,
 }
@@ -360,13 +361,13 @@ impl crate::script::Bound for Quests {
     const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_QUESTS];
 
     fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
-        load.quests()
+        Ok(load.quests())
     }
 }
 
 impl Quests {
-    /// The journal of this world, read once: empty, with a warning, where
-    /// it does not read.
+    /// The journal, read once: empty, with a warning, where it does not
+    /// read.
     fn journal(&self) -> Arc<Journal> {
         let mut held = self.journal.relock();
         if let Some(journal) = &*held {
@@ -379,7 +380,7 @@ impl Quests {
             .and_then(|key| host.served_value(key))
             .and_then(|registry| Journal::of(&registry));
         let journal = read.unwrap_or_else(|off| {
-            // Logged once a world: the empty journal is kept until the next.
+            // Logged once: the empty journal is kept.
             host.log(crate::abi::Level::WARN, &format!("quests: {off}"));
             Journal::default()
         });
@@ -442,7 +443,7 @@ impl Quests {
     /// # Examples
     ///
     /// ```
-    /// fn steps(quests: &enshwick::knowledge::Quests, quest: enshwick::knowledge::KnowledgeId) -> usize {
+    /// fn steps(quests: &enshwick::quests::Quests, quest: enshwick::knowledge::KnowledgeId) -> usize {
     ///     quests.quest(quest).map_or(0, |info| info.steps.len())
     /// }
     /// ```
@@ -487,7 +488,7 @@ impl Quests {
     /// # Examples
     ///
     /// ```
-    /// fn shown(quests: &enshwick::knowledge::Quests, quest: enshwick::knowledge::KnowledgeId) -> bool {
+    /// fn shown(quests: &enshwick::quests::Quests, quest: enshwick::knowledge::KnowledgeId) -> bool {
     ///     quests.world_state(quest).is_some_and(|state| state.started)
     /// }
     /// ```
@@ -501,25 +502,19 @@ impl Quests {
 impl Load<'_> {
     /// The [`Quests`] of the running game.
     ///
-    /// # Errors
-    ///
-    /// [`Off`] when the loader refuses the world event the quests reread
-    /// the journal on.
-    ///
     /// # Examples
     ///
     /// ```
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<enshwick::knowledge::Quests, enshwick::Off> {
+    /// fn init(load: &mut enshwick::Load<'_>) -> enshwick::quests::Quests {
     ///     load.quests()
     /// }
     /// ```
-    pub fn quests(&mut self) -> Result<Quests, Off> {
-        let journal: &'static Mutex<_> = Box::leak(Box::default());
-        self.on::<crate::events::WorldLoaded>(move |()| *journal.relock() = None)?;
-        Ok(Quests {
+    #[must_use]
+    pub fn quests(&mut self) -> Quests {
+        Quests {
             knowledge: self.knowledge(),
-            journal,
-        })
+            journal: Box::leak(Box::default()),
+        }
     }
 }
 

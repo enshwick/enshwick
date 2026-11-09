@@ -429,7 +429,7 @@ pub const NAMESPACES: &[Namespace] = &[
     Namespace::of::<crate::knowledge::Knowledge>(),
     Namespace::starting("knowledge", "", &[crate::Load::SCRIPT_KNOWLEDGE]),
     #[cfg(feature = "typed")]
-    Namespace::of::<crate::knowledge::Quests>(),
+    Namespace::of::<crate::quests::Quests>(),
     Namespace::of::<crate::game_settings::GameSettings>(),
     Namespace::of::<crate::rates::RateFns>(),
     #[cfg(feature = "unstable")]
