@@ -185,6 +185,9 @@ pub struct Image<'a> {
     sections: Vec<Section>,
     fingerprint: Option<Fingerprint>,
     relocations: (u64, u64),
+    /// Where `.text` starts and the bytes read in its place, set by
+    /// [`Image::with_text`].
+    text: Option<(u64, &'a [u8])>,
 }
 
 const PE_OFFSET: usize = 0x3c;
@@ -256,6 +259,7 @@ impl<'a> Image<'a> {
             sections,
             fingerprint: None,
             relocations: (0, 0),
+            text: None,
         };
         let has_debug = optional_size >= OPTIONAL_DEBUG_DIRECTORY + 8
             && u32_at(bytes, optional + OPTIONAL_DIRECTORY_COUNT)
@@ -370,6 +374,14 @@ impl<'a> Image<'a> {
     /// See [`Image`].
     #[must_use]
     pub fn read(&self, va: u64, len: u64) -> Option<&'a [u8]> {
+        if let Some((start, text)) = self.text
+            && let Some(offset) = va.checked_sub(start)
+            && offset < u64::try_from(text.len()).ok()?
+        {
+            let start = usize::try_from(offset).ok()?;
+            let end = start.checked_add(usize::try_from(len).ok()?)?;
+            return text.get(start..end);
+        }
         let rva = va.checked_sub(self.base)?;
         let offset = match self.layout {
             Layout::Mapped => rva,

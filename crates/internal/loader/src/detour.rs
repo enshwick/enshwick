@@ -96,6 +96,15 @@ const REACH: usize = 0x7fff_0000 - BLOCK; // bound, not a game offset: a fact of
 const SETTLE_TRIES: u32 = 50;
 /// How long each wait lasts.
 const SETTLE_WAIT: std::time::Duration = std::time::Duration::from_millis(2);
+
+#[cfg(test)]
+thread_local! {
+    /// Runs on the committing thread in each wait between two checks, the
+    /// other threads running again, so a test acts between the checks
+    /// instead of after a guessed delay.
+    pub(crate) static BETWEEN_CHECKS: core::cell::Cell<Option<fn()>> =
+        const { core::cell::Cell::new(None) };
+}
 /// The most threads the writes suspend; the room is taken before any is.
 const MAX_THREADS: usize = 4096;
 /// `STATUS_NO_MORE_ENTRIES`: past the last thread.
@@ -640,6 +649,10 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>], disarm: fn(), settle_tri
             break blind;
         }
         threads.resume();
+        #[cfg(test)]
+        if let Some(between) = BETWEEN_CHECKS.get() {
+            between();
+        }
         tries += 1;
         std::thread::sleep(SETTLE_WAIT);
     };
