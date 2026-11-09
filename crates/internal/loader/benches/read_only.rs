@@ -45,7 +45,8 @@ fn read_only(c: &mut Criterion) {
     }
     let mut old = 0;
     // SAFETY: the pages are the bench's own and nothing writes them again.
-    unsafe { VirtualProtect(base.cast(), SIZE, PAGE_READONLY, &raw mut old) };
+    let protected = unsafe { VirtualProtect(base.cast(), SIZE, PAGE_READONLY, &raw mut old) };
+    assert_ne!(protected, 0, "the bench's pages turn read-only");
     // A blob pointer on that build lies about a tenth into the region.
     let address = base.addr() + SIZE / 10;
 

@@ -45,7 +45,8 @@ component on the game thread; `write` writes it back, marked changed the
 game's way. Some fields keep their data past the component's own bytes,
 such as an array the game keeps as a `BlobArray`. A read follows them into
 the template's set-up data, where the component lies, and checks first that
-the memory is read-only. A blob that runs past that memory makes that read
+the memory is read-only. The loader checks that region once per world on
+each thread, since it stays in place while the world runs. A blob that runs past that memory makes that read
 fail, and the error names the field. Such a component does not write. The data of a designer data kind, or
 of a kind this API does not know, lies elsewhere. A component type with
 such a field does not resolve, and the refusal names the field:
