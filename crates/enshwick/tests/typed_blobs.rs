@@ -85,7 +85,8 @@ mod tests {
             .entity_tags()
             .tagged(WHOLE, 1, &[Guid([0x11; 16])])
             .install();
-        let bytes = loader.component_bytes(WHOLE, hash);
+        let bytes = [&8i32.to_le_bytes()[..], &1u32.to_le_bytes(), &[0x11; 16]].concat();
+        assert_eq!(loader.component_bytes(WHOLE, hash).as_ref(), Some(&bytes));
         // SAFETY: the three functions are the exports of this file's `declare_mod!(Blobs)`.
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
@@ -95,6 +96,6 @@ mod tests {
         let read = tags.read(*world, WHOLE).unwrap().unwrap();
         let refused = tags.write(*world, WHOLE, &read).unwrap_err().to_string();
         assert!(refused.contains("read-only set-up data"), "{refused}");
-        assert_eq!(loader.component_bytes(WHOLE, hash), bytes);
+        assert_eq!(loader.component_bytes(WHOLE, hash), Some(bytes));
     }
 }

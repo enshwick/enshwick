@@ -23,11 +23,24 @@ impl Outside {
     /// from it, so the walk meets each of them; a derived one's fields are
     /// named after the derived type, as in `shape.demo::Square.side`.
     pub(super) fn of(registry: &Registry<'_>, ty: &Type<'_>) -> Self {
+        Self::walk(registry, ty, Self::default())
+    }
+
+    /// The first blob field of `ty`, the walk ending there.
+    pub(super) fn blob_of(registry: &Registry<'_>, ty: &Type<'_>) -> Option<String> {
+        let found = Self {
+            unreached: Some(String::new()),
+            blob: None,
+        };
+        Self::walk(registry, ty, found).blob
+    }
+
+    fn walk(registry: &Registry<'_>, ty: &Type<'_>, found: Self) -> Self {
         let mut walk = Walk {
             registry,
             seen: Vec::new(),
             path: Vec::new(),
-            found: Self::default(),
+            found,
         };
         walk.ty(ty);
         walk.found
@@ -73,9 +86,11 @@ impl<'r, 'a> Walk<'r, 'a> {
                 self.blob()
                     || inner.is_some_and(|inner| {
                         self.ty(inner)
-                            || registry
-                                .derived(inner)
-                                .any(|held| self.within(held.qualified_name(), Some(held)))
+                            || registry.underlying(inner).is_ok_and(|inner| {
+                                registry
+                                    .derived(inner)
+                                    .any(|held| self.within(held.qualified_name(), Some(held)))
+                            })
                     })
             }
             Kind::Typedef => inner.is_some_and(|inner| self.ty(inner)),
@@ -147,7 +162,12 @@ mod tests {
                 Field::new("name", 4, "demo::BlobString"),
             ]),
         ]);
-        let blob = |name| Outside::of(&registry, registry.named(name).unwrap()).blob;
+        let blob = |name| {
+            let ty = registry.named(name).unwrap();
+            let only = Outside::blob_of(&registry, ty);
+            assert_eq!(only, Outside::of(&registry, ty).blob, "{name}");
+            only
+        };
         let outside = |name| Outside::of(&registry, registry.named(name).unwrap()).unreached;
         assert_eq!(blob("demo::Outer").as_deref(), Some("pairs.0.entries"));
         assert_eq!(blob("demo::Inner").as_deref(), Some("entries"));
@@ -256,6 +276,30 @@ mod tests {
             Outside::of(&registry, kept).unreached,
             None,
             "a struct derived from another base is not held"
+        );
+    }
+
+    #[test]
+    fn a_variant_of_a_typedef_meets_the_types_derived_from_the_type_it_names() {
+        let registry = Registry::new([
+            Type::new("demo::DsString", Kind::DsString, 16, 8),
+            Type::new("demo::Shape", Kind::Struct, 1, 1),
+            Type::new("demo::ShapeRef", Kind::Typedef, 1, 1).with_inner("demo::Shape"),
+            Type::new("demo::Label", Kind::Struct, 24, 8)
+                .with_inner("demo::Shape")
+                .with_fields(vec![Field::new("text", 8, "demo::DsString")]),
+            Type::new(
+                "demo::BlobVariant<demo::ShapeRef>",
+                Kind::BlobVariant,
+                12,
+                4,
+            )
+            .with_inner("demo::ShapeRef"),
+        ]);
+        let variant = registry.named("demo::BlobVariant<demo::ShapeRef>").unwrap();
+        assert_eq!(
+            Outside::of(&registry, variant).unreached.as_deref(),
+            Some("demo::Label.text")
         );
     }
 

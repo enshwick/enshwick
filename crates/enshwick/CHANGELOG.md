@@ -18,6 +18,10 @@ Each entry names the pull request that made the change.
   from its description and ask it with bytes at any address (#989).
 - `test`: `Installed::set_log_level(level)` changes the level of every
   handle without its own, as an edit of `enshwick.toml` would (#993).
+- `test`: `FakeHost::entity_tags()` reflects a tag container whose one
+  field is a `BlobArray`, named by `TAG_CONTAINER`, and
+  `FakeHost::tagged(entity, count, held)` gives an entity one, cut short
+  when `held` is shorter than `count` (#1004).
 - `typed`: `ComponentType::read` and Luau `component_type` read a live
   component's `BlobArray`, `BlobString`, `BlobOptional` and `BlobVariant`
   fields, such as `RandomSpawner.spawnEntries`, from the template's set-up
@@ -91,7 +95,9 @@ Each entry names the pull request that made the change.
   component whose `BlobVariant` field may hold a type derived from its
   inner one with a designer data field, naming the field through the
   derived type's qualified name between the field names; before, it
-  resolved and read that field's heap pointer as data (#1004).
+  resolved and read that field's heap pointer as data. A read of a
+  `BlobVariant` that holds a type neither its inner one nor derived from
+  it fails, naming both (#1004).
 - `actions`: a server sends a joining player only the controls of a server
   mod whose action that player may run, by the action's `allow` or
   `admins`, and sends them again when the server changes the player's

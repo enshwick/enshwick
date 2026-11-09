@@ -144,7 +144,7 @@ fn word(bytes: &[u8], at: usize) -> Result<u32, CodecError> {
 
 impl<'a> Registry<'a> {
     /// The type `ty` names, through its typedefs.
-    fn underlying<'r>(&'r self, ty: &'r Type<'a>) -> Result<&'r Type<'a>, CodecError> {
+    pub(crate) fn underlying<'r>(&'r self, ty: &'r Type<'a>) -> Result<&'r Type<'a>, CodecError> {
         let mut ty = ty;
         for _ in 0..MAX_TYPEDEFS {
             if ty.kind() != Kind::Typedef {
@@ -376,6 +376,15 @@ impl<'a> Decoder<'_, 'a, '_> {
                     let held = self.registry.hashed(hash).ok_or_else(|| {
                         CodecError::new(format!("a variant holds unknown type {hash:#010x}"))
                     })?;
+                    // A live read relies on this: resolve walked only these.
+                    let inner = self.registry.underlying(self.registry.inner_of(ty)?)?;
+                    if !core::ptr::eq(held, inner) && !self.registry.derives_from(held, inner) {
+                        return Err(CodecError::new(format!(
+                            "a variant of {} holds {}, which is not derived from it",
+                            inner.qualified_name(),
+                            held.qualified_name()
+                        )));
+                    }
                     let from = at + VARIANT_OFFSET;
                     let value = self.value(held, target(self.bytes, from, from)?, depth + 1)?;
                     Value::Variant(Box::new(Variant::new(held.qualified_name(), value)))
