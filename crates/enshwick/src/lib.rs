@@ -189,6 +189,8 @@ pub mod pacing;
 pub mod packs;
 pub mod points;
 pub mod progress;
+#[cfg(feature = "typed")]
+pub mod quests;
 #[cfg(feature = "unstable")]
 pub mod rates;
 // Without `unstable` the rates stay inside, for the recipe and comfort

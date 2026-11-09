@@ -225,7 +225,7 @@ impl Grant {
 /// See the [module](self).
 #[derive(Clone, Copy, Debug)]
 pub struct Knowledge {
-    host: Host,
+    pub(crate) host: Host,
     /// Each player's quest progression and the world it is read in, where
     /// the build has them.
     #[cfg(feature = "typed")]

@@ -1852,6 +1852,19 @@ pub struct HostApi {
     /// patch for another key; `out` is borrowed for the call. A panic in
     /// the loader returns [`Status::REFUSED`]. ABI 11.20.
     pub resource_buffer: extern "system" fn(me: ModHandle, len: u32, out: *mut *mut u8) -> Status,
+    /// Writes to `holds` 1 when the game query `query` (a query of the
+    /// game's query database, which quest steps and recipes name by id)
+    /// holds for the player whose character is `entity`, as the game reads
+    /// it when it pays a quest (the player's own state), or for the world
+    /// when `entity` is `Entity(0)`, and 0 when it does not.
+    /// [`Status::MISSING`] on a build without the game's query calls, while
+    /// no world runs, or for a query the game does not know or has not
+    /// evaluated yet; [`Status::REFUSED`] for a player not in the game;
+    /// [`Status::WRONG_THREAD`] off the game thread; [`Status::BAD_ARGS`]
+    /// for a null `holds`. `holds` is borrowed for the call. A panic in the
+    /// loader returns [`Status::REFUSED`]. ABI 11.21.
+    pub game_query:
+        extern "system" fn(me: ModHandle, entity: Entity, query: u32, holds: *mut u32) -> Status,
 }
 
 // Every function keeps its slot: 24 header and version bytes, then 8 per slot.
@@ -1988,5 +2001,6 @@ const _: () = {
     assert!(offset_of!(HostApi, command_list) == 24 + 195 * 8);
     assert!(offset_of!(HostApi, actions_changed) == 24 + 196 * 8);
     assert!(offset_of!(HostApi, resource_buffer) == 24 + 197 * 8);
-    assert!(size_of::<HostApi>() == 24 + 198 * 8);
+    assert!(offset_of!(HostApi, game_query) == 24 + 198 * 8);
+    assert!(size_of::<HostApi>() == 24 + 199 * 8);
 };

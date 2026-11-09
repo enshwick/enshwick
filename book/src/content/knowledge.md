@@ -91,14 +91,25 @@ unstable.
 
 ## Testing an entry
 
-A `KnowledgeQuery` tests one entry, vanilla or a mod's, where quests, journal
-pages and skill nodes ask for knowledge. It is one of:
+A `KnowledgeQuery` tests one entry, vanilla or a mod's, or one of the
+game's own queries. Quests, journal pages and skill nodes ask for knowledge
+with it. Its `test` is one of:
 
-- `KnowledgeQuery::is_set(id, scope)`, which holds when a bool is set;
-- `KnowledgeQuery::at_least(id, scope, count)`, which holds when a counter
-  reaches `count`.
+| Test | Holds when |
+| --- | --- |
+| `IsSet` (`KnowledgeQuery::is_set`) | the value is not 0: a bool set, a counter or flags not 0 |
+| `AtLeast(n)` (`KnowledgeQuery::at_least`) | a counter is at `n` or above, from 1 |
+| `Equals(n)` | a counter is at exactly `n`; `Equals(0)` is an entry not set |
+| `Below(n)` | a counter is below `n`, from 1 |
+| `HasFlag(bits)` | flags hold any of `bits` |
+| `Holds` (`KnowledgeQuery::game`) | the game's query of the id holds |
+| `Fails` | the game's query of the id does not hold |
+| `Unknown` | only the game answers: a form of the game's that enshwick does not read |
 
-A player's entry is tested for the player the game asks about.
+`query.not()` gives the opposite test, where the game has one: none for an
+exact count other than 0, for flags or for `Unknown`. A mod cannot write
+`Unknown`; it only reads back from the game's own steps. A player's entry is
+tested for the player the game asks about.
 
 ## From Luau
 

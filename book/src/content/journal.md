@@ -1,6 +1,6 @@
 <!--
 type: how-to
-description: Mods add quests and lore pages to the journal on knowledge, change vanilla quests and their rewards, and set a player's quest progression.
+description: Mods add quests and lore pages, change vanilla quests and their rewards, and read the journal and where each player stands in it.
 -->
 
 # Quests and journal pages
@@ -83,6 +83,37 @@ own setting does. The server sets it and the game sends it to the clients.
 
 These calls need the `typed` feature.
 
+## Reading the journal and where a player stands
+
+`load.quests()` gives the `Quests` of the running game, the same for every
+call of one mod. On first use they read the journal as the game's first
+read builds it, every mod's quests and changes in:
+
+| Call | What it gives |
+| --- | --- |
+| `all()` | every quest, with its steps, their queries and its rewards |
+| `quest(id)` | one quest, or none |
+| `pages()` | every lore page and its entries |
+| `state(player, id)` | per step whether it shows and is done, and whether the quest started, is done and was paid |
+| `world_state(id)` | the same from the world's knowledge alone |
+
+A step can ask one of the game's own queries (`KnowledgeTest::Holds` or
+`Fails`). It then takes the game's answer, the one the game reads when it
+pays a quest. A step reads as unknown before the game has evaluated its
+query. It also reads as unknown for a form enshwick does not read
+(`KnowledgeTest::Unknown`) and for a player not in the game.
+
+```rust
+fn report(load: &mut enshwick::Load<'_>, player: enshwick::Entity) {
+    let quests = load.quests();
+    for quest in quests.all() {
+        if quests.state(player, quest.id).is_some_and(|state| state.done) {
+            enshwick::info!("quest {} done", quest.id);
+        }
+    }
+}
+```
+
 ## From Luau
 
 Three of the same calls run at the top level of `main.luau`:
@@ -95,6 +126,9 @@ Two more run while the world runs:
 
 - `enshwick.knowledge.quest_progression(player)`
 - `set_quest_progression(player, personal)`
+
+The journal reads run under `enshwick.quests`, with the names of the Rust
+calls.
 
 ```luau
 local given = enshwick.content.add_knowledge({ id = "you.trail:given", scope = "Player", kind = "Bool" })
@@ -112,6 +146,15 @@ enshwick.content.add_quest({
     } },
     rewards = { { Item = "<the GUID of a vanilla item>" } },
 })
+
+local function report(player: number)
+    for _, quest in enshwick.quests.all() do
+        local state = enshwick.quests.state(player, quest.id)
+        if state and state.done then
+            enshwick.log.info(`quest {quest.id} done`)
+        end
+    end
+end
 ```
 
 ## Who needs the mod

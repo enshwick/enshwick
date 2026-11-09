@@ -204,6 +204,15 @@ pub struct Load<'a> {
     /// The experience values the mod added, once it added one.
     #[cfg(feature = "typed")]
     pub(crate) experience: Option<crate::content::knowledge::AddedExperience>,
+    /// The knowledge entries the mod added, once it added one.
+    #[cfg(feature = "typed")]
+    pub(crate) knowledge: Option<crate::content::knowledge::AddedKnowledge>,
+    /// The quests, pages and quest changes the mod made, once it made one.
+    #[cfg(feature = "typed")]
+    pub(crate) journal: Option<crate::content::journal::AddedJournal>,
+    /// The mod's journal reads, once it asked for them.
+    #[cfg(feature = "typed")]
+    pub(crate) quests: Option<crate::quests::Quests>,
     _init: core::marker::PhantomData<&'a ()>,
 }
 
@@ -226,6 +235,12 @@ impl Load<'_> {
             sound_base: None,
             #[cfg(feature = "typed")]
             experience: None,
+            #[cfg(feature = "typed")]
+            knowledge: None,
+            #[cfg(feature = "typed")]
+            journal: None,
+            #[cfg(feature = "typed")]
+            quests: None,
             _init: core::marker::PhantomData,
         }
     }

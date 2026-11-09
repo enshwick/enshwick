@@ -96,6 +96,8 @@ mod journal;
 mod knowledge;
 #[cfg(feature = "typed")]
 mod knowledge_content;
+#[cfg(feature = "typed")]
+mod knowledge_many;
 mod language;
 mod lifecycle;
 mod live_changes;
@@ -146,6 +148,8 @@ mod poisoned_locks;
 mod props;
 mod props_server;
 mod published_texts;
+#[cfg(feature = "typed")]
+mod quests_read;
 #[cfg(feature = "unstable")]
 mod rates;
 #[cfg(feature = "unstable")]
