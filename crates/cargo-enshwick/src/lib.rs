@@ -4,4 +4,5 @@
 #![forbid(unsafe_code)]
 
 pub mod luau;
+pub mod luau_lsp;
 pub mod points;

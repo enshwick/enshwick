@@ -9,7 +9,7 @@ It changes three production recipes in `recipes.toml`:
 
 The game's other recipes stay as they are.
 
-1. Run `cargo enshwick pack check . --game <game folder>` to check every file
+1. Run `cargo enshwick check --game <game folder>` to check every file
    against the game's data, with the line of each problem.
 2. Copy this folder into the game's `mods/` folder as `mods/you.recipe-cost-and-time/`, on the
    server and on every player's game.

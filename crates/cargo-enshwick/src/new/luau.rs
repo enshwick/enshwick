@@ -60,25 +60,24 @@ pub(crate) fn files(id: &str, side: Side, game: Option<String>) -> Vec<(PathBuf,
         Side::Server => "server",
         Side::Both => "both",
     };
-    let (game_setting, game_analyze, game_step) = if game.is_some() {
+    let (game_setting, game_step) = if game.is_some() {
         (
             format!(",\n\t\t\"@game\": \"{}\"", game_definitions_path()),
-            format!(" --definitions:@game={}", game_definitions_path()),
             GAME_STEP_WRITTEN,
         )
     } else {
-        (String::new(), String::new(), GAME_STEP_MISSING)
+        (String::new(), GAME_STEP_MISSING)
     };
     let fill = |template: &str| {
         template
             .replace("{game_step}", game_step)
             .replace("{game_setting}", &game_setting)
-            .replace("{game_analyze}", &game_analyze)
             .replace("{game_definitions}", &game_definitions_path())
             .replace("{id}", id)
             .replace("{name}", &name)
             .replace("{side}", side)
             .replace("{definitions}", &definitions_path())
+            .replace("{definitions_dir}", DEFINITIONS_DIR)
             .replace("{typed_definitions}", &typed_definitions_path())
     };
     let mut files = vec![
@@ -168,8 +167,8 @@ A Luau mod for Enshrouded, built on [Enshwick](https://github.com/enshwick/enshw
    `{typed_definitions}` the values of `enshwick.typed`;
    `.vscode/settings.json` points the editor at both.
 2. {game_step}
-3. Run `luau-lsp analyze --definitions:@enshwick={definitions} --definitions:@typed={typed_definitions}{game_analyze} main.luau`
-   to check the types without the game.
+3. Run `cargo enshwick check` to check the mod as the loader reads it and
+   type-check every script against `{definitions_dir}/`, without the game.
 4. Copy this folder into the game's `mods/` folder as `mods/{id}/`.
 5. Run `cargo enshwick pack zip .` for the archive players install.
 ";
@@ -240,9 +239,6 @@ mod tests {
         assert!(
             text("settings.json").contains(&format!("\"@game\": \"{}\"", game_definitions_path()))
         );
-        assert!(
-            text("README.md").contains(&format!("--definitions:@game={}", game_definitions_path()))
-        );
         let settings: serde_json::Value = serde_json::from_str(text("settings.json")).unwrap();
         assert!(settings.is_object());
     }
@@ -261,7 +257,7 @@ mod tests {
             .unwrap()
             .1;
         assert!(readme.contains(&format!("--luau {}", game_definitions_path())));
-        assert!(!readme.contains("--definitions:@game"));
+        assert!(readme.contains("cargo enshwick check"));
     }
 
     #[test]

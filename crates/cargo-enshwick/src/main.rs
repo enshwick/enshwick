@@ -9,6 +9,7 @@ use anyhow::Context as _;
 use clap::{Parser, Subcommand, ValueEnum};
 use enshwick::content::Guid;
 
+mod check;
 mod deps;
 mod generate;
 mod install;
@@ -69,6 +70,22 @@ enum Command {
         /// not on crates.io, or the crates.io release.
         #[arg(long, value_name = "COMMIT", conflicts_with_all = ["data", "luau"])]
         enshwick_rev: Option<new::Commit>,
+    },
+    /// Checks a mod in any form: a data pack or Luau mod as the loader reads
+    /// it, with its scripts type-checked by luau-lsp, and a Rust mod with
+    /// clippy for Windows. Exits with 1 on an error.
+    Check {
+        /// The mod's folder, holding `pack.toml` or `Cargo.toml`.
+        #[arg(default_value = ".")]
+        dir: PathBuf,
+        /// The game folder whose data checks the vanilla names a pack
+        /// names; `ENSHROUDED_DIR` when omitted.
+        #[arg(long, env = "ENSHROUDED_DIR")]
+        game: Option<PathBuf>,
+        /// Skips the download of luau-lsp when it is not on the path or in
+        /// the cache, leaving the scripts unchecked.
+        #[arg(long)]
+        offline: bool,
     },
     /// Shows what a built mod DLL says about itself: id, version, side and
     /// dependencies. Loads the DLL, which runs its code: only for DLLs you
@@ -283,6 +300,12 @@ fn run(args: Args) -> ExitCode {
             &id,
             side.unwrap_or(Side::Server),
             enshwick_rev.as_ref(),
+        ),
+        Command::Check { dir, game, offline } => check::run(
+            &dir,
+            game.as_deref(),
+            offline,
+            &mut std::io::stdout().lock(),
         ),
         Command::Install {
             game,

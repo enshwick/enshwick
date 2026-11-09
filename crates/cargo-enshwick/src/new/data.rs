@@ -34,7 +34,7 @@ pub(crate) fn create(dir: &Path, id: &str, side: Side) -> anyhow::Result<String>
         }
     }
     Ok(format!(
-        "created data pack `{id}` in {}; `cargo enshwick pack check {} --game <game folder>` checks it, and copying the folder into the game's mods/ installs it",
+        "created data pack `{id}` in {}; `cargo enshwick check {} --game <game folder>` checks it, and copying the folder into the game's mods/ installs it",
         root.display(),
         root.display()
     ))
@@ -157,7 +157,7 @@ const README: &str = "# {name}
 A data pack for Enshrouded, built on [Enshwick](https://github.com/enshwick/enshwick).
 
 1. Edit the `.toml` files: each one shows its first change, commented out.
-2. Run `cargo enshwick pack check . --game <game folder>` to check every file
+2. Run `cargo enshwick check --game <game folder>` to check every file
    against the game's data, with the line of each problem.
 3. Copy this folder into the game's `mods/` folder as `mods/{id}/`, on the
    server and on every player's game.
