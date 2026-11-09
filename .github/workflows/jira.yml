@@ -19,10 +19,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # A draft moves nothing; marking it ready moves its ticket.
   move:
     if: >-
       (github.event_name == 'pull_request'
-        && (github.event.action != 'closed' || github.event.pull_request.merged))
+        && (github.event.pull_request.merged
+          || (github.event.action != 'closed' && github.event.pull_request.draft != true)))
       || (github.event_name == 'workflow_run'
         && github.event.workflow_run.event == 'push'
         && contains(fromJSON('["failure","timed_out"]'), github.event.workflow_run.conclusion))
