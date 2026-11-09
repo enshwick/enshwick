@@ -150,8 +150,8 @@ runs:
       shell: bash
       env:
         # renovate: datasource=github-release-attachments depName=ast-grep/ast-grep
-        AST_GREP_VERSION: 0.51.0
-        AST_GREP_SHA256: a7eead5552d3a8daad70f5d50d935da44bd0c138e946b5b0a96b1d38169fa639
+        AST_GREP_VERSION: 0.51.1
+        AST_GREP_SHA256: 42514f77ae0c8a25d7d32154d31d3e7e16f3ab894f8ce76ce417de234ee49157
       run: | # zizmor: ignore[github-env] fixed paths only
         dir="$RUNNER_TEMP/ast-grep"
         archive="$RUNNER_TEMP/ast-grep.zip"
