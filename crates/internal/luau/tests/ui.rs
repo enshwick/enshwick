@@ -283,6 +283,44 @@ mod tests {
     }
 
     #[test]
+    fn a_script_draws_a_key_hint_and_a_panel_for_its_own_hosts_and_reads_where_the_host_stands() {
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT),
+            r#"
+            local guard = enshwick.content.guid("you.guards:guard")
+            enshwick.ui.extend_screen_for("StorageChest", "Right", { guard }, function(panel)
+                panel:label({ text = "Ours" })
+            end)
+            enshwick.ui.on_frame(function(frame)
+                local at = frame:screen_host_position()
+                enshwick.log.info(`ours {frame:screen_host_template() == guard} x {at and at.x}`)
+                frame:window("help", "Help", function(w)
+                    enshwick.log.info(`hint {w:input_hint("ContextualAction", "Open")}`)
+                end)
+            end)
+            "#,
+        );
+        loader.game_action("ContextualAction", true);
+        loader.open_screen(Some(HudScreenType::StorageChest));
+        loader.host_screen(Some(enshwick::Entity(512)));
+        assert!(
+            loader.draw_screen(HudScreenType::StorageChest).is_empty(),
+            "no read yet"
+        );
+        loader.read_screen_host(Guid::named("you.guards:guard"), [12.5, 0.0, 3.0]);
+        assert_eq!(loader.draw_screen(HudScreenType::StorageChest).len(), 1);
+        let _drawn = loader.draw_frame();
+        loader.read_screen_host(Guid::named("you.other:chest"), [1.0, 0.0, 0.0]);
+        assert!(
+            loader.draw_screen(HudScreenType::StorageChest).is_empty(),
+            "another host"
+        );
+        for line in ["ours true x 12.5", "hint true"] {
+            assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
+        }
+    }
+
+    #[test]
     fn a_server_script_is_refused_the_interface() {
         let (loader, status) = start(FakeHost::new(), "enshwick.ui.on_frame(function() end)");
         assert!(!status.is_ok());

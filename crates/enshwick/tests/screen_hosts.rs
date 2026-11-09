@@ -118,4 +118,27 @@ mod tests {
             [(Some(OURS), Some([10.5, -2.0, 300.25])), (None, None)]
         );
     }
+
+    #[test]
+    fn a_spec_of_an_older_minor_names_no_host_and_one_past_the_limit_is_refused() {
+        let mut spec = UiExtension {
+            header: Header::of::<UiExtension>(),
+            screen: Str::new("StorageChest"),
+            edge: UiExtension::RIGHT,
+            reserved: 0,
+            hosts: core::ptr::null(),
+            host_count: 0,
+            reserved_hosts: 0,
+        };
+        // SAFETY: a null list with no count, as an 11.17 spec reads past its end.
+        assert_eq!(unsafe { spec.host_list() }, Some(&[][..]));
+        let many = vec![[7u8; 16]; UiExtension::MAX_HOSTS as usize + 1];
+        spec.hosts = many.as_ptr();
+        spec.host_count = UiExtension::MAX_HOSTS;
+        // SAFETY: `hosts` points at `many`, which holds more than the count.
+        assert_eq!(unsafe { spec.host_list() }.map(<[_]>::len), Some(64));
+        spec.host_count += 1;
+        // SAFETY: `hosts` points at `many`, which holds exactly this count.
+        assert_eq!(unsafe { spec.host_list() }, None);
+    }
 }

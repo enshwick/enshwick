@@ -147,6 +147,50 @@ impl UiExtension {
     pub const BOTTOM: u32 = 3;
     /// The most host templates one panel names. ABI 11.18.
     pub const MAX_HOSTS: u32 = 64;
+
+    /// The host templates the panel names, empty for every host, as the
+    /// loader reads them; `None` for a null list with a count or more than
+    /// [`UiExtension::MAX_HOSTS`]. A spec of an older minor reads zero
+    /// there, so it names no host.
+    ///
+    /// # Safety
+    ///
+    /// - `hosts` is null, or readable for `host_count` GUIDs while the
+    ///   returned slice lives.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{Header, Str, UiExtension};
+    ///
+    /// let ours = [[7u8; 16]];
+    /// let mut spec = UiExtension {
+    ///     header: Header::of::<UiExtension>(),
+    ///     screen: Str::new("StorageChest"),
+    ///     edge: UiExtension::RIGHT,
+    ///     reserved: 0,
+    ///     hosts: ours.as_ptr(),
+    ///     host_count: 1,
+    ///     reserved_hosts: 0,
+    /// };
+    /// // SAFETY: `hosts` points at `ours`, one GUID, alive below.
+    /// assert_eq!(unsafe { spec.host_list() }, Some(&ours[..]));
+    /// spec.hosts = core::ptr::null();
+    /// // SAFETY: a null list.
+    /// assert_eq!(unsafe { spec.host_list() }, None);
+    /// ```
+    #[must_use]
+    pub unsafe fn host_list(&self) -> Option<&[[u8; 16]]> {
+        match (self.host_count, self.hosts.is_null()) {
+            (0, _) => Some(&[]),
+            (count, false) if count <= Self::MAX_HOSTS => {
+                // SAFETY: the caller's contract, `hosts` non-null (checked by
+                // this arm).
+                Some(unsafe { core::slice::from_raw_parts(self.hosts, count as usize) })
+            }
+            _ => None,
+        }
+    }
 }
 
 /// One widget, drawn with [`HostApi::ui_widget`](super::HostApi::ui_widget): `kind` says which, and

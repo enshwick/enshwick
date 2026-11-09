@@ -106,17 +106,13 @@ pub(crate) extern "system" fn ui_extension(
         let Some(screen) = (unsafe { spec.screen.as_str() }) else {
             return Status::BAD_ARGS;
         };
-        let hosts = match (spec.host_count, spec.hosts.is_null()) {
-            (0, _) => Vec::new(),
-            (count, false) if count <= api_frame::UiExtension::MAX_HOSTS => {
-                // SAFETY: `HostApi::ui_extension` has the mod pass `hosts`
-                // readable for `host_count` GUIDs for the call, non-null and
-                // within the bound (both checked by this arm).
-                unsafe { core::slice::from_raw_parts(spec.hosts, count as usize) }.to_vec()
-            }
-            _ => return Status::BAD_ARGS,
+        // SAFETY: `HostApi::ui_extension` has the mod pass `hosts` null or
+        // readable for `host_count` GUIDs for the call, which
+        // `register_extension` copies before it returns.
+        let Some(hosts) = (unsafe { spec.host_list() }) else {
+            return Status::BAD_ARGS;
         };
-        crate::ui::register_extension(loader, index, screen, spec.edge, &hosts, callback, user)
+        crate::ui::register_extension(loader, index, screen, spec.edge, hosts, callback, user)
     })
 }
 
