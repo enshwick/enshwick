@@ -13,8 +13,23 @@ Each entry names the pull request that made the change.
   (`LOADER_TAGS`, `TOOL_TAGS`), so the loader and `cargo enshwick` share
   it (#1018).
 
+## [1.0.0-alpha.14] - 2026-11-09
+
+### Added
+
+- A route row bounds its constant with `range = [least, greatest]` and
+  `align`, and a `field` route names the type its last field holds with
+  `type`; every constant route and every field route of `routes.toml`
+  states them, set from the values the kept builds give (#982).
+- `Routed::Outside` is a constant a route took outside its range or
+  alignment, which finds no entry (#982).
+
 ### Changed
 
+- Breaking: `catalogue::Fact::Offset` names the reflected type its field
+  holds (`holds`), and `catalogue::constant` gives no offset for a field
+  that holds another type; a route takes an address outside `.text` only
+  inside `.data` or `.rdata` (#982).
 - Breaking: `catalogue::Fact::Path` is `Path { steps, holds }`, naming the
   type its last field holds; a path offset counts only while each step holds
   the next type inline and the last field holds `holds`, so a step that
@@ -27,13 +42,6 @@ Each entry names the pull request that made the change.
 ## [1.0.0-alpha.13] - 2026-11-07
 
 ### Added
-
-- A route row bounds its constant with `range = [least, greatest]` and
-  `align`, and a `field` route names the type its last field holds with
-  `type`; every constant route and every field route of `routes.toml`
-  states them, set from the values the kept builds give (#982).
-- `Routed::Outside` is a constant a route took outside its range or
-  alignment, which finds no entry (#982).
 
 - Engine routes find the interaction prompt's title, valid byte and verb
   and the open screen's host entity in the interface's play data
@@ -92,10 +100,6 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
-- Breaking: `catalogue::Fact::Offset` names the reflected type its field
-  holds (`holds`), and `catalogue::constant` gives no offset for a field
-  that holds another type; a route takes an address outside `.text` only
-  inside `.data` or `.rdata` (#982).
 - The tables of the kept builds are the frozen record the tests compare the
   routes and anchors with; a new build gets its compatibility report and no
   table (#951).

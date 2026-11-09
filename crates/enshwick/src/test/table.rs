@@ -19,6 +19,7 @@ use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
 
 mod build;
 mod chat;
+pub(crate) mod commands;
 pub(super) mod content;
 mod controls;
 pub(crate) mod gameplay;
@@ -378,6 +379,9 @@ pub(crate) struct State {
     /// armed, from which on the raised limit holds.
     pub(crate) base_limit: BaseLimitState,
     pub(crate) grouping: Option<(u32, u32)>,
+    /// The command name and alias the mod took, and how often it said
+    /// its rules changed.
+    pub(crate) commands: commands::FakeCommands,
     /// The answer `run_console` last handed out, alive until the next call.
     run_out: Option<Box<str>>,
     /// The settings texts handed out, alive while the fake is installed.
@@ -785,6 +789,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         altar_limits: Vec::new(),
         base_limit: BaseLimitState::default(),
         grouping: None,
+        commands: commands::FakeCommands::default(),
         run_out: None,
         settings: Vec::new(),
     });
@@ -1129,4 +1134,8 @@ pub(crate) static TABLE: HostApi = HostApi {
     local_held,
     read_only,
     resource_served,
+    commands: commands::commands,
+    run_command: commands::run_command,
+    command_list: commands::command_list,
+    actions_changed: commands::actions_changed,
 };

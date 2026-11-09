@@ -8,6 +8,7 @@ mod altars;
 mod book;
 mod calls;
 mod chat;
+mod commands;
 mod content;
 mod controls;
 mod damage;

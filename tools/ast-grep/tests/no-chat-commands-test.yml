@@ -6,6 +6,9 @@ valid:
   - "pub fn add_action(&self, action: Action) {}"
   - "pub enum NpcCommandType { GoToPosition }"
   - "enum Command { Pack, New }"
+  - "pub fn commands(&self, name: &str, alias: &str) -> Result<(), Off> { Ok(()) }"
+  - "pub struct CommandSet { pub name: String, pub alias: String }"
+  - "pub fn type_in_chat(&self, line: &str) -> Option<String> { None }"
 invalid:
   - "pub fn add_command(&self, name: &str, run: fn(&CommandContext)) {}"
   - "pub fn register_chat_command(&self, name: &str) {}"

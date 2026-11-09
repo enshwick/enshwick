@@ -42,7 +42,7 @@ pub(crate) struct Said {
 }
 
 /// One account's rate: its key, the start of its window, lines in it.
-type Rate = (u64, Instant, u32);
+pub(crate) type Rate = (u64, Instant, u32);
 
 /// The waiting lines and the rate of each account; at most
 /// [`RATE_ACCOUNTS`] accounts, scanned, so no peer key is hashed.
@@ -188,7 +188,7 @@ const fn rated(kind: u32) -> bool {
 }
 
 /// Whether one more line of `player` fits its rate at `now`, counting it.
-fn admit(rate: &mut Vec<Rate>, player: u64, now: Instant) -> bool {
+pub(crate) fn admit(rate: &mut Vec<Rate>, player: u64, now: Instant) -> bool {
     let index = if let Some(index) = rate.iter().position(|&(key, ..)| key == player) {
         index
     } else {

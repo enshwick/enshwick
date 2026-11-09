@@ -27,6 +27,8 @@ mod calls;
 mod capture;
 #[cfg(feature = "unstable")]
 mod chat;
+#[cfg(feature = "unstable")]
+mod commands;
 mod config_check;
 mod config_errors;
 mod config_files;
@@ -129,6 +131,7 @@ mod pack_settings;
 mod packs;
 mod panic_abort;
 mod panic_reasons;
+mod player_teleports;
 #[cfg(feature = "unstable")]
 mod players;
 pub mod point_schema;

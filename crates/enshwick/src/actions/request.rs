@@ -350,9 +350,17 @@ pub enum Via {
     /// The game's interface: the reply shows as a notice.
     Interface,
     /// The server's [console](crate::console), such as a dedicated server's
-    /// command file: the reply is the console's answer, and the player an
-    /// administrator with no character.
+    /// command file: the reply is the console's answer, and the player the
+    /// console, with every permission and no character.
     Console,
+    /// A [command](crate::commands) the player typed in chat: the reply
+    /// goes to that player alone.
+    Chat,
+    /// A command another mod ran for a remote caller with
+    /// [`commands::run`](crate::commands::run), such as a remote console's
+    /// client: the player is that caller, with the permissions the mod gave
+    /// it, its label as the name and no character.
+    Remote,
 }
 
 /// A player's request to run an action, handed to its handler on the

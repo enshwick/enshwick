@@ -32,12 +32,12 @@ change in any release, a patch included.
 | `world`: `World`, its players, chat, notices, component writes, transactions, captures, kicks, bans and chat mutes                                       | young; world edits and build rights rest on engine facts not yet seen in the running game                |
 | `typed`, under its own `typed` feature. That feature turns on `unstable`.                                                                                         | young; its items follow the newest game build until 1.0                                                  |
 | `map` and `Load::fog_of_war`. Also the map markers of `ui`.                                                                                                | young; the map frame, the fog and how markers show are not yet seen in the client                        |
-| `actions` and `console`                                                                                                                                   | young                                                                                                    |
+| `actions` and `console`. Also `commands`.                                                                                                                 | young                                                                                                    |
 | `items`. Its `Load::on_item` and `Load::on_item_action`. Also the `on` table of `items.toml`.                                                                   | which input or event each item action raises is known from reflection only, not yet seen in the game     |
 | `rewards` and `rewards.toml`                                                                                                                              | young; a reward's experience and a craft's pairing with its request are not yet seen in the game         |
 | `script`. `#[derive(Script)]` and `#[script]`.                                                                                                             | the binding of Rust types to Luau, still growing with it                                                 |
 | Calls: `#[call]` and `Load::serve_call`. `Load::caller` and `services::Call`. The described calls, events and points a script runtime uses.                   | young                                                                                                    |
-| `Effects::teleport` and `Effects::ping`                                                                                                                   | whether a client keeps a teleported player in place, and shows a ping the server raised, is not yet seen |
+| `Effects::ping`                                                                                                                                           | whether a client shows a ping the server raised is not yet seen                                          |
 | `Load::add_experience` | whether a player gets the gain of an experience value a mod added is not yet seen in the game |
 | `Knowledge::revoke` and its kin, `Load::on_knowledge_input`                                                                                               | how a vanilla client takes a revoke, and what it asks for, is not yet seen                               |
 | `Load::request_base_limits` and `altars::set_base_cap`                                                                                                                               | young                                                                                                    |
@@ -54,7 +54,7 @@ Turn the feature on in the mod's `Cargo.toml`:
 
 ```toml
 [dependencies]
-enshwick = { git = "https://github.com/enshwick/enshwick", tag = "v1.0.0-alpha.13", features = ["unstable"] }
+enshwick = { git = "https://github.com/enshwick/enshwick", tag = "v1.0.0-alpha.14", features = ["unstable"] }
 ```
 
 An unstable item leaves the feature once it has settled and, where it rests on

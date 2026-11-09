@@ -136,6 +136,8 @@ mod book;
 pub mod buffs;
 pub mod chat;
 pub mod code;
+#[cfg(feature = "unstable")]
+pub mod commands;
 pub mod config;
 #[cfg(feature = "unstable")]
 pub mod console;

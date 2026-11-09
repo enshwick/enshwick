@@ -95,9 +95,6 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 ## Teleports
 
-Unstable: needs the `unstable` feature and may change in any release
-([Stability](stability.md)).
-
 `teleport(entity, position, how)` moves an entity as the game's admin
 teleport does. After the next step the entity jumps to `position`, in metres,
 and clients see it arrive. `Teleport::new()` keeps the entity's orientation.
@@ -111,6 +108,58 @@ It fails with `Gone` for an entity not in the world or without a place. It
 fails with `Refused` for one the game's teleport does not move: it moves
 actors and characters, not props. It fails with `Missing` where no server
 runs or on a build without teleports.
+
+### Teleport a player
+
+`teleport_player(player, position, how)` moves a connected player's
+character, by the player's account key. `teleport_player_to(player, to,
+how)` moves it to where another connected player stands. Beside another
+player the game always looks for a free spot, so the two never stand in one
+place. Elsewhere, pass `.search_best_spawn_position()` so the player never
+lands inside terrain or a wall.
+
+Either call fails with `Gone` for a player who is not connected or has no
+character in the world. Moving to another player also fails with `Gone`
+when that player has no place in the world. A teleported player arrived
+where the server put them, live, in a hosted game (client 26430625) and on
+a dedicated server (26430253).
+
+```rust
+use enshwick::actions::{Action, Arg, Outcome, Value};
+use enshwick::effects::Teleport;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let effects = load.effects();
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
+    let to = Action::new("to", "Go to a player").admins().arg(Arg::player("Player"));
+    actions.add(to, move |request| {
+        let [Value::Player { key, name }] = request.args else {
+            return Outcome::refused("Name a player");
+        };
+        match effects.teleport_player_to(request.player.key, *key, Teleport::new()) {
+            Ok(()) => Outcome::done(format!("On your way to {name}")),
+            Err(why) => Outcome::refused(format!("No teleport: {why}")),
+        }
+    })
+}
+```
+
+```luau
+local actions = enshwick.actions.actions(enshwick.i18n.parse(""))
+actions:add({
+    id = "to",
+    label = "Go to a player",
+    admins = true,
+    args = { enshwick.actions.player("Player") },
+}, function(request)
+    local target = request:args()[1].Player
+    local ok, why = pcall(enshwick.effects.teleport_player_to, request:player().key, target.key, {})
+    if not ok then
+        return enshwick.actions.refused(`No teleport: {why}`)
+    end
+    return enshwick.actions.done(`On your way to {target.name}`)
+end)
+```
 
 ## Spawns
 

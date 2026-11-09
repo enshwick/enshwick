@@ -28,6 +28,7 @@ use crate::abi::{Entity, Header, PlayerInfo, Status, Str};
 ///     action: Str::new("access"),
 ///     args: Str::new("p0000000000000009\tb1"),
 ///     target: enshwick::abi::ActionTarget::NONE,
+///     reply: core::ptr::null_mut(),
 /// };
 /// assert_eq!(call.kind, ActionCall::RUN);
 /// ```
@@ -36,8 +37,10 @@ use crate::abi::{Entity, Header, PlayerInfo, Status, Str};
 pub struct ActionCall {
     /// Size and version of this struct.
     pub header: Header,
-    /// What the loader asks: [`ActionCall::SHEET`], [`ActionCall::RUN`] or
-    /// [`ActionCall::CONSOLE`].
+    /// What the loader asks: [`ActionCall::SHEET`], [`ActionCall::RUN`],
+    /// [`ActionCall::CONSOLE`], [`ActionCall::CHAT`] or
+    /// [`ActionCall::REMOTE`]; a mod built for an older minor answers a kind
+    /// it does not know with an empty reply.
     pub kind: u32,
     /// The language the player reads the game in, a
     /// [`Language`](crate::i18n::Language) value.
@@ -45,7 +48,9 @@ pub struct ActionCall {
     /// The player the question is about.
     pub player: PlayerInfo,
     /// The action's id, for [`ActionCall::RUN`]; the console line after the
-    /// mod's id, for [`ActionCall::CONSOLE`]; valid for the call.
+    /// mod's id, for [`ActionCall::CONSOLE`]; the line after the command's
+    /// name or alias, for [`ActionCall::CHAT`] and [`ActionCall::REMOTE`];
+    /// valid for the call.
     pub action: Str,
     /// The action's arguments in the sheet's encoding, for
     /// [`ActionCall::RUN`]; valid for the call.
@@ -53,9 +58,78 @@ pub struct ActionCall {
     /// The object the player's client named for [`ActionCall::RUN`]; no
     /// flags for none, and for the other questions.
     pub target: ActionTarget,
+    /// Where the mod writes its answer to every question but
+    /// [`ActionCall::SHEET`], a zeroed [`ActionReply`] the loader owns for
+    /// the call; null for [`ActionCall::SHEET`]. A mod writes the whole
+    /// struct, its header first, and leaves the callback's `reply` text
+    /// untouched. A mod built before ABI 11.19 does not see this field and
+    /// answers in the `reply` text as `1` or `0` and then the text, which
+    /// the loader reads only while this struct's header stays zero. ABI
+    /// 11.19.
+    pub reply: *mut ActionReply,
 }
 
 impl_headed!(ActionCall, born = 144);
+
+/// A mod's answer to a run of one of its actions: whether it was done and
+/// the text the caller reads.
+///
+/// A mod writes it through [`ActionCall::reply`], and
+/// [`HostApi::run_command`](super::HostApi::run_command) writes one for its
+/// caller. ABI 11.19.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{ActionReply, Header, Str};
+///
+/// let reply = ActionReply { header: Header::of::<ActionReply>(), done: 1, text: Str::new("2 online") };
+/// assert_eq!(reply.done, 1);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct ActionReply {
+    /// Size and version of this struct; zero until the writer fills it.
+    pub header: Header,
+    /// 1 when the action was done, 0 when it was refused or failed.
+    pub done: u8,
+    /// The text the caller reads, empty for none; valid until the writer
+    /// answers again on the same thread.
+    pub text: Str,
+}
+
+impl_headed!(ActionReply);
+
+/// A running mod's command names, from
+/// [`HostApi::command_list`](super::HostApi::command_list). ABI 11.19.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{CommandInfo, Header, Str};
+///
+/// let tools = CommandInfo {
+///     header: Header::of::<CommandInfo>(),
+///     name: Str::new("admin-tools"),
+///     alias: Str::new("adl"),
+///     mod_id: Str::new("you.admin-tools"),
+/// };
+/// assert_eq!(tools.header.size, Header::of::<CommandInfo>().size);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct CommandInfo {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The full name, `admin-tools` in `/admin-tools online`.
+    pub name: Str,
+    /// The shorter alias, `adl` in `/adl online`.
+    pub alias: Str,
+    /// The id of the mod that named them.
+    pub mod_id: Str,
+}
+
+impl_headed!(CommandInfo);
 
 /// The object a run of an action names, sent with
 /// [`HostApi::run_action_at`](super::HostApi::run_action_at) and handed back
@@ -166,8 +240,9 @@ impl ActionCall {
     /// The actions the player may use now, as a sheet: the reply is the
     /// sheet's text.
     pub const SHEET: u32 = 0;
-    /// The player runs an action from the interface: the reply is `1` or
-    /// `0`, whether it was done, and the text the player reads.
+    /// The player runs an action from the interface: the answer, whether it
+    /// was done and the text the player reads, goes in
+    /// [`ActionCall::reply`].
     pub const RUN: u32 = 1;
     /// The server's console runs an action from its text form, such as
     /// `access Ann on`, in `action`: the action's id and its values as
@@ -175,6 +250,16 @@ impl ActionCall {
     /// an administrator with no character. The reply is as for
     /// [`ActionCall::RUN`].
     pub const CONSOLE: u32 = 3;
+    /// A player runs a command from chat, `/<name> ` and then what
+    /// [`ActionCall::CONSOLE`] takes in `action`; `player` is the sender and
+    /// `language` the language they read. The reply is as for
+    /// [`ActionCall::RUN`]. ABI 11.19.
+    pub const CHAT: u32 = 4;
+    /// A mod runs a command line for a remote caller, such as a remote
+    /// console, as [`ActionCall::CHAT`] does; `player` holds the caller's
+    /// label as its name, its permission bits, key 0 and no character. ABI
+    /// 11.19.
+    pub const REMOTE: u32 = 5;
 }
 
 /// A mod's answer to the loader's questions about its player actions: the

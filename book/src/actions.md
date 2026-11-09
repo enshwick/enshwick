@@ -26,8 +26,9 @@ mod offers the action through means of its own:
 
 The Mods screen shows a mod and its settings, not its actions.
 
-Actions are the only way players and administrators act in game: the client
-keeps typed `/` lines to itself, and single player has no chat.
+A mod may also name its actions as [commands](commands.md), a second way to
+run them from chat, the console and remote consoles. Single player has no
+chat.
 
 ## A first action
 
@@ -100,6 +101,7 @@ Portuguese, then to English.
 | `.help(key)`                        | a line under the label and in the console's help                                                 |
 | `.arg(Arg::...)`                    | an argument, in order; its kinds follow this table                                               |
 | `.allow(fn)`, `.admins()`           | who sees the action and may run it                                                               |
+| `.needs(permission)`                | only players the game's user groups give that [permission](commands.md#limit-an-action-to-a-permission) |
 | `.at(fn)`                           | what it acts on for a player, or why there is nothing, which the player reads beside it          |
 
 `Arg` makes four kinds of argument:
@@ -117,6 +119,7 @@ is a table of the builder's fields:
 - `help`
 - `args`
 - `admins`
+- `needs`, a list of permissions such as `{ "CanEditBase" }`
 - the function `allow(player)`
 - the function `at(ask)`
 - the function `per_player(ask, subject)`
@@ -177,7 +180,8 @@ work. It gets a `Request` that holds:
 - the values picked, in the order of the arguments (a list hands
   `Value::Player` and `Value::Toggle`);
 - the player's language;
-- where it came from, `Via::Interface` or `Via::Console`.
+- where it came from, its `Via`: the interface, the console, or a
+  [command](commands.md) from chat or for a remote caller.
 
 `request.say(key, values)` fills the mod's text in the player's language.
 The handler returns an `Outcome`. It is `Outcome::done(text)` or
@@ -282,10 +286,11 @@ words. Values are a player by name, a choice by its word, a number, or `on`
 or `off`. A list takes a player and `on` or `off`. For example:
 `you.trading-post access Ann on`. `<mod id> help` lists the actions with
 their words. The mod's id in front keeps two mods' actions apart, see
-[how ids are namespaced](concepts/ids.md). The console is an administrator with no character. That is why
-`request.player.entity` is 0 and `.admins()` lets it in. It is also why an
-`.at` that looks for something near the player finds nothing. Answers are in
-English.
+[how ids are namespaced](concepts/ids.md). A mod's command name or alias
+works in place of its id, as in `/adl online`. The console holds every
+permission and has no character. That is why `request.player.entity` is 0
+and `.admins()` lets it in. It is also why an `.at` that looks for something
+near the player finds nothing. Answers are in English.
 
 ## Where it works
 

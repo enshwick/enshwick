@@ -82,6 +82,7 @@ fn link_features(loader: &'static Loader) {
     crate::item_data::link(loader);
     crate::net::link();
     crate::chat::link(loader);
+    crate::commands::seal();
     crate::carrier::link(loader);
     crate::label::link(loader);
     crate::altars::link(loader);

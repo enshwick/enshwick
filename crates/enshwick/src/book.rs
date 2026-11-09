@@ -109,6 +109,7 @@ mod unstable {
         ItemActions => "content/item-actions.md",
         Rewards => "content/rewards.md",
         Actions => "actions.md",
+        Commands => "commands.md",
         Controls => "controls.md",
         Input => "input.md",
         Chat => "chat.md",

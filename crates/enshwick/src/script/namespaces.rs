@@ -360,6 +360,8 @@ pub const NAMESPACES: &[Namespace] = &[
     Namespace::starting("controls", "", &[crate::Load::SCRIPT_CONTROLS]),
     #[cfg(feature = "unstable")]
     Namespace::of::<crate::console::ConsoleFns>(),
+    #[cfg(feature = "unstable")]
+    Namespace::of::<crate::commands::CommandFns>(),
     Namespace::of::<crate::net::NetFns>(),
     Namespace::starting("net", "", &[crate::Load::SCRIPT_NET]),
     Namespace::starting("pacing", "", &[crate::Load::SCRIPT_PACING]),

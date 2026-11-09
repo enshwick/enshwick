@@ -153,7 +153,8 @@ A line is one of:
 
 - `enshwick ...`, the loader's own tools, listed below;
 - a mod's id and the text form of one of its [actions](actions.md#from-the-console):
-  `you.trading-post help`, `you.my-mod give-to 3073 10 Ann`.
+  `you.trading-post help`, `you.my-mod give-to 3073 10 Ann`;
+- a mod's [command](commands.md) line, `/adl online` or `adl online`.
 
 [`console::run(line)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/console.rs)
 runs a line and returns its answer. Call it on the server's game thread, from

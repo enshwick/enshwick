@@ -10,7 +10,9 @@
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use enshwick::abi::{ActionCall, ActionFn, ActionTarget, Header, PlayerInfo, Status, Str};
+use enshwick::abi::{
+    ActionCall, ActionFn, ActionReply, ActionTarget, Header, PlayerInfo, Status, Str,
+};
 
 use crate::host::Loader;
 use crate::locks::Relock;
@@ -85,7 +87,7 @@ fn running(loader: &Loader) -> Vec<Registered> {
 }
 
 /// Asks `registered` its question `kind` about `player`, with the action
-/// and its arguments and the object `target` the run names; the reply.
+/// and its arguments and the object `target` the run names; the answer.
 fn ask(
     registered: Registered,
     kind: u32,
@@ -93,7 +95,8 @@ fn ask(
     language: u32,
     (action, args): (&str, &str),
     target: ActionTarget,
-) -> String {
+) -> Answer {
+    let mut written: ActionReply = bytemuck::Zeroable::zeroed();
     let call = ActionCall {
         header: Header::of::<ActionCall>(),
         kind,
@@ -102,10 +105,15 @@ fn ask(
         action: Str::new(action),
         args: Str::new(args),
         target,
+        reply: if kind == ActionCall::SHEET {
+            core::ptr::null_mut()
+        } else {
+            &raw mut written
+        },
     };
     let mut reply = Str::EMPTY;
     // SAFETY: the callback lives in the mod's DLL, which stays loaded; the
-    // safe layer catches its panics.
+    // safe layer catches its panics. `written` outlives the call.
     crate::profile::call(
         registered.owner,
         crate::profile::Feature::Actions,
@@ -117,26 +125,114 @@ fn ask(
             );
         },
     );
+    if written.header.size != 0 {
+        // SAFETY: the mod wrote the reply, whose text stays valid until the
+        // callback runs again.
+        let text = unsafe { written.text.as_str() }.unwrap_or("").to_owned();
+        return Answer {
+            done: written.done == 1,
+            text,
+        };
+    }
     // SAFETY: the reply stays valid until the callback runs again.
-    unsafe { reply.as_str() }.unwrap_or("").to_owned()
+    let text = unsafe { reply.as_str() }.unwrap_or("");
+    if kind == ActionCall::SHEET {
+        return Answer {
+            done: true,
+            text: text.to_owned(),
+        };
+    }
+    // A mod built before ABI 11.19 answers a run as `1` or `0` and the text.
+    let (done, text) = match text.split_at_checked(1) {
+        Some((flag, text)) => (flag == "1", text),
+        None => (false, ""),
+    };
+    Answer {
+        done,
+        text: text.to_owned(),
+    }
+}
+
+/// What a mod answered: whether a run was done, and its text, or its
+/// sheet's text.
+#[derive(Debug, Default)]
+pub(crate) struct Answer {
+    pub(crate) done: bool,
+    pub(crate) text: String,
 }
 
 /// Runs the console line `rest` on the actions of mod `index`; the answer,
 /// or `None` when the mod is off or declared no actions.
 pub(crate) fn console(loader: &Loader, index: usize, rest: &str) -> Option<String> {
-    let registered = running(loader)
-        .into_iter()
-        .find(|r| r.owner == ModIndex::new(index))?;
     let console = crate::console::the_console();
-    let reply = ask(
-        registered,
+    let reply = command(
+        loader,
+        ModIndex::new(index),
         ActionCall::CONSOLE,
         &console,
         0,
+        rest,
+    )?;
+    Some(reply.text)
+}
+
+/// Asks mod `owner` to run the text form `rest` of one of its actions for
+/// `caller`, as question `kind` ([`ActionCall::CONSOLE`],
+/// [`ActionCall::CHAT`] or [`ActionCall::REMOTE`]); its reply, `1` or `0`
+/// and the text, or `None` when the mod is off or declared no actions.
+pub(crate) fn command(
+    loader: &Loader,
+    owner: ModIndex,
+    kind: u32,
+    caller: &PlayerInfo,
+    language: u32,
+    rest: &str,
+) -> Option<Answer> {
+    let registered = running(loader).into_iter().find(|r| r.owner == owner)?;
+    Some(ask(
+        registered,
+        kind,
+        caller,
+        language,
         (rest, ""),
         ActionTarget::NONE,
-    );
-    Some(reply.get(1..).unwrap_or_default().to_owned())
+    ))
+}
+
+/// Admits a run that the player of account `key` sends now, at most one per
+/// [`RUN_GAP`]: the connected player and the language they read, or `None`
+/// for a run too soon or a player not in the world.
+fn admit(loader: &Loader, key: u64) -> Option<(PlayerInfo, u32)> {
+    let now = Instant::now();
+    let (language, admitted) = server_state(|s| {
+        let client = s.clients.entry(key).or_default();
+        let admitted = client
+            .last_run
+            .is_none_or(|last| now.duration_since(last) >= RUN_GAP);
+        if admitted {
+            client.last_run = Some(now);
+        }
+        (client.language, admitted)
+    });
+    if !admitted {
+        return None;
+    }
+    caller(loader, key, language)
+}
+
+/// The connected player of account `key` and the language they read,
+/// `hello` being the one their client named in its hello.
+fn caller(loader: &Loader, key: u64, hello: u32) -> Option<(PlayerInfo, u32)> {
+    let language = crate::net::language_of(key).map_or(hello, |l| l.0);
+    Some((player(loader, key)?, language))
+}
+
+/// The connected player of account `key` and the language they read, for a
+/// command they typed, which counts against the chat's rate, not
+/// [`RUN_GAP`].
+pub(crate) fn commander(loader: &Loader, key: u64) -> Option<(PlayerInfo, u32)> {
+    let hello = server_state(|s| s.clients.get(&key).map_or(0, |c| c.language));
+    caller(loader, key, hello)
 }
 
 /// The running mods that declared actions, by index.
@@ -161,7 +257,7 @@ pub(crate) fn allowed(
         ("", ""),
         ActionTarget::NONE,
     );
-    Some(sheet_ids(&sheet))
+    Some(sheet_ids(&sheet.text))
 }
 
 /// The action ids a mod's sheet lists.
@@ -196,22 +292,7 @@ pub(crate) fn run(
     args: &str,
     target: Option<ActionTarget>,
 ) {
-    let now = Instant::now();
-    let (language, admitted) = server_state(|s| {
-        let client = s.clients.entry(key).or_default();
-        let admitted = client
-            .last_run
-            .is_none_or(|last| now.duration_since(last) >= RUN_GAP);
-        if admitted {
-            client.last_run = Some(now);
-        }
-        (client.language, admitted)
-    });
-    if !admitted {
-        return;
-    }
-    let language = crate::net::language_of(key).map_or(language, |l| l.0);
-    let Some(player) = player(loader, key) else {
+    let Some((player, language)) = admit(loader, key) else {
         return;
     };
     let Some(registered) = running(loader)
@@ -247,11 +328,7 @@ pub(crate) fn run(
         (action, args),
         target,
     );
-    let (ok, text) = match reply.split_at_checked(1) {
-        Some(("1", text)) => (true, text),
-        Some((_, text)) => (false, text),
-        None => (false, ""),
-    };
+    let (ok, text) = (reply.done, reply.text.as_str());
     let name =
         String::from_utf8_lossy(&player.name[..usize::from(player.name_len).min(64)]).into_owned();
     crate::log!(

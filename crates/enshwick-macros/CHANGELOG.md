@@ -6,6 +6,15 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.14] - 2026-11-09
+
+### Changed
+
+- **Breaking:** `#[derive(Script)]` hands a choice and a unit variant to a
+  script as `Value::Name` and reads one back from a name or a string;
+  `#[enshwick::script]` calls callbacks with `&mut [Value]` and takes its
+  arguments from one, as `script::Callback::call` now does (#989).
+
 ## [1.0.0-alpha.13] - 2026-11-07
 
 ## [1.0.0-alpha.12] - 2026-11-05

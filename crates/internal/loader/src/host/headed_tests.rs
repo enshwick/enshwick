@@ -18,6 +18,7 @@ macro_rules! headed {
     ($check:ident) => {
         $check!(
             ActionCall,
+            ActionReply,
             ActionTarget,
             ActiveBuff,
             AffixDefData,
@@ -39,6 +40,7 @@ macro_rules! headed {
             ChatRewrite,
             ChunkData,
             Comfort,
+            CommandInfo,
             ControlEvent,
             ControlSpec,
             CraftCheck,
