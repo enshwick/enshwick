@@ -3849,7 +3849,7 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*config_schema)(EnshwickModHandle me,
                                   struct EnshwickStr file,
                                   struct EnshwickStr schema,
-                                  struct EnshwickStr template);
+                                  struct EnshwickStr template_);
   // Calls `callback` with `user` after a summoning staff's use spawned or
   // moved a survivor, with `Summon::consumed` set; its return value is
   // ignored. On the thread of the use, as `HostApi::summon_filter`.

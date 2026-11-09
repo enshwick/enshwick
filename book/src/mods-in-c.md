@@ -1,21 +1,25 @@
 <!--
 type: how-to
-description: A mod is a DLL that exports four functions over the C ABI, so C, C++, Zig or any language that includes a C header can write one. Build the example C mod.
+description: A mod is a DLL that exports four functions over the C ABI, so C, C++ or any language that can call a C ABI can write one. Build the example mods in C and C++.
 -->
 
-# Mods in C
+# Mods in C and C++
 
-A mod is a DLL that exports four functions over the C ABI. That lets C, C++,
-Zig, Odin or any language that can include a C header write one. Here you build
-the example mod
-[`hello.c`](https://github.com/enshwick/enshwick/blob/main/examples/hello-c/hello.c).
+A mod is a DLL that exports four functions over the C ABI. C and C++ mods are
+tested: the example mods
+[`hello.c`](https://github.com/enshwick/enshwick/blob/main/examples/hello-c/hello.c)
+and
+[`hello.cpp`](https://github.com/enshwick/enshwick/blob/main/examples/hello-c/hello.cpp)
+start on the fake host on every change. Any other language that builds a
+Windows DLL and can call a C ABI can write a mod the same way.
 
-## The header and the example
+## The header and the examples
 
 The header is
 [`enshwick.h`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/include/enshwick.h),
 written from the same Rust types the loader uses and checked against the ABI's
-layout on every change. `hello.c` writes one line to the log when it starts.
+layout on every change. It also compiles as C++20. Each example writes one
+line to the log when it starts.
 
 ## Write the mod
 
@@ -58,6 +62,19 @@ clang --target=x86_64-pc-windows-msvc -std=c11 -O2 -shared -fuse-ld=lld \
 -nostdlib -Wl,/NOENTRY` and needs no Windows SDK. A mod that
 calls the C runtime links it as usual: with Visual Studio's `cl /LD`, `clang-cl`
 or [cargo-xwin](https://github.com/rust-cross/cargo-xwin)'s SDK off Windows.
+
+A C++ mod builds the same way with C++20, which allows the designated
+initializers the manifest uses:
+
+```sh
+clang++ --target=x86_64-pc-windows-msvc -std=c++20 -O2 -shared -fuse-ld=lld \
+  hello.cpp -o hello_cpp.dll
+```
+
+The header wraps the four exports in `extern "C"`, so their names stay
+unmangled. `hello.cpp` turns off exceptions and runtime type information
+(`-fno-exceptions -fno-rtti`) to build without the C++ runtime as well.
+A mod that uses the C++ standard library links its runtime as usual.
 
 The loader loads your mod with
 [`LoadLibraryExW`](https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-loadlibraryexw).

@@ -25,6 +25,32 @@ const HEADER: &str = "crates/enshwick/include/enshwick.h";
 const PREFIX: &str = "Enshwick";
 /// The target the layout holds on.
 const C_TARGET: &str = "x86_64-pc-windows-msvc";
+/// The C++ keywords C allows as names, which a header C++ also includes
+/// cannot use.
+const CPP_KEYWORDS: [&str; 22] = [
+    "catch",
+    "class",
+    "concept",
+    "delete",
+    "explicit",
+    "export",
+    "friend",
+    "mutable",
+    "namespace",
+    "new",
+    "operator",
+    "private",
+    "protected",
+    "public",
+    "requires",
+    "template",
+    "this",
+    "throw",
+    "try",
+    "typename",
+    "using",
+    "virtual",
+];
 
 /// One type of the golden file: its size, alignment and fields as
 /// `(name, offset)`.
@@ -61,10 +87,13 @@ pub(crate) fn check(root: &Path) -> Vec<String> {
         Ok(text) => text,
         Err(error) => return vec![format!("{LAYOUT}: {error}")],
     };
-    match parse_layout(&layout) {
-        Ok(shapes) => compile_asserts(&root.join(HEADER), &asserts(&shapes, &fresh)),
+    let header = root.join(HEADER);
+    let mut problems = match parse_layout(&layout) {
+        Ok(shapes) => compile(&header, Language::C, &asserts(&shapes, &fresh)),
         Err(error) => vec![error],
-    }
+    };
+    problems.extend(compile(&header, Language::Cpp, CPP_INCLUDE));
+    problems
 }
 
 /// The header cbindgen writes for the ABI module.
@@ -118,7 +147,7 @@ fn tidy(header: &str) -> String {
         lines.push(if comment.is_some() {
             plain_links(line)
         } else {
-            line.to_owned()
+            escape_parameters(line)
         });
     }
     let mut text = lines.join("\n");
@@ -131,6 +160,22 @@ fn tidy(header: &str) -> String {
         );
     }
     text
+}
+
+/// `line` with every parameter named by a C++ keyword given cbindgen's `_`
+/// suffix, such as `template_`: cbindgen escapes struct members but not the
+/// parameters of function pointers, and C++ refuses the header otherwise.
+fn escape_parameters(line: &str) -> String {
+    let mut line = line.to_owned();
+    for keyword in CPP_KEYWORDS {
+        for (before, after) in [(' ', ','), (' ', ')'), ('*', ','), ('*', ')')] {
+            line = line.replace(
+                &format!("{before}{keyword}{after}"),
+                &format!("{before}{keyword}_{after}"),
+            );
+        }
+    }
+    line
 }
 
 /// The names after the prefix of the constants written in capitals, such as
@@ -342,14 +387,31 @@ fn c_member(body: &[&str], field: &str) -> String {
     }
 }
 
-/// Compiles `source` against `header` for the Windows target with clang; a
-/// failing assert names its type and field.
-fn compile_asserts(header: &Path, source: &str) -> Vec<String> {
+/// The language a check compiles the header as.
+#[derive(Debug, Clone, Copy)]
+enum Language {
+    /// C11, with the layout's asserts.
+    C,
+    /// C++20, which mods in C++ include the header from.
+    Cpp,
+}
+
+/// A C++ file that only includes the header.
+const CPP_INCLUDE: &str = "#include \"enshwick.h\"\n";
+
+/// Compiles `source` against `header` for the Windows target with clang as
+/// `language`; a failing layout assert names its type and field.
+
+fn compile(header: &Path, language: Language, source: &str) -> Vec<String> {
     let dir = match scratch_dir("layout") {
         Ok(dir) => dir,
         Err(error) => return vec![error],
     };
-    let file = dir.join("layout.c");
+    let (file_name, standard) = match language {
+        Language::C => ("layout.c", "-std=c11"),
+        Language::Cpp => ("include.cpp", "-std=c++20"),
+    };
+    let file = dir.join(file_name);
     if let Err(error) = std::fs::write(&file, source) {
         return vec![format!("{}: {error}", file.display())];
     }
@@ -358,7 +420,7 @@ fn compile_asserts(header: &Path, source: &str) -> Vec<String> {
         .env("PATH", crate::tool_path())
         .args([
             &format!("--target={C_TARGET}"),
-            "-std=c11",
+            standard,
             "-ffreestanding",
             "-fsyntax-only",
             "-Werror",
@@ -368,15 +430,19 @@ fn compile_asserts(header: &Path, source: &str) -> Vec<String> {
         .arg(&file)
         .output();
     let _removed = std::fs::remove_dir_all(&dir);
+    let against = match language {
+        Language::C => LAYOUT,
+        Language::Cpp => "C++",
+    };
     match output {
         Ok(output) if output.status.success() => Vec::new(),
         Ok(output) => String::from_utf8_lossy(&output.stderr)
             .lines()
             .filter(|line| line.contains("error:"))
-            .map(|line| format!("{HEADER} against {LAYOUT}: {line}"))
+            .map(|line| format!("{HEADER} against {against}: {line}"))
             .collect(),
         Err(error) => vec![format!(
-            "running clang, which checks {HEADER} against {LAYOUT}: {error}; install LLVM's clang and put its bin folder on PATH"
+            "running clang, which checks {HEADER} against {against}: {error}; install LLVM's clang and put its bin folder on PATH"
         )],
     }
 }
@@ -427,6 +493,20 @@ mod tests {
         assert_eq!(c_member(&body, "template"), "template_");
         assert_eq!(c_member(&body, "new"), "new_");
         assert_eq!(c_member(&body, "newer"), "newer");
+    }
+
+    #[test]
+    fn parameters_named_by_a_cpp_keyword_take_the_escape() {
+        assert_eq!(
+            tidy(
+                "  Status (*schema)(Str file, Str template);\n  Status (*f)(void *this, int newer);\n"
+            ),
+            "  Status (*schema)(Str file, Str template_);\n  Status (*f)(void *this_, int newer);\n"
+        );
+        assert_eq!(
+            tidy("// the `template`, written from the defaults\n"),
+            "// the `template`, written from the defaults\n"
+        );
     }
 
     #[test]
