@@ -34,7 +34,7 @@ use crate::wire::{CONTROL, Link, MAX_SEALED, PROBES, open, probe, read_probe, se
 
 mod game;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use game::{Game, Taken, Unopened};
 

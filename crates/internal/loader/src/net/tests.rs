@@ -146,10 +146,6 @@ fn a_hello_s_language_stays_with_its_client_and_goes_with_it() {
     assert_eq!(language_in(&state, 9), None);
 }
 
-/// Held by the tests that change the server's peer in the net's shared
-/// state, which would otherwise see each other's link.
-static SERVER_LINK: Mutex<()> = Mutex::new(());
-
 #[test]
 fn a_hosting_client_s_burst_to_its_own_server_half_is_refused_past_its_rate_and_the_rest_arrives() {
     static ARRIVED: AtomicU64 = AtomicU64::new(0);
@@ -157,9 +153,9 @@ fn a_hosting_client_s_burst_to_its_own_server_half_is_refused_past_its_rate_and_
         ARRIVED.fetch_add(1, Ordering::Relaxed);
     }
     const CHANNEL: u32 = 5;
-    let _link = SERVER_LINK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    // The server's peer in the net's state, and whether a send goes, are
+    // shared with the carrier's tests.
+    let _link = crate::carrier::tests::alone();
     let (host, wired) = (7, 9);
     let in_burst = |count: u64| {
         let burst = crate::wire::BURST;
@@ -234,9 +230,9 @@ fn a_full_greeting_store_makes_room_from_keys_without_a_live_slot() {
 
 #[test]
 fn the_server_is_ready_from_its_welcome_until_the_link_goes_and_refusals_cost_no_rate() {
-    let _link = SERVER_LINK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    // The server's peer in the net's state, and whether a send goes, are
+    // shared with the carrier's tests.
+    let _link = crate::carrier::tests::alone();
     let server = NetMessage::SERVER.get();
     assert!(!ready(server));
     client_carried(5, b"before the welcome");
