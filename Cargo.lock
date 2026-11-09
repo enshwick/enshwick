@@ -511,6 +511,7 @@ dependencies = [
  "proptest",
  "rustc-hash",
  "ruzstd",
+ "semver",
  "serde",
  "serde_json",
  "thiserror",

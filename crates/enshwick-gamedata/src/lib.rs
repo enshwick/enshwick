@@ -27,15 +27,15 @@ mod game_names;
 mod locks;
 mod parts;
 pub mod reflect;
+pub mod releases;
 mod resolve;
 mod routes;
 mod table;
 pub mod typed;
 mod version;
 
-pub use parts::{Part, PartState};
-
 pub use entries::{Body, Constant, Locate, Operand, Symbol, Witness};
+pub use parts::{Part, PartState};
 pub use reflect::Fingerprint;
 pub use resolve::{
     DATA_VAR, Kind, Resolved, Routing, anchors, data_dir, exact, kept, newest, reported, tables_in,
