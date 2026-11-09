@@ -123,10 +123,10 @@ mod tests {
     fn who_took_game_code_follows_what_is_off() {
         let off = ["chat.receive".to_owned()];
         let taken = ["kiln-core.dll".to_owned(), "other.dll".to_owned()];
-        let line = line(&off, &taken).unwrap();
-        let named = line.find("chat.receive").unwrap();
-        let owners = line.find("kiln-core.dll, other.dll").unwrap();
-        assert!(named < owners, "{line}");
+        let said = line(&off, &taken).unwrap();
+        let named = said.find("chat.receive").unwrap();
+        let owners = said.find("kiln-core.dll, other.dll").unwrap();
+        assert!(named < owners, "{said}");
         assert_eq!(line(&[], &taken), None, "nothing off, nothing to say");
     }
 }
