@@ -28,6 +28,10 @@ pub const VANILLA_EXPERIENCE: u32 = 0x0000_0e05;
 /// whose id is the content id `vanilla:quest-xp`'s, so a test can add a
 /// value the game holds.
 pub const VANILLA_QUEST_EXPERIENCE: u32 = Guid::named("vanilla:quest-xp").fnv1a();
+/// A vanilla experience value of the fake's balancing table: 2 of the
+/// source 9, which the fake's source enum does not name, as a later build's
+/// new source reads.
+pub const VANILLA_UNNAMED_EXPERIENCE: u32 = 0x0000_0909;
 
 /// The unlocked nodes the fake's saves keep: room for two nodes beside its
 /// tree's two.
@@ -231,12 +235,12 @@ fn balancing_types() -> Vec<Type<'static>> {
     ]
 }
 
-/// The fake's vanilla balancing table: [`VANILLA_EXPERIENCE`] and
-/// [`VANILLA_QUEST_EXPERIENCE`].
+/// The fake's vanilla balancing table: [`VANILLA_EXPERIENCE`],
+/// [`VANILLA_QUEST_EXPERIENCE`] and [`VANILLA_UNNAMED_EXPERIENCE`].
 fn balancing_value() -> Value {
-    let value = |source: &str, id: u32, gain: u64| {
+    let value = |source: Value, id: u32, gain: u64| {
         fields(vec![
-            ("source", Value::Name(source.into())),
+            ("source", source),
             (
                 "experienceValueId",
                 fields(vec![("value", Value::Uint(id.into()))]),
@@ -247,8 +251,9 @@ fn balancing_value() -> Value {
     fields(vec![(
         "experienceValues",
         Value::List(vec![
-            value("Mining", VANILLA_EXPERIENCE, 5),
-            value("Quest", VANILLA_QUEST_EXPERIENCE, 600),
+            value(Value::Name("Mining".into()), VANILLA_EXPERIENCE, 5),
+            value(Value::Name("Quest".into()), VANILLA_QUEST_EXPERIENCE, 600),
+            value(Value::Uint(9), VANILLA_UNNAMED_EXPERIENCE, 2),
         ]),
     )])
 }
@@ -705,7 +710,7 @@ impl FakeHost {
     /// vanilla knowledge of one world counter,
     /// [`VANILLA_WORLD_KNOWLEDGE`], and one player bool,
     /// [`VANILLA_PLAYER_KNOWLEDGE`], with its skill point, and a balancing
-    /// table of [`VANILLA_EXPERIENCE`] and [`VANILLA_QUEST_EXPERIENCE`].
+    /// table of [`VANILLA_EXPERIENCE`], [`VANILLA_QUEST_EXPERIENCE`] and [`VANILLA_UNNAMED_EXPERIENCE`].
     /// What `Load::add_knowledge` and `Load::add_experience` resolve.
     ///
     /// # Examples

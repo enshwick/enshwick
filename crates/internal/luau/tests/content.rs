@@ -82,7 +82,7 @@ mod tests {
             "#,
         );
         let logs = format!("{:?}", loader.logs());
-        assert!(logged(&loader, "2 vanilla, first 5 of Mining"), "{logs}");
+        assert!(logged(&loader, "3 vanilla, first 5 of Mining"), "{logs}");
         let xp = Id::new("you.luau:shrine-xp").guid().fnv1a();
         assert!(logged(&loader, &format!("experience {xp}")), "{logs}");
         assert!(logged(&loader, "unknown source refused true"), "{logs}");

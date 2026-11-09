@@ -14,7 +14,9 @@ mod tests {
     use enshwick::game_events::ExperienceSourceType;
     use enshwick::knowledge::{KnowledgeType, Scope};
     use enshwick::resources::{Registry, Value};
-    use enshwick::test::{FakeHost, VANILLA_EXPERIENCE, VANILLA_QUEST_EXPERIENCE};
+    use enshwick::test::{
+        FakeHost, VANILLA_EXPERIENCE, VANILLA_QUEST_EXPERIENCE, VANILLA_UNNAMED_EXPERIENCE,
+    };
     use enshwick::{Load, Mod, Off};
 
     const SHRINE: Id = Id::new("you.lore:shrine-xp");
@@ -125,6 +127,7 @@ mod tests {
                     Value::Name("Quest".into()),
                     600
                 ),
+                (VANILLA_UNNAMED_EXPERIENCE.into(), Value::Uint(9), 2),
                 (added[0].get().into(), Value::Name("Quest".into()), 300),
                 (added[1].get().into(), Value::Uint(9), 7),
             ]
@@ -143,6 +146,11 @@ mod tests {
                     value: ExperienceValue::new(VANILLA_QUEST_EXPERIENCE),
                     source: ExperienceSourceType::Quest,
                     gain: 600,
+                },
+                ExperienceBalanceValue {
+                    value: ExperienceValue::new(VANILLA_UNNAMED_EXPERIENCE),
+                    source: ExperienceSourceType::Other(9),
+                    gain: 2,
                 },
             ]
         );
