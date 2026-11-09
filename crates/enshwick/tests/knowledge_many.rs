@@ -75,11 +75,13 @@ mod tests {
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
-        let (base, built, _) = grown(&loader, GAME_KNOWLEDGE, "GameKnowledgeResource");
+        let knowledge = grown(&loader, GAME_KNOWLEDGE, "GameKnowledgeResource");
+        let journal = grown(&loader, JOURNAL_REGISTRY, "JournalRegistryResource");
+        let (base, built, _) = knowledge;
         // An entry is a key, a value and the map's arrays moved once.
         let each = (built - base) / (ENTRIES + QUESTS);
         assert!(each < 128, "{each} bytes an entry, {base} -> {built}");
-        let (base, built, _) = grown(&loader, JOURNAL_REGISTRY, "JournalRegistryResource");
+        let (base, built, _) = journal;
         let each = (built - base) / QUESTS;
         assert!(each < 1024, "{each} bytes a quest, {base} -> {built}");
     }
