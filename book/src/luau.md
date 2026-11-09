@@ -144,7 +144,7 @@ these Luau types:
 | --- | --- |
 | numbers up to 32 bits, `f32`, `f64`, entity ids | `number` |
 | `u64`, such as an account key | `string` of its decimal digits |
-| `&str`, `String`, a GUID, a content id, a path | `string` |
+| `&str`, `String`, a GUID, a [content id](concepts/ids.md), a path | `string` |
 | a position, `[f64; 3]` | `vector` |
 | bytes, `&[u8]` | `buffer` |
 | `Option<T>` | `T?` |

@@ -469,7 +469,9 @@ impl Load<'_> {
     /// the handle that asks it.
     ///
     /// `P` comes from [`#[point]`](macro@crate::point), named after this
-    /// mod: `<id>:<point>`. Links run once every mod is initialised.
+    /// mod: `<id>:<point>`, see
+    /// [how ids are namespaced](https://enshwick.com/dev/concepts/ids/).
+    /// Links run once every mod is initialised.
     ///
     /// # Errors
     ///

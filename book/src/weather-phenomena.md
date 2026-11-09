@@ -12,7 +12,7 @@ change the game's.
 ## Adding and changing one
 
 During `init`, `load.add_weather_phenomenon(NewPhenomenon)` adds a copy of
-one of the game's phenomena under a content id. The copy has its own
+one of the game's phenomena under a [content id](concepts/ids.md). The copy has its own
 probability, duration, radius, strength and effect. It goes to the layer of
 the phenomenon it copies or to a layer named by its GUID.
 `load.change_weather_phenomenon` changes the values of the game's phenomenon

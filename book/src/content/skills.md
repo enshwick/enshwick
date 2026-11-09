@@ -25,7 +25,7 @@ On server 399 the tree has 243 nodes, 12 of them roots.
 
 | Field | What it sets |
 | --- | --- |
-| `id` | the node's content id |
+| `id` | the node's [content id](../concepts/ids.md) |
 | `like` | the vanilla node whose effect and icons it copies |
 | `x`, `y` | where the tree screen draws it |
 | `links_from` | the nodes it is unlocked from, vanilla or a mod's |

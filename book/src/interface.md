@@ -331,7 +331,7 @@ a new host.
 
 `load.extend_screen_for` adds a panel that shows only while the screen's
 host was made from one of the templates it names. Pass the mod's own kind by
-its content id:
+its [content id](concepts/ids.md):
 
 ```rust
 use enshwick::content::id;

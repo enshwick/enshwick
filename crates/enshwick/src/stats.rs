@@ -148,7 +148,8 @@ pub struct StatChange {
 #[derive(Clone, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct StatInfo {
-    /// The full id, `<mod>:<name>`.
+    /// The full id, `<mod>:<name>`, see
+    /// [how ids are namespaced](https://enshwick.com/dev/concepts/ids/).
     pub id: String,
     /// The text key that names it in its owner's texts, see [`name_key`].
     pub text: String,

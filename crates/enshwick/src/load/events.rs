@@ -213,7 +213,8 @@ impl Load<'_> {
     /// the [`Emitter`] that sends it.
     ///
     /// `E` comes from [`#[event]`](macro@crate::event), named after this
-    /// mod: `<id>:<what>`.
+    /// mod: `<id>:<what>`, see
+    /// [how ids are namespaced](https://enshwick.com/dev/concepts/ids/).
     ///
     /// # Errors
     ///

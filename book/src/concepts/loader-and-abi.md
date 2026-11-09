@@ -112,7 +112,7 @@ stalls = { id = "you.market-stalls", version = ">=0.2, <1.0" }
 caravans = "you.caravans"
 
 [package.metadata.enshwick.breaks]
-old_market = { id = "old-market", version = "<0.5" }
+old_market = { id = "you.old-market", version = "<0.5" }
 
 [[package.metadata.enshwick.builds]]
 side = "server"

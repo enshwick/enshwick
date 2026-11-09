@@ -6,7 +6,7 @@ description: An entity template is what a placed object or a creature is made of
 # Entity templates
 
 An entity template is what a placed object or a creature is made of. A mod
-copies a game template under its own content id and changes the components
+copies a game template under its own [content id](../concepts/ids.md) and changes the components
 of a copy or of a vanilla template.
 
 ## What a template holds

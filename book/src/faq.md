@@ -135,9 +135,9 @@ These lines read `<file> skipped: <reason>`, or name the file alone:
 | `<file> skipped: built for another Enshwick: rebuild it for Enshwick <version>`                                 | The mod was built for another Enshwick release                         |
 | `skipped: side 2 is not a mod's side: a mod runs on the server or on both`                                      | A mod built for the client alone, which no Enshwick takes now          |
 | `old.dll skipped: you.trading-post 0.1.0 is also in trading_post.dll, which runs 0.2.0; old.dll can be deleted` | Two files hold one mod; the highest version runs, then the newest file |
-| `skipped: requires trading-post, which is not loaded`                                                           | A required mod is absent or was skipped itself                         |
-| `skipped: requires trading-post ^0.2, found 0.1.3`                                                              | A required mod is too old or too new                                   |
-| `skipped: does not work beside old-market 0.4.0; remove one of them`                                            | The mod declares `breaks` on a loaded mod, and gives way               |
+| `skipped: requires you.trading-post, which is not loaded`                                                        | A required mod is absent or was skipped itself                         |
+| `skipped: requires you.trading-post ^0.2, found 0.1.3`                                                           | A required mod is too old or too new                                   |
+| `skipped: does not work beside you.old-market 0.4.0; remove one of them`                                         | The mod declares `breaks` on a loaded mod, and gives way               |
 | `skipped: in a dependency cycle`                                                                                | Mods require each other in a circle                                    |
 | `skipped: the id "My Mod" is not <author>.<name>, each of [a-z0-9-]`                                            | The manifest's id is invalid; other manifest errors read the same way  |
 

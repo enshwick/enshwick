@@ -12,7 +12,7 @@ its own, so quests, pages and skill nodes rest on them.
 ## An entry of the mod's own
 
 `load.add_knowledge(NewKnowledge)` adds the entry and returns its knowledge
-id, the [`KnowledgeId::from_guid`] of the content id:
+id, the [`KnowledgeId::from_guid`] of the [content id](../concepts/ids.md):
 
 | Field | What it sets |
 | --- | --- |
