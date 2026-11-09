@@ -185,6 +185,9 @@ pub struct Image<'a> {
     sections: Vec<Section>,
     fingerprint: Option<Fingerprint>,
     relocations: (u64, u64),
+    /// Where `.text` starts and the bytes read in its place, set by
+    /// [`Image::with_text`].
+    text: Option<(u64, &'a [u8])>,
 }
 
 const PE_OFFSET: usize = 0x3c;
@@ -256,6 +259,7 @@ impl<'a> Image<'a> {
             sections,
             fingerprint: None,
             relocations: (0, 0),
+            text: None,
         };
         let has_debug = optional_size >= OPTIONAL_DEBUG_DIRECTORY + 8
             && u32_at(bytes, optional + OPTIONAL_DIRECTORY_COUNT)
@@ -370,6 +374,21 @@ impl<'a> Image<'a> {
     /// See [`Image`].
     #[must_use]
     pub fn read(&self, va: u64, len: u64) -> Option<&'a [u8]> {
+        if let Some((start, text)) = self.text {
+            let text_end = start.checked_add(u64::try_from(text.len()).ok()?)?;
+            if let Some(offset) = va.checked_sub(start)
+                && va < text_end
+            {
+                let start = usize::try_from(offset).ok()?;
+                let end = start.checked_add(usize::try_from(len).ok()?)?;
+                return text.get(start..end);
+            }
+            // Bytes before the given code that run into it would mix two
+            // copies of the code.
+            if va.checked_add(len)? > start && va < text_end {
+                return None;
+            }
+        }
         let rva = va.checked_sub(self.base)?;
         let offset = match self.layout {
             Layout::Mapped => rva,
@@ -387,6 +406,46 @@ impl<'a> Image<'a> {
         let start = usize::try_from(offset).ok()?;
         let end = start.checked_add(usize::try_from(len).ok()?)?;
         self.bytes.get(start..end)
+    }
+
+    /// The image with `text` read in place of its `.text` section, for a
+    /// search that must see the code as shipped while another program's
+    /// hooks change it in memory; the other sections read as before, and a
+    /// read that runs into or out of `.text` is `None`.
+    ///
+    /// `None` when the image has no `.text` or `text` is not as long as the
+    /// section's [`range`](Self::range).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use enshwick_gamedata::reflect::{Image, Layout};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let bytes = std::fs::read("enshrouded_server.exe")?;
+    /// let image = Image::parse(&bytes, Layout::File, None)?;
+    /// let range = image.range(image.section(".text").ok_or("no .text")?);
+    /// let shipped = vec![0xcc; usize::try_from(range.end - range.start)?];
+    /// let read = image.with_text(&shipped).ok_or("not as long")?;
+    /// assert_eq!(read.read(range.start, 1), Some(&[0xcc][..]));
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn with_text<'b>(&self, text: &'b [u8]) -> Option<Image<'b>>
+    where
+        'a: 'b,
+    {
+        let range = self.range(self.section(".text")?);
+        (u64::try_from(text.len()).ok()? == range.end - range.start).then(|| Image {
+            bytes: self.bytes,
+            layout: self.layout,
+            base: self.base,
+            sections: self.sections.clone(),
+            fingerprint: self.fingerprint,
+            relocations: self.relocations,
+            text: Some((range.start, text)),
+        })
     }
 
     /// The little-endian `u64` at `va`.
@@ -578,5 +637,30 @@ mod tests {
         bytes[0x408..0x40a].copy_from_slice(&0xA008u16.to_le_bytes());
         let image = Image::parse(&bytes, Layout::Mapped, Some(0x1_4000_0000)).expect("a header");
         assert_eq!(image.relocations(), [0x1008]);
+    }
+
+    #[test]
+    fn text_given_in_place_of_the_code_is_read_there_and_nowhere_else() {
+        let mut bytes = header(0x200);
+        bytes.resize(0x1020, 0x90);
+        let optional = 0x40 + 24;
+        bytes[0x40 + 6..0x40 + 8].copy_from_slice(&1u16.to_le_bytes());
+        bytes[0x40 + 20..0x40 + 22].copy_from_slice(&0xF0u16.to_le_bytes());
+        bytes[optional..optional + 2].copy_from_slice(&0x20bu16.to_le_bytes());
+        let text = optional + 0xF0;
+        bytes[text..text + 8].copy_from_slice(b".text\0\0\0");
+        bytes[text + 8..text + 12].copy_from_slice(&0x10u32.to_le_bytes());
+        bytes[text + 12..text + 16].copy_from_slice(&0x1000u32.to_le_bytes());
+        let base = 0x1_4000_0000;
+        let image = Image::parse(&bytes, Layout::Mapped, Some(base)).expect("a header");
+        let shipped = [0xCC; 0x10];
+        assert!(image.with_text(&shipped[..0xF]).is_none(), "not as long");
+        let read = image.with_text(&shipped).expect("as long as .text");
+        assert_eq!(read.read(base + 0x1000, 0x10), Some(&shipped[..]));
+        assert_eq!(read.read(base + 0x100F, 2), None, "runs past .text");
+        assert_eq!(read.read(base + 0xFFF, 2), None, "runs into .text");
+        assert_eq!(read.read(base + 0x1010, 2), Some(&[0x90, 0x90][..]));
+        assert_eq!(read.read(base, 2), Some(&b"MZ"[..]));
+        assert_eq!(image.read(base + 0x1000, 1), Some(&[0x90][..]));
     }
 }

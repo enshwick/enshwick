@@ -873,3 +873,51 @@ fn the_pattern_fallback_fits_the_server_hold() {
     let budget = if cfg!(debug_assertions) { 15 } else { 2 };
     assert!(took < std::time::Duration::from_secs(budget), "{took:?}");
 }
+
+/// On the server `ENSH_SERVER_EXE` names (skipped without it), another
+/// program's jumps over the found functions hide them from a search of the
+/// changed code, and the code as shipped, read in its place, finds every
+/// entry again where it was.
+#[test]
+fn functions_hooked_before_the_search_are_found_in_the_code_as_shipped() {
+    use enshwick_gamedata::reflect::{Image, Layout};
+
+    let Ok(path) = std::env::var("ENSH_SERVER_EXE") else {
+        return;
+    };
+    let shipped = std::fs::read(path).unwrap();
+    let search = |image: &Image<'_>| {
+        let range = image.range(image.section(".text").unwrap());
+        let code = image.read(range.start, range.end - range.start).unwrap();
+        by_patterns(
+            Side::SERVER,
+            "server".into(),
+            (code, range.start - image.base()),
+            |rva| image.u32(image.base() + rva),
+        )
+        .unwrap()
+    };
+    let image = Image::parse(&shipped, Layout::File, None).unwrap();
+    let found = search(&image);
+    let text = image.range(image.section(".text").unwrap());
+    let mut hooked = shipped.clone();
+    for &(_, rva) in found.symbols() {
+        let Some(at) = image.read(image.base() + rva, 5) else {
+            continue;
+        };
+        let offset = at.as_ptr().addr() - shipped.as_ptr().addr();
+        hooked[offset..offset + 5].copy_from_slice(&[0xE9, 0x00, 0x10, 0x00, 0x00]);
+    }
+    let changed = Image::parse(&hooked, Layout::File, None).unwrap();
+    let hidden = search(&changed);
+    assert!(
+        hidden.symbols().len() < found.symbols().len(),
+        "{} of {} found in the hooked code",
+        hidden.symbols().len(),
+        found.symbols().len()
+    );
+    let code = image.read(text.start, text.end - text.start).unwrap();
+    let again = search(&changed.with_text(code).unwrap());
+    assert_eq!(again.symbols(), found.symbols());
+    assert_eq!(again.constants(), found.constants());
+}

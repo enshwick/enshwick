@@ -134,6 +134,37 @@ pub fn diff(old: &[u8], new: &[u8]) -> Vec<(usize, usize)> {
     ranges
 }
 
+/// The ranges where `now` differs from `disk`, the relocated code of the
+/// image on disk, as [`diff`] finds them, without the `ignored` ranges the
+/// loader writes itself.
+///
+/// `None` when the lengths differ or the ranges are so many that the file's
+/// code is packed or encrypted rather than changed, and so no copy of the
+/// code that runs.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::code_watch::shipped;
+///
+/// assert_eq!(shipped(&[0x90; 200], &[0x90; 200], &[]), Some(vec![]));
+/// assert_eq!(shipped(&[0x90; 200], &[0xCC; 200], &[]), None);
+/// ```
+#[must_use]
+pub fn shipped(disk: &[u8], now: &[u8], ignored: &[(usize, usize)]) -> Option<Vec<(usize, usize)>> {
+    if disk.len() != now.len() {
+        return None;
+    }
+    let ranges = diff(disk, now);
+    let changed: usize = ranges.iter().map(|&(_, len)| len).sum();
+    (ranges.len() <= PACKED_RANGES && changed <= now.len() / PACKED_SHARE).then(|| {
+        ranges
+            .into_iter()
+            .flat_map(|(offset, len)| outside(offset, len, ignored))
+            .collect()
+    })
+}
+
 /// The copy of the game's code the loader compares against while it starts,
 /// and the changes found so far.
 #[derive(Debug)]
@@ -163,14 +194,7 @@ impl Watch {
     /// code is packed or encrypted rather than changed.
     #[must_use]
     pub fn from_disk(disk: Vec<u8>, now: &[u8], ignored: &[(usize, usize)]) -> Option<Self> {
-        if disk.len() != now.len() {
-            return None;
-        }
-        let ranges = diff(&disk, now);
-        let changed: usize = ranges.iter().map(|&(_, len)| len).sum();
-        if ranges.len() > PACKED_RANGES || changed > now.len() / PACKED_SHARE {
-            return None;
-        }
+        let ranges = shipped(&disk, now, ignored)?;
         let mut watch = Self {
             copy: disk,
             ignored: ignored.to_vec(),
@@ -281,7 +305,7 @@ fn outside(offset: usize, len: usize, ignored: &[(usize, usize)]) -> Vec<(usize,
 const HOPS: usize = 3;
 /// Bytes a jump may start before the first changed byte, when its opcode
 /// equals the byte it replaced.
-const LEAD: usize = 2;
+pub const LEAD: usize = 2;
 /// The bytes [`branch`] looks at, at most.
 pub const BRANCH_BYTES: usize = 16;
 
@@ -395,32 +419,57 @@ fn pieces(old: &[u8], now: &[u8], start: usize, end: usize) -> Vec<(usize, usize
 pub fn reaches(
     now: &[u8],
     text: usize,
-    (offset, len): (usize, usize),
+    piece: (usize, usize),
     image: (usize, usize),
     read: impl Fn(usize) -> Option<Vec<u8>>,
 ) -> bool {
-    let inside = |at: usize| (image.0..image.1).contains(&at);
+    lands(now, text, piece, read, |at| {
+        (image.0..image.1).contains(&at)
+    })
+    .is_some()
+}
+
+/// Where a changed piece of code's jump leads: the first address on its way
+/// that `stop` takes, the jump's own target or one up to [`HOPS`] more
+/// jumps on, as [`reaches`] follows them; `None` when the way stops short.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::code_watch::lands;
+///
+/// let mut now = vec![0x90; 32];
+/// now[8..13].copy_from_slice(&[0xE9, 0x00, 0x10, 0, 0]);
+/// let past = |at: usize| at >= 0x2000;
+/// assert_eq!(lands(&now, 0x1000, (8, 5), |_| None, past), Some(0x200D));
+/// assert_eq!(lands(&now, 0x1000, (8, 5), |_| None, |_| false), None);
+/// ```
+#[must_use]
+pub fn lands(
+    now: &[u8],
+    text: usize,
+    (offset, len): (usize, usize),
+    read: impl Fn(usize) -> Option<Vec<u8>>,
+    stop: impl Fn(usize) -> bool,
+) -> Option<usize> {
     let cell = |at: usize| {
         let bytes: [u8; 8] = read(at)?.get(..8)?.try_into().ok()?;
         usize::try_from(u64::from_le_bytes(bytes)).ok()
     };
     let follow = |mut to: usize| {
         for _ in 0..HOPS {
-            if inside(to) {
-                return true;
+            if stop(to) {
+                return Some(to);
             }
-            match read(to).and_then(|code| branch(&code, to, cell)) {
-                Some(next) => to = next,
-                None => return false,
-            }
+            to = read(to).and_then(|code| branch(&code, to, cell))?;
         }
-        inside(to)
+        stop(to).then_some(to)
     };
-    (offset.saturating_sub(LEAD)..(offset + LEAD + 1).min(offset + len)).any(|at| {
+    (offset.saturating_sub(LEAD)..(offset + LEAD + 1).min(offset + len)).find_map(|at| {
         now.get(at..)
             .zip(text.checked_add(at))
             .and_then(|(code, address)| branch(code, address, cell))
-            .is_some_and(follow)
+            .and_then(follow)
     })
 }
 
@@ -809,6 +858,16 @@ mod tests {
         assert!(Watch::from_disk(disk.clone(), &disk[1..], &[]).is_none());
         let encrypted: Vec<u8> = disk.iter().map(|b| !b).collect();
         assert!(Watch::from_disk(disk, &encrypted, &[]).is_none());
+    }
+
+    #[test]
+    fn bytes_the_stub_holds_are_no_difference_from_the_shipped_code() {
+        let disk = code(CHUNK);
+        let mut now = disk.clone();
+        now[100..114].fill(0xFF);
+        now[300] ^= 1;
+        assert_eq!(shipped(&disk, &now, &[(100, 14)]), Some(vec![(300, 1)]));
+        assert_eq!(shipped(&disk, &now, &[]), Some(vec![(100, 14), (300, 1)]));
     }
 
     #[test]

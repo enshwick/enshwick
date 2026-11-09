@@ -8,6 +8,9 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `reflect::Image::with_text` reads a given copy in place of an image's
+  `.text`, such as the executable's code on disk relocated to where the game
+  runs, and every other section as before (#1014).
 - `releases::newer` finds the newest Enshwick release on GitHub that is
   newer than a running version, by the tag prefixes of a package
   (`LOADER_TAGS`, `TOOL_TAGS`), so the loader and `cargo enshwick` share

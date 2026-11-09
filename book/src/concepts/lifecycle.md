@@ -105,7 +105,7 @@ The DLL stays loaded and the mod stays off until the next start.
 | --- | --- |
 | `init` returns `Err(Off)` | off, `off: <reason>` with the mod's reason |
 | `init` panics | off, `off: init panicked` |
-| a hook of the mod cannot be armed | off, `off: its hook on <entry> could not be armed` |
+| a hook of the mod cannot be armed | off, `off: its hook on <entry> could not be armed: <reason>` |
 | a hook body panics | the panic is caught, the mod is off, the call continues to the rest of the chain (see [Panics](../hooks.md#panics)) |
 | an event handler, action, status closure or `ready` panics | off, `off: <what panicked>` |
 | the mod calls `host.fault(reason)` | off, with that reason |

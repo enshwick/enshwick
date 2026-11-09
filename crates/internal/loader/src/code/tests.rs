@@ -339,3 +339,26 @@ fn a_jump_just_before_an_unreadable_page_reads_up_to_it() {
     assert_ne!(released, 0);
     assert_eq!(code_at(last), None, "released");
 }
+
+/// PE headers with `stamp` as the link time and `size` as the image size.
+fn headers(stamp: u32, size: u32, image_base: u64) -> Vec<u8> {
+    let mut headers = vec![0u8; 0x200];
+    headers[0x3c..0x40].copy_from_slice(&0x40u32.to_le_bytes());
+    headers[0x48..0x4c].copy_from_slice(&stamp.to_le_bytes());
+    headers[0x70..0x78].copy_from_slice(&image_base.to_le_bytes());
+    headers[0x90..0x94].copy_from_slice(&size.to_le_bytes());
+    headers
+}
+
+#[test]
+fn only_the_executable_the_game_was_mapped_from_counts_as_its_build() {
+    let mapped = headers(0x6543_2100, 0x0400_0000, 0x7ff6_0000_0000);
+    let file = headers(0x6543_2100, 0x0400_0000, 0x1_4000_0000);
+    assert!(
+        same_build(&file, &mapped),
+        "only the relocated base differs"
+    );
+    assert!(!same_build(&headers(0x6543_2101, 0x0400_0000, 0), &mapped));
+    assert!(!same_build(&headers(0x6543_2100, 0x0400_1000, 0), &mapped));
+    assert!(!same_build(&file[..0x80], &mapped), "headers cut short");
+}

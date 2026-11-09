@@ -94,11 +94,20 @@ pub(crate) extern "system" fn service(
     }
 }
 
+/// Whether init has ended, so registrations come too late; the loader asks
+/// this before it reads the call's arguments.
+fn closed() -> bool {
+    with(false, |s| s.registration == super::Registration::Closed)
+}
+
 pub(crate) extern "system" fn define_event(
     _me: ModHandle,
     spec: *const EventSpec,
     out: *mut u32,
 ) -> Status {
+    if closed() {
+        return Status::TOO_LATE;
+    }
     let Some(spec) = super::get_headed(spec) else {
         return Status::BAD_ARGS;
     };
@@ -124,6 +133,9 @@ pub(crate) extern "system" fn subscribe_event(
     callback: ModEventFn,
     user: *mut c_void,
 ) -> Status {
+    if closed() {
+        return Status::TOO_LATE;
+    }
     let Some(spec) = super::get_headed(spec) else {
         return Status::BAD_ARGS;
     };
@@ -266,6 +278,9 @@ pub(crate) extern "system" fn subscribe(
         return Status::MISSING;
     }
     with(Status::MISSING, |s| {
+        if s.registration == super::Registration::Closed {
+            return Status::TOO_LATE;
+        }
         s.subscriptions
             .push((event, Registered::new(callback, user, me)));
         Status::OK
