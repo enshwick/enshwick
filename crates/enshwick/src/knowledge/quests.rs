@@ -26,9 +26,10 @@ use crate::content::EngineFacts as _;
 use crate::content::journal::{JOURNAL_REGISTRY, QuestReward};
 use crate::content::knowledge::{ExperienceValue, KnowledgeQuery};
 use crate::locks::Relock as _;
+use crate::resources::Value;
 use crate::typed::{
     JournalCollectionResource, JournalEntryResource, JournalQuestResource, JournalRegistryResource,
-    Named as _, QuestSourceType, QuestType, Reflected as _,
+    Named as _, QuestSourceType, QuestType, Reflected,
 };
 use crate::{Entity, ItemId, Load, Off};
 
@@ -311,13 +312,33 @@ struct Journal {
 }
 
 impl Journal {
-    fn of(registry: &JournalRegistryResource) -> Self {
-        Self {
-            quests: registry.quests.iter().map(QuestInfo::of).collect(),
-            pages: registry.collections.iter().map(PageInfo::of).collect(),
+    /// The quests and pages of the journal `registry`, each list read on
+    /// its own so a list the build changes leaves the others readable.
+    fn of(registry: &Value) -> Result<Self, Off> {
+        fn list<T: Reflected>(registry: &Value, name: &str) -> Result<Vec<T>, Off> {
+            match registry.field(name) {
+                Some(Value::List(all)) => all
+                    .iter()
+                    .map(|value| {
+                        T::from_value(value)
+                            .map_err(|error| Off::new(format!("journal {name}: {error}")))
+                    })
+                    .collect(),
+                _ => Err(Off::new(format!("journal: no list of {name}"))),
+            }
         }
+        let quests: Vec<JournalQuestResource> = list(registry, QUESTS)?;
+        let pages: Vec<JournalCollectionResource> = list(registry, COLLECTIONS)?;
+        Ok(Self {
+            quests: quests.iter().map(QuestInfo::of).collect(),
+            pages: pages.iter().map(PageInfo::of).collect(),
+        })
     }
 }
+
+/// The game's names of the journal's lists of quests and lore pages.
+const QUESTS: &str = "quests";
+const COLLECTIONS: &str = "collections";
 
 /// The quests and lore pages of the running game and where each player
 /// stands in them; get it from [`Load::quests`].
@@ -344,8 +365,8 @@ impl crate::script::Bound for Quests {
 }
 
 impl Quests {
-    /// The journal of this world, read once: empty during init, off the
-    /// game thread's world, or where it does not read.
+    /// The journal of this world, read once: empty, with a warning, where
+    /// it does not read.
     fn journal(&self) -> Arc<Journal> {
         let mut held = self.journal.relock();
         if let Some(journal) = &*held {
@@ -356,14 +377,13 @@ impl Quests {
             .hash(JournalRegistryResource::ID)
             .map(|hash| JOURNAL_REGISTRY.key_by_hash(hash))
             .and_then(|key| host.served_value(key))
-            .and_then(|value| {
-                JournalRegistryResource::from_value(&value)
-                    .map_err(|error| Off::new(format!("journal: {error}")))
-            });
-        match read {
-            Ok(registry) => Arc::clone(held.insert(Arc::new(Journal::of(&registry)))),
-            Err(_) => Arc::default(),
-        }
+            .and_then(|registry| Journal::of(&registry));
+        let journal = read.unwrap_or_else(|off| {
+            // Logged once a world: the empty journal is kept until the next.
+            host.log(crate::abi::Level::WARN, &format!("quests: {off}"));
+            Journal::default()
+        });
+        Arc::clone(held.insert(Arc::new(journal)))
     }
 
     /// Whether `query` holds for the player `player`, or for the world when

@@ -148,6 +148,8 @@ mod poisoned_locks;
 mod props;
 mod props_server;
 mod published_texts;
+#[cfg(feature = "typed")]
+mod quests_read;
 #[cfg(feature = "unstable")]
 mod rates;
 #[cfg(feature = "unstable")]
