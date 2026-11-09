@@ -101,7 +101,7 @@ tables, and is neither `vanilla` nor a Luau keyword.
 ## Names and references
 
 Every name a pack defines lives in its namespace. The pack `you.lanterns`
-holds an item `lantern`. Its [content id](../content.md#content-ids) is
+holds an item `lantern`. Its [content id](../concepts/ids.md) is
 `you.lanterns:lantern`, and `Guid::named` derives its GUID. Names are 1 to 128
 of `[a-z0-9_./-]` and unique across the pack's files. A reference is one of:
 

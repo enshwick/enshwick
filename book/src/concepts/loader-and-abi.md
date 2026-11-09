@@ -131,9 +131,9 @@ the build with its name. A changed `Cargo.toml` rebuilds the mod.
 - `id` is `<author>.<name>`, at most 64 characters in all. Each part uses
   only `[a-z0-9-]`. It names the mod in logs and names its folders in each
   world: settings in `<stem>-mod-settings/<id>`, data in
-  `<stem>-mod-data/<id>`. It is the namespace of its content, stats, points,
-  services and events (`you.trading-post:prices`). An invalid id fails the
-  build. `enshwick` is the loader's own and is refused.
+  `<stem>-mod-data/<id>`. It is the namespace of every id the mod declares,
+  such as `you.trading-post:prices`; see [how ids are namespaced](ids.md).
+  An invalid id fails the build. `enshwick` is the loader's own and is refused.
 - `side` takes one of two values. A `"server"` mod runs only where the
   world runs. Every player in the world must have a `"both"` mod too. See
   [Sides and hosting](sides-and-hosting.md) and

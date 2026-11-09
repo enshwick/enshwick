@@ -127,7 +127,7 @@ hands over texts from a string, as for a data pack.
 
 [`Load::add_texts(&texts, pairs)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
 gives game tags their texts. Each pair is a key of the texts file and a tag.
-The tag is a [content id](../content.md#content-ids) of the mod's own. The
+The tag is a [content id](../concepts/ids.md) of the mod's own. The
 tag's GUID goes into a [`NewItem`](items.md). There it fills the `name` and
 `description`. Every language that has a text for the key gets it; a key with
 no text in any language is an error.

@@ -211,7 +211,7 @@ read it once per need. Luau reads the same as a value with
 is the low-level text call. The client shows `text` wherever the game asks
 for the tag in `language`:
 
-- `tag` is a `LocaTag`, a declared [content id](../content.md#content-ids)'s
+- `tag` is a `LocaTag`, a declared [content id](../concepts/ids.md)'s
   GUID;
 - `language` is a
   [`Language`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)

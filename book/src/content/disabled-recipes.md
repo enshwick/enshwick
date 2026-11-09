@@ -36,7 +36,7 @@ workshops = []
 
 Every name is a full id. The game's recipes, items and workshops are
 `enshrouded:<debug name>`. A mod's are its
-[content id](../content.md#content-ids), `<mod id>:<name>`. Any of them may
+[content id](../concepts/ids.md), `<mod id>:<name>`. Any of them may
 also be its GUID. A debug name without `enshrouded:`
 is a problem in the log that says how to write it.
 

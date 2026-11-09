@@ -66,7 +66,7 @@ is crafted where the storage box is, for twice the box's ingredients.
 
 | Field | Meaning |
 | --- | --- |
-| `id` | The recipe's [content id](../content.md#content-ids), fixed for good; its game id is `RecipeId::from_guid(id.guid())`. |
+| `id` | The recipe's [content id](../concepts/ids.md), fixed for good; its game id is `RecipeId::from_guid(id.guid())`. |
 | `like` | The item whose recipe is copied. |
 | `output` | The item the recipe makes, such as one from [`add_item`](items.md), by GUID: `Guid::named` of a mod item's id, or a vanilla GUID. |
 | `output_count` | How many it makes. |

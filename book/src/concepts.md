@@ -12,6 +12,8 @@ before the chapters on writing a mod; each is short.
 
 - [The loader and the ABI](concepts/loader-and-abi.md): how the loader starts,
   how it finds mods, the binary contract between them, and the manifest.
+- [How ids are namespaced](concepts/ids.md): the mod id, the full ids every
+  name a mod declares gets, and what the loader refuses.
 - [The life of a mod](concepts/lifecycle.md): query, resolve, init, arm and
   ready, and what happens when a mod fails.
 - [Sides and hosting](concepts/sides-and-hosting.md): the dedicated server,
@@ -20,3 +22,6 @@ before the chapters on writing a mod; each is short.
   on a mod set.
 - [Threads](concepts/threads.md): which thread runs what, and what may be
   called where.
+- [Typed types across game builds](concepts/typed-stability.md): what a game
+  update does to the game's types a mod uses: most need nothing, the rest
+  turn off one type alone.

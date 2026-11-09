@@ -59,7 +59,7 @@ end)
 
 ## Kinds
 
-A stat kind has a [content id](content.md#content-ids) and a `StatDef`:
+A stat kind has a [content id](concepts/ids.md) and a `StatDef`:
 
 | Field | Means |
 | --- | --- |
@@ -87,7 +87,7 @@ loader logs it. `stats.info(stat)` gives a kind's id, text key and
 definition, for a menu or a tooltip.
 
 Item stats store a kind by its key, the game id of the GUID its id turns
-into, as for any [content id](content.md#content-ids). Two ids with one key
+into, as for any [content id](concepts/ids.md). Two ids with one key
 would read as one kind. So the loader turns off the mod that opens the
 second, and names both ids and both mods. Affixes are checked the same way.
 

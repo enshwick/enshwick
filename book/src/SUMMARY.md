@@ -99,6 +99,7 @@
 
 - [Concepts](concepts.md)
   - [The loader and the ABI](concepts/loader-and-abi.md)
+  - [How ids are namespaced](concepts/ids.md)
   - [The life of a mod](concepts/lifecycle.md)
   - [Sides and hosting](concepts/sides-and-hosting.md)
   - [The join check](concepts/join-check.md)
