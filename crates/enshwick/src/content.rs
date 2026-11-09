@@ -67,8 +67,10 @@ impl crate::Host {
     /// A resource's bytes as the game's first read would build them now: a
     /// served one with every mod's patches, others' included, any other
     /// from the archive. Call it after init, such as in a patch of another
-    /// key, and once per need: each read builds the key again, and every
-    /// patch's bytes stay for the process. To give an item another's data,
+    /// key, and once per need: each read runs every patch of the key again
+    /// and frees what they built. When every patch fails, a changed vanilla
+    /// key reads as the archive has it. A patch that reads a key this way
+    /// runs again whenever that key is rebuilt. To give an item another's data,
     /// use `Load::rekey_item`, which keeps its
     /// ids.
     ///
@@ -504,15 +506,16 @@ unsafe extern "system" fn build(
     let Ok(Some(bytes)) = built else {
         return Status::REFUSED;
     };
-    // The game reads the resource for the life of the process, and a
-    // rebuild writes over it: the bytes are handed over, never read here
-    // again.
     let len = bytes.len();
-    let bytes: *mut [u8] = Box::into_raw(bytes.into_boxed_slice());
+    // Bytes the loader cannot lend a buffer for stay for the process, as
+    // `ResourcePatchFn` allows: they are handed over, never read here again.
+    let at = lent(&bytes)
+        .unwrap_or_else(|| Box::into_raw(bytes.into_boxed_slice()).cast::<u8>())
+        .cast_const();
     // SAFETY: `out` is not null, as the early return ensures, and the caller
     // guarantees it is writable for one pointer.
     unsafe {
-        out.write(bytes.cast::<u8>().cast_const());
+        out.write(at);
     }
     // SAFETY: `out_len` is not null, as the early return ensures, and the
     // caller guarantees it is writable for one `usize`.
@@ -522,6 +525,23 @@ unsafe extern "system" fn build(
     Status::OK
 }
 
+/// `bytes` copied into a buffer the loader lends the running patch
+/// ([`HostApi::resource_buffer`](crate::abi::HostApi::resource_buffer)),
+/// which it frees once no build reads them; `None` when it lends none.
+fn lent(bytes: &[u8]) -> Option<*mut u8> {
+    let host = crate::host()?;
+    let len = u32::try_from(bytes.len()).ok()?;
+    let mut at = core::ptr::null_mut();
+    let status = (host.api().resource_buffer)(host.handle(), len, &raw mut at);
+    if !status.is_ok() || at.is_null() {
+        return None;
+    }
+    // SAFETY: the loader lent `len` writable bytes at `at`, apart from
+    // `bytes`, for the build that runs this patch.
+    unsafe { at.copy_from_nonoverlapping(bytes.as_ptr(), bytes.len()) };
+    Some(at)
+}
+
 /// Builds the resource `key` again from its base with the patches of every mod
 /// still on, and writes the bytes that differ over the resource the game holds.
 ///
@@ -529,9 +549,9 @@ unsafe extern "system" fn build(
 /// any thread may call this, for values a patch reads that changed after the
 /// first build, such as a server's join values.
 ///
-/// Nothing is done while the game has not built `key` yet, as its first build
-/// takes the values in force. Each rebuild keeps the patches' new bytes for the
-/// process, so it is for rare changes.
+/// `key` itself is left while the game has not built it yet, as its first
+/// build takes the values in force. Every key whose build read `key` with
+/// [`Host::served_resource`](crate::Host::served_resource) is built again too.
 ///
 /// The game keeps reading the first build's bytes, so a rebuild must come
 /// out the same length: a patch that only changes values qualifies, one
@@ -540,8 +560,9 @@ unsafe extern "system" fn build(
 ///
 /// # Errors
 ///
-/// [`Off`] for a key the mod does not serve or did not allow to rebuild,
-/// and when the new build differs in length.
+/// [`Off`] for a key the mod does not serve, or whose base the loader did
+/// not keep: the mod did not allow to rebuild it and no build read a served
+/// key; and when the new build differs in length.
 ///
 /// # Examples
 ///

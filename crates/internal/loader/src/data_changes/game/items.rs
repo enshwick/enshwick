@@ -91,15 +91,9 @@ pub(super) unsafe extern "system" fn build_item(
     if built.is_err() {
         return Status::REFUSED;
     }
-    // The game reads the resource for the life of the process.
-    let bytes: &'static [u8] = Box::leak(bytes.into_boxed_slice());
-    // SAFETY: `run_patches` passes `out` pointing at a local `*const u8`,
+    // SAFETY: `run_patches` passes `out` and `out_len` pointing at locals,
     // writable for the call.
-    unsafe { out.write(bytes.as_ptr()) };
-    // SAFETY: `run_patches` passes `out_len` pointing at a local `usize`,
-    // writable for the call.
-    unsafe { out_len.write(bytes.len()) };
-    Status::OK
+    unsafe { crate::content::hand_out(bytes, out, out_len) }
 }
 
 /// Writes the changed stack size into the item `bytes`, and notes a raise.

@@ -242,7 +242,9 @@ impl Load<'_> {
     /// size is at least `old`'s, since the game cuts a held stack above its
     /// item's and saves the cut; saves keep `old`'s id, so a world opens as
     /// vanilla without the mod. `old` takes `new` as the game reads it, with
-    /// every mod's changes of `new`; inside that read, a re-key of `new`
+    /// every mod's changes of `new`, and follows each rebuild of `new`, such
+    /// as a world's changed values, while the data still fits the bytes the
+    /// game holds for `old`; inside that read, a re-key of `new`
     /// back to `old` is skipped, so two items re-keyed to each other swap.
     /// A ring of three or more re-keys does not rotate: each item takes the
     /// data of the item two steps on. Mods that serve `old` chain in load

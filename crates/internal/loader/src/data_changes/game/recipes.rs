@@ -195,15 +195,9 @@ unsafe extern "system" fn build_menu(
     let Ok(Some(built)) = built else {
         return Status::REFUSED;
     };
-    // The game reads the resource for the life of the process.
-    let built: &'static [u8] = Box::leak(built.into_boxed_slice());
-    // SAFETY: `run_patches` passes `out` pointing at a local `*const u8`,
+    // SAFETY: `run_patches` passes `out` and `out_len` pointing at locals,
     // writable for the call.
-    unsafe { out.write(built.as_ptr()) };
-    // SAFETY: `run_patches` passes `out_len` pointing at a local `usize`,
-    // writable for the call.
-    unsafe { out_len.write(built.len()) };
-    Status::OK
+    unsafe { crate::content::hand_out(built, out, out_len) }
 }
 
 /// What the loader's patch of the recipe registry needs.
@@ -270,13 +264,7 @@ unsafe extern "system" fn build_recipes(
     if !crate::content::scratch() {
         crate::log!(INFO, "{changed} recipes changed by data changes");
     }
-    // The game reads the resource for the life of the process.
-    let built: &'static [u8] = Box::leak(built.into_boxed_slice());
-    // SAFETY: `run_patches` passes `out` pointing at a local `*const u8`,
+    // SAFETY: `run_patches` passes `out` and `out_len` pointing at locals,
     // writable for the call.
-    unsafe { out.write(built.as_ptr()) };
-    // SAFETY: `run_patches` passes `out_len` pointing at a local `usize`,
-    // writable for the call.
-    unsafe { out_len.write(built.len()) };
-    Status::OK
+    unsafe { crate::content::hand_out(built, out, out_len) }
 }

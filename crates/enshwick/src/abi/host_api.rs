@@ -992,11 +992,14 @@ pub struct HostApi {
     /// Afterwards: builds `key` again from that base with the patches of
     /// every mod still on, as values they read changed, and writes the
     /// bytes that differ over the resource the game holds; [`Status::OK`]
-    /// with nothing done while `key` was not built yet, as its first build
-    /// takes the values in force. Any thread. [`Status::MISSING`] when its
-    /// base was not kept, [`Status::REFUSED`] when the new build differs in length, which the
-    /// game's copy cannot take, [`Status::BAD_ARGS`] for a key the mod does
-    /// not serve. Each rebuild keeps the patches' new bytes for the process.
+    /// with `key` itself left while it was not built yet, as its first
+    /// build takes the values in force. Then every key whose build read
+    /// `key` as served is built again the same way. Any thread.
+    /// [`Status::MISSING`] when its base was not kept, [`Status::REFUSED`]
+    /// when the new build differs in length, which the game's copy cannot
+    /// take, [`Status::BAD_ARGS`] for a key the mod does not serve. The
+    /// loader frees what each rebuild's patches built in a
+    /// [`resource_buffer`](Self::resource_buffer).
     pub rebuild_resource: extern "system" fn(me: ModHandle, key: *const ResourceKey) -> Status,
     /// Adds the calling mod's rule that disables recipes (`disable` 1), or
     /// takes its own rule of that kind and name back (`disable` 0). `name`
@@ -1756,14 +1759,17 @@ pub struct HostApi {
     /// from its base in the archive with the patches of every mod on, on
     /// the calling thread; a patch that fails is skipped and its mod stays
     /// on. The build is kept nowhere, so a mod turned off since the game's
-    /// own build is left out, and each patch's output stays for the
-    /// process as [`ResourcePatchFn`](super::ResourcePatchFn) requires.
-    /// Any other key, and every key while served resources are off, copies
-    /// as the game opens it from the archive. [`Status::MISSING`] for a key
-    /// neither served nor in the archive, or whose every patch failed;
+    /// own build is left out, and the loader frees each output a patch
+    /// built in a [`resource_buffer`](Self::resource_buffer) once it has
+    /// copied the bytes. When every patch fails, a changed vanilla key
+    /// copies as the archive has it. Any other key, and every key while
+    /// served resources are off, copies as the game opens it from the
+    /// archive. A game build that reads a served key here is built again
+    /// whenever that key is rebuilt. [`Status::MISSING`] for a key neither
+    /// served nor in the archive, or a new key whose every patch failed;
     /// [`Status::BAD_ARGS`] when `capacity` is short or `out` null, with
-    /// `len` written and the build kept for this thread's next call with
-    /// the same key; [`Status::REFUSED`] during `enshwick_mod_init`, while
+    /// `len` written, and for a short `out` the build kept for this
+    /// thread's next call with the same key; [`Status::REFUSED`] during `enshwick_mod_init`, while
     /// not every patch is in; [`Status::BUILDING`] from a patch for a key
     /// whose patches run on this thread, which would build it again without
     /// end. Any thread; re-entrant from a patch for another key. `key` and
@@ -1830,4 +1836,157 @@ pub struct HostApi {
     /// mod without actions. A panic in the loader returns
     /// [`Status::REFUSED`]. ABI 11.19.
     pub actions_changed: extern "system" fn(me: ModHandle) -> Status,
+    /// Writes to `out` a pointer to `len` zeroed, writable bytes the loader
+    /// owns, for the output of the [`ResourcePatchFn`](super::ResourcePatchFn)
+    /// running on the calling thread: the patch builds its output there and
+    /// returns that pointer from the same call. The bytes stay valid until
+    /// the build that runs the patch ends; the game's first build keeps the
+    /// last patch's output for the process, as the game holds it, and every
+    /// other output, a rebuild's and a served read's
+    /// ([`resource_served`](Self::resource_served)) included, is freed by
+    /// the loader. A mod that is off gets one too, as a rebuild runs the
+    /// patches of the mods that built what the game holds.
+    /// [`Status::REFUSED`] outside a patch or when `len` bytes do not
+    /// allocate; [`Status::BAD_ARGS`] for a null `out` or a handle the
+    /// loader never gave out. The patch's thread only, re-entrant from a
+    /// patch for another key; `out` is borrowed for the call. A panic in
+    /// the loader returns [`Status::REFUSED`]. ABI 11.20.
+    pub resource_buffer: extern "system" fn(me: ModHandle, len: u32, out: *mut *mut u8) -> Status,
 }
+
+// Every function keeps its slot: 24 header and version bytes, then 8 per slot.
+const _: () = {
+    use core::mem::offset_of;
+    assert!(offset_of!(HostApi, header) == 0);
+    assert!(offset_of!(HostApi, host_version) == 8);
+    assert!(offset_of!(HostApi, build) == 24);
+    assert!(offset_of!(HostApi, service) == 24 + 11 * 8);
+    assert!(offset_of!(HostApi, constant) == 24 + 12 * 8);
+    assert!(offset_of!(HostApi, data_dir) == 24 + 13 * 8);
+    assert!(offset_of!(HostApi, log_level) == 24 + 14 * 8);
+    assert!(offset_of!(HostApi, subscribe) == 24 + 15 * 8);
+    assert!(offset_of!(HostApi, players) == 24 + 20 * 8);
+    assert!(offset_of!(HostApi, serve_resource) == 24 + 21 * 8);
+    assert!(offset_of!(HostApi, add_text) == 24 + 22 * 8);
+    assert!(offset_of!(HostApi, mods) == 24 + 23 * 8);
+    assert!(offset_of!(HostApi, code_range) == 24 + 24 * 8);
+    assert!(offset_of!(HostApi, workshop_recipes) == 24 + 26 * 8);
+    assert!(offset_of!(HostApi, hosting) == 24 + 27 * 8);
+    assert!(offset_of!(HostApi, server_world) == 24 + 28 * 8);
+    assert!(offset_of!(HostApi, rename_filter) == 24 + 31 * 8);
+    assert!(offset_of!(HostApi, join_missing) == 24 + 32 * 8);
+    assert!(offset_of!(HostApi, hook_at) == 24 + 33 * 8);
+    assert!(offset_of!(HostApi, inventory_open) == 24 + 34 * 8);
+    assert!(offset_of!(HostApi, inventory_submit) == 24 + 36 * 8);
+    assert!(offset_of!(HostApi, status) == 24 + 37 * 8);
+    assert!(offset_of!(HostApi, run_console) == 24 + 38 * 8);
+    assert!(offset_of!(HostApi, altars_open) == 24 + 39 * 8);
+    assert!(offset_of!(HostApi, building_zone_check_filter) == 24 + 41 * 8);
+    assert!(offset_of!(HostApi, survivor_lookup) == 24 + 42 * 8);
+    assert!(offset_of!(HostApi, survivor_status) == 24 + 46 * 8);
+    assert!(offset_of!(HostApi, interaction_filter) == 24 + 47 * 8);
+    assert!(offset_of!(HostApi, skill_override) == 24 + 48 * 8);
+    assert!(offset_of!(HostApi, experience_filter) == 24 + 50 * 8);
+    assert!(offset_of!(HostApi, base_zones) == 24 + 52 * 8);
+    assert!(offset_of!(HostApi, game_event) == 24 + 53 * 8);
+    assert!(offset_of!(HostApi, world_key) == 24 + 57 * 8);
+    assert!(offset_of!(HostApi, component_write) == 24 + 58 * 8);
+    assert!(offset_of!(HostApi, teleport) == 24 + 60 * 8);
+    assert!(offset_of!(HostApi, spawn) == 24 + 61 * 8);
+    assert!(offset_of!(HostApi, build_filter) == 24 + 63 * 8);
+    assert!(offset_of!(HostApi, net_ready) == 24 + 66 * 8);
+    assert!(offset_of!(HostApi, notify) == 24 + 67 * 8);
+    assert!(offset_of!(HostApi, time_of_day) == 24 + 68 * 8);
+    assert!(offset_of!(HostApi, set_time_speed) == 24 + 71 * 8);
+    assert!(offset_of!(HostApi, game_settings) == 24 + 72 * 8);
+    assert!(offset_of!(HostApi, damage_filter) == 24 + 74 * 8);
+    assert!(offset_of!(HostApi, buff_types) == 24 + 75 * 8);
+    assert!(offset_of!(HostApi, remove_buff) == 24 + 78 * 8);
+    assert!(offset_of!(HostApi, knowledge) == 24 + 79 * 8);
+    assert!(offset_of!(HostApi, quests) == 24 + 81 * 8);
+    assert!(offset_of!(HostApi, weather_at) == 24 + 82 * 8);
+    assert!(offset_of!(HostApi, set_weather) == 24 + 84 * 8);
+    assert!(offset_of!(HostApi, terrain_materials) == 24 + 85 * 8);
+    assert!(offset_of!(HostApi, config_schema) == 24 + 87 * 8);
+    assert!(offset_of!(HostApi, ui_dialog) == 24 + 94 * 8);
+    assert!(offset_of!(HostApi, config_check) == 24 + 97 * 8);
+    assert!(offset_of!(HostApi, texts) == 24 + 98 * 8);
+    assert!(offset_of!(HostApi, stat_open) == 24 + 102 * 8);
+    assert!(offset_of!(HostApi, define_event) == 24 + 110 * 8);
+    assert!(offset_of!(HostApi, affix_open) == 24 + 113 * 8);
+    assert!(offset_of!(HostApi, rename_content) == 24 + 117 * 8);
+    assert!(offset_of!(HostApi, declare_content) == 24 + 118 * 8);
+    assert!(offset_of!(HostApi, entity_data_open) == 24 + 119 * 8);
+    assert!(offset_of!(HostApi, mod_dir) == 24 + 120 * 8);
+    assert!(offset_of!(HostApi, knowledge_input_filter) == 24 + 121 * 8);
+    assert!(offset_of!(HostApi, language) == 24 + 122 * 8);
+    assert!(offset_of!(HostApi, forget_game_settings) == 24 + 124 * 8);
+    assert!(offset_of!(HostApi, account_knowledge) == 24 + 126 * 8);
+    assert!(offset_of!(HostApi, game_text) == 24 + 128 * 8);
+    assert!(offset_of!(HostApi, rebuild_resource) == 24 + 129 * 8);
+    assert!(offset_of!(HostApi, recipe_rule) == 24 + 130 * 8);
+    assert!(offset_of!(HostApi, recipe_disabled) == 24 + 131 * 8);
+    assert!(offset_of!(HostApi, define_point) == 24 + 132 * 8);
+    assert!(offset_of!(HostApi, actions) == 24 + 135 * 8);
+    assert!(offset_of!(HostApi, event_types) == 24 + 136 * 8);
+    assert!(offset_of!(HostApi, recipe_kind) == 24 + 137 * 8);
+    assert!(offset_of!(HostApi, feature) == 24 + 138 * 8);
+    assert!(offset_of!(HostApi, rate) == 24 + 139 * 8);
+    assert!(offset_of!(HostApi, set_rate) == 24 + 140 * 8);
+    assert!(offset_of!(HostApi, change_data) == 24 + 141 * 8);
+    assert!(offset_of!(HostApi, loop_wait) == 24 + 142 * 8);
+    assert!(offset_of!(HostApi, server_wait) == 24 + 143 * 8);
+    assert!(offset_of!(HostApi, task_workers) == 24 + 144 * 8);
+    assert!(offset_of!(HostApi, altar_zone_filter) == 24 + 145 * 8);
+    assert!(offset_of!(HostApi, altar_zones_changed) == 24 + 146 * 8);
+    assert!(offset_of!(HostApi, altar_limit_filter) == 24 + 147 * 8);
+    assert!(offset_of!(HostApi, base_limit) == 24 + 148 * 8);
+    assert!(offset_of!(HostApi, voxel_read) == 24 + 149 * 8);
+    assert!(offset_of!(HostApi, declare_change) == 24 + 150 * 8);
+    assert!(offset_of!(HostApi, set_change) == 24 + 151 * 8);
+    assert!(offset_of!(HostApi, build_rights) == 24 + 152 * 8);
+    assert!(offset_of!(HostApi, transaction_commit) == 24 + 153 * 8);
+    assert!(offset_of!(HostApi, transaction_status) == 24 + 155 * 8);
+    assert!(offset_of!(HostApi, transaction_commit_for) == 24 + 156 * 8);
+    assert!(offset_of!(HostApi, world_quiet) == 24 + 157 * 8);
+    assert!(offset_of!(HostApi, fog_open) == 24 + 158 * 8);
+    assert!(offset_of!(HostApi, fog_read) == 24 + 159 * 8);
+    assert!(offset_of!(HostApi, serve_call) == 24 + 160 * 8);
+    assert!(offset_of!(HostApi, call) == 24 + 162 * 8);
+    assert!(offset_of!(HostApi, transaction_entities) == 24 + 163 * 8);
+    assert!(offset_of!(HostApi, world_persists) == 24 + 164 * 8);
+    assert!(offset_of!(HostApi, map_markers) == 24 + 165 * 8);
+    assert!(offset_of!(HostApi, account_action) == 24 + 166 * 8);
+    assert!(offset_of!(HostApi, subscribe_tick) == 24 + 167 * 8);
+    assert!(offset_of!(HostApi, set_tick_every) == 24 + 168 * 8);
+    assert!(offset_of!(HostApi, map_frame) == 24 + 169 * 8);
+    assert!(offset_of!(HostApi, request_base_limits) == 24 + 170 * 8);
+    assert!(offset_of!(HostApi, map_marker_types) == 24 + 171 * 8);
+    assert!(offset_of!(HostApi, use_content) == 24 + 172 * 8);
+    assert!(offset_of!(HostApi, chat_mute_set) == 24 + 173 * 8);
+    assert!(offset_of!(HostApi, chat_mute_has) == 24 + 174 * 8);
+    assert!(offset_of!(HostApi, set_base_cap) == 24 + 175 * 8);
+    assert!(offset_of!(HostApi, resource_keys) == 24 + 176 * 8);
+    assert!(offset_of!(HostApi, content_hashes) == 24 + 177 * 8);
+    assert!(offset_of!(HostApi, types) == 24 + 178 * 8);
+    assert!(offset_of!(HostApi, game_version) == 24 + 179 * 8);
+    assert!(offset_of!(HostApi, control) == 24 + 180 * 8);
+    assert!(offset_of!(HostApi, run_action) == 24 + 181 * 8);
+    assert!(offset_of!(HostApi, ui_extension) == 24 + 182 * 8);
+    assert!(offset_of!(HostApi, item_filter) == 24 + 183 * 8);
+    assert!(offset_of!(HostApi, chat_filter) == 24 + 184 * 8);
+    assert!(offset_of!(HostApi, save_info) == 24 + 185 * 8);
+    assert!(offset_of!(HostApi, hold_saves) == 24 + 186 * 8);
+    assert!(offset_of!(HostApi, crafting_prop) == 24 + 187 * 8);
+    assert!(offset_of!(HostApi, set_saved) == 24 + 188 * 8);
+    assert!(offset_of!(HostApi, run_action_at) == 24 + 189 * 8);
+    assert!(offset_of!(HostApi, local_held) == 24 + 190 * 8);
+    assert!(offset_of!(HostApi, read_only) == 24 + 191 * 8);
+    assert!(offset_of!(HostApi, resource_served) == 24 + 192 * 8);
+    assert!(offset_of!(HostApi, commands) == 24 + 193 * 8);
+    assert!(offset_of!(HostApi, run_command) == 24 + 194 * 8);
+    assert!(offset_of!(HostApi, command_list) == 24 + 195 * 8);
+    assert!(offset_of!(HostApi, actions_changed) == 24 + 196 * 8);
+    assert!(offset_of!(HostApi, resource_buffer) == 24 + 197 * 8);
+    assert!(size_of::<HostApi>() == 24 + 198 * 8);
+};

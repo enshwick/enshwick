@@ -395,6 +395,21 @@ impl Installed {
         table::with(Vec::new(), |s| s.rebuilds.clone())
     }
 
+    /// How many patch outputs the fake's builds got as bytes of the patch's
+    /// own, which stay for the process, rather than in a buffer it lent
+    /// ([`HostApi::resource_buffer`](crate::abi::HostApi::resource_buffer)).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert_eq!(loader.kept_outputs(), 0);
+    /// ```
+    #[must_use]
+    pub fn kept_outputs(&self) -> usize {
+        table::with(0, |s| s.kept_outputs)
+    }
+
     /// Builds the served resource `key` from `base` with the mod's patches, in order, as
     /// the game's first read of it would.
     ///

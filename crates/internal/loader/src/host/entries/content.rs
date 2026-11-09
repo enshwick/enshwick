@@ -428,8 +428,7 @@ pub(crate) extern "system" fn resource_served(
 }
 
 /// Copies the bytes `read` gives for the key at `key` to `out`, writing
-/// their length to `len`; [`Status::BAD_ARGS`] when `capacity` is short,
-/// keeping the bytes for this thread's retry of the same `call`.
+/// their length to `len`, as [`copy_keeping`] does.
 ///
 /// # Safety
 ///
@@ -453,6 +452,29 @@ unsafe fn copy_resource(
     let Some(key) = (unsafe { key.as_ref() }).copied() else {
         return Status::BAD_ARGS;
     };
+    // SAFETY: the caller's guarantees for `out`, `capacity` and `len` are
+    // `copy_keeping`'s.
+    unsafe { copy_keeping(call, key, out, capacity, len, read) }
+}
+
+/// Copies `key`'s bytes for `call` to `out`, writing their length to
+/// `len`; [`Status::BAD_ARGS`] when `out` is null or `capacity` short. A
+/// short buffer keeps the bytes for this thread's retry of the same `call`
+/// and key; a call that only asks the length keeps nothing, since it may
+/// never come back.
+///
+/// # Safety
+///
+/// - `len` is null or points at a writable, aligned `u32`.
+/// - `out` is null or writable for `capacity` bytes, apart from `read`'s.
+unsafe fn copy_keeping(
+    call: &'static str,
+    key: enshwick::abi::ResourceKey,
+    out: *mut u8,
+    capacity: u32,
+    len: *mut u32,
+    read: impl FnOnce(enshwick::abi::ResourceKey) -> Result<Vec<u8>, Status>,
+) -> Status {
     let data = match short_or(call, key, read) {
         Ok(data) => data,
         Err(status) => return status,
@@ -461,28 +483,81 @@ unsafe fn copy_resource(
     // `out` null or `capacity` writable bytes apart from `data`, which this
     // function owns.
     let status = unsafe { enshwick::__private::copy_out(&data, out, capacity, len) };
-    if status == Status::BAD_ARGS {
-        SHORT.set(Some((call, key, data)));
+    if status == Status::BAD_ARGS && !out.is_null() {
+        keep(call, key, data);
     }
     status
+}
+
+/// Keeps `data` for this thread's retry of `call` with `key`.
+fn keep(call: &'static str, key: enshwick::abi::ResourceKey, data: Vec<u8>) {
+    SHORT.set(Some(Kept {
+        call,
+        key,
+        begun: crate::content::builds_begun(),
+        data,
+    }));
+}
+
+pub(crate) extern "system" fn resource_buffer(
+    me: ModHandle,
+    len: u32,
+    out: *mut *mut u8,
+) -> Status {
+    entry("resource_buffer", || {
+        // A mod that is off still gets one: a rebuild runs the patches of
+        // the mods that built what the game holds.
+        let known = me == crate::host::LOADER_HANDLE
+            || crate::host::loader().is_some_and(|loader| loader.record(me).is_some());
+        if !known {
+            return Status::BAD_ARGS;
+        }
+        let Ok(len) = usize::try_from(len) else {
+            return Status::BAD_ARGS;
+        };
+        if out.is_null() {
+            return Status::BAD_ARGS;
+        }
+        match crate::content::lend(len) {
+            // SAFETY: `out` is non-null, checked above; `HostApi::resource_buffer`
+            // has the mod pass it writable and aligned for one pointer, untouched
+            // by other threads during the call.
+            Some(at) => unsafe { put(out, at) },
+            None => Status::REFUSED,
+        }
+    })
+}
+/// A read whose buffer was short, kept for its retry.
+struct Kept {
+    call: &'static str,
+    key: enshwick::abi::ResourceKey,
+    /// [`crate::content::builds_begun`] when it was kept.
+    begun: u64,
+    data: Vec<u8>,
 }
 
 thread_local! {
     /// The last read on this thread whose buffer was short, kept for the
     /// retry with a buffer that fits, so a served key builds once.
-    static SHORT: core::cell::RefCell<Option<(&'static str, enshwick::abi::ResourceKey, Vec<u8>)>> =
-        const { core::cell::RefCell::new(None) };
+    static SHORT: core::cell::RefCell<Option<Kept>> = const { core::cell::RefCell::new(None) };
 }
 
 /// `key`'s bytes for `call`: the short read this thread kept for the same
-/// call and key, else `read`'s. Any kept read goes either way.
+/// call and key while no build of a served key began since, else `read`'s.
+/// Any kept read goes either way.
 fn short_or(
     call: &'static str,
     key: enshwick::abi::ResourceKey,
     read: impl FnOnce(enshwick::abi::ResourceKey) -> Result<Vec<u8>, Status>,
 ) -> Result<Vec<u8>, Status> {
     match SHORT.take() {
-        Some((kept_call, kept_key, data)) if kept_call == call && kept_key == key => Ok(data),
+        Some(kept)
+            if kept.call == call
+                && kept.key == key
+                && kept.begun == crate::content::builds_begun() =>
+        {
+            Ok(kept.data)
+        }
         _ => read(key),
     }
 }
@@ -647,7 +722,7 @@ mod tests {
             reads.set(reads.get() + 1);
             Ok(vec![1, 2, 3])
         };
-        SHORT.set(Some(("resource_served", KEY, vec![9])));
+        keep("resource_served", KEY, vec![9]);
         assert_eq!(short_or("resource_served", KEY, read), Ok(vec![9]));
         assert_eq!(reads.get(), 0, "the kept bytes answer the retry");
         assert_eq!(short_or("resource_served", KEY, read), Ok(vec![1, 2, 3]));
@@ -655,13 +730,58 @@ mod tests {
     }
 
     #[test]
+    fn a_call_that_only_asks_the_length_keeps_no_bytes_and_a_short_buffer_does() {
+        let read = |_| Ok(vec![1, 2, 3]);
+        let mut len = 0u32;
+        // SAFETY: `out` is null and `len` a local `u32`.
+        let status = unsafe {
+            copy_keeping(
+                "resource_served",
+                KEY,
+                core::ptr::null_mut(),
+                0,
+                &raw mut len,
+                read,
+            )
+        };
+        assert_eq!((status, len), (Status::BAD_ARGS, 3));
+        assert!(SHORT.take().is_none(), "a length-only call keeps nothing");
+        let mut short = [0u8; 2];
+        // SAFETY: `short` is writable for its 2 bytes and `len` a local `u32`.
+        let status = unsafe {
+            copy_keeping(
+                "resource_served",
+                KEY,
+                short.as_mut_ptr(),
+                2,
+                &raw mut len,
+                read,
+            )
+        };
+        assert_eq!(status, Status::BAD_ARGS);
+        assert!(
+            SHORT.take().is_some(),
+            "a short buffer keeps them for its retry"
+        );
+    }
+
+    #[test]
     fn a_kept_read_answers_neither_another_call_nor_another_key() {
         let read = |_| Ok(vec![1]);
-        SHORT.set(Some(("resource_served", KEY, vec![9])));
+        keep("resource_served", KEY, vec![9]);
         assert_eq!(short_or("resource_read", KEY, read), Ok(vec![1]));
         let other = ResourceKey { part: 1, ..KEY };
-        SHORT.set(Some(("resource_served", KEY, vec![9])));
+        keep("resource_served", KEY, vec![9]);
         assert_eq!(short_or("resource_served", other, read), Ok(vec![1]));
         assert!(SHORT.take().is_none(), "a miss drops the kept read");
+    }
+
+    #[test]
+    fn a_kept_read_answers_no_retry_after_a_build_began_on_the_thread() {
+        let read = |_| Ok(vec![1]);
+        keep("resource_served", KEY, vec![9]);
+        drop(crate::content::enter_build(KEY));
+        assert_eq!(short_or("resource_served", KEY, read), Ok(vec![1]));
+        assert!(SHORT.take().is_none(), "a stale kept read goes");
     }
 }

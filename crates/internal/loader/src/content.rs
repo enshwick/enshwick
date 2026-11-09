@@ -27,8 +27,9 @@ use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{HookFlags, ResourceKey, ResourcePatchFn, Status};
 use enshwick::raw::{read_at, write_at};
-use patches::{Build, run_patches};
-pub(crate) use patches::{rebuild, scratch, served_now};
+#[cfg(test)]
+pub(crate) use patches::enter_build;
+pub(crate) use patches::{builds_begun, hand_out, lend, rebuild, scratch, served_now};
 use texts::{TEXTS, seal_texts};
 
 use crate::chains::Next;
@@ -70,6 +71,23 @@ struct Served {
     state: Mutex<State>,
     /// Held through a rebuild, so two never write over each other.
     rebuilding: Mutex<()>,
+    /// The served keys whose game builds read this one as served, which a
+    /// rebuild of it rebuilds; apart from `state`, which a build holds.
+    read_by: Mutex<Vec<ResourceKey>>,
+}
+
+impl Served {
+    fn new(key: ResourceKey, base: ResourceKey, patches: Vec<Patch>, keeps_base: bool) -> Self {
+        Self {
+            key,
+            base,
+            patches,
+            keeps_base: AtomicBool::new(keeps_base),
+            state: Mutex::new(State::default()),
+            rebuilding: Mutex::new(()),
+            read_by: Mutex::new(Vec::new()),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -149,14 +167,7 @@ fn add(pending: &mut Vec<Served>, key: ResourceKey, base: ResourceKey, patch: Pa
         }
         Some(served) if base != key && served.base != base => return Status::REFUSED,
         Some(served) => served.patches.push(patch),
-        None => pending.push(Served {
-            key,
-            base,
-            patches: vec![patch],
-            keeps_base: AtomicBool::new(false),
-            state: Mutex::new(State::default()),
-            rebuilding: Mutex::new(()),
-        }),
+        None => pending.push(Served::new(key, base, vec![patch], false)),
     }
     Status::OK
 }
@@ -273,27 +284,13 @@ fn serve_stand_ins(
     }
     let count = items.len();
     for (key, base, builder) in items {
-        served.push(Served {
-            key,
-            base,
-            patches: vec![patch(builder)],
-            keeps_base: AtomicBool::new(false),
-            state: Mutex::new(State::default()),
-            rebuilding: Mutex::new(()),
-        });
+        served.push(Served::new(key, base, vec![patch(builder)], false));
     }
     let key =
         enshwick::content::items::ITEM_REGISTRY.key_by_hash(crate::catalogue::types::ITEM_REGISTRY);
     match served.iter_mut().find(|s| s.key == key) {
         Some(listed) => listed.patches.push(patch(registry)),
-        None => served.push(Served {
-            key,
-            base: key,
-            patches: vec![patch(registry)],
-            keeps_base: AtomicBool::new(false),
-            state: Mutex::new(State::default()),
-            rebuilding: Mutex::new(()),
-        }),
+        None => served.push(Served::new(key, key, vec![patch(registry)], false)),
     }
     count
 }
@@ -316,14 +313,7 @@ fn serve_rates(served: &mut Vec<Served>, patch: Option<ResourcePatchFn>) -> usiz
             entry.patches.push(patch);
             entry.keeps_base.store(true, Ordering::Relaxed);
         }
-        None => served.push(Served {
-            key,
-            base: key,
-            patches: vec![patch],
-            keeps_base: AtomicBool::new(true),
-            state: Mutex::new(State::default()),
-            rebuilding: Mutex::new(()),
-        }),
+        None => served.push(Served::new(key, key, vec![patch], true)),
     }
     1
 }
@@ -352,14 +342,7 @@ fn serve_changes(
                 entry.patches.push(patch);
                 entry.keeps_base.fetch_or(keep, Ordering::Relaxed);
             }
-            None => served.push(Served {
-                key,
-                base: key,
-                patches: vec![patch],
-                keeps_base: AtomicBool::new(keep),
-                state: Mutex::new(State::default()),
-                rebuilding: Mutex::new(()),
-            }),
+            None => served.push(Served::new(key, key, vec![patch], keep)),
         }
     }
     count
@@ -385,15 +368,9 @@ unsafe extern "system" fn build_stand_in(
     let Ok(Some(bytes)) = built else {
         return Status::REFUSED;
     };
-    // The game reads the resource for the life of the process.
-    let bytes: &'static [u8] = Box::leak(bytes.into_boxed_slice());
-    // SAFETY: `run_patches` passes `out` pointing at a local
-    // `*const u8`, writable for the call.
-    unsafe { out.write(bytes.as_ptr()) };
-    // SAFETY: `run_patches` passes `out_len` pointing at a local `usize`,
+    // SAFETY: `run_patches` passes `out` and `out_len` pointing at locals,
     // writable for the call.
-    unsafe { out_len.write(bytes.len()) };
-    Status::OK
+    unsafe { hand_out(bytes, out, out_len) }
 }
 
 /// The served resources of type `type_hash` that are new, not a vanilla
@@ -744,21 +721,10 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
         // The base is not resident yet; the game asks again.
         return None;
     }
-    let Some((current, current_len, applied)) = run_patches(entry, data, len, None, Build::Game)
-    else {
-        state.failed = true;
-        return None;
-    };
-    if entry.keeps_base.load(Ordering::Relaxed) {
-        let mut base = vec![0; len];
-        // SAFETY: the game resolved its base to `len` resident bytes at
-        // `data`, non-zero by the check before it, unchanged for the call.
-        unsafe { crate::memory::read_bytes(data, 0, &mut base) };
-        state.base = Some(base.into_boxed_slice());
-    }
+    // SAFETY: the game resolved its base to `len` resident bytes at `data`,
+    // non-zero by the check before it, unchanged for the call.
+    let (current, current_len) = unsafe { patches::build_first(entry, &mut state, data, len) }?;
     let result = (current, current_len);
-    state.built = Some(result);
-    state.built_by.clone_from(&applied);
     if entry.key.type_hash == crate::catalogue::types::ITEM_INFO {
         record_item(current as u64, current_len as u64);
     }
@@ -769,7 +735,8 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
     if crate::log::enabled(enshwick::abi::Level::DEBUG, crate::settings::LOADER_ID)
         && let Some(loader) = LOADED.get()
     {
-        let by: Vec<&str> = applied
+        let by: Vec<&str> = state
+            .built_by
             .iter()
             .filter_map(|&owner| {
                 if owner == ModIndex::new((ModIndex::LOADER).get()) {

@@ -634,7 +634,9 @@ impl Resources {
 
     /// The value of resource `key` as the game's first read would build it
     /// now, with every mod's patches; after init only, and refused inside
-    /// a patch of the same key.
+    /// a patch of the same key. Each read runs every patch of the key again
+    /// and frees what they built; when every patch fails, a changed vanilla
+    /// key reads as the archive has it.
     ///
     /// # Errors
     ///

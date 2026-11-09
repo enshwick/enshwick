@@ -176,6 +176,8 @@ mod schedule;
 mod screen_extensions;
 #[cfg(feature = "unstable")]
 mod screen_hosts;
+#[cfg(feature = "typed")]
+mod served_reads;
 #[cfg(feature = "unstable")]
 mod server_controls;
 mod services;
