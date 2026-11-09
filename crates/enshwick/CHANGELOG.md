@@ -35,8 +35,8 @@ Each entry names the pull request that made the change.
 
 - `typed`: a read with blob fields costs about 0.8 µs instead of about
   0.8 ms on the game's template set-up data: the loader remembers each
-  thread's read-only runs until the world goes away, and
-  `HostApi::read_only` may answer from one (#999).
+  thread's private read-only runs of 16 MiB or more until the world goes
+  away, and `HostApi::read_only` may answer from one (#999).
 - `content`: `Load::rekey_item(old, new)` and Luau
   `enshwick.content.rekey_item` read `new` as served at each build of
   `old`, so other mods' changes of `new`, a mod's own item included, reach
