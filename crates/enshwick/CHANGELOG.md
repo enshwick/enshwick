@@ -87,6 +87,11 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- `typed`: `ComponentType::resolve` and Luau `component_type` refuse a
+  component whose `BlobVariant` field may hold a type derived from its
+  inner one with a designer data field, naming the field through the
+  derived type's qualified name between the field names; before, it
+  resolved and read that field's heap pointer as data (#1004).
 - `actions`: a server sends a joining player only the controls of a server
   mod whose action that player may run, by the action's `allow` or
   `admins`, and sends them again when the server changes the player's
