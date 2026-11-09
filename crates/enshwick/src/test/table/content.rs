@@ -385,14 +385,20 @@ pub(crate) extern "system" fn resource_served(
             if with(true, |s| s.registration == super::Registration::Open) {
                 return Err(Status::REFUSED);
             }
-            match with(None, |s| {
+            let Some(base) = with(None, |s| {
                 s.served
                     .iter()
                     .find(|served| served.0.key == key)
                     .map(|served| served.0.base)
-            }) {
-                Some(base) => build(&key, &archived(&base)?),
-                None => archived(&key),
+            }) else {
+                return archived(&key);
+            };
+            let archived = archived(&base)?;
+            match build(&key, &archived) {
+                // As the loader: a changed vanilla key whose every patch
+                // failed reads as archived.
+                Err(Status::MISSING) if key == base => Ok(archived),
+                built => built,
             }
         })
     }
@@ -439,10 +445,36 @@ unsafe fn copy_resource(
     unsafe { crate::__private::copy_out(&data, out, capacity, len) }
 }
 
+/// A served key whose patches run, with the buffers they took, freed when
+/// its build ends.
+type Frame = (ResourceKey, Vec<Box<[u8]>>);
+
 thread_local! {
-    /// The served keys whose patches run on this thread, as the loader's.
-    static BUILDING: core::cell::RefCell<Vec<ResourceKey>> =
+    /// The builds running on this thread, as the loader's.
+    static BUILDING: core::cell::RefCell<Vec<Frame>> =
         const { core::cell::RefCell::new(Vec::new()) };
+}
+
+pub(crate) extern "system" fn resource_buffer(
+    _me: ModHandle,
+    len: u32,
+    out: *mut *mut u8,
+) -> Status {
+    let Ok(len) = usize::try_from(len) else {
+        return Status::BAD_ARGS;
+    };
+    if out.is_null() {
+        return Status::BAD_ARGS;
+    }
+    let lent = BUILDING.with_borrow_mut(|frames| {
+        let (_, buffers) = frames.last_mut()?;
+        buffers.push(vec![0; len].into_boxed_slice());
+        buffers.last_mut().map(|buffer| buffer.as_mut_ptr())
+    });
+    match lent {
+        Some(at) => put(out, at),
+        None => Status::REFUSED,
+    }
 }
 
 /// Builds the served resource `key` from `base` with every mod's patches,
@@ -450,7 +482,7 @@ thread_local! {
 /// skipped, and [`Status::MISSING`] when none built. As the loader,
 /// [`Status::BUILDING`] for a key whose patches already run on this thread.
 pub(crate) fn build(key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, Status> {
-    if BUILDING.with_borrow(|building| building.contains(key)) {
+    if BUILDING.with_borrow(|building| building.iter().any(|(at, _)| at == key)) {
         return Err(Status::BUILDING);
     }
     let patches: Vec<_> = with(Vec::new(), |s| {
@@ -478,8 +510,16 @@ pub(crate) fn build(key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, Status> {
             )
         });
         if status.is_ok() && !out.is_null() {
-            // SAFETY: on success the patch wrote bytes that live for the
-            // process.
+            let lent = BUILDING.with_borrow(|frames| {
+                frames
+                    .last()
+                    .is_some_and(|(_, buffers)| buffers.iter().any(|buffer| buffer.as_ptr() == out))
+            });
+            if !lent {
+                with((), |s| s.kept_outputs += 1);
+            }
+            // SAFETY: on success the patch wrote bytes in a buffer its build
+            // holds until it ends, or its own, which live for the process.
             bytes = unsafe { core::slice::from_raw_parts(out, out_len) }.to_vec();
             built = true;
         }
@@ -497,7 +537,7 @@ struct Building;
 
 impl Building {
     fn enter(key: ResourceKey) -> Self {
-        BUILDING.with_borrow_mut(|building| building.push(key));
+        BUILDING.with_borrow_mut(|building| building.push((key, Vec::new())));
         Self
     }
 }

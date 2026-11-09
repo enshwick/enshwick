@@ -428,8 +428,7 @@ pub(crate) extern "system" fn resource_served(
 }
 
 /// Copies the bytes `read` gives for the key at `key` to `out`, writing
-/// their length to `len`; [`Status::BAD_ARGS`] when `capacity` is short,
-/// keeping the bytes for this thread's retry of the same `call`.
+/// their length to `len`, as [`copy_keeping`] does.
 ///
 /// # Safety
 ///
@@ -453,6 +452,29 @@ unsafe fn copy_resource(
     let Some(key) = (unsafe { key.as_ref() }).copied() else {
         return Status::BAD_ARGS;
     };
+    // SAFETY: the caller's guarantees for `out`, `capacity` and `len` are
+    // `copy_keeping`'s.
+    unsafe { copy_keeping(call, key, out, capacity, len, read) }
+}
+
+/// Copies `key`'s bytes for `call` to `out`, writing their length to
+/// `len`; [`Status::BAD_ARGS`] when `out` is null or `capacity` short. A
+/// short buffer keeps the bytes for this thread's retry of the same `call`
+/// and key; a call that only asks the length keeps nothing, since it may
+/// never come back.
+///
+/// # Safety
+///
+/// - `len` is null or points at a writable, aligned `u32`.
+/// - `out` is null or writable for `capacity` bytes, apart from `read`'s.
+unsafe fn copy_keeping(
+    call: &'static str,
+    key: enshwick::abi::ResourceKey,
+    out: *mut u8,
+    capacity: u32,
+    len: *mut u32,
+    read: impl FnOnce(enshwick::abi::ResourceKey) -> Result<Vec<u8>, Status>,
+) -> Status {
     let data = match short_or(call, key, read) {
         Ok(data) => data,
         Err(status) => return status,
@@ -461,10 +483,35 @@ unsafe fn copy_resource(
     // `out` null or `capacity` writable bytes apart from `data`, which this
     // function owns.
     let status = unsafe { enshwick::__private::copy_out(&data, out, capacity, len) };
-    if status == Status::BAD_ARGS {
+    if status == Status::BAD_ARGS && !out.is_null() {
         SHORT.set(Some((call, key, data)));
     }
     status
+}
+
+pub(crate) extern "system" fn resource_buffer(
+    me: ModHandle,
+    len: u32,
+    out: *mut *mut u8,
+) -> Status {
+    entry("resource_buffer", || {
+        if let Err(status) = caller(me) {
+            return status;
+        }
+        let Ok(len) = usize::try_from(len) else {
+            return Status::BAD_ARGS;
+        };
+        if out.is_null() {
+            return Status::BAD_ARGS;
+        }
+        match crate::content::lend(len) {
+            // SAFETY: `out` is non-null, checked above; `HostApi::resource_buffer`
+            // has the mod pass it writable and aligned for one pointer, untouched
+            // by other threads during the call.
+            Some(at) => unsafe { put(out, at) },
+            None => Status::REFUSED,
+        }
+    })
 }
 
 thread_local! {
@@ -652,6 +699,42 @@ mod tests {
         assert_eq!(reads.get(), 0, "the kept bytes answer the retry");
         assert_eq!(short_or("resource_served", KEY, read), Ok(vec![1, 2, 3]));
         assert_eq!(reads.get(), 1, "a kept read answers once");
+    }
+
+    #[test]
+    fn a_call_that_only_asks_the_length_keeps_no_bytes_and_a_short_buffer_does() {
+        let read = |_| Ok(vec![1, 2, 3]);
+        let mut len = 0u32;
+        // SAFETY: `out` is null and `len` a local `u32`.
+        let status = unsafe {
+            copy_keeping(
+                "resource_served",
+                KEY,
+                core::ptr::null_mut(),
+                0,
+                &raw mut len,
+                read,
+            )
+        };
+        assert_eq!((status, len), (Status::BAD_ARGS, 3));
+        assert!(SHORT.take().is_none(), "a length-only call keeps nothing");
+        let mut short = [0u8; 2];
+        // SAFETY: `short` is writable for its 2 bytes and `len` a local `u32`.
+        let status = unsafe {
+            copy_keeping(
+                "resource_served",
+                KEY,
+                short.as_mut_ptr(),
+                2,
+                &raw mut len,
+                read,
+            )
+        };
+        assert_eq!(status, Status::BAD_ARGS);
+        assert!(
+            SHORT.take().is_some(),
+            "a short buffer keeps them for its retry"
+        );
     }
 
     #[test]

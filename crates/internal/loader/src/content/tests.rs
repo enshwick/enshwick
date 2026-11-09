@@ -1,6 +1,6 @@
 use crate::locks::Relock;
 
-use super::patches::{Build, write_differences};
+use super::patches::{Build, run_patches, write_differences};
 use super::*;
 
 unsafe extern "system" fn add_one(
@@ -30,27 +30,21 @@ fn a_rebuild_runs_the_mods_of_the_first_build_although_they_are_off() {
         type_hash: 1,
         part: 0,
     };
-    let entry = Served {
-        key,
-        base: key,
-        patches: [3, 4]
-            .map(|owner| Patch {
-                owner: ModIndex::new(owner),
-                apply: add_one,
-                user: 0,
-            })
-            .into(),
-        keeps_base: AtomicBool::new(true),
-        state: Mutex::new(State::default()),
-        rebuilding: Mutex::new(()),
-    };
+    let patches = [3, 4]
+        .map(|owner| Patch {
+            owner: ModIndex::new(owner),
+            apply: add_one,
+            user: 0,
+        })
+        .into();
+    let entry = Served::new(key, key, patches, true);
     let base = [7u8; 4];
     let at = base.as_ptr().expose_provenance();
     // No loader runs here, so every mod reads as off.
     assert!(run_patches(&entry, at, base.len(), None, Build::Game).is_none());
     let both = [ModIndex::new(3), ModIndex::new(4)];
-    let (_, len, by) = run_patches(&entry, at, base.len(), Some(&both), Build::Game).unwrap();
-    assert_eq!((len, by), (6, both.to_vec()));
+    let built = run_patches(&entry, at, base.len(), Some(&both), Build::Game).unwrap();
+    assert_eq!((built.len, built.by), (6, both.to_vec()));
 }
 
 #[test]
@@ -100,21 +94,15 @@ unsafe extern "system" fn no_patch(
 }
 
 fn served_by(key: ResourceKey, owners: &[usize]) -> Served {
-    Served {
-        key,
-        base: key,
-        patches: owners
-            .iter()
-            .map(|&owner| Patch {
-                owner: ModIndex::new(owner),
-                apply: no_patch,
-                user: 0,
-            })
-            .collect(),
-        keeps_base: AtomicBool::new(false),
-        state: Mutex::new(State::default()),
-        rebuilding: Mutex::new(()),
-    }
+    let patches = owners
+        .iter()
+        .map(|&owner| Patch {
+            owner: ModIndex::new(owner),
+            apply: no_patch,
+            user: 0,
+        })
+        .collect();
+    Served::new(key, key, patches, false)
 }
 
 #[test]

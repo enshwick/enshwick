@@ -402,19 +402,9 @@ unsafe extern "system" fn scale_recipes(
             })
         })
         .unwrap_or_else(|| registry.to_vec());
-    let built: &'static [u8] = Box::leak(built.into_boxed_slice());
-    // SAFETY: `out` is non-null (checked above) and writable for the call;
-    // the bytes are leaked, so they stay valid and unchanged for the
-    // process, as the chain needs for a rebuild.
-    unsafe {
-        out.write(built.as_ptr());
-    }
-    // SAFETY: `out_len` is non-null (checked above) and writable for the
-    // call, as `ResourcePatchFn` says.
-    unsafe {
-        out_len.write(built.len());
-    }
-    Status::OK
+    // SAFETY: `out` and `out_len` are non-null (checked above) and writable
+    // for the call, as `ResourcePatchFn` says.
+    unsafe { crate::content::hand_out(built, out, out_len) }
 }
 
 #[cfg(test)]

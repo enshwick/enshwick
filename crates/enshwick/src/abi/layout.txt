@@ -1,4 +1,4 @@
-abi 11.19
+abi 11.20
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
 ActionCall size 192 align 8 born 144
@@ -334,7 +334,7 @@ HookSpec size 32 align 8
     next at 16 size 8 type *const Atomic<usize>
     priority at 24 size 4 type i32
     flags at 28 size 4 type HookFlags
-HostApi size 1600 align 8
+HostApi size 1608 align 8
     header at 0 size 8 type Header
     host_version at 8 size 16 type Str
     build at 24 size 8 type extern "system" fn(*mut BuildInfo)
@@ -534,6 +534,7 @@ HostApi size 1600 align 8
     run_command at 1576 size 8 type extern "system" fn(ModHandle, Str, Str, u32, *mut ActionReply) -> Status
     command_list at 1584 size 8 type extern "system" fn(ModHandle, *mut CommandInfo, u32, u32, *mut u32) -> Status
     actions_changed at 1592 size 8 type extern "system" fn(ModHandle) -> Status
+    resource_buffer at 1600 size 8 type extern "system" fn(ModHandle, u32, *mut *mut u8) -> Status
 Interaction size 56 align 8 born 56
     header at 0 size 8 type Header
     kind at 8 size 4 type u32

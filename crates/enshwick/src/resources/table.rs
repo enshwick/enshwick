@@ -463,7 +463,9 @@ impl Host {
 
     /// The value of resource `key` as the game's first read would build it
     /// now, with every mod's patches; see
-    /// [`Host::served_resource`](crate::Host::served_resource).
+    /// [`Host::served_resource`](crate::Host::served_resource). Each read
+    /// runs every patch of the key again and frees what they built; when
+    /// every patch fails, a changed vanilla key reads as the archive has it.
     ///
     /// # Errors
     ///

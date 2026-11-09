@@ -50,10 +50,13 @@ pub struct ContentRename {
 /// Builds a served resource from its base: `base` is the base resource's bytes,
 /// valid for the call.
 ///
-/// On [`Status::OK`] the function writes a pointer and length of bytes that
-/// stay valid and writable for the life of the process: a rebuild
+/// On [`Status::OK`] the function writes a pointer and length of its
+/// output: bytes in a buffer from
+/// [`HostApi::resource_buffer`](super::HostApi::resource_buffer), which the
+/// loader frees once no build reads them, or bytes of its own, which stay
+/// valid and writable for the life of the process. A rebuild
 /// ([`HostApi::rebuild_resource`](super::HostApi::rebuild_resource)) writes
-/// over the last patch's bytes.
+/// over the bytes the game's first build kept.
 ///
 /// The loader calls it on the thread that builds: the game's resource
 /// thread for the game's first build, the calling thread for a rebuild or a

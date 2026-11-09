@@ -741,7 +741,7 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 122 * 8);
-    assert!(size_of::<HostApi>() == 24 + 197 * 8);
+    assert!(size_of::<HostApi>() == 24 + 198 * 8);
     assert!(core::mem::offset_of!(HostApi, actions_changed) == 24 + 196 * 8);
     assert!(core::mem::offset_of!(HostApi, command_list) == 24 + 195 * 8);
     assert!(core::mem::offset_of!(HostApi, run_command) == 24 + 194 * 8);

@@ -1756,14 +1756,17 @@ pub struct HostApi {
     /// from its base in the archive with the patches of every mod on, on
     /// the calling thread; a patch that fails is skipped and its mod stays
     /// on. The build is kept nowhere, so a mod turned off since the game's
-    /// own build is left out, and each patch's output stays for the
-    /// process as [`ResourcePatchFn`](super::ResourcePatchFn) requires.
-    /// Any other key, and every key while served resources are off, copies
-    /// as the game opens it from the archive. [`Status::MISSING`] for a key
-    /// neither served nor in the archive, or whose every patch failed;
+    /// own build is left out, and the loader frees each output a patch
+    /// built in a [`resource_buffer`](Self::resource_buffer) once it has
+    /// copied the bytes. When every patch fails, a changed vanilla key
+    /// copies as the archive has it. Any other key, and every key while
+    /// served resources are off, copies as the game opens it from the
+    /// archive. A game build that reads a served key here is built again
+    /// whenever that key is rebuilt. [`Status::MISSING`] for a key neither
+    /// served nor in the archive, or a new key whose every patch failed;
     /// [`Status::BAD_ARGS`] when `capacity` is short or `out` null, with
-    /// `len` written and the build kept for this thread's next call with
-    /// the same key; [`Status::REFUSED`] during `enshwick_mod_init`, while
+    /// `len` written, and for a short `out` the build kept for this
+    /// thread's next call with the same key; [`Status::REFUSED`] during `enshwick_mod_init`, while
     /// not every patch is in; [`Status::BUILDING`] from a patch for a key
     /// whose patches run on this thread, which would build it again without
     /// end. Any thread; re-entrant from a patch for another key. `key` and
@@ -1830,4 +1833,17 @@ pub struct HostApi {
     /// mod without actions. A panic in the loader returns
     /// [`Status::REFUSED`]. ABI 11.19.
     pub actions_changed: extern "system" fn(me: ModHandle) -> Status,
+    /// Writes to `out` a pointer to `len` zeroed, writable bytes the loader
+    /// owns, for the output of the [`ResourcePatchFn`](super::ResourcePatchFn)
+    /// running on the calling thread: the patch builds its output there and
+    /// returns that pointer from the same call. The bytes stay valid until
+    /// the build that runs the patch ends; the game's first build keeps the
+    /// last patch's output for the process, as the game holds it, and every
+    /// other output, a rebuild's and a served read's
+    /// ([`resource_served`](Self::resource_served)) included, is freed by
+    /// the loader. [`Status::REFUSED`] outside a patch or when `len` bytes
+    /// do not allocate; [`Status::BAD_ARGS`] for a null `out`. The patch's
+    /// thread only; `out` is borrowed for the call. A panic in the loader
+    /// returns [`Status::REFUSED`]. ABI 11.20.
+    pub resource_buffer: extern "system" fn(me: ModHandle, len: u32, out: *mut *mut u8) -> Status,
 }

@@ -14,6 +14,25 @@ Each entry names the pull request that made the change.
   what needs that hook turns off, and the log, the Mods screen and the chat
   line a joining player reads name the DLL the function's jump leads into
   (#1014).
+- `abi`: `HostApi::resource_buffer`, ABI 11.20, lends a resource patch
+  bytes for its output that the loader owns: the game's first build keeps
+  the last patch's output for the process, and the loader frees every other
+  output. `ResourcePatchFn` still takes bytes of the patch's own, which stay
+  for the process (#1006).
+- `test`: `Installed::kept_outputs` counts the patch outputs the fake host
+  got as a patch's own bytes rather than in a buffer it lent (#1006).
+
+### Changed
+
+- `content`: a builder of `Load::serve`, and the loader's own patches,
+  build into a lent buffer, so `Host::served_resource`,
+  `Host::served_value`, Luau `enshwick.resources.served_value` and each
+  rebuild free what they build instead of keeping every patch's output for
+  the process (#1006).
+- `content`: a served resource whose build read another served key, such
+  as an item `Load::rekey_item` re-keys, is built again whenever a rebuild
+  changes that key, so a re-keyed item follows a world's changed values of
+  its new item; the loader keeps its base for it (#1006).
 
 ### Fixed
 
@@ -26,6 +45,12 @@ Each entry names the pull request that made the change.
   shared state instead of waiting on that lock (#1014).
 - A mid-function hook finds its owner's data pack once when the hooks arm,
   not on every hit (#1014).
+- `content`: a served read of a changed vanilla resource whose every patch
+  fails reads it as the archive has it, instead of failing as missing
+  (#1006).
+- `HostApi::resource_served` keeps no bytes for a call that only asks the
+  length, so a later read on that thread no longer gets stale bytes
+  (#1006).
 
 ## [1.0.0-alpha.14] - 2026-11-09
 

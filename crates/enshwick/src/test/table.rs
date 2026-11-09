@@ -45,8 +45,8 @@ use chat::chat_filter;
 use content::{
     add_text, change_data, content_hashes, content_read, content_serve, declare_change,
     entity_data_open, game_text, game_version, icons_ready, item_data_get, item_data_open,
-    item_data_set, rebuild_resource, recipe_disabled, recipe_kind, recipe_rule, resource_keys,
-    resource_read, resource_served, serve_resource, set_change, types,
+    item_data_set, rebuild_resource, recipe_disabled, recipe_kind, recipe_rule, resource_buffer,
+    resource_keys, resource_read, resource_served, serve_resource, set_change, types,
 };
 use controls::{control, run_action, run_action_at};
 use gameplay::{
@@ -182,6 +182,9 @@ pub(crate) struct State {
     /// Every rebuild of a served resource the mod asked for, at init and
     /// after.
     pub(crate) rebuilds: Vec<ResourceKey>,
+    /// How many patch outputs were bytes of the patch's own, kept for the
+    /// process, rather than a buffer the host lent.
+    pub(crate) kept_outputs: usize,
     /// The changes of vanilla values the mod declared, with their sources.
     pub(crate) changes: DataChanges,
     /// The mod's recipe rules in force: kind and name.
@@ -679,6 +682,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         game_events: Vec::new(),
         served: Vec::new(),
         rebuilds: Vec::new(),
+        kept_outputs: 0,
         changes: DataChanges::default(),
         recipe_rules: Vec::new(),
         texts: Vec::new(),
@@ -1138,4 +1142,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     run_command: commands::run_command,
     command_list: commands::command_list,
     actions_changed: commands::actions_changed,
+    resource_buffer,
 };

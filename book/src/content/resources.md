@@ -85,8 +85,12 @@ joined client. Two calls do it:
 Nothing happens while the game has not built the resource yet. The game
 keeps reading the first build's bytes, so a rebuild must come out the same
 length. Changed values qualify. Added entries do not, and `rebuild` returns
-`Err(Off)` for them. Each rebuild
-keeps the new bytes for the process, so it is for rare changes.
+`Err(Off)` for them. A rebuild frees the bytes it built once it has written
+the ones that differ.
+
+A resource whose builder read another served key with
+`host.served_resource` is built again whenever that key is rebuilt and
+changes. The loader keeps its base for it, without `allow_rebuild`.
 
 ## Patches from several mods compose
 
@@ -201,8 +205,10 @@ if let Some(item) = key.ok().and_then(game_resource) {
 would build it now. A served key comes built with every mod's patches. Any
 other key comes from the archive. Call it after `init`, such as in a
 builder of another key. It fails during `init` and inside a build of the
-same key. Each call builds the key again and keeps every patch's bytes, so
-read it once per need. Luau reads the same as a value with
+same key. A patch that fails is skipped. When every patch fails, a changed
+vanilla key reads as the archive has it, and a mod's new key fails. Each
+call runs every patch of the key again and frees what they built, so keep
+what a mod needs more than once. Luau reads the same as a value with
 `enshwick.resources.served_value(key)`.
 
 ## One text for one tag

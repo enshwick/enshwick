@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 19
+#define ENSHWICK_ABI_MINOR 20
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -1513,10 +1513,13 @@ typedef struct EnshwickResourceKey {
 // Builds a served resource from its base: `base` is the base resource's bytes,
 // valid for the call.
 //
-// On `Status::OK` the function writes a pointer and length of bytes that
-// stay valid and writable for the life of the process: a rebuild
+// On `Status::OK` the function writes a pointer and length of its
+// output: bytes in a buffer from
+// `HostApi::resource_buffer`, which the
+// loader frees once no build reads them, or bytes of its own, which stay
+// valid and writable for the life of the process. A rebuild
 // (`HostApi::rebuild_resource`) writes
-// over the last patch's bytes.
+// over the bytes the game's first build kept.
 //
 // The loader calls it on the thread that builds: the game's resource
 // thread for the game's first build, the calling thread for a rebuild or a
@@ -4963,14 +4966,17 @@ typedef struct EnshwickHostApi {
   // from its base in the archive with the patches of every mod on, on
   // the calling thread; a patch that fails is skipped and its mod stays
   // on. The build is kept nowhere, so a mod turned off since the game's
-  // own build is left out, and each patch's output stays for the
-  // process as `ResourcePatchFn` requires.
-  // Any other key, and every key while served resources are off, copies
-  // as the game opens it from the archive. `Status::MISSING` for a key
-  // neither served nor in the archive, or whose every patch failed;
+  // own build is left out, and the loader frees each output a patch
+  // built in a `resource_buffer` once it has
+  // copied the bytes. When every patch fails, a changed vanilla key
+  // copies as the archive has it. Any other key, and every key while
+  // served resources are off, copies as the game opens it from the
+  // archive. A game build that reads a served key here is built again
+  // whenever that key is rebuilt. `Status::MISSING` for a key neither
+  // served nor in the archive, or a new key whose every patch failed;
   // `Status::BAD_ARGS` when `capacity` is short or `out` null, with
-  // `len` written and the build kept for this thread's next call with
-  // the same key; `Status::REFUSED` during `enshwick_mod_init`, while
+  // `len` written, and for a short `out` the build kept for this
+  // thread's next call with the same key; `Status::REFUSED` during `enshwick_mod_init`, while
   // not every patch is in; `Status::BUILDING` from a patch for a key
   // whose patches run on this thread, which would build it again without
   // end. Any thread; re-entrant from a patch for another key. `key` and
@@ -5031,6 +5037,19 @@ typedef struct EnshwickHostApi {
   // mod without actions. A panic in the loader returns
   // `Status::REFUSED`. ABI 11.19.
   EnshwickStatus (*actions_changed)(EnshwickModHandle me);
+  // Writes to `out` a pointer to `len` zeroed, writable bytes the loader
+  // owns, for the output of the `ResourcePatchFn`
+  // running on the calling thread: the patch builds its output there and
+  // returns that pointer from the same call. The bytes stay valid until
+  // the build that runs the patch ends; the game's first build keeps the
+  // last patch's output for the process, as the game holds it, and every
+  // other output, a rebuild's and a served read's
+  // (`resource_served`) included, is freed by
+  // the loader. `Status::REFUSED` outside a patch or when `len` bytes
+  // do not allocate; `Status::BAD_ARGS` for a null `out`. The patch's
+  // thread only; `out` is borrowed for the call. A panic in the loader
+  // returns `Status::REFUSED`. ABI 11.20.
+  EnshwickStatus (*resource_buffer)(EnshwickModHandle me, uint32_t len, uint8_t **out);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.
