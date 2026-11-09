@@ -91,12 +91,17 @@ impl<'de> Deserialize<'de> for GiveEntry {
             Some("experience") => shape(value).map(Self::Experience),
             Some("knowledge") => shape(value).map(Self::Knowledge),
             Some(_) => shape(value).map(Self::Buff),
-            None => Err(match value.as_table().and_then(|t| t.keys().next()) {
-                Some(field) => D::Error::unknown_field(field, GIVE_FIELDS),
-                None => {
-                    D::Error::custom("a gift needs `item`, `experience`, `knowledge` or `buff`")
-                }
-            }),
+            None => Err(
+                match value
+                    .as_table()
+                    .and_then(|t| t.keys().find(|key| !GIVE_FIELDS.contains(&key.as_str())))
+                {
+                    Some(field) => D::Error::unknown_field(field, GIVE_FIELDS),
+                    None => {
+                        D::Error::custom("a gift needs `item`, `experience`, `knowledge` or `buff`")
+                    }
+                },
+            ),
         }
     }
 }

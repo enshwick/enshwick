@@ -44,6 +44,15 @@ fn a_gift_of_no_known_kind_names_every_field_a_gift_takes() {
 }
 
 #[test]
+fn a_misspelt_kind_beside_a_known_field_is_the_one_named() {
+    let line = problem(&PackFiles::new().with(
+        REWARDS_FILE,
+        "[[reward]]\nid = \"torch\"\non = { join = true }\ngive = [{ items = \"Tool_Torch01\", count = 1 }]\n",
+    ));
+    names(&line, "rewards.toml:4:", "items", "item");
+}
+
+#[test]
 fn a_misspelt_field_of_an_item_is_named() {
     let line = problem(&files(&format!(
         "[[item]]\nid = \"lantern\"\nlikee = \"{CHEST}\"\n"
