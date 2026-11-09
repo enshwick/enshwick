@@ -572,7 +572,7 @@ pub(super) unsafe fn zones_at(out: *mut u8, vec: *mut u8, game: &Game, p: [f32; 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bases::fake::{Entry, FIELDS, Fake, new_base, square};
+    use crate::bases::fake::{Entry, FIELDS, Fake, new_base, shared, square};
 
     /// 40 zones that touch in an L, then one apart.
     fn l_and_one() -> Vec<Aabb> {
@@ -586,6 +586,7 @@ mod tests {
 
     #[test]
     fn the_settled_bases_hold_every_zone_with_the_game_s_mask_low() {
+        let _shared = shared();
         let mut fake = Fake::new(1, &l_and_one());
         let obj = fake.ptr();
         // The game's grouping started one base before ours took over.
@@ -606,6 +607,7 @@ mod tests {
 
     #[test]
     fn lookups_answer_for_zones_past_32_as_the_game_lays_out_its_answers() {
+        let _shared = shared();
         let mut fake = Fake::new(0, &l_and_one());
         let obj = fake.ptr();
         // SAFETY: the fake object, with no base started yet.
@@ -748,6 +750,7 @@ mod tests {
 
     #[test]
     fn the_zones_of_a_base_past_32_are_appended_through_the_game_s_callback() {
+        let _shared = shared();
         let mut fake = Fake::new(1, &l_and_one());
         let obj = fake.ptr();
         // SAFETY: the fake object, with no base started yet.
@@ -791,6 +794,7 @@ mod tests {
 
     #[test]
     fn the_zone_list_takes_the_object_s_allocator_once() {
+        let _shared = shared();
         let mut fake = Fake::new(1, &[square(0.0, 0.0)]);
         let obj = fake.ptr();
         // SAFETY: the fake object, without an allocator yet.
@@ -812,6 +816,7 @@ mod tests {
 
     #[test]
     fn more_bases_than_planned_settle_nothing() {
+        let _shared = shared();
         let mut fake = Fake::new(1, &[square(0.0, 0.0), square(10.0, 0.0)]);
         let obj = fake.ptr();
         for (z, entry) in (0u32..).zip(&fake.zones) {
@@ -828,6 +833,7 @@ mod tests {
 
     #[test]
     fn bases_past_16_start_at_window_indices_with_the_count_kept_at_16() {
+        let _shared = shared();
         let mut fake = Fake::new(1, &twenty_apart());
         let obj = fake.ptr();
         let readied = core::cell::RefCell::new(Vec::new());
@@ -861,6 +867,7 @@ mod tests {
 
     #[test]
     fn without_a_window_a_grouping_keeps_16_bases() {
+        let _shared = shared();
         let mut fake = Fake::new(1, &twenty_apart());
         let obj = fake.ptr();
         // SAFETY: the fake object, with no base started yet.
@@ -872,6 +879,7 @@ mod tests {
 
     #[test]
     fn an_object_without_a_side_table_reads_its_masks() {
+        let _shared = shared();
         let mut settled = Fake::new(1, &l_and_one());
         let obj = settled.ptr();
         // SAFETY: the fake object, with no base started yet.

@@ -309,10 +309,13 @@ mod tests {
         vec![u128::MAX / 3; GEOMETRY.block().div_ceil(16)].into_boxed_slice()
     }
 
-    /// No object windowed and no call seen, as each test starts.
-    fn fresh() {
+    /// No object windowed and no call seen, as each test starts, for as long
+    /// as the test holds the answer.
+    fn fresh() -> std::sync::MutexGuard<'static, ()> {
+        let shared = crate::bases::fake::shared();
         forget_all();
         CALLS.relock().clear();
+        shared
     }
 
     fn calls(name: &str) -> Vec<usize> {
@@ -326,7 +329,7 @@ mod tests {
 
     #[test]
     fn every_window_record_takes_the_constructor_s_record() {
-        fresh();
+        let _shared = fresh();
         let mut block = garbage();
         let obj = block.as_mut_ptr().cast::<u8>();
         // SAFETY: a fresh block of the grown size.
@@ -345,7 +348,7 @@ mod tests {
 
     #[test]
     fn a_new_object_at_a_missed_one_s_address_starts_with_no_slots() {
-        fresh();
+        let _shared = fresh();
         let mut block = garbage();
         let obj = block.as_mut_ptr().cast::<u8>();
         // SAFETY: a fresh block of the grown size.
@@ -369,7 +372,7 @@ mod tests {
 
     #[test]
     fn a_release_tears_the_window_down_in_chunks_and_skips_other_objects() {
-        fresh();
+        let _shared = fresh();
         let mut block = garbage();
         let obj = block.as_mut_ptr().cast::<u8>();
         let mut other = garbage();
@@ -389,7 +392,7 @@ mod tests {
 
     #[test]
     fn a_window_stock_slot_is_made_once_and_freed_at_destroy() {
-        fresh();
+        let _shared = fresh();
         let mut block = garbage();
         let obj = block.as_mut_ptr().cast::<u8>();
         // SAFETY: the block's first word, its allocator.
@@ -425,7 +428,7 @@ mod tests {
 
     #[test]
     fn a_destroy_before_the_window_is_made_touches_nothing() {
-        fresh();
+        let _shared = fresh();
         let mut block = garbage();
         // SAFETY: a block the create's failure path destroys before our
         // init ran.

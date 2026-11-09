@@ -24,9 +24,12 @@ const VEC: Container = FIELDS.container;
 /// What the fake game code was called with, in order.
 static CALLS: Mutex<Vec<(&'static str, usize, u32)>> = Mutex::new(Vec::new());
 
-/// No call seen, as each test starts.
-fn fresh() {
+/// No call seen, as each test starts, for as long as the test holds the
+/// answer.
+fn fresh() -> std::sync::MutexGuard<'static, ()> {
+    let shared = fake::shared();
     CALLS.relock().clear();
+    shared
 }
 
 fn calls(name: &str) -> Vec<(usize, u32)> {
@@ -78,6 +81,7 @@ fn sorted(fake: &mut Fake, entity: &Entity, filtered: bool) -> [u8; 0x10] {
 
 #[test]
 fn the_sort_reaches_a_window_base_and_answers_as_the_game() {
+    let _shared = fake::shared();
     let mut fake = twenty_bases();
     let out = sorted(&mut fake, &entity(77, [1805.0, 5.0, 5.0]), false);
     assert_eq!(
@@ -102,6 +106,7 @@ fn the_sort_reaches_a_window_base_and_answers_as_the_game() {
 
 #[test]
 fn a_list_with_room_but_no_data_fails_to_grow_as_the_game() {
+    let _shared = fake::shared();
     let mut fake = twenty_bases();
     fake.put(at(94) + RECORD.list_all + VEC.cap, 8u64);
     let out = sorted(&mut fake, &entity(82, [1705.0, 5.0, 5.0]), false);
@@ -111,6 +116,7 @@ fn a_list_with_room_but_no_data_fails_to_grow_as_the_game() {
 
 #[test]
 fn the_sort_of_every_entity_empties_the_window_lists() {
+    let _shared = fake::shared();
     let mut fake = twenty_bases();
     for i in [3, 93, 96] {
         fake.put(at(i) + RECORD.list_all + VEC.len, 5u64);
@@ -196,7 +202,7 @@ const CODE: Code = Code {
 
 #[test]
 fn the_logic_entity_sets_take_window_bases_once_a_version() {
-    fresh();
+    let _shared = fresh();
     let mut fake = Fake::new(0, &fake::apart(20));
     let obj = fake.ptr();
     let ready = |_: usize| {};
@@ -262,6 +268,7 @@ impl Map {
 
 #[test]
 fn the_npc_totals_add_the_window_bases_to_the_game_s() {
+    let _shared = fake::shared();
     let mut fake = twenty_bases();
     let npc = |base: u8, kind: u8| {
         let mut v = [0u8; 12];
@@ -290,6 +297,7 @@ fn the_npc_totals_add_the_window_bases_to_the_game_s() {
 
 #[test]
 fn the_animal_counts_add_the_window_bases_to_the_game_s() {
+    let _shared = fake::shared();
     let mut fake = twenty_bases();
     let animals: [[u8; 3]; 5] = [[93, 0, 1], [93, 6, 5], [93, 2, 9], [94, 4, 10], [3, 0, 1]];
     let filled: Vec<(usize, &[u8])> = animals
@@ -323,7 +331,7 @@ fn step(fake: &mut Fake) -> [u64; 5] {
 
 #[test]
 fn the_stock_cache_pages_a_window_base_and_fills_its_slot() {
-    fresh();
+    let _shared = fresh();
     let mut fake = twenty_bases();
     let mut entities: Vec<u32> = (0..45).collect();
     fake.put(at(93) + RECORD.list_all, entities.as_mut_ptr() as u64);
@@ -366,7 +374,7 @@ fn the_stock_cache_pages_a_window_base_and_fills_its_slot() {
 
 #[test]
 fn the_stock_cache_skips_a_window_index_whose_slot_was_never_made() {
-    fresh();
+    let _shared = fresh();
     let mut fake = Fake::new(1, &fake::apart(20));
     let obj = fake.ptr();
     let ready = |_: usize| {};
@@ -391,6 +399,7 @@ fn the_stock_cache_skips_a_window_index_whose_slot_was_never_made() {
 
 #[test]
 fn the_base_ids_of_the_window_follow_the_game_s() {
+    let _shared = fake::shared();
     let mut fake = twenty_bases();
     let base_id = RECORD.base_id.unwrap();
     fake.put(at(93) + base_id, [1u64, 2]);
@@ -409,6 +418,7 @@ fn the_base_ids_of_the_window_follow_the_game_s() {
 
 #[test]
 fn the_cleanups_clear_the_window_records_and_leave_the_rest() {
+    let _shared = fake::shared();
     let mut fake = twenty_bases();
     for i in [5, 93, 96, 97] {
         fake.put(at(i) + RECORD.beds + 4, 3u32);
