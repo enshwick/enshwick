@@ -1139,6 +1139,13 @@ impl Threads {
     }
 }
 
+impl Drop for Threads {
+    /// Resumes what a panic between suspending and resuming left held.
+    fn drop(&mut self) {
+        self.resume();
+    }
+}
+
 #[cfg(test)]
 mod tests;
 mod unwind;
