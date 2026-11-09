@@ -8,12 +8,6 @@ Each entry names the pull request that made the change.
 
 ### Added
 
-- The loader finds its entries in the game's code as the executable on disk
-  holds it, relocated, so another program's hooks no longer hide them. It
-  writes no hook over a function whose bytes no longer read as shipped: only
-  what needs that hook turns off, and the log, the Mods screen and the chat
-  line a joining player reads name the DLL the function's jump leads into
-  (#1014).
 - `abi`: `HostApi::resource_buffer`, ABI 11.20, lends a resource patch
   bytes for its output that the loader owns: the game's first build keeps
   the last patch's output for the process, and the loader frees every other
@@ -36,15 +30,6 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
-- `test`: the fake host refuses `subscribe`, `subscribe_tick`,
-  `subscribe_event` and `define_event` after init with `TOO_LATE`, before it
-  reads their arguments, as the loader does, so a mod's test fails where the
-  game would (#1014).
-- A data pack's log level keeps no memory for a handle past about a million,
-  and a log line reached again while a call site's lock is held takes the
-  shared state instead of waiting on that lock (#1014).
-- A mid-function hook finds its owner's data pack once when the hooks arm,
-  not on every hit (#1014).
 - `content`: a served read of a changed vanilla resource whose every patch
   fails reads it as the archive has it, instead of failing as missing
   (#1006).
@@ -131,6 +116,12 @@ Each entry names the pull request that made the change.
 - `test`: `Installed::game_action` and `Installed::read_screen_host` set
   the game actions the fake build names and the screen host's template and
   position (#1002).
+- The loader finds its entries in the game's code as the executable on disk
+  holds it, relocated, so another program's hooks no longer hide them. It
+  writes no hook over a function whose bytes no longer read as shipped: only
+  what needs that hook turns off, and the log, the Mods screen and the chat
+  line a joining player reads name the DLL the function's jump leads into
+  (#1014).
 
 ### Changed
 
@@ -217,6 +208,15 @@ Each entry names the pull request that made the change.
 - `test`: the fake host runs every callback a mod or data pack registered as
   its owner, as the loader does; `Installed::set_pack_log_level` sets a
   pack's level in the fake (#983).
+- `test`: the fake host refuses `subscribe`, `subscribe_tick`,
+  `subscribe_event` and `define_event` after init with `TOO_LATE`, before it
+  reads their arguments, as the loader does, so a mod's test fails where the
+  game would (#1014).
+- A data pack's log level keeps no memory for a handle past about a million,
+  and a log line reached again while a call site's lock is held takes the
+  shared state instead of waiting on that lock (#1014).
+- A mid-function hook finds its owner's data pack once when the hooks arm,
+  not on every hit (#1014).
 
 ## [1.0.0-alpha.13] - 2026-11-07
 

@@ -76,7 +76,7 @@ fn loader_notes(loader: &Loader, paint: &Painter<'_>) {
         let line = texts::fill(
             "mods.newer",
             &[
-                ("version", &release.version.to_string()),
+                ("version", &release.version().to_string()),
                 ("address", &release.page()),
             ],
         );

@@ -545,13 +545,7 @@ mod tests {
         assert!(!matches("mods/a*z", "mods/street-lanterns"));
     }
 
-    /// A fresh folder for one test.
-    fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("enshwick-new-{name}-{}", std::process::id()));
-        let _old = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
+    use crate::scratch;
 
     #[test]
     fn a_crate_inside_a_workspace_joins_its_members() {

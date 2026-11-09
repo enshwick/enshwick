@@ -6,12 +6,6 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
-### Added
-
-- `reflect::Image::with_text` reads a given copy in place of an image's
-  `.text`, such as the executable's code on disk relocated to where the game
-  runs, and every other section as before (#1014).
-
 ## [1.0.0-alpha.14] - 2026-11-09
 
 ### Added
@@ -22,6 +16,13 @@ Each entry names the pull request that made the change.
   states them, set from the values the kept builds give (#982).
 - `Routed::Outside` is a constant a route took outside its range or
   alignment, which finds no entry (#982).
+- `reflect::Image::with_text` reads a given copy in place of an image's
+  `.text`, such as the executable's code on disk relocated to where the game
+  runs, and every other section as before (#1014).
+- `releases::newer` finds the newest Enshwick release on GitHub that is
+  newer than a running version, by the tag prefixes of a package
+  (`LOADER_TAGS`, `TOOL_TAGS`), so the loader and `cargo enshwick` share
+  it (#1018).
 
 ### Changed
 
