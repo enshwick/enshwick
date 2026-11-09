@@ -34,12 +34,13 @@ you make one that lets four times as many wood logs fit in one inventory slot.
 
 ## Check it
 
-1. Run `cargo enshwick pack check you.material-stacks --game <game folder>`. It
+1. Run `cargo enshwick check you.material-stacks --game <game folder>`. It
    reads every file against the game's data. It prints each problem with its
    file and line, and the names that look like a misspelt one:
 
    ```text
-   error: items.toml:2:1: no item "Material_T1_Wood_Log" in this pack, and no vanilla item "Material_T1_Wood_Log"; near: Material_T1_Wood_Logs
+   items.toml:2:1: error: no item "Material_T1_Wood_Log" in this pack, and no vanilla item "Material_T1_Wood_Log"; near: Material_T1_Wood_Logs
+   error: you.material-stacks: 1 error
    ```
 
 ## Install and play

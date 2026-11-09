@@ -36,8 +36,8 @@ pub(crate) fn run(
         match crate::pack::check(dir, vanilla.as_ref()) {
             Ok((done, _, _)) => summary.push(done),
             Err(error) => {
-                errors += 1;
                 for line in format!("{error:#}").lines() {
+                    errors += 1;
                     writeln!(out, "{}", as_error(line))?;
                 }
             }
@@ -54,12 +54,17 @@ pub(crate) fn run(
             summary.push("clippy found no errors".to_owned());
         } else {
             errors += 1;
+            writeln!(out, "error: clippy found errors")?;
         }
     }
     if errors > 0 {
+        let name = dir
+            .canonicalize()
+            .ok()
+            .and_then(|dir| dir.file_name().map(|n| n.to_string_lossy().into_owned()))
+            .unwrap_or_else(|| dir.display().to_string());
         bail!(
-            "{}: {errors} error{}",
-            dir.display(),
+            "{name}: {errors} error{}",
             if errors == 1 { "" } else { "s" }
         );
     }
@@ -152,7 +157,11 @@ fn scripts(dir: &Path, offline: bool) -> anyhow::Result<(Vec<Finding>, String)> 
     }
     Ok((
         found,
-        format!("type-checked {} Luau scripts", scripts.len()),
+        format!(
+            "type-checked {} Luau script{}",
+            scripts.len(),
+            if scripts.len() == 1 { "" } else { "s" }
+        ),
     ))
 }
 
@@ -351,10 +360,7 @@ lib/count.luau:2.7-2.12: LocalUnused: Variable 'unused' is never used; prefix wi
             return;
         };
         let done = done.unwrap();
-        assert!(
-            done.contains("type-checked 1 Luau scripts"),
-            "{done}\n{out}"
-        );
+        assert!(done.contains("type-checked 1 Luau script"), "{done}\n{out}");
         assert!(!out.contains("error"), "{out}");
     }
 
