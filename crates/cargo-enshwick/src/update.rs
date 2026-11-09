@@ -35,13 +35,19 @@ struct Newer {
     page: String,
 }
 
+/// GitHub's answer: the newest release newer than the tool, if any.
+#[derive(Debug)]
+struct Answer {
+    newer: Option<Newer>,
+}
+
 /// A run's release check: what was seen before and, when due, the question
 /// in flight.
 #[derive(Debug)]
 pub(crate) struct Check {
     seen: Seen,
     file: PathBuf,
-    asking: Option<JoinHandle<Option<Option<Newer>>>>,
+    asking: Option<JoinHandle<Option<Answer>>>,
     /// `seen` as read, so an unchanged one is not written again.
     read: Seen,
 }
@@ -94,36 +100,32 @@ fn a_day_after(then: u64, now: u64) -> bool {
     now.checked_sub(then).is_none_or(|since| since >= DAY)
 }
 
-/// `seen` with `answer`, the newer release GitHub named or `Some(None)` for
-/// none, and the notice of a newer release than `running` when a day has
-/// passed since the last one.
+/// `seen` with `answer`, when GitHub's arrived, and the notice of a newer
+/// release than `running` when a day has passed since the last one.
 fn settle(
     mut seen: Seen,
     now: u64,
-    answer: Option<Option<Newer>>,
+    answer: Option<Answer>,
     running: &Version,
 ) -> (Seen, Option<String>) {
     if let Some(answer) = answer {
-        seen.newer = answer;
+        seen.newer = answer.newer;
     }
     let newer = seen.newer.clone().filter(|newer| {
         Version::parse(&newer.version).is_ok_and(|v| v.cmp_precedence(running).is_gt())
     });
-    let notice = newer
-        .filter(|_| a_day_after(seen.told, now))
-        .map(|newer| {
-            seen.told = now;
-            format!(
-                "cargo-enshwick {} is out, this is {running}: {}",
-                newer.version, newer.page
-            )
-        });
+    let notice = newer.filter(|_| a_day_after(seen.told, now)).map(|newer| {
+        seen.told = now;
+        format!(
+            "cargo-enshwick {} is out, this is {running}: {}",
+            newer.version, newer.page
+        )
+    });
     (seen, notice)
 }
 
-/// GitHub's newest release of the tool newer than the running one, `None`
-/// for none and `Some` of it when GitHub answered at all.
-fn ask() -> Option<Option<Newer>> {
+/// GitHub's answer, `None` when it gave none that reads.
+fn ask() -> Option<Answer> {
     let running = running();
     let url = format!("https://api.github.com{}", releases::path(&running));
     let answer = crate::net::get(
@@ -137,10 +139,12 @@ fn ask() -> Option<Option<Newer>> {
     )
     .ok()?;
     let found = releases::newer(&answer, &running, TOOL_TAGS).ok()?;
-    Some(found.map(|release| Newer {
-        page: release.page(),
-        version: release.version.to_string(),
-    }))
+    Some(Answer {
+        newer: found.map(|release| Newer {
+            page: release.page(),
+            version: release.version.to_string(),
+        }),
+    })
 }
 
 /// The running tool's version.
@@ -193,7 +197,9 @@ mod tests {
 
     #[test]
     fn a_newer_release_is_told_once_a_day() {
-        let found = Some(Some(newer("1.0.0-alpha.15")));
+        let found = Some(Answer {
+            newer: Some(newer("1.0.0-alpha.15")),
+        });
         let (seen, notice) = settle(Seen::default(), NOW, found, &running());
         assert_eq!(
             notice.as_deref(),
@@ -225,7 +231,7 @@ mod tests {
             newer: Some(newer("1.0.0-alpha.15")),
             ..Seen::default()
         };
-        let (seen, notice) = settle(seen, NOW, Some(None), &running());
+        let (seen, notice) = settle(seen, NOW, Some(Answer { newer: None }), &running());
         assert_eq!((seen.newer, notice), (None, None));
     }
 

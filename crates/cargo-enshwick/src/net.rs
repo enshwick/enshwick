@@ -43,7 +43,9 @@ pub(crate) fn get(
     if !out.status.success() {
         bail!(
             "{url}: {}",
-            String::from_utf8_lossy(&out.stderr).trim_start_matches("curl: ").trim()
+            String::from_utf8_lossy(&out.stderr)
+                .trim_start_matches("curl: ")
+                .trim()
         );
     }
     if out.stdout.len() > limit {

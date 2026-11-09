@@ -29,7 +29,7 @@ impl Found {
     }
 }
 
-/// A KeyValues value: a string, or a block of named values in file order.
+/// A `KeyValues` value: a string, or a block of named values in file order.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Value {
     Text(String),
@@ -57,7 +57,7 @@ impl Value {
     }
 }
 
-/// Why a KeyValues file does not read.
+/// Why a `KeyValues` file does not read.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub(crate) enum ParseKeyValuesError {
     #[error("a quoted string is not closed")]
@@ -79,7 +79,7 @@ enum Token {
     Text(String),
 }
 
-/// The tokens of Valve's KeyValues text: braces, quoted strings with `\\`,
+/// The tokens of Valve's `KeyValues` text: braces, quoted strings with `\\`,
 /// `\"`, `\n` and `\t` escapes, and bare words; `//` starts a comment.
 fn tokens(text: &str) -> Result<Vec<Token>, ParseKeyValuesError> {
     let mut out = Vec::new();
@@ -103,9 +103,7 @@ fn tokens(text: &str) -> Result<Vec<Token>, ParseKeyValuesError> {
                 }
                 out.push(Token::Text(word));
             }
-            '/' if chars.peek() == Some(&'/') => {
-                while chars.next_if(|&c| c != '\n').is_some() {}
-            }
+            '/' if chars.peek() == Some(&'/') => while chars.next_if(|&c| c != '\n').is_some() {},
             c if c.is_whitespace() => {}
             c => {
                 let mut word = String::from(c);
@@ -121,7 +119,7 @@ fn tokens(text: &str) -> Result<Vec<Token>, ParseKeyValuesError> {
     Ok(out)
 }
 
-/// The top-level block of a KeyValues file such as `libraryfolders.vdf` or
+/// The top-level block of a `KeyValues` file such as `libraryfolders.vdf` or
 /// an `appmanifest_<app>.acf`.
 pub(crate) fn parse(text: &str) -> Result<Value, ParseKeyValuesError> {
     let mut tokens = tokens(text)?.into_iter();
@@ -175,7 +173,12 @@ fn libraries(steam: &Path) -> Vec<PathBuf> {
 fn installed(library: &Path, app: u32) -> Option<PathBuf> {
     let steamapps = library.join("steamapps");
     let text = std::fs::read_to_string(steamapps.join(format!("appmanifest_{app}.acf"))).ok()?;
-    let dir = parse(&text).ok()?.get("AppState")?.get("installdir")?.text()?.to_owned();
+    let dir = parse(&text)
+        .ok()?
+        .get("AppState")?
+        .get("installdir")?
+        .text()?
+        .to_owned();
     let folder = steamapps.join("common").join(dir);
     folder.is_dir().then_some(folder)
 }
@@ -224,8 +227,8 @@ pub(crate) fn steam_folders() -> Vec<PathBuf> {
             .ok()
             .filter(|out| out.status.success())
             .and_then(|out| registry_path(&String::from_utf8_lossy(&out.stdout)));
-        let default = std::env::var_os("ProgramFiles(x86)")
-            .map(|dir| PathBuf::from(dir).join("Steam"));
+        let default =
+            std::env::var_os("ProgramFiles(x86)").map(|dir| PathBuf::from(dir).join("Steam"));
         registry.into_iter().chain(default).collect()
     } else {
         let Some(home) = std::env::home_dir() else {

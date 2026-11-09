@@ -52,14 +52,26 @@ struct Target {
     crate_types: Vec<String>,
 }
 
-/// Builds the chosen mod and copies it to `<game>/mods/<id>/<package>.dll`.
-pub(crate) fn install(game: &Path, package: Option<&str>) -> anyhow::Result<String> {
+/// Builds the chosen mod and copies it to `<game>/mods/<id>/<package>.dll`,
+/// `game` found through Steam when not given; with `with_loader`, puts the
+/// loader of this tool's release in first.
+pub(crate) fn install(
+    game: Option<&Path>,
+    package: Option<&str>,
+    with_loader: bool,
+) -> anyhow::Result<String> {
+    let (game, chosen) = game_folder(game, || crate::steam::find(&crate::steam::steam_folders()))?;
+    let game = game.as_path();
     if !GAME_EXECUTABLES.iter().any(|exe| game.join(exe).is_file()) {
         bail!(
             "{} holds none of {}",
             game.display(),
             GAME_EXECUTABLES.join(", ")
         );
+    }
+    let mut said: Vec<String> = chosen.into_iter().collect();
+    if with_loader {
+        said.push(crate::loader::put_in(game)?);
     }
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let output = Command::new(&cargo)
@@ -109,13 +121,44 @@ pub(crate) fn install(game: &Path, package: Option<&str>) -> anyhow::Result<Stri
     std::fs::create_dir_all(&folder).with_context(|| folder.display().to_string())?;
     let to = folder.join(format!("{}.dll", package.name));
     std::fs::copy(&from, &to).with_context(|| format!("{} -> {}", from.display(), to.display()))?;
-    let mut done = format!("installed {}", to.display());
-    if !mods.join("enshwick").join("enshwick.dll").is_file() {
-        done.push_str(
-            "; the Enshwick loader is not installed there yet (enshwick.zip from the releases)",
-        );
+    said.push(format!("installed {}", to.display()));
+    if !crate::loader::is_installed(game) {
+        said.push(crate::loader::missing_note(game));
     }
-    Ok(done)
+    Ok(said.join("\n"))
+}
+
+/// The game folder, `given` or else the first install `find` reports, with
+/// a line naming the one taken and the others.
+fn game_folder(
+    given: Option<&Path>,
+    find: impl FnOnce() -> Vec<crate::steam::Found>,
+) -> anyhow::Result<(PathBuf, Option<String>)> {
+    if let Some(given) = given {
+        return Ok((given.to_owned(), None));
+    }
+    let found = find();
+    let Some(first) = found.first() else {
+        bail!(
+            "Steam has neither the Enshrouded dedicated server nor the game installed here; name the game folder with --game or ENSHROUDED_DIR"
+        );
+    };
+    let others: Vec<String> = found
+        .iter()
+        .skip(1)
+        .map(|other| format!("{} ({})", other.folder.display(), other.what()))
+        .collect();
+    let others = if others.is_empty() {
+        String::new()
+    } else {
+        format!("; --game picks another: {}", others.join(", "))
+    };
+    let said = format!(
+        "the game folder is {}, {} as Steam installed it{others}",
+        first.folder.display(),
+        first.what()
+    );
+    Ok((first.folder.clone(), Some(said)))
 }
 
 /// The target every mod DLL is built for, whatever the host.
@@ -358,6 +401,34 @@ mod tests {
                 .name,
             "trading-post"
         );
+    }
+
+    #[test]
+    fn a_given_game_folder_wins_and_else_steam_s_first_install_is_named() {
+        use crate::steam::{Found, GAME_APP, SERVER_APP};
+        let given = game_folder(Some(Path::new("/g")), || unreachable!()).unwrap();
+        assert_eq!(given, (PathBuf::from("/g"), None));
+        let found = || {
+            vec![
+                Found {
+                    folder: PathBuf::from("/s"),
+                    app: SERVER_APP,
+                },
+                Found {
+                    folder: PathBuf::from("/c"),
+                    app: GAME_APP,
+                },
+            ]
+        };
+        let (folder, said) = game_folder(None, found).unwrap();
+        assert_eq!(folder, Path::new("/s"));
+        let said = said.unwrap();
+        assert!(said.contains("the dedicated server"), "{said}");
+        assert!(said.contains("--game picks another"), "{said}");
+        let (_, alone) = game_folder(None, || found().split_off(1)).unwrap();
+        assert!(!alone.unwrap().contains("another"));
+        let none = game_folder(None, Vec::new).unwrap_err().to_string();
+        assert!(none.contains("--game"), "{none}");
     }
 
     #[test]

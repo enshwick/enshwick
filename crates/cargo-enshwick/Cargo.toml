@@ -26,6 +26,7 @@ toml.workspace = true
 toml_edit.workspace = true
 thiserror.workspace = true
 semver.workspace = true
+sha2.workspace = true
 zip.workspace = true
 
 [target.'cfg(windows)'.dependencies]
@@ -33,6 +34,7 @@ windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_System_
 
 [dev-dependencies]
 insta.workspace = true
+proptest.workspace = true
 
 [lints]
 workspace = true

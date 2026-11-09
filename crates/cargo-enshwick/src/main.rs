@@ -12,11 +12,15 @@ use enshwick::content::Guid;
 mod deps;
 mod generate;
 mod install;
+mod loader;
 mod manifest;
+mod net;
 mod new;
 mod pack;
 mod pin;
+mod steam;
 mod types;
+mod update;
 
 /// Cargo runs a subcommand as `cargo-enshwick enshwick <args>`.
 #[derive(Debug, Parser)]
@@ -79,12 +83,18 @@ enum Command {
     /// Builds the mod in release and copies its DLL into the game's `mods/`.
     Install {
         /// The folder holding `enshrouded.exe` or `enshrouded_server.exe`;
-        /// `ENSHROUDED_DIR` when omitted.
+        /// `ENSHROUDED_DIR` when omitted, else Steam's dedicated server, else
+        /// Steam's game.
         #[arg(long, env = "ENSHROUDED_DIR")]
-        game: PathBuf,
+        game: Option<PathBuf>,
         /// The package to install, when the workspace has several mods.
         #[arg(long, short)]
         package: Option<String>,
+        /// Also puts in the Enshwick loader of the release this tool is
+        /// from, downloaded from GitHub and checked, when the game folder
+        /// has none; a different loader there is left as it is.
+        #[arg(long)]
+        with_loader: bool,
     },
     /// Ports the build rows of the loader and the mods in an Enshwick
     /// checkout to a new game build. Exits with 2 when an entry needs a human.
@@ -226,6 +236,16 @@ fn luau_definitions(
 
 fn main() -> ExitCode {
     let Cargo::Enshwick(args) = Cargo::parse();
+    let check = update::start();
+    let code = run(args);
+    if let Some(notice) = check.and_then(update::finish) {
+        let _shown = writeln!(std::io::stderr(), "note: {notice}");
+    }
+    code
+}
+
+/// Runs the command `args` names and prints what it did or why it failed.
+fn run(args: Args) -> ExitCode {
     let outcome = match args.command {
         Command::Pin(args) => {
             return match pin::run(&args) {
@@ -264,7 +284,11 @@ fn main() -> ExitCode {
             side.unwrap_or(Side::Server),
             enshwick_rev.as_ref(),
         ),
-        Command::Install { game, package } => install::install(&game, package.as_deref()),
+        Command::Install {
+            game,
+            package,
+            with_loader,
+        } => install::install(game.as_deref(), package.as_deref(), with_loader),
         Command::Manifest {
             dll,
             expect_version,
