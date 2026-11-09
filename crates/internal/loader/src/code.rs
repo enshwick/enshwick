@@ -174,7 +174,8 @@ impl Watching {
             rva,
         };
         let now = watching.now();
-        watching.watch = disk_text(base, rva, len)
+        watching.watch = crate::shipped::copy()
+            .or_else(|| disk_text(base, rva, len))
             .and_then(|disk| crate::code_watch::Watch::from_disk(disk, now, &ignored))
             .unwrap_or_else(|| {
                 crate::log!(
@@ -264,14 +265,14 @@ pub(crate) fn entry_rva(base: u64) -> Option<usize> {
 /// Up to [`BRANCH_BYTES`](crate::code_watch::BRANCH_BYTES) bytes at `at`,
 /// for following a jump: as many as read before an unreadable page, even
 /// while another program's thread changes the pages.
-fn code_at(at: usize) -> Option<Vec<u8>> {
+pub(crate) fn code_at(at: usize) -> Option<Vec<u8>> {
     crate::pages::read_up_to(at, crate::code_watch::BRANCH_BYTES)
 }
 
 /// The game's `.text` as the executable on disk holds it, relocated to
 /// `base` and `len` bytes long as mapped; `None` when the file does not read
 /// or its section starts elsewhere than `rva`.
-fn disk_text(base: u64, rva: usize, len: usize) -> Option<Vec<u8>> {
+pub(crate) fn disk_text(base: u64, rva: usize, len: usize) -> Option<Vec<u8>> {
     use enshwick_gamedata::reflect::{Image, Layout};
     let bytes = std::fs::read(std::env::current_exe().ok()?).ok()?;
     let image = Image::parse(&bytes, Layout::File, None).ok()?;

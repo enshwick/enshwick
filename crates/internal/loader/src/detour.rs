@@ -173,6 +173,11 @@ pub(crate) enum PrepareError {
     /// bytes the jump replaces, where it would land in the jump itself.
     #[error("the branch at {0:#x} lands inside the bytes of the jump")]
     JumpedInto(usize),
+    /// The bytes the jump replaces no longer read as the game shipped them:
+    /// another program took the target, and a hook over it would break
+    /// that program or be broken by it.
+    #[error("{0}")]
+    Taken(crate::shipped::Taken),
 }
 
 /// Prepares every request: relays and trampolines written and sealed, the

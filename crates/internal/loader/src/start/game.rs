@@ -247,9 +247,12 @@ pub(super) fn game(mods_dir: &Path) -> Option<Game> {
     if !reflection_read(&reflection, fingerprint, mods_dir) {
         return None;
     }
-    let code = image.section(".text").and_then(|text| {
-        let range = image.range(text);
-        image
+    let shipped = crate::shipped::read(base);
+    let shipped_image = shipped.as_deref().and_then(|text| image.with_text(text));
+    let scanned = shipped_image.as_ref().unwrap_or(image);
+    let code = scanned.section(".text").and_then(|text| {
+        let range = scanned.range(text);
+        scanned
             .read(range.start, range.end - range.start)
             .map(|bytes| (bytes, range.start - base))
     });
@@ -276,7 +279,7 @@ pub(super) fn game(mods_dir: &Path) -> Option<Game> {
     if let Some(game_dir) = game_dir {
         crate::attribute_slots::supply(&mut build, &reflection, game_dir, side);
     }
-    route(&mut build, image, &reflection, side);
+    route(&mut build, scanned, &reflection, side);
     let build: &'static builds::KnownBuild = Box::leak(Box::new(build));
     let (level, line) = build.start_line();
     if log::enabled(level, crate::settings::LOADER_ID) {
