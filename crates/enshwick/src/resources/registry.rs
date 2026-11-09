@@ -160,6 +160,7 @@ impl<'a> Registry<'a> {
     /// Every struct derived from `base`, directly or through other bases; a
     /// chain deeper than the bases [`all_fields`](Self::all_fields) follows
     /// is taken for a loop and does not count.
+    #[cfg(feature = "typed")]
     pub(crate) fn derived<'r>(&'r self, base: &'r Type<'a>) -> impl Iterator<Item = &'r Type<'a>> {
         self.types.iter().filter(move |ty| {
             let mut current = *ty;
