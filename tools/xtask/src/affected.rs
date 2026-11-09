@@ -49,12 +49,14 @@ const BOOK_DIR: &str = "book/src/";
 const BOOK_HARNESS: &str = "enshwick";
 /// The package whose tests compile and type-check the book's Luau examples.
 const BOOK_LUAU: &str = "enshwick-luau";
+/// The workflow that pins the luau-lsp release those tests run.
+const LUAU_LSP_PIN: &str = ".github/workflows/rust-ci.yml";
 
 /// Sorts changed files (relative to the root, `/` separators) into a scope.
 pub(crate) fn scope(files: &[String], packages: &[Package]) -> Scope {
     let mut changed = BTreeSet::new();
     let mut docs = BTreeSet::new();
-    let mut book = false;
+    let mut luau = false;
     for file in files {
         if GLOBAL_FILES.contains(&file.as_str())
             || GLOBAL_DIRS.iter().any(|dir| file.starts_with(dir))
@@ -63,14 +65,16 @@ pub(crate) fn scope(files: &[String], packages: &[Package]) -> Scope {
         }
         if file.starts_with(BOOK_DIR) {
             docs.insert(BOOK_HARNESS.to_owned());
-            book = true;
+            luau = true;
+        } else if file == LUAU_LSP_PIN {
+            luau = true;
         } else if let Some(package) = owner(file, packages) {
             changed.insert(package.name.clone());
         }
     }
     let mut code = dependents(&changed, packages);
-    // Its own tests read the chapters; what depends on it does not.
-    if book && packages.iter().any(|package| package.name == BOOK_LUAU) {
+    // Its own tests read the chapters and run luau-lsp; what depends on it does not.
+    if luau && packages.iter().any(|package| package.name == BOOK_LUAU) {
         code.insert(BOOK_LUAU.to_owned());
     }
     docs.retain(|name| !code.contains(name));
@@ -201,6 +205,23 @@ mod tests {
             Scope::Some {
                 code: names(&["enshwick-luau"]),
                 docs: names(&["enshwick"]),
+            }
+        );
+    }
+
+    #[test]
+    fn a_new_luau_lsp_pin_tests_the_luau_runtime_that_runs_it() {
+        let mut packages = workspace();
+        packages.push(package(
+            "enshwick-luau",
+            "crates/internal/luau",
+            &["enshwick"],
+        ));
+        assert_eq!(
+            scope(&files(&[".github/workflows/rust-ci.yml"]), &packages),
+            Scope::Some {
+                code: names(&["enshwick-luau"]),
+                docs: names(&[]),
             }
         );
     }
