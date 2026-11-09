@@ -12,7 +12,8 @@ pinned version through rustup), [lefthook](https://lefthook.dev),
 [zizmor](https://docs.zizmor.sh) for the git hooks,
 [ast-grep](https://ast-grep.github.io) and
 [cargo-machete](https://github.com/bnjbvr/cargo-machete) for
-`cargo xtask check`, and on Windows the MSVC build tools.
+`cargo xtask check`, and on Windows the MSVC build tools, whose Windows SDK
+and CRT libraries the linker needs.
 
 ```bash
 lefthook install                            # the git hooks
