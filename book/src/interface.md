@@ -356,10 +356,9 @@ enshwick.ui.extend_screen_for("NpcDialog", "Right", guards, function(panel)
 end)
 ```
 
-The client knows only the host's entity, template and position. A panel
-that needs what only the server knows, such as a survivor's NPC id or an
-altar's base, asks the mod's server part with a
-[net message](messages.md).
+The client knows only the host's entity, template and position. A
+survivor's NPC id or an altar's base is known only to the server. A panel
+that needs one asks the mod's server part with a [net message](messages.md).
 
 ### What the prompt offers
 

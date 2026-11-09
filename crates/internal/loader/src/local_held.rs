@@ -94,7 +94,7 @@ impl HostRead {
     }
 
     /// The last whole read, or `None` while the writer stays mid-write.
-    fn read(&self) -> Option<(u32, [u8; 16], [i64; 3])> {
+    fn snapshot(&self) -> Option<(u32, [u8; 16], [i64; 3])> {
         for _ in 0..4 {
             let before = self.seq.load(Ordering::Acquire);
             if before % 2 == 1 {
@@ -299,7 +299,7 @@ unsafe fn read_host(ctx: *mut u64, layout: &Layout, at: &HostLayout, host: u32) 
 /// the reads.
 pub(crate) fn screen_host(host: u32) -> Option<([u8; 16], [i64; 3])> {
     STATE.host_wanted.store(host, Ordering::Relaxed);
-    let (read, template, position) = STATE.host.read()?;
+    let (read, template, position) = STATE.host.snapshot()?;
     (host != 0 && read == host && template != [0; 16]).then_some((template, position))
 }
 
@@ -352,12 +352,15 @@ mod tests {
     #[test]
     fn a_host_read_comes_back_whole_and_only_for_its_own_entity() {
         let read = HostRead::new();
-        assert_eq!(read.read(), Some((0, [0; 16], [0; 3])));
+        assert_eq!(read.snapshot(), Some((0, [0; 16], [0; 3])));
         let template = core::array::from_fn(|i| u8::try_from(i + 1).unwrap());
         read.write(42, template, [1 << 32, -(5 << 32), 7]);
-        assert_eq!(read.read(), Some((42, template, [1 << 32, -(5 << 32), 7])));
+        assert_eq!(
+            read.snapshot(),
+            Some((42, template, [1 << 32, -(5 << 32), 7]))
+        );
         read.seq.fetch_add(1, Ordering::Relaxed);
-        assert_eq!(read.read(), None, "mid-write");
+        assert_eq!(read.snapshot(), None, "mid-write");
     }
 
     #[test]

@@ -30,6 +30,21 @@ Each entry names the pull request that made the change.
   read a resource as the game's first read would build it now, a served
   key with every mod's patches; Luau `enshwick.resources.served_value`.
   `HostApi::resource_served` and `Status::BUILDING`, ABI 11.17 (#998).
+- `ui`: `Frame::input_hint(action, label)` with the `typed` feature, and
+  Luau `frame:input_hint`, draw the key the player bound to a game action
+  as the game's own prompts draw it, following rebinds.
+  `UiWidget::INPUT_HINT`, ABI 11.18 (#1002).
+- `ui`: unstable `Load::extend_screen_for(screen, edge, hosts, draw)` adds
+  a panel that shows only while the open screen's host was made from one
+  of `hosts`, such as the mod's own survivor kind;
+  `Frame::screen_host_template` and `Frame::screen_host_position` read the
+  host's template and where it stands. Luau `extend_screen_for`,
+  `frame:screen_host_template()` and `frame:screen_host_position()`.
+  `UiExtension.hosts`, `UiFrame.screen_host_template` and
+  `UiFrame.screen_host_position`, ABI 11.18 (#1002).
+- `test`: `Installed::game_action` and `Installed::read_screen_host` set
+  the game actions the fake build names and the screen host's template and
+  position (#1002).
 
 ### Changed
 
@@ -37,6 +52,15 @@ Each entry names the pull request that made the change.
   0.8 ms on the game's template set-up data: the loader remembers each
   thread's private read-only runs of 16 MiB or more until the world goes
   away, and `HostApi::read_only` may answer from one (#999).
+- `sound`: a container added with the `Ui` scene plays from no place in
+  the world (#1002).
+- `sound`: `Load::add_sound` refuses a WAV file whose header claims more
+  samples than the file holds, and a failed client step no longer counts
+  the file against `MAX_MOD_BYTES`; the unreachable `MAX_SECONDS` limit is
+  removed (#1002).
+- `ui`: frames read no screen host while the player is in the world with
+  no screen open (#1002).
+
 - `content`: `Load::rekey_item(old, new)` and Luau
   `enshwick.content.rekey_item` read `new` as served at each build of
   `old`, so other mods' changes of `new`, a mod's own item included, reach

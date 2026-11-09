@@ -46,7 +46,7 @@ change in any release, a patch included.
 | Damage filters: `Load::on_damage` and `Damage`. Also `DamageCause` and `events::PlayerDied`. The `killer` fields of `EntityDiedEvent`.                            | the order of the game's attributes and who it records as a killer are not yet seen                       |
 | `Load::add_recipe` and `add_recipe_with`. Also `derive_recipes`.                                                                                               | what crafting a new recipe leaves in a player's knowledge is not yet seen                                |
 | `input`. `Frame::open_screen` and `Load::on_screen_changed`.                                                                                               | young; which control each bit stands for and which screen is open are not yet seen in the game           |
-| `Frame::prompt` and `Frame::screen_host`. Also `interactions::Targets` and `Load::on_fog_uncovered`.                                                        | the prompt, the screen's host, a player's prompt target and the uncovered fog are not yet seen in the game |
+| `Frame::prompt`, `Frame::screen_host`, `Frame::screen_host_template`, `Frame::screen_host_position` and `Load::extend_screen_for`. Also `interactions::Targets` and `Load::on_fog_uncovered`. | the prompt, the screen's host, a player's prompt target and the uncovered fog are not yet seen in the game |
 
 Turn the feature on in the mod's `Cargo.toml`:
 
