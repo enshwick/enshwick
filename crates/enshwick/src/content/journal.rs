@@ -32,15 +32,19 @@
 //! }
 //! ```
 
+use std::sync::{Arc, Mutex};
+
+use crate::abi::Level;
 use crate::content::knowledge::{
     ExperienceValue, KnowledgeQuery, NewKnowledge, hash_key, key_of_hash,
 };
 use crate::knowledge::{KnowledgeId, KnowledgeType, Scope};
+use crate::locks::Relock as _;
 use crate::resources::Value;
 use crate::typed::{
     JournalRegistryResource, Named as _, QuestSourceType, QuestType, Reflected as _,
 };
-use crate::{ItemId, Load, Off};
+use crate::{Host, ItemId, Load, Off};
 
 use super::{EngineFacts, Guid, Id};
 
@@ -358,13 +362,14 @@ fn holds(registry: &Value, id: u32) -> bool {
     })
 }
 
-/// `registry` with the quest `new` after the game's.
-fn add_quest_to(mut registry: Value, new: &NewQuest) -> Result<Value, Off> {
+/// Adds the quest `new` to `registry` after the game's; on an error the
+/// registry is left as it was.
+fn add_quest_to(registry: &mut Value, new: &NewQuest) -> Result<(), Off> {
     let quest = KnowledgeId::from_guid(new.id.guid()).get();
     let ids = step_ids(new.id, new.steps.len());
     if let Some(id) = core::iter::once(quest)
         .chain(ids.iter().copied())
-        .find(|&id| holds(&registry, id))
+        .find(|&id| holds(registry, id))
     {
         return Err(Off::new(format!(
             "quest {}: the journal holds {id}",
@@ -377,7 +382,7 @@ fn add_quest_to(mut registry: Value, new: &NewQuest) -> Result<Value, Off> {
         .zip(&ids)
         .map(|(step, &id)| step.to_value(id))
         .collect::<Result<_, _>>()?;
-    let mut fields = header(quest, 0, new.name, document(&registry), steps);
+    let mut fields = header(quest, 0, new.name, document(registry), steps);
     fields.extend([
         ("source".into(), new.source.to_value()),
         ("type".into(), new.kind.to_value()),
@@ -388,17 +393,18 @@ fn add_quest_to(mut registry: Value, new: &NewQuest) -> Result<Value, Off> {
             Value::List(new.rewards.iter().map(|reward| reward.to_value()).collect()),
         ),
     ]);
-    list_mut(&mut registry, QUESTS)?.push(Value::Struct(fields));
-    Ok(registry)
+    list_mut(registry, QUESTS)?.push(Value::Struct(fields));
+    Ok(())
 }
 
-/// `registry` with the lore page `new` after the game's.
-fn add_page_to(mut registry: Value, new: &NewJournalPage) -> Result<Value, Off> {
+/// Adds the lore page `new` to `registry` after the game's; on an error the
+/// registry is left as it was.
+fn add_page_to(registry: &mut Value, new: &NewJournalPage) -> Result<(), Off> {
     let page = new.id.guid().fnv1a();
     let ids = step_ids(new.id, new.entries.len());
     if let Some(id) = core::iter::once(page)
         .chain(ids.iter().copied())
-        .find(|&id| holds(&registry, id))
+        .find(|&id| holds(registry, id))
     {
         return Err(Off::new(format!(
             "journal page {}: the journal holds {id}",
@@ -431,23 +437,37 @@ fn add_page_to(mut registry: Value, new: &NewJournalPage) -> Result<Value, Off> 
         page,
         new.category.fnv1a(),
         new.name,
-        document(&registry),
+        document(registry),
         entries,
     );
-    list_mut(&mut registry, COLLECTIONS)?.push(Value::Struct(fields));
-    Ok(registry)
+    list_mut(registry, COLLECTIONS)?.push(Value::Struct(fields));
+    Ok(())
 }
 
-/// `registry` with the vanilla quest `quest` changed by `change`.
+/// Changes the vanilla quest `quest` in `registry` by `change`; on an error
+/// the registry is left as it was.
 fn change_quest_in(
-    mut registry: Value,
+    registry: &mut Value,
     quest: KnowledgeId,
     change: &QuestChange,
-) -> Result<Value, Off> {
-    let held = list_mut(&mut registry, QUESTS)?
+) -> Result<(), Off> {
+    let held = list_mut(registry, QUESTS)?
         .iter_mut()
         .find(|held| entry_id(held) == Some(quest.get()))
         .ok_or_else(|| Off::new(format!("quest {quest}: no quest of the journal")))?;
+    let steps = list_mut(held, ENTRIES)?.len();
+    let mut queries = Vec::new();
+    for step in &change.steps {
+        let at = usize::try_from(step.step)
+            .ok()
+            .filter(|&at| at < steps)
+            .ok_or_else(|| Off::new(format!("quest {quest}: no step {}", step.step)))?;
+        for (field, query) in [(SHOWN, step.shown_when), (DONE, step.done_when)] {
+            if let Some(query) = query {
+                queries.push((at, field, query.to_value()?));
+            }
+        }
+    }
     let rewards = list_mut(held, REWARDS)?;
     if let Some(new) = &change.rewards {
         *rewards = new.iter().map(|reward| reward.to_value()).collect();
@@ -457,24 +477,75 @@ fn change_quest_in(
         *held = Value::Bool(all);
     }
     let steps = list_mut(held, ENTRIES)?;
-    for step in &change.steps {
-        let held = usize::try_from(step.step)
-            .ok()
-            .and_then(|at| steps.get_mut(at))
-            .ok_or_else(|| Off::new(format!("quest {quest}: no step {}", step.step)))?;
-        for (field, query) in [(SHOWN, step.shown_when), (DONE, step.done_when)] {
-            if let (Some(query), Some(held)) = (query, held.field_mut(field)) {
-                *held = query.to_value()?;
-            }
+    for (at, field, query) in queries {
+        if let Some(held) = steps[at].field_mut(field) {
+            *held = query;
         }
     }
-    Ok(registry)
+    Ok(())
+}
+
+/// One change a mod makes to the journal.
+#[derive(Debug)]
+enum Edit {
+    /// A quest of its own.
+    Quest(NewQuest),
+    /// A lore page of its own.
+    Page(NewJournalPage),
+    /// A change of a vanilla quest.
+    Change(KnowledgeId, QuestChange),
+}
+
+impl Edit {
+    /// Makes the change in `registry`, which is left as it was on an error.
+    fn apply(&self, registry: &mut Value) -> Result<(), Off> {
+        match self {
+            Self::Quest(new) => add_quest_to(registry, new),
+            Self::Page(new) => add_page_to(registry, new),
+            Self::Change(quest, change) => change_quest_in(registry, *quest, change),
+        }
+    }
+}
+
+/// The journal changes a mod made, in order, which one patch of the
+/// journal serves, read when the game first builds it.
+#[derive(Debug)]
+pub(crate) struct AddedJournal(Arc<Mutex<Vec<Edit>>>);
+
+impl AddedJournal {
+    /// Serves the patch of the journal `key` that makes the mod's changes;
+    /// a change that fails is logged and left out, and the rest are made.
+    fn serve(host: Host, key: crate::abi::ResourceKey) -> Result<Self, Off> {
+        let edits = Arc::new(Mutex::new(Vec::new()));
+        let served = Arc::clone(&edits);
+        crate::resources::serve_value(host, key, key, move |mut registry| {
+            for edit in served.relock().iter() {
+                if let Err(off) = edit.apply(&mut registry) {
+                    host.log(Level::WARN, &off.to_string());
+                }
+            }
+            Ok(registry)
+        })?;
+        Ok(Self(edits))
+    }
 }
 
 impl Load<'_> {
     /// The journal's resource key on the running build.
-    fn journal(&self) -> Result<crate::abi::ResourceKey, Off> {
+    fn journal_key(&self) -> Result<crate::abi::ResourceKey, Off> {
         Ok(JOURNAL_REGISTRY.key_by_hash(self.hash(JournalRegistryResource::ID)?))
+    }
+
+    /// Adds `edit` to the changes the one patch of the journal `key` makes
+    /// for the mod, serving the patch with the first.
+    fn edit_journal(&mut self, key: crate::abi::ResourceKey, edit: Edit) -> Result<(), Off> {
+        let host = self.host();
+        let journal = match &mut self.journal {
+            Some(journal) => journal,
+            empty => empty.insert(AddedJournal::serve(host, key)?),
+        };
+        journal.0.relock().push(edit);
+        Ok(())
     }
 }
 
@@ -507,15 +578,13 @@ impl Load<'_> {
             step.to_value(id)?;
         }
         let resource = self.knowledge_without(new.id)?;
-        let key = self.journal()?;
+        let key = self.journal_key()?;
         self.declare(new.id)?;
         let quest = self.serve_knowledge(
             resource,
             NewKnowledge::new(new.id, Scope::Player, KnowledgeType::Bool),
         )?;
-        crate::resources::serve_value(self.host(), key, key, move |registry| {
-            add_quest_to(registry, &new)
-        })?;
+        self.edit_journal(key, Edit::Quest(new))?;
         Ok(quest)
     }
 
@@ -557,11 +626,9 @@ impl Load<'_> {
         for entry in &new.entries {
             entry.shown_when.to_value()?;
         }
+        let key = self.journal_key()?;
         self.declare(new.id)?;
-        let key = self.journal()?;
-        crate::resources::serve_value(self.host(), key, key, move |registry| {
-            add_page_to(registry, &new)
-        })
+        self.edit_journal(key, Edit::Page(new))
     }
 
     /// Changes the vanilla quest `quest` in memory, on the server and the
@@ -592,12 +659,9 @@ impl Load<'_> {
     /// ```
     #[script]
     pub fn change_quest(&mut self, quest: KnowledgeId, change: QuestChange) -> Result<(), Off> {
-        let key = self.journal()?;
-        let vanilla = self.host().game_value(key)?;
-        change_quest_in(vanilla, quest, &change)?;
-        crate::resources::serve_value(self.host(), key, key, move |registry| {
-            change_quest_in(registry, quest, &change)
-        })
+        let key = self.journal_key()?;
+        change_quest_in(&mut self.host().game_value(key)?, quest, &change)?;
+        self.edit_journal(key, Edit::Change(quest, change))
     }
 }
 
@@ -625,7 +689,8 @@ mod tests {
             (QUESTS.into(), Value::List(Vec::new())),
             (COLLECTIONS.into(), Value::List(Vec::new())),
         ]);
-        let mut held = add_quest_to(empty, &vanilla).unwrap();
+        let mut held = empty;
+        add_quest_to(&mut held, &vanilla).unwrap();
         if let Some(Value::List(quests)) = held.field_mut(QUESTS)
             && let Some(document) = quests[0].field_mut(DOCUMENT)
         {
@@ -654,7 +719,8 @@ mod tests {
                 ],
             )
         };
-        let added = add_quest_to(registry(), &new).unwrap();
+        let mut added = registry();
+        add_quest_to(&mut added, &new).unwrap();
         let quest = &quests(&added)[1];
         assert_eq!(
             entry_id(quest),
@@ -667,7 +733,9 @@ mod tests {
         assert_eq!(steps.len(), 2);
         assert_ne!(entry_id(&steps[0]), entry_id(&steps[1]));
         assert_eq!(steps[1].field(SHOWN), Some(&query(4).to_value().unwrap()));
-        assert!(add_quest_to(added, &new).is_err(), "twice");
+        let before = added.clone();
+        assert!(add_quest_to(&mut added, &new).is_err(), "twice");
+        assert_eq!(added, before, "left as it was");
     }
 
     #[test]
@@ -682,7 +750,8 @@ mod tests {
                 shown_when: query(6),
             }],
         };
-        let added = add_page_to(registry(), &page).unwrap();
+        let mut added = registry();
+        add_page_to(&mut added, &page).unwrap();
         let Some(Value::List(pages)) = added.field(COLLECTIONS) else {
             panic!("{added:?}")
         };
@@ -717,8 +786,9 @@ mod tests {
             }],
             ..QuestChange::default()
         };
-        let once = change_quest_in(registry(), vanilla, &first).unwrap();
-        let twice = change_quest_in(once, vanilla, &second).unwrap();
+        let mut twice = registry();
+        change_quest_in(&mut twice, vanilla, &first).unwrap();
+        change_quest_in(&mut twice, vanilla, &second).unwrap();
         let quest = &quests(&twice)[0];
         assert_eq!(
             quest.field(REWARDS),
@@ -744,7 +814,13 @@ mod tests {
             }],
             ..QuestChange::default()
         };
-        assert!(change_quest_in(registry(), vanilla, &past).is_err());
-        assert!(change_quest_in(registry(), KnowledgeId::new(5), &first).is_err());
+        let mut held = registry();
+        let past = QuestChange {
+            rewards: Some(Vec::new()),
+            ..past
+        };
+        assert!(change_quest_in(&mut held, vanilla, &past).is_err());
+        assert_eq!(held, registry(), "the rewards are kept when a step is past");
+        assert!(change_quest_in(&mut held, KnowledgeId::new(5), &first).is_err());
     }
 }

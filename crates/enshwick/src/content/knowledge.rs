@@ -23,10 +23,14 @@
 //! }
 //! ```
 
+use std::sync::{Arc, Mutex};
+
+use crate::abi::Level;
 use crate::knowledge::{KnowledgeId, KnowledgeType, Scope};
+use crate::locks::Relock as _;
 use crate::resources::Value;
 use crate::typed::{GameKnowledgeResource, Named as _};
-use crate::{Load, Off};
+use crate::{Host, Load, Off};
 
 use super::{EngineFacts, Guid, Id};
 
@@ -232,6 +236,11 @@ impl NewKnowledge {
         }
     }
 
+    /// Its knowledge id.
+    fn key(self) -> u32 {
+        KnowledgeId::from_guid(self.id.guid()).get()
+    }
+
     /// The game's value of the entry with knowledge id `key`.
     fn to_value(self, key: u32) -> Result<Value, Off> {
         let refuse = |why: &str| Err(Off::new(format!("knowledge {}: {why}", self.id)));
@@ -273,6 +282,28 @@ impl NewKnowledge {
     }
 }
 
+/// The knowledge entries a mod added, which one patch of the game's
+/// knowledge serves, read when the game first builds it.
+#[derive(Debug)]
+pub(crate) struct AddedKnowledge(Arc<Mutex<Vec<NewKnowledge>>>);
+
+impl AddedKnowledge {
+    /// Serves the patch of the game's knowledge `resource` that adds the
+    /// mod's entries; an entry another mod's took is logged and left out.
+    fn serve(host: Host, resource: crate::abi::ResourceKey) -> Result<Self, Off> {
+        let added = Arc::new(Mutex::new(Vec::new()));
+        let served = Arc::clone(&added);
+        crate::resources::serve_value(host, resource, resource, move |value| {
+            let (value, refused) = add_to(value, &served.relock())?;
+            for off in refused {
+                host.log(Level::WARN, &off.to_string());
+            }
+            Ok(value)
+        })?;
+        Ok(Self(added))
+    }
+}
+
 /// A `HashKey32` of `key`.
 pub(crate) fn hash_key(key: u32) -> Value {
     Value::Struct(vec![(VALUE.into(), Value::Uint(key.into()))])
@@ -298,10 +329,15 @@ pub(crate) fn key_of(value: &Value) -> Option<u32> {
 
 /// Whether the world or the player map of `knowledge` holds `key`.
 fn knows(knowledge: &Value, key: u32) -> bool {
-    [WORLD_KNOWLEDGE, PLAYER_KNOWLEDGE].iter().any(|map| {
-        matches!(knowledge.field(map).and_then(|map| map.field(KEYS)),
-            Some(Value::List(keys)) if keys.iter().any(|held| key_of(held) == Some(key)))
-    })
+    [WORLD_KNOWLEDGE, PLAYER_KNOWLEDGE]
+        .iter()
+        .any(|map| knows_in(knowledge, map, key))
+}
+
+/// Whether the map `map` of `knowledge` holds `key`.
+fn knows_in(knowledge: &Value, map: &str, key: u32) -> bool {
+    matches!(knowledge.field(map).and_then(|map| map.field(KEYS)),
+        Some(Value::List(keys)) if keys.iter().any(|held| key_of(held) == Some(key)))
 }
 
 /// The list in field `name` of `value`, taken out of it.
@@ -312,11 +348,12 @@ fn take_list(value: &mut Value, name: &str) -> Result<Vec<Value>, Off> {
     }
 }
 
-/// Inserts the entry `value` under `key` into the static hash map `map`:
-/// the keys and values ordered by bucket again, each bucket's run of them
-/// counted again, as the game's lookup reads them (a key's bucket is the
-/// key masked by the bucket count less one, server 387).
-fn insert(map: &mut Value, key: u32, value: Value) -> Result<(), Off> {
+/// Inserts the entries `added`, each a value under its key, into the static
+/// hash map `map` in one rebuild: the keys and values ordered by bucket
+/// again, each bucket's run of them counted again, as the game's lookup
+/// reads them (a key's bucket is the key masked by the bucket count less
+/// one, server 387).
+fn insert(map: &mut Value, added: Vec<(u32, Value)>) -> Result<(), Off> {
     let buckets = take_list(map, ENTRIES)?.len();
     if !buckets.is_power_of_two() {
         return Err(Off::new(format!(
@@ -328,15 +365,24 @@ fn insert(map: &mut Value, key: u32, value: Value) -> Result<(), Off> {
     if keys.len() != values.len() {
         return Err(Off::new("knowledge map: keys and values differ in count"));
     }
-    let mut pairs = Vec::with_capacity(keys.len() + 1);
+    let mut pairs = Vec::with_capacity(keys.len() + added.len());
     for (held, entry) in keys.into_iter().zip(values) {
         let id = key_of(&held).ok_or_else(|| Off::new("knowledge map: a key holds no id"))?;
-        if id == key {
-            return Err(Off::new(format!("knowledge {key}: the game knows it")));
-        }
         pairs.push((id, held, entry));
     }
-    pairs.push((key, knowledge_id(key), value));
+    pairs.extend(
+        added
+            .into_iter()
+            .map(|(key, value)| (key, knowledge_id(key), value)),
+    );
+    let mut ids: Vec<u32> = pairs.iter().map(|(id, ..)| *id).collect();
+    ids.sort_unstable();
+    if let Some(twice) = ids.windows(2).find(|pair| pair[0] == pair[1]) {
+        return Err(Off::new(format!(
+            "knowledge {}: the game knows it",
+            twice[0]
+        )));
+    }
     let mask = buckets - 1;
     // Stable: vanilla keys keep their order within a bucket.
     pairs.sort_by_key(|(id, ..)| *id as usize & mask);
@@ -368,45 +414,59 @@ fn insert(map: &mut Value, key: u32, value: Value) -> Result<(), Off> {
     Ok(())
 }
 
-/// `knowledge` with the entry `new` under `key` in its map, and its skill
-/// point unlock in the list the game keeps ordered by id (server 387).
-fn add_to(mut knowledge: Value, new: NewKnowledge, key: u32) -> Result<Value, Off> {
-    let other = if new.scope == Scope::Player {
-        WORLD_KNOWLEDGE
-    } else {
-        PLAYER_KNOWLEDGE
-    };
-    if let Some(Value::List(keys)) = knowledge.field(other).and_then(|map| map.field(KEYS))
-        && keys.iter().any(|held| key_of(held) == Some(key))
-    {
-        return Err(Off::new(format!("knowledge {}: the game knows it", new.id)));
+/// `knowledge` with the entries `added` in its maps, one rebuild of each
+/// map for all of them, and their skill point unlocks in the list the game
+/// keeps ordered by id (server 387). An entry the game's other map holds is
+/// left out and returned with the reason, so the rest still serve.
+fn add_to(mut knowledge: Value, added: &[NewKnowledge]) -> Result<(Value, Vec<Off>), Off> {
+    let mut refused = Vec::new();
+    let mut kept = Vec::with_capacity(added.len());
+    for player in [false, true] {
+        let (map, other) = if player {
+            (PLAYER_KNOWLEDGE, WORLD_KNOWLEDGE)
+        } else {
+            (WORLD_KNOWLEDGE, PLAYER_KNOWLEDGE)
+        };
+        let mut entries = Vec::new();
+        for new in added
+            .iter()
+            .filter(|new| (new.scope == Scope::Player) == player)
+        {
+            let key = new.key();
+            if knows_in(&knowledge, other, key) {
+                refused.push(Off::new(format!("knowledge {}: the game knows it", new.id)));
+                continue;
+            }
+            entries.push((key, new.to_value(key)?));
+            kept.push(new);
+        }
+        if entries.is_empty() {
+            continue;
+        }
+        let held = knowledge
+            .field_mut(map)
+            .ok_or_else(|| Off::new(format!("knowledge: no {map}")))?;
+        insert(held, entries)?;
     }
-    let map = if new.scope == Scope::Player {
-        PLAYER_KNOWLEDGE
-    } else {
-        WORLD_KNOWLEDGE
-    };
-    let value = new.to_value(key)?;
-    let held = knowledge
-        .field_mut(map)
-        .ok_or_else(|| Off::new(format!("knowledge: no {map}")))?;
-    insert(held, key, value)?;
-    if new.skill_points > 0 {
+    let mut points = kept
+        .iter()
+        .filter(|new| new.skill_points > 0)
+        .map(|new| {
+            Value::Struct(vec![
+                (KNOWLEDGE_ID.into(), knowledge_id(new.key())),
+                (AMOUNT.into(), Value::Uint(new.skill_points.into())),
+            ])
+        })
+        .peekable();
+    if points.peek().is_some() {
         let Some(Value::List(unlocks)) = knowledge.field_mut(SKILL_POINTS) else {
             return Err(Off::new("knowledge: no list of skill points"));
         };
-        let at = unlocks.partition_point(|unlock| {
-            unlock.field(KNOWLEDGE_ID).and_then(key_of).unwrap_or(0) < key
-        });
-        unlocks.insert(
-            at,
-            Value::Struct(vec![
-                (KNOWLEDGE_ID.into(), knowledge_id(key)),
-                (AMOUNT.into(), Value::Uint(new.skill_points.into())),
-            ]),
-        );
+        unlocks.extend(points);
+        unlocks
+            .sort_by_cached_key(|unlock| unlock.field(KNOWLEDGE_ID).and_then(key_of).unwrap_or(0));
     }
-    Ok(knowledge)
+    Ok((knowledge, refused))
 }
 
 #[crate::script(content_knowledge)]
@@ -498,19 +558,21 @@ impl Load<'_> {
         Ok(resource)
     }
 
-    /// Serves the game's knowledge `resource` with `new`, whose id the mod
-    /// declared.
+    /// Adds `new`, whose id the mod declared, to the entries the one patch
+    /// of the game's knowledge `resource` serves for the mod, serving the
+    /// patch with the first.
     pub(super) fn serve_knowledge(
-        &self,
+        &mut self,
         resource: crate::abi::ResourceKey,
         new: NewKnowledge,
     ) -> Result<KnowledgeId, Off> {
-        let key = KnowledgeId::from_guid(new.id.guid()).get();
-        // shortcut: each entry decodes and encodes the whole resource once at its first build; batch a mod's entries when a mod adds hundreds.
-        crate::resources::serve_value(self.host(), resource, resource, move |value| {
-            add_to(value, new, key)
-        })?;
-        Ok(KnowledgeId::new(key))
+        let host = self.host();
+        let added = match &mut self.knowledge {
+            Some(added) => added,
+            empty => empty.insert(AddedKnowledge::serve(host, resource)?),
+        };
+        added.0.relock().push(new);
+        Ok(KnowledgeId::new(new.key()))
     }
 }
 
@@ -524,9 +586,8 @@ mod tests {
             (KEYS.into(), Value::List(Vec::new())),
             (VALUES.into(), Value::List(Vec::new())),
         ]);
-        for &key in keys {
-            insert(&mut map, key, Value::Uint(key.into())).unwrap();
-        }
+        let added = keys.iter().map(|&key| (key, Value::Uint(key.into())));
+        insert(&mut map, added.collect()).unwrap();
         map
     }
 
@@ -575,51 +636,78 @@ mod tests {
     }
 
     #[test]
-    fn a_key_the_map_holds_is_refused() {
+    fn a_key_the_map_holds_or_given_twice_is_refused() {
         let mut map = map(4, &[2]);
-        assert!(insert(&mut map, 2, Value::Nil).is_err());
+        assert!(insert(&mut map.clone(), vec![(2, Value::Nil)]).is_err());
+        assert!(insert(&mut map.clone(), vec![(5, Value::Nil), (5, Value::Nil)]).is_err());
         let mut odd = map.clone();
         if let Some(entries) = odd.field_mut(ENTRIES) {
             *entries = Value::List(vec![Value::Nil; 3]);
         }
-        assert!(insert(&mut odd, 9, Value::Nil).is_err(), "3 buckets");
+        assert!(
+            insert(&mut odd, vec![(9, Value::Nil)]).is_err(),
+            "3 buckets"
+        );
+        insert(&mut map, vec![(9, Value::Nil), (13, Value::Nil)]).unwrap();
+        assert_eq!(find(&map, 2), Some(2), "kept");
     }
 
-    #[test]
-    fn skill_points_join_the_unlocks_in_id_order() {
+    fn knowledge(player: &[u32], unlocks: &[u32]) -> Value {
         let unlock = |key: u32| {
             Value::Struct(vec![
                 (KNOWLEDGE_ID.into(), knowledge_id(key)),
                 (AMOUNT.into(), Value::Uint(1)),
             ])
         };
-        let knowledge = Value::Struct(vec![
+        Value::Struct(vec![
             (WORLD_KNOWLEDGE.into(), map(4, &[])),
-            (PLAYER_KNOWLEDGE.into(), map(4, &[1])),
-            (SKILL_POINTS.into(), Value::List(vec![unlock(1), unlock(9)])),
-        ]);
-        let new = NewKnowledge {
-            skill_points: 2,
-            ..NewKnowledge::new(
-                Id::new("you.lore:shrine"),
-                Scope::Player,
-                KnowledgeType::Bool,
-            )
+            (PLAYER_KNOWLEDGE.into(), map(4, player)),
+            (
+                SKILL_POINTS.into(),
+                Value::List(unlocks.iter().copied().map(unlock).collect()),
+            ),
+        ])
+    }
+
+    fn unlock_ids(knowledge: &Value) -> Vec<u32> {
+        let Some(Value::List(unlocks)) = knowledge.field(SKILL_POINTS) else {
+            panic!("{knowledge:?}")
         };
-        let added = add_to(knowledge.clone(), new, 5).unwrap();
-        let Some(Value::List(unlocks)) = added.field(SKILL_POINTS) else {
-            panic!("{added:?}")
-        };
-        let ids: Vec<_> = unlocks
+        unlocks
             .iter()
             .filter_map(|u| u.field(KNOWLEDGE_ID).and_then(key_of))
-            .collect();
-        assert_eq!(ids, [1, 5, 9]);
+            .collect()
+    }
+
+    #[test]
+    fn skill_points_join_the_unlocks_in_id_order() {
+        let new = |name, points| NewKnowledge {
+            skill_points: points,
+            ..NewKnowledge::new(Id::new(name), Scope::Player, KnowledgeType::Bool)
+        };
+        let (a, b) = (new("you.lore:a", 2), new("you.lore:b", 1));
+        let (low, high) = (a.key().min(b.key()) - 1, a.key().max(b.key()) + 1);
+        let (added, refused) = add_to(knowledge(&[low], &[low, high]), &[a, b]).unwrap();
+        assert!(refused.is_empty(), "{refused:?}");
+        let mut sorted = vec![low, a.key(), b.key(), high];
+        sorted.sort_unstable();
+        assert_eq!(unlock_ids(&added), sorted);
+    }
+
+    #[test]
+    fn an_entry_the_other_map_holds_is_left_out_and_the_rest_serve() {
+        let player = NewKnowledge::new(Id::new("you.lore:p"), Scope::Player, KnowledgeType::Bool);
         let world = NewKnowledge::new(Id::new("you.lore:w"), Scope::World, KnowledgeType::Bool);
+        let (added, refused) = add_to(knowledge(&[world.key()], &[]), &[world, player]).unwrap();
+        assert_eq!(refused.len(), 1, "{refused:?}");
         assert!(
-            add_to(knowledge, world, 1).is_err(),
-            "a player's id already"
+            refused[0].to_string().contains("you.lore:w"),
+            "{}",
+            refused[0]
         );
+        let player_map = added.field(PLAYER_KNOWLEDGE).unwrap();
+        assert!(find(player_map, player.key()).is_some());
+        assert!(!knows_in(&added, WORLD_KNOWLEDGE, world.key()));
     }
 
     #[test]
