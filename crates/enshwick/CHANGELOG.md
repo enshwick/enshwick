@@ -10,6 +10,13 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- The loader finds its entries in the game's code as the executable on disk
+  holds it, relocated, so another program's hooks no longer hide them. It
+  writes no hook over a function whose bytes no longer read as shipped: only
+  what needs that hook turns off, and the log, the Mods screen and the chat
+  line a joining player reads name the DLL the function's jump leads into
+  (#1014).
+
 - `content`: `Load::add_experience(NewExperience)` adds an experience value
   of a mod's own, a source and a gain, for a knowledge entry's `experience`
   and a quest's experience reward; `vanilla::experience_values()` lists the
@@ -140,6 +147,14 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- `test`: the fake host refuses `subscribe`, `subscribe_tick` and
+  `subscribe_event` after init with `TOO_LATE`, as the loader does, so a
+  mod's test fails where the game would (#1014).
+- A data pack's log level keeps no memory for a handle past about a million,
+  and a log line reached again while a call site's lock is held takes the
+  shared state instead of waiting on that lock (#1014).
+- A mid-function hook finds its owner's data pack once when the hooks arm,
+  not on every hit (#1014).
 - `enshwick.h` compiles as C++: the `template` parameter of
   `HostApi::config_schema` is `defaults`, which leaves the layout as it was,
   and `cargo xtask check` holds the layout in C++20 too.

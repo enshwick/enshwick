@@ -318,6 +318,25 @@ patches mods ask for through the API. The jump that holds the server's entry
 point until the loader is ready is one too. Changes made after the last `ready`,
 and changes to game data rather than code, are not seen.
 
+### Code another program hooked first
+
+The loader finds its entries in the game's code as the executable on disk
+holds it, so another program's hooks in the code in memory hide none of them.
+When the loader turns its hooks on, it compares the bytes each hook would
+replace with that copy. Where they differ, another program holds the function.
+The loader writes no hook over it, and only what needs that hook turns off:
+
+| Line | Means |
+| --- | --- |
+| `hook off on <build>: <id> could not be armed: taken by other.dll` | the changed code jumps into `other.dll`, directly or through up to three more jumps |
+| `... taken by something other than Enshwick` | the jump leads into no DLL, or the bytes changed without a jump |
+
+The Mods screen shows the same reason under the part or mod that turned off.
+A player who joins reads which DLL holds the code in the chat line that names
+what is off. When the executable's code on disk does not read as the code in
+memory, as for an encrypted executable, the loader searches the code in memory
+and makes no such comparison.
+
 ## Faults
 
 When the loader turns a mod off, the loader's log and the mod's log say why.
