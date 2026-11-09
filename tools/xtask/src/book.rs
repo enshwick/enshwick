@@ -2,7 +2,8 @@
 //! every chapter is in `SUMMARY.md`, and every chapter is included by a
 //! doctest harness of the API crate, so its Rust examples compile. Every
 //! chapter opens with its page type and description and keeps its intro
-//! short.
+//! short, and a chapter that names an id links the page on how ids are
+//! namespaced.
 
 use std::path::Path;
 
@@ -37,6 +38,7 @@ pub(crate) fn check(root: &Path) -> Vec<String> {
             Ok(text) => {
                 found.extend(page_problems(chapter, &text));
                 found.extend(intro_problem(chapter, &text));
+                found.extend(ids_link_problem(chapter, &text));
             }
             Err(error) => found.push(format!("{SOURCE}/{chapter}: {error}")),
         }
@@ -141,6 +143,20 @@ fn intro_problem(chapter: &str, text: &str) -> Option<String> {
             "{SOURCE}/{chapter}: the intro has {words} words; keep it under {INTRO_WORDS} before the first ## heading"
         )
     })
+}
+
+/// The chapter that states how ids are namespaced, relative to [`SOURCE`].
+const IDS_CHAPTER: &str = "concepts/ids.md";
+/// What marks a chapter as naming an id: a full id's form or the term.
+const ID_MARKS: [&str; 4] = ["`<mod>:", "`<id>:", "`<mod id>:", "content id"];
+
+/// The problem with a chapter that names an id and does not link
+/// [`IDS_CHAPTER`], which states the rule once for every page.
+fn ids_link_problem(chapter: &str, text: &str) -> Option<String> {
+    let names_an_id = ID_MARKS.iter().any(|mark| text.contains(mark));
+    let file = IDS_CHAPTER.rsplit('/').next().unwrap_or(IDS_CHAPTER);
+    (chapter != IDS_CHAPTER && names_an_id && !text.contains(file))
+        .then(|| format!("{SOURCE}/{chapter}: names an id; link {IDS_CHAPTER} where it does"))
 }
 
 /// The words between the `# ` title and the first deeper heading, outside
@@ -334,6 +350,16 @@ mod tests {
 
     fn page(block: &str) -> String {
         format!("<!--\n{block}\n-->\n\n# Title\n")
+    }
+
+    #[test]
+    fn a_chapter_naming_an_id_without_the_ids_link_is_named() {
+        assert!(ids_link_problem("a.md", "Its content id is fixed.").is_some());
+        assert!(ids_link_problem("a.md", "The name is `<mod>:x`.").is_some());
+        assert!(ids_link_problem("a.md", "A [content id](concepts/ids.md).").is_none());
+        assert!(ids_link_problem("b/a.md", "A [content id](../concepts/ids.md).").is_none());
+        assert!(ids_link_problem(IDS_CHAPTER, "A content id.").is_none());
+        assert!(ids_link_problem("a.md", "No id here.").is_none());
     }
 
     #[test]
