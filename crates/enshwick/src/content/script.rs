@@ -388,7 +388,9 @@ impl Content {
     /// As [`vanilla::experience_values`].
     #[cfg(feature = "typed")]
     #[script]
-    pub fn experience_values(self) -> Result<Vec<vanilla::Experience>, vanilla::VanillaError> {
+    pub fn experience_values(
+        self,
+    ) -> Result<Vec<vanilla::ExperienceBalanceValue>, vanilla::VanillaError> {
         vanilla::experience_values()
     }
 

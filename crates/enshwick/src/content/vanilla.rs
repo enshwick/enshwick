@@ -26,7 +26,7 @@ use super::{Blob, EngineFacts, Guid, types};
 mod experience;
 
 #[cfg(feature = "typed")]
-pub use experience::{Experience, experience_values};
+pub use experience::{ExperienceBalanceValue, experience_values};
 
 /// Reads one resource of the game's archive.
 type Reader = Box<dyn Fn(ResourceKey) -> Option<Vec<u8>> + Send + Sync>;
