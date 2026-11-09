@@ -26,7 +26,9 @@ Each entry names the pull request that made the change.
 - `content`: `KnowledgeTest::Equals`, `Below`, `HasFlag`, `Holds` and
   `Fails`, `KnowledgeQuery::not` and `KnowledgeQuery::game` with
   `GameQuery`, so a step, page or skill node tests a count exactly, below
-  a count, any of a set of flags, or one of the game's queries (#1015).
+  a count, any of a set of flags, or one of the game's queries;
+  `KnowledgeTest::Unknown` marks a form enshwick does not read, and a
+  quest step reads as unknown when its knowledge cannot be read (#1015).
 - `test`: `Installed::set_game_queries` sets the fake host's answers to
   game queries (#1015).
 
