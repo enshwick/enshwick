@@ -256,7 +256,7 @@ pub(super) fn game(mods_dir: &Path) -> Option<Game> {
             .read(range.start, range.end - range.start)
             .map(|bytes| (bytes, range.start - base))
     });
-    let cell = |rva| image.u32(base + rva);
+    let cell = |rva| scanned.u32(base + rva);
     let game_dir = mods_dir.parent();
     let name = builds::build_name(
         side,
@@ -274,6 +274,7 @@ pub(super) fn game(mods_dir: &Path) -> Option<Game> {
             errors::UNKNOWN_BUILD
         );
         crate::holds::enforce(mods_dir, &[], true, None);
+        crate::shipped::release();
         return None;
     };
     if let Some(game_dir) = game_dir {

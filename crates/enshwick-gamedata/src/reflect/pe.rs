@@ -374,13 +374,20 @@ impl<'a> Image<'a> {
     /// See [`Image`].
     #[must_use]
     pub fn read(&self, va: u64, len: u64) -> Option<&'a [u8]> {
-        if let Some((start, text)) = self.text
-            && let Some(offset) = va.checked_sub(start)
-            && offset < u64::try_from(text.len()).ok()?
-        {
-            let start = usize::try_from(offset).ok()?;
-            let end = start.checked_add(usize::try_from(len).ok()?)?;
-            return text.get(start..end);
+        if let Some((start, text)) = self.text {
+            let text_end = start.checked_add(u64::try_from(text.len()).ok()?)?;
+            if let Some(offset) = va.checked_sub(start)
+                && va < text_end
+            {
+                let start = usize::try_from(offset).ok()?;
+                let end = start.checked_add(usize::try_from(len).ok()?)?;
+                return text.get(start..end);
+            }
+            // Bytes before the given code that run into it would mix two
+            // copies of the code.
+            if va.checked_add(len)? > start && va < text_end {
+                return None;
+            }
         }
         let rva = va.checked_sub(self.base)?;
         let offset = match self.layout {
@@ -403,7 +410,8 @@ impl<'a> Image<'a> {
 
     /// The image with `text` read in place of its `.text` section, for a
     /// search that must see the code as shipped while another program's
-    /// hooks change it in memory; the other sections read as before.
+    /// hooks change it in memory; the other sections read as before, and a
+    /// read that runs into or out of `.text` is `None`.
     ///
     /// `None` when the image has no `.text` or `text` is not as long as the
     /// section's [`range`](Self::range).
@@ -650,6 +658,7 @@ mod tests {
         let read = image.with_text(&shipped).expect("as long as .text");
         assert_eq!(read.read(base + 0x1000, 0x10), Some(&shipped[..]));
         assert_eq!(read.read(base + 0x100F, 2), None, "runs past .text");
+        assert_eq!(read.read(base + 0xFFF, 2), None, "runs into .text");
         assert_eq!(read.read(base + 0x1010, 2), Some(&[0x90, 0x90][..]));
         assert_eq!(read.read(base, 2), Some(&b"MZ"[..]));
         assert_eq!(image.read(base + 0x1000, 1), Some(&[0x90][..]));

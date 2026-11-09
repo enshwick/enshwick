@@ -37,18 +37,6 @@ struct Shipped {
     text: Arc<[u8]>,
 }
 
-impl Shipped {
-    /// The live code the shipped copy stands for, as it reads now.
-    fn live(&self) -> &[u8] {
-        // SAFETY: `start` is the game's `.text` as `code::text` found it,
-        // or a test's code that is never freed, mapped readable for the
-        // process and `text.len()` bytes long. Another program's thread may
-        // write these bytes at any time, so each check builds the slice anew
-        // and reads it at once; a byte has no invalid value.
-        unsafe { core::slice::from_raw_parts(self.start as *const u8, self.text.len()) }
-    }
-}
-
 #[derive(Debug)]
 struct State {
     code: Option<Shipped>,
@@ -69,9 +57,10 @@ pub(crate) fn read(base: u64) -> Option<Arc<[u8]>> {
     let (start, len) = crate::code::text(base)?;
     let rva = start.checked_sub(usize::try_from(base).ok()?)?;
     let live = crate::code::text_bytes(base)?;
-    let Some((text, ranges)) = crate::code::disk_text(base, rva, len)
-        .and_then(|disk| crate::code_watch::shipped(&disk, live).map(|ranges| (disk, ranges)))
-    else {
+    let held = crate::code::entry_hold(base, rva, len);
+    let Some((text, ranges)) = crate::code::disk_text(base, rva, len).and_then(|disk| {
+        crate::code_watch::shipped(&disk, live, &held).map(|ranges| (disk, ranges))
+    }) else {
         crate::log!(
             INFO,
             "the executable on disk does not read as the code in memory: the build search reads the code in memory, and hooks are not checked against the shipped code"
@@ -117,12 +106,19 @@ pub(crate) fn release() {
 /// would replace; `None` while they read as shipped, or when no shipped
 /// code is kept or they lie outside it.
 pub(crate) fn taken((start, len): (usize, usize)) -> Option<Taken> {
+    use crate::code_watch::{BRANCH_BYTES, LEAD};
+
     let mut state = STATE.relock();
     let code = state.code.as_ref()?;
+    // A copy of the live bytes around the span, read fault-safe: another
+    // program's thread may write them at any time.
+    let from = start.checked_sub(code.start)?.saturating_sub(LEAD);
+    let read = len.checked_add(LEAD)?.checked_add(BRANCH_BYTES)?;
+    let live = crate::pages::read_up_to(code.start.checked_add(from)?, read)?;
     let taken = taken_in(
-        &code.text,
-        code.live(),
-        code.start,
+        code.text.get(from..)?,
+        &live,
+        code.start + from,
         (start, len),
         crate::code::code_at,
         module_of,

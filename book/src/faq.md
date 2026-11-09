@@ -166,7 +166,7 @@ not turn the mod off: the mod logs
 | `off:` reason                                                  | What happened                                                                     |
 | -------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | `init returned 6` after `off: init panicked`                   | `Mod::init` panicked                                                              |
-| `its hook on <entry> could not be armed`                       | The detour failed; `hook off on <build>: <entry> could not be armed` says why     |
+| `its hook on <entry> could not be armed: <reason>`             | The detour failed for `<reason>`, such as `taken by other.dll`                    |
 | `its code patch at 0x... was skipped`                          | The bytes no longer read as expected, or overlap a hook                           |
 | `panic in hook REWARD`                                         | A detour panicked; the original ran once                                          |
 | `panic in the hook at 0x...`                                   | A mid-function hook's handler panicked                                            |

@@ -11,7 +11,7 @@ const TRAMPOLINE: usize = 0x5000; // bound, not a game offset: a fake address
 fn module(at: usize) -> Option<String> {
     (MODULE..MODULE_END)
         .contains(&at)
-        .then(|| "kiln-core.dll".to_owned())
+        .then(|| "hooks.dll".to_owned())
 }
 
 /// `jmp rel32` at `from` to `to`.
@@ -51,7 +51,7 @@ fn a_jump_into_another_module_names_that_module() {
     let mut live = shipped;
     live[8..13].copy_from_slice(&near_jump(TEXT + 8, MODULE + 0x40));
     let taken = taken_in(&shipped, &live, TEXT, (TEXT + 8, 5), |_| None, module);
-    assert_eq!(taken, Some(Taken::By("kiln-core.dll".to_owned())));
+    assert_eq!(taken, Some(Taken::By("hooks.dll".to_owned())));
 }
 
 #[test]
@@ -62,7 +62,7 @@ fn a_jump_through_a_trampoline_outside_every_module_names_where_it_ends() {
     let trampoline = far_jump(MODULE + 0x100);
     let read = memory(TRAMPOLINE, &trampoline);
     let taken = taken_in(&shipped, &live, TEXT, (TEXT + 8, 5), read, module);
-    assert_eq!(taken, Some(Taken::By("kiln-core.dll".to_owned())));
+    assert_eq!(taken, Some(Taken::By("hooks.dll".to_owned())));
 }
 
 #[test]
@@ -103,8 +103,8 @@ fn bytes_outside_the_shipped_code_are_not_judged() {
 #[test]
 fn a_holder_reads_as_who_took_the_code() {
     assert_eq!(
-        Taken::By("kiln-core.dll".to_owned()).to_string(),
-        "taken by kiln-core.dll"
+        Taken::By("hooks.dll".to_owned()).to_string(),
+        "taken by hooks.dll"
     );
     assert_eq!(
         Taken::Unknown.to_string(),

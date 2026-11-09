@@ -15,28 +15,34 @@ pub(crate) fn line(off: &[String], taken: &[String]) -> Option<String> {
     if off.is_empty() {
         return None;
     }
-    let mut names = String::new();
-    let mut shown = 0;
-    for name in off {
-        let gap = if names.is_empty() { 0 } else { 2 };
-        if shown > 0 && names.len() + gap + name.len() > NAMES_BYTES {
-            break;
-        }
-        if gap > 0 {
-            names.push_str(", ");
-        }
-        names.push_str(name);
-        shown += 1;
-    }
-    if shown < off.len() {
-        let _more = write!(names, " +{}", off.len() - shown);
-    }
-    let line = crate::texts::fill("join.off", &[("names", &names)]);
+    let line = crate::texts::fill("join.off", &[("names", &listed(off))]);
     if taken.is_empty() {
         return Some(line);
     }
-    let owners = crate::texts::fill("join.taken", &[("owners", &taken.join(", "))]);
+    let owners = crate::texts::fill("join.taken", &[("owners", &listed(taken))]);
     Some(format!("{line} {owners}"))
+}
+
+/// `names` joined by commas up to [`NAMES_BYTES`], the rest counted as
+/// `+<n>`; the first is shown whole whatever its length.
+fn listed(names: &[String]) -> String {
+    let mut listed = String::new();
+    let mut shown = 0;
+    for name in names {
+        let gap = if listed.is_empty() { 0 } else { 2 };
+        if shown > 0 && listed.len() + gap + name.len() > NAMES_BYTES {
+            break;
+        }
+        if gap > 0 {
+            listed.push_str(", ");
+        }
+        listed.push_str(name);
+        shown += 1;
+    }
+    if shown < names.len() {
+        let _more = write!(listed, " +{}", names.len() - shown);
+    }
+    listed
 }
 
 /// Who took game code a hook needed, each once: a module by its file name,
@@ -122,11 +128,24 @@ mod tests {
     #[test]
     fn who_took_game_code_follows_what_is_off() {
         let off = ["chat.receive".to_owned()];
-        let taken = ["kiln-core.dll".to_owned(), "other.dll".to_owned()];
+        let taken = ["hooks.dll".to_owned(), "other.dll".to_owned()];
         let said = line(&off, &taken).unwrap();
         let named = said.find("chat.receive").unwrap();
-        let owners = said.find("kiln-core.dll, other.dll").unwrap();
+        let owners = said.find("hooks.dll, other.dll").unwrap();
         assert!(named < owners, "{said}");
         assert_eq!(line(&[], &taken), None, "nothing off, nothing to say");
+    }
+
+    #[test]
+    fn owners_past_the_budget_are_counted() {
+        let off = ["chat.receive".to_owned()];
+        let taken: Vec<String> = (0..40)
+            .map(|i| format!("hooking-library-{i}.dll"))
+            .collect();
+        let said = line(&off, &taken).unwrap();
+        assert!(said.contains("hooking-library-0.dll"), "{said}");
+        assert!(!said.contains("hooking-library-39.dll"), "{said}");
+        let shown = said.matches("hooking-library-").count();
+        assert!(said.contains(&format!(" +{}", 40 - shown)), "{said}");
     }
 }

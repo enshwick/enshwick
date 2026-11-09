@@ -167,6 +167,7 @@ pub(crate) fn start(
         retry: crate::retry::Retry::default(),
     };
     let Some(loader) = host::install(loader) else {
+        crate::shipped::release();
         return;
     };
     if release_check {
