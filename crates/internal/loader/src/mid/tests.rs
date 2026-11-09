@@ -819,6 +819,36 @@ fn a_handler_runs_as_its_mod_s_mid_hook_for_crash_blame() {
     assert_eq!(crate::profile::current_callback(), None, "cleared after");
 }
 
+/// The handle of the host the last [`host_of`] call ran as.
+static RAN_AS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(usize::MAX);
+
+/// Keeps the handle of the host it runs as, the API's answer of `host()`.
+///
+/// # Safety
+///
+/// None: it reads neither argument.
+unsafe extern "system" fn host_of(_registers: *mut Registers, _user: *mut c_void) {
+    let handle = enshwick::host().map_or(usize::MAX, |host| host.handle().0);
+    RAN_AS.store(handle, Ordering::Relaxed);
+}
+
+#[test]
+fn a_data_pack_s_handler_runs_as_the_pack_found_at_arming() {
+    let pack = ModIndex::new(4);
+    let mut mids = Mids::default();
+    assert_eq!(mids.add(0x10, link(pack, host_of, 0)), Status::OK);
+    let site = mids.sites_as(|_| false, |owner| (owner == pack).then(|| owner.handle()))[0];
+    let target = function(&SUM);
+    install(
+        target + 2,
+        (dispatch as *const ()).expose_provenance(),
+        core::ptr::from_ref(site).expose_provenance(),
+    )
+    .unwrap();
+    assert_eq!(callable(target)(1), 7);
+    assert_eq!(RAN_AS.load(Ordering::Relaxed), pack.handle().0);
+}
+
 #[test]
 fn an_address_whose_bytes_leave_before_the_jump_ends_is_refused() {
     // add eax, 1; ret; padding: hooked at the `ret`.

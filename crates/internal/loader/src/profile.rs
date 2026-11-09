@@ -163,13 +163,36 @@ pub fn start(mods: usize) {
 /// runs with the pack as that copy's host.
 #[inline]
 pub fn call<R>(owner: ModIndex, feature: Feature, f: impl FnOnce() -> R) -> R {
+    marked(owner, feature, || {
+        as_owner(owner, || measured(owner, feature, f))
+    })
+}
+
+/// [`call`] with the data pack of `owner` found before, by [`pack_of`], for
+/// a callback whose owner never changes, such as a mid-function hook's.
+#[cfg(windows)]
+#[inline]
+pub(crate) fn call_as<R>(
+    owner: ModIndex,
+    pack: Option<enshwick::abi::ModHandle>,
+    feature: Feature,
+    f: impl FnOnce() -> R,
+) -> R {
+    marked(owner, feature, || {
+        as_pack_or_loader(pack, || measured(owner, feature, f))
+    })
+}
+
+/// Runs `f` marked as mod `owner`'s callback for `feature`, for crash blame.
+#[inline]
+fn marked<R>(owner: ModIndex, feature: Feature, f: impl FnOnce() -> R) -> R {
     let marker = u32::try_from(owner.get())
         .ok()
         .and_then(|o| o.checked_add(1))
         .and_then(|o| o.checked_mul(256))
         .map_or(0, |o| o | feature as u32);
     let outer = RUNNING.replace(marker);
-    let result = as_owner(owner, || measured(owner, feature, f));
+    let result = f();
     RUNNING.set(outer);
     result
 }
@@ -180,8 +203,14 @@ pub fn call<R>(owner: ModIndex, feature: Feature, f: impl FnOnce() -> R) -> R {
 #[cfg(windows)]
 #[inline]
 fn as_owner<R>(owner: ModIndex, f: impl FnOnce() -> R) -> R {
-    let pack = crate::host::loader().and_then(|loader| pack_handle(&loader.mods, owner));
-    as_pack_or_loader(pack, f)
+    as_pack_or_loader(pack_of(owner), f)
+}
+
+/// The handle of `owner` when the running loader has it as a data pack.
+#[cfg(windows)]
+#[inline]
+pub(crate) fn pack_of(owner: ModIndex) -> Option<enshwick::abi::ModHandle> {
+    crate::host::loader().and_then(|loader| pack_handle(&loader.mods, owner))
 }
 
 /// The handle of `owner` when it is a data pack among `mods`, whose code

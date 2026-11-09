@@ -15,7 +15,7 @@
 use core::ffi::c_void;
 use std::sync::OnceLock;
 
-use enshwick::abi::{HookFlags, MidHookFn, Registers, Status};
+use enshwick::abi::{HookFlags, MidHookFn, ModHandle, Registers, Status};
 use rustc_hash::FxHashMap;
 
 use crate::mod_index::ModIndex;
@@ -178,7 +178,8 @@ pub(crate) struct MidLink {
 pub(crate) struct Site {
     /// The hooked instruction.
     pub(crate) address: u64,
-    links: Box<[MidLink]>,
+    /// Each link with its owner's data pack, found once at arming.
+    links: Box<[(MidLink, Option<ModHandle>)]>,
     /// Whether a mod is off, by index.
     off: fn(ModIndex) -> bool,
 }
@@ -220,6 +221,16 @@ impl Mids {
 
     /// Every address with its links in running order, for arming.
     pub(crate) fn sites(&self, off: fn(ModIndex) -> bool) -> Vec<&'static Site> {
+        self.sites_as(off, crate::profile::pack_of)
+    }
+
+    /// [`Mids::sites`] with `pack` giving each owner's data pack, asked once
+    /// here so a hit does not look it up again.
+    pub(crate) fn sites_as(
+        &self,
+        off: fn(ModIndex) -> bool,
+        pack: impl Fn(ModIndex) -> Option<ModHandle>,
+    ) -> Vec<&'static Site> {
         self.sites
             .iter()
             .map(|(&address, links)| {
@@ -227,7 +238,7 @@ impl Mids {
                 links.sort_by_key(|l| l.priority);
                 &*Box::leak(Box::new(Site {
                     address,
-                    links: links.into_boxed_slice(),
+                    links: links.into_iter().map(|l| (l, pack(l.owner))).collect(),
                     off,
                 }))
             })
@@ -270,10 +281,11 @@ pub(crate) unsafe extern "system" fn dispatch(registers: *mut Registers, site: *
     let Some(site) = (unsafe { site.as_ref() }) else {
         return;
     };
-    for link in &site.links {
+    for (link, pack) in &site.links {
         if !(site.off)(link.owner) {
             let user = core::ptr::with_exposed_provenance_mut::<c_void>(link.user);
-            crate::profile::call(link.owner, crate::profile::Feature::Hooks, || {
+            let hooks = crate::profile::Feature::Hooks;
+            crate::profile::call_as(link.owner, *pack, hooks, || {
                 // SAFETY: `site.off` says the mod is on, so its DLL and the
                 // handler in it are loaded; the handler gets the pointer its
                 // mod registered and the stub's saved registers, valid by

@@ -269,6 +269,41 @@ mod tests {
         assert_eq!(attached, Status::TOO_LATE);
     }
 
+    unsafe extern "system" fn on_event(_: enshwick::abi::Event, _: *const c_void, _: *mut c_void) {}
+
+    unsafe extern "system" fn on_mod_event(_: *const c_void, _: *mut c_void) {}
+
+    #[test]
+    fn subscriptions_after_init_come_too_late() {
+        let loader = started();
+        // SAFETY: the fake's table lives for the process.
+        let api = unsafe { &*loader.api() };
+        let event = enshwick::abi::Event::SETTINGS_CHANGED;
+        let subscribed = (api.subscribe)(loader.handle(), event, on_event, core::ptr::null_mut());
+        assert_eq!(subscribed, Status::TOO_LATE);
+        let mut tick = enshwick::abi::TickHandle(0);
+        let ticked = (api.subscribe_tick)(
+            loader.handle(),
+            0,
+            on_event,
+            core::ptr::null_mut(),
+            &raw mut tick,
+        );
+        assert_eq!(ticked, Status::TOO_LATE);
+        let spec = enshwick::abi::EventSpec {
+            header: Header::of::<enshwick::abi::EventSpec>(),
+            name: Str::new("you.refusals:later"),
+            layout: EMPTY_LAYOUT,
+        };
+        let mod_event = (api.subscribe_event)(
+            loader.handle(),
+            &raw const spec,
+            on_mod_event,
+            core::ptr::null_mut(),
+        );
+        assert_eq!(mod_event, Status::TOO_LATE);
+    }
+
     #[cfg(feature = "unstable")]
     #[test]
     fn a_rate_clients_see_needs_a_mod_that_joins() {

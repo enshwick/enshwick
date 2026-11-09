@@ -131,6 +131,9 @@ pub(crate) extern "system" fn subscribe_event(
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
+        if s.registration == super::Registration::Closed {
+            return Status::TOO_LATE;
+        }
         if s.manifest.as_ref().is_some_and(|manifest| {
             manifest.unexported(crate::schema_section::Kind::Event, &name, &s.host.exports)
         }) {
@@ -266,6 +269,9 @@ pub(crate) extern "system" fn subscribe(
         return Status::MISSING;
     }
     with(Status::MISSING, |s| {
+        if s.registration == super::Registration::Closed {
+            return Status::TOO_LATE;
+        }
         s.subscriptions
             .push((event, Registered::new(callback, user, me)));
         Status::OK
