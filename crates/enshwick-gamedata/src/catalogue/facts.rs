@@ -11,35 +11,31 @@ pub const FACTS: &[(&str, Fact)] = &[
     (ids::HIT_EVENT, Fact::Type("keen::ecs::HitEvent")),
     (
         ids::HIT_EVENT_ROOT_SOURCE_ID,
-        offset(
-            "keen::ecs::BaseHitEvent",
-            "rootSourceId",
-            "keen::ecs::EntityId",
-        ),
+        offset("keen::ecs::BaseHitEvent", "rootSourceId", ENTITY_ID),
     ),
     (
         ids::HIT_EVENT_TARGET_ID,
-        offset("keen::ecs::BaseHitEvent", "targetId", "keen::ecs::EntityId"),
+        offset("keen::ecs::BaseHitEvent", "targetId", ENTITY_ID),
     ),
     (
         ids::HIT_EVENT_SOURCE_ID,
-        offset("keen::ecs::HitEvent", "sourceId", "keen::ecs::EntityId"),
+        offset("keen::ecs::HitEvent", "sourceId", ENTITY_ID),
     ),
     (
         ids::HIT_EVENT_ROOT_TARGET_ID,
-        offset("keen::ecs::HitEvent", "rootTargetId", "keen::ecs::EntityId"),
+        offset("keen::ecs::HitEvent", "rootTargetId", ENTITY_ID),
     ),
     (
         ids::HIT_EVENT_WEAPON_PIDE_ID,
-        offset("keen::ecs::HitEvent", "weaponPideId", "keen::ecs::EntityId"),
+        offset("keen::ecs::HitEvent", "weaponPideId", ENTITY_ID),
     ),
     (
         ids::HIT_HEALTH_CHANGE,
-        offset("keen::ecs::HitEvent", "healthChange", "keen::sint32"),
+        offset("keen::ecs::HitEvent", "healthChange", SINT32),
     ),
     (
         ids::HIT_STAMINA_CHANGE,
-        offset("keen::ecs::HitEvent", "staminaChange", "keen::sint32"),
+        offset("keen::ecs::HitEvent", "staminaChange", SINT32),
     ),
     (
         ids::HIT_DAMAGE_TYPES,
@@ -67,16 +63,12 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::ENTITY_DIED_EVENT_DEAD_ENTITY_ID,
-        offset(
-            "keen::ecs::EntityDiedEvent",
-            "deadEntityId",
-            "keen::ecs::EntityId",
-        ),
+        offset("keen::ecs::EntityDiedEvent", "deadEntityId", ENTITY_ID),
     ),
     (ids::HIT_HISTORY, Fact::Type("keen::ecs::HitHistory")),
     (
         ids::HIT_HISTORY_LAST_INDEX,
-        offset("keen::ecs::HitHistory", "lastIndex", "keen::uint32"),
+        offset("keen::ecs::HitHistory", "lastIndex", UINT32),
     ),
     (
         ids::HIT_HISTORY_ENTRIES,
@@ -100,37 +92,25 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::EXPERIENCE_CREDIT_LAST_PLAYER,
-        offset(
-            "keen::ecs::ExperienceSource",
-            "lastHitPlayerId",
-            "keen::ecs::EntityId",
-        ),
+        offset("keen::ecs::ExperienceSource", "lastHitPlayerId", ENTITY_ID),
     ),
     (ids::LEVEL_UP_EVENT, Fact::Type("keen::ecs::LevelUpEvent")),
     (
         ids::LEVEL_UP_EVENT_PLAYER_ENTITY_ID,
-        offset(
-            "keen::ecs::LevelUpEvent",
-            "playerEntityId",
-            "keen::ecs::EntityId",
-        ),
+        offset("keen::ecs::LevelUpEvent", "playerEntityId", ENTITY_ID),
     ),
     (
         ids::LEVEL_UP_EVENT_LEVEL,
-        offset("keen::ecs::LevelUpEvent", "level", "keen::sint32"),
+        offset("keen::ecs::LevelUpEvent", "level", SINT32),
     ),
     (ids::XP_GAINED_EVENT, Fact::Type("keen::ecs::XPGainedEvent")),
     (
         ids::XP_GAINED_EVENT_PLAYER_ENTITY_ID,
-        offset(
-            "keen::ecs::XPGainedEvent",
-            "playerEntityId",
-            "keen::ecs::EntityId",
-        ),
+        offset("keen::ecs::XPGainedEvent", "playerEntityId", ENTITY_ID),
     ),
     (
         ids::XP_GAINED_EVENT_AMOUNT,
-        offset("keen::ecs::XPGainedEvent", "amount", "keen::uint32"),
+        offset("keen::ecs::XPGainedEvent", "amount", UINT32),
     ),
     (
         ids::XP_GAINED_EVENT_SOURCE,
@@ -145,7 +125,7 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset(
             "keen::ecs::CraftRecipeEvent",
             "craftingOperatorId",
-            "keen::ecs::EntityId",
+            ENTITY_ID,
         ),
     ),
     (
@@ -153,20 +133,16 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset(
             "keen::ecs::CraftRecipeEvent",
             "craftingStationId",
-            "keen::ecs::EntityId",
+            ENTITY_ID,
         ),
     ),
     (
         ids::CRAFT_RECIPE_EVENT_RECIPE_ID,
-        offset("keen::ecs::CraftRecipeEvent", "recipeId", "keen::RecipeId"),
+        offset("keen::ecs::CraftRecipeEvent", "recipeId", RECIPE_ID),
     ),
     (
         ids::CRAFT_RECIPE_EVENT_RECIPE_AMOUNT,
-        offset(
-            "keen::ecs::CraftRecipeEvent",
-            "recipeAmount",
-            "keen::uint16",
-        ),
+        offset("keen::ecs::CraftRecipeEvent", "recipeAmount", UINT16),
     ),
     (
         ids::CRAFT_RECIPE_SUCCESS_EVENT,
@@ -177,16 +153,12 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset(
             "keen::ecs::CraftRecipeSuccessEvent",
             "workshopId",
-            "keen::WorkshopId",
+            WORKSHOP_ID,
         ),
     ),
     (
         ids::CRAFT_RECIPE_SUCCESS_EVENT_RECIPE_ID,
-        offset(
-            "keen::ecs::CraftRecipeSuccessEvent",
-            "recipeId",
-            "keen::RecipeId",
-        ),
+        offset("keen::ecs::CraftRecipeSuccessEvent", "recipeId", RECIPE_ID),
     ),
     (
         ids::ACCEPT_OFFERED_INTERACTION_EVENT,
@@ -197,7 +169,7 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset(
             "keen::ecs::AcceptOfferedInteractionEvent",
             "guestEntityId",
-            "keen::ecs::EntityId",
+            ENTITY_ID,
         ),
     ),
     (
@@ -205,7 +177,7 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset(
             "keen::ecs::AcceptOfferedInteractionEvent",
             "hostEntityId",
-            "keen::ecs::EntityId",
+            ENTITY_ID,
         ),
     ),
     (
@@ -213,7 +185,7 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset(
             "keen::ecs::AcceptOfferedInteractionEvent",
             "offerId",
-            "keen::uint32",
+            UINT32,
         ),
     ),
     (
@@ -222,47 +194,35 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::BUILDING_PLACE_EVENT_OWNER_ID,
-        offset(
-            "keen::ecs::BuildingPlaceEvent",
-            "ownerId",
-            "keen::ecs::EntityId",
-        ),
+        offset("keen::ecs::BuildingPlaceEvent", "ownerId", ENTITY_ID),
     ),
     (
         ids::BUILDING_PLACE_EVENT_POSITION,
-        offset("keen::ecs::BuildingPlaceEvent", "position", "keen::float3"),
+        offset("keen::ecs::BuildingPlaceEvent", "position", FLOAT3),
     ),
     (
         ids::BUILDING_PLACE_EVENT_ORIENTATION,
-        offset(
-            "keen::ecs::BuildingPlaceEvent",
-            "orientation",
-            "keen::float4",
-        ),
+        offset("keen::ecs::BuildingPlaceEvent", "orientation", FLOAT4),
     ),
     (
         ids::BUILDING_PLACE_EVENT_VOLUME_MIN,
-        offset("keen::ecs::BuildingPlaceEvent", "volumeMin", "keen::float3"),
+        offset("keen::ecs::BuildingPlaceEvent", "volumeMin", FLOAT3),
     ),
     (
         ids::BUILDING_PLACE_EVENT_VOLUME_MAX,
-        offset("keen::ecs::BuildingPlaceEvent", "volumeMax", "keen::float3"),
+        offset("keen::ecs::BuildingPlaceEvent", "volumeMax", FLOAT3),
     ),
     (
         ids::BUILDING_PLACE_EVENT_MATERIAL,
         offset(
             "keen::ecs::BuildingPlaceEvent",
             "material",
-            "keen::MaterialFeedbackId",
+            MATERIAL_FEEDBACK_ID,
         ),
     ),
     (
         ids::BUILDING_PLACE_EVENT_TRACKING_ITEM_ID,
-        offset(
-            "keen::ecs::BuildingPlaceEvent",
-            "trackingItemId",
-            "keen::ItemId",
-        ),
+        offset("keen::ecs::BuildingPlaceEvent", "trackingItemId", ITEM_ID),
     ),
     (
         ids::BUILDING_TEAR_DOWN_EVENT,
@@ -270,50 +230,30 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::BUILDING_TEAR_DOWN_EVENT_OWNER_ID,
-        offset(
-            "keen::ecs::BuildingTearDownEvent",
-            "ownerId",
-            "keen::ecs::EntityId",
-        ),
+        offset("keen::ecs::BuildingTearDownEvent", "ownerId", ENTITY_ID),
     ),
     (
         ids::BUILDING_TEAR_DOWN_EVENT_POSITION,
-        offset(
-            "keen::ecs::BuildingTearDownEvent",
-            "position",
-            "keen::float3",
-        ),
+        offset("keen::ecs::BuildingTearDownEvent", "position", FLOAT3),
     ),
     (
         ids::BUILDING_TEAR_DOWN_EVENT_ORIENTATION,
-        offset(
-            "keen::ecs::BuildingTearDownEvent",
-            "orientation",
-            "keen::float4",
-        ),
+        offset("keen::ecs::BuildingTearDownEvent", "orientation", FLOAT4),
     ),
     (
         ids::BUILDING_TEAR_DOWN_EVENT_VOLUME_MIN,
-        offset(
-            "keen::ecs::BuildingTearDownEvent",
-            "volumeMin",
-            "keen::float3",
-        ),
+        offset("keen::ecs::BuildingTearDownEvent", "volumeMin", FLOAT3),
     ),
     (
         ids::BUILDING_TEAR_DOWN_EVENT_VOLUME_MAX,
-        offset(
-            "keen::ecs::BuildingTearDownEvent",
-            "volumeMax",
-            "keen::float3",
-        ),
+        offset("keen::ecs::BuildingTearDownEvent", "volumeMax", FLOAT3),
     ),
     (
         ids::BUILDING_TEAR_DOWN_EVENT_MATERIAL,
         offset(
             "keen::ecs::BuildingTearDownEvent",
             "material",
-            "keen::MaterialFeedbackId",
+            MATERIAL_FEEDBACK_ID,
         ),
     ),
     (
@@ -322,38 +262,26 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::BUILDING_PICK_UP_EVENT_OWNER_ID,
-        offset(
-            "keen::ecs::BuildingPickUpEvent",
-            "ownerId",
-            "keen::ecs::EntityId",
-        ),
+        offset("keen::ecs::BuildingPickUpEvent", "ownerId", ENTITY_ID),
     ),
     (
         ids::BUILDING_PICK_UP_EVENT_POSITION,
-        offset("keen::ecs::BuildingPickUpEvent", "position", "keen::float3"),
+        offset("keen::ecs::BuildingPickUpEvent", "position", FLOAT3),
     ),
     (
         ids::BUILDING_PICK_UP_EVENT_VOLUME_MIN,
-        offset(
-            "keen::ecs::BuildingPickUpEvent",
-            "volumeMin",
-            "keen::float3",
-        ),
+        offset("keen::ecs::BuildingPickUpEvent", "volumeMin", FLOAT3),
     ),
     (
         ids::BUILDING_PICK_UP_EVENT_VOLUME_MAX,
-        offset(
-            "keen::ecs::BuildingPickUpEvent",
-            "volumeMax",
-            "keen::float3",
-        ),
+        offset("keen::ecs::BuildingPickUpEvent", "volumeMax", FLOAT3),
     ),
     (
         ids::BUILDING_PICK_UP_EVENT_MATERIAL,
         offset(
             "keen::ecs::BuildingPickUpEvent",
             "material",
-            "keen::MaterialFeedbackId",
+            MATERIAL_FEEDBACK_ID,
         ),
     ),
     (
@@ -361,7 +289,7 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset(
             "keen::ecs::BuildingPickUpEvent",
             "pickedEntityId",
-            "keen::ecs::EntityId",
+            ENTITY_ID,
         ),
     ),
     (
@@ -370,19 +298,11 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::FLAME_ALTAR_EVENT_PLAYER_ENTITY_ID,
-        offset(
-            "keen::ecs::FlameAltarEvent",
-            "playerEntityId",
-            "keen::ecs::EntityId",
-        ),
+        offset("keen::ecs::FlameAltarEvent", "playerEntityId", ENTITY_ID),
     ),
     (
         ids::FLAME_ALTAR_EVENT_BASE_ENTITY_ID,
-        offset(
-            "keen::ecs::FlameAltarEvent",
-            "baseEntityId",
-            "keen::ecs::EntityId",
-        ),
+        offset("keen::ecs::FlameAltarEvent", "baseEntityId", ENTITY_ID),
     ),
     (
         ids::FLAME_ALTAR_EVENT_TYPE,
@@ -394,23 +314,15 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::LOOT_INTERACTION_EVENT_GUEST_ID,
-        offset(
-            "keen::ecs::LootInteractionEvent",
-            "guestId",
-            "keen::ecs::EntityId",
-        ),
+        offset("keen::ecs::LootInteractionEvent", "guestId", ENTITY_ID),
     ),
     (
         ids::LOOT_INTERACTION_EVENT_HOST_ID,
-        offset(
-            "keen::ecs::LootInteractionEvent",
-            "hostId",
-            "keen::ecs::EntityId",
-        ),
+        offset("keen::ecs::LootInteractionEvent", "hostId", ENTITY_ID),
     ),
     (
         ids::LOOT_INTERACTION_EVENT_LOOT_ALL,
-        offset("keen::ecs::LootInteractionEvent", "lootAll", "keen::bool"),
+        offset("keen::ecs::LootInteractionEvent", "lootAll", BOOL),
     ),
     (
         ids::HANDLE_EQUIPMENT_SLOT_CHANGED_EVENT,
@@ -421,7 +333,7 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset(
             "keen::ecs::HandleEquipmentSlotChangedEvent",
             "playerEntityId",
-            "keen::ecs::EntityId",
+            ENTITY_ID,
         ),
     ),
     (
@@ -438,31 +350,23 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::REVIVED_PLAYER_EVENT_TARGET_ENTITY_ID,
-        offset(
-            "keen::ecs::RevivedPlayerEvent",
-            "targetEntityId",
-            "keen::ecs::EntityId",
-        ),
+        offset("keen::ecs::RevivedPlayerEvent", "targetEntityId", ENTITY_ID),
     ),
     (
         ids::REVIVED_PLAYER_EVENT_SOURCE_ENTITY_ID,
-        offset(
-            "keen::ecs::RevivedPlayerEvent",
-            "sourceEntityId",
-            "keen::ecs::EntityId",
-        ),
+        offset("keen::ecs::RevivedPlayerEvent", "sourceEntityId", ENTITY_ID),
     ),
     (
         ids::WORLD_TRANSFORM_POSITION,
-        offset("keen::WorldTransform", "position", "keen::WorldPosition"),
+        offset(WORLD_TRANSFORM, "position", WORLD_POSITION),
     ),
     (
         ids::WORLD_TRANSFORM_ORIENTATION,
-        offset("keen::WorldTransform", "orientation", "keen::Quaternion"),
+        offset(WORLD_TRANSFORM, "orientation", "keen::Quaternion"),
     ),
     (
         ids::WORLD_TRANSFORM_SCALE,
-        offset("keen::WorldTransform", "scale", "keen::float3"),
+        offset(WORLD_TRANSFORM, "scale", FLOAT3),
     ),
     (
         ids::NPC_COMMAND_EVENT,
@@ -478,14 +382,14 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::NPC_COMMAND_EVENT_NPC_ID,
-        offset("keen::ecs::NpcCommandEvent", "npcId", "keen::NpcId"),
+        offset("keen::ecs::NpcCommandEvent", "npcId", NPC_ID),
     ),
     (
         ids::NPC_COMMAND_EVENT_TARGET_TRANSFORM,
         offset(
             "keen::ecs::NpcCommandEvent",
             "targetTransform",
-            "keen::WorldTransform",
+            WORLD_TRANSFORM,
         ),
     ),
     (
@@ -494,11 +398,7 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::SET_TOGGLE_STATE_EVENT_SENDER_ID,
-        offset(
-            "keen::ecs::SetToggleStateEvent",
-            "senderId",
-            "keen::ecs::EntityId",
-        ),
+        offset("keen::ecs::SetToggleStateEvent", "senderId", ENTITY_ID),
     ),
     (
         ids::SET_TOGGLE_STATE_EVENT_SIGNAL_ID,
@@ -510,7 +410,7 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::SET_TOGGLE_STATE_EVENT_NEW_STATE,
-        offset("keen::ecs::SetToggleStateEvent", "newState", "keen::bool"),
+        offset("keen::ecs::SetToggleStateEvent", "newState", BOOL),
     ),
     (
         ids::ADD_THREAT_TARGET_EVENT,
@@ -518,49 +418,33 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::ADD_THREAT_TARGET_EVENT_ATTACKER_ID,
-        offset(
-            "keen::ecs::AddThreatTargetEvent",
-            "attackerId",
-            "keen::ecs::EntityId",
-        ),
+        offset("keen::ecs::AddThreatTargetEvent", "attackerId", ENTITY_ID),
     ),
     (
         ids::ADD_THREAT_TARGET_EVENT_TARGET_ID,
-        offset(
-            "keen::ecs::AddThreatTargetEvent",
-            "targetId",
-            "keen::ecs::EntityId",
-        ),
+        offset("keen::ecs::AddThreatTargetEvent", "targetId", ENTITY_ID),
     ),
     (
         ids::ADD_THREAT_TARGET_EVENT_THREAT_VALUE,
-        offset(
-            "keen::ecs::AddThreatTargetEvent",
-            "threatValue",
-            "keen::float32",
-        ),
+        offset("keen::ecs::AddThreatTargetEvent", "threatValue", FLOAT32),
     ),
     (ids::UI_PING_EVENT, Fact::Type("keen::ecs::UiPingEvent")),
     (
         ids::UI_PING_EVENT_SENDER_ENTITY_ID,
-        offset(
-            "keen::ecs::UiPingEvent",
-            "senderEntityId",
-            "keen::ecs::EntityId",
-        ),
+        offset("keen::ecs::UiPingEvent", "senderEntityId", ENTITY_ID),
     ),
     (
         ids::UI_PING_POSITION,
-        offset("keen::ecs::UiPingEvent", "position", "keen::WorldPosition"),
+        offset("keen::ecs::UiPingEvent", "position", WORLD_POSITION),
     ),
     (ids::ITEM_INFO, Fact::Type("keen::ItemInfo")),
     (
         ids::ITEM_INFO_ID,
-        offset("keen::ItemInfo", "itemId", "keen::ItemId"),
+        offset("keen::ItemInfo", "itemId", ITEM_ID),
     ),
     (
         ids::ITEM_INFO_OBJECT,
-        offset("keen::ItemInfo", "objectId", "keen::Guid"),
+        offset("keen::ItemInfo", "objectId", GUID),
     ),
     (
         ids::ITEM_INFO_NAME,
@@ -580,15 +464,11 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::ITEM_INFO_MAX_STACK,
-        offset("keen::ItemInfo", "maxStackSize", "keen::uint16"),
+        offset("keen::ItemInfo", "maxStackSize", UINT16),
     ),
     (
         ids::ITEM_INFO_PID_ENTITY,
-        offset(
-            "keen::ItemInfo",
-            "pidEntity",
-            "keen::ecs::TemplateReference",
-        ),
+        offset("keen::ItemInfo", "pidEntity", TEMPLATE_REFERENCE),
     ),
     (
         ids::ITEM_INFO_UI_VALUES,
@@ -609,7 +489,7 @@ pub const FACTS: &[(&str, Fact)] = &[
                 ("keen::ItemInfo", "equipment"),
                 ("keen::EquipmentSetup", "placedEntity"),
             ],
-            holds: "keen::ecs::TemplateReference",
+            holds: TEMPLATE_REFERENCE,
         },
     ),
     (
@@ -620,7 +500,7 @@ pub const FACTS: &[(&str, Fact)] = &[
                 ("keen::EquipmentSetup", "voxelData"),
                 ("keen::ChangeVoxelData", "isBuildingVoxel"),
             ],
-            holds: "keen::bool",
+            holds: BOOL,
         },
     ),
     (
@@ -631,7 +511,7 @@ pub const FACTS: &[(&str, Fact)] = &[
                 ("keen::EquipmentSetup", "voxelData"),
                 ("keen::ChangeVoxelData", "placeVoxelMaterialId"),
             ],
-            holds: "keen::uint8",
+            holds: UINT8,
         },
     ),
     (
@@ -659,7 +539,7 @@ pub const FACTS: &[(&str, Fact)] = &[
                 ("keen::ItemInfo", "damageSetup"),
                 ("keen::ItemDamageSetup", "dmgMod"),
             ],
-            holds: "keen::float32",
+            holds: FLOAT32,
         },
     ),
     (
@@ -669,7 +549,7 @@ pub const FACTS: &[(&str, Fact)] = &[
                 ("keen::ItemInfo", "damageSetup"),
                 ("keen::ItemDamageSetup", "speedMod"),
             ],
-            holds: "keen::float32",
+            holds: FLOAT32,
         },
     ),
     (
@@ -679,7 +559,7 @@ pub const FACTS: &[(&str, Fact)] = &[
                 ("keen::ItemInfo", "damageSetup"),
                 ("keen::ItemDamageSetup", "isSet"),
             ],
-            holds: "keen::bool",
+            holds: BOOL,
         },
     ),
     (
@@ -689,7 +569,7 @@ pub const FACTS: &[(&str, Fact)] = &[
                 ("keen::ItemInfo", "armorSetup"),
                 ("keen::ItemArmorSetup", "distribution"),
             ],
-            holds: "keen::impact::ArmorDistribution",
+            holds: ARMOR_DISTRIBUTION,
         },
     ),
     (
@@ -699,7 +579,7 @@ pub const FACTS: &[(&str, Fact)] = &[
                 ("keen::ItemInfo", "armorSetup"),
                 ("keen::ItemArmorSetup", "isSet"),
             ],
-            holds: "keen::bool",
+            holds: BOOL,
         },
     ),
     (
@@ -709,7 +589,7 @@ pub const FACTS: &[(&str, Fact)] = &[
                 ("keen::ItemInfo", "fuelSetup"),
                 ("keen::ItemFuelData", "burnTime"),
             ],
-            holds: "keen::Time",
+            holds: TIME,
         },
     ),
     (
@@ -719,7 +599,7 @@ pub const FACTS: &[(&str, Fact)] = &[
                 ("keen::ItemInfo", "fuelSetup"),
                 ("keen::ItemFuelData", "energyOutput"),
             ],
-            holds: "keen::uint32",
+            holds: UINT32,
         },
     ),
     (
@@ -729,7 +609,7 @@ pub const FACTS: &[(&str, Fact)] = &[
                 ("keen::ItemInfo", "fuelSetup"),
                 ("keen::ItemFuelData", "isSet"),
             ],
-            holds: "keen::bool",
+            holds: BOOL,
         },
     ),
     (
@@ -739,7 +619,7 @@ pub const FACTS: &[(&str, Fact)] = &[
                 ("keen::ItemInfo", "comfortSetup"),
                 ("keen::ItemComfortSetup", "comfortAmount"),
             ],
-            holds: "keen::uint32",
+            holds: UINT32,
         },
     ),
     (
@@ -749,13 +629,10 @@ pub const FACTS: &[(&str, Fact)] = &[
                 ("keen::ItemInfo", "comfortSetup"),
                 ("keen::ItemComfortSetup", "isSet"),
             ],
-            holds: "keen::bool",
+            holds: BOOL,
         },
     ),
-    (
-        ids::ARMOR_DISTRIBUTION,
-        Fact::Type("keen::impact::ArmorDistribution"),
-    ),
+    (ids::ARMOR_DISTRIBUTION, Fact::Type(ARMOR_DISTRIBUTION)),
     (ids::ITEM_SLOT_TYPE, Fact::Type(EQUIPMENT_SLOT_TYPE)),
     (ids::ITEM_TAG_WEIGHT, Fact::Type("keen::ItemTagWeight")),
     (
@@ -765,7 +642,7 @@ pub const FACTS: &[(&str, Fact)] = &[
     (ids::ITEM_STAT, Fact::Type("keen::ImpactUiValue")),
     (
         ids::ITEM_STAT_LABEL,
-        offset("keen::ImpactUiValue", "locaId", "keen::LocaTagId"),
+        offset("keen::ImpactUiValue", "locaId", LOCA_TAG_ID),
     ),
     (
         ids::ITEM_STAT_FORMAT,
@@ -777,11 +654,11 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::ITEM_STAT_VALUE,
-        offset("keen::ImpactUiValue", "value", "keen::sint32"),
+        offset("keen::ImpactUiValue", "value", SINT32),
     ),
     (
         ids::ITEM_STAT_SIGNED,
-        offset("keen::ImpactUiValue", "isSigned", "keen::bool"),
+        offset("keen::ImpactUiValue", "isSigned", BOOL),
     ),
     (ids::ITEM_REGISTRY, Fact::Type("keen::ItemRegistryResource")),
     (
@@ -828,28 +705,20 @@ pub const FACTS: &[(&str, Fact)] = &[
     (ids::FUEL_SETUP, Fact::Type("keen::ecs::FuelSetup")),
     (
         ids::FUEL_SETUP_MAX,
-        offset("keen::ecs::FuelSetup", "maxFuelCharges", "keen::sint32"),
+        offset("keen::ecs::FuelSetup", "maxFuelCharges", SINT32),
     ),
     (
         ids::FUEL_SETUP_START,
-        offset(
-            "keen::ecs::FuelSetup",
-            "initialFuelPercentage",
-            "keen::float",
-        ),
+        offset("keen::ecs::FuelSetup", "initialFuelPercentage", FLOAT),
     ),
     (ids::CRAFTING, Fact::Type("keen::ecs::Crafting")),
     (
         ids::CRAFTING_WORKSHOP,
-        offset(
-            "keen::ecs::Crafting",
-            "workshop",
-            "keen::ObjectReference<keen::WorkshopDefinition>",
-        ),
+        offset("keen::ecs::Crafting", "workshop", WORKSHOP_REFERENCE),
     ),
     (
         ids::CRAFTING_WORKSHOP_ID,
-        offset("keen::ecs::Crafting", "workshopId", "keen::WorkshopId"),
+        offset("keen::ecs::Crafting", "workshopId", WORKSHOP_ID),
     ),
     (
         ids::CRAFTING_INTERACTION,
@@ -860,16 +729,12 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset(
             "keen::ecs::CraftingInteraction",
             "workshop",
-            "keen::ObjectReference<keen::WorkshopDefinition>",
+            WORKSHOP_REFERENCE,
         ),
     ),
     (
         ids::CRAFTING_INTERACTION_WORKSHOP_ID,
-        offset(
-            "keen::ecs::CraftingInteraction",
-            "workshopId",
-            "keen::WorkshopId",
-        ),
+        offset("keen::ecs::CraftingInteraction", "workshopId", WORKSHOP_ID),
     ),
     (
         ids::CLIENT_CRAFTING_INTERACTION,
@@ -880,7 +745,7 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset(
             "keen::ecs::ClientCraftingInteraction",
             "workshopId",
-            "keen::WorkshopId",
+            WORKSHOP_ID,
         ),
     ),
     (
@@ -898,19 +763,19 @@ pub const FACTS: &[(&str, Fact)] = &[
     (ids::WORKSHOP, Fact::Type("keen::WorkshopResource")),
     (
         ids::WORKSHOP_GUID,
-        offset("keen::WorkshopResource", "workshopGuid", "keen::Guid"),
+        offset("keen::WorkshopResource", "workshopGuid", GUID),
     ),
     (
         ids::WORKSHOP_ID,
-        offset("keen::WorkshopResource", "workshopId", "keen::WorkshopId"),
+        offset("keen::WorkshopResource", "workshopId", WORKSHOP_ID),
     ),
     (
         ids::WORKSHOP_NAME,
-        offset("keen::WorkshopResource", "name", "keen::LocaTagId"),
+        offset("keen::WorkshopResource", "name", LOCA_TAG_ID),
     ),
     (
         ids::WORKSHOP_ITEM,
-        offset("keen::WorkshopResource", "item", "keen::ItemId"),
+        offset("keen::WorkshopResource", "item", ITEM_ID),
     ),
     (
         ids::WORKSHOP_ITEM_REF,
@@ -918,7 +783,7 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::WORKSHOP_NPC,
-        offset("keen::WorkshopResource", "isNpc", "keen::bool"),
+        offset("keen::WorkshopResource", "isNpc", BOOL),
     ),
     (
         ids::RECIPE_REGISTRY,
@@ -935,19 +800,19 @@ pub const FACTS: &[(&str, Fact)] = &[
     (ids::RECIPE, Fact::Type("keen::RecipeInfo")),
     (
         ids::RECIPE_GUID,
-        offset("keen::RecipeInfo", "recipeGuid", "keen::Guid"),
+        offset("keen::RecipeInfo", "recipeGuid", GUID),
     ),
     (
         ids::RECIPE_ID,
-        offset("keen::RecipeInfo", "recipeId", "keen::RecipeId"),
+        offset("keen::RecipeInfo", "recipeId", RECIPE_ID),
     ),
     (
         ids::RECIPE_WORKSHOP_GUID,
-        offset("keen::RecipeInfo", "workshopGuid", "keen::Guid"),
+        offset("keen::RecipeInfo", "workshopGuid", GUID),
     ),
     (
         ids::RECIPE_WORKSHOP,
-        offset("keen::RecipeInfo", "workshopId", "keen::WorkshopId"),
+        offset("keen::RecipeInfo", "workshopId", WORKSHOP_ID),
     ),
     (
         ids::RECIPE_INPUT,
@@ -975,7 +840,7 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::RECIPE_DURATION,
-        offset("keen::RecipeInfo", "craftingDuration", "keen::Time"),
+        offset("keen::RecipeInfo", "craftingDuration", TIME),
     ),
     (
         ids::RECIPE_REQUIRED_PROPS,
@@ -999,11 +864,11 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::RECIPE_STACK_ITEM,
-        offset("keen::RecipeItemStackResource", "item", "keen::ItemId"),
+        offset("keen::RecipeItemStackResource", "item", ITEM_ID),
     ),
     (
         ids::RECIPE_STACK_COUNT,
-        offset("keen::RecipeItemStackResource", "count", "keen::uint32"),
+        offset("keen::RecipeItemStackResource", "count", UINT32),
     ),
     (ids::UI_IMAGE, Fact::Type("keen::UiTextureResource")),
     (ids::UI_BUNDLE, Fact::Type("keen::FbUiBundle")),
@@ -1015,13 +880,13 @@ pub const FACTS: &[(&str, Fact)] = &[
                 ("keen::FbUiMenu", "crafting"),
                 ("keen::FbUiCrafting", "recipes"),
             ],
-            holds: "keen::FbUiCraftingRecipeCollection",
+            holds: CRAFTING_RECIPES,
         },
     ),
     (
         ids::CRAFTING_MENU_WORKSHOPS,
         offset(
-            "keen::FbUiCraftingRecipeCollection",
+            CRAFTING_RECIPES,
             "workshops",
             "keen::BlobArray<keen::WorkshopId>",
         ),
@@ -1029,26 +894,18 @@ pub const FACTS: &[(&str, Fact)] = &[
     (
         ids::CRAFTING_MENU_TREES,
         offset(
-            "keen::FbUiCraftingRecipeCollection",
+            CRAFTING_RECIPES,
             "trees",
             "keen::BlobArray<keen::FbUiCraftingRecipeTree>",
         ),
     ),
     (
         ids::CRAFTING_MENU_MAX_GROUPS,
-        offset(
-            "keen::FbUiCraftingRecipeCollection",
-            "maxRecipeGroupCount",
-            "keen::uint32",
-        ),
+        offset(CRAFTING_RECIPES, "maxRecipeGroupCount", UINT32),
     ),
     (
         ids::CRAFTING_MENU_MAX_SETS,
-        offset(
-            "keen::FbUiCraftingRecipeCollection",
-            "maxRecipeSetCount",
-            "keen::uint32",
-        ),
+        offset(CRAFTING_RECIPES, "maxRecipeSetCount", UINT32),
     ),
     (
         ids::CRAFTING_MENU_TREE,
@@ -1068,7 +925,7 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::CRAFTING_MENU_GROUP_ID,
-        offset("keen::FbUiCraftingRecipeGroup", "groupId", "keen::Guid"),
+        offset("keen::FbUiCraftingRecipeGroup", "groupId", GUID),
     ),
     (
         ids::CRAFTING_MENU_GROUP_SETS,
@@ -1096,11 +953,7 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::CURRENT_TRANSFORM_TRANSFORM,
-        offset(
-            "keen::ecs::CurrentTransform",
-            "transform",
-            "keen::WorldTransform",
-        ),
+        offset("keen::ecs::CurrentTransform", "transform", WORLD_TRANSFORM),
     ),
     (ids::USED_ITEM, Fact::Type("keen::ecs::UsedItem")),
     (ids::DO_NOT_SAVE, Fact::Type("keen::ecs::DoNotSave")),
@@ -1127,23 +980,15 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::INVENTORY_SETUP_INITIALIZED,
-        offset("keen::ecs::InventorySetup", "isInitialized", "keen::bool"),
+        offset("keen::ecs::InventorySetup", "isInitialized", BOOL),
     ),
     (
         ids::INVENTORY_SETUP_GENERIC_SLOTS,
-        offset(
-            "keen::ecs::InventorySetup",
-            "genericSlotCount",
-            "keen::uint8",
-        ),
+        offset("keen::ecs::InventorySetup", "genericSlotCount", UINT8),
     ),
     (
         ids::INVENTORY_SETUP_AVAILABLE_SLOTS,
-        offset(
-            "keen::ecs::InventorySetup",
-            "availableSlotCount",
-            "keen::uint8",
-        ),
+        offset("keen::ecs::InventorySetup", "availableSlotCount", UINT8),
     ),
     (
         ids::INVENTORY_SETUP_OVERWRITE,
@@ -1154,14 +999,14 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset(
             "keen::ecs::InventorySetupOverwrite",
             "genericSlotCount",
-            "keen::uint8",
+            UINT8,
         ),
     ),
     (ids::INVENTORY, Fact::Type("keen::ecs::Inventory")),
     (ids::ITEM_STACK, Fact::Type("keen::ItemStack")),
     (
         ids::ITEM_STACK_COUNT,
-        offset("keen::ItemStack", "data", "keen::ItemData"),
+        offset("keen::ItemStack", "data", ITEM_DATA),
     ),
     (
         ids::ITEM_STACK_PIDE,
@@ -1170,22 +1015,18 @@ pub const FACTS: &[(&str, Fact)] = &[
             ty: "keen::ItemStack",
             field: "data",
             plus: 4,
-            holds: "keen::ItemData",
+            holds: ITEM_DATA,
         },
     ),
     (ids::DURABILITY, Fact::Type("keen::ecs::NetworkDurability")),
     (
         ids::DURABILITY_MAX,
-        offset(
-            "keen::ecs::NetworkDurability",
-            "durabilityMax",
-            "keen::uint16",
-        ),
+        offset("keen::ecs::NetworkDurability", "durabilityMax", UINT16),
     ),
     (ids::FUEL, Fact::Type("keen::ecs::NetworkFuel")),
     (
         ids::FUEL_MAX,
-        offset("keen::ecs::NetworkFuel", "fuelMax", "keen::uint16"),
+        offset("keen::ecs::NetworkFuel", "fuelMax", UINT16),
     ),
     (ids::OWNER, Fact::Type("keen::ecs::OwnerRelationship")),
     (
@@ -1194,14 +1035,14 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::INVENTORY_EMPTY_STATE_EMPTY,
-        offset("keen::ecs::InventoryEmptyState", "isEmpty", "keen::bool"),
+        offset("keen::ecs::InventoryEmptyState", "isEmpty", BOOL),
     ),
     (ids::DESTROY_ON_LOOT, Fact::Type("keen::ecs::DestroyOnLoot")),
     (ids::LIFETIME, Fact::Type("keen::ecs::LifeTime")),
     (ids::AREA_LOOT, Fact::Type("keen::ecs::AreaLootOverride")),
     (
         ids::AREA_LOOT_EXCLUDE,
-        offset("keen::ecs::AreaLootOverride", "exclude", "keen::bool"),
+        offset("keen::ecs::AreaLootOverride", "exclude", BOOL),
     ),
     (
         ids::INTERACTION_OFFER,
@@ -1209,11 +1050,7 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::INTERACTION_OFFER_ACCEPT_TIME,
-        offset(
-            "keen::ecs::InteractionOfferRuntime",
-            "lastAcceptTime",
-            "keen::Time",
-        ),
+        offset("keen::ecs::InteractionOfferRuntime", "lastAcceptTime", TIME),
     ),
     (
         ids::INTERACTION_OFFER_ACCEPT_GUEST,
@@ -1222,16 +1059,12 @@ pub const FACTS: &[(&str, Fact)] = &[
                 ("keen::ecs::InteractionOfferRuntime", "lastAcceptData"),
                 ("keen::ecs::InteractionAcceptData", "guestId"),
             ],
-            holds: "keen::ecs::EntityId",
+            holds: ENTITY_ID,
         },
     ),
     (
         ids::INTERACTION_OFFER_DISABLED,
-        offset(
-            "keen::ecs::InteractionOfferRuntime",
-            "isDisabled",
-            "keen::bool",
-        ),
+        offset("keen::ecs::InteractionOfferRuntime", "isDisabled", BOOL),
     ),
     (ids::PLAYER_INPUT, Fact::Type("keen::ecs::PlayerInput")),
     (
@@ -1241,7 +1074,7 @@ pub const FACTS: &[(&str, Fact)] = &[
                 ("keen::ecs::PlayerInput", "fromClient"),
                 ("keen::ecs::ClientPlayerInputData", "digitalInput"),
             ],
-            holds: "keen::ecs::PlayerDigitalInput",
+            holds: PLAYER_DIGITAL_INPUT,
         },
     ),
     (
@@ -1263,7 +1096,7 @@ pub const FACTS: &[(&str, Fact)] = &[
                 ("keen::ecs::ClientPlayerInput", "data"),
                 ("keen::ecs::ClientPlayerInputData", "digitalInput"),
             ],
-            holds: "keen::ecs::PlayerDigitalInput",
+            holds: PLAYER_DIGITAL_INPUT,
         },
     ),
     (
@@ -1281,11 +1114,7 @@ pub const FACTS: &[(&str, Fact)] = &[
     (ids::TARGET_INFO, Fact::Type("keen::ecs::TargetInfo")),
     (
         ids::TARGET_INFO_ENTITY,
-        offset(
-            "keen::ecs::TargetInfo",
-            "targetEntityId",
-            "keen::ecs::EntityId",
-        ),
+        offset("keen::ecs::TargetInfo", "targetEntityId", ENTITY_ID),
     ),
     (ids::TARGET_TYPE, Fact::Type("keen::ecs::TargetType")),
     (ids::HUD_SCREEN_TYPE, Fact::Type("keen::HudScreenType")),
@@ -1303,16 +1132,16 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::INTERACTION_LOCK_ITEM,
-        offset("keen::ecs::InteractionLock", "requiredItem", "keen::ItemId"),
+        offset("keen::ecs::InteractionLock", "requiredItem", ITEM_ID),
     ),
     (ids::LOOT_SLOT, Fact::Type("keen::LootSlotInfo")),
     (
         ids::LOOT_SLOT_ITEM,
-        offset("keen::LootSlotInfo", "itemId", "keen::ItemId"),
+        offset("keen::LootSlotInfo", "itemId", ITEM_ID),
     ),
     (
         ids::LOOT_SLOT_COUNT,
-        offset("keen::LootSlotInfo", "stackSize", "keen::uint16"),
+        offset("keen::LootSlotInfo", "stackSize", UINT16),
     ),
     (
         ids::LOOTABLE_ITEMS,
@@ -1329,23 +1158,19 @@ pub const FACTS: &[(&str, Fact)] = &[
     (ids::LOOTABLE_ITEM, Fact::Type("keen::LootableItemInfo")),
     (
         ids::LOOTABLE_ITEM_ITEM,
-        offset("keen::LootableItemInfo", "itemId", "keen::ItemId"),
+        offset("keen::LootableItemInfo", "itemId", ITEM_ID),
     ),
     (
         ids::LOOTABLE_ITEM_STACK_MIN,
-        offset("keen::LootableItemInfo", "stackSizeMin", "keen::uint16"),
+        offset("keen::LootableItemInfo", "stackSizeMin", UINT16),
     ),
     (
         ids::LOOTABLE_ITEM_STACK_MAX,
-        offset("keen::LootableItemInfo", "stackSizeMax", "keen::uint16"),
+        offset("keen::LootableItemInfo", "stackSizeMax", UINT16),
     ),
     (
         ids::LOOTABLE_ITEM_STACK_MAX_SCALED,
-        offset(
-            "keen::LootableItemInfo",
-            "stackSizeMaxScaled",
-            "keen::uint16",
-        ),
+        offset("keen::LootableItemInfo", "stackSizeMaxScaled", UINT16),
     ),
     (
         ids::LOOT_FILL_TABLE,
@@ -1385,35 +1210,27 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::LOOT_FILL_STACK_ITEM,
-        offset("keen::ecs::ItemStackInfoResource", "item", "keen::ItemId"),
+        offset("keen::ecs::ItemStackInfoResource", "item", ITEM_ID),
     ),
     (
         ids::LOOT_FILL_STACK_COUNT_MIN,
-        offset(
-            "keen::ecs::ItemStackInfoResource",
-            "countMin",
-            "keen::uint32",
-        ),
+        offset("keen::ecs::ItemStackInfoResource", "countMin", UINT32),
     ),
     (
         ids::LOOT_FILL_STACK_COUNT_MAX,
-        offset(
-            "keen::ecs::ItemStackInfoResource",
-            "countMax",
-            "keen::uint32",
-        ),
+        offset("keen::ecs::ItemStackInfoResource", "countMax", UINT32),
     ),
     (
         ids::LOOT_FILL_STACK_PROBABILITY,
         offset(
             "keen::ecs::ItemStackInfoResource",
             "spawnProbability",
-            "keen::float",
+            FLOAT,
         ),
     ),
     (
         ids::LOOT_FILL_STACK_WEIGHT,
-        offset("keen::ecs::ItemStackInfoResource", "weight", "keen::float"),
+        offset("keen::ecs::ItemStackInfoResource", "weight", FLOAT),
     ),
     (ids::ATTRIBUTE_SET_HEALTH, Fact::Type("keen::ecs::Health")),
     (ids::ATTRIBUTE_SET_STAMINA, Fact::Type("keen::ecs::Stamina")),
@@ -1472,43 +1289,43 @@ pub const FACTS: &[(&str, Fact)] = &[
     (ids::GAME_SETTINGS, Fact::Type(GAME_SETTINGS)),
     (
         ids::GAME_SETTINGS_PLAYER_HEALTH_FACTOR,
-        offset(GAME_SETTINGS, "playerHealthFactor", "keen::float"),
+        offset(GAME_SETTINGS, "playerHealthFactor", FLOAT),
     ),
     (
         ids::GAME_SETTINGS_PLAYER_MANA_FACTOR,
-        offset(GAME_SETTINGS, "playerManaFactor", "keen::float"),
+        offset(GAME_SETTINGS, "playerManaFactor", FLOAT),
     ),
     (
         ids::GAME_SETTINGS_PLAYER_STAMINA_FACTOR,
-        offset(GAME_SETTINGS, "playerStaminaFactor", "keen::float"),
+        offset(GAME_SETTINGS, "playerStaminaFactor", FLOAT),
     ),
     (
         ids::GAME_SETTINGS_PLAYER_BODY_HEAT_FACTOR,
-        offset(GAME_SETTINGS, "playerBodyHeatFactor", "keen::float"),
+        offset(GAME_SETTINGS, "playerBodyHeatFactor", FLOAT),
     ),
     (
         ids::GAME_SETTINGS_PLAYER_DIVING_TIME_FACTOR,
-        offset(GAME_SETTINGS, "playerDivingTimeFactor", "keen::float"),
+        offset(GAME_SETTINGS, "playerDivingTimeFactor", FLOAT),
     ),
     (
         ids::GAME_SETTINGS_ENABLE_DURABILITY,
-        offset(GAME_SETTINGS, "enableDurability", "keen::bool"),
+        offset(GAME_SETTINGS, "enableDurability", BOOL),
     ),
     (
         ids::GAME_SETTINGS_ENABLE_STARVING_DEBUFF,
-        offset(GAME_SETTINGS, "enableStarvingDebuff", "keen::bool"),
+        offset(GAME_SETTINGS, "enableStarvingDebuff", BOOL),
     ),
     (
         ids::GAME_SETTINGS_FOOD_BUFF_DURATION_FACTOR,
-        offset(GAME_SETTINGS, "foodBuffDurationFactor", "keen::float"),
+        offset(GAME_SETTINGS, "foodBuffDurationFactor", FLOAT),
     ),
     (
         ids::GAME_SETTINGS_FROM_HUNGER_TO_STARVING,
-        offset(GAME_SETTINGS, "fromHungerToStarving", "keen::Time"),
+        offset(GAME_SETTINGS, "fromHungerToStarving", TIME),
     ),
     (
         ids::GAME_SETTINGS_SHROUD_TIME_FACTOR,
-        offset(GAME_SETTINGS, "shroudTimeFactor", "keen::float"),
+        offset(GAME_SETTINGS, "shroudTimeFactor", FLOAT),
     ),
     (
         ids::GAME_SETTINGS_TOMBSTONE_MODE,
@@ -1516,7 +1333,7 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::GAME_SETTINGS_ENABLE_GLIDER_TURBULENCES,
-        offset(GAME_SETTINGS, "enableGliderTurbulences", "keen::bool"),
+        offset(GAME_SETTINGS, "enableGliderTurbulences", BOOL),
     ),
     (
         ids::GAME_SETTINGS_WEATHER_FREQUENCY,
@@ -1528,47 +1345,39 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::GAME_SETTINGS_MINING_DAMAGE_FACTOR,
-        offset(GAME_SETTINGS, "miningDamageFactor", "keen::float"),
+        offset(GAME_SETTINGS, "miningDamageFactor", FLOAT),
     ),
     (
         ids::GAME_SETTINGS_PLANT_GROWTH_SPEED_FACTOR,
-        offset(GAME_SETTINGS, "plantGrowthSpeedFactor", "keen::float"),
+        offset(GAME_SETTINGS, "plantGrowthSpeedFactor", FLOAT),
     ),
     (
         ids::GAME_SETTINGS_RESOURCE_DROP_STACK_AMOUNT_FACTOR,
-        offset(
-            GAME_SETTINGS,
-            "resourceDropStackAmountFactor",
-            "keen::float",
-        ),
+        offset(GAME_SETTINGS, "resourceDropStackAmountFactor", FLOAT),
     ),
     (
         ids::GAME_SETTINGS_FACTORY_PRODUCTION_SPEED_FACTOR,
-        offset(GAME_SETTINGS, "factoryProductionSpeedFactor", "keen::float"),
+        offset(GAME_SETTINGS, "factoryProductionSpeedFactor", FLOAT),
     ),
     (
         ids::GAME_SETTINGS_PERK_UPGRADE_RECYCLING_FACTOR,
-        offset(GAME_SETTINGS, "perkUpgradeRecyclingFactor", "keen::float"),
+        offset(GAME_SETTINGS, "perkUpgradeRecyclingFactor", FLOAT),
     ),
     (
         ids::GAME_SETTINGS_PERK_COST_FACTOR,
-        offset(GAME_SETTINGS, "perkCostFactor", "keen::float"),
+        offset(GAME_SETTINGS, "perkCostFactor", FLOAT),
     ),
     (
         ids::GAME_SETTINGS_EXPERIENCE_COMBAT_FACTOR,
-        offset(GAME_SETTINGS, "experienceCombatFactor", "keen::float"),
+        offset(GAME_SETTINGS, "experienceCombatFactor", FLOAT),
     ),
     (
         ids::GAME_SETTINGS_EXPERIENCE_MINING_FACTOR,
-        offset(GAME_SETTINGS, "experienceMiningFactor", "keen::float"),
+        offset(GAME_SETTINGS, "experienceMiningFactor", FLOAT),
     ),
     (
         ids::GAME_SETTINGS_EXPERIENCE_EXPLORATION_QUESTS_FACTOR,
-        offset(
-            GAME_SETTINGS,
-            "experienceExplorationQuestsFactor",
-            "keen::float",
-        ),
+        offset(GAME_SETTINGS, "experienceExplorationQuestsFactor", FLOAT),
     ),
     (
         ids::GAME_SETTINGS_RANDOM_SPAWNER_AMOUNT,
@@ -1580,35 +1389,35 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::GAME_SETTINGS_ENEMY_DAMAGE_FACTOR,
-        offset(GAME_SETTINGS, "enemyDamageFactor", "keen::float"),
+        offset(GAME_SETTINGS, "enemyDamageFactor", FLOAT),
     ),
     (
         ids::GAME_SETTINGS_ENEMY_HEALTH_FACTOR,
-        offset(GAME_SETTINGS, "enemyHealthFactor", "keen::float"),
+        offset(GAME_SETTINGS, "enemyHealthFactor", FLOAT),
     ),
     (
         ids::GAME_SETTINGS_ENEMY_STAMINA_FACTOR,
-        offset(GAME_SETTINGS, "enemyStaminaFactor", "keen::float"),
+        offset(GAME_SETTINGS, "enemyStaminaFactor", FLOAT),
     ),
     (
         ids::GAME_SETTINGS_ENEMY_PERCEPTION_RANGE_FACTOR,
-        offset(GAME_SETTINGS, "enemyPerceptionRangeFactor", "keen::float"),
+        offset(GAME_SETTINGS, "enemyPerceptionRangeFactor", FLOAT),
     ),
     (
         ids::GAME_SETTINGS_BOSS_DAMAGE_FACTOR,
-        offset(GAME_SETTINGS, "bossDamageFactor", "keen::float"),
+        offset(GAME_SETTINGS, "bossDamageFactor", FLOAT),
     ),
     (
         ids::GAME_SETTINGS_BOSS_HEALTH_FACTOR,
-        offset(GAME_SETTINGS, "bossHealthFactor", "keen::float"),
+        offset(GAME_SETTINGS, "bossHealthFactor", FLOAT),
     ),
     (
         ids::GAME_SETTINGS_THREAT_BONUS,
-        offset(GAME_SETTINGS, "threatBonus", "keen::float"),
+        offset(GAME_SETTINGS, "threatBonus", FLOAT),
     ),
     (
         ids::GAME_SETTINGS_PACIFY_ALL_ENEMIES,
-        offset(GAME_SETTINGS, "pacifyAllEnemies", "keen::bool"),
+        offset(GAME_SETTINGS, "pacifyAllEnemies", BOOL),
     ),
     (
         ids::GAME_SETTINGS_TAMING_STARTLE_REPERCUSSION,
@@ -1620,11 +1429,11 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::GAME_SETTINGS_DAY_TIME_DURATION,
-        offset(GAME_SETTINGS, "dayTimeDuration", "keen::Time"),
+        offset(GAME_SETTINGS, "dayTimeDuration", TIME),
     ),
     (
         ids::GAME_SETTINGS_NIGHT_TIME_DURATION,
-        offset(GAME_SETTINGS, "nightTimeDuration", "keen::Time"),
+        offset(GAME_SETTINGS, "nightTimeDuration", TIME),
     ),
     (
         ids::GAME_SETTINGS_CURSE_MODIFIER,
@@ -1632,7 +1441,7 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::GAME_SETTINGS_FLAME_LEVEL_FOG_REMOVAL,
-        offset(GAME_SETTINGS, "flameLevelFogRemoval", "keen::uint8"),
+        offset(GAME_SETTINGS, "flameLevelFogRemoval", UINT8),
     ),
     (
         ids::DAMAGE_TYPE_PHYSICAL_CUT,
@@ -2031,20 +1840,20 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::PLAYER_WAYPOINT_ENABLED,
-        offset("keen::ecs::PlayerWaypoint", "enabled", "keen::bool"),
+        offset("keen::ecs::PlayerWaypoint", "enabled", BOOL),
     ),
     (
         ids::PLAYER_WAYPOINT_POSITION,
         offset(
             "keen::ecs::PlayerWaypoint",
             "waypointPosition",
-            "keen::WorldPosition",
+            WORLD_POSITION,
         ),
     ),
     (ids::MAP_MARKER, Fact::Type("keen::ecs::MapMarker")),
     (
         ids::MAP_MARKER_MARKER_ID,
-        offset("keen::ecs::MapMarker", "markerId", "keen::LocaTagReference"),
+        offset("keen::ecs::MapMarker", "markerId", LOCA_TAG_REFERENCE),
     ),
     (
         ids::MAP_MARKER_MARKER_TYPE,
@@ -2061,15 +1870,15 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::MAP_MARKER_TYPE_IS_CUSTOM,
-        offset("keen::MapMarkerType", "isCustomMarkerType", "keen::bool"),
+        offset("keen::MapMarkerType", "isCustomMarkerType", BOOL),
     ),
     (
         ids::MAP_MARKER_TYPE_SHOW_ABOVE_FOG,
-        offset("keen::MapMarkerType", "showAboveFogOfWar", "keen::bool"),
+        offset("keen::MapMarkerType", "showAboveFogOfWar", BOOL),
     ),
     (
         ids::MAP_MARKER_TYPE_SHOW_LABEL,
-        offset("keen::MapMarkerType", "showLabel", "keen::bool"),
+        offset("keen::MapMarkerType", "showLabel", BOOL),
     ),
     (
         ids::MAP_MARKER_REGISTRY_TYPES,
@@ -2110,7 +1919,7 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::MAP_MARKER_TYPE_TYPE_NAME,
-        offset("keen::MapMarkerType", "typeName", "keen::LocaTagReference"),
+        offset("keen::MapMarkerType", "typeName", LOCA_TAG_REFERENCE),
     ),
     (
         ids::MAP_MARKER_TYPE_SORTING_CATEGORY,
@@ -2122,11 +1931,7 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::MAP_MARKER_TYPE_IS_FAST_TRAVEL_DESTINATION,
-        offset(
-            "keen::MapMarkerType",
-            "isFastTravelDestination",
-            "keen::bool",
-        ),
+        offset("keen::MapMarkerType", "isFastTravelDestination", BOOL),
     ),
     (
         ids::MARKER_TYPE_SORTING,
@@ -2178,11 +1983,7 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::SCENE_SPAWN_ENTRY_TEMPLATE_INDEX,
-        offset(
-            "keen::SceneEntityChunkSpawnEntry",
-            "templateIndex",
-            "keen::uint16",
-        ),
+        offset("keen::SceneEntityChunkSpawnEntry", "templateIndex", UINT16),
     ),
     (
         ids::SCENE_SPAWN_ENTRY_TRANSFORM,
@@ -2194,32 +1995,32 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::SCENE_TRANSFORM_POSITION_X0,
-        offset("keen::SceneEntityTransform", "positionX0", "keen::uint16"),
+        offset("keen::SceneEntityTransform", "positionX0", UINT16),
     ),
     (
         ids::SCENE_TRANSFORM_POSITION_X1,
-        offset("keen::SceneEntityTransform", "positionX1", "keen::uint16"),
+        offset("keen::SceneEntityTransform", "positionX1", UINT16),
     ),
     (
         ids::SCENE_TRANSFORM_POSITION_Y0,
-        offset("keen::SceneEntityTransform", "positionY0", "keen::uint16"),
+        offset("keen::SceneEntityTransform", "positionY0", UINT16),
     ),
     (
         ids::SCENE_TRANSFORM_POSITION_Y1,
-        offset("keen::SceneEntityTransform", "positionY1", "keen::uint16"),
+        offset("keen::SceneEntityTransform", "positionY1", UINT16),
     ),
     (
         ids::SCENE_TRANSFORM_POSITION_Z0,
-        offset("keen::SceneEntityTransform", "positionZ0", "keen::uint16"),
+        offset("keen::SceneEntityTransform", "positionZ0", UINT16),
     ),
     (
         ids::SCENE_TRANSFORM_POSITION_Z1,
-        offset("keen::SceneEntityTransform", "positionZ1", "keen::uint16"),
+        offset("keen::SceneEntityTransform", "positionZ1", UINT16),
     ),
     (ids::SCENE_RESOURCE, Fact::Type("keen::SceneResource")),
     (
         ids::SCENE_RESOURCE_HAS_BIOME_MAP,
-        offset("keen::SceneResource", "hasBiomeMap", "keen::bool"),
+        offset("keen::SceneResource", "hasBiomeMap", BOOL),
     ),
     (ids::BIOME_MAP, Fact::Type("keen::BiomeMapResource")),
     (
@@ -2262,20 +2063,16 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     (
         ids::FACTORY_STATION_RUNNING_RECIPE,
-        offset(
-            "keen::ecs::FactoryStation",
-            "runningRecipe",
-            "keen::RecipeId",
-        ),
+        offset("keen::ecs::FactoryStation", "runningRecipe", RECIPE_ID),
     ),
     (
         ids::FACTORY_STATION_NEXT_RECIPE,
-        offset("keen::ecs::FactoryStation", "nextRecipe", "keen::RecipeId"),
+        offset("keen::ecs::FactoryStation", "nextRecipe", RECIPE_ID),
     ),
     (ids::NPC_BED, Fact::Type("keen::ecs::NpcBed")),
     (
         ids::NPC_BED_ASSOCIATED_NPC,
-        offset("keen::ecs::NpcBed", "associatedNpc", "keen::NpcId"),
+        offset("keen::ecs::NpcBed", "associatedNpc", NPC_ID),
     ),
     (
         ids::STORE_ASSOCIATED_NPC_IDS,
@@ -2310,7 +2107,7 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset(
             "keen::ecs::LogicEntityPlacedEvent",
             "placedByPlayerId",
-            "keen::ecs::EntityId",
+            ENTITY_ID,
         ),
     ),
     (
@@ -2318,7 +2115,7 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset(
             "keen::ecs::LogicEntityPlacedEvent",
             "placedLogicEntityId",
-            "keen::ecs::EntityId",
+            ENTITY_ID,
         ),
     ),
     (
@@ -2328,7 +2125,7 @@ pub const FACTS: &[(&str, Fact)] = &[
                 ("keen::ItemInfo", "equipment"),
                 ("keen::EquipmentSetup", "placementAABBmin"),
             ],
-            holds: "keen::float3",
+            holds: FLOAT3,
         },
     ),
     (
@@ -2338,7 +2135,7 @@ pub const FACTS: &[(&str, Fact)] = &[
                 ("keen::ItemInfo", "equipment"),
                 ("keen::EquipmentSetup", "placementAABBmax"),
             ],
-            holds: "keen::float3",
+            holds: FLOAT3,
         },
     ),
     (
@@ -2371,7 +2168,7 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset(
             "keen::ecs::LogicGraphNodeConnected",
             "hasReaderGraphs",
-            "keen::bool",
+            BOOL,
         ),
     ),
     (
@@ -2402,7 +2199,7 @@ pub const FACTS: &[(&str, Fact)] = &[
                 ("keen::ItemInfo", "equipment"),
                 ("keen::EquipmentSetup", "requiresAltarSlot"),
             ],
-            holds: "keen::bool",
+            holds: BOOL,
         },
     ),
     (
@@ -2428,7 +2225,7 @@ pub const FACTS: &[(&str, Fact)] = &[
                 ("keen::ecs::FuelSetup", "automaticRefill"),
                 ("keen::ecs::FuelRefillSetup", "enabled"),
             ],
-            holds: "keen::bool",
+            holds: BOOL,
         },
     ),
     (
@@ -2438,7 +2235,7 @@ pub const FACTS: &[(&str, Fact)] = &[
                 ("keen::ecs::FuelSetup", "rainRefill"),
                 ("keen::ecs::FuelRefillSetup", "enabled"),
             ],
-            holds: "keen::bool",
+            holds: BOOL,
         },
     ),
     (
@@ -2450,7 +2247,7 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset(
             "keen::ecs::DynamicInventoryCraftingStock",
             "canReceiveAreaDepositOverrideIsSet",
-            "keen::bool",
+            BOOL,
         ),
     ),
     (
@@ -2458,7 +2255,7 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset(
             "keen::ecs::DynamicInventoryCraftingStock",
             "canReceiveAreaDepositOverride",
-            "keen::bool",
+            BOOL,
         ),
     ),
 ];
@@ -2513,3 +2310,84 @@ const CURSE_MODIFIER: &str = "keen::ecs::CurseModifier";
 
 /// The bits of a player's permission mask.
 const PLAYER_PERMISSIONS: &str = "keen::PlayerPermissions";
+
+/// An entity's id in the running world.
+const ENTITY_ID: &str = "keen::ecs::EntityId";
+
+/// The engine's one-byte truth value.
+const BOOL: &str = "keen::bool";
+
+/// The engine's 32-bit float, by its short name.
+const FLOAT: &str = "keen::float";
+
+/// The engine's 32-bit float, by its sized name.
+const FLOAT32: &str = "keen::float32";
+
+/// Three 32-bit floats, such as a position or a size.
+const FLOAT3: &str = "keen::float3";
+
+/// Four 32-bit floats, such as an orientation.
+const FLOAT4: &str = "keen::float4";
+
+/// The engine's unsigned byte.
+const UINT8: &str = "keen::uint8";
+
+/// The engine's unsigned 16-bit integer.
+const UINT16: &str = "keen::uint16";
+
+/// The engine's unsigned 32-bit integer.
+const UINT32: &str = "keen::uint32";
+
+/// The engine's signed 32-bit integer.
+const SINT32: &str = "keen::sint32";
+
+/// A span or a point of game time.
+const TIME: &str = "keen::Time";
+
+/// A resource's or an object's GUID.
+const GUID: &str = "keen::Guid";
+
+/// An item's numeric id.
+const ITEM_ID: &str = "keen::ItemId";
+
+/// The data an item stack carries beside its item.
+const ITEM_DATA: &str = "keen::ItemData";
+
+/// A workshop's numeric id.
+const WORKSHOP_ID: &str = "keen::WorkshopId";
+
+/// A reference to a workshop's definition.
+const WORKSHOP_REFERENCE: &str = "keen::ObjectReference<keen::WorkshopDefinition>";
+
+/// A recipe's numeric id.
+const RECIPE_ID: &str = "keen::RecipeId";
+
+/// The crafting menu's recipes, by workshop.
+const CRAFTING_RECIPES: &str = "keen::FbUiCraftingRecipeCollection";
+
+/// A position, orientation and scale in the world.
+const WORLD_TRANSFORM: &str = "keen::WorldTransform";
+
+/// A position in the world.
+const WORLD_POSITION: &str = "keen::WorldPosition";
+
+/// The material a building piece is made of, as its feedback names it.
+const MATERIAL_FEEDBACK_ID: &str = "keen::MaterialFeedbackId";
+
+/// A localized text's id.
+const LOCA_TAG_ID: &str = "keen::LocaTagId";
+
+/// A reference to a localized text.
+const LOCA_TAG_REFERENCE: &str = "keen::LocaTagReference";
+
+/// A survivor's id.
+const NPC_ID: &str = "keen::NpcId";
+
+/// The buttons a player holds, as the input carries them.
+const PLAYER_DIGITAL_INPUT: &str = "keen::ecs::PlayerDigitalInput";
+
+/// A reference to an entity template.
+const TEMPLATE_REFERENCE: &str = "keen::ecs::TemplateReference";
+
+/// How an item's armor splits across damage kinds.
+const ARMOR_DISTRIBUTION: &str = "keen::impact::ArmorDistribution";
