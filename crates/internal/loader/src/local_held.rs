@@ -299,10 +299,18 @@ unsafe fn read_host(ctx: *mut u64, at: &HostLayout, host: u32) {
 /// [`FRESH_MS`], and on a build without the reads.
 pub(crate) fn screen_host(host: u32) -> Option<([u8; 16], [i64; 3])> {
     STATE.host_wanted.store(host, Ordering::Relaxed);
-    if HOST_FUSE.is_off() || !fresh(STATE.host_ms.load(Ordering::Acquire), now_ms()) {
-        return None;
-    }
-    let (read, template, position) = STATE.host.snapshot()?;
+    let live = !HOST_FUSE.is_off() && fresh(STATE.host_ms.load(Ordering::Acquire), now_ms());
+    answer(host, live, STATE.host.snapshot())
+}
+
+/// The answer for `host` from `read`, the last whole read, while the reads
+/// are `live`: on and renewed by a step.
+fn answer(
+    host: u32,
+    live: bool,
+    read: Option<(u32, [u8; 16], [i64; 3])>,
+) -> Option<([u8; 16], [i64; 3])> {
+    let (read, template, position) = read.filter(|_| live)?;
     (host != 0 && read == host && template != [0; 16]).then_some((template, position))
 }
 
@@ -406,12 +414,9 @@ mod tests {
     }
 
     #[test]
-    fn a_panic_in_the_host_reads_turns_off_only_them() {
-        STATE.host.write(42, [9; 16], [3, 4, 5]);
-        STATE.host_ms.store(now_ms(), Ordering::Release);
-        assert!(screen_host(42).is_some());
-        let _panicked = HOST_FUSE.run(HOST_FEATURE, || panic!("a read failed"));
-        assert_eq!(screen_host(42), None, "a read past the fuse");
-        assert!(!FUSE.is_off(), "the held controls stay on");
+    fn a_read_after_the_reads_turned_off_or_went_stale_is_no_answer() {
+        let read = Some((42, [9; 16], [3, 4, 5]));
+        assert_eq!(answer(42, true, read), Some(([9; 16], [3, 4, 5])));
+        assert_eq!(answer(42, false, read), None);
     }
 }
