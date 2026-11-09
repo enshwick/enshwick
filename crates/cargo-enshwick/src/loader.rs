@@ -47,13 +47,24 @@ pub(crate) fn missing_note(game: &Path) -> String {
 /// Downloads the release's archive, checks it and unpacks it into `game`;
 /// what was done, or a warning that a different loader was left there.
 pub(crate) fn put_in(game: &Path) -> anyhow::Result<String> {
-    let version = version();
+    put_in_from(game, version(), |url, limit| {
+        crate::net::get(url, &[], limit, SECONDS)
+    })
+}
+
+/// [`put_in`] of `version`'s loader, each release file read by `get` from
+/// its URL with a byte limit.
+fn put_in_from(
+    game: &Path,
+    version: &str,
+    get: impl Fn(&str, usize) -> anyhow::Result<Vec<u8>>,
+) -> anyhow::Result<String> {
     let url = |file: &str| format!("{DOWNLOADS}/v{version}/{file}");
-    let sums = crate::net::get(&url(SUMS), &[], SUMS_LIMIT, SECONDS)
+    let sums = get(&url(SUMS), SUMS_LIMIT)
         .with_context(|| format!("the checksums of Enshwick {version}"))?;
     let expected = checksum(&String::from_utf8_lossy(&sums), ARCHIVE)
         .with_context(|| format!("{SUMS} of Enshwick {version} lists no {ARCHIVE}"))?;
-    let archive = crate::net::get(&url(ARCHIVE), &[], ARCHIVE_LIMIT, SECONDS)
+    let archive = get(&url(ARCHIVE), ARCHIVE_LIMIT)
         .with_context(|| format!("{ARCHIVE} of Enshwick {version}"))?;
     if hex(&Sha256::digest(&archive)) != expected {
         bail!("{ARCHIVE} of Enshwick {version} does not match its checksum; nothing was put in");
@@ -191,6 +202,42 @@ mod tests {
         assert_eq!(std::fs::read(game.join(FILES[1])).unwrap(), b"loader");
         let again = unpack(&release(), &game, "1.0.0-alpha.14").unwrap();
         assert!(again.contains("is in"), "{again}");
+    }
+
+    /// A release on GitHub as `get` serves it: `sums` for `SHA256SUMS` and
+    /// `archive` for `enshwick.zip` of `v1.0.0-alpha.14`, nothing else.
+    fn github(sums: String, archive: Vec<u8>) -> impl Fn(&str, usize) -> anyhow::Result<Vec<u8>> {
+        move |url, _| {
+            let base = format!("{DOWNLOADS}/v1.0.0-alpha.14/");
+            match url.strip_prefix(&base) {
+                Some(SUMS) => Ok(sums.clone().into_bytes()),
+                Some(ARCHIVE) => Ok(archive.clone()),
+                _ => anyhow::bail!("404 for {url}"),
+            }
+        }
+    }
+
+    #[test]
+    fn the_release_s_archive_is_put_in_only_when_its_checksum_holds() {
+        let game = scratch("download");
+        let archive = release();
+        let sums = format!("{}  {ARCHIVE}\n", hex(&Sha256::digest(&archive)));
+        let done = put_in_from(&game, "1.0.0-alpha.14", github(sums, archive.clone())).unwrap();
+        assert!(done.starts_with("put in"), "{done}");
+        assert!(is_installed(&game));
+
+        let other = scratch("tampered");
+        let wrong = format!("{}  {ARCHIVE}\n", "0".repeat(64));
+        let error = put_in_from(&other, "1.0.0-alpha.14", github(wrong, archive.clone()))
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("does not match its checksum"), "{error}");
+        assert!(!other.join(FILES[0]).exists());
+
+        let unlisted = put_in_from(&other, "1.0.0-alpha.14", github(String::new(), archive))
+            .unwrap_err()
+            .to_string();
+        assert!(unlisted.contains("lists no enshwick.zip"), "{unlisted}");
     }
 
     #[test]
