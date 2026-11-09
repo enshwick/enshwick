@@ -3,7 +3,7 @@
 //! the station's item, read from the game's archive.
 //!
 //! [`item`], [`recipe`], [`loot_table`], [`station`] and [`workshop`] name
-//! the running game's content, and [`experience_values`] lists its
+//! the running game's content, and `experience_values` (`typed`) lists its
 //! experience values, so a mod's code holds no vanilla GUID or id;
 //! [`deps!`](crate::deps) offers them as `deps::vanilla`. [`Vanilla::game`]
 //! reads the running game's data; [`Vanilla::new`] reads any game's through
