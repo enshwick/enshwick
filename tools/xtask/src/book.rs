@@ -153,9 +153,23 @@ const ID_MARKS: [&str; 4] = ["`<mod>:", "`<id>:", "`<mod id>:", "content id"];
 /// The problem with a chapter that names an id and does not link
 /// [`IDS_CHAPTER`], which states the rule once for every page.
 fn ids_link_problem(chapter: &str, text: &str) -> Option<String> {
-    let names_an_id = ID_MARKS.iter().any(|mark| text.contains(mark));
-    let file = IDS_CHAPTER.rsplit('/').next().unwrap_or(IDS_CHAPTER);
-    (chapter != IDS_CHAPTER && names_an_id && !text.contains(file))
+    let lower = text.to_ascii_lowercase();
+    let names_an_id = ID_MARKS.iter().any(|mark| lower.contains(mark));
+    // A chapter beside it links it by its file name, any other by its path.
+    let (folder, file) = IDS_CHAPTER.rsplit_once('/').unwrap_or(("", IDS_CHAPTER));
+    let links = [
+        format!("]({IDS_CHAPTER}"),
+        format!("](../{IDS_CHAPTER}"),
+        format!("]({file}"),
+    ];
+    let beside = chapter
+        .rsplit_once('/')
+        .is_some_and(|(dir, _)| dir == folder);
+    let linked = links
+        .iter()
+        .enumerate()
+        .any(|(i, link)| (i < 2 || beside) && text.contains(link.as_str()));
+    (chapter != IDS_CHAPTER && names_an_id && !linked)
         .then(|| format!("{SOURCE}/{chapter}: names an id; link {IDS_CHAPTER} where it does"))
 }
 
@@ -360,6 +374,10 @@ mod tests {
         assert!(ids_link_problem("b/a.md", "A [content id](../concepts/ids.md).").is_none());
         assert!(ids_link_problem(IDS_CHAPTER, "A content id.").is_none());
         assert!(ids_link_problem("a.md", "No id here.").is_none());
+        assert!(ids_link_problem("a.md", "Content ID, see `ids.md`.").is_some());
+        assert!(ids_link_problem("a.md", "A [content id](uuids.md).").is_some());
+        assert!(ids_link_problem("a.md", "A [content id](ids.md).").is_some());
+        assert!(ids_link_problem("concepts/a.md", "A [content id](ids.md#x).").is_none());
     }
 
     #[test]
