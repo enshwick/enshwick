@@ -164,11 +164,11 @@ jobs:
       - name: Install luau-lsp
         if: matrix.part == 'host' || matrix.part == 'all'
         env:
-          # renovate: datasource=github-releases depName=JohnnyMorganz/luau-lsp
+          # renovate: datasource=github-release-attachments depName=JohnnyMorganz/luau-lsp
           VERSION: 1.70.1
           SHA256: 1a2ea1ae4f98f8946cefd970a4b54853e11ab4775e6932faa7f60cf920346567
         run: |
-          curl --proto '=https' -sSfL -o "$RUNNER_TEMP/luau-lsp.zip" \
+          curl --proto '=https' --tlsv1.2 -sSfL -o "$RUNNER_TEMP/luau-lsp.zip" \
             "https://github.com/JohnnyMorganz/luau-lsp/releases/download/$VERSION/luau-lsp-linux-x86_64.zip"
           echo "$SHA256  $RUNNER_TEMP/luau-lsp.zip" | sha256sum -c -
           unzip -q "$RUNNER_TEMP/luau-lsp.zip" -d "$RUNNER_TEMP/luau-lsp"
