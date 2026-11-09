@@ -401,7 +401,6 @@ const CPP_INCLUDE: &str = "#include \"enshwick.h\"\n";
 
 /// Compiles `source` against `header` for the Windows target with clang as
 /// `language`; a failing layout assert names its type and field.
-
 fn compile(header: &Path, language: Language, source: &str) -> Vec<String> {
     let dir = match scratch_dir("layout") {
         Ok(dir) => dir,

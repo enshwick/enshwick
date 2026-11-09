@@ -5,15 +5,17 @@ description: A mod is a DLL that exports four functions over the C ABI, so C, C+
 
 # Mods in C and C++
 
-A mod is a DLL that exports four functions over the C ABI. C and C++ mods are
-tested: the example mods
+A mod is a DLL that exports four functions over the C ABI. So C, C++ or any
+language that can call a C ABI can write one. Here you build the example mods
+in C and C++.
+
+## The header and the examples
+
+The examples
 [`hello.c`](https://github.com/enshwick/enshwick/blob/main/examples/hello-c/hello.c)
 and
 [`hello.cpp`](https://github.com/enshwick/enshwick/blob/main/examples/hello-c/hello.cpp)
-start on the fake host on every change. Any other language that builds a
-Windows DLL and can call a C ABI can write a mod the same way.
-
-## The header and the examples
+start on the fake host on every change, so C and C++ are the tested languages.
 
 The header is
 [`enshwick.h`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/include/enshwick.h),
