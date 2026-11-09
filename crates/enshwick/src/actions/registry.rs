@@ -77,7 +77,7 @@ fn words(line: &str) -> Vec<Word<'_>> {
 fn rest_of_line<'a>(line: &'a str, words: &[Word<'a>]) -> Option<&'a str> {
     match words {
         [] => None,
-        [only] if line[only.from..].starts_with('"') => Some(only.text),
+        [only] => Some(only.text),
         [first, ..] => Some(line[first.from..].trim_end()),
     }
 }

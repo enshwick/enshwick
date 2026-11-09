@@ -31,6 +31,25 @@ Each entry names the pull request that made the change.
   quest step reads as unknown when its knowledge cannot be read (#1015).
 - `test`: `Installed::set_game_queries` sets the fake host's answers to
   game queries (#1015).
+- `actions`: `Actions::show` and `Actions::close` show, update and close a
+  `Window` of lines, rows with buttons (`Row`) and whole actions on
+  players' clients, where the loader draws it with the game's widgets, so
+  a mod of side server needs only Enshwick on the client. The server
+  renders it for each player in their language, only for players who may
+  run every action it names, in hosted and single-player games as on a
+  dedicated server; Luau `actions:show` and `actions:close` (#1022).
+- `actions`: `Arg::text` and `Value::Text`, a line of free text of at most
+  `MAX_TEXT` (256) bytes without control characters. A console or command
+  line gives the last text argument the rest of the line and an earlier
+  one a word or a quoted run; Luau `enshwick.actions.text` (#1022).
+- `actions`: `Action::known` names up to `MAX_KNOWN` accounts a mod knows
+  while they are offline, so player arguments and lists offer them and a
+  typed name finds them; Luau `known` (#1022).
+- `abi`: `HostApi::action_window` and `ActionCall::WINDOW`, ABI 11.22,
+  show or close a mod's window on players' clients and ask the mod for it
+  as each player sees it (#1022).
+- `test`: `Installed::carried_windows` reads the windows a player's client
+  holds after the mod's shows and closes (#1022).
 
 ### Changed
 
@@ -49,6 +68,8 @@ Each entry names the pull request that made the change.
   instead of 321,536 bytes and 85 ms, and the journal in 6,000 bytes and
   0.46 ms instead of 62,056 bytes and 20.5 ms; a change that fails is
   logged and left out, and the rest are made (#1015).
+- `actions`: a console or command line reads a run in double quotes as
+  one value (#1022).
 
 ### Fixed
 
@@ -62,6 +83,9 @@ Each entry names the pull request that made the change.
   the file while the backup is linked, which Linux answers as not found,
   and waits up to about a second per step, not 50 ms, for a file that is held
   (#1025).
+- `actions`: a run naming an account no one online or known has is
+  answered "That player is no longer here." instead of with its account
+  key (#1022).
 
 ## [1.0.0-alpha.14] - 2026-11-09
 

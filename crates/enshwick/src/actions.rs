@@ -615,6 +615,10 @@ impl Actions {
     /// is skipped. Works the same on a dedicated server and in a hosted or
     /// single-player game, where the host gets its windows in process.
     ///
+    /// The mod keeps one window per id for every player who holds it: a
+    /// window shown under an id in use replaces it for them all at their
+    /// next update, so windows that differ by player take ids of their own.
+    ///
     /// # Errors
     ///
     /// [`Off`] on a client; for a malformed id, a window past its bounds

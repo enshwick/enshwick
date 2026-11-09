@@ -349,4 +349,15 @@ mod tests {
         assert_eq!(decode_args("nNaN"), None);
         assert_eq!(decode_args("pzz"), None);
     }
+
+    #[test]
+    fn a_text_argument_is_read_up_to_its_bound_and_without_control_characters() {
+        let longest = "x".repeat(crate::actions::MAX_TEXT);
+        assert_eq!(
+            decode_args(&format!("t{longest}")),
+            Some(vec![Value::Text(longest.clone())])
+        );
+        assert_eq!(decode_args(&format!("t{longest}x")), None);
+        assert_eq!(decode_args("tbell\u{7}"), None);
+    }
 }

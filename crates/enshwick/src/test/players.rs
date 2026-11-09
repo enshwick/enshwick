@@ -384,7 +384,7 @@ impl Installed {
     ///     name_len: 0,
     ///     name: [0; 64],
     /// };
-    /// assert_eq!(loader.type_in_chat(&player, 0, "/adl online"), None);
+    /// assert_eq!(loader.type_in_chat(&player, 0, "/adm online"), None);
     /// ```
     #[cfg(feature = "unstable")]
     #[must_use]

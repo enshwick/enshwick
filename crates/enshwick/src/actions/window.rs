@@ -481,6 +481,7 @@ mod tests {
             ]
         );
         assert_eq!(view.entries, [entry]);
+        assert_eq!(window.id(), "players");
         assert_eq!(
             window.actions().collect::<Vec<_>>(),
             ["kick", "say", "allowed"]
@@ -527,10 +528,29 @@ mod tests {
     }
 
     #[test]
+    fn a_window_of_exactly_the_most_bytes_keeps_its_last_item() {
+        let line = "T\t\n".len() + MAX_LINE;
+        let room = MAX_BYTES - "W\tt\n".len();
+        let full = (0..room / line).fold(Window::new("full", "t"), |w, _| {
+            w.text(&"x".repeat(MAX_LINE), &[])
+        });
+        let full = full.text(&"y".repeat(room % line - "T\t\n".len()), &[]);
+        let text = full.render(&say, &[]);
+        assert_eq!(text.len(), MAX_BYTES);
+        assert_eq!(decode(&text).unwrap().items.len(), room / line + 1);
+    }
+
+    #[test]
     fn a_window_names_its_faults() {
         let takes = |action: &str| (action == "kick").then_some(1);
         let fine = Window::new("w", "W").row(Row::new("r", &[]).button("Kick", "kick", &[]));
         assert_eq!(fine.fault(&takes), None);
+        let fullest = (0..MAX_BUTTONS).fold(Row::new("r", &[]), |row, _| {
+            row.button("k", "kick", &[Value::Toggle(true)])
+        });
+        let fullest =
+            (1..MAX_ITEMS).fold(Window::new("w", "W").row(fullest), |w, _| w.text("t", &[]));
+        assert_eq!(fullest.fault(&takes), None, "at each bound, not past it");
         let unknown = Window::new("w", "W").action("fly");
         assert_eq!(unknown.fault(&takes).as_deref(), Some("no action fly"));
         let crowded =

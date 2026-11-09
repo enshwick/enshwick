@@ -11,6 +11,7 @@ use core::cell::RefCell;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use enshwick::PlayerKey;
 use enshwick::abi::UiWidget;
 use enshwick::actions::Value;
 use enshwick::actions::sheet::{ArgView, Entry, encode_args};
@@ -102,6 +103,8 @@ pub(crate) fn forget() {
 /// What the player set in one field.
 struct Field {
     pick: u32,
+    /// The account `pick` named when it was last drawn.
+    picked: Option<PlayerKey>,
     number: f32,
     on: bool,
     text: Box<TextBuffer>,
@@ -115,6 +118,7 @@ impl Field {
     fn new(arg: &ArgView) -> Self {
         Self {
             pick: 0,
+            picked: None,
             number: arg.min as f32,
             on: false,
             text: TextBuffer::new(),
@@ -433,11 +437,16 @@ fn field(paint: &Painter<'_>, arg: &ArgView, state: &mut Field) -> Option<Value>
     match arg.kind {
         ArgView::PLAYER => {
             let names: Vec<&[u8]> = arg.players.iter().map(|(_, n)| n.as_bytes()).collect();
+            state.pick = followed(&arg.players, state.picked, state.pick);
             if names.is_empty() {
                 paint.label(label, UiWidget::STYLE_SECONDARY, false, false);
             } else if let Some(pick) = paint.dropdown(label, &names, state.pick, false) {
                 state.pick = pick;
             }
+            state.picked = usize::try_from(state.pick)
+                .ok()
+                .and_then(|at| arg.players.get(at))
+                .map(|(key, _)| *key);
             let _typed = paint.text_field(
                 &mut state.text,
                 texts::text("windows.name").as_bytes(),
@@ -483,6 +492,15 @@ fn field(paint: &Painter<'_>, arg: &ArgView, state: &mut Field) -> Option<Value>
     }
 }
 
+/// The row of the account `picked` in `players` as an update left them,
+/// else `pick`: a join or a leave moves the rows under the player's pick.
+fn followed(players: &[(PlayerKey, String)], picked: Option<PlayerKey>, pick: u32) -> u32 {
+    picked
+        .and_then(|key| players.iter().position(|(k, _)| *k == key))
+        .and_then(|at| u32::try_from(at).ok())
+        .unwrap_or(pick)
+}
+
 /// A player argument's value: the typed name when there is one, which the
 /// server looks up, else the player picked from the list.
 fn player_value(arg: &ArgView, pick: u32, typed: &str) -> Option<Value> {
@@ -526,13 +544,13 @@ fn snapped(arg: &ArgView, value: f64) -> f64 {
     } else {
         value
     };
-    stepped.clamp(arg.min, arg.max)
+    // Not `clamp`: the range comes from the server's text, and `clamp` panics
+    // on a reversed or NaN one.
+    stepped.max(arg.min).min(arg.max)
 }
 
 #[cfg(test)]
 mod tests {
-    use enshwick::PlayerKey;
-
     use super::*;
 
     fn view(title: &str) -> View {
@@ -664,6 +682,33 @@ mod tests {
         assert!((snapped(&even, 4.2) - 5.0).abs() < f64::EPSILON);
         let any = ArgView { step: 0.0, ..even };
         assert!((snapped(&any, 4.2) - 4.2).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn a_reversed_or_unreadable_range_from_the_server_does_not_panic() {
+        let reversed = ArgView {
+            kind: ArgView::NUMBER,
+            min: 9.0,
+            max: 1.0,
+            ..ArgView::default()
+        };
+        assert!((snapped(&reversed, 4.0) - 1.0).abs() < f64::EPSILON);
+        let unreadable = ArgView {
+            min: f64::NAN,
+            max: f64::NAN,
+            ..reversed
+        };
+        assert!((snapped(&unreadable, 4.0) - 4.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn a_player_pick_follows_its_account_when_an_update_moves_the_rows() {
+        let (ann, bob) = (PlayerKey::new(7), PlayerKey::new(8));
+        let both = [(ann, "Ann".to_owned()), (bob, "Bob".to_owned())];
+        assert_eq!(followed(&both, None, 1), 1, "nothing drawn yet");
+        assert_eq!(followed(&both, Some(bob), 1), 1);
+        assert_eq!(followed(&both[1..], Some(bob), 1), 0, "Ann left");
+        assert_eq!(followed(&both[..1], Some(bob), 1), 1, "Bob left");
     }
 
     #[test]
