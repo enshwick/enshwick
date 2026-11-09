@@ -1,6 +1,6 @@
 <!--
 type: how-to
-description: Mods add quests and lore pages to the journal on knowledge, change vanilla quests and their rewards, and set a player's quest progression.
+description: Mods add quests and lore pages to the journal on knowledge, change vanilla quests and their rewards, read the journal and where each player stands, and set a player's quest progression.
 -->
 
 # Quests and journal pages
@@ -83,6 +83,35 @@ own setting does. The server sets it and the game sends it to the clients.
 
 These calls need the `typed` feature.
 
+## Reading the journal and where a player stands
+
+`load.quests()` gives the `Quests` of the running game. They read the
+journal as the game built it, every mod's quests and changes in, on first
+use:
+
+| Call | What it gives |
+| --- | --- |
+| `all()` | every quest, with its steps, their queries and its rewards |
+| `quest(id)` | one quest, or none |
+| `pages()` | every lore page and its entries |
+| `state(player, id)` | per step whether it shows and is done, and whether the quest started, is done and was paid |
+| `world_state(id)` | the same from the world's knowledge alone |
+
+A step that asks one of the game's own queries (`KnowledgeTest::Holds` or
+`Fails`) takes the game's answer, the one it reads when it pays a quest;
+before the game has evaluated the query, the step reads as unknown.
+
+```rust
+fn report(load: &mut enshwick::Load<'_>, player: enshwick::Entity) {
+    let quests = load.quests();
+    for quest in quests.all() {
+        if quests.state(player, quest.id).is_some_and(|state| state.done) {
+            enshwick::info!("quest {} done", quest.id);
+        }
+    }
+}
+```
+
 ## From Luau
 
 Three of the same calls run at the top level of `main.luau`:
@@ -95,6 +124,9 @@ Two more run while the world runs:
 
 - `enshwick.knowledge.quest_progression(player)`
 - `set_quest_progression(player, personal)`
+
+The journal reads under `enshwick.quests`: `all()`, `quest(id)`,
+`pages()`, `state(player, id)` and `world_state(id)`.
 
 ```luau
 local given = enshwick.content.add_knowledge({ id = "you.trail:given", scope = "Player", kind = "Bool" })

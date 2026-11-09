@@ -15,6 +15,20 @@ Each entry names the pull request that made the change.
   for the process (#1006).
 - `test`: `Installed::kept_outputs` counts the patch outputs the fake host
   got as a patch's own bytes rather than in a buffer it lent (#1006).
+- `quests`: `Load::quests` reads every quest and lore page of the journal
+  as the game built it, mods' included, with their steps, queries and
+  rewards (`Quests::all`, `quest`, `pages`), and where a player or the
+  world stands in each quest (`Quests::state`, `world_state`); Luau
+  `enshwick.quests` (#1015).
+- `abi`: `HostApi::game_query`, ABI 11.21, answers whether one of the
+  game's queries holds for a player or the world, as the game reads it
+  when it pays a quest (#1015).
+- `content`: `KnowledgeTest::Equals`, `Below`, `HasFlag`, `Holds` and
+  `Fails`, `KnowledgeQuery::not` and `KnowledgeQuery::game` with
+  `GameQuery`, so a step, page or skill node tests a count exactly, below
+  a count, any of a set of flags, or one of the game's queries (#1015).
+- `test`: `Installed::set_game_queries` sets the fake host's answers to
+  game queries (#1015).
 
 ### Changed
 
@@ -27,6 +41,12 @@ Each entry names the pull request that made the change.
   as an item `Load::rekey_item` re-keys, is built again whenever that key
   is rebuilt, so a re-keyed item follows a world's changed values of
   its new item; the loader keeps its base for it (#1006).
+- `content`: one patch per resource serves all of a mod's knowledge
+  entries, and one all of its quests, journal pages and quest changes, so
+  100 entries and 50 quests build the knowledge in 4,464 bytes and 0.40 ms
+  instead of 321,536 bytes and 85 ms, and the journal in 6,000 bytes and
+  0.46 ms instead of 62,056 bytes and 20.5 ms; a change that fails is
+  logged and left out, and the rest are made (#1015).
 
 ### Fixed
 
