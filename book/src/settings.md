@@ -389,6 +389,9 @@ doc = "How often the log counts the players online, in minutes."
 | `choices` | the values it accepts |
 | `text` | the key of its label in the pack's `texts.toml`; `config.<key>` unless given |
 
+The folder's mod id keeps two mods' keys apart, see
+[how ids are namespaced](concepts/ids.md).
+
 The loader treats these as it treats a Rust mod's settings. It writes the
 file on first start, checks every value against its declaration, and shows
 the settings behind the mod's gear on the Mods screen.
