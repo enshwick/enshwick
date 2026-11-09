@@ -89,8 +89,9 @@ length. Changed values qualify. Added entries do not, and `rebuild` returns
 the ones that differ.
 
 A resource whose builder read another served key with
-`host.served_resource` is built again whenever that key is rebuilt and
-changes. The loader keeps its base for it, without `allow_rebuild`.
+`host.served_resource` is built again whenever that key is rebuilt. That
+holds also while the game has not built that key itself. The loader keeps
+its base for it, without `allow_rebuild`.
 
 ## Patches from several mods compose
 

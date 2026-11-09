@@ -30,8 +30,8 @@ Each entry names the pull request that made the change.
   rebuild free what they build instead of keeping every patch's output for
   the process (#1006).
 - `content`: a served resource whose build read another served key, such
-  as an item `Load::rekey_item` re-keys, is built again whenever a rebuild
-  changes that key, so a re-keyed item follows a world's changed values of
+  as an item `Load::rekey_item` re-keys, is built again whenever that key
+  is rebuilt, so a re-keyed item follows a world's changed values of
   its new item; the loader keeps its base for it (#1006).
 
 ### Fixed
@@ -49,8 +49,8 @@ Each entry names the pull request that made the change.
   fails reads it as the archive has it, instead of failing as missing
   (#1006).
 - `HostApi::resource_served` keeps no bytes for a call that only asks the
-  length, so a later read on that thread no longer gets stale bytes
-  (#1006).
+  length, and answers no retry from bytes kept before a build began on that
+  thread, so a later read there no longer gets stale bytes (#1006).
 
 ## [1.0.0-alpha.14] - 2026-11-09
 

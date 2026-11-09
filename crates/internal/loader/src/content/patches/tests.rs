@@ -142,12 +142,17 @@ unsafe extern "system" fn read_other(
 ) -> Status {
     // SAFETY: `user` is a served entry the test leaked for the process.
     let other = unsafe { &*user.cast::<Served>() };
-    match read_served(other, vec![0]) {
+    match read_served(other, vec![0], unarchived) {
         // SAFETY: `run_patches` passes `out` and `out_len` writable for the
         // call.
         Ok(bytes) => unsafe { hand_out(bytes, out, out_len) },
         Err(status) => status,
     }
+}
+
+/// An archive without the key: no game runs the tests.
+fn unarchived(_key: &ResourceKey) -> Result<Vec<u8>, Status> {
+    Err(Status::MISSING)
 }
 
 fn by_loader(apply: enshwick::abi::ResourcePatchFn) -> Patch {
@@ -238,17 +243,26 @@ fn a_served_read_is_refused_before_the_registrations_seal() {
 fn a_served_read_whose_every_patch_fails_reads_a_changed_key_as_archived_and_a_new_one_as_missing()
 {
     let changed = Served::new(KEY, KEY, vec![by_loader(fail)], false);
-    assert_eq!(read_served(&changed, vec![5; 3]), Ok(vec![5; 3]));
+    assert_eq!(
+        read_served(&changed, vec![5; 3], unarchived),
+        Ok(vec![5; 3])
+    );
     let new = ResourceKey { part: 1, ..KEY };
     let added = Served::new(new, KEY, vec![by_loader(fail)], false);
-    assert_eq!(read_served(&added, vec![5; 3]), Err(Status::MISSING));
+    assert_eq!(
+        read_served(&added, vec![5; 3], unarchived),
+        Err(Status::MISSING)
+    );
 }
 
 #[test]
 fn served_reads_free_every_buffer_their_patches_took() {
     let entry = Served::new(KEY, KEY, vec![by_loader(grow), by_loader(grow)], false);
     for _ in 0..100 {
-        assert_eq!(read_served(&entry, vec![7; 4]), Ok(vec![7, 7, 7, 7, 1, 1]));
+        assert_eq!(
+            read_served(&entry, vec![7; 4], unarchived),
+            Ok(vec![7, 7, 7, 7, 1, 1])
+        );
     }
     assert_eq!(LIVE.get(), 0, "no patch output outlives its read");
 }
@@ -257,7 +271,7 @@ fn served_reads_free_every_buffer_their_patches_took() {
 fn an_output_inside_a_lent_buffer_reads_as_its_own_bytes_and_frees_the_buffer() {
     for apply in [skip_first, short_of_buffer] {
         let entry = Served::new(KEY, KEY, vec![by_loader(apply)], false);
-        assert_eq!(read_served(&entry, vec![3, 4]), Ok(vec![3, 4]));
+        assert_eq!(read_served(&entry, vec![3, 4], unarchived), Ok(vec![3, 4]));
     }
     assert_eq!(LIVE.get(), 0);
 }
@@ -269,7 +283,7 @@ fn the_game_s_build_keeps_only_its_last_output_and_a_rebuild_frees_its_own() {
     assert_eq!(LIVE.get(), 1, "the game holds the last output");
     assert_eq!(entry.state.relock().built.map(|(_, len)| len), Some(3));
     for _ in 0..10 {
-        assert_eq!(rebuild_one(&entry), Ok(0));
+        assert_eq!(rebuild_one(&entry), Ok(Some(0)));
     }
     assert_eq!(LIVE.get(), 1, "a rebuild frees what it built");
 }
@@ -307,7 +321,7 @@ fn a_rebuild_reaches_the_keys_whose_builds_read_the_rebuilt_one_and_theirs() {
     // other do.
     list[1].read_by.relock().push(read);
     VALUE.store(2, Ordering::Relaxed);
-    assert_eq!(rebuild_one(&list[0]), Ok(1));
+    assert_eq!(rebuild_one(&list[0]), Ok(Some(1)));
     rebuild_readers(list, &list[0]);
     for entry in &list[1..] {
         let (data, _) = entry.state.relock().built.unwrap();
@@ -317,4 +331,64 @@ fn a_rebuild_reaches_the_keys_whose_builds_read_the_rebuilt_one_and_theirs() {
         unsafe { crate::memory::read_bytes(data, 0, &mut held) };
         assert_eq!(held, [2], "{:?} takes the rebuilt value", entry.key);
     }
+}
+
+/// A key that serves [`VALUE`] and one whose game build read it, the first
+/// read by a mod's served read only, never built by the game.
+fn read_and_reader() -> &'static [Served; 2] {
+    let reader = ResourceKey { part: 1, ..KEY };
+    let list: &mut [Served; 2] = Box::leak(Box::new([
+        Served::new(KEY, KEY, vec![by_loader(value)], true),
+        Served::new(reader, reader, vec![by_loader(read_other)], false),
+    ]));
+    list[1].patches[0].user = (&raw const list[0]).expose_provenance();
+    VALUE.store(1, Ordering::Relaxed);
+    build_each(&list[1..]);
+    list
+}
+
+/// The one byte the game holds for `entry`'s first build.
+fn held(entry: &Served) -> u8 {
+    let (data, _) = entry.state.relock().built.unwrap();
+    let mut held = [0u8];
+    // SAFETY: `data` is the entry's first build, one byte kept for the
+    // process.
+    unsafe { crate::memory::read_bytes(data, 0, &mut held) };
+    held[0]
+}
+
+#[test]
+fn a_rebuild_of_a_key_the_game_never_built_still_rebuilds_the_keys_that_read_it() {
+    let list = read_and_reader();
+    assert!(
+        list[0].state.relock().built.is_none(),
+        "only a served read built it"
+    );
+    VALUE.store(2, Ordering::Relaxed);
+    assert_eq!(rebuild_entry(list, &list[0]), Status::OK);
+    assert_eq!(held(&list[1]), 2, "the reader takes the rebuilt value");
+}
+
+#[test]
+fn a_rebuild_leaves_a_reader_whose_build_runs_on_this_thread() {
+    let list = read_and_reader();
+    // The game's first build of the reader holds its state while its patch
+    // rebuilds the key it read.
+    let _game = list[1].state.relock();
+    let _building = Building::enter(list[1].key, Build::Game);
+    VALUE.store(2, Ordering::Relaxed);
+    rebuild_readers(list, &list[0]);
+}
+
+#[test]
+fn a_served_read_whose_every_patch_fails_reads_a_vanilla_key_from_another_base_as_archived() {
+    let other = ResourceKey { part: 1, ..KEY };
+    let entry = Served::new(KEY, other, vec![by_loader(fail)], false);
+    assert_eq!(
+        read_served(&entry, vec![5], |key| {
+            assert_eq!(*key, KEY);
+            Ok(vec![8])
+        }),
+        Ok(vec![8])
+    );
 }

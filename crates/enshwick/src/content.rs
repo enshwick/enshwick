@@ -549,9 +549,9 @@ fn lent(bytes: &[u8]) -> Option<*mut u8> {
 /// any thread may call this, for values a patch reads that changed after the
 /// first build, such as a server's join values.
 ///
-/// Nothing is done while the game has not built `key` yet, as its first build
-/// takes the values in force. Each rebuild keeps the patches' new bytes for the
-/// process, so it is for rare changes.
+/// `key` itself is left while the game has not built it yet, as its first
+/// build takes the values in force. Every key whose build read `key` with
+/// [`Host::served_resource`](crate::Host::served_resource) is built again too.
 ///
 /// The game keeps reading the first build's bytes, so a rebuild must come
 /// out the same length: a patch that only changes values qualifies, one
@@ -560,8 +560,9 @@ fn lent(bytes: &[u8]) -> Option<*mut u8> {
 ///
 /// # Errors
 ///
-/// [`Off`] for a key the mod does not serve or did not allow to rebuild,
-/// and when the new build differs in length.
+/// [`Off`] for a key the mod does not serve, or whose base the loader did
+/// not keep: the mod did not allow to rebuild it and no build read a served
+/// key; and when the new build differs in length.
 ///
 /// # Examples
 ///

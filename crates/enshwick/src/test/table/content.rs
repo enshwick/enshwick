@@ -395,9 +395,10 @@ pub(crate) extern "system" fn resource_served(
             };
             let archived = archived(&base)?;
             match build(&key, &archived) {
-                // As the loader: a changed vanilla key whose every patch
-                // failed reads as archived.
+                // As the loader: a key whose every patch failed reads as
+                // the archive has it.
                 Err(Status::MISSING) if key == base => Ok(archived),
+                Err(Status::MISSING) => self::archived(&key),
                 built => built,
             }
         })
@@ -468,7 +469,11 @@ pub(crate) extern "system" fn resource_buffer(
     }
     let lent = BUILDING.with_borrow_mut(|frames| {
         let (_, buffers) = frames.last_mut()?;
-        buffers.push(vec![0; len].into_boxed_slice());
+        // As the loader: bytes that do not allocate refuse the call.
+        let mut buffer = Vec::new();
+        buffer.try_reserve_exact(len).ok()?;
+        buffer.resize(len, 0);
+        buffers.push(buffer.into_boxed_slice());
         buffers.last_mut().map(|buffer| buffer.as_mut_ptr())
     });
     match lent {

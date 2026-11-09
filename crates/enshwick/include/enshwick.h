@@ -4250,11 +4250,14 @@ typedef struct EnshwickHostApi {
   // Afterwards: builds `key` again from that base with the patches of
   // every mod still on, as values they read changed, and writes the
   // bytes that differ over the resource the game holds; `Status::OK`
-  // with nothing done while `key` was not built yet, as its first build
-  // takes the values in force. Any thread. `Status::MISSING` when its
-  // base was not kept, `Status::REFUSED` when the new build differs in length, which the
-  // game's copy cannot take, `Status::BAD_ARGS` for a key the mod does
-  // not serve. Each rebuild keeps the patches' new bytes for the process.
+  // with `key` itself left while it was not built yet, as its first
+  // build takes the values in force. Then every key whose build read
+  // `key` as served is built again the same way. Any thread.
+  // `Status::MISSING` when its base was not kept, `Status::REFUSED`
+  // when the new build differs in length, which the game's copy cannot
+  // take, `Status::BAD_ARGS` for a key the mod does not serve. The
+  // loader frees what each rebuild's patches built in a
+  // `resource_buffer`.
   EnshwickStatus (*rebuild_resource)(EnshwickModHandle me, const struct EnshwickResourceKey *key);
   // Adds the calling mod's rule that disables recipes (`disable` 1), or
   // takes its own rule of that kind and name back (`disable` 0). `name`
@@ -5045,10 +5048,13 @@ typedef struct EnshwickHostApi {
   // last patch's output for the process, as the game holds it, and every
   // other output, a rebuild's and a served read's
   // (`resource_served`) included, is freed by
-  // the loader. `Status::REFUSED` outside a patch or when `len` bytes
-  // do not allocate; `Status::BAD_ARGS` for a null `out`. The patch's
-  // thread only; `out` is borrowed for the call. A panic in the loader
-  // returns `Status::REFUSED`. ABI 11.20.
+  // the loader. A mod that is off gets one too, as a rebuild runs the
+  // patches of the mods that built what the game holds.
+  // `Status::REFUSED` outside a patch or when `len` bytes do not
+  // allocate; `Status::BAD_ARGS` for a null `out` or a handle the
+  // loader never gave out. The patch's thread only, re-entrant from a
+  // patch for another key; `out` is borrowed for the call. A panic in
+  // the loader returns `Status::REFUSED`. ABI 11.20.
   EnshwickStatus (*resource_buffer)(EnshwickModHandle me, uint32_t len, uint8_t **out);
 } EnshwickHostApi;
 

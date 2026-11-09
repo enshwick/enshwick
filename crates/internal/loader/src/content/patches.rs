@@ -41,11 +41,18 @@ pub(crate) fn rebuild(owner: ModIndex, key: ResourceKey) -> Status {
             None => Status::BAD_ARGS,
         };
     };
-    let Some(entry) = list.iter().find(|s| serves(s)) else {
-        return Status::BAD_ARGS;
-    };
+    match list.iter().find(|s| serves(s)) {
+        Some(entry) => rebuild_entry(list, entry),
+        None => Status::BAD_ARGS,
+    }
+}
+
+/// Builds `entry` of `list` again, then the keys whose builds read it when
+/// its served value may have changed: it changed, or the game never built
+/// it, so only served reads saw it.
+fn rebuild_entry(list: &[Served], entry: &Served) -> Status {
     match rebuild_one(entry) {
-        Ok(0) => Status::OK,
+        Ok(Some(0)) => Status::OK,
         Ok(_) => {
             rebuild_readers(list, entry);
             Status::OK
@@ -55,16 +62,16 @@ pub(crate) fn rebuild(owner: ModIndex, key: ResourceKey) -> Status {
 }
 
 /// Builds `entry` again from its kept base and writes the bytes that differ
-/// over those the game holds; how many differed, none before its first
+/// over those the game holds; how many differed, `None` before its first
 /// build, which takes the values in force.
-fn rebuild_one(entry: &Served) -> Result<usize, Status> {
+fn rebuild_one(entry: &Served) -> Result<Option<usize>, Status> {
     let _one_at_a_time = entry.rebuilding.relock();
     // The game resolves the resource meanwhile: the patches run outside the
     // state's lock, on a copy of the base.
     let (data, len, base, built_by) = {
         let state = entry.state.relock();
         let Some((data, len)) = state.built else {
-            return Ok(0);
+            return Ok(None);
         };
         let Some(base) = state.base.clone() else {
             return Err(Status::MISSING);
@@ -96,24 +103,25 @@ fn rebuild_one(entry: &Served) -> Result<usize, Status> {
         entry.key.type_hash,
         hex(&entry.key.guid)
     );
-    Ok(changed)
+    Ok(Some(changed))
 }
 
 /// Rebuilds the keys of `list` whose builds read `entry`, which changed, and
 /// in turn those that read a key that changed; each once, so keys that read
-/// each other end.
+/// each other end. A key whose build runs on this thread is left: its build
+/// holds its state, and it reads `entry` as it is when it does.
 fn rebuild_readers(list: &[Served], entry: &Served) {
     let mut done = vec![entry.key];
     let mut next = entry.read_by.relock().clone();
     while let Some(key) = next.pop() {
-        if done.contains(&key) {
+        if done.contains(&key) || building(&key) {
             continue;
         }
         done.push(key);
         let Some(reader) = list.iter().find(|s| s.key == key) else {
             continue;
         };
-        if rebuild_one(reader).is_ok_and(|changed| changed > 0) {
+        if rebuild_one(reader).is_ok_and(|changed| changed != Some(0)) {
             next.extend(reader.read_by.relock().iter().copied());
         }
     }
@@ -178,14 +186,19 @@ pub(crate) fn served_now(key: ResourceKey) -> Result<Vec<u8>, Status> {
     if building(&entry.key) {
         return Err(Status::BUILDING);
     }
-    read_served(entry, archive(&entry.base)?)
+    read_served(entry, archive(&entry.base)?, archive)
 }
 
 /// `entry` built for a mod's served read from `base`, its base's bytes:
-/// each patch of a mod on, a failed one skipped; `base` itself for a
-/// changed vanilla key when none built, [`Status::MISSING`] for a new one.
-/// The game's builds running on this thread are noted as reading `entry`.
-fn read_served(entry: &Served, base: Vec<u8>) -> Result<Vec<u8>, Status> {
+/// each patch of a mod on, a failed one skipped. When none built, the key
+/// as `archive` has it: `base` itself for a key patched in place, and
+/// [`Status::MISSING`] for a new one. The game's builds running on this
+/// thread are noted as reading `entry`.
+fn read_served(
+    entry: &Served,
+    base: Vec<u8>,
+    archive: impl FnOnce(&ResourceKey) -> Result<Vec<u8>, Status>,
+) -> Result<Vec<u8>, Status> {
     note_read(entry);
     match run_patches(
         entry,
@@ -196,7 +209,7 @@ fn read_served(entry: &Served, base: Vec<u8>) -> Result<Vec<u8>, Status> {
     ) {
         Some(built) => Ok(built.into_bytes()),
         None if entry.key == entry.base => Ok(base),
-        None => Err(Status::MISSING),
+        None => archive(&entry.key),
     }
 }
 
@@ -326,6 +339,20 @@ struct Frame {
 thread_local! {
     /// The builds of served keys running on this thread, innermost last.
     static BUILDING: RefCell<Vec<Frame>> = const { RefCell::new(Vec::new()) };
+    /// How many builds of served keys this thread has begun.
+    static BEGUN: core::cell::Cell<u64> = const { core::cell::Cell::new(0) };
+}
+
+/// How many builds of served keys this thread has begun, so bytes read
+/// before one began are known to predate it.
+pub(crate) fn builds_begun() -> u64 {
+    BEGUN.get()
+}
+
+/// Begins a game build of `key` on this thread, which ends on drop.
+#[cfg(test)]
+pub(crate) fn enter_build(key: ResourceKey) -> impl Sized {
+    Building::enter(key, Build::Game)
 }
 
 #[cfg(test)]
@@ -387,6 +414,7 @@ struct Building;
 
 impl Building {
     fn enter(key: ResourceKey, build: Build) -> Self {
+        BEGUN.set(BEGUN.get().wrapping_add(1));
         BUILDING.with_borrow_mut(|frames| {
             frames.push(Frame {
                 key,

@@ -27,7 +27,9 @@ use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{HookFlags, ResourceKey, ResourcePatchFn, Status};
 use enshwick::raw::{read_at, write_at};
-pub(crate) use patches::{hand_out, lend, rebuild, scratch, served_now};
+#[cfg(test)]
+pub(crate) use patches::enter_build;
+pub(crate) use patches::{builds_begun, hand_out, lend, rebuild, scratch, served_now};
 use texts::{TEXTS, seal_texts};
 
 use crate::chains::Next;
