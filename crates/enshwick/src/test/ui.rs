@@ -223,7 +223,14 @@ impl Installed {
     /// assert!(loader.draw_frame().is_empty());
     /// ```
     pub fn host_screen(&self, host: Option<crate::Entity>) {
-        table::with((), |s| s.screen_host = host.map_or(0, |e| e.0));
+        table::with((), |s| {
+            let host = host.map_or(0, |e| e.0);
+            // As in game, a new host has no template until a step reads it.
+            if s.screen_host != host {
+                s.screen_host_read = None;
+            }
+            s.screen_host = host;
+        });
     }
 
     /// Makes the open screen's host one made from `template`, standing at

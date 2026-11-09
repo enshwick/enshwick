@@ -32,6 +32,8 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 const SYSTEM: &str = "player_ui";
 /// The feature's name in the log and on the Mods screen.
 const FEATURE: &str = "the local player's held controls";
+/// The host reads' own name in the log and on the Mods screen.
+const HOST_FEATURE: &str = "the open screen's host template and position";
 /// How long a read stays the answer: past it, no step ran, as in a menu.
 const FRESH_MS: u64 = 1000;
 
@@ -45,14 +47,12 @@ struct Layout {
     row_entity: RowEntity,
     input: u32,
     digital: usize,
-    /// The open screen host's template and position reads; `None` on a
-    /// build whose table or reflection lacks them.
-    host: Option<HostLayout>,
 }
 
 /// Where the open screen host's template and position are read.
 #[derive(Debug)]
 struct HostLayout {
+    components: Components,
     walk: TemplateWalk,
     /// `CurrentTransform`'s type hash and the offset of its position, three
     /// 32.32 fixed-point `i64`.
@@ -122,9 +122,13 @@ struct State {
     start: OnceLock<Instant>,
     bits: AtomicU64,
     read_ms: AtomicU64,
+    /// Where the host reads run, once linked on a build that has them.
+    host_layout: OnceLock<HostLayout>,
     /// The open screen's host the interface asks about, 0 for none.
     host_wanted: AtomicU32,
     host: HostRead,
+    /// When a step last wrote `host`, as `read_ms` counts.
+    host_ms: AtomicU64,
 }
 
 static STATE: State = State {
@@ -133,10 +137,13 @@ static STATE: State = State {
     start: OnceLock::new(),
     bits: AtomicU64::new(0),
     read_ms: AtomicU64::new(0),
+    host_layout: OnceLock::new(),
     host_wanted: AtomicU32::new(0),
     host: HostRead::new(),
+    host_ms: AtomicU64::new(0),
 };
 static FUSE: Fuse = Fuse::new(FEATURE);
+static HOST_FUSE: Fuse = Fuse::new(HOST_FEATURE);
 // SAFETY: `SystemFn` is the signature of a system entry, here the reflected
 // `player_ui` system's, and `link` uses this slot only as that function's
 // next.
@@ -173,56 +180,60 @@ fn layout(loader: &Loader) -> Result<Layout, &'static str> {
         input: catalogue::type_hash(catalogue::ids::CLIENT_PLAYER_INPUT)
             .ok_or(catalogue::ids::CLIENT_PLAYER_INPUT)?,
         digital,
-        host: host_layout(loader),
     })
 }
 
-/// The host reads on this build, or `None` with a log line.
-fn host_layout(loader: &Loader) -> Option<HostLayout> {
-    let found = TemplateWalk::resolve(loader).and_then(|walk| {
-        Some(HostLayout {
-            walk,
-            transform: catalogue::type_hash(catalogue::ids::CURRENT_TRANSFORM)?,
-            position: catalogue::constant(
-                catalogue::ids::CURRENT_TRANSFORM_TRANSFORM,
-                &loader.reflection,
-            )
-            .and_then(|at| usize::try_from(at).ok())?,
-        })
-    });
-    if found.is_none() {
-        crate::log!(
-            INFO,
-            "interface: mods read no screen host template or position on this build"
-        );
-    }
-    found
+/// Where the host reads run on this build, or the id of what it lacks.
+fn host_layout(loader: &Loader) -> Result<HostLayout, &'static str> {
+    Ok(HostLayout {
+        components: Components::resolve(loader).ok_or(pinned::ecs::COMPONENT_READ_RAW.id())?,
+        walk: TemplateWalk::resolve(loader).ok_or(pinned::ecs::ENTITY_SLOT.id())?,
+        transform: catalogue::type_hash(catalogue::ids::CURRENT_TRANSFORM)
+            .ok_or(catalogue::ids::CURRENT_TRANSFORM)?,
+        position: catalogue::constant(
+            catalogue::ids::CURRENT_TRANSFORM_TRANSFORM,
+            &loader.reflection,
+        )
+        .and_then(|at| usize::try_from(at).ok())
+        .ok_or(catalogue::ids::CURRENT_TRANSFORM_TRANSFORM)?,
+    })
 }
 
 pub(crate) fn link(loader: &Loader) {
     if loader.side != Side::CLIENT {
         return;
     }
-    let layout = match layout(loader) {
-        Ok(layout) => layout,
+    let mut any = false;
+    match layout(loader) {
+        Ok(layout) => any |= STATE.layout.set(layout).is_ok(),
         Err(id) => {
             let _off = loader.feature_off(FEATURE, id, "this build lacks it");
-            return;
         }
-    };
-    let _first = STATE.layout.set(layout);
+    }
+    match host_layout(loader) {
+        Ok(at) => any |= STATE.host_layout.set(at).is_ok(),
+        Err(id) => {
+            let _off = loader.feature_off(HOST_FEATURE, id, "this build lacks it");
+        }
+    }
+    if !any {
+        return;
+    }
     let entry = loader
         .reflection
         .system(SYSTEM)
         .ok()
         .map(enshwick_gamedata::reflect::System::entry);
-    let _linked = loader.link_feature(
+    let linked = loader.link_feature(
         FEATURE,
         Target::Found(SYSTEM, entry),
         &NEXT,
         player_ui as SystemFn,
         HookFlags::NONE,
     );
+    if !linked && STATE.host_layout.get().is_some() {
+        let _off = loader.feature_off(HOST_FEATURE, SYSTEM, "its system did not link");
+    }
 }
 
 /// Reads the local player's mask from `player_ui`'s context.
@@ -232,17 +243,6 @@ pub(crate) fn link(loader: &Loader) {
 /// - `ctx` is the `player_ui` system's live, non-null context, at its entry
 ///   on its thread.
 unsafe fn read(ctx: *mut u64, layout: &Layout) {
-    let host = STATE.host_wanted.load(Ordering::Relaxed);
-    if host != 0
-        && let Some(at) = &layout.host
-    {
-        // SAFETY: the caller's live context at the system's entry on its
-        // thread.
-        unsafe { read_host(ctx, layout, at, host) };
-    }
-    if !STATE.asked.load(Ordering::Relaxed) {
-        return;
-    }
     let mut entity = 0u32;
     // SAFETY: the game's `ecs.row_entity` on the system's live context, at
     // its entry on its thread, as `player_ui` calls it itself first thing
@@ -273,45 +273,62 @@ unsafe fn read(ctx: *mut u64, layout: &Layout) {
 ///
 /// - `ctx` is the `player_ui` system's live, non-null context, at its entry
 ///   on its thread.
-unsafe fn read_host(ctx: *mut u64, layout: &Layout, at: &HostLayout, host: u32) {
+unsafe fn read_host(ctx: *mut u64, at: &HostLayout, host: u32) {
     // SAFETY: the caller's live context, on its thread.
-    let world = unsafe { layout.components.world(ctx) };
+    let world = unsafe { at.components.world(ctx) };
     // SAFETY: `world` is the running system's live entity world, read on
     // its thread during the system's entry, before it changes any entity.
     let template = world.and_then(|world| unsafe { at.walk.template(world, Entity(host)) });
     // SAFETY: the caller's live context, on its thread.
-    let transform = unsafe { layout.components.component(ctx, host, at.transform) };
+    let transform = unsafe { at.components.component(ctx, host, at.transform) };
     // SAFETY: `transform` is the host's live `CurrentTransform`, whose
     // position, three fixed-point `i64`, sits at the reflected offset
     // `at.position`.
     let position =
         transform.map(|data| unsafe { enshwick::raw::read_at::<[i64; 3]>(data, at.position) });
-    STATE.host.write(
-        host,
-        template.unwrap_or_default(),
-        position.unwrap_or_default(),
-    );
+    // A template without a position would name the world's origin.
+    let (template, position) = template.zip(position).unwrap_or_default();
+    STATE.host.write(host, template, position);
+    STATE.host_ms.store(now_ms(), Ordering::Release);
 }
 
 /// The template and fixed-point position of the open screen's host `host`
 /// as the client's last step read them, and asks the next step to read it;
-/// `None` for no host, before a step read this one and on a build without
-/// the reads.
+/// `None` for no host, before a step read this one, when no step read for
+/// [`FRESH_MS`], and on a build without the reads.
 pub(crate) fn screen_host(host: u32) -> Option<([u8; 16], [i64; 3])> {
     STATE.host_wanted.store(host, Ordering::Relaxed);
+    if HOST_FUSE.is_off() || !fresh(STATE.host_ms.load(Ordering::Acquire), now_ms()) {
+        return None;
+    }
     let (read, template, position) = STATE.host.snapshot()?;
     (host != 0 && read == host && template != [0; 16]).then_some((template, position))
 }
 
+/// Whether a read at `read` milliseconds is still the answer at `now`; 0 is
+/// never read.
+fn fresh(read: u64, now: u64) -> bool {
+    read != 0 && now.saturating_sub(read) <= FRESH_MS
+}
+
 unsafe extern "system" fn player_ui(ctx: *mut u64) -> u64 {
     // Until a mod asks, the system runs as the game's alone.
-    if (STATE.asked.load(Ordering::Relaxed) || STATE.host_wanted.load(Ordering::Relaxed) != 0)
+    let host = STATE.host_wanted.load(Ordering::Relaxed);
+    if host != 0
+        && let Some(at) = STATE.host_layout.get()
+        && !ctx.is_null()
+    {
+        // SAFETY: `ctx` is non-null by the check before it and is the
+        // system's own context, at its entry on its thread.
+        let _read = HOST_FUSE.run(HOST_FEATURE, || unsafe { read_host(ctx, at, host) });
+    }
+    if STATE.asked.load(Ordering::Relaxed)
         && let Some(layout) = STATE.layout.get()
         && !ctx.is_null()
     {
         // SAFETY: `ctx` is non-null by the check before it and is the
         // system's own context, at its entry on its thread.
-        let _read = FUSE.run("the local player's held controls", || unsafe {
+        let _read = FUSE.run(FEATURE, || unsafe {
             read(ctx, layout);
         });
     }
@@ -368,11 +385,32 @@ mod tests {
         assert_eq!(screen_host(42), None);
         assert_eq!(STATE.host_wanted.load(Ordering::Relaxed), 42);
         STATE.host.write(42, [9; 16], [3, 4, 5]);
+        STATE.host_ms.store(now_ms(), Ordering::Release);
         assert_eq!(screen_host(42), Some(([9; 16], [3, 4, 5])));
         assert_eq!(screen_host(43), None, "another host's read");
         STATE.host.write(43, [0; 16], [0; 3]);
         assert_eq!(screen_host(43), None, "no template read");
         assert_eq!(screen_host(0), None);
         assert_eq!(STATE.host_wanted.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn a_host_read_no_step_renewed_is_no_answer() {
+        assert!(!fresh(0, 5), "never read");
+        assert!(fresh(100, 100 + FRESH_MS));
+        assert!(
+            !fresh(100, 101 + FRESH_MS),
+            "a read from before a world load"
+        );
+    }
+
+    #[test]
+    fn a_panic_in_the_host_reads_turns_off_only_them() {
+        STATE.host.write(42, [9; 16], [3, 4, 5]);
+        STATE.host_ms.store(now_ms(), Ordering::Release);
+        assert!(screen_host(42).is_some());
+        let _panicked = HOST_FUSE.run(HOST_FEATURE, || panic!("a read failed"));
+        assert_eq!(screen_host(42), None, "a read past the fuse");
+        assert!(!FUSE.is_off(), "the held controls stay on");
     }
 }

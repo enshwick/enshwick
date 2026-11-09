@@ -239,6 +239,9 @@ static UI_THREAD: AtomicU32 = AtomicU32::new(0);
 // unbalanced every frame.
 static FRAMES_FUSE: Fuse = Fuse::new("mods' windows");
 static EXTENSIONS_FUSE: Fuse = Fuse::new("screen extensions");
+/// Turns the screen, prompt and host reads off at their first panic; the
+/// frames then read as outside a game.
+static READS_FUSE: Fuse = Fuse::new("screen reads");
 static DEMO_FUSE: Fuse = Fuse::new("interface demo");
 static MODS_SCREEN_FUSE: Fuse = Fuse::new("Mods screen");
 static DIALOGS_FUSE: Fuse = Fuse::new("dialogs");
@@ -555,10 +558,15 @@ unsafe extern "system" fn detour(state: *mut u8) {
     UI_THREAD.store(thread_id(), Ordering::Release);
     let frame = mods::next_frame();
     map::note(context);
-    // SAFETY: the game draws its popup inside the frame on the interface
-    // thread, and `context` is the frame's own, non-zero by the guard
-    // before it.
-    let reads = unsafe { extensions::frame_reads(engine, context) };
+    let asked = extensions::hosts_asked(FRAMES.sealed().is_some_and(|f| !f.is_empty()));
+    let reads = READS_FUSE
+        .run("the frame's screen reads", || {
+            // SAFETY: the game draws its popup inside the frame on the
+            // interface thread, and `context` is the frame's own, non-zero by
+            // the guard before it.
+            unsafe { extensions::frame_reads(engine, context, asked) }
+        })
+        .unwrap_or(extensions::FrameReads::NONE);
     // A window that panicked between its begin and end leaves the game's
     // window stack unbalanced, so a panic ends this frame's windows; its own
     // fuse keeps it off from the next frame on.
@@ -649,7 +657,7 @@ fn hud(engine: &Engine, context: usize) {
     HUD_ITEMS.with_borrow_mut(Vec::clear);
     // SAFETY: `hud_detour` calls this inside the frame on the interface
     // thread with the frame's own non-zero `context`.
-    let reads = unsafe { extensions::frame_reads(engine, context) };
+    let reads = unsafe { extensions::frame_reads(engine, context, !huds.is_empty()) };
     for registered in huds.iter().filter(|r| r.live()) {
         let token = NEXT_TOKEN.fetch_add(1, Ordering::Relaxed);
         DRAWING.set(Some(Drawing {

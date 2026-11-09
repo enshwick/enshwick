@@ -55,11 +55,14 @@ Each entry names the pull request that made the change.
 - `sound`: a container added with the `Ui` scene plays from no place in
   the world (#1002).
 - `sound`: `Load::add_sound` refuses a WAV file whose header claims more
-  samples than the file holds, and a failed client step no longer counts
-  the file against `MAX_MOD_BYTES`; the unreachable `MAX_SECONDS` limit is
-  removed (#1002).
+  samples than the file holds, and a client step that fails before it
+  serves the file no longer counts it against `MAX_MOD_BYTES`; the
+  unreachable `MAX_SECONDS` limit is removed (#1002).
 - `ui`: frames read no screen host while the player is in the world with
-  no screen open (#1002).
+  no window open, the build tools included (#1002).
+- `test`: `Installed::host_screen` with another host forgets the template
+  read for the one before, as a new host reads none until a step does
+  (#1002).
 
 - `content`: `Load::rekey_item(old, new)` and Luau
   `enshwick.content.rekey_item` read `new` as served at each build of

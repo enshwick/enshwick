@@ -713,6 +713,7 @@ struct Optional {
     dialog: Option<DialogLayout>,
     scroll: Option<scroll::Scrolling>,
     text_fields: Option<text_field::TextFields>,
+    hint: Option<hint::InputHints>,
 }
 
 impl Optional {
@@ -745,6 +746,9 @@ impl Optional {
                 .ok(),
             text_fields: text_field::TextFields::resolve(loader)
                 .inspect_err(off("text settings on the Mods screen (read-only)"))
+                .ok(),
+            hint: hint::InputHints::resolve(loader)
+                .inspect_err(off("input hints"))
                 .ok(),
         }
     }
@@ -791,6 +795,7 @@ impl Engine {
             dialog,
             scroll,
             text_fields,
+            hint,
         } = Optional::resolve(loader, &mut parts_off);
         let on = |part: Part| !parts_off.iter().any(|(p, _)| *p == part);
         let menus = on(Part::MAIN_MENU) || on(Part::PAUSE_MENU);
@@ -826,7 +831,7 @@ impl Engine {
             dialog,
             scroll,
             text_fields,
-            hint: hint::InputHints::resolve(loader),
+            hint,
             window_begin: function!(pinned::ui::WINDOW_BEGIN, WindowBeginFn),
             window_end: function!(pinned::ui::WINDOW_END, OneFn),
             frame_from_node: function!(pinned::ui::FRAME_FROM_NODE, FrameFromNodeFn),

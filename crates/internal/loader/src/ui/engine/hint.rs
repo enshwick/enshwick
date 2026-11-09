@@ -4,6 +4,7 @@
 use enshwick_gamedata::catalogue;
 
 use crate::host::Loader;
+use crate::interface_parts::Missing;
 use crate::pinned;
 
 use super::UiText;
@@ -26,29 +27,26 @@ pub(crate) struct InputHints {
 }
 
 impl InputHints {
-    /// The hint on this build, or `None` with a log line when its code or
-    /// the reflection of the actions is not found.
-    pub(super) fn resolve(loader: &Loader) -> Option<Self> {
-        let off = |why: &str| {
-            loader.feature_off("input hints", pinned::ui::INPUT_HINT.id(), why);
-        };
+    /// The hint on this build, or what of its code or reflection is missing.
+    pub(super) fn resolve(loader: &Loader) -> Result<Self, Missing> {
+        let id = pinned::ui::INPUT_HINT.id();
         if !loader.code_holds(pinned::ui::INPUT_HINT) {
-            off("the build's code lacks the game's key hint");
-            return None;
+            return Err(Missing::Bytes(id));
         }
         let ty = catalogue::type_name(catalogue::ids::GAMEPLAY_ACTION);
-        let Ok(info) = loader.reflection.type_info(ty) else {
-            off("the build's reflection lacks the game actions");
-            return None;
-        };
+        let info = loader
+            .reflection
+            .type_info(ty)
+            .map_err(|_| Missing::Reflected(ty, catalogue::ids::GAMEPLAY_ACTION))?;
         let address = loader
             .address(pinned::ui::INPUT_HINT)
-            .and_then(|a| usize::try_from(a).ok())?;
+            .and_then(|a| usize::try_from(a).ok())
+            .ok_or(Missing::Entry(id))?;
         // SAFETY: `code_holds` found the game's hint wrapper at `address`,
         // its pattern matched once where its code starts; the type is its
         // signature from the game's own calls of it on client 26430625.
         let call = unsafe { core::mem::transmute::<usize, InputHintFn>(address) };
-        Some(Self {
+        Ok(Self {
             call,
             actions: actions(info.enum_values().iter().map(|v| (v.name(), v.value()))),
         })
@@ -62,8 +60,9 @@ impl InputHints {
     ///
     /// - A layout node of the interface is open in the frame being drawn,
     ///   on the interface thread: the game builds the hint as its child.
-    /// - `label` points into memory alive to the end of the frame, as the
-    ///   game's own hint labels are frame memory.
+    /// - The bytes `label` points at outlive the frame, as the game's own
+    ///   hint labels are frame memory; the `UiText` itself lives only for
+    ///   the call, as for every widget the loader draws.
     pub(in crate::ui) unsafe fn draw(&self, name: &str, label: &UiText) -> Option<bool> {
         let action = action(&self.actions, name)?;
         // SAFETY: `self.call` is the game's hint wrapper, found in
@@ -74,9 +73,21 @@ impl InputHints {
     }
 }
 
-/// The game actions that fit the hint's byte, sorted by name.
+/// The reflected sentinel after the last game action, which the hint
+/// refuses as it does any action at or past it.
+const COUNT: &str = "Count";
+
+/// The game actions that fit the hint's byte, below the build's count,
+/// sorted by name.
 fn actions(values: impl Iterator<Item = (&'static str, u64)>) -> Vec<(&'static str, u8)> {
+    let values: Vec<_> = values.collect();
+    let count = values
+        .iter()
+        .find(|&&(name, _)| name == COUNT)
+        .map_or(u64::MAX, |&(_, value)| value);
     let mut actions: Vec<(&'static str, u8)> = values
+        .into_iter()
+        .filter(|&(_, value)| value < count)
         .filter_map(|(name, value)| Some((name, u8::try_from(value).ok()?)))
         .collect();
     actions.sort_unstable_by_key(|&(name, _)| name);
@@ -117,5 +128,13 @@ mod tests {
     fn an_action_past_the_hint_s_byte_is_left_out() {
         let actions = actions([("Far", 256), ("Near", 255)].into_iter());
         assert_eq!(actions, vec![("Near", 255)]);
+    }
+
+    #[test]
+    fn the_count_sentinel_and_actions_past_it_are_no_actions() {
+        let actions = actions([("Jump", 3), ("Count", 140), ("Past", 141)].into_iter());
+        assert_eq!(action(&actions, "Count"), None);
+        assert_eq!(action(&actions, "Past"), None);
+        assert_eq!(action(&actions, "Jump"), Some(3));
     }
 }

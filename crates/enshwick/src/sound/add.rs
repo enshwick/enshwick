@@ -407,6 +407,8 @@ impl Load<'_> {
         let sound = self.declare(sound_id)?;
         let host = self.host();
         let hash = host.serve_content(&pcm.bytes)?;
+        // Served bytes stay held whatever fails after them.
+        self.sound_bytes += size;
         let (stereo, frames, name) = (pcm.stereo, pcm.frames, id.to_string());
         drop(pcm);
         crate::resources::serve_value(
@@ -421,7 +423,6 @@ impl Load<'_> {
             container.key(types::SOUND_CONTAINER_RESOURCE)?,
             &value,
         )?;
-        self.sound_bytes += size;
         Ok(SoundContainerId::from_guid(container))
     }
 }

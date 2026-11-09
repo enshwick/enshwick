@@ -318,8 +318,8 @@ fn input_hint(engine: &Engine, action: &[u8], raw: &mut UiWidget) -> Status {
     // SAFETY: `draw` calls this only with `window_open`, checked by
     // `widget_checks::order`: this callback's window, or its screen
     // extension's, is open in this frame on the interface thread, so its
-    // layout node is open; `label` is empty or lives in the frame's arena,
-    // kept to the end of the frame.
+    // layout node is open; `label` is empty or its bytes live in the
+    // frame's arena, kept to the end of the frame.
     match unsafe { hint.draw(action, &label) } {
         Some(drawn) => {
             raw.result = u32::from(drawn);

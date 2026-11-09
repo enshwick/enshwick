@@ -244,14 +244,10 @@ type EntitySlot = unsafe extern "system" fn(map: *const u8, entity: *const u32) 
 struct Layout {
     type_index: TypeIndex,
     read_component: ReadComponent,
-    entity_slot: EntitySlot,
+    walk: TemplateWalk,
     server_world: usize,
     entity_world: usize,
     registry_maps: [usize; 2],
-    entity_map: usize,
-    entity_capacity: usize,
-    entity_records: usize,
-    record_template: usize,
     server_players: usize,
     permission_table: usize,
     permission_entries: usize,
@@ -290,7 +286,6 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             let function = |name: Symbol| symbol(name).and_then(|a| usize::try_from(a).ok());
             let type_index = function(pinned::ecs::TYPE_INDEX)?;
             let read_component = function(pinned::ecs::COMPONENT_READ_RAW)?;
-            let entity_slot = function(pinned::ecs::ENTITY_SLOT)?;
             // SAFETY: the table's `ecs.type_index` is the address of the game
             // function with the `TypeIndex` signature on this build, in the
             // image, which stays mapped.
@@ -300,24 +295,16 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             // build, in the image, which stays mapped.
             let read_component =
                 unsafe { core::mem::transmute::<usize, ReadComponent>(read_component) };
-            // SAFETY: the table's `ecs.entity_slot` is the address of the game
-            // function with the `EntitySlot` signature on this build, in the
-            // image, which stays mapped.
-            let entity_slot = unsafe { core::mem::transmute::<usize, EntitySlot>(entity_slot) };
             Some(Layout {
                 type_index,
                 read_component,
-                entity_slot,
+                walk: TemplateWalk::resolve(loader)?,
                 server_world: constant(pinned::server::WORLD)?,
                 entity_world: constant(pinned::world::ENTITIES)?,
                 registry_maps: [
                     constant(pinned::ecs::REGISTRY_TYPE_MAP)?,
                     constant(pinned::ecs::REGISTRY_TYPE_MAP_FALLBACK)?,
                 ],
-                entity_map: constant(pinned::ecs::ENTITY_MAP)?,
-                entity_capacity: constant(pinned::ecs::ENTITY_MAP_CAPACITY)?,
-                entity_records: constant(pinned::ecs::ENTITY_RECORDS)?,
-                record_template: constant(pinned::ecs::RECORD_TEMPLATE)?,
                 server_players: constant(pinned::server::PLAYER_INFOS)?,
                 permission_table: constant(pinned::server::PERMISSION_TABLE)?,
                 permission_entries: constant(pinned::server::PERMISSION_ENTRIES)?,
@@ -498,16 +485,9 @@ pub(crate) fn component(
 pub(crate) fn template(loader: &Loader, entity: Entity) -> Result<[u8; 16], Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let world = entity_world(layout, reader()?).ok_or(Status::MISSING)?;
-    let walk = TemplateWalk {
-        entity_slot: layout.entity_slot,
-        entity_map: layout.entity_map,
-        entity_capacity: layout.entity_capacity,
-        entity_records: layout.entity_records,
-        record_template: layout.record_template,
-    };
     // SAFETY: `world` is the server's non-zero entity world, read on the
     // game thread (checked by `reader`), which alone writes it.
-    unsafe { walk.template(world, entity) }.ok_or(Status::MISSING)
+    unsafe { layout.walk.template(world, entity) }.ok_or(Status::MISSING)
 }
 
 /// The walk from an entity to its template GUID through an entity world's

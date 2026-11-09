@@ -6,6 +6,7 @@ mod tests {
     use core::ffi::c_void;
     use core::ptr::null_mut;
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicU32, Ordering};
 
     use enshwick::Entity;
     use enshwick::abi::{Header, Side, Status, Str, UiExtension, UiFrame};
@@ -58,11 +59,37 @@ mod tests {
                 Err(status)
             };
             *REFUSED.lock().unwrap() = vec![too_many, null];
+            // An 11.17 spec ends before the host list, whatever lies after it.
+            let old = UiExtension {
+                header: Header {
+                    size: 32,
+                    abi_minor: 17,
+                    ..Header::of::<UiExtension>()
+                },
+                screen: Str::new("StorageChest"),
+                edge: UiExtension::TOP,
+                reserved: 0,
+                hosts: core::ptr::dangling(),
+                host_count: 3,
+                reserved_hosts: 0,
+            };
+            let status =
+                (host.api().ui_extension)(host.handle(), &raw const old, counted, null_mut());
+            *OLD.lock().unwrap() = Some(status);
             Ok(Self)
         }
     }
 
     unsafe extern "system" fn nothing(_frame: *const UiFrame, _user: *mut c_void) {}
+
+    /// What the loader answered the 11.17 spec.
+    static OLD: Mutex<Option<Status>> = Mutex::new(None);
+    /// How often the 11.17 panel drew.
+    static OLD_DRAWS: AtomicU32 = AtomicU32::new(0);
+
+    unsafe extern "system" fn counted(_frame: *const UiFrame, _user: *mut c_void) {
+        OLD_DRAWS.fetch_add(1, Ordering::Relaxed);
+    }
 
     enshwick::test::declare_mod!(
         Safes,
@@ -116,6 +143,45 @@ mod tests {
         assert_eq!(
             *READS.lock().unwrap(),
             [(Some(OURS), Some([10.5, -2.0, 300.25])), (None, None)]
+        );
+    }
+
+    #[test]
+    fn a_panel_of_an_11_17_mod_reads_no_host_list_and_shows_for_every_host() {
+        let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Safes)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        assert_eq!(*OLD.lock().unwrap(), Some(Status::OK));
+        let _drawn = loader.draw_screen(HudScreenType::StorageChest);
+        loader.host_screen(Some(Entity(512)));
+        loader.read_screen_host(THEIRS, [1.0, 2.0, 3.0]);
+        let _drawn = loader.draw_screen(HudScreenType::StorageChest);
+        assert_eq!(OLD_DRAWS.load(Ordering::Relaxed), 2);
+    }
+
+    #[test]
+    fn another_host_reads_no_template_until_a_step_read_it() {
+        let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Safes)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        loader.host_screen(Some(Entity(512)));
+        loader.read_screen_host(OURS, [1.0, 2.0, 3.0]);
+        let ours =
+            |drawn: Vec<(u32, Vec<Drawn>)>| drawn.iter().any(|(e, _)| *e == UiExtension::RIGHT);
+        assert!(ours(loader.draw_screen(HudScreenType::StorageChest)));
+        loader.host_screen(Some(Entity(600)));
+        assert!(
+            !ours(loader.draw_screen(HudScreenType::StorageChest)),
+            "the first frame of a new host"
+        );
+        loader.host_screen(Some(Entity(512)));
+        assert!(
+            !ours(loader.draw_screen(HudScreenType::StorageChest)),
+            "the first host again, read no more"
         );
     }
 

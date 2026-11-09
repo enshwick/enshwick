@@ -66,9 +66,9 @@ struct Linked {
     /// Where the play data keeps the open screen's `u32` host entity, on a
     /// build whose table has it.
     screen_host: Option<usize>,
-    /// The screen byte of the world with no screen open, `InGame`, on a
-    /// build whose reflection names it.
-    in_game: Option<u8>,
+    /// A bit for each screen byte with no window open, as
+    /// [`crate::controls::open_screens`] reads them; 0 on a build without.
+    open_screens: u64,
 }
 
 /// The interaction prompt's offsets in the play data: its title, a
@@ -101,7 +101,7 @@ pub(super) struct FrameReads {
 }
 
 impl FrameReads {
-    const NONE: Self = Self {
+    pub(super) const NONE: Self = Self {
         screen: None,
         hud_screen: Str::EMPTY,
         prompt_title: Str::EMPTY,
@@ -177,9 +177,9 @@ pub(crate) fn register(
     else {
         return Status::MISSING;
     };
-    let in_game = catalogue::constant(catalogue::ids::HUD_SCREEN_IN_GAME, &loader.reflection)
-        .and_then(|value| u8::try_from(value).ok());
-    if in_game == Some(screen) {
+    if crate::controls::open_screens(loader)
+        .is_some_and(|open| crate::controls::is_open_screen(open, screen))
+    {
         return Status::BAD_ARGS;
     }
     EXTENSIONS
@@ -209,8 +209,7 @@ pub(super) fn link(loader: &Loader) {
             names: screen_names(loader),
             prompt: prompt_at(loader),
             screen_host: loader.offset(pinned::ui::SCREEN_HOST),
-            in_game: catalogue::constant(catalogue::ids::HUD_SCREEN_IN_GAME, &loader.reflection)
-                .and_then(|value| u8::try_from(value).ok()),
+            open_screens: crate::controls::open_screens(loader).unwrap_or(0),
         })
     })();
     match found {
@@ -354,7 +353,7 @@ unsafe fn prompt(data: usize, at: PromptAt) -> (Str, u32) {
 ///
 /// - `context` is 0 or the live interface context of the frame being
 ///   drawn, on the interface thread.
-pub(super) unsafe fn frame_reads(engine: &Engine, context: usize) -> FrameReads {
+pub(super) unsafe fn frame_reads(engine: &Engine, context: usize, hosts_asked: bool) -> FrameReads {
     let Some(linked) = LINKED.get() else {
         return FrameReads::NONE;
     };
@@ -370,14 +369,19 @@ pub(super) unsafe fn frame_reads(engine: &Engine, context: usize) -> FrameReads 
     let (prompt_title, prompt_verb) = linked
         .prompt
         .map_or((Str::EMPTY, 0), |at| unsafe { prompt(data, at) });
-    let host = open_host(screen, linked.in_game, || {
+    let host = open_host(screen, linked.open_screens, || {
         // SAFETY: `data` is the live play data of this frame, whose screen
         // host `u32` sits at the table's `ui.screen_host` (every kept client).
         linked
             .screen_host
             .map_or(0, |at| unsafe { crate::memory::read::<u32>(data, at) })
     });
-    let (template, position) = crate::local_held::screen_host(host).unwrap_or_default();
+    // Each step walks the host only for a mod that draws on frames.
+    let (template, position) = if hosts_asked {
+        crate::local_held::screen_host(host).unwrap_or_default()
+    } else {
+        ([0; 16], [0; 3])
+    };
     FrameReads {
         screen: Some(screen),
         hud_screen: screen_name(linked, Some(screen)),
@@ -389,11 +393,21 @@ pub(super) unsafe fn frame_reads(engine: &Engine, context: usize) -> FrameReads 
     }
 }
 
-/// The open screen's host as `read` gives it, or 0 in the world with no
-/// screen open (`screen` is `in_game`), whatever the play data still holds
-/// of a screen that closed.
-fn open_host(screen: u8, in_game: Option<u8>, read: impl FnOnce() -> u32) -> u32 {
-    if in_game == Some(screen) { 0 } else { read() }
+/// The open screen's host as `read` gives it, or 0 on a screen with no
+/// window open (a bit of `open_screens`), whatever the play data still
+/// holds of a screen that closed.
+fn open_host(screen: u8, open_screens: u64, read: impl FnOnce() -> u32) -> u32 {
+    if crate::controls::is_open_screen(open_screens, screen) {
+        0
+    } else {
+        read()
+    }
+}
+
+/// Whether a panel or frame callback of a mod could read the host, so the
+/// steps walk it.
+pub(super) fn hosts_asked(frames: bool) -> bool {
+    frames || EXTENSIONS.sealed().is_some_and(|e| !e.is_empty())
 }
 
 /// The game's name of screen byte `screen`; empty for `None`.
@@ -538,10 +552,13 @@ mod tests {
 
     #[test]
     fn the_world_with_no_screen_open_has_no_host_whatever_the_play_data_holds() {
-        let in_game = Some(3);
-        assert_eq!(open_host(3, in_game, || 77), 0);
-        assert_eq!(open_host(9, in_game, || 77), 77);
-        assert_eq!(open_host(3, None, || 77), 77);
+        let (in_game, no_ui) = (3, 40);
+        let open = (1 << in_game) | (1 << no_ui);
+        assert_eq!(open_host(in_game, open, || 77), 0);
+        assert_eq!(open_host(no_ui, open, || 77), 0, "a build tool");
+        assert_eq!(open_host(9, open, || 77), 77);
+        assert_eq!(open_host(in_game, 0, || 77), 77);
+        assert_eq!(open_host(200, open, || 77), 77);
     }
 
     #[test]
