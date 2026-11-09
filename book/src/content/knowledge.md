@@ -61,9 +61,11 @@ mod's own and returns it:
 | `source` | the source the game counts it under, an `ExperienceSourceType` |
 | `gain` | the experience it gives |
 
-The experience rate of the source in the world settings scales the gain, as
-it does for a vanilla value. Adding the same id again replaces its source and
-gain. A source the game build lacks returns `Err(Off)`.
+The world's experience factor of the source's `ExperienceGroup` scales the
+gain, as for a vanilla value. A source in no group, such as `None`, has no
+factor. Adding the same id again replaces its source and gain. A source the
+game build lacks returns `Err(Off)`. So does an `Other` number the build's
+source enum does not hold. These calls need the `typed` feature.
 
 ```rust
 use enshwick::content::id;
@@ -82,7 +84,10 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 On a server copy of server 224, the game built its balancing table with an
-added value at start, 182 values in place of 181.
+added value at start, 182 values in place of 181. Whether a player gets the
+gain of an added value is not yet seen in the game, so the
+[stability](../stability.md) chapter lists `Load::add_experience` as
+unstable.
 
 ## Testing an entry
 
