@@ -714,8 +714,22 @@ export type EventType = {
 	on: (self: EventType, handler: (arg1: any) -> ()) -> (),
 }
 
---- A vanilla experience value, from `experience_values`: the experience of one source that a knowledge entry or a quest reward names.
+--- One character's experience before the server applies it, from `Load.on_experience`: a filter may change `gained`.
 export type Experience = {
+	--- The character.
+	entity: number,
+	--- Its level.
+	level: number,
+	--- Experience inside the level.
+	progress: number,
+	--- What the level needs.
+	need: number,
+	--- Gained experience the game applies next, at most one level a tick.
+	gained: number,
+}
+
+--- A vanilla experience value, from `experience_values`: the experience of one source that a knowledge entry or a quest reward names.
+export type ExperienceBalanceValue = {
 	--- The value, as a knowledge entry or a quest reward names it.
 	value: number,
 	--- The source the game counts it under.
@@ -3829,7 +3843,7 @@ declare enshwick: {
 		--- The vanilla enemy whose template is named `name`: its template, faction and arsenal.
 		enemy: (name: string) -> Enemy,
 		--- The vanilla experience values, each `{ value, source, gain }`, in the balancing table's order.
-		experience_values: () -> {Experience},
+		experience_values: () -> {ExperienceBalanceValue},
 		--- The workshop of the vanilla station item named `name`.
 		workshop: (name: string) -> string,
 		--- How many slots the container that `item` places holds; nil for an item that places none.

@@ -724,6 +724,16 @@ export type Experience = {
 	gained: number,
 }
 
+--- A vanilla experience value, from `experience_values`: the experience of one source that a knowledge entry or a quest reward names.
+export type ExperienceBalanceValue = {
+	--- The value, as a knowledge entry or a quest reward names it.
+	value: number,
+	--- The source the game counts it under.
+	source: string,
+	--- The experience it gives.
+	gain: number,
+}
+
 --- The groups of experience sources the game's settings give one factor each, and so one rate each.
 export type ExperienceGroup = "Combat" | "Mining" | "ExplorationQuests"
 
@@ -1536,6 +1546,16 @@ export type NewEnemy = {
 	boss: boolean?,
 	--- Further changes of its components, applied after the values above.
 	changes: {ComponentChange}?,
+}
+
+--- A new experience value for `Load.add_experience`: the experience of one source that a knowledge entry or a quest reward gives.
+export type NewExperience = {
+	--- Its content id; its experience value is the FNV-1a of the id's GUID.
+	id: string,
+	--- The source the game counts it under, whose experience rate scales it.
+	source: string,
+	--- The experience it gives.
+	gain: number,
 }
 
 --- A new Flame Altar kind for `Load.add_flame_altar`: a prop copied from a vanilla altar, with its own zone at each level.
@@ -3818,6 +3838,8 @@ declare enshwick: {
 		template: (name: string) -> string,
 		--- The vanilla enemy whose template is named `name`: its template, faction and arsenal.
 		enemy: (name: string) -> Enemy,
+		--- The vanilla experience values, each `{ value, source, gain }`, in the balancing table's order.
+		experience_values: () -> {ExperienceBalanceValue},
 		--- The workshop of the vanilla station item named `name`.
 		workshop: (name: string) -> string,
 		--- How many slots the container that `item` places holds; nil for an item that places none.
@@ -3908,6 +3930,9 @@ declare enshwick: {
 		--- Adds a knowledge entry beside the game's own, on the server and the client alike, and returns its knowledge id. The game grants, sends and saves it like a vanilla entry; a player's entry gives its skill points and experience when granted. A save keeps the values of the mod's entries while the mod runs; a save made without the mod drops them, so they read 0 when the mod comes back (server 399, read on a server copy).
 		--- Only while the mod starts, at the top level of main.luau.
 		add_knowledge: (new: NewKnowledge) -> number,
+		--- Adds an experience value beside the game's own and returns it, for a knowledge entry's `NewKnowledge.experience` or a quest's experience reward. The game counts the experience under its source, whose experience rate in the world settings scales it, as it does a vanilla value's; `experience_values` lists those. Adding the same id again replaces its source and gain.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_experience: (new: NewExperience) -> number,
 		--- Adds a quest to the journal beside the game's, on the server and the client alike, and returns its quest id: a player's bool the game sets when it pays the quest, as for its own. Each step shows while its `shown_when` holds and is done once its `done_when` holds; the game pays the rewards when the last step is done. A mod moves the quest on by granting the knowledge its steps ask for.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_quest: (new: NewQuest) -> number,
