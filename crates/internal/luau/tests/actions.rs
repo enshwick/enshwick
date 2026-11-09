@@ -318,4 +318,100 @@ mod tests {
             Some("0Open a safe first")
         );
     }
+
+    #[test]
+    fn a_script_takes_a_text_argument_and_names_offline_accounts_it_knows() {
+        let root = player(4, 9, "Root", true);
+        let loader = run(
+            FakeHost::new().player(root),
+            r#"
+            local actions = enshwick.actions.actions(enshwick.i18n.parse(""))
+            actions:add({
+                id = "ban",
+                label = "Ban",
+                admins = true,
+                args = { enshwick.actions.player("Player"), enshwick.actions.text("Reason", 16) },
+                known = function(ask)
+                    return { { key = "42", name = "Bob" } }
+                end,
+            }, function(request)
+                local args = request:args()
+                return enshwick.actions.done(`{args[1].Player.name} {args[1].Player.key}: {args[2].Text}`)
+            end)
+            "#,
+        );
+        assert_eq!(
+            loader
+                .ask_actions(ActionCall::CONSOLE, &root, 0, "ban bob for spam", "")
+                .as_deref(),
+            Some("1Bob 42: for spam"),
+            "{:?}",
+            loader.logs()
+        );
+        let sheet = decode(
+            &loader
+                .ask_actions(ActionCall::SHEET, &root, 0, "", "")
+                .unwrap(),
+        );
+        let args = &sheet[0].args;
+        assert_eq!((args[1].kind, args[1].max), (ArgView::TEXT, 16.0));
+        assert_eq!(
+            args[0].players,
+            [(enshwick::PlayerKey::new(42), "Bob".to_owned())]
+        );
+        assert!(
+            loader
+                .ask_actions(
+                    ActionCall::RUN,
+                    &root,
+                    0,
+                    "ban",
+                    "tbob\ttfar too long for it"
+                )
+                .unwrap()
+                .starts_with('0')
+        );
+    }
+
+    #[test]
+    fn a_script_shows_a_window_and_closes_it() {
+        let root = player(4, 9, "Root", true);
+        let loader = run(
+            FakeHost::new().player(root),
+            r#"
+            local actions = enshwick.actions.actions(enshwick.i18n.parse(""))
+            actions:add({ id = "kick", label = "Kick", admins = true, args = { enshwick.actions.player("Player") } },
+                function() return enshwick.actions.done("") end)
+            actions:add({ id = "open", label = "Open" }, function(request)
+                actions:show({
+                    id = "panel",
+                    title = "Panel",
+                    items = {
+                        { Text = { key = "{n} online", values = { { "n", "1" } } } },
+                        { Row = { text = { key = "Ann" }, buttons = { { label = "Kick", action = "kick", args = { { Player = { key = "7", name = "Ann" } } } } } } },
+                        { Action = "kick" },
+                    },
+                }, { request:player().key })
+                return enshwick.actions.done("")
+            end)
+            actions:add({ id = "shut", label = "Shut" }, function(request)
+                actions:close("panel", { request:player().key })
+                return enshwick.actions.done("")
+            end)
+            assert(enshwick.actions.is_valid_id("panel") and not enshwick.actions.is_valid_id("Panel"))
+            "#,
+        );
+        let run = |id: &str| loader.ask_actions(ActionCall::RUN, &root, 0, id, "");
+        assert_eq!(run("open").as_deref(), Some("1"), "{:?}", loader.logs());
+        let carried = loader.carried_windows(&root, 0);
+        let view = enshwick::actions::window::decode(&carried[0].1).unwrap();
+        assert_eq!(view.title, "Panel");
+        assert_eq!(view.items.len(), 3);
+        assert_eq!(
+            view.items[0],
+            enshwick::actions::window::ItemView::Text("1 online".into())
+        );
+        assert_eq!(run("shut").as_deref(), Some("1"));
+        assert!(loader.carried_windows(&root, 0).is_empty());
+    }
 }

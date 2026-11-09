@@ -255,6 +255,58 @@ fn a_client_refuses_a_server_s_controls_out_of_bounds() {
 }
 
 #[test]
+fn a_server_s_windows_round_trip_and_a_client_refuses_them_out_of_bounds() {
+    let window = |id: &str, window: &str, text: String| Message::Window {
+        id: id.into(),
+        window: window.into(),
+        open: true,
+        text,
+    };
+    let biggest = "x".repeat(enshwick::actions::window::MAX_BYTES);
+    for message in [
+        window("you.admin", "panel", "W\tAdmin\nE\tsay\n".into()),
+        Message::Window {
+            id: "you.admin".into(),
+            window: "panel".into(),
+            open: false,
+            text: "W\tAdmin\n".into(),
+        },
+        window("you.admin", "panel", biggest),
+        Message::WindowClose {
+            id: "you.admin".into(),
+            window: "bans".into(),
+        },
+    ] {
+        assert_eq!(
+            Message::read(message.kind(), &message.body()),
+            Some(message)
+        );
+    }
+    let refused = |message: Message| Message::read(message.kind(), &message.body()).is_none();
+    let past = "x".repeat(enshwick::actions::window::MAX_BYTES + 1);
+    assert!(
+        refused(window("you.admin", "panel", past)),
+        "past the bytes"
+    );
+    assert!(
+        refused(window("You.Admin", "panel", "W\tt\n".into())),
+        "no mod id"
+    );
+    assert!(
+        refused(window("you.admin", "Panel One", "W\tt\n".into())),
+        "no window id"
+    );
+    assert!(refused(Message::WindowClose {
+        id: "you.admin".into(),
+        window: String::new(),
+    }));
+    let mut flag = window("you.admin", "panel", "W\tt\n".into()).body();
+    let at = 2 + "you.admin".len() + 2 + "panel".len();
+    flag[at] = 2;
+    assert_eq!(Message::read(WINDOW, &flag), None, "an open flag past 1");
+}
+
+#[test]
 fn a_mod_s_carried_controls_replace_its_earlier_ones_and_the_mods_are_bounded() {
     let lights = Carried {
         name: "lights".into(),

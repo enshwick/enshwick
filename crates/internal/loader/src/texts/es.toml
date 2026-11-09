@@ -1,6 +1,10 @@
 [es]
 "actions.close" = "Cerrar"
 "actions.out-of-reach" = "Eso está demasiado lejos."
+"windows.run" = "Ejecutar"
+"windows.cancel" = "Cancelar"
+"windows.name" = "O escribe un nombre"
+"windows.text" = "Escribe aquí"
 "controls" = "Controles"
 "controls.key" = "Tecla: {key}"
 "controls.second" = "Segunda tecla: {key}"

@@ -1,6 +1,10 @@
 [th]
 "actions.close" = "ปิด"
 "actions.out-of-reach" = "อยู่ไกลเกินไป"
+"windows.run" = "ดำเนินการ"
+"windows.cancel" = "ยกเลิก"
+"windows.name" = "หรือพิมพ์ชื่อ"
+"windows.text" = "พิมพ์ที่นี่"
 "controls" = "การควบคุม"
 "controls.key" = "ปุ่ม: {key}"
 "controls.second" = "ปุ่มที่สอง: {key}"

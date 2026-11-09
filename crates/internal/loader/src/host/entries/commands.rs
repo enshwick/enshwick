@@ -106,3 +106,34 @@ pub(crate) extern "system" fn actions_changed(me: ModHandle) -> Status {
         Status::OK
     })
 }
+
+pub(crate) extern "system" fn action_window(
+    me: ModHandle,
+    id: Str,
+    players: *const enshwick::PlayerKey,
+    count: u32,
+    close: u32,
+) -> Status {
+    entry("action_window", || {
+        let (loader, index, _) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        let Some(window) = text(id) else {
+            return Status::BAD_ARGS;
+        };
+        let count = usize::try_from(count).unwrap_or(usize::MAX);
+        if count > crate::windows::MAX_PLAYERS || (players.is_null() && count != 0) || close > 1 {
+            return Status::BAD_ARGS;
+        }
+        let keys = if count == 0 {
+            &[]
+        } else {
+            // SAFETY: `HostApi::action_window` has the mod pass `count` keys
+            // at `players`, not null by the guard before it, alive and
+            // unchanged for the call; `count` is at most `MAX_PLAYERS`.
+            unsafe { core::slice::from_raw_parts(players, count) }
+        };
+        crate::windows::show(loader, index, window, keys, close == 1)
+    })
+}

@@ -112,6 +112,13 @@ pub(crate) fn client(message: Message) {
         }
         Message::Recipes { first, last, ids } => crate::recipes::received(first, last, &ids),
         Message::Controls { id, name, controls } => crate::controls::carry(&id, &name, &controls),
+        Message::Window {
+            id,
+            window,
+            open,
+            text,
+        } => crate::ui::carried::heard(&id, &window, open, &text),
+        Message::WindowClose { id, window } => crate::ui::carried::closed(&id, &window),
         Message::Query { .. }
         | Message::Edit { .. }
         | Message::ActionsLanguage { .. }
@@ -197,7 +204,9 @@ fn answer(loader: &Loader, key: u64, message: Message) {
         | Message::Snapshot { .. }
         | Message::Result { .. }
         | Message::Recipes { .. }
-        | Message::Controls { .. } => {}
+        | Message::Controls { .. }
+        | Message::Window { .. }
+        | Message::WindowClose { .. } => {}
     }
 }
 

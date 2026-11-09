@@ -1,6 +1,10 @@
 [ru]
 "actions.close" = "Закрыть"
 "actions.out-of-reach" = "Это слишком далеко."
+"windows.run" = "Выполнить"
+"windows.cancel" = "Отмена"
+"windows.name" = "Или введи имя"
+"windows.text" = "Пиши здесь"
 "controls" = "Управление"
 "controls.key" = "Клавиша: {key}"
 "controls.second" = "Вторая клавиша: {key}"

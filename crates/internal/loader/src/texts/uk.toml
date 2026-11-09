@@ -1,6 +1,10 @@
 [uk]
 "actions.close" = "Закрити"
 "actions.out-of-reach" = "Це надто далеко."
+"windows.run" = "Виконати"
+"windows.cancel" = "Скасувати"
+"windows.name" = "Або введи ім'я"
+"windows.text" = "Пиши тут"
 "controls" = "Керування"
 "controls.key" = "Клавіша: {key}"
 "controls.second" = "Друга клавіша: {key}"

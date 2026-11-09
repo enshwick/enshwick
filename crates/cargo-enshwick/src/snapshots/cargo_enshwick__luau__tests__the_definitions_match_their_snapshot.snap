@@ -39,7 +39,7 @@ export type ActionTarget = {
 }
 
 --- A value the player picked for an argument, in the order of `Action.arg`; a list hands the player and the switch.
-export type ActionValue = { Player: ActionValuePlayer } | { Choice: number } | { Number: number } | { Toggle: boolean }
+export type ActionValue = { Player: ActionValuePlayer } | { Choice: number } | { Number: number } | { Toggle: boolean } | { Text: string }
 
 --- One of the server's players: the account key, and the name as the server knows it.
 export type ActionValuePlayer = {
@@ -47,6 +47,16 @@ export type ActionValuePlayer = {
 	key: string,
 	--- The name, online or as the mod's list keeps it.
 	name: string,
+}
+
+--- A window as a script shows it: the fields of `Window`'s builder.
+export type ActionWindow = {
+	--- The window's id, 1 to 32 of `a-z0-9-`, as `Window.new` takes it.
+	id: string,
+	--- The title, a text key.
+	title: string,
+	--- The items in order, as `Window.text`, `Window.row` and `Window.action` add them.
+	items: {WindowItem}?,
 }
 
 --- A mod's player actions, declared once and run from its controls, panels or the console.
@@ -63,6 +73,10 @@ export type Actions = {
 	commands: (self: Actions, name: string, alias: string) -> (),
 	--- Tells the platform that who may run the mod's actions changed, as `Actions.rules_changed` does.
 	rules_changed: (self: Actions) -> (),
+	--- Shows `window` to the players with the account keys `players`, or updates it where it shows, as `Actions.show` does.
+	show: (self: Actions, window: ActionWindow, players: {string}) -> (),
+	--- Closes the window `id` on the clients of the players with the account keys `players`, as `Actions.close` does.
+	close: (self: Actions, id: string, players: {string}) -> (),
 }
 
 --- Rolls on crafted items, for `Load.add_craft_affixes`.
@@ -170,7 +184,7 @@ export type Apply = {
 	level: number?,
 }
 
---- An argument of an action: a typed choice, never free text.
+--- An argument of an action: a typed choice, or a line of text of bounded bytes.
 export type Arg = {
 }
 
@@ -1300,7 +1314,7 @@ export type Line = {
 	affix: number?,
 }
 
---- A player a list shows, with the switch on.
+--- A player a list shows, with the switch on, or an account the mod knows.
 export type ListedPlayer = {
 	--- The account key, as `Player.key`.
 	key: string,
@@ -1912,6 +1926,8 @@ export type PlayerAction = {
 	at: ((ask: Ask) -> FoundSubject?)?,
 	--- The players of a list, as `Action.per_player` names them; such an action is a list of players with a switch each.
 	per_player: ((ask: Ask, subject: Subject?) -> {ListedPlayer}?)?,
+	--- Accounts the mod knows beyond the players online, as `Action.known` names them.
+	known: ((ask: Ask) -> {ListedPlayer}?)?,
 }
 
 --- The data of the `PlayerJoined` and `PlayerLeft` events.
@@ -2972,6 +2988,35 @@ export type WeatherFrequency = "Disabled" | "Rare" | "Normal" | "Often" | { Othe
 --- What a front brings.
 export type WeatherPhenomenonEffect = "None" | "Rain" | "Blizzard" | { Other: number }
 
+--- A button of a row, as `Row.button` takes it.
+export type WindowButton = {
+	--- The label, a text key.
+	label: string,
+	--- The action it runs.
+	action: string,
+	--- The values it gives first.
+	args: {ActionValue}?,
+}
+
+--- An item of a script's window.
+export type WindowItem = { Text: WindowText } | { Row: WindowRow } | { Action: string }
+
+--- A row of a script's window: the fields of `Row`'s builder.
+export type WindowRow = {
+	--- The line.
+	text: WindowText,
+	--- Its buttons, as `Row.button` adds them.
+	buttons: {WindowButton}?,
+}
+
+--- A text key and the values it is filled with.
+export type WindowText = {
+	--- The text key.
+	key: string,
+	--- The values, a list of `{ name, value }`.
+	values: {{string}}?,
+}
+
 --- A workshop survivor of the game, with its summoning staff and template.
 export type WorkshopSurvivor = {
 	--- The short name, as `WorkshopSurvivor.key` gives it.
@@ -3384,6 +3429,10 @@ declare enshwick: {
 		number: (label: string, min: number, max: number, step: number) -> Arg,
 		--- On or off, as `Arg.toggle` makes it.
 		toggle: (label: string) -> Arg,
+		--- A line of text of 1 to `max_bytes` bytes, as `Arg.text` makes it.
+		text: (label: string, max_bytes: number) -> Arg,
+		--- Whether `id` can name an action or a window, as `is_valid_id` says.
+		is_valid_id: (id: string) -> boolean,
 		--- What an action acts on, as `Subject.new` makes it.
 		subject: (id: string, label: string) -> Subject,
 		--- An action done, with the text the player reads, as `Outcome.done` makes it.

@@ -420,6 +420,74 @@ impl Installed {
         table::with(0, |s| s.commands.rules_changed)
     }
 
+    /// The windows `player`'s client holds after the shows and closes the
+    /// mod sent it, as the loader carries them after a step: each window's
+    /// id and its text, which `actions::window::decode` reads. The mod
+    /// renders each show for `player` reading `language`; an empty render
+    /// closes the window.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{Header, PlayerInfo};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let player = PlayerInfo {
+    ///     header: Header::of::<PlayerInfo>(),
+    ///     slot: 0,
+    ///     entity: enshwick::Entity(2),
+    ///     key: enshwick::PlayerKey::new(7),
+    ///     permissions: 0,
+    ///     name_len: 0,
+    ///     name: [0; 64],
+    /// };
+    /// assert!(loader.carried_windows(&player, 0).is_empty());
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[must_use]
+    pub fn carried_windows(&self, player: &PlayerInfo, language: u32) -> Vec<(String, String)> {
+        let key = player.key.get();
+        let (actions, waiting) = table::with((None, Vec::new()), |s| {
+            let (mine, others) = core::mem::take(&mut s.commands.windows)
+                .into_iter()
+                .partition(|(k, _, _)| *k == key);
+            s.commands.windows = others;
+            (s.actions, mine)
+        });
+        for (_, id, close) in waiting {
+            let text = match (close, actions) {
+                (false, Some(actions)) => ask(
+                    actions,
+                    crate::abi::ActionCall::WINDOW,
+                    player,
+                    language,
+                    &id,
+                    "",
+                    crate::abi::ActionTarget::NONE,
+                ),
+                _ => String::new(),
+            };
+            table::with((), |s| {
+                let carried = &mut s.commands.carried;
+                let at = carried.iter().position(|(k, i, _)| *k == key && *i == id);
+                match (at, text.is_empty()) {
+                    (Some(at), true) => drop(carried.remove(at)),
+                    (Some(at), false) => carried[at].2 = text,
+                    (None, false) => carried.push((key, id, text)),
+                    (None, true) => {}
+                }
+            });
+        }
+        table::with(Vec::new(), |s| {
+            s.commands
+                .carried
+                .iter()
+                .filter(|(k, _, _)| *k == key)
+                .map(|(_, id, text)| (id.clone(), text.clone()))
+                .collect()
+        })
+    }
+
     /// Runs the mod's action `action` with `args` for `player` as the
     /// loader does when a client named `target` with
     /// [`Actions::run_at`](crate::actions::Actions::run_at); the reply, or

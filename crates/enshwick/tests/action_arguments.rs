@@ -1,0 +1,283 @@
+//! Action arguments past the typed choices: a line of free text, and
+//! players who are offline but known to the mod, from the console, a
+//! command and the interface.
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+
+    use enshwick::abi::{ActionCall, Header, PlayerInfo, Status};
+    use enshwick::actions::sheet::{ArgView, decode};
+    use enshwick::actions::{Action, Arg, Outcome, Value};
+    use enshwick::i18n::{Language, Texts};
+    use enshwick::{Load, Mod, Off, PlayerKey};
+
+    /// The values each run handed its handler.
+    static RUNS: Mutex<Vec<Vec<Value>>> = Mutex::new(Vec::new());
+
+    /// The accounts the mod knows: Bob is offline, and two offline
+    /// accounts share the name Sam.
+    fn known() -> Vec<(PlayerKey, String)> {
+        vec![
+            (PlayerKey::new(42), "Bob".into()),
+            (PlayerKey::new(43), "Sam".into()),
+            (PlayerKey::new(44), "Sam".into()),
+            (PlayerKey::new(45), String::new()),
+        ]
+    }
+
+    struct Bans;
+
+    impl Mod for Bans {
+        fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+            let actions = load.actions(Texts::default())?;
+            let ran = |request: &enshwick::actions::Request<'_>| {
+                RUNS.lock().unwrap().push(request.args.to_vec());
+                Outcome::done("ok")
+            };
+            actions.add(
+                Action::new("say", "Announce")
+                    .admins()
+                    .arg(Arg::text("Message", 24)),
+                ran,
+            )?;
+            actions.add(
+                Action::new("ban", "Ban")
+                    .admins()
+                    .arg(Arg::player("Player"))
+                    .arg(Arg::text("Reason", 40))
+                    .known(|_ask| known()),
+                ran,
+            )?;
+            actions.add(
+                Action::new("tag", "Tag")
+                    .admins()
+                    .arg(Arg::text("Tag", 8))
+                    .arg(Arg::number("Hours", 1.0..=48.0, 1.0)),
+                ran,
+            )?;
+            actions.add(
+                Action::per_player("allowed", "Allowed", |_ask, _subject| {
+                    vec![(PlayerKey::new(43), "Sam".into())]
+                })
+                .admins()
+                .known(|_ask| known()),
+                ran,
+            )?;
+            actions.commands("bans", "b")?;
+            Ok(Self)
+        }
+    }
+
+    enshwick::test::declare_mod!(
+        Bans,
+        r#"
+        id = "you.bans"
+        side = "server"
+        "#
+    );
+
+    fn player(entity: u32, key: u64, name: &str, permissions: u8) -> PlayerInfo {
+        let mut info = PlayerInfo {
+            header: Header::of::<PlayerInfo>(),
+            slot: 0,
+            entity: enshwick::Entity(entity),
+            key: PlayerKey::new(key),
+            permissions,
+            name_len: u8::try_from(name.len()).unwrap(),
+            name: [0; 64],
+        };
+        info.name[..name.len()].copy_from_slice(name.as_bytes());
+        info
+    }
+
+    fn start(players: &[PlayerInfo]) -> enshwick::test::Installed {
+        let host = players
+            .iter()
+            .fold(enshwick::test::FakeHost::new(), |host, p| host.player(*p));
+        let loader = host.install();
+        // SAFETY: the three functions are the exports of this file's `declare_mod!`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        loader
+    }
+
+    fn runs() -> Vec<Vec<Value>> {
+        std::mem::take(&mut *RUNS.lock().unwrap())
+    }
+
+    fn text(text: &str) -> Value {
+        Value::Text(text.into())
+    }
+
+    fn bob() -> Value {
+        Value::Player {
+            key: PlayerKey::new(42),
+            name: "Bob".into(),
+        }
+    }
+
+    #[test]
+    fn a_text_argument_takes_the_rest_of_the_line_or_one_quoted_run() {
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let loader = start(&[root]);
+        let chat = |line: &str| loader.type_in_chat(&root, 0, line);
+
+        assert_eq!(
+            chat("/b say Restart in  5 minutes ").as_deref(),
+            Some("1ok")
+        );
+        assert_eq!(chat(r#"/b say "Hi all""#).as_deref(), Some("1ok"));
+        assert_eq!(chat(r#"/b tag "red fox" 3"#).as_deref(), Some("1ok"));
+        assert_eq!(chat("/b tag fox 3").as_deref(), Some("1ok"));
+        assert_eq!(
+            runs(),
+            [
+                vec![text("Restart in  5 minutes")],
+                vec![text("Hi all")],
+                vec![text("red fox"), Value::Number(3.0)],
+                vec![text("fox"), Value::Number(3.0)],
+            ]
+        );
+
+        assert_eq!(
+            chat("/b say This line runs well past twenty-four bytes").as_deref(),
+            Some("0Message takes at most 24 bytes."),
+        );
+        assert_eq!(
+            loader
+                .type_in_chat(&root, Language::UK_UA.0, "/b tag much-too-long 3")
+                .as_deref(),
+            Some("0Tag: щонайбільше 8 байтів."),
+        );
+        assert!(
+            chat("/b say")
+                .unwrap()
+                .starts_with("0Write it so: say <Message>")
+        );
+        assert!(chat("/b tag fox").unwrap().starts_with('0'), "no hours");
+        assert!(runs().is_empty(), "nothing refused reached the handler");
+    }
+
+    #[test]
+    fn a_text_from_the_interface_is_bounded_and_refuses_control_characters() {
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let loader = start(&[root]);
+        let run = |args: &str| loader.ask_actions(ActionCall::RUN, &root, 0, "say", args);
+
+        assert_eq!(run("tHello there").as_deref(), Some("1ok"));
+        assert_eq!(runs(), [vec![text("Hello there")]]);
+        assert!(
+            run(&format!("t{}", "x".repeat(25)))
+                .unwrap()
+                .starts_with('0')
+        );
+        assert!(run("tbell\u{7}").unwrap().starts_with('0'));
+        assert!(run("t").unwrap().starts_with('0'), "an empty text");
+        assert!(runs().is_empty());
+
+        let sheet = decode(
+            &loader
+                .ask_actions(ActionCall::SHEET, &root, 0, "", "")
+                .unwrap(),
+        );
+        let say = &sheet.iter().find(|e| e.id == "say").unwrap().args[0];
+        assert_eq!(say.kind, ArgView::TEXT);
+        assert_eq!((say.min, say.max), (1.0, 24.0));
+    }
+
+    #[test]
+    fn an_offline_account_the_mod_knows_resolves_by_name_shows_as_a_row_and_runs_by_key() {
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let ann = player(3, 7, "Ann", 0);
+        let loader = start(&[root, ann]);
+
+        assert_eq!(
+            loader
+                .type_in_chat(&root, 0, "/b ban bob griefing")
+                .as_deref(),
+            Some("1ok")
+        );
+        assert_eq!(
+            enshwick::console::run(r#"you.bans ban Ann "spam, twice""#).as_deref(),
+            Ok("ok")
+        );
+        let ann_value = Value::Player {
+            key: PlayerKey::new(7),
+            name: "Ann".into(),
+        };
+        assert_eq!(
+            runs(),
+            [
+                vec![bob(), text("griefing")],
+                vec![ann_value, text("spam, twice")]
+            ]
+        );
+        assert_eq!(
+            loader.type_in_chat(&root, 0, "/b ban Sam x").as_deref(),
+            Some("0Several players are named Sam.")
+        );
+        assert_eq!(
+            loader.type_in_chat(&root, 0, "/b ban Zed x").as_deref(),
+            Some("0No player named Zed.")
+        );
+
+        let sheet = decode(
+            &loader
+                .ask_actions(ActionCall::SHEET, &root, 0, "", "")
+                .unwrap(),
+        );
+        let ban = &sheet.iter().find(|e| e.id == "ban").unwrap().args[0];
+        let options: Vec<&str> = ban.players.iter().map(|p| p.1.as_str()).collect();
+        assert_eq!(
+            options,
+            ["Ann", "Bob", "Sam", "Sam"],
+            "online first, then known"
+        );
+        let allowed = sheet.iter().find(|e| e.id == "allowed").unwrap();
+        let rows: Vec<(&str, bool)> = allowed
+            .players
+            .iter()
+            .map(|p| (p.1.as_str(), p.2))
+            .collect();
+        assert_eq!(
+            rows,
+            [
+                ("Ann", false),
+                ("Sam", true),
+                ("Bob", false),
+                ("Sam", false)
+            ]
+        );
+
+        let run =
+            |action: &str, args: &str| loader.ask_actions(ActionCall::RUN, &root, 0, action, args);
+        assert_eq!(
+            run("ban", "p000000000000002a\ttcheating").as_deref(),
+            Some("1ok")
+        );
+        assert_eq!(
+            run("ban", "tbob\ttcheating").as_deref(),
+            Some("1ok"),
+            "a typed name"
+        );
+        assert_eq!(
+            run("allowed", "p000000000000002a\tb1").as_deref(),
+            Some("1ok")
+        );
+        assert_eq!(
+            runs(),
+            [
+                vec![bob(), text("cheating")],
+                vec![bob(), text("cheating")],
+                vec![bob(), Value::Toggle(true)],
+            ]
+        );
+        assert_eq!(
+            run("ban", "p0000000000000063\ttx").as_deref(),
+            Some("0That player is no longer here."),
+            "no account key in the reply"
+        );
+    }
+}

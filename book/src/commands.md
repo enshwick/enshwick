@@ -54,7 +54,12 @@ actions:commands("admin-tools", "adl")
 Now `/admin-tools online` and `/adl online` both run the action named online.
 The words after the action's id are its values, as on the
 [console](actions.md#from-the-console). So `/adl kick Ann` kicks the player
-online named Ann. `/adl help` lists the actions the caller may run.
+online named Ann. A player the action
+[knows while offline](actions.md#players-who-are-offline) is named the same
+way. A last text argument takes the rest of the line, as in
+`/adl say Restart in five minutes`, and a text before another value takes
+one word or a `"quoted run"`. `/adl help` lists the actions the caller may
+run.
 
 A command is a second way to an action, never the only one. Players reach
 every action through the mod's controls and panels too.

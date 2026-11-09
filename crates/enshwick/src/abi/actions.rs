@@ -260,6 +260,13 @@ impl ActionCall {
     /// label as its name, its permission bits, key 0 and no character. ABI
     /// 11.19.
     pub const REMOTE: u32 = 5;
+    /// The window of the calling mod's that `action` names, as `player`
+    /// sees it in `language`, after [`HostApi::action_window`] showed it:
+    /// the reply is the window's text, empty when the mod keeps no such
+    /// window or the player may not run an action it names. ABI 11.22.
+    ///
+    /// [`HostApi::action_window`]: super::HostApi::action_window
+    pub const WINDOW: u32 = 6;
 }
 
 /// A mod's answer to the loader's questions about its player actions: the

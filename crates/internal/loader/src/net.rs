@@ -402,6 +402,7 @@ pub(crate) fn forget() {
     *guard = None;
     crate::item_data::forget_client();
     crate::controls::forget_carried();
+    crate::ui::carried::forget();
 }
 
 /// Forgets a player's client, when the player leaves.
