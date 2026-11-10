@@ -109,6 +109,19 @@ pub struct ActionReply {
 
 impl_headed!(ActionReply);
 
+/// The `close` value of
+/// [`HostApi::action_window`](super::HostApi::action_window) that shows a
+/// window: it opens, or updates where it shows.
+pub const WINDOW_SHOW: u32 = 0;
+/// The `close` value of
+/// [`HostApi::action_window`](super::HostApi::action_window) that closes a
+/// window.
+pub const WINDOW_CLOSE: u32 = 1;
+/// The `close` value of
+/// [`HostApi::action_window`](super::HostApi::action_window) that updates a
+/// window only on the clients that still show it. ABI 11.23.
+pub const WINDOW_UPDATE: u32 = 2;
+
 /// A running mod's command names, from
 /// [`HostApi::command_list`](super::HostApi::command_list). ABI 11.19.
 ///

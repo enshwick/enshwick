@@ -113,6 +113,7 @@ type Allow = Box<dyn Fn(&Player) -> bool + Send + Sync>;
 type At = Box<dyn Fn(&Ask<'_>) -> Result<Subject, FindSubjectError> + Send + Sync>;
 type On = Box<dyn Fn(&Ask<'_>, Option<&Subject>) -> Vec<(PlayerKey, String)> + Send + Sync>;
 type Known = Box<dyn Fn(&Ask<'_>) -> Vec<(PlayerKey, String)> + Send + Sync>;
+type Closed = Arc<dyn Fn(PlayerKey, Option<&str>) + Send + Sync>;
 
 /// The most accounts the platform takes from an action's
 /// [`known`](Action::known) function, in the order it gives them.
@@ -713,27 +714,11 @@ impl Actions {
     /// }
     /// ```
     pub fn show(&self, window: Window, players: &[PlayerKey]) -> Result<(), Off> {
-        let id = window.id.clone();
-        if !is_valid_id(&id) {
-            return Err(Off::new(format!(
-                "window {id}: ids are 1 to 32 of [a-z0-9-]"
-            )));
-        }
-        let fault = {
-            let declared = self.registry.declared.relock_read();
-            window.fault(
-                &|action, values| match declared.iter().find(|d| d.action.id == action) {
-                    Some(d) => values.and_then(|v| registry::button_fault(&d.action, v)),
-                    None => Some(format!("no action {action}")),
-                },
-            )
-        };
-        if let Some(fault) = fault {
-            return Err(Off::new(format!("window {id}: {fault}")));
-        }
-        let window = Arc::new(window);
+        let window = self.checked(window)?;
         let mut kept = self.registry.windows.relock_write();
-        self.carry_window(&id, players, false, |part| kept.keep(&window, part))
+        self.carry_window(&window.id, players, crate::abi::WINDOW_SHOW, |part| {
+            kept.keep(&window, part);
+        })
     }
 
     /// Closes the window `id` on the clients of the players with the
@@ -754,17 +739,19 @@ impl Actions {
     /// ```
     pub fn close(&self, id: &str, players: &[PlayerKey]) -> Result<(), Off> {
         let mut kept = self.registry.windows.relock_write();
-        self.carry_window(id, players, true, |part| kept.forget(id, part))
+        self.carry_window(id, players, crate::abi::WINDOW_CLOSE, |part| {
+            kept.forget(id, part);
+        })
     }
 
-    /// Hands the loader a show or a close of window `id` for `players`, in
-    /// parts of the most players one call takes; `taken` gets each part the
-    /// loader took.
+    /// Hands the loader `change`, a show, a close or an update of window
+    /// `id`, for `players`, in parts of the most players one call takes;
+    /// `taken` gets each part the loader took.
     fn carry_window(
         &self,
         id: &str,
         players: &[PlayerKey],
-        close: bool,
+        change: u32,
         mut taken: impl FnMut(&[PlayerKey]),
     ) -> Result<(), Off> {
         let host = self.registry.host;
@@ -775,12 +762,91 @@ impl Actions {
                 Str::new(id),
                 part.as_ptr(),
                 count,
-                u32::from(close),
+                change,
             );
             crate::load::ok(status, (), || format!("window {id}"))?;
             taken(part);
         }
         Ok(())
+    }
+
+    /// `window` behind an [`Arc`], once its id and what its buttons and
+    /// items name are checked against the actions declared.
+    fn checked(&self, window: Window) -> Result<Arc<Window>, Off> {
+        let id = &window.id;
+        if !is_valid_id(id) {
+            return Err(Off::new(format!(
+                "window {id}: ids are 1 to 32 of [a-z0-9-]"
+            )));
+        }
+        let fault = {
+            let declared = self.registry.declared.relock_read();
+            window.fault(
+                &|action, values| match declared.iter().find(|d| d.action.id == action) {
+                    Some(d) => values.and_then(|v| registry::button_fault(&d.action, v)),
+                    None => Some(format!("no action {action}")),
+                },
+            )
+        };
+        match fault {
+            Some(fault) => Err(Off::new(format!("window {id}: {fault}"))),
+            None => Ok(Arc::new(window)),
+        }
+    }
+
+    /// Puts `window` in place of the one of its id on the clients of
+    /// `players` that still show it, from the server, and opens it for no
+    /// one: a player who closed the window, or was never shown it, gets
+    /// nothing. For a list that changes while players hold it, such as a
+    /// roster when someone joins; [`show`](Self::show) opens the window.
+    ///
+    /// # Errors
+    ///
+    /// As [`show`](Self::show); also [`Off`] under a loader before ABI
+    /// 11.23, which knows no update.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::actions::{Actions, Window};
+    ///
+    /// fn refresh(actions: &Actions, admins: &[enshwick::PlayerKey], online: usize) {
+    ///     let roster = Window::new("roster", "Players").text("{n} online", &[("n", &online.to_string())]);
+    ///     let _queued = actions.update(roster, admins);
+    /// }
+    /// ```
+    pub fn update(&self, window: Window, players: &[PlayerKey]) -> Result<(), Off> {
+        let window = self.checked(window)?;
+        let mut kept = self.registry.windows.relock_write();
+        self.carry_window(&window.id, players, crate::abi::WINDOW_UPDATE, |part| {
+            kept.replace(&window, part);
+        })
+    }
+
+    /// Calls `closed` on the server's game thread when a player's client
+    /// closed one of the mod's windows, with the window's id, or when a
+    /// player left, with `None` for every window they held. The mod has
+    /// forgotten those windows by then; a mod that keeps state of its own
+    /// for a window frees it here. One function at a time: a second call
+    /// replaces the first.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let actions = load.actions(enshwick::i18n::Texts::default())?;
+    ///     actions.on_closed(|player, window| match window {
+    ///         Some(id) => enshwick::info!("{player:?} closed {id}"),
+    ///         None => enshwick::info!("{player:?} left"),
+    ///     });
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn on_closed<F>(&self, closed: F)
+    where
+        F: Fn(PlayerKey, Option<&str>) + Send + Sync + 'static,
+    {
+        *self.registry.closed.relock_write() = Some(Arc::new(closed));
     }
 }
 
@@ -810,6 +876,7 @@ impl Load<'_> {
             host,
             declared: RwLock::new(Vec::new()),
             windows: RwLock::default(),
+            closed: RwLock::new(None),
             commands: core::sync::atomic::AtomicBool::new(false),
             commands_off: core::sync::atomic::AtomicBool::new(false),
         });

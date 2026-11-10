@@ -303,6 +303,21 @@ impl Kept {
             .retain(|(player, window)| window.id != id || !players.contains(player));
     }
 
+    /// Puts `window` in place of the one of its id that each of `players`
+    /// holds, where they hold one; a player without it gets none.
+    pub(super) fn replace(&mut self, window: &Arc<Window>, players: &[PlayerKey]) {
+        for (player, held) in &mut self.0 {
+            if held.id == window.id && players.contains(player) {
+                *held = Arc::clone(window);
+            }
+        }
+    }
+
+    /// Forgets every window `player` holds, as when they leave.
+    pub(super) fn forget_player(&mut self, player: PlayerKey) {
+        self.0.retain(|(holder, _)| *holder != player);
+    }
+
     /// Window `id` as `player` holds it, now the last to go.
     pub(super) fn rendered(&mut self, id: &str, player: PlayerKey) -> Option<Arc<Window>> {
         let at = self

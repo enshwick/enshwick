@@ -144,6 +144,9 @@ pub(super) struct Registry {
     pub(super) declared: RwLock<Vec<Arc<Declared>>>,
     /// The windows the mod showed, each as one player holds it.
     pub(super) windows: RwLock<super::window::Kept>,
+    /// The mod's own function for a window a client closed or a player who
+    /// left.
+    pub(super) closed: RwLock<Option<super::Closed>>,
     /// Set once the mod named its actions as commands.
     pub(super) commands: core::sync::atomic::AtomicBool,
     /// Set once a handler panicked during a command: the mod's commands
@@ -641,6 +644,24 @@ impl Registry {
             .map(|d| self.entry(d, player, language, &others))
             .collect();
         window.render(&|key, values| self.say(key, language, values), &entries)
+    }
+
+    /// Forgets window `id` as `player` holds it, their client having closed
+    /// it, or with an empty id every window of theirs, since they left;
+    /// then tells the mod's own function, out of the lock.
+    pub(super) fn window_closed(&self, player: PlayerKey, id: &str) {
+        {
+            let mut kept = self.windows.relock_write();
+            if id.is_empty() {
+                kept.forget_player(player);
+            } else {
+                kept.forget(id, &[player]);
+            }
+        }
+        let closed = self.closed.relock_read().clone();
+        if let Some(closed) = closed {
+            closed(player, Some(id).filter(|id| !id.is_empty()));
+        }
     }
 
     /// Runs action `id` for `player` from the interface, on the object

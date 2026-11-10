@@ -123,7 +123,7 @@ pub(crate) extern "system" fn action_window(
             return Status::BAD_ARGS;
         };
         let count = usize::try_from(count).unwrap_or(usize::MAX);
-        if count > crate::windows::MAX_PLAYERS || (players.is_null() && count != 0) || close > 1 {
+        if count > crate::windows::MAX_PLAYERS || (players.is_null() && count != 0) {
             return Status::BAD_ARGS;
         }
         let keys = if count == 0 {
@@ -134,6 +134,6 @@ pub(crate) extern "system" fn action_window(
             // unchanged for the call; `count` is at most `MAX_PLAYERS`.
             unsafe { core::slice::from_raw_parts(players, count) }
         };
-        crate::windows::show(loader, index, window, keys, close == 1)
+        crate::windows::show(loader, index, window, keys, close)
     })
 }

@@ -184,7 +184,6 @@ pub mod loot;
 #[cfg(feature = "unstable")]
 pub mod map;
 pub mod mods;
-#[cfg(feature = "unstable")]
 mod near;
 pub mod net;
 pub mod pacing;

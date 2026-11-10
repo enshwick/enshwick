@@ -110,6 +110,10 @@ pub(super) unsafe extern "system" fn answer(
         || match call.kind {
             ActionCall::SHEET => Answered::Text(registry.sheet(&player, language)),
             ActionCall::WINDOW => Answered::Text(registry.window(&player, language, action)),
+            ActionCall::WINDOW_CLOSED => {
+                registry.window_closed(player.key, action);
+                Answered::Text(String::new())
+            }
             ActionCall::RUN => {
                 let covered = call.header.covers(
                     core::mem::offset_of!(ActionCall, target)
