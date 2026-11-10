@@ -126,6 +126,12 @@ pub(super) fn optional_fault(args: &[Arg]) -> Option<String> {
     if args[..required].iter().any(|arg| arg.default.is_some()) {
         return Some("only its last arguments may be optional".to_owned());
     }
+    let last = args.len().saturating_sub(1);
+    let early_text =
+        |(i, arg): (usize, &Arg)| i < last && arg.kind == ArgView::TEXT && arg.default.is_some();
+    if args.iter().enumerate().any(early_text) {
+        return Some("an optional text must be its last argument".to_owned());
+    }
     let at = args.iter().position(|arg| match &arg.default {
         None => false,
         Some(_) if arg.kind == ArgView::PLAYER => true,
@@ -270,27 +276,54 @@ impl Registry {
         }
     }
 
-    /// The values `words` give the optional arguments `optional`, in
-    /// order, each word reading as its argument; `None` when one does not
-    /// or there are more words than arguments. The arguments left without
-    /// a word take their defaults.
+    /// The values the `words` of `line` give the optional arguments
+    /// `optional`, which fill in order: each word reads as its argument,
+    /// and the arguments left without a word take their defaults. An
+    /// optional text, always the last, takes what is left of the line,
+    /// starting at the first word that does not read as the argument
+    /// before it. Without such a text a word that does not read, or one
+    /// too many, is an error.
     fn optional_values(
         &self,
         optional: &[Arg],
+        line: &str,
         words: &[Word<'_>],
         language: Language,
-    ) -> Option<Vec<Value>> {
-        if words.len() > optional.len() {
-            return None;
-        }
+    ) -> Result<Vec<Value>, ReadArgsError> {
+        let (text, plain) = match optional.split_last() {
+            Some((last, plain)) if last.kind == ArgView::TEXT => (Some(last), plain),
+            _ => (None, optional),
+        };
+        let default = |arg: &Arg| arg.default.clone().ok_or(ReadArgsError::Usage);
         let mut values = Vec::with_capacity(optional.len());
-        for (i, arg) in optional.iter().enumerate() {
-            values.push(match words.get(i) {
-                Some(word) => self.word_value(arg, word.text, language)?,
-                None => arg.default.clone()?,
-            });
+        let mut rest = words;
+        let mut text_began = false;
+        for arg in plain {
+            let read = rest
+                .split_first()
+                .filter(|_| !text_began)
+                .and_then(|(word, after)| {
+                    Some((self.word_value(arg, word.text, language)?, after))
+                });
+            match read {
+                Some((value, after)) => {
+                    values.push(value);
+                    rest = after;
+                }
+                None if text.is_some() || rest.is_empty() => {
+                    text_began = true;
+                    values.push(default(arg)?);
+                }
+                None => return Err(ReadArgsError::Usage),
+            }
         }
-        Some(values)
+        match (text, run_of_line(line, rest)) {
+            (Some(arg), Some(typed)) => values.push(Self::text_value(arg, typed)?),
+            (Some(arg), None) => values.push(default(arg)?),
+            (None, Some(_)) => return Err(ReadArgsError::Usage),
+            (None, None) => {}
+        }
+        Ok(values)
     }
 
     /// The values of the `words` of `line` after an action's id on the
@@ -324,17 +357,21 @@ impl Registry {
         let args = &d.action.args;
         let required = args.iter().take_while(|arg| arg.default.is_none()).count();
         let (required, optional) = args.split_at(required);
+        // A last optional text takes the rest of the line itself, so the
+        // arguments before it take one word each.
+        let text_ends = optional.last().is_some_and(|arg| arg.kind == ArgView::TEXT);
         let mut values = Vec::with_capacity(args.len());
         let mut rest = words;
         let mut tail = None;
         for (i, arg) in required.iter().enumerate() {
-            let takes_rest = i + 1 == required.len();
+            let takes_rest = i + 1 == required.len() && !text_ends;
             let value = match arg.kind {
                 ArgView::PLAYER | ArgView::TEXT => {
                     let taken = if takes_rest {
                         let (taken, given) = (1..=rest.len())
                             .find_map(|kept| {
-                                self.optional_values(optional, &rest[kept..], language)
+                                self.optional_values(optional, line, &rest[kept..], language)
+                                    .ok()
                                     .map(|given| (kept, given))
                             })
                             .ok_or_else(bad)?;
@@ -362,9 +399,7 @@ impl Registry {
         }
         let tail = match tail {
             Some(given) => given,
-            None => self
-                .optional_values(optional, rest, language)
-                .ok_or_else(bad)?,
+            None => self.optional_values(optional, line, rest, language)?,
         };
         values.extend(tail);
         Ok(values)
@@ -871,6 +906,13 @@ mod tests {
         );
         let first = optional_fault(&[count().optional(one.clone()), Arg::text("Item", 8)]);
         assert!(first.unwrap().contains("only its last arguments"));
+        let note = || Arg::text("Note", 8).optional(Value::Text(String::new()));
+        let mid = optional_fault(&[note(), count().optional(one.clone())]).unwrap();
+        assert!(mid.contains("an optional text must be its last"), "{mid}");
+        assert_eq!(
+            optional_fault(&[count().optional(one.clone()), note()]),
+            None
+        );
         let far = optional_fault(&[count().optional(Value::Number(100.0))]).unwrap();
         assert!(far.contains("argument 1"), "{far}");
         let other = optional_fault(&[Arg::text("Item", 8), count().optional(Value::Toggle(true))]);

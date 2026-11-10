@@ -78,6 +78,8 @@ mod tests {
         use enshwick::i18n::Language;
 
         let loader = FakeHost::new()
+            .side(enshwick::abi::Side::CLIENT)
+            .hosting(true)
             .items()
             .workshops()
             .vanilla_items(&[
@@ -131,12 +133,17 @@ mod tests {
     }
 
     #[test]
-    fn display_names_do_not_read_where_the_game_has_no_texts() {
+    fn display_names_do_not_read_on_a_dedicated_server_whatever_texts_it_is_given() {
         let loader = FakeHost::new()
             .items()
             .workshops()
             .vanilla_items(&[(CHEST, "Prop_Storage_32_T2_Chest_Wood")])
             .vanilla_item_names(&[(CHEST, CHEST_NAME)])
+            .game_text(
+                CHEST_NAME.fnv1a(),
+                enshwick::i18n::Language::EN_US,
+                "Wooden Chest",
+            )
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Looking)`.
         let status =
@@ -145,7 +152,7 @@ mod tests {
         assert_eq!(
             FOUND.lock().unwrap()[3],
             Err(VanillaError::Unreadable("texts")),
-            "as on a dedicated server, whose archive holds none"
+            "only a client's archive holds the game's texts"
         );
     }
 }

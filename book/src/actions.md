@@ -192,7 +192,7 @@ takes `default`. In Luau it is the method `:optional(value)` of an argument.
 | Rule | Detail |
 | --- | --- |
 | Which arguments | only the last ones of an action; `actions.add` refuses any other |
-| Which kinds | a choice, a number, on or off, a text; never a player |
+| Which kinds | a choice, a number, on or off, a text; never a player. A text only as the last argument |
 | The default | a value the argument takes, or an empty text |
 | In the help | the argument stands in square brackets: `give <player> <Item> [1-999]` |
 | From the interface | values left out at the end take their defaults too |
@@ -208,6 +208,16 @@ order, as far as each reads as its argument:
 | `give Ann 5` | `5` | 1 |
 | `give Ann "Stone 5"` | `Stone 5` | 1 |
 | `give Ann Stone Axe 5000` | `Stone Axe 5000` | 1 |
+
+An optional text is always the last argument, and takes what is left of the
+line itself. The arguments before it then take one word each, or a run in
+double quotes:
+
+| The line, for `warn <player> [1-60] [Reason]` | The minutes | The reason |
+| --- | --- | --- |
+| `warn Ann` | the default | none |
+| `warn Ann 5 spamming a lot` | 5 | `spamming a lot` |
+| `warn Ann spamming 5` | the default | `spamming 5` |
 
 ```rust
 use enshwick::actions::{Action, Arg, Value};

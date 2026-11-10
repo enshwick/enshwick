@@ -91,28 +91,35 @@ pub fn recipes() -> Result<Vec<VanillaRecipe>, VanillaError> {
 }
 
 /// Each vanilla item with each name the game shows for it, in every
-/// language the game ships; empty where the game's texts do not read.
+/// language the game ships, kept once they read. On a dedicated server
+/// they never do: only a client's archive holds the game's texts.
 fn shown_names() -> Result<&'static [(Guid, String)], VanillaError> {
-    static SHOWN: crate::fresh::Fresh<Option<Vec<(Guid, String)>>> = crate::fresh::Fresh::new();
-    SHOWN
-        .get_or_init(|| {
-            let mut shown: Vec<(Guid, String)> = Vec::new();
-            for item in items().ok()? {
-                let Some(tag) = item.name_tag else { continue };
-                let from = shown.len();
-                for &language in crate::i18n::Language::ALL {
-                    let Some(text) = crate::i18n::game_text_in(tag.fnv1a(), language) else {
-                        continue;
-                    };
-                    if !text.is_empty() && shown[from..].iter().all(|(_, known)| known != text) {
-                        shown.push((item.guid, text.to_owned()));
-                    }
-                }
+    static SHOWN: crate::fresh::Fresh<Vec<(Guid, String)>> = crate::fresh::Fresh::new();
+    if let Some(shown) = SHOWN.get() {
+        return Ok(shown);
+    }
+    let no_texts = VanillaError::Unreadable("texts");
+    let host = crate::host().ok_or(VanillaError::Unreadable("data"))?;
+    if host.build().side == crate::abi::Side::SERVER {
+        return Err(no_texts);
+    }
+    let mut shown: Vec<(Guid, String)> = Vec::new();
+    for item in items()? {
+        let Some(tag) = item.name_tag else { continue };
+        let from = shown.len();
+        for &language in crate::i18n::Language::ALL {
+            let Some(text) = host.game_text(tag.fnv1a(), language) else {
+                continue;
+            };
+            if !text.is_empty() && shown[from..].iter().all(|(_, known)| known != text) {
+                shown.push((item.guid, text.to_owned()));
             }
-            Some(shown)
-        })
-        .as_deref()
-        .ok_or(VanillaError::Unreadable("item registry"))
+        }
+    }
+    if shown.is_empty() {
+        return Err(no_texts);
+    }
+    Ok(SHOWN.get_or_init(|| shown))
 }
 
 /// The vanilla item `name` is among `shown`, each item with a name the
@@ -129,9 +136,10 @@ fn by_shown_name(shown: &[(Guid, String)], name: &str) -> Result<Guid, VanillaEr
     match found.as_slice() {
         [one] => Ok(*one),
         [] => {
-            let texts = shown.iter().map(|(_, text)| text.as_str());
-            let mut near = crate::near::near(name, texts, NEAR);
-            near.dedup();
+            let mut texts: Vec<&str> = shown.iter().map(|(_, text)| text.as_str()).collect();
+            texts.sort_unstable();
+            texts.dedup();
+            let near = crate::near::near(name, texts, NEAR);
             Err(VanillaError::Unknown {
                 name: name.to_owned(),
                 near: near.into_iter().map(str::to_owned).collect(),
@@ -172,24 +180,13 @@ fn by_shown_name(shown: &[(Guid, String)], name: &str) -> Result<Guid, VanillaEr
 /// }
 /// ```
 pub fn item_by_display_name(name: &str) -> Result<Guid, VanillaError> {
-    let shown = shown_names()?;
-    if shown.is_empty() {
-        return Err(VanillaError::Unreadable("texts"));
-    }
-    by_shown_name(shown, name)
+    by_shown_name(shown_names()?, name)
 }
 
 impl Vanilla {
-    /// Every vanilla item with its debug name, sorted by name.
-    ///
-    /// # Errors
-    ///
+    /// Every vanilla item with its debug name, sorted by name, or
     /// [`VanillaError::Unreadable`] without the registry.
-    ///
-    /// # Examples
-    ///
-    /// See [`items`].
-    pub fn item_list(&self) -> Result<Vec<(Guid, String)>, VanillaError> {
+    fn item_list(&self) -> Result<Vec<(Guid, String)>, VanillaError> {
         let mut list: Vec<(Guid, String)> = self
             .names()?
             .iter()
@@ -272,6 +269,17 @@ mod tests {
                 near: vec!["Cape".into()],
             }),
             "a name two items share is suggested once"
+        );
+        let mut crowded = shown.clone();
+        crowded.extend((4..9).map(|n| (Guid([n; 16]), "Cape".to_owned())));
+        crowded.push((Guid([9; 16]), "Capelin".to_owned()));
+        assert_eq!(
+            by_shown_name(&crowded, "cap"),
+            Err(VanillaError::Unknown {
+                name: "cap".into(),
+                near: vec!["Cape".into(), "Capelin".into()],
+            }),
+            "items that share a name take one place among the near names"
         );
     }
 }

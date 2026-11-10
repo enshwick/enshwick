@@ -102,6 +102,22 @@ mod tests {
                     .arg(Arg::toggle("Bound").optional(Value::Toggle(false))),
                 ran,
             )?;
+            actions.add(
+                Action::new("warn", "Warn")
+                    .admins()
+                    .arg(Arg::player("Player"))
+                    .arg(Arg::number("Minutes", 1.0..=60.0, 1.0).optional(Value::Number(10.0)))
+                    .arg(Arg::text("Reason", 40).optional(Value::Text(String::new())))
+                    .known(|_ask| known()),
+                ran,
+            )?;
+            let mid = Action::new("mid", "Mid")
+                .arg(Arg::text("Note", 8).optional(Value::Text(String::new())))
+                .arg(count());
+            assert!(
+                actions.add(mid, ran).is_err(),
+                "an optional text that is not the last argument"
+            );
             let early = Action::new("early", "Early")
                 .arg(count())
                 .arg(Arg::text("Item", 40));
@@ -344,6 +360,50 @@ mod tests {
             name: "Root".into(),
         };
         assert_eq!(runs(), [vec![root_value, Value::Toggle(false)]]);
+    }
+
+    #[test]
+    fn a_last_optional_text_takes_what_is_left_and_never_a_word_of_the_argument_before() {
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let loader = start(&[root]);
+        let chat = |line: &str| loader.type_in_chat(&root, 0, line);
+
+        for line in [
+            "/b warn Bob",
+            "/b warn Bob 5",
+            "/b warn Bob 5 spamming a lot",
+            "/b warn Bob spamming 5",
+            "/b warn Bob 99 times",
+        ] {
+            assert_eq!(chat(line).as_deref(), Some("1ok"), "{line}");
+        }
+        let warned = |minutes: f64, reason: &str| vec![bob(), Value::Number(minutes), text(reason)];
+        assert_eq!(
+            runs(),
+            [
+                warned(10.0, ""),
+                warned(5.0, ""),
+                warned(5.0, "spamming a lot"),
+                warned(10.0, "spamming 5"),
+                warned(10.0, "99 times"),
+            ],
+            "the player keeps its one word; the text starts where a word reads as no minutes"
+        );
+        assert_eq!(
+            chat("/b warn Nobody 5 why").as_deref(),
+            Some("0No player named Nobody."),
+            "the player is the first word, never the line less its last word"
+        );
+        assert_eq!(
+            chat("/b warn").as_deref(),
+            Some("0Write it so: warn <player> [1-60] [Reason]: Warn")
+        );
+        let long = format!("/b warn Bob {}", "x".repeat(41));
+        assert_eq!(
+            chat(&long).as_deref(),
+            Some("0Reason takes at most 40 bytes.")
+        );
+        assert!(runs().is_empty());
     }
 
     #[test]

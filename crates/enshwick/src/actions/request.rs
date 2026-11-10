@@ -82,6 +82,12 @@ impl Arg {
     /// five times and `Stone Axe` is one. A text in quotes keeps every word
     /// in it. The help shows the argument in square brackets.
     ///
+    /// An optional text is always the last argument and takes what is left
+    /// of the line itself: the arguments before it then take one word
+    /// each, so with a player, optional minutes and an optional reason
+    /// `Ann 5 spamming a lot` is five minutes for spamming a lot, and
+    /// `Ann spamming` is the default minutes.
+    ///
     /// # Examples
     ///
     /// ```
