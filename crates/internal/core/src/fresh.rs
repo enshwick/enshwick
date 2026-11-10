@@ -130,10 +130,10 @@ impl<T> Fresh<T> {
 }
 
 #[cfg(test)]
+#[cfg(feature = "test")]
 mod tests {
     use super::*;
 
-    #[cfg(feature = "test")]
     #[test]
     fn a_cell_reads_empty_in_the_next_life_and_keeps_old_references() {
         static CELL: Fresh<u32> = Fresh::new();
