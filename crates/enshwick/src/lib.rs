@@ -124,9 +124,10 @@
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // Each module comes from the internal crate that holds its source, which
-// tools follow to its files; this crate gives it its path. The macros'
-// docs are here, but for `config` and `script`: each is a module too, so it
-// comes with its module, documented on `enshwick-core`'s root.
+// tools follow to its files; this crate gives it its path. The macros come
+// from `enshwick-macros` with their docs here: through `enshwick-core`,
+// rustdoc would show only the macro crate's own text, so `config` and
+// `script` take their modules alone (`{self}`).
 #[doc(inline)]
 pub use enshwick_abi::abi;
 #[cfg(feature = "unstable")]
@@ -150,7 +151,7 @@ pub use enshwick_core::command_names;
 #[doc(inline)]
 pub use enshwick_core::commands;
 #[doc(inline)]
-pub use enshwick_core::config;
+pub use enshwick_core::config::{self};
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_core::console;
@@ -233,7 +234,7 @@ pub use enshwick_core::rewards;
 pub use enshwick_core::schedule;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
-pub use enshwick_core::script;
+pub use enshwick_core::script::{self};
 #[doc(inline)]
 pub use enshwick_core::services;
 #[doc(inline)]
@@ -379,6 +380,48 @@ pub use enshwick_macros::Shape;
 /// ```
 #[cfg(feature = "unstable")]
 pub use enshwick_macros::call;
+/// Declares a mod's settings struct: serde's `Deserialize` and `Serialize`,
+/// unknown keys refused and [`trait@config::Config`], so the mod needs no
+/// serde of its own.
+///
+/// A key the file leaves out reads from `Default`. `file = "name"`,
+/// `validate = path` and `text = "key"` are the struct attributes of
+/// [`trait@config::Config`]; field attributes stay `#[config(..)]` and
+/// `#[serde(..)]`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::config::Config;
+///
+/// /// Locker settings.
+/// #[enshwick::config(file = "lockers")]
+/// #[derive(Default)]
+/// struct Settings {
+///     /// How many lockers one player may own.
+///     #[config(range = 1..=16)]
+///     limit: u32,
+/// }
+///
+/// assert!(Settings::template().contains("limit = 0"));
+/// assert_eq!(Settings::FILE, "lockers");
+/// ```
+///
+/// A misspelt key is refused with its name, not read past:
+///
+/// ```
+/// /// Locker settings.
+/// #[enshwick::config]
+/// #[derive(Debug, Default)]
+/// struct Settings {
+///     /// How many lockers one player may own.
+///     limit: u32,
+/// }
+///
+/// let error = toml::from_str::<Settings>("limits = 4").map_err(|e| e.to_string());
+/// assert!(error.is_err_and(|e| e.contains("unknown field `limits`")));
+/// ```
+pub use enshwick_macros::config;
 /// Exports a [`Mod`] from the DLL with its manifest, which it reads from the
 /// crate's `Cargo.toml` at compile time.
 ///
@@ -604,6 +647,23 @@ pub use enshwick_macros::hook;
 /// }
 /// ```
 pub use enshwick_macros::point;
+/// Exports the methods of an `impl` block marked `#[script]` to script
+/// languages: `#[script(<part>)]` adds the constant `SCRIPT_<PART>`, a list
+/// of [`script::Function`] a [`script::Bound`] type names in its parts.
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
+/// A method takes `self` or `&self` and has a doc comment. Parameters and
+/// the return type implement [`script::FromScript`] and
+/// [`script::IntoScript`]; `&T` reads a `T`; an `impl Fn(A) -> R` parameter
+/// takes a script function, with `A: IntoScript` and `R: script::Answer`; a
+/// `Result` returns its `Ok` value and raises its `Err`'s message.
+///
+/// # Examples
+///
+/// See [`script::Function`].
+#[cfg(feature = "unstable")]
+pub use enshwick_macros::script;
 /// Declares a service table other mods use: the struct becomes `repr(C)`
 /// and implements [`services::Service`] with a layout hash per field, which
 /// the loader checks when a mod asks for the service.

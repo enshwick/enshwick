@@ -131,73 +131,12 @@ mod world_error;
 
 #[doc(no_inline)]
 pub use abi::{Entity, ItemId, PlayerKey, RecipeId};
-// The macros, documented where mods meet them, on `enshwick`'s root; `config`
-// and `script` are documented here, since `enshwick` takes each with its
-// module of the same name.
-/// Declares a mod's settings struct: serde's `Deserialize` and `Serialize`,
-/// unknown keys refused and [`trait@config::Config`], so the mod needs no
-/// serde of its own.
-///
-/// A key the file leaves out reads from `Default`. `file = "name"`,
-/// `validate = path` and `text = "key"` are the struct attributes of
-/// [`trait@config::Config`]; field attributes stay `#[config(..)]` and
-/// `#[serde(..)]`.
-///
-/// # Examples
-///
-/// ```
-/// # extern crate enshwick_core as enshwick;
-/// use enshwick::config::Config;
-///
-/// /// Locker settings.
-/// #[enshwick::config(file = "lockers")]
-/// #[derive(Default)]
-/// struct Settings {
-///     /// How many lockers one player may own.
-///     #[config(range = 1..=16)]
-///     limit: u32,
-/// }
-///
-/// assert!(Settings::template().contains("limit = 0"));
-/// assert_eq!(Settings::FILE, "lockers");
-/// ```
-///
-/// A misspelt key is refused with its name, not read past:
-///
-/// ```
-/// # extern crate enshwick_core as enshwick;
-/// /// Locker settings.
-/// #[enshwick::config]
-/// #[derive(Debug, Default)]
-/// struct Settings {
-///     /// How many lockers one player may own.
-///     limit: u32,
-/// }
-///
-/// let error = toml::from_str::<Settings>("limits = 4").map_err(|e| e.to_string());
-/// assert!(error.is_err_and(|e| e.contains("unknown field `limits`")));
-/// ```
-pub use enshwick_macros::config;
-/// Exports the methods of an `impl` block marked `#[script]` to script
-/// languages: `#[script(<part>)]` adds the constant `SCRIPT_<PART>`, a list
-/// of [`script::Function`] a [`script::Bound`] type names in its parts.
-///
-/// Unstable: needs the `unstable` feature and may change in any release.
-///
-/// A method takes `self` or `&self` and has a doc comment. Parameters and
-/// the return type implement [`script::FromScript`] and
-/// [`script::IntoScript`]; `&T` reads a `T`; an `impl Fn(A) -> R` parameter
-/// takes a script function, with `A: IntoScript` and `R: script::Answer`; a
-/// `Result` returns its `Ok` value and raises its `Err`'s message.
-///
-/// # Examples
-///
-/// See [`script::Function`].
+// The macros, documented where mods meet them, on `enshwick`'s root.
+pub use enshwick_macros::{
+    Config, Shape, config, declare_mod, deps, event, hook, point, service, texts,
+};
 #[cfg(feature = "unstable")]
-pub use enshwick_macros::script;
-pub use enshwick_macros::{Config, Shape, declare_mod, deps, event, hook, point, service, texts};
-#[cfg(feature = "unstable")]
-pub use enshwick_macros::{Script, call};
+pub use enshwick_macros::{Script, call, script};
 #[cfg(not(feature = "unstable"))]
 pub(crate) use enshwick_macros::{Script, script};
 pub use hook::{FnPtr, Hook, Next};
