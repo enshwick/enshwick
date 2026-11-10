@@ -211,7 +211,9 @@ pub(super) fn next_frame() -> u64 {
     FRAME.fetch_add(1, Ordering::Relaxed) + 1
 }
 
-/// The frame being drawn, as [`next_frame`] counts it.
+/// The frame being drawn, as [`next_frame`] counts it: the interface hook
+/// counts each frame before it draws any of the loader's windows, so every
+/// dropdown a window draws sees the count of its own frame.
 pub(super) fn frame() -> u64 {
     FRAME.load(Ordering::Relaxed)
 }
