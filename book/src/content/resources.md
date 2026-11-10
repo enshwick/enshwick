@@ -13,7 +13,7 @@ archive. Use it where the high-level calls fall short.
 ## Keys and bases
 
 A resource is named by a
-[`ResourceKey`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs):
+[`ResourceKey`](https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi.rs):
 a GUID, a type hash and a part.
 [`Guid::key(ty)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)
 makes the key of part 0. Its hash is the one the loader gives the type on the

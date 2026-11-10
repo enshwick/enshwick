@@ -121,7 +121,7 @@ function stays unhooked, and every mod linked on it is turned off.
 
 ## Flags
 
-[`HookFlags`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
+[`HookFlags`](https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi.rs)
 has two flags, combined with `HookFlags(a.0 | b.0)`:
 
 - `EXCLUSIVE`: no other mod may link on this function. Use it for a link that
@@ -136,7 +136,7 @@ has two flags, combined with `HookFlags(a.0 | b.0)`:
 
 A function that many places call often needs a change for one of them only.
 With `CALLER_FRAME`, the
-[`CallerFrame`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi/hooks.rs)
+[`CallerFrame`](https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi/hooks.rs)
 names the call site. Its `return_address()` reads the address the function
 returns to. A mod pins that address per build in its own rows. `stack()` is
 the caller's stack above the return address, and the callee-saved registers

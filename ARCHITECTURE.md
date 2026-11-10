@@ -11,10 +11,11 @@ safe API.
 | ---------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
 | `enshwick-loader-stub` | `crates/internal/stub`     | the `powrprof.dll` proxy: forwards the system exports, holds the dedicated server's entry point and starts the loader                                                                                                 | no, in `enshwick.zip`   |
 | `enshwick-loader`      | `crates/internal/loader`   | the loader DLL: finds the game build, loads and resolves mods, links their hooks, answers the ABI                                                                                                                     | no, in `enshwick.zip`   |
-| `enshwick-luau`        | `crates/internal/luau`     | Luau mods: one sandboxed VM per mod with memory and time budgets, the API bound from the `enshwick` crate's script descriptions                                                                                       | no                      |
-| `enshwick`             | `crates/enshwick`          | the ABI types (`enshwick::abi`), the safe API mods use, and the fake loader for tests (`test` feature)                                                                                                                | yes                     |
+| `enshwick-luau`        | `crates/internal/luau`     | Luau mods: one sandboxed VM per mod with memory and time budgets, the API bound from the script descriptions of `enshwick` and its internal parts                                                                                      | no                      |
+| `enshwick`             | `crates/enshwick`          | the safe API mods use, the ABI types re-exported as `enshwick::abi`, and the fake loader for tests (`test` feature)                                                                                                   | yes                     |
 | `enshwick-macros`      | `crates/enshwick-macros`   | `#[hook]`, `#[config]` and the other macros of the API                                                                                                                                                                | yes                     |
 | `enshwick-values` | `crates/internal/values` | internal part of `enshwick`: the value types its layers share (shape, content ids, resource values, the script value model), re-exported under `enshwick`'s paths | yes |
+| `enshwick-abi` | `crates/internal/abi` | internal part of `enshwick`: the `repr(C)` types that cross between the loader and a mod, the ABI version and its golden layout file, and the reads and writes of game memory, re-exported as `enshwick::abi` and `enshwick::raw` | yes |
 | `enshwick-typed` | `crates/internal/typed` | internal part of `enshwick`: the generated typed API, re-exported as `enshwick::typed` | yes |
 | `enshwick-gamedata`    | `crates/enshwick-gamedata` | the engine routes and anchors, the compatibility reports, the engine's reflection reader (`reflect`) and the game archive reader (`archive`)                                                                          | yes                     |
 | `cargo-enshwick`       | `crates/cargo-enshwick`    | the one tool for mod authors: new mods, install, manifests, content packs, point definitions, the game's types from reflection, porting a table to a new build; its library reads point schemas for tests and fuzzing | yes                     |
@@ -31,13 +32,15 @@ stub ──starts──▶ loader ──C ABI──▶ mods (enshwick ▸ enshwi
                    └──▶ enshwick-luau ──▶ enshwick (script descriptions)
 cargo-enshwick ──▶ enshwick, enshwick-gamedata
 enshwick ──▶ enshwick-typed ──▶ enshwick-values ──▶ enshwick-macros
+enshwick ──▶ enshwick-abi ────▶ enshwick-values
 ```
 
-- `enshwick` is the one crate a mod names. `enshwick-values` and
-  `enshwick-typed` are its internal parts, re-exported under its paths: the
-  value types its layers share, and the generated typed API. Neither depends
-  on `enshwick`; `enshwick-values` asks the running build for a resource
-  type's hash through one function `enshwick` registers.
+- `enshwick` is the one crate a mod names. `enshwick-values`,
+  `enshwick-abi` and `enshwick-typed` are its internal parts, re-exported
+  under its paths: the value types its layers share, the ABI, and the
+  generated typed API. None depends on `enshwick`, so the compiler refuses
+  ABI code that names the safe API; `enshwick-values` asks the running build
+  for a resource type's hash through one function `enshwick` registers.
 - The loader depends on `enshwick` for the ABI types and on `enshwick-gamedata`.
   Nothing depends on the loader except xtask's `compat` feature; cargo-deny
   refuses it anywhere else.
@@ -59,7 +62,7 @@ enshwick ──▶ enshwick-typed ──▶ enshwick-values ──▶ enshwick-m
   a mod exports `enshwick_mod_abi`, `enshwick_mod_query`, `enshwick_mod_init`
   and `enshwick_mod_ready`, which `declare_mod!` writes.
 - The ABI version is a major and a minor, the first line of the committed
-  layout file `crates/enshwick/src/abi/layout.txt`, which lists every
+  layout file `crates/internal/abi/src/abi/layout.txt`, which lists every
   field's offset, size and type, function pointers with their signature.
   An append is the next minor, any other change a new major, and the layout
   tests refuse a change without its bump. A mod of another major, or of a

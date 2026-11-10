@@ -40,7 +40,7 @@ end)
 
 [`load.on_raw_event(event, |raw| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
 is the untyped form: it takes an
-[`abi::Event`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
+[`abi::Event`](https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi.rs)
 and gives the handler the raw data pointer, null for events without data.
 
 ## Event kinds

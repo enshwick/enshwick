@@ -147,4 +147,27 @@ mod tests {
             "an empty list's dangling pointer"
         );
     }
+
+    #[test]
+    fn a_refusal_of_another_abi_names_the_version_of_this_crate() {
+        let refusals = [
+            enshwick::abi::check_abi(ABI_MAJOR - 1, 0),
+            enshwick::abi::check_abi(ABI_MAJOR + 1, 0),
+            enshwick::abi::check_abi(ABI_MAJOR, ABI_MINOR + 1),
+            enshwick::abi::check_major(u32::MAX),
+        ];
+        for why in refusals.map(Result::unwrap_err) {
+            let text = why.to_string();
+            let named: Vec<&str> = text
+                .split("Enshwick ")
+                .skip(1)
+                .filter_map(|rest| rest.split([' ', ':']).next())
+                .collect();
+            assert!(!named.is_empty(), "{text}");
+            assert!(
+                named.iter().all(|version| *version == enshwick::VERSION),
+                "enshwick-abi releases at enshwick's version (release-plz.toml): {text}"
+            );
+        }
+    }
 }

@@ -13,14 +13,14 @@ use std::process::Command;
 /// The package the header describes.
 pub(crate) const PACKAGE: &str = "enshwick";
 /// The ABI module cbindgen parses, relative to the workspace root.
-const ABI_SOURCE: &str = "crates/enshwick/src/abi.rs";
+const ABI_SOURCE: &str = "crates/internal/abi/src/abi.rs";
 /// The ABI types the ABI module re-exports from the crate of the value
 /// types, which cbindgen parses beside it.
 const VALUES_ABI_SOURCE: &str = "crates/internal/values/src/abi.rs";
 /// The name of that file's copy beside the ABI module's.
 const VALUES_ABI_COPY: &str = "values_abi.rs";
 /// The golden layout file.
-const LAYOUT: &str = "crates/enshwick/src/abi/layout.txt";
+const LAYOUT: &str = "crates/internal/abi/src/abi/layout.txt";
 /// cbindgen's settings.
 const CONFIG: &str = "crates/enshwick/cbindgen.toml";
 /// The committed header.

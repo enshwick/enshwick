@@ -145,9 +145,14 @@ mod tests {
 
     /// The source of the API crate and of the internal crates it re-exports,
     /// whose public modules carry the API's own paths.
-    fn sources() -> [PathBuf; 3] {
+    fn sources() -> [PathBuf; 4] {
         let internal = |name: &str| source().join("../../internal").join(name).join("src");
-        [source(), internal("values"), internal("typed")]
+        [
+            source(),
+            internal("abi"),
+            internal("values"),
+            internal("typed"),
+        ]
     }
 
     fn parse(file: &Path) -> syn::File {

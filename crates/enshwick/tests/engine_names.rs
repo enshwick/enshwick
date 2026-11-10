@@ -7,7 +7,8 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     /// The documented items whose examples may spell an engine name, by
-    /// file under `src` and item, each with its reason.
+    /// file under its crate's `src`, with the prefix of [`roots`], and item,
+    /// each with its reason.
     const ALLOWED: &[(&str, &str, &str)] = &[
         ("ecs.rs", "ComponentType", COMPONENT),
         ("ecs.rs", "hash", COMPONENT),
@@ -74,16 +75,39 @@ mod tests {
             .to_owned()
     }
 
+    /// The source folders of this crate and of the internal crates whose
+    /// modules it re-exports, each with the prefix its files take in
+    /// [`ALLOWED`]. `enshwick-typed` is generated from the reflection, whose
+    /// names it carries on purpose.
+    fn roots() -> [(&'static str, PathBuf); 3] {
+        let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let internal = |name: &str| crate_dir.join("../internal").join(name).join("src");
+        [
+            ("", crate_dir.join("src")),
+            ("abi:", internal("abi")),
+            ("values:", internal("values")),
+        ]
+    }
+
     #[test]
     fn no_engine_name_is_spelled_outside_the_low_level_examples() {
-        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         let mut found = Vec::new();
-        for path in sources(&src) {
-            let file = path
-                .strip_prefix(&src)
+        for (prefix, src) in roots() {
+            scan(prefix, &src, &mut found);
+        }
+        check(found);
+    }
+
+    /// Each documented item or code line under `src` that spells an engine
+    /// name, by its file (after `prefix`) and item.
+    fn scan(prefix: &str, src: &Path, found: &mut Vec<(String, String)>) {
+        for path in sources(src) {
+            let relative = path
+                .strip_prefix(src)
                 .unwrap()
                 .to_string_lossy()
                 .replace('\\', "/");
+            let file = format!("{prefix}{relative}");
             let text = std::fs::read_to_string(&path).unwrap();
             let lines: Vec<&str> = text.lines().collect();
             for (at, line) in lines.iter().enumerate() {
@@ -99,6 +123,11 @@ mod tests {
                 found.push((file.clone(), item));
             }
         }
+    }
+
+    /// Fails on an engine name outside [`ALLOWED`] and on an allowed item
+    /// that no longer spells one.
+    fn check(mut found: Vec<(String, String)>) {
         found.sort();
         found.dedup();
         let unexpected: Vec<_> = found

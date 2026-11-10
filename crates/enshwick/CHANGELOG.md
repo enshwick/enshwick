@@ -211,6 +211,10 @@ Each entry names the pull request that made the change.
   `enshwick` alone and names every item as before. In docs built with
   `docsrs`, the `unstable` badge no longer shows on the script impls of
   types that derive `Script` (#1038).
+- The ABI types and the game memory reads and writes are now the internal
+  crate `enshwick-abi`, which `enshwick` re-exports as `enshwick::abi` and
+  `enshwick::raw`: a mod still depends on `enshwick` alone and names every
+  item as before, and `enshwick.h` is unchanged (#1039).
 
 ### Fixed
 

@@ -1,0 +1,32 @@
+[package]
+name = "enshwick-abi"
+version = "1.0.0-alpha.14"
+description = "Internal part of enshwick; depend on enshwick: the binary interface between the loader and a mod"
+keywords = ["enshrouded", "modding", "game", "ffi"]
+categories = ["game-development"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = true
+
+[dependencies]
+enshwick-values.workspace = true
+bytemuck.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+postcard.workspace = true
+proptest.workspace = true
+syn = { version = "=3.0.9", default-features = false, features = ["full", "parsing"] }
+
+[lints]
+workspace = true
+
+# The mod whose content this crate's documentation examples name with `id!`.
+[package.metadata.enshwick]
+id = "you.hello"
+side = "both"

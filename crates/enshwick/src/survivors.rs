@@ -39,6 +39,7 @@ pub use script::SurvivorFns;
 
 pub use workshop::{WORKSHOP_SURVIVORS, WorkshopSurvivor};
 
+#[doc(no_inline)]
 pub use crate::abi::NpcId;
 
 /// Who asks for a survivor's entity, with what it works on.

@@ -47,7 +47,7 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN || steps.auth.outputs.token }}
           # Each after the ones it depends on.
-          PACKAGES: enshwick-macros enshwick-values enshwick-typed enshwick enshwick-gamedata cargo-enshwick
+          PACKAGES: enshwick-macros enshwick-values enshwick-abi enshwick-typed enshwick enshwick-gamedata cargo-enshwick
         run: |
           # The sparse index path of a crate name: 1/, 2/, 3/<first>/ or
           # <first two>/<next two>/, lower case.

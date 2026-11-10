@@ -149,7 +149,8 @@ mod tests {
 
     #[test]
     fn an_api_change_reaches_every_package_built_on_it() {
-        let Scope::Some { code, .. } = scope(&files(&["crates/enshwick/src/abi.rs"]), &workspace())
+        let Scope::Some { code, .. } =
+            scope(&files(&["crates/enshwick/src/load.rs"]), &workspace())
         else {
             panic!("not all");
         };
