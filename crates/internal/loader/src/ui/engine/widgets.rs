@@ -23,9 +23,10 @@ const ICON_MARGIN: f32 = 25.0;
 /// and size: `ui.button` hands the config to its frame, which reads the kind
 /// as its first word (client 26430625).
 const BUTTON_KIND_AT: usize = 0;
-/// The kind of the game's own small icon buttons, its settings gears among
-/// them; 0 is the full menu button (client 26430625).
-const BUTTON_KIND_ICON: u32 = 3;
+/// The kind of the game's small standalone button: the kinds are the looks
+/// of `FbUiMenuButton` in field order, `standalone`, three in a group, then
+/// `standaloneSmall` (client 26430625).
+const BUTTON_KIND_ICON: u32 = 4;
 /// The height of an icon button, which an empty slot keeps free.
 const ICON_SLOT: f32 = 50.0;
 /// The slider's value text without decimals, for a setting that holds whole
