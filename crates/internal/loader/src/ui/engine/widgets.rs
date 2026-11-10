@@ -17,8 +17,9 @@ const BUTTON_ALIGN_CENTRE: u16 = 0x202;
 /// The alignment word that puts a node at the right of its column.
 const BUTTON_ALIGN_RIGHT: u16 = 0x203;
 /// The space an icon leaves above and below it in its button, before the
-/// interface's scale; the game's own gear buttons leave 25 (client 26430625).
-const ICON_MARGIN: f32 = 25.0;
+/// interface's scale: the game's large gear buttons leave 25 (client
+/// 26430625); in the small button 12 makes the icon about a name's height.
+const ICON_MARGIN: f32 = 12.0;
 /// Where a button's config holds its kind, which picks its frame's look
 /// and size: `ui.button` hands the config to its frame, which reads the kind
 /// as its first word (client 26430625).
@@ -27,8 +28,9 @@ const BUTTON_KIND_AT: usize = 0;
 /// of `FbUiMenuButton` in field order, `standalone`, three in a group, then
 /// `standaloneSmall` (client 26430625).
 const BUTTON_KIND_ICON: u32 = 4;
-/// The height of an icon button, which an empty slot keeps free.
-const ICON_SLOT: f32 = 50.0;
+/// The height of a small icon button, which an empty slot keeps free; seen
+/// at 1280x720 on client 26430625, where the canvas is 1920x1080.
+const ICON_SLOT: f32 = 45.0;
 /// The slider's value text without decimals, for a setting that holds whole
 /// numbers whatever its stops.
 const SLIDER_WHOLE: u32 = 2;
