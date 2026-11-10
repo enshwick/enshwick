@@ -2904,6 +2904,26 @@ export type UnlockedSkill = {
 --- How a `Change` changes its value.
 export type Value = { Set: number } | { Times: number }
 
+--- A vanilla item with its names, from `items`.
+export type VanillaItem = {
+	--- The item.
+	guid: string,
+	--- Its debug name, as `item` takes it, such as `Tool_Glider_T1`.
+	name: string,
+	--- The tag of the name the game shows, for `i18n.game_text_in`; nil for an item the archive gives no name.
+	name_tag: string?,
+}
+
+--- A vanilla recipe with its name and what it makes, from `recipes`.
+export type VanillaRecipe = {
+	--- The recipe.
+	guid: string,
+	--- Its debug name, as `recipe` takes it.
+	name: string,
+	--- The item it makes, whose name the game shows for the recipe; nil for a recipe that names none.
+	output: string?,
+}
+
 --- Where a request came from.
 export type Via = "Interface" | "Console" | "Chat" | "Remote"
 
@@ -4009,6 +4029,12 @@ declare enshwick: {
 	content: {
 		--- The vanilla item named `name`, as the game's data names it, such as `Chest_Wood`; an error names the nearest names.
 		item: (name: string) -> string,
+		--- The vanilla item the game shows as `name` in any of its languages, such as `Glider`; an error names the nearest names.
+		item_by_display_name: (name: string) -> string,
+		--- Every vanilla item with its debug name and the tag of the name the game shows.
+		items: () -> {VanillaItem},
+		--- Every vanilla recipe with its debug name and the item it makes.
+		recipes: () -> {VanillaRecipe},
 		--- The item id of `id`, a GUID such as `item` gives for a vanilla item, or a content id in full (`<mod>:<name>`) for a mod's own item, as `ItemId.from_guid` and `ItemId.named` give it in Rust: the number `inventory` and `items` take.
 		item_id: (id: string) -> number,
 		--- The recipe id of `id`, a GUID such as `recipe` gives for a vanilla recipe, or a content id in full for a mod's own, as `RecipeId.from_guid` and `RecipeId.named` give it in Rust: the number recipe events carry.

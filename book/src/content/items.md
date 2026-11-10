@@ -74,6 +74,42 @@ names a vanilla item by its debug name.
 `deps::vanilla::item`. A name the game lacks turns the mod off, with the names
 that look like it in the log.
 
+### Find an item by the name the game shows
+
+A player knows an item by the name the game shows, not by its debug name.
+Three calls of `content::vanilla` serve a picker, a list or a typed name. In
+Luau they are `enshwick.content.item_by_display_name`, `items` and
+`recipes`.
+
+| Call | Answers |
+| --- | --- |
+| `item_by_display_name("Glider")` | the item the game shows by that name, in any language it ships and whatever the case |
+| `items()` | every vanilla item: its GUID, its debug name and the tag of its shown name |
+| `recipes()` | every vanilla recipe: its GUID, its debug name and the item it makes |
+
+`item_by_display_name` answers `Unknown` with the names that look like it,
+and `Ambiguous` with the items when the game shows several by one name. The
+names come from the game's texts, which only a client's archive holds
+(the loader reads no text table in a dedicated server's archive, server
+26430253). So the lookup answers on a client, in single player and in a
+game a player hosts. On a dedicated server it answers `Unreadable`; there a
+mod names an item by its debug name or GUID.
+
+```rust
+use enshwick::content::vanilla::{self, VanillaError};
+
+fn find(name: &str) -> Option<enshwick::content::Guid> {
+    match vanilla::item_by_display_name(name) {
+        Ok(item) => Some(item),
+        Err(VanillaError::Unknown { near, .. }) => {
+            enshwick::info!("no item {name}; near: {}", near.join(", "));
+            None
+        }
+        Err(_) => vanilla::item(name).ok(),
+    }
+}
+```
+
 ## `NewItem`
 
 | Field | Meaning |

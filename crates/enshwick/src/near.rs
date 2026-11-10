@@ -1,7 +1,7 @@
 //! Names close to a mistyped one, for replies that say what may be meant.
 
 /// Up to `most` of `names` close to `typed`, the closest first and equally
-/// close ones in their given order, whatever the case: a name that starts
+/// close ones by name, whatever the case: a name that starts
 /// with what was typed, then one that holds it, then one within a third of
 /// the typed length in edits, one edit at least.
 pub(crate) fn near<'a>(
@@ -32,7 +32,7 @@ pub(crate) fn near<'a>(
             Some((score, name))
         })
         .collect();
-    scored.sort_by_key(|&(score, _)| score);
+    scored.sort_unstable();
     scored
         .into_iter()
         .take(most)
