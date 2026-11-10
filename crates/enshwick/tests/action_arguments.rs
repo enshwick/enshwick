@@ -69,73 +69,83 @@ mod tests {
                 .known(|_ask| known()),
                 ran,
             )?;
-            actions.add(
-                Action::per_player("shield", "Shield", |_ask, _subject| {
-                    vec![(PlayerKey::new(9), "Root".into())]
-                })
-                .admins()
-                .with_self(),
-                ran,
-            )?;
-            actions.add(
-                Action::new("heal", "Heal")
-                    .admins()
-                    .with_self()
-                    .arg(Arg::player("Player")),
-                ran,
-            )?;
-            let count = || Arg::number("Count", 1.0..=999.0, 1.0).optional(Value::Number(1.0));
-            actions.add(
-                Action::new("give", "Give")
-                    .admins()
-                    .arg(Arg::player("Player"))
-                    .arg(Arg::text("Item", 40))
-                    .arg(count())
-                    .known(|_ask| known()),
-                ran,
-            )?;
-            actions.add(
-                Action::new("kit", "Kit")
-                    .admins()
-                    .arg(Arg::choice("Kind", &[("basic", "Basic"), ("pro", "Pro")]))
-                    .arg(count())
-                    .arg(Arg::toggle("Bound").optional(Value::Toggle(false))),
-                ran,
-            )?;
-            actions.add(
-                Action::new("warn", "Warn")
-                    .admins()
-                    .arg(Arg::player("Player"))
-                    .arg(Arg::number("Minutes", 1.0..=60.0, 1.0).optional(Value::Number(10.0)))
-                    .arg(Arg::text("Reason", 40).optional(Value::Text(String::new())))
-                    .known(|_ask| known()),
-                ran,
-            )?;
-            let mid = Action::new("mid", "Mid")
-                .arg(Arg::text("Note", 8).optional(Value::Text(String::new())))
-                .arg(count());
-            assert!(
-                actions.add(mid, ran).is_err(),
-                "an optional text that is not the last argument"
-            );
-            let early = Action::new("early", "Early")
-                .arg(count())
-                .arg(Arg::text("Item", 40));
-            let refused = actions.add(early, ran).unwrap_err();
-            assert!(
-                format!("{refused:?}").contains("only its last arguments"),
-                "{refused:?}"
-            );
-            let far = Arg::number("Count", 1.0..=9.0, 1.0).optional(Value::Number(10.0));
-            assert!(
-                actions
-                    .add(Action::new("far", "Far").arg(far), ran)
-                    .is_err(),
-                "a default out of the argument's range"
-            );
+            self_and_optional(&actions, ran)?;
             actions.commands("b")?;
             Ok(Self)
         }
+    }
+
+    /// The actions that offer the player who looks, and those with optional
+    /// arguments, each run by `ran`.
+    fn self_and_optional(
+        actions: &enshwick::actions::Actions,
+        ran: impl Fn(&enshwick::actions::Request<'_>) -> Outcome + Send + Sync + Copy + 'static,
+    ) -> Result<(), Off> {
+        actions.add(
+            Action::per_player("shield", "Shield", |_ask, _subject| {
+                vec![(PlayerKey::new(9), "Root".into())]
+            })
+            .admins()
+            .with_self(),
+            ran,
+        )?;
+        actions.add(
+            Action::new("heal", "Heal")
+                .admins()
+                .with_self()
+                .arg(Arg::player("Player")),
+            ran,
+        )?;
+        let count = || Arg::number("Count", 1.0..=999.0, 1.0).optional(Value::Number(1.0));
+        actions.add(
+            Action::new("give", "Give")
+                .admins()
+                .arg(Arg::player("Player"))
+                .arg(Arg::text("Item", 40))
+                .arg(count())
+                .known(|_ask| known()),
+            ran,
+        )?;
+        actions.add(
+            Action::new("kit", "Kit")
+                .admins()
+                .arg(Arg::choice("Kind", &[("basic", "Basic"), ("pro", "Pro")]))
+                .arg(count())
+                .arg(Arg::toggle("Bound").optional(Value::Toggle(false))),
+            ran,
+        )?;
+        actions.add(
+            Action::new("warn", "Warn")
+                .admins()
+                .arg(Arg::player("Player"))
+                .arg(Arg::number("Minutes", 1.0..=60.0, 1.0).optional(Value::Number(10.0)))
+                .arg(Arg::text("Reason", 40).optional(Value::Text(String::new())))
+                .known(|_ask| known()),
+            ran,
+        )?;
+        let mid = Action::new("mid", "Mid")
+            .arg(Arg::text("Note", 8).optional(Value::Text(String::new())))
+            .arg(count());
+        assert!(
+            actions.add(mid, ran).is_err(),
+            "an optional text that is not the last argument"
+        );
+        let early = Action::new("early", "Early")
+            .arg(count())
+            .arg(Arg::text("Item", 40));
+        let refused = actions.add(early, ran).unwrap_err();
+        assert!(
+            format!("{refused:?}").contains("only its last arguments"),
+            "{refused:?}"
+        );
+        let far = Arg::number("Count", 1.0..=9.0, 1.0).optional(Value::Number(10.0));
+        assert!(
+            actions
+                .add(Action::new("far", "Far").arg(far), ran)
+                .is_err(),
+            "a default out of the argument's range"
+        );
+        Ok(())
     }
 
     enshwick::test::declare_mod!(
