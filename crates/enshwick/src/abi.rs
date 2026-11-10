@@ -336,6 +336,7 @@ mod transactions;
 mod ui;
 mod version;
 mod world;
+mod writes;
 
 pub use actions::*;
 pub use altars::*;
@@ -363,6 +364,7 @@ pub use transactions::*;
 pub use ui::*;
 pub use version::*;
 pub use world::*;
+pub use writes::*;
 
 /// A UTF-8 string borrowed for the duration of a call, or for as long as its
 /// owner documents.

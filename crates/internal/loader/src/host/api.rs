@@ -267,4 +267,6 @@ pub(crate) static API: HostApi = HostApi {
     resource_buffer,
     game_query: super::entries::gameplay::game_query,
     action_window,
+    progress_write: super::entries::effects::progress_write,
+    drop_items: super::entries::effects::drop_items,
 };

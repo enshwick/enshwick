@@ -253,6 +253,8 @@ mod world_props;
 #[cfg(feature = "unstable")]
 mod world_queries;
 mod world_settings;
+#[cfg(feature = "unstable")]
+mod world_writes;
 mod worlds;
 #[cfg(feature = "unstable")]
 mod writes;

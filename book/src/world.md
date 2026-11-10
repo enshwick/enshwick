@@ -135,7 +135,7 @@ the game derives from gear and buffs and the writes leave alone:
 
 | Stat | Floor | Refused when |
 | --- | --- | --- |
-| Health | 1: a write never kills | the entity is dead (`WorldError::Refused`): death and revival stay the game's |
+| Health | 1: a write never kills | the entity is dead (`WorldError::Refused`): `revive` stands it up |
 | Stamina | 0 | the entity has no stamina (`WorldError::Lacks`) |
 | Mana | 0 | the entity has no mana (`WorldError::Lacks`) |
 
@@ -156,6 +156,43 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 The game sends the new value to the clients and regenerates from it as from
 any other.
+
+`revive(entity, health)` stands a dead character up where it lies, as a
+friend's revive does, with no respawn at a bed or flame. The health stays
+between 1 and the maximum, and the call returns the `Meter` the character now
+has. A character the game counts as dead has health below 1; the game's death
+step sees it alive from the next step on. A living character is refused
+(`WorldError::Refused`).
+
+Three calls write a player's level and experience. Each queues the write; the
+server's next level step applies it, where the game raises levels itself:
+
+| Call | What the step does |
+| --- | --- |
+| `set_level(entity, level)` | sets the level, kept between 1 and the game's level cap. The level starts empty and needs what the game asks of it, as after a level-up, and a gain not applied yet is dropped. No level-up event |
+| `set_experience(entity, experience)` | sets the experience inside the level, kept below what the level needs, and drops a gain not applied yet |
+| `add_experience(entity, amount)` | adds a gain, as a kill does; the game levels up from it, one level a step, with its own level-up events. Experience filters do not see it |
+
+Skill points follow the level, as the game counts them from it. Experience
+filters (`Load::on_experience`) do not see these writes. Each call is refused
+(`WorldError::Refused`) for an entity that is not a player's character in the
+game, and while 256 writes wait for the step. `progress(entity)` reads the
+result after the step.
+
+```rust
+use enshwick::actions::{Action, Outcome};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let world = load.world()?;
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
+    actions.add(Action::new("level-ten", "Set your level to 10").admins(), move |request| {
+        match world.set_level(request.player.entity, 10) {
+            Ok(()) => Outcome::done("Level 10 from the next step"),
+            Err(why) => Outcome::refused(format!("{why}")),
+        }
+    })
+}
+```
 
 `item_meter(pide)` reads the [meter](content/items.md#meters) of an item's
 own entity. It returns a `Meter` with the count and its maximum.

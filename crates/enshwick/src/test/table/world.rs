@@ -410,6 +410,89 @@ pub(crate) extern "system" fn spawn(
     }
 }
 
+pub(crate) extern "system" fn progress_write(
+    _me: ModHandle,
+    entity: crate::Entity,
+    what: u32,
+    value: u32,
+) -> Status {
+    use crate::abi::{
+        PROGRESS_ADD_EXPERIENCE, PROGRESS_OPEN, PROGRESS_SET_EXPERIENCE, PROGRESS_SET_LEVEL,
+    };
+    with(Status::MISSING, |s| {
+        if what == PROGRESS_OPEN {
+            if entity.0 != 0 {
+                return Status::BAD_ARGS;
+            }
+            if s.registration == super::Registration::Closed {
+                return Status::TOO_LATE;
+            }
+            s.progress_writes.get_or_insert_with(Vec::new);
+            return Status::OK;
+        }
+        if ![
+            PROGRESS_SET_LEVEL,
+            PROGRESS_SET_EXPERIENCE,
+            PROGRESS_ADD_EXPERIENCE,
+        ]
+        .contains(&what)
+        {
+            return Status::BAD_ARGS;
+        }
+        // The loader's level step links after `init`.
+        if s.registration != super::Registration::Closed {
+            return Status::MISSING;
+        }
+        let in_game = s.host.players.iter().any(|p| p.entity == entity);
+        let step = s.ticks.step;
+        // The loader holds at most 256 writes for its next level step.
+        let waiting = s.progress_steps.iter().filter(|&&at| at == step).count();
+        match s.progress_writes.as_mut() {
+            Some(writes) if in_game && waiting < 256 => {
+                writes.push((entity, what, value));
+                s.progress_steps.push(step);
+                Status::OK
+            }
+            _ => Status::REFUSED,
+        }
+    })
+}
+
+pub(crate) extern "system" fn drop_items(
+    _me: ModHandle,
+    request: *const crate::abi::DropRequest,
+    out: *mut crate::Entity,
+) -> Status {
+    let Some(request) = super::get_headed(request) else {
+        return Status::BAD_ARGS;
+    };
+    if out.is_null() {
+        return Status::BAD_ARGS;
+    }
+    let rarity = u8::try_from(request.rarity).ok();
+    if !(1..=u32::from(u16::MAX)).contains(&request.count)
+        || rarity
+            .and_then(crate::affixes::ItemRarity::from_raw)
+            .is_none()
+    {
+        return Status::BAD_ARGS;
+    }
+    let entity = with(None, |s| {
+        if !s.host.items.contains_key(&request.item.get()) {
+            return Some(Err(Status::REFUSED));
+        }
+        // Above every spawn's id, so the two never share one.
+        let entity = FIRST_SPAWNED + 0x1_0000 + u32::try_from(s.drops.len()).unwrap_or(0);
+        s.drops.push((crate::Entity(entity), request));
+        Some(Ok(entity))
+    });
+    match entity {
+        Some(Ok(entity)) => put(out, crate::Entity(entity)),
+        Some(Err(status)) => status,
+        None => Status::MISSING,
+    }
+}
+
 pub(crate) extern "system" fn time_of_day(_me: ModHandle, out: *mut DaytimeInfo) -> Status {
     let Some(info) = with(None, |s| s.daytime) else {
         return Status::MISSING;

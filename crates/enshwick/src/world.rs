@@ -428,6 +428,10 @@ impl World {
             return Ok(Self(resolved));
         }
         let host = load.host();
+        // Asked once for every mod with a world, as a write cannot ask after
+        // `init`; where the loader cannot write, the writes answer Missing.
+        let _asked =
+            (host.api().progress_write)(host.handle(), Entity::NONE, crate::abi::PROGRESS_OPEN, 0);
         let resolved = Resolved {
             host,
             transform: ComponentType::named(host, ids::CURRENT_TRANSFORM)?,

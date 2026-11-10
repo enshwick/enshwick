@@ -522,6 +522,38 @@ impl Installed {
         table::with(Vec::new(), |s| s.spawns.clone())
     }
 
+    /// The level and experience writes the mod asked for, in order: the
+    /// character, the `what` (`abi::PROGRESS_SET_LEVEL` and its kin) and the
+    /// value. The fake takes them only from a mod that asked for them in
+    /// `init`, for a character of [`FakeHost::player`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.progress_writes().is_empty());
+    /// ```
+    #[must_use]
+    pub fn progress_writes(&self) -> Vec<(crate::Entity, u32, u32)> {
+        table::with(Vec::new(), |s| {
+            s.progress_writes.clone().unwrap_or_default()
+        })
+    }
+
+    /// The drops the mod asked for, with the entity ids the fake handed
+    /// out, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.drops().is_empty());
+    /// ```
+    #[must_use]
+    pub fn drops(&self) -> Vec<(crate::Entity, crate::abi::DropRequest)> {
+        table::with(Vec::new(), |s| s.drops.clone())
+    }
+
     /// How many saves the mod asked for.
     ///
     /// # Examples

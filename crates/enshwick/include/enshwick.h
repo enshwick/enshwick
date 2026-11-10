@@ -22,11 +22,27 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 23
+#define ENSHWICK_ABI_MINOR 24
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
 #define ENSHWICK_DAMAGE_TYPES 13
+
+// The `what` of `HostApi::progress_write`
+// that adds experience for the game to apply. ABI 11.24.
+#define ENSHWICK_PROGRESS_ADD_EXPERIENCE 3
+
+// The `what` of `HostApi::progress_write`
+// that asks for the writes, during `init`. ABI 11.24.
+#define ENSHWICK_PROGRESS_OPEN 0
+
+// The `what` of `HostApi::progress_write`
+// that sets the experience inside the level. ABI 11.24.
+#define ENSHWICK_PROGRESS_SET_EXPERIENCE 2
+
+// The `what` of `HostApi::progress_write`
+// that sets the level. ABI 11.24.
+#define ENSHWICK_PROGRESS_SET_LEVEL 1
 
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
@@ -1158,6 +1174,23 @@ typedef struct EnshwickDependency {
   // How the two relate.
   EnshwickRelation relation;
 } EnshwickDependency;
+
+// A request to drop a stack of new items on the ground, for
+// `HostApi::drop_items`. ABI 11.24.
+typedef struct EnshwickDropRequest {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The item.
+  EnshwickItemId item;
+  // How many, 1 to 65535: one stack lies as one pickup.
+  uint32_t count;
+  // Where, in 32.32 fixed-point metres.
+  int64_t position[3];
+  // The item's level, as the game levels weapons and armour; 0 for none.
+  uint32_t level;
+  // The game's `ItemRarity` of the item, 0 for common.
+  uint32_t rarity;
+} EnshwickDropRequest;
 
 // Flags of `HostApi::entity_data_open`.
 typedef uint32_t EnshwickEntityDataFlags;
@@ -5142,6 +5175,46 @@ typedef struct EnshwickHostApi {
                                   const EnshwickPlayerKey *players,
                                   uint32_t count,
                                   uint32_t close);
+  // Writes the level or experience of the player whose character is
+  // `entity` in the server's next level step, where the game raises
+  // levels itself; `what` says which. `PROGRESS_SET_LEVEL`: the level
+  // becomes `value`, kept between 1 and the game's level cap, with no
+  // experience inside it and what that level needs to go on, as the
+  // game leaves a level it raised, and a gain not applied yet is
+  // dropped; the game raises no level-up event.
+  // `PROGRESS_SET_EXPERIENCE`: the experience inside the level becomes
+  // `value`, kept below what the level needs.
+  // `PROGRESS_ADD_EXPERIENCE`: `value` is gained, and the game levels
+  // up from it, one level a step, with its own events; experience
+  // filters do not see it. Skill points follow the level, as the game
+  // counts them from it. A mod asks for
+  // the writes during `init` with `PROGRESS_OPEN` and `Entity(0)`;
+  // `Status::TOO_LATE` for that after `init`. `Status::OK` queues
+  // the write; the step applies writes in the order given.
+  // `Status::REFUSED` for a mod that did not ask, an entity that is
+  // not a player's character in the game, or while 256 writes wait;
+  // `Status::BAD_ARGS` for another `what`; `Status::WRONG_THREAD`
+  // off the server's game thread; `Status::MISSING` for a write during
+  // `init`, on a client, a
+  // build without the level step, or once a panic turned the writes
+  // off. A panic in the loader returns `Status::REFUSED`. ABI 11.24.
+  EnshwickStatus (*progress_write)(EnshwickModHandle me,
+                                   EnshwickEntity entity,
+                                   uint32_t what,
+                                   uint32_t value);
+  // Drops `request.count` new items of `request.item` on the ground at
+  // `request.position`, as one loose stack any player can pick up, as
+  // the game spills loot; writes the new pickup's entity to `out`. The
+  // game falls it to the ground and does not save it.
+  // `Status::BAD_ARGS` for a null `request` or `out`, a count of 0 or over
+  // 65535, or a rarity the game lacks; `Status::REFUSED` for an item
+  // the game does not know; `Status::WRONG_THREAD` off the server's
+  // game thread; `Status::MISSING` on a client or a build without the
+  // pickup. `request` and `out` are borrowed for the call. A panic in
+  // the loader returns `Status::REFUSED`. ABI 11.24.
+  EnshwickStatus (*drop_items)(EnshwickModHandle me,
+                               const struct EnshwickDropRequest *request,
+                               EnshwickEntity *out);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.

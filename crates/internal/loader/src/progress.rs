@@ -48,8 +48,20 @@ const ENTITY: usize = 5;
 const KIND: usize = 6;
 const TRACKER: usize = 7;
 const LEVEL: usize = 8;
+/// The `Level` set's change tracking follows it as `Experience`'s follows
+/// that set.
+const LEVEL_TRACKING: usize = LEVEL - EXPERIENCE;
+// The `Level` set's tracking starts right after it and ends before the
+// balancing registry.
+const _: () =
+    assert!(STAMP_A + LEVEL_TRACKING == LEVEL + 1 && TRACKER + LEVEL_TRACKING < BALANCING);
 const BALANCING: usize = 20;
 const REGISTRY: usize = 22;
+
+mod writes;
+
+use writes::{PENDING, WRITERS, WRITES_FUSE};
+pub(crate) use writes::{after_step, write};
 
 #[derive(Debug, Default)]
 struct Sealed {
@@ -206,10 +218,13 @@ pub(crate) fn link(loader: &'static Loader) {
         comfort: take(&COMFORT).into_boxed_slice(),
         experience: take(&EXPERIENCE_FILTERS).into_boxed_slice(),
     };
+    // Sealed whatever else is wanted: a write checks its mod in the seal.
+    let writers = !WRITERS.seal().is_empty();
+    let filters = !sealed.experience.is_empty();
     let wants = [
         !sealed.skills.is_empty(),
         !sealed.comfort.is_empty() || crate::rate_links::wanted(pinned::comfort::BASE_REGISTER),
-        !sealed.experience.is_empty(),
+        filters || writers,
     ];
     let _first = SEALED.set(sealed);
     let _first = LOADED.set(loader);
@@ -227,9 +242,13 @@ pub(crate) fn link(loader: &'static Loader) {
                 .map(enshwick_gamedata::reflect::System::entry),
         )),
         Err(why) => {
-            if wants[2] {
+            // Every mod with a world asks for the writes, so only filters
+            // a mod registered are worth a warning; writes answer MISSING.
+            if filters {
                 crate::log!(WARN, "experience filters off: {why}");
                 crate::diag::part_off("experience", &why.to_string());
+            } else if writers {
+                crate::log!(INFO, "level writes off: {why}");
             }
             None
         }
@@ -266,7 +285,8 @@ pub(crate) fn link(loader: &'static Loader) {
             HookFlags::NONE,
         )
     {
-        crate::log!(INFO, "experience filtered by mods");
+        PENDING.linked.store(true, Ordering::Relaxed);
+        crate::log!(INFO, "experience filtered or written by mods");
     }
 }
 
@@ -406,7 +426,10 @@ unsafe extern "system" fn register(
 }
 
 unsafe extern "system" fn player_level_link(ctx: *mut u64) {
-    if let (Some(loader), Some(engine)) = (LOADED.get(), crate::ecs::resolved())
+    let filtered = SEALED.get().is_some_and(|s| !s.experience.is_empty());
+    let writes = PENDING.any.load(Ordering::Acquire);
+    if (filtered || writes)
+        && let (Some(loader), Some(engine)) = (LOADED.get(), crate::ecs::resolved())
         && !ctx.is_null()
         // SAFETY: `ctx` is non-null (the `is_null` condition) and the live
         // context the game passed to `player_level`, used on its thread while
@@ -417,11 +440,22 @@ unsafe extern "system" fn player_level_link(ctx: *mut u64) {
         // query context the game passed to `player_level`, used on its thread
         // while it runs.
         let saved = unsafe { engine.row(ctx) };
-        // SAFETY: `ctx` is the live, non-null context the game passed to
-        // `player_level`, on its thread while it runs and before vanilla does.
-        let _done = EXPERIENCE_FUSE.run("the experience pass", || unsafe {
-            experience(loader, engine, ctx);
-        });
+        if filtered {
+            // SAFETY: `ctx` is the live, non-null context the game passed to
+            // `player_level`, on its thread while it runs and before vanilla
+            // does.
+            let _done = EXPERIENCE_FUSE.run("the experience pass", || unsafe {
+                experience(loader, engine, ctx);
+            });
+        }
+        if writes {
+            // SAFETY: `ctx` is the live, non-null context the game passed to
+            // `player_level`, on its thread while it runs and before vanilla
+            // does.
+            let _done = WRITES_FUSE.run("the level writes", || unsafe {
+                writes::apply_writes(loader, engine, ctx);
+            });
+        }
         // SAFETY: `ctx` is the live, non-null query context the game passed
         // to `player_level`, which only this thread writes while the system
         // runs.
