@@ -184,6 +184,59 @@ mod tests {
     }
 
     #[test]
+    fn a_window_shown_to_one_player_leaves_another_players_window_of_that_id_alone() {
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let eve = player(5, 8, "Eve", PlayerInfo::CAN_KICK_BAN);
+        let loader = start(enshwick::test::FakeHost::new().player(root).player(eve));
+        let actions = actions();
+        let title = |of: &PlayerInfo| {
+            let carried = loader.carried_windows(of, 0);
+            assert_eq!(carried.len(), 1, "{carried:?}");
+            decode(&carried[0].1).unwrap().title
+        };
+
+        actions
+            .show(Window::new("mine", "Root's").action("wave"), &[root.key])
+            .unwrap();
+        actions
+            .show(Window::new("mine", "Eve's").action("wave"), &[eve.key])
+            .unwrap();
+        assert_eq!(
+            title(&root),
+            "Root's",
+            "each player keeps the one shown to them"
+        );
+        assert_eq!(title(&eve), "Eve's");
+
+        actions.close("mine", &[eve.key]).unwrap();
+        assert!(loader.carried_windows(&eve, 0).is_empty());
+        actions
+            .show(
+                Window::new("mine", "Both").action("wave"),
+                &[root.key, eve.key],
+            )
+            .unwrap();
+        assert_eq!(title(&root), "Both");
+        assert_eq!(title(&eve), "Both");
+    }
+
+    #[test]
+    fn a_close_forgets_the_window_so_a_later_update_finds_none() {
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let loader = start(enshwick::test::FakeHost::new().player(root));
+        let actions = actions();
+
+        actions.show(panel(), &[root.key]).unwrap();
+        assert_eq!(loader.carried_windows(&root, 0).len(), 1);
+        actions.close("panel", &[root.key]).unwrap();
+        assert_eq!(
+            loader.ask_actions(ActionCall::WINDOW, &root, 0, "panel", ""),
+            Some(String::new()),
+            "the mod keeps no closed window to render"
+        );
+    }
+
+    #[test]
     fn a_window_past_its_bounds_or_naming_an_unknown_action_is_refused() {
         let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
         let _loader = start(enshwick::test::FakeHost::new().player(root));
@@ -198,16 +251,6 @@ mod tests {
         let long = (0..=enshwick::actions::window::MAX_ITEMS)
             .fold(Window::new("w", "x"), |w, _| w.text("t", &[]));
         assert!(refused(long).contains("items"));
-
-        for n in 0..enshwick::actions::window::MAX_WINDOWS {
-            actions
-                .show(Window::new(&format!("w{n}"), "x"), &[])
-                .unwrap();
-        }
-        assert!(refused(Window::new("one-more", "x")).contains("at most"));
-        actions
-            .show(Window::new("w0", "again"), &[])
-            .expect("an id the mod keeps updates");
     }
 
     #[test]

@@ -394,11 +394,13 @@ action takes more, a press opens a form with fields for the rest, such as a
 ban's reason after the row's player.
 
 `actions.show(window, &players)` shows the window to the players with those
-account keys. Shown again under the same id, it updates in place. The mod
-keeps one window per id for every player who holds it, so windows that
-differ by player take ids of their own.
-`actions.close(id, &players)` closes it on their clients. A mod keeps up to
-16 windows by id, each up to 64 items. A window carries at most 7,168 bytes
+account keys. Shown again to a player under the same id, it updates in
+place. Each player keeps the window shown to them, so two players may hold
+different windows under one id.
+`actions.close(id, &players)` closes it on their clients. A mod keeps the
+newest 1,024 windows, counted per player, each up to 64 items. A player
+whose window went past that sees it close at their next update.
+A window carries at most 7,168 bytes
 to one player. Items past it are left out. When the actions it names fill
 that alone, it closes, and the server's log names the window.
 

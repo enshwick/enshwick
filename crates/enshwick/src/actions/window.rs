@@ -15,9 +15,11 @@
 //! the actions the window names. Texts never hold a tab or a line break.
 
 use core::fmt::Write as _;
+use std::sync::Arc;
 
 use super::Value;
 use super::sheet::{self, Entry, clean};
+use crate::PlayerKey;
 
 /// The most items a window holds: lines, rows and actions.
 pub const MAX_ITEMS: usize = 64;
@@ -25,8 +27,9 @@ pub const MAX_ITEMS: usize = 64;
 /// The most buttons a row holds.
 pub const MAX_BUTTONS: usize = 4;
 
-/// The most windows a mod keeps at once, each under its own id.
-pub const MAX_WINDOWS: usize = 16;
+/// The most windows a mod keeps at once, counted once for each player a
+/// window was shown to; a show past it drops the oldest.
+pub const MAX_KEPT: usize = 1_024;
 
 /// The most bytes of a title, line or label the client shows; the server
 /// cuts a longer one at a character's edge.
@@ -264,6 +267,38 @@ impl Window {
     }
 }
 
+/// The windows a mod showed and did not close, each as the one player it
+/// was shown to holds it, oldest first.
+#[derive(Debug, Default)]
+pub(super) struct Kept(Vec<(PlayerKey, Arc<Window>)>);
+
+impl Kept {
+    /// Keeps `window` for each of `players`, in place of the window each
+    /// held under its id; past [`MAX_KEPT`] the oldest go.
+    pub(super) fn keep(&mut self, window: Window, players: &[PlayerKey]) {
+        self.forget(&window.id, players);
+        let window = Arc::new(window);
+        self.0
+            .extend(players.iter().map(|&player| (player, Arc::clone(&window))));
+        let over = self.0.len().saturating_sub(MAX_KEPT);
+        self.0.drain(..over);
+    }
+
+    /// Forgets window `id` as each of `players` holds it.
+    pub(super) fn forget(&mut self, id: &str, players: &[PlayerKey]) {
+        self.0
+            .retain(|(player, window)| window.id != id || !players.contains(player));
+    }
+
+    /// Window `id` as `player` holds it.
+    pub(super) fn of(&self, id: &str, player: PlayerKey) -> Option<Arc<Window>> {
+        self.0
+            .iter()
+            .find(|(holder, window)| *holder == player && window.id == id)
+            .map(|(_, window)| Arc::clone(window))
+    }
+}
+
 /// A row of a [`Window`]: a line with buttons beside it, each running one
 /// of the mod's actions.
 ///
@@ -427,12 +462,48 @@ pub fn decode(text: &str) -> Option<View> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::PlayerKey;
 
     fn say(key: &str, values: &[(&str, &str)]) -> String {
         values.iter().fold(key.to_owned(), |text, (name, value)| {
             text.replace(&format!("{{{name}}}"), value)
         })
+    }
+
+    #[test]
+    fn a_mod_keeps_a_window_per_player_and_drops_the_oldest_past_the_bound() {
+        let (ann, bob) = (PlayerKey::new(7), PlayerKey::new(8));
+        let title =
+            |kept: &Kept, id: &str, player| kept.of(id, player).map(|w| w.title.key.clone());
+        let mut kept = Kept::default();
+
+        kept.keep(Window::new("w", "both"), &[ann, bob]);
+        kept.keep(Window::new("w", "ann's"), &[ann]);
+        kept.keep(Window::new("v", "other"), &[ann]);
+        assert_eq!(title(&kept, "w", ann).as_deref(), Some("ann's"));
+        assert_eq!(title(&kept, "w", bob).as_deref(), Some("both"));
+        assert_eq!(
+            kept.0.len(),
+            3,
+            "a window shown again takes the place of the old"
+        );
+
+        kept.forget("w", &[ann]);
+        assert_eq!(title(&kept, "w", ann), None);
+        assert_eq!(title(&kept, "v", ann).as_deref(), Some("other"));
+        assert_eq!(title(&kept, "w", bob).as_deref(), Some("both"));
+
+        let crowd: Vec<PlayerKey> = (0..MAX_KEPT as u64 - 1)
+            .map(|n| PlayerKey::new(100 + n))
+            .collect();
+        kept.keep(Window::new("crowd", "c"), &crowd);
+        assert_eq!(kept.0.len(), MAX_KEPT);
+        assert_eq!(title(&kept, "w", bob), None, "the oldest went");
+        assert_eq!(
+            title(&kept, "v", ann).as_deref(),
+            Some("other"),
+            "exactly the bound stays"
+        );
+        assert!(title(&kept, "crowd", crowd[0]).is_some());
     }
 
     #[test]

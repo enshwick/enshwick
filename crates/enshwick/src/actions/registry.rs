@@ -86,9 +86,8 @@ pub(super) struct Registry {
     pub(super) texts: Texts,
     pub(super) host: Host,
     pub(super) declared: RwLock<Vec<Arc<Declared>>>,
-    /// The windows the mod showed, by id, at most
-    /// [`MAX_WINDOWS`](super::window::MAX_WINDOWS).
-    pub(super) windows: RwLock<Vec<Arc<super::Window>>>,
+    /// The windows the mod showed, each as one player holds it.
+    pub(super) windows: RwLock<super::window::Kept>,
     /// Set once the mod named its actions as commands.
     pub(super) commands: core::sync::atomic::AtomicBool,
     /// Set once a handler panicked during a command: the mod's commands
@@ -550,15 +549,10 @@ impl Registry {
 
     /// The window `id` as `player` sees it in `language`: its texts filled,
     /// with the sheet entries of the actions it names; empty when the mod
-    /// keeps no such window or the player may not run an action it names.
+    /// keeps no such window for them or the player may not run an action
+    /// it names.
     pub(super) fn window(&self, player: &Player, language: Language, id: &str) -> String {
-        let Some(window) = self
-            .windows
-            .relock_read()
-            .iter()
-            .find(|w| w.id == id)
-            .cloned()
-        else {
+        let Some(window) = self.windows.relock_read().of(id, player.key) else {
             return String::new();
         };
         let declared = self.declared();

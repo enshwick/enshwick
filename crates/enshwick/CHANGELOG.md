@@ -37,7 +37,9 @@ Each entry names the pull request that made the change.
   a mod of side server needs only Enshwick on the client. The server
   renders it for each player in their language, only for players who may
   run every action it names, in hosted and single-player games as on a
-  dedicated server; Luau `actions:show` and `actions:close` (#1022).
+  dedicated server. Each player keeps the window shown to them, so two
+  players may hold different windows under one id; Luau `actions:show` and
+  `actions:close` (#1022).
 - `actions`: `Arg::text` and `Value::Text`, a line of free text of at most
   `MAX_TEXT` (256) bytes without control characters. A console or command
   line gives the last text argument the rest of the line and an earlier

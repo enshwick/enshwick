@@ -615,17 +615,19 @@ impl Actions {
     /// is skipped. Works the same on a dedicated server and in a hosted or
     /// single-player game, where the host gets its windows in process.
     ///
-    /// The mod keeps one window per id for every player who holds it: a
-    /// window shown under an id in use replaces it for them all at their
-    /// next update, so windows that differ by player take ids of their own.
+    /// The mod keeps the window for each player it names, apart from the
+    /// window other players hold under the same id, and the server renders
+    /// a player's own again after their run. It keeps the newest
+    /// [`window::MAX_KEPT`], counted per player; a player whose window
+    /// went past that sees it close at their next update.
     ///
     /// # Errors
     ///
     /// [`Off`] on a client; for a malformed id, a window past its bounds
     /// ([`window::MAX_ITEMS`], [`window::MAX_BUTTONS`]), a button or item
-    /// naming an action not declared yet, a button giving more values
-    /// than its action takes, or a new id past [`window::MAX_WINDOWS`];
-    /// or when the loader refuses, as while too many shows wait.
+    /// naming an action not declared yet, or a button giving more values
+    /// than its action takes; or when the loader refuses, as while too
+    /// many shows wait.
     ///
     /// # Examples
     ///
@@ -672,25 +674,13 @@ impl Actions {
         if let Some(fault) = fault {
             return Err(Off::new(format!("window {id}: {fault}")));
         }
-        {
-            let mut windows = self.registry.windows.relock_write();
-            match windows.iter().position(|w| w.id == id) {
-                Some(at) => windows[at] = Arc::new(window),
-                None if windows.len() >= window::MAX_WINDOWS => {
-                    return Err(Off::new(format!(
-                        "window {id}: a mod keeps at most {} windows",
-                        window::MAX_WINDOWS
-                    )));
-                }
-                None => windows.push(Arc::new(window)),
-            }
-        }
+        self.registry.windows.relock_write().keep(window, players);
         self.carry_window(&id, players, false)
     }
 
     /// Closes the window `id` on the clients of the players with the
-    /// account keys `players`, from the server. The mod keeps the window,
-    /// so [`show`](Self::show) opens it again.
+    /// account keys `players`, from the server, and forgets it for them;
+    /// [`show`](Self::show) opens it again.
     ///
     /// # Errors
     ///
@@ -705,6 +695,7 @@ impl Actions {
     /// }
     /// ```
     pub fn close(&self, id: &str, players: &[PlayerKey]) -> Result<(), Off> {
+        self.registry.windows.relock_write().forget(id, players);
         self.carry_window(id, players, true)
     }
 
@@ -898,7 +889,7 @@ impl Load<'_> {
             texts: all,
             host,
             declared: RwLock::new(Vec::new()),
-            windows: RwLock::new(Vec::new()),
+            windows: RwLock::default(),
             commands: core::sync::atomic::AtomicBool::new(false),
             commands_off: core::sync::atomic::AtomicBool::new(false),
         });
