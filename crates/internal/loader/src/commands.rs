@@ -69,11 +69,13 @@ pub enum Refusal {
     Taken(ModIndex),
 }
 
-/// The names mod `owner` gets for the alias it asks, checked against the
-/// reserved words, the mods' ids (`ids`, by mod index) and the names in
-/// `named`: its name is the part of its id after the author, and the alias
-/// is its own unless another mod's commands, name or id hold the word,
-/// which the second value then names.
+/// The command names mod `owner` gets for the alias it asks, and the mod
+/// that holds that alias, if one does.
+///
+/// They are checked against the reserved words, the mods' ids (`ids`, by
+/// mod index) and the names in `named`: the name is the part of the mod's
+/// id after the author, and the alias is its own unless another mod's
+/// commands, name or id hold the word.
 ///
 /// An alias never takes the name of another mod, whether that mod names
 /// commands or not, so a mod's full name always reaches it.
@@ -89,7 +91,7 @@ pub fn check(
 ) -> Result<(Named, Option<ModIndex>), Refusal> {
     use enshwick::commands::{is_alias, is_reserved, name_of};
 
-    let name = ids.get(owner.get()).copied().map(name_of).unwrap_or("");
+    let name = ids.get(owner.get()).copied().map_or("", name_of);
     if name.is_empty() || is_reserved(name) || !is_alias(alias) || alias.len() >= name.len() {
         return Err(Refusal::Malformed);
     }
@@ -180,10 +182,11 @@ pub enum Reply<'a> {
     Chat(&'a str),
 }
 
-/// How the reply `text` of a command typed in chat goes: one line of an
-/// action that was `done` as a notice; several lines, and every refusal, in
-/// chat, where the player typed and reads, while `chat_to_one` (lines to
-/// one player) works, else joined into one notice.
+/// How the reply `text` of a command typed in chat goes to its player.
+///
+/// One line of an action that was `done` goes as a notice. Several lines,
+/// and every refusal, go in chat, where the player typed and reads, while
+/// `chat_to_one` (lines to one player) works, else joined into one notice.
 #[must_use]
 pub fn reply_by(text: &str, done: bool, chat_to_one: bool) -> Reply<'_> {
     if text.is_empty() {
@@ -198,8 +201,10 @@ pub fn reply_by(text: &str, done: bool, chat_to_one: bool) -> Reply<'_> {
 }
 
 /// The chat messages a reply of several lines goes as, each of at most
-/// `most` lines, since the chat cuts one message there: a long help reaches
-/// the player whole.
+/// `most` lines.
+///
+/// The chat cuts one message there, so a long help reaches the player
+/// whole.
 #[must_use]
 pub fn messages(text: &str, most: usize) -> Vec<String> {
     let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();

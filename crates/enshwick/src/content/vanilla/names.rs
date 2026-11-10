@@ -144,12 +144,11 @@ fn by_shown_name(shown: &[(Guid, String)], name: &str) -> Result<Guid, VanillaEr
     }
 }
 
-/// The running game's vanilla item that the game shows as `name`, such as
-/// `Glider` or `Планер`, in any language the game ships and whatever the
-/// case: what a player or an administrator knows an item by, where
-/// [`item`](super::item) takes its debug name.
+/// The vanilla item the game shows as `name`, such as `Glider` or `Планер`,
+/// in any language it ships and whatever the case.
 ///
-/// The names come from the game's texts, which only a client's archive
+/// It is what a player or an administrator knows an item by, where
+/// [`item`](super::item) takes its debug name. The names come from the game's texts, which only a client's archive
 /// holds: the lookup answers on a client, in single player and in a game a
 /// player hosts, and not on a dedicated server.
 ///

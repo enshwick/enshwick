@@ -1,7 +1,9 @@
-//! Carried windows on the server: a mod shows or closes a window for some
-//! players, and after the step the server asks the mod for the window as
-//! each player sees it and carries the text to that player's client, which
-//! draws it without the mod. After a player's run the server renders the
+//! Carried windows on the server: windows a mod shows on players' clients.
+//!
+//! A mod shows or closes a window for some players, and after the step the
+//! server asks the mod for the window as each player sees it and carries
+//! the text to that player's client, which draws it without the mod. After
+//! a player's run the server renders the
 //! mod's windows that player holds again, so a list shows its switches as
 //! they are now.
 //!
@@ -103,8 +105,10 @@ pub fn holds(held: &[(u64, ModIndex, String)], key: u64, owner: ModIndex, window
 }
 
 /// The waiting changes with one for each window of a player, where the
-/// first stood: the last show or close, which an update after it leaves as
-/// it is, since a show renders anew and a closed window takes no update.
+/// first stood.
+///
+/// It is the last show or close, which an update after it leaves as it is,
+/// since a show renders anew and a closed window takes no update.
 #[must_use]
 pub fn merged(waiting: Vec<Waiting>) -> Vec<Waiting> {
     let mut merged: Vec<Waiting> = Vec::with_capacity(waiting.len());
