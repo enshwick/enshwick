@@ -139,7 +139,6 @@ fn a_word_is_read_only_from_memory_that_reads() {
     );
     // SAFETY: `page` is the test's own reservation, released once.
     unsafe { VirtualFree(page, 0, MEM_RELEASE) };
-    assert_eq!(read_word(page.expose_provenance()), None, "released");
 }
 
 #[test]

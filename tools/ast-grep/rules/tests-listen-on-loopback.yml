@@ -1,0 +1,37 @@
+id: tests-listen-on-loopback
+language: rust
+severity: error
+message: a test listens on 127.0.0.1 or [::1], never on every network
+note: >-
+  A test program that listens on 0.0.0.0 or [::] raises the Windows firewall
+  prompt on a developer's desktop and opens a port to the network while the
+  test runs. The rule reads the addresses written in test files; an address
+  that reaches a test from a default elsewhere is not seen.
+files:
+  - "**/tests/**"
+  - "**/tests.rs"
+rule:
+  any:
+    - kind: string_content
+      regex: '0\.0\.0\.0|\[::\]'
+    - kind: identifier
+      regex: '^UNSPECIFIED$'
+---
+id: test-modules-listen-on-loopback
+language: rust
+severity: error
+message: a test listens on 127.0.0.1 or [::1], never on every network
+note: >-
+  As `tests-listen-on-loopback`, for the `mod tests` of a source file.
+rule:
+  any:
+    - kind: string_content
+      regex: '0\.0\.0\.0|\[::\]'
+    - kind: identifier
+      regex: '^UNSPECIFIED$'
+  inside:
+    kind: mod_item
+    stopBy: end
+    has:
+      field: name
+      regex: '^tests$'

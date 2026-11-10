@@ -312,7 +312,7 @@ fn only_workshops_past_the_limit_get_full_lists() {
 #[test]
 fn a_jump_just_before_an_unreadable_page_reads_up_to_it() {
     use windows_sys::Win32::System::Memory::{
-        MEM_RELEASE, PAGE_NOACCESS, PAGE_READWRITE, VirtualFree,
+        MEM_DECOMMIT, MEM_RELEASE, PAGE_NOACCESS, PAGE_READWRITE, VirtualFree,
     };
     const PAGE: usize = 4096;
     let pages = crate::pages::allocate(None, 2 * PAGE).expect("two fresh pages");
@@ -334,10 +334,15 @@ fn a_jump_just_before_an_unreadable_page_reads_up_to_it() {
     );
     assert_eq!(code_at(start + PAGE), None, "the unreadable page");
     assert_eq!(code_at(0), None);
+    // SAFETY: `pages` is the test's own allocation, unused from here on; it
+    // stays reserved, since a released address may be another test's before
+    // the next line reads it.
+    let decommitted = unsafe { VirtualFree(pages.as_ptr().cast(), 0, MEM_DECOMMIT) };
+    assert_ne!(decommitted, 0);
+    assert_eq!(code_at(last), None, "decommitted");
     // SAFETY: `pages` is the test's own allocation, released once.
     let released = unsafe { VirtualFree(pages.as_ptr().cast(), 0, MEM_RELEASE) };
     assert_ne!(released, 0);
-    assert_eq!(code_at(last), None, "released");
 }
 
 /// PE headers with `stamp` as the link time and `size` as the image size.
