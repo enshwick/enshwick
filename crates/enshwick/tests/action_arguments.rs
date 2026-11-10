@@ -15,10 +15,12 @@ mod tests {
     /// The values each run handed its handler.
     static RUNS: Mutex<Vec<Vec<Value>>> = Mutex::new(Vec::new());
 
-    /// The accounts the mod knows: Bob is offline, and two offline
-    /// accounts share the name Sam.
+    /// The accounts the mod knows: Ann, who is also online in the tests,
+    /// Bob, who is offline, and two offline accounts that share the name
+    /// Sam.
     fn known() -> Vec<(PlayerKey, String)> {
         vec![
+            (PlayerKey::new(7), "Ann".into()),
             (PlayerKey::new(42), "Bob".into()),
             (PlayerKey::new(43), "Sam".into()),
             (PlayerKey::new(44), "Sam".into()),
@@ -58,7 +60,10 @@ mod tests {
             )?;
             actions.add(
                 Action::per_player("allowed", "Allowed", |_ask, _subject| {
-                    vec![(PlayerKey::new(43), "Sam".into())]
+                    vec![
+                        (PlayerKey::new(43), "Sam".into()),
+                        (PlayerKey::new(7), "Ann".into()),
+                    ]
                 })
                 .admins()
                 .known(|_ask| known()),
@@ -233,7 +238,7 @@ mod tests {
         assert_eq!(
             options,
             ["Ann", "Bob", "Sam", "Sam"],
-            "online first, then known"
+            "online first, then known, an account that is both once"
         );
         let allowed = sheet.iter().find(|e| e.id == "allowed").unwrap();
         let rows: Vec<(&str, bool)> = allowed
@@ -243,12 +248,8 @@ mod tests {
             .collect();
         assert_eq!(
             rows,
-            [
-                ("Ann", false),
-                ("Sam", true),
-                ("Bob", false),
-                ("Sam", false)
-            ]
+            [("Ann", true), ("Sam", true), ("Bob", false), ("Sam", false)],
+            "an online player the list holds shows once, switched on"
         );
 
         let run =
@@ -267,12 +268,24 @@ mod tests {
             Some("1ok")
         );
         assert_eq!(
+            run("allowed", "tbob\tb0").as_deref(),
+            Some("1ok"),
+            "a typed name on a list"
+        );
+        assert_eq!(
             runs(),
             [
                 vec![bob(), text("cheating")],
                 vec![bob(), text("cheating")],
                 vec![bob(), Value::Toggle(true)],
+                vec![bob(), Value::Toggle(false)],
             ]
+        );
+        assert!(
+            loader
+                .type_in_chat(&root, 0, "/b ban")
+                .is_some_and(|reply| reply.starts_with("0Write it so: ban ")),
+            "a line without its player gets the usage"
         );
         assert_eq!(
             run("ban", "p0000000000000063\ttx").as_deref(),
