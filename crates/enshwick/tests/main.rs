@@ -3,6 +3,7 @@
 //! Every test still runs in a process of its own under nextest, and the fake
 //! host takes its turn behind a lock under `cargo test`.
 
+mod abi_coverage;
 mod abi_versions;
 #[cfg(feature = "unstable")]
 mod accounts;
@@ -76,6 +77,7 @@ mod game_events;
 mod game_names;
 mod game_settings;
 mod hook_macro;
+mod host_reads;
 #[cfg(feature = "unstable")]
 mod hud;
 mod icons;
@@ -85,6 +87,7 @@ mod init_off;
 mod input;
 #[cfg(feature = "typed")]
 mod input_hint;
+mod interaction_filter;
 #[cfg(feature = "unstable")]
 mod interaction_targets;
 mod inventory;
@@ -102,6 +105,10 @@ mod knowledge;
 mod knowledge_content;
 #[cfg(feature = "typed")]
 mod knowledge_many;
+#[cfg(feature = "unstable")]
+mod knowledge_revokes;
+#[cfg(feature = "unstable")]
+mod labels_and_renames;
 mod language;
 mod lifecycle;
 mod live_changes;
@@ -205,11 +212,13 @@ mod sounds;
 mod spawns;
 #[cfg(feature = "unstable")]
 mod stat_kinds;
+mod stat_watch;
 #[cfg(feature = "unstable")]
 mod static_halves;
 #[cfg(feature = "unstable")]
 mod stats;
 mod step_clock;
+mod survivor_filters;
 mod survivor_lookup;
 mod symbols;
 mod table_config;
@@ -247,3 +256,4 @@ mod world_settings;
 mod worlds;
 #[cfg(feature = "unstable")]
 mod writes;
+mod zone_checks;

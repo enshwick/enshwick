@@ -48,6 +48,7 @@ chapters! {
     Inventories => "inventories.md",
     Releasing => "releasing.md",
     Stability => "stability.md",
+    AbiCoverage => "abi-coverage.md",
     AbiReference => "abi-reference.md",
     ModsInC => "mods-in-c.md",
     Faq => "faq.md",

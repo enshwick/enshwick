@@ -111,6 +111,7 @@
 # Reference
 
 - [Stability](stability.md)
+- [ABI test coverage](abi-coverage.md)
 - [ABI reference](abi-reference.md)
 - [Mods in C and C++](mods-in-c.md)
 - [FAQ and troubleshooting](faq.md)
