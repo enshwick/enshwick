@@ -123,11 +123,12 @@
 /// The version of this crate, which a mod's generated `Cargo.toml` pins.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-// Every module lives in `enshwick-core`; this crate gives it its path. The
-// macros' docs are here, but for `config` and `script`: each is a module
-// too, so it comes with its module, documented on that crate's root.
+// Each module comes from the internal crate that holds its source, which
+// tools follow to its files; this crate gives it its path. The macros'
+// docs are here, but for `config` and `script`: each is a module too, so it
+// comes with its module, documented on `enshwick-core`'s root.
 #[doc(inline)]
-pub use enshwick_core::abi;
+pub use enshwick_abi::abi;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_core::actions;
@@ -198,6 +199,8 @@ pub use enshwick_core::knowledge;
 pub use enshwick_core::loot;
 #[cfg(doctest)]
 mod lower_examples;
+#[doc(inline)]
+pub use enshwick_abi::raw;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_core::map;
@@ -219,8 +222,6 @@ pub use enshwick_core::quests;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_core::rates;
-#[doc(inline)]
-pub use enshwick_core::raw;
 #[cfg(doctest)]
 mod refused;
 #[doc(inline)]
@@ -235,8 +236,6 @@ pub use enshwick_core::schedule;
 pub use enshwick_core::script;
 #[doc(inline)]
 pub use enshwick_core::services;
-#[doc(inline)]
-pub use enshwick_core::shape;
 #[doc(inline)]
 pub use enshwick_core::sound;
 #[doc(inline)]
@@ -268,6 +267,8 @@ pub use enshwick_core::weather;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_core::world;
+#[doc(inline)]
+pub use enshwick_values::shape;
 
 // Listed as re-exports, not as second pages beside their `abi` ones.
 #[doc(no_inline)]
