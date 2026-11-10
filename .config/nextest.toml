@@ -1,0 +1,4 @@
+# CI's host part leaves the trybuild test to a job of its own, where it runs
+# beside the other parts instead of setting the length of the host tests.
+[profile.ci]
+default-filter = "not binary_id(enshwick::config_files)"
