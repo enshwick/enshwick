@@ -5,6 +5,7 @@
 "windows.cancel" = "キャンセル"
 "windows.name" = "または名前を入力"
 "windows.text" = "ここに入力"
+"windows.item" = "アイテムを検索"
 "controls.title" = "キー割り当て"
 "controls.belongs" = "これらのキーはこのコンピューターでのあなたの設定です。ワールドには属しません。"
 "mods.carried" = "参加中のサーバーで動作します。ここでキーを変更できます。"

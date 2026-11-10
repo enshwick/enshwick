@@ -129,6 +129,11 @@ mod item_actions;
 #[cfg(windows)]
 mod item_data;
 pub mod item_kinds;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the client's interface lists items")
+)]
+mod item_names;
 pub mod item_records;
 pub mod join;
 #[cfg_attr(

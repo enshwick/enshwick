@@ -17,6 +17,8 @@ use enshwick::abi::UiWidget;
 use enshwick::actions::Value;
 use enshwick::actions::sheet::{ArgView, Entry, encode_args};
 use enshwick::actions::window::{ButtonView, ItemView, View, decode};
+use enshwick::content::Guid;
+use enshwick::ui::MAX_OPTIONS;
 
 use super::engine::{Engine, Scroll, TextBuffer, Window};
 use super::{Painter, copy};
@@ -106,6 +108,14 @@ struct Field {
     number: f32,
     on: bool,
     text: Box<TextBuffer>,
+    /// The item picked, for an item argument.
+    item: Option<Guid>,
+    /// The search the items in `found` match, and the language of their
+    /// list; `None` before the first.
+    searched: Option<(String, u32)>,
+    /// The items of the list that match the search, at most
+    /// [`MAX_OPTIONS`].
+    found: Vec<usize>,
 }
 
 impl Field {
@@ -124,6 +134,9 @@ impl Field {
             number: arg.min as f32,
             on: false,
             text: TextBuffer::new(),
+            item: None,
+            searched: None,
+            found: Vec::new(),
         }
     }
 }
@@ -499,8 +512,64 @@ fn field(paint: &Painter<'_>, arg: &ArgView, state: &mut Field) -> Option<Value>
             );
             text_value(arg, state.text.text())
         }
+        ArgView::ITEM => item_field(paint, label, state),
         _ => None,
     }
+}
+
+/// Draws an item argument's field: a search over the items this client's
+/// game names in its language, and a list of those that match.
+fn item_field(paint: &Painter<'_>, label: &[u8], state: &mut Field) -> Option<Value> {
+    let search_field = |state: &mut Field| {
+        let _typed = paint.text_field(
+            &mut state.text,
+            texts::text("windows.item").as_bytes(),
+            false,
+        );
+    };
+    let Some(list) = crate::item_names::items(texts::language()) else {
+        paint.label(label, UiWidget::STYLE_SECONDARY, false, false);
+        search_field(state);
+        return None;
+    };
+    let search = (state.text.text(), list.language);
+    if state
+        .searched
+        .as_ref()
+        .is_none_or(|(text, language)| (text.as_str(), *language) != search)
+    {
+        state.found = crate::item_names::matching(&list.items, search.0, MAX_OPTIONS);
+        state.searched = Some((search.0.to_owned(), search.1));
+    }
+    let mut names: [&[u8]; MAX_OPTIONS] = [&[]; MAX_OPTIONS];
+    for (name, &at) in names.iter_mut().zip(&state.found) {
+        *name = list.items[at].name.as_bytes();
+    }
+    let shown = |item: Guid| {
+        state
+            .found
+            .iter()
+            .position(|&at| list.items[at].item == item)
+    };
+    let pick = state.item.and_then(shown);
+    let index = pick
+        .and_then(|at| u32::try_from(at).ok())
+        .unwrap_or(NO_PICK);
+    let chosen = if state.found.is_empty() {
+        paint.label(label, UiWidget::STYLE_SECONDARY, false, false);
+        None
+    } else {
+        paint.dropdown(label, &names[..state.found.len()], index, false)
+    };
+    state.item = match chosen {
+        Some(at) => usize::try_from(at)
+            .ok()
+            .and_then(|at| state.found.get(at))
+            .map(|&at| list.items[at].item),
+        None => pick.map(|at| list.items[state.found[at]].item),
+    };
+    search_field(state);
+    state.item.map(Value::Item)
 }
 
 /// The row of the account `picked` in `players` as an update left them: a

@@ -5,6 +5,7 @@
 "windows.cancel" = "取消"
 "windows.name" = "或輸入名字"
 "windows.text" = "在此輸入"
+"windows.item" = "搜尋物品"
 "controls.title" = "按鍵綁定"
 "controls.belongs" = "這些按鍵是你在這台電腦上的設定，不屬於世界。"
 "mods.carried" = "在你加入的伺服器上執行。可以在這裡變更它的按鍵。"

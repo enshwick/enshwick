@@ -5,6 +5,7 @@
 "windows.cancel" = "Cancel"
 "windows.name" = "Or type a name"
 "windows.text" = "Type here"
+"windows.item" = "Search for an item"
 "controls.title" = "Key bindings"
 "controls.belongs" = "These keys are yours on this computer. They do not belong to the world."
 "mods.carried" = "Runs on the server you joined. You can change its keys here."
