@@ -100,7 +100,9 @@ Portuguese, then to English.
 | ----------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `Action::new(id, label)`            | a button; `id` is 1 to 32 of `[a-z0-9-]`, its name on the console                                |
 | `Action::per_player(id, label, on)` | a list of players with a switch each; `on` names the players switched on                         |
-| `.help(key)`                        | a line under the label and in the console's help                                                 |
+| `.help(key)`                        | a line under the label, and what `help <id>` answers on a typed line                             |
+| `.group(key)`                       | the group the [help](commands.md#help-and-mistyped-lines) lists it under                          |
+| `.with_self()`                      | its players include the player who looks, first; without it they hold only the others            |
 | `.arg(Arg::...)`                    | an argument, in order; its kinds follow this table                                               |
 | `.allow(fn)`, `.admins()`           | who sees the action and may run it                                                               |
 | `.needs(permission)`                | only players the game's user groups give that [permission](commands.md#limit-an-action-to-a-permission) |
@@ -121,6 +123,8 @@ is a table of the builder's fields:
 - `id`
 - `label`
 - `help`
+- `group`
+- `with_self`
 - `args`
 - `admins`
 - `needs`, a list of permissions such as `{ "CanEditBase" }`
@@ -176,7 +180,58 @@ Each argument is one of five kinds:
   character, such as a ban reason or an announcement.
 
 A list takes the players online and the ones `on` names, so a player
-switched on can be switched off while away.
+switched on can be switched off while away. A list and a player argument
+offer the other players. With `.with_self()` they offer the player who
+looks too, first, for a switch or an action a player uses on themselves.
+
+### Optional arguments
+
+`Arg::optional(default)` lets a typed line leave an argument out. It then
+takes `default`. In Luau it is the method `:optional(value)` of an argument.
+
+| Rule | Detail |
+| --- | --- |
+| Which arguments | only the last ones of an action; `actions.add` refuses any other |
+| Which kinds | a choice, a number, on or off, a text; never a player |
+| The default | a value the argument takes, or an empty text |
+| In the help | the argument stands in square brackets: `give <player> <Item> [1-999]` |
+| From the interface | values left out at the end take their defaults too |
+
+A text or a player that only optional arguments follow takes the rest of
+the line up to them. The last words go to the optional arguments, in
+order, as far as each reads as its argument:
+
+| The line, for `give <player> <Item> [1-999]` | The item | The count |
+| --- | --- | --- |
+| `give Ann Stone Axe` | `Stone Axe` | 1 |
+| `give Ann Stone Axe 5` | `Stone Axe` | 5 |
+| `give Ann 5` | `5` | 1 |
+| `give Ann "Stone 5"` | `Stone 5` | 1 |
+| `give Ann Stone Axe 5000` | `Stone Axe 5000` | 1 |
+
+```rust
+use enshwick::actions::{Action, Arg, Value};
+
+let give = Action::new("give", "Give an item")
+    .admins()
+    .arg(Arg::player("Player"))
+    .arg(Arg::text("Item", 64))
+    .arg(Arg::number("Count", 1.0..=999.0, 1.0).optional(Value::Number(1.0)));
+assert_eq!(give.id(), "give");
+```
+
+```luau
+local give = {
+    id = "give",
+    label = "Give an item",
+    admins = true,
+    args = {
+        enshwick.actions.player("Player"),
+        enshwick.actions.text("Item", 64),
+        enshwick.actions.number("Count", 1, 999, 1):optional({ Number = 1 }),
+    },
+}
+```
 
 ## Players who are offline
 
@@ -355,10 +410,13 @@ or `off`, or a text. A list takes a player and `on` or `off`. For example:
 `you.trading-post access Ann on`. The last text argument takes the rest of
 the line as typed. A text argument before another value takes one word, or
 a run in double quotes: `you.tags tag "red fox" 3`. The server refuses a
-longer text than the argument takes: "Reason takes at most 120 bytes." `<mod id> help` lists the actions with
-their words. The mod's id in front keeps two mods' actions apart, see
+longer text than the argument takes: "Reason takes at most 120 bytes." The
+last arguments may be [optional](#optional-arguments). `<mod id> help`
+lists the actions with their words, and `<mod id> help <action>` explains
+one ([Help and mistyped lines](commands.md#help-and-mistyped-lines)). The
+mod's id in front keeps two mods' actions apart, see
 [how ids are namespaced](concepts/ids.md). A mod's command name or alias
-works in place of its id, as in `/adl online`. The console holds every
+works in place of its id, as in `/adm online`. The console holds every
 permission and has no character. That is why `request.player.entity` is 0
 and `.admins()` lets it in. It is also why an `.at` that looks for something
 near the player finds nothing. Answers are in English.

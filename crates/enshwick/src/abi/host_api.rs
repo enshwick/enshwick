@@ -1871,8 +1871,13 @@ pub struct HostApi {
     pub game_query:
         extern "system" fn(me: ModHandle, entity: Entity, query: u32, holds: *mut u32) -> Status,
     /// Shows the calling mod's window `id`, 1 to 32 of `[a-z0-9-]`, to the
-    /// `count` players whose account keys `players` holds, or closes it
-    /// on their clients when `close` is 1. After the server's step the
+    /// `count` players whose account keys `players` holds; closes it on
+    /// their clients when `close` is 1; or, when `close` is 2, updates it
+    /// only on the clients that still show it, opening none (ABI 11.23; a
+    /// loader before it answers [`Status::BAD_ARGS`]). When a client closes
+    /// a window or its player leaves, the loader tells the mod with
+    /// [`ActionCall::WINDOW_CLOSED`](super::ActionCall::WINDOW_CLOSED).
+    /// After the server's step the
     /// loader asks the mod for the window as each player sees it
     /// ([`ActionCall::WINDOW`](super::ActionCall::WINDOW)) and carries the
     /// text to that player's client, which draws it; an empty answer closes

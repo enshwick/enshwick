@@ -38,9 +38,10 @@ use crate::abi::{Entity, Header, PlayerInfo, Status, Str};
 pub struct ActionCall {
     /// Size and version of this struct.
     pub header: Header,
-    /// What the loader asks: [`ActionCall::SHEET`], [`ActionCall::RUN`],
-    /// [`ActionCall::CONSOLE`], [`ActionCall::CHAT`] or
-    /// [`ActionCall::REMOTE`]; a mod built for an older minor answers a kind
+    /// What the loader asks or tells: [`ActionCall::SHEET`],
+    /// [`ActionCall::RUN`], [`ActionCall::CONSOLE`], [`ActionCall::CHAT`],
+    /// [`ActionCall::REMOTE`], [`ActionCall::WINDOW`] or
+    /// [`ActionCall::WINDOW_CLOSED`]; a mod built for an older minor answers a kind
     /// it does not know with an empty reply.
     pub kind: u32,
     /// The language the player reads the game in, a
@@ -276,6 +277,12 @@ impl ActionCall {
     /// window for them or the player may not run an action it names. ABI
     /// 11.22.
     pub const WINDOW: u32 = 6;
+    /// The client of the player whose account key `player` holds closed
+    /// the calling mod's window `action`; or, with an empty `action`, that
+    /// player left, and holds none of the mod's windows any more. The mod
+    /// forgets what it kept for them. `player` holds the account key alone:
+    /// no character, name or permission. No reply is read. ABI 11.23.
+    pub const WINDOW_CLOSED: u32 = 7;
 }
 
 /// A mod's answer to the loader's questions about its player actions: the
