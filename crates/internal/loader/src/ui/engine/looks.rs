@@ -28,8 +28,21 @@ pub(in crate::ui) enum Icon {
     Info = 1,
 }
 
-/// The bundle offsets of the [`Icon`]s, from reflection, in their order.
+/// The bundle offsets of the [`Icon`]s, from reflection, in their order;
+/// `None`, logged once at start, keeps icon buttons to their text.
 fn icons(loader: &Loader) -> Option<[usize; 2]> {
+    let found = generic_icons(loader);
+    if found.is_none() {
+        crate::log!(
+            WARN,
+            "interface: icon buttons show their text on {}: the look bundle's icons do not read",
+            loader.build.name
+        );
+    }
+    found
+}
+
+fn generic_icons(loader: &Loader) -> Option<[usize; 2]> {
     let generic = |name| {
         path(
             loader,
@@ -41,18 +54,6 @@ fn icons(loader: &Loader) -> Option<[usize; 2]> {
         )
     };
     Some([generic("settings")?, generic("infoCircle")?])
-}
-
-/// Logs once, at start, that icon buttons show their text on a build where
-/// the icons or the button's icon fields do not read (`on` false).
-pub(super) fn note_icons(loader: &Loader, on: bool) {
-    if !on {
-        crate::log!(
-            WARN,
-            "interface: icon buttons off on {}: the button's icon or the look bundle's icons do not read; those buttons show their text",
-            loader.build.name
-        );
-    }
 }
 
 /// Where the look of the main menu's version line sits in the look bundle,

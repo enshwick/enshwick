@@ -701,10 +701,6 @@ impl Engine {
         let looks = looks(loader).ok_or(Missing::Looks)?;
         let lookup = |id: &str| loader.build.constant(id);
         let layout = Layout::read(&lookup)?;
-        looks::note_icons(
-            loader,
-            looks.icons.is_some() && layout.button_icon.is_some(),
-        );
         let Optional {
             menu,
             dialog,
