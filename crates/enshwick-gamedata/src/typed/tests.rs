@@ -683,9 +683,10 @@ fn every_committed_typed_file_carries_the_header_of_one_build() {
         .split_once('\0')
         .map(|(b, a)| (b.to_owned(), a.to_owned()))
         .unwrap();
+    let typed = src.join("../../internal/typed/src");
     let ids = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/typed/ids.rs");
-    let mut files = vec![src.join("typed.rs"), src.join("ui/screens.rs"), ids];
-    for entry in std::fs::read_dir(src.join("typed")).unwrap() {
+    let mut files = vec![typed.join("typed.rs"), src.join("ui/screens.rs"), ids];
+    for entry in std::fs::read_dir(typed.join("typed")).unwrap() {
         let path = entry.unwrap().path();
         if path.extension().is_some_and(|e| e == "rs") && !path.ends_with("runtime.rs") {
             files.push(path);
@@ -729,10 +730,10 @@ fn the_committed_typed_api_is_what_its_snapshot_generates() {
         })
         .map(|(path, _)| path.clone())
         .collect();
-    for entry in std::fs::read_dir(repo.join("crates/enshwick/src/typed")).unwrap() {
+    for entry in std::fs::read_dir(repo.join("crates/internal/typed/src/typed")).unwrap() {
         let path = entry.unwrap().path();
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
-        let key = format!("crates/enshwick/src/typed/{name}");
+        let key = format!("crates/internal/typed/src/typed/{name}");
         let generated = path.extension().is_some_and(|e| e == "rs") && name != "runtime.rs";
         if generated && !files.contains_key(&key) {
             differ.push(format!("{key} (stale)"));

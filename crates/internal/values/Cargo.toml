@@ -1,0 +1,24 @@
+[package]
+name = "enshwick-values"
+version = "1.0.0-alpha.14"
+description = "Internal part of enshwick; depend on enshwick: the value types its layers share"
+keywords = ["enshrouded", "modding", "game"]
+categories = ["game-development"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = true
+
+[dependencies]
+enshwick-macros = { path = "../../enshwick-macros", version = "=1.0.0-alpha.14" }
+const-sha1.workspace = true
+const_format.workspace = true
+rustc-hash.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

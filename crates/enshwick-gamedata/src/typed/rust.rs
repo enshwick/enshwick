@@ -347,7 +347,11 @@ impl<'c> Writer<'c> {
             ),
             _ => format!("The game's struct `{shown}`, {} {bytes}.", ty.size),
         };
-        let mut more: Vec<String> = ty.roles.iter().map(|r| role_line(*r).to_owned()).collect();
+        let mut more: Vec<String> = ty
+            .roles
+            .iter()
+            .map(|r| role_line(*r, place.module.len()))
+            .collect();
         for side in ["client_only", "server_only"] {
             if ty.attributes.iter().any(|a| a == side) {
                 more.push(format!(
@@ -494,8 +498,8 @@ impl Catalogue {
     }
 
     /// Every file the typed API is generated into, by path below the
-    /// enshwick repository root: the API crate's `typed` modules and game
-    /// screens, and the loader's id table.
+    /// enshwick repository root: the `typed` modules of the generated
+    /// types' crate, the API crate's game screens, and the loader's id table.
     ///
     /// # Errors
     ///
@@ -507,7 +511,7 @@ impl Catalogue {
     /// use enshwick_gamedata::typed::{Catalogue, Renames};
     ///
     /// let files = Catalogue::default().files("test", &Renames::default())?;
-    /// assert!(files.contains_key("crates/enshwick/src/typed.rs"));
+    /// assert!(files.contains_key("crates/internal/typed/src/typed.rs"));
     /// # Ok::<(), enshwick_gamedata::typed::GenerateError>(())
     /// ```
     pub fn files(
@@ -518,7 +522,7 @@ impl Catalogue {
         let mut files: BTreeMap<String, String> = self
             .rust(build)?
             .into_iter()
-            .map(|(path, text)| (format!("crates/enshwick/src/{path}"), text))
+            .map(|(path, text)| (format!("crates/internal/typed/src/{path}"), text))
             .collect();
         files.insert(
             "crates/enshwick-gamedata/src/typed/ids.rs".to_owned(),
@@ -609,14 +613,19 @@ impl Catalogue {
     }
 }
 
-fn role_line(role: Role) -> &'static str {
-    match role {
-        Role::Component => {
-            "An ECS component: read and write it through [`crate::typed::ComponentType`]."
-        }
-        Role::Event => "A game event: handle it through [`crate::typed::EventType`].",
-        Role::Resource => "A resource: read and serve it through [`crate::typed::ResourceType`].",
-    }
+/// The doc line of a type with `role`, `depth` modules below `typed`. The
+/// handle it names lies in the API crate, above the generated types' own, so
+/// the link is the handle's page there, as a page of the type reaches it.
+fn role_line(role: Role, depth: usize) -> String {
+    let (what, handle) = match role {
+        Role::Component => ("An ECS component: read and write it", "ComponentType"),
+        Role::Event => ("A game event: handle it", "EventType"),
+        Role::Resource => ("A resource: read and serve it", "ResourceType"),
+    };
+    format!(
+        "{what} through [`crate::typed::{handle}`]({}struct.{handle}.html).",
+        "../".repeat(depth)
+    )
 }
 
 fn role_trait(role: Role) -> &'static str {
@@ -640,40 +649,16 @@ fn root_file(top: &BTreeSet<&String>, build: &str) -> String {
     let mut out = String::from(
         "// Long file: generated, a row per covered type in the table at its end.\n\
          //! Every component, event and resource the game reflects, as typed Rust\n\
-         //! items generated from the game's own reflection.\n\
-         //!\n\
-         //! A module per reflected namespace holds its types, read and written\n\
-         //! by field name, so a type whose shape a build changes turns off alone.\n\
-         //!\n\
-         //! A game update needs no change for a moved field or a renumbered\n\
-         //! constant; a removed or retyped field turns off only its type at\n\
-         //! resolve, naming the build; a type renamed with the same layout\n\
-         //! resolves under its new name. The book's chapter \"Typed types across\n\
-         //! game builds\" explains each case.\n\
-         //!\n\
-         //! # Examples\n\
-         //!\n\
-         //! ```\n\
-         //! use enshwick::typed::{ComponentType, ecs::Health};\n\
-         //!\n\
-         //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {\n\
-         //!     let health = ComponentType::<Health>::resolve(load)?;\n\
-         //!     let world = load.world()?;\n\
-         //!     load.on::<enshwick::events::PlayerJoined>(move |joined| {\n\
-         //!         if let Ok(Some(value)) = health.read(world, joined.entity) {\n\
-         //!             enshwick::info!(\"{value:?}\");\n\
-         //!         }\n\
-         //!     })\n\
-         //! }\n\
-         //! ```\n\n",
+         //! items generated from the game's own reflection; `enshwick::typed`\n\
+         //! re-exports them beside the handles that read and write them.\n\n",
     );
     out.push_str(&header(build));
-    out.push_str("\nmod root;\npub(crate) mod runtime;\n\n");
+    out.push_str("\nmod root;\n#[doc(hidden)]\npub mod runtime;\n\n");
     for name in top {
         let _ = writeln!(out, "pub mod {name};");
     }
     out.push_str(
-        "\npub use root::*;\npub use runtime::{\n    Component, ComponentType, Constant, Event, EventType, Flags, Named, Reflected, Resource,\n    ResourceType, ShapeError,\n};\n#[doc(hidden)]\npub use runtime::{Row, check, sample};\n",
+        "\npub use root::*;\npub use runtime::{Component, Constant, Event, Flags, Named, Reflected, Resource, ShapeError};\n#[doc(hidden)]\npub use runtime::{Row, check};\n",
     );
     out
 }

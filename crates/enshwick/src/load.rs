@@ -1,109 +1,35 @@
 //! What a mod does while the loader initialises it.
 
 use core::ffi::c_void;
-use std::borrow::Cow;
 
 use crate::abi::{HostApi, Status, Str};
 use crate::config::ConfigError;
 use crate::host::Host;
 use crate::services::{ModEvent, Service};
 
-/// Why a mod turns itself off during initialisation; the loader logs the
-/// reason and keeps the game vanilla where the mod would have acted.
-///
-/// Every error type of this crate turns into an `Off` with `?`, its message
-/// the reason.
-///
-/// # Examples
-///
-/// ```
-/// let off = enshwick::Off::new("this game build is not supported");
-/// assert_eq!(off.to_string(), "this game build is not supported");
-///
-/// fn calls(load: &enshwick::Load<'_>) -> Result<usize, enshwick::Off> {
-///     let pattern = enshwick::code::Pattern::parse("E8 ?? ?? ?? ??")?;
-///     Ok(pattern.find_all(load.code()?).count())
-/// }
-/// ```
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
-#[error("{reason}")]
-pub struct Off {
-    reason: Cow<'static, str>,
-    /// The reason as the loader reads a text of the mod's texts, when it is
-    /// one.
-    text: Option<String>,
-}
+#[doc(inline)]
+pub use enshwick_values::Off;
 
-impl Off {
-    /// An `Off` with a reason for the log.
-    ///
-    /// # Examples
-    ///
-    /// See [`Off`].
-    #[must_use]
-    pub fn new(reason: impl Into<Cow<'static, str>>) -> Self {
-        Self {
-            reason: reason.into(),
-            text: None,
-        }
-    }
-
-    /// An `Off` whose reason is the text of `key` in the mod's texts with
-    /// each `{name}` filled from `args`, so the Mods screen, the status
-    /// summary and the log show it in the reader's language.
-    ///
-    /// The mod hands its texts over with [`Load::texts`] first; a reason
-    /// whose key has no text shows as the key and its values.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let _texts = load.texts_from("[en]\n\"glow.off\" = \"No glow on this game version.\"\n")?;
-    ///     let glow = load.feature("glow", |load| {
-    ///         load.symbol("lantern.glow").map_err(|_| enshwick::Off::text("glow.off", &[]))
-    ///     });
-    ///     let _ = glow;
-    ///     Ok(())
-    /// }
-    ///
-    /// let off = enshwick::Off::text("stalls.min", &[("min", "2")]);
-    /// assert_eq!(off.to_string(), "stalls.min (min = 2)");
-    /// ```
-    #[must_use]
-    pub fn text(key: &str, args: &[(&str, &str)]) -> Self {
-        Self {
-            reason: crate::i18n::reason::show(key, args).into(),
-            text: Some(crate::i18n::reason::encode(key, args)),
-        }
-    }
-
-    /// The reason as the loader reads it: a text as its key and values,
-    /// any other as its words.
-    pub(crate) fn to_reason(&self) -> &str {
-        self.text.as_deref().unwrap_or(&self.reason)
-    }
-
-    pub(crate) fn status(what: &str, status: Status) -> Self {
-        let why = match status {
-            Status::MISSING => "missing on this game build",
-            Status::AMBIGUOUS => "ambiguous on this game build",
-            Status::REFUSED => "refused by the loader",
-            Status::BAD_ARGS => "malformed",
-            Status::TOO_LATE => "asked for too late",
-            Status::FAULTED => "unavailable: the mod has faulted",
-            Status::WRONG_THREAD => "called off the thread it serves",
-            Status::NOT_LOADED => "not loaded yet",
-            Status::OUTSIDE_WORLD => "outside the world",
-            Status::STATIC_HALF => "template data, never written",
-            Status::NOT_A_PROP => "not a prop",
-            Status::NOT_KEPT => "not found again after a load",
-            Status::UNAVAILABLE => "not available here or on this game build",
-            Status::BUILDING => "being built further up this call",
-            _ => "failed",
-        };
-        Self::new(format!("{what}: {why}"))
-    }
+/// Why `what` is off, from the `status` the loader answered with.
+pub(crate) fn off_status(what: &str, status: Status) -> Off {
+    let why = match status {
+        Status::MISSING => "missing on this game build",
+        Status::AMBIGUOUS => "ambiguous on this game build",
+        Status::REFUSED => "refused by the loader",
+        Status::BAD_ARGS => "malformed",
+        Status::TOO_LATE => "asked for too late",
+        Status::FAULTED => "unavailable: the mod has faulted",
+        Status::WRONG_THREAD => "called off the thread it serves",
+        Status::NOT_LOADED => "not loaded yet",
+        Status::OUTSIDE_WORLD => "outside the world",
+        Status::STATIC_HALF => "template data, never written",
+        Status::NOT_A_PROP => "not a prop",
+        Status::NOT_KEPT => "not found again after a load",
+        Status::UNAVAILABLE => "not available here or on this game build",
+        Status::BUILDING => "being built further up this call",
+        _ => "failed",
+    };
+    Off::new(format!("{what}: {why}"))
 }
 
 /// `From<E> for Off` with `E`'s message as the reason.
@@ -143,10 +69,7 @@ impl From<ConfigError> for Off {
     /// of the mod's texts, as from [`Off::text`].
     fn from(error: ConfigError) -> Self {
         let text = matches!(error, ConfigError::Text { .. }).then(|| error.to_reason());
-        Self {
-            reason: error.to_string().into(),
-            text,
-        }
+        Self::with_text(error.to_string(), text)
     }
 }
 
@@ -557,7 +480,7 @@ pub(crate) fn ok<T>(status: Status, value: T, what: impl FnOnce() -> String) -> 
     if status.is_ok() {
         Ok(value)
     } else {
-        Err(Off::status(&what(), status))
+        Err(off_status(&what(), status))
     }
 }
 

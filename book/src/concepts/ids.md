@@ -68,7 +68,7 @@ events. A Luau script writes content, stat kinds and affixes in full.
 
 The game knows content by GUID, so each content id turns into one. It is a
 version 5 (name-based, SHA-1) UUID of the id's UTF-8 bytes. The namespace is
-[`NAMESPACE`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/ids.rs),
+[`NAMESPACE`](https://github.com/enshwick/enshwick/blob/main/crates/internal/values/src/content/ids.rs),
 `e2185889-0e5e-4977-9edd-d6e7bcd1393f`.
 
 The same id gives the same GUID on every machine and in every release:

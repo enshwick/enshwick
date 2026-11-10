@@ -1,9 +1,9 @@
 //! Reasons given as a text of a mod's texts, as they reach the loader: the
 //! key, then `name=value` pairs, tab-separated, on one line.
 
-/// `key` and `args` as the loader reads them back with
-/// [`Texts::reason`](super::Texts::reason).
-pub(crate) fn encode<N: AsRef<str>, V: AsRef<str>>(key: &str, args: &[(N, V)]) -> String {
+/// `key` and `args` as the loader reads them back with `Texts::reason`.
+#[must_use]
+pub fn encode<N: AsRef<str>, V: AsRef<str>>(key: &str, args: &[(N, V)]) -> String {
     let mut reason = key.replace(SEPARATORS, " ");
     for (name, value) in args {
         reason.push('\t');
@@ -15,7 +15,8 @@ pub(crate) fn encode<N: AsRef<str>, V: AsRef<str>>(key: &str, args: &[(N, V)]) -
 }
 
 /// `key` and `args` as a log shows them: `key (name = value, ...)`.
-pub(crate) fn show<N: AsRef<str>, V: AsRef<str>>(key: &str, args: &[(N, V)]) -> String {
+#[must_use]
+pub fn show<N: AsRef<str>, V: AsRef<str>>(key: &str, args: &[(N, V)]) -> String {
     if args.is_empty() {
         return key.to_owned();
     }
@@ -28,7 +29,8 @@ pub(crate) fn show<N: AsRef<str>, V: AsRef<str>>(key: &str, args: &[(N, V)]) -> 
 
 /// The key of `reason` and its `name=value` pairs; a reason given as plain
 /// words reads as a key no text has.
-pub(crate) fn decode(reason: &str) -> (&str, Vec<(&str, &str)>) {
+#[must_use]
+pub fn decode(reason: &str) -> (&str, Vec<(&str, &str)>) {
     let mut parts = reason.split('\t');
     let key = parts.next().unwrap_or_default();
     (key, parts.filter_map(|pair| pair.split_once('=')).collect())

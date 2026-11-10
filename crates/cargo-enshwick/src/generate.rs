@@ -16,9 +16,9 @@ use enshwick_gamedata::typed::{
 use enshwick_gamedata::{Side, Table, exact, file_name, tables_in};
 
 /// The one hand-written file among the generated modules.
-const RUNTIME: &str = "crates/enshwick/src/typed/runtime.rs";
+const RUNTIME: &str = "crates/internal/typed/src/typed/runtime.rs";
 /// The folder of the generated modules.
-const TYPED: &str = "crates/enshwick/src/typed";
+const TYPED: &str = "crates/internal/typed/src/typed";
 
 /// The kept builds' tables in the game data folder `data`.
 ///

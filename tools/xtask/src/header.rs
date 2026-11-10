@@ -14,6 +14,11 @@ use std::process::Command;
 pub(crate) const PACKAGE: &str = "enshwick";
 /// The ABI module cbindgen parses, relative to the workspace root.
 const ABI_SOURCE: &str = "crates/enshwick/src/abi.rs";
+/// The ABI types the ABI module re-exports from the crate of the value
+/// types, which cbindgen parses beside it.
+const VALUES_ABI_SOURCE: &str = "crates/internal/values/src/abi.rs";
+/// The name of that file's copy beside the ABI module's.
+const VALUES_ABI_COPY: &str = "values_abi.rs";
 /// The golden layout file.
 const LAYOUT: &str = "crates/enshwick/src/abi/layout.txt";
 /// cbindgen's settings.
@@ -85,7 +90,8 @@ fn generate(root: &Path) -> Result<String, String> {
     let mut builder = cbindgen::Builder::new()
         .with_config(config)
         .with_item_prefix(PREFIX)
-        .with_src(crate_root.join("lib.rs"));
+        .with_src(crate_root.join("lib.rs"))
+        .with_src(crate_root.join(VALUES_ABI_COPY));
     for shape in &shapes {
         builder = builder.include_item(&shape.name);
     }
@@ -225,9 +231,9 @@ fn scratch_dir(purpose: &str) -> Result<PathBuf, String> {
 }
 
 /// Copies the ABI module into `to` as a crate of its own, `abi.rs` as
-/// `lib.rs` beside its submodules: cbindgen looks for the submodules of a
-/// single source file next to it, and the rest of the API crate stays out of
-/// the header.
+/// `lib.rs` beside its submodules and the value types' ABI file: cbindgen
+/// looks for the submodules of a single source file next to it, and the
+/// rest of the API crate stays out of the header.
 fn copy_abi(root: &Path, to: &Path) -> Result<(), String> {
     let source = root.join(ABI_SOURCE);
     let copy = |from: &Path, name: &OsStr| {
@@ -236,6 +242,7 @@ fn copy_abi(root: &Path, to: &Path) -> Result<(), String> {
             .map_err(|error| format!("{}: {error}", from.display()))
     };
     copy(&source, OsStr::new("lib.rs"))?;
+    copy(&root.join(VALUES_ABI_SOURCE), OsStr::new(VALUES_ABI_COPY))?;
     let modules = source.with_extension("");
     let entries =
         std::fs::read_dir(&modules).map_err(|error| format!("{}: {error}", modules.display()))?;

@@ -112,5 +112,5 @@ unchanged; a new resource turns the mod off. The Luau tab of
 [`Host::game_value`]: https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/resources/table.rs
 [`Host::content_hashes`]: https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/resources/table.rs
 [`Host::game_content`]: https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/resources/table.rs
-[`Value`]: https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/resources/value.rs
+[`Value`]: https://github.com/enshwick/enshwick/blob/main/crates/internal/values/src/resources/value.rs
 [`Load::serve`]: https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs

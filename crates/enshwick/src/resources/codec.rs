@@ -459,19 +459,7 @@ struct Encoder<'r, 'a> {
 
 /// A value of `ty` that another kind was given for.
 fn mismatch(ty: &Type<'_>, value: &Value) -> CodecError {
-    let given = match value {
-        Value::Nil => "nil",
-        Value::Bool(_) => "a bool",
-        Value::Int(_) | Value::Uint(_) | Value::Float(_) => "a number",
-        Value::Name(_) => "a name",
-        Value::Flags(_) => "flags",
-        Value::Text(_) => "text",
-        Value::Guid(_) => "a GUID",
-        Value::List(_) => "a list",
-        Value::Struct(_) => "a struct",
-        Value::Variant(_) => "a variant",
-        Value::Bytes(_) => "bytes",
-    };
+    let given = value.kind_name();
     CodecError::new(format!(
         "{} ({:?}) does not take {given}",
         ty.qualified_name(),

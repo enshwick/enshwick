@@ -2,7 +2,10 @@
 
 use std::sync::Arc;
 
-use super::{Bound, Error, Function, InitFunction, IntoScript as _, Object, Signature, Ty, Value};
+use super::{
+    Bound, Declared, Error, Function, InitFunction, IntoScript as _, Object, Signature, Ty, Value,
+    declare,
+};
 
 /// A part of the API as one namespace of a script, its type erased: what it
 /// declares, and how a runtime opens it for a mod.
@@ -43,52 +46,6 @@ impl<T: Object> Getter<T> {
     const SIGNATURE: &'static Signature = &Signature::new(&[], &Ty::Object(T::CLASS));
 }
 
-/// A function of a [`Namespace`] as definitions declare it.
-///
-/// # Examples
-///
-/// See [`Namespace::functions`].
-#[derive(Clone, Copy, Debug)]
-pub struct Declared {
-    /// Its place in its namespace's [`Bound::functions`].
-    index: usize,
-    name: &'static str,
-    doc: &'static str,
-    signature: &'static Signature,
-}
-
-impl Declared {
-    /// The function's name.
-    ///
-    /// # Examples
-    ///
-    /// See [`Namespace::functions`].
-    #[must_use]
-    pub const fn name(&self) -> &'static str {
-        self.name
-    }
-
-    /// Its doc comment up to the first section.
-    ///
-    /// # Examples
-    ///
-    /// See [`Namespace::functions`].
-    #[must_use]
-    pub const fn doc(&self) -> &'static str {
-        self.doc
-    }
-
-    /// Its parameters and answer.
-    ///
-    /// # Examples
-    ///
-    /// See [`Namespace::functions`].
-    #[must_use]
-    pub const fn signature(&self) -> &'static Signature {
-        self.signature
-    }
-}
-
 /// The function behind an [`Opened`] namespace: the function's place in its
 /// namespace, from [`Declared`], and its arguments.
 type OpenedFn = dyn Fn(usize, &mut [Value]) -> Result<Value, Error> + Send + Sync;
@@ -120,7 +77,7 @@ impl Opened {
     ///
     /// See [`Namespace::open`].
     pub fn call(&self, function: &Declared, args: &mut [Value]) -> Result<Value, Error> {
-        (self.0)(function.index, args)
+        (self.0)(function.index(), args)
     }
 }
 
@@ -166,12 +123,9 @@ impl Namespace {
     /// ```
     #[must_use]
     pub fn request_function(&self) -> Option<Declared> {
-        self.request.as_ref().map(|request| Declared {
-            index: 0,
-            name: request.name,
-            doc: self.doc,
-            signature: request.signature,
-        })
+        self.request
+            .as_ref()
+            .map(|request| Declared::new(0, request.name, self.doc, request.signature))
     }
 
     /// Opens a namespace a script asks for with
@@ -279,29 +233,6 @@ impl Namespace {
 
 fn describe<T: Bound>() -> Vec<Declared> {
     declare(T::functions())
-}
-
-/// `functions` as a script declares them, each with its place in the list.
-pub(super) fn declare<T: 'static>(
-    functions: impl Iterator<Item = &'static Function<T>>,
-) -> Vec<Declared> {
-    functions
-        .enumerate()
-        .map(|(index, f)| Declared {
-            index,
-            name: f.name,
-            doc: f.doc,
-            signature: &f.signature,
-        })
-        .collect()
-}
-
-impl Declared {
-    /// Its place in its list, which [`Opened::call`] and
-    /// [`Handle::call`](super::Handle::call) index.
-    pub(super) const fn index(&self) -> usize {
-        self.index
-    }
 }
 
 fn open<T: Bound>(load: &mut crate::Load<'_>) -> Result<Opened, crate::Off> {

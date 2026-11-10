@@ -2,8 +2,8 @@
 # Fuzz seeds are input bytes, not text.
 extend-exclude = ["CHANGELOG.md", "*.lock", "*.exports", "texts.toml", "fuzz/corpus/",
   # The game's own names, spelled as its reflection spells them.
-  "crates/enshwick/src/typed.rs", "crates/enshwick/src/typed/*.rs",
-  "!crates/enshwick/src/typed/runtime.rs",
+  "crates/internal/typed/src/typed.rs", "crates/internal/typed/src/typed/*.rs",
+  "!crates/internal/typed/src/typed/runtime.rs",
   "crates/enshwick-gamedata/src/typed/ids.rs", "crates/enshwick-gamedata/typed/",
   # Texts in other languages than English; the English ones are checked.
   "crates/internal/loader/src/texts/*.toml", "!crates/internal/loader/src/texts/en.toml"]

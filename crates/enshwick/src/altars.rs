@@ -673,7 +673,7 @@ pub fn set_base_cap(bases: u32) -> Result<(), Off> {
     if status.is_ok() {
         Ok(())
     } else {
-        Err(Off::status("the base cap", status))
+        Err(crate::load::off_status("the base cap", status))
     }
 }
 

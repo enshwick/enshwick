@@ -26,7 +26,7 @@ pub type ItemId = u32;
 crate::typed::runtime::reflected_struct! {
     /// The game's struct `LootResource`, 24 bytes.
     ///
-    /// A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// A resource: read and serve it through [`crate::typed::ResourceType`](struct.ResourceType.html).
     LootResource {
         /// `items`, of `BlobArray<ecs::Fuel>`.
         items: ::std::vec::Vec<crate::typed::ecs::Fuel> = "items",

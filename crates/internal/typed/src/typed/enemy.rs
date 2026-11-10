@@ -19,7 +19,7 @@
 crate::typed::runtime::reflected_struct! {
     /// The game's struct `enemy::EnemyArsenalRegistryResource`, 8 bytes.
     ///
-    /// A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// A resource: read and serve it through [`crate::typed::ResourceType`](../struct.ResourceType.html).
     EnemyArsenalRegistryResource {
         /// `arsenals`, of `BlobArray<enemy::EnemyArsenalResource>`.
         arsenals: ::std::vec::Vec<EnemyArsenalResource> = "arsenals",
@@ -30,7 +30,7 @@ crate::typed::runtime::named!(EnemyArsenalRegistryResource = "enemy::EnemyArsena
 crate::typed::runtime::reflected_struct! {
     /// The game's struct `enemy::EnemyArsenalResource`, 32 bytes.
     ///
-    /// A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// A resource: read and serve it through [`crate::typed::ResourceType`](../struct.ResourceType.html).
     EnemyArsenalResource {
         /// `guid`, of `Guid`.
         guid: crate::content::Guid = "guid",

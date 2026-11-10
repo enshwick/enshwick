@@ -2,8 +2,8 @@
 
 use crate::content::Guid;
 
-/// A value of a reflected type, as [`Registry::decode`](super::Registry::decode)
-/// reads it from a resource and [`Registry::encode`](super::Registry::encode)
+/// A value of a reflected type, as [`Registry::decode`](struct.Registry.html#method.decode)
+/// reads it from a resource and [`Registry::encode`](struct.Registry.html#method.encode)
 /// writes it back.
 ///
 /// Each kind has one form: a struct is its fields by name, an enum its
@@ -15,6 +15,7 @@ use crate::content::Guid;
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_values as enshwick;
 /// use enshwick::resources::Value;
 ///
 /// let mut table = Value::Struct(vec![("damage".into(), Value::Float(2.5))]);
@@ -63,6 +64,7 @@ pub enum Value {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_values as enshwick;
 /// use enshwick::resources::{Value, Variant};
 ///
 /// let shape = Value::Variant(Box::new(Variant::new("demo::ecs::SphereShape", Value::Float(1.0))));
@@ -113,6 +115,7 @@ impl Variant {
     /// # Examples
     ///
     /// ```
+    /// # extern crate enshwick_values as enshwick;
     /// use enshwick::resources::{Value, Variant};
     ///
     /// let mut variant = Variant::new("demo::float32", Value::Float(1.0));
@@ -125,6 +128,29 @@ impl Variant {
 }
 
 impl Value {
+    /// What kind of value this is, as a refusal names it.
+    ///
+    /// The one match on every kind that the compiler holds whole: crates
+    /// above see `Value` as `non_exhaustive`, so a new kind is named here
+    /// and decided in `data_to_toml` of the API crate's world store.
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn kind_name(&self) -> &'static str {
+        match self {
+            Self::Nil => "nil",
+            Self::Bool(_) => "a bool",
+            Self::Int(_) | Self::Uint(_) | Self::Float(_) => "a number",
+            Self::Name(_) => "a name",
+            Self::Flags(_) => "flags",
+            Self::Text(_) => "text",
+            Self::Guid(_) => "a GUID",
+            Self::List(_) => "a list",
+            Self::Struct(_) => "a struct",
+            Self::Variant(_) => "a variant",
+            Self::Bytes(_) => "bytes",
+        }
+    }
+
     /// The field `name` of a struct; `None` for another kind of value or a
     /// field it lacks.
     ///

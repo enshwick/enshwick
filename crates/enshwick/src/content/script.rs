@@ -17,68 +17,6 @@ use crate::script::{
 };
 use crate::{ItemId, Off, RecipeId};
 
-impl Typed for Guid {
-    const TY: &'static Ty = &Ty::String;
-}
-
-impl IntoScript for Guid {
-    fn into_value(self) -> Value {
-        Value::String(self.to_string())
-    }
-}
-
-impl FromScript for Guid {
-    fn from_value(value: Value) -> Result<Self, Error> {
-        let text = String::from_value(value)?;
-        Self::try_parse(&text).ok_or_else(|| Error::new(format!("{text:?} is no GUID")))
-    }
-}
-
-impl Typed for Id {
-    const TY: &'static Ty = &Ty::String;
-}
-
-impl IntoScript for Id {
-    fn into_value(self) -> Value {
-        Value::String(self.to_string())
-    }
-}
-
-impl FromScript for Id {
-    fn from_value(value: Value) -> Result<Self, Error> {
-        let text = String::from_value(value)?;
-        if !is_id(&text) {
-            return Err(Error::new(format!(
-                "{text:?} is no content id, <mod>:<name>"
-            )));
-        }
-        let text = ScriptIds::keep(text);
-        Self::try_new(text).ok_or_else(|| Error::new(format!("{text:?} is no content id")))
-    }
-}
-
-/// The content id texts scripts passed, each kept once for the process, as
-/// a pack's are: a handler that names an id on every event keeps no more.
-struct ScriptIds(rustc_hash::FxHashSet<&'static str>);
-
-static SCRIPT_IDS: std::sync::Mutex<ScriptIds> = std::sync::Mutex::new(ScriptIds(
-    rustc_hash::FxHashSet::with_hasher(rustc_hash::FxBuildHasher),
-));
-
-impl ScriptIds {
-    /// `text` for the process, the copy kept before when there is one.
-    fn keep(text: String) -> &'static str {
-        use crate::Relock as _;
-        let mut ids = SCRIPT_IDS.relock();
-        if let Some(&kept) = ids.0.get(text.as_str()) {
-            return kept;
-        }
-        let kept: &'static str = Box::leak(text.into_boxed_str());
-        ids.0.insert(kept);
-        kept
-    }
-}
-
 impl Typed for ItemCategoryMask {
     const TY: &'static Ty = &Ty::List(&Ty::String);
 }
@@ -103,27 +41,6 @@ impl FromScript for ItemCategoryMask {
                 .map(|one| mask.union(one))
                 .ok_or_else(|| Error::new(format!("{name:?} is no item category of the game")))
         })
-    }
-}
-
-impl Typed for &'static [u8] {
-    const TY: &'static Ty = &Ty::Bytes;
-}
-
-impl IntoScript for &'static [u8] {
-    fn into_value(self) -> Value {
-        Value::Bytes(self.to_vec())
-    }
-}
-
-impl FromScript for &'static [u8] {
-    fn from_value(value: Value) -> Result<Self, Error> {
-        let Value::Bytes(bytes) = value else {
-            return Err(Error::new("expected a buffer"));
-        };
-        // shortcut: an icon's PNG from a script lives for the process, as an
-        // embedded one does; icons are few and given while the mod starts.
-        Ok(Box::leak(bytes.into_boxed_slice()))
     }
 }
 

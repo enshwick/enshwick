@@ -63,7 +63,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::reflected_struct! {
     /// The game's struct `fishing::FishSpawnEntryResource`, 12 bytes.
     ///
-    /// A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// A resource: read and serve it through [`crate::typed::ResourceType`](../struct.ResourceType.html).
     FishSpawnEntryResource {
         /// `weight`, of `float`.
         weight: crate::typed::Float = "weight",
@@ -81,7 +81,7 @@ pub type FishSpawnTableReference = crate::content::Guid;
 crate::typed::runtime::reflected_struct! {
     /// The game's struct `fishing::FishSpawnTableResource`, 24 bytes.
     ///
-    /// A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// A resource: read and serve it through [`crate::typed::ResourceType`](../struct.ResourceType.html).
     FishSpawnTableResource {
         /// `fishEntries`, of `BlobArray<fishing::FishSpawnEntryResource>`.
         fish_entries: ::std::vec::Vec<FishSpawnEntryResource> = "fishEntries",
@@ -323,7 +323,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::reflected_struct! {
     /// The game's struct `fishing::ShoeSpawnEntryResource`, 12 bytes.
     ///
-    /// A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// A resource: read and serve it through [`crate::typed::ResourceType`](../struct.ResourceType.html).
     ShoeSpawnEntryResource {
         /// `percentage`, of `float`.
         percentage: crate::typed::Float = "percentage",
@@ -478,7 +478,7 @@ crate::typed::runtime::reflected_enum! {
 crate::typed::runtime::reflected_struct! {
     /// The game's struct `fishing::TrashLootEntryResource`, 12 bytes.
     ///
-    /// A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// A resource: read and serve it through [`crate::typed::ResourceType`](../struct.ResourceType.html).
     TrashLootEntryResource {
         /// `weight`, of `float`.
         weight: crate::typed::Float = "weight",
@@ -493,7 +493,7 @@ crate::typed::runtime::named!(TrashLootEntryResource = "fishing::TrashLootEntryR
 crate::typed::runtime::reflected_struct! {
     /// The game's struct `fishing::TrashLootTableResource`, 8 bytes.
     ///
-    /// A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// A resource: read and serve it through [`crate::typed::ResourceType`](../struct.ResourceType.html).
     TrashLootTableResource {
         /// `entries`, of `BlobArray<fishing::TrashLootEntryResource>`.
         entries: ::std::vec::Vec<TrashLootEntryResource> = "entries",
@@ -507,7 +507,7 @@ pub type TrashLootTableResourceReference = crate::content::Guid;
 crate::typed::runtime::reflected_struct! {
     /// The game's struct `fishing::TrashSpawnEntryResource`, 4 bytes.
     ///
-    /// A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// A resource: read and serve it through [`crate::typed::ResourceType`](../struct.ResourceType.html).
     TrashSpawnEntryResource {
         /// `percentage`, of `float`.
         percentage: crate::typed::Float = "percentage",

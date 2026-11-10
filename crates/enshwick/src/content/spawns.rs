@@ -23,8 +23,8 @@
 //! ```
 
 use crate::resources::Value;
-use crate::typed::ecs::{RandomSpawner, RuntimeSpawnerEntry, SpawnConditionFlags};
-use crate::typed::{Flags, Named as _, Time};
+use crate::typed::ecs::{RandomSpawner, SpawnConditionFlags};
+use crate::typed::{Flags, Named as _};
 use crate::{Load, Off};
 
 use super::templates::ComponentChange;
@@ -149,7 +149,8 @@ impl SpawnerChange {
                     reason = "a wait of seconds fits a 64-bit count of nanoseconds"
                 )]
                 let nanos = (seconds.max(0.0) * NANOS) as i64;
-                *held = crate::typed::Reflected::to_value(&Time { value: nanos });
+                *held =
+                    crate::typed::Reflected::to_value(&crate::typed::runtime::made::time(nanos));
             }
         }
     }
@@ -252,13 +253,12 @@ impl Load<'_> {
     /// See [`spawns`](self).
     #[script]
     pub fn add_spawn_entry(&mut self, entry: SpawnEntry) -> Result<(), Off> {
-        let added = RuntimeSpawnerEntry {
-            entity_templates: vec![entry.template],
-            spawn_group_id: entry.group.unwrap_or(Guid([0; 16])),
-            spawn_conditions: entry.conditions.unwrap_or(Flags(Vec::new())),
-            weight: entry.weight,
-            is_high_priority_entry: false,
-        };
+        let added = crate::typed::runtime::made::spawner_entry(
+            vec![entry.template],
+            entry.group.unwrap_or(Guid([0; 16])),
+            entry.conditions.unwrap_or(Flags(Vec::new())),
+            entry.weight,
+        );
         let added = crate::typed::Reflected::to_value(&added);
         for spawner in self.spawners(entry.spawner)? {
             let added = added.clone();

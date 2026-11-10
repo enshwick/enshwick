@@ -4,8 +4,7 @@
 use core::any::Any;
 use std::sync::Arc;
 
-use super::namespaces::declare;
-use super::{Declared, Error, FromScript, Function, IntoScript, Ty, Typed, Value};
+use super::{Declared, Error, FromScript, Function, IntoScript, Ty, Typed, Value, declare};
 
 /// A Rust handle a script holds as an object with the handle's
 /// [`#[script]`](macro@crate::script) methods, called as `handle:method()`.
@@ -13,6 +12,7 @@ use super::{Declared, Error, FromScript, Function, IntoScript, Ty, Typed, Value}
 /// # Examples
 ///
 /// ```rust,standalone_crate
+/// # extern crate enshwick_values as enshwick;
 /// use enshwick::script::{Class, Function, IntoScript, Object, Value};
 ///
 /// #[derive(Clone, Copy, Debug)]
@@ -85,6 +85,7 @@ impl Class {
     /// # Examples
     ///
     /// ```rust,standalone_crate
+    /// # extern crate enshwick_values as enshwick;
     /// use enshwick::script::{Class, Function, Object};
     ///
     /// #[derive(Clone, Copy, Debug)]
@@ -221,6 +222,7 @@ impl Handle {
 /// # Examples
 ///
 /// ```rust,standalone_crate
+/// # extern crate enshwick_values as enshwick;
 /// use std::sync::Arc;
 ///
 /// use enshwick::script::{Class, FromScript, Function, IntoScript, Object};

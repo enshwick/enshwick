@@ -14,6 +14,8 @@ safe API.
 | `enshwick-luau`        | `crates/internal/luau`     | Luau mods: one sandboxed VM per mod with memory and time budgets, the API bound from the `enshwick` crate's script descriptions                                                                                       | no                      |
 | `enshwick`             | `crates/enshwick`          | the ABI types (`enshwick::abi`), the safe API mods use, and the fake loader for tests (`test` feature)                                                                                                                | yes                     |
 | `enshwick-macros`      | `crates/enshwick-macros`   | `#[hook]`, `#[config]` and the other macros of the API                                                                                                                                                                | yes                     |
+| `enshwick-values` | `crates/internal/values` | internal part of `enshwick`: the value types its layers share (shape, content ids, resource values, the script value model), re-exported under `enshwick`'s paths | yes |
+| `enshwick-typed` | `crates/internal/typed` | internal part of `enshwick`: the generated typed API, re-exported as `enshwick::typed` | yes |
 | `enshwick-gamedata`    | `crates/enshwick-gamedata` | the engine routes and anchors, the compatibility reports, the engine's reflection reader (`reflect`) and the game archive reader (`archive`)                                                                          | yes                     |
 | `cargo-enshwick`       | `crates/cargo-enshwick`    | the one tool for mod authors: new mods, install, manifests, content packs, point definitions, the game's types from reflection, porting a table to a new build; its library reads point schemas for tests and fuzzing | yes                     |
 | `xtask`                | `tools/xtask`              | repository checks, the release archive and alpha notes, and `cargo xtask compat`, the maintainers' report of what works on a game build                                                                               | no                      |
@@ -28,8 +30,14 @@ stub ──starts──▶ loader ──C ABI──▶ mods (enshwick ▸ enshwi
                    ├──▶ enshwick-gamedata (tables, reflect, archive)
                    └──▶ enshwick-luau ──▶ enshwick (script descriptions)
 cargo-enshwick ──▶ enshwick, enshwick-gamedata
+enshwick ──▶ enshwick-typed ──▶ enshwick-values ──▶ enshwick-macros
 ```
 
+- `enshwick` is the one crate a mod names. `enshwick-values` and
+  `enshwick-typed` are its internal parts, re-exported under its paths: the
+  value types its layers share, and the generated typed API. Neither depends
+  on `enshwick`; `enshwick-values` asks the running build for a resource
+  type's hash through one function `enshwick` registers.
 - The loader depends on `enshwick` for the ABI types and on `enshwick-gamedata`.
   Nothing depends on the loader except xtask's `compat` feature; cargo-deny
   refuses it anywhere else.

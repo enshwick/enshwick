@@ -1,7 +1,8 @@
-//! A generated type described as data, so a script runtime crosses every
-//! generated type through one walk instead of compiled conversions per type:
-//! the loader links the descriptions, and only Rust mods link the types they
-//! use.
+//! A generated type described as data.
+//!
+//! A script runtime crosses every generated type through one walk instead
+//! of compiled conversions per type: the loader links the descriptions, and
+//! only Rust mods link the types they use.
 
 use super::{Constant, Flags, Reflected, ShapeError};
 use crate::content::Guid;
@@ -14,7 +15,7 @@ use crate::script::{Error, FromScript, IntoScript, Value};
 /// same way.
 #[doc(hidden)]
 #[derive(Debug)]
-pub(crate) enum Shape {
+pub enum Shape {
     /// A type that is no generated item, such as `u8`, `String` or
     /// [`Guid`], crossing through its own conversions.
     Leaf(Leaf),
@@ -32,9 +33,10 @@ pub(crate) enum Shape {
 
 /// A [`Shape::Leaf`]'s conversions, one pair per leaf type.
 #[doc(hidden)]
-pub(crate) struct Leaf {
+pub struct Leaf {
     shown: fn(&Data) -> Result<Value, ShapeError>,
     taken: fn(Value) -> Result<Data, Error>,
+    blank: fn() -> Data,
 }
 
 impl core::fmt::Debug for Leaf {
@@ -44,11 +46,13 @@ impl core::fmt::Debug for Leaf {
 }
 
 impl Leaf {
-    /// The conversions of `T`.
-    const fn of<T: Reflected + IntoScript + FromScript>() -> Self {
+    /// The conversions of `T`, whose empty or zero value the codec writes
+    /// as `blank`.
+    const fn of<T: Reflected + IntoScript + FromScript>(blank: fn() -> Data) -> Self {
         Self {
             shown: |value| <T as Reflected>::from_value(value).map(IntoScript::into_value),
             taken: |value| <T as FromScript>::from_value(value).map(|typed| typed.to_value()),
+            blank,
         }
     }
 }
@@ -57,7 +61,7 @@ impl Leaf {
 /// own fields.
 #[doc(hidden)]
 #[derive(Debug)]
-pub(crate) struct Struct {
+pub struct Struct {
     name: &'static str,
     base: Option<fn() -> &'static Shape>,
     fields: &'static [Field],
@@ -66,7 +70,7 @@ pub(crate) struct Struct {
 impl Struct {
     #[doc(hidden)]
     #[must_use]
-    pub(crate) const fn new(
+    pub const fn new(
         name: &'static str,
         base: Option<fn() -> &'static Shape>,
         fields: &'static [Field],
@@ -79,7 +83,7 @@ impl Struct {
 /// its shape, asked for later since a type may hold itself.
 #[doc(hidden)]
 #[derive(Debug)]
-pub(crate) struct Field {
+pub struct Field {
     rust: &'static str,
     game: &'static str,
     shape: fn() -> &'static Shape,
@@ -88,7 +92,7 @@ pub(crate) struct Field {
 impl Field {
     #[doc(hidden)]
     #[must_use]
-    pub(crate) const fn new(
+    pub const fn new(
         rust: &'static str,
         game: &'static str,
         shape: fn() -> &'static Shape,
@@ -100,7 +104,7 @@ impl Field {
 /// A generated enum: its Rust path and each variant's Rust and game name.
 #[doc(hidden)]
 #[derive(Debug)]
-pub(crate) struct Enum {
+pub struct Enum {
     name: &'static str,
     variants: &'static [(&'static str, &'static str)],
 }
@@ -108,7 +112,7 @@ pub(crate) struct Enum {
 impl Enum {
     #[doc(hidden)]
     #[must_use]
-    pub(crate) const fn new(
+    pub const fn new(
         name: &'static str,
         variants: &'static [(&'static str, &'static str)],
     ) -> Self {
@@ -116,16 +120,48 @@ impl Enum {
     }
 }
 
+impl Struct {
+    /// The fields of the struct's blank value, its base's first.
+    fn blank(&self) -> Vec<(String, Data)> {
+        let base = match self.base.map(|base| base().blank()) {
+            Some(Data::Struct(fields)) => fields,
+            _ => Vec::new(),
+        };
+        let own = self
+            .fields
+            .iter()
+            .map(|field| (field.game.to_owned(), (field.shape)().blank()));
+        base.into_iter().chain(own).collect()
+    }
+}
+
 /// The field of a derived struct that holds its base's fields in a script.
 const BASE: &str = "base";
 
 impl Shape {
+    /// The codec's value of the type with every field empty or zero: an
+    /// absent optional, an empty array, an enum's first constant.
+    #[must_use]
+    pub fn blank(&self) -> Data {
+        match self {
+            Self::Leaf(leaf) => (leaf.blank)(),
+            Self::Optional(_) => Data::Nil,
+            Self::List(_) => Data::List(Vec::new()),
+            Self::Flags(_) => Data::Flags(Vec::new()),
+            Self::Struct(record) => Data::Struct(record.blank()),
+            Self::Enum(choice) => choice
+                .variants
+                .first()
+                .map_or(Data::Uint(0), |(_, game)| Data::Name((*game).to_owned())),
+        }
+    }
+
     /// Whether `value` reads as the type.
     ///
     /// # Errors
     ///
     /// [`ShapeError`] when it does not.
-    pub(crate) fn check(&self, value: &Data) -> Result<(), ShapeError> {
+    pub fn check(&self, value: &Data) -> Result<(), ShapeError> {
         self.shown(value).map(drop)
     }
 
@@ -135,7 +171,7 @@ impl Shape {
     /// # Errors
     ///
     /// [`ShapeError`] when it does not read as the type.
-    pub(crate) fn shown(&self, value: &Data) -> Result<Value, ShapeError> {
+    pub fn shown(&self, value: &Data) -> Result<Value, ShapeError> {
         match self {
             Self::Leaf(leaf) => (leaf.shown)(value),
             Self::Optional(inner) => match value {
@@ -175,7 +211,7 @@ impl Shape {
     /// # Errors
     ///
     /// [`Error`] when it does not read as the type.
-    pub(crate) fn taken(&self, value: Value) -> Result<Data, Error> {
+    pub fn taken(&self, value: Value) -> Result<Data, Error> {
         match self {
             Self::Leaf(leaf) => (leaf.taken)(value),
             Self::Optional(inner) => match value {
@@ -290,34 +326,34 @@ impl Enum {
 /// A type with a [`Shape`]: every generated item and every type a
 /// generated field holds.
 #[doc(hidden)]
-pub(crate) trait Shaped {
+pub trait Shaped {
     /// The type's shape.
     const SHAPE: &'static Shape;
 }
 
 macro_rules! leaves {
-    ($($ty:ty),* $(,)?) => {$(
+    ($($ty:ty => $blank:expr),* $(,)?) => {$(
         impl Shaped for $ty {
-            const SHAPE: &'static Shape = &Shape::Leaf(Leaf::of::<$ty>());
+            const SHAPE: &'static Shape = &Shape::Leaf(Leaf::of::<$ty>(|| $blank));
         }
     )*};
 }
 
 leaves!(
-    u8,
-    u16,
-    u32,
-    u64,
-    i8,
-    i16,
-    i32,
-    i64,
-    bool,
-    f32,
-    String,
-    Guid,
-    Data,
-    Option<Variant>
+    u8 => Data::Uint(0),
+    u16 => Data::Uint(0),
+    u32 => Data::Uint(0),
+    u64 => Data::Uint(0),
+    i8 => Data::Int(0),
+    i16 => Data::Int(0),
+    i32 => Data::Int(0),
+    i64 => Data::Int(0),
+    bool => Data::Bool(false),
+    f32 => Data::Float(0.0),
+    String => Data::Text(String::new()),
+    Guid => Data::Guid(Guid([0; 16])),
+    Data => Data::Nil,
+    Option<Variant> => Data::Nil,
 );
 
 impl<T: Shaped> Shaped for Box<T> {

@@ -431,11 +431,12 @@ dependencies = [
  "aho-corasick",
  "bcdec_rs",
  "bytemuck",
- "const-sha1",
  "const_format",
  "criterion",
  "document-features",
  "enshwick-macros",
+ "enshwick-typed",
+ "enshwick-values",
  "fastrand",
  "hound",
  "insta",
@@ -580,6 +581,26 @@ dependencies = [
  "quote",
  "syn 3.0.9",
  "toml 1.2.1+spec-1.1.0",
+]
+
+[[package]]
+name = "enshwick-typed"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "enshwick-values",
+ "thiserror",
+]
+
+[[package]]
+name = "enshwick-values"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "const-sha1",
+ "const_format",
+ "enshwick-macros",
+ "rustc-hash",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]

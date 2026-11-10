@@ -40,7 +40,6 @@ fn toml_to_data(value: toml::Value) -> Data {
 /// `data` as TOML; nil, and what TOML cannot hold, is left out.
 fn data_to_toml(data: Data) -> Option<toml::Value> {
     Some(match data {
-        Data::Nil | Data::Bytes(_) => return None,
         Data::Bool(b) => toml::Value::Boolean(b),
         Data::Int(i) => toml::Value::Integer(i),
         Data::Uint(u) => toml::Value::Integer(i64::try_from(u).ok()?),
@@ -60,6 +59,9 @@ fn data_to_toml(data: Data) -> Option<toml::Value> {
                 .collect(),
         ),
         Data::Variant(variant) => data_to_toml(variant.value().clone())?,
+        // Nil, bytes, and a kind `Value::kind_name` gains later, which that
+        // change decides here.
+        _ => return None,
     })
 }
 

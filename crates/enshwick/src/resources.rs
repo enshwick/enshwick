@@ -28,9 +28,10 @@ mod registry;
 mod script;
 mod table;
 mod types;
-mod value;
 
 pub use codec::CodecError;
+#[doc(inline)]
+pub use enshwick_values::resources::{Value, Variant};
 pub use kind::Kind;
 pub use registry::Registry;
 pub use script::{Bytes, Resources};
@@ -42,7 +43,6 @@ pub(crate) use table::decode;
 pub(crate) use table::serve_new;
 pub(crate) use table::serve_value;
 pub use types::{Attribute, Constant, Field, Type, crc32, crc64, fnv1a32};
-pub use value::{Value, Variant};
 
 #[cfg(test)]
 mod tests;

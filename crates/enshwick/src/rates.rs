@@ -446,7 +446,10 @@ impl Load<'_> {
         let host = self.host();
         match (host.api().rate)(host.handle(), rate.id()) {
             Status::OK => Ok(RateHandle { host, rate }),
-            status => Err(Off::status(&format!("the rate {rate:?}"), status)),
+            status => Err(crate::load::off_status(
+                &format!("the rate {rate:?}"),
+                status,
+            )),
         }
     }
 }

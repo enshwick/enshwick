@@ -135,7 +135,7 @@ The repository holds no code, assets, archives or dumps of the game. It holds
 these facts about the game:
 
 - Type and field names, sizes and offsets, read from the game's reflection
-  data: in the generated typed API (`crates/enshwick/src/typed`), in the
+  data: in the generated typed API (`crates/internal/typed/src/typed`), in the
   catalogue of engine facts and in the engine routes
   (`crates/enshwick-gamedata/anchors/routes.toml`), which also name
   instruction shapes and short texts that the game's code loads.

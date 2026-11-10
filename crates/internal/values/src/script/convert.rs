@@ -3,7 +3,9 @@ use std::time::Duration;
 
 use super::{Answer, Callback, Error, FromScript, IntoScript, Signature, Ty, Typed, Value};
 
-pub(crate) fn expected(what: &str, value: &Value) -> Error {
+/// The error for a `value` that is not `what`.
+#[must_use]
+pub fn expected(what: &str, value: &Value) -> Error {
     let got = match value {
         Value::Nil => "nil",
         Value::Bool(_) => "a boolean",
@@ -204,74 +206,6 @@ impl IntoScript for std::path::PathBuf {
     }
 }
 
-/// A side by name, as `mods.side` answers it.
-impl Typed for crate::abi::Side {
-    const TY: &'static Ty = &Ty::Choice(&super::Choice::new(
-        "Side",
-        "Which binary of the game runs, or where a mod runs.",
-        &[
-            (
-                "server",
-                "The dedicated server; as a mod's side, where the world runs.",
-            ),
-            (
-                "client",
-                "The game client, as a binary; never a mod's side.",
-            ),
-            (
-                "both",
-                "As a mod's side, where the world runs and on every client in it.",
-            ),
-        ],
-    ));
-}
-
-impl IntoScript for crate::abi::Side {
-    fn into_value(self) -> Value {
-        use crate::abi::Side;
-        let name = match self {
-            Side::CLIENT => "client",
-            Side::BOTH => "both",
-            _ => "server",
-        };
-        Value::Name(name)
-    }
-}
-
-impl FromScript for crate::abi::Side {
-    fn from_value(value: Value) -> Result<Self, Error> {
-        use crate::abi::Side;
-        match String::from_value(value)?.as_str() {
-            "server" => Ok(Side::SERVER),
-            "client" => Ok(Side::CLIENT),
-            "both" => Ok(Side::BOTH),
-            other => Err(Error::new(format!(
-                "{other:?} is not one of \"server\", \"client\", \"both\""
-            ))),
-        }
-    }
-}
-
-/// A log level by name, as settings and log lines spell it.
-impl Typed for crate::abi::Level {
-    const TY: &'static Ty = &Ty::Choice(&super::Choice::new(
-        "Level",
-        "How much a log keeps, from errors alone to development detail.",
-        &[
-            ("error", "Something failed and a feature is off."),
-            ("warn", "Something unexpected that the mod handled."),
-            ("info", "A milestone worth one line."),
-            ("debug", "Detail for development, off in releases."),
-        ],
-    ));
-}
-
-impl IntoScript for crate::abi::Level {
-    fn into_value(self) -> Value {
-        Value::Name(self.name())
-    }
-}
-
 /// A pair of texts, such as a name and its value: a list of two strings.
 impl Typed for (String, String) {
     const TY: &'static Ty = &Ty::List(&Ty::String);
@@ -376,11 +310,11 @@ macro_rules! keys {
 }
 
 /// The largest whole number a script number holds exactly, 2^53.
-pub(crate) const EXACT: u64 = 1 << 53;
+pub const EXACT: u64 = 1 << 53;
 
 /// [`EXACT`] as a script number.
 #[expect(clippy::cast_precision_loss, reason = "2^53 converts exactly")]
-pub(crate) const EXACT_NUMBER: f64 = EXACT as f64;
+pub const EXACT_NUMBER: f64 = EXACT as f64;
 
 keys!(u64, i64);
 
@@ -588,6 +522,57 @@ impl Answer for ControlFlow<()> {
     }
 }
 
+impl Typed for &'static [u8] {
+    const TY: &'static Ty = &Ty::Bytes;
+}
+
+impl IntoScript for &'static [u8] {
+    fn into_value(self) -> Value {
+        Value::Bytes(self.to_vec())
+    }
+}
+
+impl FromScript for &'static [u8] {
+    fn from_value(value: Value) -> Result<Self, Error> {
+        let Value::Bytes(bytes) = value else {
+            return Err(Error::new("expected a buffer"));
+        };
+        // shortcut: an icon's PNG from a script lives for the process, as an
+        // embedded one does; icons are few and given while the mod starts.
+        Ok(Box::leak(bytes.into_boxed_slice()))
+    }
+}
+
+/// A generated type's value in a script: a table by the generated item's
+/// field names, shaped by its record.
+#[doc(hidden)]
+#[derive(Clone, Debug)]
+pub struct Fields(pub Value);
+
+impl Typed for Fields {
+    const TY: &'static Ty = &Ty::Data;
+}
+
+impl IntoScript for Fields {
+    fn into_value(self) -> Value {
+        self.0
+    }
+}
+
+impl FromScript for Fields {
+    fn from_value(value: Value) -> Result<Self, Error> {
+        Ok(Self(value))
+    }
+}
+
+impl Answer for Result<Fields, Error> {
+    const TY: &'static Ty = &Ty::Data;
+
+    fn from_answer(answer: Result<Value, Error>) -> Self {
+        answer.map(Fields)
+    }
+}
+
 #[doc(hidden)]
 /// The record fields of `value` for a type with `count` fields, for
 /// [`#[derive(Script)]`](macro@crate::Script).
@@ -636,7 +621,6 @@ pub fn argument_or_default<T: FromScript + Default>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::abi::Side;
 
     #[test]
     fn a_count_takes_only_whole_numbers_from_zero_to_two_to_the_53() {
@@ -660,22 +644,6 @@ mod tests {
                 Value::Number(0.0),
             ]);
             assert!(<[i64; 3]>::from_value(list).is_err(), "{refused}");
-        }
-    }
-
-    #[test]
-    fn a_side_reads_back_from_its_name() {
-        for (side, name) in [
-            (Side::SERVER, "server"),
-            (Side::CLIENT, "client"),
-            (Side::BOTH, "both"),
-        ] {
-            assert!(matches!(side.into_value(), Value::Name(text) if text == name));
-            assert_eq!(Side::from_value(Value::Name(name)).ok(), Some(side));
-            assert_eq!(
-                Side::from_value(Value::String(name.into())).ok(),
-                Some(side)
-            );
         }
     }
 

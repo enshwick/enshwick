@@ -183,6 +183,8 @@ pub mod knowledge;
 mod load;
 mod locks;
 pub mod loot;
+#[cfg(doctest)]
+mod lower_examples;
 #[cfg(feature = "unstable")]
 pub mod map;
 pub mod mods;
@@ -226,7 +228,8 @@ pub mod script;
 )]
 mod script;
 pub mod services;
-pub mod shape;
+#[doc(inline)]
+pub use enshwick_values::shape;
 pub mod sound;
 pub mod state;
 pub mod stats;
@@ -701,6 +704,7 @@ pub use hook::{FnPtr, Hook, Next};
 pub use host::{Host, host};
 pub use load::{Load, Mod, Off};
 pub use locks::{Relock, RelockRw, RelockWait};
+#[doc(no_inline)]
 pub use shape::Shape;
 pub use world_error::WorldError;
 

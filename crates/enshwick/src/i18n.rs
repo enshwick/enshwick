@@ -20,7 +20,7 @@ use crate::content::Id;
 use crate::locks::Relock;
 use crate::{Host, Load, Off};
 
-pub(crate) mod reason;
+pub(crate) use enshwick_values::reason;
 mod script;
 #[doc(hidden)]
 pub use script::I18nFns;

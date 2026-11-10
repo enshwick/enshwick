@@ -190,6 +190,12 @@ Each entry names the pull request that made the change.
 - The book says Enshwick supports the latest game version, and the alpha
   release notes name only the game version an alpha was checked against; the
   repository has a name policy, `NAME-POLICY.md` (#1034).
+- The value types the API's layers share and the generated typed layer are
+  now the internal crates `enshwick-values` and `enshwick-typed`, which
+  `enshwick` re-exports under its own paths: a mod still depends on
+  `enshwick` alone and names every item as before. In docs built with
+  `docsrs`, the `unstable` badge no longer shows on the script impls of
+  types that derive `Script` (#1038).
 
 ### Fixed
 
