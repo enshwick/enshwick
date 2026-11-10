@@ -17,6 +17,7 @@ autotests = false
 enshwick-macros = { path = "../enshwick-macros", version = "=1.0.0-alpha.14" }
 enshwick-abi.workspace = true
 enshwick-core.workspace = true
+enshwick-fake = { workspace = true, optional = true }
 enshwick-values.workspace = true
 document-features.workspace = true
 
@@ -34,17 +35,17 @@ serde_json.workspace = true
 
 [features]
 ## `test`: a fake loader for a mod's unit tests.
-test = ["enshwick-core/test"]
+test = ["dep:enshwick-fake"]
 ## `packs::schemas`: the JSON Schemas of a data pack's files, for tools.
 schema = ["enshwick-core/schema"]
 ## `unstable`: the parts of the API that may still change in any release:
 ## young APIs and calls that rest on engine facts not yet checked in the
 ## running game. Every item it adds is marked in the docs.
-unstable = ["enshwick-core/unstable"]
+unstable = ["enshwick-core/unstable", "enshwick-fake?/unstable"]
 ## `typed`: every component, event and resource the game reflects as typed
 ## items generated from its reflection, a few thousand of them; it builds on
 ## `unstable`.
-typed = ["unstable", "enshwick-core/typed"]
+typed = ["unstable", "enshwick-core/typed", "enshwick-fake?/typed"]
 
 # One binary for every file in `tests/`, each a module of `tests/main.rs`:
 # one link instead of one per file. nextest still runs each test in a

@@ -1,0 +1,879 @@
+//! Gameplay answers: damage, knowledge, buffs, altars, survivors, stats and checks.
+
+use crate::Entity;
+use crate::abi::AltarInfo;
+use crate::abi::AltarLimit;
+use crate::abi::AltarZone;
+use crate::abi::BedCheck;
+use crate::abi::Bounds;
+use crate::abi::BuildingZoneCheck;
+use crate::abi::Comfort;
+use crate::abi::ExperiencePass;
+use crate::abi::ExperienceRow;
+use crate::abi::Header;
+use crate::abi::Interaction;
+use crate::abi::KnowledgeId;
+use crate::abi::SkillCheck;
+use crate::abi::Summon;
+use crate::abi::SurvivorLookup;
+
+use super::FakeHost;
+use super::Installed;
+use super::stats;
+use super::table;
+
+impl FakeHost {
+    /// Plays a game build whose base code the platform does not know:
+    /// `raise_base_limit` and `request_base_limits` answer
+    /// [`Status::MISSING`](super::Status::MISSING), and the game keeps its
+    /// own limits.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().without_base_limit().install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn without_base_limit(mut self) -> Self {
+        self.base_code = super::BaseCode::Unknown;
+        self
+    }
+
+    /// Plays a game build whose zone code the platform knows but not all of
+    /// the code bases past 16 need: requests up to the most go through, and
+    /// once the mod is armed the game holds at most 16 bases, which
+    /// `altars::base_limit` reads as `bases` and `max_bases`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().without_bases_past_16().install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn without_bases_past_16(mut self) -> Self {
+        self.base_code = super::BaseCode::ZonesOnly;
+        self
+    }
+}
+
+#[expect(
+    clippy::unused_self,
+    reason = "the fake's state is process-wide; `self` proves it is installed"
+)]
+impl Installed {
+    /// Makes `altars` the altars of the world, as the loader lists them to a
+    /// mod that opened altars, and raises
+    /// [`AltarsChanged`](crate::events::AltarsChanged) as the loader does.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::abi::AltarInfo;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let mut altar = AltarInfo::EMPTY;
+    /// altar.entity = enshwick::Entity(4096);
+    /// loader.set_altars(&[altar]);
+    /// ```
+    pub fn set_altars(&self, altars: &[AltarInfo]) {
+        table::with((), |s| s.altars = altars.to_vec());
+        let _handled = self.raise::<crate::events::AltarsChanged>(&());
+    }
+
+    /// Runs the mod's damage filters on `check` as the loader does before
+    /// the game applies damage; returns what they left.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::abi::{DamageCheck, Header};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let fall = DamageCheck {
+    ///     header: Header::of::<DamageCheck>(),
+    ///     cause: DamageCheck::FALL_DAMAGE,
+    ///     target: enshwick::Entity(2),
+    ///     source: enshwick::Entity(0),
+    ///     attacker: enshwick::Entity(0),
+    ///     amounts: [0.0; enshwick::abi::DAMAGE_TYPES],
+    ///     total: 40.0,
+    /// };
+    /// assert_eq!(loader.damage(fall), fall, "no filters, no change");
+    /// ```
+    #[must_use]
+    pub fn damage(&self, mut check: crate::abi::DamageCheck) -> crate::abi::DamageCheck {
+        // One filter at a time, outside the lock, without copying the list:
+        // a bench of a filter counts its own allocations alone.
+        let mut at = 0;
+        while let Some(filter) = table::with(None, |s| s.damage_filters.get(at).copied()) {
+            // SAFETY: the filter the mod registered, with its pointer.
+            filter.run(|callback, user| unsafe { callback(&raw mut check, user) });
+            at += 1;
+        }
+        check
+    }
+
+    /// Runs the mod's knowledge input filters on `request`, as the loader
+    /// runs them on what a client asks for, and says whether it goes
+    /// through: each filter's answer replaces the verdict so far, which
+    /// starts at `request.allowed`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::abi::{Header, KnowledgeInfo, KnowledgeInput};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let quest = KnowledgeInput {
+    ///     header: Header::of::<KnowledgeInput>(),
+    ///     player: enshwick::Entity(2),
+    ///     id: enshwick::knowledge::KnowledgeId::new(0x51),
+    ///     kind: KnowledgeInfo::BOOL,
+    ///     scope: KnowledgeInfo::PLAYER,
+    ///     reserved: 0,
+    ///     value: 0,
+    ///     refusal: KnowledgeInput::QUEST,
+    ///     allowed: 0,
+    /// };
+    /// assert!(!loader.knowledge_input(quest), "no filters, the guard's verdict");
+    /// ```
+    #[must_use]
+    pub fn knowledge_input(&self, mut request: crate::abi::KnowledgeInput) -> bool {
+        let filters = table::with(Vec::new(), |s| s.knowledge_input_filters.clone());
+        for filter in filters {
+            // SAFETY: the filter the mod registered, with its pointer.
+            let verdict =
+                filter.run(|callback, user| unsafe { callback(&raw const request, user) });
+            request.allowed = u32::from(verdict != 0);
+        }
+        request.allowed != 0
+    }
+
+    /// Sets the buff types the fake knows and the entities that hold buffs,
+    /// with none yet; a buff the mod gives starts with the duration asked,
+    /// or the type's, and one it removes goes at once.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::abi::{BuffTypeInfo, Header};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let ty = BuffTypeInfo { header: Header::of::<BuffTypeInfo>(), id: enshwick::buffs::BuffTypeId::new(7), slot: 1, flags: 0, name: 0, duration: 60_000_000_000 };
+    /// loader.set_buffs(&[ty], &[enshwick::Entity(2)]);
+    /// assert_eq!(loader.buffs_of(enshwick::Entity(2)), Some(Vec::new()));
+    /// ```
+    pub fn set_buffs(&self, types: &[crate::abi::BuffTypeInfo], holders: &[Entity]) {
+        table::with((), |s| {
+            s.buff_types = types.to_vec();
+            s.buffs = holders.iter().map(|&e| (e.0, Vec::new())).collect();
+        });
+    }
+
+    /// The buffs `entity` holds as the mod left them; `None` for one that
+    /// holds no buffs.
+    ///
+    /// # Examples
+    ///
+    /// See [`Installed::set_buffs`].
+    #[must_use]
+    pub fn buffs_of(&self, entity: Entity) -> Option<Vec<crate::abi::ActiveBuff>> {
+        table::with(None, |s| s.buffs.get(&entity.0).cloned())
+    }
+
+    /// Sets the knowledge the fake knows, `(character, value)`; a world
+    /// value's character is ignored. A grant is recorded, not applied.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::abi::{Header, KnowledgeInfo};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let flag = KnowledgeInfo { header: Header::of::<KnowledgeInfo>(), id: enshwick::knowledge::KnowledgeId::new(9), kind: KnowledgeInfo::BOOL, scope: KnowledgeInfo::WORLD, reserved: 0, value: 1, flags: 0 };
+    /// loader.set_knowledge(&[(None, flag)], &[]);
+    /// assert!(loader.grants().is_empty());
+    /// ```
+    pub fn set_knowledge(
+        &self,
+        values: &[(Option<Entity>, crate::abi::KnowledgeInfo)],
+        quests: &[KnowledgeId],
+    ) {
+        table::with((), |s| {
+            s.knowledge = values.to_vec();
+            s.quests = quests.to_vec();
+        });
+    }
+
+    /// Sets whether each game query holds, `(character or None for the
+    /// world, query, holds)`; a query not set is one the game has not
+    /// answered, and a character the fake lists no player for is one not
+    /// in the game.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::content::knowledge::GameQuery;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.set_game_queries(&[(None, GameQuery::new(7), true)]);
+    /// ```
+    #[cfg(feature = "typed")]
+    pub fn set_game_queries(
+        &self,
+        answers: &[(Option<Entity>, crate::content::knowledge::GameQuery, bool)],
+    ) {
+        let answers = answers
+            .iter()
+            .map(|&(holder, query, holds)| (holder, query.get(), holds))
+            .collect();
+        table::with((), |s| s.game_queries = answers);
+    }
+
+    /// The knowledge grants the mod asked for: character, id, kind, value.
+    ///
+    /// # Examples
+    ///
+    /// See [`Installed::set_knowledge`].
+    #[must_use]
+    pub fn grants(&self) -> Vec<(Option<Entity>, KnowledgeId, u32, u32)> {
+        table::with(Vec::new(), |s| s.grants.clone())
+    }
+
+    /// The knowledge revokes the mod asked for: character, id, kind, value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.revokes().is_empty());
+    /// ```
+    #[must_use]
+    pub fn revokes(&self) -> Vec<(Option<Entity>, KnowledgeId, u32, u32)> {
+        table::with(Vec::new(), |s| s.revokes.clone())
+    }
+
+    /// The knowledge changes the mod asked for accounts: the account's key,
+    /// id, kind, value, and whether it takes the knowledge back.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.account_changes().is_empty());
+    /// ```
+    #[must_use]
+    pub fn account_changes(&self) -> Vec<(crate::PlayerKey, KnowledgeId, u32, u32, bool)> {
+        table::with(Vec::new(), |s| s.account_changes.clone())
+    }
+
+    /// Whether the mod opened altars, and whether it controls their zones.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert_eq!(loader.altars_opened(), (false, false));
+    /// ```
+    #[must_use]
+    pub fn altars_opened(&self) -> (bool, bool) {
+        table::with((false, false), |s| (s.altars_opened, s.zone_control))
+    }
+
+    /// Runs the mod's altar zone filters on one altar's vanilla zone of
+    /// `height` cells, as the loader would, a `grow` below 0 counting as 0 and
+    /// a `height` below one cell keeping the one before; the `grow` and
+    /// `height` they leave.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert_eq!(loader.altar_zone(enshwick::Entity(4096), 2, 60), (0, 60));
+    /// ```
+    #[must_use]
+    pub fn altar_zone(&self, altar: Entity, level: u8, height: i64) -> (i64, i64) {
+        let filters = table::with(Vec::new(), |s| s.zone_sizing.filters.clone());
+        let mut zone = AltarZone {
+            header: Header::of::<AltarZone>(),
+            altar: Entity(altar.0),
+            level,
+            reserved: [0; 3],
+            grow: 0,
+            height,
+        };
+        for filter in filters {
+            let before = zone;
+            // SAFETY: a valid registration; `user` is the mod's pointer.
+            filter.run(|callback, user| unsafe { callback(&raw mut zone, user) });
+            zone.grow = zone.grow.max(0);
+            if zone.height <= 0 {
+                zone.height = before.height;
+            }
+        }
+        (zone.grow, zone.height)
+    }
+
+    /// How often the mod asked for the altar zones to be sized again.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert_eq!(loader.zone_resizes(), 0);
+    /// ```
+    #[must_use]
+    pub fn zone_resizes(&self) -> usize {
+        table::with(0, |s| s.zone_sizing.resizes)
+    }
+
+    /// Asks the mod's zone check filters about a placement the game refused,
+    /// as the loader would; whether any accepts it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::abi::Bounds;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(!loader.building_zone_check(&[], Bounds::default(), 0));
+    /// ```
+    #[must_use]
+    pub fn building_zone_check(&self, zones: &[Bounds], object: Bounds, margin: i64) -> bool {
+        let filters = table::with(Vec::new(), |s| s.zone_filters.clone());
+        let call = BuildingZoneCheck {
+            header: Header::of::<BuildingZoneCheck>(),
+            zones: zones.as_ptr(),
+            zone_count: zones.len(),
+            object,
+            margin,
+        };
+        filters.iter().any(|filter| {
+            // SAFETY: a valid call; `user` is the pointer the mod registered with.
+            filter.run(|callback, user| unsafe { callback(&raw const call, user) != 0 })
+        })
+    }
+
+    /// Asks the mod's survivor lookup as the game would: survivor
+    /// `survivor`, the game's answer `vanilla`, `purpose` one of the
+    /// [`SurvivorLookup`] constants with its `entity` and `cell`; `beds`
+    /// answers [`Lookup::bed_of`](crate::survivors::Lookup::bed_of). The
+    /// mod's answer, [`Answer::Vanilla`](crate::survivors::Answer::Vanilla)
+    /// without a lookup.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::abi::SurvivorLookup;
+    /// use enshwick::survivors::{Answer, NpcId};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let vanilla = Some(enshwick::Entity(4096));
+    /// let answer = loader.survivor_lookup(NpcId(7), vanilla, SurvivorLookup::SPAWN, None, [0; 3], &[]);
+    /// assert_eq!(answer, Answer::Vanilla);
+    /// ```
+    #[must_use]
+    pub fn survivor_lookup(
+        &self,
+        survivor: crate::survivors::NpcId,
+        vanilla: Option<Entity>,
+        purpose: u32,
+        entity: Option<Entity>,
+        cell: [i64; 3],
+        beds: &[(Entity, Entity)],
+    ) -> crate::survivors::Answer {
+        /// # Safety
+        ///
+        /// - `token` points at the `beds` slice of a running
+        ///   `survivor_lookup`, alive and unchanged for the call.
+        unsafe extern "system" fn bed_of(token: *mut core::ffi::c_void, entity: Entity) -> Entity {
+            // SAFETY: the caller guarantees `token` points at the `beds` slice
+            // of the running call, an aligned `&[(Entity, Entity)]` alive for it.
+            let beds = unsafe { &*token.cast::<&[(Entity, Entity)]>() };
+            beds.iter()
+                .find(|(e, _)| *e == entity)
+                .map_or(Entity::NONE, |(_, bed)| *bed)
+        }
+        use crate::survivors::Answer;
+        let Some(registered) = table::with(None, |s| s.survivor_lookup) else {
+            return Answer::Vanilla;
+        };
+        let mut beds = beds;
+        let lookup = SurvivorLookup {
+            header: Header::of::<SurvivorLookup>(),
+            survivor,
+            vanilla: vanilla.unwrap_or(Entity::NONE),
+            purpose,
+            entity: entity.unwrap_or(Entity::NONE),
+            cell,
+            bed_of: Some(bed_of),
+            token: (&raw mut beds).cast(),
+        };
+        let mut out = Entity::NONE;
+        // SAFETY: a valid call and out pointer; `user` is the mod's pointer.
+        let answered =
+            registered.run(|answer, user| unsafe { answer(&raw const lookup, user, &raw mut out) });
+        match (answered != 0, Entity::from_raw(out.0)) {
+            (false, _) => Answer::Vanilla,
+            (true, Some(entity)) => Answer::Entity(entity),
+            (true, None) => Answer::Nobody,
+        }
+    }
+
+    /// Asks the mod's bed checks as the game would; whether every one keeps
+    /// the bed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::abi::{BedCheck, Header};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let check = BedCheck { header: Header::of::<BedCheck>(), npc_id: enshwick::survivors::NpcId::new(7), entity: enshwick::Entity(1), bed_id: enshwick::Entity(2), home: [0; 3], bed_at: [0; 3] };
+    /// assert!(loader.survivor_bed_check(&check));
+    /// ```
+    #[must_use]
+    pub fn survivor_bed_check(&self, check: &BedCheck) -> bool {
+        let filters = table::with(Vec::new(), |s| s.bed_checks.clone());
+        filters.iter().all(|filter| {
+            // SAFETY: a valid check; `user` is the mod's pointer.
+            filter.run(|callback, user| unsafe { callback(check, user) != 0 })
+        })
+    }
+
+    /// Asks the mod's summon filters as the game would: [`Summon::REFUSE`]
+    /// when one refuses the use, [`Summon::TAKE`] when one makes it take
+    /// the item, else 0.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::abi::{Header, Summon};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let summon = Summon {
+    ///     header: Header::of::<Summon>(),
+    ///     item: enshwick::ItemId::new(1),
+    ///     ammo: enshwick::ItemId::new(0),
+    ///     template: [0; 16],
+    ///     target: [0; 3],
+    ///     slot: 0,
+    ///     pide: enshwick::Entity(0),
+    ///     meter: [0; 2],
+    ///     consumed: 0,
+    ///     reserved: [0; 3],
+    /// };
+    /// assert_eq!(loader.summon(&summon), 0);
+    /// ```
+    #[must_use]
+    pub fn summon(&self, summon: &Summon) -> u8 {
+        let filters = table::with(Vec::new(), |s| s.summons.clone());
+        let mut verdict = 0;
+        for filter in &filters {
+            // SAFETY: a valid summon; `user` is the mod's pointer.
+            match filter.run(|callback, user| unsafe { callback(summon, user) }) {
+                Summon::REFUSE => return Summon::REFUSE,
+                0 => {}
+                _ => verdict = Summon::TAKE,
+            }
+        }
+        verdict
+    }
+
+    /// Tells the mod's summon handlers that a use worked, as the game does
+    /// after the spawn or move; returns how many handlers ran.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::abi::{Header, Summon};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let summon = Summon {
+    ///     header: Header::of::<Summon>(),
+    ///     item: enshwick::ItemId::new(1),
+    ///     ammo: enshwick::ItemId::new(0),
+    ///     template: [0; 16],
+    ///     target: [0; 3],
+    ///     slot: 0,
+    ///     pide: enshwick::Entity(0),
+    ///     meter: [0; 2],
+    ///     consumed: 1,
+    ///     reserved: [0; 3],
+    /// };
+    /// assert_eq!(loader.summoned(&summon), 0);
+    /// ```
+    #[must_use]
+    pub fn summoned(&self, summon: &Summon) -> usize {
+        let handlers = table::with(Vec::new(), |s| s.summoned.clone());
+        for handler in &handlers {
+            // SAFETY: a valid summon; `user` is the mod's pointer.
+            handler.run(|callback, user| unsafe { callback(summon, user) });
+        }
+        handlers.len()
+    }
+
+    /// Puts `item` on `entity`, as worn equipment the stats count.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::Entity;
+    /// use enshwick::inventory::ItemInstance;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.wear(Entity(2), ItemInstance { pide: Entity(900), item: enshwick::ItemId::new(0x5e01) });
+    /// ```
+    pub fn wear(&self, entity: Entity, item: crate::inventory::ItemInstance) {
+        table::with((), |s| s.stats.worn.entry(entity.0).or_default().push(item));
+    }
+
+    /// Works out the stat values of every watched entity and runs the mod's
+    /// [`on_stats_changed`](crate::Load::on_stats_changed) handlers for each
+    /// that changed since the last call, as the loader does after a step;
+    /// how many changes it raised.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert_eq!(loader.settle_stats(), 0);
+    /// ```
+    #[must_use]
+    pub fn settle_stats(&self) -> usize {
+        stats::settle()
+    }
+
+    /// The modifiers the mod keeps on entities: `(entity, key hash, stat
+    /// index, operation, value, flags, duration in ms)`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.stat_modifiers().is_empty());
+    /// ```
+    #[must_use]
+    pub fn stat_modifiers(&self) -> Vec<(u32, u32, u32, u8, f32, u32, u64)> {
+        stats::modifiers()
+    }
+
+    /// The items the mod filed as summoning staffs, as `(item, survivor)`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.summon_items().is_empty());
+    /// ```
+    #[must_use]
+    pub fn summon_items(&self) -> Vec<(crate::ItemId, crate::survivors::NpcId)> {
+        table::with(Vec::new(), |s| s.summon_items.clone())
+    }
+
+    /// Asks the mod's survivor menu merge about `statuses`; the byte to show,
+    /// or `None` for the game's.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert_eq!(loader.survivor_status(enshwick::survivors::NpcId::new(7), &[1, 3]), None);
+    /// ```
+    #[must_use]
+    pub fn survivor_status(
+        &self,
+        survivor: crate::survivors::NpcId,
+        statuses: &[u8],
+    ) -> Option<u8> {
+        let registered = table::with(None, |s| s.survivor_status)?;
+        // SAFETY: valid statuses for the call; `user` is the mod's pointer.
+        let answer = registered.run(|callback, user| unsafe {
+            callback(survivor, statuses.as_ptr(), statuses.len(), user)
+        });
+        (answer & crate::abi::SURVIVOR_STATUS_SET != 0).then(|| answer.to_le_bytes()[0])
+    }
+
+    /// Asks the mod's interaction filters about `call` as the loader would;
+    /// whether every one allows it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::abi::{Header, Interaction};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let call = Interaction {
+    ///     header: Header::of::<Interaction>(),
+    ///     kind: Interaction::OPEN,
+    ///     player: enshwick::Entity(1),
+    ///     target: enshwick::Entity(2),
+    ///     item: enshwick::ItemId::new(0),
+    ///     known: 0,
+    ///     reserved: [0; 3],
+    ///     position: [0.0; 3],
+    /// };
+    /// assert!(loader.interaction(&call));
+    /// ```
+    #[must_use]
+    pub fn interaction(&self, call: &Interaction) -> bool {
+        let filters = table::with(Vec::new(), |s| s.interaction_filters.clone());
+        filters.iter().all(|filter| {
+            // SAFETY: a valid call; `user` is the mod's pointer.
+            filter.run(|callback, user| unsafe { callback(call, user) != 0 })
+        })
+    }
+
+    /// Asks the mod's skill overrides about `check` as the loader would: the
+    /// first answer for the node, [`SkillCheck::VANILLA`] for none, else
+    /// [`SkillCheck::UNLOCKED`] or [`SkillCheck::LOCKED`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::abi::{Header, SkillCheck};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let check = SkillCheck { header: Header::of::<SkillCheck>(), node: enshwick::abi::SkillNode::new(7), gate: SkillCheck::OTHER, unlocked: 0, reserved: [0; 3] };
+    /// assert_eq!(loader.skill(&check), SkillCheck::VANILLA);
+    /// ```
+    #[must_use]
+    pub fn skill(&self, check: &SkillCheck) -> u8 {
+        let skills = table::with(Vec::new(), |s| s.skills.clone());
+        skills
+            .iter()
+            .filter(|(node, _)| *node == check.node)
+            .map(|(_, skill)| {
+                // SAFETY: a valid check; `user` is the mod's pointer.
+                skill.run(|callback, user| unsafe { callback(check, user) })
+            })
+            .find(|&answer| answer != SkillCheck::VANILLA)
+            .unwrap_or(SkillCheck::VANILLA)
+    }
+
+    /// Runs the mod's comfort filters on `comfort` as the loader would, then
+    /// its comfort rate (`Rate::Comfort`);
+    /// the comfort registered.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::abi::{Comfort, Header};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let comfort = Comfort { header: Header::of::<Comfort>(), category: 1, value: 3, position: [0.0; 3] };
+    /// assert_eq!(loader.comfort(&comfort), 3);
+    /// ```
+    #[must_use]
+    pub fn comfort(&self, comfort: &Comfort) -> i32 {
+        let filters = table::with(Vec::new(), |s| s.comfort_filters.clone());
+        let filtered = filters.iter().fold(comfort.value, |value, filter| {
+            let call = Comfort { value, ..*comfort };
+            // SAFETY: a valid registration; `user` is the mod's pointer.
+            filter.run(|callback, user| unsafe { callback(&raw const call, user) })
+        });
+        let factor = self.rate_of(crate::abi::RateId::COMFORT).unwrap_or(1.0);
+        let scaled = enshwick_core::__fake::scale_whole(i64::from(filtered), factor);
+        i32::try_from(scaled).unwrap_or(if scaled < 0 { i32::MIN } else { i32::MAX })
+    }
+
+    /// Runs the mod's experience filters on `rows` as the loader would, with
+    /// a level table of `cap` levels, level `l` needing `need(l)`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::Entity;
+    /// use enshwick::progress::Experience;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let mut rows = [Experience { entity: Entity(1), level: 1, progress: 0, need: 100, gained: 5 }];
+    /// loader.experience(&mut rows, 25, |level| level * 100);
+    /// assert_eq!(rows[0].gained, 5);
+    /// ```
+    pub fn experience(
+        &self,
+        rows: &mut [crate::progress::Experience],
+        cap: u32,
+        need: fn(u32) -> u32,
+    ) {
+        /// # Safety
+        ///
+        /// - `token` points at the `need` function of a running
+        ///   `experience`, alive and unchanged for the call.
+        unsafe extern "system" fn need_for(token: *mut core::ffi::c_void, level: u32) -> u32 {
+            // SAFETY: the caller guarantees `token` points at the `need`
+            // function of the running call, an aligned `fn(u32) -> u32`.
+            let need = unsafe { *token.cast::<fn(u32) -> u32>() };
+            need(level)
+        }
+        let filters = table::with(Vec::new(), |s| s.experience_filters.clone());
+        let mut need = need;
+        for filter in &filters {
+            let mut pass = ExperiencePass {
+                header: Header::of::<ExperiencePass>(),
+                rows: rows.as_mut_ptr().cast::<ExperienceRow>(),
+                row_count: rows.len(),
+                level_cap: cap,
+                need_for: Some(need_for),
+                token: (&raw mut need).cast(),
+            };
+            // SAFETY: a valid pass; `user` is the mod's pointer.
+            filter.run(|callback, user| unsafe { callback(&raw mut pass, user) });
+        }
+    }
+
+    /// Asks the mod's altar limit filters about `flame_level`, where the game
+    /// allows `vanilla`, as the loader would: each on the count the last one
+    /// left, the answer kept within the zones the game groups.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert_eq!(loader.altar_limit(3, 6), 6);
+    /// ```
+    #[must_use]
+    pub fn altar_limit(&self, flame_level: u32, vanilla: u8) -> u8 {
+        let filters = table::with(Vec::new(), |s| s.altar_limits.clone());
+        let mut limit = AltarLimit {
+            header: Header::of::<AltarLimit>(),
+            flame_level,
+            vanilla,
+            allowed: vanilla,
+            reserved: [0; 2],
+        };
+        for filter in filters {
+            // SAFETY: a valid limit; `user` is the mod's pointer.
+            filter.run(|callback, user| unsafe { callback(&raw mut limit, user) });
+            limit.flame_level = flame_level;
+            limit.vanilla = vanilla;
+        }
+        let (zones, _) = table::gameplay::zones_and_bases();
+        limit.allowed.min(u8::try_from(zones).unwrap_or(u8::MAX))
+    }
+
+    /// The largest altar zones and bases the mod asked for, each at least
+    /// the game's own; `None` until it asks.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert_eq!(loader.requested_base_limits(), None);
+    /// ```
+    #[must_use]
+    pub fn requested_base_limits(&self) -> Option<(u32, u32)> {
+        table::with(None, |s| s.base_limit.requested)
+    }
+
+    /// Makes the last grouping find `zones` altar zones in `bases` bases.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.set_grouping(17, 16);
+    /// ```
+    pub fn set_grouping(&self, zones: u32, bases: u32) {
+        table::with((), |s| s.grouping = Some((zones, bases)));
+    }
+
+    /// Asks the mod's craft filters about `call`, as the server does
+    /// before it crafts; whether the craft goes ahead.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::abi::{CraftCheck, Header};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let craft = CraftCheck { header: Header::of::<CraftCheck>(), crafting_operator_id: enshwick::Entity(2), crafting_station_id: enshwick::Entity(0), recipe_id: enshwick::RecipeId::new(1), recipe_amount: 1, reserved: 0 };
+    /// assert!(loader.craft(&craft));
+    /// ```
+    #[must_use]
+    pub fn craft(&self, call: &crate::abi::CraftCheck) -> bool {
+        let filters = table::with(Vec::new(), |s| s.craft_filters.clone());
+        filters.iter().all(|filter| {
+            // SAFETY: a filter the mod registered with its own pointer.
+            filter.run(|callback, user| unsafe { callback(call, user) != 0 })
+        })
+    }
+
+    /// Asks the mod's build filters about `call`, as the cursor check does
+    /// after it allowed a placement: `Ok` when the placement goes ahead,
+    /// else the reason the first refusing filter gave, if any. `call`'s own
+    /// `reason` is not used; the fake host gives each filter a slot.
+    ///
+    /// # Errors
+    ///
+    /// The refusal, with the reason as the filter gave it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::abi::{BuildCheck, Header};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let wall = BuildCheck {
+    ///     header: Header::of::<BuildCheck>(),
+    ///     player: enshwick::Entity(2),
+    ///     item: enshwick::ItemId::new(7),
+    ///     position: [0; 3],
+    ///     reason: core::ptr::null_mut(),
+    /// };
+    /// assert_eq!(loader.build(&wall), Ok(()));
+    /// ```
+    pub fn build(&self, call: &crate::abi::BuildCheck) -> Result<(), Option<String>> {
+        let filters = table::with(Vec::new(), |s| s.build_filters.clone());
+        for filter in filters {
+            let mut reason = crate::abi::Str::new("");
+            let mut asked = *call;
+            asked.reason = &raw mut reason;
+            // SAFETY: a filter the mod registered with its own pointer; `asked`
+            // and its `reason` slot live on this stack for the call.
+            let allowed = filter.run(|callback, user| unsafe { callback(&raw const asked, user) });
+            if allowed == 0 {
+                // SAFETY: the refusing filter wrote a text it keeps until its
+                // next call on this thread, or left the empty one.
+                let reason = unsafe { reason.as_str() }.filter(|r| !r.is_empty());
+                return Err(reason.map(str::to_owned));
+            }
+        }
+        Ok(())
+    }
+}

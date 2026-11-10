@@ -42,7 +42,7 @@ pub enum HeldState {
 
 impl HeldState {
     /// Its `TransactionInfo::HOLDS_` bit.
-    #[cfg(any(test, feature = "test"))]
+    #[cfg(any(test, feature = "fake"))]
     pub(crate) fn bit(self) -> u32 {
         Self::ALL
             .iter()

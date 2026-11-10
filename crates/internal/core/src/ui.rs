@@ -58,7 +58,7 @@ mod frame;
 mod hud;
 #[cfg(feature = "unstable")]
 mod map;
-#[cfg(any(feature = "unstable", feature = "test"))]
+#[cfg(any(feature = "unstable", feature = "fake"))]
 pub(crate) mod screens;
 mod script;
 mod widgets;
@@ -82,7 +82,7 @@ pub use screens::HudScreenType;
 
 /// The most markers a mod shows on the map at once, which the fake host
 /// holds to as well.
-#[cfg(any(feature = "test", feature = "unstable"))]
+#[cfg(any(feature = "fake", feature = "unstable"))]
 pub(crate) const MARKER_LIMIT: usize = 256;
 
 /// The most options a [`Dropdown`] shows.

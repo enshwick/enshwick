@@ -5,7 +5,7 @@ description: enshwick::test is a fake loader for a mod's unit tests: it answers 
 
 # Testing
 
-[`enshwick::test`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/test.rs) is a
+[`enshwick::test`](https://github.com/enshwick/enshwick/blob/main/crates/internal/fake/src/test.rs) is a
 fake loader for a mod's unit tests.
 
 ## Turning it on
@@ -26,10 +26,10 @@ You tell the fake what the game and the loader would answer. You start the
 mod through the same exports the real loader calls. Then you check what the
 mod asked for and what its hooks and handlers do.
 
-1. Build a [`FakeHost`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/test.rs)
+1. Build a [`FakeHost`](https://github.com/enshwick/enshwick/blob/main/crates/internal/fake/src/test.rs)
    with what the game would answer: symbols, settings text, the side.
 2. Call `install()`. You get an
-   [`Installed`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/test.rs)
+   [`Installed`](https://github.com/enshwick/enshwick/blob/main/crates/internal/fake/src/test.rs)
    fake, which is the loader of the process until it drops.
 3. Start the mod with `start(enshwick_mod_init, enshwick_mod_ready)`, the two
    exports [`declare_mod!`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/declare.rs)
@@ -108,7 +108,7 @@ assert!(loader.faults().is_empty());
 ```
 
 A hook's chain continues to its target address. Give the target as
-[`address`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/test.rs)
+[`address`](https://github.com/enshwick/enshwick/blob/main/crates/internal/fake/src/test.rs)
 of a plain `extern "system"` function with the game function's signature, and
 that function plays the original.
 
@@ -218,7 +218,7 @@ fact by hand where it tests that fact.
 
 ## Builder methods
 
-[`FakeHost`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/test.rs)
+[`FakeHost`](https://github.com/enshwick/enshwick/blob/main/crates/internal/fake/src/test.rs)
 is a builder. Each method sets one thing the game would answer, such as the
 side, a symbol, a component, a player or another mod's service.
 `install()` ends it. Its rustdoc lists every method.
@@ -226,7 +226,7 @@ side, a symbol, a component, a player or another mod's service.
 ## What the installed fake shows
 
 `install()` returns an
-[`Installed`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/test.rs).
+[`Installed`](https://github.com/enshwick/enshwick/blob/main/crates/internal/fake/src/test.rs).
 Its methods fall into three groups, each listed in its rustdoc:
 
 - Starting the mod. These methods are `unsafe`: pass the exports of one

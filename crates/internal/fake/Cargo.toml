@@ -1,0 +1,56 @@
+[package]
+name = "enshwick-fake"
+version = "1.0.0-alpha.14"
+description = "Internal part of enshwick; depend on enshwick: the fake loader for a mod's unit tests"
+keywords = ["enshrouded", "modding", "game", "testing", "fake"]
+categories = ["game-development", "development-tools::testing"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = true
+
+[dependencies]
+enshwick-macros = { path = "../../enshwick-macros", version = "=1.0.0-alpha.14" }
+enshwick-core = { workspace = true, features = ["fake"] }
+bytemuck.workspace = true
+postcard.workspace = true
+rustc-hash.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+# The features of `enshwick`, which turns each of them on here.
+[features]
+unstable = ["enshwick-core/unstable"]
+typed = ["unstable", "enshwick-core/typed"]
+
+[lints]
+workspace = true
+
+# The mod this crate's documentation examples declare with `declare_mod!`.
+[package.metadata.enshwick]
+id = "you.hello"
+side = "both"
+exports = ["content:locker"]
+
+[package.metadata.enshwick.requires]
+lockers = { id = "you.lockers", version = ">=0.1, <1.0" }
+
+[package.metadata.enshwick.after]
+lanterns = "you.lanterns"
+trading_post = "you.trading-post"
+
+[[package.metadata.enshwick.builds]]
+side = "server"
+guid = "1c129660cd6efc4f9f0b21652d5ff2bf"
+age = 387
+
+[package.metadata.enshwick.builds.symbols]
+"survivors.spawn_return" = 0x4_05cb
+
+[package.metadata.docs.rs]
+targets = ["x86_64-pc-windows-msvc"]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

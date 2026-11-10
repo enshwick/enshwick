@@ -237,7 +237,7 @@ impl FuelSetup {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
     /// use enshwick::content::id;
     /// use enshwick::content::items::FuelSetup;
     ///
@@ -245,6 +245,7 @@ impl FuelSetup {
     /// let meter = FuelSetup { template: id!("charges"), max_fuel_charges: 4, start: 1 };
     /// assert_eq!(meter.change(&host)?.component(), "fuel_setup");
     /// # Ok::<(), enshwick::Off>(())
+    /// # }
     /// ```
     pub fn change(self, facts: &(impl EngineFacts + ?Sized)) -> Result<ComponentChange, Off> {
         let max = i32::from(self.max_fuel_charges).to_le_bytes();

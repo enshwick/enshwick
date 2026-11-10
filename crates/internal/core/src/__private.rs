@@ -601,7 +601,7 @@ unsafe extern "system" fn refresh_level(
 /// it for the others; `site` itself outside a pack, and for a call made while
 /// this thread takes the states' lock, such as a line the poisoned-lock
 /// warning logs, which would otherwise wait on that lock for ever.
-fn for_pack<T: Default + Send + Sync + 'static>(site: &'static T) -> &'static T {
+pub(crate) fn for_pack<T: Default + Send + Sync + 'static>(site: &'static T) -> &'static T {
     type Sites = rustc_hash::FxHashMap<(usize, usize), &'static (dyn core::any::Any + Send + Sync)>;
     static SITES: std::sync::LazyLock<std::sync::Mutex<Sites>> =
         std::sync::LazyLock::new(std::sync::Mutex::default);
@@ -807,8 +807,8 @@ pub unsafe fn init<M: Mod>(
         host.fault(&reason);
         return Status::REFUSED;
     }
-    #[cfg(feature = "test")]
-    if let Some(refused) = crate::test::table::note_manifest(api, manifest) {
+    #[cfg(feature = "fake")]
+    if let Some(refused) = crate::__fake::refused(api, manifest) {
         host.fault(&refused);
         return Status::REFUSED;
     }

@@ -13,7 +13,8 @@ safe API.
 | `enshwick-loader`      | `crates/internal/loader`   | the loader DLL: finds the game build, loads and resolves mods, links their hooks, answers the ABI                                                                                                                     | no, in `enshwick.zip`   |
 | `enshwick-luau`        | `crates/internal/luau`     | Luau mods: one sandboxed VM per mod with memory and time budgets, the API bound from the script descriptions of `enshwick` and its internal parts                                                                                      | no                      |
 | `enshwick`             | `crates/enshwick`          | the one crate mods use: the facade that re-exports every module of its internal parts at its own paths, the crate docs, the macros' docs and the features                                                            | yes                     |
-| `enshwick-core` | `crates/internal/core` | internal part of `enshwick`: the safe layer over the ABI and every domain of the API, and the fake loader for tests (`test` feature), re-exported under `enshwick`'s paths | yes |
+| `enshwick-core` | `crates/internal/core` | internal part of `enshwick`: the safe layer over the ABI and every domain of the API, re-exported under `enshwick`'s paths | yes |
+| `enshwick-fake` | `crates/internal/fake` | internal part of `enshwick`: the fake loader for a mod's unit tests, re-exported as `enshwick::test` behind the `test` feature | yes |
 | `enshwick-macros`      | `crates/enshwick-macros`   | `#[hook]`, `#[config]` and the other macros of the API                                                                                                                                                                | yes                     |
 | `enshwick-values` | `crates/internal/values` | internal part of `enshwick`: the value types its layers share (shape, content ids, resource values, the script value model), re-exported under `enshwick`'s paths | yes |
 | `enshwick-abi` | `crates/internal/abi` | internal part of `enshwick`: the `repr(C)` types that cross between the loader and a mod, the ABI version and its golden layout file, and the reads and writes of game memory, re-exported as `enshwick::abi` and `enshwick::raw` | yes |
@@ -34,15 +35,23 @@ stub ──starts──▶ loader ──C ABI──▶ mods (enshwick ▸ enshwi
 cargo-enshwick ──▶ enshwick, enshwick-gamedata
 enshwick ──▶ enshwick-core ──▶ enshwick-typed ──▶ enshwick-values ──▶ enshwick-macros
                  enshwick-core ──▶ enshwick-abi ────▶ enshwick-values
+enshwick ──test──▶ enshwick-fake ──▶ enshwick-core (its `fake` feature)
 ```
 
 - `enshwick` is the one crate a mod names, a facade over its internal parts,
   each re-exported under its paths: `enshwick-core`, the safe layer and every
-  domain; `enshwick-typed`, the generated typed API; `enshwick-abi`, the ABI;
-  `enshwick-values`, the value types the layers share. None depends on
-  `enshwick` or on a part above it, so the compiler refuses ABI code that
-  names the safe API; `enshwick-values` asks the running build for a resource
-  type's hash through one function `enshwick-core` registers.
+  domain; `enshwick-fake`, the fake loader; `enshwick-typed`, the generated
+  typed API; `enshwick-abi`, the ABI; `enshwick-values`, the value types the
+  layers share. None depends on `enshwick` or on a part above it, so the
+  compiler refuses ABI code that names the safe API and core code that names
+  the fake; `enshwick-values` asks the running build for a resource type's
+  hash through one function `enshwick-core` registers.
+- The fake reaches inside `enshwick-core` only through its hidden `__fake`
+  module, which only core's `fake` feature builds and only `enshwick-fake`
+  turns on, so a mod's release build holds no test support. Core asks the
+  fake about a mod's manifest through one check the fake hands down at
+  install. The fake's root holds core's items at their paths beside `test`,
+  so its examples name it `enshwick` as the other parts do.
 - An internal part's doc example names its own crate `enshwick` by a hidden
   `# extern crate <crate> as enshwick;` line. One that names items above its
   crate sits in a hidden wrapper, and `crates/enshwick/src/lower_examples.rs`

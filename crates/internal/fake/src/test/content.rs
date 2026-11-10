@@ -1,0 +1,644 @@
+//! Content: items, archives, resources, texts and what the mod serves.
+
+use crate::abi::Header;
+use crate::abi::ItemData;
+use crate::abi::ResourceKey;
+use crate::abi::Status;
+use crate::content::Guid;
+
+use super::FakeHost;
+use super::Installed;
+use super::table;
+
+impl FakeHost {
+    /// The static data of item `item`, for `item_info`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::abi::ItemData;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().item(enshwick::ItemId::new(0x5e01), 1, ItemData::HAS_PIDE).install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn item(mut self, item: crate::ItemId, max_stack: u16, flags: u32) -> Self {
+        self.items.insert(
+            item.get(),
+            ItemData {
+                header: Header::of::<ItemData>(),
+                id: item,
+                max_stack,
+                category: 0,
+                rarity: 0,
+                flags,
+                placed_entity: [0; 16],
+            },
+        );
+        self
+    }
+
+    /// Puts item `item`, set with [`FakeHost::item`], in the game's
+    /// `ItemCategory` numbered `category`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let host = enshwick::test::FakeHost::new().item(enshwick::ItemId::new(0x5e01), 1, 0).item_category(enshwick::ItemId::new(0x5e01), 1);
+    /// let _loader = host.install();
+    /// ```
+    #[must_use]
+    pub fn item_category(mut self, item: crate::ItemId, category: u8) -> Self {
+        if let Some(data) = self.items.get_mut(&item.get()) {
+            data.category = category;
+        }
+        self
+    }
+
+    /// Makes item `item`, set with [`FakeHost::item`], one a player places
+    /// as the template `template`, by its GUID in file order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let host = enshwick::test::FakeHost::new().item(enshwick::ItemId::new(0x5e01), 1, 0).item_places(enshwick::ItemId::new(0x5e01), [0x3a; 16]);
+    /// let _loader = host.install();
+    /// ```
+    #[must_use]
+    pub fn item_places(mut self, item: crate::ItemId, template: [u8; 16]) -> Self {
+        if let Some(data) = self.items.get_mut(&item.get()) {
+            data.placed_entity = template;
+        }
+        self
+    }
+
+    /// Plays a client that shows served UI images: `icons_ready` answers
+    /// [`Status::OK`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().icons_ready().install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn icons_ready(mut self) -> Self {
+        self.icons_ready = true;
+        self
+    }
+
+    /// Puts content `bytes` under `hash` in the game's archive, for
+    /// `content_read`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().archive([4, 1, 2, 3], vec![1, 2, 3, 4]).install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn archive(mut self, hash: [u32; 4], bytes: Vec<u8>) -> Self {
+        self.archive.insert(hash, bytes);
+        self
+    }
+
+    /// Puts resource `bytes` under `key` in the game's archive, for
+    /// `resource_read`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::content::Guid;
+    ///
+    /// let key = Guid::parse("2f04a05f-697d-489b-a32f-76bb3439f5bc").key_by_hash(1);
+    /// let loader = enshwick::test::FakeHost::new().resource(key, vec![1, 2, 3]).install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn resource(mut self, key: ResourceKey, bytes: Vec<u8>) -> Self {
+        self.resources
+            .insert((key.guid, key.type_hash, key.part), bytes);
+        self
+    }
+
+    /// Gives the game's archive the version string `version`, for
+    /// `Host::game_version`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().game_version("1|demo|2026").install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn game_version(mut self, version: &'static str) -> Self {
+        self.game_version = Some(version);
+        self
+    }
+
+    /// Gives the game the reflected `types`, for
+    /// [`Registry::game`](crate::resources::Registry::game), beside those of
+    /// earlier calls and presets; a type named again replaces the earlier one.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::resources::{Kind, Type};
+    ///
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .types([Type::new("demo::uint32", Kind::Uint32, 4, 4)])
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn types(
+        mut self,
+        types: impl IntoIterator<Item = crate::resources::Type<'static>>,
+    ) -> Self {
+        for ty in types {
+            self.type_list
+                .retain(|held| held.qualified_name() != ty.qualified_name());
+            self.type_list.push(ty);
+        }
+        self.types = Some(std::sync::Arc::new(crate::resources::TypeTable::new(
+            &self.type_list,
+        )));
+        self
+    }
+
+    /// Lists `named` in the game's item registry by their debug names, laid
+    /// out by the host's item layout, so `content::vanilla::item` finds each
+    /// item by its name in a mod the host runs. It needs
+    /// [`FakeHost::items`] and [`FakeHost::workshops`] first, which `Vanilla`
+    /// resolves; without the item layout it serves nothing.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::content::Guid;
+    ///
+    /// let chest = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .items()
+    ///     .workshops()
+    ///     .vanilla_items(&[(chest, "Prop_Storage_32_T2_Chest_Wood")])
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn vanilla_items(self, named: &[(Guid, &str)]) -> Self {
+        use crate::content::items::{ITEM_REGISTRY, ItemLayout};
+        use crate::content::{Blob, EngineFacts, types};
+
+        let (Ok(layout), Ok(hash)) = (
+            ItemLayout::resolve(&self),
+            self.hash(types::ITEM_REGISTRY_RESOURCE.id()),
+        ) else {
+            return self;
+        };
+        let Ok(count) = u32::try_from(named.len()) else {
+            return self;
+        };
+        let mut blob = Blob::new(&vec![0; layout.refs.max(layout.names) + 8]);
+        let guids: Vec<u8> = named.iter().flat_map(|(guid, _)| guid.0).collect();
+        let refs = blob.append(&guids, 4);
+        let slots = blob.append(&vec![0; named.len() * 8], 4);
+        let mut laid =
+            blob.set_array(layout.refs, refs, count) && blob.set_array(layout.names, slots, count);
+        for (i, (_, name)) in named.iter().enumerate() {
+            let text = blob.append(name.as_bytes(), 1);
+            laid &=
+                u32::try_from(name.len()).is_ok_and(|len| blob.set_array(slots + i * 8, text, len));
+        }
+        if !laid {
+            return self;
+        }
+        self.resource(ITEM_REGISTRY.key_by_hash(hash), blob.into_bytes())
+    }
+
+    /// Gives each vanilla item of `tags` the tag of its name, as the game's
+    /// item infos carry it: for
+    /// [`vanilla_name_tag`](crate::content::items::vanilla_name_tag) and
+    /// [`vanilla::item_by_display_name`](crate::content::vanilla::item_by_display_name),
+    /// which read the texts [`game_text`](Self::game_text) gives under the
+    /// tag's hash. Call [`items`](Self::items) first: it gives the layout.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::content::Guid;
+    /// use enshwick::i18n::Language;
+    ///
+    /// let (glider, name) = (Guid([7; 16]), Guid([9; 16]));
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .items()
+    ///     .vanilla_items(&[(glider, "Tool_Glider_T1")])
+    ///     .vanilla_item_names(&[(glider, name)])
+    ///     .game_text(name.fnv1a(), Language::EN_US, "Glider")
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn vanilla_item_names(self, tags: &[(Guid, Guid)]) -> Self {
+        use crate::content::EngineFacts;
+        use enshwick_core::__fake::ids;
+
+        let (Ok(at), Ok(hash)) = (self.offset(ids::ITEM_INFO_NAME), self.hash(ids::ITEM_INFO))
+        else {
+            return self;
+        };
+        tags.iter().fold(self, |host, (item, tag)| {
+            let mut info = vec![0; at + 16];
+            info[at..].copy_from_slice(&tag.0);
+            host.resource(item.key_by_hash(hash), info)
+        })
+    }
+
+    /// Gives the game the text `text` for tag `id` in `language`, for
+    /// `game_text`; a tag without a text in a language falls back to
+    /// [`Language::EN_US`](crate::i18n::Language::EN_US) as the game's does.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::i18n::Language;
+    ///
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .game_text(7, Language::UK_UA, "Бальтазар")
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn game_text(
+        mut self,
+        id: u32,
+        language: crate::i18n::Language,
+        text: &'static str,
+    ) -> Self {
+        self.game_texts.insert((id, language.0), text);
+        self
+    }
+
+    /// Plays a game whose recipe `recipe` is disabled, as
+    /// [`recipes::is_disabled`](crate::content::recipes::is_disabled) asks.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::content::Guid;
+    ///
+    /// let torch = Guid::parse("7fa62007-a38e-4790-8591-873055fc3f34");
+    /// let loader = enshwick::test::FakeHost::new().disabled_recipe(torch).install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn disabled_recipe(mut self, recipe: Guid) -> Self {
+        self.disabled_recipes.insert(recipe.fnv1a());
+        self
+    }
+
+    /// Plays a game that has loaded the item `item` as one of `kind`, as
+    /// [`RecipeView::kind`](crate::content::recipes::RecipeView::kind) asks;
+    /// every other item reads as not loaded yet.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::content::Guid;
+    /// use enshwick::content::recipes::RecipeKind;
+    ///
+    /// let plank = Guid::parse("0b6c5a52-1df4-4a3b-bd0e-6c1f7e2a9c44");
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .recipe_kind(plank, RecipeKind::BuildingBlock)
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn recipe_kind(mut self, item: Guid, kind: crate::content::recipes::RecipeKind) -> Self {
+        self.recipe_kinds.insert(item.fnv1a(), kind.into());
+        self
+    }
+}
+
+#[expect(
+    clippy::unused_self,
+    reason = "the fake's state is process-wide; `self` proves it is installed"
+)]
+impl Installed {
+    /// The resources the mod serves, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.resources().is_empty());
+    /// ```
+    #[must_use]
+    pub fn resources(&self) -> Vec<ServedResource> {
+        table::with(Vec::new(), |s| {
+            let mut keys: Vec<ServedResource> = Vec::new();
+            for served in &s.served {
+                if !keys.iter().any(|k| k.key == served.0.key) {
+                    keys.push(served.0);
+                }
+            }
+            keys
+        })
+    }
+
+    /// The changes of vanilla values the mod declared, in order, each with
+    /// its source.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.changes().is_empty());
+    /// ```
+    #[must_use]
+    pub fn changes(&self) -> Vec<(crate::content::changes::Change, String)> {
+        table::with(Vec::new(), |s| s.changes.one.clone())
+    }
+
+    /// The changes of every item a selection picks the mod declared, in
+    /// order, each with its source.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.item_changes().is_empty());
+    /// ```
+    #[must_use]
+    pub fn item_changes(&self) -> Vec<(crate::content::changes::ItemsChange, String)> {
+        table::with(Vec::new(), |s| s.changes.items.clone())
+    }
+
+    /// The changes of every recipe a selection picks the mod declared, in
+    /// order, each with its source.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.recipe_changes().is_empty());
+    /// ```
+    #[must_use]
+    pub fn recipe_changes(&self) -> Vec<(crate::content::changes::RecipesChange, String)> {
+        table::with(Vec::new(), |s| s.changes.recipes.clone())
+    }
+
+    /// The changes the mod declared to set later, in order, each with its
+    /// value in force: `None` until set or after a reset.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.live_changes().is_empty());
+    /// ```
+    #[must_use]
+    pub fn live_changes(&self) -> Vec<LiveChange> {
+        table::with(Vec::new(), |s| s.changes.live.clone())
+    }
+
+    /// The mod's recipe rules in force, from
+    /// [`recipes::disable`](crate::content::recipes::disable) less those
+    /// [`recipes::enable`](crate::content::recipes::enable) took back: kind
+    /// and name.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.recipe_rules().is_empty());
+    /// ```
+    #[must_use]
+    pub fn recipe_rules(&self) -> Vec<(crate::abi::RecipeRuleKind, String)> {
+        table::with(Vec::new(), |s| s.recipe_rules.clone())
+    }
+
+    /// The served resources the mod asked to rebuild, in order: each
+    /// [`Load::allow_rebuild`](crate::Load::allow_rebuild) at init and each
+    /// [`rebuild`](crate::content::rebuild) after.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.rebuilds().is_empty());
+    /// ```
+    #[must_use]
+    pub fn rebuilds(&self) -> Vec<ResourceKey> {
+        table::with(Vec::new(), |s| s.rebuilds.clone())
+    }
+
+    /// How many patch outputs the fake's builds got as bytes of the patch's
+    /// own, which stay for the process, rather than in a buffer it lent
+    /// ([`HostApi::resource_buffer`](crate::abi::HostApi::resource_buffer)).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert_eq!(loader.kept_outputs(), 0);
+    /// ```
+    #[must_use]
+    pub fn kept_outputs(&self) -> usize {
+        table::with(0, |s| s.kept_outputs)
+    }
+
+    /// Builds the served resource `key` from `base` with the mod's patches, in order, as
+    /// the game's first read of it would.
+    ///
+    /// # Errors
+    ///
+    /// [`Status::MISSING`] when the mod serves no `key`, or the patch's own
+    /// status when it fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// use enshwick::abi::{ResourceKey, Status};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let key = ResourceKey { guid: [0x3a; 16], type_hash: 0xb5ce_8765, part: 0 };
+    /// assert_eq!(loader.build_resource(&key, &[]), Err(Status::MISSING));
+    /// ```
+    pub fn build_resource(&self, key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, Status> {
+        table::content::build(key, base)
+    }
+
+    /// The texts the mod added, as `(tag, language, text)`, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.texts().is_empty());
+    /// ```
+    #[must_use]
+    pub fn texts(&self) -> Vec<(u32, u32, String)> {
+        table::with(Vec::new(), |s| s.texts.clone())
+    }
+
+    /// The item data kinds the mod opened, by full id, and every value set:
+    /// `(kind id, entity, item, bytes)`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.item_data().is_empty());
+    /// ```
+    #[must_use]
+    pub fn item_data(&self) -> Vec<(String, u32, u32, Vec<u8>)> {
+        table::with(Vec::new(), |s| {
+            s.item_values
+                .iter()
+                .map(|(&(kind, pide), (item, bytes))| {
+                    let id = s.item_kinds.get(kind as usize).cloned().unwrap_or_default();
+                    (id, pide, *item, bytes.clone())
+                })
+                .collect()
+        })
+    }
+
+    /// The content the mod served, by hash.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.served_content().is_empty());
+    /// ```
+    #[must_use]
+    pub fn served_content(&self) -> Vec<([u32; 4], Vec<u8>)> {
+        table::with(Vec::new(), |s| {
+            s.content.iter().map(|(h, b)| (*h, b.clone())).collect()
+        })
+    }
+
+    /// The texts the mod handed the loader last, as TOML; `None` before it
+    /// read any.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert_eq!(loader.published_texts(), None);
+    /// ```
+    #[must_use]
+    pub fn published_texts(&self) -> Option<String> {
+        table::with(None, |s| s.published_texts.clone())
+    }
+
+    /// The services the mod published, as `(name, major)`, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.published().is_empty());
+    /// ```
+    #[must_use]
+    pub fn published(&self) -> Vec<(String, u32)> {
+        table::with(Vec::new(), |s| {
+            s.published
+                .iter()
+                .map(|p| (p.name.clone(), p.major))
+                .collect()
+        })
+    }
+
+    /// The content ids the mod declared, `<mod>:<name>`, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.content_ids().is_empty());
+    /// ```
+    #[must_use]
+    pub fn content_ids(&self) -> Vec<String> {
+        table::with(Vec::new(), |s| s.content_ids.clone())
+    }
+
+    /// The content renames the mod declared, old GUID to new, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_fake as enshwick;
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.content_renames().is_empty());
+    /// ```
+    #[must_use]
+    pub fn content_renames(&self) -> Vec<(Guid, Guid)> {
+        table::with(None, |s| s.content_renames.clone())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(from, to)| (Guid(from), Guid(to)))
+            .collect()
+    }
+}
+
+/// A resource the mod serves, as the loader received it.
+///
+/// # Examples
+///
+/// See [`Installed::resources`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct ServedResource {
+    /// The resource served.
+    pub key: ResourceKey,
+    /// The resource it is built from.
+    pub base: ResourceKey,
+}
+
+/// A change a mod declared to set later, as the fake loader keeps it.
+///
+/// # Examples
+///
+/// See [`Installed::live_changes`](crate::test::Installed::live_changes).
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct LiveChange {
+    /// What it reaches.
+    pub target: crate::content::changes::Target,
+    /// What it changes.
+    pub field: crate::content::changes::Field,
+    /// Its source.
+    pub source: String,
+    /// The value in force; `None` until set or after a reset.
+    pub value: Option<crate::content::changes::Value>,
+}
