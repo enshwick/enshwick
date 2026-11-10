@@ -705,5 +705,11 @@ mod tests {
         assert_eq!(lean.items.len(), 2, "every item stays");
         assert_eq!(lean.entries.len(), 4);
         assert!(lean.entries.iter().all(|e| e.args[0].players.is_empty()));
+
+        let bare = decode(&Window::new("bare", "Bare").render(&say, &many)).unwrap();
+        assert!(
+            bare.entries.iter().all(|e| e.args[0].players.is_empty()),
+            "entries too big alone go lean though no item was left out"
+        );
     }
 }

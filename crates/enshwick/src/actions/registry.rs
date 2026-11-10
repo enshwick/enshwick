@@ -750,4 +750,34 @@ mod tests {
         assert_eq!(rest_of_line(mixed, &words(mixed)[1..]), Some(r#""Hi" all"#));
         assert_eq!(rest_of_line("say", &[]), None);
     }
+
+    #[test]
+    fn a_button_s_values_fit_its_action_or_name_their_fault() {
+        let ann = Value::Player {
+            key: PlayerKey::new(7),
+            name: "Ann".into(),
+        };
+        let list = Action::per_player("allowed", "Allowed", |_, _| Vec::new());
+        let whole = [ann.clone(), Value::Toggle(true)];
+        assert_eq!(button_fault(&list, &whole), None);
+        for short in [&[][..], &whole[..1], &[Value::Toggle(true), ann.clone()]] {
+            let fault = button_fault(&list, short).expect("a list takes a player and on or off");
+            assert!(fault.contains("the list allowed"), "{fault}");
+        }
+
+        let ban = Action::new("ban", "Ban")
+            .arg(Arg::player("Player"))
+            .arg(Arg::text("Reason", 8));
+        assert_eq!(button_fault(&ban, &[]), None);
+        assert_eq!(button_fault(&ban, core::slice::from_ref(&ann)), None);
+        let long = Value::Text("too long a reason".into());
+        let fault = button_fault(&ban, &[ann.clone(), long]).unwrap();
+        assert!(
+            fault.contains("ban") && fault.contains("argument 2"),
+            "{fault}"
+        );
+        let three = [ann.clone(), Value::Text("ok".into()), ann];
+        let fault = button_fault(&ban, &three).unwrap();
+        assert!(fault.contains("3 values to ban, which takes 2"), "{fault}");
+    }
 }

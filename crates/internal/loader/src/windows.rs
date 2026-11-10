@@ -400,6 +400,8 @@ mod tests {
             change(1, 7, "panel", Change::Update),
             change(0, 9, "panel", Change::Update),
             change(0, 7, "bans", Change::Show),
+            change(0, 6, "panel", Change::Show),
+            change(0, 6, "panel", Change::Close),
         ];
         assert_eq!(
             merged(waiting),
@@ -409,6 +411,7 @@ mod tests {
                 change(0, 7, "bans", Change::Show),
                 change(0, 9, "panel", Change::Close),
                 change(1, 7, "panel", Change::Update),
+                change(0, 6, "panel", Change::Close),
             ],
             "one render each: a show still opens, a closed window takes no update"
         );
