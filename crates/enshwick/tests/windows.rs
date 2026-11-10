@@ -360,6 +360,35 @@ mod tests {
     }
 
     #[test]
+    fn the_fake_refuses_a_malformed_window_call_as_the_loader_does() {
+        use enshwick::abi::Str;
+        use enshwick::actions::window::MAX_CALL_PLAYERS;
+
+        let _loader = start(enshwick::test::FakeHost::new());
+        let host = enshwick::host().expect("the mod's host");
+        let keys = [PlayerKey::new(7); MAX_CALL_PLAYERS + 1];
+        let call = |id: &str, players: *const PlayerKey, count: usize, close: u32| {
+            let count = u32::try_from(count).unwrap();
+            (host.api().action_window)(host.handle(), Str::new(id), players, count, close)
+        };
+
+        assert_eq!(
+            call("panel", keys.as_ptr(), MAX_CALL_PLAYERS, 0),
+            Status::OK
+        );
+        assert_eq!(
+            call("panel", keys.as_ptr(), MAX_CALL_PLAYERS + 1, 0),
+            Status::BAD_ARGS
+        );
+        assert_eq!(call("panel", core::ptr::null(), 1, 0), Status::BAD_ARGS);
+        assert_eq!(call("panel", core::ptr::null(), 0, 0), Status::OK);
+        assert_eq!(call("panel", keys.as_ptr(), 1, 2), Status::BAD_ARGS);
+        assert_eq!(call("panel", keys.as_ptr(), 1, 1), Status::OK);
+        assert_eq!(call("Bad Id", keys.as_ptr(), 1, 0), Status::BAD_ARGS);
+        assert_eq!(call("", keys.as_ptr(), 1, 0), Status::BAD_ARGS);
+    }
+
+    #[test]
     fn a_hosted_or_single_player_game_shows_the_host_its_own_window() {
         let host = player(2, 7, "Host", PlayerInfo::CAN_KICK_BAN);
         let loader = start(
