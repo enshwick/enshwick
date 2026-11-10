@@ -280,7 +280,8 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
             _ => Outcome::refused("Name a player"),
         },
     )?;
-    actions.commands("bans", "b")
+    // In the mod `you.bans`: `/bans` and `/b`.
+    actions.commands("b")
 }
 ```
 
@@ -298,10 +299,11 @@ actions:add({
     local args = request:args()
     return enshwick.actions.done(`Banned {args[1].Player.name}: {args[2].Text}`)
 end)
-actions:commands("bans", "b")
+actions:commands("b")
 ```
 
-`/b ban Bob griefing on the coast` bans Bob while he is offline.
+In the mod `you.bans`, `/b ban Bob griefing on the coast` bans Bob while he
+is offline.
 
 ## Handling
 
