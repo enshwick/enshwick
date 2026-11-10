@@ -84,6 +84,6 @@ fn armed(status: crate::abi::Status) -> Result<bool, Off> {
     } else if status == crate::abi::Status::MISSING {
         Ok(false)
     } else {
-        Err(Off::status("the base limit", status))
+        Err(crate::load::off_status("the base limit", status))
     }
 }

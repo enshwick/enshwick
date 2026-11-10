@@ -102,7 +102,7 @@ impl crate::Host {
     /// ```
     pub fn served_resource(&self, key: ResourceKey) -> Result<Vec<u8>, Off> {
         self.read_resource(self.api().resource_served, key)
-            .map_err(|status| Off::status(&format!("read resource {key:?}"), status))
+            .map_err(|status| crate::load::off_status(&format!("read resource {key:?}"), status))
     }
 
     /// Reads `key` through `read`, one of the loader's copy calls, into a
@@ -142,46 +142,11 @@ impl crate::Host {
     }
 }
 
-/// A type of game resource by enshwick's name for it, such as
-/// [`types::ITEM_INFO`]; the loader maps it to the running build's type,
-/// whose hash resource keys carry.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::content::types;
-///
-/// assert_eq!(types::ITEM_INFO.id(), "item_info");
-/// assert!(types::ITEM_INFO.hash().is_err(), "outside the game");
-/// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct ResourceType(&'static str);
-
-impl ResourceType {
-    /// Its enshwick id, which the loader's catalogue maps to the engine.
-    ///
-    /// # Examples
-    ///
-    /// See [`ResourceType`].
-    #[must_use]
-    pub const fn id(self) -> &'static str {
-        self.0
-    }
-
-    /// Its hash on the running build.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] outside the game or when the build lacks the type.
-    ///
-    /// # Examples
-    ///
-    /// See [`ResourceType`].
-    pub fn hash(self) -> Result<u32, Off> {
-        crate::host()
-            .ok_or_else(|| Off::new(format!("type {}: outside the game", self.0)))?
-            .hash(self.0)
-    }
+/// Answers [`ResourceType::hash`] from the running build, for the value
+/// types' crate, which lies below the loader's table; `None` outside the
+/// game.
+pub(crate) fn type_hash(id: &'static str) -> Option<Result<u32, Off>> {
+    Some(crate::host()?.hash(id))
 }
 
 /// Resource types mods commonly serve.
@@ -190,25 +155,26 @@ pub mod types {
     use crate::engine_ids as ids;
 
     /// One item.
-    pub const ITEM_INFO: ResourceType = ResourceType(ids::ITEM_INFO);
+    pub const ITEM_INFO: ResourceType = ResourceType::new(ids::ITEM_INFO);
     /// The list of every item.
-    pub const ITEM_REGISTRY_RESOURCE: ResourceType = ResourceType(ids::ITEM_REGISTRY);
+    pub const ITEM_REGISTRY_RESOURCE: ResourceType = ResourceType::new(ids::ITEM_REGISTRY);
     /// Every recipe.
-    pub const RECIPE_REGISTRY_RESOURCE: ResourceType = ResourceType(ids::RECIPE_REGISTRY);
+    pub const RECIPE_REGISTRY_RESOURCE: ResourceType = ResourceType::new(ids::RECIPE_REGISTRY);
     /// What a placed object or creature is made of.
-    pub const TEMPLATE_RESOURCE: ResourceType = ResourceType(ids::TEMPLATE);
+    pub const TEMPLATE_RESOURCE: ResourceType = ResourceType::new(ids::TEMPLATE);
     /// The list of every template.
-    pub const TEMPLATE_COLLECTION_RESOURCE: ResourceType = ResourceType(ids::TEMPLATE_COLLECTION);
+    pub const TEMPLATE_COLLECTION_RESOURCE: ResourceType =
+        ResourceType::new(ids::TEMPLATE_COLLECTION);
     /// Every workshop.
-    pub const WORKSHOP_REGISTRY_RESOURCE: ResourceType = ResourceType(ids::WORKSHOP_REGISTRY);
+    pub const WORKSHOP_REGISTRY_RESOURCE: ResourceType = ResourceType::new(ids::WORKSHOP_REGISTRY);
     /// The client's UI image, such as an item icon.
-    pub const UI_TEXTURE_RESOURCE: ResourceType = ResourceType(ids::UI_IMAGE);
+    pub const UI_TEXTURE_RESOURCE: ResourceType = ResourceType::new(ids::UI_IMAGE);
     /// The client's UI data, the crafting menu among it.
-    pub const FB_UI_BUNDLE: ResourceType = ResourceType(ids::UI_BUNDLE);
+    pub const FB_UI_BUNDLE: ResourceType = ResourceType::new(ids::UI_BUNDLE);
     /// A sound container: the sounds one event plays and how it plays them.
-    pub const SOUND_CONTAINER_RESOURCE: ResourceType = ResourceType(ids::SOUND_CONTAINER);
+    pub const SOUND_CONTAINER_RESOURCE: ResourceType = ResourceType::new(ids::SOUND_CONTAINER);
     /// A sound: its samples and their format, which a sound container plays.
-    pub const SOUND_RESOURCE: ResourceType = ResourceType(ids::SOUND);
+    pub const SOUND_RESOURCE: ResourceType = ResourceType::new(ids::SOUND);
 }
 
 /// Answers engine facts by enshwick id: the running game through [`Load`]

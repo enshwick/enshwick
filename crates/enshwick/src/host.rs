@@ -181,6 +181,7 @@ impl Host {
         // function's `# Safety`, and the check above found that size at least
         // `size_of::<HostApi>()`.
         let api = unsafe { api.as_ref() }?;
+        enshwick_values::content::answer_type_hashes(crate::content::type_hash);
         Some(Self { api, me })
     }
 

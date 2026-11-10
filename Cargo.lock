@@ -587,8 +587,11 @@ dependencies = [
 name = "enshwick-values"
 version = "1.0.0-alpha.14"
 dependencies = [
+ "const-sha1",
  "const_format",
  "enshwick-macros",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]

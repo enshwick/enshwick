@@ -183,6 +183,8 @@ pub mod knowledge;
 mod load;
 mod locks;
 pub mod loot;
+#[cfg(doctest)]
+mod lower_examples;
 #[cfg(feature = "unstable")]
 pub mod map;
 pub mod mods;

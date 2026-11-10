@@ -291,9 +291,9 @@ impl Load<'_> {
                 // Inside a build of `old`, which `new` re-keys back to: `old`
                 // stays, so two items re-keyed to each other swap.
                 Err(Status::BUILDING) => return Ok(Value::Nil),
-                read => {
-                    read.map_err(|status| Off::status(&format!("re-key {old} to {new}"), status))?
-                }
+                read => read.map_err(|status| {
+                    crate::load::off_status(&format!("re-key {old} to {new}"), status)
+                })?,
             };
             rekeyed(&item, &crate::resources::decode(new_key, &served)?)
         })
