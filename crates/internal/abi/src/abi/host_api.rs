@@ -32,7 +32,7 @@ use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, NpcId, PlayerKey, Reci
 ///
 /// # Examples
 ///
-/// The safe layer wraps this table; see [`crate::Load`].
+/// The safe layer wraps this table; see [`crate::Load`](../struct.Load.html).
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct HostApi {
@@ -625,7 +625,7 @@ pub struct HostApi {
         extern "system" fn(me: ModHandle, edit: *const TerrainEdit, amount: *mut f32) -> Status,
     /// Hands the loader the schema of the mod's settings file `file`, its
     /// name without `.toml`: `schema`, the TOML text of a
-    /// [`config::Schema`](crate::config::Schema), and `defaults`, the file
+    /// [`config::Schema`](../config/struct.Schema.html), and `defaults`, the file
     /// written from the defaults with their comments. As each world loads,
     /// the loader writes the file from `defaults` beside the save, or adds
     /// the keys it lacks and removes the ones the schema lacks. The console
@@ -733,7 +733,7 @@ pub struct HostApi {
         user: *mut c_void,
     ) -> Status,
     /// Hands the loader the mod's texts, a TOML table per language code as
-    /// [`crate::i18n::Texts`] reads them, for the loader's own screens: the
+    /// [`crate::i18n::Texts`](../i18n/struct.Texts.html) reads them, for the loader's own screens: the
     /// Mods screen labels the mod's settings with them. A later call
     /// replaces them.
     pub texts: extern "system" fn(me: ModHandle, toml: Str) -> Status,
@@ -915,7 +915,7 @@ pub struct HostApi {
     pub knowledge_input_filter:
         extern "system" fn(me: ModHandle, callback: KnowledgeInputFn, user: *mut c_void) -> Status,
     /// The game language of the reader, as the game numbers them (see
-    /// [`crate::i18n::Language`]). On a server, while the loader calls the
+    /// [`crate::i18n::Language`](../i18n/struct.Language.html)). On a server, while the loader calls the
     /// mod about one player (an action, a settings check, the player's mod
     /// message) on that thread, the language that player's game named when
     /// it joined, always one the game knows; else `0`, the fallback. On a

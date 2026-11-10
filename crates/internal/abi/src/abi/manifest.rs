@@ -243,7 +243,7 @@ impl ManifestFlags {
     /// No flag.
     pub const NONE: Self = Self(0);
     /// The mod is a developer tool, never for real play: it runs only while
-    /// [`DEVELOPER_TOOLS`](crate::mods::DEVELOPER_TOOLS) exists, and every player reads that developer tools are on.
+    /// [`DEVELOPER_TOOLS`](../mods/constant.DEVELOPER_TOOLS.html) exists, and every player reads that developer tools are on.
     pub const DEVELOPER: Self = Self(4);
 
     /// Whether every flag of `other` is set.

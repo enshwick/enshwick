@@ -140,4 +140,4 @@ A save keeps the values of the mod's entries while the mod runs. A save made
 without the mod drops them, so they read 0 when it comes back. On a server
 copy of server 399, the world opened and saved without errors.
 
-[`KnowledgeId::from_guid`]: https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi/ids.rs
+[`KnowledgeId::from_guid`]: https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi/ids.rs

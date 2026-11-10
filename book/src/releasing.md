@@ -21,8 +21,8 @@ The platform's crates carry versions of their own:
 - the loader, `enshwick-loader`
 - the `powrprof.dll` stub, `enshwick-loader-stub`
 - `enshwick` with its test fake, and `enshwick-macros`
-- `enshwick-values` and `enshwick-typed`, internal parts of the API crate
-  released at its version
+- `enshwick-values`, `enshwick-abi` and `enshwick-typed`, internal parts of
+  the API crate released at its version
 - the engine routes and anchors with the reflection reader,
   `enshwick-gamedata`
 - `cargo-enshwick`

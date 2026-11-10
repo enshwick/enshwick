@@ -56,5 +56,5 @@ impl NetMessage {
 ///
 /// # Examples
 ///
-/// The safe layer wraps it in [`Load::channel`](crate::Load::channel).
+/// The safe layer wraps it in [`Load::channel`](../struct.Load.html#method.channel).
 pub type NetMessageFn = unsafe extern "system" fn(message: *const NetMessage, user: *mut c_void);

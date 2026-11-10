@@ -129,7 +129,7 @@ impl_headed!(AltarZone);
 ///
 /// # Examples
 ///
-/// The safe layer wraps it in [`Load::on_altar_zone`](crate::Load::on_altar_zone).
+/// The safe layer wraps it in [`Load::on_altar_zone`](../struct.Load.html#method.on_altar_zone).
 pub type AltarZoneFn = unsafe extern "system" fn(zone: *mut AltarZone, user: *mut c_void);
 
 /// A placement the game refused because the object's box does not lie in a
@@ -176,6 +176,6 @@ impl_headed!(BuildingZoneCheck);
 /// # Examples
 ///
 /// The safe layer wraps it in
-/// [`Load::on_building_zone_check`](crate::Load::on_building_zone_check).
+/// [`Load::on_building_zone_check`](../struct.Load.html#method.on_building_zone_check).
 pub type BuildingZoneCheckFn =
     unsafe extern "system" fn(check: *const BuildingZoneCheck, user: *mut c_void) -> u8;

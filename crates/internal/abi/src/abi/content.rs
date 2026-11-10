@@ -51,7 +51,7 @@ pub struct ContentRename {
 ///
 /// # Examples
 ///
-/// The safe layer wraps it in [`Load::serve`](crate::Load::serve).
+/// The safe layer wraps it in [`Load::serve`](../struct.Load.html#method.serve).
 pub type ResourcePatchFn = unsafe extern "system" fn(
     base: *const u8,
     base_len: usize,
@@ -437,7 +437,7 @@ pub struct TypeEntry {
     pub align: u16,
     /// The alignment as an array element.
     pub element_align: u16,
-    /// The descriptor's kind byte, as [`Kind::from_byte`](crate::resources::Kind::from_byte)
+    /// The descriptor's kind byte, as [`Kind::from_byte`](../resources/enum.Kind.html#method.from_byte)
     /// reads it.
     pub kind: u8,
     /// The descriptor's flags byte.

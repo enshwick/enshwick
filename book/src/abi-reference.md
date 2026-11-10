@@ -14,17 +14,17 @@ table.
 The ABI is made of `repr(C)` structs, integer enums, `extern "system"`
 functions, strings borrowed for the call, and no unwinding across the
 boundary. The exact types and signatures are in the
-[`abi` module's rustdoc](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs). The same types for
+[`abi` module's rustdoc](https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi.rs). The same types for
 C and other languages are in `enshwick.h`, see [Mods in C and C++](mods-in-c.md).
 
 ## Versions
 
 The layout file
-[`abi/layout.txt`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi/layout.txt)
+[`abi/layout.txt`](https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi/layout.txt)
 lists the layout of every ABI type, field by field: offset, size and type,
 and for a function pointer its signature. Its first line is the ABI
 version, a major and a minor:
-[`ABI_MAJOR` and `ABI_MINOR`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs).
+[`ABI_MAJOR` and `ABI_MINOR`](https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi.rs).
 
 | Change to the layout                                          | Version                |
 | ------------------------------------------------------------- | ---------------------- |
@@ -43,10 +43,10 @@ one:
 - The manifest's header holds the minor. A loader older than that minor
   logs `<file> skipped: built for ABI 11.19, newer than ABI 11.18 of Enshwick 1.0.0-alpha.14: update Enshwick`.
 - Structs that cross the boundary on their own start with a
-  [`Header`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs).
+  [`Header`](https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi.rs).
   It holds the struct's size as its writer knew it and the writer's major
   and minor. A reader takes a field only when
-  [`Header::covers`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
+  [`Header::covers`](https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi.rs)
   it. So a mod of an older minor and a loader of a newer one read the
   fields both know. The loader requires of a mod's struct only
   `Headed::BORN`, where the fields of the major's minor 0 end. The
@@ -108,7 +108,7 @@ and unloaded.
 
 ## The manifest
 
-The [`Manifest`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
+The [`Manifest`](https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi.rs)
 comes from the crate's `Cargo.toml`.
 [`declare_mod!`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs) builds it.
 The rustdoc of `abi::Manifest` lists its fields, and
@@ -128,7 +128,7 @@ The reason goes to the loader's log as `<file> skipped: <reason>`.
 ## Status codes
 
 Every call that can fail returns a
-[`Status`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs).
+[`Status`](https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi.rs).
 The safe layer turns a failed status into an
 [`Off`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
 reason of the form `<what>: <why>`. For example:
@@ -182,7 +182,7 @@ declares each as a typedef:
 ## Recipe kinds
 
 `HostApi::recipe_kind` answers a
-[`RecipeKind`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi/content.rs)
+[`RecipeKind`](https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi/content.rs)
 code. A recipe selection of `change_data` takes one, and so does a recipe
 output `RateId`. A mod reads a code it does not know as `OTHER`.
 
@@ -202,7 +202,7 @@ A mod subscribes with
 [`Load::on`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
 and the types in
 [`events`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/events.rs).
-It may also subscribe with a raw [`Event`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
+It may also subscribe with a raw [`Event`](https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi.rs)
 id through `Load::on_raw_event`. See [Events and the scheduler](events.md).
 
 `on_raw_event` takes the event's id, an `abi::Event` constant. An example
@@ -212,7 +212,7 @@ events without data. The rustdoc of `abi::Event` lists every id, and
 
 ## The host table
 
-[`HostApi`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi/host_api.rs)
+[`HostApi`](https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi/host_api.rs)
 is the table of functions the loader passes to `enshwick_mod_init`. It
 holds every service a mod reaches, from logging and hooks to the world, content and
 other mods. The safe layer wraps each field in a typed call. A field whose

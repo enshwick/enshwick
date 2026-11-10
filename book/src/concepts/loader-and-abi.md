@@ -30,7 +30,7 @@ is there. The loader reads every folder but its own `mods/enshwick/`. The
 order mods load in comes from their ids and dependencies, see
 [load order](lifecycle.md#in-what-order-do-mods-load). In each folder, the mod is the one DLL that exports the four
 functions of
-[`abi::exports`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs).
+[`abi::exports`](https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi.rs).
 The loader tells it apart by its export table before loading it.
 Other DLLs in the folder are the mod's own, and the mod's imports resolve
 from its folder. A second DLL with the four exports in the same folder is
@@ -64,7 +64,7 @@ goes to the loader's log, such as
 ## The ABI
 
 A mod and the loader are built separately, so they talk through a C ABI,
-[`enshwick::abi`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs):
+[`enshwick::abi`](https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi.rs):
 
 - `ABI_MAJOR` and `ABI_MINOR` are the ABI version. An append to the layout
   is the next minor, any other change a new major. A loader loads mods of

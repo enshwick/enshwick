@@ -76,7 +76,7 @@ impl Interaction {
 ///
 /// # Examples
 ///
-/// The safe layer wraps it in [`Load::on_interaction`](crate::Load::on_interaction).
+/// The safe layer wraps it in [`Load::on_interaction`](../struct.Load.html#method.on_interaction).
 pub type InteractionFn =
     unsafe extern "system" fn(call: *const Interaction, user: *mut c_void) -> u8;
 
@@ -127,7 +127,7 @@ impl SkillCheck {
 ///
 /// # Examples
 ///
-/// The safe layer wraps it in [`Load::on_skill`](crate::Load::on_skill).
+/// The safe layer wraps it in [`Load::on_skill`](../struct.Load.html#method.on_skill).
 pub type SkillCheckFn =
     unsafe extern "system" fn(check: *const SkillCheck, user: *mut c_void) -> u8;
 
@@ -162,7 +162,7 @@ impl_headed!(Comfort);
 ///
 /// # Examples
 ///
-/// The safe layer wraps it in [`Load::on_comfort`](crate::Load::on_comfort).
+/// The safe layer wraps it in [`Load::on_comfort`](../struct.Load.html#method.on_comfort).
 pub type ComfortFn = unsafe extern "system" fn(comfort: *const Comfort, user: *mut c_void) -> i32;
 
 /// One character's experience before the game applies it, in an
@@ -227,7 +227,7 @@ impl_headed!(ExperiencePass);
 ///
 /// # Examples
 ///
-/// The safe layer wraps it in [`Load::on_experience`](crate::Load::on_experience).
+/// The safe layer wraps it in [`Load::on_experience`](../struct.Load.html#method.on_experience).
 pub type ExperiencePassFn = unsafe extern "system" fn(pass: *mut ExperiencePass, user: *mut c_void);
 
 /// How many altars a Flame level allows, as the loader asks every
@@ -309,5 +309,5 @@ impl_headed!(BaseLimitInfo);
 ///
 /// # Examples
 ///
-/// The safe layer wraps it in [`Load::on_altar_limit`](crate::Load::on_altar_limit).
+/// The safe layer wraps it in [`Load::on_altar_limit`](../struct.Load.html#method.on_altar_limit).
 pub type AltarLimitFilterFn = unsafe extern "system" fn(limit: *mut AltarLimit, user: *mut c_void);

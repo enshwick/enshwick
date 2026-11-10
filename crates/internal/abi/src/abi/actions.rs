@@ -45,7 +45,7 @@ pub struct ActionCall {
     /// it does not know with an empty reply.
     pub kind: u32,
     /// The language the player reads the game in, a
-    /// [`Language`](crate::i18n::Language) value.
+    /// [`Language`](../i18n/struct.Language.html) value.
     pub language: u32,
     /// The player the question is about.
     pub player: PlayerInfo,
@@ -316,7 +316,7 @@ pub type ActionFn =
 ///
 /// # Examples
 ///
-/// The safe layer wraps it in [`Load::add_status`](crate::Load::add_status).
+/// The safe layer wraps it in [`Load::add_status`](../struct.Load.html#method.add_status).
 pub type StatusFn = unsafe extern "system" fn(user: *mut c_void, out: *mut Str);
 
 /// A player renaming an entity, handed to the filters registered with

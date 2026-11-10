@@ -153,7 +153,7 @@ impl_headed!(EventSpec);
 ///
 /// # Examples
 ///
-/// The safe layer wraps it in [`Load::on_mod_event`](crate::Load::on_mod_event).
+/// The safe layer wraps it in [`Load::on_mod_event`](../struct.Load.html#method.on_mod_event).
 pub type ModEventFn = unsafe extern "system" fn(data: *const c_void, user: *mut c_void);
 
 /// A described service, a call: one function from an input struct to an

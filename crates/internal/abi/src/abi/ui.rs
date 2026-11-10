@@ -85,8 +85,8 @@ impl UiFrame {
 ///
 /// # Examples
 ///
-/// The safe layer wraps it in [`Load::on_frame`](crate::Load::on_frame) and
-/// [`Load::on_hud`](crate::Load::on_hud).
+/// The safe layer wraps it in [`Load::on_frame`](../struct.Load.html#method.on_frame) and
+/// [`Load::on_hud`](../struct.Load.html#method.on_hud).
 pub type UiFrameFn = unsafe extern "system" fn(frame: *const UiFrame, user: *mut c_void);
 
 /// An element a mod adds to one of the game's screens, registered with
@@ -576,7 +576,7 @@ impl UiDialog {
 ///
 /// # Examples
 ///
-/// The safe layer wraps it in [`Ui::dialog`](crate::ui::Ui::dialog).
+/// The safe layer wraps it in [`Ui::dialog`](../ui/struct.Ui.html#method.dialog).
 pub type UiAnswerFn = unsafe extern "system" fn(answer: u32, user: *mut c_void);
 
 /// A mod's check of a new text of its settings file, before the loader writes
@@ -592,7 +592,7 @@ pub type UiAnswerFn = unsafe extern "system" fn(answer: u32, user: *mut c_void);
 ///
 /// # Examples
 ///
-/// The safe layer wraps it in [`Load::on_settings`](crate::Load::on_settings).
+/// The safe layer wraps it in [`Load::on_settings`](../struct.Load.html#method.on_settings).
 pub type ConfigCheckFn =
     unsafe extern "system" fn(text: Str, why: *mut Str, user: *mut c_void) -> Status;
 

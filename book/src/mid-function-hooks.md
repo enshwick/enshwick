@@ -34,7 +34,7 @@ is a value the game code goes on with, which the loader cannot check.
 
 ## Registers
 
-[`Registers`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
+[`Registers`](https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi.rs)
 holds the 16 general-purpose registers and `rflags`.
 
 - Writes to any field but `rsp` take effect when the game code goes on.

@@ -49,7 +49,7 @@ pub(crate) const TARGETS: &[(&str, &[&str])] = &[
     (
         "mod_manifests",
         &[
-            "crates/enshwick/src/abi",
+            "crates/internal/abi/src/abi",
             "crates/internal/loader/src/manifest",
             "crates/internal/loader/src/resolve",
         ],

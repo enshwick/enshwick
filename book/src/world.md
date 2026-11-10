@@ -428,7 +428,7 @@ has:
 - `key`, the same number for the same account in every session. Use it to
   remember a player between sessions;
 - `permissions`, the server's permission bits. They are `PlayerInfo::CAN_*` in
-  [`abi`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs).
+  [`abi`](https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi.rs).
   `is_admin()` tells whether the player may kick and ban, the server's
   administrators;
 - `name`, the name the client sent. It is untrusted: a client picks it, and two

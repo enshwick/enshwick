@@ -18,8 +18,8 @@
 //! assert!(open);
 //! ```
 //!
-//! [`Load::field_offset`]: crate::Load::field_offset
-//! [`Load::constant`]: crate::Load::constant
+//! [`Load::field_offset`]: ../struct.Load.html#method.field_offset
+//! [`Load::constant`]: ../struct.Load.html#method.constant
 
 pub use bytemuck::{AnyBitPattern, NoUninit, Zeroable};
 

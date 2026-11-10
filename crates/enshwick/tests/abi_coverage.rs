@@ -8,7 +8,7 @@ mod tests {
     /// The fields of `HostApi` in the committed layout, in order.
     fn host_api_fields() -> Vec<String> {
         let layout = std::fs::read_to_string(
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("src/abi/layout.txt"),
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../internal/abi/src/abi/layout.txt"),
         )
         .unwrap();
         layout

@@ -199,8 +199,8 @@ impl PointVerdict {
 ///
 /// # Examples
 ///
-/// The safe layer wraps it in [`Load::extend_point`](crate::Load::extend_point) and
-/// [`Load::observe_point`](crate::Load::observe_point).
+/// The safe layer wraps it in [`Load::extend_point`](../struct.Load.html#method.extend_point) and
+/// [`Load::observe_point`](../struct.Load.html#method.observe_point).
 pub type PointFn = unsafe extern "system" fn(
     input: *const c_void,
     value: *mut c_void,

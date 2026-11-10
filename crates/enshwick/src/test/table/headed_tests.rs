@@ -37,7 +37,7 @@ fn sources(dir: &Path) -> Vec<PathBuf> {
 
 /// The structs of the ABI that implement `Headed`.
 fn headed() -> Vec<String> {
-    let abi = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/abi");
+    let abi = Path::new(env!("CARGO_MANIFEST_DIR")).join("../internal/abi/src/abi");
     sources(&abi)
         .iter()
         .map(|file| std::fs::read_to_string(file).unwrap())

@@ -184,7 +184,7 @@ impl InventoryResult {
 /// # Examples
 ///
 /// The safe layer wraps it in
-/// [`Inventories::submit`](crate::inventory::Inventories::submit).
+/// [`Inventories::submit`](../inventory/struct.Inventories.html#method.submit).
 pub type InventoryResultFn =
     unsafe extern "system" fn(result: *const InventoryResult, user: *mut c_void);
 

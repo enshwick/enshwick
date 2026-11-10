@@ -191,7 +191,7 @@ pub struct PlayerDeathData {
     /// Zero.
     pub reserved: u16,
     /// For a hit, the attacker of the last hit the player took, from its
-    /// `HitHistory`, as [`EntityDiedEvent`](crate::game_events::EntityDiedEvent) reads it; 0 for other
+    /// `HitHistory`, as [`EntityDiedEvent`](../game_events/struct.EntityDiedEvent.html) reads it; 0 for other
     /// causes, or when the history names none. The name is enshwick's.
     pub killer_entity: Entity,
     /// Zero.
@@ -211,7 +211,7 @@ impl PlayerDeathData {
     pub const SUFFOCATED: u32 = 3;
 }
 
-/// The data of the [`KnowledgeChanged`](crate::events::KnowledgeChanged) event.
+/// The data of the [`KnowledgeChanged`](../events/struct.KnowledgeChanged.html) event.
 ///
 /// # Examples
 ///
@@ -236,7 +236,7 @@ pub struct KnowledgeData {
 
 impl_headed!(KnowledgeData);
 
-/// The data of the [`QuestCompleted`](crate::events::QuestCompleted) event.
+/// The data of the [`QuestCompleted`](../events/struct.QuestCompleted.html) event.
 ///
 /// # Examples
 ///
@@ -343,8 +343,8 @@ impl KnowledgeInput {
 pub type KnowledgeInputFn =
     unsafe extern "system" fn(call: *const KnowledgeInput, user: *mut c_void) -> u8;
 
-/// The data of the [`ChunkLoaded`](crate::events::ChunkLoaded) and
-/// [`ChunkUnloaded`](crate::events::ChunkUnloaded) events: a chunk of the
+/// The data of the [`ChunkLoaded`](../events/struct.ChunkLoaded.html) and
+/// [`ChunkUnloaded`](../events/struct.ChunkUnloaded.html) events: a chunk of the
 /// world's entities, never of its terrain's voxels.
 ///
 /// # Examples
@@ -373,10 +373,10 @@ pub struct ChunkData {
 
 impl_headed!(ChunkData);
 
-/// The data of the [`TerrainPageLoaded`](crate::events::TerrainPageLoaded)
-/// and [`TerrainPageUnloaded`](crate::events::TerrainPageUnloaded) events: a
+/// The data of the [`TerrainPageLoaded`](../events/struct.TerrainPageLoaded.html)
+/// and [`TerrainPageUnloaded`](../events/struct.TerrainPageUnloaded.html) events: a
 /// page of the finest voxels, the ones
-/// [`Voxels`](crate::voxels::Voxels) reads. "Page" is enshwick's name.
+/// [`Voxels`](../voxels/struct.Voxels.html) reads. "Page" is enshwick's name.
 ///
 /// # Examples
 ///
@@ -398,15 +398,15 @@ pub struct TerrainPageData {
     pub z: u32,
     /// Its side in metres, 128 on server 26430253: it spans `x * size` to
     /// `(x + 1) * size` metres along x and `z * size` to `(z + 1) * size`
-    /// along z, as [`VoxelPos::to_metres`](crate::voxels::VoxelPos::to_metres)
+    /// along z, as [`VoxelPos::to_metres`](../voxels/struct.VoxelPos.html#method.to_metres)
     /// counts them, at every height.
     pub size: u32,
 }
 
 impl_headed!(TerrainPageData);
 
-/// The data of the [`BuildingPlaced`](crate::events::BuildingPlaced) and
-/// [`BuildingRemoved`](crate::events::BuildingRemoved) events.
+/// The data of the [`BuildingPlaced`](../events/struct.BuildingPlaced.html) and
+/// [`BuildingRemoved`](../events/struct.BuildingRemoved.html) events.
 ///
 /// # Examples
 ///
@@ -528,7 +528,7 @@ impl PlayerInfo {
     pub const CAN_RECEIVE_EXP: u8 = 1 << 5;
 }
 
-/// The data of the [`Ticked`](crate::events::Ticked) event.
+/// The data of the [`Ticked`](../events/struct.Ticked.html) event.
 ///
 /// A handler on a period sees the steps and the time since its own last
 /// call; an every-step handler sees one step and the time since the step
@@ -680,8 +680,8 @@ impl TickData {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
 pub struct TickHandle(pub u32);
 
-/// The data of the [`PlayerJoined`](crate::events::PlayerJoined) and
-/// [`PlayerLeft`](crate::events::PlayerLeft) events.
+/// The data of the [`PlayerJoined`](../events/struct.PlayerJoined.html) and
+/// [`PlayerLeft`](../events/struct.PlayerLeft.html) events.
 ///
 /// # Examples
 ///
@@ -713,6 +713,6 @@ impl_headed!(PlayerData);
 ///
 /// # Examples
 ///
-/// The safe layer wraps it in [`Load::on`](crate::Load::on) and
-/// [`Load::on_tick`](crate::Load::on_tick).
+/// The safe layer wraps it in [`Load::on`](../struct.Load.html#method.on) and
+/// [`Load::on_tick`](../struct.Load.html#method.on_tick).
 pub type EventFn = unsafe extern "system" fn(event: Event, data: *const c_void, user: *mut c_void);

@@ -37,7 +37,7 @@ impl_headed!(LoopWaitData);
 ///
 /// # Examples
 ///
-/// The safe layer wraps it in [`Load::on_loop_wait`](crate::Load::on_loop_wait).
+/// The safe layer wraps it in [`Load::on_loop_wait`](../struct.Load.html#method.on_loop_wait).
 pub type LoopWaitFn = unsafe extern "system" fn(wait: *const LoopWaitData, user: *mut c_void);
 
 /// A handler of the server loop's wait between two passes: the wait in
@@ -46,7 +46,7 @@ pub type LoopWaitFn = unsafe extern "system" fn(wait: *const LoopWaitData, user:
 ///
 /// # Examples
 ///
-/// The safe layer wraps it in [`Load::on_server_wait`](crate::Load::on_server_wait).
+/// The safe layer wraps it in [`Load::on_server_wait`](../struct.Load.html#method.on_server_wait).
 pub type ServerWaitFn = unsafe extern "system" fn(wait_ns: *mut u64, user: *mut c_void);
 
 /// Which waits [`HostApi::loop_wait`](super::HostApi::loop_wait) found and

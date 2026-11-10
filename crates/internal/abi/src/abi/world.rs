@@ -74,7 +74,7 @@ impl_headed!(EventTypeInfo);
 ///
 /// # Examples
 ///
-/// The safe layer wraps it in [`Load::on`](crate::Load::on), for a game event's type.
+/// The safe layer wraps it in [`Load::on`](../struct.Load.html#method.on), for a game event's type.
 pub type GameEventFn = unsafe extern "system" fn(event: *const GameEventData, user: *mut c_void);
 
 /// An entity placed in the world, from [`HostApi::entities`](super::HostApi::entities).
@@ -231,7 +231,7 @@ impl_headed!(CraftCheck);
 ///
 /// # Examples
 ///
-/// The safe layer wraps it in [`Load::on_craft`](crate::Load::on_craft).
+/// The safe layer wraps it in [`Load::on_craft`](../struct.Load.html#method.on_craft).
 pub type CraftCheckFn = unsafe extern "system" fn(call: *const CraftCheck, user: *mut c_void) -> u8;
 
 /// A placement the game's cursor check allows, handed to the filters
@@ -276,7 +276,7 @@ impl_headed!(BuildCheck, born = 40);
 ///
 /// # Examples
 ///
-/// The safe layer wraps it in [`Load::on_build`](crate::Load::on_build).
+/// The safe layer wraps it in [`Load::on_build`](../struct.Load.html#method.on_build).
 pub type BuildCheckFn = unsafe extern "system" fn(call: *const BuildCheck, user: *mut c_void) -> u8;
 
 /// The clock of the server's world, written by [`HostApi::time_of_day`](super::HostApi::time_of_day).
@@ -373,7 +373,7 @@ pub struct DamageCheck {
     /// arrow), or `source` when the game names none; 0 for other causes.
     pub attacker: Entity,
     /// A hit's damage by type, in the game's order of its damage types
-    /// ([`DamageTypeNew::index`](crate::damage::DamageTypeNew::index)), after
+    /// ([`DamageTypeNew::index`](../damage/enum.DamageTypeNew.html#method.index)), after
     /// the target's resistances and before its armour; healing is what
     /// heals. Zero for other causes.
     pub amounts: [f32; DAMAGE_TYPES],

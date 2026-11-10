@@ -186,7 +186,7 @@ fn module_source(dir: &str) -> String {
 /// The source of the ABI module and its submodules.
 fn abi_source() -> &'static str {
     static SOURCE: OnceLock<String> = OnceLock::new();
-    SOURCE.get_or_init(|| module_source("../../enshwick/src/abi"))
+    SOURCE.get_or_init(|| module_source("../abi/src/abi"))
 }
 
 /// The source of the loader's entry points.

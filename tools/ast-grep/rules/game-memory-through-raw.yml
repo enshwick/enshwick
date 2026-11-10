@@ -13,7 +13,7 @@ note: >-
   `slice::from_raw_parts` or a deref through a variable, so review holds
   those.
 ignores:
-  - "crates/enshwick/src/raw.rs"
+  - "crates/internal/abi/src/raw.rs"
   - "**/tests/**"
   - "**/tests.rs"
   - "**/*_tests.rs"

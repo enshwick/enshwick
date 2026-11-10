@@ -11,7 +11,7 @@ on:
       - "crates/enshwick/CHANGELOG.md"
       - "crates/enshwick/Cargo.toml"
       - "crates/enshwick/src/lib.rs"
-      - "crates/enshwick/src/abi.rs"
+      - "crates/internal/abi/src/abi.rs"
       - "crates/enshwick-gamedata/reports/**"
       - "crates/internal/loader/src/errors.toml"
       - .github/workflows/docs.yml
