@@ -2,7 +2,7 @@
 //! which the fake host follows, so a mod's test names commands as the game
 //! does.
 
-/// The longest command line [`run`](crate::commands::run) takes, in bytes.
+/// The longest command line `commands::run` takes, in bytes.
 pub const MAX_LINE: usize = 1024;
 
 /// The longest alias of a mod's commands, in bytes; a command's name is
