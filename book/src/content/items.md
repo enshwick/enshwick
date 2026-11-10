@@ -77,9 +77,8 @@ that look like it in the log.
 ### Find an item by the name the game shows
 
 A player knows an item by the name the game shows, not by its debug name.
-Three calls of `content::vanilla` serve a picker, a list or a typed name. In
-Luau they are `enshwick.content.item_by_display_name`, `items` and
-`recipes`.
+Three calls of `content::vanilla` serve a picker, a list or a typed name.
+Luau has them under `enshwick.content`, by the same names.
 
 | Call | Answers |
 | --- | --- |
@@ -87,11 +86,10 @@ Luau they are `enshwick.content.item_by_display_name`, `items` and
 | `items()` | every vanilla item: its GUID, its debug name and the tag of its shown name |
 | `recipes()` | every vanilla recipe: its GUID, its debug name and the item it makes |
 
-`item_by_display_name` answers `Unknown` with the names that look like it,
-and `Ambiguous` with the items when the game shows several by one name. The
-names come from the game's texts, which only a client's archive holds
-(the loader reads no text table in a dedicated server's archive, server
-26430253). So the lookup answers on a client, in single player and in a
+An unknown name answers `Unknown`, with the names that look like it. A name
+the game shows for several items answers `Ambiguous`, with those items. The
+names come from the game's texts. Only a client's archive holds them: the
+loader finds no text table in the archive of server 26430253. So the lookup answers on a client, in single player and in a
 game a player hosts. On a dedicated server it answers `Unreadable`; there a
 mod names an item by its debug name or GUID.
 
