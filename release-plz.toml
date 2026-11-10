@@ -22,6 +22,28 @@ pr_body = """
 Each package's `CHANGELOG.md` in this pull request lists what changed.
 """
 
+# The API crate and its internal parts release at one version, which the
+# ABI's messages name from `enshwick-abi` as the API crate's.
+[[package]]
+name = "enshwick"
+version_group = "api"
+
+[[package]]
+name = "enshwick-macros"
+version_group = "api"
+
+[[package]]
+name = "enshwick-values"
+version_group = "api"
+
+[[package]]
+name = "enshwick-abi"
+version_group = "api"
+
+[[package]]
+name = "enshwick-typed"
+version_group = "api"
+
 # The loader DLL and the proxy stub are not published to crates.io: their
 # versions live in git tags, and their release carries `enshwick.zip`.
 [[package]]
