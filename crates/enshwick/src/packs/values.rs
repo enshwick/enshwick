@@ -2,19 +2,39 @@
 //! `{ setting = "<key>" }` naming a `[[setting]]` of `pack.toml`.
 
 use serde::Deserialize;
+use serde::de::{DeserializeOwned, Deserializer};
 
 use super::manifest::PackSetting;
 use super::reader::Reader;
 
 /// A number as a pack file writes it.
-#[derive(Clone, Debug, PartialEq, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(untagged)]
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema), serde(untagged))]
 pub(super) enum NumberEntry<T> {
     /// The number itself.
     Value(T),
     /// The world's value of a setting of `pack.toml`.
     Setting(SettingEntry),
+}
+
+impl<'de, T: DeserializeOwned> Deserialize<'de> for NumberEntry<T> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        match toml::Value::deserialize(deserializer)? {
+            table @ toml::Value::Table(_) => shape(table).map(Self::Setting),
+            value => shape(value).map(Self::Value),
+        }
+    }
+}
+
+/// Reads `value` as `T`, one shape of a value a file writes in several,
+/// keeping the error `T` gives, such as the field it does not take. A
+/// derived untagged enum gives only that no shape matched.
+///
+/// # Errors
+///
+/// The error of `T`'s reader, as `E`.
+pub(super) fn shape<T: DeserializeOwned, E: serde::de::Error>(value: toml::Value) -> Result<T, E> {
+    T::deserialize(value).map_err(|e| E::custom(e.message().trim_end()))
 }
 
 /// `{ setting = "<key>" }`.

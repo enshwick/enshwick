@@ -59,9 +59,8 @@ pub(super) struct OnEntry {
 }
 
 /// One thing a reward gives.
-#[derive(Clone, Debug, PartialEq, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(untagged)]
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema), serde(untagged))]
 pub(super) enum GiveEntry {
     /// Items.
     Items(ItemsEntry),
@@ -71,6 +70,51 @@ pub(super) enum GiveEntry {
     Knowledge(KnowledgeEntry),
     /// A buff.
     Buff(BuffEntry),
+}
+
+/// The field that names each kind of [`GiveEntry`].
+pub(super) const GIVE_KINDS: [&str; 4] = ["item", "experience", "knowledge", "buff"];
+
+/// Every field a gift takes: its kinds and an item's `count`.
+pub(super) const GIVE_FIELDS: [&str; 5] = ["item", "count", "experience", "knowledge", "buff"];
+
+impl<'de> Deserialize<'de> for GiveEntry {
+    /// Told apart by the field that names the kind, so a misspelt field of
+    /// that kind is named.
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use super::values::shape;
+        use serde::de::Error as _;
+        let table = toml::Table::deserialize(deserializer)?;
+        let kinds: Vec<&str> = GIVE_KINDS
+            .into_iter()
+            .filter(|kind| table.contains_key(*kind))
+            .collect();
+        if let [first, second, ..] = kinds[..] {
+            return Err(D::Error::custom(format!(
+                "a gift gives one kind, but this one names `{first}` and `{second}`; give each in a gift of its own"
+            )));
+        }
+        let Some(&kind) = kinds.first() else {
+            return Err(
+                match table
+                    .keys()
+                    .find(|key| !GIVE_FIELDS.contains(&key.as_str()))
+                {
+                    Some(field) => D::Error::unknown_field(field, &GIVE_FIELDS),
+                    None => {
+                        D::Error::custom("a gift needs `item`, `experience`, `knowledge` or `buff`")
+                    }
+                },
+            );
+        };
+        let value = toml::Value::Table(table);
+        match kind {
+            "item" => shape(value).map(Self::Items),
+            "experience" => shape(value).map(Self::Experience),
+            "knowledge" => shape(value).map(Self::Knowledge),
+            _ => shape(value).map(Self::Buff),
+        }
+    }
 }
 
 /// `count` of `item`, all or nothing.

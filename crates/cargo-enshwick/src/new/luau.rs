@@ -17,6 +17,17 @@ pub(crate) const DEFINITIONS_DIR: &str = "types";
 /// The file of the game's own types beside the API's definitions.
 pub(crate) const GAME_DEFINITIONS_FILE: &str = "game.d.luau";
 
+/// The luau-lsp platform a new mod's editor settings and `cargo enshwick
+/// check` type-check with: plain Luau, not Roblox, luau-lsp's default.
+pub(crate) const PLATFORM: &str = "standard";
+
+/// The alias each definitions file of a new mod has in its editor settings.
+pub(crate) const DEFINITION_ALIASES: [(&str, &str); 3] = [
+    (DEFINITIONS_FILE, "enshwick"),
+    (TYPED_DEFINITIONS_FILE, "typed"),
+    (GAME_DEFINITIONS_FILE, "game"),
+];
+
 /// Creates the Luau mod `id`, `<author>.<name>`, in `<dir>/<id>`, the folder
 /// name the loader wants, with the game's own types read from `game`, the
 /// game executable or its folder, when given; what was made, for the user.
@@ -60,25 +71,25 @@ pub(crate) fn files(id: &str, side: Side, game: Option<String>) -> Vec<(PathBuf,
         Side::Server => "server",
         Side::Both => "both",
     };
-    let (game_setting, game_analyze, game_step) = if game.is_some() {
+    let (game_setting, game_step) = if game.is_some() {
         (
             format!(",\n\t\t\"@game\": \"{}\"", game_definitions_path()),
-            format!(" --definitions:@game={}", game_definitions_path()),
             GAME_STEP_WRITTEN,
         )
     } else {
-        (String::new(), String::new(), GAME_STEP_MISSING)
+        (String::new(), GAME_STEP_MISSING)
     };
     let fill = |template: &str| {
         template
             .replace("{game_step}", game_step)
             .replace("{game_setting}", &game_setting)
-            .replace("{game_analyze}", &game_analyze)
             .replace("{game_definitions}", &game_definitions_path())
             .replace("{id}", id)
             .replace("{name}", &name)
             .replace("{side}", side)
             .replace("{definitions}", &definitions_path())
+            .replace("{definitions_dir}", DEFINITIONS_DIR)
+            .replace("{platform}", PLATFORM)
             .replace("{typed_definitions}", &typed_definitions_path())
     };
     let mut files = vec![
@@ -151,7 +162,7 @@ const LUAURC: &str = r#"{
 "#;
 
 const VSCODE_SETTINGS: &str = r#"{
-	"luau-lsp.platform.type": "standard",
+	"luau-lsp.platform.type": "{platform}",
 	"luau-lsp.types.definitionFiles": {
 		"@enshwick": "{definitions}",
 		"@typed": "{typed_definitions}"{game_setting}
@@ -168,8 +179,8 @@ A Luau mod for Enshrouded, built on [Enshwick](https://github.com/enshwick/enshw
    `{typed_definitions}` the values of `enshwick.typed`;
    `.vscode/settings.json` points the editor at both.
 2. {game_step}
-3. Run `luau-lsp analyze --definitions:@enshwick={definitions} --definitions:@typed={typed_definitions}{game_analyze} main.luau`
-   to check the types without the game.
+3. Run `cargo enshwick check` to check the mod as the loader reads it and
+   type-check every script against `{definitions_dir}/`, without the game.
 4. Copy this folder into the game's `mods/` folder as `mods/{id}/`.
 5. Run `cargo enshwick pack zip .` for the archive players install.
 ";
@@ -240,9 +251,6 @@ mod tests {
         assert!(
             text("settings.json").contains(&format!("\"@game\": \"{}\"", game_definitions_path()))
         );
-        assert!(
-            text("README.md").contains(&format!("--definitions:@game={}", game_definitions_path()))
-        );
         let settings: serde_json::Value = serde_json::from_str(text("settings.json")).unwrap();
         assert!(settings.is_object());
     }
@@ -261,7 +269,7 @@ mod tests {
             .unwrap()
             .1;
         assert!(readme.contains(&format!("--luau {}", game_definitions_path())));
-        assert!(!readme.contains("--definitions:@game"));
+        assert!(readme.contains("cargo enshwick check"));
     }
 
     #[test]

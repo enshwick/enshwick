@@ -52,7 +52,7 @@ pub(crate) fn put_in(game: &Path) -> anyhow::Result<String> {
         game,
         version(),
         crate::update::cache_dir().as_deref(),
-        |url, limit| crate::net::get(url, &[], limit, SECONDS),
+        |url, limit| Ok(cargo_enshwick::net::get(url, &[], limit, SECONDS)?),
     )
 }
 

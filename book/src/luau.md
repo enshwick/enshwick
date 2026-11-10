@@ -55,12 +55,21 @@ mod. To start one of your own:
    [luau-lsp](https://github.com/JohnnyMorganz/luau-lsp) extension. The
    folder's `.vscode/settings.json` points it at the definitions in
    `types/`, so every call and event shows its types and documentation.
-3. Check the types without the game:
+3. Run `cargo enshwick check` in the folder. It reads the mod as the loader
+   does, then type-checks every script with luau-lsp against the definitions
+   in `types/`, without the game. It prints each problem with its file, line
+   and column, and exits with 1 on an error. A misspelt event gives an error
+   on its line and one listing every event `enshwick.on` takes:
 
    ```text
-   luau-lsp analyze --definitions:@enshwick=types/enshwick.d.luau --definitions:@typed=types/enshwick.typed.d.luau main.luau
+   main.luau:6:13: error: Expected this to be '"SettingsChanged"' but got '"PlayerJoind"'
+   main.luau:6:1: error: Other overloads are also not viable: ("LoaderSettingsChanged", () -> ()) -> (); ("WorldLoaded", () -> ()) -> (); ...
+   error: you.greeter: 3 errors
    ```
 
+   Without luau-lsp on the path, `check` downloads the release it was
+   built for once, checks its SHA-256 and keeps it in the user's cache
+   folder. `--offline` skips the download and leaves the scripts unchecked.
 4. Copy the folder into the game's `mods/` folder as `mods/you.greeter/`.
 
 The repository's
@@ -184,7 +193,7 @@ mirror, unless this table names it and says why.
 | `raw::*`, `code::*`, `Hook::*`, `Frame::*`, `Load::hook`, `Load::hook_at`, `Load::code`, `Load::find_code`, `Load::patch_code`, `Load::symbol`, `Load::constant`, `Load::field_offset`, `Load::type_size`, `Load::system` | Native code: detours, code patches, byte patterns and raw addresses run machine code in the game's own frames. A script runs in a sandbox without pointers. |
 | `Host::api`, `Host::handle`, `Host::caller_frame`, `Host::fault`, `host` | The raw handle to the loader. The runtime holds it for the script. |
 | `script::*` | The script binding itself, which the Luau runtime runs on. |
-| `test::*` | The fake loader a Rust mod's tests run against. A Luau mod is checked with `luau-lsp analyze` and on a server. |
+| `test::*` | The fake loader a Rust mod's tests run against. A Luau mod is checked with `cargo enshwick check` and on a server. |
 | `shape::*` | Layout hashes of Rust types. The runtime hashes a script's descriptions itself. |
 | `Off::new`, `Off::text` | Luau reports a failure with `error()`, and a caller catches it with `pcall`. |
 | `sound::Load::change_sound`, `sound::Load::add_sound` | Luau calls them by their module, `enshwick.sound.change` and `enshwick.sound.add`; a container is its GUID as text. |

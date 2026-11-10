@@ -303,11 +303,30 @@ impl PackError {
         }
     }
 
-    /// A TOML error of `file`.
+    /// A TOML error of `file`; an unknown field also gets the fields its
+    /// table takes that it is near, as a misspelt one is.
     pub(super) fn of(file: &str, text: &str, error: &toml::de::Error) -> Self {
         let offset = error.span().map_or(0, |span| span.start);
-        Self::at(file, text, offset, error.message().trim_end())
+        let message = error.message().trim_end();
+        Self::at(
+            file,
+            text,
+            offset,
+            &format!("{message}{}", near_field(message)),
+        )
     }
+}
+
+/// `; near: ` and the expected fields within two edits of the field serde's
+/// `unknown field `x`, expected ...` message names, or nothing.
+pub(super) fn near_field(message: &str) -> String {
+    let Some((field, expected)) = message
+        .strip_prefix("unknown field `")
+        .and_then(|rest| rest.split_once('`'))
+    else {
+        return String::new();
+    };
+    super::near_names(&super::near(expected.split('`').skip(1).step_by(2), field))
 }
 
 /// The scripts [`PackFiles::read_dir`] reads from the folder `dir`, as

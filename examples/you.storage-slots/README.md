@@ -10,7 +10,7 @@ Every box gets the new size when a world loads, boxes placed before the pack
 too. Removing the pack loses no item: a box that held more slots than the
 game gives it comes back with 128 slots, every item in its slot.
 
-1. Run `cargo enshwick pack check . --game <game folder>` to check every file
+1. Run `cargo enshwick check --game <game folder>` to check every file
    against the game's data, with the line of each problem.
 2. Copy this folder into the game's `mods/` folder as `mods/you.storage-slots/`, on the
    server and on every player's game.

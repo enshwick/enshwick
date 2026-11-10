@@ -80,7 +80,7 @@ function keep_tonic()
 end
 ```
 
-`pack check` reports these problems:
+`cargo enshwick check` reports these problems:
 
 - a key other than the seven kinds
 - a value that is no Luau name

@@ -1,0 +1,33 @@
+# The luau-lsp release `cargo enshwick check` runs when none is on the path,
+# one download per host, `<os>-<arch>` as Rust names them. Renovate moves each
+# version with the SHA-256 of its download.
+
+["windows-x86_64"]
+# renovate: datasource=github-release-attachments depName=JohnnyMorganz/luau-lsp
+version = "1.70.1"
+asset = "luau-lsp-win64.zip"
+sha256 = "64225b9738102a30de6ee09fb28e5a3827edc402ecf2a6364af570312468159f"
+
+["linux-x86_64"]
+# renovate: datasource=github-release-attachments depName=JohnnyMorganz/luau-lsp
+version = "1.70.1"
+asset = "luau-lsp-linux-x86_64.zip"
+sha256 = "1a2ea1ae4f98f8946cefd970a4b54853e11ab4775e6932faa7f60cf920346567"
+
+["linux-aarch64"]
+# renovate: datasource=github-release-attachments depName=JohnnyMorganz/luau-lsp
+version = "1.70.1"
+asset = "luau-lsp-linux-arm64.zip"
+sha256 = "6062345b95124ca937b8c324b74bc3fddb1d6919ba133c58f8b17945ce1acbc2"
+
+["macos-aarch64"]
+# renovate: datasource=github-release-attachments depName=JohnnyMorganz/luau-lsp
+version = "1.70.1"
+asset = "luau-lsp-macos.zip"
+sha256 = "7d3936e8dec6dc77547abd061d2e950da392562a5f94858b880f23dba50d84cd"
+
+["macos-x86_64"]
+# renovate: datasource=github-release-attachments depName=JohnnyMorganz/luau-lsp
+version = "1.70.1"
+asset = "luau-lsp-macos.zip"
+sha256 = "7d3936e8dec6dc77547abd061d2e950da392562a5f94858b880f23dba50d84cd"
