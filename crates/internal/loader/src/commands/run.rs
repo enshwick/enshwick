@@ -7,7 +7,8 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use enshwick::abi::{ActionCall, CommandInfo, Header, Status, Str};
 
 use super::{
-    MAX_LINE, Named, Refusal, Reply, Typed, check, parse, remote_caller, reply_by, typed, word,
+    MAX_LINE, Named, Refusal, Reply, Typed, check, messages, parse, remote_caller, reply_by, typed,
+    word,
 };
 use crate::host::Loader;
 use crate::locks::Relock;
@@ -220,7 +221,9 @@ pub(crate) fn after_step(loader: &Loader) {
         );
         match reply_by(text, reply.done, crate::chat::to_one_player()) {
             Reply::Chat(text) => {
-                let _queued = crate::chat::send(command.key, text);
+                for message in messages(text, crate::chat::LINES_PER_REPLY) {
+                    let _queued = crate::chat::send(command.key, &message);
+                }
             }
             Reply::Notice(text) => crate::actions::tell(loader, command.key, &text),
             Reply::None => {}

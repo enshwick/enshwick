@@ -41,6 +41,30 @@ mod tests {
             actions:add({ id = "repair", label = "Repair", needs = { "CanEditBase" } }, function()
                 return enshwick.actions.done("repaired")
             end)
+            actions:add({
+                id = "give",
+                label = "Give",
+                help = "Gives the item.",
+                group = "Items",
+                with_self = true,
+                args = {
+                    enshwick.actions.player("Player"),
+                    enshwick.actions.text("Item", 40),
+                    enshwick.actions.number("Count", 1, 99, 1):optional({ Number = 1 }),
+                },
+            }, function(request)
+                local args = request:args()
+                return enshwick.actions.done(`{args[2].Text} x{args[3].Number}`)
+            end)
+            local early = pcall(actions.add, actions, {
+                id = "early",
+                label = "Early",
+                args = {
+                    enshwick.actions.toggle("On"):optional({ Toggle = true }),
+                    enshwick.actions.text("Item", 40),
+                },
+            }, function() end)
+            enshwick.log.info(`optional first {early}`)
             local ok = pcall(actions.commands, actions, "luau-long")
             enshwick.log.info(`longer alias {ok}`)
             actions:commands("lk")
@@ -55,6 +79,49 @@ mod tests {
             "#,
         );
         assert!(logged(&loader, "longer alias false"), "{:?}", loader.logs());
+        assert!(
+            logged(&loader, "optional first false"),
+            "{:?}",
+            loader.logs()
+        );
+        assert_eq!(
+            loader
+                .type_in_chat(&guest, 0, "/lk give Friend Stone Axe")
+                .as_deref(),
+            Some("1Stone Axe x1"),
+            "an optional argument left out takes its default"
+        );
+        assert_eq!(
+            loader
+                .type_in_chat(&guest, 0, "/lk give Friend Stone Axe 5")
+                .as_deref(),
+            Some("1Stone Axe x5")
+        );
+        assert_eq!(
+            loader.type_in_chat(&guest, 0, "/lk help").as_deref(),
+            Some(
+                "1you.luau: /lk <action> runs one, /lk help <action> explains one.\n\
+                 online: Players online\n\
+                 Items:\n\
+                 give <player> <Item> [1-99]: Give"
+            ),
+            "a group heads its actions"
+        );
+        assert_eq!(
+            loader.type_in_chat(&guest, 0, "/lk help give").as_deref(),
+            Some("1give <player> <Item> [1-99]: Give\nGives the item.")
+        );
+        let sheet = enshwick::actions::sheet::decode(
+            &loader
+                .ask_actions(ActionCall::SHEET, &guest, 0, "", "")
+                .unwrap(),
+        );
+        let give = sheet.iter().find(|entry| entry.id == "give").unwrap();
+        assert_eq!(
+            give.args[0].players.first().map(|(_, name)| name.as_str()),
+            Some("Guest"),
+            "with_self offers the player who looks"
+        );
         assert!(
             logged(&loader, "remote true repaired"),
             "{:?}",

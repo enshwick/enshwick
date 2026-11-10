@@ -48,7 +48,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 /// when it fills.
 const LINES_PER_DRAIN: usize = 16;
 /// Lines one reply may have.
-const LINES_PER_REPLY: usize = 16;
+pub(crate) const LINES_PER_REPLY: usize = 16;
 /// Lines waiting at most; more are dropped.
 const MAX_WAITING: usize = 256;
 /// The result the game's chat post writes on success.

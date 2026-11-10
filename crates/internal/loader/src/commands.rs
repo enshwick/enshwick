@@ -197,6 +197,18 @@ pub fn reply_by(text: &str, done: bool, chat_to_one: bool) -> Reply<'_> {
     }
 }
 
+/// The chat messages a reply of several lines goes as, each of at most
+/// `most` lines, since the chat cuts one message there: a long help reaches
+/// the player whole.
+#[must_use]
+pub fn messages(text: &str, most: usize) -> Vec<String> {
+    let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
+    lines
+        .chunks(most.max(1))
+        .map(|part| part.join("\n"))
+        .collect()
+}
+
 /// The remote caller `label` with the game's permission bits
 /// `permissions`: no character, account key 0, the label, cut to 64 bytes,
 /// as its name.
@@ -363,6 +375,20 @@ mod tests {
             Reply::Notice(unknown.into()),
             "as a notice while lines to one player are off"
         );
+    }
+
+    #[test]
+    fn a_reply_longer_than_one_chat_message_goes_as_several() {
+        let help: Vec<String> = (1..=5).map(|n| format!("line {n}")).collect();
+        let text = format!("{}\n\n{}", help[..3].join("\n"), help[3..].join("\n"));
+        assert_eq!(
+            messages(&text, 2),
+            ["line 1\nline 2", "line 3\nline 4", "line 5"],
+            "empty lines, which the chat drops, fill no message"
+        );
+        assert_eq!(messages(&text, 5), [help.join("\n")]);
+        assert_eq!(messages("one", 0), ["one"]);
+        assert!(messages(" \n", 4).is_empty());
     }
 
     #[test]

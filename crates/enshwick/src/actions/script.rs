@@ -31,6 +31,14 @@ pub(crate) struct ScriptAction {
     /// A line on what the action does, a text key, as [`Action::help`] sets it.
     #[script(default)]
     pub help: String,
+    /// The group the help lists it under, a text key, as [`Action::group`]
+    /// sets it.
+    #[script(default)]
+    pub group: String,
+    /// Whether its players include the one who looks, as
+    /// [`Action::with_self`] sets it.
+    #[script(default)]
+    pub with_self: bool,
     /// The arguments in order, as [`Action::arg`] adds them; a list takes none.
     #[script(default)]
     pub args: Vec<Arg>,
@@ -67,8 +75,9 @@ impl ScriptAction {
             }
             None => Action::new(&self.id, &self.label),
         };
-        if !self.help.is_empty() {
-            action = action.help(&self.help);
+        action = action.help(&self.help).group(&self.group);
+        if self.with_self {
+            action = action.with_self();
         }
         for arg in self.args {
             action = action.arg(arg);
@@ -477,7 +486,18 @@ impl Object for Arg {
         "Arg",
         "An argument of an action: a typed choice, or a line of text of bounded bytes.",
     );
-    const PARTS: &'static [&'static [Function<Self>]] = &[];
+    const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_ARG];
+}
+
+#[crate::script(arg)]
+impl Arg {
+    /// The argument as one a typed line may leave out, taking `default`
+    /// then, as [`Arg::optional`] makes it.
+    #[script(name = "optional")]
+    #[must_use]
+    pub(crate) fn optional_script(&self, default: Value) -> Self {
+        self.clone().optional(default)
+    }
 }
 
 impl Object for Actions {
