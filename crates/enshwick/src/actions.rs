@@ -55,14 +55,12 @@ pub mod window;
 
 pub use window::{Row, Window};
 
-use core::ffi::c_void;
-use std::cell::RefCell;
 use std::sync::{Arc, RwLock};
 
 use crate::PlayerKey;
-use crate::abi::{ActionCall, ActionReply, Str, read_headed};
+use crate::abi::Str;
 use crate::controls::{Control, Key};
-use crate::i18n::{Language, Texts};
+use crate::i18n::Texts;
 use crate::world::{Player, PlayerPermissions};
 use crate::{Load, Off};
 
@@ -71,7 +69,9 @@ use crate::{Load, Off};
 const PLATFORM_TEXTS: &str = r#"
 [en]
 "actions.usage" = "Actions, each after the mod's id:"
-"actions.unknown" = "No action {word}; help lists them."
+"actions.help" = "{mod}: {command} <action> runs one, {command} help <action> explains one."
+"actions.unknown" = "No action {word}; {help} lists them."
+"actions.unknown_near" = "No action {word}. Closest: {near}. {help} lists them."
 "actions.denied" = "You may not do that."
 "actions.no_player" = "No player named {name}."
 "actions.several" = "Several players are named {name}."
@@ -85,7 +85,9 @@ const PLATFORM_TEXTS: &str = r#"
 
 [uk]
 "actions.usage" = "Дії, кожна після id мода:"
-"actions.unknown" = "Немає дії {word}; help перелічує їх."
+"actions.help" = "{mod}: {command} <дія> виконує дію, {command} help <дія> пояснює її."
+"actions.unknown" = "Немає дії {word}; {help} перелічує їх."
+"actions.unknown_near" = "Немає дії {word}. Найближчі: {near}. {help} перелічує їх."
 "actions.denied" = "Тобі цього не можна."
 "actions.no_player" = "Немає гравця на ім'я {name}."
 "actions.several" = "Кілька гравців мають ім'я {name}."
@@ -130,6 +132,11 @@ pub struct Action {
     id: String,
     label: String,
     help: String,
+    /// The text key of the group the help lists the action under; empty
+    /// for none.
+    group: String,
+    /// Whether the players the action offers include the one who looks.
+    with_self: bool,
     args: Vec<Arg>,
     /// The permission bits a player needs, all of them.
     needs: u8,
@@ -165,6 +172,8 @@ impl Action {
             id: id.to_owned(),
             label: label.to_owned(),
             help: String::new(),
+            group: String::new(),
+            with_self: false,
             args: Vec::new(),
             needs: 0,
             allow: None,
@@ -207,8 +216,8 @@ impl Action {
         &self.id
     }
 
-    /// A line on what the action does, a text key, shown under its label and
-    /// in the console's help.
+    /// A line on what the action does, a text key, shown under its label
+    /// and by `help <id>` on a typed line.
     ///
     /// # Examples
     ///
@@ -221,6 +230,45 @@ impl Action {
     #[must_use]
     pub fn help(mut self, help: &str) -> Self {
         help.clone_into(&mut self.help);
+        self
+    }
+
+    /// The group the action belongs to, a text key such as `Players` or
+    /// `World`: the help of the mod's typed lines lists the actions under
+    /// their groups, the groups in the order their first actions were
+    /// declared, after the actions without one.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::actions::{Action, Arg};
+    ///
+    /// let kick = Action::new("kick", "Kick").group("Players").arg(Arg::player("Player"));
+    /// assert_eq!(kick.id(), "kick");
+    /// ```
+    #[must_use]
+    pub fn group(mut self, group: &str) -> Self {
+        group.clone_into(&mut self.group);
+        self
+    }
+
+    /// Offers the player who looks at the action among its players: first
+    /// in a [list](Action::per_player) and in the picker of each
+    /// [player](Arg::player) argument, which otherwise hold only the
+    /// others. For a switch or an action a player may use on themselves,
+    /// such as a heal.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::actions::Action;
+    ///
+    /// let shielded = Action::per_player("shield", "Shield", |_ask, _subject| Vec::new()).with_self();
+    /// assert_eq!(shielded.id(), "shield");
+    /// ```
+    #[must_use]
+    pub const fn with_self(mut self) -> Self {
+        self.with_self = true;
         self
     }
 
@@ -369,8 +417,9 @@ impl Actions {
     ///
     /// # Errors
     ///
-    /// [`Off`] for a malformed id, one declared before, or arguments on a
-    /// list.
+    /// [`Off`] for a malformed id, one declared before, arguments on a
+    /// list, an [optional](Arg::optional) argument before one that is not,
+    /// or one whose default its argument does not take.
     ///
     /// # Examples
     ///
@@ -387,6 +436,9 @@ impl Actions {
         }
         if action.on.is_some() && !action.args.is_empty() {
             return Err(Off::new(format!("action {id}: a list takes no arguments")));
+        }
+        if let Some(fault) = registry::optional_fault(&action.args) {
+            return Err(Off::new(format!("action {id}: {fault}")));
         }
         let mut declared = self.registry.declared.relock_write();
         if declared.iter().any(|d| d.action.id == id) {
@@ -732,152 +784,6 @@ impl Actions {
     }
 }
 
-/// What the mod answers the loader: a text, such as its sheet, or how a run
-/// went.
-enum Answered {
-    Text(String),
-    Run(Outcome),
-}
-
-thread_local! {
-    /// The last reply, alive until the next question on this thread.
-    static REPLY: RefCell<String> = const { RefCell::new(String::new()) };
-}
-
-/// Runs a typed line for `player`, from chat, the console or a remote
-/// caller: a panic in a handler turns off only the mod's typed lines, with a
-/// warning, and every later one is refused saying so.
-fn run_command(
-    registry: &Registry,
-    player: &Player,
-    line: &str,
-    language: Language,
-    via: Via,
-) -> Outcome {
-    use core::sync::atomic::Ordering;
-
-    if registry.commands_off.load(Ordering::Acquire) {
-        return Outcome::refused(registry.say("actions.commands_off", language, &[]));
-    }
-    let run = || registry.run_from_console(player, line, language, via);
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(run)).unwrap_or_else(|payload| {
-        registry.commands_off.store(true, Ordering::Release);
-        crate::warn!(
-            "commands off: a handler panicked: {}",
-            crate::host::panic_text(payload.as_ref())
-        );
-        Outcome::refused("")
-    })
-}
-
-/// Answers one of the loader's questions about this mod's actions.
-///
-/// # Safety
-///
-/// - `call` is null or points at an [`ActionCall`] readable for the size its
-///   header states, with no other writer during the call.
-/// - `call`'s strings are null or point at their `len` bytes, alive and
-///   unchanged for the call.
-/// - `call`'s `reply`, where its header covers it, is null or writable for
-///   one [`ActionReply`], which the loader reads before it asks again on
-///   this thread.
-/// - `user` is the `Box<Arc<Registry>>` that [`Load::actions`] handed over,
-///   which the loader keeps for the process.
-/// - `out` is null or writable for one [`Str`], which the loader reads
-///   before it asks again on this thread.
-unsafe extern "system" fn answer(call: *const ActionCall, user: *mut c_void, out: *mut Str) {
-    // SAFETY: the caller guarantees `call` is null or an `ActionCall`
-    // readable for the size its header states with no concurrent writer,
-    // which is the contract of `read_headed`.
-    let Some(call) = (unsafe { read_headed(call, size_of::<ActionCall>()) }) else {
-        return;
-    };
-    // SAFETY: the caller guarantees `user` is the boxed `Arc<Registry>` that
-    // `hand_over` leaked for the process, so it is aligned, alive and only
-    // read through shared references.
-    let registry = unsafe { &*user.cast::<Arc<Registry>>() };
-    let player = Player::from_info(&call.player);
-    let language = Language(call.language);
-    // SAFETY: the caller keeps the action's bytes alive and unchanged for
-    // the call, and `action` is not used after it returns.
-    let action = unsafe { call.action.as_str() }.unwrap_or("");
-    // SAFETY: the caller keeps the arguments' bytes alive and unchanged for
-    // the call, and `args` is not used after it returns.
-    let args = unsafe { call.args.as_str() }.unwrap_or("");
-    let answered = crate::host::guard(
-        "panic in an action",
-        || Answered::Text(String::new()),
-        || match call.kind {
-            ActionCall::SHEET => Answered::Text(registry.sheet(&player, language)),
-            ActionCall::WINDOW => Answered::Text(registry.window(&player, language, action)),
-            ActionCall::RUN => {
-                let covered = call.header.covers(
-                    core::mem::offset_of!(ActionCall, target)
-                        + size_of::<crate::abi::ActionTarget>(),
-                );
-                let target = covered
-                    .then(|| ActionTarget::from_raw(&call.target))
-                    .flatten();
-                Answered::Run(registry.run_from_interface(&player, action, args, language, target))
-            }
-            ActionCall::CONSOLE => Answered::Run(run_command(
-                registry,
-                &player,
-                action,
-                Language::FALLBACK,
-                Via::Console,
-            )),
-            ActionCall::CHAT => {
-                Answered::Run(run_command(registry, &player, action, language, Via::Chat))
-            }
-            ActionCall::REMOTE => Answered::Run(run_command(
-                registry,
-                &player,
-                action,
-                Language::FALLBACK,
-                Via::Remote,
-            )),
-            _ => Answered::Text(String::new()),
-        },
-    );
-    let slot = if call
-        .header
-        .covers(core::mem::offset_of!(ActionCall, reply) + size_of::<*mut ActionReply>())
-    {
-        call.reply
-    } else {
-        core::ptr::null_mut()
-    };
-    REPLY.with_borrow_mut(|kept| match answered {
-        Answered::Run(outcome) if !slot.is_null() => {
-            *kept = outcome.text;
-            let reply = ActionReply {
-                header: crate::abi::Header::of::<ActionReply>(),
-                done: u8::from(outcome.done),
-                text: Str::new(kept),
-            };
-            // SAFETY: `slot` is not null, as the guard checks, and the caller
-            // guarantees it writable for one `ActionReply`; its text lives in
-            // this thread's buffer until the next question, after the loader
-            // read it.
-            unsafe { slot.write(reply) };
-        }
-        answered if !out.is_null() => {
-            *kept = match answered {
-                Answered::Text(text) => text,
-                // A call without a reply slot reads a run as `1` or `0` and the text.
-                Answered::Run(outcome) => format!("{}{}", u8::from(outcome.done), outcome.text),
-            };
-            // SAFETY: `out` is not null, as the guard checks, and the caller
-            // guarantees it is writable for one `Str`; the text lives in this
-            // thread's buffer until the next question, after the loader read
-            // it.
-            unsafe { out.write(Str::new(kept)) };
-        }
-        _ => {}
-    });
-}
-
 impl Load<'_> {
     /// The mod's player actions: declare each with [`Actions::add`]. `texts`
     /// holds the labels' texts, as [`Load::texts`] reads them; the
@@ -909,7 +815,7 @@ impl Load<'_> {
         });
         crate::load::hand_over(
             Arc::clone(&registry),
-            |user| (host.api().actions)(host.handle(), answer, user),
+            |user| (host.api().actions)(host.handle(), answer::answer, user),
             "actions",
         )?;
         crate::i18n::hand_under(host, &registry.texts);
@@ -939,6 +845,7 @@ pub fn is_valid_id(id: &str) -> bool {
 mod tests {
     use super::registry::{fits, toggle_word};
     use super::*;
+    use crate::i18n::Language;
 
     #[test]
     fn toggle_words_read_both_ways() {
@@ -962,6 +869,7 @@ mod tests {
     }
 }
 
+mod answer;
 mod registry;
 mod request;
 mod script;

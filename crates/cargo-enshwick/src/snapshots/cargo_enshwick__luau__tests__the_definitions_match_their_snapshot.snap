@@ -69,8 +69,8 @@ export type Actions = {
 	run_at: (self: Actions, action: string, args: {ActionValue}, target: ActionTarget) -> (),
 	--- Puts the declared action `action` on `key`, as `Actions.control` does.
 	control: (self: Actions, action: string, key: string) -> (),
-	--- Names the mod's actions as commands `/<name>` and `/<alias>`, as `Actions.commands` does.
-	commands: (self: Actions, name: string, alias: string) -> (),
+	--- Names the mod's actions as commands, `/<alias>` beside the name in the mod's id, as `Actions.commands` does.
+	commands: (self: Actions, alias: string) -> (),
 	--- Tells the platform that who may run the mod's actions changed, as `Actions.rules_changed` does.
 	rules_changed: (self: Actions) -> (),
 	--- Shows `window` to the players with the account keys `players`, or updates it where it shows, as `Actions.show` does.
@@ -524,8 +524,8 @@ export type Comfort = {
 export type CommandSet = {
 	--- The full name, `admin-tools` in `/admin-tools online`.
 	name: string,
-	--- The shorter alias, `adl` in `/adl online`.
-	alias: string,
+	--- The shorter alias, `adm` in `/adm online`; nil when another mod took the word first, so only the full name runs the mod's actions.
+	alias: string?,
 	--- The id of the mod that named them.
 	mod_id: string,
 }

@@ -56,6 +56,8 @@ pub struct Arg {
     pub(super) choices: Vec<(String, String)>,
     pub(super) range: (f64, f64),
     pub(super) step: f64,
+    /// The value a typed line that leaves the argument out gives it.
+    pub(super) default: Option<Value>,
 }
 
 impl Arg {
@@ -66,7 +68,35 @@ impl Arg {
             choices: Vec::new(),
             range: (0.0, 0.0),
             step: 0.0,
+            default: None,
         }
+    }
+
+    /// Lets a typed line leave the argument out: it then takes `default`.
+    /// Only the last arguments of an action may be optional, and never a
+    /// [player](Self::player); `default` is a value the argument takes, or
+    /// an empty text. A text followed only by optional arguments takes the
+    /// rest of the line up to them: the last words go to the optional
+    /// arguments, in order, as far as each reads as its argument, so with
+    /// an item and an optional count `Stone Axe 5` is the item `Stone Axe`
+    /// five times and `Stone Axe` is one. A text in quotes keeps every word
+    /// in it. The help shows the argument in square brackets.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::actions::{Action, Arg, Value};
+    ///
+    /// let give = Action::new("give", "Give an item")
+    ///     .arg(Arg::player("Player"))
+    ///     .arg(Arg::text("Item", 64))
+    ///     .arg(Arg::number("Count", 1.0..=999.0, 1.0).optional(Value::Number(1.0)));
+    /// assert_eq!(give.id(), "give");
+    /// ```
+    #[must_use]
+    pub fn optional(mut self, default: Value) -> Self {
+        self.default = Some(default);
+        self
     }
 
     /// One of the server's players online now, picked from a list; named in
