@@ -9,15 +9,15 @@ use crate::abi::{
     BuffTypeInfo, BuildCheckFn, BuildInfo, BuildRights, BuildingZoneCheckFn, CallFn, CallSpec,
     CallerFrame, ChangeId, ChangeOp, ChatFilterFn, ComfortFn, CommandInfo, ConfigCheckFn,
     ContentRename, ControlFn, ControlSpec, CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo,
-    EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperiencePassFn,
-    FogInfo, GameEventFn, Header, HookSpec, InteractionFn, InventoryRequest, InventoryResultFn,
-    ItemActionFn, ItemData, ItemLine, KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn,
-    LoopWaitSites, MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MidHookSpec, ModEventFn,
-    ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec,
-    PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn,
-    SaveInfo, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn,
-    StatDefData, StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn, Str,
-    SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
+    DropRequest, EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo,
+    ExperiencePassFn, FogInfo, GameEventFn, Header, HookSpec, InteractionFn, InventoryRequest,
+    InventoryResultFn, ItemActionFn, ItemData, ItemLine, KnowledgeInfo, KnowledgeInputFn, Level,
+    LoopWaitFn, LoopWaitSites, MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MidHookSpec,
+    ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink,
+    PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey,
+    ResourcePatchFn, SaveInfo, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest,
+    StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn,
+    Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
     TerrainMaterialInfo, TickHandle, TransactionInfo, TransactionOp, TypeEntry, UiAnswerFn,
     UiDialog, UiExtension, UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront,
 };
@@ -1898,6 +1898,40 @@ pub struct HostApi {
         count: u32,
         close: u32,
     ) -> Status,
+    /// Writes the level or experience of the player whose character is
+    /// `entity` in the server's next level step, where the game raises
+    /// levels itself; `what` says which. [`PROGRESS_SET_LEVEL`](super::PROGRESS_SET_LEVEL): the level
+    /// becomes `value`, kept between 1 and the game's level cap, with no
+    /// experience inside it and what that level needs to go on, as the
+    /// game leaves a level it raised; the game raises no level-up event.
+    /// [`PROGRESS_SET_EXPERIENCE`](super::PROGRESS_SET_EXPERIENCE): the experience inside the level becomes
+    /// `value`, kept below what the level needs.
+    /// [`PROGRESS_ADD_EXPERIENCE`](super::PROGRESS_ADD_EXPERIENCE): `value` is gained, and the game levels
+    /// up from it, one level a step, with its own events. Skill points
+    /// follow the level, as the game counts them from it. A mod asks for
+    /// the writes during `init` with [`PROGRESS_OPEN`](super::PROGRESS_OPEN) and `Entity(0)`;
+    /// [`Status::TOO_LATE`] for that after `init`. [`Status::OK`] queues
+    /// the write; the step applies writes in the order given.
+    /// [`Status::REFUSED`] for a mod that did not ask, an entity that is
+    /// not a player's character in the game, or while 256 writes wait;
+    /// [`Status::BAD_ARGS`] for another `what`; [`Status::WRONG_THREAD`]
+    /// off the server's game thread; [`Status::MISSING`] on a client or a
+    /// build without the level step. A panic in the loader returns
+    /// [`Status::REFUSED`]. ABI 11.24.
+    pub progress_write:
+        extern "system" fn(me: ModHandle, entity: Entity, what: u32, value: u32) -> Status,
+    /// Drops `request.count` new items of `request.item` on the ground at
+    /// `request.position`, as one loose stack any player can pick up, as
+    /// the game spills loot; writes the new pickup's entity to `out`. The
+    /// game falls it to the ground and does not save it.
+    /// [`Status::BAD_ARGS`] for a null `request`, a count of 0 or over
+    /// 65535, or a rarity the game lacks; [`Status::REFUSED`] for an item
+    /// the game does not know; [`Status::WRONG_THREAD`] off the server's
+    /// game thread; [`Status::MISSING`] on a client or a build without the
+    /// pickup. `request` and `out` are borrowed for the call. A panic in
+    /// the loader returns [`Status::REFUSED`]. ABI 11.24.
+    pub drop_items:
+        extern "system" fn(me: ModHandle, request: *const DropRequest, out: *mut Entity) -> Status,
 }
 
 // Every function keeps its slot: 24 header and version bytes, then 8 per slot.
@@ -2036,5 +2070,7 @@ const _: () = {
     assert!(offset_of!(HostApi, resource_buffer) == 24 + 197 * 8);
     assert!(offset_of!(HostApi, game_query) == 24 + 198 * 8);
     assert!(offset_of!(HostApi, action_window) == 24 + 199 * 8);
-    assert!(size_of::<HostApi>() == 24 + 200 * 8);
+    assert!(offset_of!(HostApi, progress_write) == 24 + 200 * 8);
+    assert!(offset_of!(HostApi, drop_items) == 24 + 201 * 8);
+    assert!(size_of::<HostApi>() == 24 + 202 * 8);
 };

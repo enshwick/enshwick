@@ -238,6 +238,11 @@ pub(crate) struct State {
     /// The step each of `spawns` was asked in: the entity is in the world
     /// from the next one, as the loader's spawns are.
     pub(crate) spawn_steps: Vec<u64>,
+    /// The level and experience writes the mod asked for: character, what
+    /// and value; `None` until it asks for them in `init`.
+    pub(crate) progress_writes: Option<Vec<(crate::Entity, u32, u32)>>,
+    /// The drops the mod asked for, with the ids handed out.
+    pub(crate) drops: Vec<(u32, crate::abi::DropRequest)>,
     pub(crate) craft_filters: Vec<Registered<CraftCheckFn>>,
     /// Channels the mod opened: full name, id, handler and pointer.
     pub(crate) channels: Vec<(String, u32, Registered<NetMessageFn>)>,
@@ -714,6 +719,8 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         teleports: Vec::new(),
         spawns: Vec::new(),
         spawn_steps: Vec::new(),
+        progress_writes: None,
+        drops: Vec::new(),
         craft_filters: Vec::new(),
         daytime: None,
         clock_speed: None,
@@ -1148,4 +1155,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     resource_buffer,
     game_query: gameplay::game_query,
     action_window: commands::action_window,
+    progress_write: world::progress_write,
+    drop_items: world::drop_items,
 };

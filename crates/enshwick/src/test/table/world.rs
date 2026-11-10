@@ -410,6 +410,74 @@ pub(crate) extern "system" fn spawn(
     }
 }
 
+pub(crate) extern "system" fn progress_write(
+    _me: ModHandle,
+    entity: crate::Entity,
+    what: u32,
+    value: u32,
+) -> Status {
+    use crate::abi::{
+        PROGRESS_ADD_EXPERIENCE, PROGRESS_OPEN, PROGRESS_SET_EXPERIENCE, PROGRESS_SET_LEVEL,
+    };
+    with(Status::MISSING, |s| {
+        if what == PROGRESS_OPEN {
+            if entity.0 != 0 {
+                return Status::BAD_ARGS;
+            }
+            if s.registration == super::Registration::Closed {
+                return Status::TOO_LATE;
+            }
+            s.progress_writes.get_or_insert_with(Vec::new);
+            return Status::OK;
+        }
+        if ![
+            PROGRESS_SET_LEVEL,
+            PROGRESS_SET_EXPERIENCE,
+            PROGRESS_ADD_EXPERIENCE,
+        ]
+        .contains(&what)
+        {
+            return Status::BAD_ARGS;
+        }
+        let in_game = s.host.players.iter().any(|p| p.entity == entity);
+        match s.progress_writes.as_mut() {
+            Some(writes) if in_game => {
+                writes.push((entity, what, value));
+                Status::OK
+            }
+            _ => Status::REFUSED,
+        }
+    })
+}
+
+pub(crate) extern "system" fn drop_items(
+    _me: ModHandle,
+    request: *const crate::abi::DropRequest,
+    out: *mut crate::Entity,
+) -> Status {
+    let Some(request) = super::get_headed(request) else {
+        return Status::BAD_ARGS;
+    };
+    let rarity = u8::try_from(request.rarity).ok();
+    if !(1..=u32::from(u16::MAX)).contains(&request.count)
+        || rarity
+            .and_then(crate::affixes::ItemRarity::from_raw)
+            .is_none()
+    {
+        return Status::BAD_ARGS;
+    }
+    let entity = with(None, |s| {
+        // Above every spawn's id, so the two never share one.
+        let entity = FIRST_SPAWNED + 0x1_0000 + u32::try_from(s.drops.len()).unwrap_or(0);
+        s.drops.push((entity, request));
+        Some(entity)
+    });
+    match entity {
+        Some(entity) => put(out, crate::Entity(entity)),
+        None => Status::MISSING,
+    }
+}
+
 pub(crate) extern "system" fn time_of_day(_me: ModHandle, out: *mut DaytimeInfo) -> Status {
     let Some(info) = with(None, |s| s.daytime) else {
         return Status::MISSING;

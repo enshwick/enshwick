@@ -81,6 +81,8 @@ pub mod diag;
     expect(dead_code, reason = "only the running game discovers mods")
 )]
 mod discovery;
+#[cfg(windows)]
+mod drops;
 pub mod early;
 #[cfg(windows)]
 mod ecs;

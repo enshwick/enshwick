@@ -209,6 +209,66 @@ impl Spawn {
     }
 }
 
+/// What a dropped stack is, beside its item and count, for
+/// [`Effects::drop_items`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::affixes::ItemRarity;
+/// use enshwick::effects::ItemDrop;
+///
+/// let sword = ItemDrop::new().level(12).rarity(ItemRarity::Rare);
+/// assert_eq!(sword.level, 12);
+/// ```
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
+pub struct ItemDrop {
+    /// The item's level, as the game levels weapons and armour; 0 for none.
+    #[script(default)]
+    pub level: u32,
+    /// The item's rarity.
+    #[script(default)]
+    pub rarity: crate::affixes::ItemRarity,
+}
+
+impl ItemDrop {
+    /// A common item without a level.
+    ///
+    /// # Examples
+    ///
+    /// See [`ItemDrop`].
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            level: 0,
+            rarity: crate::affixes::ItemRarity::Common,
+        }
+    }
+
+    /// At `level`.
+    ///
+    /// # Examples
+    ///
+    /// See [`ItemDrop`].
+    #[must_use]
+    pub const fn level(mut self, level: u32) -> Self {
+        self.level = level;
+        self
+    }
+
+    /// Of `rarity`.
+    ///
+    /// # Examples
+    ///
+    /// See [`ItemDrop`].
+    #[must_use]
+    pub const fn rarity(mut self, rarity: crate::affixes::ItemRarity) -> Self {
+        self.rarity = rarity;
+        self
+    }
+}
+
 /// The fields of a world transform inside an event.
 #[derive(Clone, Copy, Debug)]
 struct TransformAt {
@@ -655,6 +715,55 @@ impl Effects {
 
 #[crate::script(spawns)]
 impl Effects {
+    /// Drops `count` new items of `item` on the ground at `at` in metres, as
+    /// one loose stack any player can pick up, as the game spills loot; the
+    /// pickup's entity comes back at once and is in the world after the
+    /// next step. The game drops it to the ground and does not save it. The
+    /// first drop reads the names of the game's templates once, about a
+    /// tenth of a second on a dedicated server. On the server's game thread
+    /// only.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Refused`] for a count of 0 or over 65535 or an item
+    /// the game does not know; [`WorldError::WrongThread`] off the game
+    /// thread; [`WorldError::Missing`] on a client or a build without the
+    /// pickup.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::effects::{Effects, ItemDrop};
+    ///
+    /// fn logs(effects: &Effects, wood: enshwick::ItemId, at: [f64; 3]) -> Result<enshwick::Entity, enshwick::WorldError> {
+    ///     effects.drop_items(wood, 5, at, ItemDrop::new())
+    /// }
+    /// ```
+    #[script]
+    pub fn drop_items(
+        &self,
+        item: crate::ItemId,
+        count: u32,
+        at: [f64; 3],
+        how: ItemDrop,
+    ) -> Result<Entity, WorldError> {
+        let request = crate::abi::DropRequest {
+            header: Header::of::<crate::abi::DropRequest>(),
+            item,
+            count,
+            position: crate::ecs::fixed(at),
+            level: how.level,
+            rarity: u32::from(how.rarity.to_raw()),
+        };
+        let mut entity = Entity::NONE;
+        WorldError::from_status((self.host.api().drop_items)(
+            self.host.handle(),
+            &raw const request,
+            &raw mut entity,
+        ))?;
+        Ok(entity)
+    }
+
     /// Asks the server to spawn an entity of `template`, its GUID as
     /// `World::template` gives it, at
     /// `position` in metres, as its admin spawn does: an enemy, an animal,

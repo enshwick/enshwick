@@ -5,6 +5,7 @@ pub(crate) mod calls;
 pub(crate) mod chat;
 pub(crate) mod commands;
 pub(crate) mod content;
+pub(crate) mod effects;
 pub(crate) mod gameplay;
 pub(crate) mod hooks;
 pub(crate) mod inventory;

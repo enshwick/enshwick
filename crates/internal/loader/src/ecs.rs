@@ -353,6 +353,17 @@ impl Engine {
         unsafe { self.attribute(registry, set, self.level_attribute) }
     }
 
+    /// Writes `level` to the level attribute of the `Level` set `set`; false
+    /// when nothing was written.
+    ///
+    /// # Safety
+    ///
+    /// As for [`Engine::set_attribute`].
+    pub(crate) unsafe fn set_level(&self, registry: u64, set: *mut u8, level: u32) -> bool {
+        // SAFETY: the caller's contract is `set_attribute`'s.
+        unsafe { self.set_attribute(registry, set, self.level_attribute, level) }
+    }
+
     /// The value of `attribute` in the attribute set `set`, looked up in its
     /// row's attribute `registry`; `None` when the set is not initialised or
     /// lacks it.

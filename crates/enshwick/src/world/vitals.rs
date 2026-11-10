@@ -59,6 +59,30 @@ impl World {
         self.write_stat(entity, stats::Pool::Health, |_| value)
     }
 
+    /// Revives `entity`, a dead character, where it lies, with `health`
+    /// kept between 1 and its maximum; returns the health it now has. The
+    /// game's death step sees it alive from the next step on, as after a
+    /// friend's revive, with no respawn at a bed or flame. On the game
+    /// thread only.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Refused`] for an entity that is alive; otherwise as
+    /// for [`World::update`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn stand_up(world: &enshwick::world::World, player: &enshwick::world::Player) {
+    ///     let max = world.vitals(player.entity).map_or(1, |v| v.health.max);
+    ///     let _revived = world.revive(player.entity, max / 2);
+    /// }
+    /// ```
+    #[script]
+    pub fn revive(self, entity: Entity, health: i32) -> Result<Meter, WorldError> {
+        self.write_stat(entity, stats::Pool::Revival, |_| health)
+    }
+
     /// Adds `amount` to `entity`'s health, kept between 1 and its maximum: a
     /// negative amount takes health but never kills. Returns the health it
     /// now has. On the game thread only.
@@ -275,5 +299,84 @@ impl World {
     #[script]
     pub fn progress(self, entity: Entity) -> Option<Progress> {
         self.0.stats?.progress(self, entity)
+    }
+
+    /// Sets the level of `entity`, a player's character, as the game leaves
+    /// a level it raised: no experience inside it and what the level needs
+    /// to go on. The server's next level step applies it, kept between 1 and
+    /// the game's level cap; skill points follow the level, as the game
+    /// counts them from it, and the game raises no level-up event. On the
+    /// server's game thread only.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Refused`] for an entity that is not a player's
+    /// character in the game, or while 256 writes wait for the step;
+    /// [`WorldError::WrongThread`] off the game thread;
+    /// [`WorldError::Missing`] on a client or a build without the level
+    /// step.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn to_ten(world: &enshwick::world::World, player: &enshwick::world::Player) -> bool {
+    ///     world.set_level(player.entity, 10).is_ok()
+    /// }
+    /// ```
+    #[script]
+    pub fn set_level(self, entity: Entity, level: u32) -> Result<(), WorldError> {
+        self.write_progress(entity, crate::abi::PROGRESS_SET_LEVEL, level)
+    }
+
+    /// Sets the experience inside the level of `entity`, a player's
+    /// character, kept below what the level needs, and drops a gain the game
+    /// has not applied yet. The server's next level step applies it. On the
+    /// server's game thread only.
+    ///
+    /// # Errors
+    ///
+    /// As for [`World::set_level`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn restart_level(world: &enshwick::world::World, player: &enshwick::world::Player) {
+    ///     let _restarted = world.set_experience(player.entity, 0);
+    /// }
+    /// ```
+    #[script]
+    pub fn set_experience(self, entity: Entity, experience: u32) -> Result<(), WorldError> {
+        self.write_progress(entity, crate::abi::PROGRESS_SET_EXPERIENCE, experience)
+    }
+
+    /// Gives `entity`, a player's character, `amount` experience, as a kill
+    /// gives it: the server's next level step applies it, and the game
+    /// levels up from it, one level a step, with its own level-up events.
+    /// Experience filters do not see it. On the server's game thread only.
+    ///
+    /// # Errors
+    ///
+    /// As for [`World::set_level`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn reward(world: &enshwick::world::World, player: &enshwick::world::Player) {
+    ///     let _given = world.add_experience(player.entity, 500);
+    /// }
+    /// ```
+    #[script]
+    pub fn add_experience(self, entity: Entity, amount: u32) -> Result<(), WorldError> {
+        self.write_progress(entity, crate::abi::PROGRESS_ADD_EXPERIENCE, amount)
+    }
+
+    fn write_progress(self, entity: Entity, what: u32, value: u32) -> Result<(), WorldError> {
+        let host = self.host();
+        WorldError::from_status((host.api().progress_write)(
+            host.handle(),
+            entity,
+            what,
+            value,
+        ))
     }
 }

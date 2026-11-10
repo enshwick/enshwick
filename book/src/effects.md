@@ -202,9 +202,45 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
-Items lying in the world are entities too. But a dropped stack carries the
-item and its count in components the spawn does not fill. To hand a player
-items, use [inventory transactions](inventories.md).
+## Drops
+
+`drop_items(item, count, position, how)` drops a stack of new items on the
+ground, as the game spills loot: one loose pickup any player can take. The
+pickup's entity comes back at once and is in the world after the next step.
+The game does not save it. `count` is 1 to 65535; a larger stack is two
+drops. `ItemDrop::new()` drops a common item without a level. Two methods
+change it:
+
+- `.level(n)` gives the item a level, as the game levels weapons and armour;
+- `.rarity(rarity)` gives it an `ItemRarity`.
+
+The first drop reads the names of the game's templates once, about a tenth of
+a second on a dedicated server. An item the game does not know is refused
+(`WorldError::Refused`).
+
+```rust
+use enshwick::actions::{Action, Outcome};
+use enshwick::effects::ItemDrop;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let effects = load.effects();
+    let world = load.world()?;
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
+    let wood = enshwick::ItemId::from_guid(enshwick::content::Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"));
+    actions.add(Action::new("wood", "Five logs at your feet").admins(), move |request| {
+        let Some([x, y, z]) = world.position(request.player.entity) else {
+            return Outcome::refused("You are nowhere");
+        };
+        match effects.drop_items(wood, 5, [x, y + 1.0, z], ItemDrop::new()) {
+            Ok(_) => Outcome::done("Dropped"),
+            Err(why) => Outcome::refused(format!("{why}")),
+        }
+    })
+}
+```
+
+To put items straight into a player's inventory or a chest, use
+[inventory transactions](inventories.md).
 
 Where each call works is in
 [What may be called where](concepts/threads.md#what-may-be-called-where).

@@ -418,6 +418,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
     part!("day steps", crate::daytime::after_step(loader));
     part!("knowledge steps", crate::knowledge::after_step(loader));
     part!("death steps", crate::deaths::after_step(loader));
+    part!("level writes", crate::progress::after_step());
     part!("survivor steps", crate::survivors::after_step(loader));
     part!("item data steps", crate::item_data::after_step(loader));
     part!(

@@ -76,6 +76,8 @@ pub struct Vitals {
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Pool {
     Health,
+    /// Health of a dead character, which stands up with it.
+    Revival,
     Stamina,
     Mana,
     /// An item entity's meter, the game's fuel.
@@ -291,7 +293,7 @@ impl Stats {
         change: impl FnOnce(i32) -> i32,
     ) -> Result<Meter, WorldError> {
         let (set, floor) = match pool {
-            Pool::Health => (&self.health, 1),
+            Pool::Health | Pool::Revival => (&self.health, 1),
             Pool::Stamina => (&self.stamina, 0),
             Pool::Mana => (&self.mana, 0),
             Pool::Meter => (self.meter.as_ref().ok_or(WorldError::Missing)?, 0),
@@ -325,8 +327,13 @@ impl Stats {
         // `count` 32-bit values from `offset`, and `max_slot < count` was
         // checked above.
         let max: i32 = unsafe { read_at(data, value(max_slot)) };
-        if matches!(pool, Pool::Health) && current <= 0 {
-            return Err(WorldError::Refused);
+        // The game's death step marks a character dead while its health is
+        // below 1 and clears the mark once it is not (server 26430253,
+        // `sys.death`): health alone tells the dead.
+        match pool {
+            Pool::Health if current <= 0 => return Err(WorldError::Refused),
+            Pool::Revival if current > 0 => return Err(WorldError::Refused),
+            _ => {}
         }
         let new = change(current).clamp(floor, max.max(floor));
         // SAFETY: `component_mut` handed the attribute set out for writing on

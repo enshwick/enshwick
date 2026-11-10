@@ -1,6 +1,5 @@
 ---
 source: crates/cargo-enshwick/src/luau.rs
-assertion_line: 621
 expression: definitions()
 ---
 --!strict
@@ -1145,6 +1144,14 @@ export type ItemData = {
 	set: (self: ItemData, item: ItemInstance, value: any) -> (),
 	--- Removes the item's value, as `ItemData.remove` does.
 	remove: (self: ItemData, item: ItemInstance) -> (),
+}
+
+--- What a dropped stack is, beside its item and count, for `Effects.drop_items`.
+export type ItemDrop = {
+	--- The item's level, as the game levels weapons and armour; 0 for none.
+	level: number?,
+	--- The item's rarity.
+	rarity: ItemRarity?,
 }
 
 --- An item's static data.
@@ -3287,6 +3294,8 @@ declare enshwick: {
 		vitals: (entity: number) -> Vitals?,
 		--- Sets `entity`'s health to `value`, kept between 1 and its maximum, so a write never kills; returns the health it now has. The game sends it to clients and regenerates from it as from any other value. On the game thread only.
 		set_health: (entity: number, value: number) -> Meter,
+		--- Revives `entity`, a dead character, where it lies, with `health` kept between 1 and its maximum; returns the health it now has. The game's death step sees it alive from the next step on, as after a friend's revive, with no respawn at a bed or flame. On the game thread only.
+		revive: (entity: number, health: number) -> Meter,
 		--- Adds `amount` to `entity`'s health, kept between 1 and its maximum: a negative amount takes health but never kills. Returns the health it now has. On the game thread only.
 		heal: (entity: number, amount: number) -> Meter,
 		--- Sets `entity`'s stamina to `value`, kept between 0 and its maximum; returns the stamina it now has. On the game thread only.
@@ -3303,6 +3312,12 @@ declare enshwick: {
 		skills: (entity: number) -> {UnlockedSkill}?,
 		--- `entity`'s level and experience; nil for an entity without them, off the game thread, or on a build without stat reads.
 		progress: (entity: number) -> Progress?,
+		--- Sets the level of `entity`, a player's character, as the game leaves a level it raised: no experience inside it and what the level needs to go on. The server's next level step applies it, kept between 1 and the game's level cap; skill points follow the level, as the game counts them from it, and the game raises no level-up event. On the server's game thread only.
+		set_level: (entity: number, level: number) -> (),
+		--- Sets the experience inside the level of `entity`, a player's character, kept below what the level needs, and drops a gain the game has not applied yet. The server's next level step applies it. On the server's game thread only.
+		set_experience: (entity: number, experience: number) -> (),
+		--- Gives `entity`, a player's character, `amount` experience, as a kill gives it: the server's next level step applies it, and the game levels up from it, one level a step, with its own level-up events. Experience filters do not see it. On the server's game thread only.
+		add_experience: (entity: number, amount: number) -> (),
 		--- Changes an item's meter on its entity `pide` to what `change` returns for the value now, as `World.change_item_meter` does; nil keeps it.
 		change_item_meter: (pide: number, change: (arg1: number) -> number?) -> Meter,
 		--- Changes `entity`'s shroud time to what `change` returns for the time now, as `World.change_shroud_time` does; nil keeps it.
@@ -3555,6 +3570,8 @@ declare enshwick: {
 		teleport_player: (player: string, position: vector, how: Teleport) -> (),
 		--- Asks the server to move the character of the connected player `player` to where the connected player `to` stands, as `teleport_player` does; the game always picks a free spot beside them, so the two never stand in one place.
 		teleport_player_to: (player: string, to: string, how: Teleport) -> (),
+		--- Drops `count` new items of `item` on the ground at `at` in metres, as one loose stack any player can pick up, as the game spills loot; the pickup's entity comes back at once and is in the world after the next step. The game drops it to the ground and does not save it. The first drop reads the names of the game's templates once, about a tenth of a second on a dedicated server. On the server's game thread only.
+		drop_items: (item: number, count: number, at: vector, how: ItemDrop) -> number,
 		--- Asks the server to spawn an entity of `template`, its GUID as `World.template` gives it, at `position` in metres, as its admin spawn does: an enemy, an animal, a survivor or a prop. The new entity's id comes back at once; the entity is in the world after the next step, and a template the game does not know spawns nothing.
 		spawn: (template: string, position: vector, how: Spawn) -> number,
 	},

@@ -47,6 +47,7 @@ macro_rules! headed {
             DamageCheck,
             DataChange,
             DaytimeInfo,
+            DropRequest,
             EventSpec,
             EventTypeInfo,
             ExperiencePass,

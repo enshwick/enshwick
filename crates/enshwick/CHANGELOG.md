@@ -8,6 +8,21 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `world`: `World::set_level`, `set_experience` and `add_experience` write
+  a player's level and experience in the server's next level step, as the
+  game raises levels: a set level starts empty with what the game asks of
+  it and raises no level-up event, given experience levels up as a kill's
+  does, and skill points follow the level; Luau `enshwick.world` (#1036).
+- `world`: `World::revive` stands a dead character up where it lies with
+  the health asked, kept between 1 and its maximum; a living character is
+  refused (#1036).
+- `effects`: `Effects::drop_items` drops a stack of new items on the
+  ground as one pickup any player can take, with a level and a rarity
+  (`ItemDrop`); Luau `enshwick.effects.drop_items` (#1036).
+- `abi`: `HostApi::progress_write` and `HostApi::drop_items`, ABI 11.24,
+  with `DropRequest` and the `PROGRESS_*` values (#1036).
+- `test`: `Installed::progress_writes` and `Installed::drops` list the
+  writes and drops a mod asked the fake host for (#1036).
 - `actions`: `Arg::item` and `Value::Item`. A window lists the game's
   vanilla items by the names the player's own game shows, with a search,
   and sends the picked item's GUID; a name several items share is followed

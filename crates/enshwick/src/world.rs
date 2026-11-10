@@ -428,6 +428,10 @@ impl World {
             return Ok(Self(resolved));
         }
         let host = load.host();
+        // Asked once for every mod with a world; a client or a build without
+        // the level step answers that it lacks them, and the writes say so.
+        let _asked =
+            (host.api().progress_write)(host.handle(), Entity::NONE, crate::abi::PROGRESS_OPEN, 0);
         let resolved = Resolved {
             host,
             transform: ComponentType::named(host, ids::CURRENT_TRANSFORM)?,
