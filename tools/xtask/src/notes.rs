@@ -394,6 +394,7 @@ mod tests {
             checked(&builds),
             "game version 1287369 on the client and game version 1283531 on the server"
         );
+        assert_eq!(checked(&[]), "no game version");
     }
 
     #[test]
