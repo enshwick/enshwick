@@ -129,7 +129,7 @@ mods that read the same bytes differently never link.
 
 ## Publishing
 
-[`load.publish(&TABLE)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
+[`load.publish(&TABLE)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load.rs)
 publishes a `'static` table. It does so during `init`:
 
 ```rust
@@ -164,7 +164,7 @@ service, so `cargo enshwick deps --luau` leaves services out and says so.
 
 ## Using a service
 
-[`load.service::<T>()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
+[`load.service::<T>()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load.rs)
 returns the table once the loader has checked that the published table
 starts with every field of `T`. The publisher's manifest carries the schema
 of every service it exports. [`cargo enshwick deps`](extending.md#getting-a-points-definition)
@@ -196,7 +196,7 @@ does not serve `T`.
 ## Mod events
 
 The definer defines its event during `init` and keeps the
-[`Emitter`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/services.rs)
+[`Emitter`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/services.rs)
 it gets back. Sending calls every subscriber's handler on the sending
 thread, with no queue and no allocation:
 

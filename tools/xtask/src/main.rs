@@ -63,10 +63,18 @@ const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// API's unstable calls, its generated typed API and the compat task are
 /// linted and tested with the rest.
 const TEST_FEATURE: &str = "enshwick/test,enshwick/unstable,enshwick/typed,xtask/compat";
-/// The API crate alone, without `unstable`: the workspace turns the feature
-/// on for the runtimes, so only a build of its own shows that the stable
-/// surface, its docs and its examples stand without the unstable one.
-const STABLE_API: [&str; 4] = ["--package", "enshwick", "--features", "test"];
+/// The API crate and its core, whose modules and examples it re-exports,
+/// without `unstable`: the workspace turns the feature on for the runtimes,
+/// so only a build of their own shows that the stable surface, its docs and
+/// its examples stand without the unstable one.
+const STABLE_API: [&str; 6] = [
+    "--package",
+    "enshwick",
+    "--package",
+    "enshwick-core",
+    "--features",
+    "enshwick/test",
+];
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -741,7 +749,7 @@ mod tests {
             })
         };
         for file in ["src/script/mod.rs", "src/rates.rs", "src/item_data.rs"] {
-            let name = format!("crates/enshwick/{file} - item (line 1)");
+            let name = format!("crates/internal/core/{file} - item (line 1)");
             assert!(skipped(&name), "{name}");
             assert!(skipped(&name.replace('/', "\\")), "{name}");
         }

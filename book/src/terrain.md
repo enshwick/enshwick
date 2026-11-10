@@ -5,9 +5,9 @@ description: Read the terrain materials of the server's world, and add, dig and 
 
 # Terrain
 
-[`load.terrain()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/terrain.rs)
+[`load.terrain()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/terrain.rs)
 returns the
-[`Terrain`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/terrain.rs)
+[`Terrain`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/terrain.rs)
 of the server's world: the terrain materials, and adding, digging and
 flattening ground as the game's terraforming does. It is `Copy`; get it
 during `init` and move it into handlers, tasks and actions.
@@ -409,7 +409,7 @@ mod itself: it checks no rights, and its events name no owner.
 
 ## Reading voxels
 
-[`load.voxels()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/voxels.rs)
+[`load.voxels()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/voxels.rs)
 returns the `Voxels` of the server's world, which read the ground and the
 building blocks voxel by voxel without changing them. A `VoxelPos` is a
 voxel's index on each axis from the world's corner. Each step is half a

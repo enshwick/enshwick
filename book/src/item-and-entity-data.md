@@ -18,9 +18,9 @@ bonus, the name engraved on a sword and the player who owns a placed chest.
 Another is the nickname of a survivor. Each piece belongs to a kind with an
 id `<mod>:<name>` and a value type of the mod's choosing. The values are kept
 per world beside the game's save, never inside it. The
-[`item_data`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/item_data.rs)
+[`item_data`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/item_data.rs)
 module attaches to items, the
-[`entity_data`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/entity_data.rs)
+[`entity_data`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/entity_data.rs)
 module to any entity the save keeps in place.
 
 ```rust
@@ -77,7 +77,7 @@ end
 - **An item** with an entity of its own, its PIDE: weapons, armour and other
   items with durability or a level, and items with a
   [meter](content/items.md#meters). An
-  [`ItemInstance`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/item_data.rs)
+  [`ItemInstance`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/item_data.rs)
   is that entity and the item id it holds. `ItemInstance::of(&slot)` takes it
   from an [inventory](inventories.md) slot. It gives `None` for an empty slot
   or an item without an entity of its own.

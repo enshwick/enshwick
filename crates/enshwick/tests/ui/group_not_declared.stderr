@@ -21,7 +21,7 @@ help: the trait `enshwick::config::__Group` is not implemented for `Comfort`
  4 | struct Comfort {
    | ^^^^^^^^^^^^^^
 note: required by a bound in `enshwick::config::__group`
-  --> src/config.rs
+  --> $WORKSPACE/crates/internal/core/src/config.rs
    |
    | pub const fn __group<T: __Group>() {}
    |                         ^^^^^^^ required by this bound in `__group`

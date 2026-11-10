@@ -6,10 +6,10 @@ description: A workshop is what a crafting station crafts at. Load::add_workshop
 # Workshops
 
 A workshop is what a crafting station crafts at.
-[`Load::add_workshop`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/workshops.rs)
+[`Load::add_workshop`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/workshops.rs)
 clones a vanilla station into a new one with a workshop of its own, and
 returns its
-[`WorkshopId`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/workshops.rs)
+[`WorkshopId`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/workshops.rs)
 for your recipes.
 
 ## A new station
@@ -123,7 +123,7 @@ made at it.
 
 | Field | Meaning |
 | --- | --- |
-| `like` | The vanilla station cloned, a [`Station`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/workshops.rs): its item and the template the item places. |
+| `like` | The vanilla station cloned, a [`Station`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/workshops.rs): its item and the template the item places. |
 | `id` | The new station item's content id, which every other id derives from. |
 | `named` | Whether the station takes the name `<id>.name`, which also names the workshop; `false` keeps the vanilla names. |
 | `described` | Whether the station item takes the description `<id>.description`; `false` keeps the vanilla one. |
@@ -135,9 +135,9 @@ recipe; set the other fields with struct update syntax. Give the name and
 description their texts with [`add_texts`](texts.md). Their tags are
 `new.name()` and `new.description()`.
 
-[`stations::WORKBENCH`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/workshops.rs)
+[`stations::WORKBENCH`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/workshops.rs)
 is the Workbench. Any other crafting station comes from the game's data.
-[`Vanilla::game()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/vanilla.rs)
+[`Vanilla::game()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/vanilla.rs)
 finds an item by its debug name. `station(item)` reads the template the item
 places, after two checks:
 
@@ -177,7 +177,7 @@ Send recipes to the workshop with its `WorkshopId`:
 
 A `WorkshopId` is only a GUID with the game's id beside it. `add_workshop`
 returns one, and
-[`WorkshopId::new`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/workshops.rs)
+[`WorkshopId::new`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/workshops.rs)
 names any workshop, a vanilla one included:
 
 ```rust

@@ -79,11 +79,12 @@ mod tests {
     /// modules it re-exports, each with the prefix its files take in
     /// [`ALLOWED`]. `enshwick-typed` is generated from the reflection, whose
     /// names it carries on purpose.
-    fn roots() -> [(&'static str, PathBuf); 3] {
+    fn roots() -> [(&'static str, PathBuf); 4] {
         let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
         let internal = |name: &str| crate_dir.join("../internal").join(name).join("src");
         [
             ("", crate_dir.join("src")),
+            ("", internal("core")),
             ("abi:", internal("abi")),
             ("values:", internal("values")),
         ]

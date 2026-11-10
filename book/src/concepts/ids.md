@@ -85,7 +85,7 @@ their keys from the same GUIDs.
 
 ## How does a mod name its own ids?
 
-[`id!`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/ids.rs)
+[`id!`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/ids.rs)
 puts the mod's id in front of a name. It reads the id from
 `[package.metadata.enshwick]` in the crate's `Cargo.toml`. `part` derives the
 ids of one piece of content from its name. Both are constants, and a

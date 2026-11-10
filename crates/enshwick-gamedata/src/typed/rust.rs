@@ -13,7 +13,7 @@ const SCREEN_TYPE: &str = "keen::HudScreenType";
 /// The member of [`SCREEN_TYPE`] that names no screen.
 const NO_SCREEN: &str = "Invalid";
 /// Where the screens go, below the enshwick repository root.
-const SCREENS_FILE: &str = "crates/enshwick/src/ui/screens.rs";
+const SCREENS_FILE: &str = "crates/internal/core/src/ui/screens.rs";
 
 /// Typedefs deeper than this are taken for a loop in bad data.
 const MAX_HOPS: usize = 32;
@@ -568,6 +568,7 @@ impl Catalogue {
              /// # Examples\n\
              ///\n\
              /// ```\n\
+             /// # extern crate enshwick_core as enshwick;\n\
              /// use enshwick::ui::HudScreenType;\n\
              ///\n\
              /// assert_eq!(HudScreenType::StorageChest.name(), \"StorageChest\");\n\
@@ -589,6 +590,7 @@ impl Catalogue {
              /// # Examples\n    \
              ///\n    \
              /// ```\n    \
+             /// # extern crate enshwick_core as enshwick;\n    \
              /// use enshwick::ui::HudScreenType;\n    \
              ///\n    \
              /// assert!(HudScreenType::ALL.contains(&HudScreenType::Map));\n    \

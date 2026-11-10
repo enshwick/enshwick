@@ -13,7 +13,7 @@ summoning staff.
 
 A mod that keeps several entities of one survivor answers those
 questions itself through
-[`load.on_survivor_lookup`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/survivors.rs).
+[`load.on_survivor_lookup`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/survivors.rs).
 The platform tells the askers apart and reads what each works on. The mod
 sees a `Lookup` with the survivor, the game's own answer and a `Purpose`:
 

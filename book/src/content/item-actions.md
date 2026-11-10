@@ -11,7 +11,7 @@ It may refuse the first four and hears when all mods allowed a use. The calls ar
 
 ## Give an item behaviour
 
-[`load.on_item(item, kind, handler)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/items.rs)
+[`load.on_item(item, kind, handler)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/items.rs)
 runs `handler` when a player does that kind of action with the item. A mod's
 own item is `ItemId::from_guid` of its [content id](../concepts/ids.md)'s GUID, and in Luau
 `enshwick.content.item_id` of its full content id. The handler gets an
@@ -52,7 +52,7 @@ enshwick.items.on_item(tonic, "Trash", function() return false end)
 ```
 
 A Luau handler that returns nothing allows the action.
-[`load.on_item_action(filter)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/items.rs)
+[`load.on_item_action(filter)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/items.rs)
 hears the actions with every item, for a mod that decides by the item.
 
 ## Bind a function in `items.toml`

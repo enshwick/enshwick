@@ -74,9 +74,9 @@ A mod and the loader are built separately, so they talk through a C ABI,
   with a `Header` (size, major and minor).
 - `HostApi` is the loader's table of functions, passed to the mod at init.
 
-A mod rarely touches the ABI. [`Load`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
+A mod rarely touches the ABI. [`Load`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load.rs)
 wraps the table during init. Afterwards,
-[`host()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/host.rs)
+[`host()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/host.rs)
 returns a `Host`, from any thread. It serves logging, `fault`, `hosting()`
 and the raw table. Each mod DLL links its own copy of the crate,
 so `host()` always answers for the mod that calls it. The

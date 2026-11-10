@@ -647,7 +647,7 @@ version differ, and the player's game stays out of the server.
 ## Packs in a mod
 
 A mod adds a pack it embeds with
-[`Load::add_pack`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/packs.rs);
+[`Load::add_pack`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/packs.rs);
 the names live in the mod's namespace:
 
 ```rust

@@ -5,9 +5,9 @@ description: Read the weather at a place in the server's world and the fronts th
 
 # Weather and chunks
 
-[`load.weather()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/weather.rs)
+[`load.weather()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/weather.rs)
 returns the
-[`Weather`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/weather.rs)
+[`Weather`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/weather.rs)
 of the server's world: how it is at a place, the fronts that make it, and
 starting new weather. It is `Copy`; get it during `init` and move it into
 handlers, tasks and actions.

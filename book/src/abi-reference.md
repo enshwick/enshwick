@@ -93,7 +93,7 @@ The repository checks this in CI:
 
 ## The exports of a mod
 
-[`declare_mod!`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/declare.rs)
+[`declare_mod!`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/declare.rs)
 writes four exports:
 
 | Export                  | Signature                                 | When the loader calls it                               |
@@ -130,7 +130,7 @@ The reason goes to the loader's log as `<file> skipped: <reason>`.
 Every call that can fail returns a
 [`Status`](https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi.rs).
 The safe layer turns a failed status into an
-[`Off`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
+[`Off`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load.rs)
 reason of the form `<what>: <why>`. For example:
 `symbol quest.reward: missing on this game build`.
 
@@ -199,9 +199,9 @@ output `RateId`. A mod reads a code it does not know as `OTHER`.
 ## Events
 
 A mod subscribes with
-[`Load::on`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
+[`Load::on`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load.rs)
 and the types in
-[`events`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/events.rs).
+[`events`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/events.rs).
 It may also subscribe with a raw [`Event`](https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi.rs)
 id through `Load::on_raw_event`. See [Events and the scheduler](events.md).
 

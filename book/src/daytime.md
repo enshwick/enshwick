@@ -5,11 +5,11 @@ description: Read and set the time of day in the server's world with the Clock, 
 
 # Time of day
 
-[`load.clock()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/daytime.rs)
+[`load.clock()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/daytime.rs)
 returns the
-[`Clock`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/daytime.rs)
+[`Clock`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/daytime.rs)
 of the server's world: the time of day, and setting it.
-[`load.clock_speed()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/daytime.rs)
+[`load.clock_speed()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/daytime.rs)
 returns the mod's `ClockSpeed`, its say in how fast the clock runs.
 
 ## Using the clock

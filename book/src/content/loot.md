@@ -5,7 +5,7 @@ description: Read the containers a dead enemy leaves, corpses and loot bags, and
 
 # Loot containers
 
-[`enshwick::loot`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot.rs)
+[`enshwick::loot`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/loot.rs)
 reads the containers a dead enemy leaves, corpses and loot bags, and other
 containers that dissolve once emptied. It reads only; empty a container
 through [Inventories](../inventories.md). To put items into the loot a
@@ -14,9 +14,9 @@ container rolls, see [Random loot](random-loot.md).
 ## Each check of the containers
 
 The game checks every such container each step in one ECS system,
-[`loot::SYSTEM`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot.rs)
+[`loot::SYSTEM`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/loot.rs)
 (`destroy_inventory_on_loot`), on a worker thread.
-[`load.on_loot_pass`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot.rs)
+[`load.on_loot_pass`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/loot.rs)
 runs a handler after each run of it in the server's world. The handler gets a
 `LootPass` that walks that run's containers and reads any entity as one:
 
@@ -66,7 +66,7 @@ system's own hook; see [ECS inside systems](../ecs.md).
 
 ## Reading one container
 
-[`Container`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot.rs)
+[`Container`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/loot.rs)
 holds what one container is and holds, read in one go:
 
 | Field | Meaning |
@@ -76,7 +76,7 @@ holds what one container is and holds, read in one go:
 | `is_empty` | Whether it holds nothing, as the game last recorded. |
 | `expires` | Whether it despawns on its own after a while (`LifeTime`). |
 | `area_loot` | Its `AreaLootOverride`, or `None` without one. `Some(true)` means area loot may take it. `Some(false)` means it is excluded, as items a player dropped are. |
-| `offer` | Its interaction offer, an [`InteractionOfferRuntime`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot.rs); `None` without one. |
+| `offer` | Its interaction offer, an [`InteractionOfferRuntime`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/loot.rs); `None` without one. |
 
 An `InteractionOfferRuntime` has three fields:
 
@@ -105,7 +105,7 @@ From inside any hooked system, with its context:
 - `is_player(ctx, entity)` tells whether an entity is a player character,
   such as an offer's `guest_id`.
 
-[`near(center, at, radius, height)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world/geometry.rs)
+[`near(center, at, radius, height)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/world/geometry.rs)
 tells whether `at` lies near the centre. It must lie within `radius` metres
 of the centre across the ground, and within `height` metres above or below
 it:
@@ -122,7 +122,7 @@ assert!(!near([0.0, 0.0, 0.0], [6.0, 5.0, 8.0], 10.0, 4.0));
 A client that hosts a game runs the system in the built-in server's world
 and in its own. `on_loot_pass` calls its handler for the server's world only,
 checked with
-[`Worlds::is_server(ctx)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ecs.rs),
+[`Worlds::is_server(ctx)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/ecs.rs),
 so the handler needs no check of its own. Entity ids of the two worlds are
 unrelated. See [Sides and hosting](../concepts/sides-and-hosting.md).
 

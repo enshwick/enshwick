@@ -5,9 +5,9 @@ description: The Effects handle of a mod raises game events in the server's worl
 
 # Effects
 
-[`load.effects()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/effects.rs)
+[`load.effects()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/effects.rs)
 returns the mod's
-[`Effects`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/effects.rs):
+[`Effects`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/effects.rs):
 game events it raises in the server's world, teleports and spawns. Like
 [`World`](world.md), it is `Copy`. Get it during `init` and move it into
 handlers, tasks and actions.

@@ -6,7 +6,7 @@ description: Three typed hooks cover how characters grow: skills, comfort and ex
 # Character progress
 
 Three typed hooks cover how characters grow, from
-[`progress`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/progress.rs).
+[`progress`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/progress.rs).
 
 ## Skills
 

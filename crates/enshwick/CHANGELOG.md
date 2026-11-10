@@ -215,6 +215,11 @@ Each entry names the pull request that made the change.
   crate `enshwick-abi`, which `enshwick` re-exports as `enshwick::abi` and
   `enshwick::raw`: a mod still depends on `enshwick` alone and names every
   item as before, and `enshwick.h` is unchanged (#1039).
+- Every other module, from `Load` to the fake host, now lives in the
+  internal crate `enshwick-core`; `enshwick` is a facade that re-exports
+  each at its own path and keeps the crate docs, the macros' docs and the
+  features. A mod still depends on `enshwick` alone and names every item as
+  before (#1040).
 
 ### Fixed
 

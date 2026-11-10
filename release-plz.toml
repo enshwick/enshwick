@@ -44,6 +44,10 @@ version_group = "api"
 name = "enshwick-typed"
 version_group = "api"
 
+[[package]]
+name = "enshwick-core"
+version_group = "api"
+
 # The loader DLL and the proxy stub are not published to crates.io: their
 # versions live in git tags, and their release carries `enshwick.zip`.
 [[package]]

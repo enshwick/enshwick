@@ -5,7 +5,7 @@ description: Read what a chest, a corpse or a player holds, and change it throug
 
 # Inventories
 
-[`enshwick::inventory`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)
+[`enshwick::inventory`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/inventory.rs)
 reads what a chest, a corpse or a player holds, and changes it through the
 game's own transactions. It works in the game server: the dedicated server,
 or a client while it hosts a game.
@@ -13,9 +13,9 @@ or a client while it hosts a game.
 ## Asking for it
 
 Ask for it during `init` with
-[`load.inventories()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs).
+[`load.inventories()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load.rs).
 The returned
-[`Inventories`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)
+[`Inventories`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/inventory.rs)
 is `Copy`; keep it anywhere.
 
 ```rust
@@ -46,7 +46,7 @@ another inventory. Only items with durability or a level have an entity of
 their own, the item's PIDE.
 
 A slot is a
-[`SlotRef`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs):
+[`SlotRef`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/inventory.rs):
 the sub-inventory entity and the slot index, packed as the game packs them,
 `entity | index << 32`.
 
@@ -64,17 +64,17 @@ assert_eq!((slot.inventory(), slot.index()), (Entity(0x41), 3));
 Reads are synchronous plain memory reads. Make them where no inventory
 changes underneath:
 
-- [`read()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)
+- [`read()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/inventory.rs)
   on the server's game thread between steps: in a game event, a
   [scheduler](events.md) task or an inventory callback. Elsewhere it returns
   nothing: empty lists, zero counts, `None`;
-- [`read_in(ctx)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)
+- [`read_in(ctx)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/inventory.rs)
   inside a hooked ECS system, through its context. It is `unsafe`: `ctx`
   must be the hooked system's live context, used on its thread during the
   hook.
 
 Both return a
-[`Reader`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs):
+[`Reader`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/inventory.rs):
 
 | Call | Returns |
 | --- | --- |
@@ -92,7 +92,7 @@ Two calls read the same as `read()` does, without the `Reader`:
 
 A [Luau mod](#from-luau) reads through them.
 
-A [`Slot`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)
+A [`Slot`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/inventory.rs)
 holds these fields:
 
 - `at`, its `SlotRef`;
@@ -106,7 +106,7 @@ A slot is empty when its `item` or `count` is 0. `is_empty()` tells so.
 Item ids are [`ItemId::from_guid`](content/items.md#guids-and-item-ids) of the
 item's GUID.
 
-[`item_info(item)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)
+[`item_info(item)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/inventory.rs)
 gives an item's static data from any thread. The data holds `max_stack_size`
 and three flags, read with these methods:
 
@@ -150,10 +150,10 @@ inventory in one transaction. It returns `None` when none needs it.
 
 ### Batches
 
-[`Batch`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)
-runs several [`Op`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)s
+[`Batch`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/inventory.rs)
+runs several [`Op`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/inventory.rs)s
 as one transaction. A batch goes in through
-[`submit`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs):
+[`submit`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/inventory.rs):
 every operation succeeds, or nothing changes.
 
 ```rust
@@ -188,13 +188,13 @@ The one-operation calls above are batches of one. A batch also sets:
 ### Limits and splitting
 
 A transaction has limits, and
-[`Batch::check`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)
+[`Batch::check`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/inventory.rs)
 tests them:
 
 - at most 64 operations
-  ([`MAX_OPS`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs));
+  ([`MAX_OPS`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/inventory.rs));
 - at most 16 distinct inventories named
-  ([`MAX_INVENTORIES`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs));
+  ([`MAX_INVENTORIES`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/inventory.rs));
 - what fits the game's op log of 512 records. A give or take counts as 16, a
   slot move as 4, a destroy as 1 and a `MoveAll` as 256. So one batch holds
   at most two `MoveAll`s;
@@ -204,7 +204,7 @@ tests them:
 
 `submit` refuses a batch that breaks a limit before it reaches the game,
 with `Done::Refused(BatchError)`.
-[`Batch::split`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)
+[`Batch::split`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/inventory.rs)
 cuts a batch into parts that fit, in order, keeping its settings. Each part
 is all or nothing on its own; together they are not.
 
@@ -224,7 +224,7 @@ assert!(parts.iter().all(|part| part.check().is_ok()));
 ## Outcomes
 
 Each callback gets an
-[`Outcome`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs).
+[`Outcome`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/inventory.rs).
 Its `done` says how the request ended. Its `ops` hold one result per
 operation when the request ran, and are empty otherwise.
 
@@ -236,7 +236,7 @@ operation when the request ran, and are empty otherwise.
 | `TimedOut` | The game did not run its inventory system within 30 seconds; nothing changed. |
 | `Refused(BatchError)` | The batch broke a limit and never reached the game. |
 
-An [`OpResult`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)
+An [`OpResult`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/inventory.rs)
 holds the game's `error` code, 0 for none. Its `remaining` is how much of the
 count the operation could not do. `ok()` is true without an error.
 Operations after a failed one are not run and carry
@@ -265,7 +265,7 @@ inventory it touched to the clients, as vanilla does after a transfer.
 ### Tickets
 
 Every request returns a
-[`Ticket`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)
+[`Ticket`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/inventory.rs)
 that holds the same outcome once it is known. It serves polling instead of a
 callback, through `is_done()` and `outcome()`. Clone it freely. A callback that does
 nothing, `|_| {}`, is fine when you poll.
@@ -305,7 +305,7 @@ game is hosted. See [Sides and hosting](concepts/sides-and-hosting.md).
 
 ## Testing
 
-[The test fake](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/test.rs)
+[The test fake](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/test.rs)
 records a mod's requests. `inventory_requests()` lists them, and
 `finish_inventory(outcome, results)` answers the oldest as the game would.
 `item` and `without_inventories` set what the build has. See

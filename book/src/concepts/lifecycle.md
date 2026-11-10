@@ -58,11 +58,11 @@ it skip in turn. A circle that
 ## The mod
 
 A mod implements
-[`Mod`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs) on its
+[`Mod`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load.rs) on its
 state type:
 
 - `init(load)` registers hooks, settings, events and content, and returns the
-  state or an [`Off`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs);
+  state or an [`Off`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load.rs);
 - `ready(&'static self, host)`, optional, runs once the hooks are armed.
 
 `Off::new(reason)` turns the mod off with a reason for the log. Every fallible
