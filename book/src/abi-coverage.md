@@ -237,3 +237,5 @@ checks that it names every entry once, in that order.
 | `resource_buffer` | loader | — | — |
 | `game_query` | game | — | with a player |
 | `action_window` | game | — | client |
+| `progress_write` | game | — | with a player |
+| `drop_items` | game | — | with a player |
