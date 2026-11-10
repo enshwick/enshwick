@@ -55,8 +55,6 @@ pub enum Kind {
     /// The joined server's settings of a mod, opened from that mod on the
     /// list of mods.
     ModServerSettings,
-    /// The controls page, which may wait for a key.
-    Controls,
 }
 
 /// Where one step back from a page goes.
@@ -77,9 +75,10 @@ pub enum Back {
 pub const fn back(kind: Kind) -> Back {
     match kind {
         Kind::List => Back::Close,
-        Kind::Settings | Kind::ServerList | Kind::ModServerSettings => Back::List,
+        Kind::ServerList | Kind::ModServerSettings => Back::List,
         Kind::ServerSettings => Back::ServerList,
-        Kind::Controls => Back::Inside,
+        // A key binding on the page may wait for a key.
+        Kind::Settings => Back::Inside,
     }
 }
 

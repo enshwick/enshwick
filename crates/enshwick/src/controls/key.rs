@@ -7,8 +7,8 @@ use core::fmt;
 ///
 /// The key is its scan code, the key's place on the keyboard, not the letter
 /// a layout prints on it: `Key::parse("Q")` is the key left of W, also on
-/// an AZERTY keyboard. Names are those of a US keyboard; the controls page
-/// shows each player the name their own layout gives the key. Mouse buttons
+/// an AZERTY keyboard. Names are those of a US keyboard; the key bindings
+/// show each player the name their own layout gives the key. Mouse buttons
 /// are `Mouse1` (left) to `Mouse5`.
 ///
 /// # Examples

@@ -47,7 +47,7 @@ It reads keys only while the game's window has the focus. The game keeps the
 key too: a mod key that is also a game key does both.
 
 A key is a place on the keyboard, not a letter. `Key::parse("Q")` is the key
-left of W on every layout. The controls page shows it with the name the
+left of W on every layout. Key bindings show it with the name the
 player's layout gives it. Names are those of a US keyboard, with Shift, Ctrl
 and Alt joined by `+`, such as `Shift+E`. The mouse buttons are `Mouse1` to
 `Mouse5`. A control fires when its key goes down with at least its modifiers
@@ -144,7 +144,7 @@ fires. The handler still runs on the client.
 `actions.control(id, key)` does all of that in one call, after
 `actions.add`. It declares a control named after the action, on that key,
 which runs the action at each press. Its label is the action's label, a key
-of the texts the mod gave `load.actions`. The Controls page shows it in each
+of the texts the mod gave `load.actions`. Key bindings show it in each
 player's language. A text the mod handed itself under the same key wins, as
 [Actions](actions.md) says. An action with arguments or a list of
 players takes no key.
@@ -179,8 +179,8 @@ each client with Enshwick that joins. Each player gets only the controls
 whose action they may run, by the action's `allow` or `admins`. When the server changes
 a player's permissions, it sends that player's controls again within two
 seconds. An `allow` that reads other state is asked again only then and at
-the next join. The client's Controls page lists them
-under the mod's name with the mod's keys. The player may change the keys,
+the next join. The client's Mods screen lists them
+under the mod's Key bindings with the mod's keys. The player may change the keys,
 and a press sends the run to the server. The server checks who may run the
 action and shows its reply as a notice, as for any action. The label is a
 key of the mod's texts, so each player reads it in their own language. A
@@ -268,11 +268,14 @@ any player holds this step, on the server, vanilla clients included.
 
 ## The player's keys
 
-The Mods screen's Controls page lists every mod's controls under the mod's
-name, the server's controls of its server-only mods included. A click on a key waits for the next key or combination, which becomes
-the binding; Escape cancels and Unbind clears it. The left mouse button
-works the page, so it is bound in the file only. The page warns when two
-controls share a key; the game's own keys are not checked.
+A mod's keys sit on its settings page on the Mods screen, under Key
+bindings, after the world's settings. The keys belong to the player on this
+computer, not to the world. A server-only mod whose controls the server sends
+has its own entry at the end of the list, with its keys alone. A click on a
+key waits for the next key or combination, which becomes the binding; Escape
+cancels and Unbind clears it. The left mouse button works the page, so it is
+bound in the file only. The page warns when a key is shared with another
+control, of any mod; the game's own keys are not checked.
 
 The page writes `mod-controls.toml` in the game's folder: only the keys the
 player changed, each a scan code with its name beside it. A person may edit
@@ -289,7 +292,7 @@ second = 0 # none
 ## Where it works
 
 Keys need Enshwick on the player's client and a game build whose table finds
-the game's current screen. Without it the Controls page says the keys are
+the game's current screen. Without it a mod's Key bindings say the keys are
 off. Linked controls run in the game server: the dedicated server, and a
 client while it hosts a game, single player included. There a control with a
 key and a game action may run its handler on the interface thread and the

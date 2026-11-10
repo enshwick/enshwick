@@ -304,7 +304,7 @@ impl Control {
     /// The handler still runs wherever the mod's code does.
     ///
     /// A mod of side server needs it: the server sends its controls to each
-    /// client that joins, whose controls page lists them under the mod's name
+    /// client that joins, whose Mods screen lists them under the mod's key bindings
     /// and whose player may rebind them, though the client runs none of the
     /// mod's code. The label is then a key of the mod's texts, shown in each
     /// player's language.

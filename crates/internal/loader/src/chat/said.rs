@@ -263,7 +263,7 @@ pub(crate) fn forget() {
 /// emote (server build 387, the loca tag `Emote.chatMessage`), anything
 /// else a notice such as a join or leave line.
 pub(crate) const fn kind_of(chat_type: u8) -> u32 {
-    if chat_type == 1 {
+    if chat_type == super::EMOTE {
         ChatLine::EMOTE
     } else {
         ChatLine::NOTICE

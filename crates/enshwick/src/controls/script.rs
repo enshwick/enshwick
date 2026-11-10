@@ -52,7 +52,7 @@ impl FromScript for GameAction {
 pub(crate) struct ScriptControl {
     /// The control's name, 1 to 32 of `[a-z0-9-]`, as [`Control::new`] takes it.
     pub name: String,
-    /// What the controls page shows, a text key.
+    /// What the mod's key bindings show, a text key.
     pub label: String,
     /// The default key, as [`Control::key`] sets it.
     pub key: Option<Key>,

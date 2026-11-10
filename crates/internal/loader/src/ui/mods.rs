@@ -4,9 +4,11 @@
 //! that world's settings of the mod as the game's settings rows, built from
 //! the schema the mod handed the loader. In another's world the button shows
 //! the values its server sent, read-only, and the server's settings of the
-//! mod are a page of their own, which only its administrators change. In the
-//! main menu there is no button: settings belong to each world, and the
-//! screen says so once.
+//! mod are a page of their own, which only its administrators change. A
+//! mod's key bindings follow its settings on the same page and belong to
+//! the player, so in the main menu, where settings belong to no world, the
+//! button shows only for a mod with key bindings, and the screen says so
+//! once.
 //!
 //! The entries are drawn from two hooks inside the menus' drawing: in the
 //! main menu before its Credits entry, in the pause menu right after its
@@ -89,7 +91,7 @@ enum Page {
     List { first: usize },
     /// Mod `index`'s settings, from row `first` while they page, where
     /// `place` says, with the mod's id when the joined server keeps its
-    /// world settings (`server`).
+    /// world settings (`server`), then the mod's key bindings (`controls`).
     Settings {
         index: usize,
         first: usize,
@@ -97,6 +99,14 @@ enum Page {
         entries: Entries,
         place: mods_screen::Place,
         server: Option<String>,
+        controls: controls::View,
+    },
+    /// The key bindings of mod `id` named `name`, which the joined server
+    /// runs and this client does not have.
+    Bindings {
+        id: String,
+        name: String,
+        controls: controls::View,
     },
     /// The joined server's mods with settings, from `first` while they page.
     ServerList { first: usize },
@@ -112,8 +122,6 @@ enum Page {
         entries: Entries,
         from_mod: bool,
     },
-    /// Every mod's controls and their keys.
-    Controls(controls::View),
     /// The mods that differ from those of a server that refused or kicked
     /// this client, from row `first` while they page.
     Mismatch {
@@ -127,13 +135,12 @@ impl Page {
     const fn kind(&self) -> Kind {
         match self {
             Self::List { .. } | Self::Mismatch { .. } => Kind::List,
-            Self::Settings { .. } => Kind::Settings,
+            Self::Settings { .. } | Self::Bindings { .. } => Kind::Settings,
             Self::ServerList { .. } => Kind::ServerList,
             Self::ServerSettings {
                 from_mod: false, ..
             } => Kind::ServerSettings,
             Self::ServerSettings { from_mod: true, .. } => Kind::ModServerSettings,
-            Self::Controls(_) => Kind::Controls,
         }
     }
 
@@ -399,7 +406,9 @@ fn back(screen: &mut Screen) -> bool {
         Back::ServerList => open_server_list(screen),
         Back::Inside => {
             let done = match &mut screen.page {
-                Page::Controls(view) => view.back(),
+                Page::Settings { controls, .. } | Page::Bindings { controls, .. } => {
+                    controls.back()
+                }
                 _ => true,
             };
             if done {
@@ -431,11 +440,11 @@ fn title(loader: &Loader, page: &Page) -> super::engine::UiText {
             || copy(&[texts::text("mods.title").as_bytes()]),
             |m| copy(&[m.label().as_bytes()]),
         ),
+        Page::Bindings { name, .. } => copy(&[name.as_bytes()]),
         Page::ServerList { .. } => copy(&[texts::text("mods.server").as_bytes()]),
         Page::ServerSettings { id, .. } => {
             copy(&[texts::fill("mods.server.of", &[("id", id)]).as_bytes()])
         }
-        Page::Controls(_) => copy(&[texts::text("controls").as_bytes()]),
         Page::Mismatch { .. } => copy(&[texts::text("join.dialog.title").as_bytes()]),
     }
 }
@@ -495,7 +504,7 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
             return false;
         }
         Next::Page(page, message) => {
-            screen.page = page;
+            screen.page = *page;
             screen.message = message;
             return false;
         }
@@ -519,9 +528,15 @@ enum Next {
     /// Opens the server's list of mods.
     ServerList,
     /// Opens a page, with a message or none.
-    Page(Page, Option<(String, bool)>),
+    Page(Box<Page>, Option<(String, bool)>),
     /// Shows a message.
     Message((String, bool)),
+}
+
+impl Next {
+    fn page(page: Page, message: Option<(String, bool)>) -> Self {
+        Self::Page(Box::new(page), message)
+    }
 }
 
 /// Draws the page's content, inside the scroll area where the build has
@@ -535,7 +550,14 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
             }
             match list(loader, paint, first) {
                 Listed::Settings(index) => settings_page(loader, from, index),
-                Listed::Controls => Next::Page(Page::Controls(controls::View::default()), None),
+                Listed::Bindings(id, name) => Next::page(
+                    Page::Bindings {
+                        id,
+                        name,
+                        controls: controls::View::default(),
+                    },
+                    None,
+                ),
                 Listed::Nothing => Next::Stay,
             }
         }
@@ -546,6 +568,7 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
             entries,
             place,
             server,
+            controls: view,
         } => {
             let look = FRAME.load(Ordering::Relaxed).is_multiple_of(JOINED_EVERY);
             let joined = if look {
@@ -566,22 +589,35 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
             {
                 return server_page(id.clone(), true);
             }
+            let mut next = Next::Stay;
             if rows.is_empty() {
-                paint.label(
-                    texts::text("mods.server.none").as_bytes(),
-                    UiWidget::STYLE_SECONDARY,
-                    true,
-                    false,
-                );
-                return Next::Stay;
-            }
-            match settings(loader, paint, *index, first, rows, entries, place.world) {
-                Some(message) => {
-                    *rows = page_rows(loader, *index, *place);
-                    Next::Message(message)
+                if place.away {
+                    paint.label(
+                        texts::text("mods.server.none").as_bytes(),
+                        UiWidget::STYLE_SECONDARY,
+                        true,
+                        false,
+                    );
                 }
-                None => Next::Stay,
+            } else if let Some(message) =
+                settings(loader, paint, *index, first, rows, entries, place.world)
+            {
+                *rows = page_rows(loader, *index, *place);
+                next = Next::Message(message);
             }
+            if let Some(record) = loader.mods.get(*index)
+                && controls::any(&record.id)
+            {
+                view.yield_to(entries.editing);
+                controls::body(loader, paint, view, &record.id);
+            }
+            next
+        }
+        Page::Bindings {
+            id, controls: view, ..
+        } => {
+            controls::body(loader, paint, view, id);
+            Next::Stay
         }
         Page::ServerList { first } => {
             server_list(paint, first).map_or(Next::Stay, |id| server_page(id, false))
@@ -596,10 +632,6 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
             ..
         } => server_settings(paint, id, first, rows, schema, news, entries)
             .map_or(Next::Stay, Next::Message),
-        Page::Controls(view) => {
-            controls::body(loader, paint, view);
-            Next::Stay
-        }
         Page::Mismatch { rows, first } => {
             mismatch::body(paint, rows, first);
             Next::Stay
@@ -611,15 +643,15 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
 /// settings of a mod with nothing to show here; `from` is the menu under
 /// the screen.
 fn settings_page(loader: &Loader, from: u8, index: usize) -> Next {
-    if loader.mods.get(index).is_none() {
+    let Some(record) = loader.mods.get(index) else {
         return Next::Stay;
-    }
+    };
     let place = place(from, joined_elsewhere());
     let rows = page_rows(loader, index, place);
     let server = server_id(loader, index, place);
     match server {
-        Some(id) if rows.is_empty() => server_page(id, true),
-        server => Next::Page(
+        Some(id) if rows.is_empty() && !controls::any(&record.id) => server_page(id, true),
+        server => Next::page(
             Page::Settings {
                 index,
                 first: 0,
@@ -627,6 +659,7 @@ fn settings_page(loader: &Loader, from: u8, index: usize) -> Next {
                 entries: Entries::default(),
                 place,
                 server,
+                controls: controls::View::default(),
             },
             None,
         ),
@@ -654,7 +687,7 @@ const JOINED_EVERY: u64 = 60;
 /// from the mod on the list of mods (`from_mod`) or the server's list.
 fn server_page(id: String, from_mod: bool) -> Next {
     let asked = crate::net::to_server(&crate::remote::Message::Query { id: id.clone() });
-    Next::Page(
+    Next::page(
         Page::ServerSettings {
             id,
             first: 0,

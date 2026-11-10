@@ -225,7 +225,7 @@ pub(crate) fn key_name(bits: u32) -> String {
 }
 
 /// Every key a control may take, whether each is down, the modifiers held
-/// and whether Escape is down: what the controls page's capture looks at.
+/// and whether Escape is down: what a key capture looks at.
 pub(crate) fn capture_keys() -> (Vec<Key>, Vec<bool>, u32, bool) {
     let layout = layout(focused_thread().unwrap_or(0));
     let keys: Vec<Key> = Key::every().collect();

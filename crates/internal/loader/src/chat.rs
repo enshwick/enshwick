@@ -57,6 +57,9 @@ const POSTED: u8 = 0;
 /// sends for typed text (server build 387); the server copies the type a
 /// client sends unchecked.
 const TYPED: u8 = 0;
+/// The chat type of an emote line (server build 387, the loca tag
+/// `Emote.chatMessage`), which a vanilla client sends for its player's emotes.
+const EMOTE: u8 = 1;
 
 /// Where a line goes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -160,16 +163,16 @@ struct Delivery {
     /// once a line for one player reached others: no line goes to one player
     /// from then on, since this build's chat does not keep it there.
     one_player_off: AtomicBool,
-    /// Players' lines whose client sent a chat type other than typed text,
-    /// which posted as typed text.
-    forged: Drops,
+    /// Players' lines whose client sent a chat type other than typed text
+    /// or an emote, which were dropped.
+    foreign: Drops,
 }
 
 static DELIVERY: Delivery = Delivery {
     dropped: Drops::new(),
     strayed: Drops::new(),
     one_player_off: AtomicBool::new(false),
-    forged: Drops::new(),
+    foreign: Drops::new(),
 };
 
 /// The lines for one player dropped and those that reached
@@ -377,8 +380,9 @@ fn next() -> Option<PostFn> {
 }
 
 /// The loader's link on the game's chat post: drops what a muted player
-/// sent, posts every other line a player's client sent as typed text, and
-/// hands the server's own lines on unchanged; it gives the queue's drain the
+/// sent and a client's line of a type no client sends, passes every other
+/// line a player's client sent through the chat filters, and hands the
+/// server's own lines on unchanged; it gives the queue's drain the
 /// rest of the chain to post through.
 ///
 /// # Safety
@@ -417,33 +421,30 @@ unsafe extern "system" fn post(
         }
     }
     let judged = match typed {
-        None => Verdict::Pass(kind),
+        None => Verdict::Pass,
         // A check that panicked turns its fuse off: the mute is gone for the
-        // process, but a player's line still posts as typed text.
+        // process, but a player's line still keeps only a type a client may send.
         Some(loader) => CHAT_FUSE
             .run("the chat line check", || {
                 // SAFETY: `text` is the game's own argument at the entry of
                 // `chat.post`, by this function's `# Safety`.
-                unsafe { judge(loader, text, hash) }
+                unsafe { judge(loader, kind, text, hash) }
             })
-            .unwrap_or(Verdict::Pass(TYPED)),
+            .unwrap_or_else(|| verdict(true, kind, false, false)),
     };
-    let posted = match judged {
-        Verdict::Drop => {
-            // SAFETY: a line is judged only for a non-null `out`, a result
-            // record of at least 8 writable bytes by this function's
-            // `# Safety`.
-            unsafe { enshwick::raw::write_at(out, 0, 0u64) };
-            return out;
+    if judged == Verdict::Drop {
+        if !sent_by_clients(kind) && DELIVERY.foreign.add(1).is_some() {
+            // shortcut: logs the first drop and every 100th, not once per player; a per-player set when the console needs it.
+            crate::log!(
+                DEBUG,
+                "chat: the client of {hash:016x} sent a line of chat type {kind}; it is dropped"
+            );
         }
-        Verdict::Pass(posted) => posted,
-    };
-    if posted != kind && DELIVERY.forged.add(1).is_some() {
-        // shortcut: logs the first rewrite and every 100th, not once per player; a per-player set when the console needs it.
-        crate::log!(
-            WARN,
-            "chat: the client of {hash:016x} sent a line of chat type {kind}; it posts as typed text"
-        );
+        // SAFETY: only a player's line is dropped, and it is judged only
+        // for a non-null `out`, a result record of at least 8 writable
+        // bytes by this function's `# Safety`.
+        unsafe { enshwick::raw::write_at(out, 0, 0u64) };
+        return out;
     }
     let heard = MODS_FUSE
         .run("the chat line for mods", || {
@@ -470,10 +471,11 @@ unsafe extern "system" fn post(
     match next() {
         // SAFETY: `next` is the rest of `chat.post`'s chain, wired while this
         // detour runs, and the arguments are the game's own, the chat type
-        // bounded to typed text for a line a player's client sent; a text a
+        // bounded to typed text or an emote for a line a player's client
+        // sent; a text a
         // filter rewrote is a span over `rewritten`, which lives past the
         // call and holds at most the table's `chat.max_text` bytes.
-        Some(next) => unsafe { next(out, store, posted, text, loca1, loca2, handle, hash, extra) },
+        Some(next) => unsafe { next(out, store, kind, text, loca1, loca2, handle, hash, extra) },
         None => out,
     }
 }
@@ -489,9 +491,22 @@ enum Heard {
     Rewrite(String),
 }
 
-/// Hands a line the game posts to the mods: a player's line (`typed`) to
-/// the chat filters, then every line that goes on to the lines mods hear
-/// after the step. Nothing happens while no mod filters or hears the chat.
+/// The kind mods hear a line of chat type `kind` as: a player's own text
+/// when a client sent it (`typed`) as typed text, else what the type says,
+/// so a client's emote is heard as an emote.
+const fn heard_as(typed: bool, kind: u8) -> u32 {
+    if typed && kind == TYPED {
+        ChatLine::PLAYER
+    } else {
+        said::kind_of(kind)
+    }
+}
+
+/// Hands a line the game posts to the mods: every line a player's client
+/// sent (`typed`), an emote included, to the chat filters, so no type byte
+/// carries text past them; then every line that goes on to the lines mods
+/// hear after the step. Nothing happens while no mod filters or hears the
+/// chat.
 ///
 /// # Safety
 ///
@@ -512,14 +527,15 @@ unsafe fn for_mods(
     }
     // SAFETY: the caller guarantees `text` null or readable for the call.
     let original = unsafe { read_text(text, layout.max_text) };
-    let (kind, line, heard) = if typed {
+    let kind = heard_as(typed, kind);
+    let (line, heard) = if typed {
         match said::filter(key, loca, original.clone(), layout.max_text) {
             None => return Heard::Drop,
-            Some(line) if line == original => (ChatLine::PLAYER, line, Heard::Keep),
-            Some(line) => (ChatLine::PLAYER, line.clone(), Heard::Rewrite(line)),
+            Some(line) if line == original => (line, Heard::Keep),
+            Some(line) => (line.clone(), Heard::Rewrite(line)),
         }
     } else {
-        (said::kind_of(kind), original, Heard::Keep)
+        (original, Heard::Keep)
     };
     said::heard(
         loader,
@@ -579,18 +595,19 @@ unsafe fn old_frame(text: *const [usize; 2]) -> bool {
     read == Some(OLD_FRAME.len()) && start == OLD_FRAME
 }
 
-/// The verdict on a line the player of account `key` sent: dropped when
-/// the player is muted or the line an old frame line, else typed text.
+/// The verdict on a line of chat type `kind` the player of account `key`
+/// sent: dropped when the player is muted, the line an old frame line or of
+/// a type no client sends, else it keeps its type.
 ///
 /// # Safety
 ///
 /// - `text` is null or the game's span of pointer and byte length, its bytes
 ///   readable and unchanged for the call.
-unsafe fn judge(loader: &'static Loader, text: *const [usize; 2], key: u64) -> Verdict {
+unsafe fn judge(loader: &'static Loader, kind: u8, text: *const [usize; 2], key: u64) -> Verdict {
     // SAFETY: the caller guarantees `text` null or readable for the call.
     let old = unsafe { old_frame(text) };
     let muted = !old && crate::chat_mute::drops(loader, key);
-    verdict(true, TYPED, muted, old)
+    verdict(true, kind, muted, old)
 }
 
 /// The loader when the game posts a line a player's client sent, told by
@@ -620,24 +637,32 @@ unsafe fn typed_line(out: *mut u8) -> Option<&'static Loader> {
 enum Verdict {
     /// The line goes no further.
     Drop,
-    /// The line goes on with this chat type.
-    Pass(u8),
+    /// The line goes on with its chat type.
+    Pass,
 }
 
 /// The verdict on a line of chat type `kind`: a line a player's client sent
-/// (`typed`) is dropped when its player is `muted` or it starts like an old
-/// frame line, and otherwise goes on as typed text, whatever type byte the
-/// client chose, since the server copies that byte unchecked (server build
-/// 387). A line the server or the loader posts itself keeps its type.
+/// (`typed`) is dropped when its player is `muted`, it starts like an old
+/// frame line or its type is one no client sends for its player, since the
+/// server copies that byte unchecked and posts the line under the player's
+/// name (server build 387); otherwise it keeps its type. A line the server
+/// or the loader posts itself keeps its type.
 fn verdict(typed: bool, kind: u8, muted: bool, old_frame: bool) -> Verdict {
     if !typed {
-        return Verdict::Pass(kind);
+        return Verdict::Pass;
     }
-    if muted || old_frame {
+    if muted || old_frame || !sent_by_clients(kind) {
         Verdict::Drop
     } else {
-        Verdict::Pass(TYPED)
+        Verdict::Pass
     }
+}
+
+/// Whether a client sends lines of chat type `kind` for its player: typed
+/// text and emotes. A line of another type (a client sent type 2 on a fall,
+/// client 26430625) carries no text the chat shows under the player's name.
+const fn sent_by_clients(kind: u8) -> bool {
+    kind == TYPED || kind == EMOTE
 }
 
 /// Drops the lines waiting for a hosted game that stops.
@@ -883,8 +908,8 @@ mod tests {
     }
 
     #[test]
-    fn a_player_s_line_of_any_chat_type_is_dropped_while_muted_and_posts_as_typed_text() {
-        for kind in [0, 1, 4, 255] {
+    fn a_player_s_line_of_any_chat_type_is_dropped_while_muted_or_an_old_frame() {
+        for kind in [TYPED, EMOTE, 2, 4, 255] {
             assert_eq!(
                 verdict(true, kind, true, false),
                 Verdict::Drop,
@@ -895,9 +920,29 @@ mod tests {
                 Verdict::Drop,
                 "kind {kind}"
             );
+        }
+    }
+
+    #[test]
+    fn a_client_s_emote_is_heard_as_an_emote_and_only_its_typed_text_as_the_player_s() {
+        assert_eq!(heard_as(true, TYPED), ChatLine::PLAYER);
+        assert_eq!(heard_as(true, EMOTE), ChatLine::EMOTE);
+        assert_eq!(heard_as(false, TYPED), ChatLine::NOTICE, "the server's own");
+        assert_eq!(heard_as(false, EMOTE), ChatLine::EMOTE);
+    }
+
+    #[test]
+    fn a_player_s_typed_line_and_emote_keep_their_chat_type() {
+        assert_eq!(verdict(true, TYPED, false, false), Verdict::Pass);
+        assert_eq!(verdict(true, EMOTE, false, false), Verdict::Pass);
+    }
+
+    #[test]
+    fn a_player_s_line_of_another_chat_type_is_dropped_not_posted_as_empty_text() {
+        for kind in [2, 3, 4, 255] {
             assert_eq!(
                 verdict(true, kind, false, false),
-                Verdict::Pass(TYPED),
+                Verdict::Drop,
                 "kind {kind}"
             );
         }
@@ -906,7 +951,7 @@ mod tests {
     #[test]
     fn lines_the_server_posts_itself_keep_their_chat_type() {
         for kind in [0, 1, 4, 255] {
-            assert_eq!(verdict(false, kind, true, true), Verdict::Pass(kind));
+            assert_eq!(verdict(false, kind, true, true), Verdict::Pass);
         }
     }
 }

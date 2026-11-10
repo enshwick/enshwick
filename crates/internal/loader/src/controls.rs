@@ -79,7 +79,7 @@ static LINKED_FUSE: Fuse = Fuse::new("controls that follow game actions");
 /// The controls' state once they are sealed.
 struct State {
     /// The keys in force and the controls the server carried; set on the
-    /// client at link, by the controls page and by the server's messages.
+    /// client at link, by the key bindings and by the server's messages.
     keys: ArcSwapOption<Bound>,
     /// Where the client's screen gate reads, once the build has it.
     gate: OnceLock<Gate>,
@@ -661,7 +661,7 @@ pub(crate) fn forget() {
     *STATE.rights.relock() = None;
 }
 
-/// A control as the controls page shows it.
+/// A control as the key bindings show it.
 #[derive(Clone, Debug)]
 pub(crate) struct Row {
     /// The control's index among the declared, then the carried.

@@ -1,7 +1,42 @@
 use super::{
     BAR_HEIGHT, BUTTON_CONFIG, Buf, DROPDOWN_CONFIG, Engine, FRAME_SIZE, LABEL_SIZE, SLIDER_CONFIG,
-    TOGGLE_CONFIG, TOGGLE_ENTRIES, UiText, slider_format, stretch,
+    TOGGLE_CONFIG, TOGGLE_ENTRIES, UiText, stretch,
 };
+
+/// `ui.button`'s size mode that fits the button to its text; 1 is a fixed
+/// width, 2 and 3 the column's width (client 26430625, `ui.button` reads it
+/// at `ui.button_size_mode`).
+const BUTTON_FITS_TEXT: u64 = 0;
+/// `ui.button`'s size mode that takes the column's width.
+const BUTTON_FILLS_COLUMN: u64 = 3;
+/// The alignment word that centres a node in its column, as `ui.button`
+/// spells for its own content (client 26430625).
+const BUTTON_ALIGN_CENTRE: u16 = 0x202;
+/// The alignment word that puts a node at the right of its column.
+const BUTTON_ALIGN_RIGHT: u16 = 0x203;
+/// The slider's value text without decimals, for a setting that holds whole
+/// numbers whatever its stops.
+const SLIDER_WHOLE: u32 = 2;
+
+/// The slider's value text: whole numbers for a `whole` setting or when
+/// every stop is one, else two decimals.
+pub(super) fn slider_format(min: f32, max: f32, steps: u32, whole: bool) -> u32 {
+    let is_whole = |v: f32| v.fract() == 0.0;
+    #[expect(clippy::cast_precision_loss, reason = "a count of stops")]
+    let unit =
+        steps >= 2 && is_whole(min) && is_whole(max) && is_whole((max - min) / (steps - 1) as f32);
+    if whole || unit { SLIDER_WHOLE } else { 4 }
+}
+
+/// When a slider gives its value.
+#[derive(Clone, Copy, Debug)]
+pub(in crate::ui) enum Takes {
+    /// While the player drags it.
+    Live,
+    /// When the player lets go, as a setting's does; one of a `whole`
+    /// setting shows its value without decimals.
+    OnRelease { whole: bool },
+}
 
 impl Engine {
     /// Draws the window's title in the popup's title style.
@@ -152,12 +187,36 @@ impl Engine {
     /// - Called inside a window, on the frame's thread.
     /// - The bytes `text` points at outlive the frame.
     pub(in crate::ui) unsafe fn button(&self, text: &UiText, enabled: bool) -> bool {
+        // SAFETY: the caller's contract is `button_as`'s.
+        unsafe { self.button_as(text, enabled, BUTTON_ALIGN_CENTRE, BUTTON_FILLS_COLUMN) }
+    }
+
+    /// Draws a button as wide as its text at the right of its column, for
+    /// an action on the item above it; true when clicked this frame.
+    ///
+    /// # Safety
+    ///
+    /// - Called inside a window, on the frame's thread.
+    /// - The bytes `text` points at outlive the frame.
+    pub(in crate::ui) unsafe fn button_compact(&self, text: &UiText, enabled: bool) -> bool {
+        // SAFETY: the caller's contract is `button_as`'s.
+        unsafe { self.button_as(text, enabled, BUTTON_ALIGN_RIGHT, BUTTON_FITS_TEXT) }
+    }
+
+    /// Draws a button aligned as `align` says and sized by `size_mode`;
+    /// true when clicked this frame.
+    ///
+    /// # Safety
+    ///
+    /// - Called inside a window, on the frame's thread.
+    /// - The bytes `text` points at outlive the frame.
+    unsafe fn button_as(&self, text: &UiText, enabled: bool, align: u16, size_mode: u64) -> bool {
         let layout = &self.layout;
         let mut config = Buf::<BUTTON_CONFIG>::zeroed();
-        config.u16(layout.button_align, 0x202);
+        config.u16(layout.button_align, align);
         config.u8(layout.button_centered, 1);
         config.u8(layout.button_enabled, u8::from(enabled));
-        config.u64(layout.button_size_mode, 3);
+        config.u64(layout.button_size_mode, size_mode);
         config.f32(layout.button_padding[0], 10.0);
         config.f32(layout.button_padding[1], 5.0);
         config.f32(layout.button_scale, 1.0);
@@ -237,8 +296,12 @@ impl Engine {
         (min, max): (f32, f32),
         steps: u32,
         read_only: bool,
-        on_release: bool,
+        takes: Takes,
     ) -> Option<f32> {
+        let (on_release, whole) = match takes {
+            Takes::Live => (false, false),
+            Takes::OnRelease { whole } => (true, whole),
+        };
         let layout = &self.layout;
         let mut config = Buf::<SLIDER_CONFIG>::zeroed();
         // SAFETY: `self.slider_init` is the game's `ui.slider_init`, checked
@@ -252,7 +315,7 @@ impl Engine {
         config.u8(layout.slider_bounded, 1);
         config.u8(layout.slider_read_only, u8::from(read_only));
         config.u8(layout.slider_on_release, u8::from(on_release));
-        config.u32(layout.slider_format, slider_format(min, max, steps));
+        config.u32(layout.slider_format, slider_format(min, max, steps, whole));
         let most = u32::try_from(layout.slider_stop_capacity).unwrap_or(0);
         if (2..=most).contains(&steps) {
             for (i, slot) in (0..steps).zip((layout.slider_stops..).step_by(4)) {

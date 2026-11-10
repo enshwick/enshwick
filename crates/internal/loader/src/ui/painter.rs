@@ -6,7 +6,7 @@ use crate::host::Loader;
 use crate::mod_index::ModIndex;
 use crate::widget_checks;
 
-use super::engine::{Engine, TextBuffer, Typed, UiText};
+use super::engine::{Engine, Row, Takes, TextBuffer, Typed, UiText};
 use super::{ARENA, DRAWING, WINDOW};
 use super::{Drawing, ENGINE, gather};
 
@@ -72,6 +72,13 @@ impl<'a> Painter<'a> {
         unsafe { self.engine.button(&text, enabled) }
     }
 
+    pub(super) fn button_compact(&self, text: &[u8], enabled: bool) -> bool {
+        let text = copy(&[text]);
+        // SAFETY: a window is open on this thread, by the contract of
+        // `Painter::new`; the text lives in the frame's arena.
+        unsafe { self.engine.button_compact(&text, enabled) }
+    }
+
     pub(super) fn toggle(&self, label: &[u8], on: bool, read_only: bool) -> Option<bool> {
         let label = copy(&[label]);
         // SAFETY: a window is open on this thread with `self.context`, by
@@ -93,11 +100,12 @@ impl<'a> Painter<'a> {
         // `Painter::new`; the label lives in the frame's arena.
         unsafe {
             self.engine
-                .slider(&label, value, range, steps, read_only, false)
+                .slider(&label, value, range, steps, read_only, Takes::Live)
         }
     }
 
-    /// A settings slider that takes its value when the player lets go.
+    /// A settings slider that takes its value when the player lets go; one
+    /// of a `whole` setting shows its value without decimals.
     pub(super) fn setting_slider(
         &self,
         label: &[u8],
@@ -105,13 +113,20 @@ impl<'a> Painter<'a> {
         range: (f32, f32),
         steps: u32,
         read_only: bool,
+        whole: bool,
     ) -> Option<f32> {
         let label = copy(&[label]);
         // SAFETY: a window is open on this thread, by the contract of
         // `Painter::new`; the label lives in the frame's arena.
         unsafe {
-            self.engine
-                .slider(&label, value, range, steps, read_only, true)
+            self.engine.slider(
+                &label,
+                value,
+                range,
+                steps,
+                read_only,
+                Takes::OnRelease { whole },
+            )
         }
     }
 
@@ -150,6 +165,38 @@ impl<'a> Painter<'a> {
         // the contract of `Painter::new`; the hint lives in the frame's
         // arena.
         unsafe { self.engine.text_field(self.context, buffer, &hint, ending) }
+    }
+
+    /// Draws a list entry as a row: what `about` draws at the left, what
+    /// `side` draws at its right, centred beside it; `side`'s answer. On a
+    /// build without rows the two stack.
+    pub(super) fn row<R>(&self, about: impl FnOnce(), side: impl FnOnce() -> R) -> R {
+        let mut row = Row::new();
+        // SAFETY: a window is open on this thread, by the contract of
+        // `Painter::new`; `row` stays in place on this stack until
+        // `row_end` below, which follows `row_side` whenever this opens.
+        let open = unsafe { self.engine.row_begin(&mut row) };
+        about();
+        if open {
+            // SAFETY: `row_begin` returned true for `row` in this frame, on
+            // this thread; the painter's widgets close every frame they
+            // open, so nothing `about` drew is open.
+            unsafe { self.engine.row_side(&mut row) };
+        }
+        let done = side();
+        if open {
+            // SAFETY: `row_side` ran for `row` above; the painter's widgets
+            // close every frame they open, so nothing `side` drew is open.
+            unsafe { self.engine.row_end(&mut row) };
+        }
+        done
+    }
+
+    /// The thin line between the entries of a list.
+    pub(super) fn separator(&self) {
+        // SAFETY: a window is open on this thread, by the contract of
+        // `Painter::new`.
+        unsafe { self.engine.separator() };
     }
 
     /// Whether the list drawn now is inside a scroll area.
@@ -372,7 +419,7 @@ pub(super) fn row(
             // in this frame on this thread; the label lives in the frame's
             // arena.
             let changed =
-                unsafe { engine.slider(&label, value, range, raw.steps, read_only, false) };
+                unsafe { engine.slider(&label, value, range, raw.steps, read_only, Takes::Live) };
             if let Some(value) = changed {
                 raw.value = value;
                 raw.result = 1;

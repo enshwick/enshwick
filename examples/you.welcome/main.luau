@@ -29,7 +29,7 @@ end)
 
 -- A key for administrators that tells everyone how many are online. The mod
 -- runs on the server alone, so the server sends the control to each player's
--- controls page, and a press runs the action on the server.
+-- Mods screen, and a press runs the action on the server.
 local texts = enshwick.i18n.texts_from([[
 [en]
 "count" = "Tell everyone how many are online"

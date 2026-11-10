@@ -6711,6 +6711,83 @@ take = "address"
 check = ["mov [rsp+0x10],rbx", "mov [rsp+0x18],rbp"]
 
 [[route]]
+id = "ui.row"
+sides = ["client"]
+in = "ui.popup"
+shape = [
+  "movss xmm1,[rip+?]",
+  "lea rcx,[rbp+?]",
+  "call *",
+  "movss xmm0,[rip+?]",
+  "mov rcx,[rbp+?]",
+  "unpcklps xmm0,xmm6",
+  "movq rdx,xmm0",
+  "call {ui.node_stretch}",
+]
+take = "address"
+check = [
+  "push rbx",
+  "sub rsp,0x30",
+  "mov rax,[rip+?]",
+  "mov rbx,rcx",
+  "movaps [rsp+0x20],xmm6",
+  "xor r8d,r8d",
+  "xor edx,edx",
+  "movaps xmm6,xmm1",
+  "mov rcx,[rax+?]",
+  "mov [rbx],rcx",
+  "mov qword [rbx+0x8],0x0",
+  "mov qword [rbx+0x10],0x0",
+]
+
+[[route]]
+id = "ui.separator"
+sides = ["client"]
+callers = "ui.row"
+shape = [
+  "movss [rbp+?],xmm7",
+  "movaps [rbp],xmm0",
+  "call *",
+  "movaps xmm1,xmm10",
+  "lea rcx,[rbp+?]",
+  "call {ui.row}",
+]
+take = "address"
+check = ["mov [rsp+0x10],rbx", "mov [rsp+0x18],rdi", "push rbp", "mov rbp,rsp"]
+
+[[route]]
+id = "ui.separator_height"
+sides = ["client"]
+in = "ui.separator"
+shape = ["call ?", "movss xmm1,[rdi+*]", "mov rcx,[rbp-?]"]
+take = "value"
+range = [14, 56]
+
+[[route]]
+id = "ui.separator_margin"
+sides = ["client"]
+in = "ui.separator"
+shape = ["lea rdx,[rdi+*]", "call ?"]
+take = "value"
+range = [6, 24]
+
+[[route]]
+id = "ui.separator_offset"
+sides = ["client"]
+in = "ui.separator"
+shape = ["movss xmm0,[rdi+*]", "xorps xmm1,xmm1"]
+take = "value"
+range = [16, 64]
+
+[[route]]
+id = "ui.text_field_look"
+sides = ["client"]
+in = "ui.text_field"
+shape = ["lea rcx,[rbx+?]", "mov dword [rbx+*],0x0", "mov qword [rbx+?],0x40"]
+take = "value"
+range = [0xa4, 0x290]
+
+[[route]]
 id = "ui.text_field_state"
 sides = ["client"]
 in = "~fn:ui.text_field_editing"

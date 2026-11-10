@@ -39,9 +39,9 @@ use crate::{Entity, Host, Load, Off, PlayerKey};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum ChatKind {
-    /// A line a player typed, whatever chat type their client named.
+    /// A line a player typed.
     Player,
-    /// An emote the server posted for a player.
+    /// An emote of a player; one a client sent passes the filters first.
     Emote,
     /// Another line the server posted, such as a player joining or leaving.
     Notice,

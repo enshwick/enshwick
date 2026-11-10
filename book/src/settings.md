@@ -315,7 +315,7 @@ The screen builds each row from the schema, with the game's own widgets:
 | Field | Row |
 | --- | --- |
 | `bool` | a toggle |
-| a number with a range | a slider, in stops for whole numbers of up to 32 values |
+| a number with a range | a slider, in stops for whole numbers of up to 32 values; an integer shows without decimals |
 | a list of up to 16 numbers with a range | a slider per element, numbered from 1 or from `first = n` |
 | `choices` | a dropdown |
 | text up to 256 bytes | a text field |

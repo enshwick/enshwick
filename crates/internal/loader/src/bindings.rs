@@ -1,6 +1,6 @@
 //! One player's keys for mod controls: `mod-controls.toml` in the game's
 //! folder, client only, holding only what the player changed; the clashes
-//! the controls page shows; and how the page captures a new key.
+//! the key bindings show; and how the page captures a new key.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -189,7 +189,7 @@ pub enum Captured {
     Cancelled,
 }
 
-/// The controls page waiting for a key: it counts only a key that goes
+/// A mod's key bindings waiting for a key: it counts only a key that goes
 /// down after the capture began, so the click that began it does not bind
 /// the mouse button.
 #[derive(Clone, Debug)]

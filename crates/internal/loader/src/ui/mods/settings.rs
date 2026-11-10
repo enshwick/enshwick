@@ -14,8 +14,12 @@ use crate::texts;
 use crate::ui::Painter;
 
 /// The rows of mod `index`'s settings page at `place`: in another's world,
-/// the values its server sent, read-only, and none before it sent them.
+/// the values its server sent, read-only, and none before it sent them; in
+/// the main menu none, since settings belong to a world there.
 pub(super) fn page_rows(loader: &Loader, index: usize, place: mods_screen::Place) -> Vec<Row> {
+    if !place.world && !place.away {
+        return Vec::new();
+    }
     let Some(record) = loader.mods.get(index) else {
         return Vec::new();
     };
@@ -124,7 +128,14 @@ pub(super) fn draw_row(
             steps,
             whole,
         } => paint
-            .setting_slider(label.as_bytes(), *value, (*min, *max), *steps, read_only)
+            .setting_slider(
+                label.as_bytes(),
+                *value,
+                (*min, *max),
+                *steps,
+                read_only,
+                *whole,
+            )
             .map(|v| rows::slid(v, *whole)),
         Widget::Choice { options, index } => {
             let options: Vec<&[u8]> = options.iter().map(String::as_bytes).collect();

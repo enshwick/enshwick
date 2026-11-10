@@ -576,7 +576,7 @@ export type ContentRename = {
 export type Control = {
 	--- The control's name, 1 to 32 of `a-z0-9-`, as `Control.new` takes it.
 	name: string,
-	--- What the controls page shows, a text key.
+	--- What the mod's key bindings show, a text key.
 	label: string,
 	--- The default key, as `Control.key` sets it.
 	key: string?,
