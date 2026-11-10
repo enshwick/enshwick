@@ -41,23 +41,36 @@ would without Enshwick:
 The parts are the time, the exception code, the address, and whom the fault
 is blamed on:
 
-| Blame                                                  | Means                                                                     |
-| ------------------------------------------------------ | ------------------------------------------------------------------------- |
-| `blamed on <mod>: in its code`                         | the fault is in the mod's DLL                                             |
-| `blamed on <mod>: in its <feature> callback`           | the loader was running one of the mod's callbacks, such as an action      |
-| `blamed on <mod>: its code is on the stack`            | the fault is in game code a mod's hook or call led to, found by unwinding |
-| `in the loader`                                        | the fault is in the loader with no mod's callback running or code near it |
-| `in the game, called from enshwick`                    | the fault is in game code under the loader's code, with no mod's near it  |
-| `in the game: no mod's or loader's code on the stack`  | Enshwick and its mods are not involved                                    |
+| Blame                                                               | Means                                                                              |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `blamed on <mod>: in its code`                                      | the fault is in the mod's DLL                                                      |
+| `blamed on <mod>: in its <feature> callback`                        | the loader was running one of the mod's callbacks, such as an action               |
+| `blamed on <mod>: its code is on the stack`                         | the fault is in game code a mod's hook or call led to, found by unwinding          |
+| `in the loader`                                                     | the fault is in the loader with no mod's callback running or code near it          |
+| `in the game, called from enshwick`                                 | the fault is in game code under the loader's code, with no mod's near it           |
+| `the game itself crashed: no mod's or loader's code on the stack`   | the whole stack was searched and Enshwick and its mods are not involved            |
+| `whose code led there is not known: the stack was not searched whole` | the stack overflowed or ran deeper than the search, so a mod is not ruled out    |
+| `in code no module names, with no mod's or loader's code on the stack` | the fault is in generated code, such as a hook's trampoline, so it is not the game's own |
 
-The offset in brackets is the address inside the DLL that holds it. The last
-part is what the faulting access read, wrote or ran.
+The offset in brackets is the address inside the module that holds it. When
+no mod or the loader holds the address, a bracket after the address names its
+module. An example is `(+0x6213 in sechost.dll)`. An address in no module gets no such bracket. The
+last part is what the faulting access read, wrote or ran.
 
 Each crash writes its line to the loader's file of that run and to a file of
 its own, `logs/enshwick-crash_<date>_<time>.log`. The newest 10 crash files
 are kept. The next start logs the last crash as a warning and shows it at
-the top of the status summary. The line waits in
-`mods/enshwick/last-crash.txt` until then.
+the top of the status summary. The warning opens with `the game crashed in
+the last session` when Enshwick and its mods were not involved, else with
+`the last session crashed`. The line waits in `mods/enshwick/last-crash.txt`
+until then.
+
+## Why does a server under Wine write a crash file at every stop?
+
+Under Wine 11.0 the game itself crashes at the end of every stop, after the
+save, with or without Enshwick.
+[Run a server on Linux](https://enshwick.com/guides/run-a-linux-server/#why-does-a-server-under-wine-write-a-crash-file-at-every-stop)
+explains the crash file it leaves.
 
 ## Where is the status summary?
 

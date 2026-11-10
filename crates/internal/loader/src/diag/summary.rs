@@ -10,6 +10,23 @@ use super::{PartOff, Patches, SAMPLE_EVERY, TurnedOff};
 /// Hooked functions the summary lists, busiest first.
 const HOOK_LINES: usize = 40;
 
+/// What a crash line says when no mod's or the loader's code was near the
+/// fault.
+pub(crate) const GAME_CRASHED: &str =
+    "the game itself crashed: no mod's or loader's code on the stack";
+
+/// The words that open the last session's crash line in the log and the
+/// summary, telling the game's own crash apart from one a mod or the loader
+/// was near.
+#[must_use]
+pub(crate) fn crash_heading(line: &str) -> &'static str {
+    if line.contains(GAME_CRASHED) {
+        "the game crashed in the last session"
+    } else {
+        "the last session crashed"
+    }
+}
+
 /// One hooked game function's calls.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct HookStat {
@@ -256,7 +273,7 @@ impl Summary {
             duration(self.uptime)
         );
         if let Some(crash) = &self.last_crash {
-            let _w = writeln!(out, "the last session crashed: {crash}");
+            let _w = writeln!(out, "{}: {crash}", crash_heading(crash));
         }
         self.render_settings(&mut out);
         self.render_parts(&mut out);
