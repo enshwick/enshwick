@@ -307,7 +307,7 @@ such as `5` or `"text"`. Text settings also take plain words.
 
 In a world the process runs, single player or hosted, a mod's gear opens
 that world's settings of the mod. In the main menu a gear shows only for a
-mod with key bindings and opens those, and the screen says once that mod
+mod with key bindings, and opens those. The screen says once that mod
 settings belong to each world.
 The game's own world settings show no mod rows.
 
