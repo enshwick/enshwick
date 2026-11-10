@@ -114,6 +114,16 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ("1.0 client (26430625)", "ui.separator_margin", 0xc),
     ("1.0 client (26430625)", "ui.separator_height", 0x1c),
     ("1.0 client (26430625)", "ui.separator_offset", 0x20),
+    // The button's icon flag and texture, read in `ui.button` and in the
+    // vanilla gear buttons that set them on 26430625.
+    ("1.0 client (1269579)", "ui.button_icon_shown", 0x48),
+    ("1.0 client (1269579)", "ui.button_icon", 0x38),
+    ("1.0 client (26082781)", "ui.button_icon_shown", 0x48),
+    ("1.0 client (26082781)", "ui.button_icon", 0x38),
+    ("1.0 client (26320373)", "ui.button_icon_shown", 0x48),
+    ("1.0 client (26320373)", "ui.button_icon", 0x38),
+    ("1.0 client (26430625)", "ui.button_icon_shown", 0x48),
+    ("1.0 client (26430625)", "ui.button_icon", 0x38),
     // The editor's commit, which every terrain edit passes; on 26083076 and
     // 26430253 checked live on server copies.
     ("1.0 server (1269579)", "voxel.commit", 0x83_39d0),

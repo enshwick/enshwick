@@ -8920,3 +8920,21 @@ in = "~undo_kernel"
 shape = ["call *", "mov bl,0x1"]
 take = "address"
 check = ["mov r11,rsp", "mov [r11+0x20],r9", "mov [r11+0x18],r8"]
+
+# The icon `ui.button` draws in place of an empty label when the flag is set:
+# the flag byte it tests and the texture it hands the image lookup.
+[[route]]
+id = "ui.button_icon_shown"
+sides = ["client"]
+in = "ui.button"
+shape = ["cmp [rbx+*],sil", "je ?", "movss xmm2,?"]
+take = "value"
+range = [48, 128]
+
+[[route]]
+id = "ui.button_icon"
+sides = ["client"]
+in = "ui.button"
+shape = ["lea r8,[rbx+*]", "mov rcx,rax"]
+take = "value"
+range = [32, 128]
