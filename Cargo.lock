@@ -431,7 +431,6 @@ dependencies = [
  "aho-corasick",
  "bcdec_rs",
  "bytemuck",
- "const-sha1",
  "const_format",
  "criterion",
  "document-features",

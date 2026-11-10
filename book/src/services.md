@@ -75,7 +75,7 @@ Never free memory the other side allocated.
 
 ### Shapes
 
-A field's hash reaches into its type through [`Shape`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/shape.rs).
+A field's hash reaches into its type through [`Shape`](https://github.com/enshwick/enshwick/blob/main/crates/internal/values/src/shape.rs).
 These types have one already:
 
 - integers and floats

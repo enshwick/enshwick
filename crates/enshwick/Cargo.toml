@@ -19,7 +19,6 @@ enshwick-values.workspace = true
 aho-corasick.workspace = true
 bcdec_rs.workspace = true
 bytemuck.workspace = true
-const-sha1.workspace = true
 const_format.workspace = true
 document-features.workspace = true
 zune-core.workspace = true
