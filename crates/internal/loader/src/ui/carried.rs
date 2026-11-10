@@ -124,7 +124,7 @@ impl Field {
         reason = "a slider takes an f32; the server checks the value it gets"
     )]
     fn new(arg: &ArgView) -> Self {
-        Self {
+        let mut field = Self {
             pick: if arg.kind == ArgView::PLAYER {
                 NO_PICK
             } else {
@@ -137,7 +137,16 @@ impl Field {
             item: None,
             searched: None,
             found: Vec::new(),
+        };
+        match &arg.default {
+            Some(Value::Choice(at)) => field.pick = u32::try_from(*at).unwrap_or(0),
+            Some(Value::Number(number)) => field.number = *number as f32,
+            Some(Value::Toggle(on)) => field.on = *on,
+            Some(Value::Text(text)) => field.text.set(text),
+            Some(Value::Item(item)) => field.item = Some(*item),
+            _ => {}
         }
+        field
     }
 }
 
@@ -311,7 +320,17 @@ unsafe fn window(engine: &Engine, context: usize, view: &View, drawn: &mut Drawn
 /// Draws the window's items; what the player did.
 fn items(paint: &Painter<'_>, view: &View, drawn: &mut Drawn) -> Click {
     let mut click = Click::Nothing;
+    let mut group = "";
     for item in &view.items {
+        if let ItemView::Action(id) = item
+            && let Some(entry) = view.entries.iter().find(|e| e.id == *id)
+            && entry.group != group
+        {
+            group = &entry.group;
+            if !group.is_empty() {
+                paint.label(group.as_bytes(), UiWidget::STYLE_H2, true, false);
+            }
+        }
         let done = match item {
             ItemView::Text(text) => {
                 paint.label(text.as_bytes(), UiWidget::STYLE_BODY, true, false);
@@ -444,7 +463,8 @@ fn fields(
 ) -> Option<Vec<Value>> {
     let mut values = Some(Vec::new());
     for (index, arg) in args.iter().enumerate().skip(from) {
-        let value = field(paint, arg, drawn.field(action, index, arg));
+        let value =
+            field(paint, arg, drawn.field(action, index, arg)).or_else(|| arg.default.clone());
         values = values.zip(value).map(|(mut all, value)| {
             all.push(value);
             all
@@ -879,6 +899,37 @@ mod tests {
         assert_eq!(drawn.field("ban", 0, &arg).pick, 0, "another argument");
         assert_eq!(drawn.field("ban", 1, &arg).pick, 3, "the same field");
         assert_eq!(drawn.fields.len(), 3);
+    }
+
+    #[test]
+    fn a_field_opens_with_its_argument_s_default() {
+        let with = |kind: u8, default: Value| ArgView {
+            kind,
+            min: 1.0,
+            max: 99.0,
+            default: Some(default),
+            ..ArgView::default()
+        };
+        let count = Field::new(&with(ArgView::NUMBER, Value::Number(5.0)));
+        assert!((count.number - 5.0).abs() < f32::EPSILON);
+        assert!(Field::new(&with(ArgView::TOGGLE, Value::Toggle(true))).on);
+        assert_eq!(Field::new(&with(ArgView::CHOICE, Value::Choice(2))).pick, 2);
+        let note = Field::new(&with(ArgView::TEXT, Value::Text("spam".into())));
+        assert_eq!(note.text.text(), "spam");
+        let torch = Guid([7; 16]);
+        assert_eq!(
+            Field::new(&with(ArgView::ITEM, Value::Item(torch))).item,
+            Some(torch)
+        );
+        let plain = Field::new(&ArgView {
+            kind: ArgView::NUMBER,
+            min: 1.0,
+            ..ArgView::default()
+        });
+        assert!(
+            (plain.number - 1.0).abs() < f32::EPSILON,
+            "no default: the least value"
+        );
     }
 
     fn held() -> Vec<(String, String)> {

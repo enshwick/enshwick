@@ -3,8 +3,11 @@
 //! and [`Actions`](super::Actions) share it.
 //!
 //! A sheet is text, a line per item and tab-separated fields: `A` an
-//! action, `G` an argument of the action before it, `O` a player of an
-//! action's list. Texts never hold a tab or a line break.
+//! action, `R` the group of the action before it, `G` an argument of the
+//! action before it, `D` the default of the argument before it, `O` a
+//! player of an action's list. Texts never hold a tab or a line break. A
+//! reader skips a line kind it does not know, so a kind is added, never
+//! changed.
 
 use core::fmt::Write as _;
 
@@ -27,6 +30,9 @@ pub struct Entry {
     pub id: String,
     /// Its label, in the player's language.
     pub label: String,
+    /// The group it stands under, in the player's language; empty for
+    /// none.
+    pub group: String,
     /// A line on what it does; may be empty.
     pub help: String,
     /// Whether it is a list of players with a switch each.
@@ -64,6 +70,8 @@ pub struct ArgView {
     pub choices: Vec<String>,
     /// A player argument's options: account key and name.
     pub players: Vec<(PlayerKey, String)>,
+    /// The value an optional argument takes when left out.
+    pub default: Option<Value>,
 }
 
 impl ArgView {
@@ -124,6 +132,9 @@ pub fn encode(entries: &[Entry]) -> String {
             clean(&entry.help),
             clean(&entry.subject)
         );
+        if !entry.group.is_empty() {
+            let _ = writeln!(out, "R\t{}", clean(&entry.group));
+        }
         for arg in &entry.args {
             let choices = if arg.kind == ArgView::PLAYER {
                 arg.players
@@ -143,6 +154,9 @@ pub fn encode(entries: &[Entry]) -> String {
                 arg.step,
                 choices.join(&ITEM.to_string())
             );
+            if let Some(default) = &arg.default {
+                let _ = writeln!(out, "D\t{}", encode_args(core::slice::from_ref(default)));
+            }
         }
         for (key, name, on) in &entry.players {
             let _ = writeln!(out, "O\t{key:016x}\t{}\t{}", u8::from(*on), clean(name));
@@ -171,9 +185,19 @@ pub fn decode(text: &str) -> Vec<Entry> {
                     per_player: flags & 1 != 0,
                     offered: flags & 4 != 0,
                     subject: (*subject).to_owned(),
-                    args: Vec::new(),
-                    players: Vec::new(),
+                    ..Entry::default()
                 });
+            }
+            ["R", group] => {
+                if let Some(entry) = entries.last_mut() {
+                    (*group).clone_into(&mut entry.group);
+                }
+            }
+            ["D", value] => {
+                let arg = entries.last_mut().and_then(|entry| entry.args.last_mut());
+                if let (Some(arg), Some([default])) = (arg, decode_args(value).as_deref()) {
+                    arg.default = Some(default.clone());
+                }
             }
             ["G", kind, label, min, max, step, choices] => {
                 let Some(entry) = entries.last_mut() else {
@@ -203,6 +227,7 @@ pub fn decode(text: &str) -> Vec<Entry> {
                     step: step.parse().unwrap_or(0.0),
                     choices,
                     players,
+                    default: None,
                 });
             }
             ["O", key, on, name] => {
@@ -293,6 +318,7 @@ mod tests {
             Entry {
                 id: "access".into(),
                 label: "Who may use it".into(),
+                group: String::new(),
                 help: "Let players use the locker".into(),
                 per_player: true,
                 offered: true,
@@ -337,6 +363,65 @@ mod tests {
         expected[0].players[1].1 = "Bob Lee".into();
         assert_eq!(decode(&encode(&entries)), expected);
         assert!(decode("G\t0\tx\t0\t0\t0\t\nnonsense\n").is_empty());
+    }
+
+    #[test]
+    fn a_group_and_defaults_round_trip_in_lines_an_older_reader_skips() {
+        let entry = Entry {
+            id: "give".into(),
+            label: "Give".into(),
+            group: "Items\tand more".into(),
+            offered: true,
+            args: vec![
+                ArgView {
+                    kind: ArgView::TEXT,
+                    label: "Item".into(),
+                    max: 64.0,
+                    ..ArgView::default()
+                },
+                ArgView {
+                    kind: ArgView::NUMBER,
+                    label: "Count".into(),
+                    min: 1.0,
+                    max: 999.0,
+                    step: 1.0,
+                    default: Some(Value::Number(1.0)),
+                    ..ArgView::default()
+                },
+                ArgView {
+                    kind: ArgView::TEXT,
+                    label: "Note".into(),
+                    max: 32.0,
+                    default: Some(Value::Text(String::new())),
+                    ..ArgView::default()
+                },
+            ],
+            ..Entry::default()
+        };
+        let text = encode(core::slice::from_ref(&entry));
+        let mut expected = entry.clone();
+        expected.group = "Items and more".into();
+        assert_eq!(decode(&text), [expected.clone()]);
+
+        let older = text
+            .lines()
+            .filter(|line| !line.starts_with("R\t") && !line.starts_with("D\t"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        expected.group.clear();
+        for arg in &mut expected.args {
+            arg.default = None;
+        }
+        assert_eq!(
+            decode(&older),
+            [expected],
+            "the lines an older loader reads"
+        );
+        assert_eq!(
+            decode("D\tn1\nR\tLost\n"),
+            [],
+            "a group or default before any action is skipped"
+        );
     }
 
     #[test]

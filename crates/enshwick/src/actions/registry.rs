@@ -634,6 +634,11 @@ impl Registry {
         let mut entry = Entry {
             id: d.action.id.clone(),
             label: self.say(&d.action.label, language, &[]),
+            group: if d.action.group.is_empty() {
+                String::new()
+            } else {
+                self.say(&d.action.group, language, &[])
+            },
             help: if d.action.help.is_empty() {
                 String::new()
             } else {
@@ -699,6 +704,7 @@ impl Registry {
                 } else {
                     Vec::new()
                 },
+                default: arg.default.clone(),
             });
         }
         entry

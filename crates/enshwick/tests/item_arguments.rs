@@ -28,6 +28,7 @@ mod tests {
             actions.add(
                 Action::new("spawn", "Spawn")
                     .admins()
+                    .group("Items")
                     .arg(Arg::item("Item"))
                     .arg(Arg::number("Count", 1.0..=99.0, 1.0).optional(Value::Number(1.0))),
                 |request| {
@@ -88,6 +89,13 @@ mod tests {
                 .unwrap(),
         );
         assert_eq!(sheet[0].args[0].kind, ArgView::ITEM);
+        assert_eq!(sheet[0].group, "Items");
+        assert_eq!(sheet[0].args[0].default, None);
+        assert_eq!(
+            sheet[0].args[1].default,
+            Some(Value::Number(1.0)),
+            "a window fills the count with its default"
+        );
 
         let run = |args: &str| loader.ask_actions(ActionCall::RUN, &root(), 0, "spawn", args);
         assert_eq!(run(&format!("i{TORCH}")).as_deref(), Some("1ok"));
