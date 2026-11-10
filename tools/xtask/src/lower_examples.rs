@@ -22,10 +22,9 @@ const WRAPPER_OPEN: &str = "# #[cfg(any())] fn in_enshwick() {";
 const WRAPPER_CLOSE: &str = "# }";
 /// What an example names when it needs the alias line.
 const NAMES_FACADE: &str = "enshwick::";
-/// The fence tokens of a code block rustdoc compiles as Rust, besides the
-/// `edition` ones.
-const RUST_TOKENS: [&str; 6] = [
-    "rust",
+/// The fence tokens rustdoc reads as Rust attributes, besides `rust`,
+/// `ignore`, the `ignore-<target>`, `edition` and error code ones.
+const RUST_TOKENS: [&str; 5] = [
     "should_panic",
     "no_run",
     "compile_fail",
@@ -49,12 +48,26 @@ struct Example {
 }
 
 impl Example {
-    /// Whether rustdoc compiles it as Rust.
+    /// Whether rustdoc compiles it as Rust. By rustdoc's rule a fence is Rust
+    /// without a token of another language, or with `rust` or a Rust
+    /// attribute before the first such token; `ignore` compiles nothing.
     fn compiles(&self) -> bool {
-        self.info
-            .split([',', ' ', '\t'])
-            .filter(|token| !token.is_empty())
-            .all(|token| RUST_TOKENS.contains(&token) || token.starts_with("edition"))
+        let (mut other, mut rust, mut ignored) = (false, false, false);
+        for token in self.info.split([',', ' ', '\t']).filter(|t| !t.is_empty()) {
+            match token {
+                "rust" => rust = true,
+                "ignore" => ignored = true,
+                _ if token.starts_with("edition") => {}
+                _ if RUST_TOKENS.contains(&token)
+                    || token.starts_with("ignore-")
+                    || is_error_code(token) =>
+                {
+                    rust |= !other;
+                }
+                _ => other = true,
+            }
+        }
+        !ignored && (rust || !other)
     }
 
     /// Whether it opens with the wrapper.
@@ -122,6 +135,12 @@ fn doc_line(line: &str) -> Option<(&str, &str)> {
     let text = &rest[marked.len()..];
     let text_at = indent + marked.len() + usize::from(text.starts_with(' '));
     Some((&line[..text_at], &line[text_at..]))
+}
+
+/// Whether `token` is an error code a `compile_fail` example expects, such
+/// as `E0428`.
+fn is_error_code(token: &str) -> bool {
+    token.len() == 5 && token.starts_with('E') && token.bytes().skip(1).all(|b| b.is_ascii_digit())
 }
 
 /// An internal crate whose examples the rules hold.
@@ -493,8 +512,14 @@ impl Thing {
         assert!(fence("").compiles());
         assert!(fence("edition2024").compiles());
         assert!(fence("rust,no_run").compiles());
+        assert!(fence("compile_fail,E0428").compiles());
+        assert!(fence("ignore-windows").compiles());
+        assert!(fence("no_run,text").compiles());
+        assert!(fence("text,rust").compiles());
         assert!(!fence("toml").compiles());
-        assert!(!fence("rust,text").compiles());
+        assert!(!fence("text,no_run").compiles());
+        assert!(!fence("text,E0428").compiles());
+        assert!(!fence("ignore").compiles());
     }
 
     #[test]

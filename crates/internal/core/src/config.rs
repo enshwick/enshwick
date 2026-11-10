@@ -63,6 +63,7 @@ pub use values::{__check_field, __entry};
 /// error naming the file and pointing at both types:
 ///
 /// ```compile_fail,E0428
+/// # extern crate enshwick_core as enshwick;
 /// /// Altars.
 /// #[enshwick::config]
 /// #[derive(Default)]
