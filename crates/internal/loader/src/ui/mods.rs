@@ -211,6 +211,11 @@ pub(super) fn next_frame() -> u64 {
     FRAME.fetch_add(1, Ordering::Relaxed) + 1
 }
 
+/// The frame being drawn, as [`next_frame`] counts it.
+pub(super) fn frame() -> u64 {
+    FRAME.load(Ordering::Relaxed)
+}
+
 /// Links the menu hooks; the screen draws from the interface hook.
 pub(super) fn link(loader: &Loader, engine: &Engine) {
     for (site, handler, part, id) in [

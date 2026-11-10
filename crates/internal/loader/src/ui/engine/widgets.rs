@@ -406,7 +406,8 @@ impl Engine {
         // `ui.dropdown_count` (`Layout::checked`), and `value` and `clicked`
         // are live locals the game writes.
         let _shown = unsafe { (self.dropdown)(config.ptr(), &raw mut value, &raw mut clicked) };
-        let id = label.hash ^ count as u64;
+        let base = label.hash ^ count as u64;
+        let id = TWINS.with_borrow_mut(|twins| twins.id(crate::ui::mods::frame(), base));
         let open = OPEN_DROPDOWN.get();
         if read_only {
             OPEN_DROPDOWN.set(open.filter(|&o| o != id));
@@ -461,10 +462,54 @@ impl Engine {
 }
 
 thread_local! {
-    /// The dropdown whose options show, by its label's hash and option
-    /// count; one at a time, as the game opens one list at a time.
-    // shortcut: two dropdowns of one label and count open together, upgrade to a per-window id if a screen holds such twins.
+    /// The dropdown whose options show, by its id from [`Twins::id`]; one
+    /// at a time, as the game opens one list at a time.
     static OPEN_DROPDOWN: core::cell::Cell<Option<u64>> = const { core::cell::Cell::new(None) };
+    static TWINS: core::cell::RefCell<Twins> = const { core::cell::RefCell::new(Twins::new()) };
+}
+
+/// Dropdowns drawn in a frame that share a label and option count, such as
+/// two "Player" arguments of one window, told apart by the order they draw
+/// in, so each opens alone.
+struct Twins {
+    frame: u64,
+    seen: [u64; TWINS_KEPT],
+    len: usize,
+}
+
+/// Dropdowns of one frame kept to count twins; one drawn after them counts
+/// its twins among these only.
+const TWINS_KEPT: usize = 64;
+
+impl Twins {
+    const fn new() -> Self {
+        Self {
+            frame: 0,
+            seen: [0; TWINS_KEPT],
+            len: 0,
+        }
+    }
+
+    /// The id of the dropdown keyed `base` drawn next in `frame`: `base`
+    /// for the first of its key in the frame, a different id for each twin
+    /// after it, the same ids every frame the dropdowns draw in one order.
+    fn id(&mut self, frame: u64, base: u64) -> u64 {
+        if frame != self.frame {
+            self.frame = frame;
+            self.len = 0;
+        }
+        let before = self
+            .seen
+            .iter()
+            .take(self.len)
+            .filter(|&&s| s == base)
+            .count();
+        if let Some(slot) = self.seen.get_mut(self.len) {
+            *slot = base;
+            self.len += 1;
+        }
+        base ^ (before as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)
+    }
 }
 
 /// The open dropdown after a frame of dropdown `id`: a click on its row
@@ -479,7 +524,22 @@ fn toggled(open: Option<u64>, id: u64, clicked: bool) -> Option<u64> {
 
 #[cfg(test)]
 mod dropdown_tests {
-    use super::toggled;
+    use super::{Twins, toggled};
+
+    #[test]
+    fn two_dropdowns_of_one_label_and_count_get_ids_of_their_own_that_hold_across_frames() {
+        let mut twins = Twins::new();
+        let kick = twins.id(1, 7);
+        let ban = twins.id(1, 7);
+        let other = twins.id(1, 9);
+        assert_eq!(kick, 7, "the first keeps its key");
+        assert_eq!(other, 9);
+        assert_ne!(kick, ban);
+        assert_eq!(twins.id(2, 7), kick, "a new frame counts again");
+        assert_eq!(twins.id(2, 7), ban);
+        let open = toggled(None, ban, true);
+        assert_ne!(open, Some(kick), "a click on one opens only that one");
+    }
 
     #[test]
     fn a_click_opens_a_dropdown_closes_it_again_and_moves_to_another() {
