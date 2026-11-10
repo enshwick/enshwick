@@ -72,8 +72,9 @@ fn unnamed_modules(lib: &str, texts: &[String]) -> Vec<String> {
         .collect()
 }
 
-/// The modules `lib` declares as `pub mod <name>;`, without those whose
-/// attribute lines right above hide them from the docs.
+/// The modules `lib` declares as `pub mod <name>;` or re-exports whole from
+/// an internal crate as `pub use enshwick_<crate>::<name>;`, without those
+/// whose attribute lines right above hide them from the docs.
 fn public_modules(lib: &str) -> Vec<&str> {
     let mut modules = Vec::new();
     let mut hidden = false;
@@ -83,8 +84,19 @@ fn public_modules(lib: &str) -> Vec<&str> {
             hidden |= line == "#[doc(hidden)]";
             continue;
         }
-        if let Some(name) = line
-            .strip_prefix("pub mod ")
+        let declared = line.strip_prefix("pub mod ");
+        // The macro crate's lowercase items are macros, not modules.
+        let reexported = line
+            .strip_prefix("pub use ")
+            .and_then(|rest| rest.split_once("::"))
+            .filter(|(from, _)| from.starts_with("enshwick_") && *from != "enshwick_macros")
+            .map(|(_, name)| name)
+            .filter(|name| {
+                name.bytes()
+                    .all(|b| b.is_ascii_lowercase() || b == b'_' || b == b';')
+            });
+        if let Some(name) = declared
+            .or(reexported)
             .and_then(|rest| rest.strip_suffix(';'))
             && !hidden
         {
@@ -609,6 +621,13 @@ mod tests {
     fn a_hidden_module_needs_no_chapter_and_the_hiding_ends_at_the_next_item() {
         let lib = "#[doc(hidden)]\n#[cfg(test)]\npub mod a;\npub mod b;\n";
         assert_eq!(public_modules(lib), ["b"]);
+    }
+
+    #[test]
+    fn a_module_reexported_whole_from_an_internal_crate_is_public_and_a_macro_is_not() {
+        let lib = "#[doc(inline)]\npub use enshwick_values::shape;\npub use enshwick_values::Off;\n\
+                   pub use enshwick_macros::texts;\n#[doc(hidden)]\npub use enshwick_values::abi;\n";
+        assert_eq!(public_modules(lib), ["shape"]);
     }
 
     #[test]

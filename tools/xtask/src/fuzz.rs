@@ -80,6 +80,8 @@ pub(crate) const TARGETS: &[(&str, &[&str])] = &[
             "crates/enshwick/src/i18n",
             "crates/enshwick/src/packs",
             "crates/internal/loader/src/record",
+            "crates/internal/values/src/off",
+            "crates/internal/values/src/reason",
         ],
     ),
     ("table", &["crates/enshwick-gamedata/src"]),
