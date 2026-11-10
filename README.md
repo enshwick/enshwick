@@ -52,8 +52,8 @@ loads every mod from the `mods/` folder beside it.
 2. Extract it into the folder with `enshrouded.exe` (players) or
    `enshrouded_server.exe` (servers). You get `powrprof.dll` and a `mods`
    folder.
-3. Download the mods you want. Each mod's page links its own archive
-   ([Mods](#mods)).
+3. Download the mods you want. Each mod's page on
+   [the site](https://enshwick.com/#mods) links its own archive.
    Extract each one into the same folder.
 4. Start the game or the server. "Mods" in the main menu and in the pause menu
    lists the mods.
