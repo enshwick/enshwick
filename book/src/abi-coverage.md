@@ -5,10 +5,9 @@ description: How each entry of the host table is tested before 1.0, on the fake 
 
 # ABI test coverage
 
-Every entry of the host table, `HostApi`, has a test on the fake host. An
-entry that rests on the game is also tested in the running game. 1.0 freezes
-only the entries tested both ways; [Stability](stability.md) says what the
-freeze promises.
+Every `HostApi` entry has a test on the fake host. An entry that rests on
+the game is also tested in the running game. 1.0 freezes only the entries
+tested both ways, as [Stability](stability.md) promises.
 
 ## How is an entry tested?
 

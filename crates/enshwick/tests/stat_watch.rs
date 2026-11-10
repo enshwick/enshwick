@@ -41,9 +41,9 @@ mod tests {
     fn an_entity_counts_its_buffs_only_while_watched() {
         let loader = enshwick::test::FakeHost::new().install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Curses)`.
-        let status =
+        let started =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
-        assert_eq!(status, Status::OK, "{:?}", loader.faults());
+        assert_eq!(started, Status::OK, "{:?}", loader.faults());
         let (buffs, stats, doom) = *KIT.get().unwrap();
         let cursed = BuffTypeInfo {
             header: Header::of::<BuffTypeInfo>(),

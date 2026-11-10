@@ -14,9 +14,11 @@ mod tests {
     const BANNED: ItemId = ItemId::new(0x5e03);
     const FARMER: NpcId = NpcId(1_201_801_546);
 
-    /// What the summon handler saw: item, own entity, meter, whether taken.
-    static SUMMONED: Mutex<Vec<(ItemId, Option<Entity>, Option<[u16; 2]>, bool)>> =
-        Mutex::new(Vec::new());
+    /// What the summon handler saw of one use: item, own entity, meter,
+    /// whether it took the item.
+    type Seen = (ItemId, Option<Entity>, Option<[u16; 2]>, bool);
+
+    static SUMMONED: Mutex<Vec<Seen>> = Mutex::new(Vec::new());
 
     struct Staffs;
 
