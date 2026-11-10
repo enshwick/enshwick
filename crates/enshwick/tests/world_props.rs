@@ -159,6 +159,20 @@ mod tests {
     }
 
     #[test]
+    fn a_state_named_twice_still_holds_the_prop() {
+        let (loader, world) = started();
+        loader.set_prop_state(OLD_CHEST, &[HeldState::Inventory, HeldState::Inventory]);
+        let id = world.transaction().remove_prop(OLD_CHEST).commit().unwrap();
+        loader.run_transactions();
+        match world.transaction_status(id) {
+            Some(TransactionStatus::Failed(WorldError::HoldsState(state))) => {
+                assert!(state.holds(HeldState::Inventory));
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
     fn a_removal_that_discards_state_cannot_be_undone() {
         let (loader, world) = started();
         loader.set_prop_state(OLD_CHEST, &[HeldState::Inventory]);
