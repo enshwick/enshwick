@@ -20,7 +20,9 @@
 //! dependency lines of the Markdown to the workspace version's tag, which the
 //! check holds ([`tag_lines`]). `cargo xtask header` rewrites the ABI's
 //! C header, which the check holds to the ABI module and its golden layout
-//! ([`header`]).
+//! ([`header`]). `cargo xtask alias-examples` writes the hidden line that
+//! names an internal crate `enshwick` into its doc examples, which the
+//! check holds with their copies in the facade ([`lower_examples`]).
 //!
 //! `cargo xtask compat` reports what works on a game build. It links the
 //! loader, so it is the binary `xtask-compat` of this package, built with
@@ -38,6 +40,7 @@ mod crate_rules;
 mod dist;
 mod fuzz;
 mod header;
+mod lower_examples;
 mod notes;
 mod ranges;
 mod reports;
@@ -53,7 +56,7 @@ use std::time::Instant;
 
 use affected::{Package, Scope};
 
-const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|windows-lint|windows-tests|fuzz]... [--list-windows-tests] (--all fuzzes only with --part fuzz) | dist [--out <dir>] | notes [--out <file>] [--known-issues <text>] | tag-lines | header | host-args | compat <exe> [--mods <path>...] [--report <file>] [--patterns] [--data <file>] | compat refresh (ENSH_EXES lists the executables)";
+const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|windows-lint|windows-tests|fuzz]... [--list-windows-tests] (--all fuzzes only with --part fuzz) | dist [--out <dir>] | notes [--out <file>] [--known-issues <text>] | tag-lines | header | alias-examples | host-args | compat <exe> [--mods <path>...] [--report <file>] [--patterns] [--data <file>] | compat refresh (ENSH_EXES lists the executables)";
 const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// Turned on by name: most of the API crate's test targets need its fake
 /// loader, and without the feature cargo skips them without a word; the
@@ -88,6 +91,7 @@ fn run(args: &[String]) -> Result<bool, String> {
         "notes" => return notes::run(rest),
         "tag-lines" => return tag_lines::run(rest),
         "header" if rest.is_empty() => return header::run(&workspace_root()),
+        "alias-examples" if rest.is_empty() => return lower_examples::run(&workspace_root()),
         "host-args" if rest.is_empty() => {
             // One argument a line, for CI runs that test the host as the check does.
             for arg in host_args(&packages()?, cfg!(windows)) {
@@ -182,7 +186,8 @@ fn run(args: &[String]) -> Result<bool, String> {
 
 /// The problems the checks that compile nothing find in the tree: manifest
 /// ranges, the book, its links and sentence lengths, the tag lines, the
-/// crate rules and the seals of the compatibility reports.
+/// crate rules, the internal crates' examples and the seals of the
+/// compatibility reports.
 fn tree_problems(root: &std::path::Path, packages: &[Package]) -> Result<Vec<String>, String> {
     let mut problems: Vec<String> = ranges::check(root, packages)
         .into_iter()
@@ -218,6 +223,11 @@ fn tree_problems(root: &std::path::Path, packages: &[Package]) -> Result<Vec<Str
         crate_rules::check()?
             .into_iter()
             .map(|problem| format!("crate rule: {problem}")),
+    );
+    problems.extend(
+        lower_examples::check(root)
+            .into_iter()
+            .map(|problem| format!("internal example: {problem}")),
     );
     problems.extend(
         reports::stale(root, &[])
