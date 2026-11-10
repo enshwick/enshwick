@@ -38,6 +38,8 @@ mod tests {
             })?;
             actions.add(
                 Action::new("kick", "Kick a player")
+                    .group("Players")
+                    .help("Removes the player from the server.")
                     .admins()
                     .arg(Arg::player("Player")),
                 |request| {
@@ -49,7 +51,9 @@ mod tests {
                 },
             )?;
             actions.add(
-                Action::new("repair", "Repair the base").needs(PlayerPermissions::CanEditBase),
+                Action::new("repair", "Repair the base")
+                    .group("World")
+                    .needs(PlayerPermissions::CanEditBase),
                 |request| {
                     ran("repair", request);
                     Outcome::done("repaired")
@@ -187,6 +191,134 @@ mod tests {
             None,
             "no slash, plain chat"
         );
+    }
+
+    #[test]
+    fn help_is_one_line_for_each_action_the_caller_may_run_under_its_group() {
+        let ann = player(3, 7, "Ann", 0);
+        let root = player(
+            4,
+            9,
+            "Root",
+            PlayerInfo::CAN_KICK_BAN | PlayerInfo::CAN_EDIT_BASE,
+        );
+        let loader = start(enshwick::test::FakeHost::new().player(ann).player(root));
+
+        let all = "1you.admin-tools: /adm <action> runs one, /adm help <action> explains one.\n\
+                   online: Players online\n\
+                   boom: Break\n\
+                   Players:\n\
+                   kick <player>: Kick a player\n\
+                   World:\n\
+                   repair: Repair the base";
+        assert_eq!(
+            loader.type_in_chat(&root, 0, "/adm help").as_deref(),
+            Some(all)
+        );
+        assert_eq!(
+            loader.type_in_chat(&root, 0, "/adm").as_deref(),
+            Some(all),
+            "the command alone"
+        );
+        assert_eq!(
+            loader.type_in_chat(&ann, 0, "/ADMIN-TOOLS help").as_deref(),
+            Some(
+                "1you.admin-tools: /admin-tools <action> runs one, /admin-tools help <action> \
+                 explains one.\nonline: Players online\nboom: Break"
+            ),
+            "only what the caller may run, named by the word typed"
+        );
+        let uk = Language::UK_UA.0;
+        let translated = loader.type_in_chat(&ann, uk, "/adm help").unwrap();
+        assert!(
+            translated.starts_with("1you.admin-tools: /adm <дія> виконує дію"),
+            "{translated}"
+        );
+
+        assert_eq!(
+            loader.type_in_chat(&root, 0, "/adm help KICK").as_deref(),
+            Some("1kick <player>: Kick a player\nRemoves the player from the server."),
+        );
+        assert_eq!(
+            loader.type_in_chat(&root, 0, "/adm help online").as_deref(),
+            Some("1online: Players online"),
+            "an action without a longer text"
+        );
+        assert_eq!(
+            loader.type_in_chat(&ann, 0, "/adm help kick").as_deref(),
+            Some("0No action kick; /adm help lists them."),
+            "an action the caller may not run reads as none"
+        );
+    }
+
+    #[test]
+    fn help_names_the_mod_by_its_plain_name_whichever_word_ran_it() {
+        use enshwick::abi::{ModInfo, Str};
+
+        let ann = player(3, 7, "Ann", 0);
+        let loader = start(enshwick::test::FakeHost::new().player(ann).loaded(ModInfo {
+            header: Header::of::<ModInfo>(),
+            id: Str::new("you.admin-tools"),
+            name: Str::new("Admin Tools"),
+            ..ModInfo::EMPTY
+        }));
+        for (line, command) in [("/adm", "/adm"), ("/admin-tools help", "/admin-tools")] {
+            let help = loader.type_in_chat(&ann, 0, line).unwrap();
+            assert!(
+                help.starts_with(&format!("1Admin Tools: {command} <action> runs one")),
+                "{help}"
+            );
+        }
+        let console = player(0, 0, "console", 0x3f);
+        let by_id = loader
+            .ask_actions(ActionCall::CONSOLE, &console, 0, "help", "you.admin-tools")
+            .unwrap();
+        assert!(
+            by_id.starts_with("1Admin Tools: you.admin-tools <action> runs one"),
+            "the console names a mod by its id too: {by_id}"
+        );
+    }
+
+    #[test]
+    fn an_unknown_action_is_refused_with_the_closest_ids_and_how_to_list_them() {
+        let ann = player(3, 7, "Ann", 0);
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let loader = start(enshwick::test::FakeHost::new().player(ann).player(root));
+
+        assert_eq!(
+            loader.type_in_chat(&root, 0, "/adm kik Ann").as_deref(),
+            Some("0No action kik. Closest: kick. /adm help lists them.")
+        );
+        assert_eq!(
+            loader.type_in_chat(&ann, 0, "/adm kik Root").as_deref(),
+            Some("0No action kik; /adm help lists them."),
+            "never an id the caller may not run"
+        );
+        assert_eq!(
+            loader.type_in_chat(&ann, 0, "/admin-tools o").as_deref(),
+            Some("0No action o. Closest: online, boom. /admin-tools help lists them.")
+        );
+        assert_eq!(
+            loader
+                .type_in_chat(&ann, Language::UK_UA.0, "/adm dance")
+                .as_deref(),
+            Some("0Немає дії dance; /adm help перелічує їх.")
+        );
+        assert_eq!(
+            commands::run("adm dance", &Caller::new("rcon"))
+                .unwrap()
+                .text(),
+            "No action dance; adm help lists them.",
+            "a remote caller types no slash"
+        );
+        assert_eq!(
+            loader
+                .ask_actions(ActionCall::CONSOLE, &ann, 0, "dance", "")
+                .as_deref(),
+            Some("0No action dance; help lists them."),
+            "a loader that does not tell the word"
+        );
+        assert!(runs().is_empty());
     }
 
     #[test]
