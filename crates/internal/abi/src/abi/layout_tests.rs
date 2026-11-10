@@ -523,7 +523,7 @@ fn the_abi_layout_and_version_match_the_golden_file() {
 fn structs_in_source() -> BTreeMap<String, Vec<String>> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     // The ABI types the ABI module re-exports from the value types' crate.
-    let values = root.join("../../internal/values/src/abi.rs");
+    let values = root.join("../../values/src/abi.rs");
     let mut files = vec![root.join("abi.rs"), values];
     if let Ok(dir) = std::fs::read_dir(root.join("abi")) {
         files.extend(dir.filter_map(|entry| entry.ok().map(|entry| entry.path())));

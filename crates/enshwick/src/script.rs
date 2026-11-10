@@ -23,7 +23,6 @@
 //! assert!(matches!(Purse { coins: 3 }.into_value(), Value::Record(_)));
 //! ```
 
-mod abi;
 mod events;
 mod namespaces;
 #[cfg(test)]

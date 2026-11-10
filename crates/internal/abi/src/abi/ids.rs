@@ -50,17 +50,20 @@ pub struct Entity(pub u32);
 
 impl Entity {
     /// The engine's id for no entity.
-    pub(crate) const NONE: Self = Self(0);
+    #[doc(hidden)]
+    pub const NONE: Self = Self(0);
 
     /// Whether this is the engine's id for no entity.
+    #[doc(hidden)]
     #[must_use]
-    pub(crate) const fn is_none(self) -> bool {
+    pub const fn is_none(self) -> bool {
         self.0 == 0
     }
 
     /// `Some(entity)` for the engine's id `raw`, `None` for 0.
+    #[doc(hidden)]
     #[must_use]
-    pub(crate) const fn from_raw(raw: u32) -> Option<Self> {
+    pub const fn from_raw(raw: u32) -> Option<Self> {
         if raw == 0 { None } else { Some(Self(raw)) }
     }
 }
@@ -316,6 +319,8 @@ impl From<RecipeId> for KnowledgeId {
 
 /// `new`, `get`, the `From` conversions both ways and the formatting traits
 /// of an id newtype over an integer, which print the bare number.
+#[doc(hidden)]
+#[macro_export]
 macro_rules! id_conversions {
     ($($id:ident($int:ty)),* $(,)?) => {$(
         impl $id {
@@ -371,8 +376,6 @@ macro_rules! id_conversions {
         }
     )*};
 }
-
-pub(crate) use id_conversions;
 
 /// `from_guid` of an id the game numbers by the [`Guid::fnv1a`] of a
 /// resource's GUID.

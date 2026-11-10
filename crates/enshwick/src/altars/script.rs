@@ -36,23 +36,6 @@ impl Object for ZoneSizes {
     const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_SIZES];
 }
 
-impl Typed for Bounds {
-    const TY: &'static Ty = &Ty::Record(&Record::new(
-        "Bounds",
-        "A box of cells, by its lowest and highest corner.",
-        &[
-            Field::new("min", "The lowest corner.", <[i64; 3] as Typed>::TY),
-            Field::new("max", "The highest corner.", <[i64; 3] as Typed>::TY),
-        ],
-    ));
-}
-
-impl IntoScript for Bounds {
-    fn into_value(self) -> Value {
-        Value::Record(vec![self.min.into_value(), self.max.into_value()])
-    }
-}
-
 impl Typed for BuildingZoneCheck<'_> {
     const TY: &'static Ty = &Ty::Record(&Record::new(
         "BuildingZoneCheck",

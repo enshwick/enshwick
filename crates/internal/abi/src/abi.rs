@@ -329,6 +329,7 @@ mod net;
 mod pacing;
 mod points;
 mod rates;
+mod script;
 mod services;
 mod stats;
 mod survivors;

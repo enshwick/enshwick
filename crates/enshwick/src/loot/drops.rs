@@ -89,7 +89,7 @@ impl Kinds {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord, crate::Script)]
 pub struct LootContainerId(u32);
 
-crate::abi::id_conversions!(LootContainerId(u32));
+enshwick_abi::id_conversions!(LootContainerId(u32));
 
 /// One roll of a container's loot, as the filters see it.
 ///

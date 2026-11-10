@@ -1,7 +1,7 @@
 //! The ABI's own types as a script sees them.
 
-use super::{Choice, Error, FromScript, IntoScript, Ty, Typed, Value};
-use crate::abi::{Level, Side};
+use super::{Bounds, Level, Side};
+use crate::script::{Choice, Error, Field, FromScript, IntoScript, Record, Ty, Typed, Value};
 
 /// A side by name, as `mods.side` answers it.
 impl Typed for Side {
@@ -66,6 +66,23 @@ impl Typed for Level {
 impl IntoScript for Level {
     fn into_value(self) -> Value {
         Value::Name(self.name())
+    }
+}
+
+impl Typed for Bounds {
+    const TY: &'static Ty = &Ty::Record(&Record::new(
+        "Bounds",
+        "A box of cells, by its lowest and highest corner.",
+        &[
+            Field::new("min", "The lowest corner.", <[i64; 3] as Typed>::TY),
+            Field::new("max", "The highest corner.", <[i64; 3] as Typed>::TY),
+        ],
+    ));
+}
+
+impl IntoScript for Bounds {
+    fn into_value(self) -> Value {
+        Value::Record(vec![self.min.into_value(), self.max.into_value()])
     }
 }
 

@@ -126,7 +126,8 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 // Enshwick's own mods are declared with them.
 extern crate self as enshwick;
 
-pub mod abi;
+#[doc(inline)]
+pub use enshwick_abi::abi;
 #[cfg(feature = "unstable")]
 pub mod actions;
 pub mod affixes;
@@ -207,7 +208,8 @@ pub mod rates;
     reason = "the rates are public only with `unstable`"
 )]
 mod rates;
-pub mod raw;
+#[doc(inline)]
+pub use enshwick_abi::raw;
 #[cfg(doctest)]
 mod refused;
 pub mod resources;

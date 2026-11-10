@@ -434,6 +434,7 @@ dependencies = [
  "const_format",
  "criterion",
  "document-features",
+ "enshwick-abi",
  "enshwick-macros",
  "enshwick-typed",
  "enshwick-values",
@@ -454,6 +455,19 @@ dependencies = [
  "trybuild",
  "zune-core",
  "zune-png",
+]
+
+[[package]]
+name = "enshwick-abi"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "bytemuck",
+ "enshwick-values",
+ "postcard",
+ "proptest",
+ "serde",
+ "syn 3.0.9",
+ "thiserror",
 ]
 
 [[package]]

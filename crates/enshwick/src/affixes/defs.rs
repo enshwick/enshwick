@@ -376,7 +376,7 @@ pub(crate) enum DefineAffixError {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord, crate::Script)]
 pub struct AffixId(u32);
 
-crate::abi::id_conversions!(AffixId(u32));
+enshwick_abi::id_conversions!(AffixId(u32));
 
 /// The stored name of an affix: the FNV-1a 32 hash of its full id.
 ///
