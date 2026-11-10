@@ -85,4 +85,4 @@ builds keeps the layout and the mods.
 From 1.0 the layout is frozen. The loader's table and its structs grow only
 by appending fields, and a loader runs mods built against older releases.
 [ABI test coverage](abi-coverage.md) lists how each entry of the table is
-tested and which entries 1.0 freezes.
+tested.
