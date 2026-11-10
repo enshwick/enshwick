@@ -95,13 +95,12 @@ const ALL_BITS: u8 = u8::MAX;
 /// One mod's commands as the loader grants them.
 struct Granted {
     id: String,
-    name: String,
-    alias: Option<String>,
+    set: Named<usize>,
 }
 
 impl Granted {
     fn is_called(&self, word: &str) -> bool {
-        self.name == word || self.alias.as_deref() == Some(word)
+        self.set.is_called(word)
     }
 }
 
@@ -128,7 +127,7 @@ fn granted(
     let mut answered = None;
     for (index, (_, alias)) in order.iter().enumerate() {
         let Some(alias) = alias else { continue };
-        let checked = check(&named, &ids, index, alias).map(|(set, _)| named.push(set));
+        let checked = check(&named, &ids, index, Some(alias)).map(|(set, _)| named.push(set));
         if index == me {
             answered = Some(checked);
         }
@@ -137,8 +136,7 @@ fn granted(
         .into_iter()
         .map(|set| Granted {
             id: order[set.owner].0.to_owned(),
-            name: set.name,
-            alias: set.alias,
+            set,
         })
         .collect();
     (sets, answered)
@@ -294,7 +292,8 @@ pub(crate) extern "system" fn command_list(
             .0
             .into_iter()
             .map(|set| {
-                [set.name, set.alias.unwrap_or_default(), set.id].map(String::into_boxed_str)
+                [set.set.name, set.set.alias.unwrap_or_default(), set.id]
+                    .map(String::into_boxed_str)
             })
             .collect();
         s.commands

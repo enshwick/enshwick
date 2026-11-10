@@ -512,16 +512,32 @@ impl Installed {
             } else {
                 text
             };
-            table::with((), |s| {
+            let closed = table::with(None, |s| {
                 let carried = &mut s.commands.carried;
                 let at = carried.iter().position(|(k, i, _)| *k == key && *i == id);
                 match (at, text.is_empty()) {
-                    (Some(at), true) => drop(carried.remove(at)),
-                    (Some(at), false) => carried[at].2 = text,
-                    (None, false) => carried.push((key, id, text)),
-                    (None, true) => {}
+                    (Some(at), true) => {
+                        let (_, id, _) = carried.remove(at);
+                        (change != crate::abi::WINDOW_CLOSE).then_some(id)
+                    }
+                    (Some(at), false) => {
+                        carried[at].2 = text;
+                        None
+                    }
+                    (None, false) => {
+                        carried.push((key, id, text));
+                        let mine: Vec<usize> = (0..carried.len())
+                            .filter(|&i| carried[i].0 == key)
+                            .collect();
+                        (mine.len() > crate::actions::window::MAX_HELD)
+                            .then(|| carried.remove(mine[0]).1)
+                    }
+                    (None, true) => None,
                 }
             });
+            if let Some(closed) = closed {
+                self.tell_window_closed(player.key, &closed);
+            }
         }
         table::with(Vec::new(), |s| {
             s.commands

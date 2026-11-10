@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use enshwick::abi::{ActionCall, CommandInfo, Header, Status, Str};
 
-use enshwick::command_names::check;
+use enshwick::command_names::{alias_asked, check};
 
 use super::{MAX_LINE, Named, Refusal, Reply, Typed, parse, remote_caller, reply_by, typed, word};
 use crate::host::Loader;
@@ -57,7 +57,9 @@ static STATE: State = State {
 /// in the mod's id, and `/<alias>`. An alias another mod held first stays
 /// that mod's, with one warning and a part off naming both mods, and this
 /// mod's commands run by their name alone. A name another mod's commands
-/// have turns off only this mod's commands, reported the same way.
+/// have turns off only this mod's commands, reported the same way. A mod
+/// built before names came from ids whose alias no longer fits runs its
+/// commands by their name, reported the same way too.
 pub(crate) fn register(loader: &Loader, owner: ModIndex, alias: &str) -> Status {
     let ids: Vec<(ModIndex, &str)> = loader
         .mods
@@ -65,18 +67,34 @@ pub(crate) fn register(loader: &Loader, owner: ModIndex, alias: &str) -> Status 
         .enumerate()
         .map(|(index, m)| (ModIndex::new(index), m.id.as_str()))
         .collect();
+    let id = |index: ModIndex| ids.get(index.get()).map_or("", |(_, id)| *id);
+    let asked = loader.mods.get(owner.get()).map_or(Some(alias), |m| {
+        alias_asked(alias, &m.id, m.manifest.header.abi_minor)
+    });
     let checked = NAMED.edit(|named| {
-        check(named, &ids, owner, alias).map(|(granted, holder)| {
+        check(named, &ids, owner, asked).map(|(granted, holder)| {
             let name = granted.name.clone();
             named.push(granted);
             (name, holder)
         })
     });
-    let id = |index: ModIndex| ids.get(index.get()).map_or("", |(_, id)| *id);
     match checked {
         Err(sealed) => sealed.into(),
         Ok(Ok((name, holder))) => {
             STATE.any.store(true, Ordering::Release);
+            if asked.is_none() {
+                let mine = id(owner);
+                let feature = format!("alias /{alias} of {mine}");
+                crate::host::report_off(
+                    &feature,
+                    (
+                        format!(
+                            "{feature} off: it is not shorter than /{name}, the name in the mod's id; /{name} runs its commands"
+                        ),
+                        format!("/{alias} is not shorter than /{name}; use /{name}"),
+                    ),
+                );
+            }
             if let Some(holder) = holder {
                 let (mine, theirs) = (id(owner), id(holder));
                 let feature = format!("alias /{alias} of {mine}");

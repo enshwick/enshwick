@@ -79,12 +79,13 @@ pub enum Refusal<O> {
     Malformed,
     /// The mod named its commands before.
     Twice,
-    /// Another mod's commands have the same name.
+    /// Another mod's commands have the same name, or another mod's whole
+    /// id is the name, which the console reaches that mod by.
     Taken(O),
 }
 
-/// The command names mod `owner` gets for the alias it asks, and the mod
-/// that holds that alias, if one does.
+/// The command names mod `owner` gets for the alias it asks, if it asks
+/// one, and the mod that holds that alias, if one does.
 ///
 /// They are checked against the reserved words, every mod's id (`ids`, each
 /// mod with its id) and the names in `named`: the name is the part of the
@@ -101,11 +102,12 @@ pub fn check<O: Copy + PartialEq>(
     named: &[Named<O>],
     ids: &[(O, &str)],
     owner: O,
-    alias: &str,
+    alias: Option<&str>,
 ) -> Result<(Named<O>, Option<O>), Refusal<O>> {
     let own = ids.iter().find(|(mod_, _)| *mod_ == owner);
     let name = own.map_or("", |(_, id)| name_of(id));
-    if name.is_empty() || is_reserved(name) || !is_alias(alias) || alias.len() >= name.len() {
+    let fits = |alias: &str| is_alias(alias) && alias.len() < name.len();
+    if name.is_empty() || is_reserved(name) || !alias.is_none_or(fits) {
         return Err(Refusal::Malformed);
     }
     if named.iter().any(|n| n.owner == owner) {
@@ -114,21 +116,43 @@ pub fn check<O: Copy + PartialEq>(
     if let Some(n) = named.iter().find(|n| n.is_called(name)) {
         return Err(Refusal::Taken(n.owner));
     }
-    let holder = named
-        .iter()
-        .find(|n| n.is_called(alias))
-        .map(|n| n.owner)
-        .or_else(|| {
-            ids.iter()
-                .find(|(mod_, id)| *mod_ != owner && (*id == alias || name_of(id) == alias))
-                .map(|(mod_, _)| *mod_)
-        });
+    if let Some(&(other, _)) = ids.iter().find(|(o, id)| *o != owner && *id == name) {
+        return Err(Refusal::Taken(other));
+    }
+    let holder = alias.and_then(|alias| {
+        named
+            .iter()
+            .find(|n| n.is_called(alias))
+            .map(|n| n.owner)
+            .or_else(|| {
+                ids.iter()
+                    .find(|(mod_, id)| *mod_ != owner && (*id == alias || name_of(id) == alias))
+                    .map(|(mod_, _)| *mod_)
+            })
+    });
     let granted = Named {
         owner,
         name: name.to_owned(),
-        alias: holder.is_none().then(|| alias.to_owned()),
+        alias: alias.filter(|_| holder.is_none()).map(str::to_owned),
     };
     Ok((granted, holder))
+}
+
+/// The ABI minor from which a mod's command name comes from its id, and
+/// `HostApi::commands` no longer reads the name a mod gives.
+pub const NAME_FROM_ID: u16 = 23;
+
+/// The alias to grant mod `mod_id`, built for ABI minor `abi_minor`, that
+/// asks `alias`.
+///
+/// `None`, its commands by their name alone, for a mod built before
+/// [`NAME_FROM_ID`] whose alias is a well-formed word but not shorter than
+/// the name in its id, since it chose the alias against a name of its own.
+#[must_use]
+pub fn alias_asked<'a>(alias: &'a str, mod_id: &str, abi_minor: u16) -> Option<&'a str> {
+    let older_misfit =
+        abi_minor < NAME_FROM_ID && is_alias(alias) && alias.len() >= name_of(mod_id).len();
+    (!older_misfit).then_some(alias)
 }
 
 #[cfg(test)]
@@ -156,6 +180,8 @@ mod tests {
     #[test]
     fn an_alias_is_a_plain_word_that_is_not_reserved() {
         assert!(is_alias("adm"));
+        assert!(is_alias("a-1"), "digits and hyphens");
+        assert!(is_alias("2"), "a digit alone");
         assert!(is_alias(&"x".repeat(MAX_NAME)));
         for word in ["Adm", "a b", "a\tb", "", "enshwick", "help", "a.b"] {
             assert!(!is_alias(word), "{word}");
@@ -167,11 +193,11 @@ mod tests {
     fn a_mod_s_commands_take_the_name_in_its_id_and_the_alias_it_asks() {
         let ids = mods(&["you.admin-tools", "you.weather", "sky"]);
         assert_eq!(
-            check(&[], &ids, 0, "adm"),
+            check(&[], &ids, 0, Some("adm")),
             Ok((named(0, "admin-tools", "adm"), None))
         );
         assert_eq!(
-            check(&[], &ids, 2, "s"),
+            check(&[], &ids, 2, Some("s")),
             Ok((named(2, "sky", "s"), None)),
             "an id without an author names itself"
         );
@@ -187,18 +213,18 @@ mod tests {
             long.as_str(),
         ] {
             assert_eq!(
-                check(&[], &ids, 0, alias),
+                check(&[], &ids, 0, Some(alias)),
                 Err(Refusal::Malformed),
                 "{alias}"
             );
         }
         assert_eq!(
-            check(&[], &mods(&["you.help"]), 0, "h"),
+            check(&[], &mods(&["you.help"]), 0, Some("h")),
             Err(Refusal::Malformed),
             "a mod named by a reserved word has no commands"
         );
         assert_eq!(
-            check(&[], &ids, 9, "adm"),
+            check(&[], &ids, 9, Some("adm")),
             Err(Refusal::Malformed),
             "no such mod"
         );
@@ -209,22 +235,75 @@ mod tests {
         let ids = mods(&["you.admin-tools", "you.weather", "sky", "they.wx"]);
         let held = |by: usize| Ok((named(0, "admin-tools", ""), Some(by)));
         let taken = [named(1, "weather", "wx")];
-        assert_eq!(check(&taken, &ids, 0, "wx"), held(1), "another's alias");
-        assert_eq!(check(&[], &ids, 0, "weather"), held(1), "another's name");
-        assert_eq!(check(&[], &ids, 0, "sky"), held(2), "another's whole id");
         assert_eq!(
-            check(&[], &ids, 1, "wx"),
+            check(&taken, &ids, 0, Some("wx")),
+            held(1),
+            "another's alias"
+        );
+        assert_eq!(
+            check(&[], &ids, 0, Some("weather")),
+            held(1),
+            "another's name"
+        );
+        assert_eq!(
+            check(&[], &ids, 0, Some("sky")),
+            held(2),
+            "another's whole id"
+        );
+        assert_eq!(
+            check(&[], &ids, 1, Some("wx")),
             Ok((named(1, "weather", ""), Some(3))),
             "the name of a mod that names no commands is still its own"
         );
-        assert_eq!(check(&taken, &ids, 1, "wi"), Err(Refusal::Twice));
+        assert_eq!(check(&taken, &ids, 1, Some("wi")), Err(Refusal::Twice));
     }
 
     #[test]
     fn two_mods_of_one_name_leave_the_commands_to_the_first() {
         let ids = mods(&["you.tools", "they.tools"]);
-        let first = check(&[], &ids, 0, "t").unwrap().0;
-        assert_eq!(check(&[first], &ids, 1, "to"), Err(Refusal::Taken(0)));
+        let first = check(&[], &ids, 0, Some("t")).unwrap().0;
+        assert_eq!(check(&[first], &ids, 1, Some("to")), Err(Refusal::Taken(0)));
+    }
+
+    #[test]
+    fn a_mod_built_before_names_came_from_ids_keeps_its_name_when_its_alias_no_longer_fits() {
+        let ids = mods(&["you.wx", "you.admin-tools"]);
+        assert_eq!(alias_asked("wt", "you.wx", NAME_FROM_ID - 1), None);
+        assert_eq!(
+            check(&[], &ids, 0, None),
+            Ok((named(0, "wx", ""), None)),
+            "its commands run by their name alone"
+        );
+        assert_eq!(alias_asked("wt", "you.wx", NAME_FROM_ID), Some("wt"));
+        assert_eq!(
+            check(&[], &ids, 0, Some("wt")),
+            Err(Refusal::Malformed),
+            "a mod of this minor is told its alias does not fit"
+        );
+        assert_eq!(
+            alias_asked("adm", "you.admin-tools", 19),
+            Some("adm"),
+            "an alias that fits stays"
+        );
+        assert_eq!(
+            alias_asked("Adm", "you.wx", 19),
+            Some("Adm"),
+            "a malformed word is refused as before"
+        );
+    }
+
+    #[test]
+    fn a_name_that_is_another_mod_s_whole_id_stays_that_mod_s() {
+        let ids = mods(&["tools", "you.tools"]);
+        assert_eq!(
+            check(&[], &ids, 1, Some("t")),
+            Err(Refusal::Taken(0)),
+            "the console reaches `tools` by its id, so /tools is never another mod's"
+        );
+        assert_eq!(
+            check(&[], &ids, 0, Some("t")),
+            Ok((named(0, "tools", "t"), None))
+        );
     }
 
     #[test]

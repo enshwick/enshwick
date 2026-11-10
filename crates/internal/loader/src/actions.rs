@@ -266,8 +266,13 @@ fn admit(loader: &Loader, key: u64) -> Option<(PlayerInfo, u32)> {
 /// The connected player of account `key` and the language they read,
 /// `hello` being the one their client named in its hello.
 fn caller(loader: &Loader, key: u64, hello: u32) -> Option<(PlayerInfo, u32)> {
-    let language = crate::net::language_of(key).map_or(hello, |l| l.0);
-    Some((player(loader, key)?, language))
+    Some((player(loader, key)?, read_language(key, hello)))
+}
+
+/// The language the player of account `key` reads: the one their client
+/// names now, else `hello`, the one it named in its hello.
+fn read_language(key: u64, hello: u32) -> u32 {
+    crate::net::language_of(key).map_or(hello, |l| l.0)
 }
 
 /// The connected player of account `key` and the language they read, for a
@@ -280,18 +285,17 @@ pub(crate) fn commander(loader: &Loader, key: u64) -> Option<(PlayerInfo, u32)> 
 /// The language the player of account `key` reads, as their client named
 /// it; 0, the fallback, for one that named none.
 pub(crate) fn language_of(key: u64) -> u32 {
-    let hello = server_state(|s| s.clients.get(&key).map_or(0, |c| c.language));
-    crate::net::language_of(key).map_or(hello, |l| l.0)
+    read_language(
+        key,
+        server_state(|s| s.clients.get(&key).map_or(0, |c| c.language)),
+    )
 }
 
-/// Tells mod `owner` that the client of account `key` closed its window
-/// `window`, or with no window that the player left; nothing for a mod
-/// that is off or declared no actions. The mod gets the key alone, since
-/// the player may be gone.
-pub(crate) fn window_closed(loader: &Loader, owner: ModIndex, key: u64, window: Option<&str>) {
-    let Some(registered) = running(loader).into_iter().find(|r| r.owner == owner) else {
-        return;
-    };
+/// Tells the mods that the client of account `key` closed mod `owner`'s
+/// window `window`, given as `Some((owner, window))`, which that mod hears,
+/// or with `None` that the player left, which every running mod with
+/// actions hears. The mods get the key alone, since the player may be gone.
+pub(crate) fn window_closed(loader: &Loader, key: u64, closed: Option<(ModIndex, &str)>) {
     let who = PlayerInfo {
         header: Header::of::<PlayerInfo>(),
         slot: u32::MAX,
@@ -301,14 +305,21 @@ pub(crate) fn window_closed(loader: &Loader, owner: ModIndex, key: u64, window: 
         name_len: 0,
         name: [0; 64],
     };
-    let _heard = ask(
-        registered,
-        ActionCall::WINDOW_CLOSED,
-        &who,
-        0,
-        (window.unwrap_or(""), "", ""),
-        ActionTarget::NONE,
-    );
+    for registered in running(loader) {
+        let window = match closed {
+            None => "",
+            Some((owner, window)) if owner == registered.owner => window,
+            Some(_) => continue,
+        };
+        let _heard = ask(
+            registered,
+            ActionCall::WINDOW_CLOSED,
+            &who,
+            0,
+            (window, "", ""),
+            ActionTarget::NONE,
+        );
+    }
 }
 
 /// The running mods that declared actions, by index.

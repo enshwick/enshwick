@@ -832,7 +832,8 @@ impl Actions {
     /// closed one of the mod's windows, with the window's id, or when a
     /// player left, with `None` for every window they held. A client keeps
     /// eight windows of all mods: a ninth lets the oldest go, which its mod
-    /// hears as closed. The mod has
+    /// hears as closed, and so is a window that renders nothing or too much
+    /// for a player, which closes on their client. The mod has
     /// forgotten those windows by then; a mod that keeps state of its own
     /// for a window frees it here. One function at a time: a second call
     /// replaces the first.

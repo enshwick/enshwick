@@ -479,8 +479,8 @@ whose window went past that sees it close at their next update.
 
 Use `update` for a list that changes while players hold it, such as a
 roster when a player joins. A player who closed the window does not get it
-back. When a client closes a window, or its player leaves, the mod forgets
-that window for the player. `actions.on_closed(fn)` tells the mod of it,
+back. When a client closes a window, its player leaves, or the window
+renders nothing for that player, the mod forgets that window for the player. `actions.on_closed(fn)` tells the mod of it,
 with the player's account key and the window's id, or no id for a player
 who left:
 

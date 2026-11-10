@@ -1791,12 +1791,15 @@ pub struct HostApi {
     /// than the name, and neither `enshwick` nor `help`.
     /// [`Status::BAD_ARGS`] for a malformed or unreadable alias, or a mod
     /// whose name is `enshwick` or `help`; [`Status::REFUSED`] for a second
-    /// call, or when another mod's commands have the same name, which the
+    /// call, or when another mod's commands have the same name or another
+    /// mod's whole id is that name, which the
     /// loader logs and reports naming both mods, the mod running on without
     /// commands. An alias that another mod's commands, name or id hold goes
     /// to that mod: the call returns [`Status::OK`], the mod's commands run
     /// by their name alone, and the loader logs and reports it once naming
-    /// both mods. Allowed during `enshwick_mod_init` only; the strings are
+    /// both mods. A mod built before 11.23 whose alias is well formed but
+    /// not shorter than the name gets [`Status::OK`] and its name alone,
+    /// reported the same way. Allowed during `enshwick_mod_init` only; the strings are
     /// borrowed for the call. A panic in the loader returns
     /// [`Status::REFUSED`]. ABI 11.19; `name` not read since 11.23.
     pub commands: extern "system" fn(me: ModHandle, name: Str, alias: Str) -> Status,

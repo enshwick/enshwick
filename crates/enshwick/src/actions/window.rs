@@ -32,6 +32,10 @@ pub const MAX_BUTTONS: usize = 4;
 /// longest ago.
 pub const MAX_KEPT: usize = 1_024;
 
+/// The most windows a client keeps, of all mods: a show of one more lets
+/// the oldest go, which its mod hears as closed.
+pub const MAX_HELD: usize = 8;
+
 /// The most players one show or close hands the loader in a call;
 /// [`Actions::show`](super::Actions::show) splits a longer list.
 pub const MAX_CALL_PLAYERS: usize = 64;

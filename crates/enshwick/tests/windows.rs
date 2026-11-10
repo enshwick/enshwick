@@ -315,6 +315,25 @@ mod tests {
     }
 
     #[test]
+    fn a_ninth_window_lets_the_client_s_oldest_go_and_its_mod_hears_of_it() {
+        use enshwick::actions::window::MAX_HELD;
+
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let loader = start(enshwick::test::FakeHost::new().player(root));
+        for n in 0..=MAX_HELD {
+            let id = format!("w{n}");
+            actions()
+                .show(Window::new(&id, "panel"), &[root.key])
+                .unwrap();
+            let _held = loader.carried_windows(&root, 0);
+        }
+        let held = loader.carried_windows(&root, 0);
+        assert_eq!(held.len(), MAX_HELD);
+        assert!(held.iter().all(|(id, _)| id != "w0"), "the oldest goes");
+        assert_eq!(*CLOSED.lock().unwrap(), [(9, Some("w0".to_owned()))]);
+    }
+
+    #[test]
     fn a_window_shown_to_one_player_leaves_another_players_window_of_that_id_alone() {
         let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
         let eve = player(5, 8, "Eve", PlayerInfo::CAN_KICK_BAN);

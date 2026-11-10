@@ -13,7 +13,8 @@ pub(crate) fn near<'a>(
     if needle.is_empty() {
         return Vec::new();
     }
-    let slack = (needle.chars().count() / 3).max(1);
+    let typed_len = needle.chars().count();
+    let slack = (typed_len / 3).max(1);
     let mut scored: Vec<(usize, &str)> = names
         .into_iter()
         .filter_map(|name| {
@@ -23,6 +24,10 @@ pub(crate) fn near<'a>(
             } else if lower.contains(&needle) {
                 1
             } else {
+                // The edits are at least the length difference, which costs nothing to know.
+                if typed_len.abs_diff(lower.chars().count()) > slack {
+                    return None;
+                }
                 let edits = strsim::levenshtein(&needle, &lower);
                 if edits > slack {
                     return None;
@@ -59,6 +64,25 @@ mod tests {
             near("плaнер", ["Планер", "Плащ"], 3),
             ["Планер"],
             "characters, not bytes, in any script"
+        );
+    }
+
+    #[test]
+    fn a_long_typed_name_over_many_names_is_answered_without_measuring_each_one() {
+        let names: Vec<String> = (0..30_000).map(|n| format!("Item name {n}")).collect();
+        let typed = "й".repeat(1_000);
+        let started = std::time::Instant::now();
+        assert!(near(&typed, names.iter().map(String::as_str), 3).is_empty());
+        assert!(
+            // Measuring each one took 7.7 s in a debug build; skipping them a few ms.
+            started.elapsed() < std::time::Duration::from_secs(3),
+            "names far longer or shorter than the typed one are never measured: {:?}",
+            started.elapsed()
+        );
+        assert_eq!(
+            near("onlinee", ["online"], 3),
+            ["online"],
+            "one char longer"
         );
     }
 }

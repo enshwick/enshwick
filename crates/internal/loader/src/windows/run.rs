@@ -8,8 +8,8 @@ use enshwick::PlayerKey;
 use enshwick::abi::{Side, Status};
 
 use super::{
-    Change, Held, MAX_PLAYERS, Told, Waiting, close_told, heard, holds, merged, message, note,
-    queue,
+    Change, Held, MAX_PLAYERS, Told, Waiting, close_told, heard, holds, leaving, merged, message,
+    note, queue,
 };
 use crate::host::Loader;
 use crate::locks::Relock;
@@ -140,49 +140,48 @@ pub(crate) fn left(key: u64) {
 /// Tells the mods what `told` holds: a window's mod of its close, and
 /// every mod with actions of a player who left.
 fn tell_mods(loader: &Loader, told: Vec<Told>) {
-    if told.is_empty() {
-        return;
-    }
-    let declaring = crate::actions::declaring(loader);
     for told in told {
         match told {
             Told::Closed { key, owner, window } => {
-                crate::actions::window_closed(loader, owner, key, Some(&window));
+                crate::actions::window_closed(loader, key, Some((owner, &window)));
             }
-            Told::Left { key } => {
-                for &owner in &declaring {
-                    crate::actions::window_closed(loader, owner, key, None);
-                }
-            }
+            Told::Left { key } => crate::actions::window_closed(loader, key, None),
         }
     }
 }
 
 /// What waits for the step, out of its locks, so a mod told of a close or
 /// a leave may show a window, and the game may remove a player, while the
-/// mods hear: the closes and leaves [`heard`] keeps, and the merged
-/// changes.
+/// mods hear: the closes and leaves, and the merged changes.
 fn taken() -> (Vec<Told>, Vec<Waiting>) {
     let told = core::mem::take(&mut *WINDOWS.told.relock());
     let waiting = merged(core::mem::take(&mut *WINDOWS.waiting.relock()));
-    (heard(told, &waiting), waiting)
+    (told, waiting)
 }
 
-/// On the server's game thread after its step: tells the mods of the
-/// windows clients closed and the players who left, then carries each
-/// waiting change to its player's client: a show or an update as the mod
-/// renders it for that player, in their language, and a close where the
-/// mod renders nothing for them. An update goes only to a client that
-/// holds the window. A player not online is skipped, and so is one whose
-/// client takes no messages, as one without Enshwick: the mod renders
-/// nothing for it and the server notes nothing as held. A window a client
-/// lets go for a newer one is told to its mod after the next step.
+/// On the server's game thread after its step: carries each waiting change
+/// to its player's client: a show or an update as the mod renders it for
+/// that player, in their language, and a close where the mod renders
+/// nothing for them. An update goes only to a client that holds the
+/// window. A player not online is skipped, and so is one whose client
+/// takes no messages, as one without Enshwick: the mod renders nothing for
+/// it and the server notes nothing as held. Then tells the mods of the
+/// players who left and of every window a client no longer holds: closed
+/// by the client, let go for a newer one, or closed by a render; not one
+/// its mod closed itself.
 pub(crate) fn after_step(loader: &Loader) {
     if !WINDOWS.any.swap(false, Ordering::AcqRel) {
         return;
     }
-    let (told, waiting) = taken();
+    let (mut told, waiting) = taken();
+    carry(loader, waiting, &mut told);
+    let told = heard(told, &WINDOWS.held.relock());
     tell_mods(loader, told);
+}
+
+/// Carries `waiting` to the clients, adding to `told` the windows a client
+/// closed for it.
+fn carry(loader: &Loader, waiting: Vec<Waiting>, told: &mut Vec<Told>) {
     if waiting.is_empty() {
         return;
     }
@@ -224,10 +223,8 @@ pub(crate) fn after_step(loader: &Loader) {
         }
         let message = message(&record.id, window, change == Change::Show, text);
         if crate::net::to_player(key, &message) {
-            let let_go = note(&mut WINDOWS.held.relock(), key, owner, &message);
-            if let Some(told) = let_go {
-                tell(told);
-            }
+            let closed = note(&mut WINDOWS.held.relock(), key, owner, &message);
+            told.extend(closed.filter(|_| change != Change::Close));
         } else {
             crate::log!(
                 DEBUG,
@@ -239,13 +236,17 @@ pub(crate) fn after_step(loader: &Loader) {
 }
 
 /// Forgets the waiting changes and what clients hold, as when the server's
-/// world goes away.
-pub(crate) fn forget() {
+/// world goes away; the mods of `loader` hear that every player who held a
+/// window or was waiting to be told of one left.
+pub(crate) fn forget(loader: Option<&Loader>) {
     WINDOWS.waiting.relock().clear();
-    WINDOWS.told.relock().clear();
+    let told = core::mem::take(&mut *WINDOWS.told.relock());
     WINDOWS.any.store(false, Ordering::Release);
-    WINDOWS.held.relock().clear();
+    let held = core::mem::take(&mut *WINDOWS.held.relock());
     WINDOWS.warned.store(false, Ordering::Relaxed);
+    if let Some(loader) = loader {
+        tell_mods(loader, leaving(told, &held));
+    }
 }
 
 #[cfg(test)]
@@ -290,7 +291,7 @@ mod tests {
             WINDOWS.any.load(Ordering::Acquire),
             "the step tells the mods"
         );
-        forget();
+        forget(None);
         assert!(WINDOWS.told.relock().is_empty() && WINDOWS.held.relock().is_empty());
     }
 
@@ -313,8 +314,14 @@ mod tests {
         assert!(wait(core::iter::once(show(7))));
 
         let (told, waiting) = taken();
-        assert_eq!(told, [closed(8)], "7 is shown the window again");
+        assert_eq!(told, [closed(7), closed(8)]);
         assert_eq!(waiting, [show(7)]);
+        let held = [(7, mine, "panel".to_owned())];
+        assert_eq!(
+            heard(told, &held),
+            [closed(8)],
+            "7 was shown the window again"
+        );
         // As a mod's handler does while it hears: the game removes a player
         // it kicked, and it shows a window.
         left(9);

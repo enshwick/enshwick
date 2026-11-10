@@ -291,7 +291,9 @@ impl ActionCall {
     /// 11.22.
     pub const WINDOW: u32 = 6;
     /// The client of the player whose account key `player` holds closed
-    /// the calling mod's window `action`; or, with an empty `action`, that
+    /// the calling mod's window `action`, let it go for a newer one, or
+    /// closed it for an empty or oversized answer to
+    /// [`ActionCall::WINDOW`]; or, with an empty `action`, that
     /// player left, and holds none of the mod's windows any more. The mod
     /// forgets what it kept for them. `player` holds the account key alone:
     /// no character, name or permission. No reply is read. ABI 11.23.
