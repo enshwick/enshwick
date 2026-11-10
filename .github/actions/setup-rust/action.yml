@@ -40,7 +40,7 @@ runs:
       shell: bash
       run: |
         if ! command -v rustup > /dev/null; then
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+          curl --proto '=https' --tlsv1.2 -sSf --retry 6 https://sh.rustup.rs \
             | sh -s -- -y --profile minimal --default-toolchain none --no-modify-path
         fi
         rustup toolchain install
@@ -71,7 +71,7 @@ runs:
           codename=$(sed -n 's/^VERSION_CODENAME=//p' /etc/os-release)
           key=/etc/apt/keyrings/apt-llvm.asc
           if [ ! -f "$key" ]; then
-            curl --proto '=https' --tlsv1.2 -sSfL -o "$RUNNER_TEMP/llvm.asc" https://apt.llvm.org/llvm-snapshot.gpg.key
+            curl --proto '=https' --tlsv1.2 -sSfL --retry 6 --retry-all-errors -o "$RUNNER_TEMP/llvm.asc" https://apt.llvm.org/llvm-snapshot.gpg.key
             echo "$LLVM_KEY_SHA256  $RUNNER_TEMP/llvm.asc" | sha256sum -c -
             sudo install -D -m 0644 "$RUNNER_TEMP/llvm.asc" "$key"
           fi
@@ -135,7 +135,7 @@ runs:
         GH_VERSION="${GH_TAG#v}"
         dir="$RUNNER_TEMP/gh"
         archive="$RUNNER_TEMP/gh.tar.gz"
-        curl --proto '=https' --tlsv1.2 -sSfL -o "$archive" \
+        curl --proto '=https' --tlsv1.2 -sSfL --retry 6 --retry-all-errors -o "$archive" \
           "https://github.com/cli/cli/releases/download/v$GH_VERSION/gh_${GH_VERSION}_linux_amd64.tar.gz"
         echo "$GH_SHA256  $archive" | sha256sum -c -
         mkdir -p "$dir"
@@ -155,7 +155,7 @@ runs:
       run: | # zizmor: ignore[github-env] fixed paths only
         dir="$RUNNER_TEMP/ast-grep"
         archive="$RUNNER_TEMP/ast-grep.zip"
-        curl --proto '=https' --tlsv1.2 -sSfL -o "$archive" \
+        curl --proto '=https' --tlsv1.2 -sSfL --retry 6 --retry-all-errors -o "$archive" \
           "https://github.com/ast-grep/ast-grep/releases/download/$AST_GREP_VERSION/app-x86_64-unknown-linux-gnu.zip"
         echo "$AST_GREP_SHA256  $archive" | sha256sum -c -
         unzip -q -o "$archive" ast-grep -d "$dir"
@@ -180,7 +180,7 @@ runs:
         echo "ENSH_FUZZ_TOOLCHAIN=$NIGHTLY" >> "$GITHUB_ENV"
         dir="$RUNNER_TEMP/cargo-fuzz"
         archive="$RUNNER_TEMP/cargo-fuzz.tar.gz"
-        curl --proto '=https' --tlsv1.2 -sSfL -o "$archive" \
+        curl --proto '=https' --tlsv1.2 -sSfL --retry 6 --retry-all-errors -o "$archive" \
           "https://github.com/rust-fuzz/cargo-fuzz/releases/download/$CARGO_FUZZ_VERSION/cargo-fuzz-$CARGO_FUZZ_VERSION-x86_64-unknown-linux-musl.tar.gz"
         echo "$CARGO_FUZZ_SHA256  $archive" | sha256sum -c -
         mkdir -p "$dir"

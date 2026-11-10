@@ -1,0 +1,32 @@
+id: test-modules-listen-on-loopback
+valid:
+  - |
+    fn listen() {
+        let socket = TcpListener::bind("0.0.0.0:0");
+    }
+  - |
+    mod tests {
+        fn a_client_reaches_the_console() {
+            let socket = TcpListener::bind("127.0.0.1:0");
+            let other = TcpListener::bind((Ipv6Addr::LOCALHOST, 0));
+        }
+    }
+invalid:
+  - |
+    mod tests {
+        fn a_client_reaches_the_console() {
+            let socket = TcpListener::bind("0.0.0.0:0");
+        }
+    }
+  - |
+    mod tests {
+        fn settings() -> String {
+            format!("rcon_ip = \"[::]\"\nrcon_port = {port}\n")
+        }
+    }
+  - |
+    mod tests {
+        fn a_client_reaches_the_console() {
+            let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0));
+        }
+    }

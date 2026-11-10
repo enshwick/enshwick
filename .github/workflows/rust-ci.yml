@@ -63,7 +63,7 @@ jobs:
           if [ "$EVENT" = merge_group ]; then
             number=$(sed -nE 's|.*/pr-([0-9]+)-[0-9a-f]+$|\1|p' <<< "$HEAD_REF")
             if [ -n "$number" ]; then
-              head=$(curl --proto '=https' -sSf -H "Authorization: Bearer $GH_TOKEN" \
+              head=$(curl --proto '=https' -sSf --retry 6 -H "Authorization: Bearer $GH_TOKEN" \
                 "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$number" | jq -r .head.sha)
               git fetch -q origin "$head"
               if [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse "$head^{tree}")" ]; then
@@ -168,7 +168,7 @@ jobs:
           VERSION: 1.70.1
           SHA256: 1a2ea1ae4f98f8946cefd970a4b54853e11ab4775e6932faa7f60cf920346567
         run: |
-          curl --proto '=https' --tlsv1.2 -sSfL -o "$RUNNER_TEMP/luau-lsp.zip" \
+          curl --proto '=https' --tlsv1.2 -sSfL --retry 6 --retry-all-errors -o "$RUNNER_TEMP/luau-lsp.zip" \
             "https://github.com/JohnnyMorganz/luau-lsp/releases/download/$VERSION/luau-lsp-linux-x86_64.zip"
           echo "$SHA256  $RUNNER_TEMP/luau-lsp.zip" | sha256sum -c -
           unzip -q "$RUNNER_TEMP/luau-lsp.zip" -d "$RUNNER_TEMP/luau-lsp"
