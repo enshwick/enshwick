@@ -72,7 +72,8 @@
 /// let off = enshwick::Off::text("stalls.min", &[("min", "2")]);
 /// assert_eq!(off.to_string(), "stalls.min (min = 2)");
 /// ```
-///
+mod values {}
+
 /// `script::Function`:
 ///
 /// ```rust,standalone_crate
@@ -106,4 +107,5 @@
 /// let Ok(Value::Number(sum)) = roll.call(&Dice, &mut [Value::Number(2.0)]) else { unreachable!() };
 /// assert_eq!(sum, 8.0);
 /// ```
-mod values {}
+#[cfg(feature = "unstable")]
+mod unstable_values {}
