@@ -271,10 +271,17 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
         let opens = settings && mods_screen::gear(world, sent)
             || super::controls::any_in(&controls, &record.id);
         // The Details button on every mod, at the same place; the gear under
-        // it where the mod has something to set here.
+        // it where the mod has something to set here, else its place kept.
         let opened = paint.row(
             || state(paint, record),
-            || button(Icon::Info) | (opens && button(Icon::Settings)),
+            || {
+                let details = button(Icon::Info);
+                let settings = opens && button(Icon::Settings);
+                if !opens {
+                    paint.icon_slot();
+                }
+                details || settings
+            },
         );
         if opened {
             done = Listed::Settings(index);

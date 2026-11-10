@@ -127,10 +127,13 @@ impl Row {
     }
 }
 
-/// The alignment word that puts the right cell at the top right of its
-/// row, as `ui.button` places its key hint (client 26430625): the low byte
-/// across (3 right), the high byte down (1 top).
-const SIDE_ALIGN: u16 = 0x103;
+/// The alignment word that puts the right cell at the right of its row,
+/// centred down it (client 26430625): the low byte across (3 right), the
+/// high byte down (2 centre).
+const SIDE_ALIGN: u16 = 0x203;
+/// The gap between the buttons stacked in a row's right cell, a third of
+/// an icon button's height, so they read as two.
+const SIDE_GAP: f32 = 16.0;
 
 impl Engine {
     /// Opens a row as wide as its column and the left cell in it, which
@@ -173,8 +176,7 @@ impl Engine {
     }
 
     /// Ends the row's left cell and opens its right cell, a column at the
-    /// top right of the row: what is drawn next stacks there, at the same
-    /// place in every row whatever its height.
+    /// right of the row, centred down it: what is drawn next stacks there.
     ///
     /// # Safety
     ///
@@ -192,7 +194,7 @@ impl Engine {
         // SAFETY: `fns.column` is the game's `ui.column`, checked in
         // `Rows::resolve`, inside the row `row_begin` opened; `row.side`
         // holds `FRAME_SIZE` bytes and stays in place.
-        unsafe { (fns.column)(row.side.ptr(), LINE_GAP) };
+        unsafe { (fns.column)(row.side.ptr(), SIDE_GAP) };
         let node = self.frame_node(&row.side);
         // SAFETY: `self.node_align` is the game's `ui.node_align`, checked in
         // `Engine::resolve`, on the node the game just wrote into the

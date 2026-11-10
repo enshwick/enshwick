@@ -19,6 +19,15 @@ const BUTTON_ALIGN_RIGHT: u16 = 0x203;
 /// The space an icon leaves above and below it in its button, before the
 /// interface's scale; the game's own gear buttons leave 25 (client 26430625).
 const ICON_MARGIN: f32 = 25.0;
+/// Where a button's config holds its kind, which picks its frame's look
+/// and size: `ui.button` hands the config to its frame, which reads the kind
+/// as its first word (client 26430625).
+const BUTTON_KIND_AT: usize = 0;
+/// The kind of the game's own small icon buttons, its settings gears among
+/// them; 0 is the full menu button (client 26430625).
+const BUTTON_KIND_ICON: u32 = 3;
+/// The height of an icon button, which an empty slot keeps free.
+const ICON_SLOT: f32 = 50.0;
 /// The slider's value text without decimals, for a setting that holds whole
 /// numbers whatever its stops.
 const SLIDER_WHOLE: u32 = 2;
@@ -327,6 +336,7 @@ impl Engine {
             BUTTON_FITS_TEXT,
             [0.0, ICON_MARGIN],
         );
+        config.u32(BUTTON_KIND_AT, BUTTON_KIND_ICON);
         config.u64(texture, image[0]);
         config.u64(texture + 8, image[1]);
         config.u8(shown, 1);
@@ -337,6 +347,29 @@ impl Engine {
         // empty text has no bytes.
         let clicked = unsafe { (self.button)(config.ptr(), &UiText::EMPTY) } != 0;
         Some(clicked && enabled)
+    }
+
+    /// Keeps an icon button's place free, so the buttons above it sit where
+    /// they would with one there.
+    ///
+    /// # Safety
+    ///
+    /// - Called inside a window, on the frame's thread.
+    pub(in crate::ui) unsafe fn icon_slot(&self) {
+        let mut frame = Buf::<FRAME_SIZE>::zeroed();
+        // SAFETY: `self.frame_open` is the game's `ui.frame_open`, checked in
+        // `Engine::resolve`, inside the window this function's `# Safety`
+        // gives; `frame` holds the table's `ui.frame_extent` bytes
+        // (`Layout::read`), name 0 for none.
+        unsafe { (self.frame_open)(frame.ptr(), 0) };
+        let node = self.frame_node(&frame);
+        // SAFETY: `self.node_height` is the game's `ui.node_height`, checked
+        // in `Engine::resolve`, on the node the game just wrote into `frame`.
+        unsafe { (self.node_height)(node, ICON_SLOT) };
+        // SAFETY: `self.frame_close` is the game's `ui.frame_close`, checked
+        // in `Engine::resolve`, on the frame `frame_open` opened above, with
+        // nothing opened inside it.
+        unsafe { (self.frame_close)(frame.ptr()) };
     }
 
     pub(super) fn setting_texts(&self, context: usize) -> [UiText; TOGGLE_ENTRIES] {

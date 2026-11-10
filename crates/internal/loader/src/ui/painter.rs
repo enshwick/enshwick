@@ -97,6 +97,13 @@ impl<'a> Painter<'a> {
             .unwrap_or_else(|| self.button_compact(fallback, enabled))
     }
 
+    /// The free place of an icon button that is not there.
+    pub(super) fn icon_slot(&self) {
+        // SAFETY: a window is open on this thread, by the contract of
+        // `Painter::new`.
+        unsafe { self.engine.icon_slot() };
+    }
+
     pub(super) fn toggle(&self, label: &[u8], on: bool, read_only: bool) -> Option<bool> {
         let label = copy(&[label]);
         // SAFETY: a window is open on this thread with `self.context`, by
