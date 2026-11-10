@@ -5,7 +5,7 @@ name: coverage
 
 on:
   push:
-    branches: [main, "feat/*-ci-codecov"]
+    branches: [main]
     paths:
       - "**/*.rs"
       - "**/Cargo.toml"
