@@ -172,7 +172,7 @@ jobs:
           # Only main's runs store objects, as only they save the build
           # caches: the repository's cache storage is full, and a pull
           # request's entries would evict the ones every run starts from.
-          sccache: ${{ github.event_name == 'push' && 'write' || 'read' }}
+          sccache: write
           ast-grep: ${{ matrix.part == 'host' || matrix.part == 'all' }}
           sanitizers: ${{ matrix.part == 'fuzz' }}
           fuzz: ${{ matrix.part == 'fuzz' }}
@@ -268,7 +268,7 @@ jobs:
           version: v0.19.0
       - name: Compile through sccache
         env:
-          RW: ${{ github.event_name == 'push' && 'READ_WRITE' || 'READ_ONLY' }}
+          RW: READ_WRITE
         run: | # zizmor: ignore[github-env] fixed values only
           {
             echo "SCCACHE_GHA_ENABLED=true"
