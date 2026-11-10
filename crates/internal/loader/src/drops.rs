@@ -42,36 +42,37 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             read_layout(loader)
                 .inspect_err(|why| {
                     crate::log!(WARN, "item drops off: {why}");
-                    crate::diag::part_off("item drops", why);
+                    crate::diag::part_off("item drops", &why.to_string());
                 })
                 .ok()
         })
         .as_ref()
 }
 
-fn read_layout(loader: &Loader) -> Result<Layout, String> {
+fn read_layout(loader: &Loader) -> Result<Layout, ReadLayoutError> {
     let reflection = &loader.reflection;
-    let info = reflection
-        .type_info(PICKUP)
-        .map_err(|why| why.to_string())?;
+    let info = reflection.type_info(PICKUP)?;
     // A field whose type the build widened or narrowed would take its
     // neighbour's bytes: each must hold what `pickup` writes into it.
-    let field = |name: &str, width: u32| {
+    let field = |name: &'static str, width: u32| {
         let mut found = info.fields().iter().filter(|f| f.name() == name);
         let (Some(held), None) = (found.next(), found.next()) else {
-            return Err(format!("{PICKUP}.{name} missing or ambiguous"));
+            return Err(ReadLayoutError::Field(name));
         };
         let size = held
             .type_name()
             .and_then(|ty| reflection.type_info(ty).ok())
             .map(enshwick_gamedata::reflect::TypeInfo::size);
-        if size != Some(width) || held.offset() + u64::from(width) > u64::from(info.size()) {
-            let at = held.offset();
-            return Err(format!(
-                "{PICKUP}.{name} at {at} holds {size:?} bytes, not {width}"
-            ));
+        let at = held.offset();
+        if size != Some(width) || at + u64::from(width) > u64::from(info.size()) {
+            return Err(ReadLayoutError::Width {
+                field: name,
+                at,
+                size,
+                width,
+            });
         }
-        usize::try_from(held.offset()).map_err(|_| format!("{PICKUP}.{name} offset"))
+        usize::try_from(at).map_err(|_| ReadLayoutError::Field(name))
     };
     let vanilla = enshwick::content::vanilla::Vanilla::new(
         &enshwick_gamedata::catalogue::Reflected(reflection),
@@ -79,17 +80,42 @@ fn read_layout(loader: &Loader) -> Result<Layout, String> {
     );
     let template = match vanilla.map(|vanilla| vanilla.template(TEMPLATE)) {
         Ok(Ok(guid)) => guid.0,
-        why => return Err(format!("{TEMPLATE}: {why:?}")),
+        why => return Err(ReadLayoutError::Template(format!("{why:?}"))),
     };
     Ok(Layout {
         template,
-        hash: crate::world::type_hash(info.va()).ok_or_else(|| format!("{PICKUP} hash"))?,
-        size: usize::try_from(info.size()).map_err(|_| format!("{PICKUP} size"))?,
+        hash: crate::world::type_hash(info.va()).ok_or(ReadLayoutError::Type)?,
+        size: usize::try_from(info.size()).map_err(|_| ReadLayoutError::Type)?,
         item: field("itemId", 4)?,
         level: field("level", 4)?,
         rarity: field("rarity", 1)?,
         amount: field("pickupAmount", 2)?,
     })
+}
+
+/// Why the pickup's layout does not read on this build.
+#[derive(Debug, thiserror::Error)]
+enum ReadLayoutError {
+    /// The reflection lacks the pickup type.
+    #[error(transparent)]
+    Reflection(#[from] enshwick_gamedata::reflect::LookupError),
+    /// The pickup type has no hash or size the loader can use.
+    #[error("{pickup} has no usable type hash or size", pickup = PICKUP)]
+    Type,
+    /// A field is missing or more than one carries its name.
+    #[error("{pickup}.{0} missing or ambiguous", pickup = PICKUP)]
+    Field(&'static str),
+    /// A field's type is not as wide as what a drop writes into it.
+    #[error("{pickup}.{field} at {at} holds {size:?} bytes, not {width}", pickup = PICKUP)]
+    Width {
+        field: &'static str,
+        at: u64,
+        size: Option<u32>,
+        width: u32,
+    },
+    /// The template is not found by its name in the game's data.
+    #[error("{template}: {0}", template = TEMPLATE)]
+    Template(String),
 }
 
 /// `PickupItem`'s bytes for `request` on `layout`, `None` for a count or a

@@ -3308,7 +3308,7 @@ declare enshwick: {
 		skills: (entity: number) -> {UnlockedSkill}?,
 		--- `entity`'s level and experience; nil for an entity without them, off the game thread, or on a build without stat reads.
 		progress: (entity: number) -> Progress?,
-		--- Sets the level of `entity`, a player's character, as the game leaves a level it raised: no experience inside it and what the level needs to go on. The server's next level step applies it, kept between 1 and the game's level cap; skill points follow the level, as the game counts them from it, and the game raises no level-up event. On the server's game thread only.
+		--- Sets the level of `entity`, a player's character, as the game leaves a level it raised: no experience inside it and what the level needs to go on; a gain the game has not applied yet is dropped. The server's next level step applies it, kept between 1 and the game's level cap; skill points follow the level, as the game counts them from it, and the game raises no level-up event. On the server's game thread only.
 		set_level: (entity: number, level: number) -> (),
 		--- Sets the experience inside the level of `entity`, a player's character, kept below what the level needs, and drops a gain the game has not applied yet. The server's next level step applies it. On the server's game thread only.
 		set_experience: (entity: number, experience: number) -> (),
