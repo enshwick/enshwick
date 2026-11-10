@@ -53,7 +53,7 @@ use std::time::Instant;
 
 use affected::{Package, Scope};
 
-const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|windows-lint|windows-tests|fuzz]... [--list-windows-tests] (--all fuzzes only with --part fuzz) | dist [--out <dir>] | notes [--out <file>] [--known-issues <text>] | tag-lines | header | compat <exe> [--mods <path>...] [--report <file>] [--patterns] [--data <file>] | compat refresh (ENSH_EXES lists the executables)";
+const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|windows-lint|windows-tests|fuzz]... [--list-windows-tests] (--all fuzzes only with --part fuzz) | dist [--out <dir>] | notes [--out <file>] [--known-issues <text>] | tag-lines | header | host-args | compat <exe> [--mods <path>...] [--report <file>] [--patterns] [--data <file>] | compat refresh (ENSH_EXES lists the executables)";
 const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// Turned on by name: most of the API crate's test targets need its fake
 /// loader, and without the feature cargo skips them without a word; the
@@ -88,6 +88,13 @@ fn run(args: &[String]) -> Result<bool, String> {
         "notes" => return notes::run(rest),
         "tag-lines" => return tag_lines::run(rest),
         "header" if rest.is_empty() => return header::run(&workspace_root()),
+        "host-args" if rest.is_empty() => {
+            // One argument a line, for CI runs that test the host as the check does.
+            for arg in host_args(&packages()?, cfg!(windows)) {
+                let _shown = writeln!(std::io::stdout(), "{arg}");
+            }
+            return Ok(true);
+        }
         _ => return Err(USAGE.to_owned()),
     }
     let mut all = false;
@@ -546,6 +553,22 @@ fn source_checks() -> bool {
 /// the tests run are narrowed to the changed packages. Host steps run one
 /// after another (they share the build lock); the Windows lint runs beside
 /// them.
+/// The cargo arguments every host build and test of the workspace takes.
+fn host_args(packages: &[Package], on_windows: bool) -> Vec<String> {
+    let mut args = vec![
+        "--workspace".to_owned(),
+        "--features".to_owned(),
+        TEST_FEATURE.to_owned(),
+    ];
+    // Off Windows the crates that build only for Windows stay out of host builds.
+    if !on_windows {
+        for package in packages.iter().filter(|p| p.windows_only) {
+            args.extend(["--exclude".to_owned(), package.name.clone()]);
+        }
+    }
+    args
+}
+
 fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> bool {
     // The source checks read every file in about a second without compiling,
     // so they run whatever changed: a change to a rule alone touches no package.
@@ -580,17 +603,7 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
     if matches!(scope, Scope::All) {
         say("checking the whole workspace");
     }
-    let mut workspace = vec![
-        "--workspace".to_owned(),
-        "--features".to_owned(),
-        TEST_FEATURE.to_owned(),
-    ];
-    // Off Windows the crates that build only for Windows stay out of host builds.
-    if !on_windows {
-        for package in packages.iter().filter(|p| p.windows_only) {
-            workspace.extend(["--exclude".to_owned(), package.name.clone()]);
-        }
-    }
+    let workspace = host_args(packages, on_windows);
     let host = |words: &[&str]| Step::new(words).then_owned(&workspace);
 
     let mut host_steps = Vec::new();
@@ -669,6 +682,25 @@ mod tests {
                     .iter()
                     .any(|(name, value)| *name == "RUSTDOCFLAGS" && value == "-D warnings")
         })
+    }
+
+    #[test]
+    fn host_args_leave_out_windows_only_crates_only_off_windows() {
+        let package = |name: &str, windows_only| Package {
+            name: name.to_owned(),
+            version: "0.0.0-dev".to_owned(),
+            dir: name.to_owned(),
+            deps: Vec::new(),
+            windows_only,
+            windows_tests: windows_only,
+        };
+        let packages = [package("api", false), package("loader", true)];
+        let base = ["--workspace", "--features", TEST_FEATURE];
+        assert_eq!(host_args(&packages, true), base);
+        assert_eq!(
+            host_args(&packages, false),
+            [&base[..], &["--exclude", "loader"]].concat()
+        );
     }
 
     #[test]

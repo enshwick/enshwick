@@ -9,6 +9,8 @@ The paragraph before this comment is `site.description` of src/data/texts.json
 in enshwick/docs, the source of the project's words. Change it there first.
 -->
 
+[![Coverage](https://codecov.io/gh/enshwick/enshwick/graph/badge.svg)](https://codecov.io/gh/enshwick/enshwick)
+
 Enshwick is in alpha: version 1.0 is not out yet. Until 1.0, anything may
 change between alphas, so back up your saves before you update. The site,
 [enshwick.com](https://enshwick.com), has the guides for players and server
