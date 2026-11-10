@@ -59,6 +59,7 @@ impl Engine {
             crate::ui::window_drawn();
         }
         window.saved_nav = self.nav(context);
+        super::widgets::twins_window(name.hash);
         let name = [name.ptr.expose_provenance() as u64, name.len];
         // SAFETY: `self.window_begin` is the game's `ui.window_begin`, its
         // entry bytes checked in `Engine::resolve`, called in a frame on its

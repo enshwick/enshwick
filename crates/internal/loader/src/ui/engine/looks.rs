@@ -15,8 +15,9 @@ pub(super) struct Looks {
     pub(super) sounds: [usize; 4],
     pub(super) setting_off: usize,
     pub(super) setting_on: usize,
-    /// The bundle's icons, by [`Icon`]; `None` keeps buttons to text.
-    pub(super) icons: Option<[usize; 2]>,
+    /// The bundle's icons, by [`Icon`], and the kind of the game's small
+    /// standalone button that shows them; `None` keeps buttons to text.
+    pub(super) icons: Option<([usize; 2], u32)>,
     /// The font size of a list entry's name, the bundle's `large`; `None`
     /// keeps names at their style's size.
     pub(super) name_size: Option<usize>,
@@ -31,32 +32,73 @@ pub(in crate::ui) enum Icon {
     Info = 1,
 }
 
-/// The bundle offsets of the [`Icon`]s, from reflection, in their order;
-/// `None`, logged once at start, keeps icon buttons to their text.
-fn icons(loader: &Loader) -> Option<[usize; 2]> {
-    let found = generic_icons(loader);
+/// The bundle offsets of the [`Icon`]s, from reflection, in their order,
+/// with the small button's kind; `None`, logged once at start, keeps icon
+/// buttons to their text.
+fn icons(loader: &Loader) -> Option<([usize; 2], u32)> {
+    let found = generic_icons(loader).zip(small_button(loader));
     if found.is_none() {
         crate::log!(
             WARN,
-            "interface: icon buttons show their text on {}: the look bundle's icons do not read",
+            "interface: icon buttons show their text on {}: the look bundle's icons or the small button's look do not read",
             loader.build.name
         );
     }
     found
 }
 
+const GENERIC_ICONS: &str = "keen::FbUiGenericIcons";
+/// The bytes of a `UiTexture` the loader copies into a button's config.
+const TEXTURE_SIZE: u32 = 16;
+
 fn generic_icons(loader: &Loader) -> Option<[usize; 2]> {
     let generic = |name| {
+        let info = loader.reflection.type_info(GENERIC_ICONS).ok()?;
+        let texture = info
+            .fields()
+            .iter()
+            .find(|f| f.name() == name)?
+            .type_name()?;
+        let size = loader.reflection.type_info(texture).ok()?.size();
+        (size == TEXTURE_SIZE).then_some(())?;
         path(
             loader,
             &[
                 (BUNDLE, "icons"),
                 ("keen::FbUiIcons", "genericIcons"),
-                ("keen::FbUiGenericIcons", name),
+                (GENERIC_ICONS, name),
             ],
         )
     };
     Some([generic("settings")?, generic("infoCircle")?])
+}
+
+/// The kind `ui.button` takes for the game's small standalone button: the
+/// index of `standaloneSmall` among the looks of `FbUiMenuButton`, which the
+/// button's frame indexes by its kind (client 26430625).
+fn small_button(loader: &Loader) -> Option<u32> {
+    let info = loader.reflection.type_info("keen::FbUiMenuButton").ok()?;
+    let fields: Vec<(&str, u64)> = info
+        .fields()
+        .iter()
+        .map(|f| (f.name(), f.offset()))
+        .collect();
+    look_index(&fields, "standaloneSmall")
+}
+
+/// The index of look `name` among `fields`, `(name, offset)` in the
+/// engine's order; `None` unless the looks sit one stride apart from the
+/// first, as an array the kind indexes.
+pub(super) fn look_index(fields: &[(&str, u64)], name: &str) -> Option<u32> {
+    let first = fields.first()?.1;
+    let stride = fields.get(1)?.1.checked_sub(first)?;
+    let even = (0u64..).zip(fields).all(|(i, (_, offset))| {
+        i.checked_mul(stride).and_then(|at| at.checked_add(first)) == Some(*offset)
+    });
+    if stride == 0 || !even {
+        return None;
+    }
+    u32::try_from(fields.iter().position(|(field, _)| *field == name)?).ok()
 }
 
 /// Where the look of the main menu's version line sits in the look bundle,
@@ -146,4 +188,32 @@ pub(super) fn looks(loader: &Loader) -> Option<Looks> {
         icons: icons(loader),
         name_size: path(loader, &[(BUNDLE, "fontSizes"), (FONT_SIZES, "large")]),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::look_index;
+
+    #[test]
+    fn a_look_s_kind_is_its_place_among_looks_one_stride_apart() {
+        let looks = [
+            ("standalone", 0),
+            ("inGroupLeft", 0x40),
+            ("inGroupMiddle", 0x80),
+            ("inGroupRight", 0xc0),
+            ("standaloneSmall", 0x100),
+        ];
+        assert_eq!(look_index(&looks, "standaloneSmall"), Some(4));
+        assert_eq!(look_index(&looks, "standalone"), Some(0));
+        assert_eq!(look_index(&looks, "huge"), None, "a look the build lacks");
+        let mut uneven = looks;
+        uneven[2].1 = 0x88;
+        assert_eq!(
+            look_index(&uneven, "standaloneSmall"),
+            None,
+            "a field that is no look"
+        );
+        assert_eq!(look_index(&looks[..1], "standalone"), None, "no stride");
+        assert_eq!(look_index(&[("a", 0), ("b", 0)], "b"), None, "no stride");
+    }
 }

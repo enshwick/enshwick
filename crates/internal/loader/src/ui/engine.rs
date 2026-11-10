@@ -183,6 +183,12 @@ const NAV_SIZE: usize = 0x300; // bound, not a game offset: the loader's room
 const NAV_CONFIG: usize = 0x58; // bound, not a game offset: the loader's room
 const PANEL_CONFIG: usize = 0x100; // bound, not a game offset: the loader's room
 const BUTTON_CONFIG: usize = 0x80; // bound, not a game offset: the loader's room
+/// Where a button's config holds its kind, a `u32` that picks its frame's
+/// look and size: `ui.button` hands the config to its frame, which reads the
+/// kind as its first word (client 26430625).
+// shortcut: a code constant `Layout::checked` only keeps clear of the
+// routed fields, until a route finds the word.
+const BUTTON_KIND_AT: usize = 0;
 const TOGGLE_CONFIG: usize = 0xc50; // bound, not a game offset: the loader's room
 const SLIDER_CONFIG: usize = 0x140; // bound, not a game offset: the loader's room
 const DROPDOWN_CONFIG: usize = 0xca0; // bound, not a game offset: the loader's room
@@ -404,8 +410,29 @@ impl Layout {
         .checked()
     }
 
-    /// Refuses a layout whose lists would run past the loader's buffers.
-    fn checked(self) -> Result<Self, Missing> {
+    /// Refuses a layout whose lists would run past the loader's buffers,
+    /// and keeps buttons to their text when the icon fields would.
+    fn checked(mut self) -> Result<Self, Missing> {
+        let others = [
+            self.button_align,
+            self.button_centered,
+            self.button_enabled,
+            self.button_size_mode,
+            self.button_padding[0],
+            self.button_padding[1],
+            self.button_scale,
+            self.button_sound,
+        ];
+        if self
+            .button_icon
+            .is_some_and(|(texture, shown)| !icon_fits(&others, texture, shown))
+        {
+            crate::log!(
+                WARN,
+                "interface: icon buttons show their text: the button's icon fields do not fit its config"
+            );
+            self.button_icon = None;
+        }
         let stops = self
             .slider_stop_capacity
             .checked_mul(4)
@@ -422,6 +449,23 @@ impl Layout {
         }
         Ok(self)
     }
+}
+
+/// Whether a button's icon texture at `texture` and its flag byte at
+/// `shown` fit its config beside the kind word and the `others` fields
+/// without one write landing on another's start.
+fn icon_fits(others: &[usize], texture: usize, shown: usize) -> bool {
+    let kind = BUTTON_KIND_AT..BUTTON_KIND_AT + 4;
+    let image = texture..texture + 16;
+    let starts_clear = others
+        .iter()
+        .chain([&texture, &shown])
+        .all(|at| !kind.contains(at));
+    starts_clear
+        && image.end <= BUTTON_CONFIG
+        && shown < BUTTON_CONFIG
+        && !image.contains(&shown)
+        && others.iter().all(|at| !image.contains(at) && *at != shown)
 }
 
 impl DialogLayout {

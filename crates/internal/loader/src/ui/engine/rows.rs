@@ -127,10 +127,6 @@ impl Row {
     }
 }
 
-/// The alignment word that puts the right cell at the right of its row,
-/// centred down it (client 26430625): the low byte across (3 right), the
-/// high byte down (2 centre).
-const SIDE_ALIGN: u16 = 0x203;
 /// The gap between the buttons stacked in a row's right cell, a third of
 /// an icon button's height, so they read as two.
 const SIDE_GAP: f32 = 16.0;
@@ -199,7 +195,7 @@ impl Engine {
         // SAFETY: `self.node_align` is the game's `ui.node_align`, checked in
         // `Engine::resolve`, on the node the game just wrote into the
         // column, with a live alignment word.
-        unsafe { (self.node_align)(node, &SIDE_ALIGN) };
+        unsafe { (self.node_align)(node, &super::widgets::BUTTON_ALIGN_RIGHT) };
     }
 
     /// Ends the row.

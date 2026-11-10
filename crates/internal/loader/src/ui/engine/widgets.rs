@@ -14,19 +14,13 @@ const BUTTON_FILLS_COLUMN: u64 = 3;
 /// The alignment word that centres a node in its column, as `ui.button`
 /// spells for its own content (client 26430625).
 const BUTTON_ALIGN_CENTRE: u16 = 0x202;
-/// The alignment word that puts a node at the right of its column.
-const BUTTON_ALIGN_RIGHT: u16 = 0x203;
+/// The alignment word that puts a node at the right of its column, centred
+/// down it (client 26430625): the low byte across (3 right), the high byte
+/// down (2 centre).
+pub(super) const BUTTON_ALIGN_RIGHT: u16 = 0x203;
 /// The space an icon leaves above and below it in its button, before the
 /// interface's scale; the game's own gear buttons leave 25 (client 26430625).
 const ICON_MARGIN: f32 = 25.0;
-/// Where a button's config holds its kind, which picks its frame's look
-/// and size: `ui.button` hands the config to its frame, which reads the kind
-/// as its first word (client 26430625).
-const BUTTON_KIND_AT: usize = 0;
-/// The kind of the game's small standalone button: the kinds are the looks
-/// of `FbUiMenuButton` in field order, `standalone`, three in a group, then
-/// `standaloneSmall` (client 26430625).
-const BUTTON_KIND_ICON: u32 = 4;
 /// The height of an icon button, which an empty slot keeps free.
 const ICON_SLOT: f32 = 50.0;
 /// The slider's value text without decimals, for a setting that holds whole
@@ -322,7 +316,8 @@ impl Engine {
         enabled: bool,
     ) -> Option<bool> {
         let (texture, shown) = self.layout.button_icon?;
-        let offset = *self.looks.icons?.get(icon as usize)?;
+        let (icons, kind) = self.looks.icons?;
+        let offset = *icons.get(icon as usize)?;
         // SAFETY: `bundle` is the frame's look bundle, read from the live
         // context, and `offset` the reflected offset of a `UiTexture`, 16
         // bytes, inside it.
@@ -337,7 +332,7 @@ impl Engine {
             BUTTON_FITS_TEXT,
             [0.0, ICON_MARGIN],
         );
-        config.u32(BUTTON_KIND_AT, BUTTON_KIND_ICON);
+        config.u32(super::BUTTON_KIND_AT, kind);
         config.u64(texture, image[0]);
         config.u64(texture + 8, image[1]);
         config.u8(shown, 1);
@@ -612,47 +607,63 @@ thread_local! {
     static TWINS: core::cell::RefCell<Twins> = const { core::cell::RefCell::new(Twins::new()) };
 }
 
-/// Dropdowns drawn in a frame that share a label and option count, such as
-/// two "Player" arguments of one window, told apart by the order they draw
-/// in, so each opens alone.
-struct Twins {
-    frame: u64,
-    seen: [u64; TWINS_KEPT],
-    len: usize,
+/// Starts counting dropdown twins in the window named by `name_hash`, so a
+/// dropdown's id holds whatever other windows open or close.
+pub(super) fn twins_window(name_hash: u64) {
+    TWINS.with_borrow_mut(|twins| twins.enter(name_hash));
 }
 
-/// Dropdowns of one frame kept to count twins; one drawn after them counts
-/// its twins among these only.
+/// Dropdowns drawn in one window that share a label and option count, such
+/// as two "Player" arguments of one window, told apart by the order they
+/// draw in, so each opens alone.
+struct Twins {
+    frame: u64,
+    window: u64,
+    seen: [u64; TWINS_KEPT],
+    /// Dropdowns drawn in the window this frame, the kept ones first.
+    drawn: usize,
+}
+
+/// Dropdowns of one window kept to count twins; one drawn after them takes
+/// an id by its place in the window instead.
 const TWINS_KEPT: usize = 64;
 
 impl Twins {
     const fn new() -> Self {
         Self {
             frame: 0,
+            window: 0,
             seen: [0; TWINS_KEPT],
-            len: 0,
+            drawn: 0,
         }
     }
 
-    /// The id of the dropdown keyed `base` drawn next in `frame`: `base`
-    /// for the first of its key in the frame, a different id for each twin
-    /// after it, the same ids every frame the dropdowns draw in one order.
+    fn enter(&mut self, window: u64) {
+        self.window = window;
+        self.drawn = 0;
+    }
+
+    /// The id of the dropdown keyed `base` drawn next in `frame` in the
+    /// current window: a different id for each twin in the window, the
+    /// same ids every frame the window draws them in one order.
     fn id(&mut self, frame: u64, base: u64) -> u64 {
         if frame != self.frame {
             self.frame = frame;
-            self.len = 0;
+            self.drawn = 0;
         }
-        let before = self
-            .seen
-            .iter()
-            .take(self.len)
-            .filter(|&&s| s == base)
-            .count();
-        if let Some(slot) = self.seen.get_mut(self.len) {
-            *slot = base;
-            self.len += 1;
-        }
-        base ^ (before as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)
+        let before = match self.seen.get_mut(self.drawn) {
+            Some(slot) => {
+                *slot = base;
+                self.seen[..self.drawn]
+                    .iter()
+                    .filter(|&&s| s == base)
+                    .count()
+            }
+            // Past the kept ones, its place: above any count of twins.
+            None => self.drawn,
+        };
+        self.drawn += 1;
+        base ^ self.window ^ (before as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)
     }
 }
 
@@ -683,6 +694,29 @@ mod dropdown_tests {
         assert_eq!(twins.id(2, 7), ban);
         let open = toggled(None, ban, true);
         assert_ne!(open, Some(kick), "a click on one opens only that one");
+    }
+
+    #[test]
+    fn a_dropdown_s_id_holds_when_another_window_opens_or_closes_before_it() {
+        let mut twins = Twins::new();
+        twins.enter(100);
+        let first = twins.id(1, 7);
+        twins.enter(200);
+        let second = twins.id(1, 7);
+        assert_ne!(first, second, "one key in two windows");
+        twins.enter(200);
+        assert_eq!(twins.id(2, 7), second, "the first window closed");
+    }
+
+    #[test]
+    fn dropdowns_past_the_kept_ones_still_get_ids_of_their_own() {
+        let mut twins = Twins::new();
+        twins.enter(1);
+        let ids: Vec<u64> = (0..super::TWINS_KEPT + 3).map(|_| twins.id(1, 7)).collect();
+        let mut unique = ids.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(unique.len(), ids.len());
     }
 
     #[test]
