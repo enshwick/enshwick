@@ -6,9 +6,9 @@ description: Mods add quests and lore pages, change vanilla quests and their rew
 # Quests and journal pages
 
 A mod adds quests and lore pages to the journal and changes the game's
-quests. A quest's steps show and complete on [knowledge](knowledge.md); its
-rewards pay out when the last step completes. The game's own screens draw
-them.
+quests. A quest's steps show and complete on [knowledge](knowledge.md). The
+game gives its experience; the mod gives its items. The game's screens
+draw them.
 
 ## A quest of the mod's own
 
@@ -25,7 +25,7 @@ quest, as for its own quests; [Knowledge](../knowledge.md) reads it.
 | `main` | whether the journal lists it as a main quest |
 | `for_all_players` | whether one player's completion unlocks it for all |
 | `steps` | its steps, in order |
-| `rewards` | items by GUID and experience values |
+| `rewards` | the items by GUID and experience values the journal shows as its reward |
 
 Each `QuestStep` shows while `shown_when` holds. It is done once `done_when`
 holds. Its `progress` lists parts the journal counts. A mod moves the quest on by
@@ -58,10 +58,77 @@ fn init(load: &mut enshwick::Load<'_>, torch: Guid) -> Result<(), enshwick::Off>
 On a server copy of server 399, the server's journal listed a mod's quest
 beside the game's 188.
 
+## Giving a quest's items
+
+The game gives a quest's experience and never its items. It only draws an
+item reward in the journal. The rewards of its own quests name NPCs,
+workshops and chest icons. This is read in client 26430625 and not yet
+seen in the game. So a mod gives the items of its own quest when `QuestCompleted`
+names it. `give_what_fits` gives as many as the inventory has room for and
+tells the handler how many did not fit. The mod decides what becomes of
+those: tell the player, or keep them in its own
+[world data](../state.md) and give them later. Enshwick stores nothing
+about a reward.
+
+```rust
+use enshwick::events::QuestCompleted;
+use enshwick::knowledge::KnowledgeId;
+
+fn init(load: &mut enshwick::Load<'_>, trail: KnowledgeId, torch: enshwick::ItemId) -> Result<(), enshwick::Off> {
+    let inventories = load.inventories()?;
+    load.on::<QuestCompleted>(move |done| {
+        if done.quest == trail {
+            let _ticket = inventories.give_what_fits(done.entity, torch, 1, |left| {
+                if left > 0 {
+                    enshwick::warn!("no room for {left} of the reward");
+                }
+            });
+        }
+    })
+}
+```
+
+`load.quests().quest(done.quest)` gives the rewards the quest declares, for
+a handler that serves several quests. A mod gives only for quests of its
+own: a vanilla quest's item reward is a picture, not an item to hand out.
+
+A data pack without a script gives on `quest = true` in
+[`rewards.toml`](rewards.md), for every quest a player completes. It gives
+as many items as fit and logs the rest; the player gets no message.
+
 ## A lore page
 
-`load.add_journal_page(NewJournalPage)` adds a lore page listed under its
-category's text tag. Each `PageEntry` shows once its `shown_when` holds.
+`load.add_journal_page(NewJournalPage)` adds a lore page. Each `PageEntry`
+shows once its `shown_when` holds. A player finds the page in the journal
+(J) under "World information", on the card of its category. The card counts
+the page from the start and lists it once one entry shows.
+
+`category` is the text tag of one of the game's own lore categories. The
+journal has a card only for those, so `add_journal_page` refuses any other
+tag and logs the categories of the running game. A category of the mod's
+own is not possible.
+
+| Card | Constant in `journal::lore_category` | Text tag |
+| --- | --- | --- |
+| General | `GENERAL` | `f94a5ece-d3fb-4f32-8d6e-e72bdffaba39` |
+| Ancients and the Flame | `ANCIENTS_AND_THE_FLAME` | `a86a5728-f02a-4e28-b0f5-1d53d69f7261` |
+| The Shroud, Elixir, and Elixir Wells | `THE_SHROUD_ELIXIR_AND_ELIXIR_WELLS` | `8ab85ee5-5709-4ff7-b5cf-d60954cafec0` |
+| About Scavengers | `ABOUT_SCAVENGERS` | `04123d11-4918-4fd9-853f-682e39ee8b50` |
+| Vukah and Wildlife | `VUKAH_AND_WILDLIFE` | `e1a327ed-419c-4cef-9ccf-0d8bf142db0a` |
+| Nobles and History | `NOBLES_AND_HISTORY` | `58b2bc1e-713e-4b0a-9225-71df283e1c4f` |
+| Revelwoods | `REVELWOODS` | `771bb6b6-3ce5-4bfc-bb1a-7e1a1a2c9d2b` |
+| Nomad Highlands | `NOMAD_HIGHLANDS` | `2e66d970-04a3-4078-b3bf-3e33d4996728` |
+| Kindlewastes | `KINDLEWASTES` | `a57cfea9-74fc-42d0-8a12-b05a2ed112b9` |
+| The Hollow | `THE_HOLLOW` | `1e15a1ec-ecc1-4f6c-afb2-9eb3609dbdac` |
+| Cold Heights | `COLD_HEIGHTS` | `c811b8f1-bd2b-4e31-80a3-65a54ff794d9` |
+| Veilwater Basin | `VEILWATER_BASIN` | `437ca83f-c2ec-4feb-9095-108c627a6ac7` |
+| Drak | `DRAK` | `99e69e04-0fbc-4317-a9e3-1623261a4c0e` |
+
+The cards and their English texts are those of client 26430625. The
+journals of that client and of server 26430253 list their pages under these
+13 tags. The game ships no name for a category, so the constants take the
+cards' texts. They need the `unstable` feature until a mod's page is seen
+on its card in the game. A Luau mod passes the text tag.
 
 ## Changing a vanilla quest
 
@@ -122,6 +189,9 @@ Three of the same calls run at the top level of `main.luau`:
 - `enshwick.content.add_journal_page{...}`
 - `enshwick.content.change_quest(id, {...})`
 
+`enshwick.on("QuestCompleted", handler)` subscribes there too, and
+`enshwick.inventory.give_what_fits(to, item, count, done)` gives the items.
+
 Two more run while the world runs:
 
 - `enshwick.knowledge.quest_progression(player)`
@@ -133,7 +203,7 @@ calls.
 ```luau
 local given = enshwick.content.add_knowledge({ id = "you.trail:given", scope = "Player", kind = "Bool" })
 local is_given = { id = given, scope = "Player", test = "IsSet" }
-enshwick.content.add_quest({
+local trail = enshwick.content.add_quest({
     id = "you.trail:trail",
     name = enshwick.content.guid("you.trail:trail.name"),
     source = "None",
@@ -146,6 +216,17 @@ enshwick.content.add_quest({
     } },
     rewards = { { Item = "<the GUID of a vanilla item>" } },
 })
+
+local torch = enshwick.content.item_id("<the GUID of a vanilla item>")
+enshwick.on("QuestCompleted", function(done)
+    if done.quest == trail then
+        enshwick.inventory.give_what_fits(done.entity, torch, 1, function(left)
+            if left > 0 then
+                enshwick.log.warn(`no room for {left} of the reward`)
+            end
+        end)
+    end
+end)
 
 local function report(player: number)
     for _, quest in enshwick.quests.all() do

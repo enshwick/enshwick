@@ -4,8 +4,12 @@
 
 local content = enshwick.content
 
--- Tool_Torch01, the quest's reward.
+-- Tool_Torch01, the reward the quest shows and the script gives.
 local TORCH = "224097e5-ed0d-49d2-9d23-43256a6682b3"
+
+-- The game's lore category "General": the journal lists a page only under
+-- one of its own categories.
+local GENERAL = "f94a5ece-d3fb-4f32-8d6e-e72bdffaba39"
 
 local TEXTS: { [string]: { en: string, uk: string } } = {
 	["trail.name"] = { en = "A Trail Through the Woods", uk = "Стежка крізь ліс" },
@@ -16,7 +20,6 @@ local TEXTS: { [string]: { en: string, uk: string } } = {
 		en = "Pick up resin. The trail pays a torch.",
 		uk = "Підбери смолу. Стежка дасть смолоскип.",
 	},
-	["lore.category"] = { en = "Trail Notes", uk = "Нотатки зі стежки" },
 	["lore.name"] = { en = "The Old Trail", uk = "Стара стежка" },
 	["lore.entry"] = { en = "First Mark", uk = "Перша позначка" },
 	["lore.entry.text"] = {
@@ -50,7 +53,7 @@ local given = is_set(player_bool("given"))
 local wood = is_set(player_bool("wood"))
 local resin = is_set(player_bool("resin"))
 
-content.add_quest({
+local trail = content.add_quest({
 	id = "you.trail:trail",
 	name = text("trail.name"),
 	source = "None",
@@ -62,9 +65,30 @@ content.add_quest({
 	rewards = { { Item = TORCH } },
 })
 
+-- The game gives a quest's experience and only draws its item, so the mod
+-- gives the torch itself. What a full inventory leaves out is the mod's to
+-- decide: this one tells the player, in the language the game runs in.
+local NO_ROOM = {
+	en = "No room for the trail's torch.",
+	uk = "Немає місця для смолоскипа стежки.",
+}
+local torch = content.item_id(TORCH)
+
+enshwick.on("QuestCompleted", function(done)
+	if done.quest ~= trail then
+		return
+	end
+	enshwick.inventory.give_what_fits(done.entity, torch, 1, function(left)
+		local player = enshwick.world.player(done.entity)
+		if left > 0 and player then
+			enshwick.world.notify(player, NO_ROOM[enshwick.i18n.language()] or NO_ROOM.en)
+		end
+	end)
+end)
+
 content.add_journal_page({
 	id = "you.trail:lore",
-	category = text("lore.category"),
+	category = GENERAL,
 	name = text("lore.name"),
 	entries = { { name = text("lore.entry"), text = text("lore.entry.text"), shown_when = given } },
 })

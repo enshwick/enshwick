@@ -146,6 +146,16 @@ impl Outcome {
         matches!(self.done, Done::Committed)
     }
 
+    /// How many of the `count` items of a request of one give did not fit:
+    /// what its operation left, or all of them when nothing changed.
+    pub(super) fn left_of(&self, count: u32) -> u32 {
+        if self.is_committed() {
+            self.ops.first().map_or(0, |op| op.remaining.min(count))
+        } else {
+            count
+        }
+    }
+
     pub(super) const fn not_run(done: Done) -> Self {
         Self {
             done,

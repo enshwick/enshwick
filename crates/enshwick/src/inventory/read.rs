@@ -339,6 +339,41 @@ impl Inventories {
         )
     }
 
+    /// Gives as many of `count` new items `item` as the inventory `to` has
+    /// room for, with the game's pickup message, and tells `done` how many
+    /// did not fit: 0 when all did, `count` when the request did not run.
+    /// What becomes of the rest is the caller's to decide.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn reward(inventories: &enshwick::inventory::Inventories, player: enshwick::Entity) {
+    ///     inventories.give_what_fits(player, enshwick::ItemId::new(0x0c01), 10, |left| {
+    ///         if left > 0 {
+    ///             enshwick::warn!("no room for {left} of the reward");
+    ///         }
+    ///     });
+    /// }
+    /// ```
+    #[script]
+    pub fn give_what_fits(
+        &self,
+        to: Entity,
+        item: ItemId,
+        count: u32,
+        done: impl FnOnce(u32) + Send + 'static,
+    ) -> Ticket {
+        let give = Op::Give {
+            to,
+            item,
+            count,
+            fill: None,
+        };
+        self.submit(&Batch::new().with(give).allow_partial(), move |outcome| {
+            done(outcome.left_of(count));
+        })
+    }
+
     /// Takes `count` items `item` from the inventory `from`, all or nothing.
     ///
     /// # Examples

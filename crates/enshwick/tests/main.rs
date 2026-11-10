@@ -151,6 +151,8 @@ mod props;
 mod props_server;
 mod published_texts;
 #[cfg(feature = "typed")]
+mod quest_rewards;
+#[cfg(feature = "typed")]
 mod quests_read;
 #[cfg(feature = "unstable")]
 mod rates;

@@ -74,8 +74,8 @@ pub enum Action {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub enum Give {
-    /// `count` of `item`, all or nothing: with a full inventory the player
-    /// gets none and the log says so.
+    /// `count` of `item`, as many as fit: the log says how many a full
+    /// inventory left out, and nothing is kept for later.
     Items {
         /// The item.
         item: ItemId,
@@ -486,11 +486,16 @@ impl Shared {
             let given = match one {
                 Give::Items { item, count } => match self.inventories {
                     Some(inventories) => {
-                        let _ticket = inventories.give(player, item, count, move |outcome| {
-                            if !outcome.is_committed() {
-                                crate::warn!("reward: {count} items {} did not fit", item.get());
-                            }
-                        });
+                        let _ticket =
+                            inventories.give_what_fits(player, item, count, move |left| {
+                                if left > 0 {
+                                    crate::warn!(
+                                        "reward: {left} of {count} items {} did not fit player {}",
+                                        item.get(),
+                                        player.0
+                                    );
+                                }
+                            });
                         Ok(())
                     }
                     None => Err("this game build has no inventories".to_owned()),

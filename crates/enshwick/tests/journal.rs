@@ -15,7 +15,7 @@ mod tests {
     use enshwick::content::{EngineFacts, Guid, Id};
     use enshwick::knowledge::{Knowledge, KnowledgeId, KnowledgeType, Scope};
     use enshwick::resources::{Registry, Value, fnv1a32};
-    use enshwick::test::{FakeHost, PROGRESSION, QUEST_ITEM, VANILLA_QUEST};
+    use enshwick::test::{FakeHost, LORE_CATEGORY, PROGRESSION, QUEST_ITEM, VANILLA_QUEST};
     use enshwick::{Entity, Load, Mod, Off};
 
     const TRAIL: Id = Id::new("you.trail:trail");
@@ -71,7 +71,7 @@ mod tests {
             *QUEST.lock().unwrap() = Some(quest);
             load.add_journal_page(NewJournalPage {
                 id: LORE,
-                category: tag("lore.category"),
+                category: LORE_CATEGORY,
                 name: tag("lore.name"),
                 entries: vec![PageEntry {
                     name: tag("lore.1"),
@@ -79,6 +79,16 @@ mod tests {
                     shown_when: is(given),
                 }],
             })?;
+            refused(load.add_journal_page(NewJournalPage {
+                id: Id::new("you.trail:own-category"),
+                category: tag("lore.category"),
+                name: tag("lore.name"),
+                entries: vec![PageEntry {
+                    name: tag("lore.1"),
+                    text: tag("lore.1.text"),
+                    shown_when: is(given),
+                }],
+            }));
             let vanilla = KnowledgeId::new(VANILLA_QUEST);
             load.change_quest(
                 vanilla,
@@ -209,10 +219,15 @@ mod tests {
             list(trail.field("rewards"))[0].field("itemRef"),
             Some(&Value::Guid(TORCH))
         );
-        let page = &list(journal.field("collections"))[0];
+        let pages = list(journal.field("collections"));
         assert_eq!(
-            key(page.field("loreCategory")),
-            Some(tag("lore.category").fnv1a())
+            pages.len(),
+            2,
+            "beside the vanilla page, the refused one left out"
+        );
+        assert_eq!(
+            key(pages[1].field("loreCategory")),
+            Some(LORE_CATEGORY.fnv1a())
         );
 
         let knowledge = built(
@@ -234,11 +249,16 @@ mod tests {
         );
 
         let refused = REFUSED.lock().unwrap().clone();
-        assert_eq!(refused.len(), 4, "{refused:?}");
-        assert!(refused[0].contains("no steps"), "{}", refused[0]);
-        assert!(refused[1].contains("no quest"), "{}", refused[1]);
-        assert!(refused[2].contains("no step 4"), "{}", refused[2]);
-        assert!(refused[3].contains("start at 1"), "{}", refused[3]);
+        assert_eq!(refused.len(), 5, "{refused:?}");
+        assert!(
+            refused[0].contains(&format!("the game's are {:?}", [LORE_CATEGORY.fnv1a()])),
+            "{}",
+            refused[0]
+        );
+        assert!(refused[1].contains("no steps"), "{}", refused[1]);
+        assert!(refused[2].contains("no quest"), "{}", refused[2]);
+        assert!(refused[3].contains("no step 4"), "{}", refused[3]);
+        assert!(refused[4].contains("start at 1"), "{}", refused[4]);
     }
 
     #[test]
