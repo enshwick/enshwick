@@ -72,6 +72,12 @@ Each entry names the pull request that made the change.
   logged and left out, and the rest are made (#1015).
 - `actions`: a console or command line reads a run in double quotes as
   one value (#1022).
+- `packs`: a misspelt or unknown field in a pack's data is named with the
+  fields its place takes and the one it is near, such as
+  ``unknown field `cout`, expected `item` or `count`; near: count``, with
+  its file, line and column, where a gift, a value, a scale or a
+  dependency used to answer that the data matched no variant of an
+  untagged enum (#1017).
 
 ### Fixed
 
