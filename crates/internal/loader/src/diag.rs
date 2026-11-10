@@ -17,6 +17,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use menu::{KeptLine, MenuNote, menu_line, menu_line_off};
 pub(crate) use summary::clock;
+#[cfg(windows)]
+pub(crate) use summary::{GAME_CRASHED, crash_heading};
 pub use summary::{HookStat, ModStatus, Served, Summary, duration, messages_line, part_line};
 
 use crate::locks::Relock;

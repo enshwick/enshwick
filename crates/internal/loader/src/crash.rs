@@ -35,7 +35,10 @@ use windows_sys::Win32::System::Diagnostics::Debug::{
     AddVectoredExceptionHandler, EXCEPTION_POINTERS, LPTOP_LEVEL_EXCEPTION_FILTER,
     SetUnhandledExceptionFilter,
 };
-use windows_sys::Win32::System::ProcessStatus::{GetModuleInformation, MODULEINFO};
+use windows_sys::Win32::System::Memory::MEM_IMAGE;
+use windows_sys::Win32::System::ProcessStatus::{
+    GetMappedFileNameW, GetModuleInformation, MODULEINFO,
+};
 use windows_sys::Win32::System::SystemInformation::GetSystemTime;
 use windows_sys::Win32::System::Threading::{
     GetCurrentProcess, GetCurrentProcessId, GetCurrentThreadId,
@@ -233,13 +236,19 @@ impl Line {
     }
 }
 
-/// The fault in words, as the crash file keeps it: time, code, address, whom it
-/// is blamed on and where, and what was accessed.
+/// The fault in words, as the crash file keeps it: time, code, address and
+/// the module it lies in when no range holds it, whom it is blamed on and
+/// where, and what was accessed.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the parts of one crash line, each read where the fault is"
+)]
 pub(crate) fn describe(
     line: &mut Line,
     time: [u16; 6],
     code: u32,
     at: usize,
+    module: Option<(usize, &[u8])>,
     access: Option<(u64, u64)>,
     blame: Blame,
     ranges: &[Range],
@@ -260,6 +269,13 @@ pub(crate) fn describe(
         .hex(u64::from(code))
         .text(b" at ")
         .hex(at as u64);
+    if let Some((base, name)) = module {
+        line.text(b" (+")
+            .hex(at.wrapping_sub(base) as u64)
+            .text(b" in ")
+            .text(name)
+            .text(b")");
+    }
     let offset = |line: &mut Line, range: &Range, address: usize| {
         line.text(b" (+")
             .hex(address.wrapping_sub(range.start) as u64)
@@ -308,7 +324,7 @@ pub(crate) fn describe(
             offset(line, &ranges[index], at);
         }
         Blame::Game => {
-            line.text(b", in the game: no mod's or loader's code on the stack");
+            line.text(b", ").text(crate::diag::GAME_CRASHED.as_bytes());
         }
     }
     if let Some((kind, address)) = access {
@@ -562,6 +578,42 @@ pub(crate) fn range_of(module: HMODULE) -> Option<(usize, usize)> {
     (ok != 0).then(|| (start, start + info.SizeOfImage as usize))
 }
 
+/// The base of the module `at` lies in, with its file name written into
+/// `name`, non-ASCII as `?`: the name's length beside the base. `None`
+/// outside a mapped image or when Windows does not name the file.
+///
+/// Allocates nothing and takes no loader lock, which another thread of the
+/// dying process may hold, so the report may call it.
+fn module_at(at: usize, name: &mut [u8; NAME]) -> Option<(usize, usize)> {
+    let region = crate::pages::query(at).filter(|r| r.kind == MEM_IMAGE)?;
+    let mut path = [0u16; CRASH_PATH];
+    // SAFETY: `GetCurrentProcess` takes no arguments and has no
+    // preconditions; `GetMappedFileNameW` reads no memory at the base, which
+    // it only looks up, and writes at most `CRASH_PATH` units into `path`.
+    let len = unsafe {
+        GetMappedFileNameW(
+            GetCurrentProcess(),
+            core::ptr::with_exposed_provenance(region.allocation),
+            path.as_mut_ptr(),
+            u32::try_from(CRASH_PATH).unwrap_or(0),
+        )
+    };
+    let path = path.get(..len as usize)?;
+    // A Windows path ends in `\name`; one under Wine may end in `/name`.
+    let file = path
+        .rsplit(|&unit| unit == u16::from(b'\\') || unit == u16::from(b'/'))
+        .next()
+        .filter(|file| !file.is_empty())?;
+    let file = &file[..file.len().min(NAME)];
+    for (byte, &unit) in name.iter_mut().zip(file) {
+        *byte = u8::try_from(unit)
+            .ok()
+            .filter(u8::is_ascii_graphic)
+            .unwrap_or(b'?');
+    }
+    Some((region.allocation, file.len()))
+}
+
 /// Opens `path` for the filter, `access` as given; 0 when it cannot.
 fn open(path: &Path, access: u32) -> usize {
     let wide: Vec<u16> = wide(path).into_iter().chain(Some(0)).collect();
@@ -652,7 +704,7 @@ pub(crate) fn install(modules: &[(usize, String, usize, usize)], logs_dir: &Path
         && !text.trim().is_empty()
     {
         let text = text.trim().to_owned();
-        crate::log!(WARN, "the last session crashed: {text}");
+        crate::log!(WARN, "{}: {text}", crate::diag::crash_heading(&text));
         let _first = LAST.set(text);
     }
     let _cleared = std::fs::write(&last_path, "");
@@ -823,6 +875,12 @@ unsafe fn record(state: &State, pointers: &EXCEPTION_POINTERS, thread: u32, line
     };
     // SAFETY: `time` is a writable `SYSTEMTIME`.
     unsafe { GetSystemTime(&raw mut time) };
+    let mut name = [0; NAME];
+    let module = if state.ranges.iter().any(|r| r.holds(at)) {
+        None
+    } else {
+        module_at(at, &mut name).map(|(base, len)| (base, &name[..len]))
+    };
     describe(
         line,
         [
@@ -835,6 +893,7 @@ unsafe fn record(state: &State, pointers: &EXCEPTION_POINTERS, thread: u32, line
         ],
         code.cast_unsigned(),
         at,
+        module,
         access,
         blame,
         &state.ranges,

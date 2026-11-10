@@ -48,16 +48,29 @@ is blamed on:
 | `blamed on <mod>: its code is on the stack`            | the fault is in game code a mod's hook or call led to, found by unwinding |
 | `in the loader`                                        | the fault is in the loader with no mod's callback running or code near it |
 | `in the game, called from enshwick`                    | the fault is in game code under the loader's code, with no mod's near it  |
-| `in the game: no mod's or loader's code on the stack`  | Enshwick and its mods are not involved                                    |
+| `the game itself crashed: no mod's or loader's code on the stack` | Enshwick and its mods are not involved                         |
 
-The offset in brackets is the address inside the DLL that holds it. The last
-part is what the faulting access read, wrote or ran.
+The offset in brackets is the address inside the DLL that holds it. When no
+mod or the loader holds the address, the bracket after the address names the
+game's or the system's DLL instead, such as `(+0x6213 in sechost.dll)`. The
+last part is what the faulting access read, wrote or ran.
 
 Each crash writes its line to the loader's file of that run and to a file of
 its own, `logs/enshwick-crash_<date>_<time>.log`. The newest 10 crash files
 are kept. The next start logs the last crash as a warning and shows it at
-the top of the status summary. The line waits in
-`mods/enshwick/last-crash.txt` until then.
+the top of the status summary, opened by `the game crashed in the last
+session` when Enshwick and its mods were not involved and by `the last
+session crashed` otherwise. The line waits in `mods/enshwick/last-crash.txt`
+until then.
+
+## Why does a server under Wine write a crash file at every stop?
+
+Under Wine 11, the dedicated server crashes at the end of every stop, with or
+without Enshwick. The fault is in Wine's `sechost.dll` while the game shuts
+down Steam, after the world is saved, so nothing is lost. The game writes its
+own crash dump to `crash_dumps/`, and Enshwick writes a crash file whose line
+says `the game itself crashed`. Under GE-Proton 11 the stop does not crash.
+This was seen on game build 26430253.
 
 ## Where is the status summary?
 

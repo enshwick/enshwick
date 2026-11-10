@@ -30,17 +30,75 @@ fn ranges() -> [Range; 3] {
 }
 
 fn text(blame: Blame, at: usize, access: Option<(u64, u64)>) -> String {
+    text_in(None, blame, at, access)
+}
+
+fn text_in(
+    module: Option<(usize, &[u8])>,
+    blame: Blame,
+    at: usize,
+    access: Option<(u64, u64)>,
+) -> String {
     let mut line = Line::default();
     describe(
         &mut line,
         [2026, 10, 21, 9, 5, 7],
         0xc000_0005,
         at,
+        module,
         access,
         blame,
         &ranges(),
     );
     String::from_utf8(line.as_bytes().to_vec()).unwrap()
+}
+
+#[test]
+fn the_games_own_crash_names_the_module_it_faulted_in() {
+    // The stop of a server under Wine 11 (server 26430253): the game's
+    // main thread faults in Wine's sechost.dll at its last shutdown step.
+    let at = 0x6fff_fee2_6213;
+    assert_eq!(blame(&ranges(), at, None, &[0x1_4000_1000]), Blame::Game);
+    let line = text_in(
+        Some((0x6fff_fee2_0000, b"sechost.dll")),
+        Blame::Game,
+        at,
+        Some((0, u64::MAX)),
+    );
+    assert_eq!(
+        line,
+        "2026-10-21 09:05:07Z fault 0xc0000005 at 0x6ffffee26213 (+0x6213 in sechost.dll), the game itself crashed: no mod's or loader's code on the stack; reading 0xffffffffffffffff\r\n"
+    );
+    assert_eq!(
+        crate::diag::crash_heading(line.trim_end()),
+        "the game crashed in the last session"
+    );
+    assert_eq!(
+        crate::diag::crash_heading(&text(Blame::Code(1), 0x5800, None)),
+        "the last session crashed"
+    );
+}
+
+#[test]
+fn the_module_of_an_address_is_found_without_allocating() {
+    let mut name = [0; NAME];
+    let at = GetCurrentThreadId as *const () as usize;
+    let (base, len) = module_at(at, &mut name).unwrap();
+    assert!(base <= at, "{base:#x} above {at:#x}");
+    // The export's code lives in kernel32 or, forwarded, in kernelbase.
+    let name = String::from_utf8(name[..len].to_vec())
+        .unwrap()
+        .to_lowercase();
+    assert!(
+        name.starts_with("kernel") && name.ends_with(".dll"),
+        "{name}"
+    );
+    let local = 0u64;
+    assert_eq!(
+        module_at((&raw const local).addr(), &mut [0; NAME]),
+        None,
+        "a stack address lies in no module"
+    );
 }
 
 #[test]
@@ -85,7 +143,7 @@ fn the_loader_and_the_game_are_named_when_no_mod_is_near() {
     assert_eq!(blame(&r, 0x77_0000, None, &[0x3000]), Blame::Game);
     assert!(
         text(Blame::Game, 0x77_0000, None)
-            .ends_with("in the game: no mod's or loader's code on the stack\r\n")
+            .ends_with(", the game itself crashed: no mod's or loader's code on the stack\r\n")
     );
 }
 
