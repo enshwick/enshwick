@@ -1,3 +1,5 @@
+use enshwick::abi::UiWidget;
+
 use super::{
     BAR_HEIGHT, BUTTON_CONFIG, Buf, DROPDOWN_CONFIG, Engine, FRAME_SIZE, Icon, LABEL_SIZE,
     SLIDER_CONFIG, TOGGLE_CONFIG, TOGGLE_ENTRIES, UiText, stretch,
@@ -95,6 +97,45 @@ impl Engine {
         wrap: bool,
         center: bool,
     ) {
+        // SAFETY: the caller's contract is `label_sized`'s.
+        unsafe { self.label_sized(context, text, style, wrap, center, None) };
+    }
+
+    /// Draws a list entry's name: the heading style at the bundle's large
+    /// font size, so it stands above the entry's text; wrapped.
+    ///
+    /// # Safety
+    ///
+    /// - Called inside a window, on the frame's thread.
+    /// - `context` is the non-zero context [`Engine::context`] read in this
+    ///   frame.
+    /// - The bytes `text` points at outlive the frame.
+    pub(in crate::ui) unsafe fn name(&self, context: usize, text: &UiText) {
+        let size = self.looks.name_size;
+        // SAFETY: the caller's contract is `label_sized`'s.
+        unsafe { self.label_sized(context, text, UiWidget::STYLE_H3, true, false, size) };
+    }
+
+    /// Draws a label as [`Engine::label`] does, at the font size the look
+    /// bundle holds at `size` when given.
+    ///
+    /// # Safety
+    ///
+    /// - Called inside a window, on the frame's thread.
+    /// - `context` is the non-zero context [`Engine::context`] read in this
+    ///   frame.
+    /// - The bytes `text` points at outlive the frame.
+    /// - `size` is `None` or the reflected offset of a font size, a float, in
+    ///   the look bundle.
+    unsafe fn label_sized(
+        &self,
+        context: usize,
+        text: &UiText,
+        style: u32,
+        wrap: bool,
+        center: bool,
+        size: Option<usize>,
+    ) {
         let bundle = self.bundle(context);
         let style = self
             .looks
@@ -122,6 +163,13 @@ impl Engine {
             // checked in `Engine::resolve`, on the node the game just wrote
             // into `label`.
             unsafe { (self.node_stretch)(node, stretch(1.0, 0.0)) };
+        }
+        if let Some(size) = size {
+            // SAFETY: `bundle` is the frame's look bundle, read from the live
+            // context, and `size` the reflected offset of a font size in it,
+            // a float, by this function's `# Safety`.
+            let size = unsafe { crate::memory::read::<f32>(bundle, size) };
+            label.f32(self.layout.label_font_size, size);
         }
         // SAFETY: `self.label_draw` is the game's `ui.label_draw`, checked in
         // `Engine::resolve`, on the label `label_new` filled, inside the

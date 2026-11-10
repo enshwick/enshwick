@@ -54,7 +54,7 @@ fn heading(
     dimmed: &str,
     state: Option<((&str, u32), &str, Option<String>)>,
 ) {
-    paint.label(name.as_bytes(), UiWidget::STYLE_H3, true, false);
+    paint.name(name.as_bytes());
     paint.label(dimmed.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
     if let Some(((key, style), version, why)) = state {
         let line = texts::fill(key, &[("name", name), ("version", version)]);
@@ -131,12 +131,14 @@ fn detail_lines(loader: &Loader, index: usize, record: &crate::host::ModRecord) 
     .collect()
 }
 
-/// Draws mod `index`'s technical details at the top of its page.
+/// Draws mod `index`'s version and authors, then its technical details, at
+/// the top of its page.
 pub(super) fn details(loader: &Loader, paint: &Painter<'_>, index: usize) {
     let Some(record) = loader.mods.get(index) else {
         return;
     };
-    for line in detail_lines(loader, index, record) {
+    let credits = metadata(&record.version, &record.meta.authors);
+    for line in core::iter::once(credits).chain(detail_lines(loader, index, record)) {
         paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
     }
 }
@@ -290,7 +292,7 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
         paint.separator();
         let opened = paint.row(
             || {
-                paint.label(name.as_bytes(), UiWidget::STYLE_H3, true, false);
+                paint.name(name.as_bytes());
                 paint.label(
                     texts::text("mods.carried").as_bytes(),
                     UiWidget::STYLE_SECONDARY,

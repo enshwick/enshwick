@@ -65,6 +65,15 @@ impl<'a> Painter<'a> {
         unsafe { self.engine.label(self.context, &text, style, wrap, center) };
     }
 
+    /// A list entry's name, above the entry's text.
+    pub(super) fn name(&self, text: &[u8]) {
+        let text = copy(&[text]);
+        // SAFETY: a window is open on this thread with `self.context`, by
+        // the contract of `Painter::new`; the text lives in the frame's
+        // arena.
+        unsafe { self.engine.name(self.context, &text) };
+    }
+
     pub(super) fn button(&self, text: &[u8], enabled: bool) -> bool {
         let text = copy(&[text]);
         // SAFETY: a window is open on this thread, by the contract of

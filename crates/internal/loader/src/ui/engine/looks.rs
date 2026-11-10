@@ -17,6 +17,9 @@ pub(super) struct Looks {
     pub(super) setting_on: usize,
     /// The bundle's icons, by [`Icon`]; `None` keeps buttons to text.
     pub(super) icons: Option<[usize; 2]>,
+    /// The font size of a list entry's name, the bundle's `large`; `None`
+    /// keeps names at their style's size.
+    pub(super) name_size: Option<usize>,
 }
 
 /// An icon of the game's own look bundle that a button can show.
@@ -141,5 +144,6 @@ pub(super) fn looks(loader: &Loader) -> Option<Looks> {
         setting_off: setting_text(loader, "settingOff")?,
         setting_on: setting_text(loader, "settingOn")?,
         icons: icons(loader),
+        name_size: path(loader, &[(BUNDLE, "fontSizes"), (FONT_SIZES, "large")]),
     })
 }
