@@ -69,7 +69,7 @@ impl FakeHost {
     ///
     /// # Examples
     ///
-    /// See [`crate`].
+    /// See the [module](crate::test).
     #[must_use]
     pub fn symbol(mut self, name: &str, address: u64) -> Self {
         self.symbols.insert(name.to_owned(), address);
@@ -276,7 +276,7 @@ impl Installed {
     ///
     /// # Examples
     ///
-    /// See [`crate`].
+    /// See the [module](crate::test).
     #[must_use]
     pub fn detour<F: FnPtr>(&self, hook: &'static Hook<F>) -> Option<F> {
         let entry = address(hook.entry());

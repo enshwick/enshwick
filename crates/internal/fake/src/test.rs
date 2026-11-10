@@ -544,7 +544,7 @@ impl FakeHost {
 ///
 /// # Examples
 ///
-/// See [`crate`].
+/// See the [module](crate::test).
 #[derive(Debug)]
 pub struct Installed {
     handle: ModHandle,
@@ -595,7 +595,7 @@ impl Installed {
     ///
     /// # Examples
     ///
-    /// See [`crate`].
+    /// See the [module](crate::test).
     pub unsafe fn init(&self, init: InitFn) -> Status {
         // SAFETY: the caller guarantees `init` is the `enshwick_mod_init` of a
         // `declare_mod!`, which takes the static fake table and a handle.
@@ -616,7 +616,7 @@ impl Installed {
     ///
     /// # Examples
     ///
-    /// See [`crate`].
+    /// See the [module](crate::test).
     pub unsafe fn ready(&self, ready: ReadyFn) {
         table::with((), |s| s.base_limit.armed = true);
         // SAFETY: the caller guarantees `ready` is the `enshwick_mod_ready` of
@@ -642,7 +642,7 @@ impl Installed {
     ///
     /// # Examples
     ///
-    /// See [`crate`].
+    /// See the [module](crate::test).
     pub unsafe fn start(&self, query: QueryFn, init: InitFn, ready: ReadyFn) -> Status {
         // SAFETY: `query` returns null or a manifest valid for the process.
         if let Some(manifest) = unsafe { query().as_ref() }
@@ -666,7 +666,7 @@ impl Installed {
     ///
     /// # Examples
     ///
-    /// See [`crate`].
+    /// See the [module](crate::test).
     #[must_use]
     pub fn logs(&self) -> Vec<(Level, String)> {
         table::with(Vec::new(), |s| s.logs.clone())

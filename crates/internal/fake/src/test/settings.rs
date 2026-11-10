@@ -16,7 +16,7 @@ impl FakeHost {
     ///
     /// # Examples
     ///
-    /// See [`crate`].
+    /// See the [module](crate::test).
     #[must_use]
     pub fn settings(self, text: &str) -> Self {
         self.settings_file("settings", text)
