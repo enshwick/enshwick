@@ -11,6 +11,7 @@ use crate::locks::Relock;
 use crate::mods_screen;
 use crate::texts;
 use crate::ui::Painter;
+use crate::ui::engine::Icon;
 
 /// What the player did on the mod list.
 pub(super) enum Listed {
@@ -93,10 +94,9 @@ const fn state_text(off: bool, waiting: bool) -> Option<(&'static str, u32)> {
     }
 }
 
-/// Paints the left cell of mod `index`'s row: what it is, then each of its
-/// features that is off in red and the extension points it defines and
-/// extends.
-fn state(loader: &Loader, paint: &Painter<'_>, index: usize, record: &crate::host::ModRecord) {
+/// Paints the left cell of a mod's row: what it is, then each of its
+/// features that is off in red.
+fn state(paint: &Painter<'_>, record: &crate::host::ModRecord) {
     about(paint, record);
     let features = record.features.relock().clone();
     let features = crate::features::shown(&features, record.texts.relock().as_ref());
@@ -111,12 +111,33 @@ fn state(loader: &Loader, paint: &Painter<'_>, index: usize, record: &crate::hos
             paint.label(line.as_bytes(), UiWidget::STYLE_NEGATIVE, true, false);
         }
     }
+}
+
+/// Mod `index`'s technical details, dimmed lines for the top of its page:
+/// its licence, its homepage and the extension points it defines and
+/// extends.
+fn detail_lines(loader: &Loader, index: usize, record: &crate::host::ModRecord) -> Vec<String> {
+    let meta = &record.meta;
     let (defines, extends) = crate::points::screen(index, loader);
-    for (key, points) in [("mods.points", defines), ("mods.extends", extends)] {
-        if !points.is_empty() {
-            let line = texts::fill(key, &[("points", &points.join(", "))]);
-            paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
-        }
+    [
+        ("mods.license", "license", meta.license.clone()),
+        ("mods.homepage", "address", meta.homepage.clone()),
+        ("mods.points", "points", defines.join(", ")),
+        ("mods.extends", "points", extends.join(", ")),
+    ]
+    .into_iter()
+    .filter(|(_, _, value)| !value.is_empty())
+    .map(|(key, name, value)| texts::fill(key, &[(name, &value)]))
+    .collect()
+}
+
+/// Draws mod `index`'s technical details at the top of its page.
+pub(super) fn details(loader: &Loader, paint: &Painter<'_>, index: usize) {
+    let Some(record) = loader.mods.get(index) else {
+        return;
+    };
+    for line in detail_lines(loader, index, record) {
+        paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
     }
 }
 
@@ -229,7 +250,13 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
     let listing = listing(paint, MODS_PER_PAGE);
     *first = listing.clamp_first(*first, count);
     let shown = listing.shown(*first, count);
-    let settings_button = || paint.button_compact(texts::text("mods.settings").as_bytes(), true);
+    let button = |icon: Icon| {
+        let fallback = match icon {
+            Icon::Settings => "mods.settings",
+            Icon::Info => "mods.details",
+        };
+        paint.icon_button(icon, texts::text(fallback).as_bytes(), true)
+    };
     let controls = crate::controls::rows();
     for (index, record) in mods.iter().enumerate().take(shown.end).skip(shown.start) {
         if index > shown.start {
@@ -241,10 +268,12 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
         let sent = record.server_values.relock().is_some();
         let opens = settings && mods_screen::gear(world, sent)
             || super::controls::any_in(&controls, &record.id);
-        let opened = paint.row(
-            || state(loader, paint, index, record),
-            || opens && settings_button(),
-        );
+        let icon = if opens {
+            Some(Icon::Settings)
+        } else {
+            (!detail_lines(loader, index, record).is_empty()).then_some(Icon::Info)
+        };
+        let opened = paint.row(|| state(paint, record), || icon.is_some_and(button));
         if opened {
             done = Listed::Settings(index);
         }
@@ -269,7 +298,7 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
                     false,
                 );
             },
-            settings_button,
+            || button(Icon::Settings),
         );
         if opened {
             done = Listed::Bindings(id, name);

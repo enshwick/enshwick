@@ -283,3 +283,6 @@
 "mods.skipped.version" = "Ему нужен {id} {range}, а установлен {found}. Установите подходящую версию {id}."
 "mods.skipped.breaks" = "Он не работает рядом с {id} {version}. Удалите один из двух."
 "mods.skipped.cycle" = "Он и другой мод ждут, чтобы другой запустился первым. Обновите или удалите один из них."
+"mods.license" = "Лицензия: {license}"
+"mods.homepage" = "Страница: {address}"
+"mods.details" = "Подробности"

@@ -283,3 +283,6 @@
 "mods.skipped.version" = "{id} {range} gerekiyor, kurulu olan {found}. {id} modunun uyan bir sürümünü kurun."
 "mods.skipped.breaks" = "{id} {version} ile birlikte çalışmıyor. İkisinden birini kaldırın."
 "mods.skipped.cycle" = "Bu mod ve başka bir mod, önce ötekinin başlamasını bekliyor. Birini güncelleyin ya da kaldırın."
+"mods.license" = "Lisans: {license}"
+"mods.homepage" = "Web sayfası: {address}"
+"mods.details" = "Ayrıntılar"

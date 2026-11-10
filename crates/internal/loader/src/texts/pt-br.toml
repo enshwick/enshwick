@@ -283,3 +283,6 @@
 "mods.skipped.version" = "Ele precisa de {id} {range}, e a versão instalada é {found}. Instale uma versão de {id} que combine."
 "mods.skipped.breaks" = "Ele não funciona junto com {id} {version}. Remova um dos dois."
 "mods.skipped.cycle" = "Ele e outro mod precisam, cada um, que o outro inicie primeiro. Atualize ou remova um deles."
+"mods.license" = "Licença: {license}"
+"mods.homepage" = "Página: {address}"
+"mods.details" = "Detalhes"

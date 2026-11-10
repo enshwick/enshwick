@@ -589,6 +589,7 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
                 *rows = page_rows(loader, *index, now);
                 *server = server_id(loader, *index, now);
             }
+            list::details(loader, paint, *index);
             if let Some(id) = server
                 && paint.button(texts::text("mods.server").as_bytes(), true)
             {

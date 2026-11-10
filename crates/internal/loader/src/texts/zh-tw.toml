@@ -283,3 +283,6 @@
 "mods.skipped.version" = "它需要 {id} {range}，但安裝的是 {found}。請安裝相符的 {id} 版本。"
 "mods.skipped.breaks" = "它無法與 {id} {version} 一起運作。請移除其中一個。"
 "mods.skipped.cycle" = "它與另一個模組都需要對方先啟動。請更新或移除其中一個。"
+"mods.license" = "授權：{license}"
+"mods.homepage" = "首頁：{address}"
+"mods.details" = "詳細資料"

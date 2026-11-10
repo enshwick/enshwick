@@ -252,6 +252,9 @@ pub(super) struct Layout {
     dropdown_external: Option<usize>,
     dropdown_capacity: usize,
     dropdown_entry_text: usize,
+    /// The button config's icon texture and the byte that draws it in
+    /// place of an empty label; `None` keeps buttons to text.
+    pub(super) button_icon: Option<(usize, usize)>,
 }
 
 /// The navigation group's fields the loader's config sets, as offsets in
@@ -394,6 +397,9 @@ impl Layout {
             dropdown_external: f(pinned::ui::DROPDOWN_EXTERNAL.id()).ok(),
             dropdown_capacity: f(pinned::ui::DROPDOWN_CAPACITY.id())?,
             dropdown_entry_text: f(pinned::ui::DROPDOWN_ENTRY_TEXT.id())?,
+            button_icon: f(pinned::ui::BUTTON_ICON.id())
+                .ok()
+                .zip(f(pinned::ui::BUTTON_ICON_SHOWN.id()).ok()),
         }
         .checked()
     }
@@ -498,20 +504,6 @@ impl HudWindow {
     }
 }
 
-/// Where the looks the loader uses sit in the look bundle, from reflection.
-#[derive(Debug, Clone, Copy)]
-struct Looks {
-    /// Label styles, by `UiWidget::STYLE_*`.
-    styles: [usize; 8],
-    title: usize,
-    title_size: usize,
-    outline: usize,
-    /// Sounds, by `UiWidget::SOUND_*`.
-    sounds: [usize; 4],
-    setting_off: usize,
-    setting_on: usize,
-}
-
 /// The engine functions and looks, resolved for the running build.
 #[derive(Debug)]
 pub(crate) struct Engine {
@@ -575,93 +567,6 @@ pub(crate) struct Engine {
     /// The look of the main menu's version line; `None` keeps the loader's
     /// line off.
     legal: Option<Legal>,
-}
-
-/// Where the look of the main menu's version line sits in the look bundle,
-/// from reflection.
-#[derive(Debug, Clone, Copy)]
-struct Legal {
-    style: usize,
-    size: usize,
-}
-
-impl Legal {
-    fn find(loader: &Loader) -> Option<Self> {
-        Some(Self {
-            style: style(loader, "legalText")?,
-            size: path(loader, &[(BUNDLE, "fontSizes"), (FONT_SIZES, "xsmall")])?,
-        })
-    }
-}
-
-/// The bundle offset of a reflected path, `(type, field)` pairs summed.
-fn path(loader: &Loader, steps: &[(&str, &str)]) -> Option<usize> {
-    steps.iter().try_fold(0usize, |sum, (ty, field)| {
-        let offset = loader.reflection.field_offset(ty, field).ok()?;
-        Some(sum + usize::try_from(offset).ok()?)
-    })
-}
-
-const BUNDLE: &str = "keen::FbUiBundle";
-const STYLES: &str = "keen::FbUiCharacterStyles";
-const SOUNDS: &str = "keen::FbUiSounds";
-const FONT_SIZES: &str = "keen::FbUiFontSizes";
-const MENU_SOUNDS: &str = "keen::FbUiSoundsMenuGeneric";
-
-fn style(loader: &Loader, name: &str) -> Option<usize> {
-    path(loader, &[(BUNDLE, "namedStyles"), (STYLES, name)])
-}
-
-fn sound(loader: &Loader, name: &str) -> Option<usize> {
-    path(
-        loader,
-        &[(BUNDLE, "sounds"), (SOUNDS, "menu"), (MENU_SOUNDS, name)],
-    )
-}
-
-fn setting_text(loader: &Loader, name: &str) -> Option<usize> {
-    path(
-        loader,
-        &[
-            (BUNDLE, "locatags"),
-            ("keen::FbUiLocaLinks", "menuStrings"),
-            ("keen::FbUiLocaMenus", "settings"),
-            ("keen::FbUiLocaMenuSettings", name),
-        ],
-    )
-}
-
-fn looks(loader: &Loader) -> Option<Looks> {
-    Some(Looks {
-        styles: [
-            style(loader, "defaultStyle")?,
-            style(loader, "secondaryText")?,
-            style(loader, "h1")?,
-            style(loader, "h2")?,
-            style(loader, "h3")?,
-            style(loader, "warning")?,
-            style(loader, "greenText")?,
-            style(loader, "redText")?,
-        ],
-        title: path(
-            loader,
-            &[
-                (BUNDLE, "namedStyles"),
-                (STYLES, "menu"),
-                ("keen::FbUiMenuCharacterStyles", "header1"),
-            ],
-        )?,
-        outline: style(loader, "defaultStyleOutline")?,
-        title_size: path(loader, &[(BUNDLE, "fontSizes"), (FONT_SIZES, "caps_large")])?,
-        sounds: [
-            sound(loader, "mouseClickGeneric")?,
-            sound(loader, "entryTrigger")?,
-            sound(loader, "back")?,
-            sound(loader, "entryTriggerFailed")?,
-        ],
-        setting_off: setting_text(loader, "settingOff")?,
-        setting_on: setting_text(loader, "settingOn")?,
-    })
 }
 
 /// The address of game function `name`, once its first eight bytes read as
@@ -796,6 +701,10 @@ impl Engine {
         let looks = looks(loader).ok_or(Missing::Looks)?;
         let lookup = |id: &str| loader.build.constant(id);
         let layout = Layout::read(&lookup)?;
+        looks::note_icons(
+            loader,
+            looks.icons.is_some() && layout.button_icon.is_some(),
+        );
         let Optional {
             menu,
             dialog,
@@ -985,6 +894,7 @@ fn stretch(x: f32, y: f32) -> u64 {
 
 mod hint;
 mod hud;
+mod looks;
 mod menus;
 mod rows;
 mod scroll;
@@ -994,6 +904,8 @@ mod text_field;
 mod widgets;
 mod windows;
 
+pub(in crate::ui) use looks::Icon;
+use looks::{BUNDLE, Legal, Looks, looks, path, sound};
 pub(super) use rows::Row;
 pub(super) use scroll::Scroll;
 pub(super) use text_field::{TextBuffer, Typed};

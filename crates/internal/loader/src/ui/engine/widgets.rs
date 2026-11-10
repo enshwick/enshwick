@@ -1,6 +1,6 @@
 use super::{
-    BAR_HEIGHT, BUTTON_CONFIG, Buf, DROPDOWN_CONFIG, Engine, FRAME_SIZE, LABEL_SIZE, SLIDER_CONFIG,
-    TOGGLE_CONFIG, TOGGLE_ENTRIES, UiText, stretch,
+    BAR_HEIGHT, BUTTON_CONFIG, Buf, DROPDOWN_CONFIG, Engine, FRAME_SIZE, Icon, LABEL_SIZE,
+    SLIDER_CONFIG, TOGGLE_CONFIG, TOGGLE_ENTRIES, UiText, stretch,
 };
 
 /// `ui.button`'s size mode that fits the button to its text; 1 is a fixed
@@ -14,6 +14,9 @@ const BUTTON_FILLS_COLUMN: u64 = 3;
 const BUTTON_ALIGN_CENTRE: u16 = 0x202;
 /// The alignment word that puts a node at the right of its column.
 const BUTTON_ALIGN_RIGHT: u16 = 0x203;
+/// The space an icon leaves above and below it in its button, before the
+/// interface's scale; the game's own gear buttons leave 25 (client 26430625).
+const ICON_MARGIN: f32 = 25.0;
 /// The slider's value text without decimals, for a setting that holds whole
 /// numbers whatever its stops.
 const SLIDER_WHOLE: u32 = 2;
@@ -211,22 +214,81 @@ impl Engine {
     /// - Called inside a window, on the frame's thread.
     /// - The bytes `text` points at outlive the frame.
     unsafe fn button_as(&self, text: &UiText, enabled: bool, align: u16, size_mode: u64) -> bool {
-        let layout = &self.layout;
-        let mut config = Buf::<BUTTON_CONFIG>::zeroed();
-        config.u16(layout.button_align, align);
-        config.u8(layout.button_centered, 1);
-        config.u8(layout.button_enabled, u8::from(enabled));
-        config.u64(layout.button_size_mode, size_mode);
-        config.f32(layout.button_padding[0], 10.0);
-        config.f32(layout.button_padding[1], 5.0);
-        config.f32(layout.button_scale, 1.0);
-        config.u8(layout.button_sound, 1);
+        let mut config = self.button_config(enabled, align, size_mode, [10.0, 5.0]);
         // SAFETY: `self.button` is the game's `ui.button`, checked in
         // `Engine::resolve`, inside the window this function's `# Safety`
         // gives; `config` holds the table's `ui.button_extent` bytes
         // (`Layout::read`) and `text` outlives the frame by the same contract.
         let clicked = unsafe { (self.button)(config.ptr(), text) } != 0;
         clicked && enabled
+    }
+
+    /// A button's config, aligned as `align` says, sized by `size_mode`,
+    /// with `padding` across and down; for an icon the padding is the space
+    /// the icon leaves in the button.
+    fn button_config(
+        &self,
+        enabled: bool,
+        align: u16,
+        size_mode: u64,
+        padding: [f32; 2],
+    ) -> Buf<BUTTON_CONFIG> {
+        let layout = &self.layout;
+        let mut config = Buf::<BUTTON_CONFIG>::zeroed();
+        config.u16(layout.button_align, align);
+        config.u8(layout.button_centered, 1);
+        config.u8(layout.button_enabled, u8::from(enabled));
+        config.u64(layout.button_size_mode, size_mode);
+        config.f32(layout.button_padding[0], padding[0]);
+        config.f32(layout.button_padding[1], padding[1]);
+        // For an icon, its width over its height (client 26430625).
+        config.f32(layout.button_scale, 1.0);
+        config.u8(layout.button_sound, 1);
+        config
+    }
+
+    /// Draws a small button at the right of its column that shows `icon` of
+    /// the game's look bundle in place of a label, as the game's own gear
+    /// buttons do; whether it was clicked this frame, `None`, drawing
+    /// nothing, on a build whose icons do not read.
+    ///
+    /// # Safety
+    ///
+    /// - Called inside a window, on the frame's thread.
+    /// - `context` is the non-zero context [`Engine::context`] read in this
+    ///   frame.
+    pub(in crate::ui) unsafe fn icon_button(
+        &self,
+        context: usize,
+        icon: Icon,
+        enabled: bool,
+    ) -> Option<bool> {
+        let (texture, shown) = self.layout.button_icon?;
+        let offset = *self.looks.icons?.get(icon as usize)?;
+        // SAFETY: `bundle` is the frame's look bundle, read from the live
+        // context, and `offset` the reflected offset of a `UiTexture`, 16
+        // bytes, inside it.
+        let image = unsafe { crate::memory::read::<[u64; 2]>(self.bundle(context), offset) };
+        // A zero image draws the game's untextured square.
+        if image == [0; 2] {
+            return None;
+        }
+        let mut config = self.button_config(
+            enabled,
+            BUTTON_ALIGN_RIGHT,
+            BUTTON_FITS_TEXT,
+            [0.0, ICON_MARGIN],
+        );
+        config.u64(texture, image[0]);
+        config.u64(texture + 8, image[1]);
+        config.u8(shown, 1);
+        // SAFETY: `self.button` is the game's `ui.button`, checked in
+        // `Engine::resolve`, inside the window this function's `# Safety`
+        // gives; `config` holds the table's `ui.button_extent` bytes
+        // (`Layout::read`) with a texture the game's own bundle holds, and the
+        // empty text has no bytes.
+        let clicked = unsafe { (self.button)(config.ptr(), &UiText::EMPTY) } != 0;
+        Some(clicked && enabled)
     }
 
     pub(super) fn setting_texts(&self, context: usize) -> [UiText; TOGGLE_ENTRIES] {

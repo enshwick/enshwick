@@ -283,3 +283,6 @@
 "mods.skipped.version" = "{id} {range} が必要ですが、インストールされているのは {found} です。合う {id} のバージョンをインストールしてください。"
 "mods.skipped.breaks" = "{id} {version} と一緒には動きません。どちらかを削除してください。"
 "mods.skipped.cycle" = "この Mod と別の Mod が、互いに相手が先に起動することを必要としています。どちらかを更新または削除してください。"
+"mods.license" = "ライセンス：{license}"
+"mods.homepage" = "ホームページ：{address}"
+"mods.details" = "詳細"

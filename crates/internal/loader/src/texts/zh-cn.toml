@@ -283,3 +283,6 @@
 "mods.skipped.version" = "它需要 {id} {range}，但安装的是 {found}。请安装匹配的 {id} 版本。"
 "mods.skipped.breaks" = "它无法与 {id} {version} 一起运行。请移除其中一个。"
 "mods.skipped.cycle" = "它与另一个模组都需要对方先启动。请更新或移除其中一个。"
+"mods.license" = "许可证：{license}"
+"mods.homepage" = "主页：{address}"
+"mods.details" = "详情"

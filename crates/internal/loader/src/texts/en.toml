@@ -285,3 +285,6 @@
 "mods.skipped.version" = "It needs {id} {range}, and {found} is installed. Install a version of {id} that matches."
 "mods.skipped.breaks" = "It does not work beside {id} {version}. Remove one of the two."
 "mods.skipped.cycle" = "It and another mod each need the other to start first. Update or remove one of them."
+"mods.license" = "Licence: {license}"
+"mods.homepage" = "Homepage: {address}"
+"mods.details" = "Details"

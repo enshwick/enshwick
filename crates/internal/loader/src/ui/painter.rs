@@ -6,7 +6,7 @@ use crate::host::Loader;
 use crate::mod_index::ModIndex;
 use crate::widget_checks;
 
-use super::engine::{Engine, Row, Takes, TextBuffer, Typed, UiText};
+use super::engine::{Engine, Icon, Row, Takes, TextBuffer, Typed, UiText};
 use super::{ARENA, DRAWING, WINDOW};
 use super::{Drawing, ENGINE, gather};
 
@@ -77,6 +77,15 @@ impl<'a> Painter<'a> {
         // SAFETY: a window is open on this thread, by the contract of
         // `Painter::new`; the text lives in the frame's arena.
         unsafe { self.engine.button_compact(&text, enabled) }
+    }
+
+    /// A small button showing the game's `icon`, or a compact button with
+    /// the text `fallback` on a build whose icons do not read.
+    pub(super) fn icon_button(&self, icon: Icon, fallback: &[u8], enabled: bool) -> bool {
+        // SAFETY: a window is open on this thread with `self.context`, by
+        // the contract of `Painter::new`.
+        unsafe { self.engine.icon_button(self.context, icon, enabled) }
+            .unwrap_or_else(|| self.button_compact(fallback, enabled))
     }
 
     pub(super) fn toggle(&self, label: &[u8], on: bool, read_only: bool) -> Option<bool> {
