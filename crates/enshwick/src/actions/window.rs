@@ -497,6 +497,7 @@ pub fn decode(text: &str) -> Option<View> {
 
 #[cfg(test)]
 mod tests {
+    use super::sheet::ArgView;
     use super::*;
 
     fn say(key: &str, values: &[(&str, &str)]) -> String {
@@ -614,6 +615,28 @@ mod tests {
             window.actions().collect::<Vec<_>>(),
             ["kick", "say", "allowed"]
         );
+    }
+
+    #[test]
+    fn a_grouped_action_with_a_default_adds_no_item_to_its_window() {
+        let window = Window::new("give", "Give").action("spawn");
+        let entry = Entry {
+            id: "spawn".into(),
+            label: "Spawn".into(),
+            group: "Items".into(),
+            offered: true,
+            args: vec![ArgView {
+                kind: ArgView::NUMBER,
+                label: "Count".into(),
+                max: 10.0,
+                default: Some(Value::Number(1.0)),
+                ..ArgView::default()
+            }],
+            ..Entry::default()
+        };
+        let view = decode(&window.render(&say, core::slice::from_ref(&entry))).unwrap();
+        assert_eq!(view.items, [ItemView::Action("spawn".into())]);
+        assert_eq!(view.entries, [entry]);
     }
 
     #[test]

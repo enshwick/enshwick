@@ -17,10 +17,9 @@ pub(in crate::actions) fn optional_fault(args: &[Arg]) -> Option<String> {
         return Some("only its last arguments may be optional".to_owned());
     }
     let last = args.len().saturating_sub(1);
-    let early_text =
-        |(i, arg): (usize, &Arg)| i < last && arg.kind == ArgView::TEXT && arg.default.is_some();
+    let early_text = |(i, arg): (usize, &Arg)| i < last && takes_line(arg) && arg.default.is_some();
     if args.iter().enumerate().any(early_text) {
-        return Some("an optional text must be its last argument".to_owned());
+        return Some("an optional text or item must be its last argument".to_owned());
     }
     let at = args.iter().position(|arg| match &arg.default {
         None => false,
@@ -32,6 +31,12 @@ pub(in crate::actions) fn optional_fault(args: &[Arg]) -> Option<String> {
         "its argument {} is a player, which is never optional, or does not take its default",
         at + 1
     ))
+}
+
+/// Whether `arg` reads words as a text does, so that, last on a typed line,
+/// it takes the rest of the line: a text or an item.
+pub(in crate::actions) fn takes_line(arg: &Arg) -> bool {
+    matches!(arg.kind, ArgView::TEXT | ArgView::ITEM)
 }
 
 /// Whether `value` fits `arg`: its type and range, or the default the
@@ -104,7 +109,19 @@ mod tests {
         assert!(first.unwrap().contains("only its last arguments"));
         let note = || Arg::text("Note", 8).optional(Value::Text(String::new()));
         let mid = optional_fault(&[note(), count().optional(one.clone())]).unwrap();
-        assert!(mid.contains("an optional text must be its last"), "{mid}");
+        assert!(
+            mid.contains("an optional text or item must be its last"),
+            "{mid}"
+        );
+        let torch = Value::Item(crate::content::Guid([1; 16]));
+        let early = optional_fault(&[
+            Arg::item("Item").optional(torch),
+            count().optional(one.clone()),
+        ]);
+        assert!(
+            early.unwrap().contains("must be its last"),
+            "an optional item too"
+        );
         assert_eq!(
             optional_fault(&[count().optional(one.clone()), note()]),
             None

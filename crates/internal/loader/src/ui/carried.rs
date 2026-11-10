@@ -322,8 +322,11 @@ fn items(paint: &Painter<'_>, view: &View, drawn: &mut Drawn) -> Click {
     let mut click = Click::Nothing;
     let mut group = "";
     for item in &view.items {
-        if let ItemView::Action(id) = item
-            && let Some(entry) = view.entries.iter().find(|e| e.id == *id)
+        let entry = match item {
+            ItemView::Action(id) => view.entries.iter().find(|e| e.id == *id),
+            _ => None,
+        };
+        if let Some(entry) = entry
             && entry.group != group
         {
             group = &entry.group;
@@ -346,11 +349,9 @@ fn items(paint: &Painter<'_>, view: &View, drawn: &mut Drawn) -> Click {
                 }
                 pressed
             }
-            ItemView::Action(id) => view
-                .entries
-                .iter()
-                .find(|e| e.id == *id)
-                .map_or(Click::Nothing, |entry| action(paint, entry, drawn)),
+            ItemView::Action(_) => {
+                entry.map_or(Click::Nothing, |entry| action(paint, entry, drawn))
+            }
             _ => Click::Nothing,
         };
         if done != Click::Nothing {

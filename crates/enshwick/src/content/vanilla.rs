@@ -30,6 +30,7 @@ pub use experience::{ExperienceBalanceValue, experience_values};
 
 mod names;
 
+pub(crate) use names::item_exactly;
 pub use names::{VanillaItem, VanillaRecipe, item_by_display_name, items, recipes};
 
 /// Reads one resource of the game's archive.
@@ -352,7 +353,7 @@ pub struct Vanilla {
     hashes: Hashes,
     read: Reader,
     /// The item names, kept once the registry reads.
-    names: OnceLock<Names>,
+    names: OnceLock<Option<Names>>,
     /// Where an item's resource holds the tag of its shown name, when the
     /// build reflects it.
     item_name: Option<usize>,
@@ -814,15 +815,30 @@ impl Vanilla {
     }
 
     /// The item names; a registry that does not read yet, as before the
-    /// archive is ready, is read again on the next call.
+    /// archive is ready, is read again on the next call, and one that reads
+    /// but does not fit the layout is kept as unreadable.
     fn names(&self) -> Result<&Names, VanillaError> {
+        let unreadable = || VanillaError::Unreadable("item registry");
         if let Some(names) = self.names.get() {
-            return Ok(names);
+            return names.as_ref().ok_or_else(unreadable);
         }
-        let names = (self.read)(ITEM_REGISTRY.key_by_hash(self.hashes.item_registry))
-            .and_then(|registry| registry_names(&self.items, &registry))
-            .ok_or(VanillaError::Unreadable("item registry"))?;
-        Ok(self.names.get_or_init(|| names))
+        let registry = (self.read)(ITEM_REGISTRY.key_by_hash(self.hashes.item_registry))
+            .ok_or_else(unreadable)?;
+        self.names
+            .get_or_init(|| registry_names(&self.items, &registry))
+            .as_ref()
+            .ok_or_else(unreadable)
+    }
+
+    /// The vanilla item the game knows by `id`, [`Guid::fnv1a`] of its
+    /// GUID; `None` for none, or without the registry.
+    pub(crate) fn item_with_id(&self, id: u32) -> Option<Guid> {
+        self.names()
+            .ok()?
+            .values()
+            .flatten()
+            .find(|item| item.fnv1a() == id)
+            .copied()
     }
 
     /// The vanilla item with the debug name `name`, as the item registry

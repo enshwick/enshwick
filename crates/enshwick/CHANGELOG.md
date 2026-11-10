@@ -9,9 +9,10 @@ Each entry names the pull request that made the change.
 ### Added
 
 - `actions`: `Arg::item` and `Value::Item`. A window lists the game's
-  items by the names the player's own game shows, with a search, and sends
-  the picked item's GUID. A typed line takes a debug name, GUID, content id
-  or shown name. The server refuses an item its game does not know before
+  vanilla items by the names the player's own game shows, with a search,
+  and sends the picked item's GUID; a name several items share is followed
+  by each one's debug name. A typed line takes a debug name, GUID, content
+  id or shown name. The server refuses an item its game does not know before
   the handler runs. Luau `enshwick.actions.item` (#1033).
 - `actions`: a window opens an optional argument's field with its default
   and runs while only optional fields are empty, and shows an action's
@@ -120,6 +121,11 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- `actions`: **breaking.** `sheet::Entry` has the field `group` and
+  `sheet::ArgView` the field `default`, so a struct literal of either names
+  them or ends in `..Default::default()`. An optional item, like an
+  optional text, must be an action's last argument, and takes the rest of a
+  typed line (#1033).
 - `commands`: **breaking.** A mod's command is named after its id, the
   part after the author: `you.admin-tools` gets `/admin-tools`.
   `Actions::commands` takes only the alias, in Rust and in Luau, and

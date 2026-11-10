@@ -192,12 +192,12 @@ takes `default`. In Luau it is the method `:optional(value)` of an argument.
 | Rule | Detail |
 | --- | --- |
 | Which arguments | only the last ones of an action; `actions.add` refuses any other |
-| Which kinds | a choice, a number, on or off, a text; never a player. A text only as the last argument |
+| Which kinds | a choice, a number, on or off, a text, an item; never a player. A text or an item only as the last argument |
 | The default | a value the argument takes, or an empty text |
 | In the help | the argument stands in square brackets: `give <player> <Item> [1-999]` |
 | From the interface | a window opens the field with its default; values left out at the end take their defaults too |
 
-A text or a player that only optional arguments follow takes the rest of
+A text, an item or a player that only optional arguments follow takes the rest of
 the line up to them. The last words go to the optional arguments, in
 order, as far as each reads as its argument:
 
@@ -209,8 +209,8 @@ order, as far as each reads as its argument:
 | `give Ann "Stone 5"` | `Stone 5` | 1 |
 | `give Ann Stone Axe 5000` | `Stone Axe 5000` | 1 |
 
-An optional text is always the last argument, and takes what is left of the
-line itself. The arguments before it then take one word each, or a run in
+An optional text or item is always the last argument, and takes what is
+left of the line itself. The arguments before it then take one word each, or a run in
 double quotes:
 
 | The line, for `warn <player> [1-60] [Reason]` | The minutes | The reason |

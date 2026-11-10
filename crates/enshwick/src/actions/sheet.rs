@@ -3,11 +3,12 @@
 //! and [`Actions`](super::Actions) share it.
 //!
 //! A sheet is text, a line per item and tab-separated fields: `A` an
-//! action, `R` the group of the action before it, `G` an argument of the
+//! action, `S` the group of the action before it, `G` an argument of the
 //! action before it, `D` the default of the argument before it, `O` a
 //! player of an action's list. Texts never hold a tab or a line break. A
 //! reader skips a line kind it does not know, so a kind is added, never
-//! changed.
+//! changed; a window's text carries these lines after its own, so a kind
+//! is never one of the [window's](super::window) letters either.
 
 use core::fmt::Write as _;
 
@@ -133,7 +134,7 @@ pub fn encode(entries: &[Entry]) -> String {
             clean(&entry.subject)
         );
         if !entry.group.is_empty() {
-            let _ = writeln!(out, "R\t{}", clean(&entry.group));
+            let _ = writeln!(out, "S\t{}", clean(&entry.group));
         }
         for arg in &entry.args {
             let choices = if arg.kind == ArgView::PLAYER {
@@ -188,7 +189,7 @@ pub fn decode(text: &str) -> Vec<Entry> {
                     ..Entry::default()
                 });
             }
-            ["R", group] => {
+            ["S", group] => {
                 if let Some(entry) = entries.last_mut() {
                     (*group).clone_into(&mut entry.group);
                 }
@@ -405,7 +406,7 @@ mod tests {
 
         let older = text
             .lines()
-            .filter(|line| !line.starts_with("R\t") && !line.starts_with("D\t"))
+            .filter(|line| !line.starts_with("S\t") && !line.starts_with("D\t"))
             .collect::<Vec<_>>()
             .join("\n");
         expected.group.clear();

@@ -118,6 +118,37 @@ fn a_registry_that_does_not_read_yet_is_read_again_and_each_name_tag_once_it_doe
     );
 }
 
+#[test]
+fn a_registry_that_reads_but_does_not_parse_is_read_only_once() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let reads = Arc::new(AtomicUsize::new(0));
+    let counter = Arc::clone(&reads);
+    let vanilla = Vanilla::with_parts(
+        ITEMS,
+        super::super::workshops::tests::LAYOUT,
+        HASHES,
+        move |key| {
+            (key.type_hash == HASHES.item_registry).then(|| {
+                counter.fetch_add(1, Ordering::Relaxed);
+                vec![0xff; 3]
+            })
+        },
+    );
+    for _ in 0..2 {
+        assert_eq!(
+            vanilla.item("Tool_Torch01"),
+            Err(VanillaError::Unreadable("item registry"))
+        );
+    }
+    assert_eq!(
+        reads.load(Ordering::Relaxed),
+        1,
+        "a layout that does not fit is kept"
+    );
+}
+
 /// A game with the items `named`, a forge station of its own workshop,
 /// a survivor's workshop and an item that places a plain template.
 pub(crate) fn game(named: &[(Guid, &str)]) -> Vanilla {
@@ -403,6 +434,14 @@ fn a_name_finds_its_item_or_explains_why_not() {
         empty.item("Tool_Torch01"),
         Err(VanillaError::Unreadable("item registry"))
     );
+}
+
+#[test]
+fn an_item_id_finds_only_the_vanilla_item_of_that_key() {
+    let torch = Guid([1; 16]);
+    let vanilla = game(&[(torch, "Tool_Torch01")]);
+    assert_eq!(vanilla.item_with_id(torch.fnv1a()), Some(torch));
+    assert_eq!(vanilla.item_with_id(Guid([2; 16]).fnv1a()), None);
 }
 
 #[test]

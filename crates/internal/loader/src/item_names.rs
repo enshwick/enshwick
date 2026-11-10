@@ -3,6 +3,8 @@
 //! client's archive and texts, so no name travels from the server.
 
 #[cfg(windows)]
+use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(windows)]
 use std::sync::{Arc, OnceLock};
 
 #[cfg(windows)]
@@ -78,45 +80,106 @@ pub(crate) fn keep_pick(
     }
 }
 
-/// The list read last; a frame loads it without a lock.
+/// `(item, debug name, shown name)` as the picker lists them: sorted by
+/// shown name, without empty names, and a name several items share
+/// followed by each one's debug name, so the player can tell them apart.
+pub(crate) fn listed<'a>(named: impl Iterator<Item = (Guid, &'a str, &'a str)>) -> Vec<Shown> {
+    let mut named: Vec<(Shown, &str)> = named
+        .filter(|(_, _, shown)| !shown.is_empty())
+        .map(|(item, debug, shown)| (Shown::new(item, shown), debug))
+        .collect();
+    named.sort_unstable_by(|(a, _), (b, _)| (&a.lower, a.item.0).cmp(&(&b.lower, b.item.0)));
+    let mut items: Vec<Shown> = Vec::with_capacity(named.len());
+    for (at, (shown, debug)) in named.iter().enumerate() {
+        let shared =
+            |other: Option<&(Shown, &str)>| other.is_some_and(|(o, _)| o.lower == shown.lower);
+        if shared(at.checked_sub(1).and_then(|before| named.get(before)))
+            || shared(named.get(at + 1))
+        {
+            items.push(Shown::new(shown.item, &format!("{} ({debug})", shown.name)));
+        } else {
+            items.push(shown.clone());
+        }
+    }
+    items
+}
+
+/// The picker's lists: the one built last, which a frame loads without a
+/// lock, and whether a build runs.
 #[cfg(windows)]
-static LIST: ArcSwapOption<List> = ArcSwapOption::const_empty();
+struct State {
+    list: ArcSwapOption<List>,
+    building: AtomicBool,
+    vanilla: OnceLock<Option<Vanilla>>,
+}
+
+/// How often a build whose archive or texts do not read yet tries again,
+/// and how many times, before the next draw of a picker starts it anew.
+#[cfg(windows)]
+const BUILD_RETRY: std::time::Duration = std::time::Duration::from_secs(1);
+#[cfg(windows)]
+const BUILD_TRIES: u32 = 30;
+
+#[cfg(windows)]
+static STATE: State = State {
+    list: ArcSwapOption::const_empty(),
+    building: AtomicBool::new(false),
+    vanilla: OnceLock::new(),
+};
 
 /// Every vanilla item the game shows a name for in `language`, sorted by
-/// name; `None` while the archive or its texts do not read, as on a
-/// server, which a later call tries again.
+/// name. `None` while the list is built on a thread of its own, which
+/// reads every item's resource from the archive, and while the archive or
+/// its texts do not read, as on a server, which a later call tries again.
 // shortcut: vanilla items only; a mod's own items join once the loader lists the items it serves with their name tags.
 #[cfg(windows)]
 pub(crate) fn items(language: enshwick::i18n::Language) -> Option<Arc<List>> {
-    if let Some(list) = LIST.load_full().filter(|list| list.language == language.0) {
+    if let Some(list) = STATE
+        .list
+        .load_full()
+        .filter(|list| list.language == language.0)
+    {
         return Some(list);
     }
-    let mut items: Vec<Shown> = vanilla()?
-        .items()
-        .ok()?
-        .iter()
-        .filter_map(|item| {
-            let text = crate::game_texts::text(item.name_tag?.fnv1a(), language.0)?;
-            (!text.is_empty()).then(|| Shown::new(item.guid, text))
-        })
-        .collect();
-    if items.is_empty() {
-        return None;
+    if !STATE.building.swap(true, Ordering::AcqRel) {
+        let built = std::thread::Builder::new()
+            .name("enshwick-item-names".into())
+            .spawn(move || {
+                for _ in 0..BUILD_TRIES {
+                    if let Some(list) = build(language) {
+                        STATE.list.store(Some(Arc::new(list)));
+                        break;
+                    }
+                    std::thread::sleep(BUILD_RETRY);
+                }
+                STATE.building.store(false, Ordering::Release);
+            });
+        if built.is_err() {
+            STATE.building.store(false, Ordering::Release);
+        }
     }
-    items.sort_unstable_by(|a, b| (&a.lower, a.item.0).cmp(&(&b.lower, b.item.0)));
-    let list = Arc::new(List {
+    None
+}
+
+/// The list of `language`, read from the client's archive and texts.
+#[cfg(windows)]
+fn build(language: enshwick::i18n::Language) -> Option<List> {
+    let vanilla = vanilla()?.items().ok()?;
+    let items = listed(vanilla.iter().filter_map(|item| {
+        let text = crate::game_texts::text(item.name_tag?.fnv1a(), language.0)?;
+        Some((item.guid, item.name.as_str(), text))
+    }));
+    (!items.is_empty()).then_some(List {
         language: language.0,
         items,
-    });
-    LIST.store(Some(Arc::clone(&list)));
-    Some(list)
+    })
 }
 
 /// The client's vanilla content, read through its own archive.
 #[cfg(windows)]
 fn vanilla() -> Option<&'static Vanilla> {
-    static VANILLA: OnceLock<Option<Vanilla>> = OnceLock::new();
-    VANILLA
+    STATE
+        .vanilla
         .get_or_init(|| {
             let loader = crate::host::loader()?;
             Vanilla::new(&crate::catalogue::Reflected(&loader.reflection), |key| {
@@ -156,5 +219,21 @@ mod tests {
             [3, 2, 0],
             "an item without a shown name adds nothing"
         );
+    }
+
+    #[test]
+    fn items_that_share_a_shown_name_are_listed_with_their_debug_names() {
+        let named = [
+            (Guid([3; 16]), "Cape_T2", "Cape"),
+            (Guid([1; 16]), "Torch", "torch"),
+            (Guid([2; 16]), "Cape_T1", "cape"),
+            (Guid([4; 16]), "Hidden", ""),
+            (Guid([5; 16]), "Axe", "Axe"),
+        ];
+        let shown: Vec<String> = listed(named.into_iter())
+            .into_iter()
+            .map(|s| s.name)
+            .collect();
+        assert_eq!(shown, ["Axe", "cape (Cape_T1)", "Cape (Cape_T2)", "torch"]);
     }
 }

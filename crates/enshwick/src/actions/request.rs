@@ -191,15 +191,16 @@ impl Arg {
         arg
     }
 
-    /// One of the game's items, vanilla or a mod's. A window lists them by
-    /// the names the game shows in the player's language, searched by
-    /// typing, and sends the server the picked item; the names come from the
-    /// client's own game, so the server needs none. A console line names
-    /// the item by its debug name, GUID or content id, or by a name the
-    /// game shows where the server's game has its texts, as in a game a
-    /// player hosts; it takes words as a [text](Self::text) does. The
-    /// server refuses an item its game does not know before the handler
-    /// runs.
+    /// One of the game's items, vanilla or a mod's. A window lists the
+    /// vanilla items by the names the game shows in the player's language,
+    /// searched by typing, and sends the server the picked item; the names
+    /// come from the client's own game, so the server needs none. A console
+    /// line names any item by its GUID or content id, and a vanilla item
+    /// also by its debug name or, where the server's game has its texts as
+    /// in a game a player hosts, by a name the game shows; it takes words
+    /// as a [text](Self::text) does, and an optional item, like an optional
+    /// text, is the last argument. The server refuses an item its game does
+    /// not know before the handler runs.
     ///
     /// # Examples
     ///

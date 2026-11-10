@@ -85,10 +85,7 @@ pub const METER_TEMPLATE_BASE: Guid = Guid::parse("39246eb2-1b9f-4881-8c60-e0e4f
 /// ```
 #[must_use]
 pub fn vanilla_name_tag(item: Guid) -> Option<Guid> {
-    let host = crate::host()?;
-    let at = host.offset(ids::ITEM_INFO_NAME).ok()?;
-    let info = host.game_resource(item.key_by_hash(host.hash(ids::ITEM_INFO).ok()?))?;
-    Some(Guid(info.get(at..at.checked_add(16)?)?.try_into().ok()?))
+    super::vanilla::Vanilla::game()?.name_tag(item)
 }
 
 /// The name a vanilla item has in the game in `language`, as the player

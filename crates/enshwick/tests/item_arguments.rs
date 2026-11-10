@@ -36,6 +36,15 @@ mod tests {
                     Outcome::done("ok")
                 },
             )?;
+            actions.add(
+                Action::new("find", "Find")
+                    .admins()
+                    .arg(Arg::item("Item").optional(Value::Item(TORCH))),
+                |request| {
+                    RUNS.lock().unwrap().push(request.args.to_vec());
+                    Outcome::done("ok")
+                },
+            )?;
             actions.commands("s")?;
             Ok(Self)
         }
@@ -152,5 +161,31 @@ mod tests {
             chat("/s help spawn").as_deref(),
             Some("1spawn <Item> [1-99]: Spawn")
         );
+    }
+
+    #[test]
+    fn an_unknown_typed_item_is_refused_under_the_text_typed() {
+        let loader = start();
+        assert_eq!(
+            loader
+                .type_in_chat(&root(), 0, "/s spawn you.spawner:lampp")
+                .as_deref(),
+            Some("0No item you.spawner:lampp.")
+        );
+        assert!(runs().is_empty());
+    }
+
+    #[test]
+    fn a_last_optional_item_takes_the_rest_of_the_line_or_its_default() {
+        let loader = start();
+        let chat = |line: &str| loader.type_in_chat(&root(), 0, line);
+        assert_eq!(chat("/s find").as_deref(), Some("1ok"));
+        assert_eq!(chat("/s find you.spawner:lamp").as_deref(), Some("1ok"));
+        assert_eq!(
+            chat("/s find you.spawner:lamp two").as_deref(),
+            Some("0No item you.spawner:lamp two."),
+            "every word is the item's, not one too many"
+        );
+        assert_eq!(runs(), [vec![Value::Item(TORCH)], vec![Value::Item(LAMP)]]);
     }
 }

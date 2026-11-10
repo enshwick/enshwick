@@ -3,6 +3,7 @@ use std::sync::{Arc, RwLock};
 mod fit;
 mod help;
 
+use fit::takes_line;
 pub(super) use fit::{button_fault, fits, optional_fault};
 
 use crate::Host;
@@ -264,7 +265,7 @@ impl Registry {
                 .filter(|n| n.is_finite() && *n >= arg.range.0 && *n <= arg.range.1)
                 .map(Value::Number),
             ArgView::TEXT => arg.takes_text(word).then(|| Value::Text(word.to_owned())),
-            ArgView::ITEM => Self::item_named(word).ok(),
+            ArgView::ITEM => self.item_word(word),
             ArgView::TOGGLE => toggle_word(word, &self.texts, language).map(Value::Toggle),
             _ => None,
         }
@@ -273,10 +274,10 @@ impl Registry {
     /// The values the `words` of `line` give the optional arguments
     /// `optional`, which fill in order: each word reads as its argument,
     /// and the arguments left without a word take their defaults. An
-    /// optional text, always the last, takes what is left of the line,
-    /// starting at the first word that does not read as the argument
-    /// before it. Without such a text a word that does not read, or one
-    /// too many, is an error.
+    /// optional text or item, always the last, takes what is left of the
+    /// line, starting at the first word that does not read as the argument
+    /// before it. Without one a word that does not read, or one too many,
+    /// is an error.
     fn optional_values(
         &self,
         optional: &[Arg],
@@ -285,7 +286,7 @@ impl Registry {
         language: Language,
     ) -> Result<Vec<Value>, ReadArgsError> {
         let (text, plain) = match optional.split_last() {
-            Some((last, plain)) if last.kind == ArgView::TEXT => (Some(last), plain),
+            Some((last, plain)) if takes_line(last) => (Some(last), plain),
             _ => (None, optional),
         };
         let default = |arg: &Arg| arg.default.clone().ok_or(ReadArgsError::Usage);
@@ -312,6 +313,9 @@ impl Registry {
             }
         }
         match (text, run_of_line(line, rest)) {
+            (Some(arg), Some(typed)) if arg.kind == ArgView::ITEM => {
+                values.push(self.item_named(typed)?);
+            }
             (Some(arg), Some(typed)) => values.push(Self::text_value(arg, typed)?),
             (Some(arg), None) => values.push(default(arg)?),
             (None, Some(_)) => return Err(ReadArgsError::Usage),
@@ -351,9 +355,9 @@ impl Registry {
         let args = &d.action.args;
         let required = args.iter().take_while(|arg| arg.default.is_none()).count();
         let (required, optional) = args.split_at(required);
-        // A last optional text takes the rest of the line itself, so the
-        // arguments before it take one word each.
-        let text_ends = optional.last().is_some_and(|arg| arg.kind == ArgView::TEXT);
+        // A last optional text or item takes the rest of the line itself,
+        // so the arguments before it take one word each.
+        let text_ends = optional.last().is_some_and(takes_line);
         let mut values = Vec::with_capacity(args.len());
         let mut rest = words;
         let mut tail = None;
@@ -378,14 +382,10 @@ impl Registry {
                     rest = if takes_rest { &[] } else { after };
                     if arg.kind == ArgView::PLAYER {
                         self.player_named(&joined(mine), &known)?
+                    } else if arg.kind == ArgView::ITEM {
+                        self.item_named(run_of_line(line, mine).ok_or_else(bad)?)?
                     } else {
-                        let text = run_of_line(line, mine).ok_or_else(bad)?;
-                        let value = Self::text_value(arg, text)?;
-                        if arg.kind == ArgView::ITEM {
-                            Self::item_named(text)?
-                        } else {
-                            value
-                        }
+                        Self::text_value(arg, run_of_line(line, mine).ok_or_else(bad)?)?
                     }
                 }
                 _ => {
@@ -406,12 +406,20 @@ impl Registry {
 
     /// The item `text` names on the console: its GUID, a content id in
     /// full, a vanilla debug name, or a name the game shows where the
-    /// server's game has its texts.
-    fn item_named(text: &str) -> Result<Value, ReadArgsError> {
+    /// server's game has its texts. A GUID or content id of an item the
+    /// server's game does not know is refused under the text typed.
+    fn item_named(&self, text: &str) -> Result<Value, ReadArgsError> {
         use crate::content::vanilla::{self, VanillaError};
 
         if let Some(item) = Guid::try_parse(text).or_else(|| Guid::try_named(text)) {
-            return Ok(Value::Item(item));
+            return if self.knows_item(item) {
+                Ok(Value::Item(item))
+            } else {
+                Err(ReadArgsError::NoItem {
+                    name: text.to_owned(),
+                    near: Vec::new(),
+                })
+            };
         }
         let several = || ReadArgsError::SeveralItems {
             name: text.to_owned(),
@@ -435,15 +443,33 @@ impl Registry {
         }
     }
 
+    /// The item the one word `word` names exactly, which only chooses how
+    /// a line splits, so a miss looks for no near names.
+    fn item_word(&self, word: &str) -> Option<Value> {
+        Guid::try_parse(word)
+            .or_else(|| Guid::try_named(word))
+            .filter(|&item| self.knows_item(item))
+            .or_else(|| crate::content::vanilla::item_exactly(word))
+            .map(Value::Item)
+    }
+
+    /// Whether the server's game knows `item` by this very GUID. The game
+    /// keys items by [`Guid::fnv1a`], so a GUID that shares a vanilla
+    /// item's key but is not that item is refused; a mod's item never
+    /// shares one, as content ids that collide are refused.
+    // shortcut: a GUID crafted to share a mod item's key passes; an exact check needs the GUID of an item id from the loader.
+    fn knows_item(&self, item: Guid) -> bool {
+        let id = crate::ItemId::from_guid(item);
+        crate::inventory::item_data(&self.host, id).is_some()
+            && crate::content::vanilla::Vanilla::game()
+                .and_then(|vanilla| vanilla.item_with_id(id.get()))
+                .is_none_or(|vanilla_item| vanilla_item == item)
+    }
+
     /// The first item of `values` the server's game does not know.
     fn unknown_item(&self, values: &[Value]) -> Option<Guid> {
         values.iter().find_map(|value| match value {
-            Value::Item(item)
-                if crate::inventory::item_data(&self.host, crate::ItemId::from_guid(*item))
-                    .is_none() =>
-            {
-                Some(*item)
-            }
+            Value::Item(item) if !self.knows_item(*item) => Some(*item),
             _ => None,
         })
     }

@@ -130,7 +130,7 @@ mod item_actions;
 mod item_data;
 pub mod item_kinds;
 #[cfg_attr(
-    all(not(windows), not(test)),
+    not(windows),
     expect(dead_code, reason = "only the client's interface lists items")
 )]
 mod item_names;

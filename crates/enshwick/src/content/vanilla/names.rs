@@ -194,6 +194,27 @@ pub fn item_by_display_name(name: &str) -> Result<Guid, VanillaError> {
     by_shown_name(shown_names()?, name)
 }
 
+/// The vanilla item `name` names exactly, by its debug name or a name the
+/// game shows whatever the case; `None` for no item or several, without
+/// the search for near names a miss of [`item`](super::item) makes.
+pub(crate) fn item_exactly(name: &str) -> Option<Guid> {
+    if let Ok(names) = game().and_then(Vanilla::names) {
+        match names.get(name).map(Vec::as_slice) {
+            Some([one]) => return Some(*one),
+            Some([_, _, ..]) => return None,
+            _ => {}
+        }
+    }
+    let wanted = name.to_lowercase();
+    let mut found = shown_names()
+        .ok()?
+        .iter()
+        .filter(|shown| shown.lower == wanted)
+        .map(|shown| shown.guid);
+    let first = found.next()?;
+    found.all(|guid| guid == first).then_some(first)
+}
+
 impl Vanilla {
     /// Every vanilla item with its debug name and the tag of the name the
     /// game shows, sorted by debug name. The first call that finds the
@@ -233,7 +254,7 @@ impl Vanilla {
 
     /// The tag of the name the game shows for `item`, read from its
     /// resource; `None` for an item without one.
-    fn name_tag(&self, item: Guid) -> Option<Guid> {
+    pub(crate) fn name_tag(&self, item: Guid) -> Option<Guid> {
         let at = self.item_name?;
         let info = (self.read)(item.key_by_hash(self.hashes.item))?;
         Some(Guid(info.get(at..at.checked_add(16)?)?.try_into().ok()?))
