@@ -317,9 +317,8 @@ impl PackError {
     }
 }
 
-/// `; near: ` and the expected fields closest to the field serde's
-/// `unknown field `x`, expected ...` message names, within two edits, or
-/// nothing.
+/// `; near: ` and the expected fields within two edits of the field serde's
+/// `unknown field `x`, expected ...` message names, or nothing.
 pub(super) fn near_field(message: &str) -> String {
     let Some((field, expected)) = message
         .strip_prefix("unknown field `")
@@ -327,24 +326,7 @@ pub(super) fn near_field(message: &str) -> String {
     else {
         return String::new();
     };
-    let edits: Vec<(&str, usize)> = expected
-        .split('`')
-        .skip(1)
-        .step_by(2)
-        .map(|name| (name, strsim::levenshtein(name, field)))
-        .filter(|&(_, edits)| edits <= 2)
-        .collect();
-    let closest = edits.iter().map(|&(_, edits)| edits).min();
-    let near: Vec<&str> = edits
-        .iter()
-        .filter(|&&(_, edits)| Some(edits) == closest)
-        .map(|&(name, _)| name)
-        .collect();
-    if near.is_empty() {
-        String::new()
-    } else {
-        format!("; near: {}", near.join(", "))
-    }
+    super::near_names(&super::near(expected.split('`').skip(1).step_by(2), field))
 }
 
 /// The scripts [`PackFiles::read_dir`] reads from the folder `dir`, as

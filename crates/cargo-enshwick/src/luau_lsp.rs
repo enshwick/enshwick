@@ -23,25 +23,56 @@ const EXE: &str = if cfg!(windows) {
     "luau-lsp"
 };
 
+/// The largest release archive taken, in bytes; luau-lsp's are under 20 MB.
+const LIMIT: usize = 64 << 20;
+
+/// How long a download may take, in seconds.
+const SECONDS: u32 = 300;
+
 /// Why no luau-lsp is at hand.
+///
+/// # Examples
+///
+/// ```no_run
+/// use cargo_enshwick::luau_lsp::{Error, find};
+///
+/// let downloaded = !matches!(find(true), Err(Error::Offline(_)));
+/// # let _ = downloaded;
+/// ```
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum Error {
     /// It is not installed and the download was not allowed.
     #[error("luau-lsp is not on the path or in the cache, and --offline skips the download of {0}")]
     Offline(String),
+    /// `LUAU_LSP` names a tool that does not run.
+    #[error("{VAR} names {}, which does not run `--version`", .0.display())]
+    Named(PathBuf),
     /// The pin has no release for this host.
     #[error("luau-lsp has no release for {0}; put luau-lsp on the path or name it in {VAR}")]
     NoRelease(String),
     /// Neither the platform's cache folder nor a home folder is known.
     #[error("no cache folder for luau-lsp: set {VAR} to a luau-lsp to run")]
     NoCache,
-    /// The download failed or does not match its pin.
-    #[error("{url}: {why}")]
-    Download {
+    /// The download failed.
+    #[error(transparent)]
+    Download(#[from] crate::net::Error),
+    /// The download is not the file the pin names.
+    #[error("{url}: SHA-256 {found}, but the pin says {pinned}")]
+    Mismatch {
         /// What was downloaded.
         url: String,
-        /// What went wrong.
+        /// The download's digest.
+        found: String,
+        /// The pinned digest.
+        pinned: String,
+    },
+    /// The archive does not read or holds no tool.
+    #[error("{url}: {why}")]
+    Archive {
+        /// What was downloaded.
+        url: String,
+        /// What is wrong with it.
         why: String,
     },
     /// A file in the cache could not be written.
@@ -67,10 +98,29 @@ struct Release {
 ///
 /// # Errors
 ///
-/// [`Error`] when none is found and none can be downloaded.
+/// [`Error`] when `LUAU_LSP` names a tool that does not run, or none is
+/// found and none can be downloaded.
+///
+/// # Examples
+///
+/// ```no_run
+/// let tool = cargo_enshwick::luau_lsp::find(false)?;
+/// std::process::Command::new(tool).arg("--version").status()?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn find(offline: bool) -> Result<PathBuf, Error> {
-    if let Some(named) = std::env::var_os(VAR) {
-        return Ok(named.into());
+    find_from(std::env::var_os(VAR), offline)
+}
+
+/// [`find`] with `named` as the value of `LUAU_LSP`.
+fn find_from(named: Option<std::ffi::OsString>, offline: bool) -> Result<PathBuf, Error> {
+    if let Some(named) = named.filter(|named| !named.is_empty()) {
+        let named = PathBuf::from(named);
+        return if runs(&named) {
+            Ok(named)
+        } else {
+            Err(Error::Named(named))
+        };
     }
     if runs(Path::new("luau-lsp")) {
         return Ok("luau-lsp".into());
@@ -124,52 +174,39 @@ fn cache_dir() -> Option<PathBuf> {
     base.map(|base| base.join("enshwick"))
 }
 
-/// Refuses `bytes` whose SHA-256 is not the one `release` pins.
-fn pinned(bytes: &[u8], release: &Release) -> Result<(), String> {
+/// Refuses `bytes`, downloaded from `url`, whose SHA-256 is not the one
+/// `release` pins.
+fn pinned(bytes: &[u8], release: &Release, url: &str) -> Result<(), Error> {
     let found = hex(&Sha256::digest(bytes));
-    if found == release.sha256 {
+    if found.eq_ignore_ascii_case(&release.sha256) {
         Ok(())
     } else {
-        Err(format!(
-            "SHA-256 {found}, but the pin says {}",
-            release.sha256
-        ))
+        Err(Error::Mismatch {
+            url: url.to_owned(),
+            found,
+            pinned: release.sha256.clone(),
+        })
     }
 }
 
-/// Downloads `release` with curl, which Windows, macOS and Linux ship,
-/// checks its SHA-256 and unpacks the tool into `dir`.
+/// Downloads `release`, checks its SHA-256 before anything is written and
+/// unpacks the tool into `dir`.
 fn download(release: &Release, dir: &Path) -> Result<(), Error> {
     let url = format!("{RELEASES}/{}/{}", release.version, release.asset);
-    let failed = |why: String| Error::Download {
-        url: url.clone(),
-        why,
-    };
     let io = |path: &Path| {
         let path = path.to_path_buf();
         move |source| Error::Io { path, source }
     };
+    let bytes = crate::net::get(&url, &[], LIMIT, SECONDS)?;
+    pinned(&bytes, release, &url)?;
+    let exe = unpack(&bytes, &url)?;
     std::fs::create_dir_all(dir).map_err(io(dir))?;
     // Per process and thread, as parallel checks or tests may download at once.
-    let pid = format!("{}-{:?}", std::process::id(), std::thread::current().id());
-    let archive = dir.join(format!("{}.{pid}", release.asset));
-    let out = Command::new("curl")
-        .args(["--proto", "=https", "--tlsv1.2", "-sSfL"])
-        .args(["--retry", "6", "--retry-all-errors", "-o"])
-        .arg(&archive)
-        .arg(&url)
-        .output()
-        .map_err(|e| failed(format!("curl does not run: {e}")))?;
-    if !out.status.success() {
-        return Err(failed(
-            String::from_utf8_lossy(&out.stderr).trim().to_owned(),
-        ));
-    }
-    let bytes = std::fs::read(&archive).map_err(io(&archive))?;
-    let _gone = std::fs::remove_file(&archive);
-    pinned(&bytes, release).map_err(failed)?;
-    let exe = unpack(&bytes).map_err(failed)?;
-    let part = dir.join(format!("{EXE}.{pid}.part"));
+    let part = dir.join(format!(
+        "{EXE}.{}-{:?}.part",
+        std::process::id(),
+        std::thread::current().id()
+    ));
     std::fs::write(&part, exe).map_err(io(&part))?;
     #[cfg(unix)]
     {
@@ -189,16 +226,21 @@ fn download(release: &Release, dir: &Path) -> Result<(), Error> {
     }
 }
 
-/// The tool's bytes in the zip archive `bytes`.
-fn unpack(bytes: &[u8]) -> Result<Vec<u8>, String> {
+/// The tool's bytes in the zip archive `bytes`, downloaded from `url`.
+fn unpack(bytes: &[u8], url: &str) -> Result<Vec<u8>, Error> {
     use std::io::Read as _;
+    let failed = |why: String| Error::Archive {
+        url: url.to_owned(),
+        why,
+    };
     let mut archive =
-        zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(|e| e.to_string())?;
+        zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(|e| failed(e.to_string()))?;
     let mut file = archive
         .by_name(EXE)
-        .map_err(|_| format!("the archive holds no {EXE}"))?;
+        .map_err(|_| failed(format!("the archive holds no {EXE}")))?;
     let mut exe = Vec::new();
-    file.read_to_end(&mut exe).map_err(|e| e.to_string())?;
+    file.read_to_end(&mut exe)
+        .map_err(|e| failed(e.to_string()))?;
     Ok(exe)
 }
 
@@ -222,12 +264,41 @@ mod tests {
             asset: "a.zip".to_owned(),
             sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".to_owned(),
         };
-        assert_eq!(pinned(b"", &release), Ok(()));
-        let why = pinned(b"other", &release).unwrap_err();
+        assert!(pinned(b"", &release, "u").is_ok());
+        let why = pinned(b"other", &release, "u").unwrap_err().to_string();
         assert!(
             why.ends_with(&format!("the pin says {}", release.sha256)),
             "{why}"
         );
+    }
+
+    #[test]
+    fn a_named_tool_that_does_not_run_is_refused_by_its_name() {
+        let named = std::env::temp_dir().join("no-such-luau-lsp.exe");
+        let why = find_from(Some(named.clone().into()), true).unwrap_err();
+        assert!(
+            matches!(&why, Error::Named(path) if *path == named),
+            "{why}"
+        );
+        assert!(why.to_string().starts_with("LUAU_LSP names "), "{why}");
+    }
+
+    #[test]
+    fn a_named_tool_that_runs_is_taken_as_named() {
+        // Cargo runs the tests with CARGO set to a program that answers --version.
+        let cargo = std::env::var_os("CARGO").unwrap();
+        assert_eq!(
+            find_from(Some(cargo.clone()), true).unwrap(),
+            PathBuf::from(cargo)
+        );
+    }
+
+    #[test]
+    fn an_empty_name_counts_as_none() {
+        assert!(!matches!(
+            find_from(Some("".into()), true),
+            Err(Error::Named(_))
+        ));
     }
 
     #[test]
@@ -271,7 +342,7 @@ mod tests {
         zip.start_file("README.md", zip::write::SimpleFileOptions::default())
             .unwrap();
         zip.finish().unwrap();
-        let why = unpack(&bytes).unwrap_err();
+        let why = unpack(&bytes, "u").unwrap_err().to_string();
         assert!(why.contains(EXE), "{why}");
     }
 }

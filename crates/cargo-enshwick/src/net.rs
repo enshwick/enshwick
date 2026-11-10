@@ -5,32 +5,58 @@
 
 use std::process::Command;
 
-use anyhow::{Context as _, bail};
-
 /// How `cargo enshwick` names itself to the servers it asks.
 const AGENT: &str = "enshwick (https://github.com/enshwick)";
 
+/// Why a download gave no body.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum Error {
+    /// curl is not installed or does not start.
+    #[error("curl, which downloads from GitHub, did not start; install curl: {0}")]
+    Curl(std::io::Error),
+    /// The server, the network or a limit refused the download.
+    #[error("{url}: {why}")]
+    Failed {
+        /// What was asked for.
+        url: String,
+        /// curl's reason.
+        why: String,
+    },
+    /// The body is longer than asked for.
+    #[error("{url}: the answer is longer than {limit} bytes")]
+    TooLong {
+        /// What was asked for.
+        url: String,
+        /// The byte limit.
+        limit: usize,
+    },
+}
+
 /// The body of a GET of `url` over HTTPS only, redirects included, refused
 /// past `limit` bytes or `seconds` seconds; `headers` go with the request.
-pub(crate) fn get(
-    url: &str,
-    headers: &[&str],
-    limit: usize,
-    seconds: u32,
-) -> anyhow::Result<Vec<u8>> {
+///
+/// # Errors
+///
+/// [`Error`] when curl does not run, the download fails or passes a limit.
+pub fn get(url: &str, headers: &[&str], limit: usize, seconds: u32) -> Result<Vec<u8>, Error> {
     let out = curl(url, headers, limit, seconds)
         .output()
-        .context("curl, which downloads from GitHub, did not start; install curl")?;
+        .map_err(Error::Curl)?;
     if !out.status.success() {
-        bail!(
-            "{url}: {}",
-            String::from_utf8_lossy(&out.stderr)
+        return Err(Error::Failed {
+            url: url.to_owned(),
+            why: String::from_utf8_lossy(&out.stderr)
                 .trim_start_matches("curl: ")
                 .trim()
-        );
+                .to_owned(),
+        });
     }
     if out.stdout.len() > limit {
-        bail!("{url}: the answer is longer than {limit} bytes");
+        return Err(Error::TooLong {
+            url: url.to_owned(),
+            limit,
+        });
     }
     Ok(out.stdout)
 }

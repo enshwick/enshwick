@@ -53,6 +53,44 @@ fn a_misspelt_kind_beside_a_known_field_is_the_one_named() {
 }
 
 #[test]
+fn a_gift_of_two_kinds_is_refused_naming_both() {
+    let line = problem(&PackFiles::new().with(
+        REWARDS_FILE,
+        "[[reward]]\nid = \"torch\"\non = { join = true }\ngive = [{ item = \"Tool_Torch01\", buff = \"6943053a-32c1-4718-ae22-e61427ddf54d\" }]\n",
+    ));
+    assert!(line.starts_with("rewards.toml:4:"), "{line}");
+    assert!(
+        line.contains("a gift gives one kind, but this one names `item` and `buff`"),
+        "{line}"
+    );
+    assert!(!line.contains("unknown field"), "{line}");
+}
+
+#[test]
+fn every_field_a_kind_of_gift_takes_is_one_a_gift_names() {
+    use crate::packs::rewards::{GIVE_FIELDS, GIVE_KINDS, GiveEntry};
+    use serde::Deserialize as _;
+    for kind in GIVE_KINDS {
+        let value = if kind == "experience" { "5" } else { "\"x\"" };
+        let gift: toml::Value = toml::from_str(&format!("aaa = 1\n{kind} = {value}\n")).unwrap();
+        let why = GiveEntry::deserialize(gift)
+            .unwrap_err()
+            .message()
+            .to_owned();
+        let expected = why
+            .split_once("expected ")
+            .unwrap_or_else(|| panic!("{kind}: {why}"))
+            .1;
+        for field in expected.split('`').skip(1).step_by(2) {
+            assert!(
+                GIVE_FIELDS.contains(&field),
+                "{kind} takes `{field}`: {why}"
+            );
+        }
+    }
+}
+
+#[test]
 fn a_misspelt_field_of_an_item_is_named() {
     let line = problem(&files(&format!(
         "[[item]]\nid = \"lantern\"\nlikee = \"{CHEST}\"\n"

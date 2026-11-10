@@ -15,7 +15,6 @@ mod generate;
 mod install;
 mod loader;
 mod manifest;
-mod net;
 mod new;
 mod pack;
 mod pin;

@@ -80,8 +80,8 @@ The limit is one of:
 - `Daily`: once per player each calendar day in UTC
 - `World`: once in the world, to the first player
 
-The chance is from 0 to 1, always when left out. `pack check` reports these
-problems:
+The chance is from 0 to 1, always when left out. `cargo enshwick check` reports
+these problems:
 
 - a reward without an action or with two
 - a reward that gives nothing

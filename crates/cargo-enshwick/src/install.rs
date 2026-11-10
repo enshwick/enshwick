@@ -90,7 +90,7 @@ pub(crate) fn install(
                 .output()
                 .is_ok_and(|out| out.status.success())
         },
-        windows_target_installed,
+        || windows_target_installed(&here),
     )?;
     let built = Command::new(&cargo)
         .args(build_args(windows, &package.name))
@@ -201,10 +201,11 @@ pub(crate) fn preflight(
     Ok(())
 }
 
-/// Whether rustup has the Windows target for the toolchain of the current
-/// folder; `None` without rustup.
-pub(crate) fn windows_target_installed() -> Option<bool> {
+/// Whether rustup has the Windows target for the toolchain of the folder
+/// `dir`; `None` without rustup.
+pub(crate) fn windows_target_installed(dir: &Path) -> Option<bool> {
     let out = Command::new("rustup")
+        .current_dir(dir)
         .args(["target", "list", "--installed"])
         .output()
         .ok()

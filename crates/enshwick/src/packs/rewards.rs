@@ -72,8 +72,11 @@ pub(super) enum GiveEntry {
     Buff(BuffEntry),
 }
 
-/// Every field a gift takes, for a gift that names none of its kinds.
-const GIVE_FIELDS: &[&str] = &["item", "count", "experience", "knowledge", "buff"];
+/// The field that names each kind of [`GiveEntry`].
+pub(super) const GIVE_KINDS: [&str; 4] = ["item", "experience", "knowledge", "buff"];
+
+/// Every field a gift takes: its kinds and an item's `count`.
+pub(super) const GIVE_FIELDS: [&str; 5] = ["item", "count", "experience", "knowledge", "buff"];
 
 impl<'de> Deserialize<'de> for GiveEntry {
     /// Told apart by the field that names the kind, so a misspelt field of
@@ -82,26 +85,34 @@ impl<'de> Deserialize<'de> for GiveEntry {
         use super::values::shape;
         use serde::de::Error as _;
         let table = toml::Table::deserialize(deserializer)?;
-        let kind = ["item", "experience", "knowledge", "buff"]
+        let kinds: Vec<&str> = GIVE_KINDS
             .into_iter()
-            .find(|key| table.contains_key(*key));
-        let value = toml::Value::Table(table);
-        match kind {
-            Some("item") => shape(value).map(Self::Items),
-            Some("experience") => shape(value).map(Self::Experience),
-            Some("knowledge") => shape(value).map(Self::Knowledge),
-            Some(_) => shape(value).map(Self::Buff),
-            None => Err(
-                match value
-                    .as_table()
-                    .and_then(|t| t.keys().find(|key| !GIVE_FIELDS.contains(&key.as_str())))
+            .filter(|kind| table.contains_key(*kind))
+            .collect();
+        if let [first, second, ..] = kinds[..] {
+            return Err(D::Error::custom(format!(
+                "a gift gives one kind, but this one names `{first}` and `{second}`; give each in a gift of its own"
+            )));
+        }
+        let Some(&kind) = kinds.first() else {
+            return Err(
+                match table
+                    .keys()
+                    .find(|key| !GIVE_FIELDS.contains(&key.as_str()))
                 {
-                    Some(field) => D::Error::unknown_field(field, GIVE_FIELDS),
+                    Some(field) => D::Error::unknown_field(field, &GIVE_FIELDS),
                     None => {
                         D::Error::custom("a gift needs `item`, `experience`, `knowledge` or `buff`")
                     }
                 },
-            ),
+            );
+        };
+        let value = toml::Value::Table(table);
+        match kind {
+            "item" => shape(value).map(Self::Items),
+            "experience" => shape(value).map(Self::Experience),
+            "knowledge" => shape(value).map(Self::Knowledge),
+            _ => shape(value).map(Self::Buff),
         }
     }
 }

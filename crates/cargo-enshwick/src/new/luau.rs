@@ -17,6 +17,17 @@ pub(crate) const DEFINITIONS_DIR: &str = "types";
 /// The file of the game's own types beside the API's definitions.
 pub(crate) const GAME_DEFINITIONS_FILE: &str = "game.d.luau";
 
+/// The luau-lsp platform a new mod's editor settings and `cargo enshwick
+/// check` type-check with: plain Luau, not Roblox, luau-lsp's default.
+pub(crate) const PLATFORM: &str = "standard";
+
+/// The alias each definitions file of a new mod has in its editor settings.
+pub(crate) const DEFINITION_ALIASES: [(&str, &str); 3] = [
+    (DEFINITIONS_FILE, "enshwick"),
+    (TYPED_DEFINITIONS_FILE, "typed"),
+    (GAME_DEFINITIONS_FILE, "game"),
+];
+
 /// Creates the Luau mod `id`, `<author>.<name>`, in `<dir>/<id>`, the folder
 /// name the loader wants, with the game's own types read from `game`, the
 /// game executable or its folder, when given; what was made, for the user.
@@ -78,6 +89,7 @@ pub(crate) fn files(id: &str, side: Side, game: Option<String>) -> Vec<(PathBuf,
             .replace("{side}", side)
             .replace("{definitions}", &definitions_path())
             .replace("{definitions_dir}", DEFINITIONS_DIR)
+            .replace("{platform}", PLATFORM)
             .replace("{typed_definitions}", &typed_definitions_path())
     };
     let mut files = vec![
@@ -150,7 +162,7 @@ const LUAURC: &str = r#"{
 "#;
 
 const VSCODE_SETTINGS: &str = r#"{
-	"luau-lsp.platform.type": "standard",
+	"luau-lsp.platform.type": "{platform}",
 	"luau-lsp.types.definitionFiles": {
 		"@enshwick": "{definitions}",
 		"@typed": "{typed_definitions}"{game_setting}

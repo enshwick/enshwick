@@ -4,14 +4,14 @@
 //! which also runs the checks `declare_mod!` makes of its manifest.
 
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 use anyhow::{Context as _, bail};
 use cargo_enshwick::luau_lsp;
 use enshwick::packs::MANIFEST_FILE;
 
-use crate::new::luau::DEFINITIONS_DIR;
+use crate::new::luau::{DEFINITION_ALIASES, DEFINITIONS_DIR, PLATFORM};
 
 /// Checks the mod in `dir`, with the vanilla names of the game in `game`
 /// when given, writing each problem to `out`; a summary, or how many errors.
@@ -42,11 +42,8 @@ pub(crate) fn run(
                 }
             }
         }
-        let (found, done) = scripts(dir, offline)?;
-        for finding in &found {
-            writeln!(out, "{finding}")?;
-        }
-        errors += found.iter().filter(|f| f.error).count();
+        let (found, done) = scripts(dir, offline, out)?;
+        errors += found;
         summary.push(done);
     }
     if crate_ {
@@ -58,6 +55,10 @@ pub(crate) fn run(
         }
     }
     if errors > 0 {
+        // What did pass, and what went unchecked, still matters to the author.
+        for line in &summary {
+            writeln!(out, "{line}")?;
+        }
         let name = dir
             .canonicalize()
             .ok()
@@ -115,48 +116,43 @@ impl core::fmt::Display for Finding {
     }
 }
 
-/// Type-checks every script in `dir` with the definitions in its
-/// `types/`: the problems, and a line saying what was checked.
-fn scripts(dir: &Path, offline: bool) -> anyhow::Result<(Vec<Finding>, String)> {
-    let files = luau_files(dir, Path::new(""))?;
-    let (definitions, scripts): (Vec<String>, Vec<String>) = files
-        .into_iter()
-        .partition(|file| file.ends_with(".d.luau"));
+/// Type-checks the scripts the loader runs from `dir` with the definitions
+/// in its `types/`, as the editor settings of a new mod do, writing each
+/// problem to `out`: how many are errors, and a line saying what was
+/// checked.
+fn scripts(dir: &Path, offline: bool, out: &mut impl Write) -> anyhow::Result<(usize, String)> {
+    let scripts: Vec<String> = enshwick::packs::script_files(dir)?
+        .iter()
+        .map(|path| relative(dir, path))
+        .collect();
     if scripts.is_empty() {
-        return Ok((Vec::new(), "no Luau scripts to type-check".to_owned()));
+        return Ok((0, "no Luau scripts to type-check".to_owned()));
     }
     let tool = match luau_lsp::find(offline) {
         Ok(tool) => tool,
         Err(why @ luau_lsp::Error::Offline(_)) => {
-            return Ok((
-                Vec::new(),
-                format!("warning: scripts not type-checked: {why}"),
-            ));
+            return Ok((0, format!("warning: scripts not type-checked: {why}")));
         }
-        Err(why) => return Err(why.into()),
+        Err(why) => {
+            writeln!(out, "error: scripts not type-checked: {why}")?;
+            return Ok((1, "scripts not type-checked".to_owned()));
+        }
     };
-    let prefix = format!("{DEFINITIONS_DIR}/");
-    let definitions = definitions
-        .iter()
-        .filter(|file| file.starts_with(&prefix))
-        .map(|file| {
-            let name = file.trim_start_matches(&prefix).trim_end_matches(".d.luau");
-            format!("--definitions:@{name}={file}")
-        });
     let ran = Command::new(&tool)
         .current_dir(dir)
-        .args(["analyze", "--formatter=gnu"])
-        .args(definitions)
-        .args(&scripts)
+        .args(analyze_args(&definitions(dir)?, &scripts))
         .output()
         .with_context(|| format!("{} does not run", tool.display()))?;
     let text = String::from_utf8_lossy(&ran.stderr);
-    let found = findings(&text);
-    if !ran.status.success() && found.is_empty() {
-        bail!("{} failed: {}", tool.display(), text.trim());
+    let (found, failed) = judged(ran.status.success(), &text);
+    for finding in &found {
+        writeln!(out, "{finding}")?;
+    }
+    if let Some(failed) = &failed {
+        writeln!(out, "error: {} {failed}", tool.display())?;
     }
     Ok((
-        found,
+        found.iter().filter(|f| f.error).count() + usize::from(failed.is_some()),
         format!(
             "type-checked {} Luau script{}",
             scripts.len(),
@@ -165,25 +161,71 @@ fn scripts(dir: &Path, offline: bool) -> anyhow::Result<(Vec<Finding>, String)> 
     ))
 }
 
-/// The `.luau` files under `dir`, below `at`, with `/` between folders,
-/// sorted; hidden folders are left out.
-fn luau_files(dir: &Path, at: &Path) -> anyhow::Result<Vec<String>> {
-    let here = dir.join(at);
+/// `path` below `dir`, with `/` between folders.
+fn relative(dir: &Path, path: &Path) -> String {
+    path.strip_prefix(dir)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .replace('\\', "/")
+}
+
+/// The definitions files in `dir`'s `types/`, sorted.
+fn definitions(dir: &Path) -> anyhow::Result<Vec<String>> {
+    let types = dir.join(DEFINITIONS_DIR);
+    if !types.is_dir() {
+        return Ok(Vec::new());
+    }
     let mut files = Vec::new();
-    for entry in std::fs::read_dir(&here).with_context(|| here.display().to_string())? {
-        let entry = entry.with_context(|| here.display().to_string())?;
-        let name = entry.file_name();
-        let path: PathBuf = at.join(&name);
-        if entry.file_type().is_ok_and(|t| t.is_dir()) {
-            if !name.to_string_lossy().starts_with('.') {
-                files.extend(luau_files(dir, &path)?);
-            }
-        } else if name.to_string_lossy().ends_with(".luau") {
-            files.push(path.to_string_lossy().replace('\\', "/"));
+    for entry in std::fs::read_dir(&types).with_context(|| types.display().to_string())? {
+        let name = entry
+            .with_context(|| types.display().to_string())?
+            .file_name()
+            .to_string_lossy()
+            .into_owned();
+        if name.ends_with(enshwick::packs::DEFINITIONS_SUFFIX) {
+            files.push(format!("{DEFINITIONS_DIR}/{name}"));
         }
     }
     files.sort();
     Ok(files)
+}
+
+/// The arguments of `luau-lsp analyze` over `scripts` with `definitions`,
+/// each under the alias the editor settings of a new mod give it.
+fn analyze_args(definitions: &[String], scripts: &[String]) -> Vec<String> {
+    let mut args = vec![
+        "analyze".to_owned(),
+        "--formatter=gnu".to_owned(),
+        format!("--platform={PLATFORM}"),
+    ];
+    for file in definitions {
+        let name = file.rsplit('/').next().unwrap_or(file);
+        let alias = DEFINITION_ALIASES
+            .iter()
+            .find(|(of, _)| *of == name)
+            .map_or_else(
+                || name.trim_end_matches(enshwick::packs::DEFINITIONS_SUFFIX),
+                |(_, alias)| alias,
+            );
+        args.push(format!("--definitions:@{alias}={file}"));
+    }
+    args.extend(scripts.iter().cloned());
+    args
+}
+
+/// The problems of a luau-lsp run that wrote `text`, and why the run
+/// counts as failed beyond them: luau-lsp also fails on lints a `.luaurc`
+/// makes errors and on files it cannot open.
+fn judged(success: bool, text: &str) -> (Vec<Finding>, Option<String>) {
+    let found = findings(text);
+    let failed = (!success && !found.iter().any(|f| f.error)).then(|| {
+        if found.is_empty() {
+            format!("failed: {}", text.trim())
+        } else {
+            "failed: it counts a problem above as an error".to_owned()
+        }
+    });
+    (found, failed)
 }
 
 /// The problems in luau-lsp's `--formatter=gnu` output, each a line
@@ -240,10 +282,12 @@ fn clippy(dir: &Path) -> anyhow::Result<bool> {
                 .output()
                 .is_ok_and(|out| out.status.success())
         },
-        crate::install::windows_target_installed,
+        || crate::install::windows_target_installed(dir),
     )?;
     let xwin: &[&str] = if windows { &[] } else { &["xwin"] };
+    // The mod's own .cargo/config.toml applies only from its folder.
     let status = Command::new(&cargo)
+        .current_dir(dir)
         .args(xwin)
         .args([
             "clippy",
@@ -260,6 +304,8 @@ fn clippy(dir: &Path) -> anyhow::Result<bool> {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::*;
 
     const OUTPUT: &str = "[INFO] Loading definitions file: @enshwick - types/enshwick.d.luau
@@ -335,8 +381,7 @@ lib/count.luau:2.7-2.12: LocalUnused: Variable 'unused' is never used; prefix wi
 
     #[test]
     fn a_folder_without_a_mod_is_refused() {
-        let dir = std::env::temp_dir().join(format!("enshwick-check-none-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = crate::scratch("none");
         let why = run(&dir, None, true, &mut Vec::new())
             .unwrap_err()
             .to_string();
@@ -347,10 +392,7 @@ lib/count.luau:2.7-2.12: LocalUnused: Variable 'unused' is never used; prefix wi
     /// A new Luau mod in a scratch folder, with `main.luau` replaced by
     /// `main` when given.
     fn luau_mod(name: &str, main: Option<&str>) -> PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("enshwick-check-{name}-{}", std::process::id()));
-        let _old = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = crate::scratch(name);
         crate::new::luau::create(&dir, "you.greeter", crate::Side::Server, None).unwrap();
         let root = dir.join("you.greeter");
         if let Some(main) = main {
@@ -432,6 +474,83 @@ lib/count.luau:2.7-2.12: LocalUnused: Variable 'unused' is never used; prefix wi
         );
         let done = run(&dir, None, true, &mut Vec::new()).unwrap();
         assert!(done.contains("no Luau scripts"), "{done}");
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_failing_run_fails_the_check_even_when_it_names_only_lints() {
+        let lint = "main.luau:2.7-2.12: LocalUnused: Variable 'x' is never used\n";
+        let (found, failed) = judged(false, lint);
+        assert_eq!(found.len(), 1);
+        assert!(!found[0].error);
+        assert_eq!(
+            failed.as_deref(),
+            Some("failed: it counts a problem above as an error")
+        );
+        assert_eq!(judged(true, lint).1, None);
+        assert_eq!(
+            judged(false, "Error opening main.luau\n").1.as_deref(),
+            Some("failed: Error opening main.luau")
+        );
+        let error = "main.luau:1.1-1.2: TypeError: wrong\n";
+        assert_eq!(judged(false, error).1, None, "the error already counts");
+    }
+
+    #[test]
+    fn check_type_checks_as_the_editor_settings_of_a_new_mod_do() {
+        let files =
+            crate::new::luau::files("you.greeter", crate::Side::Server, Some(String::new()));
+        let settings = &files
+            .iter()
+            .find(|(path, _)| path.ends_with("settings.json"))
+            .unwrap()
+            .1;
+        let settings: serde_json::Value = serde_json::from_str(settings).unwrap();
+        let aliases = settings["luau-lsp.types.definitionFiles"]
+            .as_object()
+            .unwrap();
+        let definitions: Vec<String> = aliases
+            .values()
+            .map(|path| path.as_str().unwrap().to_owned())
+            .collect();
+        let args = analyze_args(&definitions, &["main.luau".to_owned()]);
+        assert!(
+            args.contains(&format!(
+                "--platform={}",
+                settings["luau-lsp.platform.type"].as_str().unwrap()
+            )),
+            "{args:?}"
+        );
+        for (alias, path) in aliases {
+            let arg = format!("--definitions:{alias}={}", path.as_str().unwrap());
+            assert!(args.contains(&arg), "{arg} in {args:?}");
+        }
+    }
+
+    #[test]
+    fn only_the_scripts_the_loader_runs_are_type_checked() {
+        // Without main.luau the loader runs no script of the pack.
+        let dir = crate::pack::tests::pack(
+            "check-no-main",
+            "[[item]]\nid = \"lantern\"\nlike = \"6943053a-32c1-4718-ae22-e61427ddf54d\"\n",
+        );
+        std::fs::create_dir_all(dir.join("lib")).unwrap();
+        std::fs::write(dir.join("lib/count.luau"), "local x =\n").unwrap();
+        let done = run(&dir, None, false, &mut Vec::new()).unwrap();
+        assert!(done.contains("no Luau scripts"), "{done}");
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_failed_check_still_says_what_it_checked() {
+        let dir = crate::pack::tests::pack(
+            "check-said",
+            "[[item]]\nid = \"lantern\"\nlike = \"torch\"\n",
+        );
+        let mut out = Vec::new();
+        assert!(run(&dir, None, true, &mut out).is_err());
+        let out = String::from_utf8(out).unwrap();
+        assert!(out.ends_with("no Luau scripts to type-check\n"), "{out}");
         let _gone = std::fs::remove_dir_all(&dir);
     }
 }

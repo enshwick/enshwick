@@ -5,4 +5,6 @@
 
 pub mod luau;
 pub mod luau_lsp;
+#[doc(hidden)]
+pub mod net;
 pub mod points;

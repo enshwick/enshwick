@@ -589,7 +589,7 @@ the mod's gear. The value takes effect when a world loads, and a change
 takes effect at the next world load. Until a world's settings come, the
 default stands. A chance outside 0 to 1 is held to that range. Items,
 recipes and workshops stay as the mod starts them, whatever the settings say.
-`pack check` reports a key `pack.toml` does not declare and a default of
+`cargo enshwick check` reports a key `pack.toml` does not declare and a default of
 another type. A pack with a `main.luau` reads the same values with
 `enshwick.settings()`.
 
@@ -614,8 +614,9 @@ the pack stays off:
 error [you.lanterns] items.toml:7:1: no item "torch" in this pack; name a required mod's as <alias>:<name>, or a vanilla one by its GUID or, where the game's data is at hand, its debug name
 ```
 
-`cargo enshwick pack check mods/you.lanterns --game <game folder>` gives the
-same lines before you ship. It reads vanilla names from that game's data
+`cargo enshwick check mods/you.lanterns --game <game folder>` finds the
+same problems before you ship. It also type-checks the scripts the loader
+runs with luau-lsp. It reads vanilla names from that game's data
 (`ENSHROUDED_DIR` when `--game` is left out). Without a game folder it
 checks everything else. A debug name, or a station other than the
 workbench, is then a problem that asks for the game's data.

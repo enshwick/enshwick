@@ -16,7 +16,7 @@ use super::entries::{
 };
 use super::files::PackError;
 use super::reader::{Dropped, Reader};
-use super::{ITEMS_FILE, LOOT_FILE, RECIPES_FILE};
+use super::{ITEMS_FILE, LOOT_FILE, RECIPES_FILE, near, near_names};
 
 /// A field a recipe change sets, with its ingredient and the name the pack
 /// gave it, and the value.
@@ -185,13 +185,7 @@ fn category(names: &[String]) -> Result<ItemCategoryMask, ReadCategoryError> {
                 .map(|one| mask | one)
                 .ok_or_else(|| ReadCategoryError::Unknown {
                     name: name.clone(),
-                    near: ItemCategoryMask::NAMES
-                        .iter()
-                        .map(|(game, _)| *game)
-                        .filter(|game| {
-                            strsim::levenshtein(&game.to_lowercase(), &name.to_lowercase()) <= 2
-                        })
-                        .collect(),
+                    near: near(ItemCategoryMask::NAMES.iter().map(|(game, _)| *game), name),
                 })
         })
 }
@@ -208,15 +202,6 @@ enum ReadCategoryError {
         name: String,
         near: Vec<&'static str>,
     },
-}
-
-/// `; near: ` and `near`, or nothing when it is empty.
-fn near_names(near: &[&str]) -> String {
-    if near.is_empty() {
-        String::new()
-    } else {
-        format!("; near: {}", near.join(", "))
-    }
 }
 
 /// The checked changes of each field `fields` gives through the selection
@@ -763,16 +748,7 @@ fn select_recipes(
             targets.push((Recipes::Kind(kind), format!("kind {name}")));
             continue;
         }
-        let near: Vec<&str> = RecipeKind::ALL
-            .iter()
-            .map(|k| k.name())
-            .filter(|k| strsim::levenshtein(k, &name.to_lowercase()) <= 2)
-            .collect();
-        let near = if near.is_empty() {
-            String::new()
-        } else {
-            format!("; near: {}", near.join(", "))
-        };
+        let near = near_names(&near(RecipeKind::ALL.iter().map(|k| k.name()), name));
         fail(reader, format!("no recipe kind {name:?}{near}"));
     }
     for name in &e.workshop {

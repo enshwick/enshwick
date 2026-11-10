@@ -159,6 +159,14 @@ jobs:
           prefix-key: v1-rust
           key: ${{ matrix.part }}
 
+      # The luau-lsp the tests download, kept per pin instead of fetched by
+      # each test process.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: matrix.part == 'host' || matrix.part == 'all'
+        with:
+          path: ~/.cache/enshwick
+          key: luau-lsp-${{ runner.os }}-${{ hashFiles('crates/cargo-enshwick/luau-lsp.toml') }}
+
       - name: cargo xtask check
         env:
           ENSH_MODS_DIR: ${{ github.workspace }}/.mods
