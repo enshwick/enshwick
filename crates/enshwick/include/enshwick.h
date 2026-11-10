@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 22
+#define ENSHWICK_ABI_MINOR 23
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -31,6 +31,21 @@
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
 #define ENSHWICK_SURVIVOR_STATUS_SET 256
+
+// The `close` value of
+// `HostApi::action_window` that closes a
+// window.
+#define ENSHWICK_WINDOW_CLOSE 1
+
+// The `close` value of
+// `HostApi::action_window` that shows a
+// window: it opens, or updates where it shows.
+#define ENSHWICK_WINDOW_SHOW 0
+
+// The `close` value of
+// `HostApi::action_window` that updates a
+// window only on the clients that still show it. ABI 11.23.
+#define ENSHWICK_WINDOW_UPDATE 2
 
 // An account action of `HostApi::account_action`,
 // with the values of the game's own `AccountActionType`.
@@ -160,9 +175,10 @@ typedef struct EnshwickActionReply {
 typedef struct EnshwickActionCall {
   // Size and version of this struct.
   struct EnshwickHeader header;
-  // What the loader asks: `ActionCall::SHEET`, `ActionCall::RUN`,
-  // `ActionCall::CONSOLE`, `ActionCall::CHAT` or
-  // `ActionCall::REMOTE`; a mod built for an older minor answers a kind
+  // What the loader asks or tells: `ActionCall::SHEET`,
+  // `ActionCall::RUN`, `ActionCall::CONSOLE`, `ActionCall::CHAT`,
+  // `ActionCall::REMOTE`, `ActionCall::WINDOW` or
+  // `ActionCall::WINDOW_CLOSED`; a mod built for an older minor answers a kind
   // it does not know with an empty reply.
   uint32_t kind;
   // The language the player reads the game in, a
@@ -190,6 +206,13 @@ typedef struct EnshwickActionCall {
   // the loader reads only while this struct's header stays zero. ABI
   // 11.19.
   struct EnshwickActionReply *reply;
+  // The word that named the mod in the line, in lower case and without
+  // its `/`: the mod's command name, alias or id, for
+  // `ActionCall::CONSOLE`, `ActionCall::CHAT` and
+  // `ActionCall::REMOTE`, so the mod's help names the command as the
+  // caller typed it; empty for the other questions. Valid for the call.
+  // ABI 11.23.
+  struct EnshwickStr word;
 } EnshwickActionCall;
 // The actions the player may use now, as a sheet: the reply is the
 // sheet's text.
@@ -221,6 +244,14 @@ typedef struct EnshwickActionCall {
 // window for them or the player may not run an action it names. ABI
 // 11.22.
 #define EnshwickActionCall_WINDOW 6
+// The client of the player whose account key `player` holds closed
+// the calling mod's window `action`, let it go for a newer one, or
+// closed it for an empty or oversized answer to
+// `ActionCall::WINDOW`; or, with an empty `action`, that
+// player left, and holds none of the mod's windows any more. The mod
+// forgets what it kept for them. `player` holds the account key alone:
+// no character, name or permission. No reply is read. ABI 11.23.
+#define EnshwickActionCall_WINDOW_CLOSED 7
 
 // A buff type of the game by its id, the
 // `Guid::fnv1a` of its GUID, to apply,
@@ -839,7 +870,8 @@ typedef struct EnshwickCommandInfo {
   struct EnshwickHeader header;
   // The full name, `admin-tools` in `/admin-tools online`.
   struct EnshwickStr name;
-  // The shorter alias, `adl` in `/adl online`.
+  // The shorter alias, `adm` in `/adm online`; empty when another mod
+  // took the word first.
   struct EnshwickStr alias;
   // The id of the mod that named them.
   struct EnshwickStr mod_id;
@@ -5001,17 +5033,25 @@ typedef struct EnshwickHostApi {
   // Names the calling mod's actions as commands: a
   // line `/<name> <action> <values>`, or the same with `alias`, runs
   // one of them from a player's chat, the server's console or
-  // `run_command`, with the caller's rights. Each
-  // is 1 to 32 of `[a-z0-9-]`, `alias` shorter than `name`; neither is
-  // `enshwick` or `help`. `Status::BAD_ARGS` for a malformed or
-  // unreadable one; `Status::REFUSED` for a second call, or when
-  // another mod named the same word first, which the loader logs and
-  // reports naming both mods, the mod running on without commands.
-  // Allowed during `enshwick_mod_init` only; the strings are borrowed for
-  // the call. A panic in the loader returns `Status::REFUSED`. ABI
-  // 11.19.
+  // `run_command`, with the caller's rights. The
+  // name is the part of the mod's id after the author; `name` is
+  // reserved and not read. `alias` is 1 to 32 of `[a-z0-9-]`, shorter
+  // than the name, and neither `enshwick` nor `help`.
+  // `Status::BAD_ARGS` for a malformed or unreadable alias, or a mod
+  // whose name is `enshwick` or `help`; `Status::REFUSED` for a second
+  // call, or when another mod's commands have the same name or another
+  // mod's whole id is that name, which the
+  // loader logs and reports naming both mods, the mod running on without
+  // commands. An alias that another mod's commands, name or id hold goes
+  // to that mod: the call returns `Status::OK`, the mod's commands run
+  // by their name alone, and the loader logs and reports it once naming
+  // both mods. A mod built before 11.23 whose alias is well formed but
+  // not shorter than the name gets `Status::OK` and its name alone,
+  // reported the same way. Allowed during `enshwick_mod_init` only; the strings are
+  // borrowed for the call. A panic in the loader returns
+  // `Status::REFUSED`. ABI 11.19; `name` not read since 11.23.
   EnshwickStatus (*commands)(EnshwickModHandle me, struct EnshwickStr name, struct EnshwickStr alias);
-  // Runs the command line `line`, such as `/adl online`, as a remote
+  // Runs the command line `line`, such as `/adm online`, as a remote
   // caller named `label` (for the log and the handler, at most 64 bytes)
   // with the game's permission bits `permissions` (as
   // `PlayerInfo::permissions`), never as
@@ -5080,8 +5120,13 @@ typedef struct EnshwickHostApi {
                                uint32_t query,
                                uint32_t *holds);
   // Shows the calling mod's window `id`, 1 to 32 of `[a-z0-9-]`, to the
-  // `count` players whose account keys `players` holds, or closes it
-  // on their clients when `close` is 1. After the server's step the
+  // `count` players whose account keys `players` holds; closes it on
+  // their clients when `close` is 1; or, when `close` is 2, updates it
+  // only on the clients that still show it, opening none (ABI 11.23; a
+  // loader before it answers `Status::BAD_ARGS`). When a client closes
+  // a window or its player leaves, the loader tells the mod with
+  // `ActionCall::WINDOW_CLOSED`.
+  // After the server's step the
   // loader asks the mod for the window as each player sees it
   // (`ActionCall::WINDOW`) and carries the
   // text to that player's client, which draws it; an empty answer closes

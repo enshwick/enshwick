@@ -29,6 +29,7 @@ use crate::abi::{Entity, Header, PlayerInfo, Status, Str};
 ///     args: Str::new("p0000000000000009\tb1"),
 ///     target: enshwick::abi::ActionTarget::NONE,
 ///     reply: core::ptr::null_mut(),
+///     word: Str::EMPTY,
 /// };
 /// assert_eq!(call.kind, ActionCall::RUN);
 /// ```
@@ -37,9 +38,10 @@ use crate::abi::{Entity, Header, PlayerInfo, Status, Str};
 pub struct ActionCall {
     /// Size and version of this struct.
     pub header: Header,
-    /// What the loader asks: [`ActionCall::SHEET`], [`ActionCall::RUN`],
-    /// [`ActionCall::CONSOLE`], [`ActionCall::CHAT`] or
-    /// [`ActionCall::REMOTE`]; a mod built for an older minor answers a kind
+    /// What the loader asks or tells: [`ActionCall::SHEET`],
+    /// [`ActionCall::RUN`], [`ActionCall::CONSOLE`], [`ActionCall::CHAT`],
+    /// [`ActionCall::REMOTE`], [`ActionCall::WINDOW`] or
+    /// [`ActionCall::WINDOW_CLOSED`]; a mod built for an older minor answers a kind
     /// it does not know with an empty reply.
     pub kind: u32,
     /// The language the player reads the game in, a
@@ -67,6 +69,13 @@ pub struct ActionCall {
     /// the loader reads only while this struct's header stays zero. ABI
     /// 11.19.
     pub reply: *mut ActionReply,
+    /// The word that named the mod in the line, in lower case and without
+    /// its `/`: the mod's command name, alias or id, for
+    /// [`ActionCall::CONSOLE`], [`ActionCall::CHAT`] and
+    /// [`ActionCall::REMOTE`], so the mod's help names the command as the
+    /// caller typed it; empty for the other questions. Valid for the call.
+    /// ABI 11.23.
+    pub word: Str,
 }
 
 impl_headed!(ActionCall, born = 144);
@@ -100,6 +109,19 @@ pub struct ActionReply {
 
 impl_headed!(ActionReply);
 
+/// The `close` value of
+/// [`HostApi::action_window`](super::HostApi::action_window) that shows a
+/// window: it opens, or updates where it shows.
+pub const WINDOW_SHOW: u32 = 0;
+/// The `close` value of
+/// [`HostApi::action_window`](super::HostApi::action_window) that closes a
+/// window.
+pub const WINDOW_CLOSE: u32 = 1;
+/// The `close` value of
+/// [`HostApi::action_window`](super::HostApi::action_window) that updates a
+/// window only on the clients that still show it. ABI 11.23.
+pub const WINDOW_UPDATE: u32 = 2;
+
 /// A running mod's command names, from
 /// [`HostApi::command_list`](super::HostApi::command_list). ABI 11.19.
 ///
@@ -111,7 +133,7 @@ impl_headed!(ActionReply);
 /// let tools = CommandInfo {
 ///     header: Header::of::<CommandInfo>(),
 ///     name: Str::new("admin-tools"),
-///     alias: Str::new("adl"),
+///     alias: Str::new("adm"),
 ///     mod_id: Str::new("you.admin-tools"),
 /// };
 /// assert_eq!(tools.header.size, Header::of::<CommandInfo>().size);
@@ -123,7 +145,8 @@ pub struct CommandInfo {
     pub header: Header,
     /// The full name, `admin-tools` in `/admin-tools online`.
     pub name: Str,
-    /// The shorter alias, `adl` in `/adl online`.
+    /// The shorter alias, `adm` in `/adm online`; empty when another mod
+    /// took the word first.
     pub alias: Str,
     /// The id of the mod that named them.
     pub mod_id: Str,
@@ -267,6 +290,14 @@ impl ActionCall {
     /// window for them or the player may not run an action it names. ABI
     /// 11.22.
     pub const WINDOW: u32 = 6;
+    /// The client of the player whose account key `player` holds closed
+    /// the calling mod's window `action`, let it go for a newer one, or
+    /// closed it for an empty or oversized answer to
+    /// [`ActionCall::WINDOW`]; or, with an empty `action`, that
+    /// player left, and holds none of the mod's windows any more. The mod
+    /// forgets what it kept for them. `player` holds the account key alone:
+    /// no character, name or permission. No reply is read. ABI 11.23.
+    pub const WINDOW_CLOSED: u32 = 7;
 }
 
 /// A mod's answer to the loader's questions about its player actions: the

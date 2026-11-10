@@ -65,14 +65,18 @@ export type Actions = {
 	run_at: (self: Actions, action: string, args: {ActionValue}, target: ActionTarget) -> (),
 	--- Puts the declared action `action` on `key`, as `Actions.control` does.
 	control: (self: Actions, action: string, key: string) -> (),
-	--- Names the mod's actions as commands `/<name>` and `/<alias>`, as `Actions.commands` does.
-	commands: (self: Actions, name: string, alias: string) -> (),
+	--- Names the mod's actions as commands, `/<alias>` beside the name in the mod's id, as `Actions.commands` does.
+	commands: (self: Actions, alias: string) -> (),
 	--- Tells the platform that who may run the mod's actions changed, as `Actions.rules_changed` does.
 	rules_changed: (self: Actions) -> (),
 	--- Shows `window` to the players with the account keys `players`, or updates it where it shows, as `Actions.show` does.
 	show: (self: Actions, window: ActionWindow, players: {string}) -> (),
 	--- Closes the window `id` on the clients of the players with the account keys `players`, as `Actions.close` does.
 	close: (self: Actions, id: string, players: {string}) -> (),
+	--- Puts `window` in place of the one of its id on the clients of `players` that still show it, opening it for no one, as `Actions.update` does.
+	update: (self: Actions, window: ActionWindow, players: {string}) -> (),
+	--- Calls `closed` with a player's account key and a window's id when their client closed that window, and with the key alone when the player left, as `Actions.on_closed` does.
+	on_closed: (self: Actions, closed: (arg1: string, arg2: string?) -> ()) -> (),
 }
 
 --- Rolls on crafted items, for `Load.add_craft_affixes`.
@@ -182,6 +186,8 @@ export type Apply = {
 
 --- An argument of an action: a typed choice, or a line of text of bounded bytes.
 export type Arg = {
+	--- The argument as one a typed line may leave out, taking `default` then, as `Arg.optional` makes it.
+	optional: (self: Arg, default: ActionValue) -> Arg,
 }
 
 --- A change of an arsenal: the attacks and behaviours it picks from, and the values of some of its attacks.
@@ -520,8 +526,8 @@ export type Comfort = {
 export type CommandSet = {
 	--- The full name, `admin-tools` in `/admin-tools online`.
 	name: string,
-	--- The shorter alias, `adl` in `/adl online`.
-	alias: string,
+	--- The shorter alias, `adm` in `/adm online`; nil when another mod took the word first, so only the full name runs the mod's actions.
+	alias: string?,
 	--- The id of the mod that named them.
 	mod_id: string,
 }
@@ -1910,6 +1916,10 @@ export type PlayerAction = {
 	label: string,
 	--- A line on what the action does, a text key, as `Action.help` sets it.
 	help: string?,
+	--- The group the help lists it under, a text key, as `Action.group` sets it.
+	group: string?,
+	--- Whether its players include the one who looks, as `Action.with_self` sets it.
+	with_self: boolean?,
 	--- The arguments in order, as `Action.arg` adds them; a list takes none.
 	args: {Arg}?,
 	--- Whether only the server's administrators see and run it, as `Action.admins` sets it.
@@ -2889,6 +2899,26 @@ export type UnlockedSkill = {
 
 --- How a `Change` changes its value.
 export type Value = { Set: number } | { Times: number }
+
+--- A vanilla item with its names, from `items`.
+export type VanillaItem = {
+	--- The item.
+	guid: string,
+	--- Its debug name, as `item` takes it, such as `Tool_Glider_T1`.
+	name: string,
+	--- The tag of the name the game shows, for `i18n.game_text_in`; nil for an item the archive gives no name.
+	name_tag: string?,
+}
+
+--- A vanilla recipe with its name and what it makes, from `recipes`.
+export type VanillaRecipe = {
+	--- The recipe.
+	guid: string,
+	--- Its debug name, as `recipe` takes it.
+	name: string,
+	--- The item it makes, whose name the game shows for the recipe; nil for a recipe that names none.
+	output: string?,
+}
 
 --- Where a request came from.
 export type Via = "Interface" | "Console" | "Chat" | "Remote"
@@ -3997,6 +4027,12 @@ declare enshwick: {
 	content: {
 		--- The vanilla item named `name`, as the game's data names it, such as `Chest_Wood`; an error names the nearest names.
 		item: (name: string) -> string,
+		--- The vanilla item the game shows as `name` in any of its languages, such as `Glider`; an error names the nearest names.
+		item_by_display_name: (name: string) -> string,
+		--- Every vanilla item with its debug name and the tag of the name the game shows.
+		items: () -> {VanillaItem},
+		--- Every vanilla recipe with its debug name and the item it makes.
+		recipes: () -> {VanillaRecipe},
 		--- The item id of `id`, a GUID such as `item` gives for a vanilla item, or a content id in full (`<mod>:<name>`) for a mod's own item, as `ItemId.from_guid` and `ItemId.named` give it in Rust: the number `inventory` and `items` take.
 		item_id: (id: string) -> number,
 		--- The recipe id of `id`, a GUID such as `recipe` gives for a vanilla recipe, or a content id in full for a mod's own, as `RecipeId.from_guid` and `RecipeId.named` give it in Rust: the number recipe events carry.

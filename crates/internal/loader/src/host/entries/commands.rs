@@ -23,7 +23,7 @@ fn kept(answer: crate::actions::Answer) -> ActionReply {
     })
 }
 
-pub(crate) extern "system" fn commands(me: ModHandle, name: Str, alias: Str) -> Status {
+pub(crate) extern "system" fn commands(me: ModHandle, _name: Str, alias: Str) -> Status {
     entry("commands", || {
         let (loader, index, record) = match calling(me) {
             Ok(found) => found,
@@ -32,15 +32,15 @@ pub(crate) extern "system" fn commands(me: ModHandle, name: Str, alias: Str) -> 
         if !crate::host::in_init(index.get()) {
             return Status::TOO_LATE;
         }
-        let (Some(name), Some(alias)) = (text(name), text(alias)) else {
+        let Some(alias) = text(alias) else {
             return Status::BAD_ARGS;
         };
-        let status = crate::commands::register(loader, index, name, alias);
+        let status = crate::commands::register(loader, index, alias);
         if status.is_ok() {
             crate::log::write(
                 Level::DEBUG,
                 &record.id,
-                &format!("commands /{name} /{alias}"),
+                &format!("commands, alias /{alias}"),
             );
         }
         status
@@ -123,7 +123,7 @@ pub(crate) extern "system" fn action_window(
             return Status::BAD_ARGS;
         };
         let count = usize::try_from(count).unwrap_or(usize::MAX);
-        if count > crate::windows::MAX_PLAYERS || (players.is_null() && count != 0) || close > 1 {
+        if count > crate::windows::MAX_PLAYERS || (players.is_null() && count != 0) {
             return Status::BAD_ARGS;
         }
         let keys = if count == 0 {
@@ -134,6 +134,6 @@ pub(crate) extern "system" fn action_window(
             // unchanged for the call; `count` is at most `MAX_PLAYERS`.
             unsafe { core::slice::from_raw_parts(players, count) }
         };
-        crate::windows::show(loader, index, window, keys, close == 1)
+        crate::windows::show(loader, index, window, keys, close)
     })
 }

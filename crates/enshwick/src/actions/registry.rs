@@ -1,5 +1,7 @@
 use std::sync::{Arc, RwLock};
 
+mod help;
+
 use crate::Host;
 use crate::PlayerKey;
 use crate::i18n::{Language, Texts};
@@ -13,6 +15,28 @@ use super::{Action, Handler, MAX_KNOWN, MAX_PLAYERS, sheet};
 pub(super) struct Declared {
     pub(super) action: Action,
     pub(super) handler: Handler,
+}
+
+/// A line typed on the console, in chat or by a remote caller, as the
+/// loader hands it over.
+pub(super) struct Typed<'a> {
+    /// The line after the word that named the mod.
+    pub(super) line: &'a str,
+    /// The word that named the mod, its command name, alias or id, in
+    /// lower case; empty from a loader that does not tell it.
+    pub(super) word: &'a str,
+    pub(super) via: Via,
+}
+
+impl Typed<'_> {
+    /// The command as the caller types it: the word, after a `/` in chat.
+    fn command(&self) -> String {
+        if self.via == Via::Chat && !self.word.is_empty() {
+            format!("/{}", self.word)
+        } else {
+            self.word.to_owned()
+        }
+    }
 }
 
 /// Why the words of a console line or the values from the interface name no
@@ -38,11 +62,13 @@ enum ReadArgsError {
 }
 
 /// A word of a console line: a run without white space, or a run between
-/// quotes without them, and the byte where it starts in the line.
+/// quotes without them, and the bytes it spans in the line, its quotes
+/// included.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Word<'a> {
     text: &'a str,
     from: usize,
+    to: usize,
 }
 
 /// The words of `line`; an unclosed quote runs to the end of the line.
@@ -54,7 +80,8 @@ fn words(line: &str) -> Vec<Word<'_>> {
             chars.next();
             continue;
         }
-        let (start, stop): (usize, fn(char) -> bool) = if c == '"' {
+        let quoted = c == '"';
+        let (start, stop): (usize, fn(char) -> bool) = if quoted {
             chars.next();
             (at + c.len_utf8(), |c| c == '"')
         } else {
@@ -67,19 +94,54 @@ fn words(line: &str) -> Vec<Word<'_>> {
         words.push(Word {
             text: &line[start..end],
             from: at,
+            to: if quoted {
+                (end + 1).min(line.len())
+            } else {
+                end
+            },
         });
     }
     words
 }
 
-/// The text a last text argument takes from `words`, the rest of `line`:
-/// as typed, or without its quotes when it is one quoted run.
-fn rest_of_line<'a>(line: &'a str, words: &[Word<'a>]) -> Option<&'a str> {
+/// The text a text argument takes from `words`, a run of the words of
+/// `line`: as typed from the first to the last, or without its quotes when
+/// it is one quoted run.
+fn run_of_line<'a>(line: &'a str, words: &[Word<'a>]) -> Option<&'a str> {
     match words {
         [] => None,
         [only] => Some(only.text),
-        [first, ..] => Some(line[first.from..].trim_end()),
+        [first, .., last] => Some(&line[first.from..last.to]),
     }
+}
+
+/// What is wrong with the optional arguments among `args`: one before an
+/// argument that is not optional, an optional player, or a default its
+/// argument does not take; `None` when they are well declared.
+pub(super) fn optional_fault(args: &[Arg]) -> Option<String> {
+    let required = args
+        .iter()
+        .rposition(|arg| arg.default.is_none())
+        .map_or(0, |last| last + 1);
+    if args[..required].iter().any(|arg| arg.default.is_some()) {
+        return Some("only its last arguments may be optional".to_owned());
+    }
+    let last = args.len().saturating_sub(1);
+    let early_text =
+        |(i, arg): (usize, &Arg)| i < last && arg.kind == ArgView::TEXT && arg.default.is_some();
+    if args.iter().enumerate().any(early_text) {
+        return Some("an optional text must be its last argument".to_owned());
+    }
+    let at = args.iter().position(|arg| match &arg.default {
+        None => false,
+        Some(_) if arg.kind == ArgView::PLAYER => true,
+        Some(Value::Text(text)) if arg.kind == ArgView::TEXT && text.is_empty() => false,
+        Some(default) => !takes(default, arg),
+    })?;
+    Some(format!(
+        "its argument {} is a player, which is never optional, or does not take its default",
+        at + 1
+    ))
 }
 
 pub(super) struct Registry {
@@ -88,6 +150,9 @@ pub(super) struct Registry {
     pub(super) declared: RwLock<Vec<Arc<Declared>>>,
     /// The windows the mod showed, each as one player holds it.
     pub(super) windows: RwLock<super::window::Kept>,
+    /// The mod's own function for a window a client closed or a player who
+    /// left.
+    pub(super) closed: RwLock<Option<super::Closed>>,
     /// Set once the mod named its actions as commands.
     pub(super) commands: core::sync::atomic::AtomicBool,
     /// Set once a handler panicked during a command: the mod's commands
@@ -124,40 +189,6 @@ impl Registry {
         }
     }
 
-    /// The usage line of `action` on the console.
-    fn usage(&self, action: &Action, language: Language) -> String {
-        let player = format!("<{}>", self.say("actions.player", language, &[]));
-        let on_off = format!(
-            "<{}|{}>",
-            self.say("actions.on", language, &[]),
-            self.say("actions.off", language, &[])
-        );
-        let label = self.say(&action.label, language, &[]);
-        if action.on.is_some() {
-            return format!("{} {player} {on_off}: {label}", action.id);
-        }
-        let mut line = action.id.clone();
-        for arg in &action.args {
-            let shown = match arg.kind {
-                ArgView::PLAYER => player.clone(),
-                ArgView::CHOICE => format!(
-                    "<{}>",
-                    arg.choices
-                        .iter()
-                        .map(|(word, _)| word.as_str())
-                        .collect::<Vec<_>>()
-                        .join("|")
-                ),
-                ArgView::NUMBER => format!("<{}-{}>", arg.range.0, arg.range.1),
-                ArgView::TEXT => format!("<{}>", self.say(&arg.label, language, &[])),
-                _ => on_off.clone(),
-            };
-            line.push(' ');
-            line.push_str(&shown);
-        }
-        format!("{line}: {label}")
-    }
-
     /// The reply in `language` to a run of `action` refused for `error`.
     fn refusal(&self, error: &ReadArgsError, action: &Action, language: Language) -> String {
         match error {
@@ -181,51 +212,124 @@ impl Registry {
         }
     }
 
-    fn help(&self, player: &Player, language: Language) -> String {
-        let declared = self.declared();
-        let mut lines = vec![self.say("actions.usage", language, &[])];
-        for d in declared.iter().filter(|d| Self::allowed(d, player)) {
-            lines.push(self.usage(&d.action, language));
-            if !d.action.help.is_empty() {
-                lines.push(format!("  {}", self.say(&d.action.help, language, &[])));
-            }
-        }
-        lines.join("\n")
-    }
-
-    /// Runs the text form `line`, the part after the mod's id or command
-    /// name, for `player` reading `language`, from `via`: `help`, or an
-    /// action's id and its values as words.
+    /// Runs the text form `typed.line`, the part after the word that named
+    /// the mod, for `player` reading `language`: `help`, `help <id>`, or
+    /// an action's id and its values as words.
     pub(super) fn run_from_console(
         &self,
         player: &Player,
-        line: &str,
         language: Language,
-        via: Via,
+        typed: &Typed<'_>,
     ) -> Outcome {
+        let line = typed.line;
         let words = words(line);
         let Some((first, rest)) = words.split_first() else {
-            return Outcome::done(self.help(player, language));
+            return Outcome::done(self.help(player, language, typed));
         };
         let word = first.text.to_lowercase();
-        if word == "help" {
-            return Outcome::done(self.help(player, language));
-        }
         let declared = self.declared();
-        let Some(d) = declared.iter().find(|d| d.action.id == word) else {
-            return Outcome::refused(self.say("actions.unknown", language, &[("word", &word)]));
+        let named = |id: &str| declared.iter().find(|d| d.action.id == id);
+        if word == "help" {
+            let Some(about) = rest.first().map(|w| w.text.to_lowercase()) else {
+                return Outcome::done(self.help(player, language, typed));
+            };
+            return match named(&about) {
+                Some(d) if Self::allowed(d, player) => Outcome::done(self.help_of(d, language)),
+                _ => self.unknown(&about, player, language, typed),
+            };
+        }
+        let Some(d) = named(&word) else {
+            return self.unknown(&word, player, language, typed);
         };
         if !Self::allowed(d, player) {
             return Outcome::refused(self.say("actions.denied", language, &[]));
         }
         match self.console_args(d, player, line, rest, language) {
-            Ok(values) => self.run(d, player, &values, language, via, None),
+            Ok(values) => self.run(d, player, &values, language, typed.via, None),
             Err(why) => Outcome::refused(self.refusal(&why, &d.action, language)),
         }
     }
 
+    /// The value the one word `word` gives `arg`, which is no player.
+    fn word_value(&self, arg: &Arg, word: &str, language: Language) -> Option<Value> {
+        match arg.kind {
+            ArgView::CHOICE => arg
+                .choices
+                .iter()
+                .position(|(w, _)| w.eq_ignore_ascii_case(word))
+                .or_else(|| {
+                    word.parse::<usize>()
+                        .ok()
+                        .and_then(|n| n.checked_sub(1))
+                        .filter(|&n| n < arg.choices.len())
+                })
+                .map(Value::Choice),
+            ArgView::NUMBER => word
+                .replace(',', ".")
+                .parse::<f64>()
+                .ok()
+                .filter(|n| n.is_finite() && *n >= arg.range.0 && *n <= arg.range.1)
+                .map(Value::Number),
+            ArgView::TEXT => arg.takes_text(word).then(|| Value::Text(word.to_owned())),
+            ArgView::TOGGLE => toggle_word(word, &self.texts, language).map(Value::Toggle),
+            _ => None,
+        }
+    }
+
+    /// The values the `words` of `line` give the optional arguments
+    /// `optional`, which fill in order: each word reads as its argument,
+    /// and the arguments left without a word take their defaults. An
+    /// optional text, always the last, takes what is left of the line,
+    /// starting at the first word that does not read as the argument
+    /// before it. Without such a text a word that does not read, or one
+    /// too many, is an error.
+    fn optional_values(
+        &self,
+        optional: &[Arg],
+        line: &str,
+        words: &[Word<'_>],
+        language: Language,
+    ) -> Result<Vec<Value>, ReadArgsError> {
+        let (text, plain) = match optional.split_last() {
+            Some((last, plain)) if last.kind == ArgView::TEXT => (Some(last), plain),
+            _ => (None, optional),
+        };
+        let default = |arg: &Arg| arg.default.clone().ok_or(ReadArgsError::Usage);
+        let mut values = Vec::with_capacity(optional.len());
+        let mut rest = words;
+        let mut text_began = false;
+        for arg in plain {
+            let read = rest
+                .split_first()
+                .filter(|_| !text_began)
+                .and_then(|(word, after)| {
+                    Some((self.word_value(arg, word.text, language)?, after))
+                });
+            match read {
+                Some((value, after)) => {
+                    values.push(value);
+                    rest = after;
+                }
+                None if text.is_some() || rest.is_empty() => {
+                    text_began = true;
+                    values.push(default(arg)?);
+                }
+                None => return Err(ReadArgsError::Usage),
+            }
+        }
+        match (text, run_of_line(line, rest)) {
+            (Some(arg), Some(typed)) => values.push(Self::text_value(arg, typed)?),
+            (Some(arg), None) => values.push(default(arg)?),
+            (None, Some(_)) => return Err(ReadArgsError::Usage),
+            (None, None) => {}
+        }
+        Ok(values)
+    }
+
     /// The values of the `words` of `line` after an action's id on the
-    /// console.
+    /// console. A player or a text that only optional arguments follow
+    /// takes the rest of the line up to them: the last words go to the
+    /// optional arguments as far as each reads as its own.
     fn console_args(
         &self,
         d: &Declared,
@@ -250,80 +354,72 @@ impl Registry {
             return Ok(vec![target, Value::Toggle(on)]);
         }
         let known = Self::known_of(d, &self.ask(player, language, None));
-        let mut values = Vec::with_capacity(d.action.args.len());
+        let args = &d.action.args;
+        let required = args.iter().take_while(|arg| arg.default.is_none()).count();
+        let (required, optional) = args.split_at(required);
+        // A last optional text takes the rest of the line itself, so the
+        // arguments before it take one word each.
+        let text_ends = optional.last().is_some_and(|arg| arg.kind == ArgView::TEXT);
+        let mut values = Vec::with_capacity(args.len());
         let mut rest = words;
-        for (i, arg) in d.action.args.iter().enumerate() {
-            let last = i + 1 == d.action.args.len();
+        let mut tail = None;
+        for (i, arg) in required.iter().enumerate() {
+            let takes_rest = i + 1 == required.len() && !text_ends;
             let value = match arg.kind {
-                ArgView::PLAYER => {
-                    let taken = if last { rest.len() } else { 1 };
-                    if rest.len() < taken || taken == 0 {
-                        return Err(bad());
-                    }
-                    let name = joined(&rest[..taken]);
-                    rest = &rest[taken..];
-                    self.player_named(&name, &known)?
-                }
-                ArgView::TEXT => {
-                    let text = if last {
-                        let text = rest_of_line(line, rest).ok_or_else(bad)?;
-                        rest = &[];
-                        text
+                ArgView::PLAYER | ArgView::TEXT => {
+                    let taken = if takes_rest {
+                        let (taken, given) = (1..=rest.len())
+                            .find_map(|kept| {
+                                self.optional_values(optional, line, &rest[kept..], language)
+                                    .ok()
+                                    .map(|given| (kept, given))
+                            })
+                            .ok_or_else(bad)?;
+                        tail = Some(given);
+                        taken
                     } else {
-                        let (word, tail) = rest.split_first().ok_or_else(bad)?;
-                        rest = tail;
-                        word.text
+                        1
                     };
-                    if !arg.takes_text(text) {
-                        let too_long = u16::try_from(text.len())
-                            .map_or(true, |len| f64::from(len) > arg.range.1);
-                        return Err(if too_long {
-                            ReadArgsError::TooLong {
-                                label: arg.label.clone(),
-                                max: arg.range.1.to_string(),
-                            }
-                        } else {
-                            bad()
-                        });
+                    let (mine, after) = rest.split_at_checked(taken).ok_or_else(bad)?;
+                    rest = if takes_rest { &[] } else { after };
+                    if arg.kind == ArgView::PLAYER {
+                        self.player_named(&joined(mine), &known)?
+                    } else {
+                        let text = run_of_line(line, mine).ok_or_else(bad)?;
+                        Self::text_value(arg, text)?
                     }
-                    Value::Text(text.to_owned())
                 }
-                kind => {
-                    let (word, tail) = rest.split_first().ok_or_else(bad)?;
-                    rest = tail;
-                    let word = word.text;
-                    match kind {
-                        ArgView::CHOICE => Value::Choice(
-                            arg.choices
-                                .iter()
-                                .position(|(w, _)| w.eq_ignore_ascii_case(word))
-                                .or_else(|| {
-                                    word.parse::<usize>()
-                                        .ok()
-                                        .and_then(|n| n.checked_sub(1))
-                                        .filter(|&n| n < arg.choices.len())
-                                })
-                                .ok_or_else(bad)?,
-                        ),
-                        ArgView::NUMBER => Value::Number(
-                            word.replace(',', ".")
-                                .parse::<f64>()
-                                .ok()
-                                .filter(|n| n.is_finite() && *n >= arg.range.0 && *n <= arg.range.1)
-                                .ok_or_else(bad)?,
-                        ),
-                        _ => {
-                            Value::Toggle(toggle_word(word, &self.texts, language).ok_or_else(bad)?)
-                        }
-                    }
+                _ => {
+                    let (word, after) = rest.split_first().ok_or_else(bad)?;
+                    rest = after;
+                    self.word_value(arg, word.text, language).ok_or_else(bad)?
                 }
             };
             values.push(value);
         }
-        if !rest.is_empty() {
-            return Err(bad());
-        }
+        let tail = match tail {
+            Some(given) => given,
+            None => self.optional_values(optional, line, rest, language)?,
+        };
+        values.extend(tail);
         Ok(values)
+    }
+
+    /// `text` as the value of the text argument `arg`, or why it takes
+    /// none: too long, or empty or with a control character.
+    fn text_value(arg: &Arg, text: &str) -> Result<Value, ReadArgsError> {
+        if arg.takes_text(text) {
+            return Ok(Value::Text(text.to_owned()));
+        }
+        let too_long = u16::try_from(text.len()).map_or(true, |len| f64::from(len) > arg.range.1);
+        Err(if too_long {
+            ReadArgsError::TooLong {
+                label: arg.label.clone(),
+                max: arg.range.1.to_string(),
+            }
+        } else {
+            ReadArgsError::Usage
+        })
     }
 
     /// The one player named `name` among those online and `listed`.
@@ -515,6 +611,10 @@ impl Registry {
                 }
             }
             players.sort_by_key(|(_, name, _)| name.to_lowercase());
+            if d.action.with_self {
+                let on = switched.iter().any(|(k, _)| *k == player.key);
+                players.insert(0, (player.key, player.name.clone(), on));
+            }
             for (key, name) in &known {
                 if !players.iter().any(|(k, _, _)| k == key) {
                     players.push((*key, name.clone(), false));
@@ -536,8 +636,12 @@ impl Registry {
                     .map(|(_, label)| self.say(label, language, &[]))
                     .collect(),
                 players: if arg.kind == ArgView::PLAYER {
-                    others
-                        .iter()
+                    let viewer = (player.key, player.name.clone());
+                    d.action
+                        .with_self
+                        .then_some(&viewer)
+                        .into_iter()
+                        .chain(others)
                         .chain(&known)
                         .take(MAX_PLAYERS)
                         .cloned()
@@ -577,6 +681,24 @@ impl Registry {
         window.render(&|key, values| self.say(key, language, values), &entries)
     }
 
+    /// Forgets window `id` as `player` holds it, their client having closed
+    /// it, or with an empty id every window of theirs, since they left;
+    /// then tells the mod's own function, out of the lock.
+    pub(super) fn window_closed(&self, player: PlayerKey, id: &str) {
+        {
+            let mut kept = self.windows.relock_write();
+            if id.is_empty() {
+                kept.forget_player(player);
+            } else {
+                kept.forget(id, &[player]);
+            }
+        }
+        let closed = self.closed.relock_read().clone();
+        if let Some(closed) = closed {
+            closed(player, Some(id).filter(|id| !id.is_empty()));
+        }
+    }
+
     /// Runs action `id` for `player` from the interface, on the object
     /// `target` the client named, if any.
     pub(super) fn run_from_interface(
@@ -589,13 +711,19 @@ impl Registry {
     ) -> Outcome {
         let declared = self.declared();
         match declared.iter().find(|d| d.action.id == id) {
-            None => Outcome::refused(self.say("actions.unknown", language, &[("word", id)])),
+            None => Outcome::refused(self.say(
+                "actions.unknown",
+                language,
+                &[("word", id), ("help", "help")],
+            )),
             Some(d) if !Self::allowed(d, player) => {
                 Outcome::refused(self.say("actions.denied", language, &[]))
             }
             Some(d) => match sheet::decode_args(args) {
                 None => Outcome::refused(self.say("actions.denied", language, &[])),
                 Some(mut values) => {
+                    let left_out = d.action.args.iter().skip(values.len());
+                    values.extend(left_out.map_while(|arg| arg.default.clone()));
                     match self.name_players(d, player, &mut values, language, target) {
                         Ok(()) => self.run(d, player, &values, language, Via::Interface, target),
                         Err(why) => Outcome::refused(self.refusal(&why, &d.action, language)),
@@ -667,8 +795,14 @@ impl Registry {
     }
 }
 
-/// Whether `value` fits `arg`'s type and range.
+/// Whether `value` fits `arg`: its type and range, or the default the
+/// argument takes when a typed line leaves it out.
 pub(super) fn fits(value: &Value, arg: &Arg) -> bool {
+    arg.default.as_ref() == Some(value) || takes(value, arg)
+}
+
+/// Whether `value` is of `arg`'s type and within its range.
+fn takes(value: &Value, arg: &Arg) -> bool {
     match (value, arg.kind) {
         (Value::Player { .. }, ArgView::PLAYER) | (Value::Toggle(_), ArgView::TOGGLE) => true,
         (Value::Choice(index), ArgView::CHOICE) => *index < arg.choices.len(),
@@ -740,15 +874,63 @@ mod tests {
     }
 
     #[test]
-    fn the_rest_of_a_line_keeps_its_spaces_and_drops_the_quotes_of_one_run() {
+    fn a_run_of_a_line_keeps_its_spaces_and_drops_the_quotes_of_one_run() {
         let line = "say  two  spaces ";
         let all = words(line);
-        assert_eq!(rest_of_line(line, &all[1..]), Some("two  spaces"));
+        assert_eq!(run_of_line(line, &all[1..]), Some("two  spaces"));
         let quoted = r#"say "Hi all""#;
-        assert_eq!(rest_of_line(quoted, &words(quoted)[1..]), Some("Hi all"));
+        assert_eq!(run_of_line(quoted, &words(quoted)[1..]), Some("Hi all"));
         let mixed = r#"say "Hi" all"#;
-        assert_eq!(rest_of_line(mixed, &words(mixed)[1..]), Some(r#""Hi" all"#));
-        assert_eq!(rest_of_line("say", &[]), None);
+        assert_eq!(run_of_line(mixed, &words(mixed)[1..]), Some(r#""Hi" all"#));
+        assert_eq!(run_of_line("say", &[]), None);
+        let counted = r#"give Stone  "Axe" 5"#;
+        let all = words(counted);
+        assert_eq!(
+            run_of_line(counted, &all[1..3]),
+            Some(r#"Stone  "Axe""#),
+            "a run that stops before the last word keeps its closing quote"
+        );
+        let unclosed = r#"say "no end"#;
+        assert_eq!(words(unclosed)[1].to, unclosed.len());
+    }
+
+    #[test]
+    fn only_the_last_arguments_may_be_optional_and_each_takes_its_default() {
+        let count = || Arg::number("Count", 1.0..=99.0, 1.0);
+        let one = Value::Number(1.0);
+        assert_eq!(optional_fault(&[]), None);
+        assert_eq!(
+            optional_fault(&[Arg::text("Item", 8), count().optional(one.clone())]),
+            None
+        );
+        assert_eq!(
+            optional_fault(&[Arg::text("Why", 8).optional(Value::Text(String::new()))]),
+            None,
+            "an empty text may stand for a text left out"
+        );
+        let first = optional_fault(&[count().optional(one.clone()), Arg::text("Item", 8)]);
+        assert!(first.unwrap().contains("only its last arguments"));
+        let note = || Arg::text("Note", 8).optional(Value::Text(String::new()));
+        let mid = optional_fault(&[note(), count().optional(one.clone())]).unwrap();
+        assert!(mid.contains("an optional text must be its last"), "{mid}");
+        assert_eq!(
+            optional_fault(&[count().optional(one.clone()), note()]),
+            None
+        );
+        let far = optional_fault(&[count().optional(Value::Number(100.0))]).unwrap();
+        assert!(far.contains("argument 1"), "{far}");
+        let other = optional_fault(&[Arg::text("Item", 8), count().optional(Value::Toggle(true))]);
+        assert!(other.unwrap().contains("argument 2"));
+        let who = Value::Player {
+            key: PlayerKey::new(7),
+            name: "Ann".into(),
+        };
+        assert!(optional_fault(&[Arg::player("Player").optional(who)]).is_some());
+        let blank = optional_fault(&[count().optional(Value::Text(String::new()))]);
+        assert!(
+            blank.unwrap().contains("argument 1"),
+            "an empty text stands only for a text"
+        );
     }
 
     #[test]

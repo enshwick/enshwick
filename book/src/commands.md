@@ -13,9 +13,11 @@ administrators and remote tools then type them.
 
 ## Name the actions as commands
 
-Call `Actions::commands` once during `init`, with a full name and a shorter
-alias. Each is 1 to 32 lowercase letters, digits and hyphens. Neither may be
-`enshwick` or `help`.
+Call `Actions::commands` once during `init`, with a short alias. The
+command's name is the part of the mod's id after the author: the mod
+`you.admin-tools` gets `/admin-tools`. The alias is 1 to 32 lowercase
+letters, digits and hyphens, shorter than the name, and neither `enshwick`
+nor `help`.
 
 ```rust
 use enshwick::actions::{Action, Arg, Outcome, Value};
@@ -25,13 +27,18 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let actions = load.actions(Texts::default())?;
     actions.add(Action::new("online", "Players online"), |_| Outcome::done("2 online"))?;
     actions.add(
-        Action::new("kick", "Kick a player").admins().arg(Arg::player("Player")),
+        Action::new("kick", "Kick a player")
+            .group("Players")
+            .help("Removes the player from the server.")
+            .admins()
+            .arg(Arg::player("Player")),
         |request| match request.args {
             [Value::Player { name, .. }] => Outcome::done(format!("Kicked {name}")),
             _ => Outcome::refused("Name a player"),
         },
     )?;
-    actions.commands("admin-tools", "adl")
+    // In the mod `you.admin-tools`: `/admin-tools` and `/adm`.
+    actions.commands("adm")
 }
 ```
 
@@ -43,23 +50,44 @@ end)
 actions:add({
     id = "kick",
     label = "Kick a player",
+    group = "Players",
+    help = "Removes the player from the server.",
     admins = true,
     args = { enshwick.actions.player("Player") },
 }, function(request)
     return enshwick.actions.done(`Kicked {request:args()[1].Player.name}`)
 end)
-actions:commands("admin-tools", "adl")
+actions:commands("adm")
 ```
 
-Now `/admin-tools online` and `/adl online` both run the action named online.
+Now `/admin-tools online` and `/adm online` both run the action named online.
 The words after the action's id are its values, as on the
-[console](actions.md#from-the-console). So `/adl kick Ann` kicks the player
+[console](actions.md#from-the-console). So `/adm kick Ann` kicks the player
 online named Ann. A player the action
 [knows while offline](actions.md#players-who-are-offline) is named the same
 way. A last text argument takes the rest of the line, as in
-`/adl say Restart in five minutes`, and a text before another value takes
-one word or a `"quoted run"`. `/adl help` lists the actions the caller may
-run.
+`/adm say Restart in five minutes`, and a text before another value takes
+one word or a `"quoted run"`. The last arguments of an action may be
+[optional](actions.md#optional-arguments).
+
+## Help and mistyped lines
+
+The platform writes every mod's help from the actions the mod declares. A
+mod cannot declare an action named `help`.
+
+| The caller types | The reply |
+| --- | --- |
+| `/adm` or `/adm help` | a line naming the mod, then one line for each action the caller may run: its id, its arguments and its label |
+| `/adm help kick` | the line of `kick`, then the text of `Action::help` |
+| `/adm kik Ann` | no such action, the closest ids the caller may run, and `/adm help` |
+| `/adm kick` | the line of `kick`, since a value is missing |
+
+`Action::group` names the group of an action, a text key. The help lists
+the actions without a group first, then each group under its name, in the
+order the mod declared them. The first line shows the mod's name as the
+Mods screen shows it, and the command as the caller typed it. An optional
+argument stands in square brackets. A long help reaches the chat whole while the chat has room. Replies to typed
+commands take at most half of the 256 lines waiting to be posted.
 
 A command is a second way to an action, never the only one. Players reach
 every action through the mod's controls and panels too.
@@ -71,7 +99,7 @@ callers type commands:
 
 | Caller | Runs as | The reply goes |
 | --- | --- | --- |
-| A player, in chat | that player, with their permissions | to that player alone: one line as a notice, several in chat |
+| A player, in chat | that player, with their permissions | to that player alone: one line of a done action as a notice, several lines and every refusal in chat |
 | The server's console window | the console, with every permission and no character | to the console |
 | A remote tool, through another mod | a caller that mod names, with the permissions it gives | back to that mod |
 
@@ -87,14 +115,22 @@ with a line saying so. Its actions keep their other paths.
 The handler reads where a run came from in `request.via`. Commands typed in
 chat arrive as `Via::Chat`, and those another mod runs as `Via::Remote`.
 
-## When two mods want the same word
+## When two mods want the same alias
 
-The first mod to name a word keeps it. When a later mod names that word as
-its command name or alias, the loader turns off only the later mod's
-commands. The log and the Mods screen name both mods. Its call returns `Ok`,
-so the mod runs on, and its actions keep their other paths.
+An alias goes to the first mod that asks for it. A later mod that asks for
+the same word runs by its full name alone: `/admin-tools online` works, and
+its alias does not. Nothing turns off. The log and the Mods screen say once
+which mod has the alias, and `commands::list` shows the later mod without
+one.
 
-A word that is another mod's id is taken too.
+A word that is another mod's id or command name is never an alias, whether
+or not that mod names commands. So a mod's full name always reaches it.
+
+Two mods of different authors may share a name, such as `you.tools` and
+`they.tools`. The first one to name commands keeps `/tools`. The loader
+turns off only the later mod's commands, and the log and the Mods screen
+name both mods. Its call returns `Ok`, and its actions keep their other
+paths.
 
 ## Run any mod's command for a remote caller
 
@@ -116,7 +152,7 @@ fn on_line(line: &str) -> String {
 ```
 
 ```luau
-local reply = enshwick.commands.run("/adl online", "rcon 10.0.0.2", { "CanKickBan" })
+local reply = enshwick.commands.run("/adm online", "rcon 10.0.0.2", { "CanKickBan" })
 enshwick.log.info(reply.text)
 ```
 
@@ -182,6 +218,8 @@ loader does:
 
 - `type_in_chat(&player, language, line)` types a line in chat. It returns
   the mod's reply, or `None` for a line that stays in chat.
-- `other_mod_commands(mod_id, name, alias)` adds another mod's command set.
-  A line to it gets the `console_answer` of the word used.
+- `other_mod_commands(mod_id, alias)` adds a mod loaded before the mod under
+  test, and `later_mod_commands(mod_id, alias)` one loaded after it. Each
+  names its commands with that alias. A line to it gets the `console_answer`
+  of the word used.
 - `rules_changed()` counts calls of `Actions::rules_changed`.

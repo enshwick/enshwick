@@ -216,6 +216,44 @@ impl FakeHost {
         self.resource(ITEM_REGISTRY.key_by_hash(hash), blob.into_bytes())
     }
 
+    /// Gives each vanilla item of `tags` the tag of its name, as the game's
+    /// item infos carry it: for
+    /// [`vanilla_name_tag`](crate::content::items::vanilla_name_tag) and
+    /// [`vanilla::item_by_display_name`](crate::content::vanilla::item_by_display_name),
+    /// which read the texts [`game_text`](Self::game_text) gives under the
+    /// tag's hash. Call [`items`](Self::items) first: it gives the layout.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::Guid;
+    /// use enshwick::i18n::Language;
+    ///
+    /// let (glider, name) = (Guid([7; 16]), Guid([9; 16]));
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .items()
+    ///     .vanilla_items(&[(glider, "Tool_Glider_T1")])
+    ///     .vanilla_item_names(&[(glider, name)])
+    ///     .game_text(name.fnv1a(), Language::EN_US, "Glider")
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn vanilla_item_names(self, tags: &[(Guid, Guid)]) -> Self {
+        use crate::content::EngineFacts;
+        use crate::engine_ids as ids;
+
+        let (Ok(at), Ok(hash)) = (self.offset(ids::ITEM_INFO_NAME), self.hash(ids::ITEM_INFO))
+        else {
+            return self;
+        };
+        tags.iter().fold(self, |host, (item, tag)| {
+            let mut info = vec![0; at + 16];
+            info[at..].copy_from_slice(&tag.0);
+            host.resource(item.key_by_hash(hash), info)
+        })
+    }
+
     /// Gives the game the text `text` for tag `id` in `language`, for
     /// `game_text`; a tag without a text in a language falls back to
     /// [`Language::EN_US`](crate::i18n::Language::EN_US) as the game's does.

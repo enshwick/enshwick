@@ -325,8 +325,9 @@ pub struct FakeHost {
     no_entity_commands: bool,
     base_code: BaseCode,
     console_answers: FxHashMap<String, String>,
-    /// Other mods' command names: mod id, name and alias.
-    other_commands: Vec<(String, String, String)>,
+    /// Other mods' commands: mod id, the alias each asks, and whether it
+    /// loads after the mod under test.
+    other_commands: Vec<(String, String, bool)>,
     placed: Vec<(u32, EntityPlace)>,
     world_key: Option<String>,
     fog: Option<(crate::abi::FogInfo, Vec<u8>)>,

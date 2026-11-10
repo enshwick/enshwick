@@ -69,9 +69,83 @@ mod tests {
                 .known(|_ask| known()),
                 ran,
             )?;
-            actions.commands("bans", "b")?;
+            self_and_optional(&actions, ran)?;
+            actions.commands("b")?;
             Ok(Self)
         }
+    }
+
+    /// The actions that offer the player who looks, and those with optional
+    /// arguments, each run by `ran`.
+    fn self_and_optional(
+        actions: &enshwick::actions::Actions,
+        ran: impl Fn(&enshwick::actions::Request<'_>) -> Outcome + Send + Sync + Copy + 'static,
+    ) -> Result<(), Off> {
+        actions.add(
+            Action::per_player("shield", "Shield", |_ask, _subject| {
+                vec![(PlayerKey::new(9), "Root".into())]
+            })
+            .admins()
+            .with_self(),
+            ran,
+        )?;
+        actions.add(
+            Action::new("heal", "Heal")
+                .admins()
+                .with_self()
+                .arg(Arg::player("Player")),
+            ran,
+        )?;
+        let count = || Arg::number("Count", 1.0..=999.0, 1.0).optional(Value::Number(1.0));
+        actions.add(
+            Action::new("give", "Give")
+                .admins()
+                .arg(Arg::player("Player"))
+                .arg(Arg::text("Item", 40))
+                .arg(count())
+                .known(|_ask| known()),
+            ran,
+        )?;
+        actions.add(
+            Action::new("kit", "Kit")
+                .admins()
+                .arg(Arg::choice("Kind", &[("basic", "Basic"), ("pro", "Pro")]))
+                .arg(count())
+                .arg(Arg::toggle("Bound").optional(Value::Toggle(false))),
+            ran,
+        )?;
+        actions.add(
+            Action::new("warn", "Warn")
+                .admins()
+                .arg(Arg::player("Player"))
+                .arg(Arg::number("Minutes", 1.0..=60.0, 1.0).optional(Value::Number(10.0)))
+                .arg(Arg::text("Reason", 40).optional(Value::Text(String::new())))
+                .known(|_ask| known()),
+            ran,
+        )?;
+        let mid = Action::new("mid", "Mid")
+            .arg(Arg::text("Note", 8).optional(Value::Text(String::new())))
+            .arg(count());
+        assert!(
+            actions.add(mid, ran).is_err(),
+            "an optional text that is not the last argument"
+        );
+        let early = Action::new("early", "Early")
+            .arg(count())
+            .arg(Arg::text("Item", 40));
+        let refused = actions.add(early, ran).unwrap_err();
+        assert!(
+            format!("{refused:?}").contains("only its last arguments"),
+            "{refused:?}"
+        );
+        let far = Arg::number("Count", 1.0..=9.0, 1.0).optional(Value::Number(10.0));
+        assert!(
+            actions
+                .add(Action::new("far", "Far").arg(far), ran)
+                .is_err(),
+            "a default out of the argument's range"
+        );
+        Ok(())
     }
 
     enshwick::test::declare_mod!(
@@ -163,6 +237,183 @@ mod tests {
         );
         assert!(chat("/b tag fox").unwrap().starts_with('0'), "no hours");
         assert!(runs().is_empty(), "nothing refused reached the handler");
+    }
+
+    #[test]
+    fn a_text_before_optional_arguments_takes_the_line_up_to_the_words_they_read() {
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let loader = start(&[root]);
+        let chat = |line: &str| loader.type_in_chat(&root, 0, line);
+
+        for line in [
+            "/b give Bob Stone Axe",
+            "/b give Bob Stone Axe 5",
+            "/b give Bob 5",
+            r#"/b give Bob "Stone 5""#,
+            r#"/b give Bob "Year 2000" 3"#,
+            "/b give Bob Stone Axe 5000",
+            "/b give Bob Stone  Axe  7 ",
+        ] {
+            assert_eq!(chat(line).as_deref(), Some("1ok"), "{line}");
+        }
+        let given = |item: &str, count: f64| vec![bob(), text(item), Value::Number(count)];
+        assert_eq!(
+            runs(),
+            [
+                given("Stone Axe", 1.0),
+                given("Stone Axe", 5.0),
+                given("5", 1.0),
+                given("Stone 5", 1.0),
+                given("Year 2000", 3.0),
+                given("Stone Axe 5000", 1.0),
+                given("Stone  Axe", 7.0),
+            ],
+            "a count out of its range stays in the text; quotes keep a number in it"
+        );
+        assert_eq!(
+            chat("/b give Bob").as_deref(),
+            Some("0Write it so: give <player> <Item> [1-999]: Give"),
+            "an optional argument shows in square brackets"
+        );
+        assert!(runs().is_empty());
+    }
+
+    #[test]
+    fn optional_arguments_after_one_word_arguments_fill_in_order() {
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let loader = start(&[root]);
+        let chat = |line: &str| loader.type_in_chat(&root, 0, line);
+        let kit = |count: f64, bound: bool| {
+            vec![Value::Choice(1), Value::Number(count), Value::Toggle(bound)]
+        };
+
+        for line in ["/b kit pro", "/b kit pro 3", "/b kit pro 3 on"] {
+            assert_eq!(chat(line).as_deref(), Some("1ok"), "{line}");
+        }
+        assert_eq!(runs(), [kit(1.0, false), kit(3.0, false), kit(3.0, true)]);
+        for line in [
+            "/b kit pro on",
+            "/b kit pro 3 on more",
+            "/b kit",
+            "/b kit 3",
+        ] {
+            assert_eq!(
+                chat(line).as_deref(),
+                Some("0Write it so: kit <basic|pro> [1-999] [on|off]: Kit"),
+                "{line}"
+            );
+        }
+
+        let run = |args: &str| loader.ask_actions(ActionCall::RUN, &root, 0, "kit", args);
+        assert_eq!(run("c0").as_deref(), Some("1ok"), "the interface too");
+        assert_eq!(run("c0\tn4").as_deref(), Some("1ok"));
+        assert_eq!(
+            runs(),
+            [
+                vec![Value::Choice(0), Value::Number(1.0), Value::Toggle(false)],
+                vec![Value::Choice(0), Value::Number(4.0), Value::Toggle(false)],
+            ]
+        );
+        assert!(
+            run("").unwrap().starts_with('0'),
+            "the kind is not optional"
+        );
+    }
+
+    #[test]
+    fn an_action_offers_the_player_who_looks_only_when_it_asks_to() {
+        let ann = player(3, 7, "Ann", 0);
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let loader = start(&[ann, root]);
+        let sheet = decode(
+            &loader
+                .ask_actions(ActionCall::SHEET, &root, 0, "", "")
+                .unwrap(),
+        );
+        let entry = |id: &str| sheet.iter().find(|e| e.id == id).unwrap();
+        let viewer = PlayerKey::new(9);
+
+        assert_eq!(
+            entry("shield").players,
+            [
+                (viewer, "Root".to_owned(), true),
+                (PlayerKey::new(7), "Ann".to_owned(), false),
+            ],
+            "the viewer first, switched as the mod says"
+        );
+        assert_eq!(
+            entry("heal").args[0].players[..2],
+            [
+                (viewer, "Root".to_owned()),
+                (PlayerKey::new(7), "Ann".to_owned())
+            ]
+        );
+        assert!(
+            entry("allowed")
+                .players
+                .iter()
+                .all(|(key, _, _)| *key != viewer),
+            "a list that did not ask holds only the others"
+        );
+        assert!(
+            entry("ban").args[0]
+                .players
+                .iter()
+                .all(|(key, _)| *key != viewer),
+            "and so does a player argument"
+        );
+
+        let flip = loader.ask_actions(ActionCall::RUN, &root, 0, "shield", "p0000000000000009\tb0");
+        assert_eq!(flip.as_deref(), Some("1ok"));
+        let root_value = Value::Player {
+            key: viewer,
+            name: "Root".into(),
+        };
+        assert_eq!(runs(), [vec![root_value, Value::Toggle(false)]]);
+    }
+
+    #[test]
+    fn a_last_optional_text_takes_what_is_left_and_never_a_word_of_the_argument_before() {
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let loader = start(&[root]);
+        let chat = |line: &str| loader.type_in_chat(&root, 0, line);
+
+        for line in [
+            "/b warn Bob",
+            "/b warn Bob 5",
+            "/b warn Bob 5 spamming a lot",
+            "/b warn Bob spamming 5",
+            "/b warn Bob 99 times",
+        ] {
+            assert_eq!(chat(line).as_deref(), Some("1ok"), "{line}");
+        }
+        let warned = |minutes: f64, reason: &str| vec![bob(), Value::Number(minutes), text(reason)];
+        assert_eq!(
+            runs(),
+            [
+                warned(10.0, ""),
+                warned(5.0, ""),
+                warned(5.0, "spamming a lot"),
+                warned(10.0, "spamming 5"),
+                warned(10.0, "99 times"),
+            ],
+            "the player keeps its one word; the text starts where a word reads as no minutes"
+        );
+        assert_eq!(
+            chat("/b warn Nobody 5 why").as_deref(),
+            Some("0No player named Nobody."),
+            "the player is the first word, never the line less its last word"
+        );
+        assert_eq!(
+            chat("/b warn").as_deref(),
+            Some("0Write it so: warn <player> [1-60] [Reason]: Warn")
+        );
+        let long = format!("/b warn Bob {}", "x".repeat(41));
+        assert_eq!(
+            chat(&long).as_deref(),
+            Some("0Reason takes at most 40 bytes.")
+        );
+        assert!(runs().is_empty());
     }
 
     #[test]

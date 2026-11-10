@@ -100,7 +100,9 @@ Portuguese, then to English.
 | ----------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `Action::new(id, label)`            | a button; `id` is 1 to 32 of `[a-z0-9-]`, its name on the console                                |
 | `Action::per_player(id, label, on)` | a list of players with a switch each; `on` names the players switched on                         |
-| `.help(key)`                        | a line under the label and in the console's help                                                 |
+| `.help(key)`                        | a line under the label, and what `help <id>` answers on a typed line                             |
+| `.group(key)`                       | the group the [help](commands.md#help-and-mistyped-lines) lists it under                          |
+| `.with_self()`                      | its players include the player who looks, first; without it they hold only the others            |
 | `.arg(Arg::...)`                    | an argument, in order; its kinds follow this table                                               |
 | `.allow(fn)`, `.admins()`           | who sees the action and may run it                                                               |
 | `.needs(permission)`                | only players the game's user groups give that [permission](commands.md#limit-an-action-to-a-permission) |
@@ -121,6 +123,8 @@ is a table of the builder's fields:
 - `id`
 - `label`
 - `help`
+- `group`
+- `with_self`
 - `args`
 - `admins`
 - `needs`, a list of permissions such as `{ "CanEditBase" }`
@@ -176,7 +180,68 @@ Each argument is one of five kinds:
   character, such as a ban reason or an announcement.
 
 A list takes the players online and the ones `on` names, so a player
-switched on can be switched off while away.
+switched on can be switched off while away. A list and a player argument
+offer the other players. With `.with_self()` they offer the player who
+looks too, first, for a switch or an action a player uses on themselves.
+
+### Optional arguments
+
+`Arg::optional(default)` lets a typed line leave an argument out. It then
+takes `default`. In Luau it is the method `:optional(value)` of an argument.
+
+| Rule | Detail |
+| --- | --- |
+| Which arguments | only the last ones of an action; `actions.add` refuses any other |
+| Which kinds | a choice, a number, on or off, a text; never a player. A text only as the last argument |
+| The default | a value the argument takes, or an empty text |
+| In the help | the argument stands in square brackets: `give <player> <Item> [1-999]` |
+| From the interface | values left out at the end take their defaults too |
+
+A text or a player that only optional arguments follow takes the rest of
+the line up to them. The last words go to the optional arguments, in
+order, as far as each reads as its argument:
+
+| The line, for `give <player> <Item> [1-999]` | The item | The count |
+| --- | --- | --- |
+| `give Ann Stone Axe` | `Stone Axe` | 1 |
+| `give Ann Stone Axe 5` | `Stone Axe` | 5 |
+| `give Ann 5` | `5` | 1 |
+| `give Ann "Stone 5"` | `Stone 5` | 1 |
+| `give Ann Stone Axe 5000` | `Stone Axe 5000` | 1 |
+
+An optional text is always the last argument, and takes what is left of the
+line itself. The arguments before it then take one word each, or a run in
+double quotes:
+
+| The line, for `warn <player> [1-60] [Reason]` | The minutes | The reason |
+| --- | --- | --- |
+| `warn Ann` | the default | none |
+| `warn Ann 5 spamming a lot` | 5 | `spamming a lot` |
+| `warn Ann spamming 5` | the default | `spamming 5` |
+
+```rust
+use enshwick::actions::{Action, Arg, Value};
+
+let give = Action::new("give", "Give an item")
+    .admins()
+    .arg(Arg::player("Player"))
+    .arg(Arg::text("Item", 64))
+    .arg(Arg::number("Count", 1.0..=999.0, 1.0).optional(Value::Number(1.0)));
+assert_eq!(give.id(), "give");
+```
+
+```luau
+local give = {
+    id = "give",
+    label = "Give an item",
+    admins = true,
+    args = {
+        enshwick.actions.player("Player"),
+        enshwick.actions.text("Item", 64),
+        enshwick.actions.number("Count", 1, 999, 1):optional({ Number = 1 }),
+    },
+}
+```
 
 ## Players who are offline
 
@@ -215,7 +280,8 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
             _ => Outcome::refused("Name a player"),
         },
     )?;
-    actions.commands("bans", "b")
+    // In the mod `you.bans`: `/bans` and `/b`.
+    actions.commands("b")
 }
 ```
 
@@ -233,10 +299,11 @@ actions:add({
     local args = request:args()
     return enshwick.actions.done(`Banned {args[1].Player.name}: {args[2].Text}`)
 end)
-actions:commands("bans", "b")
+actions:commands("b")
 ```
 
-`/b ban Bob griefing on the coast` bans Bob while he is offline.
+In the mod `you.bans`, `/b ban Bob griefing on the coast` bans Bob while he
+is offline.
 
 ## Handling
 
@@ -355,10 +422,13 @@ or `off`, or a text. A list takes a player and `on` or `off`. For example:
 `you.trading-post access Ann on`. The last text argument takes the rest of
 the line as typed. A text argument before another value takes one word, or
 a run in double quotes: `you.tags tag "red fox" 3`. The server refuses a
-longer text than the argument takes: "Reason takes at most 120 bytes." `<mod id> help` lists the actions with
-their words. The mod's id in front keeps two mods' actions apart, see
+longer text than the argument takes: "Reason takes at most 120 bytes." The
+last arguments may be [optional](#optional-arguments). `<mod id> help`
+lists the actions with their words, and `<mod id> help <action>` explains
+one ([Help and mistyped lines](commands.md#help-and-mistyped-lines)). The
+mod's id in front keeps two mods' actions apart, see
 [how ids are namespaced](concepts/ids.md). A mod's command name or alias
-works in place of its id, as in `/adl online`. The console holds every
+works in place of its id, as in `/adm online`. The console holds every
 permission and has no character. That is why `request.player.entity` is 0
 and `.admins()` lets it in. It is also why an `.at` that looks for something
 near the player finds nothing. Answers are in English.
@@ -400,6 +470,38 @@ different windows under one id.
 `actions.close(id, &players)` closes it on their clients. A mod keeps the
 newest 1,024 windows, counted per player, each up to 64 items. A player
 whose window went past that sees it close at their next update.
+
+| Call | Where the window shows after it |
+| --- | --- |
+| `actions.show(window, &players)` | on every client named: it opens, or updates where it shows |
+| `actions.update(window, &players)` | only on the clients named that still show it; it opens for no one |
+| `actions.close(id, &players)` | on none of the clients named |
+
+Use `update` for a list that changes while players hold it, such as a
+roster when a player joins. A player who closed the window does not get it
+back. When a client closes a window, its player leaves, or the window
+renders nothing for that player, the mod forgets that window for the player. `actions.on_closed(fn)` tells the mod of it,
+with the player's account key and the window's id, or no id for a player
+who left:
+
+```rust
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
+    actions.on_closed(|player, window| match window {
+        Some(id) => enshwick::info!("{player:?} closed {id}"),
+        None => enshwick::info!("{player:?} left"),
+    });
+    Ok(())
+}
+```
+
+```luau
+local actions = enshwick.actions.actions(enshwick.i18n.parse(""))
+actions:on_closed(function(player, window)
+    enshwick.log.info(`{player} closed {window or "every window: they left"}`)
+end)
+```
+
 A window carries at most 7,168 bytes
 to one player. When it does not fit, the players its actions' arguments
 offer go first, and the player names one by typing. Then items past the
@@ -469,7 +571,8 @@ The server decides what each player sees:
   switches as they are now.
 - The player closes a window on their client with Close. The newest window
   shows; the one under it shows when it closes. The server renders a closed
-  window for that player again only when the mod shows it again.
+  window for that player again only when the mod shows it again, and the
+  mod hears of the close.
 - A client that loses its server closes every window.
 
 A client without Enshwick gets no window and plays on. A dedicated server, a
@@ -498,8 +601,11 @@ the loader does:
 - `ask_actions(ActionCall::SHEET, &player, language, "", "")` returns the
   mod's sheet, which `actions::sheet::decode` reads.
 - `carried_windows(&player, language)` returns the windows that player's
-  client holds after the mod's shows and closes, which
+  client holds after the mod's shows, updates and closes, which
   `actions::window::decode` reads.
+- `close_window(&player, id)` closes a window as that player's client does,
+  and `player_left(key)` makes the player leave as far as windows go. The
+  mod hears of both as the loader tells it.
 - `console::run("<mod id> <action> ...")` runs the console form. The fake
   hands a line to the mod's own actions unless `console_answer` gave its first
   word an answer.

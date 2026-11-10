@@ -28,6 +28,10 @@ mod experience;
 #[cfg(feature = "typed")]
 pub use experience::{ExperienceBalanceValue, experience_values};
 
+mod names;
+
+pub use names::{VanillaItem, VanillaRecipe, item_by_display_name, items, recipes};
+
 /// Reads one resource of the game's archive.
 type Reader = Box<dyn Fn(ResourceKey) -> Option<Vec<u8>> + Send + Sync>;
 
@@ -941,33 +945,12 @@ fn registry_names(layout: &ItemLayout, registry: &[u8]) -> Option<Names> {
     Some(out)
 }
 
-/// Names in `names` that look like `name`: the same but for case first,
-/// then those that hold it, then those a few edits away, ignoring case.
+/// Names in `names` that look like `name`, as [`crate::near::near`] finds
+/// them.
 fn near(names: &Names, name: &str) -> Vec<String> {
-    let wanted = name.to_ascii_lowercase();
-    let mut scored: Vec<(usize, &String)> = names
-        .keys()
-        .filter_map(|n| {
-            let lower = n.to_ascii_lowercase();
-            let score = if lower == wanted {
-                0
-            } else if !wanted.is_empty() && lower.contains(&wanted) {
-                1
-            } else {
-                let edits = strsim::levenshtein(&lower, &wanted);
-                if edits > 2 {
-                    return None;
-                }
-                1 + edits
-            };
-            Some((score, n))
-        })
-        .collect();
-    scored.sort();
-    scored
+    crate::near::near(name, names.keys().map(String::as_str), NEAR)
         .into_iter()
-        .take(NEAR)
-        .map(|(_, n)| n.clone())
+        .map(str::to_owned)
         .collect()
 }
 

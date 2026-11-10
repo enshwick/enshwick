@@ -414,4 +414,51 @@ mod tests {
         assert_eq!(run("shut").as_deref(), Some("1"));
         assert!(loader.carried_windows(&root, 0).is_empty());
     }
+
+    #[test]
+    fn a_script_updates_a_window_where_it_shows_and_hears_of_a_close_and_a_leave() {
+        let root = player(4, 9, "Root", true);
+        let loader = run(
+            FakeHost::new().player(root),
+            r#"
+            local actions = enshwick.actions.actions(enshwick.i18n.parse(""))
+            local function panel(n)
+                return { id = "panel", title = "Panel", items = { { Text = { key = `{n} online` } } } }
+            end
+            actions:add({ id = "open", label = "Open" }, function(request)
+                actions:show(panel(1), { request:player().key })
+                return enshwick.actions.done("")
+            end)
+            actions:add({ id = "refresh", label = "Refresh" }, function(request)
+                actions:update(panel(2), { request:player().key })
+                return enshwick.actions.done("")
+            end)
+            actions:on_closed(function(player, window)
+                enshwick.log.info(`closed {player} {window or "left"}`)
+            end)
+            "#,
+        );
+        let run = |id: &str| loader.ask_actions(ActionCall::RUN, &root, 0, id, "");
+        let shown = || {
+            let carried = loader.carried_windows(&root, 0);
+            carried
+                .first()
+                .map(|(_, text)| enshwick::actions::window::decode(text).unwrap().items[0].clone())
+        };
+        let line = |text: &str| Some(enshwick::actions::window::ItemView::Text(text.into()));
+
+        assert_eq!(run("refresh").as_deref(), Some("1"), "{:?}", loader.logs());
+        assert_eq!(shown(), None, "an update opens nothing");
+        assert_eq!(run("open").as_deref(), Some("1"));
+        assert_eq!(shown(), line("1 online"));
+        assert_eq!(run("refresh").as_deref(), Some("1"));
+        assert_eq!(shown(), line("2 online"));
+
+        loader.close_window(&root, "panel");
+        assert!(logged(&loader, "closed 9 panel"), "{:?}", loader.logs());
+        assert_eq!(run("refresh").as_deref(), Some("1"));
+        assert_eq!(shown(), None, "a closed window takes no update");
+        loader.player_left(root.key);
+        assert!(logged(&loader, "closed 9 left"), "{:?}", loader.logs());
+    }
 }

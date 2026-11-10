@@ -6,7 +6,9 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use enshwick::abi::{ActionCall, CommandInfo, Header, Status, Str};
 
-use super::{MAX_LINE, Named, Refusal, Reply, Typed, check, parse, remote_caller, reply_by, typed};
+use enshwick::command_names::{alias_asked, check};
+
+use super::{MAX_LINE, Named, Refusal, Reply, Typed, parse, remote_caller, reply_by, typed, word};
 use crate::host::Loader;
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -20,6 +22,8 @@ const MAX_PENDING: usize = 64;
 struct Pending {
     key: u64,
     owner: ModIndex,
+    /// The word that named the mod, as [`word`] reads it.
+    word: String,
     rest: String,
 }
 
@@ -49,42 +53,74 @@ static STATE: State = State {
     dropped: AtomicU32::new(0),
 };
 
-/// Names mod `owner`'s actions as the commands `/<name>` and `/<alias>`,
-/// during init. A word another mod took first turns off only this mod's
-/// commands, with a warning and a part off naming both mods.
-pub(crate) fn register(loader: &Loader, owner: ModIndex, name: &str, alias: &str) -> Status {
-    let ids: Vec<&str> = loader.mods.iter().map(|m| m.id.as_str()).collect();
+/// Names mod `owner`'s actions as commands during init: `/<name>`, the name
+/// in the mod's id, and `/<alias>`. An alias another mod held first stays
+/// that mod's, with one warning and a part off naming both mods, and this
+/// mod's commands run by their name alone. A name another mod's commands
+/// have turns off only this mod's commands, reported the same way. A mod
+/// built before names came from ids whose alias no longer fits runs its
+/// commands by their name, reported the same way too.
+pub(crate) fn register(loader: &Loader, owner: ModIndex, alias: &str) -> Status {
+    let ids: Vec<(ModIndex, &str)> = loader
+        .mods
+        .iter()
+        .enumerate()
+        .map(|(index, m)| (ModIndex::new(index), m.id.as_str()))
+        .collect();
+    let id = |index: ModIndex| ids.get(index.get()).map_or("", |(_, id)| *id);
+    let asked = loader.mods.get(owner.get()).map_or(Some(alias), |m| {
+        alias_asked(alias, &m.id, m.manifest.header.abi_minor)
+    });
     let checked = NAMED.edit(|named| {
-        check(named, &ids, owner, name, alias).map(|()| {
-            named.push(Named {
-                owner,
-                name: name.to_owned(),
-                alias: alias.to_owned(),
-            });
+        check(named, &ids, owner, asked).map(|(granted, holder)| {
+            let name = granted.name.clone();
+            named.push(granted);
+            (name, holder)
         })
     });
     match checked {
         Err(sealed) => sealed.into(),
-        Ok(Ok(())) => {
+        Ok(Ok((name, holder))) => {
             STATE.any.store(true, Ordering::Release);
+            if asked.is_none() {
+                let mine = id(owner);
+                let feature = format!("alias /{alias} of {mine}");
+                crate::host::report_off(
+                    &feature,
+                    (
+                        format!(
+                            "{feature} off: it is not shorter than /{name}, the name in the mod's id; /{name} runs its commands"
+                        ),
+                        format!("/{alias} is not shorter than /{name}; use /{name}"),
+                    ),
+                );
+            }
+            if let Some(holder) = holder {
+                let (mine, theirs) = (id(owner), id(holder));
+                let feature = format!("alias /{alias} of {mine}");
+                crate::host::report_off(
+                    &feature,
+                    (
+                        format!(
+                            "{feature} off: /{alias} is {theirs}'s; /{name} runs the commands of {mine}"
+                        ),
+                        format!("/{alias} is {theirs}'s; use /{name}"),
+                    ),
+                );
+            }
             Status::OK
         }
         Ok(Err(Refusal::Malformed)) => Status::BAD_ARGS,
         Ok(Err(Refusal::Twice)) => Status::REFUSED,
         Ok(Err(Refusal::Taken(other))) => {
-            let id = |index: ModIndex| {
-                loader
-                    .mods
-                    .get(index.get())
-                    .map_or_else(String::new, |m| m.id.clone())
-            };
             let (mine, theirs) = (id(owner), id(other));
+            let name = enshwick::commands::name_of(mine);
             let feature = format!("commands of {mine}");
             crate::host::report_off(
                 &feature,
                 (
-                    format!("{feature} off: /{name} or /{alias} is taken by {theirs}"),
-                    format!("/{name} /{alias} taken by {theirs}"),
+                    format!("{feature} off: /{name} is taken by {theirs}"),
+                    format!("/{name} taken by {theirs}"),
                 ),
             );
             Status::REFUSED
@@ -143,6 +179,7 @@ pub(crate) fn queue(loader: &Loader, key: u64, text: &str) -> bool {
             pending.push(Pending {
                 key,
                 owner,
+                word: word(text),
                 rest: rest.to_owned(),
             });
             STATE.waiting.store(true, Ordering::Release);
@@ -192,7 +229,7 @@ pub(crate) fn after_step(loader: &Loader) {
             ActionCall::CHAT,
             &player,
             language,
-            &command.rest,
+            (&command.word, &command.rest),
         ) else {
             continue;
         };
@@ -204,9 +241,9 @@ pub(crate) fn after_step(loader: &Loader) {
             command.owner.get(),
             if reply.done { "done" } else { "refused" }
         );
-        match reply_by(text, crate::chat::to_one_player()) {
+        match reply_by(text, reply.done, crate::chat::to_one_player()) {
             Reply::Chat(text) => {
-                let _queued = crate::chat::send(command.key, text);
+                let _queued = crate::chat::reply(command.key, text);
             }
             Reply::Notice(text) => crate::actions::tell(loader, command.key, &text),
             Reply::None => {}
@@ -235,7 +272,8 @@ pub(crate) fn run_remote(
     let (owner, rest) = owner_of(loader, line).ok_or(Status::MISSING)?;
     let caller = remote_caller(label, permissions);
     crate::log!(DEBUG, "{label} runs the command {line}");
-    crate::actions::command(loader, owner, ActionCall::REMOTE, &caller, 0, rest)
+    let word = word(line);
+    crate::actions::command(loader, owner, ActionCall::REMOTE, &caller, 0, (&word, rest))
         .ok_or(Status::MISSING)
 }
 
@@ -261,7 +299,7 @@ pub(crate) fn list(loader: &'static Loader) -> Vec<CommandInfo> {
         .map(|(n, id)| CommandInfo {
             header: Header::of::<CommandInfo>(),
             name: Str::new(&n.name),
-            alias: Str::new(&n.alias),
+            alias: n.alias.as_deref().map_or(Str::EMPTY, Str::new),
             mod_id: Str::new(id),
         })
         .collect()
@@ -276,6 +314,7 @@ mod tests {
         STATE.pending.relock().push(Pending {
             key: 7,
             owner: ModIndex::new(0),
+            word: "adm".to_owned(),
             rest: "tp spawn".to_owned(),
         });
         STATE.waiting.store(true, Ordering::Release);

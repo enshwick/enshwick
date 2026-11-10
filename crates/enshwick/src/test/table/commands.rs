@@ -9,15 +9,15 @@ use crate::test::table::{Registration, put_headed, text, with};
 /// What the mod did with its commands.
 #[derive(Debug, Default)]
 pub(crate) struct FakeCommands {
-    /// The name and alias it took.
-    pub(crate) named: Option<(String, String)>,
+    /// The alias it asked for its commands, once the fake took them.
+    pub(crate) asked: Option<String>,
     /// How often it said who may run its actions changed.
     pub(crate) rules_changed: u32,
     /// The strings `command_list` last handed out: name, alias, mod id.
     pub(crate) listed: Vec<[Box<str>; 3]>,
-    /// Shows and closes of the mod's windows not carried yet: account key,
-    /// window id and whether it closes.
-    pub(crate) windows: Vec<(u64, String, bool)>,
+    /// Shows, closes and updates of the mod's windows not carried yet:
+    /// account key, window id and the `close` value of the call.
+    pub(crate) windows: Vec<(u64, String, u32)>,
     /// The windows each client holds: account key, window id and text.
     pub(crate) carried: Vec<(u64, String, String)>,
 }
@@ -54,7 +54,10 @@ pub(crate) extern "system" fn action_window(
     let Some(id) = (unsafe { id.as_str() }).filter(|id| is_window_id(id)) else {
         return Status::BAD_ARGS;
     };
-    if count as usize > MAX_CALL_PLAYERS || (players.is_null() && count != 0) || close > 1 {
+    if count as usize > MAX_CALL_PLAYERS
+        || (players.is_null() && count != 0)
+        || close > crate::abi::WINDOW_UPDATE
+    {
         return Status::BAD_ARGS;
     }
     let keys: Vec<u64> = if count == 0 {
@@ -76,17 +79,12 @@ pub(crate) extern "system" fn action_window(
         }
         s.commands
             .windows
-            .extend(keys.into_iter().map(|key| (key, id.to_owned(), close == 1)));
+            .extend(keys.into_iter().map(|key| (key, id.to_owned(), close)));
         Status::OK
     })
 }
 
-#[cfg(feature = "unstable")]
-use crate::commands::MAX_LINE;
-/// The longest command line, as `commands::MAX_LINE` holds it where that
-/// module is built.
-#[cfg(not(feature = "unstable"))]
-const MAX_LINE: usize = 1024;
+use crate::command_names::{MAX_LINE, Named, Refusal, check};
 /// The game's permission bits a remote caller may hold.
 #[cfg(feature = "unstable")]
 const ALL_BITS: u8 = crate::world::PlayerPermissions::ALL_BITS;
@@ -94,34 +92,98 @@ const ALL_BITS: u8 = crate::world::PlayerPermissions::ALL_BITS;
 #[cfg(not(feature = "unstable"))]
 const ALL_BITS: u8 = u8::MAX;
 
-/// Whether `name` and `alias` are words the loader takes.
-fn fit(name: &str, alias: &str) -> bool {
-    #[cfg(feature = "unstable")]
-    return crate::commands::names_fit(name, alias);
-    #[cfg(not(feature = "unstable"))]
-    return !name.is_empty() && !alias.is_empty();
+/// One mod's commands as the loader grants them.
+struct Granted {
+    id: String,
+    set: Named<usize>,
 }
 
-pub(crate) extern "system" fn commands(_me: ModHandle, name: Str, alias: Str) -> Status {
-    let (name, alias) = (text(name), text(alias));
+impl Granted {
+    fn is_called(&self, word: &str) -> bool {
+        self.set.is_called(word)
+    }
+}
+
+/// What the loader answers each mod that names commands, by the one rule
+/// of [`check`], in load order: the mods loaded before the one under test,
+/// that mod `own` (its id, and the alias it asked, if it did) and the mods
+/// loaded after it, each `others` entry being a mod id, the alias it asks
+/// and whether it loads after. The command sets granted, and what the mod
+/// under test was answered.
+fn granted(
+    own: (&str, Option<&str>),
+    others: &[(String, String, bool)],
+) -> (Vec<Granted>, Option<Result<(), Refusal<usize>>>) {
+    let at = |later: bool| {
+        others
+            .iter()
+            .filter(move |(_, _, after)| *after == later)
+            .map(|(id, alias, _)| (id.as_str(), Some(alias.as_str())))
+    };
+    let order: Vec<(&str, Option<&str>)> = at(false).chain([own]).chain(at(true)).collect();
+    let me = at(false).count();
+    let ids: Vec<(usize, &str)> = order.iter().map(|(id, _)| *id).enumerate().collect();
+    let mut named: Vec<Named<usize>> = Vec::new();
+    let mut answered = None;
+    for (index, (_, alias)) in order.iter().enumerate() {
+        let Some(alias) = alias else { continue };
+        let checked = check(&named, &ids, index, Some(alias)).map(|(set, _)| named.push(set));
+        if index == me {
+            answered = Some(checked);
+        }
+    }
+    let sets = named
+        .into_iter()
+        .map(|set| Granted {
+            id: order[set.owner].0.to_owned(),
+            set,
+        })
+        .collect();
+    (sets, answered)
+}
+
+/// The id of the mod under test.
+fn own_id(s: &crate::test::table::State) -> String {
+    s.manifest
+        .as_ref()
+        .map(|m| m.id.clone())
+        .unwrap_or_default()
+}
+
+/// The command sets granted now, and the id of the mod under test.
+fn sets_now(s: &crate::test::table::State) -> (Vec<Granted>, String) {
+    let id = own_id(s);
+    let (sets, _) = granted((&id, s.commands.asked.as_deref()), &s.host.other_commands);
+    (sets, id)
+}
+
+pub(crate) extern "system" fn commands(_me: ModHandle, _name: Str, alias: Str) -> Status {
+    let alias = text(alias);
     with(Status::MISSING, |s| {
         if s.registration == Registration::Closed {
             return Status::TOO_LATE;
         }
-        if !fit(&name, &alias) {
-            return Status::BAD_ARGS;
+        let id = own_id(s);
+        let (_, answered) = granted((&id, Some(&alias)), &s.host.other_commands);
+        match answered {
+            Some(Err(Refusal::Malformed)) | None => Status::BAD_ARGS,
+            Some(Ok(())) if s.commands.asked.is_none() => {
+                s.commands.asked = Some(alias);
+                Status::OK
+            }
+            Some(_) => Status::REFUSED,
         }
-        let words = [name.as_str(), alias.as_str()];
-        let taken = s
-            .host
-            .other_commands
-            .iter()
-            .any(|(_, n, a)| words.contains(&n.as_str()) || words.contains(&a.as_str()));
-        if s.commands.named.is_some() || taken {
-            return Status::REFUSED;
-        }
-        s.commands.named = Some((name, alias));
-        Status::OK
+    })
+}
+
+/// Whether `word`, in any case, is the command name or the alias of the
+/// mod under test.
+#[cfg(feature = "unstable")]
+pub(crate) fn is_own(word: &str) -> bool {
+    let word = word.to_lowercase();
+    with(false, |s| {
+        let (sets, id) = sets_now(s);
+        sets.iter().any(|set| set.id == id && set.is_called(&word))
     })
 }
 
@@ -141,23 +203,18 @@ fn split(line: &str) -> (String, String) {
 pub(crate) fn answer(line: &str, kind: u32, caller: &PlayerInfo, language: u32) -> Option<String> {
     let (word, rest) = split(line);
     let (own, other, actions) = with((false, None, None), |s| {
-        let own = s
-            .commands
-            .named
-            .as_ref()
-            .is_some_and(|(n, a)| *n == word || *a == word);
-        let other = s
-            .host
-            .other_commands
-            .iter()
-            .any(|(_, n, a)| *n == word || *a == word)
-            .then(|| {
-                s.host
-                    .console_answers
-                    .get(&word)
-                    .cloned()
-                    .unwrap_or_default()
-            });
+        let (sets, id) = sets_now(s);
+        let Some(set) = sets.iter().find(|set| set.is_called(&word)) else {
+            return (false, None, s.actions);
+        };
+        let own = set.id == id;
+        let other = (!own).then(|| {
+            s.host
+                .console_answers
+                .get(&word)
+                .cloned()
+                .unwrap_or_default()
+        });
         (own, other, s.actions)
     });
     if let Some(answer) = other {
@@ -173,7 +230,7 @@ pub(crate) fn answer(line: &str, kind: u32, caller: &PlayerInfo, language: u32) 
         caller,
         language,
         &rest,
-        "",
+        &word,
         ActionTarget::NONE,
     ))
 }
@@ -231,21 +288,13 @@ pub(crate) extern "system" fn command_list(
     count: *mut u32,
 ) -> Status {
     let infos = with(Vec::new(), |s| {
-        let own_id = s
-            .manifest
-            .as_ref()
-            .map(|m| m.id.clone())
-            .unwrap_or_default();
-        let own = s
-            .commands
-            .named
-            .iter()
-            .map(|(name, alias)| (own_id.clone(), name.clone(), alias.clone()));
-        let sets: Vec<(String, String, String)> =
-            own.chain(s.host.other_commands.iter().cloned()).collect();
-        s.commands.listed = sets
+        s.commands.listed = sets_now(s)
+            .0
             .into_iter()
-            .map(|(id, name, alias)| [name, alias, id].map(String::into_boxed_str))
+            .map(|set| {
+                [set.set.name, set.set.alias.unwrap_or_default(), set.id]
+                    .map(String::into_boxed_str)
+            })
             .collect();
         s.commands
             .listed

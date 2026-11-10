@@ -52,6 +52,47 @@ Each entry names the pull request that made the change.
   as each player sees it (#1022).
 - `test`: `Installed::carried_windows` reads the windows a player's client
   holds after the mod's shows and closes (#1022).
+- `actions`: `Action::group` names the group an action's line stands
+  under in the help of a typed line, and `help <action>` answers an
+  action's usage and the text of `Action::help`; Luau `group` (#1027).
+- `actions`: `Arg::optional(default)` lets a typed line leave out the last
+  arguments of an action, each taking its default. A text or a player
+  before them takes the rest of the line up to the words that read as the
+  optional arguments, so `give Ann Stone Axe` gives one and
+  `give Ann Stone Axe 5` gives five; the help shows such an argument in
+  square brackets, and a run from the interface that leaves values out at
+  the end takes the defaults too; Luau `arg:optional(value)` (#1027).
+- `actions`: `Action::with_self` offers the player who looks at an action
+  among its players, first in a list and in a player argument's picker;
+  Luau `with_self` (#1027).
+- `actions`: `Actions::update` puts a window in place of the one of its id
+  only on the clients that still show it and opens it for no one, and
+  `Actions::on_closed` tells the mod when a client closed a window, let
+  its oldest go for a ninth, or its player left, and when a window closed
+  there because it rendered nothing for the player; the mod forgets such a
+  window by itself; Luau
+  `actions:update` and `actions:on_closed` (#1027).
+- `abi`: ABI 11.23. `ActionCall::word` is the word that named the mod in a
+  typed line, so its help and refusals name the command as typed;
+  `ActionCall::WINDOW_CLOSED` tells a mod that a client closed its window
+  or a player left; `HostApi::action_window` takes 2 as `close`
+  (`WINDOW_UPDATE`, beside `WINDOW_SHOW` and `WINDOW_CLOSE`) for an update
+  only where the window shows, which a loader before it answers with
+  `Status::BAD_ARGS` (#1027).
+- `content`: `vanilla::item_by_display_name` finds a vanilla item by the
+  name the game shows, in any language it ships and whatever the case,
+  with the names that look like it when none matches; `vanilla::items`
+  lists every item with its debug name and the tag of its shown name, and
+  `vanilla::recipes` every recipe with its debug name and the item it
+  makes; Luau `enshwick.content.item_by_display_name`, `items` and
+  `recipes`. The names come from the game's texts, which only a client's
+  archive holds: the lookup answers `Unreadable` on a dedicated server
+  (#1027).
+- `test`: `FakeHost::later_mod_commands` adds a mod loaded after the one
+  under test, `FakeHost::vanilla_item_names` gives vanilla items the tags
+  of their names, and `Installed::close_window` and
+  `Installed::player_left` close a window as a client does and make a
+  player leave (#1027).
 - `inventory`: `Inventories::give_what_fits` gives as many of a count of
   items as the inventory has room for and tells the caller how many were
   not given and the request's outcome, for a mod that gives its own
@@ -65,6 +106,30 @@ Each entry names the pull request that made the change.
   request needs to run (#1028).
 
 ### Changed
+
+- `commands`: **breaking.** A mod's command is named after its id, the
+  part after the author: `you.admin-tools` gets `/admin-tools`.
+  `Actions::commands` takes only the alias, in Rust and in Luau, and
+  `HostApi::commands` keeps its `name` parameter, which the loader no
+  longer reads. An alias goes to the first mod that asks for it; a later
+  mod keeps its full name, and the log and the Mods screen name both mods
+  once. An alias is never another mod's id or name, so a mod's full name
+  always reaches it, and a name that is another mod's whole id stays that
+  mod's. A mod built before ABI 11.23 whose alias is not shorter than the
+  name in its id runs its commands by that name alone instead of failing
+  its init. `CommandSet::alias` is an `Option`, and
+  `FakeHost::other_mod_commands` takes the mod's id and alias (#1027).
+- `actions`: the help of a typed line names the mod and the command as
+  typed, then lists one line for each action the caller may run, under the
+  groups the mod names. An unknown action is refused with the closest ids
+  the caller may run and how to list them all (#1027).
+- `commands`: the refusal of a command typed in chat goes into that
+  player's chat instead of a notice, and a reply of more than 16 lines
+  reaches the chat whole while replies to typed commands fill at most half
+  of the lines waiting to be posted (#1027).
+- `content`: the names `VanillaError::Unknown` and its like suggest are
+  those that start with or hold what was asked, then those within a third
+  of its length in edits (#1027).
 
 - `content`: a builder of `Load::serve`, and the loader's own patches,
   build into a lent buffer, so `Host::served_resource`,

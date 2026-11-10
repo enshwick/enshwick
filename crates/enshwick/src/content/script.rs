@@ -302,6 +302,38 @@ impl Content {
         vanilla::item(name)
     }
 
+    /// The vanilla item the game shows as `name` in any of its languages,
+    /// such as `Glider`; an error names the nearest names.
+    ///
+    /// # Errors
+    ///
+    /// As [`vanilla::item_by_display_name`].
+    #[script]
+    pub fn item_by_display_name(self, name: &str) -> Result<Guid, vanilla::VanillaError> {
+        vanilla::item_by_display_name(name)
+    }
+
+    /// Every vanilla item with its debug name and the tag of the name the
+    /// game shows.
+    ///
+    /// # Errors
+    ///
+    /// As [`vanilla::items`].
+    #[script]
+    pub fn items(self) -> Result<Vec<vanilla::VanillaItem>, vanilla::VanillaError> {
+        vanilla::items()
+    }
+
+    /// Every vanilla recipe with its debug name and the item it makes.
+    ///
+    /// # Errors
+    ///
+    /// As [`vanilla::recipes`].
+    #[script]
+    pub fn recipes(self) -> Result<Vec<vanilla::VanillaRecipe>, vanilla::VanillaError> {
+        vanilla::recipes()
+    }
+
     /// The item id of `id`, a GUID such as `item` gives for a vanilla item,
     /// or a content id in full (`<mod>:<name>`) for a mod's own item, as
     /// `ItemId::from_guid` and `ItemId::named` give it in Rust: the number

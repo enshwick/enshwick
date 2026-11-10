@@ -4,9 +4,12 @@
 //! Unstable: needs the `unstable` feature and may change in any release.
 //!
 //! A mod names its actions as commands with
-//! [`Actions::commands`](crate::actions::Actions::commands): a full name and
-//! a shorter alias, so `/admin-tools online` and `/adl online` both run its
-//! action `online`, and `/adl help` lists the actions the caller may run.
+//! [`Actions::commands`](crate::actions::Actions::commands). The command's
+//! name is the part of the mod's id after the author, and the mod picks a
+//! shorter alias: for the mod `you.admin-tools` with the alias `adm`,
+//! `/admin-tools online` and `/adm online` both run its action `online`,
+//! and `/adm help` lists the actions the caller may run. An alias goes to
+//! the first mod that asks for it; a later mod keeps its full name.
 //! The words after the action's id are its values, as on the console. The
 //! server checks the caller's rights as for any run, and the reply goes to
 //! the caller alone. A command is never the only way to an action: players
@@ -24,7 +27,7 @@
 //!
 //! let operator = Caller::new("rcon 10.0.0.2").with(PlayerPermissions::CanKickBan);
 //! // Outside the game no loader answers.
-//! assert!(run("/adl online", &operator).is_err());
+//! assert!(run("/adm online", &operator).is_err());
 //! ```
 
 use crate::abi::{ActionReply, CommandInfo, Header, Status, Str};
@@ -32,30 +35,9 @@ use crate::actions::Outcome;
 use crate::schedule::Scheduler;
 use crate::world::PlayerPermissions;
 
-/// The longest command line [`run`] takes, in bytes.
-pub const MAX_LINE: usize = 1024;
-
-/// The longest command name or alias, in bytes.
-pub const MAX_NAME: usize = 32;
-
-/// Words no mod's commands may take: the loader's own and the help word.
-const RESERVED: [&str; 2] = ["enshwick", "help"];
-
-/// Whether `name` and `alias` can name a mod's commands: each 1 to
-/// [`MAX_NAME`] of `[a-z0-9-]`, the alias shorter, neither reserved; the
-/// loader checks by the same rule.
+pub use crate::command_names::{MAX_LINE, MAX_NAME};
 #[doc(hidden)]
-#[must_use]
-pub fn names_fit(name: &str, alias: &str) -> bool {
-    let word = |w: &str| {
-        !w.is_empty()
-            && w.len() <= MAX_NAME
-            && !RESERVED.contains(&w)
-            && w.bytes()
-                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
-    };
-    word(name) && word(alias) && alias.len() < name.len()
-}
+pub use crate::command_names::{is_alias, is_reserved, name_of};
 
 /// Who runs a command line through [`run`]: a remote caller with a label
 /// for the log and the handler, and the game's permissions it holds; never
@@ -147,7 +129,7 @@ pub enum RunCommandError {
     Refused(u32),
 }
 
-/// Runs the command line `line`, such as `/adl online`, for `caller`, and
+/// Runs the command line `line`, such as `/adm online`, for `caller`, and
 /// returns the mod's reply.
 ///
 /// The `/` is optional. The reply says whether the action was done, and
@@ -216,7 +198,7 @@ pub fn run(line: &str, caller: &Caller) -> Result<Outcome, RunCommandError> {
 ///     let scheduler = load.scheduler()?;
 ///     let (tx, rx) = mpsc::channel();
 ///     std::thread::spawn(move || {
-///         run_later(scheduler, "/adl online".into(), Caller::new("rcon").with_all(), move |reply| {
+///         run_later(scheduler, "/adm online".into(), Caller::new("rcon").with_all(), move |reply| {
 ///             let _sent = tx.send(reply.map(|outcome| outcome.text().to_owned()));
 ///         });
 ///     });
@@ -243,8 +225,9 @@ pub fn run_later(
 pub struct CommandSet {
     /// The full name, `admin-tools` in `/admin-tools online`.
     pub name: String,
-    /// The shorter alias, `adl` in `/adl online`.
-    pub alias: String,
+    /// The shorter alias, `adm` in `/adm online`; `None` when another mod
+    /// took the word first, so only the full name runs the mod's actions.
+    pub alias: Option<String>,
     /// The id of the mod that named them.
     pub mod_id: String,
 }
@@ -295,7 +278,7 @@ pub fn list() -> Vec<CommandSet> {
         .into_iter()
         .map(|info| CommandSet {
             name: text(info.name),
-            alias: text(info.alias),
+            alias: Some(text(info.alias)).filter(|alias| !alias.is_empty()),
             mod_id: text(info.mod_id),
         })
         .collect()
@@ -352,27 +335,5 @@ impl crate::script::Bound for CommandFns {
 
     fn resolve(_load: &mut crate::Load<'_>) -> Result<Self, crate::Off> {
         Ok(Self)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn command_names_are_plain_words_with_a_shorter_alias() {
-        assert!(names_fit("admin-tools", "adl"));
-        for (name, alias) in [
-            ("Admin", "a"),
-            ("admin tools", "a"),
-            ("adl", "admin-tools"),
-            ("adl", "adl"),
-            ("admin-tools", ""),
-            ("enshwick", "e"),
-            ("helper", "help"),
-        ] {
-            assert!(!names_fit(name, alias), "{name} {alias}");
-        }
-        assert!(!names_fit(&"x".repeat(MAX_NAME + 1), "x"));
     }
 }

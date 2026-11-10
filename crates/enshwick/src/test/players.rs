@@ -257,25 +257,46 @@ impl FakeHost {
         self
     }
 
-    /// Another running mod, `mod_id`, that named its actions as the
-    /// commands `name` and `alias`: the mod under test cannot take those
-    /// words, [`commands::list`](crate::commands::list) names them, and a
-    /// command line to them gets the [console answer](Self::console_answer)
-    /// of the word used, as done.
+    /// Another running mod, `mod_id`, loaded before the mod under test,
+    /// that named its actions as commands with `alias`: the mod under test
+    /// gets no alias another mod holds,
+    /// [`commands::list`](crate::commands::list) names both, and a command
+    /// line to the other mod gets the
+    /// [console answer](Self::console_answer) of the word used, as done.
     ///
     /// # Examples
     ///
     /// ```
     /// let loader = enshwick::test::FakeHost::new()
-    ///     .other_mod_commands("you.weather", "weather", "wx")
+    ///     .other_mod_commands("you.weather", "wx")
     ///     .install();
     /// # let _ = loader;
     /// ```
     #[cfg(feature = "unstable")]
     #[must_use]
-    pub fn other_mod_commands(mut self, mod_id: &str, name: &str, alias: &str) -> Self {
+    pub fn other_mod_commands(mut self, mod_id: &str, alias: &str) -> Self {
         self.other_commands
-            .push((mod_id.to_owned(), name.to_owned(), alias.to_owned()));
+            .push((mod_id.to_owned(), alias.to_owned(), false));
+        self
+    }
+
+    /// As [`other_mod_commands`](Self::other_mod_commands), for a mod
+    /// loaded after the mod under test: it gets no alias the mod under
+    /// test holds, and runs by its name alone.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .later_mod_commands("you.weather", "wx")
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[must_use]
+    pub fn later_mod_commands(mut self, mod_id: &str, alias: &str) -> Self {
+        self.other_commands
+            .push((mod_id.to_owned(), alias.to_owned(), true));
         self
     }
 
@@ -366,7 +387,9 @@ impl Installed {
             let key = player.key.get();
             table::with((), |s| {
                 let held = s.commands.carried.iter().filter(|(k, _, _)| *k == key);
-                let again: Vec<_> = held.map(|(k, id, _)| (*k, id.clone(), false)).collect();
+                let again: Vec<_> = held
+                    .map(|(k, id, _)| (*k, id.clone(), crate::abi::WINDOW_UPDATE))
+                    .collect();
                 s.commands.windows.extend(again);
             });
         }
@@ -401,13 +424,10 @@ impl Installed {
         if !line.starts_with('/') {
             return None;
         }
-        let own = line[1..].split_whitespace().next().is_some_and(|word| {
-            table::with(false, |s| {
-                s.commands.named.as_ref().is_some_and(|(n, a)| {
-                    n.eq_ignore_ascii_case(word) || a.eq_ignore_ascii_case(word)
-                })
-            })
-        });
+        let own = line[1..]
+            .split_whitespace()
+            .next()
+            .is_some_and(table::commands::is_own);
         if !own {
             return None;
         }
@@ -467,8 +487,15 @@ impl Installed {
             let online = s.host.players.iter().any(|p| p.key == player.key);
             (s.actions, if online { mine } else { Vec::new() })
         });
-        for (_, id, close) in waiting {
-            let text = match (close, actions) {
+        for (_, id, change) in waiting {
+            let holds = table::with(false, |s| {
+                let mut carried = s.commands.carried.iter();
+                carried.any(|(k, i, _)| *k == key && *i == id)
+            });
+            if change == crate::abi::WINDOW_UPDATE && !holds {
+                continue;
+            }
+            let text = match (change == crate::abi::WINDOW_CLOSE, actions) {
                 (false, Some(actions)) => ask(
                     actions,
                     crate::abi::ActionCall::WINDOW,
@@ -485,16 +512,32 @@ impl Installed {
             } else {
                 text
             };
-            table::with((), |s| {
+            let closed = table::with(None, |s| {
                 let carried = &mut s.commands.carried;
                 let at = carried.iter().position(|(k, i, _)| *k == key && *i == id);
                 match (at, text.is_empty()) {
-                    (Some(at), true) => drop(carried.remove(at)),
-                    (Some(at), false) => carried[at].2 = text,
-                    (None, false) => carried.push((key, id, text)),
-                    (None, true) => {}
+                    (Some(at), true) => {
+                        let (_, id, _) = carried.remove(at);
+                        (change != crate::abi::WINDOW_CLOSE).then_some(id)
+                    }
+                    (Some(at), false) => {
+                        carried[at].2 = text;
+                        None
+                    }
+                    (None, false) => {
+                        carried.push((key, id, text));
+                        let mine: Vec<usize> = (0..carried.len())
+                            .filter(|&i| carried[i].0 == key)
+                            .collect();
+                        (mine.len() > crate::actions::window::MAX_HELD)
+                            .then(|| carried.remove(mine[0]).1)
+                    }
+                    (None, true) => None,
                 }
             });
+            if let Some(closed) = closed {
+                self.tell_window_closed(player.key, &closed);
+            }
         }
         table::with(Vec::new(), |s| {
             s.commands
@@ -504,6 +547,97 @@ impl Installed {
                 .map(|(_, id, text)| (id.clone(), text.clone()))
                 .collect()
         })
+    }
+
+    /// `player`'s client closes the mod's window `id`, as when the player
+    /// presses its Close: the client holds it no more, and the mod hears of
+    /// it as the loader tells it after the step. A close of a window the
+    /// client does not hold tells the mod nothing, as the loader drops it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{Header, PlayerInfo};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let player = PlayerInfo {
+    ///     header: Header::of::<PlayerInfo>(),
+    ///     slot: 0,
+    ///     entity: enshwick::Entity(2),
+    ///     key: enshwick::PlayerKey::new(7),
+    ///     permissions: 0,
+    ///     name_len: 0,
+    ///     name: [0; 64],
+    /// };
+    /// loader.close_window(&player, "panel");
+    /// assert!(loader.carried_windows(&player, 0).is_empty());
+    /// ```
+    #[cfg(feature = "unstable")]
+    pub fn close_window(&self, player: &PlayerInfo, id: &str) {
+        let key = player.key.get();
+        let held = table::with(false, |s| {
+            let before = s.commands.carried.len();
+            s.commands
+                .carried
+                .retain(|(k, i, _)| !(*k == key && i == id));
+            s.commands.carried.len() != before
+        });
+        if held {
+            self.tell_window_closed(player.key, id);
+        }
+    }
+
+    /// `player` leaves, as far as the mod's windows go: their client holds
+    /// none any more, what waited for it is dropped, and the mod hears that
+    /// the player left, as the loader tells every mod with actions.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.player_left(enshwick::PlayerKey::new(7));
+    /// ```
+    #[cfg(feature = "unstable")]
+    pub fn player_left(&self, player: crate::PlayerKey) {
+        let key = player.get();
+        table::with((), |s| {
+            s.commands.carried.retain(|(k, _, _)| *k != key);
+            s.commands.windows.retain(|(k, _, _)| *k != key);
+        });
+        self.tell_window_closed(player, "");
+    }
+
+    /// Tells the mod that `player`'s client closed its window `id`, or with
+    /// an empty id that the player left, with the key alone as the loader
+    /// does.
+    #[cfg(feature = "unstable")]
+    #[expect(
+        clippy::unused_self,
+        reason = "only an installed fake has a mod to tell"
+    )]
+    fn tell_window_closed(&self, player: crate::PlayerKey, id: &str) {
+        let Some(actions) = table::with(None, |s| s.actions) else {
+            return;
+        };
+        let who = PlayerInfo {
+            header: Header::of::<PlayerInfo>(),
+            slot: u32::MAX,
+            entity: crate::Entity(0),
+            key: player,
+            permissions: 0,
+            name_len: 0,
+            name: [0; 64],
+        };
+        let closed = crate::abi::ActionCall::WINDOW_CLOSED;
+        let _heard = ask(
+            actions,
+            closed,
+            &who,
+            0,
+            id,
+            "",
+            crate::abi::ActionTarget::NONE,
+        );
     }
 
     /// Runs the mod's action `action` with `args` for `player` as the
@@ -763,14 +897,16 @@ pub(crate) fn console() -> PlayerInfo {
     }
 }
 
-/// Asks a mod's actions callback as the loader does; its reply.
+/// Asks a mod's actions callback as the loader does; its reply. `extra` is
+/// the arguments of a run, or the word that named the mod for a typed line
+/// (the console, chat or a remote caller).
 pub(crate) fn ask(
     actions: table::Registered<crate::abi::ActionFn>,
     kind: u32,
     player: &PlayerInfo,
     language: u32,
     action: &str,
-    args: &str,
+    extra: &str,
     target: crate::abi::ActionTarget,
 ) -> String {
     let mut call = crate::abi::ActionCall {
@@ -779,10 +915,21 @@ pub(crate) fn ask(
         language,
         player: *player,
         action: Str::new(action),
-        args: Str::new(args),
+        args: Str::EMPTY,
         target,
         reply: core::ptr::null_mut(),
+        word: Str::EMPTY,
     };
+    let typed = [
+        crate::abi::ActionCall::CONSOLE,
+        crate::abi::ActionCall::CHAT,
+        crate::abi::ActionCall::REMOTE,
+    ];
+    if typed.contains(&kind) {
+        call.word = Str::new(extra);
+    } else {
+        call.args = Str::new(extra);
+    }
     let mut written: crate::abi::ActionReply = bytemuck::Zeroable::zeroed();
     if kind != crate::abi::ActionCall::SHEET {
         call.reply = &raw mut written;

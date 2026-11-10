@@ -136,6 +136,8 @@ mod book;
 pub mod buffs;
 pub mod chat;
 pub mod code;
+#[doc(hidden)]
+pub mod command_names;
 #[cfg(feature = "unstable")]
 pub mod commands;
 pub mod config;
@@ -184,6 +186,7 @@ pub mod loot;
 #[cfg(feature = "unstable")]
 pub mod map;
 pub mod mods;
+mod near;
 pub mod net;
 pub mod pacing;
 pub mod packs;

@@ -1,4 +1,4 @@
-//! Commands: a mod's actions named `/admin-tools` and `/adl`, run from chat,
+//! Commands: a mod's actions named `/admin-tools` and `/adm`, run from chat,
 //! for a remote caller and listed, with the rights of who runs them.
 
 #[cfg(test)]
@@ -38,6 +38,8 @@ mod tests {
             })?;
             actions.add(
                 Action::new("kick", "Kick a player")
+                    .group("Players")
+                    .help("Removes the player from the server.")
                     .admins()
                     .arg(Arg::player("Player")),
                 |request| {
@@ -49,7 +51,9 @@ mod tests {
                 },
             )?;
             actions.add(
-                Action::new("repair", "Repair the base").needs(PlayerPermissions::CanEditBase),
+                Action::new("repair", "Repair the base")
+                    .group("World")
+                    .needs(PlayerPermissions::CanEditBase),
                 |request| {
                     ran("repair", request);
                     Outcome::done("repaired")
@@ -63,23 +67,17 @@ mod tests {
                 Outcome::done("fine")
             })?;
             assert!(
-                actions.commands("admin\ttools", "adl").is_err(),
+                actions.commands("ad\tm").is_err(),
                 "a tab would break a list of names"
             );
+            assert!(actions.commands("Adm").is_err(), "not a plain word");
             assert!(
-                actions.commands("Admin", "adl").is_err(),
-                "not a plain word"
+                actions.commands("admin-tools-x").is_err(),
+                "an alias longer than the name in the mod's id"
             );
-            assert!(
-                actions.commands("adl", "admin-tools").is_err(),
-                "a longer alias"
-            );
-            assert!(actions.commands("help", "h").is_err(), "a reserved word");
-            actions.commands("admin-tools", "adl")?;
-            assert!(
-                actions.commands("tools", "t").is_err(),
-                "named once already"
-            );
+            assert!(actions.commands("help").is_err(), "a reserved word");
+            actions.commands("adm")?;
+            assert!(actions.commands("t").is_err(), "named once already");
             let _first = ACTIONS.set(actions);
             Ok(Self)
         }
@@ -117,6 +115,13 @@ mod tests {
         loader
     }
 
+    /// Each set's name, alias (empty for none) and mod id.
+    fn names(list: Vec<CommandSet>) -> Vec<(String, String, String)> {
+        list.into_iter()
+            .map(|c| (c.name, c.alias.unwrap_or_default(), c.mod_id))
+            .collect()
+    }
+
     fn runs() -> Vec<(String, Via, String)> {
         std::mem::take(&mut *RUNS.lock().unwrap())
     }
@@ -128,7 +133,7 @@ mod tests {
         let loader = start(enshwick::test::FakeHost::new().player(ann).player(root));
 
         assert_eq!(
-            loader.type_in_chat(&ann, 0, "/adl online").as_deref(),
+            loader.type_in_chat(&ann, 0, "/adm online").as_deref(),
             Some("12 online")
         );
         assert_eq!(
@@ -145,35 +150,35 @@ mod tests {
             ]
         );
 
-        let refused = loader.type_in_chat(&ann, 0, "/adl kick Root").unwrap();
+        let refused = loader.type_in_chat(&ann, 0, "/adm kick Root").unwrap();
         assert!(refused.starts_with('0'), "{refused}");
         let uk = Language::UK_UA.0;
         assert_eq!(
-            loader.type_in_chat(&ann, uk, "/adl kick Root").as_deref(),
+            loader.type_in_chat(&ann, uk, "/adm kick Root").as_deref(),
             Some("0Тобі цього не можна."),
             "the refusal in the player's language"
         );
         assert_eq!(
-            loader.type_in_chat(&root, 0, "/adl kick ann").as_deref(),
+            loader.type_in_chat(&root, 0, "/adm kick ann").as_deref(),
             Some("1kicked Ann"),
             "a player's name matches a player online"
         );
         assert!(
             loader
-                .type_in_chat(&root, 0, "/adl kick Nobody")
+                .type_in_chat(&root, 0, "/adm kick Nobody")
                 .unwrap()
                 .starts_with('0')
         );
         assert!(
             loader
-                .type_in_chat(&ann, 0, "/adl dance")
+                .type_in_chat(&ann, 0, "/adm dance")
                 .unwrap()
                 .starts_with('0')
         );
 
-        let help = loader.type_in_chat(&ann, 0, "/adl help").unwrap();
+        let help = loader.type_in_chat(&ann, 0, "/adm help").unwrap();
         assert!(help.contains("online") && !help.contains("kick"), "{help}");
-        let help = loader.type_in_chat(&root, 0, "/adl").unwrap();
+        let help = loader.type_in_chat(&root, 0, "/adm").unwrap();
         assert!(help.contains("kick"), "{help}");
 
         assert_eq!(
@@ -182,10 +187,145 @@ mod tests {
             "another command stays in chat"
         );
         assert_eq!(
-            loader.type_in_chat(&ann, 0, "adl online"),
+            loader.type_in_chat(&ann, 0, "adm online"),
             None,
             "no slash, plain chat"
         );
+    }
+
+    #[test]
+    fn help_is_one_line_for_each_action_the_caller_may_run_under_its_group() {
+        let ann = player(3, 7, "Ann", 0);
+        let root = player(
+            4,
+            9,
+            "Root",
+            PlayerInfo::CAN_KICK_BAN | PlayerInfo::CAN_EDIT_BASE,
+        );
+        let loader = start(enshwick::test::FakeHost::new().player(ann).player(root));
+
+        let all = "1you.admin-tools: /adm <action> runs one, /adm help <action> explains one.\n\
+                   online: Players online\n\
+                   boom: Break\n\
+                   Players:\n\
+                   kick <player>: Kick a player\n\
+                   World:\n\
+                   repair: Repair the base";
+        assert_eq!(
+            loader.type_in_chat(&root, 0, "/adm help").as_deref(),
+            Some(all)
+        );
+        assert_eq!(
+            loader.type_in_chat(&root, 0, "/adm").as_deref(),
+            Some(all),
+            "the command alone"
+        );
+        assert_eq!(
+            loader.type_in_chat(&ann, 0, "/ADMIN-TOOLS help").as_deref(),
+            Some(
+                "1you.admin-tools: /admin-tools <action> runs one, /admin-tools help <action> \
+                 explains one.\nonline: Players online\nboom: Break"
+            ),
+            "only what the caller may run, named by the word typed"
+        );
+        let uk = Language::UK_UA.0;
+        let translated = loader.type_in_chat(&ann, uk, "/adm help").unwrap();
+        assert!(
+            translated.starts_with("1you.admin-tools: /adm <дія> виконує дію"),
+            "{translated}"
+        );
+
+        assert_eq!(
+            loader.type_in_chat(&root, 0, "/adm help KICK").as_deref(),
+            Some("1kick <player>: Kick a player\nRemoves the player from the server."),
+        );
+        assert_eq!(
+            loader.type_in_chat(&root, 0, "/adm help online").as_deref(),
+            Some("1online: Players online"),
+            "an action without a longer text"
+        );
+        assert_eq!(
+            loader.type_in_chat(&ann, 0, "/adm help kick").as_deref(),
+            Some("0No action kick; /adm help lists them."),
+            "an action the caller may not run reads as none"
+        );
+    }
+
+    #[test]
+    fn help_names_the_mod_by_its_plain_name_whichever_word_ran_it() {
+        use enshwick::abi::{ModInfo, Str};
+
+        let ann = player(3, 7, "Ann", 0);
+        let loader = start(enshwick::test::FakeHost::new().player(ann).loaded(ModInfo {
+            header: Header::of::<ModInfo>(),
+            id: Str::new("you.admin-tools"),
+            name: Str::new("Admin Tools"),
+            ..ModInfo::EMPTY
+        }));
+        for (line, command) in [("/adm", "/adm"), ("/admin-tools help", "/admin-tools")] {
+            let help = loader.type_in_chat(&ann, 0, line).unwrap();
+            assert!(
+                help.starts_with(&format!("1Admin Tools: {command} <action> runs one")),
+                "{help}"
+            );
+        }
+        let console = player(0, 0, "console", 0x3f);
+        let by_id = loader
+            .ask_actions(ActionCall::CONSOLE, &console, 0, "help", "you.admin-tools")
+            .unwrap();
+        assert!(
+            by_id.starts_with("1Admin Tools: you.admin-tools <action> runs one"),
+            "the console names a mod by its id too: {by_id}"
+        );
+    }
+
+    #[test]
+    fn an_unknown_action_is_refused_with_the_closest_ids_and_how_to_list_them() {
+        let ann = player(3, 7, "Ann", 0);
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let loader = start(enshwick::test::FakeHost::new().player(ann).player(root));
+
+        assert_eq!(
+            loader.type_in_chat(&root, 0, "/adm kik Ann").as_deref(),
+            Some("0No action kik. Closest: kick. /adm help lists them.")
+        );
+        assert_eq!(
+            loader.type_in_chat(&ann, 0, "/adm kik Root").as_deref(),
+            Some("0No action kik; /adm help lists them."),
+            "never an id the caller may not run"
+        );
+        assert_eq!(
+            loader.type_in_chat(&ann, 0, "/admin-tools o").as_deref(),
+            Some("0No action o. Closest: online, boom. /admin-tools help lists them.")
+        );
+        assert_eq!(
+            loader
+                .type_in_chat(&ann, Language::UK_UA.0, "/adm dance")
+                .as_deref(),
+            Some("0Немає дії dance; /adm help перелічує їх.")
+        );
+        assert_eq!(
+            commands::run("adm dance", &Caller::new("rcon"))
+                .unwrap()
+                .text(),
+            "No action dance; adm help lists them.",
+            "a remote caller types no slash"
+        );
+        assert_eq!(
+            loader
+                .ask_actions(ActionCall::CONSOLE, &ann, 0, "dance", "")
+                .as_deref(),
+            Some("0No action dance; help lists them."),
+            "a loader that does not tell the word"
+        );
+        assert_eq!(
+            loader
+                .ask_actions(ActionCall::RUN, &ann, 0, "dance", "")
+                .as_deref(),
+            Some("0No action dance; help lists them."),
+            "a run from the interface names no command"
+        );
+        assert!(runs().is_empty());
     }
 
     #[test]
@@ -209,12 +349,12 @@ mod tests {
         assert_eq!(ids(&friend), ["online", "repair", "boom"]);
         assert!(
             loader
-                .type_in_chat(&guest, 0, "/adl repair")
+                .type_in_chat(&guest, 0, "/adm repair")
                 .unwrap()
                 .starts_with('0')
         );
         assert_eq!(
-            loader.type_in_chat(&friend, 0, "/adl repair").as_deref(),
+            loader.type_in_chat(&friend, 0, "/adm repair").as_deref(),
             Some("1repaired")
         );
         let reply = loader
@@ -236,26 +376,26 @@ mod tests {
         let _loader = start(
             enshwick::test::FakeHost::new()
                 .player(ann)
-                .other_mod_commands("you.weather", "weather", "wx")
+                .other_mod_commands("you.weather", "wx")
                 .console_answer("wx", "rain"),
         );
         let rcon = Caller::new("rcon 10.0.0.2");
 
-        let online = commands::run("/adl online", &rcon).unwrap();
+        let online = commands::run("/adm online", &rcon).unwrap();
         assert!(online.is_done());
         assert_eq!(online.text(), "2 online");
         assert_eq!(
             runs(),
             [("online".into(), Via::Remote, "rcon 10.0.0.2".into())]
         );
-        assert!(!commands::run("adl kick Ann", &rcon).unwrap().is_done());
+        assert!(!commands::run("adm kick Ann", &rcon).unwrap().is_done());
         let admin = rcon.clone().with(PlayerPermissions::CanKickBan);
         assert_eq!(
-            commands::run("adl kick Ann", &admin).unwrap().text(),
+            commands::run("adm kick Ann", &admin).unwrap().text(),
             "kicked Ann"
         );
         assert!(
-            commands::run("/adl repair", &Caller::new("owner").with_all())
+            commands::run("/adm repair", &Caller::new("owner").with_all())
                 .unwrap()
                 .is_done()
         );
@@ -270,26 +410,22 @@ mod tests {
             Err(RunCommandError::Unknown)
         );
         assert_eq!(commands::run(" ", &rcon), Err(RunCommandError::Empty));
-        let longest = format!("/adl online{}", " ".repeat(MAX_LINE - 11));
+        let longest = format!("/adm online{}", " ".repeat(MAX_LINE - 11));
         assert_eq!(longest.len(), MAX_LINE);
         assert!(
             commands::run(&longest, &rcon).unwrap().is_done(),
             "the longest line runs"
         );
-        let long = format!("/adl online {}", "x".repeat(MAX_LINE));
+        let long = format!("/adm online {}", "x".repeat(MAX_LINE));
         assert_eq!(commands::run(&long, &rcon), Err(RunCommandError::TooLong));
 
-        let names = |list: Vec<CommandSet>| -> Vec<(String, String, String)> {
-            list.into_iter()
-                .map(|c| (c.name, c.alias, c.mod_id))
-                .collect()
-        };
         assert_eq!(
             names(commands::list()),
             [
-                ("admin-tools".into(), "adl".into(), "you.admin-tools".into()),
                 ("weather".into(), "wx".into(), "you.weather".into()),
-            ]
+                ("admin-tools".into(), "adm".into(), "you.admin-tools".into()),
+            ],
+            "in load order"
         );
     }
 
@@ -301,7 +437,7 @@ mod tests {
         std::thread::spawn(move || {
             commands::run_later(
                 scheduler,
-                "/adl online".into(),
+                "/adm online".into(),
                 Caller::new("rcon"),
                 move |reply| {
                     tx.send(reply.map(|outcome| outcome.text().to_owned()))
@@ -320,14 +456,97 @@ mod tests {
     }
 
     #[test]
-    fn a_name_another_mod_took_leaves_the_mod_running_without_commands() {
+    fn an_alias_a_mod_loaded_before_holds_leaves_the_mod_its_full_name() {
         let ann = player(3, 7, "Ann", 0);
         let loader = start(
             enshwick::test::FakeHost::new()
                 .player(ann)
-                .other_mod_commands("you.lists", "admin-lists", "adl"),
+                .other_mod_commands("you.lists", "adm")
+                .console_answer("adm", "lists"),
+        );
+        assert_eq!(
+            loader
+                .type_in_chat(&ann, 0, "/admin-tools online")
+                .as_deref(),
+            Some("12 online"),
+            "the full name always works"
+        );
+        assert_eq!(
+            loader.type_in_chat(&ann, 0, "/adm online"),
+            None,
+            "the alias is the first mod's"
+        );
+        assert_eq!(
+            commands::run("/adm", &Caller::new("rcon")).unwrap().text(),
+            "lists"
+        );
+        assert_eq!(
+            names(commands::list()),
+            [
+                ("lists".into(), "adm".into(), "you.lists".into()),
+                (
+                    "admin-tools".into(),
+                    String::new(),
+                    "you.admin-tools".into()
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn an_alias_the_mod_holds_leaves_a_mod_loaded_after_its_full_name() {
+        let ann = player(3, 7, "Ann", 0);
+        let loader = start(
+            enshwick::test::FakeHost::new()
+                .player(ann)
+                .later_mod_commands("you.lists", "adm")
+                .console_answer("lists", "lists"),
+        );
+        assert_eq!(
+            loader.type_in_chat(&ann, 0, "/adm online").as_deref(),
+            Some("12 online")
+        );
+        assert_eq!(
+            commands::run("/lists", &Caller::new("rcon"))
+                .unwrap()
+                .text(),
+            "lists"
+        );
+        assert_eq!(
+            names(commands::list()),
+            [
+                ("admin-tools".into(), "adm".into(), "you.admin-tools".into()),
+                ("lists".into(), String::new(), "you.lists".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn an_alias_that_is_another_mod_s_name_stays_that_mod_s() {
+        let ann = player(3, 7, "Ann", 0);
+        let loader = start(
+            enshwick::test::FakeHost::new()
+                .player(ann)
+                .later_mod_commands("they.adm", "a"),
+        );
+        assert_eq!(loader.type_in_chat(&ann, 0, "/adm online"), None);
+        assert!(
+            loader
+                .type_in_chat(&ann, 0, "/admin-tools online")
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn a_mod_whose_name_another_mod_s_commands_have_runs_on_without_commands() {
+        let ann = player(3, 7, "Ann", 0);
+        let loader = start(
+            enshwick::test::FakeHost::new()
+                .player(ann)
+                .other_mod_commands("they.admin-tools", "at"),
         );
         assert_eq!(loader.type_in_chat(&ann, 0, "/admin-tools online"), None);
+        assert_eq!(loader.type_in_chat(&ann, 0, "/adm online"), None);
         let reply = loader
             .ask_actions(ActionCall::RUN, &ann, 0, "online", "")
             .unwrap();
@@ -339,16 +558,16 @@ mod tests {
         let ann = player(3, 7, "Ann", 0);
         let loader = start(enshwick::test::FakeHost::new().player(ann));
         assert_eq!(
-            loader.type_in_chat(&ann, 0, "/adl boom").as_deref(),
+            loader.type_in_chat(&ann, 0, "/adm boom").as_deref(),
             Some("0")
         );
         assert_eq!(
-            loader.type_in_chat(&ann, 0, "/adl online").as_deref(),
+            loader.type_in_chat(&ann, 0, "/adm online").as_deref(),
             Some("0This mod's commands are off after an error."),
             "the mod's commands are off: refused, saying why"
         );
         assert_eq!(
-            commands::run("/adl online", &Caller::new("rcon")),
+            commands::run("/adm online", &Caller::new("rcon")),
             Ok(Outcome::refused(
                 "This mod's commands are off after an error."
             )),
@@ -384,7 +603,7 @@ mod tests {
             .unwrap();
         assert_eq!(reply, "1fine", "the mod runs on");
         assert_eq!(
-            loader.type_in_chat(&ann, 0, "/adl online").as_deref(),
+            loader.type_in_chat(&ann, 0, "/adm online").as_deref(),
             Some("0This mod's commands are off after an error.")
         );
     }

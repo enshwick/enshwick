@@ -1785,17 +1785,25 @@ pub struct HostApi {
     /// Names the calling mod's [actions](HostApi::actions) as commands: a
     /// line `/<name> <action> <values>`, or the same with `alias`, runs
     /// one of them from a player's chat, the server's console or
-    /// [`run_command`](HostApi::run_command), with the caller's rights. Each
-    /// is 1 to 32 of `[a-z0-9-]`, `alias` shorter than `name`; neither is
-    /// `enshwick` or `help`. [`Status::BAD_ARGS`] for a malformed or
-    /// unreadable one; [`Status::REFUSED`] for a second call, or when
-    /// another mod named the same word first, which the loader logs and
-    /// reports naming both mods, the mod running on without commands.
-    /// Allowed during `enshwick_mod_init` only; the strings are borrowed for
-    /// the call. A panic in the loader returns [`Status::REFUSED`]. ABI
-    /// 11.19.
+    /// [`run_command`](HostApi::run_command), with the caller's rights. The
+    /// name is the part of the mod's id after the author; `name` is
+    /// reserved and not read. `alias` is 1 to 32 of `[a-z0-9-]`, shorter
+    /// than the name, and neither `enshwick` nor `help`.
+    /// [`Status::BAD_ARGS`] for a malformed or unreadable alias, or a mod
+    /// whose name is `enshwick` or `help`; [`Status::REFUSED`] for a second
+    /// call, or when another mod's commands have the same name or another
+    /// mod's whole id is that name, which the
+    /// loader logs and reports naming both mods, the mod running on without
+    /// commands. An alias that another mod's commands, name or id hold goes
+    /// to that mod: the call returns [`Status::OK`], the mod's commands run
+    /// by their name alone, and the loader logs and reports it once naming
+    /// both mods. A mod built before 11.23 whose alias is well formed but
+    /// not shorter than the name gets [`Status::OK`] and its name alone,
+    /// reported the same way. Allowed during `enshwick_mod_init` only; the strings are
+    /// borrowed for the call. A panic in the loader returns
+    /// [`Status::REFUSED`]. ABI 11.19; `name` not read since 11.23.
     pub commands: extern "system" fn(me: ModHandle, name: Str, alias: Str) -> Status,
-    /// Runs the command line `line`, such as `/adl online`, as a remote
+    /// Runs the command line `line`, such as `/adm online`, as a remote
     /// caller named `label` (for the log and the handler, at most 64 bytes)
     /// with the game's permission bits `permissions` (as
     /// [`PlayerInfo::permissions`](super::PlayerInfo::permissions)), never as
@@ -1866,8 +1874,13 @@ pub struct HostApi {
     pub game_query:
         extern "system" fn(me: ModHandle, entity: Entity, query: u32, holds: *mut u32) -> Status,
     /// Shows the calling mod's window `id`, 1 to 32 of `[a-z0-9-]`, to the
-    /// `count` players whose account keys `players` holds, or closes it
-    /// on their clients when `close` is 1. After the server's step the
+    /// `count` players whose account keys `players` holds; closes it on
+    /// their clients when `close` is 1; or, when `close` is 2, updates it
+    /// only on the clients that still show it, opening none (ABI 11.23; a
+    /// loader before it answers [`Status::BAD_ARGS`]). When a client closes
+    /// a window or its player leaves, the loader tells the mod with
+    /// [`ActionCall::WINDOW_CLOSED`](super::ActionCall::WINDOW_CLOSED).
+    /// After the server's step the
     /// loader asks the mod for the window as each player sees it
     /// ([`ActionCall::WINDOW`](super::ActionCall::WINDOW)) and carries the
     /// text to that player's client, which draws it; an empty answer closes

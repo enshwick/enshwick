@@ -97,14 +97,15 @@ fn running(loader: &Loader) -> Vec<Registered> {
         .collect()
 }
 
-/// Asks `registered` its question `kind` about `player`, with the action
-/// and its arguments and the object `target` the run names; the answer.
+/// Asks `registered` its question `kind` about `player`, with the action,
+/// its arguments and the word that named the mod in a typed line, and the
+/// object `target` the run names; the answer.
 fn ask(
     registered: Registered,
     kind: u32,
     player: &PlayerInfo,
     language: u32,
-    (action, args): (&str, &str),
+    (action, args, word): (&str, &str, &str),
     target: ActionTarget,
 ) -> Answer {
     let mut written: ActionReply = bytemuck::Zeroable::zeroed();
@@ -121,6 +122,7 @@ fn ask(
         } else {
             &raw mut written
         },
+        word: Str::new(word),
     };
     let mut reply = Str::EMPTY;
     // SAFETY: the callback lives in the mod's DLL, which stays loaded; the
@@ -186,7 +188,7 @@ pub(crate) fn window(
         ActionCall::WINDOW,
         player,
         language,
-        (id, ""),
+        (id, "", ""),
         ActionTarget::NONE,
     );
     Some(answer.text)
@@ -200,9 +202,10 @@ pub(crate) struct Answer {
     pub(crate) text: String,
 }
 
-/// Runs the console line `rest` on the actions of mod `index`; the answer,
-/// or `None` when the mod is off or declared no actions.
-pub(crate) fn console(loader: &Loader, index: usize, rest: &str) -> Option<String> {
+/// Runs the console line `rest` on the actions of mod `index`, named there
+/// by `word`; the answer, or `None` when the mod is off or declared no
+/// actions.
+pub(crate) fn console(loader: &Loader, index: usize, word: &str, rest: &str) -> Option<String> {
     let console = crate::console::the_console();
     let reply = command(
         loader,
@@ -210,22 +213,23 @@ pub(crate) fn console(loader: &Loader, index: usize, rest: &str) -> Option<Strin
         ActionCall::CONSOLE,
         &console,
         0,
-        rest,
+        (word, rest),
     )?;
     Some(reply.text)
 }
 
 /// Asks mod `owner` to run the text form `rest` of one of its actions for
 /// `caller`, as question `kind` ([`ActionCall::CONSOLE`],
-/// [`ActionCall::CHAT`] or [`ActionCall::REMOTE`]); its reply, `1` or `0`
-/// and the text, or `None` when the mod is off or declared no actions.
+/// [`ActionCall::CHAT`] or [`ActionCall::REMOTE`]), `word` being what named
+/// the mod in the line, in lower case; its reply, `1` or `0` and the text,
+/// or `None` when the mod is off or declared no actions.
 pub(crate) fn command(
     loader: &Loader,
     owner: ModIndex,
     kind: u32,
     caller: &PlayerInfo,
     language: u32,
-    rest: &str,
+    (word, rest): (&str, &str),
 ) -> Option<Answer> {
     let registered = running(loader).into_iter().find(|r| r.owner == owner)?;
     Some(ask(
@@ -233,7 +237,7 @@ pub(crate) fn command(
         kind,
         caller,
         language,
-        (rest, ""),
+        (rest, "", word),
         ActionTarget::NONE,
     ))
 }
@@ -262,16 +266,60 @@ fn admit(loader: &Loader, key: u64) -> Option<(PlayerInfo, u32)> {
 /// The connected player of account `key` and the language they read,
 /// `hello` being the one their client named in its hello.
 fn caller(loader: &Loader, key: u64, hello: u32) -> Option<(PlayerInfo, u32)> {
-    let language = crate::net::language_of(key).map_or(hello, |l| l.0);
-    Some((player(loader, key)?, language))
+    Some((player(loader, key)?, read_language(key, hello)))
+}
+
+/// The language the player of account `key` reads: the one their client
+/// names now, else `hello`, the one it named in its hello.
+fn read_language(key: u64, hello: u32) -> u32 {
+    crate::net::language_of(key).map_or(hello, |l| l.0)
 }
 
 /// The connected player of account `key` and the language they read, for a
 /// command they typed, which counts against the chat's rate, not
 /// [`RUN_GAP`].
 pub(crate) fn commander(loader: &Loader, key: u64) -> Option<(PlayerInfo, u32)> {
-    let hello = server_state(|s| s.clients.get(&key).map_or(0, |c| c.language));
-    caller(loader, key, hello)
+    Some((player(loader, key)?, language_of(key)))
+}
+
+/// The language the player of account `key` reads, as their client named
+/// it; 0, the fallback, for one that named none.
+pub(crate) fn language_of(key: u64) -> u32 {
+    read_language(
+        key,
+        server_state(|s| s.clients.get(&key).map_or(0, |c| c.language)),
+    )
+}
+
+/// Tells the mods that the client of account `key` closed mod `owner`'s
+/// window `window`, given as `Some((owner, window))`, which that mod hears,
+/// or with `None` that the player left, which every running mod with
+/// actions hears. The mods get the key alone, since the player may be gone.
+pub(crate) fn window_closed(loader: &Loader, key: u64, closed: Option<(ModIndex, &str)>) {
+    let who = PlayerInfo {
+        header: Header::of::<PlayerInfo>(),
+        slot: u32::MAX,
+        entity: enshwick::Entity(0),
+        key: enshwick::PlayerKey::new(key),
+        permissions: 0,
+        name_len: 0,
+        name: [0; 64],
+    };
+    for registered in running(loader) {
+        let window = match closed {
+            None => "",
+            Some((owner, window)) if owner == registered.owner => window,
+            Some(_) => continue,
+        };
+        let _heard = ask(
+            registered,
+            ActionCall::WINDOW_CLOSED,
+            &who,
+            0,
+            (window, "", ""),
+            ActionTarget::NONE,
+        );
+    }
 }
 
 /// The running mods that declared actions, by index.
@@ -293,7 +341,7 @@ pub(crate) fn allowed(
         ActionCall::SHEET,
         player,
         0,
-        ("", ""),
+        ("", "", ""),
         ActionTarget::NONE,
     );
     Some(sheet_ids(&sheet.text))
@@ -372,7 +420,7 @@ pub(crate) fn run(
         ActionCall::RUN,
         &player,
         language,
-        (action, args),
+        (action, args, ""),
         target,
     );
     crate::windows::ran(registered.owner, key);

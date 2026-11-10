@@ -51,6 +51,9 @@ const LINES_PER_DRAIN: usize = 16;
 const LINES_PER_REPLY: usize = 16;
 /// Lines waiting at most; more are dropped.
 const MAX_WAITING: usize = 256;
+/// Lines waiting past which replies to typed commands queue no more, so
+/// players typing commands leave room for the mods' own lines.
+const MAX_REPLY_WAITING: usize = MAX_WAITING / 2;
 /// The result the game's chat post writes on success.
 const POSTED: u8 = 0;
 /// The chat type of a line a player typed, which the game's own client
@@ -192,7 +195,22 @@ pub(crate) fn send(to: u64, text: &str) -> Status {
         return Status::MISSING;
     }
     let to = if to == 0 { To::All } else { To::Key(to) };
-    queue(to, text);
+    let _left_out = queue(to, replied(text), MAX_WAITING);
+    Status::OK
+}
+
+/// Queues every line of `text` for the player with account key `to` alone:
+/// the reply to a command they typed, which may be longer than the one
+/// message a mod sends, so a long help arrives whole, while fewer than
+/// [`MAX_REPLY_WAITING`] lines wait.
+pub(crate) fn reply(to: u64, text: &str) -> Status {
+    if LOADED.get().is_none() {
+        return Status::MISSING;
+    }
+    let left_out = queue(To::Key(to), shown(text), MAX_REPLY_WAITING);
+    if left_out > 0 {
+        dropped(left_out);
+    }
     Status::OK
 }
 
@@ -229,27 +247,33 @@ fn cut(text: &str, max: usize) -> &str {
     &text[..end]
 }
 
-/// Queues the lines of `text`, a mod's message.
-fn queue(to: To, text: &str) {
+/// Queues `lines`, each a chat line, while fewer than `room` lines wait;
+/// how many it left out.
+fn queue<'a>(to: To, lines: impl Iterator<Item = &'a str>, room: usize) -> usize {
     let mut outbox = OUTBOX.relock();
-    for line in replied(text) {
+    let mut left_out = 0;
+    for line in lines {
         let line = Line {
             to,
             text: line.to_owned(),
         };
-        if !outbox.push_whole([line]) {
-            break;
+        if left_out > 0 || outbox.len() >= room || !outbox.push_whole([line]) {
+            left_out += 1;
         }
     }
     WAITING.store(!outbox.is_empty(), Ordering::Release);
+    left_out
 }
 
-/// The lines of `text` the chat shows: none empty, at most
+/// The lines of `text` the chat shows: none empty.
+fn shown(text: &str) -> impl Iterator<Item = &str> {
+    text.lines().filter(|l| !l.trim().is_empty())
+}
+
+/// The lines of a mod's message `text` the chat shows, at most
 /// [`LINES_PER_REPLY`].
 fn replied(text: &str) -> impl Iterator<Item = &str> {
-    text.lines()
-        .filter(|l| !l.trim().is_empty())
-        .take(LINES_PER_REPLY)
+    shown(text).take(LINES_PER_REPLY)
 }
 
 /// Links the chat post on the server; without it mods' chat lines and the
@@ -834,124 +858,4 @@ unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn a_line_that_is_not_utf8_stays_within_the_limit_once_replaced() {
-        let bytes = [0xffu8; 16];
-        let span = [bytes.as_ptr().expose_provenance(), bytes.len()];
-        // SAFETY: `span` views `bytes`, readable and unchanged for the call.
-        let text = unsafe { read_text(&raw const span, 16) };
-        assert_eq!(text, "\u{fffd}".repeat(5));
-        assert!(text.len() <= 16);
-    }
-
-    #[test]
-    fn a_panic_in_the_part_for_mods_leaves_the_chat_mute_on() {
-        let panicked = MODS_FUSE.run("a test", || panic!("a test"));
-        assert_eq!(panicked, None::<()>);
-        assert!(MODS_FUSE.is_off());
-        assert!(!CHAT_FUSE.is_off(), "the mute and old frames keep working");
-    }
-
-    #[test]
-    fn a_line_to_one_player_needs_a_positive_byte_mask_and_overhead() {
-        let one = OneLine {
-            handle_slot: 0x7f,
-            line_overhead: 0x17,
-        };
-        assert_eq!(OneLine::from_rows(Some(0x7f), Some(0x17)), Some(one));
-        assert_eq!(OneLine::from_rows(None, Some(0x17)), None, "no mask");
-        assert_eq!(OneLine::from_rows(Some(0x7f), None), None, "no overhead");
-        assert_eq!(
-            OneLine::from_rows(Some(0x80), Some(0x17)),
-            None,
-            "a negative mask"
-        );
-        assert_eq!(
-            OneLine::from_rows(Some(0x7f), Some(0xe9)),
-            None,
-            "a negative overhead"
-        );
-        assert_eq!(OneLine::from_rows(Some(0), Some(0x17)), None, "a zero mask");
-        assert_eq!(
-            OneLine::from_rows(Some(0x7f), Some(0)),
-            None,
-            "a zero overhead"
-        );
-    }
-
-    #[test]
-    fn a_line_counts_its_text_and_overhead_rounded_up_to_four() {
-        assert_eq!(line_bytes(0, 0x17), 0x18);
-        assert_eq!(line_bytes(1, 0x17), 0x18);
-        assert_eq!(line_bytes(2, 0x17), 0x1c);
-        assert_eq!(line_bytes(0x400, 0x17), 0x418);
-        assert_eq!(line_bytes(usize::MAX, 0x17), u32::MAX);
-    }
-
-    #[test]
-    fn a_reply_keeps_its_lines_that_are_not_empty_up_to_a_bound() {
-        let text = "said: hi\n\n  \n/enshwick ok";
-        assert_eq!(
-            replied(text).collect::<Vec<_>>(),
-            ["said: hi", "/enshwick ok"]
-        );
-        assert_eq!(replied(&"x\n".repeat(40)).count(), LINES_PER_REPLY);
-    }
-
-    #[test]
-    fn lines_are_cut_at_character_boundaries() {
-        assert_eq!(cut("Сейф", 3), "С");
-        assert_eq!(cut("safe", 10), "safe");
-        assert_eq!(cut("safe", 0), "");
-    }
-
-    #[test]
-    fn a_player_s_line_of_any_chat_type_is_dropped_while_muted_or_an_old_frame() {
-        for kind in [TYPED, EMOTE, 2, 4, 255] {
-            assert_eq!(
-                verdict(true, kind, true, false),
-                Verdict::Drop,
-                "kind {kind}"
-            );
-            assert_eq!(
-                verdict(true, kind, false, true),
-                Verdict::Drop,
-                "kind {kind}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_client_s_emote_is_heard_as_an_emote_and_only_its_typed_text_as_the_player_s() {
-        assert_eq!(heard_as(true, TYPED), ChatLine::PLAYER);
-        assert_eq!(heard_as(true, EMOTE), ChatLine::EMOTE);
-        assert_eq!(heard_as(false, TYPED), ChatLine::NOTICE, "the server's own");
-        assert_eq!(heard_as(false, EMOTE), ChatLine::EMOTE);
-    }
-
-    #[test]
-    fn a_player_s_typed_line_and_emote_keep_their_chat_type() {
-        assert_eq!(verdict(true, TYPED, false, false), Verdict::Pass);
-        assert_eq!(verdict(true, EMOTE, false, false), Verdict::Pass);
-    }
-
-    #[test]
-    fn a_player_s_line_of_another_chat_type_is_dropped_not_posted_as_empty_text() {
-        for kind in [2, 3, 4, 255] {
-            assert_eq!(
-                verdict(true, kind, false, false),
-                Verdict::Drop,
-                "kind {kind}"
-            );
-        }
-    }
-
-    #[test]
-    fn lines_the_server_posts_itself_keep_their_chat_type() {
-        for kind in [0, 1, 4, 255] {
-            assert_eq!(verdict(false, kind, true, true), Verdict::Pass);
-        }
-    }
-}
+mod tests;

@@ -31,6 +31,14 @@ pub(crate) struct ScriptAction {
     /// A line on what the action does, a text key, as [`Action::help`] sets it.
     #[script(default)]
     pub help: String,
+    /// The group the help lists it under, a text key, as [`Action::group`]
+    /// sets it.
+    #[script(default)]
+    pub group: String,
+    /// Whether its players include the one who looks, as
+    /// [`Action::with_self`] sets it.
+    #[script(default)]
+    pub with_self: bool,
     /// The arguments in order, as [`Action::arg`] adds them; a list takes none.
     #[script(default)]
     pub args: Vec<Arg>,
@@ -67,8 +75,9 @@ impl ScriptAction {
             }
             None => Action::new(&self.id, &self.label),
         };
-        if !self.help.is_empty() {
-            action = action.help(&self.help);
+        action = action.help(&self.help).group(&self.group);
+        if self.with_self {
+            action = action.with_self();
         }
         for arg in self.args {
             action = action.arg(arg);
@@ -477,7 +486,18 @@ impl Object for Arg {
         "Arg",
         "An argument of an action: a typed choice, or a line of text of bounded bytes.",
     );
-    const PARTS: &'static [&'static [Function<Self>]] = &[];
+    const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_ARG];
+}
+
+#[crate::script(arg)]
+impl Arg {
+    /// The argument as one a typed line may leave out, taking `default`
+    /// then, as [`Arg::optional`] makes it.
+    #[script(name = "optional")]
+    #[must_use]
+    pub(crate) fn optional_script(&self, default: Value) -> Self {
+        self.clone().optional(default)
+    }
 }
 
 impl Object for Actions {
@@ -567,15 +587,16 @@ impl Actions {
         self.control(action, key)
     }
 
-    /// Names the mod's actions as commands `/<name>` and `/<alias>`, as
+    /// Names the mod's actions as commands, `/<alias>` beside the name in
+    /// the mod's id, as
     /// [`Actions::commands`] does.
     ///
     /// # Errors
     ///
     /// As [`Actions::commands`].
     #[script(name = "commands")]
-    pub(crate) fn commands_script(&self, name: &str, alias: &str) -> Result<(), Off> {
-        self.commands(name, alias)
+    pub(crate) fn commands_script(&self, alias: &str) -> Result<(), Off> {
+        self.commands(alias)
     }
 
     /// Tells the platform that who may run the mod's actions changed, as
@@ -621,6 +642,37 @@ impl Actions {
     )]
     pub(crate) fn close_script(&self, id: &str, players: Vec<PlayerKey>) -> Result<(), Off> {
         self.close(id, &players)
+    }
+
+    /// Puts `window` in place of the one of its id on the clients of
+    /// `players` that still show it, opening it for no one, as
+    /// [`Actions::update`] does.
+    ///
+    /// # Errors
+    ///
+    /// As [`Actions::update`].
+    #[script(name = "update")]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "a script hands the list over as its own copy"
+    )]
+    pub(crate) fn update_script(
+        &self,
+        window: ScriptWindow,
+        players: Vec<PlayerKey>,
+    ) -> Result<(), Off> {
+        self.update(window.into_window(), &players)
+    }
+
+    /// Calls `closed` with a player's account key and a window's id when
+    /// their client closed that window, and with the key alone when the
+    /// player left, as [`Actions::on_closed`] does.
+    #[script(name = "on_closed")]
+    pub(crate) fn on_closed_script(
+        &self,
+        closed: impl Fn(PlayerKey, Option<String>) + Send + Sync + 'static,
+    ) {
+        self.on_closed(move |player, window| closed(player, window.map(str::to_owned)));
     }
 }
 

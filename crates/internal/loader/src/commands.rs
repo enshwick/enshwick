@@ -24,69 +24,25 @@ pub use enshwick::commands::MAX_LINE;
 /// Every permission bit the game gives, for the console's full rights.
 pub const ALL_PERMISSIONS: u8 = enshwick::world::PlayerPermissions::ALL_BITS;
 
-/// A mod's command name and alias.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Named {
-    /// The mod that named them.
-    pub owner: ModIndex,
-    /// The full name, `admin-tools` in `/admin-tools online`.
-    pub name: String,
-    /// The shorter alias, `adl` in `/adl online`.
-    pub alias: String,
-}
-
-/// Why a mod's command names are refused.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Refusal {
-    /// A malformed or reserved word, or an alias not shorter than the name.
-    Malformed,
-    /// The mod named its commands before.
-    Twice,
-    /// Another mod's name, alias or id is one of the words.
-    Taken(ModIndex),
-}
-
-/// Checks mod `owner`'s `name` and `alias` against the reserved words, the
-/// mods' ids (`ids`, by mod index) and the names in `named`.
-///
-/// # Errors
-///
-/// [`Refusal`] with why the words cannot be the mod's.
-pub fn check(
-    named: &[Named],
-    ids: &[&str],
-    owner: ModIndex,
-    name: &str,
-    alias: &str,
-) -> Result<(), Refusal> {
-    if !enshwick::commands::names_fit(name, alias) {
-        return Err(Refusal::Malformed);
-    }
-    if named.iter().any(|n| n.owner == owner) {
-        return Err(Refusal::Twice);
-    }
-    let words = [name, alias];
-    if let Some(n) = named
-        .iter()
-        .find(|n| words.contains(&n.name.as_str()) || words.contains(&n.alias.as_str()))
-    {
-        return Err(Refusal::Taken(n.owner));
-    }
-    let other_id = ids
-        .iter()
-        .enumerate()
-        .find(|&(i, id)| i != owner.get() && words.iter().any(|w| id.eq_ignore_ascii_case(w)));
-    match other_id {
-        Some((i, _)) => Err(Refusal::Taken(ModIndex::new(i))),
-        None => Ok(()),
-    }
-}
+/// A mod's command name and alias, as the one rule of
+/// [`enshwick::command_names`] grants them.
+pub type Named = enshwick::command_names::Named<ModIndex>;
+/// Why a mod's commands are refused.
+pub type Refusal = enshwick::command_names::Refusal<ModIndex>;
 
 /// The first word of `line` and the rest, trimmed.
 fn split(line: &str) -> (&str, &str) {
     let line = line.trim();
     let (first, rest) = line.split_once(char::is_whitespace).unwrap_or((line, ""));
     (first, rest.trim())
+}
+
+/// The word that names a mod in `line`, as the mod is told it: the first
+/// word in lower case, without a leading `/`.
+#[must_use]
+pub fn word(line: &str) -> String {
+    let (first, _) = split(line);
+    first.strip_prefix('/').unwrap_or(first).to_lowercase()
 }
 
 /// The mod whose command name or alias is `line`'s first word, a leading
@@ -97,7 +53,7 @@ pub fn parse<'a>(named: &[Named], line: &'a str) -> Option<(ModIndex, &'a str)> 
     let word = first.strip_prefix('/').unwrap_or(first);
     named
         .iter()
-        .find(|n| n.name.eq_ignore_ascii_case(word) || n.alias.eq_ignore_ascii_case(word))
+        .find(|n| n.is_called(word))
         .map(|n| (n.owner, rest))
 }
 
@@ -133,17 +89,20 @@ pub enum Reply<'a> {
     None,
     /// One notice.
     Notice(std::borrow::Cow<'a, str>),
-    /// Several lines in chat, to that player alone.
+    /// Several lines in chat, to that player alone, however many.
     Chat(&'a str),
 }
 
-/// How the reply `text` goes: one line as a notice, several in chat while
+/// How the reply `text` of a command typed in chat goes to its player.
+///
+/// One line of an action that was `done` goes as a notice. Several lines,
+/// and every refusal, go in chat, where the player typed and reads, while
 /// `chat_to_one` (lines to one player) works, else joined into one notice.
 #[must_use]
-pub fn reply_by(text: &str, chat_to_one: bool) -> Reply<'_> {
+pub fn reply_by(text: &str, done: bool, chat_to_one: bool) -> Reply<'_> {
     if text.is_empty() {
         Reply::None
-    } else if text.lines().nth(1).is_none() {
+    } else if done && text.lines().nth(1).is_none() {
         Reply::Notice(text.into())
     } else if chat_to_one {
         Reply::Chat(text)
@@ -179,59 +138,15 @@ mod tests {
         Named {
             owner: ModIndex::new(owner),
             name: name.to_owned(),
-            alias: alias.to_owned(),
+            alias: Some(alias.to_owned()).filter(|alias| !alias.is_empty()),
         }
-    }
-
-    #[test]
-    fn a_name_and_a_shorter_alias_of_plain_words_are_taken() {
-        let ids = ["you.admin-tools", "you.weather"];
-        let me = ModIndex::new(0);
-        assert_eq!(check(&[], &ids, me, "admin-tools", "adl"), Ok(()));
-        let long = "x".repeat(33);
-        for (name, alias) in [
-            ("Admin", "adl"),
-            ("admin tools", "adl"),
-            ("adl", "admin-tools"),
-            ("adl", "adl"),
-            ("admin-tools", ""),
-            ("enshwick", "en"),
-            ("helper", "help"),
-            (long.as_str(), "x"),
-        ] {
-            assert_eq!(
-                check(&[], &ids, me, name, alias),
-                Err(Refusal::Malformed),
-                "{name} {alias}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_word_another_mod_took_is_refused_naming_that_mod() {
-        let ids = ["you.admin-tools", "you.weather", "sky"];
-        let taken = [named(1, "weather", "wx")];
-        let me = ModIndex::new(0);
-        let by = |i| Err(Refusal::Taken(ModIndex::new(i)));
-        assert_eq!(check(&taken, &ids, me, "admin-tools", "wx"), by(1));
-        assert_eq!(check(&taken, &ids, me, "weather", "adl"), by(1));
-        assert_eq!(check(&taken, &ids, me, "skies", "sky"), by(2));
-        assert_eq!(
-            check(&taken, &ids, ModIndex::new(1), "winds", "wi"),
-            Err(Refusal::Twice)
-        );
-        assert_eq!(
-            check(&taken, &ids, ModIndex::new(2), "sky-mod", "sky"),
-            Ok(()),
-            "its own id"
-        );
     }
 
     #[test]
     fn a_line_names_a_mod_by_its_command_name_or_alias_with_or_without_a_slash() {
-        let all = [named(3, "admin-tools", "adl"), named(5, "weather", "wx")];
+        let all = [named(3, "admin-tools", "adm"), named(5, "weather", "wx")];
         let at = |i| ModIndex::new(i);
-        assert_eq!(parse(&all, "/adl online"), Some((at(3), "online")));
+        assert_eq!(parse(&all, "/adm online"), Some((at(3), "online")));
         assert_eq!(
             parse(&all, "  ADMIN-TOOLS   kick  Ann Lee "),
             Some((at(3), "kick  Ann Lee"))
@@ -244,10 +159,10 @@ mod tests {
 
     #[test]
     fn a_command_of_a_mod_that_is_off_leaves_the_chat_and_runs_nowhere() {
-        let all = [named(3, "admin-tools", "adl"), named(5, "weather", "wx")];
+        let all = [named(3, "admin-tools", "adm"), named(5, "weather", "wx")];
         let running = |owner: ModIndex| owner.get() == 5;
         assert_eq!(
-            typed(&all, "/adl password hunter2", running),
+            typed(&all, "/adm password hunter2", running),
             Typed::Off,
             "never posted for every player to read"
         );
@@ -255,23 +170,42 @@ mod tests {
             typed(&all, "/wx rain", running),
             Typed::Run(ModIndex::new(5), "rain")
         );
-        assert_eq!(typed(&all, "adl online", running), Typed::Chat);
+        assert_eq!(typed(&all, "adm online", running), Typed::Chat);
         assert_eq!(typed(&all, "/me waves", running), Typed::Chat);
     }
 
     #[test]
     fn a_reply_of_several_lines_goes_as_one_notice_when_chat_to_one_player_is_off() {
         let help = "online: players online\nkick: kick a player";
-        assert_eq!(reply_by(help, true), Reply::Chat(help));
+        assert_eq!(reply_by(help, true, true), Reply::Chat(help));
         assert_eq!(
-            reply_by(help, false),
+            reply_by(help, true, false),
             Reply::Notice("online: players online / kick: kick a player".into())
         );
         assert_eq!(
-            reply_by("kicked Ann", true),
+            reply_by("kicked Ann", true, true),
             Reply::Notice("kicked Ann".into())
         );
-        assert_eq!(reply_by("", false), Reply::None);
+        assert_eq!(reply_by("", true, false), Reply::None);
+        assert_eq!(reply_by("", false, true), Reply::None);
+    }
+
+    #[test]
+    fn a_refusal_of_a_typed_command_goes_into_the_chat_of_who_typed_it() {
+        let unknown = "No action dance. /adm help lists them.";
+        assert_eq!(reply_by(unknown, false, true), Reply::Chat(unknown));
+        assert_eq!(
+            reply_by(unknown, false, false),
+            Reply::Notice(unknown.into()),
+            "as a notice while lines to one player are off"
+        );
+    }
+
+    #[test]
+    fn the_word_that_names_a_mod_is_told_in_lower_case_without_its_slash() {
+        assert_eq!(word("/ADM  online"), "adm");
+        assert_eq!(word("you.admin-tools kick Ann"), "you.admin-tools");
+        assert_eq!(word("  "), "");
     }
 
     #[test]

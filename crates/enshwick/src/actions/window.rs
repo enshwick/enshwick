@@ -32,6 +32,10 @@ pub const MAX_BUTTONS: usize = 4;
 /// longest ago.
 pub const MAX_KEPT: usize = 1_024;
 
+/// The most windows a client keeps, of all mods: a show of one more lets
+/// the oldest go, which its mod hears as closed.
+pub const MAX_HELD: usize = 8;
+
 /// The most players one show or close hands the loader in a call;
 /// [`Actions::show`](super::Actions::show) splits a longer list.
 pub const MAX_CALL_PLAYERS: usize = 64;
@@ -303,6 +307,21 @@ impl Kept {
             .retain(|(player, window)| window.id != id || !players.contains(player));
     }
 
+    /// Puts `window` in place of the one of its id that each of `players`
+    /// holds, where they hold one; a player without it gets none.
+    pub(super) fn replace(&mut self, window: &Arc<Window>, players: &[PlayerKey]) {
+        for (player, held) in &mut self.0 {
+            if held.id == window.id && players.contains(player) {
+                *held = Arc::clone(window);
+            }
+        }
+    }
+
+    /// Forgets every window `player` holds, as when they leave.
+    pub(super) fn forget_player(&mut self, player: PlayerKey) {
+        self.0.retain(|(holder, _)| *holder != player);
+    }
+
     /// Window `id` as `player` holds it, now the last to go.
     pub(super) fn rendered(&mut self, id: &str, player: PlayerKey) -> Option<Arc<Window>> {
         let at = self
@@ -484,6 +503,24 @@ mod tests {
         values.iter().fold(key.to_owned(), |text, (name, value)| {
             text.replace(&format!("{{{name}}}"), value)
         })
+    }
+
+    #[test]
+    fn an_update_replaces_only_that_window_of_the_players_named() {
+        let (ann, bob) = (PlayerKey::new(7), PlayerKey::new(8));
+        let window = |id: &str, title: &str| Arc::new(Window::new(id, title));
+        let mut kept = Kept::default();
+        kept.keep(&window("w", "old"), &[ann, bob]);
+        kept.keep(&window("v", "other"), &[ann]);
+        kept.replace(&window("w", "new"), &[ann]);
+        let titles: Vec<(u64, &str, &str)> = kept
+            .0
+            .iter()
+            .map(|(p, w)| (p.get(), w.id.as_str(), w.title.key.as_str()))
+            .collect();
+        assert!(titles.contains(&(7, "w", "new")));
+        assert!(titles.contains(&(8, "w", "old")), "bob was not named");
+        assert!(titles.contains(&(7, "v", "other")), "another window stays");
     }
 
     #[test]
