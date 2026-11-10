@@ -286,3 +286,4 @@
 "mods.license" = "Licence : {license}"
 "mods.homepage" = "Page web : {address}"
 "mods.details" = "Détails"
+"mods.metadata.gap" = " · "

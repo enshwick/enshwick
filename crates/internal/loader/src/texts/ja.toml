@@ -286,3 +286,4 @@
 "mods.license" = "ライセンス：{license}"
 "mods.homepage" = "ホームページ：{address}"
 "mods.details" = "詳細"
+"mods.metadata.gap" = " · "

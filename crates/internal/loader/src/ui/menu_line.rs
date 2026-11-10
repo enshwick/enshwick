@@ -59,7 +59,7 @@ pub(super) fn link(loader: &Loader, engine: &Engine) {
 /// The line for this frame in the frame's text arena, built again only when
 /// the count of mods off changed.
 fn line(loader: &Loader) -> super::engine::UiText {
-    let off = crate::off_line::mods_off(loader).len();
+    let off = crate::off_line::mods_off_count(loader);
     LINE.with_borrow_mut(|kept| {
         let line = kept.get(off, || {
             use crate::diag::MenuNote;
@@ -75,7 +75,7 @@ fn line(loader: &Loader) -> super::engine::UiText {
                 .into_iter()
                 .filter_map(|(shown, note)| shown.then_some(note))
                 .collect();
-            let total = loader.mods.len() + loader.skipped.len();
+            let total = loader.mods.len() + crate::off_line::skipped_off(loader).count();
             crate::diag::menu_line(env!("CARGO_PKG_VERSION"), total, off, &notes)
         });
         copy(&[line.as_bytes()])

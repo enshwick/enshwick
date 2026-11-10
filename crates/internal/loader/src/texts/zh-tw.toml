@@ -286,3 +286,4 @@
 "mods.license" = "授權：{license}"
 "mods.homepage" = "首頁：{address}"
 "mods.details" = "詳細資料"
+"mods.metadata.gap" = " · "

@@ -91,8 +91,20 @@ pub struct Skipped {
     pub version: String,
     /// The name players read, or the id when the manifest names none.
     pub label: String,
+    /// Its file relative to the game's folder, so a player finds the copy
+    /// to act on.
+    pub file: String,
     /// Why it does not load.
     pub reason: Skip,
+}
+
+impl Skipped {
+    /// Whether it counts as a mod that is off: a second copy of a mod that
+    /// runs does not, since that mod runs; `loads` tells whether an id runs.
+    #[must_use]
+    pub fn counts_off(&self, loads: impl Fn(&str) -> bool) -> bool {
+        !matches!(&self.reason, Skip::Copy { id, .. } if loads(id))
+    }
 }
 
 impl core::fmt::Display for Skip {
@@ -343,6 +355,25 @@ mod tests {
                 })
                 .collect(),
         }
+    }
+
+    #[test]
+    fn only_a_second_copy_of_a_mod_that_runs_does_not_count_as_off() {
+        let skipped = |reason| Skipped {
+            id: "you.safes".into(),
+            version: "1.0.0".into(),
+            label: "Safes".into(),
+            file: "you.safes/you.safes.dll".into(),
+            reason,
+        };
+        let copy = skipped(Skip::Copy {
+            id: "you.safes".into(),
+            first: 0,
+        });
+        assert!(!copy.counts_off(|id| id == "you.safes"));
+        assert!(copy.counts_off(|_| false), "no copy of it runs");
+        let missing = skipped(Skip::Missing { id: "x".into() });
+        assert!(missing.counts_off(|_| true));
     }
 
     #[test]

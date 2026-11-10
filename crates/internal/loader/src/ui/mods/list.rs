@@ -16,11 +16,27 @@ use crate::ui::engine::Icon;
 /// What the player did on the mod list.
 pub(super) enum Listed {
     Nothing,
-    /// Opened mod `index`'s settings and key bindings.
+    /// Opened mod `index`'s settings and key bindings with its gear, which
+    /// for a mod with nothing to set here goes straight to the joined
+    /// server's settings.
     Settings(usize),
+    /// Opened mod `index`'s own page with its Details button.
+    Details(usize),
     /// Opened the key bindings of a mod the joined server runs, by id and
     /// name.
     Bindings(String, String),
+}
+
+/// What a click on mod `index`'s Details button or gear opens: the Details
+/// button the mod's own page, the gear its settings.
+const fn clicked(details: bool, gear: bool, index: usize) -> Option<Listed> {
+    if gear {
+        Some(Listed::Settings(index))
+    } else if details {
+        Some(Listed::Details(index))
+    } else {
+        None
+    }
 }
 
 /// Paints a mod's plain name, its version and authors dimmed below it, that
@@ -65,12 +81,13 @@ fn heading(
     }
 }
 
-/// Paints a mod the loader skipped at start, as off with its reason.
+/// Paints a mod the loader skipped at start, as off with its reason; its
+/// dimmed line names its file, so a player finds the copy the reason means.
 fn skipped_row(paint: &Painter<'_>, skipped: &crate::resolve::Skipped) {
     heading(
         paint,
         &skipped.label,
-        &skipped.version,
+        &metadata(&skipped.version, core::slice::from_ref(&skipped.file)),
         state_text(true, false).map(|state| {
             (
                 state,
@@ -148,7 +165,7 @@ fn metadata(version: &str, authors: &[String]) -> String {
     core::iter::once(version)
         .chain(authors.iter().map(String::as_str))
         .collect::<Vec<_>>()
-        .join(" · ")
+        .join(texts::text("mods.metadata.gap"))
 }
 
 /// The name the API gives the feature of a world store, before the store's
@@ -272,7 +289,7 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
             || super::controls::any_in(&controls, &record.id);
         // The Details button on every mod, at the same place; the gear under
         // it where the mod has something to set here, else its place kept.
-        let opened = paint.row(
+        let clicked = paint.row(
             || state(paint, record),
             || {
                 let details = button(Icon::Info);
@@ -280,11 +297,11 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
                 if !opens {
                     paint.icon_slot();
                 }
-                details || settings
+                clicked(details, settings, index)
             },
         );
-        if opened {
-            done = Listed::Settings(index);
+        if let Some(clicked) = clicked {
+            done = clicked;
         }
     }
     for (index, skipped) in (mods.len()..).zip(&loader.skipped) {
@@ -345,8 +362,15 @@ pub(super) fn pages(paint: &Painter<'_>, listing: Listing, first: &mut usize, co
 
 #[cfg(test)]
 mod tests {
-    use super::{metadata, state_text, store_off};
+    use super::{Listed, clicked, metadata, state_text, store_off};
     use crate::texts;
+
+    #[test]
+    fn the_details_button_opens_the_mod_s_page_and_only_the_gear_its_settings() {
+        assert!(matches!(clicked(true, false, 3), Some(Listed::Details(3))));
+        assert!(matches!(clicked(false, true, 3), Some(Listed::Settings(3))));
+        assert!(clicked(false, false, 3).is_none());
+    }
 
     #[test]
     fn a_mod_that_is_off_or_waiting_says_so_in_words_not_by_colour_alone() {

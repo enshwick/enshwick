@@ -556,7 +556,8 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
                 return Next::ServerList;
             }
             match list(loader, paint, first) {
-                Listed::Settings(index) => settings_page(loader, from, index),
+                Listed::Settings(index) => settings_page(loader, from, index, true),
+                Listed::Details(index) => settings_page(loader, from, index, false),
                 Listed::Bindings(id, name) => Next::page(
                     Page::Bindings {
                         id,
@@ -647,10 +648,10 @@ fn content(loader: &Loader, paint: &Painter<'_>, from: u8, page: &mut Page) -> N
     }
 }
 
-/// Opens mod `index`'s settings page, or straight the joined server's
-/// settings of a mod with nothing to show here; `from` is the menu under
-/// the screen.
-fn settings_page(loader: &Loader, from: u8, index: usize) -> Next {
+/// Opens mod `index`'s page, or for its gear (`gear`) straight the joined
+/// server's settings of a mod with nothing to show here; `from` is the menu
+/// under the screen.
+fn settings_page(loader: &Loader, from: u8, index: usize, gear: bool) -> Next {
     let Some(record) = loader.mods.get(index) else {
         return Next::Stay;
     };
@@ -658,7 +659,7 @@ fn settings_page(loader: &Loader, from: u8, index: usize) -> Next {
     let rows = page_rows(loader, index, place);
     let server = server_id(loader, index, place);
     match server {
-        Some(id) if rows.is_empty() && !controls::any(&record.id) => server_page(id, true),
+        Some(id) if gear && rows.is_empty() && !controls::any(&record.id) => server_page(id, true),
         server => Next::page(
             Page::Settings {
                 index,

@@ -286,3 +286,4 @@
 "mods.license" = "Lisans: {license}"
 "mods.homepage" = "Web sayfası: {address}"
 "mods.details" = "Ayrıntılar"
+"mods.metadata.gap" = " · "

@@ -275,6 +275,7 @@ fn skipped(
             // loaded through start, and `meta` copies what it reads.
             label: unsafe { crate::manifest::meta(libraries[*i].manifest) }
                 .label(&candidates[*i].id),
+            file: libraries[*i].file.clone(),
             reason: reason.clone(),
         })
         .collect()

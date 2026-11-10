@@ -286,3 +286,4 @@
 "mods.license" = "许可证：{license}"
 "mods.homepage" = "主页：{address}"
 "mods.details" = "详情"
+"mods.metadata.gap" = " · "

@@ -550,12 +550,13 @@ pause menu, beside Settings. It opens a screen of the loader's own that lists
 every mod. A row shows the mod's name, its version and authors on a dimmed
 line, and what it does. A mod the loader did not start, such as one whose
 required mod is missing, shows as off with the reason in the player's
-language. At the right of each row, a small button with the game's info icon
-opens the mod's page. The page shows its licence, homepage and the
-[extension points](extending.md) it defines and extends. Under that button, a
-mod that derives `Config` has the game's gear, with nothing to write in the
-mod. The gear opens the mod's settings,
-each player's own first, then the world's (see
+language, with no buttons. At the right of each mod that runs, a small button
+with the game's info icon opens the mod's page. The page shows its licence,
+homepage and the [extension points](extending.md) it defines and extends.
+Under that button, the game's gear shows when the mod has settings or key
+bindings to change there, with nothing to write in the mod. In a world, the
+gear of a mod that derives `Config` opens its settings, each player's own
+first, then the world's (see
 [How a world's file is kept](settings.md#how-a-worlds-file-is-kept)). Mod settings show
 nowhere else; the game's world settings have no mod rows. Back, Escape or the
 gamepad's B steps back from a mod's settings to the list, and from the list

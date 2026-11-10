@@ -286,3 +286,4 @@
 "mods.license" = "สัญญาอนุญาต: {license}"
 "mods.homepage" = "หน้าเว็บ: {address}"
 "mods.details" = "รายละเอียด"
+"mods.metadata.gap" = " · "

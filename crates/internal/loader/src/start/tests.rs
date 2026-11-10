@@ -130,7 +130,7 @@ pub(crate) fn bare_loader() -> Loader {
 }
 
 #[test]
-fn a_mod_skipped_at_start_is_kept_with_its_reason_and_counts_as_off() {
+fn a_second_copy_skipped_at_start_is_kept_with_its_reason_but_its_running_mod_is_not_off() {
     let (loader, order) = loader(
         &[TestMod::plain("you.safes"), TestMod::plain("you.safes")],
         false,
@@ -159,7 +159,12 @@ fn a_mod_skipped_at_start_is_kept_with_its_reason_and_counts_as_off() {
             first: 0
         }
     );
-    assert_eq!(crate::off_line::mods_off(&loader), ["you.safes"]);
+    assert_eq!(skipped.file, "you.safes/you.safes.dll");
+    assert!(
+        crate::off_line::mods_off(&loader).is_empty(),
+        "you.safes runs"
+    );
+    assert_eq!(crate::off_line::mods_off_count(&loader), 0);
 }
 
 /// The handle of the mod `id` in `loader`'s load order.

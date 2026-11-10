@@ -286,3 +286,4 @@
 "mods.license" = "라이선스: {license}"
 "mods.homepage" = "홈페이지: {address}"
 "mods.details" = "자세히"
+"mods.metadata.gap" = " · "
