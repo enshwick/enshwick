@@ -6,7 +6,9 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use enshwick::abi::{ActionCall, CommandInfo, Header, Status, Str};
 
-use super::{MAX_LINE, Named, Refusal, Reply, Typed, check, parse, remote_caller, reply_by, typed};
+use super::{
+    MAX_LINE, Named, Refusal, Reply, Typed, check, parse, remote_caller, reply_by, typed, word,
+};
 use crate::host::Loader;
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -20,6 +22,8 @@ const MAX_PENDING: usize = 64;
 struct Pending {
     key: u64,
     owner: ModIndex,
+    /// The word that named the mod, as [`word`] reads it.
+    word: String,
     rest: String,
 }
 
@@ -152,6 +156,7 @@ pub(crate) fn queue(loader: &Loader, key: u64, text: &str) -> bool {
             pending.push(Pending {
                 key,
                 owner,
+                word: word(text),
                 rest: rest.to_owned(),
             });
             STATE.waiting.store(true, Ordering::Release);
@@ -201,7 +206,7 @@ pub(crate) fn after_step(loader: &Loader) {
             ActionCall::CHAT,
             &player,
             language,
-            &command.rest,
+            (&command.word, &command.rest),
         ) else {
             continue;
         };
@@ -213,7 +218,7 @@ pub(crate) fn after_step(loader: &Loader) {
             command.owner.get(),
             if reply.done { "done" } else { "refused" }
         );
-        match reply_by(text, crate::chat::to_one_player()) {
+        match reply_by(text, reply.done, crate::chat::to_one_player()) {
             Reply::Chat(text) => {
                 let _queued = crate::chat::send(command.key, text);
             }
@@ -244,7 +249,8 @@ pub(crate) fn run_remote(
     let (owner, rest) = owner_of(loader, line).ok_or(Status::MISSING)?;
     let caller = remote_caller(label, permissions);
     crate::log!(DEBUG, "{label} runs the command {line}");
-    crate::actions::command(loader, owner, ActionCall::REMOTE, &caller, 0, rest)
+    let word = word(line);
+    crate::actions::command(loader, owner, ActionCall::REMOTE, &caller, 0, (&word, rest))
         .ok_or(Status::MISSING)
 }
 
@@ -285,6 +291,7 @@ mod tests {
         STATE.pending.relock().push(Pending {
             key: 7,
             owner: ModIndex::new(0),
+            word: "adm".to_owned(),
             rest: "tp spawn".to_owned(),
         });
         STATE.waiting.store(true, Ordering::Release);

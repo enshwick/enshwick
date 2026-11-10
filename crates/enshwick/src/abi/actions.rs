@@ -29,6 +29,7 @@ use crate::abi::{Entity, Header, PlayerInfo, Status, Str};
 ///     args: Str::new("p0000000000000009\tb1"),
 ///     target: enshwick::abi::ActionTarget::NONE,
 ///     reply: core::ptr::null_mut(),
+///     word: Str::EMPTY,
 /// };
 /// assert_eq!(call.kind, ActionCall::RUN);
 /// ```
@@ -67,6 +68,13 @@ pub struct ActionCall {
     /// the loader reads only while this struct's header stays zero. ABI
     /// 11.19.
     pub reply: *mut ActionReply,
+    /// The word that named the mod in the line, in lower case and without
+    /// its `/`: the mod's command name, alias or id, for
+    /// [`ActionCall::CONSOLE`], [`ActionCall::CHAT`] and
+    /// [`ActionCall::REMOTE`], so the mod's help names the command as the
+    /// caller typed it; empty for the other questions. Valid for the call.
+    /// ABI 11.23.
+    pub word: Str,
 }
 
 impl_headed!(ActionCall, born = 144);

@@ -176,7 +176,7 @@ pub(crate) extern "system" fn run_console(_me: ModHandle, line: Str, out: *mut S
                     &crate::test::console(),
                     0,
                     &rest,
-                    "",
+                    &word.to_lowercase(),
                     crate::abi::ActionTarget::NONE,
                 );
                 reply.get(1..).unwrap_or_default().to_owned()

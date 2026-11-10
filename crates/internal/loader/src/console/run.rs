@@ -96,7 +96,8 @@ pub(crate) fn run(loader: &Loader, line: &str) -> Result<String, Status> {
                 .or_else(|| crate::commands::find(id).map(crate::mod_index::ModIndex::get))
                 .ok_or(Status::MISSING)?;
             crate::log!(DEBUG, "the console runs {id} {rest}");
-            crate::actions::console(loader, index, rest).ok_or(Status::MISSING)
+            crate::actions::console(loader, index, &crate::commands::word(id), rest)
+                .ok_or(Status::MISSING)
         }
         Line::Loader(tool) => {
             crate::log!(DEBUG, "the console runs {line}");

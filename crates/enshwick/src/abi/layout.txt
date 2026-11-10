@@ -1,7 +1,7 @@
-abi 11.22
+abi 11.23
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
-ActionCall size 192 align 8 born 144
+ActionCall size 208 align 8 born 144
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
     language at 12 size 4 type u32
@@ -10,6 +10,7 @@ ActionCall size 192 align 8 born 144
     args at 128 size 16 type Str
     target at 144 size 40 type ActionTarget
     reply at 184 size 8 type *mut ActionReply
+    word at 192 size 16 type Str
 ActionReply size 32 align 8 born 32
     header at 0 size 8 type Header
     done at 8 size 1 type u8

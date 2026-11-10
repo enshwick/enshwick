@@ -124,6 +124,14 @@ fn split(line: &str) -> (&str, &str) {
     (first, rest.trim())
 }
 
+/// The word that names a mod in `line`, as the mod is told it: the first
+/// word in lower case, without a leading `/`.
+#[must_use]
+pub fn word(line: &str) -> String {
+    let (first, _) = split(line);
+    first.strip_prefix('/').unwrap_or(first).to_lowercase()
+}
+
 /// The mod whose command name or alias is `line`'s first word, a leading
 /// `/` allowed, and the rest of the line.
 #[must_use]
@@ -172,13 +180,15 @@ pub enum Reply<'a> {
     Chat(&'a str),
 }
 
-/// How the reply `text` goes: one line as a notice, several in chat while
-/// `chat_to_one` (lines to one player) works, else joined into one notice.
+/// How the reply `text` of a command typed in chat goes: one line of an
+/// action that was `done` as a notice; several lines, and every refusal, in
+/// chat, where the player typed and reads, while `chat_to_one` (lines to
+/// one player) works, else joined into one notice.
 #[must_use]
-pub fn reply_by(text: &str, chat_to_one: bool) -> Reply<'_> {
+pub fn reply_by(text: &str, done: bool, chat_to_one: bool) -> Reply<'_> {
     if text.is_empty() {
         Reply::None
-    } else if text.lines().nth(1).is_none() {
+    } else if done && text.lines().nth(1).is_none() {
         Reply::Notice(text.into())
     } else if chat_to_one {
         Reply::Chat(text)
@@ -331,16 +341,35 @@ mod tests {
     #[test]
     fn a_reply_of_several_lines_goes_as_one_notice_when_chat_to_one_player_is_off() {
         let help = "online: players online\nkick: kick a player";
-        assert_eq!(reply_by(help, true), Reply::Chat(help));
+        assert_eq!(reply_by(help, true, true), Reply::Chat(help));
         assert_eq!(
-            reply_by(help, false),
+            reply_by(help, true, false),
             Reply::Notice("online: players online / kick: kick a player".into())
         );
         assert_eq!(
-            reply_by("kicked Ann", true),
+            reply_by("kicked Ann", true, true),
             Reply::Notice("kicked Ann".into())
         );
-        assert_eq!(reply_by("", false), Reply::None);
+        assert_eq!(reply_by("", true, false), Reply::None);
+        assert_eq!(reply_by("", false, true), Reply::None);
+    }
+
+    #[test]
+    fn a_refusal_of_a_typed_command_goes_into_the_chat_of_who_typed_it() {
+        let unknown = "No action dance. /adm help lists them.";
+        assert_eq!(reply_by(unknown, false, true), Reply::Chat(unknown));
+        assert_eq!(
+            reply_by(unknown, false, false),
+            Reply::Notice(unknown.into()),
+            "as a notice while lines to one player are off"
+        );
+    }
+
+    #[test]
+    fn the_word_that_names_a_mod_is_told_in_lower_case_without_its_slash() {
+        assert_eq!(word("/ADM  online"), "adm");
+        assert_eq!(word("you.admin-tools kick Ann"), "you.admin-tools");
+        assert_eq!(word("  "), "");
     }
 
     #[test]

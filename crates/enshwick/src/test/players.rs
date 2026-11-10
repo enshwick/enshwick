@@ -781,14 +781,16 @@ pub(crate) fn console() -> PlayerInfo {
     }
 }
 
-/// Asks a mod's actions callback as the loader does; its reply.
+/// Asks a mod's actions callback as the loader does; its reply. `extra` is
+/// the arguments of a run, or the word that named the mod for a typed line
+/// (the console, chat or a remote caller).
 pub(crate) fn ask(
     actions: table::Registered<crate::abi::ActionFn>,
     kind: u32,
     player: &PlayerInfo,
     language: u32,
     action: &str,
-    args: &str,
+    extra: &str,
     target: crate::abi::ActionTarget,
 ) -> String {
     let mut call = crate::abi::ActionCall {
@@ -797,10 +799,21 @@ pub(crate) fn ask(
         language,
         player: *player,
         action: Str::new(action),
-        args: Str::new(args),
+        args: Str::EMPTY,
         target,
         reply: core::ptr::null_mut(),
+        word: Str::EMPTY,
     };
+    let typed = [
+        crate::abi::ActionCall::CONSOLE,
+        crate::abi::ActionCall::CHAT,
+        crate::abi::ActionCall::REMOTE,
+    ];
+    if typed.contains(&kind) {
+        call.word = Str::new(extra);
+    } else {
+        call.args = Str::new(extra);
+    }
     let mut written: crate::abi::ActionReply = bytemuck::Zeroable::zeroed();
     if kind != crate::abi::ActionCall::SHEET {
         call.reply = &raw mut written;

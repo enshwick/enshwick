@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 22
+#define ENSHWICK_ABI_MINOR 23
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -190,6 +190,13 @@ typedef struct EnshwickActionCall {
   // the loader reads only while this struct's header stays zero. ABI
   // 11.19.
   struct EnshwickActionReply *reply;
+  // The word that named the mod in the line, in lower case and without
+  // its `/`: the mod's command name, alias or id, for
+  // `ActionCall::CONSOLE`, `ActionCall::CHAT` and
+  // `ActionCall::REMOTE`, so the mod's help names the command as the
+  // caller typed it; empty for the other questions. Valid for the call.
+  // ABI 11.23.
+  struct EnshwickStr word;
 } EnshwickActionCall;
 // The actions the player may use now, as a sheet: the reply is the
 // sheet's text.
@@ -839,7 +846,8 @@ typedef struct EnshwickCommandInfo {
   struct EnshwickHeader header;
   // The full name, `admin-tools` in `/admin-tools online`.
   struct EnshwickStr name;
-  // The shorter alias, `adl` in `/adl online`.
+  // The shorter alias, `adm` in `/adm online`; empty when another mod
+  // took the word first.
   struct EnshwickStr alias;
   // The id of the mod that named them.
   struct EnshwickStr mod_id;
@@ -5000,17 +5008,22 @@ typedef struct EnshwickHostApi {
   // Names the calling mod's actions as commands: a
   // line `/<name> <action> <values>`, or the same with `alias`, runs
   // one of them from a player's chat, the server's console or
-  // `run_command`, with the caller's rights. Each
-  // is 1 to 32 of `[a-z0-9-]`, `alias` shorter than `name`; neither is
-  // `enshwick` or `help`. `Status::BAD_ARGS` for a malformed or
-  // unreadable one; `Status::REFUSED` for a second call, or when
-  // another mod named the same word first, which the loader logs and
-  // reports naming both mods, the mod running on without commands.
-  // Allowed during `enshwick_mod_init` only; the strings are borrowed for
-  // the call. A panic in the loader returns `Status::REFUSED`. ABI
-  // 11.19.
+  // `run_command`, with the caller's rights. The
+  // name is the part of the mod's id after the author; `name` is
+  // reserved and not read. `alias` is 1 to 32 of `[a-z0-9-]`, shorter
+  // than the name, and neither `enshwick` nor `help`.
+  // `Status::BAD_ARGS` for a malformed or unreadable alias, or a mod
+  // whose name is `enshwick` or `help`; `Status::REFUSED` for a second
+  // call, or when another mod's commands have the same name, which the
+  // loader logs and reports naming both mods, the mod running on without
+  // commands. An alias that another mod's commands, name or id hold goes
+  // to that mod: the call returns `Status::OK`, the mod's commands run
+  // by their name alone, and the loader logs and reports it once naming
+  // both mods. Allowed during `enshwick_mod_init` only; the strings are
+  // borrowed for the call. A panic in the loader returns
+  // `Status::REFUSED`. ABI 11.19; `name` not read since 11.23.
   EnshwickStatus (*commands)(EnshwickModHandle me, struct EnshwickStr name, struct EnshwickStr alias);
-  // Runs the command line `line`, such as `/adl online`, as a remote
+  // Runs the command line `line`, such as `/adm online`, as a remote
   // caller named `label` (for the log and the handler, at most 64 bytes)
   // with the game's permission bits `permissions` (as
   // `PlayerInfo::permissions`), never as

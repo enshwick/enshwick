@@ -261,7 +261,7 @@ pub(crate) fn answer(line: &str, kind: u32, caller: &PlayerInfo, language: u32) 
         caller,
         language,
         &rest,
-        "",
+        &word,
         ActionTarget::NONE,
     ))
 }
