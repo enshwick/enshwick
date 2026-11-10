@@ -226,7 +226,8 @@ pub mod script;
 )]
 mod script;
 pub mod services;
-pub mod shape;
+#[doc(inline)]
+pub use enshwick_values::shape;
 pub mod sound;
 pub mod state;
 pub mod stats;
