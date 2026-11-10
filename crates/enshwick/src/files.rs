@@ -103,7 +103,7 @@ fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
 /// When the folder, the temporary file, the backup or the rename fails; the
 /// old file then stays as it was and no temporary file is left. A backup or
 /// rename refused for access, as while another program or writer briefly
-/// holds the file, is tried again for up to about 50 ms first.
+/// holds the file, is tried again for up to about a second per step first.
 ///
 /// # Examples
 ///
@@ -126,8 +126,10 @@ pub fn write_atomically(path: &Path, contents: impl AsRef<[u8]>) -> io::Result<(
     placed
 }
 
-/// How often [`while_busy`] tries a step.
-const BUSY_TRIES: u32 = 8;
+/// How often [`while_busy`] tries a step: about a second of waiting per step,
+/// since on a machine under load a writer that holds the file may not run
+/// again for tens of milliseconds.
+const BUSY_TRIES: u32 = 32;
 
 /// Windows' `ERROR_SHARING_VIOLATION` and `ERROR_LOCK_VIOLATION`, which
 /// `io::ErrorKind` leaves uncategorized.
@@ -180,28 +182,44 @@ fn create_temporary(path: &Path) -> io::Result<(PathBuf, std::fs::File)> {
 /// or a copy where the file system has no links. Nothing to keep while no
 /// file is there.
 fn keep_backup(path: &Path) -> io::Result<()> {
+    keep_backup_with(path, |from, to| std::fs::hard_link(from, to))
+}
+
+/// [`keep_backup`] with `link` as the step that makes the second link.
+fn keep_backup_with(
+    path: &Path,
+    mut link: impl FnMut(&Path, &Path) -> io::Result<()>,
+) -> io::Result<()> {
     let backup = backup_path(path);
     match while_busy(|| std::fs::remove_file(&backup)) {
         Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
         _ => {}
     }
-    match while_busy(|| std::fs::hard_link(path, &backup)) {
-        Ok(()) => Ok(()),
-        // No file yet, or a writer at the same time kept it a moment ago: a
-        // whole earlier file stays either way, and a copy would hold the file
-        // open against the other writers' renames.
-        Err(e)
-            if matches!(
-                e.kind(),
-                io::ErrorKind::NotFound | io::ErrorKind::AlreadyExists
-            ) =>
-        {
-            Ok(())
+    // Bounded: a file system that answers not found for a file it still
+    // lists must not hang the writer; the earlier whole file then stays.
+    for _ in 0..BUSY_TRIES {
+        match while_busy(|| link(path, &backup)) {
+            // A writer at the same time kept it a moment ago: a whole
+            // earlier file stays, and a copy would hold the file open
+            // against the other writers' renames.
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => return Ok(()),
+            // Linux also answers so for a file that another writer's rename
+            // replaced between the lookup of its name and the link (the
+            // `i_nlink == 0` check of `vfs_link`); the new file is there to
+            // keep, and each further turn needs one more whole write to land
+            // in that gap.
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                if matches!(path.try_exists(), Ok(false)) {
+                    return Ok(());
+                }
+            }
+            Ok(()) => return Ok(()),
+            // Still refused once the tries ran out, as a file system without
+            // links answers.
+            Err(_) => return std::fs::copy(path, &backup).map(drop),
         }
-        // Still refused once the tries ran out, as a file system without
-        // links answers.
-        Err(_) => std::fs::copy(path, &backup).map(drop),
     }
+    Ok(())
 }
 
 /// The functions of [`files`](self) a script calls, as its namespace
@@ -366,6 +384,43 @@ mod tests {
             assert!(texts.contains(&last), "one writer's whole text");
             assert_eq!(names(&dir), ["settings.toml", "settings.toml.bak"]);
         }
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_file_replaced_while_its_backup_is_linked_is_linked_again() {
+        let dir = dir("replaced");
+        let path = dir.join("settings.toml");
+        std::fs::write(&path, "kept").unwrap();
+        let mut links = 0;
+        keep_backup_with(&path, |from, to| {
+            links += 1;
+            if links == 1 {
+                return Err(io::ErrorKind::NotFound.into());
+            }
+            std::fs::hard_link(from, to)
+        })
+        .unwrap();
+        assert_eq!(std::fs::read_to_string(backup_path(&path)).unwrap(), "kept");
+        let absent = dir.join("absent.toml");
+        keep_backup(&absent).unwrap();
+        assert_eq!(names(&dir), ["settings.toml", "settings.toml.bak"]);
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_link_that_never_finds_a_file_still_there_gives_up() {
+        let dir = dir("never-found");
+        let path = dir.join("settings.toml");
+        std::fs::write(&path, "kept").unwrap();
+        let mut links = 0;
+        keep_backup_with(&path, |_, _| {
+            links += 1;
+            Err(io::ErrorKind::NotFound.into())
+        })
+        .unwrap();
+        assert_eq!(links, BUSY_TRIES);
+        assert_eq!(names(&dir), ["settings.toml"]);
         let _gone = std::fs::remove_dir_all(&dir);
     }
 
