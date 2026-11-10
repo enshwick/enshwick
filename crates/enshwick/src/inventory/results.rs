@@ -147,10 +147,11 @@ impl Outcome {
     }
 
     /// How many of the `count` items of a request of one give did not fit:
-    /// what its operation left, or all of them when nothing changed.
+    /// what its operation left, or all of them when nothing changed or no
+    /// result says what did.
     pub(super) fn left_of(&self, count: u32) -> u32 {
         if self.is_committed() {
-            self.ops.first().map_or(0, |op| op.remaining.min(count))
+            self.ops.first().map_or(count, |op| op.remaining.min(count))
         } else {
             count
         }

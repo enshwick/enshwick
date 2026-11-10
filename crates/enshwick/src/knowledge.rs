@@ -528,7 +528,7 @@ impl Knowledge {
     }
 
     /// Whether the player whose character is `player` completed quest
-    /// `quest` and got its rewards.
+    /// `quest`: its bool is set for them.
     ///
     /// # Examples
     ///

@@ -341,15 +341,18 @@ impl Inventories {
 
     /// Gives as many of `count` new items `item` as the inventory `to` has
     /// room for, with the game's pickup message, and tells `done` how many
-    /// did not fit: 0 when all did, `count` when the request did not run.
-    /// What becomes of the rest is the caller's to decide.
+    /// were not given and the request's [`Outcome`]: a committed one left
+    /// them for want of room, any other gave none (`count`), for the reason
+    /// its [`Done`] names. What becomes of the rest is the caller's to decide.
     ///
     /// # Examples
     ///
     /// ```
     /// fn reward(inventories: &enshwick::inventory::Inventories, player: enshwick::Entity) {
-    ///     inventories.give_what_fits(player, enshwick::ItemId::new(0x0c01), 10, |left| {
-    ///         if left > 0 {
+    ///     inventories.give_what_fits(player, enshwick::ItemId::new(0x0c01), 10, |left, outcome| {
+    ///         if !outcome.is_committed() {
+    ///             enshwick::warn!("reward not given: {:?}", outcome.done);
+    ///         } else if left > 0 {
     ///             enshwick::warn!("no room for {left} of the reward");
     ///         }
     ///     });
@@ -361,7 +364,7 @@ impl Inventories {
         to: Entity,
         item: ItemId,
         count: u32,
-        done: impl FnOnce(u32) + Send + 'static,
+        done: impl FnOnce(u32, &Outcome) + Send + 'static,
     ) -> Ticket {
         let give = Op::Give {
             to,
@@ -370,7 +373,7 @@ impl Inventories {
             fill: None,
         };
         self.submit(&Batch::new().with(give).allow_partial(), move |outcome| {
-            done(outcome.left_of(count));
+            done(outcome.left_of(count), outcome);
         })
     }
 

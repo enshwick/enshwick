@@ -67,21 +67,23 @@ local trail = content.add_quest({
 
 -- The game gives a quest's experience and only draws its item, so the mod
 -- gives the torch itself. What a full inventory leaves out is the mod's to
--- decide: this one tells the player, in the language the game runs in.
-local NO_ROOM = {
-	en = "No room for the trail's torch.",
-	uk = "Немає місця для смолоскипа стежки.",
-}
+-- decide: this one tells the player. A server does not know a player's
+-- language here, so the notice says it in both.
+local NO_ROOM = "No room for the trail's torch. / Немає місця для смолоскипа стежки."
 local torch = content.item_id(TORCH)
 
 enshwick.on("QuestCompleted", function(done)
 	if done.quest ~= trail then
 		return
 	end
-	enshwick.inventory.give_what_fits(done.entity, torch, 1, function(left)
+	enshwick.inventory.give_what_fits(done.entity, torch, 1, function(left, outcome)
+		if outcome.done ~= "Committed" then
+			enshwick.log.warn(`torch not given: {outcome.done}`)
+			return
+		end
 		local player = enshwick.world.player(done.entity)
 		if left > 0 and player then
-			enshwick.world.notify(player, NO_ROOM[enshwick.i18n.language()] or NO_ROOM.en)
+			enshwick.world.notify(player, NO_ROOM)
 		end
 	end)
 end)

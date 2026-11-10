@@ -15,6 +15,7 @@ mod tests {
     use enshwick::content::knowledge::{ExperienceValue, KnowledgeQuery, NewKnowledge};
     use enshwick::content::{Guid, Id};
     use enshwick::events::QuestCompleted;
+    use enshwick::inventory::Done;
     use enshwick::knowledge::{KnowledgeId, KnowledgeType, Scope};
     use enshwick::test::{FakeHost, VANILLA_QUEST, VANILLA_QUEST_EXPERIENCE};
     use enshwick::{Entity, ItemId, Load, Mod, Off};
@@ -23,9 +24,8 @@ mod tests {
     const PLAYER: Entity = Entity(2);
 
     static QUEST: Mutex<Option<KnowledgeId>> = Mutex::new(None);
-    static LEFT: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+    static LEFT: Mutex<Vec<(u32, Done)>> = Mutex::new(Vec::new());
     static REWARDS: std::sync::OnceLock<enshwick::rewards::Rewards> = std::sync::OnceLock::new();
-    static SKIPPED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(44);
 
     struct Trail;
 
@@ -71,7 +71,7 @@ mod tests {
                             done.entity,
                             ItemId::from_guid(item),
                             2,
-                            |left| LEFT.lock().unwrap().push(left),
+                            |left, outcome| LEFT.lock().unwrap().push((left, outcome.done)),
                         );
                     }
                 }
@@ -100,16 +100,9 @@ mod tests {
         let data = std::env::temp_dir().join(format!("enshwick-{name}-{}", std::process::id()));
         let _gone = std::fs::remove_dir_all(&data);
         let loader = FakeHost::new()
-            .symbol("ecs.type_index", 0x1_4064_5cc0)
-            .symbol("ecs.component_read_raw", 0x1_4064_6b00)
-            .symbol("ecs.slot_root", 0x1_4093_5420)
-            .symbol("inventory.skip_entity", SKIPPED.as_ptr().addr() as u64)
-            .constant("ecs.context_entity_world", 0x30)
-            .constant("ecs.registry_type_map", 0x30)
-            .constant("ecs.registry_type_map_fallback", 0x88)
             .progression()
             .world()
-            .inventory()
+            .inventory_requests()
             .data_dir(data.to_str().unwrap())
             .world_key("world0")
             .install();
@@ -152,6 +145,22 @@ mod tests {
                 .logs()
                 .iter()
                 .any(|(_, line)| line.contains("2 of 3 items") && line.contains("player 2")),
+            "{:?}",
+            loader.logs()
+        );
+
+        REWARDS.get().unwrap().give(PLAYER, &give);
+        assert!(loader.finish_inventory(InventoryResult::TIMED_OUT, &[]));
+        assert_eq!(
+            short(&loader),
+            1,
+            "a request that never ran is no full inventory"
+        );
+        assert!(
+            loader
+                .logs()
+                .iter()
+                .any(|(_, line)| line.contains("3 items") && line.contains("not given")),
             "{:?}",
             loader.logs()
         );
@@ -200,10 +209,19 @@ mod tests {
         assert!(loader.finish_inventory(InventoryResult::TIMED_OUT, &[]));
         assert_eq!(loader.raise::<QuestCompleted>(&completed(trail)), 1);
         assert!(loader.finish_inventory(InventoryResult::ROLLED_BACK, &[fit(1)]));
+        assert_eq!(loader.raise::<QuestCompleted>(&completed(trail)), 1);
+        assert!(loader.finish_inventory(InventoryResult::COMMITTED, &[]));
         assert_eq!(
             *LEFT.lock().unwrap(),
-            [1, 0, 2, 2],
-            "one short, all in, and all of them when nothing changed"
+            [
+                (1, Done::Committed),
+                (0, Done::Committed),
+                (2, Done::TimedOut),
+                (2, Done::RolledBack),
+                (2, Done::Committed),
+            ],
+            "one short, all in, all of them when nothing changed with why, and \
+             all of them when a commit names no result"
         );
     }
 }

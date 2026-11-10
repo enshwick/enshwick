@@ -53,14 +53,16 @@ Each entry names the pull request that made the change.
 - `test`: `Installed::carried_windows` reads the windows a player's client
   holds after the mod's shows and closes (#1022).
 - `inventory`: `Inventories::give_what_fits` gives as many of a count of
-  items as the inventory has room for and tells the caller how many did
-  not fit, for a mod that gives its own quest's items on `QuestCompleted`;
+  items as the inventory has room for and tells the caller how many were
+  not given and the request's outcome, for a mod that gives its own
+  quest's items on `QuestCompleted`;
   Luau `enshwick.inventory.give_what_fits` (#1028).
 - `content`: `journal::lore_category` names the game's 13 lore categories
   by their cards' texts, for `NewJournalPage::category`; behind the
   `unstable` feature until a mod's page is seen on its card (#1028).
 - `test`: `LORE_CATEGORY`, the category of the fake journal's one lore
-  page (#1028).
+  page; `FakeHost::inventory_requests`, the inventory preset with what a
+  request needs to run (#1028).
 
 ### Changed
 
@@ -88,12 +90,13 @@ Each entry names the pull request that made the change.
   dependency used to answer that the data matched no variant of an
   untagged enum (#1017).
 - `rewards`: `Give::Items`, and an item gift of a pack's `rewards.toml`,
-  gives as many items as fit and logs how many did not, where a full
-  inventory got none (#1028).
+  gives as many items as fit and logs how many did not, or why none were
+  given, where a full inventory got none (#1028).
 - `content`: **Breaking.** `Load::add_journal_page` refuses a page whose
   `category` is not one of the game's own lore categories and names the
   categories of the running game: the journal has a card only for those
-  and dropped any other page without a word (#1028).
+  and dropped any other page without a word. It needs the `unstable`
+  feature until a mod's page is seen on its card (#1028).
 
 ### Fixed
 

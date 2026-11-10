@@ -251,7 +251,7 @@ mod tests {
         let refused = REFUSED.lock().unwrap().clone();
         assert_eq!(refused.len(), 5, "{refused:?}");
         assert!(
-            refused[0].contains(&format!("the game's are {:?}", [LORE_CATEGORY.fnv1a()])),
+            refused[0].ends_with(&format!("the game's are {LORE_CATEGORY}")),
             "{}",
             refused[0]
         );

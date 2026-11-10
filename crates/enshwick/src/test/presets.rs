@@ -282,6 +282,31 @@ impl FakeHost {
         )
     }
 
+    /// [`inventory`](Self::inventory) with the symbols and constants
+    /// [`Load::inventories`](crate::Load::inventories) resolves, so a test
+    /// submits and finishes inventory requests.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let host = enshwick::test::FakeHost::new().inventory_requests();
+    /// # let _ = host;
+    /// ```
+    #[must_use]
+    pub fn inventory_requests(self) -> Self {
+        /// The entity the game's inventory system skips, which the loader
+        /// reads and writes through `inventory.skip_entity`.
+        static SKIPPED: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(44);
+        self.symbol("ecs.type_index", 0x1_4064_5cc0)
+            .symbol("ecs.component_read_raw", 0x1_4064_6b00)
+            .symbol("ecs.slot_root", 0x1_4093_5420)
+            .symbol("inventory.skip_entity", SKIPPED.as_ptr().addr() as u64)
+            .constant("ecs.context_entity_world", 0x30)
+            .constant("ecs.registry_type_map", 0x30)
+            .constant("ecs.registry_type_map_fallback", 0x88)
+            .inventory()
+    }
+
     /// The hit, death and equipment change game events, with the hit
     /// history and experience credit a death reads its killer from, and
     /// damage bits, an attack category and an equipment slot numbered unlike

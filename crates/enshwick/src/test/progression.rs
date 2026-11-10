@@ -55,7 +55,7 @@ pub const VANILLA_QUEST: u32 = 0x0000_0500;
 /// The text tag of the lore category the vanilla journal's one page is
 /// listed under, the game's "General": the one category a mod's page may
 /// take here.
-pub const LORE_CATEGORY: Guid = Guid::parse("f94a5ece-d3fb-4f32-8d6e-e72bdffaba39");
+pub const LORE_CATEGORY: Guid = crate::content::journal::lore_category::GENERAL;
 /// The item [`VANILLA_QUEST`] pays.
 pub const QUEST_ITEM: Guid = Guid::parse("c0ffee00-0000-4000-8000-0000000a0e57");
 /// The document the fake's journal entries name.

@@ -80,9 +80,10 @@ impl Event {
     /// [`KnowledgeData`]. Raised on the game thread after the step that
     /// applied it. Server only.
     pub const KNOWLEDGE_CHANGED: Self = Self(15);
-    /// A player completed a quest and got its rewards; data is a
-    /// [`QuestData`]. Raised on the game thread after the step. Server
-    /// only.
+    /// A player completed a quest: its bool was set for them, and the game
+    /// gave its experience, not its items; data is a [`QuestData`]. Raised
+    /// on the game thread after the step, for every change that sets the
+    /// bool, a mod's grant of it included. Server only.
     pub const QUEST_COMPLETED: Self = Self(16);
     /// A chunk of the server's entities loaded: players came near, and its
     /// entities exist now; data is a [`ChunkData`]. The terrain's voxels

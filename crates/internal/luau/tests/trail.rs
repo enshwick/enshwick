@@ -80,19 +80,11 @@ mod tests {
         use enshwick::events::QuestCompleted;
         use enshwick::knowledge::KnowledgeId;
 
-        static SKIPPED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(44);
         let loader = FakeHost::new()
-            .symbol("ecs.type_index", 0x1_4064_5cc0)
-            .symbol("ecs.component_read_raw", 0x1_4064_6b00)
-            .symbol("ecs.slot_root", 0x1_4093_5420)
-            .symbol("inventory.skip_entity", SKIPPED.as_ptr().addr() as u64)
-            .constant("ecs.context_entity_world", 0x30)
-            .constant("ecs.registry_type_map", 0x30)
-            .constant("ecs.registry_type_map_fallback", 0x88)
             .progression()
             .items()
             .world()
-            .inventory()
+            .inventory_requests()
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Trail)`.
         let status =
@@ -126,6 +118,25 @@ mod tests {
             remaining: 1,
         };
         assert!(loader.finish_inventory(InventoryResult::COMMITTED, &[none_fit]));
+        assert!(
+            !loader
+                .logs()
+                .iter()
+                .any(|(_, line)| line.contains("not given")),
+            "a full inventory is no failed request: {:?}",
+            loader.logs()
+        );
+
+        assert_eq!(loader.raise::<QuestCompleted>(&completed(trail)), 1);
+        assert!(loader.finish_inventory(InventoryResult::TIMED_OUT, &[]));
+        assert!(
+            loader
+                .logs()
+                .iter()
+                .any(|(_, line)| line.contains("torch not given: TimedOut")),
+            "{:?}",
+            loader.logs()
+        );
         assert!(loader.faults().is_empty(), "{:?}", loader.faults());
     }
 

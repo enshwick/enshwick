@@ -164,11 +164,14 @@ pub(crate) fn holds(loader: &Loader, entity: Entity, query: u32) -> Result<bool,
         // The evaluator indexes the player records with no bounds check.
         record(layout, state, entity)?;
         let mut mode = Mode::PERSONAL;
-        // SAFETY: as for the world call; `record` checked the character's
-        // record exists and is active, and `mode` lives writable on this
-        // stack for the call, as the game's own callers pass it.
-        answered(|answer| unsafe {
-            (calls.player)(answer, knowledge, data.as_ptr(), entity.0, &raw mut mode);
+        answered(|answer| {
+            // SAFETY: `knowledge` is the live knowledge object on the game
+            // thread at a quiet moment (`world::server`); `answer`, `data`
+            // (the game's query data of the build's size) and `mode` live
+            // writable on this stack for the call, `mode` as the game's own
+            // callers pass it; `record` checked the character's record
+            // exists and is active, which the evaluator indexes unchecked.
+            unsafe { (calls.player)(answer, knowledge, data.as_ptr(), entity.0, &raw mut mode) };
         })
     }
 }

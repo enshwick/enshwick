@@ -64,8 +64,10 @@ The game gives a quest's experience and never its items. It only draws an
 item reward in the journal. The rewards of its own quests name NPCs,
 workshops and chest icons. This is read in client 26430625 and not yet
 seen in the game. So a mod gives the items of its own quest when `QuestCompleted`
-names it. `give_what_fits` gives as many as the inventory has room for and
-tells the handler how many did not fit. The mod decides what becomes of
+names it. `give_what_fits` gives as many as the inventory has room for. It
+tells the handler how many were not given and the request's outcome. A
+committed outcome left them for want of room; any other gave none. The mod
+decides what becomes of
 those: tell the player, or keep them in its own
 [world data](../state.md) and give them later. Enshwick stores nothing
 about a reward.
@@ -78,8 +80,10 @@ fn init(load: &mut enshwick::Load<'_>, trail: KnowledgeId, torch: enshwick::Item
     let inventories = load.inventories()?;
     load.on::<QuestCompleted>(move |done| {
         if done.quest == trail {
-            let _ticket = inventories.give_what_fits(done.entity, torch, 1, |left| {
-                if left > 0 {
+            let _ticket = inventories.give_what_fits(done.entity, torch, 1, |left, outcome| {
+                if !outcome.is_committed() {
+                    enshwick::warn!("reward not given: {:?}", outcome.done);
+                } else if left > 0 {
                     enshwick::warn!("no room for {left} of the reward");
                 }
             });
@@ -89,8 +93,13 @@ fn init(load: &mut enshwick::Load<'_>, trail: KnowledgeId, torch: enshwick::Item
 ```
 
 `load.quests().quest(done.quest)` gives the rewards the quest declares, for
-a handler that serves several quests. A mod gives only for quests of its
-own: a vanilla quest's item reward is a picture, not an item to hand out.
+a handler that serves several quests. A mod gives only the items it
+declared itself. A vanilla quest's own item reward is a picture, not an
+item to hand out.
+
+`QuestCompleted` is raised for every change that sets the quest's bool.
+The game sets it once, but a mod that grants it again raises the event
+again. A mod that must give only once keeps a mark in its world data.
 
 A data pack without a script gives on `quest = true` in
 [`rewards.toml`](rewards.md), for every quest a player completes. It gives
@@ -127,8 +136,8 @@ own is not possible.
 The cards and their English texts are those of client 26430625. The
 journals of that client and of server 26430253 list their pages under these
 13 tags. The game ships no name for a category, so the constants take the
-cards' texts. They need the `unstable` feature until a mod's page is seen
-on its card in the game. A Luau mod passes the text tag.
+cards' texts. They and `add_journal_page` need the `unstable` feature until
+a mod's page is seen on its card in the game. A Luau mod passes the text tag.
 
 ## Changing a vanilla quest
 
@@ -140,6 +149,10 @@ on its card in the game. A Luau mod passes the text tag.
 
 Mods that change one quest change it in load order, each on the one before's
 result. `knowledge.quests()` lists the quest ids of the running game.
+
+The game gives the experience of an added reward and only draws an added
+item. A mod gives that item itself on `QuestCompleted`, as for a quest of
+its own (see [Giving a quest's items](#giving-a-quests-items)).
 
 ## Personal quest progression
 
@@ -220,8 +233,10 @@ local trail = enshwick.content.add_quest({
 local torch = enshwick.content.item_id("<the GUID of a vanilla item>")
 enshwick.on("QuestCompleted", function(done)
     if done.quest == trail then
-        enshwick.inventory.give_what_fits(done.entity, torch, 1, function(left)
-            if left > 0 then
+        enshwick.inventory.give_what_fits(done.entity, torch, 1, function(left, outcome)
+            if outcome.done ~= "Committed" then
+                enshwick.log.warn(`reward not given: {outcome.done}`)
+            elseif left > 0 then
                 enshwick.log.warn(`no room for {left} of the reward`)
             end
         end)
