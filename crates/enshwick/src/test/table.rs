@@ -1147,4 +1147,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     actions_changed: commands::actions_changed,
     resource_buffer,
     game_query: gameplay::game_query,
+    action_window: commands::action_window,
 };

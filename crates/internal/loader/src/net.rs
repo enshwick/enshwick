@@ -188,13 +188,15 @@ pub(crate) fn client_tick(opened: bool) {
     );
 }
 
-/// Forgets the server's answer when the client's link went.
+/// Forgets the server's answer and the windows it showed when the
+/// client's link went.
 pub(crate) fn link_lost() {
     ANSWERED.store(false, Ordering::Release);
     state(|s| {
         s.peers.remove(&NetMessage::SERVER.get());
         s.sending.remove(&NetMessage::SERVER.get());
     });
+    crate::ui::carried::forget();
 }
 
 /// Hands a message to the mod that opened its channel.
@@ -402,6 +404,7 @@ pub(crate) fn forget() {
     *guard = None;
     crate::item_data::forget_client();
     crate::controls::forget_carried();
+    crate::ui::carried::forget();
 }
 
 /// Forgets a player's client, when the player leaves.

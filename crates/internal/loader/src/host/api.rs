@@ -8,7 +8,9 @@ use super::entries::build::{
 };
 use super::entries::calls::{call, find_call, serve_call};
 use super::entries::chat::chat_filter;
-use super::entries::commands::{actions_changed, command_list, commands, run_command};
+use super::entries::commands::{
+    action_window, actions_changed, command_list, commands, run_command,
+};
 use super::entries::content::{
     add_text, change_data, content_hashes, content_read, content_serve, declare_change,
     entity_data_open, game_text, game_version, icons_ready, item_data_get, item_data_open,
@@ -264,4 +266,5 @@ pub(crate) static API: HostApi = HostApi {
     actions_changed,
     resource_buffer,
     game_query: super::entries::gameplay::game_query,
+    action_window,
 };

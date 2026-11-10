@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 use super::registry::Registry;
 use super::{
-    Action, ActionTarget, Actions, Arg, Ask, FindSubjectError, Outcome, Request, Subject, Value,
-    Via,
+    Action, ActionTarget, Actions, Arg, Ask, FindSubjectError, Outcome, Request, Row, Subject,
+    Value, Via, Window,
 };
 use crate::i18n::{Language, Texts};
 use crate::script::{
@@ -50,6 +50,9 @@ pub(crate) struct ScriptAction {
     /// The players of a list, as [`Action::per_player`] names them; such an
     /// action is a list of players with a switch each.
     pub per_player: Option<PerPlayerFn>,
+    /// Accounts the mod knows beyond the players online, as
+    /// [`Action::known`] names them.
+    pub known: Option<KnownFn>,
 }
 
 impl ScriptAction {
@@ -84,7 +87,97 @@ impl ScriptAction {
             let registry = Arc::clone(registry);
             action = action.at(move |ask| at.find(ScriptAsk::of(ask, &registry)));
         }
+        if let Some(known) = self.known {
+            let registry = Arc::clone(registry);
+            action = action.known(move |ask| known.accounts(ScriptAsk::of(ask, &registry)));
+        }
         action
+    }
+}
+
+/// A window as a script shows it: the fields of [`Window`]'s builder.
+#[derive(Clone, Debug, crate::Script)]
+#[script(name = "ActionWindow")]
+pub(crate) struct ScriptWindow {
+    /// The window's id, 1 to 32 of `[a-z0-9-]`, as [`Window::new`] takes it.
+    pub id: String,
+    /// The title, a text key.
+    pub title: String,
+    /// The items in order, as [`Window::text`], [`Window::row`] and
+    /// [`Window::action`] add them.
+    #[script(default)]
+    pub items: Vec<WindowItem>,
+}
+
+/// An item of a script's window.
+#[derive(Clone, Debug, crate::Script)]
+pub(crate) enum WindowItem {
+    /// A line, as [`Window::text`] adds it.
+    Text(WindowText),
+    /// A line with buttons, as [`Window::row`] adds it.
+    Row(WindowRow),
+    /// An action drawn whole, by id, as [`Window::action`] adds it.
+    Action(String),
+}
+
+/// A text key and the values it is filled with.
+#[derive(Clone, Debug, crate::Script)]
+pub(crate) struct WindowText {
+    /// The text key.
+    pub key: String,
+    /// The values, a list of `{ name, value }`.
+    #[script(default)]
+    pub values: Vec<(String, String)>,
+}
+
+/// A row of a script's window: the fields of [`Row`]'s builder.
+#[derive(Clone, Debug, crate::Script)]
+pub(crate) struct WindowRow {
+    /// The line.
+    pub text: WindowText,
+    /// Its buttons, as [`Row::button`] adds them.
+    #[script(default)]
+    pub buttons: Vec<WindowButton>,
+}
+
+/// A button of a row, as [`Row::button`] takes it.
+#[derive(Clone, Debug, crate::Script)]
+pub(crate) struct WindowButton {
+    /// The label, a text key.
+    pub label: String,
+    /// The action it runs.
+    pub action: String,
+    /// The values it gives first.
+    #[script(default)]
+    pub args: Vec<Value>,
+}
+
+impl WindowText {
+    fn values(&self) -> Vec<(&str, &str)> {
+        self.values
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_str()))
+            .collect()
+    }
+}
+
+impl ScriptWindow {
+    /// The Rust window.
+    fn into_window(self) -> Window {
+        self.items.into_iter().fold(
+            Window::new(&self.id, &self.title),
+            |window, item| match item {
+                WindowItem::Text(text) => window.text(&text.key, &text.values()),
+                WindowItem::Row(row) => window.row(
+                    row.buttons
+                        .into_iter()
+                        .fold(Row::new(&row.text.key, &row.text.values()), |r, b| {
+                            r.button(&b.label, &b.action, &b.args)
+                        }),
+                ),
+                WindowItem::Action(action) => window.action(&action),
+            },
+        )
     }
 }
 
@@ -156,6 +249,27 @@ impl Typed for PerPlayerFn {
     ));
 }
 
+/// A script's `known`: the accounts the mod knows beyond those online.
+#[derive(Clone, Debug)]
+pub(crate) struct KnownFn(Callback);
+
+impl KnownFn {
+    fn accounts(&self, ask: ScriptAsk) -> Vec<(PlayerKey, String)> {
+        Option::<Vec<Listed>>::from_answer(self.0.call(&mut [ask.into_value()]))
+            .unwrap_or_default()
+            .into_iter()
+            .map(|listed| (listed.key, listed.name))
+            .collect()
+    }
+}
+
+impl Typed for KnownFn {
+    const TY: &'static Ty = &Ty::Function(&Signature::new(
+        &[Param::new("ask", <ScriptAsk as Typed>::TY)],
+        <Option<Vec<Listed>> as Answer>::TY,
+    ));
+}
+
 macro_rules! function_fields {
     ($($t:ty),*) => {$(
         impl IntoScript for $t {
@@ -172,7 +286,7 @@ macro_rules! function_fields {
     )*};
 }
 
-function_fields!(AllowFn, AtFn, PerPlayerFn);
+function_fields!(AllowFn, AtFn, PerPlayerFn, KnownFn);
 
 /// What a script's `at` found, as the `Result` of [`Action::at`]: the
 /// subject, or the reason the player reads beside the dimmed action.
@@ -185,7 +299,7 @@ enum Found {
     Err(String),
 }
 
-/// A player a list shows, with the switch on.
+/// A player a list shows, with the switch on, or an account the mod knows.
 #[derive(Clone, Debug, crate::Script)]
 #[script(name = "ListedPlayer")]
 struct Listed {
@@ -361,7 +475,7 @@ impl Answer for Outcome {
 impl Object for Arg {
     const CLASS: &'static Class = &Class::of::<Self>(
         "Arg",
-        "An argument of an action: a typed choice, never free text.",
+        "An argument of an action: a typed choice, or a line of text of bounded bytes.",
     );
     const PARTS: &'static [&'static [Function<Self>]] = &[];
 }
@@ -474,6 +588,40 @@ impl Actions {
     pub(crate) fn rules_changed_script(&self) -> Result<(), Off> {
         self.rules_changed()
     }
+
+    /// Shows `window` to the players with the account keys `players`, or
+    /// updates it where it shows, as [`Actions::show`] does.
+    ///
+    /// # Errors
+    ///
+    /// As [`Actions::show`].
+    #[script(name = "show")]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "a script hands the list over as its own copy"
+    )]
+    pub(crate) fn show_script(
+        &self,
+        window: ScriptWindow,
+        players: Vec<PlayerKey>,
+    ) -> Result<(), Off> {
+        self.show(window.into_window(), &players)
+    }
+
+    /// Closes the window `id` on the clients of the players with the
+    /// account keys `players`, as [`Actions::close`] does.
+    ///
+    /// # Errors
+    ///
+    /// As [`Actions::close`].
+    #[script(name = "close")]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "a script hands the list over as its own copy"
+    )]
+    pub(crate) fn close_script(&self, id: &str, players: Vec<PlayerKey>) -> Result<(), Off> {
+        self.close(id, &players)
+    }
 }
 
 /// The free functions of [`actions`](super) as a script's namespace
@@ -523,6 +671,21 @@ impl ActionFns {
     #[must_use]
     pub fn toggle(self, label: &str) -> Arg {
         Arg::toggle(label)
+    }
+
+    /// A line of text of 1 to `max_bytes` bytes, as [`Arg::text`] makes it.
+    #[script]
+    #[must_use]
+    pub fn text(self, label: &str, max_bytes: usize) -> Arg {
+        Arg::text(label, max_bytes)
+    }
+
+    /// Whether `id` can name an action or a window, as
+    /// [`is_valid_id`](super::is_valid_id) says.
+    #[script]
+    #[must_use]
+    pub fn is_valid_id(self, id: &str) -> bool {
+        super::is_valid_id(id)
     }
 
     /// What an action acts on, as [`Subject::new`] makes it.

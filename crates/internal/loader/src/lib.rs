@@ -314,6 +314,8 @@ mod watch;
 #[cfg(windows)]
 mod weather;
 pub mod widget_checks;
+#[cfg(windows)]
+mod windows;
 pub mod wire;
 #[cfg(windows)]
 mod world;

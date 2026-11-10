@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 21
+#define ENSHWICK_ABI_MINOR 22
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -214,6 +214,13 @@ typedef struct EnshwickActionCall {
 // label as its name, its permission bits, key 0 and no character. ABI
 // 11.19.
 #define EnshwickActionCall_REMOTE 5
+// The window of the calling mod's that `action` names, as `player`
+// sees it in `language`, after
+// `HostApi::action_window` showed it:
+// the reply is the window's text, empty when the mod keeps no such
+// window for them or the player may not run an action it names. ABI
+// 11.22.
+#define EnshwickActionCall_WINDOW 6
 
 // A buff type of the game by its id, the
 // `Guid::fnv1a` of its GUID, to apply,
@@ -5071,6 +5078,24 @@ typedef struct EnshwickHostApi {
                                EnshwickEntity entity,
                                uint32_t query,
                                uint32_t *holds);
+  // Shows the calling mod's window `id`, 1 to 32 of `[a-z0-9-]`, to the
+  // `count` players whose account keys `players` holds, or closes it
+  // on their clients when `close` is 1. After the server's step the
+  // loader asks the mod for the window as each player sees it
+  // (`ActionCall::WINDOW`) and carries the
+  // text to that player's client, which draws it; an empty answer closes
+  // it there. A player not online is skipped. On the server only
+  // (`Status::MISSING` on a client); `Status::BAD_ARGS` for a
+  // malformed id, `count` over 64 or a null `players` with a non-zero
+  // `count`; `Status::REFUSED` for a mod without
+  // actions, or while 256 shows or closes wait.
+  // Any thread; `id` and `players` are borrowed for the call. A panic
+  // in the loader returns `Status::REFUSED`. ABI 11.22.
+  EnshwickStatus (*action_window)(EnshwickModHandle me,
+                                  struct EnshwickStr id,
+                                  const EnshwickPlayerKey *players,
+                                  uint32_t count,
+                                  uint32_t close);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.

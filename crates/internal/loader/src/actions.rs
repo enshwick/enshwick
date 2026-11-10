@@ -22,6 +22,17 @@ use crate::remote::Message;
 /// The least time between two runs one player sends.
 const RUN_GAP: Duration = Duration::from_millis(200);
 
+/// The most bytes of arguments a run a client sends takes: enshwick's
+/// bound, room for several texts of the most bytes a text argument takes.
+const MAX_ARGS: usize = 2_048;
+
+/// Whether a client's arguments `args` pass the boundary: within
+/// [`MAX_ARGS`] and without a control character but the tab between
+/// fields; the mod checks each value against its argument again.
+fn args_in_bounds(args: &str) -> bool {
+    args.len() <= MAX_ARGS && !args.chars().any(|c| c.is_control() && c != '\t')
+}
+
 /// A mod's actions callback.
 #[derive(Clone, Copy)]
 struct Registered {
@@ -105,7 +116,7 @@ fn ask(
         action: Str::new(action),
         args: Str::new(args),
         target,
-        reply: if kind == ActionCall::SHEET {
+        reply: if answers_text(kind) {
             core::ptr::null_mut()
         } else {
             &raw mut written
@@ -136,7 +147,7 @@ fn ask(
     }
     // SAFETY: the reply stays valid until the callback runs again.
     let text = unsafe { reply.as_str() }.unwrap_or("");
-    if kind == ActionCall::SHEET {
+    if answers_text(kind) {
         return Answer {
             done: true,
             text: text.to_owned(),
@@ -151,6 +162,34 @@ fn ask(
         done,
         text: text.to_owned(),
     }
+}
+
+/// Whether a mod answers question `kind` with a text alone, a sheet or a
+/// window, not a run's outcome.
+const fn answers_text(kind: u32) -> bool {
+    kind == ActionCall::SHEET || kind == ActionCall::WINDOW
+}
+
+/// Mod `owner`'s window `id` as `player` sees it in `language`: its text,
+/// empty when the player may not see it; `None` when the mod is off or
+/// declared no actions.
+pub(crate) fn window(
+    loader: &Loader,
+    owner: ModIndex,
+    player: &PlayerInfo,
+    language: u32,
+    id: &str,
+) -> Option<String> {
+    let registered = running(loader).into_iter().find(|r| r.owner == owner)?;
+    let answer = ask(
+        registered,
+        ActionCall::WINDOW,
+        player,
+        language,
+        (id, ""),
+        ActionTarget::NONE,
+    );
+    Some(answer.text)
 }
 
 /// What a mod answered: whether a run was done, and its text, or its
@@ -292,6 +331,14 @@ pub(crate) fn run(
     args: &str,
     target: Option<ActionTarget>,
 ) {
+    if !args_in_bounds(args) {
+        crate::log!(
+            DEBUG,
+            "{key:016x} sent {} bytes of arguments out of bounds for {id}:{action}",
+            args.len()
+        );
+        return;
+    }
     let Some((player, language)) = admit(loader, key) else {
         return;
     };
@@ -328,6 +375,7 @@ pub(crate) fn run(
         (action, args),
         target,
     );
+    crate::windows::ran(registered.owner, key);
     let (ok, text) = (reply.done, reply.text.as_str());
     let name =
         String::from_utf8_lossy(&player.name[..usize::from(player.name_len).min(64)]).into_owned();
@@ -434,6 +482,29 @@ mod tests {
             ["greet", "wipe"]
         );
         assert_eq!(sheet_ids(""), Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_sheet_and_a_window_answer_as_text_and_the_rest_as_runs() {
+        assert!(answers_text(ActionCall::SHEET));
+        assert!(answers_text(ActionCall::WINDOW));
+        for kind in [
+            ActionCall::RUN,
+            ActionCall::CONSOLE,
+            ActionCall::CHAT,
+            ActionCall::REMOTE,
+        ] {
+            assert!(!answers_text(kind), "{kind}");
+        }
+    }
+
+    #[test]
+    fn arguments_over_the_bound_or_with_a_control_character_are_dropped() {
+        assert!(args_in_bounds("tBan for griefing\tb1"));
+        assert!(args_in_bounds(&"t".repeat(MAX_ARGS)));
+        assert!(!args_in_bounds(&"t".repeat(MAX_ARGS + 1)));
+        assert!(!args_in_bounds("tline\nbreak"));
+        assert!(!args_in_bounds("tbell\u{7}"));
     }
 
     fn places(entity: enshwick::Entity) -> Option<[f64; 3]> {

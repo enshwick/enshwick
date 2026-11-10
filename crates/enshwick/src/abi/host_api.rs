@@ -1865,6 +1865,26 @@ pub struct HostApi {
     /// loader returns [`Status::REFUSED`]. ABI 11.21.
     pub game_query:
         extern "system" fn(me: ModHandle, entity: Entity, query: u32, holds: *mut u32) -> Status,
+    /// Shows the calling mod's window `id`, 1 to 32 of `[a-z0-9-]`, to the
+    /// `count` players whose account keys `players` holds, or closes it
+    /// on their clients when `close` is 1. After the server's step the
+    /// loader asks the mod for the window as each player sees it
+    /// ([`ActionCall::WINDOW`](super::ActionCall::WINDOW)) and carries the
+    /// text to that player's client, which draws it; an empty answer closes
+    /// it there. A player not online is skipped. On the server only
+    /// ([`Status::MISSING`] on a client); [`Status::BAD_ARGS`] for a
+    /// malformed id, `count` over 64 or a null `players` with a non-zero
+    /// `count`; [`Status::REFUSED`] for a mod without
+    /// [actions](HostApi::actions), or while 256 shows or closes wait.
+    /// Any thread; `id` and `players` are borrowed for the call. A panic
+    /// in the loader returns [`Status::REFUSED`]. ABI 11.22.
+    pub action_window: extern "system" fn(
+        me: ModHandle,
+        id: Str,
+        players: *const PlayerKey,
+        count: u32,
+        close: u32,
+    ) -> Status,
 }
 
 // Every function keeps its slot: 24 header and version bytes, then 8 per slot.
@@ -2002,5 +2022,6 @@ const _: () = {
     assert!(offset_of!(HostApi, actions_changed) == 24 + 196 * 8);
     assert!(offset_of!(HostApi, resource_buffer) == 24 + 197 * 8);
     assert!(offset_of!(HostApi, game_query) == 24 + 198 * 8);
-    assert!(size_of::<HostApi>() == 24 + 199 * 8);
+    assert!(offset_of!(HostApi, action_window) == 24 + 199 * 8);
+    assert!(size_of::<HostApi>() == 24 + 200 * 8);
 };

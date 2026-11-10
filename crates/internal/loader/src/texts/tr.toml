@@ -1,6 +1,10 @@
 [tr]
 "actions.close" = "Kapat"
 "actions.out-of-reach" = "Bu çok uzakta."
+"windows.run" = "Çalıştır"
+"windows.cancel" = "İptal"
+"windows.name" = "Ya da bir ad yaz"
+"windows.text" = "Buraya yaz"
 "controls" = "Kontroller"
 "controls.key" = "Tuş: {key}"
 "controls.second" = "İkinci tuş: {key}"

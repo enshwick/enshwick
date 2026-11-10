@@ -51,6 +51,9 @@ use registry::Declared;
 use crate::locks::RelockRw;
 
 pub mod sheet;
+pub mod window;
+
+pub use window::{Row, Window};
 
 use core::ffi::c_void;
 use std::cell::RefCell;
@@ -72,7 +75,9 @@ const PLATFORM_TEXTS: &str = r#"
 "actions.denied" = "You may not do that."
 "actions.no_player" = "No player named {name}."
 "actions.several" = "Several players are named {name}."
+"actions.gone" = "That player is no longer here."
 "actions.bad" = "Write it so: {usage}"
+"actions.too_long" = "{label} takes at most {max} bytes."
 "actions.player" = "player"
 "actions.on" = "on"
 "actions.off" = "off"
@@ -84,7 +89,9 @@ const PLATFORM_TEXTS: &str = r#"
 "actions.denied" = "Тобі цього не можна."
 "actions.no_player" = "Немає гравця на ім'я {name}."
 "actions.several" = "Кілька гравців мають ім'я {name}."
+"actions.gone" = "Цього гравця вже немає."
 "actions.bad" = "Пиши так: {usage}"
+"actions.too_long" = "{label}: щонайбільше {max} байтів."
 "actions.player" = "гравець"
 "actions.on" = "on"
 "actions.off" = "off"
@@ -97,9 +104,17 @@ pub const MAX_ID: usize = 32;
 /// Players an action's list or a player argument shows at most.
 pub const MAX_PLAYERS: usize = 32;
 
+/// The most bytes an [`Arg::text`] takes.
+pub const MAX_TEXT: usize = 256;
+
 type Allow = Box<dyn Fn(&Player) -> bool + Send + Sync>;
 type At = Box<dyn Fn(&Ask<'_>) -> Result<Subject, FindSubjectError> + Send + Sync>;
 type On = Box<dyn Fn(&Ask<'_>, Option<&Subject>) -> Vec<(PlayerKey, String)> + Send + Sync>;
+type Known = Box<dyn Fn(&Ask<'_>) -> Vec<(PlayerKey, String)> + Send + Sync>;
+
+/// The most accounts the platform takes from an action's
+/// [`known`](Action::known) function, in the order it gives them.
+pub const MAX_KNOWN: usize = 1_024;
 type Handler = Box<dyn Fn(&Request<'_>) -> Outcome + Send + Sync>;
 
 /// An action as a mod declares it: hand it to [`Actions::add`] with its
@@ -121,6 +136,7 @@ pub struct Action {
     allow: Option<Allow>,
     at: Option<At>,
     on: Option<On>,
+    known: Option<Known>,
 }
 
 impl core::fmt::Debug for Action {
@@ -131,6 +147,7 @@ impl core::fmt::Debug for Action {
             .field("args", &self.args)
             .field("needs", &self.needs)
             .field("per_player", &self.on.is_some())
+            .field("knows_accounts", &self.known.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -153,6 +170,7 @@ impl Action {
             allow: None,
             at: None,
             on: None,
+            known: None,
         }
     }
 
@@ -293,6 +311,36 @@ impl Action {
         F: Fn(&Ask<'_>) -> Result<Subject, FindSubjectError> + Send + Sync + 'static,
     {
         self.at = Some(Box::new(at));
+        self
+    }
+
+    /// Accounts the mod knows beyond the players online, such as banned
+    /// players or those refused at the door, newest first: account key and
+    /// last name. The action's [player](Arg::player) arguments and its
+    /// [list](Action::per_player) offer them after the players online, up
+    /// to [`MAX_PLAYERS`] rows, and a typed name finds any of the first
+    /// [`MAX_KNOWN`], so an administrator acts on a player who is offline.
+    /// A name that several accounts share is refused. Called on the server
+    /// each time a player looks or runs the action.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::PlayerKey;
+    /// use enshwick::actions::{Action, Arg};
+    ///
+    /// let ban = Action::new("ban", "Ban")
+    ///     .admins()
+    ///     .arg(Arg::player("Player"))
+    ///     .known(|_ask| vec![(PlayerKey::new(42), "Bob".into())]);
+    /// assert_eq!(ban.id(), "ban");
+    /// ```
+    #[must_use]
+    pub fn known<F>(mut self, known: F) -> Self
+    where
+        F: Fn(&Ask<'_>) -> Vec<(PlayerKey, String)> + Send + Sync + 'static,
+    {
+        self.known = Some(Box::new(known));
         self
     }
 }
@@ -556,6 +604,125 @@ impl Actions {
         let status = (host.api().actions_changed)(host.handle());
         crate::load::ok(status, (), || "actions: rules changed".to_owned())
     }
+
+    /// Shows `window` to the players with the account keys `players`, or
+    /// updates it where it shows already, from the server: the client's
+    /// loader draws it with the game's widgets, so a mod of side server
+    /// opens windows on clients that run only Enshwick. After the server's
+    /// step each player gets the window in their language, only when they
+    /// may run every action it names; a press of its buttons runs the
+    /// action as any run, checked again on the server. A player not online
+    /// is skipped. Works the same on a dedicated server and in a hosted or
+    /// single-player game, where the host gets its windows in process.
+    ///
+    /// The mod keeps the window for each player it names, apart from the
+    /// window other players hold under the same id, and the server renders
+    /// a player's own again after their run. It keeps the newest
+    /// [`window::MAX_KEPT`], counted per player; a player whose window
+    /// went past that sees it close at their next update.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] on a client; for a malformed id, a window past its bounds
+    /// ([`window::MAX_ITEMS`], [`window::MAX_BUTTONS`]), a button or item
+    /// naming an action not declared yet, or a button giving values its
+    /// action does not take; or when the loader refuses, as while too many
+    /// shows wait. The mod keeps the window only for the players the
+    /// loader took.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::actions::{Action, Arg, Outcome, Window};
+    /// use enshwick::i18n::Texts;
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let actions = load.actions(Texts::default())?;
+    ///     actions.add(
+    ///         Action::new("say", "Announce").admins().arg(Arg::text("Message", 200)),
+    ///         |_| Outcome::done("Sent"),
+    ///     )?;
+    ///     let shown = actions.clone();
+    ///     actions.add(Action::new("panel", "Admin panel").admins(), move |request| {
+    ///         let window = Window::new("panel", "Admin panel").action("say");
+    ///         match shown.show(window, &[request.player.key]) {
+    ///             Ok(()) => Outcome::done(""),
+    ///             Err(why) => Outcome::refused(why.to_string()),
+    ///         }
+    ///     })?;
+    ///     actions.control("panel", enshwick::controls::Key::parse("F7")?)
+    /// }
+    /// ```
+    pub fn show(&self, window: Window, players: &[PlayerKey]) -> Result<(), Off> {
+        let id = window.id.clone();
+        if !is_valid_id(&id) {
+            return Err(Off::new(format!(
+                "window {id}: ids are 1 to 32 of [a-z0-9-]"
+            )));
+        }
+        let fault = {
+            let declared = self.registry.declared.relock_read();
+            window.fault(
+                &|action, values| match declared.iter().find(|d| d.action.id == action) {
+                    Some(d) => values.and_then(|v| registry::button_fault(&d.action, v)),
+                    None => Some(format!("no action {action}")),
+                },
+            )
+        };
+        if let Some(fault) = fault {
+            return Err(Off::new(format!("window {id}: {fault}")));
+        }
+        let window = Arc::new(window);
+        let mut kept = self.registry.windows.relock_write();
+        self.carry_window(&id, players, false, |part| kept.keep(&window, part))
+    }
+
+    /// Closes the window `id` on the clients of the players with the
+    /// account keys `players`, from the server, and forgets it for them;
+    /// [`show`](Self::show) opens it again.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] on a client, or when the loader refuses, as while too many
+    /// shows and closes wait.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn close_panel(actions: &enshwick::actions::Actions, admin: enshwick::PlayerKey) {
+    ///     let _closed = actions.close("panel", &[admin]);
+    /// }
+    /// ```
+    pub fn close(&self, id: &str, players: &[PlayerKey]) -> Result<(), Off> {
+        let mut kept = self.registry.windows.relock_write();
+        self.carry_window(id, players, true, |part| kept.forget(id, part))
+    }
+
+    /// Hands the loader a show or a close of window `id` for `players`, in
+    /// parts of the most players one call takes; `taken` gets each part the
+    /// loader took.
+    fn carry_window(
+        &self,
+        id: &str,
+        players: &[PlayerKey],
+        close: bool,
+        mut taken: impl FnMut(&[PlayerKey]),
+    ) -> Result<(), Off> {
+        let host = self.registry.host;
+        for part in players.chunks(window::MAX_CALL_PLAYERS) {
+            let count = u32::try_from(part.len()).unwrap_or(u32::MAX);
+            let status = (host.api().action_window)(
+                host.handle(),
+                Str::new(id),
+                part.as_ptr(),
+                count,
+                u32::from(close),
+            );
+            crate::load::ok(status, (), || format!("window {id}"))?;
+            taken(part);
+        }
+        Ok(())
+    }
 }
 
 /// What the mod answers the loader: a text, such as its sheet, or how a run
@@ -635,6 +802,7 @@ unsafe extern "system" fn answer(call: *const ActionCall, user: *mut c_void, out
         || Answered::Text(String::new()),
         || match call.kind {
             ActionCall::SHEET => Answered::Text(registry.sheet(&player, language)),
+            ActionCall::WINDOW => Answered::Text(registry.window(&player, language, action)),
             ActionCall::RUN => {
                 let covered = call.header.covers(
                     core::mem::offset_of!(ActionCall, target)
@@ -728,6 +896,7 @@ impl Load<'_> {
             texts: all,
             host,
             declared: RwLock::new(Vec::new()),
+            windows: RwLock::default(),
             commands: core::sync::atomic::AtomicBool::new(false),
             commands_off: core::sync::atomic::AtomicBool::new(false),
         });
@@ -741,8 +910,17 @@ impl Load<'_> {
     }
 }
 
-/// Whether `id` can name an action: 1 to 32 characters of `[a-z0-9-]`.
-fn is_valid_id(id: &str) -> bool {
+/// Whether `id` can name an action or a [`Window`]: 1 to 32 characters of
+/// `[a-z0-9-]`.
+///
+/// # Examples
+///
+/// ```
+/// assert!(enshwick::actions::is_valid_id("ban-list"));
+/// assert!(!enshwick::actions::is_valid_id("Ban List"));
+/// ```
+#[must_use]
+pub fn is_valid_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= MAX_ID
         && id

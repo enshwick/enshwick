@@ -1,6 +1,10 @@
 [ja]
 "actions.close" = "閉じる"
 "actions.out-of-reach" = "遠すぎます。"
+"windows.run" = "実行"
+"windows.cancel" = "キャンセル"
+"windows.name" = "または名前を入力"
+"windows.text" = "ここに入力"
 "controls" = "操作"
 "controls.key" = "キー: {key}"
 "controls.second" = "第2キー: {key}"

@@ -50,13 +50,13 @@ pub struct Entry {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ArgView {
     /// What it is: [`ArgView::PLAYER`], [`ArgView::CHOICE`],
-    /// [`ArgView::NUMBER`] or [`ArgView::TOGGLE`].
+    /// [`ArgView::NUMBER`], [`ArgView::TOGGLE`] or [`ArgView::TEXT`].
     pub kind: u8,
     /// Its label, in the player's language.
     pub label: String,
-    /// A number's least value.
+    /// A number's least value, or a text's fewest bytes.
     pub min: f64,
-    /// A number's greatest value.
+    /// A number's greatest value, or a text's most bytes.
     pub max: f64,
     /// A number's step; 0 for any value.
     pub step: f64,
@@ -75,6 +75,8 @@ impl ArgView {
     pub const NUMBER: u8 = 2;
     /// On or off.
     pub const TOGGLE: u8 = 3;
+    /// A line of text.
+    pub const TEXT: u8 = 4;
 }
 
 /// The separator of a list inside a field.
@@ -239,6 +241,7 @@ pub fn encode_args(args: &[Value]) -> String {
             Value::Choice(index) => write!(out, "c{index}"),
             Value::Number(number) => write!(out, "n{number}"),
             Value::Toggle(on) => write!(out, "b{}", u8::from(*on)),
+            Value::Text(text) => write!(out, "t{}", clean(text)),
         };
     }
     out
@@ -266,6 +269,9 @@ pub fn decode_args(text: &str) -> Option<Vec<Value>> {
                 "c" => Value::Choice(rest.parse().ok()?),
                 "n" => Value::Number(rest.parse::<f64>().ok().filter(|n| n.is_finite())?),
                 "b" => Value::Toggle(rest == "1"),
+                "t" if rest.len() <= super::MAX_TEXT && !rest.chars().any(char::is_control) => {
+                    Value::Text(rest.to_owned())
+                }
                 _ => return None,
             })
         })
@@ -342,5 +348,16 @@ mod tests {
         assert_eq!(decode_args("x1"), None);
         assert_eq!(decode_args("nNaN"), None);
         assert_eq!(decode_args("pzz"), None);
+    }
+
+    #[test]
+    fn a_text_argument_is_read_up_to_its_bound_and_without_control_characters() {
+        let longest = "x".repeat(crate::actions::MAX_TEXT);
+        assert_eq!(
+            decode_args(&format!("t{longest}")),
+            Some(vec![Value::Text(longest.clone())])
+        );
+        assert_eq!(decode_args(&format!("t{longest}x")), None);
+        assert_eq!(decode_args("tbell\u{7}"), None);
     }
 }

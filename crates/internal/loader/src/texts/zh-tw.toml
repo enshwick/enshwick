@@ -1,6 +1,10 @@
 [zh-tw]
 "actions.close" = "關閉"
 "actions.out-of-reach" = "距離太遠。"
+"windows.run" = "執行"
+"windows.cancel" = "取消"
+"windows.name" = "或輸入名字"
+"windows.text" = "在此輸入"
 "controls" = "操作"
 "controls.key" = "按鍵：{key}"
 "controls.second" = "第二按鍵：{key}"

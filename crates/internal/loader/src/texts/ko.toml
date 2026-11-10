@@ -1,6 +1,10 @@
 [ko]
 "actions.close" = "닫기"
 "actions.out-of-reach" = "너무 멀리 있습니다."
+"windows.run" = "실행"
+"windows.cancel" = "취소"
+"windows.name" = "또는 이름 입력"
+"windows.text" = "여기에 입력"
 "controls" = "조작"
 "controls.key" = "키: {key}"
 "controls.second" = "두 번째 키: {key}"

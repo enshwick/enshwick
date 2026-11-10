@@ -210,6 +210,20 @@ mod tests {
             Ok("Write it so: wipe <all|half> <1-10>: Wipe")
         );
         assert_eq!(
+            console::run("you.lockers wipe 2 3").as_deref(),
+            Ok("wipe 1 in 3"),
+            "a choice by its number"
+        );
+        assert_eq!(
+            console::run("you.lockers wipe 1 3").as_deref(),
+            Ok("wipe 0 in 3")
+        );
+        assert_eq!(
+            console::run("you.lockers wipe 3 3").as_deref(),
+            Ok("Write it so: wipe <all|half> <1-10>: Wipe"),
+            "a number past the choices"
+        );
+        assert_eq!(
             loader
                 .ask_actions(ActionCall::CONSOLE, &owner, 0, "access Ann off", "")
                 .as_deref(),

@@ -15,6 +15,70 @@ pub(crate) struct FakeCommands {
     pub(crate) rules_changed: u32,
     /// The strings `command_list` last handed out: name, alias, mod id.
     pub(crate) listed: Vec<[Box<str>; 3]>,
+    /// Shows and closes of the mod's windows not carried yet: account key,
+    /// window id and whether it closes.
+    pub(crate) windows: Vec<(u64, String, bool)>,
+    /// The windows each client holds: account key, window id and text.
+    pub(crate) carried: Vec<(u64, String, String)>,
+}
+
+#[cfg(feature = "unstable")]
+use crate::actions::{
+    is_valid_id as is_window_id,
+    window::{MAX_CALL_PLAYERS, MAX_WAITING},
+};
+/// The most players one show or close names, as
+/// `actions::window::MAX_CALL_PLAYERS` holds it where that module is built.
+#[cfg(not(feature = "unstable"))]
+const MAX_CALL_PLAYERS: usize = 64;
+/// The most shows and closes that wait, as `actions::window::MAX_WAITING`
+/// holds it where that module is built.
+#[cfg(not(feature = "unstable"))]
+const MAX_WAITING: usize = 256;
+
+/// Without the `actions` module the fake takes any window id of 1 to 32
+/// bytes.
+#[cfg(not(feature = "unstable"))]
+fn is_window_id(id: &str) -> bool {
+    (1..=32).contains(&id.len())
+}
+
+pub(crate) extern "system" fn action_window(
+    _me: ModHandle,
+    id: Str,
+    players: *const crate::PlayerKey,
+    count: u32,
+    close: u32,
+) -> Status {
+    // SAFETY: the caller keeps the id's bytes alive for the call.
+    let Some(id) = (unsafe { id.as_str() }).filter(|id| is_window_id(id)) else {
+        return Status::BAD_ARGS;
+    };
+    if count as usize > MAX_CALL_PLAYERS || (players.is_null() && count != 0) || close > 1 {
+        return Status::BAD_ARGS;
+    }
+    let keys: Vec<u64> = if count == 0 {
+        Vec::new()
+    } else {
+        // SAFETY: the caller hands `count` keys at `players`, not null by
+        // the guard before it, alive for the call.
+        unsafe { core::slice::from_raw_parts(players, count as usize) }
+            .iter()
+            .map(|key| key.get())
+            .collect()
+    };
+    with(Status::MISSING, |s| {
+        if s.host.side == crate::abi::Side::CLIENT && !s.host.hosting {
+            return Status::MISSING;
+        }
+        if s.actions.is_none() || s.commands.windows.len() + keys.len() > MAX_WAITING {
+            return Status::REFUSED;
+        }
+        s.commands
+            .windows
+            .extend(keys.into_iter().map(|key| (key, id.to_owned(), close == 1)));
+        Status::OK
+    })
 }
 
 #[cfg(feature = "unstable")]

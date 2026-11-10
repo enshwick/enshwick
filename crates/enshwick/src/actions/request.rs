@@ -38,9 +38,13 @@ pub enum Value {
     Number(f64),
     /// On or off.
     Toggle(bool),
+    /// The text typed for an [`Arg::text`], within its bytes and without a
+    /// control character.
+    Text(String),
 }
 
-/// An argument of an action: a typed choice, never free text.
+/// An argument of an action: a typed choice, or a line of text of at most
+/// [`MAX_TEXT`](crate::actions::MAX_TEXT) bytes.
 ///
 /// # Examples
 ///
@@ -123,6 +127,36 @@ impl Arg {
     #[must_use]
     pub fn toggle(label: &str) -> Self {
         Self::new(ArgView::TOGGLE, label)
+    }
+
+    /// A line of text of 1 to `max_bytes` bytes of UTF-8, at most
+    /// [`MAX_TEXT`](crate::actions::MAX_TEXT), such as a ban reason or an
+    /// announcement. On the console the last text argument takes the rest
+    /// of the line; one before it takes one word or a `"quoted run"`. The
+    /// server refuses a longer text and any control character.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::actions::{Action, Arg};
+    ///
+    /// let say = Action::new("say", "Announce").admins().arg(Arg::text("Message", 200));
+    /// assert_eq!(say.id(), "say");
+    /// ```
+    #[must_use]
+    pub fn text(label: &str, max_bytes: usize) -> Self {
+        let max = u16::try_from(max_bytes.clamp(1, super::MAX_TEXT)).unwrap_or(u16::MAX);
+        let mut arg = Self::new(ArgView::TEXT, label);
+        arg.range = (1.0, f64::from(max));
+        arg
+    }
+
+    /// Whether `text` fits this text argument: its bytes within the range
+    /// and no control character.
+    pub(super) fn takes_text(&self, text: &str) -> bool {
+        u16::try_from(text.len())
+            .is_ok_and(|len| f64::from(len) >= self.range.0 && f64::from(len) <= self.range.1)
+            && !text.chars().any(char::is_control)
     }
 }
 

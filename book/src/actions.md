@@ -22,7 +22,9 @@ mod offers the action through means of its own:
   which send one with `Actions::run`;
 - on the server's [console](chat.md#the-console), as the mod's id, the
   action and its values, such as a line typed in a dedicated server's
-  console window.
+  console window;
+- in a [window the server shows](#windows-from-the-server) on the
+  player's client, which needs only Enshwick there.
 
 The Mods screen shows a mod and its settings, not its actions.
 
@@ -103,13 +105,15 @@ Portuguese, then to English.
 | `.allow(fn)`, `.admins()`           | who sees the action and may run it                                                               |
 | `.needs(permission)`                | only players the game's user groups give that [permission](commands.md#limit-an-action-to-a-permission) |
 | `.at(fn)`                           | what it acts on for a player, or why there is nothing, which the player reads beside it          |
+| `.known(fn)`                        | accounts the mod knows beyond the players online, for player arguments and lists                 |
 
-`Arg` makes four kinds of argument:
+`Arg` makes five kinds of argument:
 
 - `player`
 - `choice`
 - `number`
 - `toggle`
+- `text`
 
 In Luau, `enshwick.actions.actions(texts)` returns the `Actions`. An action
 is a table of the builder's fields:
@@ -123,18 +127,20 @@ is a table of the builder's fields:
 - the function `allow(player)`
 - the function `at(ask)`
 - the function `per_player(ask, subject)`
+- the function `known(ask)`
 
 Only `true` from `allow` lets a player in. With `admins` set, both must
-hold. Four functions make the arguments:
+hold. Five functions make the arguments:
 
 - `enshwick.actions.player`
 - `choice`
 - `number`. It takes the range as `min` and `max`.
 - `toggle`
+- `text`. It takes the most bytes as a number.
 
 `at` returns `{ Ok = enshwick.actions.subject(id, label) }` on success. On
 failure it returns `{ Err = reason }`. `per_player` returns a list of
-`{ key, name }`. A subject's `id` is a 64-bit key, so it crosses as its decimal digits.
+`{ key, name }`. The function `known` returns one too. A subject's `id` is a 64-bit key, so it crosses as its decimal digits.
 
 ```luau
 local actions = enshwick.actions.actions(enshwick.i18n.texts_from('[en]\n"access" = "Who may use it"\n'))
@@ -160,15 +166,77 @@ actions:add({
 end)
 ```
 
-Arguments are typed choices, never free text. Each is one of four kinds:
+Each argument is one of five kinds:
 
-- a player online, named on the console;
+- a player online or known to the mod, named on the console;
 - one of a few options;
 - a number in a range with a step;
-- on or off.
+- on or off;
+- a line of text of 1 to its most bytes, at most 256, without a control
+  character, such as a ban reason or an announcement.
 
 A list takes the players online and the ones `on` names, so a player
 switched on can be switched off while away.
+
+## Players who are offline
+
+An administrator bans or allows players who are not online. `.known(fn)`
+names the accounts the mod knows beyond the players online. Examples are
+banned players or those refused at the door, newest first. Each is an
+account key and the last name the mod saw. The function runs on the server
+each time a player looks at or runs the action.
+
+- The action's player arguments and its list offer the players online
+  first, then the known accounts, 32 rows at most.
+- A name typed on the console, in a command or in a player's field finds
+  any of the first 1,024 known accounts.
+- A name that several accounts share is refused: "Several players are named
+  Sam."
+- A run hands the account's key in `Value::Player`, whether the player is
+  online or not.
+
+```rust
+use enshwick::PlayerKey;
+use enshwick::actions::{Action, Arg, Outcome, Value};
+use enshwick::i18n::Texts;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let actions = load.actions(Texts::default())?;
+    actions.add(
+        Action::new("ban", "Ban")
+            .admins()
+            .arg(Arg::player("Player"))
+            .arg(Arg::text("Reason", 120))
+            .known(|_ask| vec![(PlayerKey::new(42), "Bob".into())]),
+        |request| match request.args {
+            [Value::Player { name, .. }, Value::Text(reason)] => {
+                Outcome::done(format!("Banned {name}: {reason}"))
+            }
+            _ => Outcome::refused("Name a player"),
+        },
+    )?;
+    actions.commands("bans", "b")
+}
+```
+
+```luau
+local actions = enshwick.actions.actions(enshwick.i18n.parse(""))
+actions:add({
+    id = "ban",
+    label = "Ban",
+    admins = true,
+    args = { enshwick.actions.player("Player"), enshwick.actions.text("Reason", 120) },
+    known = function(ask)
+        return { { key = "42", name = "Bob" } }
+    end,
+}, function(request)
+    local args = request:args()
+    return enshwick.actions.done(`Banned {args[1].Player.name}: {args[2].Text}`)
+end)
+actions:commands("bans", "b")
+```
+
+`/b ban Bob griefing on the coast` bans Bob while he is offline.
 
 ## Handling
 
@@ -282,9 +350,12 @@ object is the kind it acts on and the player's to use.
 ## From the console
 
 A console line names the mod by its id, then the action and its values as
-words. Values are a player by name, a choice by its word, a number, or `on`
-or `off`. A list takes a player and `on` or `off`. For example:
-`you.trading-post access Ann on`. `<mod id> help` lists the actions with
+words. Values are a player by name, a choice by its word, a number, `on`
+or `off`, or a text. A list takes a player and `on` or `off`. For example:
+`you.trading-post access Ann on`. The last text argument takes the rest of
+the line as typed. A text argument before another value takes one word, or
+a run in double quotes: `you.tags tag "red fox" 3`. The server refuses a
+longer text than the argument takes: "Reason takes at most 120 bytes." `<mod id> help` lists the actions with
 their words. The mod's id in front keeps two mods' actions apart, see
 [how ids are namespaced](concepts/ids.md). A mod's command name or alias
 works in place of its id, as in `/adl online`. The console holds every
@@ -298,8 +369,112 @@ Actions run in the game server: the dedicated server, and a client while it
 hosts a game, single player included. A control or panel that runs one
 needs Enshwick on the player's client. A mod of side `server` has no part on
 the client, so it offers its actions through controls that
-[run an action](controls.md#a-mod-that-runs-on-the-server-only). The server
-sends them to each player's client.
+[run an action](controls.md#a-mod-that-runs-on-the-server-only) and through
+[windows](#windows-from-the-server). The server sends both to each player's
+client.
+
+## Windows from the server
+
+A mod of side `server` opens windows on players' clients, though it has no
+part there. The client's Enshwick draws them with the game's own widgets.
+An administrator needs only Enshwick on their client to use them.
+
+A `Window` holds a title and items, in order:
+
+| Builder | What the player sees |
+| --- | --- |
+| `Window::new(id, title)` | an empty window; `id` is 1 to 32 of `[a-z0-9-]` |
+| `.text(key, values)` | a line |
+| `.row(Row::new(key, values).button(label, action, values))` | a line with up to 4 buttons |
+| `.action(id)` | the action whole: its fields above a Run button, or a list's players with a switch each |
+
+Texts are keys of the mod's texts, filled with the values in each player's
+language. A button runs its action with the values it gives. When the
+action takes more, a press opens a form with fields for the rest, such as a
+ban's reason after the row's player.
+
+`actions.show(window, &players)` shows the window to the players with those
+account keys. Shown again to a player under the same id, it updates in
+place. Each player keeps the window shown to them, so two players may hold
+different windows under one id.
+`actions.close(id, &players)` closes it on their clients. A mod keeps the
+newest 1,024 windows, counted per player, each up to 64 items. A player
+whose window went past that sees it close at their next update.
+A window carries at most 7,168 bytes
+to one player. When it does not fit, the players its actions' arguments
+offer go first, and the player names one by typing. Then items past the
+bound are left out. When the actions it names fill
+that alone, it closes, and the server's log names the window.
+
+```rust
+use enshwick::actions::{Action, Arg, Outcome, Row, Value, Window};
+use enshwick::i18n::Texts;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let actions = load.actions(Texts::default())?;
+    actions.add(
+        Action::new("ban", "Ban")
+            .admins()
+            .arg(Arg::player("Player"))
+            .arg(Arg::text("Reason", 120)),
+        |_| Outcome::done("Banned"),
+    )?;
+    let shown = actions.clone();
+    actions.add(Action::new("panel", "Admin panel").admins(), move |request| {
+        let ann = Value::Player { key: enshwick::PlayerKey::new(7), name: "Ann".into() };
+        let window = Window::new("panel", "Admin panel")
+            .text("Players", &[])
+            .row(Row::new("Ann", &[]).button("Ban", "ban", &[ann]));
+        match shown.show(window, &[request.player.key]) {
+            Ok(()) => Outcome::done(""),
+            Err(why) => Outcome::refused(why.to_string()),
+        }
+    })?;
+    actions.control("panel", enshwick::controls::Key::parse("F7")?)
+}
+```
+
+```luau
+local actions = enshwick.actions.actions(enshwick.i18n.parse(""))
+actions:add({
+    id = "ban",
+    label = "Ban",
+    admins = true,
+    args = { enshwick.actions.player("Player"), enshwick.actions.text("Reason", 120) },
+}, function() return enshwick.actions.done("Banned") end)
+actions:add({ id = "panel", label = "Admin panel", admins = true }, function(request)
+    actions:show({
+        id = "panel",
+        title = "Admin panel",
+        items = {
+            { Text = { key = "Players" } },
+            { Row = { text = { key = "Ann" }, buttons = {
+                { label = "Ban", action = "ban", args = { { Player = { key = "7", name = "Ann" } } } },
+            } } },
+        },
+    }, { request:player().key })
+    return enshwick.actions.done("")
+end)
+actions:control("panel", "F7")
+```
+
+The server decides what each player sees:
+
+- After its step, the server renders the window for each player in their
+  language. A player gets it only when they may run every action it names;
+  a player who may not gets nothing.
+- Each run from a window is checked again on the server, as any run.
+- After a player runs one of the mod's actions from a window, the server
+  renders the mod's windows that player holds again. So a list shows its
+  switches as they are now.
+- The player closes a window on their client with Close. The newest window
+  shows; the one under it shows when it closes. The server renders a closed
+  window for that player again only when the mod shows it again.
+- A client that loses its server closes every window.
+
+A client without Enshwick gets no window and plays on. A dedicated server, a
+game a player hosts and single player work alike. The host gets its own
+windows inside the game. Joined friends get theirs over the network.
 
 ## Worked example
 
@@ -322,6 +497,9 @@ the loader does:
 - `action_targets()` lists the objects a client's runs named.
 - `ask_actions(ActionCall::SHEET, &player, language, "", "")` returns the
   mod's sheet, which `actions::sheet::decode` reads.
+- `carried_windows(&player, language)` returns the windows that player's
+  client holds after the mod's shows and closes, which
+  `actions::window::decode` reads.
 - `console::run("<mod id> <action> ...")` runs the console form. The fake
   hands a line to the mod's own actions unless `console_answer` gave its first
   word an answer.

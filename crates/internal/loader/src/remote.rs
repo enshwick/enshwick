@@ -37,6 +37,10 @@ pub const ACTION_RUN: u8 = 14;
 /// The server's controls of one of its mods of side server; 13 and 15
 /// stay unused, since loaders before them read those as action sheets.
 pub const CONTROLS: u8 = 16;
+/// A window of one of the server's mods, as the client's player sees it.
+pub const WINDOW: u8 = 17;
+/// The server closes a window of one of its mods.
+pub const WINDOW_CLOSE: u8 = 18;
 
 /// The controls of one mod a [`Message::Controls`] carries at most.
 pub const MAX_CARRIED: usize = 24;
@@ -143,6 +147,26 @@ pub enum Message {
         name: String,
         /// Its controls, at most [`MAX_CARRIED`].
         controls: Vec<Carried>,
+    },
+    /// The window `window` of the server's mod `id`, as the client's
+    /// player sees it, which the client draws without the mod.
+    Window {
+        /// The mod.
+        id: String,
+        /// The window's id in the mod.
+        window: String,
+        /// Whether it opens: the mod showed it. Otherwise it only updates a
+        /// window the client still holds, as after the player's run.
+        open: bool,
+        /// Its text, at most [`enshwick::actions::window::MAX_BYTES`].
+        text: String,
+    },
+    /// The server closes the window `window` of its mod `id`.
+    WindowClose {
+        /// The mod.
+        id: String,
+        /// The window's id in the mod.
+        window: String,
     },
 }
 
@@ -286,6 +310,12 @@ fn take_target(bytes: &[u8]) -> Option<ActionTarget> {
     (target.flags != 0 && target.is_valid()).then_some(target)
 }
 
+/// Whether a window message names a mod `id` and a window `window` as ids
+/// read.
+fn window_named(id: &str, window: &str) -> bool {
+    enshwick::abi::is_valid_id(id) && enshwick::actions::is_valid_id(window)
+}
+
 fn put(out: &mut Vec<u8>, text: &str) {
     let len = u16::try_from(text.len()).unwrap_or(u16::MAX);
     out.extend_from_slice(&len.to_le_bytes());
@@ -314,6 +344,8 @@ impl Message {
             Self::ActionsLanguage { .. } => ACTIONS_LANGUAGE,
             Self::ActionRun { .. } => ACTION_RUN,
             Self::Controls { .. } => CONTROLS,
+            Self::Window { .. } => WINDOW,
+            Self::WindowClose { .. } => WINDOW_CLOSE,
         }
     }
 
@@ -399,8 +431,49 @@ impl Message {
                     }
                 }
             }
+            Self::Window {
+                id,
+                window,
+                open,
+                text,
+            } => {
+                put(&mut out, id);
+                put(&mut out, window);
+                out.push(u8::from(*open));
+                put(&mut out, text);
+            }
+            Self::WindowClose { id, window } => {
+                put(&mut out, id);
+                put(&mut out, window);
+            }
         }
         out
+    }
+
+    /// Reads a [`Message::Window`] or [`Message::WindowClose`] from the
+    /// rest of its body: `None` for ids that do not read, an open flag past
+    /// 1 or a text past the window's bound.
+    fn read_window(kind: u8, bytes: &mut &[u8]) -> Option<Self> {
+        let (id, window) = (take(bytes)?, take(bytes)?);
+        if !window_named(id, window) {
+            return None;
+        }
+        let (id, window) = (id.to_owned(), window.to_owned());
+        if kind == WINDOW_CLOSE {
+            return Some(Self::WindowClose { id, window });
+        }
+        let (&open, rest) = bytes.split_first()?;
+        *bytes = rest;
+        let text = take(bytes)?;
+        if open > 1 || text.len() > enshwick::actions::window::MAX_BYTES {
+            return None;
+        }
+        Some(Self::Window {
+            id,
+            window,
+            open: open == 1,
+            text: text.to_owned(),
+        })
     }
 
     /// Reads a message of `kind` from its body.
@@ -495,6 +568,7 @@ impl Message {
                 }
                 Self::Controls { id, name, controls }
             }
+            WINDOW | WINDOW_CLOSE => Self::read_window(kind, bytes)?,
             _ => return None,
         })
     }

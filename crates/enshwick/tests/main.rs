@@ -7,6 +7,8 @@ mod abi_versions;
 #[cfg(feature = "unstable")]
 mod accounts;
 #[cfg(feature = "unstable")]
+mod action_arguments;
+#[cfg(feature = "unstable")]
 mod action_keys;
 #[cfg(feature = "unstable")]
 mod action_targets;
@@ -229,6 +231,8 @@ mod voxels;
 mod weather;
 #[cfg(feature = "typed")]
 mod weather_phenomena;
+#[cfg(feature = "unstable")]
+mod windows;
 #[cfg(feature = "unstable")]
 mod world_blocks;
 #[cfg(feature = "unstable")]

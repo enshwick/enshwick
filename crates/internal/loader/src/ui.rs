@@ -15,6 +15,7 @@ use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::registry::Registry;
 
+pub(crate) mod carried;
 mod demo;
 mod dialog;
 mod engine;
@@ -243,6 +244,7 @@ static EXTENSIONS_FUSE: Fuse = Fuse::new("screen extensions");
 /// frames then read as outside a game.
 static READS_FUSE: Fuse = Fuse::new("screen reads");
 static DEMO_FUSE: Fuse = Fuse::new("interface demo");
+static CARRIED_FUSE: Fuse = Fuse::new("carried windows");
 static MODS_SCREEN_FUSE: Fuse = Fuse::new("Mods screen");
 static DIALOGS_FUSE: Fuse = Fuse::new("dialogs");
 /// Turns the mods' HUD items off at their first panic.
@@ -582,11 +584,17 @@ unsafe extern "system" fn detour(state: *mut u8) {
         // thread, `context` is non-zero (checked by the guard before it), and
         // `extensions::draw` ends each window before it returns.
         && drew(&DEMO_FUSE, "the demo's draw", || unsafe { demo::draw(engine, context) })
+        // SAFETY: the game draws its popup inside the frame on the interface
+        // thread, `context` is non-zero (checked by the guard before it), and
+        // `demo::draw` ends its window before it returns.
+        && drew(&CARRIED_FUSE, "the carried windows' draw", || unsafe {
+            carried::draw(engine, context);
+        })
         && drew(&MODS_SCREEN_FUSE, "the Mods screen's draw", || {
             if let Some(loader) = crate::host::loader() {
                 // SAFETY: the game draws its popup inside the frame on the
                 // interface thread, `context` is non-zero (checked by the
-                // guard before it), `demo::draw` ends its window before it
+                // guard before it), `carried::draw` ends its window before it
                 // returns, and `frame` is the count `mods::next_frame` gave
                 // this frame.
                 unsafe { mods::draw(loader, engine, context, frame) };

@@ -1,6 +1,10 @@
 [pl]
 "actions.close" = "Zamknij"
 "actions.out-of-reach" = "To jest za daleko."
+"windows.run" = "Wykonaj"
+"windows.cancel" = "Anuluj"
+"windows.name" = "Lub wpisz imię"
+"windows.text" = "Wpisz tutaj"
 "controls" = "Sterowanie"
 "controls.key" = "Klawisz: {key}"
 "controls.second" = "Drugi klawisz: {key}"
