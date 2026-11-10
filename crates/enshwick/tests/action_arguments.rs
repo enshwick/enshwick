@@ -69,7 +69,7 @@ mod tests {
                 .known(|_ask| known()),
                 ran,
             )?;
-            actions.commands("bans", "b")?;
+            actions.commands("b")?;
             Ok(Self)
         }
     }

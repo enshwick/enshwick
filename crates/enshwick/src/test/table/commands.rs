@@ -9,8 +9,8 @@ use crate::test::table::{Registration, put_headed, text, with};
 /// What the mod did with its commands.
 #[derive(Debug, Default)]
 pub(crate) struct FakeCommands {
-    /// The name and alias it took.
-    pub(crate) named: Option<(String, String)>,
+    /// The alias it asked for its commands, once the fake took them.
+    pub(crate) asked: Option<String>,
     /// How often it said who may run its actions changed.
     pub(crate) rules_changed: u32,
     /// The strings `command_list` last handed out: name, alias, mod id.
@@ -94,34 +94,127 @@ const ALL_BITS: u8 = crate::world::PlayerPermissions::ALL_BITS;
 #[cfg(not(feature = "unstable"))]
 const ALL_BITS: u8 = u8::MAX;
 
-/// Whether `name` and `alias` are words the loader takes.
-fn fit(name: &str, alias: &str) -> bool {
-    #[cfg(feature = "unstable")]
-    return crate::commands::names_fit(name, alias);
-    #[cfg(not(feature = "unstable"))]
-    return !name.is_empty() && !alias.is_empty();
+#[cfg(feature = "unstable")]
+use crate::commands::{is_alias, is_reserved, name_of};
+/// The command name of a mod id, as `commands::name_of` gives it where that
+/// module is built.
+#[cfg(not(feature = "unstable"))]
+fn name_of(mod_id: &str) -> &str {
+    mod_id.split_once('.').map_or(mod_id, |(_, name)| name)
+}
+/// Without the `commands` module the fake takes any alias that is not
+/// empty.
+#[cfg(not(feature = "unstable"))]
+fn is_alias(word: &str) -> bool {
+    !word.is_empty()
+}
+/// Without the `commands` module the fake reserves no word.
+#[cfg(not(feature = "unstable"))]
+fn is_reserved(_word: &str) -> bool {
+    false
 }
 
-pub(crate) extern "system" fn commands(_me: ModHandle, name: Str, alias: Str) -> Status {
-    let (name, alias) = (text(name), text(alias));
+/// Whether `word` is the id or the name of the mod `mod_id`.
+fn names(mod_id: &str, word: &str) -> bool {
+    mod_id == word || name_of(mod_id) == word
+}
+
+/// One mod's commands as the loader grants them.
+struct Granted {
+    id: String,
+    name: String,
+    alias: Option<String>,
+}
+
+impl Granted {
+    fn is_called(&self, word: &str) -> bool {
+        self.name == word || self.alias.as_deref() == Some(word)
+    }
+}
+
+/// The command sets the loader would grant, in load order: the mods loaded
+/// before the one under test, that mod `own` (its id and the alias it
+/// asked) and the mods loaded after it, each `others` entry being a mod id,
+/// the alias it asks and whether it loads after. A mod whose name another's
+/// commands have gets none; an alias another mod holds, or that is another
+/// mod's id or name, is not granted.
+fn granted(own: Option<(&str, &str)>, others: &[(String, String, bool)]) -> Vec<Granted> {
+    let at = |later: bool| {
+        others
+            .iter()
+            .filter(move |(_, _, after)| *after == later)
+            .map(|(id, alias, _)| (id.as_str(), alias.as_str()))
+    };
+    let order: Vec<(&str, &str)> = at(false).chain(own).chain(at(true)).collect();
+    let mut sets: Vec<Granted> = Vec::new();
+    for &(id, alias) in &order {
+        let name = name_of(id);
+        if sets.iter().any(|set| set.name == name) {
+            continue;
+        }
+        let held = sets.iter().any(|set| set.alias.as_deref() == Some(alias))
+            || order
+                .iter()
+                .any(|&(other, _)| other != id && names(other, alias));
+        sets.push(Granted {
+            id: id.to_owned(),
+            name: name.to_owned(),
+            alias: (!held).then(|| alias.to_owned()),
+        });
+    }
+    sets
+}
+
+/// The id of the mod under test.
+fn own_id(s: &crate::test::table::State) -> String {
+    s.manifest
+        .as_ref()
+        .map(|m| m.id.clone())
+        .unwrap_or_default()
+}
+
+/// The command sets granted now, and the id of the mod under test.
+fn sets_now(s: &crate::test::table::State) -> (Vec<Granted>, String) {
+    let id = own_id(s);
+    let own = s
+        .commands
+        .asked
+        .as_deref()
+        .map(|alias| (id.as_str(), alias));
+    (granted(own, &s.host.other_commands), id.clone())
+}
+
+pub(crate) extern "system" fn commands(_me: ModHandle, _name: Str, alias: Str) -> Status {
+    let alias = text(alias);
     with(Status::MISSING, |s| {
         if s.registration == Registration::Closed {
             return Status::TOO_LATE;
         }
-        if !fit(&name, &alias) {
+        let id = own_id(s);
+        let name = name_of(&id);
+        if name.is_empty() || is_reserved(name) || !is_alias(&alias) || alias.len() >= name.len() {
             return Status::BAD_ARGS;
         }
-        let words = [name.as_str(), alias.as_str()];
-        let taken = s
-            .host
-            .other_commands
-            .iter()
-            .any(|(_, n, a)| words.contains(&n.as_str()) || words.contains(&a.as_str()));
-        if s.commands.named.is_some() || taken {
+        if s.commands.asked.is_some() {
             return Status::REFUSED;
         }
-        s.commands.named = Some((name, alias));
+        let sets = granted(Some((&id, &alias)), &s.host.other_commands);
+        if !sets.iter().any(|set| set.id == id) {
+            return Status::REFUSED;
+        }
+        s.commands.asked = Some(alias);
         Status::OK
+    })
+}
+
+/// Whether `word`, in any case, is the command name or the alias of the
+/// mod under test.
+#[cfg(feature = "unstable")]
+pub(crate) fn is_own(word: &str) -> bool {
+    let word = word.to_lowercase();
+    with(false, |s| {
+        let (sets, id) = sets_now(s);
+        sets.iter().any(|set| set.id == id && set.is_called(&word))
     })
 }
 
@@ -141,23 +234,18 @@ fn split(line: &str) -> (String, String) {
 pub(crate) fn answer(line: &str, kind: u32, caller: &PlayerInfo, language: u32) -> Option<String> {
     let (word, rest) = split(line);
     let (own, other, actions) = with((false, None, None), |s| {
-        let own = s
-            .commands
-            .named
-            .as_ref()
-            .is_some_and(|(n, a)| *n == word || *a == word);
-        let other = s
-            .host
-            .other_commands
-            .iter()
-            .any(|(_, n, a)| *n == word || *a == word)
-            .then(|| {
-                s.host
-                    .console_answers
-                    .get(&word)
-                    .cloned()
-                    .unwrap_or_default()
-            });
+        let (sets, id) = sets_now(s);
+        let Some(set) = sets.iter().find(|set| set.is_called(&word)) else {
+            return (false, None, s.actions);
+        };
+        let own = set.id == id;
+        let other = (!own).then(|| {
+            s.host
+                .console_answers
+                .get(&word)
+                .cloned()
+                .unwrap_or_default()
+        });
         (own, other, s.actions)
     });
     if let Some(answer) = other {
@@ -231,21 +319,12 @@ pub(crate) extern "system" fn command_list(
     count: *mut u32,
 ) -> Status {
     let infos = with(Vec::new(), |s| {
-        let own_id = s
-            .manifest
-            .as_ref()
-            .map(|m| m.id.clone())
-            .unwrap_or_default();
-        let own = s
-            .commands
-            .named
-            .iter()
-            .map(|(name, alias)| (own_id.clone(), name.clone(), alias.clone()));
-        let sets: Vec<(String, String, String)> =
-            own.chain(s.host.other_commands.iter().cloned()).collect();
-        s.commands.listed = sets
+        s.commands.listed = sets_now(s)
+            .0
             .into_iter()
-            .map(|(id, name, alias)| [name, alias, id].map(String::into_boxed_str))
+            .map(|set| {
+                [set.name, set.alias.unwrap_or_default(), set.id].map(String::into_boxed_str)
+            })
             .collect();
         s.commands
             .listed

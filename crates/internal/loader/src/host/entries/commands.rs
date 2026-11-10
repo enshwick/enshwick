@@ -23,7 +23,7 @@ fn kept(answer: crate::actions::Answer) -> ActionReply {
     })
 }
 
-pub(crate) extern "system" fn commands(me: ModHandle, name: Str, alias: Str) -> Status {
+pub(crate) extern "system" fn commands(me: ModHandle, _name: Str, alias: Str) -> Status {
     entry("commands", || {
         let (loader, index, record) = match calling(me) {
             Ok(found) => found,
@@ -32,15 +32,15 @@ pub(crate) extern "system" fn commands(me: ModHandle, name: Str, alias: Str) -> 
         if !crate::host::in_init(index.get()) {
             return Status::TOO_LATE;
         }
-        let (Some(name), Some(alias)) = (text(name), text(alias)) else {
+        let Some(alias) = text(alias) else {
             return Status::BAD_ARGS;
         };
-        let status = crate::commands::register(loader, index, name, alias);
+        let status = crate::commands::register(loader, index, alias);
         if status.is_ok() {
             crate::log::write(
                 Level::DEBUG,
                 &record.id,
-                &format!("commands /{name} /{alias}"),
+                &format!("commands, alias /{alias}"),
             );
         }
         status

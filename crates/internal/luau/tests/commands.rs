@@ -31,7 +31,7 @@ mod tests {
             FakeHost::new()
                 .player(guest)
                 .player(friend)
-                .other_mod_commands("you.weather", "weather", "wx"),
+                .other_mod_commands("you.weather", "wx"),
             r#"
             local actions = enshwick.actions.actions(enshwick.i18n.parse(""))
             actions:add({ id = "online", label = "Players online" }, function(request)
@@ -41,9 +41,9 @@ mod tests {
             actions:add({ id = "repair", label = "Repair", needs = { "CanEditBase" } }, function()
                 return enshwick.actions.done("repaired")
             end)
-            local ok = pcall(actions.commands, actions, "lk", "lockers")
+            local ok = pcall(actions.commands, actions, "luau-long")
             enshwick.log.info(`longer alias {ok}`)
-            actions:commands("lockers", "lk")
+            actions:commands("lk")
             actions:rules_changed()
             local reply = enshwick.commands.run("/lk repair", "rcon", { "CanEditBase" })
             enshwick.log.info(`remote {reply.done} {reply.text}`)
@@ -66,7 +66,7 @@ mod tests {
             loader.logs()
         );
         assert!(
-            logged(&loader, "listed lockers lk you.luau"),
+            logged(&loader, "listed luau lk you.luau"),
             "{:?}",
             loader.logs()
         );
@@ -78,7 +78,7 @@ mod tests {
         assert_eq!(loader.rules_changed(), 1);
 
         assert_eq!(
-            loader.type_in_chat(&guest, 0, "/lockers online").as_deref(),
+            loader.type_in_chat(&guest, 0, "/luau online").as_deref(),
             Some("12 online")
         );
         assert!(logged(&loader, "online Chat Guest"), "{:?}", loader.logs());

@@ -111,7 +111,7 @@ impl_headed!(ActionReply);
 /// let tools = CommandInfo {
 ///     header: Header::of::<CommandInfo>(),
 ///     name: Str::new("admin-tools"),
-///     alias: Str::new("adl"),
+///     alias: Str::new("adm"),
 ///     mod_id: Str::new("you.admin-tools"),
 /// };
 /// assert_eq!(tools.header.size, Header::of::<CommandInfo>().size);
@@ -123,7 +123,8 @@ pub struct CommandInfo {
     pub header: Header,
     /// The full name, `admin-tools` in `/admin-tools online`.
     pub name: Str,
-    /// The shorter alias, `adl` in `/adl online`.
+    /// The shorter alias, `adm` in `/adm online`; empty when another mod
+    /// took the word first.
     pub alias: Str,
     /// The id of the mod that named them.
     pub mod_id: Str,

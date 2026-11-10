@@ -29,57 +29,92 @@ pub const ALL_PERMISSIONS: u8 = enshwick::world::PlayerPermissions::ALL_BITS;
 pub struct Named {
     /// The mod that named them.
     pub owner: ModIndex,
-    /// The full name, `admin-tools` in `/admin-tools online`.
+    /// The full name, `admin-tools` in `/admin-tools online`: the part of
+    /// the mod's id after the author.
     pub name: String,
-    /// The shorter alias, `adl` in `/adl online`.
-    pub alias: String,
+    /// The shorter alias, `adm` in `/adm online`; `None` when another mod
+    /// held the word first.
+    pub alias: Option<String>,
 }
 
-/// Why a mod's command names are refused.
+impl Named {
+    /// Whether `word` is the name or the alias, whatever its case.
+    fn is_called(&self, word: &str) -> bool {
+        self.name.eq_ignore_ascii_case(word)
+            || self
+                .alias
+                .as_deref()
+                .is_some_and(|alias| alias.eq_ignore_ascii_case(word))
+    }
+
+    /// The words that run the commands, each after its `/`.
+    #[must_use]
+    pub fn words(&self) -> String {
+        match &self.alias {
+            Some(alias) => format!("/{} /{alias}", self.name),
+            None => format!("/{}", self.name),
+        }
+    }
+}
+
+/// Why a mod's commands are refused.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Refusal {
-    /// A malformed or reserved word, or an alias not shorter than the name.
+    /// A malformed or reserved alias, an alias not shorter than the name, or
+    /// a mod whose own name is reserved.
     Malformed,
     /// The mod named its commands before.
     Twice,
-    /// Another mod's name, alias or id is one of the words.
+    /// Another mod's commands have the same name.
     Taken(ModIndex),
 }
 
-/// Checks mod `owner`'s `name` and `alias` against the reserved words, the
-/// mods' ids (`ids`, by mod index) and the names in `named`.
+/// The names mod `owner` gets for the alias it asks, checked against the
+/// reserved words, the mods' ids (`ids`, by mod index) and the names in
+/// `named`: its name is the part of its id after the author, and the alias
+/// is its own unless another mod's commands, name or id hold the word,
+/// which the second value then names.
+///
+/// An alias never takes the name of another mod, whether that mod names
+/// commands or not, so a mod's full name always reaches it.
 ///
 /// # Errors
 ///
-/// [`Refusal`] with why the words cannot be the mod's.
+/// [`Refusal`] with why the mod gets no commands.
 pub fn check(
     named: &[Named],
     ids: &[&str],
     owner: ModIndex,
-    name: &str,
     alias: &str,
-) -> Result<(), Refusal> {
-    if !enshwick::commands::names_fit(name, alias) {
+) -> Result<(Named, Option<ModIndex>), Refusal> {
+    use enshwick::commands::{is_alias, is_reserved, name_of};
+
+    let name = ids.get(owner.get()).copied().map(name_of).unwrap_or("");
+    if name.is_empty() || is_reserved(name) || !is_alias(alias) || alias.len() >= name.len() {
         return Err(Refusal::Malformed);
     }
     if named.iter().any(|n| n.owner == owner) {
         return Err(Refusal::Twice);
     }
-    let words = [name, alias];
-    if let Some(n) = named
-        .iter()
-        .find(|n| words.contains(&n.name.as_str()) || words.contains(&n.alias.as_str()))
-    {
+    if let Some(n) = named.iter().find(|n| n.is_called(name)) {
         return Err(Refusal::Taken(n.owner));
     }
-    let other_id = ids
+    let holder = named
         .iter()
-        .enumerate()
-        .find(|&(i, id)| i != owner.get() && words.iter().any(|w| id.eq_ignore_ascii_case(w)));
-    match other_id {
-        Some((i, _)) => Err(Refusal::Taken(ModIndex::new(i))),
-        None => Ok(()),
-    }
+        .find(|n| n.is_called(alias))
+        .map(|n| n.owner)
+        .or_else(|| {
+            ids.iter()
+                .enumerate()
+                .find(|&(i, id)| i != owner.get() && (*id == alias || name_of(id) == alias))
+                .map(|(i, _)| ModIndex::new(i))
+        });
+    let granted = Named {
+        owner,
+        name: name.to_owned(),
+        alias: holder.is_none().then(|| alias.to_owned()),
+    };
+    Ok((granted, holder))
 }
 
 /// The first word of `line` and the rest, trimmed.
@@ -97,7 +132,7 @@ pub fn parse<'a>(named: &[Named], line: &'a str) -> Option<(ModIndex, &'a str)> 
     let word = first.strip_prefix('/').unwrap_or(first);
     named
         .iter()
-        .find(|n| n.name.eq_ignore_ascii_case(word) || n.alias.eq_ignore_ascii_case(word))
+        .find(|n| n.is_called(word))
         .map(|n| (n.owner, rest))
 }
 
@@ -179,59 +214,93 @@ mod tests {
         Named {
             owner: ModIndex::new(owner),
             name: name.to_owned(),
-            alias: alias.to_owned(),
+            alias: Some(alias.to_owned()).filter(|alias| !alias.is_empty()),
         }
     }
 
     #[test]
-    fn a_name_and_a_shorter_alias_of_plain_words_are_taken() {
-        let ids = ["you.admin-tools", "you.weather"];
+    fn a_mod_s_commands_take_the_name_in_its_id_and_the_alias_it_asks() {
+        let ids = ["you.admin-tools", "you.weather", "sky"];
         let me = ModIndex::new(0);
-        assert_eq!(check(&[], &ids, me, "admin-tools", "adl"), Ok(()));
+        assert_eq!(
+            check(&[], &ids, me, "adm"),
+            Ok((named(0, "admin-tools", "adm"), None))
+        );
+        assert_eq!(
+            check(&[], &ids, ModIndex::new(2), "s"),
+            Ok((named(2, "sky", "s"), None)),
+            "an id without an author names itself"
+        );
         let long = "x".repeat(33);
-        for (name, alias) in [
-            ("Admin", "adl"),
-            ("admin tools", "adl"),
-            ("adl", "admin-tools"),
-            ("adl", "adl"),
-            ("admin-tools", ""),
-            ("enshwick", "en"),
-            ("helper", "help"),
-            (long.as_str(), "x"),
+        for alias in [
+            "Adm",
+            "a b",
+            "",
+            "enshwick",
+            "help",
+            "admin-tools",
+            "admin-tools-x",
+            long.as_str(),
         ] {
             assert_eq!(
-                check(&[], &ids, me, name, alias),
+                check(&[], &ids, me, alias),
                 Err(Refusal::Malformed),
-                "{name} {alias}"
+                "{alias}"
             );
         }
+        assert_eq!(
+            check(&[], &["you.help"], me, "h"),
+            Err(Refusal::Malformed),
+            "a mod named by a reserved word has no commands"
+        );
+        assert_eq!(
+            check(&[], &ids, ModIndex::new(9), "adm"),
+            Err(Refusal::Malformed),
+            "no such mod"
+        );
     }
 
     #[test]
-    fn a_word_another_mod_took_is_refused_naming_that_mod() {
-        let ids = ["you.admin-tools", "you.weather", "sky"];
-        let taken = [named(1, "weather", "wx")];
+    fn an_alias_goes_to_the_mod_that_held_the_word_first_and_the_name_stays() {
+        let ids = ["you.admin-tools", "you.weather", "sky", "they.wx"];
         let me = ModIndex::new(0);
-        let by = |i| Err(Refusal::Taken(ModIndex::new(i)));
-        assert_eq!(check(&taken, &ids, me, "admin-tools", "wx"), by(1));
-        assert_eq!(check(&taken, &ids, me, "weather", "adl"), by(1));
-        assert_eq!(check(&taken, &ids, me, "skies", "sky"), by(2));
+        let held = |by: usize| Ok((named(0, "admin-tools", ""), Some(ModIndex::new(by))));
+        let taken = [named(1, "weather", "wx")];
+        assert_eq!(check(&taken, &ids, me, "wx"), held(1), "another's alias");
+        assert_eq!(check(&[], &ids, me, "weather"), held(1), "another's name");
+        assert_eq!(check(&[], &ids, me, "sky"), held(2), "another's whole id");
         assert_eq!(
-            check(&taken, &ids, ModIndex::new(1), "winds", "wi"),
+            check(&[], &ids, ModIndex::new(1), "wx"),
+            Ok((named(1, "weather", ""), Some(ModIndex::new(3)))),
+            "the name of a mod that names no commands is still its own"
+        );
+        assert_eq!(
+            check(&taken, &ids, ModIndex::new(1), "wi"),
             Err(Refusal::Twice)
         );
+    }
+
+    #[test]
+    fn two_mods_of_one_name_leave_the_commands_to_the_first() {
+        let ids = ["you.tools", "they.tools"];
+        let first = check(&[], &ids, ModIndex::new(0), "t").unwrap().0;
         assert_eq!(
-            check(&taken, &ids, ModIndex::new(2), "sky-mod", "sky"),
-            Ok(()),
-            "its own id"
+            check(&[first], &ids, ModIndex::new(1), "to"),
+            Err(Refusal::Taken(ModIndex::new(0)))
         );
+    }
+
+    #[test]
+    fn the_words_of_a_command_set_are_its_name_and_its_alias_if_it_has_one() {
+        assert_eq!(named(0, "admin-tools", "adm").words(), "/admin-tools /adm");
+        assert_eq!(named(0, "admin-tools", "").words(), "/admin-tools");
     }
 
     #[test]
     fn a_line_names_a_mod_by_its_command_name_or_alias_with_or_without_a_slash() {
-        let all = [named(3, "admin-tools", "adl"), named(5, "weather", "wx")];
+        let all = [named(3, "admin-tools", "adm"), named(5, "weather", "wx")];
         let at = |i| ModIndex::new(i);
-        assert_eq!(parse(&all, "/adl online"), Some((at(3), "online")));
+        assert_eq!(parse(&all, "/adm online"), Some((at(3), "online")));
         assert_eq!(
             parse(&all, "  ADMIN-TOOLS   kick  Ann Lee "),
             Some((at(3), "kick  Ann Lee"))
@@ -244,10 +313,10 @@ mod tests {
 
     #[test]
     fn a_command_of_a_mod_that_is_off_leaves_the_chat_and_runs_nowhere() {
-        let all = [named(3, "admin-tools", "adl"), named(5, "weather", "wx")];
+        let all = [named(3, "admin-tools", "adm"), named(5, "weather", "wx")];
         let running = |owner: ModIndex| owner.get() == 5;
         assert_eq!(
-            typed(&all, "/adl password hunter2", running),
+            typed(&all, "/adm password hunter2", running),
             Typed::Off,
             "never posted for every player to read"
         );
@@ -255,7 +324,7 @@ mod tests {
             typed(&all, "/wx rain", running),
             Typed::Run(ModIndex::new(5), "rain")
         );
-        assert_eq!(typed(&all, "adl online", running), Typed::Chat);
+        assert_eq!(typed(&all, "adm online", running), Typed::Chat);
         assert_eq!(typed(&all, "/me waves", running), Typed::Chat);
     }
 

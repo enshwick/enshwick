@@ -1785,17 +1785,22 @@ pub struct HostApi {
     /// Names the calling mod's [actions](HostApi::actions) as commands: a
     /// line `/<name> <action> <values>`, or the same with `alias`, runs
     /// one of them from a player's chat, the server's console or
-    /// [`run_command`](HostApi::run_command), with the caller's rights. Each
-    /// is 1 to 32 of `[a-z0-9-]`, `alias` shorter than `name`; neither is
-    /// `enshwick` or `help`. [`Status::BAD_ARGS`] for a malformed or
-    /// unreadable one; [`Status::REFUSED`] for a second call, or when
-    /// another mod named the same word first, which the loader logs and
-    /// reports naming both mods, the mod running on without commands.
-    /// Allowed during `enshwick_mod_init` only; the strings are borrowed for
-    /// the call. A panic in the loader returns [`Status::REFUSED`]. ABI
-    /// 11.19.
+    /// [`run_command`](HostApi::run_command), with the caller's rights. The
+    /// name is the part of the mod's id after the author; `name` is
+    /// reserved and not read. `alias` is 1 to 32 of `[a-z0-9-]`, shorter
+    /// than the name, and neither `enshwick` nor `help`.
+    /// [`Status::BAD_ARGS`] for a malformed or unreadable alias, or a mod
+    /// whose name is `enshwick` or `help`; [`Status::REFUSED`] for a second
+    /// call, or when another mod's commands have the same name, which the
+    /// loader logs and reports naming both mods, the mod running on without
+    /// commands. An alias that another mod's commands, name or id hold goes
+    /// to that mod: the call returns [`Status::OK`], the mod's commands run
+    /// by their name alone, and the loader logs and reports it once naming
+    /// both mods. Allowed during `enshwick_mod_init` only; the strings are
+    /// borrowed for the call. A panic in the loader returns
+    /// [`Status::REFUSED`]. ABI 11.19; `name` not read since 11.23.
     pub commands: extern "system" fn(me: ModHandle, name: Str, alias: Str) -> Status,
-    /// Runs the command line `line`, such as `/adl online`, as a remote
+    /// Runs the command line `line`, such as `/adm online`, as a remote
     /// caller named `label` (for the log and the handler, at most 64 bytes)
     /// with the game's permission bits `permissions` (as
     /// [`PlayerInfo::permissions`](super::PlayerInfo::permissions)), never as

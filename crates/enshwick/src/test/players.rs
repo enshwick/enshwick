@@ -257,25 +257,46 @@ impl FakeHost {
         self
     }
 
-    /// Another running mod, `mod_id`, that named its actions as the
-    /// commands `name` and `alias`: the mod under test cannot take those
-    /// words, [`commands::list`](crate::commands::list) names them, and a
-    /// command line to them gets the [console answer](Self::console_answer)
-    /// of the word used, as done.
+    /// Another running mod, `mod_id`, loaded before the mod under test,
+    /// that named its actions as commands with `alias`: the mod under test
+    /// gets no alias another mod holds,
+    /// [`commands::list`](crate::commands::list) names both, and a command
+    /// line to the other mod gets the
+    /// [console answer](Self::console_answer) of the word used, as done.
     ///
     /// # Examples
     ///
     /// ```
     /// let loader = enshwick::test::FakeHost::new()
-    ///     .other_mod_commands("you.weather", "weather", "wx")
+    ///     .other_mod_commands("you.weather", "wx")
     ///     .install();
     /// # let _ = loader;
     /// ```
     #[cfg(feature = "unstable")]
     #[must_use]
-    pub fn other_mod_commands(mut self, mod_id: &str, name: &str, alias: &str) -> Self {
+    pub fn other_mod_commands(mut self, mod_id: &str, alias: &str) -> Self {
         self.other_commands
-            .push((mod_id.to_owned(), name.to_owned(), alias.to_owned()));
+            .push((mod_id.to_owned(), alias.to_owned(), false));
+        self
+    }
+
+    /// As [`other_mod_commands`](Self::other_mod_commands), for a mod
+    /// loaded after the mod under test: it gets no alias the mod under
+    /// test holds, and runs by its name alone.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .later_mod_commands("you.weather", "wx")
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[must_use]
+    pub fn later_mod_commands(mut self, mod_id: &str, alias: &str) -> Self {
+        self.other_commands
+            .push((mod_id.to_owned(), alias.to_owned(), true));
         self
     }
 
@@ -401,13 +422,10 @@ impl Installed {
         if !line.starts_with('/') {
             return None;
         }
-        let own = line[1..].split_whitespace().next().is_some_and(|word| {
-            table::with(false, |s| {
-                s.commands.named.as_ref().is_some_and(|(n, a)| {
-                    n.eq_ignore_ascii_case(word) || a.eq_ignore_ascii_case(word)
-                })
-            })
-        });
+        let own = line[1..]
+            .split_whitespace()
+            .next()
+            .is_some_and(table::commands::is_own);
         if !own {
             return None;
         }

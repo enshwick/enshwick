@@ -207,7 +207,7 @@ fn help(loader: &Loader) -> String {
     lines.extend(
         crate::commands::running(loader)
             .into_iter()
-            .map(|(n, id)| format!("/{} /{}: {id}", n.name, n.alias)),
+            .map(|(n, id)| format!("{}: {id}", n.words())),
     );
     lines.join("\n")
 }

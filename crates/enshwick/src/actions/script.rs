@@ -567,15 +567,16 @@ impl Actions {
         self.control(action, key)
     }
 
-    /// Names the mod's actions as commands `/<name>` and `/<alias>`, as
+    /// Names the mod's actions as commands, `/<alias>` beside the name in
+    /// the mod's id, as
     /// [`Actions::commands`] does.
     ///
     /// # Errors
     ///
     /// As [`Actions::commands`].
     #[script(name = "commands")]
-    pub(crate) fn commands_script(&self, name: &str, alias: &str) -> Result<(), Off> {
-        self.commands(name, alias)
+    pub(crate) fn commands_script(&self, alias: &str) -> Result<(), Off> {
+        self.commands(alias)
     }
 
     /// Tells the platform that who may run the mod's actions changed, as

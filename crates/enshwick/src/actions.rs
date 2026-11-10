@@ -524,21 +524,27 @@ impl Actions {
     }
 
     /// Names the mod's actions as [commands](crate::commands) during init:
-    /// `/<name> <action> <values>`, or the same with the shorter `alias`,
-    /// then runs an action from a player's chat, the server's console or a
-    /// remote console, with the caller's rights, and `/<alias> help` lists
-    /// the actions the caller may run. Each is 1 to 32 of `[a-z0-9-]`, and
-    /// neither is `enshwick` or `help`.
+    /// `/<name> <action> <values>` then runs an action from a player's
+    /// chat, the server's console or a remote console, with the caller's
+    /// rights, and `/<name> help` lists the actions the caller may run. The
+    /// name is the part of the mod's id after the author, `admin-tools` for
+    /// `you.admin-tools`; `alias` is a shorter word for it, 1 to 32 of
+    /// `[a-z0-9-]`, neither `enshwick` nor `help`.
     ///
-    /// When another mod named one of the words first, the loader turns off
-    /// only this mod's commands, says so in the log and on the Mods screen
-    /// naming both mods, and the call returns `Ok`: the actions keep their
-    /// other paths.
+    /// An alias goes to the first mod that asks for it. When another mod's
+    /// commands, name or id hold the word, this mod's commands run by their
+    /// full name alone, the loader says so once in the log and on the Mods
+    /// screen naming both mods, and the call returns `Ok`;
+    /// [`commands::list`](crate::commands::list) then shows the mod without
+    /// an alias. When another mod's commands have the same name, the loader
+    /// turns off only this mod's commands, says so the same way, and the
+    /// call returns `Ok`: the actions keep their other paths.
     ///
     /// # Errors
     ///
-    /// [`Off`] for a malformed word, an alias not shorter than the name, a
-    /// second call, or a call after init.
+    /// [`Off`] for a malformed alias, an alias not shorter than the name, a
+    /// mod whose name is `enshwick` or `help`, a second call, or a call
+    /// after init.
     ///
     /// # Examples
     ///
@@ -549,32 +555,33 @@ impl Actions {
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let actions = load.actions(Texts::default())?;
     ///     actions.add(Action::new("online", "Players online"), |_| Outcome::done("2 online"))?;
-    ///     // `/admin-tools online` and `/adl online` run it.
-    ///     actions.commands("admin-tools", "adl")
+    ///     // In the mod `you.admin-tools`, `/admin-tools online` and
+    ///     // `/adm online` run it.
+    ///     actions.commands("adm")
     /// }
     /// ```
-    pub fn commands(&self, name: &str, alias: &str) -> Result<(), Off> {
-        if !crate::commands::names_fit(name, alias) {
+    pub fn commands(&self, alias: &str) -> Result<(), Off> {
+        if !crate::commands::is_alias(alias) {
             return Err(Off::new(format!(
-                "commands /{name} /{alias}: each is 1 to 32 of [a-z0-9-], the alias shorter, neither enshwick nor help"
+                "commands, alias /{alias}: an alias is 1 to 32 of [a-z0-9-], neither enshwick nor help"
             )));
         }
-        if self
-            .registry
-            .commands
-            .swap(true, core::sync::atomic::Ordering::AcqRel)
-        {
+        let named = &self.registry.commands;
+        if named.load(core::sync::atomic::Ordering::Acquire) {
             return Err(Off::new("commands: named once already"));
         }
         let host = self.registry.host;
-        let status = (host.api().commands)(host.handle(), Str::new(name), Str::new(alias));
+        let status = (host.api().commands)(host.handle(), Str::EMPTY, Str::new(alias));
+        if matches!(status, crate::abi::Status::OK | crate::abi::Status::REFUSED) {
+            named.store(true, core::sync::atomic::Ordering::Release);
+        }
         if status == crate::abi::Status::REFUSED {
-            crate::warn!(
-                "commands /{name} /{alias} are off: another mod's commands or id hold one of them"
-            );
+            crate::warn!("commands are off: another mod's commands have this mod's name");
             return Ok(());
         }
-        crate::load::ok(status, (), || format!("commands /{name} /{alias}"))
+        crate::load::ok(status, (), || {
+            format!("commands, alias /{alias}, which must be shorter than the mod's name")
+        })
     }
 
     /// Tells the platform that who may run the mod's actions changed, such

@@ -49,42 +49,51 @@ static STATE: State = State {
     dropped: AtomicU32::new(0),
 };
 
-/// Names mod `owner`'s actions as the commands `/<name>` and `/<alias>`,
-/// during init. A word another mod took first turns off only this mod's
-/// commands, with a warning and a part off naming both mods.
-pub(crate) fn register(loader: &Loader, owner: ModIndex, name: &str, alias: &str) -> Status {
+/// Names mod `owner`'s actions as commands during init: `/<name>`, the name
+/// in the mod's id, and `/<alias>`. An alias another mod held first stays
+/// that mod's, with one warning and a part off naming both mods, and this
+/// mod's commands run by their name alone. A name another mod's commands
+/// have turns off only this mod's commands, reported the same way.
+pub(crate) fn register(loader: &Loader, owner: ModIndex, alias: &str) -> Status {
     let ids: Vec<&str> = loader.mods.iter().map(|m| m.id.as_str()).collect();
     let checked = NAMED.edit(|named| {
-        check(named, &ids, owner, name, alias).map(|()| {
-            named.push(Named {
-                owner,
-                name: name.to_owned(),
-                alias: alias.to_owned(),
-            });
+        check(named, &ids, owner, alias).map(|(granted, holder)| {
+            let name = granted.name.clone();
+            named.push(granted);
+            (name, holder)
         })
     });
+    let id = |index: ModIndex| ids.get(index.get()).copied().unwrap_or("");
     match checked {
         Err(sealed) => sealed.into(),
-        Ok(Ok(())) => {
+        Ok(Ok((name, holder))) => {
             STATE.any.store(true, Ordering::Release);
+            if let Some(holder) = holder {
+                let (mine, theirs) = (id(owner), id(holder));
+                let feature = format!("alias /{alias} of {mine}");
+                crate::host::report_off(
+                    &feature,
+                    (
+                        format!(
+                            "{feature} off: /{alias} is {theirs}'s; /{name} runs the commands of {mine}"
+                        ),
+                        format!("/{alias} is {theirs}'s; use /{name}"),
+                    ),
+                );
+            }
             Status::OK
         }
         Ok(Err(Refusal::Malformed)) => Status::BAD_ARGS,
         Ok(Err(Refusal::Twice)) => Status::REFUSED,
         Ok(Err(Refusal::Taken(other))) => {
-            let id = |index: ModIndex| {
-                loader
-                    .mods
-                    .get(index.get())
-                    .map_or_else(String::new, |m| m.id.clone())
-            };
             let (mine, theirs) = (id(owner), id(other));
+            let name = enshwick::commands::name_of(mine);
             let feature = format!("commands of {mine}");
             crate::host::report_off(
                 &feature,
                 (
-                    format!("{feature} off: /{name} or /{alias} is taken by {theirs}"),
-                    format!("/{name} /{alias} taken by {theirs}"),
+                    format!("{feature} off: /{name} is taken by {theirs}"),
+                    format!("/{name} taken by {theirs}"),
                 ),
             );
             Status::REFUSED
@@ -261,7 +270,7 @@ pub(crate) fn list(loader: &'static Loader) -> Vec<CommandInfo> {
         .map(|(n, id)| CommandInfo {
             header: Header::of::<CommandInfo>(),
             name: Str::new(&n.name),
-            alias: Str::new(&n.alias),
+            alias: n.alias.as_deref().map_or(Str::EMPTY, Str::new),
             mod_id: Str::new(id),
         })
         .collect()
