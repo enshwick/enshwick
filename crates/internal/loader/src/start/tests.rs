@@ -94,6 +94,7 @@ fn loader(mods: &[TestMod], developer_tools: bool) -> (Loader, Vec<Library>) {
         .collect();
     let plan = resolve::resolve(&candidates);
     let mods = records(&libraries, &candidates, &plan);
+    let skipped = skipped(&libraries, &candidates, &plan);
     let mut slots: Vec<Option<Library>> = libraries.into_iter().map(Some).collect();
     let order = plan
         .order
@@ -118,6 +119,7 @@ fn loader(mods: &[TestMod], developer_tools: bool) -> (Loader, Vec<Library>) {
         settings_problems: Vec::new(),
         newer_release: OnceLock::new(),
         retry: crate::retry::Retry::default(),
+        skipped,
     };
     (loader, order)
 }
@@ -125,6 +127,39 @@ fn loader(mods: &[TestMod], developer_tools: bool) -> (Loader, Vec<Library>) {
 /// A server's loader with no game and no mods, for the tests of other parts.
 pub(crate) fn bare_loader() -> Loader {
     loader(&[], false).0
+}
+
+#[test]
+fn a_mod_skipped_at_start_is_kept_with_its_reason_and_counts_as_off() {
+    let (loader, order) = loader(
+        &[TestMod::plain("you.safes"), TestMod::plain("you.safes")],
+        false,
+    );
+    assert_eq!(order.len(), 1);
+    assert_eq!(
+        loader.mods.len(),
+        1,
+        "only the copy that loads has a record"
+    );
+    let [skipped] = loader.skipped.as_slice() else {
+        panic!("{:?}", loader.skipped);
+    };
+    assert_eq!(
+        (
+            skipped.id.as_str(),
+            skipped.label.as_str(),
+            skipped.version.as_str()
+        ),
+        ("you.safes", "you.safes", "1.0.0")
+    );
+    assert_eq!(
+        skipped.reason,
+        resolve::Skip::Copy {
+            id: "you.safes".into(),
+            first: 0
+        }
+    );
+    assert_eq!(crate::off_line::mods_off(&loader), ["you.safes"]);
 }
 
 /// The handle of the mod `id` in `loader`'s load order.

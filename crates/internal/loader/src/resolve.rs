@@ -81,6 +81,20 @@ pub enum Skip {
     Cycle,
 }
 
+/// A mod that does not load, as the Mods screen and the chat line at world
+/// load name it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Skipped {
+    /// The mod id.
+    pub id: String,
+    /// Its version.
+    pub version: String,
+    /// The name players read, or the id when the manifest names none.
+    pub label: String,
+    /// Why it does not load.
+    pub reason: Skip,
+}
+
 impl core::fmt::Display for Skip {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {

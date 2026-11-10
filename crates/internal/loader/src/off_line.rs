@@ -59,6 +59,23 @@ pub(crate) fn takers() -> Vec<String> {
         .collect()
 }
 
+/// The mods that are off, by name: the loaded ones that turned off, then
+/// the ones skipped at start; the one count the Mods screen, the main menu
+/// line and the chat line at world load share.
+#[cfg(windows)]
+#[must_use]
+pub(crate) fn mods_off(loader: &crate::host::Loader) -> Vec<String> {
+    use std::sync::atomic::Ordering;
+
+    loader
+        .mods
+        .iter()
+        .filter(|record| record.off.load(Ordering::Acquire))
+        .map(crate::host::ModRecord::label)
+        .chain(loader.skipped.iter().map(|skipped| skipped.label.clone()))
+        .collect()
+}
+
 /// What this server has off, by name: mods off, each mod's features off
 /// (`<mod>: <feature>`), the loader's parts off and the features this game
 /// build lacks.
@@ -69,10 +86,9 @@ pub(crate) fn names(loader: &crate::host::Loader) -> Vec<String> {
 
     use crate::locks::Relock;
 
-    let mut names = Vec::new();
+    let mut names = mods_off(loader);
     for record in &loader.mods {
         if record.off.load(Ordering::Acquire) {
-            names.push(record.label());
             continue;
         }
         let features = record.features.relock();
