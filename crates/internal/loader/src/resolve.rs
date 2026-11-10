@@ -141,7 +141,7 @@ impl Skip {
                 "mods.skipped.breaks",
                 &[("id", id), ("version", &version.to_string())],
             ),
-            Self::Cycle => crate::texts::text("mods.skipped.cycle").to_owned(),
+            Self::Cycle => crate::texts::fill("mods.skipped.cycle", &[]),
         }
     }
 }
