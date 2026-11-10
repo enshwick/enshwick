@@ -280,4 +280,35 @@ mod tests {
             "no account key in the reply"
         );
     }
+
+    #[test]
+    fn a_player_who_may_not_run_an_action_learns_nothing_of_the_accounts_it_knows() {
+        let ann = player(3, 7, "Ann", 0);
+        let loader = start(&[ann]);
+        let denied = Some("0You may not do that.");
+
+        for line in [
+            "/b ban Bob x",
+            "/b ban Zed x",
+            "/b ban Sam x",
+            "/b allowed Bob on",
+        ] {
+            assert_eq!(
+                loader.type_in_chat(&ann, 0, line).as_deref(),
+                denied,
+                "{line}"
+            );
+        }
+        let run =
+            |action: &str, args: &str| loader.ask_actions(ActionCall::RUN, &ann, 0, action, args);
+        for args in [
+            "p000000000000002a\ttx",
+            "p0000000000000063\ttx",
+            "tBob\ttx",
+            "tZed\ttx",
+        ] {
+            assert_eq!(run("ban", args).as_deref(), denied, "{args}");
+        }
+        assert!(runs().is_empty());
+    }
 }

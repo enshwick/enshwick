@@ -28,8 +28,17 @@ pub const MAX_ITEMS: usize = 64;
 pub const MAX_BUTTONS: usize = 4;
 
 /// The most windows a mod keeps at once, counted once for each player a
-/// window was shown to; a show past it drops the oldest.
+/// window was shown to; a show past it drops the one shown or rendered
+/// longest ago.
 pub const MAX_KEPT: usize = 1_024;
+
+/// The most players one show or close hands the loader in a call;
+/// [`Actions::show`](super::Actions::show) splits a longer list.
+pub const MAX_CALL_PLAYERS: usize = 64;
+
+/// The most shows, updates and closes the loader keeps for its next step,
+/// one for each player; a call past it is refused.
+pub const MAX_WAITING: usize = 256;
 
 /// The most bytes of a title, line or label the client shows; the server
 /// cuts a longer one at a character's edge.
@@ -191,49 +200,51 @@ impl Window {
         })
     }
 
-    /// Why the window cannot be shown: too many items or buttons, or a
-    /// button giving more values than its action takes, `takes` saying how
-    /// many each declared action takes; `None` when it can.
-    pub(super) fn fault(&self, takes: &dyn Fn(&str) -> Option<usize>) -> Option<String> {
+    /// Why the window cannot be shown: too many items or buttons, or what
+    /// `check` finds wrong with an action an item names and the values a
+    /// button gives it, `None` for an action drawn whole; `None` when it
+    /// can.
+    pub(super) fn fault(
+        &self,
+        check: &dyn Fn(&str, Option<&[Value]>) -> Option<String>,
+    ) -> Option<String> {
         if self.items.len() > MAX_ITEMS {
             return Some(format!("{} items, at most {MAX_ITEMS}", self.items.len()));
         }
-        for item in &self.items {
-            match item {
-                Item::Row(row) if row.buttons.len() > MAX_BUTTONS => {
-                    return Some(format!(
-                        "a row of {} buttons, at most {MAX_BUTTONS}",
-                        row.buttons.len()
-                    ));
-                }
-                Item::Row(row) => {
-                    for button in &row.buttons {
-                        match takes(&button.action) {
-                            None => return Some(format!("no action {}", button.action)),
-                            Some(n) if button.args.len() > n => {
-                                return Some(format!(
-                                    "a button gives {} values to {}, which takes {n}",
-                                    button.args.len(),
-                                    button.action
-                                ));
-                            }
-                            Some(_) => {}
-                        }
-                    }
-                }
-                Item::Action(action) if takes(action).is_none() => {
-                    return Some(format!("no action {action}"));
-                }
-                _ => {}
-            }
-        }
-        None
+        self.items.iter().find_map(|item| match item {
+            Item::Row(row) if row.buttons.len() > MAX_BUTTONS => Some(format!(
+                "a row of {} buttons, at most {MAX_BUTTONS}",
+                row.buttons.len()
+            )),
+            Item::Row(row) => row
+                .buttons
+                .iter()
+                .find_map(|button| check(&button.action, Some(&button.args))),
+            Item::Action(action) => check(action, None),
+            Item::Text(_) => None,
+        })
     }
 
     /// The window's text for one reader, `say` filling a text key in their
     /// language, with `entries`, the sheet entries of the actions it names.
+    /// When not every item fits beside them, the entries go without the
+    /// players their arguments offer, whom the reader then names by typing.
     pub(super) fn render(&self, say: Say<'_>, entries: &[Entry]) -> String {
-        let tail = sheet::encode(entries);
+        let (text, whole) = self.lines(say, &sheet::encode(entries));
+        if whole {
+            return text;
+        }
+        let mut lean = entries.to_vec();
+        for arg in lean.iter_mut().flat_map(|entry| &mut entry.args) {
+            arg.players.clear();
+        }
+        self.lines(say, &sheet::encode(&lean)).0
+    }
+
+    /// The window's text with `tail`, its entries' text, after the items
+    /// that fit, and whether all of it fits.
+    fn lines(&self, say: Say<'_>, tail: &str) -> (String, bool) {
+        let mut whole = true;
         let mut out = format!("W\t{}\n", self.title.line(say));
         for item in &self.items {
             let mut lines = String::new();
@@ -258,28 +269,29 @@ impl Window {
                 }
             }
             if out.len() + lines.len() + tail.len() > MAX_BYTES {
+                whole = false;
                 break;
             }
             out.push_str(&lines);
         }
-        out.push_str(&tail);
-        out
+        out.push_str(tail);
+        whole &= out.len() <= MAX_BYTES;
+        (out, whole)
     }
 }
 
 /// The windows a mod showed and did not close, each as the one player it
-/// was shown to holds it, oldest first.
+/// was shown to holds it, the one shown or rendered longest ago first.
 #[derive(Debug, Default)]
 pub(super) struct Kept(Vec<(PlayerKey, Arc<Window>)>);
 
 impl Kept {
     /// Keeps `window` for each of `players`, in place of the window each
-    /// held under its id; past [`MAX_KEPT`] the oldest go.
-    pub(super) fn keep(&mut self, window: Window, players: &[PlayerKey]) {
+    /// held under its id; past [`MAX_KEPT`] the first go.
+    pub(super) fn keep(&mut self, window: &Arc<Window>, players: &[PlayerKey]) {
         self.forget(&window.id, players);
-        let window = Arc::new(window);
         self.0
-            .extend(players.iter().map(|&player| (player, Arc::clone(&window))));
+            .extend(players.iter().map(|&player| (player, Arc::clone(window))));
         let over = self.0.len().saturating_sub(MAX_KEPT);
         self.0.drain(..over);
     }
@@ -290,12 +302,16 @@ impl Kept {
             .retain(|(player, window)| window.id != id || !players.contains(player));
     }
 
-    /// Window `id` as `player` holds it.
-    pub(super) fn of(&self, id: &str, player: PlayerKey) -> Option<Arc<Window>> {
-        self.0
+    /// Window `id` as `player` holds it, now the last to go.
+    pub(super) fn rendered(&mut self, id: &str, player: PlayerKey) -> Option<Arc<Window>> {
+        let at = self
+            .0
             .iter()
-            .find(|(holder, window)| *holder == player && window.id == id)
-            .map(|(_, window)| Arc::clone(window))
+            .position(|(holder, window)| *holder == player && window.id == id)?;
+        let held = self.0.remove(at);
+        let window = Arc::clone(&held.1);
+        self.0.push(held);
+        Some(window)
     }
 }
 
@@ -472,38 +488,41 @@ mod tests {
     #[test]
     fn a_mod_keeps_a_window_per_player_and_drops_the_oldest_past_the_bound() {
         let (ann, bob) = (PlayerKey::new(7), PlayerKey::new(8));
-        let title =
-            |kept: &Kept, id: &str, player| kept.of(id, player).map(|w| w.title.key.clone());
+        let window = |id: &str, title: &str| Arc::new(Window::new(id, title));
+        let title = |kept: &mut Kept, id: &str, player| {
+            kept.rendered(id, player).map(|w| w.title.key.clone())
+        };
         let mut kept = Kept::default();
 
-        kept.keep(Window::new("w", "both"), &[ann, bob]);
-        kept.keep(Window::new("w", "ann's"), &[ann]);
-        kept.keep(Window::new("v", "other"), &[ann]);
-        assert_eq!(title(&kept, "w", ann).as_deref(), Some("ann's"));
-        assert_eq!(title(&kept, "w", bob).as_deref(), Some("both"));
+        kept.keep(&window("w", "both"), &[ann, bob]);
+        kept.keep(&window("w", "ann's"), &[ann]);
+        kept.keep(&window("v", "other"), &[ann]);
         assert_eq!(
             kept.0.len(),
             3,
             "a window shown again takes the place of the old"
         );
+        assert_eq!(title(&mut kept, "w", ann).as_deref(), Some("ann's"));
+        assert_eq!(title(&mut kept, "w", bob).as_deref(), Some("both"));
 
         kept.forget("w", &[ann]);
-        assert_eq!(title(&kept, "w", ann), None);
-        assert_eq!(title(&kept, "v", ann).as_deref(), Some("other"));
-        assert_eq!(title(&kept, "w", bob).as_deref(), Some("both"));
+        assert_eq!(title(&mut kept, "w", ann), None);
+        assert_eq!(title(&mut kept, "w", bob).as_deref(), Some("both"));
+        assert_eq!(title(&mut kept, "v", ann).as_deref(), Some("other"));
 
         let crowd: Vec<PlayerKey> = (0..MAX_KEPT as u64 - 1)
             .map(|n| PlayerKey::new(100 + n))
             .collect();
-        kept.keep(Window::new("crowd", "c"), &crowd);
-        assert_eq!(kept.0.len(), MAX_KEPT);
-        assert_eq!(title(&kept, "w", bob), None, "the oldest went");
+        assert_eq!(title(&mut kept, "w", bob).as_deref(), Some("both"));
+        kept.keep(&window("crowd", "c"), &crowd);
+        assert_eq!(kept.0.len(), MAX_KEPT, "exactly the bound stays");
         assert_eq!(
-            title(&kept, "v", ann).as_deref(),
-            Some("other"),
-            "exactly the bound stays"
+            title(&mut kept, "v", ann),
+            None,
+            "the one rendered longest ago went"
         );
-        assert!(title(&kept, "crowd", crowd[0]).is_some());
+        assert_eq!(title(&mut kept, "w", bob).as_deref(), Some("both"));
+        assert!(title(&mut kept, "crowd", crowd[0]).is_some());
     }
 
     #[test]
@@ -613,24 +632,77 @@ mod tests {
 
     #[test]
     fn a_window_names_its_faults() {
-        let takes = |action: &str| (action == "kick").then_some(1);
-        let fine = Window::new("w", "W").row(Row::new("r", &[]).button("Kick", "kick", &[]));
-        assert_eq!(fine.fault(&takes), None);
+        let check = |action: &str, values: Option<&[Value]>| {
+            if action != "kick" {
+                return Some(format!("no action {action}"));
+            }
+            values
+                .is_some_and(|v| v.len() > 1)
+                .then(|| "too many".to_owned())
+        };
+        let fine = Window::new("w", "W")
+            .row(Row::new("r", &[]).button("Kick", "kick", &[]))
+            .action("kick");
+        assert_eq!(fine.fault(&check), None);
         let fullest = (0..MAX_BUTTONS).fold(Row::new("r", &[]), |row, _| {
             row.button("k", "kick", &[Value::Toggle(true)])
         });
         let fullest =
             (1..MAX_ITEMS).fold(Window::new("w", "W").row(fullest), |w, _| w.text("t", &[]));
-        assert_eq!(fullest.fault(&takes), None, "at each bound, not past it");
+        assert_eq!(fullest.fault(&check), None, "at each bound, not past it");
         let unknown = Window::new("w", "W").action("fly");
-        assert_eq!(unknown.fault(&takes).as_deref(), Some("no action fly"));
+        assert_eq!(unknown.fault(&check).as_deref(), Some("no action fly"));
+        let unknown = Window::new("w", "W").row(Row::new("r", &[]).button("Fly", "fly", &[]));
+        assert_eq!(unknown.fault(&check).as_deref(), Some("no action fly"));
         let crowded =
             (0..=MAX_BUTTONS).fold(Row::new("r", &[]), |row, _| row.button("k", "kick", &[]));
-        assert!(Window::new("w", "W").row(crowded).fault(&takes).is_some());
+        assert!(Window::new("w", "W").row(crowded).fault(&check).is_some());
         let over =
             Row::new("r", &[]).button("k", "kick", &[Value::Toggle(true), Value::Toggle(false)]);
-        assert!(Window::new("w", "W").row(over).fault(&takes).is_some());
+        let over = Window::new("w", "W").text("t", &[]).row(over);
+        assert_eq!(over.fault(&check).as_deref(), Some("too many"));
         let long = (0..=MAX_ITEMS).fold(Window::new("w", "W"), |w, _| w.text("t", &[]));
-        assert!(long.fault(&takes).is_some());
+        assert!(long.fault(&check).is_some());
+    }
+
+    #[test]
+    fn a_window_too_big_with_its_player_lists_goes_without_them() {
+        use crate::actions::sheet::ArgView;
+
+        let players: Vec<(PlayerKey, String)> = (0..32)
+            .map(|n| (PlayerKey::new(n), "n".repeat(60)))
+            .collect();
+        let entry = |id: &str| Entry {
+            id: id.into(),
+            label: id.into(),
+            offered: true,
+            args: vec![ArgView {
+                kind: ArgView::PLAYER,
+                label: "Player".into(),
+                players: players.clone(),
+                ..ArgView::default()
+            }],
+            ..Entry::default()
+        };
+        let window = Window::new("panel", "Panel")
+            .text("first", &[])
+            .text("last", &[]);
+
+        let one = [entry("kick")];
+        let fits = decode(&window.render(&say, &one)).unwrap();
+        assert_eq!(
+            fits.entries[0].args[0].players.len(),
+            32,
+            "kept while it fits"
+        );
+
+        let many = ["kick", "ban", "mute", "heal"].map(entry);
+        assert!(sheet::encode(&many).len() > MAX_BYTES);
+        let text = window.render(&say, &many);
+        assert!(text.len() <= MAX_BYTES, "{}", text.len());
+        let lean = decode(&text).unwrap();
+        assert_eq!(lean.items.len(), 2, "every item stays");
+        assert_eq!(lean.entries.len(), 4);
+        assert!(lean.entries.iter().all(|e| e.args[0].players.is_empty()));
     }
 }

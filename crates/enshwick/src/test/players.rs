@@ -353,7 +353,7 @@ impl Installed {
         args: &str,
     ) -> Option<String> {
         let actions = table::with(None, |s| s.actions)?;
-        Some(ask(
+        let reply = ask(
             actions,
             kind,
             player,
@@ -361,7 +361,16 @@ impl Installed {
             action,
             args,
             crate::abi::ActionTarget::NONE,
-        ))
+        );
+        if kind == crate::abi::ActionCall::RUN {
+            let key = player.key.get();
+            table::with((), |s| {
+                let held = s.commands.carried.iter().filter(|(k, _, _)| *k == key);
+                let again: Vec<_> = held.map(|(k, id, _)| (*k, id.clone(), false)).collect();
+                s.commands.windows.extend(again);
+            });
+        }
+        Some(reply)
     }
 
     /// `player`, reading `language`, types `line` in chat, as the loader
@@ -423,8 +432,11 @@ impl Installed {
     /// The windows `player`'s client holds after the shows and closes the
     /// mod sent it, as the loader carries them after a step: each window's
     /// id and its text, which `actions::window::decode` reads. The mod
-    /// renders each show for `player` reading `language`; an empty render
-    /// closes the window.
+    /// renders each show for `player` reading `language`, and again each
+    /// window they hold after their run through
+    /// [`ask_actions`](Self::ask_actions); a render that is empty or past
+    /// `actions::window::MAX_BYTES` closes the window. A player the host
+    /// does not have online holds none.
     ///
     /// # Examples
     ///
@@ -448,11 +460,12 @@ impl Installed {
     pub fn carried_windows(&self, player: &PlayerInfo, language: u32) -> Vec<(String, String)> {
         let key = player.key.get();
         let (actions, waiting) = table::with((None, Vec::new()), |s| {
-            let (mine, others) = core::mem::take(&mut s.commands.windows)
+            let (mine, others): (Vec<_>, Vec<_>) = core::mem::take(&mut s.commands.windows)
                 .into_iter()
                 .partition(|(k, _, _)| *k == key);
             s.commands.windows = others;
-            (s.actions, mine)
+            let online = s.host.players.iter().any(|p| p.key == player.key);
+            (s.actions, if online { mine } else { Vec::new() })
         });
         for (_, id, close) in waiting {
             let text = match (close, actions) {
@@ -466,6 +479,11 @@ impl Installed {
                     crate::abi::ActionTarget::NONE,
                 ),
                 _ => String::new(),
+            };
+            let text = if text.len() > crate::actions::window::MAX_BYTES {
+                String::new()
+            } else {
+                text
             };
             table::with((), |s| {
                 let carried = &mut s.commands.carried;

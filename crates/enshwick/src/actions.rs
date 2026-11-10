@@ -625,9 +625,10 @@ impl Actions {
     ///
     /// [`Off`] on a client; for a malformed id, a window past its bounds
     /// ([`window::MAX_ITEMS`], [`window::MAX_BUTTONS`]), a button or item
-    /// naming an action not declared yet, or a button giving more values
-    /// than its action takes; or when the loader refuses, as while too
-    /// many shows wait.
+    /// naming an action not declared yet, or a button giving values its
+    /// action does not take; or when the loader refuses, as while too many
+    /// shows wait. The mod keeps the window only for the players the
+    /// loader took.
     ///
     /// # Examples
     ///
@@ -661,21 +662,19 @@ impl Actions {
         }
         let fault = {
             let declared = self.registry.declared.relock_read();
-            window.fault(&|action| {
-                declared.iter().find(|d| d.action.id == action).map(|d| {
-                    if d.action.on.is_some() {
-                        2
-                    } else {
-                        d.action.args.len()
-                    }
-                })
-            })
+            window.fault(
+                &|action, values| match declared.iter().find(|d| d.action.id == action) {
+                    Some(d) => values.and_then(|v| registry::button_fault(&d.action, v)),
+                    None => Some(format!("no action {action}")),
+                },
+            )
         };
         if let Some(fault) = fault {
             return Err(Off::new(format!("window {id}: {fault}")));
         }
-        self.registry.windows.relock_write().keep(window, players);
-        self.carry_window(&id, players, false)
+        let window = Arc::new(window);
+        let mut kept = self.registry.windows.relock_write();
+        self.carry_window(&id, players, false, |part| kept.keep(&window, part))
     }
 
     /// Closes the window `id` on the clients of the players with the
@@ -695,15 +694,22 @@ impl Actions {
     /// }
     /// ```
     pub fn close(&self, id: &str, players: &[PlayerKey]) -> Result<(), Off> {
-        self.registry.windows.relock_write().forget(id, players);
-        self.carry_window(id, players, true)
+        let mut kept = self.registry.windows.relock_write();
+        self.carry_window(id, players, true, |part| kept.forget(id, part))
     }
 
     /// Hands the loader a show or a close of window `id` for `players`, in
-    /// parts of the most players one call takes.
-    fn carry_window(&self, id: &str, players: &[PlayerKey], close: bool) -> Result<(), Off> {
+    /// parts of the most players one call takes; `taken` gets each part the
+    /// loader took.
+    fn carry_window(
+        &self,
+        id: &str,
+        players: &[PlayerKey],
+        close: bool,
+        mut taken: impl FnMut(&[PlayerKey]),
+    ) -> Result<(), Off> {
         let host = self.registry.host;
-        for part in players.chunks(64) {
+        for part in players.chunks(window::MAX_CALL_PLAYERS) {
             let count = u32::try_from(part.len()).unwrap_or(u32::MAX);
             let status = (host.api().action_window)(
                 host.handle(),
@@ -713,6 +719,7 @@ impl Actions {
                 u32::from(close),
             );
             crate::load::ok(status, (), || format!("window {id}"))?;
+            taken(part);
         }
         Ok(())
     }

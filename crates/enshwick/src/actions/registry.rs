@@ -215,6 +215,9 @@ impl Registry {
         let Some(d) = declared.iter().find(|d| d.action.id == word) else {
             return Outcome::refused(self.say("actions.unknown", language, &[("word", &word)]));
         };
+        if !Self::allowed(d, player) {
+            return Outcome::refused(self.say("actions.denied", language, &[]));
+        }
         match self.console_args(d, player, line, rest, language) {
             Ok(values) => self.run(d, player, &values, language, via, None),
             Err(why) => Outcome::refused(self.refusal(&why, &d.action, language)),
@@ -552,18 +555,17 @@ impl Registry {
     /// keeps no such window for them or the player may not run an action
     /// it names.
     pub(super) fn window(&self, player: &Player, language: Language, id: &str) -> String {
-        let Some(window) = self.windows.relock_read().of(id, player.key) else {
+        let Some(window) = self.windows.relock_write().rendered(id, player.key) else {
             return String::new();
         };
         let declared = self.declared();
         let mut named: Vec<&Declared> = Vec::new();
         for action in window.actions() {
+            if named.iter().any(|n| n.action.id == action) {
+                continue;
+            }
             match declared.iter().find(|d| d.action.id == action) {
-                Some(d) if Self::allowed(d, player) => {
-                    if !named.iter().any(|n| n.action.id == action) {
-                        named.push(d);
-                    }
-                }
+                Some(d) if Self::allowed(d, player) => named.push(d),
                 _ => return String::new(),
             }
         }
@@ -588,6 +590,9 @@ impl Registry {
         let declared = self.declared();
         match declared.iter().find(|d| d.action.id == id) {
             None => Outcome::refused(self.say("actions.unknown", language, &[("word", id)])),
+            Some(d) if !Self::allowed(d, player) => {
+                Outcome::refused(self.say("actions.denied", language, &[]))
+            }
             Some(d) => match sheet::decode_args(args) {
                 None => Outcome::refused(self.say("actions.denied", language, &[])),
                 Some(mut values) => {
@@ -673,6 +678,32 @@ pub(super) fn fits(value: &Value, arg: &Arg) -> bool {
         (Value::Text(text), ArgView::TEXT) => arg.takes_text(text),
         _ => false,
     }
+}
+
+/// What is wrong with the `values` a window's button gives `action` first:
+/// a list takes its player and on or off, any other action no more values
+/// than its arguments, each fitting its own; `None` when they fit.
+pub(super) fn button_fault(action: &Action, values: &[Value]) -> Option<String> {
+    let id = &action.id;
+    if action.on.is_some() {
+        return (!matches!(values, [Value::Player { .. }, Value::Toggle(_)]))
+            .then(|| format!("a button gives the list {id} other than a player and on or off"));
+    }
+    if values.len() > action.args.len() {
+        return Some(format!(
+            "a button gives {} values to {id}, which takes {}",
+            values.len(),
+            action.args.len()
+        ));
+    }
+    let at = values
+        .iter()
+        .zip(&action.args)
+        .position(|(v, a)| !fits(v, a))?;
+    Some(format!(
+        "a button gives {id} a value its argument {} does not take",
+        at + 1
+    ))
 }
 
 /// On or off, from a console word.

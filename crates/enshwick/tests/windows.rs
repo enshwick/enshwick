@@ -5,6 +5,7 @@
 #[cfg(test)]
 mod tests {
     use std::sync::OnceLock;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use enshwick::abi::{ActionCall, Header, PlayerInfo, Side, Status};
     use enshwick::actions::sheet::ArgView;
@@ -14,6 +15,9 @@ mod tests {
     use enshwick::{Load, Mod, Off, PlayerKey};
 
     static ACTIONS: OnceLock<Actions> = OnceLock::new();
+
+    /// How often the mod was asked whether a player may wave.
+    static ALLOWS: AtomicUsize = AtomicUsize::new(0);
 
     const TEXTS: &str = r#"
 [en]
@@ -59,7 +63,13 @@ mod tests {
                     .arg(Arg::text("Message", 120)),
                 done,
             )?;
-            actions.add(Action::new("wave", "Wave"), done)?;
+            actions.add(
+                Action::new("wave", "Wave").allow(|_| {
+                    ALLOWS.fetch_add(1, Ordering::Relaxed);
+                    true
+                }),
+                done,
+            )?;
             let shown = actions.clone();
             actions.add(
                 Action::new("open", "Open the panel"),
@@ -233,6 +243,92 @@ mod tests {
             loader.ask_actions(ActionCall::WINDOW, &root, 0, "panel", ""),
             Some(String::new()),
             "the mod keeps no closed window to render"
+        );
+    }
+
+    #[test]
+    fn a_button_giving_values_its_action_does_not_take_is_refused() {
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let _loader = start(enshwick::test::FakeHost::new().player(root));
+        let show = |action: &str, values: &[Value]| {
+            let row = Row::new("r", &[]).button("Go", action, values);
+            actions().show(Window::new("w", "x").row(row), &[root.key])
+        };
+        let refused =
+            |action: &str, values: &[Value]| show(action, values).unwrap_err().to_string();
+
+        let text = |text: &str| Value::Text(text.into());
+        assert!(refused("ban", &[text("Ann")]).contains("argument 1"));
+        assert!(refused("ban", &[ann(), text(&"x".repeat(65))]).contains("argument 2"));
+        assert!(refused("say", &[text("line\nbreak")]).contains("argument 1"));
+        show("ban", &[ann(), text(&"x".repeat(64))]).expect("values at their bounds fit");
+        show("ban", &[]).expect("a button may leave every value to its form");
+    }
+
+    #[test]
+    fn a_render_asks_once_who_may_run_an_action_however_many_buttons_name_it() {
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let loader = start(enshwick::test::FakeHost::new().player(root));
+        let row = (0..3).fold(Row::new("r", &[]), |row, _| row.button("Wave", "wave", &[]));
+        let window = Window::new("w", "x")
+            .row(row.clone())
+            .row(row)
+            .action("wave");
+        actions().show(window, &[root.key]).unwrap();
+
+        ALLOWS.store(0, Ordering::Relaxed);
+        assert_eq!(loader.carried_windows(&root, 0).len(), 1);
+        assert_eq!(ALLOWS.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn a_show_or_close_the_loader_refuses_leaves_the_window_the_player_holds() {
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let loader = start(enshwick::test::FakeHost::new().player(root));
+        let actions = actions();
+        let held = || {
+            let text = loader.ask_actions(ActionCall::WINDOW, &root, 0, "panel", "");
+            decode(&text.unwrap()).map(|view| view.title)
+        };
+
+        actions.show(panel(), &[root.key]).unwrap();
+        let waiting: Vec<PlayerKey> = (0..enshwick::actions::window::MAX_WAITING as u64 - 1)
+            .map(|n| PlayerKey::new(1000 + n))
+            .collect();
+        actions.show(Window::new("crowd", "x"), &waiting).unwrap();
+
+        let second = Window::new("panel", "Second").action("wave");
+        assert!(actions.show(second, &[root.key]).is_err(), "no room waits");
+        assert_eq!(held().as_deref(), Some("Admin panel"));
+        assert!(actions.close("panel", &[root.key]).is_err());
+        assert_eq!(held().as_deref(), Some("Admin panel"));
+    }
+
+    #[test]
+    fn the_fake_renders_a_players_windows_again_after_their_run_and_none_for_a_stranger() {
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let stranger = player(6, 99, "Gone", PlayerInfo::CAN_KICK_BAN);
+        let loader = start(enshwick::test::FakeHost::new().player(root));
+        let actions = actions();
+
+        actions.show(panel(), &[root.key, stranger.key]).unwrap();
+        assert!(
+            loader.carried_windows(&stranger, 0).is_empty(),
+            "not online"
+        );
+        let title = |carried: Vec<(String, String)>| decode(&carried[0].1).unwrap().title;
+        assert_eq!(title(loader.carried_windows(&root, 0)), "Admin panel");
+        assert_eq!(
+            title(loader.carried_windows(&root, Language::UK_UA.0)),
+            "Admin panel",
+            "nothing waits, so nothing renders"
+        );
+
+        let ran = loader.ask_actions(ActionCall::RUN, &root, 0, "wave", "");
+        assert_eq!(ran.as_deref(), Some("1ok"));
+        assert_eq!(
+            title(loader.carried_windows(&root, Language::UK_UA.0)),
+            "Панель адміністратора"
         );
     }
 
