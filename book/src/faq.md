@@ -58,9 +58,9 @@ last part is what the faulting access read, wrote or ran.
 Each crash writes its line to the loader's file of that run and to a file of
 its own, `logs/enshwick-crash_<date>_<time>.log`. The newest 10 crash files
 are kept. The next start logs the last crash as a warning and shows it at
-the top of the status summary, opened by `the game crashed in the last
-session` when Enshwick and its mods were not involved and by `the last
-session crashed` otherwise. The line waits in `mods/enshwick/last-crash.txt`
+the top of the status summary. The warning opens with `the game crashed in
+the last session` when Enshwick and its mods were not involved, else with
+`the last session crashed`. The line waits in `mods/enshwick/last-crash.txt`
 until then.
 
 ## Why does a server under Wine write a crash file at every stop?
