@@ -59,6 +59,7 @@ mod entity_data;
 #[cfg(feature = "unstable")]
 mod events_described;
 #[cfg(feature = "typed")]
+mod example_manifest;
 mod experience_content;
 mod export_dir;
 mod exports;
