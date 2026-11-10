@@ -60,7 +60,7 @@ impl AffixFns {
     /// rolls from `pool` under `rules`, from `seed`, as
     /// [`roll`](super::roll) rolls them; each of `pool` is `{ key, def }`.
     /// Its name differs from Rust's, since `roll` rolls an item, as
-    /// `Affixes::roll` does with `unstable`.
+    /// `Affixes::roll` does.
     #[script(name = "roll_pool")]
     #[must_use]
     pub fn roll(
