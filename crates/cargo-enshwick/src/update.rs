@@ -146,7 +146,7 @@ fn settle(
 fn ask() -> Answer {
     let running = running();
     let url = format!("https://api.github.com{}", releases::path(&running));
-    let found = crate::net::get(
+    let found = cargo_enshwick::net::get(
         &url,
         &[
             "Accept: application/vnd.github+json",

@@ -90,7 +90,7 @@ pub(crate) fn install(
                 .output()
                 .is_ok_and(|out| out.status.success())
         },
-        windows_target_installed,
+        || windows_target_installed(&here),
     )?;
     let built = Command::new(&cargo)
         .args(build_args(windows, &package.name))
@@ -161,7 +161,7 @@ fn game_folder(
 }
 
 /// The target every mod DLL is built for, whatever the host.
-const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
+pub(crate) const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 
 /// The cargo arguments that build `package` as a Windows DLL: plain cargo on
 /// Windows, `cargo xwin` with the Windows SDK it fetches elsewhere.
@@ -183,7 +183,7 @@ fn build_args(windows_host: bool, package: &str) -> Vec<&str> {
 
 /// Fails with the install command of a tool the Windows build lacks;
 /// `target_installed` is `None` when rustup cannot tell.
-fn preflight(
+pub(crate) fn preflight(
     windows_host: bool,
     has_xwin: impl FnOnce() -> bool,
     target_installed: impl FnOnce() -> Option<bool>,
@@ -201,10 +201,11 @@ fn preflight(
     Ok(())
 }
 
-/// Whether rustup has the Windows target for the toolchain of the current
-/// folder; `None` without rustup.
-fn windows_target_installed() -> Option<bool> {
+/// Whether rustup has the Windows target for the toolchain of the folder
+/// `dir`; `None` without rustup.
+pub(crate) fn windows_target_installed(dir: &Path) -> Option<bool> {
     let out = Command::new("rustup")
+        .current_dir(dir)
         .args(["target", "list", "--installed"])
         .output()
         .ok()

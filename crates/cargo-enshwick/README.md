@@ -38,6 +38,16 @@ is out, at most once a day; without a network it says nothing, and `CI` or
   `types/enshwick.d.luau`, the luau-lsp settings that read them and a
   README. It runs on the server unless `--side` says otherwise;
   `--game <game>` adds the game's own types in `types/game.d.luau`.
+- `check [dir]` checks a mod in any form, in the current folder unless
+  `dir` names one. A data pack or Luau mod is read as the loader reads it,
+  against the game's data with `--game` or `ENSHROUDED_DIR`, and every
+  script is type-checked with luau-lsp against the definitions in `types/`.
+  A Rust mod is linted with clippy for Windows, which also checks its
+  `[package.metadata.enshwick]` table. Each problem is printed as
+  `<file>:<line>:<column>: <severity>: <message>`, and an error exits with 1.
+  Without luau-lsp on the path, `check` downloads the release it was built
+  for once into the user's cache folder and checks its SHA-256; `--offline`
+  skips the download.
 - `luau [--out <file>]` writes the API's Luau definitions for the loader the
   tool was built with, to refresh a mod's `types/enshwick.d.luau`.
 - `manifest <dll>` prints what a built mod says about itself: id, version,

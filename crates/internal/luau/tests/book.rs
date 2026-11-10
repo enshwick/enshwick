@@ -103,16 +103,10 @@ mod tests {
         }
     }
 
-    /// Where luau-lsp is: `LUAU_LSP`, or `luau-lsp` on the path; `None`
-    /// without it.
+    /// The luau-lsp `cargo enshwick check` runs, downloaded when missing;
+    /// `None` when it cannot be had.
     fn luau_lsp() -> Option<PathBuf> {
-        let tool =
-            std::env::var_os("LUAU_LSP").map_or_else(|| PathBuf::from("luau-lsp"), PathBuf::from);
-        Command::new(&tool)
-            .arg("--version")
-            .output()
-            .is_ok_and(|out| out.status.success())
-            .then_some(tool)
+        cargo_enshwick::luau_lsp::find(false).ok()
     }
 
     /// Writes the definitions, the trading post's deps modules and every
@@ -200,13 +194,13 @@ mod tests {
     /// Every block type-checks against the definitions this build writes:
     /// a renamed or removed call fails here. Lints such as an unused local
     /// are allowed. Without luau-lsp it is skipped, except in CI, which
-    /// installs it.
+    /// downloads it.
     #[test]
     fn every_luau_example_of_the_book_type_checks() {
         let Some(tool) = luau_lsp() else {
             assert!(
                 std::env::var_os("CI").is_none(),
-                "luau-lsp is missing; CI installs it and sets LUAU_LSP"
+                "luau-lsp could not be downloaded"
             );
             return;
         };

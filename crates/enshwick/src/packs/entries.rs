@@ -162,12 +162,20 @@ pub(super) struct WorkshopEntry {
 }
 
 /// A new value: a number sets it, `{ times = x }` scales it.
-#[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(untagged)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema), serde(untagged))]
 pub(super) enum ValueEntry {
     Set(f64),
     Scale(ScaleEntry),
+}
+
+impl<'de> Deserialize<'de> for ValueEntry {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        match toml::Value::deserialize(deserializer)? {
+            table @ toml::Value::Table(_) => super::values::shape(table).map(Self::Scale),
+            value => super::values::shape(value).map(Self::Set),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
@@ -182,7 +190,10 @@ pub(super) struct ScaleEntry {
 /// vanilla items from the game's data.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(untagged)]
+#[serde(
+    untagged,
+    expecting = "`stackable`, `containers`, `backpacks` or a list of item names"
+)]
 pub(super) enum ItemsEntry {
     /// `stackable`, `containers` or `backpacks`.
     Word(String),
@@ -280,7 +291,10 @@ pub(super) struct LootChangeEntry {
 /// Where a drop comes from: one name or several.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(untagged)]
+#[serde(
+    untagged,
+    expecting = "a source, such as `bosses`, or a list of sources"
+)]
 pub(super) enum FromEntry {
     One(String),
     Many(Vec<String>),

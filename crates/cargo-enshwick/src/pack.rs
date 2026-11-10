@@ -56,7 +56,7 @@ pub(crate) fn run(command: &Command) -> anyhow::Result<String> {
 
 /// The vanilla content of the game in `game`: the layouts from its
 /// executable's reflection, the data from its archive.
-fn vanilla(game: &Path) -> anyhow::Result<Vanilla> {
+pub(crate) fn vanilla(game: &Path) -> anyhow::Result<Vanilla> {
     use enshwick_gamedata::catalogue::Reflected;
     use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 
@@ -159,7 +159,8 @@ fn zip(dir: &Path, out: Option<&Path>) -> anyhow::Result<String> {
 pub(crate) mod tests {
     use super::*;
 
-    fn pack(name: &str, items: &str) -> PathBuf {
+    /// A scratch pack folder `name` with `items` as its `items.toml`.
+    pub(crate) fn pack(name: &str, items: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("enshwick-pack-{name}-{}", std::process::id()));
         let _fresh = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();

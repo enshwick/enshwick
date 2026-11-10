@@ -159,20 +159,13 @@ jobs:
           prefix-key: v1-rust
           key: ${{ matrix.part }}
 
-      # The book's Luau examples type-check against the definitions this
-      # build writes; the test fails in CI without the tool.
-      - name: Install luau-lsp
+      # The luau-lsp the tests download, kept per pin instead of fetched by
+      # each test process.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: matrix.part == 'host' || matrix.part == 'all'
-        env:
-          # renovate: datasource=github-release-attachments depName=JohnnyMorganz/luau-lsp
-          VERSION: 1.70.1
-          SHA256: 1a2ea1ae4f98f8946cefd970a4b54853e11ab4775e6932faa7f60cf920346567
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSfL --retry 6 --retry-all-errors -o "$RUNNER_TEMP/luau-lsp.zip" \
-            "https://github.com/JohnnyMorganz/luau-lsp/releases/download/$VERSION/luau-lsp-linux-x86_64.zip"
-          echo "$SHA256  $RUNNER_TEMP/luau-lsp.zip" | sha256sum -c -
-          unzip -q "$RUNNER_TEMP/luau-lsp.zip" -d "$RUNNER_TEMP/luau-lsp"
-          echo "LUAU_LSP=$RUNNER_TEMP/luau-lsp/luau-lsp" >> "$GITHUB_ENV"
+        with:
+          path: ~/.cache/enshwick
+          key: luau-lsp-${{ runner.os }}-${{ hashFiles('crates/cargo-enshwick/luau-lsp.toml') }}
 
       - name: cargo xtask check
         env:
