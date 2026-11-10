@@ -49,6 +49,9 @@ pub(super) struct TextLayout {
     /// The game's key for the field's kept state among its node's states,
     /// which changes with each build.
     key: u64,
+    /// Where the field object keeps its look; `None` where the route
+    /// misses or points outside the object, and the field draws bare.
+    look: Option<usize>,
 }
 
 impl TextLayout {
@@ -75,7 +78,13 @@ impl TextLayout {
         }
         let key = pinned::ui::TEXT_FIELD_STATE_KEY.id();
         let key = lookup(key).ok_or(Missing::Entry(key))?;
-        Ok(Self { editing, key })
+        let look = field(lookup, pinned::ui::TEXT_FIELD_LOOK.id())
+            .ok()
+            .filter(|at| {
+                at.checked_add(size_of::<u32>())
+                    .is_some_and(|end| end <= extent)
+            });
+        Ok(Self { editing, key, look })
     }
 }
 /// The input's answer for Enter.
@@ -84,6 +93,13 @@ const ENTERED: u64 = 1;
 const CLICKED: u8 = 4;
 /// The field's least height, as the rename dialog's.
 const FIELD_HEIGHT: f32 = 40.0;
+/// The look the rename dialog gives its field at `ui.text_field_look`,
+/// which the constructor zeroes: 0 draws the bare text, 2 the box with its
+/// hover and caret colours (clients 426 and 26430625).
+const LOOK_BOXED: u32 = 2;
+/// The rename dialog's text alignment in its field: left and top, where a
+/// label's default is the centre.
+const ALIGN_LEFT: u16 = 0x101;
 
 /// The text field's functions.
 #[derive(Debug)]
@@ -219,6 +235,10 @@ impl Engine {
             );
         }
         field.u8(self.layout.label_shown, 1);
+        field.u16(self.layout.label_align, ALIGN_LEFT);
+        if let Some(look) = fns.layout.look {
+            field.u32(look, LOOK_BOXED);
+        }
         let node = self.frame_node(&field);
         // SAFETY: `self.node_stretch` is the game's `ui.node_stretch`,
         // checked in `Engine::resolve`, on the node the game just wrote into
@@ -278,5 +298,35 @@ impl Engine {
             entered: answer & u64::from(u32::MAX) == ENTERED,
             editing,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A client's text field constants, with its look at `look`.
+    fn build(look: Option<u64>) -> impl Fn(&str) -> Option<u64> {
+        move |id| {
+            [
+                (pinned::ui::TEXT_FIELD_EXTENT.id(), Some(0x272)),
+                (pinned::ui::TEXT_FIELD_TEXT.id(), Some(0x150)),
+                (pinned::ui::TEXT_FIELD_STATE_SIZE.id(), Some(0x1990)),
+                (pinned::ui::TEXT_FIELD_EDITING.id(), Some(0x1988)),
+                (pinned::ui::TEXT_FIELD_STATE_KEY.id(), Some(1)),
+                (pinned::ui::TEXT_FIELD_LOOK.id(), look),
+            ]
+            .into_iter()
+            .find_map(|(known, value)| (known == id).then_some(value))?
+        }
+    }
+
+    #[test]
+    fn the_field_draws_boxed_only_where_its_look_lies_inside_the_object() {
+        let look = |at| TextLayout::read(&build(at)).map(|layout| layout.look).ok();
+        assert_eq!(look(Some(0x148)), Some(Some(0x148)));
+        assert_eq!(look(Some(0x26e)), Some(Some(0x26e)), "the last four bytes");
+        assert_eq!(look(Some(0x26f)), Some(None), "one byte past the object");
+        assert_eq!(look(None), Some(None), "a build whose route misses");
     }
 }

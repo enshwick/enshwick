@@ -528,6 +528,8 @@ pub(crate) struct Engine {
     text_fields: Option<text_field::TextFields>,
     /// The game's key hint; `None` refuses mods' input hints.
     pub(super) hint: Option<hint::InputHints>,
+    /// The row frame and the separator; `None` stacks a row's cells.
+    rows: Option<rows::Rows>,
     window_begin: WindowBeginFn,
     window_end: OneFn,
     frame_from_node: FrameFromNodeFn,
@@ -714,6 +716,7 @@ struct Optional {
     scroll: Option<scroll::Scrolling>,
     text_fields: Option<text_field::TextFields>,
     hint: Option<hint::InputHints>,
+    rows: Option<rows::Rows>,
 }
 
 impl Optional {
@@ -749,6 +752,9 @@ impl Optional {
                 .ok(),
             hint: hint::InputHints::resolve(loader)
                 .inspect_err(off("input hints"))
+                .ok(),
+            rows: rows::Rows::resolve(loader)
+                .inspect_err(off("rows on the Mods screen (stacked)"))
                 .ok(),
         }
     }
@@ -796,6 +802,7 @@ impl Engine {
             scroll,
             text_fields,
             hint,
+            rows,
         } = Optional::resolve(loader, &mut parts_off);
         let on = |part: Part| !parts_off.iter().any(|(p, _)| *p == part);
         let menus = on(Part::MAIN_MENU) || on(Part::PAUSE_MENU);
@@ -832,6 +839,7 @@ impl Engine {
             scroll,
             text_fields,
             hint,
+            rows,
             window_begin: function!(pinned::ui::WINDOW_BEGIN, WindowBeginFn),
             window_end: function!(pinned::ui::WINDOW_END, OneFn),
             frame_from_node: function!(pinned::ui::FRAME_FROM_NODE, FrameFromNodeFn),
@@ -975,18 +983,10 @@ fn stretch(x: f32, y: f32) -> u64 {
     u64::from(x.to_bits()) | u64::from(y.to_bits()) << 32
 }
 
-/// The slider's value text: whole numbers when every stop is one, else two
-/// decimals.
-fn slider_format(min: f32, max: f32, steps: u32) -> u32 {
-    let whole = |v: f32| v.fract() == 0.0;
-    #[expect(clippy::cast_precision_loss, reason = "a count of stops")]
-    let unit = steps >= 2 && whole(min) && whole(max) && whole((max - min) / (steps - 1) as f32);
-    if unit { 2 } else { 4 }
-}
-
 mod hint;
 mod hud;
 mod menus;
+mod rows;
 mod scroll;
 #[cfg(test)]
 mod tests;
@@ -994,5 +994,7 @@ mod text_field;
 mod widgets;
 mod windows;
 
+pub(super) use rows::Row;
 pub(super) use scroll::Scroll;
 pub(super) use text_field::{TextBuffer, Typed};
+pub(super) use widgets::Takes;

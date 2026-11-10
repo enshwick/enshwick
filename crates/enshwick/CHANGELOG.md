@@ -88,6 +88,31 @@ Each entry names the pull request that made the change.
 - `actions`: a run naming an account no one online or known has is
   answered "That player is no longer here." instead of with its account
   key (#1022).
+- Mods screen: each mod is one row with its plain name as the title, its
+  version and credits on one dimmed line, and a small Settings button at
+  the row's right instead of a button across the window; a thin line parts
+  the mods. A game build without the row frame stacks the row's parts
+  (#1023).
+- Mods screen: a mod's key bindings sit on its own settings page, after
+  the world's settings, and say that they belong to the player on this
+  computer; the Controls button and its page for every mod are gone. Back
+  ends a key capture before it leaves the page (#1023).
+- Mods screen: a text setting draws as an input box with its text at the
+  left and an outline while it has the caret, and an integer setting's
+  slider shows no decimals (#1023).
+- Mods screen: what is off shows in red: a mod's off reason, each feature
+  that is off, the loader's parts off and the features this game build
+  lacks. A world store whose file does not read has its own line in the
+  player's language, with the mod, the store, the file and the parser's
+  words last (#1023).
+- Chat: a line a client sends with a type other than typed text or an
+  emote is dropped with a debug log line, instead of showing as an empty
+  line under the player's name; emotes keep their look, pass the chat
+  filters like typed text and are heard as `ChatKind::Emote` (#1023).
+- Mods screen: a mod that is off or waiting says so in words under its
+  name, not by colour alone; a key capture ends when a text setting takes
+  the caret; key bindings page on a game build without the scroll area
+  (#1023).
 
 ## [1.0.0-alpha.14] - 2026-11-09
 

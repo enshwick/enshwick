@@ -332,7 +332,7 @@ impl Installed {
         deliver(&calls, Some(player))
     }
 
-    /// The mod's controls as the controls page lists them: name, label and
+    /// The mod's controls as the key bindings list them: name, label and
     /// the keys in force. As in the loader, the label is a key of the texts
     /// the mod handed over, in the fake's language, else as written.
     ///

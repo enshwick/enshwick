@@ -886,7 +886,7 @@ typedef struct EnshwickControlSpec {
   // The control's name in its mod, 1 to 32 of `[a-z0-9-]`; the player's
   // override names it `<mod id>:<name>`. Valid for the call.
   struct EnshwickStr name;
-  // What the controls page shows for it, in the player's language. Valid
+  // What the mod's key bindings show for it, in the player's language. Valid
   // for the call; the loader copies it.
   struct EnshwickStr label;
   // The default key, or 0 for none.

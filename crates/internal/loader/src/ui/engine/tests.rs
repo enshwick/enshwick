@@ -1,3 +1,4 @@
+use super::widgets::slider_format;
 use super::*;
 
 #[test]
@@ -282,9 +283,15 @@ fn client_tables_pin_the_scroll_area_and_the_text_field_whole() {
 
 #[test]
 fn whole_stops_show_whole_numbers() {
-    assert_eq!(slider_format(1.0, 20.0, 20), 2);
-    assert_eq!(slider_format(0.0, 1.0, 11), 4);
-    assert_eq!(slider_format(0.0, 10.0, 0), 4);
+    assert_eq!(slider_format(1.0, 20.0, 20, false), 2);
+    assert_eq!(slider_format(0.0, 1.0, 11, false), 4);
+    assert_eq!(slider_format(0.0, 10.0, 0, false), 4);
+}
+
+#[test]
+fn a_whole_setting_s_slider_shows_no_decimals_whatever_its_stops() {
+    assert_eq!(slider_format(0.0, 1000.0, 0, true), 2);
+    assert_eq!(slider_format(0.0, 1.0, 11, true), 2);
 }
 
 #[test]

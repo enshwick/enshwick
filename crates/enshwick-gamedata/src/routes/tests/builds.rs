@@ -84,6 +84,36 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ("1.0 client (26320373)", "text.format", 0xaf_f930),
     ("1.0 client (26082781)", "ui.dropdown_external", 0xc76),
     ("1.0 client (26320373)", "ui.dropdown_external", 0xc76),
+    // The text field's look, which its constructor zeroes and the rename
+    // dialog sets; read in both on 26082781 and 26430625.
+    ("1.0 client (1269579)", "ui.text_field_look", 0x148),
+    ("1.0 client (26082781)", "ui.text_field_look", 0x148),
+    ("1.0 client (26320373)", "ui.text_field_look", 0x148),
+    ("1.0 client (26430625)", "ui.text_field_look", 0x148),
+    // The row frame, the column frame's twin, and the separator line, at
+    // their calls in and after the popup; read on 26430625.
+    ("1.0 client (1269579)", "ui.row", 0xa2_eab0),
+    ("1.0 client (1269579)", "ui.separator", 0xc8_1280),
+    ("1.0 client (26082781)", "ui.row", 0xa3_05e0),
+    ("1.0 client (26082781)", "ui.separator", 0xc8_2d10),
+    ("1.0 client (26320373)", "ui.row", 0xa3_cf00),
+    ("1.0 client (26320373)", "ui.separator", 0xc9_58a0),
+    ("1.0 client (26430625)", "ui.row", 0xa3_cfc0),
+    ("1.0 client (26430625)", "ui.separator", 0xc9_5960),
+    // Where the separator reads its config's margin, height and offset,
+    // which the loader's config must match; read on 26430625.
+    ("1.0 client (1269579)", "ui.separator_margin", 0xc),
+    ("1.0 client (1269579)", "ui.separator_height", 0x1c),
+    ("1.0 client (1269579)", "ui.separator_offset", 0x20),
+    ("1.0 client (26082781)", "ui.separator_margin", 0xc),
+    ("1.0 client (26082781)", "ui.separator_height", 0x1c),
+    ("1.0 client (26082781)", "ui.separator_offset", 0x20),
+    ("1.0 client (26320373)", "ui.separator_margin", 0xc),
+    ("1.0 client (26320373)", "ui.separator_height", 0x1c),
+    ("1.0 client (26320373)", "ui.separator_offset", 0x20),
+    ("1.0 client (26430625)", "ui.separator_margin", 0xc),
+    ("1.0 client (26430625)", "ui.separator_height", 0x1c),
+    ("1.0 client (26430625)", "ui.separator_offset", 0x20),
     // The editor's commit, which every terrain edit passes; on 26083076 and
     // 26430253 checked live on server copies.
     ("1.0 server (1269579)", "voxel.commit", 0x83_39d0),

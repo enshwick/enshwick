@@ -46,7 +46,6 @@ fn back_ends_the_typing_before_it_leaves_the_page() {
 #[test]
 fn back_steps_from_each_page_towards_the_list_and_closes_from_it() {
     assert_eq!(back(Kind::List), Back::Close);
-    assert_eq!(back(Kind::Settings), Back::List);
     assert_eq!(back(Kind::ServerList), Back::List);
     assert_eq!(back(Kind::ServerSettings), Back::ServerList);
     assert_eq!(
@@ -54,7 +53,11 @@ fn back_steps_from_each_page_towards_the_list_and_closes_from_it() {
         Back::List,
         "a server page a mod opened goes back to the mods"
     );
-    assert_eq!(back(Kind::Controls), Back::Inside);
+    assert_eq!(
+        back(Kind::Settings),
+        Back::Inside,
+        "a settings page ends a key capture before it goes back to the mods"
+    );
 }
 
 #[test]

@@ -175,7 +175,7 @@ pub enum Message {
 pub struct Carried {
     /// Its name in its mod.
     pub name: String,
-    /// What the controls page shows, in the client's language.
+    /// What the mod's key bindings show, in the client's language.
     pub label: String,
     /// The mod's action a firing runs on the server.
     pub action: String,

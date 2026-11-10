@@ -6,6 +6,13 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- Routes for the client's row frame (`ui.row`), its separator line
+  (`ui.separator`, with where it reads its margin, height and offset) and
+  the text field's look (`ui.text_field_look`), found on every kept client
+  build; the compatibility reports list them (#1023).
+
 ## [1.0.0-alpha.14] - 2026-11-09
 
 ### Added
