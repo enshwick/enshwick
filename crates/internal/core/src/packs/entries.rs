@@ -414,11 +414,10 @@ pub fn schemas() -> Vec<(&'static str, String)> {
     ]
 }
 
-/// The fence tokens of a code block rustdoc compiles as Rust, besides the
-/// `edition` ones; only such a block has hidden lines.
+/// The fence tokens rustdoc reads as Rust attributes, besides `rust` and the
+/// `ignore-<target>`, `edition` and error code ones.
 #[cfg(feature = "schema")]
-const RUST_FENCE: [&str; 7] = [
-    "rust",
+const RUST_FENCE: [&str; 6] = [
     "ignore",
     "should_panic",
     "no_run",
@@ -457,11 +456,7 @@ fn without_hidden(text: &str) -> String {
         if let Some(info) = trimmed.strip_prefix("```") {
             rust = match rust {
                 Some(_) => None,
-                None => Some(
-                    info.split([',', ' ', '\t'])
-                        .filter(|token| !token.is_empty())
-                        .all(|token| RUST_FENCE.contains(&token) || token.starts_with("edition")),
-                ),
+                None => Some(is_rust(info)),
             };
         } else if rust == Some(true) && (trimmed == "#" || trimmed.starts_with("# ")) {
             continue;
@@ -469,6 +464,28 @@ fn without_hidden(text: &str) -> String {
         kept.push(line);
     }
     kept.join("\n")
+}
+
+/// Whether a fence's `info` makes its block Rust, the only kind with hidden
+/// lines. By rustdoc's rule a fence is Rust without a token of another
+/// language, or with `rust` or a Rust attribute before the first such token.
+#[cfg(feature = "schema")]
+fn is_rust(info: &str) -> bool {
+    let (mut other, mut rust) = (false, false);
+    for token in info.split([',', ' ', '\t']).filter(|t| !t.is_empty()) {
+        let error_code = token.len() == 5
+            && token.starts_with('E')
+            && token.bytes().skip(1).all(|b| b.is_ascii_digit());
+        match token {
+            "rust" => rust = true,
+            _ if token.starts_with("edition") => {}
+            _ if RUST_FENCE.contains(&token) || token.starts_with("ignore-") || error_code => {
+                rust |= !other;
+            }
+            _ => other = true,
+        }
+    }
+    rust || !other
 }
 
 #[cfg(test)]
@@ -483,6 +500,23 @@ mod tests {
             without_hidden(text),
             "Reads a pack.\n\n```\nlet a = 1;\n```\n\n```toml\n# A comment stays.\nid = \"you.a\"\n```"
         );
+    }
+
+    #[test]
+    fn a_fence_with_an_error_code_or_a_target_hides_lines_and_another_language_does_not() {
+        for info in [
+            "compile_fail,E0428",
+            "ignore-windows",
+            "no_run,text",
+            "ignore",
+        ] {
+            let text = format!("```{info}\n# hidden\nshown\n```");
+            assert_eq!(without_hidden(&text), format!("```{info}\nshown\n```"));
+        }
+        for info in ["text", "text,no_run", "json"] {
+            let text = format!("```{info}\n# kept\n```");
+            assert_eq!(without_hidden(&text), text);
+        }
     }
 
     #[test]
