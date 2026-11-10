@@ -137,8 +137,8 @@ fn download(release: &Release, dir: &Path) -> Result<(), Error> {
         move |source| Error::Io { path, source }
     };
     std::fs::create_dir_all(dir).map_err(io(dir))?;
-    // Per process, as parallel checks or tests may download at once.
-    let pid = std::process::id();
+    // Per process and thread, as parallel checks or tests may download at once.
+    let pid = format!("{}-{:?}", std::process::id(), std::thread::current().id());
     let archive = dir.join(format!("{}.{pid}", release.asset));
     let out = Command::new("curl")
         .args(["--proto", "=https", "--tlsv1.2", "-sSfL"])
