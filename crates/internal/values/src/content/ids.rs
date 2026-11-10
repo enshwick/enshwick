@@ -703,6 +703,7 @@ pub const NAME_PART: &str = "name";
 /// The name side `<name>.<part>` of the id [`Id::try_part`] derives from
 /// the content id `id`, for an id known only at run time; `None` where
 /// [`is_id`] or [`Id::try_part`] refuses.
+#[doc(hidden)]
 #[must_use]
 pub fn part_name(id: &str, part: &str) -> Option<String> {
     let (_, name) = id.split_once(':')?;
@@ -737,6 +738,7 @@ impl core::fmt::Display for Guid {
 /// # Panics
 ///
 /// When `c` is no hex digit.
+#[doc(hidden)]
 #[must_use]
 #[expect(
     clippy::panic,

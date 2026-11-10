@@ -143,6 +143,12 @@ mod tests {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../enshwick/src")
     }
 
+    /// The source of the API crate and of the internal crates it re-exports,
+    /// whose public modules carry the API's own paths.
+    fn sources() -> [PathBuf; 2] {
+        [source(), source().join("../../internal/values/src")]
+    }
+
     fn parse(file: &Path) -> syn::File {
         let text =
             std::fs::read_to_string(file).unwrap_or_else(|e| panic!("{}: {e}", file.display()));
@@ -208,10 +214,12 @@ mod tests {
 
     impl Walk {
         fn crate_api() -> Self {
-            let root = source();
-            let lib = parse(&root.join("lib.rs"));
+            let roots = sources().map(|root| {
+                let lib = parse(&root.join("lib.rs"));
+                (root, lib)
+            });
             let mut walk = Self::default();
-            for item in &lib.items {
+            for item in roots.iter().flat_map(|(_, lib)| &lib.items) {
                 match item {
                     Item::Mod(m) if is_public(&m.vis) && !left_out(&m.attrs) => {
                         walk.public.insert(m.ident.to_string());
@@ -220,7 +228,9 @@ mod tests {
                     _ => {}
                 }
             }
-            walk.items(&lib.items, &root, "");
+            for (root, lib) in &roots {
+                walk.items(&lib.items, root, "");
+            }
             // A private module's item is public only as the root re-exports it.
             let (root, types) = (&walk.root, &walk.types);
             walk.functions.retain(|f| {
