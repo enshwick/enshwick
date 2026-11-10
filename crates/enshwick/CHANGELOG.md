@@ -22,6 +22,9 @@ Each entry names the pull request that made the change.
   reads each tag once; `vanilla::items` no longer reads the archive on each
   call, and an item registry that does not read yet is read again later
   (#1033).
+- book: the ABI test coverage chapter lists how each `HostApi` entry is
+  tested on the fake host, on a server copy and in game, and which entries
+  1.0 freezes; a test fails when an entry is missing from it (#1035).
 - `abi`: `HostApi::resource_buffer`, ABI 11.20, lends a resource patch
   bytes for its output that the loader owns: the game's first build keeps
   the last patch's output for the process, and the loader frees every other
