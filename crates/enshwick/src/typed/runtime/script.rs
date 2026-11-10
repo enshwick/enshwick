@@ -7,38 +7,13 @@
 use super::{RawComponent, RawEvent, RawResource, Role, Row};
 use crate::content::Guid;
 use crate::resources::{Registry, Resources, Value as Data};
-use crate::script::{Answer, Class, Error, FromScript, IntoScript, Ty, Typed, Value};
+#[cfg(any(test, feature = "test"))]
+use crate::script::Ty;
+use crate::script::{Class, Error, Value};
 use crate::world::World;
 use crate::{Entity, Host, Load, Off};
 
-/// A generated type's value in a script: a table by the generated item's
-/// field names, shaped by its record.
-#[derive(Clone, Debug)]
-pub(crate) struct Fields(Value);
-
-impl Typed for Fields {
-    const TY: &'static Ty = &Ty::Data;
-}
-
-impl IntoScript for Fields {
-    fn into_value(self) -> Value {
-        self.0
-    }
-}
-
-impl FromScript for Fields {
-    fn from_value(value: Value) -> Result<Self, Error> {
-        Ok(Self(value))
-    }
-}
-
-impl Answer for Result<Fields, Error> {
-    const TY: &'static Ty = &Ty::Data;
-
-    fn from_answer(answer: Result<Value, Error>) -> Self {
-        answer.map(Fields)
-    }
-}
+pub(crate) use crate::script::convert::Fields;
 
 /// `value`, of `ty`, with each record a table by its fields' names, as a
 /// script holds game data: the compiled path the tests hold every shape to.
@@ -422,6 +397,7 @@ impl Load<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::script::{FromScript, IntoScript, Typed};
     use crate::typed::runtime::{Compiled, Shaped, reflected_enum, reflected_struct};
 
     reflected_enum! {

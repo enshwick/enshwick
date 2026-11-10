@@ -590,6 +590,7 @@ dependencies = [
  "const-sha1",
  "const_format",
  "enshwick-macros",
+ "rustc-hash",
  "serde",
  "thiserror",
 ]

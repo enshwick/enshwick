@@ -72,4 +72,38 @@
 /// let off = enshwick::Off::text("stalls.min", &[("min", "2")]);
 /// assert_eq!(off.to_string(), "stalls.min (min = 2)");
 /// ```
+///
+/// `script::Function`:
+///
+/// ```rust,standalone_crate
+/// use enshwick::script::{Bound, Value};
+///
+/// #[derive(Clone, Copy, Debug)]
+/// pub struct Dice;
+///
+/// #[enshwick::script(rolls)]
+/// impl Dice {
+///     /// The sum of `count` dice of six sides, all showing four.
+///     #[script]
+///     pub fn roll(self, count: u32) -> u32 {
+///         count * 4
+///     }
+/// }
+///
+/// impl Bound for Dice {
+///     const NAME: &'static str = "dice";
+///     const DOC: &'static str = "Dice.";
+///     const PARTS: &'static [&'static [enshwick::script::Function<Self>]] = &[Self::SCRIPT_ROLLS];
+///
+///     fn resolve(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
+///         Ok(Self)
+///     }
+/// }
+///
+/// let roll = &Dice::SCRIPT_ROLLS[0];
+/// assert_eq!(roll.name(), "roll");
+/// assert_eq!(roll.signature().params()[0].name(), "count");
+/// let Ok(Value::Number(sum)) = roll.call(&Dice, &mut [Value::Number(2.0)]) else { unreachable!() };
+/// assert_eq!(sum, 8.0);
+/// ```
 mod values {}

@@ -44,27 +44,6 @@ impl FromScript for ItemCategoryMask {
     }
 }
 
-impl Typed for &'static [u8] {
-    const TY: &'static Ty = &Ty::Bytes;
-}
-
-impl IntoScript for &'static [u8] {
-    fn into_value(self) -> Value {
-        Value::Bytes(self.to_vec())
-    }
-}
-
-impl FromScript for &'static [u8] {
-    fn from_value(value: Value) -> Result<Self, Error> {
-        let Value::Bytes(bytes) = value else {
-            return Err(Error::new("expected a buffer"));
-        };
-        // shortcut: an icon's PNG from a script lives for the process, as an
-        // embedded one does; icons are few and given while the mod starts.
-        Ok(Box::leak(bytes.into_boxed_slice()))
-    }
-}
-
 impl Typed for RecipeView<'_> {
     const TY: &'static Ty = &Ty::Record(&Record::new(
         "RecipeView",

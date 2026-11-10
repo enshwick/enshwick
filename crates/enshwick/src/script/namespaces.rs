@@ -77,7 +77,7 @@ impl Opened {
     ///
     /// See [`Namespace::open`].
     pub fn call(&self, function: &Declared, args: &mut [Value]) -> Result<Value, Error> {
-        (self.0)(function.index, args)
+        (self.0)(function.index(), args)
     }
 }
 

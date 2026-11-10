@@ -310,11 +310,11 @@ macro_rules! keys {
 }
 
 /// The largest whole number a script number holds exactly, 2^53.
-pub(crate) const EXACT: u64 = 1 << 53;
+pub const EXACT: u64 = 1 << 53;
 
 /// [`EXACT`] as a script number.
 #[expect(clippy::cast_precision_loss, reason = "2^53 converts exactly")]
-pub(crate) const EXACT_NUMBER: f64 = EXACT as f64;
+pub const EXACT_NUMBER: f64 = EXACT as f64;
 
 keys!(u64, i64);
 
@@ -519,6 +519,57 @@ impl Answer for ControlFlow<()> {
             Ok(Value::Bool(false)) | Err(_) => Self::Break(()),
             Ok(_) => Self::Continue(()),
         }
+    }
+}
+
+impl Typed for &'static [u8] {
+    const TY: &'static Ty = &Ty::Bytes;
+}
+
+impl IntoScript for &'static [u8] {
+    fn into_value(self) -> Value {
+        Value::Bytes(self.to_vec())
+    }
+}
+
+impl FromScript for &'static [u8] {
+    fn from_value(value: Value) -> Result<Self, Error> {
+        let Value::Bytes(bytes) = value else {
+            return Err(Error::new("expected a buffer"));
+        };
+        // shortcut: an icon's PNG from a script lives for the process, as an
+        // embedded one does; icons are few and given while the mod starts.
+        Ok(Box::leak(bytes.into_boxed_slice()))
+    }
+}
+
+/// A generated type's value in a script: a table by the generated item's
+/// field names, shaped by its record.
+#[doc(hidden)]
+#[derive(Clone, Debug)]
+pub struct Fields(pub Value);
+
+impl Typed for Fields {
+    const TY: &'static Ty = &Ty::Data;
+}
+
+impl IntoScript for Fields {
+    fn into_value(self) -> Value {
+        self.0
+    }
+}
+
+impl FromScript for Fields {
+    fn from_value(value: Value) -> Result<Self, Error> {
+        Ok(Self(value))
+    }
+}
+
+impl Answer for Result<Fields, Error> {
+    const TY: &'static Ty = &Ty::Data;
+
+    fn from_answer(answer: Result<Value, Error>) -> Self {
+        answer.map(Fields)
     }
 }
 
