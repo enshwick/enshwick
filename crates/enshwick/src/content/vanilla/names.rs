@@ -90,11 +90,30 @@ pub fn recipes() -> Result<Vec<VanillaRecipe>, VanillaError> {
     game()?.recipes()
 }
 
+/// A name the game shows for an item, with its lower case, which a lookup
+/// compares, made once.
+#[derive(Clone, Debug)]
+struct Shown {
+    guid: Guid,
+    text: String,
+    lower: String,
+}
+
+impl Shown {
+    fn new(guid: Guid, text: &str) -> Self {
+        Self {
+            guid,
+            text: text.to_owned(),
+            lower: text.to_lowercase(),
+        }
+    }
+}
+
 /// Each vanilla item with each name the game shows for it, in every
 /// language the game ships, kept once they read. On a dedicated server
 /// they never do: only a client's archive holds the game's texts.
-fn shown_names() -> Result<&'static [(Guid, String)], VanillaError> {
-    static SHOWN: crate::fresh::Fresh<Vec<(Guid, String)>> = crate::fresh::Fresh::new();
+fn shown_names() -> Result<&'static [Shown], VanillaError> {
+    static SHOWN: crate::fresh::Fresh<Vec<Shown>> = crate::fresh::Fresh::new();
     if let Some(shown) = SHOWN.get() {
         return Ok(shown);
     }
@@ -103,7 +122,7 @@ fn shown_names() -> Result<&'static [(Guid, String)], VanillaError> {
     if host.build().side == crate::abi::Side::SERVER {
         return Err(no_texts);
     }
-    let mut shown: Vec<(Guid, String)> = Vec::new();
+    let mut shown: Vec<Shown> = Vec::new();
     for item in items()? {
         let Some(tag) = item.name_tag else { continue };
         let from = shown.len();
@@ -111,8 +130,8 @@ fn shown_names() -> Result<&'static [(Guid, String)], VanillaError> {
             let Some(text) = host.game_text(tag.fnv1a(), language) else {
                 continue;
             };
-            if !text.is_empty() && shown[from..].iter().all(|(_, known)| known != text) {
-                shown.push((item.guid, text.to_owned()));
+            if !text.is_empty() && shown[from..].iter().all(|known| known.text != text) {
+                shown.push(Shown::new(item.guid, text));
             }
         }
     }
@@ -124,19 +143,19 @@ fn shown_names() -> Result<&'static [(Guid, String)], VanillaError> {
 
 /// The vanilla item `name` is among `shown`, each item with a name the
 /// game shows for it, whatever the case.
-fn by_shown_name(shown: &[(Guid, String)], name: &str) -> Result<Guid, VanillaError> {
+fn by_shown_name(shown: &[Shown], name: &str) -> Result<Guid, VanillaError> {
     let wanted = name.to_lowercase();
     let mut found: Vec<Guid> = shown
         .iter()
-        .filter(|(_, text)| text.to_lowercase() == wanted)
-        .map(|(guid, _)| *guid)
+        .filter(|shown| shown.lower == wanted)
+        .map(|shown| shown.guid)
         .collect();
     found.sort_unstable_by_key(|guid| guid.0);
     found.dedup();
     match found.as_slice() {
         [one] => Ok(*one),
         [] => {
-            let mut texts: Vec<&str> = shown.iter().map(|(_, text)| text.as_str()).collect();
+            let mut texts: Vec<&str> = shown.iter().map(|shown| shown.text.as_str()).collect();
             texts.sort_unstable();
             texts.dedup();
             let near = crate::near::near(name, texts, NEAR);
@@ -208,18 +227,20 @@ impl Vanilla {
     /// See [`recipes`].
     pub fn recipes(&self) -> Result<Vec<VanillaRecipe>, VanillaError> {
         let recipes = self.recipe_list()?;
-        let mut list: Vec<VanillaRecipe> = recipes
+        let names: rustc_hash::FxHashMap<Guid, &String> = recipes
             .names
             .iter()
             .flat_map(|(name, guids)| guids.iter().map(move |guid| (*guid, name)))
-            .map(|(guid, name)| VanillaRecipe {
-                guid,
-                name: name.clone(),
-                output: recipes
-                    .made
-                    .iter()
-                    .find(|(made, _)| *made == guid)
-                    .and_then(|(_, output)| *output),
+            .collect();
+        let mut list: Vec<VanillaRecipe> = recipes
+            .made
+            .iter()
+            .filter_map(|(guid, output)| {
+                Some(VanillaRecipe {
+                    guid: *guid,
+                    name: (*names.get(guid)?).clone(),
+                    output: *output,
+                })
             })
             .collect();
         list.sort_unstable_by(|a, b| (&a.name, a.guid.0).cmp(&(&b.name, b.guid.0)));
@@ -235,11 +256,11 @@ mod tests {
     fn an_item_is_found_by_a_shown_name_whatever_the_case_or_named_as_unknown_or_ambiguous() {
         let (glider, cape, cloak) = (Guid([1; 16]), Guid([2; 16]), Guid([3; 16]));
         let shown = vec![
-            (glider, "Glider".to_owned()),
-            (glider, "Планер".to_owned()),
-            (cape, "Cape".to_owned()),
-            (cloak, "Cape".to_owned()),
-            (cape, "Плащ".to_owned()),
+            Shown::new(glider, "Glider"),
+            Shown::new(glider, "Планер"),
+            Shown::new(cape, "Cape"),
+            Shown::new(cloak, "Cape"),
+            Shown::new(cape, "Плащ"),
         ];
         assert_eq!(by_shown_name(&shown, "glider"), Ok(glider));
         assert_eq!(by_shown_name(&shown, "ПЛАНЕР"), Ok(glider));
@@ -271,8 +292,8 @@ mod tests {
             "a name two items share is suggested once"
         );
         let mut crowded = shown.clone();
-        crowded.extend((4..9).map(|n| (Guid([n; 16]), "Cape".to_owned())));
-        crowded.push((Guid([9; 16]), "Capelin".to_owned()));
+        crowded.extend((4..9).map(|n| Shown::new(Guid([n; 16]), "Cape")));
+        crowded.push(Shown::new(Guid([9; 16]), "Capelin"));
         assert_eq!(
             by_shown_name(&crowded, "cap"),
             Err(VanillaError::Unknown {

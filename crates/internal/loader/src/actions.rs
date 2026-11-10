@@ -285,10 +285,10 @@ pub(crate) fn language_of(key: u64) -> u32 {
 }
 
 /// Tells mod `owner` that the client of account `key` closed its window
-/// `window`, or with an empty `window` that the player left; nothing for a
-/// mod that is off or declared no actions. The mod gets the key alone,
-/// since the player may be gone.
-pub(crate) fn window_closed(loader: &Loader, owner: ModIndex, key: u64, window: &str) {
+/// `window`, or with no window that the player left; nothing for a mod
+/// that is off or declared no actions. The mod gets the key alone, since
+/// the player may be gone.
+pub(crate) fn window_closed(loader: &Loader, owner: ModIndex, key: u64, window: Option<&str>) {
     let Some(registered) = running(loader).into_iter().find(|r| r.owner == owner) else {
         return;
     };
@@ -306,7 +306,7 @@ pub(crate) fn window_closed(loader: &Loader, owner: ModIndex, key: u64, window: 
         ActionCall::WINDOW_CLOSED,
         &who,
         0,
-        (window, "", ""),
+        (window.unwrap_or(""), "", ""),
         ActionTarget::NONE,
     );
 }

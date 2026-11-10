@@ -6,10 +6,9 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use enshwick::abi::{ActionCall, CommandInfo, Header, Status, Str};
 
-use super::{
-    MAX_LINE, Named, Refusal, Reply, Typed, check, messages, parse, remote_caller, reply_by, typed,
-    word,
-};
+use enshwick::command_names::check;
+
+use super::{MAX_LINE, Named, Refusal, Reply, Typed, parse, remote_caller, reply_by, typed, word};
 use crate::host::Loader;
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -60,7 +59,12 @@ static STATE: State = State {
 /// mod's commands run by their name alone. A name another mod's commands
 /// have turns off only this mod's commands, reported the same way.
 pub(crate) fn register(loader: &Loader, owner: ModIndex, alias: &str) -> Status {
-    let ids: Vec<&str> = loader.mods.iter().map(|m| m.id.as_str()).collect();
+    let ids: Vec<(ModIndex, &str)> = loader
+        .mods
+        .iter()
+        .enumerate()
+        .map(|(index, m)| (ModIndex::new(index), m.id.as_str()))
+        .collect();
     let checked = NAMED.edit(|named| {
         check(named, &ids, owner, alias).map(|(granted, holder)| {
             let name = granted.name.clone();
@@ -68,7 +72,7 @@ pub(crate) fn register(loader: &Loader, owner: ModIndex, alias: &str) -> Status 
             (name, holder)
         })
     });
-    let id = |index: ModIndex| ids.get(index.get()).copied().unwrap_or("");
+    let id = |index: ModIndex| ids.get(index.get()).map_or("", |(_, id)| *id);
     match checked {
         Err(sealed) => sealed.into(),
         Ok(Ok((name, holder))) => {
@@ -221,9 +225,7 @@ pub(crate) fn after_step(loader: &Loader) {
         );
         match reply_by(text, reply.done, crate::chat::to_one_player()) {
             Reply::Chat(text) => {
-                for message in messages(text, crate::chat::LINES_PER_REPLY) {
-                    let _queued = crate::chat::send(command.key, &message);
-                }
+                let _queued = crate::chat::reply(command.key, text);
             }
             Reply::Notice(text) => crate::actions::tell(loader, command.key, &text),
             Reply::None => {}

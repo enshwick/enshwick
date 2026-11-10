@@ -318,6 +318,13 @@ mod tests {
             Some("0No action dance; help lists them."),
             "a loader that does not tell the word"
         );
+        assert_eq!(
+            loader
+                .ask_actions(ActionCall::RUN, &ann, 0, "dance", "")
+                .as_deref(),
+            Some("0No action dance; help lists them."),
+            "a run from the interface names no command"
+        );
         assert!(runs().is_empty());
     }
 

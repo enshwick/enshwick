@@ -7,11 +7,13 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use enshwick::PlayerKey;
 use enshwick::abi::{Side, Status};
 
-use super::{Change, Held, MAX_PLAYERS, Told, Waiting, holds, merged, message, note, queue};
+use super::{
+    Change, Held, MAX_PLAYERS, Told, Waiting, close_told, heard, holds, merged, message, note,
+    queue,
+};
 use crate::host::Loader;
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
-use crate::remote::Message;
 
 /// The windows' state on the server.
 struct Windows {
@@ -23,9 +25,6 @@ struct Windows {
     held: Mutex<Held>,
     /// Closes and leaves the mods hear after the step.
     told: Mutex<Vec<Told>>,
-    /// Set once a mod showed a window, so a server without windows queues
-    /// nothing when a player leaves.
-    shown: AtomicBool,
     /// Set once the log named a window past the bound, so a mod that shows
     /// one again and again fills no log.
     warned: AtomicBool,
@@ -36,7 +35,6 @@ static WINDOWS: Windows = Windows {
     any: AtomicBool::new(false),
     held: Mutex::new(Vec::new()),
     told: Mutex::new(Vec::new()),
-    shown: AtomicBool::new(false),
     warned: AtomicBool::new(false),
 };
 
@@ -79,7 +77,6 @@ pub(crate) fn show(
         change,
     });
     if wait(more) {
-        WINDOWS.shown.store(true, Ordering::Release);
         Status::OK
     } else {
         Status::REFUSED
@@ -106,13 +103,9 @@ pub(crate) fn ran(owner: ModIndex, key: u64) {
     }
 }
 
-/// Queues `told` for the mods to hear after the step, once a mod showed a
-/// window; past the bound it is dropped, and the mod keeps that window
-/// until its own bound lets it go.
+/// Queues `told` for the mods to hear after the step; past the bound it is
+/// dropped, and the mod keeps that window until its own bound lets it go.
 fn tell(told: Told) {
-    if !WINDOWS.shown.load(Ordering::Acquire) {
-        return;
-    }
     if queue(&mut WINDOWS.told.relock(), core::iter::once(told)) {
         WINDOWS.any.store(true, Ordering::Release);
     }
@@ -120,20 +113,20 @@ fn tell(told: Told) {
 
 /// Player `key`'s client closed mod `id`'s window `window`: the server
 /// renders it for them no more, until the mod shows it again, and the mod
-/// hears of it after the step.
-pub(crate) fn closed(loader: &Loader, key: u64, id: String, window: String) {
-    if let Some((index, _)) = loader.find_mod(&id) {
-        let owner = ModIndex::new(index);
-        let close = Message::WindowClose {
-            id,
-            window: window.clone(),
-        };
-        note(&mut WINDOWS.held.relock(), key, owner, &close);
-        tell(Told {
-            key,
-            owner: Some(owner),
-            window,
-        });
+/// hears of it after the step. A close of a window the client does not
+/// hold is dropped: the message is the client's own, at no rate.
+pub(crate) fn closed(loader: &Loader, key: u64, id: &str, window: String) {
+    let Some((index, _)) = loader.find_mod(id) else {
+        return;
+    };
+    let told = close_told(
+        &mut WINDOWS.held.relock(),
+        key,
+        ModIndex::new(index),
+        window,
+    );
+    if let Some(told) = told {
+        tell(told);
     }
 }
 
@@ -141,11 +134,7 @@ pub(crate) fn closed(loader: &Loader, key: u64, id: String, window: String) {
 /// the mods hear of it after the step.
 pub(crate) fn left(key: u64) {
     WINDOWS.held.relock().retain(|(k, _, _)| *k != key);
-    tell(Told {
-        key,
-        owner: None,
-        window: String::new(),
-    });
+    tell(Told::Left { key });
 }
 
 /// Tells the mods what `told` holds: a window's mod of its close, and
@@ -155,16 +144,28 @@ fn tell_mods(loader: &Loader, told: Vec<Told>) {
         return;
     }
     let declaring = crate::actions::declaring(loader);
-    for Told { key, owner, window } in told {
-        match owner {
-            Some(owner) => crate::actions::window_closed(loader, owner, key, &window),
-            None => {
+    for told in told {
+        match told {
+            Told::Closed { key, owner, window } => {
+                crate::actions::window_closed(loader, owner, key, Some(&window));
+            }
+            Told::Left { key } => {
                 for &owner in &declaring {
-                    crate::actions::window_closed(loader, owner, key, "");
+                    crate::actions::window_closed(loader, owner, key, None);
                 }
             }
         }
     }
+}
+
+/// What waits for the step, out of its locks, so a mod told of a close or
+/// a leave may show a window, and the game may remove a player, while the
+/// mods hear: the closes and leaves [`heard`] keeps, and the merged
+/// changes.
+fn taken() -> (Vec<Told>, Vec<Waiting>) {
+    let told = core::mem::take(&mut *WINDOWS.told.relock());
+    let waiting = merged(core::mem::take(&mut *WINDOWS.waiting.relock()));
+    (heard(told, &waiting), waiting)
 }
 
 /// On the server's game thread after its step: tells the mods of the
@@ -174,13 +175,14 @@ fn tell_mods(loader: &Loader, told: Vec<Told>) {
 /// mod renders nothing for them. An update goes only to a client that
 /// holds the window. A player not online is skipped, and so is one whose
 /// client takes no messages, as one without Enshwick: the mod renders
-/// nothing for it and the server notes nothing as held.
+/// nothing for it and the server notes nothing as held. A window a client
+/// lets go for a newer one is told to its mod after the next step.
 pub(crate) fn after_step(loader: &Loader) {
     if !WINDOWS.any.swap(false, Ordering::AcqRel) {
         return;
     }
-    tell_mods(loader, core::mem::take(&mut *WINDOWS.told.relock()));
-    let waiting = core::mem::take(&mut *WINDOWS.waiting.relock());
+    let (told, waiting) = taken();
+    tell_mods(loader, told);
     if waiting.is_empty() {
         return;
     }
@@ -190,7 +192,7 @@ pub(crate) fn after_step(loader: &Loader) {
         window,
         key,
         change,
-    } in merged(waiting)
+    } in waiting
     {
         let Some(record) = loader.mods.get(owner.get()) else {
             continue;
@@ -222,7 +224,10 @@ pub(crate) fn after_step(loader: &Loader) {
         }
         let message = message(&record.id, window, change == Change::Show, text);
         if crate::net::to_player(key, &message) {
-            note(&mut WINDOWS.held.relock(), key, owner, &message);
+            let let_go = note(&mut WINDOWS.held.relock(), key, owner, &message);
+            if let Some(told) = let_go {
+                tell(told);
+            }
         } else {
             crate::log!(
                 DEBUG,
@@ -240,7 +245,6 @@ pub(crate) fn forget() {
     WINDOWS.told.relock().clear();
     WINDOWS.any.store(false, Ordering::Release);
     WINDOWS.held.relock().clear();
-    WINDOWS.shown.store(false, Ordering::Release);
     WINDOWS.warned.store(false, Ordering::Relaxed);
 }
 
@@ -277,24 +281,45 @@ mod tests {
 
         left(7);
         assert_eq!(*WINDOWS.held.relock(), [(8, mine, "panel".to_owned())]);
-        assert!(
-            WINDOWS.told.relock().is_empty(),
-            "no mod showed a window yet, so none hears of a leave"
+        assert_eq!(
+            *WINDOWS.told.relock(),
+            [Told::Left { key: 7 }],
+            "a leave is told whether or not a mod showed a window"
         );
-        WINDOWS.shown.store(true, Ordering::Release);
-        left(8);
-        let gone = Told {
-            key: 8,
-            owner: None,
-            window: String::new(),
-        };
-        assert_eq!(*WINDOWS.told.relock(), [gone]);
         assert!(
             WINDOWS.any.load(Ordering::Acquire),
             "the step tells the mods"
         );
         forget();
         assert!(WINDOWS.told.relock().is_empty() && WINDOWS.held.relock().is_empty());
-        assert!(!WINDOWS.shown.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn what_waits_is_taken_out_of_its_locks_so_a_mod_told_of_it_may_queue_more() {
+        let mine = ModIndex::new(0);
+        let show = |key| Waiting {
+            owner: mine,
+            window: "panel".into(),
+            key,
+            change: Change::Show,
+        };
+        let closed = |key| Told::Closed {
+            key,
+            owner: mine,
+            window: "panel".into(),
+        };
+        tell(closed(7));
+        tell(closed(8));
+        assert!(wait(core::iter::once(show(7))));
+
+        let (told, waiting) = taken();
+        assert_eq!(told, [closed(8)], "7 is shown the window again");
+        assert_eq!(waiting, [show(7)]);
+        // As a mod's handler does while it hears: the game removes a player
+        // it kicked, and it shows a window.
+        left(9);
+        assert!(wait(core::iter::once(show(8))));
+        assert_eq!(*WINDOWS.told.relock(), [Told::Left { key: 9 }]);
+        assert_eq!(*WINDOWS.waiting.relock(), [show(8)]);
     }
 }

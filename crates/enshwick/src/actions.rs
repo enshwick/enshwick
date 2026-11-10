@@ -633,7 +633,12 @@ impl Actions {
             return Ok(());
         }
         crate::load::ok(status, (), || {
-            format!("commands, alias /{alias}, which must be shorter than the mod's name")
+            let rule = if status == crate::abi::Status::BAD_ARGS {
+                ", which must be shorter than the mod's name, itself neither enshwick nor help"
+            } else {
+                ""
+            };
+            format!("commands, alias /{alias}{rule}")
         })
     }
 
@@ -825,7 +830,9 @@ impl Actions {
 
     /// Calls `closed` on the server's game thread when a player's client
     /// closed one of the mod's windows, with the window's id, or when a
-    /// player left, with `None` for every window they held. The mod has
+    /// player left, with `None` for every window they held. A client keeps
+    /// eight windows of all mods: a ninth lets the oldest go, which its mod
+    /// hears as closed. The mod has
     /// forgotten those windows by then; a mod that keeps state of its own
     /// for a window frees it here. One function at a time: a second call
     /// replaces the first.

@@ -48,7 +48,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 /// when it fills.
 const LINES_PER_DRAIN: usize = 16;
 /// Lines one reply may have.
-pub(crate) const LINES_PER_REPLY: usize = 16;
+const LINES_PER_REPLY: usize = 16;
 /// Lines waiting at most; more are dropped.
 const MAX_WAITING: usize = 256;
 /// The result the game's chat post writes on success.
@@ -192,7 +192,19 @@ pub(crate) fn send(to: u64, text: &str) -> Status {
         return Status::MISSING;
     }
     let to = if to == 0 { To::All } else { To::Key(to) };
-    queue(to, text);
+    queue(to, replied(text));
+    Status::OK
+}
+
+/// Queues every line of `text` for the player with account key `to` alone:
+/// the reply to a command they typed, which may be longer than the one
+/// message a mod sends, so a long help arrives whole; the outbox bounds
+/// what waits.
+pub(crate) fn reply(to: u64, text: &str) -> Status {
+    if LOADED.get().is_none() {
+        return Status::MISSING;
+    }
+    queue(To::Key(to), shown(text));
     Status::OK
 }
 
@@ -229,10 +241,10 @@ fn cut(text: &str, max: usize) -> &str {
     &text[..end]
 }
 
-/// Queues the lines of `text`, a mod's message.
-fn queue(to: To, text: &str) {
+/// Queues `lines`, each a chat line.
+fn queue<'a>(to: To, lines: impl Iterator<Item = &'a str>) {
     let mut outbox = OUTBOX.relock();
-    for line in replied(text) {
+    for line in lines {
         let line = Line {
             to,
             text: line.to_owned(),
@@ -244,12 +256,15 @@ fn queue(to: To, text: &str) {
     WAITING.store(!outbox.is_empty(), Ordering::Release);
 }
 
-/// The lines of `text` the chat shows: none empty, at most
+/// The lines of `text` the chat shows: none empty.
+fn shown(text: &str) -> impl Iterator<Item = &str> {
+    text.lines().filter(|l| !l.trim().is_empty())
+}
+
+/// The lines of a mod's message `text` the chat shows, at most
 /// [`LINES_PER_REPLY`].
 fn replied(text: &str) -> impl Iterator<Item = &str> {
-    text.lines()
-        .filter(|l| !l.trim().is_empty())
-        .take(LINES_PER_REPLY)
+    shown(text).take(LINES_PER_REPLY)
 }
 
 /// Links the chat post on the server; without it mods' chat lines and the
@@ -898,6 +913,11 @@ mod tests {
             ["said: hi", "/enshwick ok"]
         );
         assert_eq!(replied(&"x\n".repeat(40)).count(), LINES_PER_REPLY);
+        assert_eq!(
+            shown(&"x\n\n".repeat(40)).count(),
+            40,
+            "the reply to a typed command keeps every line"
+        );
     }
 
     #[test]

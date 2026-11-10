@@ -24,100 +24,11 @@ pub use enshwick::commands::MAX_LINE;
 /// Every permission bit the game gives, for the console's full rights.
 pub const ALL_PERMISSIONS: u8 = enshwick::world::PlayerPermissions::ALL_BITS;
 
-/// A mod's command name and alias.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Named {
-    /// The mod that named them.
-    pub owner: ModIndex,
-    /// The full name, `admin-tools` in `/admin-tools online`: the part of
-    /// the mod's id after the author.
-    pub name: String,
-    /// The shorter alias, `adm` in `/adm online`; `None` when another mod
-    /// held the word first.
-    pub alias: Option<String>,
-}
-
-impl Named {
-    /// Whether `word` is the name or the alias, whatever its case.
-    fn is_called(&self, word: &str) -> bool {
-        self.name.eq_ignore_ascii_case(word)
-            || self
-                .alias
-                .as_deref()
-                .is_some_and(|alias| alias.eq_ignore_ascii_case(word))
-    }
-
-    /// The words that run the commands, each after its `/`.
-    #[must_use]
-    pub fn words(&self) -> String {
-        match &self.alias {
-            Some(alias) => format!("/{} /{alias}", self.name),
-            None => format!("/{}", self.name),
-        }
-    }
-}
-
+/// A mod's command name and alias, as the one rule of
+/// [`enshwick::command_names`] grants them.
+pub type Named = enshwick::command_names::Named<ModIndex>;
 /// Why a mod's commands are refused.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Refusal {
-    /// A malformed or reserved alias, an alias not shorter than the name, or
-    /// a mod whose own name is reserved.
-    Malformed,
-    /// The mod named its commands before.
-    Twice,
-    /// Another mod's commands have the same name.
-    Taken(ModIndex),
-}
-
-/// The command names mod `owner` gets for the alias it asks, and the mod
-/// that holds that alias, if one does.
-///
-/// They are checked against the reserved words, the mods' ids (`ids`, by
-/// mod index) and the names in `named`: the name is the part of the mod's
-/// id after the author, and the alias is its own unless another mod's
-/// commands, name or id hold the word.
-///
-/// An alias never takes the name of another mod, whether that mod names
-/// commands or not, so a mod's full name always reaches it.
-///
-/// # Errors
-///
-/// [`Refusal`] with why the mod gets no commands.
-pub fn check(
-    named: &[Named],
-    ids: &[&str],
-    owner: ModIndex,
-    alias: &str,
-) -> Result<(Named, Option<ModIndex>), Refusal> {
-    use enshwick::commands::{is_alias, is_reserved, name_of};
-
-    let name = ids.get(owner.get()).copied().map_or("", name_of);
-    if name.is_empty() || is_reserved(name) || !is_alias(alias) || alias.len() >= name.len() {
-        return Err(Refusal::Malformed);
-    }
-    if named.iter().any(|n| n.owner == owner) {
-        return Err(Refusal::Twice);
-    }
-    if let Some(n) = named.iter().find(|n| n.is_called(name)) {
-        return Err(Refusal::Taken(n.owner));
-    }
-    let holder = named
-        .iter()
-        .find(|n| n.is_called(alias))
-        .map(|n| n.owner)
-        .or_else(|| {
-            ids.iter()
-                .enumerate()
-                .find(|&(i, id)| i != owner.get() && (*id == alias || name_of(id) == alias))
-                .map(|(i, _)| ModIndex::new(i))
-        });
-    let granted = Named {
-        owner,
-        name: name.to_owned(),
-        alias: holder.is_none().then(|| alias.to_owned()),
-    };
-    Ok((granted, holder))
-}
+pub type Refusal = enshwick::command_names::Refusal<ModIndex>;
 
 /// The first word of `line` and the rest, trimmed.
 fn split(line: &str) -> (&str, &str) {
@@ -178,7 +89,7 @@ pub enum Reply<'a> {
     None,
     /// One notice.
     Notice(std::borrow::Cow<'a, str>),
-    /// Several lines in chat, to that player alone.
+    /// Several lines in chat, to that player alone, however many.
     Chat(&'a str),
 }
 
@@ -198,20 +109,6 @@ pub fn reply_by(text: &str, done: bool, chat_to_one: bool) -> Reply<'_> {
     } else {
         Reply::Notice(text.lines().collect::<Vec<_>>().join(" / ").into())
     }
-}
-
-/// The chat messages a reply of several lines goes as, each of at most
-/// `most` lines.
-///
-/// The chat cuts one message there, so a long help reaches the player
-/// whole.
-#[must_use]
-pub fn messages(text: &str, most: usize) -> Vec<String> {
-    let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
-    lines
-        .chunks(most.max(1))
-        .map(|part| part.join("\n"))
-        .collect()
 }
 
 /// The remote caller `label` with the game's permission bits
@@ -243,84 +140,6 @@ mod tests {
             name: name.to_owned(),
             alias: Some(alias.to_owned()).filter(|alias| !alias.is_empty()),
         }
-    }
-
-    #[test]
-    fn a_mod_s_commands_take_the_name_in_its_id_and_the_alias_it_asks() {
-        let ids = ["you.admin-tools", "you.weather", "sky"];
-        let me = ModIndex::new(0);
-        assert_eq!(
-            check(&[], &ids, me, "adm"),
-            Ok((named(0, "admin-tools", "adm"), None))
-        );
-        assert_eq!(
-            check(&[], &ids, ModIndex::new(2), "s"),
-            Ok((named(2, "sky", "s"), None)),
-            "an id without an author names itself"
-        );
-        let long = "x".repeat(33);
-        for alias in [
-            "Adm",
-            "a b",
-            "",
-            "enshwick",
-            "help",
-            "admin-tools",
-            "admin-tools-x",
-            long.as_str(),
-        ] {
-            assert_eq!(
-                check(&[], &ids, me, alias),
-                Err(Refusal::Malformed),
-                "{alias}"
-            );
-        }
-        assert_eq!(
-            check(&[], &["you.help"], me, "h"),
-            Err(Refusal::Malformed),
-            "a mod named by a reserved word has no commands"
-        );
-        assert_eq!(
-            check(&[], &ids, ModIndex::new(9), "adm"),
-            Err(Refusal::Malformed),
-            "no such mod"
-        );
-    }
-
-    #[test]
-    fn an_alias_goes_to_the_mod_that_held_the_word_first_and_the_name_stays() {
-        let ids = ["you.admin-tools", "you.weather", "sky", "they.wx"];
-        let me = ModIndex::new(0);
-        let held = |by: usize| Ok((named(0, "admin-tools", ""), Some(ModIndex::new(by))));
-        let taken = [named(1, "weather", "wx")];
-        assert_eq!(check(&taken, &ids, me, "wx"), held(1), "another's alias");
-        assert_eq!(check(&[], &ids, me, "weather"), held(1), "another's name");
-        assert_eq!(check(&[], &ids, me, "sky"), held(2), "another's whole id");
-        assert_eq!(
-            check(&[], &ids, ModIndex::new(1), "wx"),
-            Ok((named(1, "weather", ""), Some(ModIndex::new(3)))),
-            "the name of a mod that names no commands is still its own"
-        );
-        assert_eq!(
-            check(&taken, &ids, ModIndex::new(1), "wi"),
-            Err(Refusal::Twice)
-        );
-    }
-
-    #[test]
-    fn two_mods_of_one_name_leave_the_commands_to_the_first() {
-        let ids = ["you.tools", "they.tools"];
-        let first = check(&[], &ids, ModIndex::new(0), "t").unwrap().0;
-        assert_eq!(
-            check(&[first], &ids, ModIndex::new(1), "to"),
-            Err(Refusal::Taken(ModIndex::new(0)))
-        );
-    }
-
-    #[test]
-    fn the_words_of_a_command_set_are_its_name_and_its_alias_if_it_has_one() {
-        assert_eq!(named(0, "admin-tools", "adm").words(), "/admin-tools /adm");
-        assert_eq!(named(0, "admin-tools", "").words(), "/admin-tools");
     }
 
     #[test]
@@ -380,20 +199,6 @@ mod tests {
             Reply::Notice(unknown.into()),
             "as a notice while lines to one player are off"
         );
-    }
-
-    #[test]
-    fn a_reply_longer_than_one_chat_message_goes_as_several() {
-        let help: Vec<String> = (1..=5).map(|n| format!("line {n}")).collect();
-        let text = format!("{}\n\n{}", help[..3].join("\n"), help[3..].join("\n"));
-        assert_eq!(
-            messages(&text, 2),
-            ["line 1\nline 2", "line 3\nline 4", "line 5"],
-            "empty lines, which the chat drops, fill no message"
-        );
-        assert_eq!(messages(&text, 5), [help.join("\n")]);
-        assert_eq!(messages("one", 0), ["one"]);
-        assert!(messages(" \n", 4).is_empty());
     }
 
     #[test]

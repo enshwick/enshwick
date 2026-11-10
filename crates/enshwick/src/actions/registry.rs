@@ -711,7 +711,11 @@ impl Registry {
     ) -> Outcome {
         let declared = self.declared();
         match declared.iter().find(|d| d.action.id == id) {
-            None => Outcome::refused(self.say("actions.unknown", language, &[("word", id)])),
+            None => Outcome::refused(self.say(
+                "actions.unknown",
+                language,
+                &[("word", id), ("help", "help")],
+            )),
             Some(d) if !Self::allowed(d, player) => {
                 Outcome::refused(self.say("actions.denied", language, &[]))
             }

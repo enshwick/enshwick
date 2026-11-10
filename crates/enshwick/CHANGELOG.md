@@ -67,8 +67,9 @@ Each entry names the pull request that made the change.
   Luau `with_self` (#1027).
 - `actions`: `Actions::update` puts a window in place of the one of its id
   only on the clients that still show it and opens it for no one, and
-  `Actions::on_closed` tells the mod when a client closed a window or its
-  player left; the mod forgets such a window by itself; Luau
+  `Actions::on_closed` tells the mod when a client closed a window, let
+  its oldest go for a ninth, or its player left; the mod forgets such a
+  window by itself; Luau
   `actions:update` and `actions:on_closed` (#1027).
 - `abi`: ABI 11.23. `ActionCall::word` is the word that named the mod in a
   typed line, so its help and refusals name the command as typed;
@@ -108,8 +109,8 @@ Each entry names the pull request that made the change.
   groups the mod names. An unknown action is refused with the closest ids
   the caller may run and how to list them all (#1027).
 - `commands`: the refusal of a command typed in chat goes into that
-  player's chat instead of a notice, and a reply longer than one chat
-  message goes as several (#1027).
+  player's chat instead of a notice, and a reply of more than 16 lines
+  reaches the chat whole (#1027).
 - `content`: the names `VanillaError::Unknown` and its like suggest are
   those that start with or hold what was asked, then those within a third
   of its length in edits (#1027).

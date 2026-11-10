@@ -535,7 +535,8 @@ impl Installed {
 
     /// `player`'s client closes the mod's window `id`, as when the player
     /// presses its Close: the client holds it no more, and the mod hears of
-    /// it as the loader tells it after the step.
+    /// it as the loader tells it after the step. A close of a window the
+    /// client does not hold tells the mod nothing, as the loader drops it.
     ///
     /// # Examples
     ///
@@ -558,12 +559,16 @@ impl Installed {
     #[cfg(feature = "unstable")]
     pub fn close_window(&self, player: &PlayerInfo, id: &str) {
         let key = player.key.get();
-        table::with((), |s| {
+        let held = table::with(false, |s| {
+            let before = s.commands.carried.len();
             s.commands
                 .carried
                 .retain(|(k, i, _)| !(*k == key && i == id));
+            s.commands.carried.len() != before
         });
-        self.tell_window_closed(player.key, id);
+        if held {
+            self.tell_window_closed(player.key, id);
+        }
     }
 
     /// `player` leaves, as far as the mod's windows go: their client holds

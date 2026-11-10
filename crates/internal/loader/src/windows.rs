@@ -71,17 +71,24 @@ pub struct Waiting {
     pub change: Change,
 }
 
-/// What the mods hear after the step: a client closed a window, or a
-/// player left.
+/// What the mods hear after the step.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Told {
-    /// The player's account key.
-    pub key: u64,
-    /// The mod whose window closed; `None` for a player who left, which
-    /// every mod with actions hears.
-    pub owner: Option<ModIndex>,
-    /// The window's id; empty for a player who left.
-    pub window: String,
+pub enum Told {
+    /// A client closed a window, or let its oldest go for a newer one: the
+    /// window's mod hears it.
+    Closed {
+        /// The player's account key.
+        key: u64,
+        /// The mod whose window closed.
+        owner: ModIndex,
+        /// The window's id.
+        window: String,
+    },
+    /// A player left: every mod with actions hears it.
+    Left {
+        /// The player's account key.
+        key: u64,
+    },
 }
 
 /// The windows clients got and were not told to close: account key, mod
@@ -125,8 +132,35 @@ pub fn merged(waiting: Vec<Waiting>) -> Vec<Waiting> {
     merged
 }
 
-/// Notes what client `key` holds once `message` of mod `owner` reached it.
-pub fn note(held: &mut Held, key: u64, owner: ModIndex, message: &Message) {
+/// What mod `owner` hears when client `key` says it closed the window
+/// `window`, which `held` then holds no more: `None` for a window the
+/// client did not hold, so a client names closes only of what the server
+/// carried to it.
+pub fn close_told(held: &mut Held, key: u64, owner: ModIndex, window: String) -> Option<Told> {
+    let before = held.len();
+    held.retain(|(k, o, w)| !(*k == key && *o == owner && *w == window));
+    (held.len() != before).then_some(Told::Closed { key, owner, window })
+}
+
+/// What the mods hear of `told` in a step whose merged changes are
+/// `waiting`: not the close of a window its mod shows that player again in
+/// the same step, which would make the mod forget the window it just
+/// showed, so the window would never open.
+#[must_use]
+pub fn heard(mut told: Vec<Told>, waiting: &[Waiting]) -> Vec<Told> {
+    told.retain(|told| match told {
+        Told::Closed { key, owner, window } => !waiting.iter().any(|w| {
+            w.change == Change::Show && w.key == *key && w.owner == *owner && w.window == *window
+        }),
+        Told::Left { .. } => true,
+    });
+    told
+}
+
+/// Notes what client `key` holds once `message` of mod `owner` reached it;
+/// the window the client let go for it, its oldest past [`MAX_HELD`],
+/// which that window's mod hears as closed.
+pub fn note(held: &mut Held, key: u64, owner: ModIndex, message: &Message) -> Option<Told> {
     match message {
         Message::Window { window, open, .. } => {
             let at = held
@@ -136,7 +170,8 @@ pub fn note(held: &mut Held, key: u64, owner: ModIndex, message: &Message) {
                 held.push((key, owner, window.clone()));
                 let mine: Vec<usize> = (0..held.len()).filter(|&i| held[i].0 == key).collect();
                 if mine.len() > MAX_HELD {
-                    held.remove(mine[0]);
+                    let (key, owner, window) = held.remove(mine[0]);
+                    return Some(Told::Closed { key, owner, window });
                 }
             }
         }
@@ -145,6 +180,7 @@ pub fn note(held: &mut Held, key: u64, owner: ModIndex, message: &Message) {
         }
         _ => {}
     }
+    None
 }
 
 /// The message carrying `text`, the mod's window `window` as one player
@@ -237,9 +273,15 @@ mod tests {
             &message("you.admin", "panel".into(), true, String::new()),
         );
         assert_eq!(held, [(8, other, "panel".to_owned())]);
-        for n in 0..=MAX_HELD {
-            note(&mut held, 9, mine, &shown(&format!("w{n}"), true));
-        }
+        let let_go: Vec<Told> = (0..=MAX_HELD)
+            .filter_map(|n| note(&mut held, 9, mine, &shown(&format!("w{n}"), true)))
+            .collect();
+        let oldest = Told::Closed {
+            key: 9,
+            owner: mine,
+            window: "w0".to_owned(),
+        };
+        assert_eq!(let_go, [oldest], "the mod hears of the window let go");
         assert_eq!(held.iter().filter(|(k, _, _)| *k == 9).count(), MAX_HELD);
         assert!(
             !held.contains(&(9, mine, "w0".to_owned())),
@@ -305,6 +347,71 @@ mod tests {
                 change(0, 6, "panel", Change::Close),
             ],
             "one render each: a show still opens, a closed window takes no update"
+        );
+    }
+
+    #[test]
+    fn a_client_s_close_is_told_only_for_a_window_the_server_carried_to_it() {
+        let (mine, other) = (ModIndex::new(0), ModIndex::new(1));
+        let mut held = vec![(7, mine, "panel".to_owned()), (8, mine, "bans".to_owned())];
+        for (key, owner, window) in [(7, mine, "bans"), (7, other, "panel"), (9, mine, "panel")] {
+            assert_eq!(
+                close_told(&mut held, key, owner, window.to_owned()),
+                None,
+                "{key} holds no {window} of that mod"
+            );
+        }
+        assert_eq!(
+            held.len(),
+            2,
+            "a close of a window not held forgets nothing"
+        );
+        let told = Told::Closed {
+            key: 7,
+            owner: mine,
+            window: "panel".to_owned(),
+        };
+        assert_eq!(
+            close_told(&mut held, 7, mine, "panel".to_owned()),
+            Some(told)
+        );
+        assert_eq!(held, [(8, mine, "bans".to_owned())]);
+        assert_eq!(
+            close_told(&mut held, 7, mine, "panel".to_owned()),
+            None,
+            "a second close of the same window tells nothing"
+        );
+    }
+
+    #[test]
+    fn a_close_is_not_told_for_a_window_its_mod_shows_again_in_the_same_step() {
+        let mine = ModIndex::new(0);
+        let closed = |key, window: &str| Told::Closed {
+            key,
+            owner: mine,
+            window: window.to_owned(),
+        };
+        let waiting = |key, window: &str, change| Waiting {
+            owner: mine,
+            window: window.to_owned(),
+            key,
+            change,
+        };
+        let told = vec![
+            closed(7, "panel"),
+            closed(7, "bans"),
+            closed(8, "panel"),
+            Told::Left { key: 7 },
+        ];
+        let step = [
+            waiting(7, "panel", Change::Show),
+            waiting(7, "bans", Change::Update),
+            waiting(8, "panel", Change::Close),
+        ];
+        assert_eq!(
+            heard(told, &step),
+            [closed(7, "bans"), closed(8, "panel"), Told::Left { key: 7 }],
+            "only a show keeps the window, and a leave is always told"
         );
     }
 

@@ -270,6 +270,17 @@ mod tests {
     }
 
     #[test]
+    fn a_close_of_a_window_the_client_does_not_hold_tells_the_mod_nothing() {
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let loader = start(enshwick::test::FakeHost::new().player(root));
+        loader.close_window(&root, "panel");
+        assert!(
+            CLOSED.lock().unwrap().is_empty(),
+            "the loader drops a close of a window it did not carry to that client"
+        );
+    }
+
+    #[test]
     fn a_player_who_left_holds_no_window_and_the_mod_forgets_theirs() {
         let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
         let eve = player(5, 6, "Eve", PlayerInfo::CAN_KICK_BAN);

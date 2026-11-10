@@ -84,43 +84,13 @@ pub(crate) extern "system" fn action_window(
     })
 }
 
-#[cfg(feature = "unstable")]
-use crate::commands::MAX_LINE;
-/// The longest command line, as `commands::MAX_LINE` holds it where that
-/// module is built.
-#[cfg(not(feature = "unstable"))]
-const MAX_LINE: usize = 1024;
+use crate::command_names::{MAX_LINE, Named, Refusal, check};
 /// The game's permission bits a remote caller may hold.
 #[cfg(feature = "unstable")]
 const ALL_BITS: u8 = crate::world::PlayerPermissions::ALL_BITS;
 /// Without the `world` module the fake keeps every bit a caller names.
 #[cfg(not(feature = "unstable"))]
 const ALL_BITS: u8 = u8::MAX;
-
-#[cfg(feature = "unstable")]
-use crate::commands::{is_alias, is_reserved, name_of};
-/// The command name of a mod id, as `commands::name_of` gives it where that
-/// module is built.
-#[cfg(not(feature = "unstable"))]
-fn name_of(mod_id: &str) -> &str {
-    mod_id.split_once('.').map_or(mod_id, |(_, name)| name)
-}
-/// Without the `commands` module the fake takes any alias that is not
-/// empty.
-#[cfg(not(feature = "unstable"))]
-fn is_alias(word: &str) -> bool {
-    !word.is_empty()
-}
-/// Without the `commands` module the fake reserves no word.
-#[cfg(not(feature = "unstable"))]
-fn is_reserved(_word: &str) -> bool {
-    false
-}
-
-/// Whether `word` is the id or the name of the mod `mod_id`.
-fn names(mod_id: &str, word: &str) -> bool {
-    mod_id == word || name_of(mod_id) == word
-}
 
 /// One mod's commands as the loader grants them.
 struct Granted {
@@ -135,37 +105,43 @@ impl Granted {
     }
 }
 
-/// The command sets the loader would grant, in load order: the mods loaded
-/// before the one under test, that mod `own` (its id and the alias it
-/// asked) and the mods loaded after it, each `others` entry being a mod id,
-/// the alias it asks and whether it loads after. A mod whose name another's
-/// commands have gets none; an alias another mod holds, or that is another
-/// mod's id or name, is not granted.
-fn granted(own: Option<(&str, &str)>, others: &[(String, String, bool)]) -> Vec<Granted> {
+/// What the loader answers each mod that names commands, by the one rule
+/// of [`check`], in load order: the mods loaded before the one under test,
+/// that mod `own` (its id, and the alias it asked, if it did) and the mods
+/// loaded after it, each `others` entry being a mod id, the alias it asks
+/// and whether it loads after. The command sets granted, and what the mod
+/// under test was answered.
+fn granted(
+    own: (&str, Option<&str>),
+    others: &[(String, String, bool)],
+) -> (Vec<Granted>, Option<Result<(), Refusal<usize>>>) {
     let at = |later: bool| {
         others
             .iter()
             .filter(move |(_, _, after)| *after == later)
-            .map(|(id, alias, _)| (id.as_str(), alias.as_str()))
+            .map(|(id, alias, _)| (id.as_str(), Some(alias.as_str())))
     };
-    let order: Vec<(&str, &str)> = at(false).chain(own).chain(at(true)).collect();
-    let mut sets: Vec<Granted> = Vec::new();
-    for &(id, alias) in &order {
-        let name = name_of(id);
-        if sets.iter().any(|set| set.name == name) {
-            continue;
+    let order: Vec<(&str, Option<&str>)> = at(false).chain([own]).chain(at(true)).collect();
+    let me = at(false).count();
+    let ids: Vec<(usize, &str)> = order.iter().map(|(id, _)| *id).enumerate().collect();
+    let mut named: Vec<Named<usize>> = Vec::new();
+    let mut answered = None;
+    for (index, (_, alias)) in order.iter().enumerate() {
+        let Some(alias) = alias else { continue };
+        let checked = check(&named, &ids, index, alias).map(|(set, _)| named.push(set));
+        if index == me {
+            answered = Some(checked);
         }
-        let held = sets.iter().any(|set| set.alias.as_deref() == Some(alias))
-            || order
-                .iter()
-                .any(|&(other, _)| other != id && names(other, alias));
-        sets.push(Granted {
-            id: id.to_owned(),
-            name: name.to_owned(),
-            alias: (!held).then(|| alias.to_owned()),
-        });
     }
-    sets
+    let sets = named
+        .into_iter()
+        .map(|set| Granted {
+            id: order[set.owner].0.to_owned(),
+            name: set.name,
+            alias: set.alias,
+        })
+        .collect();
+    (sets, answered)
 }
 
 /// The id of the mod under test.
@@ -179,12 +155,8 @@ fn own_id(s: &crate::test::table::State) -> String {
 /// The command sets granted now, and the id of the mod under test.
 fn sets_now(s: &crate::test::table::State) -> (Vec<Granted>, String) {
     let id = own_id(s);
-    let own = s
-        .commands
-        .asked
-        .as_deref()
-        .map(|alias| (id.as_str(), alias));
-    (granted(own, &s.host.other_commands), id.clone())
+    let (sets, _) = granted((&id, s.commands.asked.as_deref()), &s.host.other_commands);
+    (sets, id)
 }
 
 pub(crate) extern "system" fn commands(_me: ModHandle, _name: Str, alias: Str) -> Status {
@@ -194,19 +166,15 @@ pub(crate) extern "system" fn commands(_me: ModHandle, _name: Str, alias: Str) -
             return Status::TOO_LATE;
         }
         let id = own_id(s);
-        let name = name_of(&id);
-        if name.is_empty() || is_reserved(name) || !is_alias(&alias) || alias.len() >= name.len() {
-            return Status::BAD_ARGS;
+        let (_, answered) = granted((&id, Some(&alias)), &s.host.other_commands);
+        match answered {
+            Some(Err(Refusal::Malformed)) | None => Status::BAD_ARGS,
+            Some(Ok(())) if s.commands.asked.is_none() => {
+                s.commands.asked = Some(alias);
+                Status::OK
+            }
+            Some(_) => Status::REFUSED,
         }
-        if s.commands.asked.is_some() {
-            return Status::REFUSED;
-        }
-        let sets = granted(Some((&id, &alias)), &s.host.other_commands);
-        if !sets.iter().any(|set| set.id == id) {
-            return Status::REFUSED;
-        }
-        s.commands.asked = Some(alias);
-        Status::OK
     })
 }
 

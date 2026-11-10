@@ -35,42 +35,9 @@ use crate::actions::Outcome;
 use crate::schedule::Scheduler;
 use crate::world::PlayerPermissions;
 
-/// The longest command line [`run`] takes, in bytes.
-pub const MAX_LINE: usize = 1024;
-
-/// The longest command name or alias, in bytes.
-pub const MAX_NAME: usize = 32;
-
-/// Words no mod's commands may take: the loader's own and the help word.
-const RESERVED: [&str; 2] = ["enshwick", "help"];
-
-/// The command name of the mod `mod_id`: the part of its id after the
-/// author, or the whole id when it names none.
+pub use crate::command_names::{MAX_LINE, MAX_NAME};
 #[doc(hidden)]
-#[must_use]
-pub fn name_of(mod_id: &str) -> &str {
-    mod_id.split_once('.').map_or(mod_id, |(_, name)| name)
-}
-
-/// Whether `word` can be the alias of a mod's commands: 1 to [`MAX_NAME`]
-/// of `[a-z0-9-]` and not reserved; the loader checks by the same rule.
-#[doc(hidden)]
-#[must_use]
-pub fn is_alias(word: &str) -> bool {
-    !word.is_empty()
-        && word.len() <= MAX_NAME
-        && !is_reserved(word)
-        && word
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
-}
-
-/// Whether `word` is one no mod's commands may take.
-#[doc(hidden)]
-#[must_use]
-pub fn is_reserved(word: &str) -> bool {
-    RESERVED.contains(&word)
-}
+pub use crate::command_names::{is_alias, is_reserved, name_of};
 
 /// Who runs a command line through [`run`]: a remote caller with a label
 /// for the log and the handler, and the game's permissions it holds; never
@@ -368,26 +335,5 @@ impl crate::script::Bound for CommandFns {
 
     fn resolve(_load: &mut crate::Load<'_>) -> Result<Self, crate::Off> {
         Ok(Self)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_command_is_named_after_the_part_of_the_mod_id_past_the_author() {
-        assert_eq!(name_of("you.admin-tools"), "admin-tools");
-        assert_eq!(name_of("sky"), "sky", "an id of the old form names itself");
-    }
-
-    #[test]
-    fn an_alias_is_a_plain_word_that_is_not_reserved() {
-        assert!(is_alias("adm"));
-        assert!(is_alias(&"x".repeat(MAX_NAME)));
-        for word in ["Adm", "a b", "a\tb", "", "enshwick", "help", "a.b"] {
-            assert!(!is_alias(word), "{word}");
-        }
-        assert!(!is_alias(&"x".repeat(MAX_NAME + 1)));
     }
 }
