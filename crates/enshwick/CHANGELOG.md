@@ -220,6 +220,9 @@ Each entry names the pull request that made the change.
   each at its own path and keeps the crate docs, the macros' docs and the
   features. A mod still depends on `enshwick` alone and names every item as
   before (#1040).
+- `packs::schemas`: a description in a pack file's JSON Schema leaves out the
+  hidden lines of its examples, as the API docs do, so an editor no longer
+  shows lines such as `# Ok::<(), PackError>(())` (#1040).
 
 ### Fixed
 

@@ -397,7 +397,12 @@ pub fn schemas() -> Vec<(&'static str, String)> {
     struct Sounds {
         sound: Option<Vec<super::sounds::SoundEntry>>,
     }
-    let json = |schema: schemars::Schema| serde_json::to_string_pretty(&schema).unwrap_or_default();
+    let json = |mut schema: schemars::Schema| {
+        if let Some(map) = schema.as_object_mut() {
+            shown(map);
+        }
+        serde_json::to_string_pretty(&schema).unwrap_or_default()
+    };
     vec![
         (MANIFEST_FILE, json(schemars::schema_for!(PackManifest))),
         (ITEMS_FILE, json(schemars::schema_for!(Items))),
@@ -407,4 +412,94 @@ pub fn schemas() -> Vec<(&'static str, String)> {
         (super::REWARDS_FILE, json(schemars::schema_for!(Rewards))),
         (super::SOUNDS_FILE, json(schemars::schema_for!(Sounds))),
     ]
+}
+
+/// The fence tokens of a code block rustdoc compiles as Rust, besides the
+/// `edition` ones; only such a block has hidden lines.
+#[cfg(feature = "schema")]
+const RUST_FENCE: [&str; 7] = [
+    "rust",
+    "ignore",
+    "should_panic",
+    "no_run",
+    "compile_fail",
+    "standalone_crate",
+    "test_harness",
+];
+
+/// Leaves out of every description in `map`, nested ones too, the lines
+/// rustdoc hides, so an editor shows a description as the docs do.
+#[cfg(feature = "schema")]
+fn shown(map: &mut serde_json::Map<String, serde_json::Value>) {
+    for (key, field) in map.iter_mut() {
+        match field {
+            serde_json::Value::String(text) if key == "description" => {
+                *text = without_hidden(text);
+            }
+            serde_json::Value::Object(inner) => shown(inner),
+            serde_json::Value::Array(items) => items
+                .iter_mut()
+                .filter_map(serde_json::Value::as_object_mut)
+                .for_each(shown),
+            _ => {}
+        }
+    }
+}
+
+/// `text` without the lines of its Rust examples that are `#` alone or open
+/// with `# `, which rustdoc compiles but does not show.
+#[cfg(feature = "schema")]
+fn without_hidden(text: &str) -> String {
+    let mut rust = None;
+    let mut kept = Vec::new();
+    for line in text.lines() {
+        let trimmed = line.trim_start();
+        if let Some(info) = trimmed.strip_prefix("```") {
+            rust = match rust {
+                Some(_) => None,
+                None => Some(
+                    info.split([',', ' ', '\t'])
+                        .filter(|token| !token.is_empty())
+                        .all(|token| RUST_FENCE.contains(&token) || token.starts_with("edition")),
+                ),
+            };
+        } else if rust == Some(true) && (trimmed == "#" || trimmed.starts_with("# ")) {
+            continue;
+        }
+        kept.push(line);
+    }
+    kept.join("\n")
+}
+
+#[cfg(test)]
+#[cfg(feature = "schema")]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_description_keeps_what_the_docs_show_of_its_examples() {
+        let text = "Reads a pack.\n\n```\n# extern crate enshwick_core as enshwick;\nlet a = 1;\n#\n# Ok::<(), ()>(())\n```\n\n```toml\n# A comment stays.\nid = \"you.a\"\n```";
+        assert_eq!(
+            without_hidden(text),
+            "Reads a pack.\n\n```\nlet a = 1;\n```\n\n```toml\n# A comment stays.\nid = \"you.a\"\n```"
+        );
+    }
+
+    #[test]
+    fn every_description_of_a_schema_is_cut_but_a_field_named_description_stays() {
+        let mut value = serde_json::json!({
+            "description": "A.\n```\n# hidden\nshown\n```",
+            "properties": { "description": { "description": "B.\n```rust\n# hidden\n```" } },
+            "anyOf": [{ "description": "C.\n```\n# hidden\n```" }],
+            "default": "```\n# kept\n```",
+        });
+        shown(value.as_object_mut().unwrap());
+        assert_eq!(value["description"], "A.\n```\nshown\n```");
+        assert_eq!(
+            value["properties"]["description"]["description"],
+            "B.\n```rust\n```"
+        );
+        assert_eq!(value["anyOf"][0]["description"], "C.\n```\n```");
+        assert_eq!(value["default"], "```\n# kept\n```");
+    }
 }
