@@ -34,10 +34,14 @@ pub(crate) extern "system" fn drop_items(
         else {
             return Status::BAD_ARGS;
         };
+        // Refused before the drop: after it, a mod told BAD_ARGS would drop again.
+        if out.is_null() {
+            return Status::BAD_ARGS;
+        }
         match caller(me).and_then(|loader| crate::drops::drop_items(loader, &request)) {
-            // SAFETY: `HostApi::drop_items` has the mod pass `out` null or
-            // pointing at a writable, aligned `Entity` that no other thread
-            // touches during the call.
+            // SAFETY: `out` is non-null (checked above) and `HostApi::drop_items`
+            // has the mod pass a writable, aligned `Entity` that no other
+            // thread touches during the call.
             Ok(entity) => unsafe { put(out, Entity(entity)) },
             Err(status) => status,
         }

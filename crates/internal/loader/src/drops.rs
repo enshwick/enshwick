@@ -2,7 +2,7 @@
 //! between steps.
 //!
 //! A drop is the game's generic pickup template, spawned with the item's
-//! `PickupItem` as its first component, as the game spills loot (server
+//! `PickupItem` among its initial components, as the game spills loot (server
 //! 26430253, `sys.random_pickup_loot_spawner`): the template carries the
 //! model setup, the interaction offer any player takes it by, gravity and
 //! `DoNotSave`, and `sys.pickup_item_setup` fills the rest from the item.
@@ -34,40 +34,62 @@ struct Layout {
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 
 /// The layout, read once: the template by its name in the game's data,
-/// which reads every template's name the first time.
+/// which reads every template's name the first time. A failure stays for
+/// the process, as the reflection and the archive it comes from do.
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT
         .get_or_init(|| {
-            let reflection = &loader.reflection;
-            let field = |name: &str| {
-                reflection
-                    .field_offset(PICKUP, name)
-                    .ok()
-                    .and_then(|at| usize::try_from(at).ok())
-            };
-            let info = reflection.type_info(PICKUP).ok()?;
-            let vanilla = enshwick::content::vanilla::Vanilla::new(
-                &enshwick_gamedata::catalogue::Reflected(reflection),
-                |key| crate::archive::game()?.resource(&key),
-            );
-            let template = match vanilla.map(|vanilla| vanilla.template(TEMPLATE)) {
-                Ok(Ok(guid)) => guid.0,
-                why => {
-                    crate::log!(WARN, "item drops off: {TEMPLATE}: {why:?}");
-                    return None;
-                }
-            };
-            Some(Layout {
-                template,
-                hash: crate::world::type_hash(info.va())?,
-                size: usize::try_from(info.size()).ok()?,
-                item: field("itemId")?,
-                level: field("level")?,
-                rarity: field("rarity")?,
-                amount: field("pickupAmount")?,
-            })
+            read_layout(loader)
+                .inspect_err(|why| {
+                    crate::log!(WARN, "item drops off: {why}");
+                    crate::diag::part_off("item drops", why);
+                })
+                .ok()
         })
         .as_ref()
+}
+
+fn read_layout(loader: &Loader) -> Result<Layout, String> {
+    let reflection = &loader.reflection;
+    let info = reflection
+        .type_info(PICKUP)
+        .map_err(|why| why.to_string())?;
+    // A field whose type the build widened or narrowed would take its
+    // neighbour's bytes: each must hold what `pickup` writes into it.
+    let field = |name: &str, width: u32| {
+        let mut found = info.fields().iter().filter(|f| f.name() == name);
+        let (Some(held), None) = (found.next(), found.next()) else {
+            return Err(format!("{PICKUP}.{name} missing or ambiguous"));
+        };
+        let size = held
+            .type_name()
+            .and_then(|ty| reflection.type_info(ty).ok())
+            .map(enshwick_gamedata::reflect::TypeInfo::size);
+        if size != Some(width) || held.offset() + u64::from(width) > u64::from(info.size()) {
+            let at = held.offset();
+            return Err(format!(
+                "{PICKUP}.{name} at {at} holds {size:?} bytes, not {width}"
+            ));
+        }
+        usize::try_from(held.offset()).map_err(|_| format!("{PICKUP}.{name} offset"))
+    };
+    let vanilla = enshwick::content::vanilla::Vanilla::new(
+        &enshwick_gamedata::catalogue::Reflected(reflection),
+        |key| crate::archive::game()?.resource(&key),
+    );
+    let template = match vanilla.map(|vanilla| vanilla.template(TEMPLATE)) {
+        Ok(Ok(guid)) => guid.0,
+        why => return Err(format!("{TEMPLATE}: {why:?}")),
+    };
+    Ok(Layout {
+        template,
+        hash: crate::world::type_hash(info.va()).ok_or_else(|| format!("{PICKUP} hash"))?,
+        size: usize::try_from(info.size()).map_err(|_| format!("{PICKUP} size"))?,
+        item: field("itemId", 4)?,
+        level: field("level", 4)?,
+        rarity: field("rarity", 1)?,
+        amount: field("pickupAmount", 2)?,
+    })
 }
 
 /// `PickupItem`'s bytes for `request` on `layout`, `None` for a count or a
@@ -77,17 +99,15 @@ fn pickup(layout: &Layout, request: &DropRequest) -> Option<Vec<u8>> {
     let rarity = u8::try_from(request.rarity)
         .ok()
         .filter(|&r| ItemRarity::from_raw(r).is_some())?;
-    let mut bytes = vec![0u8; layout.size];
-    let mut put = |at: usize, part: &[u8]| {
-        bytes
-            .get_mut(at..at + part.len())
-            .map(|slot| slot.copy_from_slice(part))
-    };
-    put(layout.item, &request.item.get().to_le_bytes())?;
-    put(layout.level, &request.level.to_le_bytes())?;
-    put(layout.rarity, &[rarity])?;
-    put(layout.amount, &amount.to_le_bytes())?;
-    Some(bytes)
+    Some(crate::spawns::bytes(
+        layout.size,
+        &[
+            (layout.item, &request.item.get().to_le_bytes()),
+            (layout.level, &request.level.to_le_bytes()),
+            (layout.rarity, &[rarity]),
+            (layout.amount, &amount.to_le_bytes()),
+        ],
+    ))
 }
 
 /// Drops the stack `request` asks for; the pickup's entity.
@@ -143,6 +163,12 @@ mod tests {
         assert_eq!(bytes[20..24], 9_u32.to_le_bytes());
         assert_eq!(bytes[24], 2);
         assert_eq!(bytes[26..28], 300_u16.to_le_bytes());
+    }
+
+    #[test]
+    fn a_drop_without_a_server_world_hands_out_no_entity() {
+        let loader = crate::start::tests::bare_loader();
+        assert!(drop_items(&loader, &request(5, 0)).is_err());
     }
 
     #[test]

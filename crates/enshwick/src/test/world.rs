@@ -550,7 +550,7 @@ impl Installed {
     /// assert!(loader.drops().is_empty());
     /// ```
     #[must_use]
-    pub fn drops(&self) -> Vec<(u32, crate::abi::DropRequest)> {
+    pub fn drops(&self) -> Vec<(crate::Entity, crate::abi::DropRequest)> {
         table::with(Vec::new(), |s| s.drops.clone())
     }
 

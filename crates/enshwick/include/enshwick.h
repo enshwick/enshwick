@@ -5180,21 +5180,24 @@ typedef struct EnshwickHostApi {
   // levels itself; `what` says which. `PROGRESS_SET_LEVEL`: the level
   // becomes `value`, kept between 1 and the game's level cap, with no
   // experience inside it and what that level needs to go on, as the
-  // game leaves a level it raised; the game raises no level-up event.
+  // game leaves a level it raised, and a gain not applied yet is
+  // dropped; the game raises no level-up event.
   // `PROGRESS_SET_EXPERIENCE`: the experience inside the level becomes
   // `value`, kept below what the level needs.
   // `PROGRESS_ADD_EXPERIENCE`: `value` is gained, and the game levels
-  // up from it, one level a step, with its own events. Skill points
-  // follow the level, as the game counts them from it. A mod asks for
+  // up from it, one level a step, with its own events; experience
+  // filters do not see it. Skill points follow the level, as the game
+  // counts them from it. A mod asks for
   // the writes during `init` with `PROGRESS_OPEN` and `Entity(0)`;
   // `Status::TOO_LATE` for that after `init`. `Status::OK` queues
   // the write; the step applies writes in the order given.
   // `Status::REFUSED` for a mod that did not ask, an entity that is
   // not a player's character in the game, or while 256 writes wait;
   // `Status::BAD_ARGS` for another `what`; `Status::WRONG_THREAD`
-  // off the server's game thread; `Status::MISSING` on a client or a
-  // build without the level step. A panic in the loader returns
-  // `Status::REFUSED`. ABI 11.24.
+  // off the server's game thread; `Status::MISSING` for a write during
+  // `init`, on a client, a
+  // build without the level step, or once a panic turned the writes
+  // off. A panic in the loader returns `Status::REFUSED`. ABI 11.24.
   EnshwickStatus (*progress_write)(EnshwickModHandle me,
                                    EnshwickEntity entity,
                                    uint32_t what,
@@ -5203,7 +5206,7 @@ typedef struct EnshwickHostApi {
   // `request.position`, as one loose stack any player can pick up, as
   // the game spills loot; writes the new pickup's entity to `out`. The
   // game falls it to the ground and does not save it.
-  // `Status::BAD_ARGS` for a null `request`, a count of 0 or over
+  // `Status::BAD_ARGS` for a null `request` or `out`, a count of 0 or over
   // 65535, or a rarity the game lacks; `Status::REFUSED` for an item
   // the game does not know; `Status::WRONG_THREAD` off the server's
   // game thread; `Status::MISSING` on a client or a build without the

@@ -103,6 +103,16 @@ mod tests {
                 (Entity(7), PROGRESS_ADD_EXPERIENCE, 500),
             ]
         );
+        for _ in 3..256 {
+            assert_eq!(world.add_experience(Entity(7), 1), Ok(()));
+        }
+        assert_eq!(
+            world.add_experience(Entity(7), 1),
+            Err(WorldError::Refused),
+            "256 writes wait for the step"
+        );
+        let _handled = loader.tick(std::time::Duration::from_millis(50));
+        assert_eq!(world.add_experience(Entity(7), 1), Ok(()), "a new step");
     }
 
     #[test]
@@ -131,8 +141,13 @@ mod tests {
 
     #[test]
     fn a_drop_carries_its_item_count_level_rarity_and_place_and_refuses_no_items() {
-        let (loader, _, effects) = started(FakeHost::new());
+        let (loader, _, effects) = started(FakeHost::new().item(ItemId(0x2a), 100, 0));
 
+        assert_eq!(
+            effects.drop_items(ItemId(0x2b), 5, [0.0; 3], ItemDrop::new()),
+            Err(WorldError::Refused),
+            "an item the game does not know"
+        );
         let how = ItemDrop::new().level(3).rarity(ItemRarity::Rare);
         let dropped = effects.drop_items(ItemId(0x2a), 5, [1.0, 2.0, -3.0], how);
         let entity = dropped.unwrap();
@@ -147,7 +162,7 @@ mod tests {
         let drops = loader.drops();
         assert_eq!(drops.len(), 1, "{drops:?}");
         let (handed, request) = drops[0];
-        assert_eq!(Entity(handed), entity);
+        assert_eq!(handed, entity);
         assert_eq!(request.item, ItemId(0x2a));
         assert_eq!((request.count, request.level, request.rarity), (5, 3, 2));
         assert_eq!(request.position, [1 << 32, 2 << 32, -(3 << 32)]);

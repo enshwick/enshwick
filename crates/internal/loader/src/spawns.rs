@@ -146,7 +146,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
 }
 
 /// Bytes of `size` with `parts` written at their offsets.
-fn bytes(size: usize, parts: &[(usize, &[u8])]) -> Vec<u8> {
+pub(crate) fn bytes(size: usize, parts: &[(usize, &[u8])]) -> Vec<u8> {
     let mut out = vec![0u8; size];
     for &(at, part) in parts {
         if let Some(slot) = out.get_mut(at..at + part.len()) {

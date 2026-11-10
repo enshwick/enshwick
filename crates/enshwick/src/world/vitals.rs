@@ -303,7 +303,7 @@ impl World {
 
     /// Sets the level of `entity`, a player's character, as the game leaves
     /// a level it raised: no experience inside it and what the level needs
-    /// to go on. The server's next level step applies it, kept between 1 and
+    /// to go on; a gain the game has not applied yet is dropped. The server's next level step applies it, kept between 1 and
     /// the game's level cap; skill points follow the level, as the game
     /// counts them from it, and the game raises no level-up event. On the
     /// server's game thread only.
@@ -313,8 +313,8 @@ impl World {
     /// [`WorldError::Refused`] for an entity that is not a player's
     /// character in the game, or while 256 writes wait for the step;
     /// [`WorldError::WrongThread`] off the game thread;
-    /// [`WorldError::Missing`] on a client or a build without the level
-    /// step.
+    /// [`WorldError::Missing`] during `init`, on a client, a build without the level
+    /// step, or once a panic turned the writes off.
     ///
     /// # Examples
     ///

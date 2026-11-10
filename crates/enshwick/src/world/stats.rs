@@ -283,8 +283,9 @@ impl Stats {
 
     /// Sets the current value of `pool` on `entity` to what `change` makes
     /// of it, kept between the pool's floor and its maximum: 1 for health,
-    /// so a write never kills, 0 for stamina and mana. Health of an entity
-    /// already dead is refused: death and revival stay the game's.
+    /// so a write never kills, 0 for stamina and mana. [`Pool::Health`] is
+    /// refused for an entity already dead and [`Pool::Revival`] for one
+    /// alive.
     pub(crate) fn write(
         &self,
         world: World,

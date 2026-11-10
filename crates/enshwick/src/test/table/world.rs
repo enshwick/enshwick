@@ -439,10 +439,18 @@ pub(crate) extern "system" fn progress_write(
         {
             return Status::BAD_ARGS;
         }
+        // The loader's level step links after `init`.
+        if s.registration != super::Registration::Closed {
+            return Status::MISSING;
+        }
         let in_game = s.host.players.iter().any(|p| p.entity == entity);
+        let step = s.ticks.step;
+        // The loader holds at most 256 writes for its next level step.
+        let waiting = s.progress_steps.iter().filter(|&&at| at == step).count();
         match s.progress_writes.as_mut() {
-            Some(writes) if in_game => {
+            Some(writes) if in_game && waiting < 256 => {
                 writes.push((entity, what, value));
+                s.progress_steps.push(step);
                 Status::OK
             }
             _ => Status::REFUSED,
@@ -458,6 +466,9 @@ pub(crate) extern "system" fn drop_items(
     let Some(request) = super::get_headed(request) else {
         return Status::BAD_ARGS;
     };
+    if out.is_null() {
+        return Status::BAD_ARGS;
+    }
     let rarity = u8::try_from(request.rarity).ok();
     if !(1..=u32::from(u16::MAX)).contains(&request.count)
         || rarity
@@ -467,13 +478,17 @@ pub(crate) extern "system" fn drop_items(
         return Status::BAD_ARGS;
     }
     let entity = with(None, |s| {
+        if !s.host.items.contains_key(&request.item.get()) {
+            return Some(Err(Status::REFUSED));
+        }
         // Above every spawn's id, so the two never share one.
         let entity = FIRST_SPAWNED + 0x1_0000 + u32::try_from(s.drops.len()).unwrap_or(0);
-        s.drops.push((entity, request));
-        Some(entity)
+        s.drops.push((crate::Entity(entity), request));
+        Some(Ok(entity))
     });
     match entity {
-        Some(entity) => put(out, crate::Entity(entity)),
+        Some(Ok(entity)) => put(out, crate::Entity(entity)),
+        Some(Err(status)) => status,
         None => Status::MISSING,
     }
 }

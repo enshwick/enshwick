@@ -169,9 +169,9 @@ server's next level step applies it, where the game raises levels itself:
 
 | Call | What the step does |
 | --- | --- |
-| `set_level(entity, level)` | sets the level, kept between 1 and the game's level cap. The level starts empty and needs what the game asks of it, as after a level-up. No level-up event |
+| `set_level(entity, level)` | sets the level, kept between 1 and the game's level cap. The level starts empty and needs what the game asks of it, as after a level-up, and a gain not applied yet is dropped. No level-up event |
 | `set_experience(entity, experience)` | sets the experience inside the level, kept below what the level needs, and drops a gain not applied yet |
-| `add_experience(entity, amount)` | adds a gain, as a kill does; the game levels up from it, one level a step, with its own level-up events |
+| `add_experience(entity, amount)` | adds a gain, as a kill does; the game levels up from it, one level a step, with its own level-up events; experience filters do not see it |
 
 Skill points follow the level, as the game counts them from it. Experience
 filters (`Load::on_experience`) do not see these writes. Each call is refused

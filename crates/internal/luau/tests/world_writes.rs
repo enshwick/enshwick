@@ -23,17 +23,23 @@ mod tests {
             name: [0; 64],
         };
         let loader = run(
-            FakeHost::new().world().player(player),
+            FakeHost::new()
+                .world()
+                .player(player)
+                .item(ItemId::new(42), 100, 0),
             r#"
-            enshwick.world.set_level(7, 10)
-            enshwick.world.set_experience(7, 5)
-            enshwick.world.add_experience(7, 500)
-            local ok, why = pcall(enshwick.world.set_level, 8, 3)
-            enshwick.log.info(`level of a stranger {ok}: {why}`)
-            local pickup = enshwick.effects.drop_items(42, 5, vector.create(1, 2, 3), { level = 3, rarity = "Rare" })
-            enshwick.log.info(`dropped {pickup}`)
+            enshwick.on_tick(0.1, function()
+                enshwick.world.set_level(7, 10)
+                enshwick.world.set_experience(7, 5)
+                enshwick.world.add_experience(7, 500)
+                local ok, why = pcall(enshwick.world.set_level, 8, 3)
+                enshwick.log.info(`level of a stranger {ok}: {why}`)
+                local pickup = enshwick.effects.drop_items(42, 5, vector.create(1, 2, 3), { level = 3, rarity = "Rare" })
+                enshwick.log.info(`dropped {pickup}`)
+            end)
             "#,
         );
+        let _ran = loader.tick(std::time::Duration::from_millis(100));
         assert_eq!(
             loader.progress_writes(),
             [
@@ -53,7 +59,7 @@ mod tests {
         assert_eq!(drops.len(), 1, "{:?}", loader.logs());
         let (entity, request) = drops[0];
         assert!(
-            logged(&loader, &format!("dropped {entity}")),
+            logged(&loader, &format!("dropped {}", entity.0)),
             "{:?}",
             loader.logs()
         );
