@@ -6,7 +6,7 @@ description: Load::serve serves any game resource, new or changed, as if it came
 # Served resources
 
 Items, recipes and workshops are built on one lower-level call,
-[`Load::serve`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs).
+[`Load::serve`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content.rs).
 It serves any game resource, new or changed, as if it came from the game's
 archive. Use it where the high-level calls fall short.
 
@@ -15,10 +15,10 @@ archive. Use it where the high-level calls fall short.
 A resource is named by a
 [`ResourceKey`](https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi.rs):
 a GUID, a type hash and a part.
-[`Guid::key(ty)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)
+[`Guid::key(ty)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content.rs)
 makes the key of part 0. Its hash is the one the loader gives the type on the
 running build.
-[`content::types`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)
+[`content::types`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content.rs)
 names the resource types mods commonly serve. Two of them are `ITEM_INFO` and
 `ITEM_REGISTRY`.
 
@@ -50,7 +50,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 Field offsets change between game builds. During `init`, resolve a layout
 such as
-[`ItemLayout::resolve`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/items.rs)
+[`ItemLayout::resolve`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/items.rs)
 and move it into the builder. The resolve asks the loader by Enshwick's ids. For a field no layout names, `load.field_offset(type, field)`
 and `load.type_size(type)` read the game's reflection. See
 [Finding the game](../finding-the-game.md).
@@ -123,7 +123,7 @@ and what failed.
 Game resources are blobs: plain data whose arrays and strings are offsets
 relative to the field that holds them. Growing an array in place would break
 every offset after it.
-[`content::Blob`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)
+[`content::Blob`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content.rs)
 edits a blob safely, by moving a grown array to the end and correcting the
 offsets that move with it.
 
@@ -175,14 +175,14 @@ assert_eq!(blob.array(header), Some((text, 4)));
 The API's own content files are worked examples. Each builds its resources
 with `Blob` alone:
 
-- [`items.rs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/items.rs)
-- [`recipes.rs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs)
-- [`workshops.rs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/workshops.rs)
+- [`items.rs`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/items.rs)
+- [`recipes.rs`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/recipes.rs)
+- [`workshops.rs`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/workshops.rs)
 
 ## Reading vanilla resources
 
 A builder sees only its own base.
-[`content::game_resource(key)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)
+[`content::game_resource(key)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content.rs)
 reads another vanilla resource, such as the template a station item places or
 an item's name tag. It returns the bytes from the game's archive files. They
 are the bytes as the game reads them before it resolves their references, so
@@ -214,14 +214,14 @@ what a mod needs more than once. Luau reads the same as a value with
 
 ## One text for one tag
 
-[`Load::add_text(tag, language, text)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)
+[`Load::add_text(tag, language, text)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content.rs)
 is the low-level text call. The client shows `text` wherever the game asks
 for the tag in `language`:
 
 - `tag` is a `LocaTag`, a declared [content id](../concepts/ids.md)'s
   GUID;
 - `language` is a
-  [`Language`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
+  [`Language`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/i18n.rs)
   number.
 
 A served item whose name field holds `tag` shows that text as its

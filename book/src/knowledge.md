@@ -5,9 +5,9 @@ description: Read and change the values the game keeps for the world and each pl
 
 # Knowledge and quests
 
-[`load.knowledge()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/knowledge.rs)
+[`load.knowledge()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/knowledge.rs)
 returns the
-[`Knowledge`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/knowledge.rs)
+[`Knowledge`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/knowledge.rs)
 of the server's world. It holds the values the game keeps for the world and
 for each player. Recipes, quests, journal pages, skill points and much more
 read them.

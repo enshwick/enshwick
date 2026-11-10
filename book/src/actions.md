@@ -84,7 +84,7 @@ it. `weather help` lists the actions. A control of the mod runs it with
 
 ## Declaring
 
-[`load.actions(texts)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/actions.rs)
+[`load.actions(texts)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/actions.rs)
 returns the mod's `Actions`. Call it once,
 during `init`, on both sides of a mod of side `both` alike. Texts are keys of
 `texts`, the mod's [translations](settings.md), shown in each player's

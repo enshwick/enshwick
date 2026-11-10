@@ -171,7 +171,7 @@ title is `config.comfort`.
 
 ## When a mod gets its settings
 
-[`load.on_settings`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load/settings.rs)
+[`load.on_settings`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load/settings.rs)
 calls its handler with the defaults at once, during `init`. It calls it
 again with the world's values each time a world loads, before
 [`WorldLoaded`](events.md). When the world stops, the handler gets the
@@ -204,7 +204,7 @@ A change to a world's settings applies the next time the world loads. On a
 dedicated server, that is when the server starts again.
 
 For values that change while the world runs, register
-[`load.on_settings_change`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load/settings.rs)
+[`load.on_settings_change`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load/settings.rs)
 instead. Its handler runs when `on_settings`'s would, and also on every
 change, on a thread that is not fixed:
 
@@ -282,7 +282,7 @@ when it leaves.
 
 ## The schema and the console
 
-[`Config::schema()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/config.rs)
+[`Config::schema()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/config.rs)
 describes every field: key, type, default, range, choices, doc comment and
 text key. `on_settings` hands it to the loader with the file's template.
 The loader writes the file from it and checks values against it before it

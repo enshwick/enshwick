@@ -310,11 +310,29 @@ checksum = "edd0f118536f44f5ccd48bcb8b111bdc3de888b58c74639dfb034a357d0f206d"
 name = "enshwick"
 version = "1.0.0-alpha.14"
 dependencies = [
+ "document-features",
+ "enshwick-core",
+ "enshwick-macros",
+]
+
+[[package]]
+name = "enshwick-abi"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "bytemuck",
+ "enshwick-values",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "enshwick-core"
+version = "1.0.0-alpha.14"
+dependencies = [
  "aho-corasick",
  "bcdec_rs",
  "bytemuck",
  "const_format",
- "document-features",
  "enshwick-abi",
  "enshwick-macros",
  "enshwick-typed",
@@ -332,16 +350,6 @@ dependencies = [
  "toml",
  "zune-core",
  "zune-png",
-]
-
-[[package]]
-name = "enshwick-abi"
-version = "1.0.0-alpha.14"
-dependencies = [
- "bytemuck",
- "enshwick-values",
- "serde",
- "thiserror",
 ]
 
 [[package]]

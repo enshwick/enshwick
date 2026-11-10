@@ -8,7 +8,7 @@ description: The Map of the game server holds the markers a world comes with, it
 Unstable: everything in this chapter needs the `unstable` feature and may
 change in any release ([Stability](stability.md)).
 
-[`load.map()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/map.rs)
+[`load.map()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/map.rs)
 returns the `Map` of the game server, dedicated or hosted by a client.
 
 ## Getting the map

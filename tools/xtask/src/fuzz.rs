@@ -28,7 +28,7 @@ fn toolchain() -> String {
 /// Each target and the modules that read its input, as paths without `.rs`:
 /// a change to the module file or below its folder reaches the target.
 pub(crate) const TARGETS: &[(&str, &[&str])] = &[
-    ("action_sheet", &["crates/enshwick/src/actions"]),
+    ("action_sheet", &["crates/internal/core/src/actions"]),
     (
         "channel_messages",
         &[
@@ -61,24 +61,24 @@ pub(crate) const TARGETS: &[(&str, &[&str])] = &[
             "crates/internal/loader/src/wire",
         ],
     ),
-    ("pattern", &["crates/enshwick/src/code"]),
+    ("pattern", &["crates/internal/core/src/code"]),
     (
         "point_schemas",
         &[
             "crates/cargo-enshwick/src/points",
-            "crates/enshwick/src/schema_section",
+            "crates/internal/core/src/schema_section",
         ],
     ),
     ("reflection", &["crates/enshwick-gamedata/src/reflect"]),
-    ("remote_edit", &["crates/enshwick/src/config"]),
+    ("remote_edit", &["crates/internal/core/src/config"]),
     ("remote_message", &["crates/internal/loader/src/remote"]),
     ("server_rules", &["crates/internal/loader/src/join"]),
     (
         "settings_files",
         &[
-            "crates/enshwick/src/config",
-            "crates/enshwick/src/i18n",
-            "crates/enshwick/src/packs",
+            "crates/internal/core/src/config",
+            "crates/internal/core/src/i18n",
+            "crates/internal/core/src/packs",
             "crates/internal/loader/src/record",
             "crates/internal/values/src/off",
             "crates/internal/values/src/reason",

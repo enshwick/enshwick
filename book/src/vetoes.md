@@ -11,7 +11,7 @@ that panics turns the mod off and lets the action through.
 
 ## Crafting
 
-[`load.on_craft(|craft| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/vetoes.rs)
+[`load.on_craft(|craft| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/vetoes.rs)
 runs on each player's craft request in the server's world. It gets the game's
 `CraftRecipeEvent`, with these fields:
 
@@ -39,7 +39,7 @@ request reaches the crafting system empty, with no crafter and no amount.
 
 ## Building
 
-[`load.on_build(|placement| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/vetoes.rs)
+[`load.on_build(|placement| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/vetoes.rs)
 runs after the game's cursor check allows a placement. It gets a `Placement`,
 a name of Enshwick's own, since the game's check has none. Its fields are
 these:
@@ -55,7 +55,7 @@ It answers a `BuildVerdict`:
 - `RefuseBecause` refuses it with a reason the builder reads.
 
 The reason is a key of the mod's
-[texts](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs),
+[texts](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/i18n.rs),
 shown in the player's language, or plain words. A client that runs the mod
 shows it under the build cursor while the player aims there. Some clients do
 not show it. The server tells such a player once, as a notice, or in chat to a
@@ -107,7 +107,7 @@ the mod shows the placement as allowed, and the server places nothing.
 
 ## Interactions
 
-[`load.on_interaction`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/interactions.rs)
+[`load.on_interaction`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/interactions.rs)
 runs a filter before the game lets a player interact with an entity, from
 opening a chest to dismantling a piece. It gets an `Interaction`, which holds:
 

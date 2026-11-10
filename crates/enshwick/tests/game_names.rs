@@ -21,8 +21,11 @@ mod tests {
             .collect()
     }
 
+    /// A file of `enshwick-core`, which holds the modules this crate
+    /// re-exports, by its path in that crate.
     fn source(file: &str) -> String {
-        std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(file)).unwrap()
+        let core = Path::new(env!("CARGO_MANIFEST_DIR")).join("../internal/core");
+        std::fs::read_to_string(core.join(file)).unwrap()
     }
 
     /// Each id constant of the API's id table with its id.

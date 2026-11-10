@@ -10,7 +10,7 @@ use std::path::Path;
 /// The book's sources, relative to the workspace root.
 const SOURCE: &str = "book/src";
 /// The files that include chapters as doctests.
-const HARNESSES: [&str; 2] = ["crates/enshwick/src/book.rs", "crates/enshwick/src/test.rs"];
+const HARNESSES: [&str; 1] = ["crates/enshwick/src/book.rs"];
 
 /// The problems with the book under `root`, one line each.
 pub(crate) fn check(root: &Path) -> Vec<String> {

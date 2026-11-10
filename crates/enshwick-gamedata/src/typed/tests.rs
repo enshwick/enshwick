@@ -170,7 +170,7 @@ fn two_screens_that_case_alike_take_numbered_variants() {
 }
 
 /// Where the generator writes the game's screens.
-const SCREENS: &str = "crates/enshwick/src/ui/screens.rs";
+const SCREENS: &str = "crates/internal/core/src/ui/screens.rs";
 
 /// The fixture as a later build changes it: one change of each case.
 fn next_build() -> Catalogue {
@@ -678,12 +678,12 @@ fn every_shape_crosses_a_sample_as_its_rust_type_does() {
 /// fails on every machine, with the game data or without it.
 #[test]
 fn every_committed_typed_file_carries_the_header_of_one_build() {
-    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../enshwick/src");
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../internal/core/src");
     let (before, after) = rust::header("\0")
         .split_once('\0')
         .map(|(b, a)| (b.to_owned(), a.to_owned()))
         .unwrap();
-    let typed = src.join("../../internal/typed/src");
+    let typed = src.join("../../typed/src");
     let ids = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/typed/ids.rs");
     let mut files = vec![typed.join("typed.rs"), src.join("ui/screens.rs"), ids];
     for entry in std::fs::read_dir(typed.join("typed")).unwrap() {

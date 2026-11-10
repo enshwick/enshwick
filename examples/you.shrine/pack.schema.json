@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "PackManifest",
-  "description": "A pack folder's `pack.toml`: what the loader reads before it runs the\npack, as a mod's `[package.metadata.enshwick]` says it for a DLL.\n\n# Examples\n\n```\nuse enshwick::packs::{PackManifest, PackSide};\n\nlet manifest = PackManifest::parse(r#\"\nid = \"you.lanterns\"\nversion = \"1.0.0\"\nname = \"Lanterns\"\nexports = [\"event:lit\"]\n\n[requires]\nmarket = { id = \"you.trading-post\", version = \">=0.5, <1.0\" }\n\"#)?;\nassert_eq!(manifest.id, \"you.lanterns\");\nassert_eq!(manifest.exports, [\"event:lit\"]);\nassert_eq!(manifest.side, PackSide::Both);\nassert_eq!(manifest.requires[\"market\"].id, \"you.trading-post\");\n# Ok::<(), enshwick::packs::PackError>(())\n```",
+  "description": "A pack folder's `pack.toml`: what the loader reads before it runs the\npack, as a mod's `[package.metadata.enshwick]` says it for a DLL.\n\n# Examples\n\n```\nuse enshwick::packs::{PackManifest, PackSide};\n\nlet manifest = PackManifest::parse(r#\"\nid = \"you.lanterns\"\nversion = \"1.0.0\"\nname = \"Lanterns\"\nexports = [\"event:lit\"]\n\n[requires]\nmarket = { id = \"you.trading-post\", version = \">=0.5, <1.0\" }\n\"#)?;\nassert_eq!(manifest.id, \"you.lanterns\");\nassert_eq!(manifest.exports, [\"event:lit\"]);\nassert_eq!(manifest.side, PackSide::Both);\nassert_eq!(manifest.requires[\"market\"].id, \"you.trading-post\");\n```",
   "type": "object",
   "properties": {
     "after": {
@@ -139,7 +139,7 @@
       ]
     },
     "PackDependency": {
-      "description": "One dependency of a pack, the value under its alias in `requires`,\n`after` or `breaks`: a mod id, or a table with the `id`\nand a `version` requirement.\n\n# Examples\n\n```\nuse enshwick::packs::PackManifest;\n\nlet manifest = PackManifest::parse(r#\"\nid = \"you.lanterns\"\nversion = \"1.0.0\"\n\n[requires]\nmarket = { id = \"you.trading-post\", version = \">=0.5, <1.0\" }\nlockers = \"you.lockers\"\n\"#)?;\nassert_eq!(manifest.requires[\"market\"].id, \"you.trading-post\");\nassert_eq!(manifest.requires[\"market\"].version, \">=0.5, <1.0\");\nassert_eq!(manifest.requires[\"lockers\"].version, \"\");\n# Ok::<(), enshwick::packs::PackError>(())\n```",
+      "description": "One dependency of a pack, the value under its alias in `requires`,\n`after` or `breaks`: a mod id, or a table with the `id`\nand a `version` requirement.\n\n# Examples\n\n```\nuse enshwick::packs::PackManifest;\n\nlet manifest = PackManifest::parse(r#\"\nid = \"you.lanterns\"\nversion = \"1.0.0\"\n\n[requires]\nmarket = { id = \"you.trading-post\", version = \">=0.5, <1.0\" }\nlockers = \"you.lockers\"\n\"#)?;\nassert_eq!(manifest.requires[\"market\"].id, \"you.trading-post\");\nassert_eq!(manifest.requires[\"market\"].version, \">=0.5, <1.0\");\nassert_eq!(manifest.requires[\"lockers\"].version, \"\");\n```",
       "anyOf": [
         {
           "description": "The mod's id alone, for any version.",
@@ -152,7 +152,7 @@
       ]
     },
     "PackPoint": {
-      "description": "One extension point a pack's scripts own, a `[[point]]` table of\n`pack.toml`: other mods link into it, as into a Rust mod's `#[point]`.\n\n# Examples\n\n```\nuse enshwick::packs::PackManifest;\nuse enshwick::points::Mode;\n\nlet manifest = PackManifest::parse(r#\"\nid = \"you.trading-post\"\nversion = \"1.0.0\"\nexports = [\"point:price\"]\n\n[[point]]\nname = \"price\"\nmode = \"override\"\nrefusable = true\noutput = \"u32\"\ninput = [{ name = \"item\", type = \"enshwick.item_id\" }, { name = \"count\", type = \"u32\" }]\n\"#)?;\nlet price = &manifest.point[0];\nassert_eq!(price.mode, Mode::Override);\nlet layout = price.layout().ok_or(\"no layout\")?;\nassert_eq!((layout.input[1].offset, layout.size), (4, 8));\n# Ok::<(), Box<dyn std::error::Error>>(())\n```",
+      "description": "One extension point a pack's scripts own, a `[[point]]` table of\n`pack.toml`: other mods link into it, as into a Rust mod's `#[point]`.\n\n# Examples\n\n```\nuse enshwick::packs::PackManifest;\nuse enshwick::points::Mode;\n\nlet manifest = PackManifest::parse(r#\"\nid = \"you.trading-post\"\nversion = \"1.0.0\"\nexports = [\"point:price\"]\n\n[[point]]\nname = \"price\"\nmode = \"override\"\nrefusable = true\noutput = \"u32\"\ninput = [{ name = \"item\", type = \"enshwick.item_id\" }, { name = \"count\", type = \"u32\" }]\n\"#)?;\nlet price = &manifest.point[0];\nassert_eq!(price.mode, Mode::Override);\nlet layout = price.layout().ok_or(\"no layout\")?;\nassert_eq!((layout.input[1].offset, layout.size), (4, 8));\n```",
       "type": "object",
       "properties": {
         "doc": {
@@ -217,7 +217,7 @@
       ]
     },
     "PackSetting": {
-      "description": "One setting of a pack, a `[[setting]]` table of `pack.toml`.\n\n# Examples\n\n```\nuse enshwick::packs::PackManifest;\n\nlet manifest = PackManifest::parse(r#\"\nid = \"you.greeter\"\nversion = \"1.0.0\"\n\n[[setting]]\nkey = \"greeting\"\ndefault = \"Welcome\"\ndoc = \"What a player who joins reads.\"\n\n[[setting]]\nkey = \"every\"\ndefault = 30\nmin = 1\n\"#)?;\nlet schema = manifest.settings_schema().ok_or(\"no settings\")?;\nassert_eq!(schema.fields[1].min, Some(1.0));\n# Ok::<(), Box<dyn std::error::Error>>(())\n```",
+      "description": "One setting of a pack, a `[[setting]]` table of `pack.toml`.\n\n# Examples\n\n```\nuse enshwick::packs::PackManifest;\n\nlet manifest = PackManifest::parse(r#\"\nid = \"you.greeter\"\nversion = \"1.0.0\"\n\n[[setting]]\nkey = \"greeting\"\ndefault = \"Welcome\"\ndoc = \"What a player who joins reads.\"\n\n[[setting]]\nkey = \"every\"\ndefault = 30\nmin = 1\n\"#)?;\nlet schema = manifest.settings_schema().ok_or(\"no settings\")?;\nassert_eq!(schema.fields[1].min, Some(1.0));\n```",
       "type": "object",
       "properties": {
         "choices": {

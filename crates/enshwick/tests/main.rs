@@ -58,6 +58,7 @@ mod entity_calls_unavailable;
 mod entity_data;
 #[cfg(feature = "unstable")]
 mod events_described;
+mod example_manifest;
 #[cfg(feature = "typed")]
 mod experience_content;
 mod export_dir;
@@ -124,6 +125,7 @@ mod map_events;
 mod map_marker_types;
 mod mid_hook;
 mod mod_index;
+mod module_sources;
 mod net;
 mod no_inventories;
 mod no_mod_points;

@@ -16,26 +16,9 @@ autotests = false
 [dependencies]
 enshwick-macros = { path = "../enshwick-macros", version = "=1.0.0-alpha.14" }
 enshwick-abi.workspace = true
-enshwick-typed = { workspace = true, optional = true }
+enshwick-core.workspace = true
 enshwick-values.workspace = true
-aho-corasick.workspace = true
-bcdec_rs.workspace = true
-bytemuck.workspace = true
-const_format.workspace = true
 document-features.workspace = true
-zune-core.workspace = true
-zune-png.workspace = true
-hound = { workspace = true, optional = true }
-fastrand.workspace = true
-memchr.workspace = true
-postcard.workspace = true
-rustc-hash.workspace = true
-schemars = { workspace = true, optional = true }
-serde_json = { workspace = true, optional = true }
-serde.workspace = true
-strsim.workspace = true
-thiserror.workspace = true
-toml.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
@@ -43,20 +26,25 @@ criterion.workspace = true
 insta.workspace = true
 trybuild.workspace = true
 serde = { workspace = true, features = ["derive"] }
+toml.workspace = true
+hound.workspace = true
+postcard.workspace = true
+rustc-hash.workspace = true
+serde_json.workspace = true
 
 [features]
 ## `test`: a fake loader for a mod's unit tests.
-test = ["enshwick-typed?/test"]
+test = ["enshwick-core/test"]
 ## `packs::schemas`: the JSON Schemas of a data pack's files, for tools.
-schema = ["dep:schemars", "dep:serde_json"]
+schema = ["enshwick-core/schema"]
 ## `unstable`: the parts of the API that may still change in any release:
 ## young APIs and calls that rest on engine facts not yet checked in the
 ## running game. Every item it adds is marked in the docs.
-unstable = ["dep:hound"]
+unstable = ["enshwick-core/unstable"]
 ## `typed`: every component, event and resource the game reflects as typed
 ## items generated from its reflection, a few thousand of them; it builds on
 ## `unstable`.
-typed = ["unstable", "dep:enshwick-typed"]
+typed = ["unstable", "enshwick-core/typed"]
 
 # One binary for every file in `tests/`, each a module of `tests/main.rs`:
 # one link instead of one per file. nextest still runs each test in a

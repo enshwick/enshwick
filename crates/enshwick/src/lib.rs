@@ -118,142 +118,171 @@
 //! enshwick::declare_mod!(Hello);
 //! ```
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![forbid(unsafe_code)]
 
 /// The version of this crate, which a mod's generated `Cargo.toml` pins.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-// The macros name this crate by its path, as mods see it, and the points of
-// Enshwick's own mods are declared with them.
-extern crate self as enshwick;
-
+// Each module comes from the internal crate that holds its source, which
+// tools follow to its files; this crate gives it its path. The macros come
+// from `enshwick-macros` with their docs here: through `enshwick-core`,
+// rustdoc would show only the macro crate's own text, so `config` and
+// `script` take their modules alone (`{self}`).
 #[doc(inline)]
 pub use enshwick_abi::abi;
 #[cfg(feature = "unstable")]
-pub mod actions;
-pub mod affixes;
-pub mod altars;
+#[doc(inline)]
+pub use enshwick_core::actions;
+#[doc(inline)]
+pub use enshwick_core::affixes;
+#[doc(inline)]
+pub use enshwick_core::altars;
 #[cfg(doctest)]
 mod book;
-pub mod buffs;
-pub mod chat;
-pub mod code;
+#[doc(inline)]
+pub use enshwick_core::buffs;
+#[doc(inline)]
+pub use enshwick_core::chat;
+#[doc(inline)]
+pub use enshwick_core::code;
 #[doc(hidden)]
-pub mod command_names;
+pub use enshwick_core::command_names;
 #[cfg(feature = "unstable")]
-pub mod commands;
-pub mod config;
+#[doc(inline)]
+pub use enshwick_core::commands;
+#[doc(inline)]
+pub use enshwick_core::config::{self};
 #[cfg(feature = "unstable")]
-pub mod console;
-pub mod content;
+#[doc(inline)]
+pub use enshwick_core::console;
+#[doc(inline)]
+pub use enshwick_core::content;
 #[cfg(feature = "unstable")]
-pub mod controls;
-pub mod damage;
-pub mod daytime;
-mod declare;
-pub mod ecs;
-pub mod effects;
-mod engine_enum;
-mod engine_ids;
+#[doc(inline)]
+pub use enshwick_core::controls;
+#[doc(inline)]
+pub use enshwick_core::damage;
+#[doc(inline)]
+pub use enshwick_core::daytime;
+#[doc(inline)]
+pub use enshwick_core::ecs;
+#[doc(inline)]
+pub use enshwick_core::effects;
 #[cfg(feature = "unstable")]
-pub mod entity_data;
-pub mod events;
-pub mod files;
-pub(crate) mod fresh;
-pub mod game_events;
-pub mod game_settings;
-mod hook;
-mod host;
-pub mod i18n;
+#[doc(inline)]
+pub use enshwick_core::entity_data;
+#[doc(inline)]
+pub use enshwick_core::events;
+#[doc(inline)]
+pub use enshwick_core::files;
+#[doc(inline)]
+pub use enshwick_core::game_events;
+#[doc(inline)]
+pub use enshwick_core::game_settings;
+#[doc(inline)]
+pub use enshwick_core::i18n;
 #[cfg(feature = "unstable")]
-pub mod input;
-pub mod interactions;
-pub mod inventory;
+#[doc(inline)]
+pub use enshwick_core::input;
+#[doc(inline)]
+pub use enshwick_core::interactions;
+#[doc(inline)]
+pub use enshwick_core::inventory;
 #[cfg(feature = "unstable")]
-pub mod item_data;
+#[doc(inline)]
+pub use enshwick_core::item_data;
 #[cfg(feature = "unstable")]
-pub mod items;
-// Without `unstable` item data stays inside, for the stats of single items.
-#[cfg(not(feature = "unstable"))]
-#[expect(
-    unreachable_pub,
-    dead_code,
-    reason = "item data is public only with `unstable`"
-)]
-mod item_data;
-pub mod knowledge;
-mod load;
-mod locks;
-pub mod loot;
+#[doc(inline)]
+pub use enshwick_core::items;
+#[doc(inline)]
+pub use enshwick_core::knowledge;
+#[doc(inline)]
+pub use enshwick_core::loot;
 #[cfg(doctest)]
 mod lower_examples;
-#[cfg(feature = "unstable")]
-pub mod map;
-pub mod mods;
-mod near;
-pub mod net;
-pub mod pacing;
-pub mod packs;
-pub mod points;
-pub mod progress;
-#[cfg(feature = "typed")]
-pub mod quests;
-#[cfg(feature = "unstable")]
-pub mod rates;
-// Without `unstable` the rates stay inside, for the recipe and comfort
-// scaling the stable parts and the fake host share.
-#[cfg(not(feature = "unstable"))]
-#[expect(
-    unreachable_pub,
-    dead_code,
-    reason = "the rates are public only with `unstable`"
-)]
-mod rates;
 #[doc(inline)]
 pub use enshwick_abi::raw;
+#[cfg(feature = "unstable")]
+#[doc(inline)]
+pub use enshwick_core::map;
+#[doc(inline)]
+pub use enshwick_core::mods;
+#[doc(inline)]
+pub use enshwick_core::net;
+#[doc(inline)]
+pub use enshwick_core::pacing;
+#[doc(inline)]
+pub use enshwick_core::packs;
+#[doc(inline)]
+pub use enshwick_core::points;
+#[doc(inline)]
+pub use enshwick_core::progress;
+#[cfg(feature = "typed")]
+#[doc(inline)]
+pub use enshwick_core::quests;
+#[cfg(feature = "unstable")]
+#[doc(inline)]
+pub use enshwick_core::rates;
 #[cfg(doctest)]
 mod refused;
-pub mod resources;
+#[doc(inline)]
+pub use enshwick_core::resources;
 #[cfg(feature = "unstable")]
-pub mod rewards;
-mod rules;
-pub mod schedule;
+#[doc(inline)]
+pub use enshwick_core::rewards;
+#[doc(inline)]
+pub use enshwick_core::schedule;
 #[cfg(feature = "unstable")]
-pub mod script;
-// Without `unstable` the binding stays inside, so the crate's own types keep
-// their derives; only a script runtime, which turns the feature on, reads
-// them.
-#[cfg(not(feature = "unstable"))]
-#[expect(
-    unreachable_pub,
-    dead_code,
-    reason = "the script binding is public only with `unstable`"
-)]
-mod script;
-pub mod services;
+#[doc(inline)]
+pub use enshwick_core::script::{self};
+#[doc(inline)]
+pub use enshwick_core::services;
+#[doc(inline)]
+pub use enshwick_core::sound;
+#[doc(inline)]
+pub use enshwick_core::state;
+#[doc(inline)]
+pub use enshwick_core::stats;
+#[doc(inline)]
+pub use enshwick_core::status;
+#[doc(inline)]
+pub use enshwick_core::survivors;
+#[doc(inline)]
+pub use enshwick_core::terrain;
+#[cfg(feature = "test")]
+#[doc(inline)]
+pub use enshwick_core::test;
+#[doc(inline)]
+pub use enshwick_core::time;
+#[cfg(feature = "typed")]
+#[doc(inline)]
+pub use enshwick_core::typed;
+#[doc(inline)]
+pub use enshwick_core::ui;
+#[doc(inline)]
+pub use enshwick_core::vetoes;
+#[doc(inline)]
+pub use enshwick_core::voxels;
+#[doc(inline)]
+pub use enshwick_core::weather;
+#[cfg(feature = "unstable")]
+#[doc(inline)]
+pub use enshwick_core::world;
 #[doc(inline)]
 pub use enshwick_values::shape;
-pub mod sound;
-pub mod state;
-pub mod stats;
-pub mod status;
-pub mod survivors;
-pub mod terrain;
-#[cfg(feature = "test")]
-pub mod test;
-pub mod time;
-#[cfg(feature = "typed")]
-pub mod typed;
-pub mod ui;
-pub mod vetoes;
-pub mod voxels;
-pub mod weather;
-#[cfg(feature = "unstable")]
-pub mod world;
-mod world_error;
 
 // Listed as re-exports, not as second pages beside their `abi` ones.
 #[doc(no_inline)]
 pub use abi::{Entity, ItemId, PlayerKey, RecipeId};
+#[doc(inline)]
+pub use enshwick_core::{
+    FnPtr, Hook, Host, Load, Mod, Next, Off, Relock, RelockRw, RelockWait, WorldError, host,
+};
+#[doc(inline)]
+pub use enshwick_core::{
+    debug, detour, error, error_every, error_once, info, info_every, info_once, warn, warn_every,
+    warn_once,
+};
 pub use enshwick_macros::Config;
 /// Describes a type for script languages through [`script::Typed`],
 /// [`script::IntoScript`] and, when every field is shown,
@@ -702,17 +731,11 @@ pub use enshwick_macros::service;
 /// # Ok::<(), enshwick::Off>(())
 /// ```
 pub use enshwick_macros::texts;
-#[cfg(not(feature = "unstable"))]
-pub(crate) use enshwick_macros::{Script, script};
-pub use hook::{FnPtr, Hook, Next};
-pub use host::{Host, host};
-pub use load::{Load, Mod, Off};
-pub use locks::{Relock, RelockRw, RelockWait};
 #[doc(no_inline)]
 pub use shape::Shape;
-pub use world_error::WorldError;
 
 #[doc(hidden)]
-pub mod __private;
-#[doc(hidden)]
-pub mod schema_section;
+pub use enshwick_core::{
+    __declare_exports, __every, __log, __once, __private, __require_unwind, __schema_entry,
+    schema_section,
+};

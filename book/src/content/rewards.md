@@ -91,7 +91,7 @@ these problems:
 
 ## Hold a grant back or give from code
 
-[`load.on_reward(filter)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/rewards.rs)
+[`load.on_reward(filter)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/rewards.rs)
 runs before the mod gives any of its rewards; `false` holds the grant back
 and leaves its limit unused. To give something else, give it and return
 `false`. `load.rewards()` returns the handle that grants a declared reward

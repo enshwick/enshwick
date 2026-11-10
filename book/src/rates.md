@@ -14,7 +14,7 @@ workshop speed.
 ## Declaring a rate
 
 A mod declares each
-[`Rate`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/rates.rs)
+[`Rate`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/rates.rs)
 it multiplies with `load.rate(rate)`. It does so during `init`. The call returns a
 `RateHandle`, and its `set(factor)` puts the mod's factor in force: 1 is
 vanilla, 2 doubles, 0 takes it all. Factors run from 0 to 100; workshop
@@ -87,7 +87,7 @@ server, or on a client while it hosts a game.
 
 The game uses the product of the factors of every mod that declared the
 rate and is still on, held to 0 to 100. The rule is
-[`combine`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/rates.rs),
+[`combine`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/rates.rs),
 the same in the loader and the fake host; `scale_whole` rounds a whole
 number the game keeps. A product is the same in any
 order, so load order never changes a rate. A mod that turns off drops out

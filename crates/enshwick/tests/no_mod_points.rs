@@ -24,6 +24,7 @@ mod tests {
         // The internal crates whose modules this crate re-exports.
         for src in [
             crate_dir.join("src"),
+            crate_dir.join("../internal/core/src"),
             crate_dir.join("../internal/abi/src"),
             crate_dir.join("../internal/values/src"),
             crate_dir.join("../internal/typed/src"),

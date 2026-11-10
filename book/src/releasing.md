@@ -20,7 +20,9 @@ The platform's crates carry versions of their own:
 
 - the loader, `enshwick-loader`
 - the `powrprof.dll` stub, `enshwick-loader-stub`
-- `enshwick` with its test fake, and `enshwick-macros`
+- `enshwick` and `enshwick-macros`
+- `enshwick-core`, the safe layer with the test fake, an internal part of the
+  API crate released at its version
 - `enshwick-values` and `enshwick-typed`, internal parts of the API crate
   released at its version
 - `enshwick-abi`, the ABI types, an internal part of the API crate released
@@ -92,9 +94,9 @@ report.
 
 ## The list of loaded mods
 
-[`enshwick::mods::all()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
+[`enshwick::mods::all()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/mods.rs)
 lists every loaded mod in load order, the loader first (id `enshwick`). Each
-is a [`ModEntry`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
+is a [`ModEntry`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/mods.rs)
 with its id, version, side, file, whether it runs and the manifest's credits:
 
 ```rust
@@ -112,9 +114,9 @@ stub and the loader's DLL.
 The join check keeps a client out when the server runs mods of side `both`
 that the client lacks or has in another version. The loader lists those mods
 on the mismatch screen, then raises
-[`events::JoinRefused`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/events.rs)
+[`events::JoinRefused`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/events.rs)
 on the client.
-[`mods::join_missing()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
+[`mods::join_missing()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/mods.rs)
 then lists those mods. Each has the id and version the server advertises, `running`
 false, and the client's DLL path when it has the mod (empty otherwise). A
 server advertises no homepage or name, so players find a mod by its id.

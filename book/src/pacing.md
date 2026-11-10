@@ -6,7 +6,7 @@ description: The engine paces its loops with waits on handles and sizes its thre
 # Pacing and threads
 
 The engine paces its loops with waits on handles and sizes its thread pools
-from the CPUs it sees. [`pacing`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/pacing.rs)
+from the CPUs it sees. [`pacing`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/pacing.rs)
 names the places a mod can change to make the game use less CPU.
 
 ## The places
@@ -117,9 +117,9 @@ end
 A Luau mod names both caps; `TaskWorkers::at_most(4)` is the Rust way to
 give both the same value.
 
-[`SERVER_IDLE_WAIT_NS`]: https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/pacing.rs
-[`SERVER_ONLINE_WAIT_NS`]: https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/pacing.rs
-[`SERVER_SLOW_WAIT_NS`]: https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/pacing.rs
+[`SERVER_IDLE_WAIT_NS`]: https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/pacing.rs
+[`SERVER_ONLINE_WAIT_NS`]: https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/pacing.rs
+[`SERVER_SLOW_WAIT_NS`]: https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/pacing.rs
 
 ## Worked example
 

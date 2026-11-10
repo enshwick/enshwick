@@ -116,7 +116,7 @@ a request for a disabled recipe.
 
 ## From a mod
 
-[`recipes::disable`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs)
+[`recipes::disable`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/recipes.rs)
 adds a rule of the mod's, in the forms of the file. It works at init or
 later, from any thread. `recipes::enable` takes the mod's own rule back.
 `recipes::is_disabled` asks whether a recipe is disabled now, by GUID or

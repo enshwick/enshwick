@@ -6,7 +6,7 @@ description: The game's systems tell each other what happens through ECS events.
 # Game events
 
 The game's own systems tell each other what happens through ECS events.
-[`game_events`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/game_events.rs)
+[`game_events`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/game_events.rs)
 lets a mod observe them, typed for the common ones and by reflected name for
 any other.
 
@@ -15,7 +15,7 @@ any other.
 An event says that a hit resolved, an entity died, a player levelled up or a
 workshop finished a recipe, among others.
 
-[`load.on::<E>(|event| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
+[`load.on::<E>(|event| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load.rs)
 runs a handler on every event of kind `E`:
 
 ```rust

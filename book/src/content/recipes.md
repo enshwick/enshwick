@@ -7,9 +7,9 @@ description: Add a single recipe or derive recipes from vanilla ones, set their 
 
 Two calls add recipes:
 
-- [`Load::add_recipe`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs)
+- [`Load::add_recipe`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/recipes.rs)
   adds one recipe for a new output, copied from the recipe of a vanilla item;
-- [`Load::derive_recipes`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs)
+- [`Load::derive_recipes`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/recipes.rs)
   looks at every recipe in the registry and adds a scaled copy of each one
   you pick.
 
@@ -19,7 +19,7 @@ Both patch the game's recipe registry, which every mod shares; patches
 from several mods run in turn, so their recipes end up side by side. To
 change the counts, cost or time of vanilla recipes, declare a data change
 with
-[`Load::change_recipes`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/changes/recipes.rs)
+[`Load::change_recipes`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/changes/recipes.rs)
 ([the fields](packs.md)) or set a recipe output [rate](../rates.md). To take
 recipes out of the game, see [Disabling recipes](disabled-recipes.md).
 
@@ -119,7 +119,7 @@ it. Its output count is the original's times `output`. Its ingredient counts
 are the original's times `cost`. The original stays as it is. The
 copy makes the original's first output only.
 
-[`RecipeView`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs)
+[`RecipeView`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/recipes.rs)
 shows what a recipe is:
 
 - `guid()`, the recipe's GUID;
@@ -197,7 +197,7 @@ client:
 - `derive_recipes`.
 
 The
-[`content::menu`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/menu.rs)
+[`content::menu`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/menu.rs)
 module does the edit:
 
 - a new recipe goes right after the vanilla recipe that makes `like`, in the
@@ -213,7 +213,7 @@ copies. Take the locker of one mod and the Vault of a mod loaded later, both
 copied from the wooden chest. The Vault shows first: chest, Vault, locker.
 
 One group of the menu shows at most 512 recipes, all its sets together
-([`GROUP_ENTRIES`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/menu.rs)).
+([`GROUP_ENTRIES`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/menu.rs)).
 The mod's log says when a recipe is left out because its group is full. It
 also says when a recipe is left out because nothing in the menu says where it
 goes. The dedicated server has no crafting menu and serves no UI bundle.
@@ -221,19 +221,19 @@ goes. The dedicated server has no crafting menu and serves no UI bundle.
 ## The workshop limit
 
 The game takes at most 512 recipes at one workshop
-([`WORKSHOP_RECIPES`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs));
+([`WORKSHOP_RECIPES`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/recipes.rs));
 more ends the game. When any mod serves the recipe registry, the loader
 patches the game to lift that limit, on the server and the client alike. If
 it cannot, because the game code does not read as the loader expects, the
 loader logs `workshop recipe limit kept: <reason>` and the limit holds.
 
-[`workshop_limit()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs)
+[`workshop_limit()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/recipes.rs)
 tells which: `usize::MAX` once the limit is lifted, else 512. The answer is
 final before the game first reads the registry, which is when the recipe
 patches run, so both calls follow it:
 
 - while the limit holds, derived copies stop
-  [`RESERVED_FOR_SINGLE`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs)
+  [`RESERVED_FOR_SINGLE`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/recipes.rs)
   (16) short of 512 at each workshop. That leaves room for single recipes
   from `add_recipe`. A single recipe is skipped at a workshop that already
   holds 512;

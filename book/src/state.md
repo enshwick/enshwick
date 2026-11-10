@@ -48,10 +48,10 @@ a save keeps its GUID, so a copied world keeps its folders.
 
 ## The data folder
 
-[`world.data_dir()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world.rs)
+[`world.data_dir()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/world.rs)
 returns the mod's folder in the running world, `<stem>-mod-data/<id>`. It
 creates the folder when missing. It returns `None` while no world runs, as in the main menu or
-during `init`. [`load.data_dir()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
+during `init`. [`load.data_dir()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load.rs)
 answers the same. The path is plain `std::path::PathBuf`; use it from any
 thread while that world runs.
 
@@ -81,7 +81,7 @@ disk.
 
 ## Per-world state
 
-[`load.world_store::<T>(name)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
+[`load.world_store::<T>(name)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load.rs)
 keeps a value per world, in `<stem>-mod-data/<id>/<name>.toml`, never inside
 the game's save: removing the mod leaves the world as vanilla left it.
 
@@ -130,7 +130,7 @@ same error.
 ## Files of your own
 
 A mod that keeps a file in another format in its data folder uses
-[`enshwick::files`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/files.rs),
+[`enshwick::files`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/files.rs),
 the same calls the stores use:
 
 - Two calls read a file that may be missing: `read_if_present(path)` and
@@ -160,7 +160,7 @@ fn record_visit(dir: &std::path::Path) -> std::io::Result<()> {
 
 Some changes let a world grow past what the vanilla game opens safely, such as
 more altars than the game groups into bases. A mod that makes them sets a
-[`state::Hold`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/state.rs)
+[`state::Hold`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/state.rs)
 while that is so. It clears the hold when it is no longer so.
 
 ```rust
@@ -176,7 +176,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 A hold in the mod's folder, from
-[`load.mod_dir()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs),
+[`load.mod_dir()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load.rs),
 is the file `mods/<folder>/hold.txt`, holding the reason. While it is set,
 the loader checks it at start and stops the game before any world loads
 whenever the mod would not run:

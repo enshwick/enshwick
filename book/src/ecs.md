@@ -13,7 +13,7 @@ for.
 
 `load.system(name)` finds a system's update function by its reflected name,
 and a [hook](hooks.md) on it receives the system's query context, `ctx`. The
-types in [`enshwick::ecs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ecs.rs)
+types in [`enshwick::ecs`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/ecs.rs)
 work through that context, with the engine's own functions, pinned per build in
 the loader's table.
 
@@ -54,7 +54,7 @@ constants for the running build.
 
 ## Walking the query: `Ecs`
 
-[`Ecs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ecs.rs)
+[`Ecs`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/ecs.rs)
 walks the system's query with the engine's own iterator:
 
 - `query::<N>(ctx)` starts a walk. `next()` moves to the next row and returns
@@ -107,7 +107,7 @@ fn system(next: Next<'_, unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
 
 ## Other entities: `Components`
 
-[`Components`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ecs.rs)
+[`Components`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/ecs.rs)
 reads what any entity holds, from inside a running system:
 
 - `component(ctx, entity, ty)` returns a pointer to the entity's component of
@@ -151,7 +151,7 @@ assert_eq!(metres(at), [10.5, 2.0, -4.0]);
 
 Components such as `Level` and `Experience` hold attributes looked up by hash
 in the row's attribute registry.
-[`Attributes`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ecs.rs)
+[`Attributes`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/ecs.rs)
 reads and writes them:
 
 - `value(registry, set, attribute)` reads one, or `None` when the set is not
@@ -172,7 +172,7 @@ uses it.
 
 A client that hosts a game runs two worlds, its own and the built-in server's,
 and their systems share the same functions.
-[`Worlds`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ecs.rs)
+[`Worlds`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/ecs.rs)
 tells them apart:
 
 - `is_server(ctx)` is true for a context of the server's world. It is always

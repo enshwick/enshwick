@@ -17,9 +17,9 @@ github_checks:
 ignore:
   - "**/tests/**"
   - "**/tests.rs"
-  - crates/enshwick/src/typed.rs
-  - crates/enshwick/src/typed/**
-  - crates/enshwick/src/ui/screens.rs
+  - crates/internal/core/src/typed.rs
+  - crates/internal/core/src/typed/**
+  - crates/internal/core/src/ui/screens.rs
   - crates/enshwick-gamedata/src/typed/ids.rs
   - examples/**
   - fuzz/**

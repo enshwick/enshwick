@@ -22,7 +22,7 @@ Everything here is client only. On a server, these calls return
 ## Frames
 
 The game redraws its interface every frame from code, and a mod draws its own
-the same way. [`load.on_frame(draw)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ui.rs)
+the same way. [`load.on_frame(draw)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/ui.rs)
 registers a callback during `init`. It runs once per frame, on the thread
 that draws the interface, from the title screen on. It draws through the
 `Frame` it is handed. A widget's state lives with the mod: a toggle draws the
@@ -100,7 +100,7 @@ widgets draw only inside one. The widgets:
 | `input_hint`             | the key bound to a game action, with a label  | true when a key is bound  |
 
 `sound` and `play` need no window. `play` takes a
-[`SoundContainerId`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/sound.rs),
+[`SoundContainerId`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/sound.rs),
 the GUID of one of the game's sound containers, as its archive names it, or
 of a mod's own. It plays the container as an interface sound: only this
 client hears it, and it comes from no place in the world. The loader refuses
@@ -168,7 +168,7 @@ it left open.
 
 ## The HUD
 
-[`load.on_hud(draw)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ui/hud.rs)
+[`load.on_hud(draw)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/ui/hud.rs)
 registers a callback that runs once per frame while the game draws its HUD.
 It draws lines and bars at an `Anchor`: a corner, or the middle of the top or
 bottom edge. Items at one anchor stack in the order drawn, in a column the
@@ -212,7 +212,7 @@ refuses it. Its test draws the HUD through the fake host with `draw_hud`.
 Unstable: needs the `unstable` feature and may change in any release
 ([Stability](stability.md)).
 
-[`load.extend_screen(screen, edge, draw)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ui/extension.rs)
+[`load.extend_screen(screen, edge, draw)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/ui/extension.rs)
 adds a panel to one of the game's own screens, such as a storage chest's.
 `screen` is a `HudScreenType`, the game's own list of screens. `edge` is one
 edge of the screen, and the panel sits there, centred along it. The edges
@@ -410,7 +410,7 @@ This is not yet checked in the running game.
 Unstable: needs the `unstable` feature and may change in any release
 ([Stability](stability.md)).
 
-[`Ui::set_markers`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ui/map.rs)
+[`Ui::set_markers`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/ui/map.rs)
 shows the mod's markers on the map, at most 256. Each has a position in
 metres, a label and one of the game's eight custom marker colours. The next
 call replaces them all, and `clear_markers` takes them off. It works from any
@@ -480,7 +480,7 @@ fn mark_dungeons(ui: Ui, dungeons: &[[f64; 3]]) {
 
 ## Dialogs
 
-[`Ui::dialog`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ui.rs)
+[`Ui::dialog`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/ui.rs)
 queues a dialog in the game's own style, the one it shows for its own errors.
 It has a title, a message, smaller detail text and buttons the game labels in the
 player's language. It works from any thread; the answer callback runs on the
