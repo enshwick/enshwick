@@ -6,10 +6,6 @@
 //! same path; this crate's own paths carry no promise.
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-/// The version of Enshwick this crate is part of, released at one version
-/// with `enshwick`.
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-
 // The macros name the API crate by its path, as mods see it; for the code
 // and examples here that crate is this one, whose root has the same paths.
 extern crate self as enshwick;
