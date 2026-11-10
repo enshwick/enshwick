@@ -430,8 +430,10 @@ version = "1.0.0-alpha.14"
 dependencies = [
  "criterion",
  "document-features",
+ "enshwick-abi",
  "enshwick-core",
  "enshwick-macros",
+ "enshwick-values",
  "hound",
  "insta",
  "postcard",
