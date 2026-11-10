@@ -117,7 +117,7 @@ impl<'de> Deserialize<'de> for GiveEntry {
     }
 }
 
-/// `count` of `item`, all or nothing.
+/// `count` of `item`, as many as fit; the log names the rest.
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]

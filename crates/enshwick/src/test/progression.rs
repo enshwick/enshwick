@@ -52,6 +52,10 @@ pub const PROGRESSION: &str = "demo::ecs::PlayerQuestProgressionMode";
 /// The vanilla quest of the fake's journal, a world's main quest of one
 /// step.
 pub const VANILLA_QUEST: u32 = 0x0000_0500;
+/// The text tag of the lore category the vanilla journal's one page is
+/// listed under, the game's "General": the one category a mod's page may
+/// take here.
+pub const LORE_CATEGORY: Guid = crate::content::journal::lore_category::GENERAL;
 /// The item [`VANILLA_QUEST`] pays.
 pub const QUEST_ITEM: Guid = Guid::parse("c0ffee00-0000-4000-8000-0000000a0e57");
 /// The document the fake's journal entries name.
@@ -585,7 +589,8 @@ fn hash_key(key: u32) -> Value {
 }
 
 /// The vanilla journal, as the codec writes it: [`VANILLA_QUEST`], one step
-/// shown on [`VANILLA_PLAYER_KNOWLEDGE`], paying the item [`QUEST_ITEM`].
+/// shown on [`VANILLA_PLAYER_KNOWLEDGE`], paying the item [`QUEST_ITEM`],
+/// and one lore page without entries under [`LORE_CATEGORY`].
 fn journal_value() -> Value {
     let query = |id: u32, kind: &str| {
         fields(vec![
@@ -632,9 +637,18 @@ fn journal_value() -> Value {
             ])]),
         ),
     ]);
+    let page = fields(vec![
+        ("entryId", hash_key(0x0000_0507)),
+        ("loreCategory", hash_key(LORE_CATEGORY.fnv1a())),
+        ("name", hash_key(0x0000_0508)),
+        ("referencedDocumentName", hash_key(VANILLA_DOCUMENT)),
+        ("priority", Value::Uint(0)),
+        ("isTutorial", Value::Bool(false)),
+        ("entries", Value::List(Vec::new())),
+    ]);
     fields(vec![
         ("quests", Value::List(vec![quest])),
-        ("collections", Value::List(Vec::new())),
+        ("collections", Value::List(vec![page])),
     ])
 }
 

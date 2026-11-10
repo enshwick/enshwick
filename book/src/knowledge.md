@@ -172,8 +172,10 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 [`KnowledgeChanged`](events.md) is raised on the game thread after each step
 for every value that step changed. It holds the player's character (0 for
 the world), the id and the new value. [`QuestCompleted`](events.md) is raised
-when a player completed a quest and got its rewards. It holds the character
-and the quest's id.
+when a quest's bool is set for a player. The game gave its experience, and a
+mod gives its items ([Giving a quest's items](content/journal.md#giving-a-quests-items)).
+A mod's grant of that bool raises it too. It holds the character and the
+quest's id.
 
 Where each call works is in
 [What may be called where](concepts/threads.md#what-may-be-called-where).

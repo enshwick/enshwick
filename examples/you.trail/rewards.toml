@@ -18,7 +18,7 @@ on = { pickup = "3f4093ae-75ed-4e5d-bd0b-784ba83b88f5" }
 give = [{ knowledge = "f1a8b8c7-1be7-55c5-b347-eaeb9b2d5334" }] # you.trail:wood
 limit = "once"
 
-# Completes the second step, which pays the quest's torch.
+# Completes the second step and the quest; main.luau then gives the torch.
 [[reward]]
 id = "resin"
 # Material_T1_Resin

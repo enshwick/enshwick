@@ -128,6 +128,7 @@ One operation each:
 | Call | Does |
 | --- | --- |
 | `give(to, item, count, done)` | Gives new items: merged into stacks of the same item, then free slots. |
+| `give_what_fits(to, item, count, done)` | Gives as many new items as fit. `done` hears how many were not given and the outcome. |
 | `take(from, item, count, done)` | Removes items, from whichever stacks hold them. |
 | `destroy_slot(slot, done)` | Destroys a stack. |
 | `move_slot(slot, to, amount, done)` | Moves a stack, or `Some(amount)` of it, into an inventory's free or matching slots. |
@@ -321,6 +322,7 @@ and `allow_partial`. They also set `notify`. See [Loot containers](content/loot.
 inventory step and hand the outcome to a function:
 
 - `give`
+- `give_what_fits`, whose function takes the count not given and the outcome
 - `take`
 - `destroy_slot`
 - `move_slot`

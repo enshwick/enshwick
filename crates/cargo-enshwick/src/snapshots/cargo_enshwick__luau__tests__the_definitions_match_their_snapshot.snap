@@ -1,5 +1,6 @@
 ---
 source: crates/cargo-enshwick/src/luau.rs
+assertion_line: 621
 expression: definitions()
 ---
 --!strict
@@ -937,7 +938,7 @@ export type GenericDifficulty = "VeryEasy" | "Easy" | "Normal" | "Hard" | "VeryH
 --- What a reward gives.
 export type Give = { Items: GiveItems } | { Experience: number } | { Knowledge: number } | { Buff: number }
 
---- `count` of `item`, all or nothing: with a full inventory the player gets none and the log says so.
+--- `count` of `item`, as many as fit: the log says how many a full inventory left out, or why none were given, and nothing is kept for later.
 export type GiveItems = {
 	--- The item.
 	item: number,
@@ -1630,7 +1631,7 @@ export type NewItem = {
 export type NewJournalPage = {
 	--- Its content id.
 	id: string,
-	--- The text tag of the category the journal lists it under.
+	--- The text tag of the game's lore category the journal lists it under: the journal has a card only for its own categories, so `Load.add_journal_page` refuses any other tag. Rust names them in `journal.lore_category` behind the `unstable` feature; Luau has no such names and passes the tag.
 	category: string,
 	--- Its title's text tag.
 	name: string,
@@ -1706,7 +1707,7 @@ export type NewQuest = {
 	for_all_players: boolean?,
 	--- Its steps, in order.
 	steps: {QuestStep},
-	--- What it pays when its last step completes.
+	--- What the journal shows as its reward; see `QuestReward` for what the game gives of it.
 	rewards: {QuestReward}?,
 }
 
@@ -2098,11 +2099,11 @@ export type QuestInfo = {
 	priority: number,
 	--- Its steps, in order.
 	steps: {StepInfo},
-	--- What it pays when its last step is done; a reward of the game's that gives an item and experience reads as two.
+	--- What the journal shows as its reward, as `QuestReward` says the game gives it; a reward of the game's with an item and experience reads as two.
 	rewards: {QuestReward},
 }
 
---- What a quest pays when its last step completes. The name is enshwick's, not the game's.
+--- What the journal shows as a quest's reward. The game gives the experience when the quest's last step completes and only draws the item: its own quests name an NPC, a station or a chest icon there (client 26430625). A mod hands the items of its own quest out on `QuestCompleted`. The name is enshwick's, not the game's.
 export type QuestReward = { Item: string } | { Experience: number }
 
 --- Where a player or the world stands in a quest, from the knowledge its steps ask for.
@@ -3348,6 +3349,8 @@ declare enshwick: {
 		count: (root: number, item: number) -> number,
 		--- Gives `count` new items `item` to the inventory `to`, all or nothing, with the game's pickup message.
 		give: (to: number, item: number, count: number, done: (arg1: Outcome) -> ()) -> (),
+		--- Gives as many of `count` new items `item` as the inventory `to` has room for, with the game's pickup message, and tells `done` how many were not given and the request's `Outcome`: a committed one left them for want of room, any other gave none (`count`), for the reason its `Done` names. What becomes of the rest is the caller's to decide.
+		give_what_fits: (to: number, item: number, count: number, done: (arg1: number, arg2: Outcome) -> ()) -> (),
 		--- Takes `count` items `item` from the inventory `from`, all or nothing.
 		take: (from: number, item: number, count: number, done: (arg1: Outcome) -> ()) -> (),
 		--- Destroys the stack in `slot`.
@@ -3749,7 +3752,7 @@ declare enshwick: {
 		revoke_account: (account: string, id: number, revoke: Revoke) -> (),
 		--- Every quest id of the running game; empty off the game thread or while no world runs.
 		quests: () -> {number},
-		--- Whether the player whose character is `player` completed quest `quest` and got its rewards.
+		--- Whether the player whose character is `player` completed quest `quest`: its bool is set for them.
 		completed: (player: number, quest: number) -> boolean,
 		--- Whether the player whose character is `player` follows the quests on their own (personal progression) rather than with the world; nil for a player not in the game, off the game thread, or on a build without it.
 		quest_progression: (player: number) -> boolean?,
@@ -4144,13 +4147,13 @@ declare enshwick: {
 		--- Adds an experience value beside the game's own and returns it, for a knowledge entry's `NewKnowledge.experience` or a quest's experience reward. The game counts the experience under its source, as it does a vanilla value's; `experience_values` lists those. Adding the same id again replaces its source and gain. One patch of the balancing table serves all of a mod's values; it adds none when another mod's value there has the id of one of them.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_experience: (new: NewExperience) -> number,
-		--- Adds a quest to the journal beside the game's, on the server and the client alike, and returns its quest id: a player's bool the game sets when it pays the quest, as for its own. Each step shows while its `shown_when` holds and is done once its `done_when` holds; the game pays the rewards when the last step is done. A mod moves the quest on by granting the knowledge its steps ask for.
+		--- Adds a quest to the journal beside the game's, on the server and the client alike, and returns its quest id: a player's bool the game sets when it pays the quest, as for its own. Each step shows while its `shown_when` holds and is done once its `done_when` holds. When the last step is done the game gives the experience of the rewards and raises `QuestCompleted`; it draws an item reward and never gives it, so the mod gives its items in a handler of that event (`give_what_fits`). A mod moves the quest on by granting the knowledge its steps ask for.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_quest: (new: NewQuest) -> number,
-		--- Adds a lore page to the journal, on the server and the client alike: its entries show once their knowledge holds, listed under its category.
+		--- Adds a lore page to the journal, on the server and the client alike: its entries show once their knowledge holds, on the card of its category on the journal's world information screen. The card counts the page from the start and lists it once one entry shows.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_journal_page: (new: NewJournalPage) -> (),
-		--- Changes the vanilla quest `quest` in memory, on the server and the client alike: its rewards, whether it unlocks for every player, and its steps' knowledge. Mods that change one quest change it in load order, each on the one before's result; `Knowledge.quests` lists the quest ids. `Knowledge.quests`: crate.knowledge.Knowledge.quests
+		--- Changes the vanilla quest `quest` in memory, on the server and the client alike: its rewards, whether it unlocks for every player, and its steps' knowledge. Mods that change one quest change it in load order, each on the one before's result; `Knowledge.quests` lists the quest ids. The game gives an added reward's experience and only draws an added item, which the mod gives on `QuestCompleted`, as for its own quest (see `QuestReward`). `Knowledge.quests`: crate.knowledge.Knowledge.quests
 		--- Only while the mod starts, at the top level of main.luau.
 		change_quest: (quest: number, change: QuestChange) -> (),
 		--- The vanilla nodes of the skill tree, to link a mod's nodes from and place them beside.

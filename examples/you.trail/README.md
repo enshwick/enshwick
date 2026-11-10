@@ -7,17 +7,20 @@ the game's own journal and skill tree. Copy the folder into the game's
 | File | What it adds |
 | --- | --- |
 | `pack.toml` | The pack, a mod of side both: the client draws the journal and the tree from its own data |
-| `main.luau` | Three knowledge entries of each player, the quest, the lore page, the skill node and their texts in English and Ukrainian |
+| `main.luau` | Three knowledge entries of each player, the quest and the handler that gives its torch, the lore page, the skill node and their texts in English and Ukrainian |
 | `rewards.toml` | The actions that set the knowledge entries and so move the quest on |
 
 ## Try it
 
 1. Start the server and the client with the mod, and join with a new
    character. Joining gives the quest and shows the lore page.
-2. Open the journal: the quest "A Trail Through the Woods" asks for wood,
-   and the page "The Old Trail" is under "Trail Notes".
+2. Open the journal: the quest "A Trail Through the Woods" asks for wood.
+   Under "World information" the card "General" lists the page "The Old
+   Trail".
 3. Pick up wood logs: the first step is done and the second asks for resin.
-4. Pick up resin: the quest is complete and pays a torch.
+4. Pick up resin: the quest is complete and the mod gives a torch. The game
+   gives a quest's experience and only shows its item, so `main.luau` gives
+   the torch when the quest completes. A full inventory gets a notice.
 5. Open the skill tree: the node "Trail Endurance" sits beside the first
    root, costs 1 skill point and gives what the tree's first attribute node
    gives.

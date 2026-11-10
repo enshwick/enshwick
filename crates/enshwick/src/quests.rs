@@ -231,8 +231,9 @@ pub struct QuestInfo {
     pub priority: u32,
     /// Its steps, in order.
     pub steps: Vec<StepInfo>,
-    /// What it pays when its last step is done; a reward of the game's that
-    /// gives an item and experience reads as two.
+    /// What the journal shows as its reward, as [`QuestReward`] says the
+    /// game gives it; a reward of the game's with an item and experience
+    /// reads as two.
     pub rewards: Vec<QuestReward>,
 }
 

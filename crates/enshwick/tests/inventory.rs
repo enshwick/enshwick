@@ -5,7 +5,6 @@
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::AtomicU32;
     use std::sync::{Mutex, OnceLock};
 
     use enshwick::Entity;
@@ -26,7 +25,6 @@ mod tests {
     const COIN: u32 = 0x0c01;
 
     static INVENTORIES: OnceLock<Inventories> = OnceLock::new();
-    static SKIPPED: AtomicU32 = AtomicU32::new(44);
     static OUTCOMES: Mutex<Vec<Outcome>> = Mutex::new(Vec::new());
 
     struct Looter;
@@ -107,16 +105,7 @@ mod tests {
     }
 
     fn world() -> FakeHost {
-        let host = FakeHost::new()
-            .symbol("ecs.type_index", 0x1_4064_5cc0)
-            .symbol("ecs.component_read_raw", 0x1_4064_6b00)
-            .symbol("ecs.slot_root", 0x1_4093_5420)
-            .symbol("inventory.skip_entity", SKIPPED.as_ptr().addr() as u64)
-            .constant("ecs.context_entity_world", 0x30)
-            .constant("ecs.registry_type_map", 0x30)
-            .constant("ecs.registry_type_map_fallback", 0x88)
-            .world()
-            .inventory();
+        let host = FakeHost::new().world().inventory_requests();
         let (setup_type, inventory) = (
             hash(&host, facts::INVENTORY_SETUP),
             hash(&host, facts::INVENTORY),

@@ -2,8 +2,8 @@
 //! every chapter is in `SUMMARY.md`, and every chapter is included by a
 //! doctest harness of the API crate, so its Rust examples compile. Every
 //! chapter opens with its page type and description and keeps its intro
-//! short, and a chapter that names an id links the page on how ids are
-//! namespaced.
+//! short, a chapter that names an id links the page on how ids are
+//! namespaced, and some chapter names each public module of the API crate.
 
 use std::path::Path;
 
@@ -33,17 +33,83 @@ pub(crate) fn check(root: &Path) -> Vec<String> {
     let mut found = problems(&summary, &chapters, &harnessed, |link| {
         source.join(link).is_file()
     });
+    let mut texts = Vec::new();
     for chapter in &chapters {
         match std::fs::read_to_string(source.join(chapter)) {
             Ok(text) => {
                 found.extend(page_problems(chapter, &text));
                 found.extend(intro_problem(chapter, &text));
                 found.extend(ids_link_problem(chapter, &text));
+                texts.push(text);
             }
             Err(error) => found.push(format!("{SOURCE}/{chapter}: {error}")),
         }
     }
+    match std::fs::read_to_string(root.join(API_ROOT)) {
+        Ok(lib) => found.extend(unnamed_modules(&lib, &texts)),
+        Err(error) => found.push(format!("{API_ROOT}: {error}")),
+    }
     found
+}
+
+/// The API crate's root, which declares its public modules.
+const API_ROOT: &str = "crates/enshwick/src/lib.rs";
+/// The API crate's name, as a chapter writes a path through it.
+const API_CRATE: &str = "enshwick";
+
+/// The public modules of `lib` that no chapter of `texts` names. The
+/// developer site builds a page per chapter and fails on a module none
+/// names, so this holds the same rule where the module is added.
+fn unnamed_modules(lib: &str, texts: &[String]) -> Vec<String> {
+    public_modules(lib)
+        .into_iter()
+        .filter(|name| !texts.iter().any(|text| names_module(text, name)))
+        .map(|name| {
+            format!(
+                "{API_ROOT}: no chapter names the public module `{name}`; name `{API_CRATE}::{name}` in the chapter that documents it"
+            )
+        })
+        .collect()
+}
+
+/// The modules `lib` declares as `pub mod <name>;`, without those whose
+/// attribute lines right above hide them from the docs.
+fn public_modules(lib: &str) -> Vec<&str> {
+    let mut modules = Vec::new();
+    let mut hidden = false;
+    for line in lib.lines() {
+        let line = line.trim();
+        if line.starts_with("#[") {
+            hidden |= line == "#[doc(hidden)]";
+            continue;
+        }
+        if let Some(name) = line
+            .strip_prefix("pub mod ")
+            .and_then(|rest| rest.strip_suffix(';'))
+            && !hidden
+        {
+            modules.push(name);
+        }
+        hidden = false;
+    }
+    modules
+}
+
+/// Whether `text` names the module `name` as the site reads it: a link to
+/// its source, `enshwick::<name>` or a path `<name>::` through it.
+fn names_module(text: &str, name: &str) -> bool {
+    let word = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    let bounded = |needle: &str, right: bool| {
+        text.match_indices(needle).any(|(at, _)| {
+            let before = text[..at].chars().next_back();
+            let after = text[at + needle.len()..].chars().next();
+            !(before.is_some_and(word) || right && after.is_some_and(word))
+        })
+    };
+    text.contains(&format!("src/{name}.rs"))
+        || text.contains(&format!("src/{name}/"))
+        || bounded(&format!("{API_CRATE}::{name}"), true)
+        || bounded(&format!("{name}::"), false)
 }
 
 /// The Diátaxis page types a chapter may declare.
@@ -503,6 +569,7 @@ mod tests {
         for harness in HARNESSES {
             std::fs::write(root.join(harness), r#""hooks.md""#).unwrap();
         }
+        std::fs::write(root.join(API_ROOT), "").unwrap();
         std::fs::write(source.join("SUMMARY.md"), "- [Hooks](hooks.md)\n").unwrap();
         std::fs::write(source.join("hooks.md"), "# Hooks\n\nA hook runs first.\n").unwrap();
         let found = check(&root);
@@ -513,6 +580,35 @@ mod tests {
                 "book/src/hooks.md: opens with no <!-- type: … description: … --> comment on lines of their own"
             ]
         );
+    }
+
+    #[test]
+    fn a_public_module_no_chapter_names_is_named() {
+        let lib = "pub mod abi;\n#[cfg(feature = \"typed\")]\npub mod quests;\nmod hook;\n#[doc(hidden)]\npub mod __private;\n";
+        let texts = [String::from("Read `enshwick::abi` first.")];
+        assert_eq!(
+            unnamed_modules(lib, &texts),
+            [
+                "crates/enshwick/src/lib.rs: no chapter names the public module `quests`; name `enshwick::quests` in the chapter that documents it"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_module_is_named_by_its_source_its_crate_path_or_a_path_through_it() {
+        assert!(names_module("See [it](src/quests.rs).", "quests"));
+        assert!(names_module("Under src/quests/state.rs.", "quests"));
+        assert!(names_module("`enshwick::quests`.", "quests"));
+        assert!(names_module("use quests::Quests;", "quests"));
+        assert!(!names_module("`enshwick::questsx`.", "quests"));
+        assert!(!names_module("my_quests::all", "quests"));
+        assert!(!names_module("enshwick.quests.all()", "quests"));
+    }
+
+    #[test]
+    fn a_hidden_module_needs_no_chapter_and_the_hiding_ends_at_the_next_item() {
+        let lib = "#[doc(hidden)]\n#[cfg(test)]\npub mod a;\npub mod b;\n";
+        assert_eq!(public_modules(lib), ["b"]);
     }
 
     #[test]
