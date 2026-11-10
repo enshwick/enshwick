@@ -278,3 +278,8 @@
 "mods.demo" = "Demostración de la interfaz"
 "mods.store.unparsed" = "{mod}: sus datos guardados «{store}» están desactivados en este mundo. El archivo no se puede leer: {path}. {detail}"
 "mods.store.off" = "{mod}: sus datos guardados «{store}» están desactivados en este mundo: {reason}"
+"mods.skipped.copy" = "Otra copia de {id} se carga en lugar de esta. Borra esta copia."
+"mods.skipped.missing" = "Necesita el mod {id}, que no está instalado o no se inició. Instala {id}."
+"mods.skipped.version" = "Necesita {id} {range}, y está instalado {found}. Instala una versión de {id} que coincida."
+"mods.skipped.breaks" = "No funciona junto a {id} {version}. Quita uno de los dos."
+"mods.skipped.cycle" = "Este mod y otro necesitan cada uno que el otro se inicie primero. Actualiza o quita uno de ellos."

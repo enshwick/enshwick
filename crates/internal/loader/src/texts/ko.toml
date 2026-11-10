@@ -278,3 +278,8 @@
 "mods.demo" = "인터페이스 데모"
 "mods.store.unparsed" = "{mod}: 저장된 데이터 \"{store}\"이(가) 이 월드에서 꺼져 있습니다. 파일을 읽을 수 없습니다: {path}. {detail}"
 "mods.store.off" = "{mod}: 저장된 데이터 \"{store}\"이(가) 이 월드에서 꺼져 있습니다: {reason}"
+"mods.skipped.copy" = "이 사본 대신 {id}의 다른 사본이 로드됩니다. 이 사본을 삭제하세요."
+"mods.skipped.missing" = "모드 {id}이(가) 필요하지만 설치되지 않았거나 시작되지 않았습니다. {id}을(를) 설치하세요."
+"mods.skipped.version" = "{id} {range}이(가) 필요하지만 {found}이(가) 설치되어 있습니다. 맞는 {id} 버전을 설치하세요."
+"mods.skipped.breaks" = "{id} {version}와(과) 함께 작동하지 않습니다. 둘 중 하나를 제거하세요."
+"mods.skipped.cycle" = "이 모드와 다른 모드가 서로 상대가 먼저 시작되어야 합니다. 둘 중 하나를 업데이트하거나 제거하세요."

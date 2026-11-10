@@ -280,3 +280,8 @@
 "mods.demo" = "Interface demo"
 "mods.store.unparsed" = "{mod}: its saved data \"{store}\" is off in this world. The file does not read: {path}. {detail}"
 "mods.store.off" = "{mod}: its saved data \"{store}\" is off in this world: {reason}"
+"mods.skipped.copy" = "Another copy of {id} loads instead of this one. Delete this copy."
+"mods.skipped.missing" = "It needs the mod {id}, which is not installed or did not start. Install {id}."
+"mods.skipped.version" = "It needs {id} {range}, and {found} is installed. Install a version of {id} that matches."
+"mods.skipped.breaks" = "It does not work beside {id} {version}. Remove one of the two."
+"mods.skipped.cycle" = "It and another mod each need the other to start first. Update or remove one of them."

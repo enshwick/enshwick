@@ -278,3 +278,8 @@
 "mods.demo" = "界面演示"
 "mods.store.unparsed" = "{mod}:保存的数据“{store}”在此世界中已关闭。文件无法读取:{path}。{detail}"
 "mods.store.off" = "{mod}:保存的数据“{store}”在此世界中已关闭:{reason}"
+"mods.skipped.copy" = "{id} 的另一个副本代替此副本加载。请删除此副本。"
+"mods.skipped.missing" = "它需要模组 {id}，但该模组未安装或未启动。请安装 {id}。"
+"mods.skipped.version" = "它需要 {id} {range}，但安装的是 {found}。请安装匹配的 {id} 版本。"
+"mods.skipped.breaks" = "它无法与 {id} {version} 一起运行。请移除其中一个。"
+"mods.skipped.cycle" = "它与另一个模组都需要对方先启动。请更新或移除其中一个。"

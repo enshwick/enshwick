@@ -278,3 +278,8 @@
 "mods.demo" = "インターフェースのデモ"
 "mods.store.unparsed" = "{mod}: 保存データ「{store}」はこのワールドで無効です。ファイルを読み込めません: {path}。{detail}"
 "mods.store.off" = "{mod}: 保存データ「{store}」はこのワールドで無効です: {reason}"
+"mods.skipped.copy" = "このコピーの代わりに {id} の別のコピーが読み込まれます。このコピーを削除してください。"
+"mods.skipped.missing" = "Mod {id} が必要ですが、インストールされていないか起動しませんでした。{id} をインストールしてください。"
+"mods.skipped.version" = "{id} {range} が必要ですが、インストールされているのは {found} です。合う {id} のバージョンをインストールしてください。"
+"mods.skipped.breaks" = "{id} {version} と一緒には動きません。どちらかを削除してください。"
+"mods.skipped.cycle" = "この Mod と別の Mod が、互いに相手が先に起動することを必要としています。どちらかを更新または削除してください。"

@@ -42,7 +42,82 @@ pub struct Plan {
     /// Indices into the candidates, dependencies first.
     pub order: Vec<usize>,
     /// Indices of skipped candidates and why.
-    pub skipped: Vec<(usize, String)>,
+    pub skipped: Vec<(usize, Skip)>,
+}
+
+/// Why a mod does not load: the log names it in English, the player reads
+/// [`Skip::shown`] in their language.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Skip {
+    /// A second copy of a mod id.
+    Copy {
+        /// The mod id.
+        id: String,
+        /// The index of the copy that loads.
+        first: usize,
+    },
+    /// A required mod is not loaded.
+    Missing {
+        /// The required mod's id.
+        id: String,
+    },
+    /// A required mod loads in a version outside the range asked for.
+    Version {
+        /// The required mod's id.
+        id: String,
+        /// The versions asked for.
+        range: VersionReq,
+        /// The version that loads.
+        found: Version,
+    },
+    /// The mod does not work beside another that loads.
+    Breaks {
+        /// The other mod's id.
+        id: String,
+        /// The other mod's version.
+        version: Version,
+    },
+    /// The mod is in a cycle of requirements.
+    Cycle,
+}
+
+impl core::fmt::Display for Skip {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Copy { id, first } => write!(f, "a second copy of {id}, after #{first}"),
+            Self::Missing { id } => write!(f, "requires {id}, which is not loaded"),
+            Self::Version { id, range, found } => write!(f, "requires {id} {range}, found {found}"),
+            Self::Breaks { id, version } => {
+                write!(f, "does not work beside {id} {version}; remove one of them")
+            }
+            Self::Cycle => f.write_str("in a dependency cycle"),
+        }
+    }
+}
+
+impl Skip {
+    /// The reason in the player's language, as the Mods screen and the chat
+    /// line at world load show it.
+    #[must_use]
+    pub fn shown(&self) -> String {
+        match self {
+            Self::Copy { id, .. } => crate::texts::fill("mods.skipped.copy", &[("id", id)]),
+            Self::Missing { id } => crate::texts::fill("mods.skipped.missing", &[("id", id)]),
+            Self::Version { id, range, found } => crate::texts::fill(
+                "mods.skipped.version",
+                &[
+                    ("id", id),
+                    ("range", &range.to_string()),
+                    ("found", &found.to_string()),
+                ],
+            ),
+            Self::Breaks { id, version } => crate::texts::fill(
+                "mods.skipped.breaks",
+                &[("id", id), ("version", &version.to_string())],
+            ),
+            Self::Cycle => crate::texts::text("mods.skipped.cycle").to_owned(),
+        }
+    }
 }
 
 /// A file in `mods/` that declares a mod, weighed by [`duplicates`] against
@@ -98,13 +173,16 @@ pub fn duplicates(files: &[Installed<'_>]) -> Vec<(usize, usize)> {
 /// Decides which `candidates` load and in what order.
 #[must_use]
 pub fn resolve(candidates: &[Candidate]) -> Plan {
-    let mut skipped: BTreeMap<usize, String> = BTreeMap::new();
+    let mut skipped: BTreeMap<usize, Skip> = BTreeMap::new();
     let mut by_id: BTreeMap<&str, usize> = BTreeMap::new();
     for (i, candidate) in candidates.iter().enumerate() {
         if let Some(&first) = by_id.get(candidate.id.as_str()) {
             skipped.insert(
                 i,
-                format!("a second copy of {}, after #{first}", candidate.id),
+                Skip::Copy {
+                    id: candidate.id.clone(),
+                    first,
+                },
             );
         } else {
             by_id.insert(&candidate.id, i);
@@ -151,7 +229,7 @@ pub fn resolve(candidates: &[Candidate]) -> Plan {
         // A cycle of soft orders only gives way: its mods load anyway.
         let Some(at) = ready(true).or_else(|| ready(false)) else {
             for &i in &pending {
-                skipped.insert(i, "in a dependency cycle".into());
+                skipped.insert(i, Skip::Cycle);
             }
             break;
         };
@@ -182,9 +260,9 @@ fn unmet(
     candidate: &Candidate,
     candidates: &[Candidate],
     by_id: &BTreeMap<&str, usize>,
-    skipped: &BTreeMap<usize, String>,
+    skipped: &BTreeMap<usize, Skip>,
     me: usize,
-) -> Option<String> {
+) -> Option<Skip> {
     for dependency in &candidate.dependencies {
         let other = by_id
             .get(dependency.id.as_str())
@@ -193,15 +271,18 @@ fn unmet(
         match dependency.relation {
             Relation::REQUIRES => {
                 let Some(j) = other else {
-                    return Some(format!("requires {}, which is not loaded", dependency.id));
+                    return Some(Skip::Missing {
+                        id: dependency.id.clone(),
+                    });
                 };
                 if let Some(range) = &dependency.range
                     && !meets(range, &candidates[j].version)
                 {
-                    return Some(format!(
-                        "requires {} {range}, found {}",
-                        dependency.id, candidates[j].version
-                    ));
+                    return Some(Skip::Version {
+                        id: dependency.id.clone(),
+                        range: range.clone(),
+                        found: candidates[j].version.clone(),
+                    });
                 }
             }
             // The mod that declares the break gives way.
@@ -211,10 +292,10 @@ fn unmet(
                         !dev(&candidates[j].version) && range.matches(&candidates[j].version)
                     })
                 {
-                    return Some(format!(
-                        "does not work beside {} {}; remove one of them",
-                        dependency.id, candidates[j].version
-                    ));
+                    return Some(Skip::Breaks {
+                        id: dependency.id.clone(),
+                        version: candidates[j].version.clone(),
+                    });
                 }
             }
             _ => {}
@@ -318,12 +399,11 @@ mod tests {
         let plan = resolve(&mods);
         assert_eq!(plan.order, [1]);
         assert_eq!(
-            plan.skipped[0],
-            (0, "requires zones ^0.2, found 0.1.3".into())
-        );
-        assert_eq!(
-            plan.skipped[1],
-            (2, "requires you.market-stalls, which is not loaded".into())
+            reasons(&plan),
+            [
+                (0, "requires zones ^0.2, found 0.1.3".into()),
+                (2, "requires you.market-stalls, which is not loaded".into())
+            ]
         );
     }
 
@@ -340,7 +420,7 @@ mod tests {
         let reasons: Vec<usize> = plan.skipped.iter().map(|(i, _)| *i).collect();
         assert_eq!(reasons, [2, 3]);
         assert_eq!(
-            plan.skipped[1].1,
+            plan.skipped[1].1.to_string(),
             "does not work beside a 1.0.0; remove one of them"
         );
     }
@@ -391,7 +471,7 @@ mod tests {
         let plan = resolve(&mods);
         assert_eq!(plan.order, [1, 0]);
         assert_eq!(
-            plan.skipped,
+            reasons(&plan),
             [
                 (2, "in a dependency cycle".into()),
                 (3, "in a dependency cycle".into())
@@ -411,12 +491,30 @@ mod tests {
         let plan = resolve(&mods);
         assert_eq!(plan.order, [0, 1, 2]);
         assert_eq!(
-            plan.skipped,
+            reasons(&plan),
             [
                 (3, "in a dependency cycle".into()),
                 (4, "in a dependency cycle".into())
             ]
         );
+    }
+
+    fn reasons(plan: &Plan) -> Vec<(usize, String)> {
+        plan.skipped
+            .iter()
+            .map(|(i, skip)| (*i, skip.to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn a_skipped_mod_s_reason_reads_in_the_player_s_language() {
+        let skip = Skip::Missing {
+            id: "enshwick.not-installed".into(),
+        };
+        let uk = Some(enshwick::i18n::Language::UK_UA);
+        let shown = crate::texts::for_reader(uk, || skip.shown());
+        assert!(shown.contains("enshwick.not-installed"), "{shown}");
+        assert_ne!(shown, crate::texts::for_reader(None, || skip.shown()));
     }
 
     fn at(seconds: u64) -> SystemTime {
