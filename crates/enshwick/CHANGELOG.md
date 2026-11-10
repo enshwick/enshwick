@@ -101,8 +101,10 @@ Each entry names the pull request that made the change.
 ### Fixed
 
 - Loader: a crash line names the module a fault lies in when no mod or the
-  loader holds the address, and says `the game itself crashed` when no mod's
-  or loader's code was near the fault; the next start's warning and the
+  loader holds the address, and says `the game itself crashed` only when it
+  searched the whole stack and found no mod's or loader's code, in a module's
+  code; an overflowed stack, a deeper one or a fault in generated code says
+  so instead of blaming the game; the next start's warning and the
   status summary open such a crash with `the game crashed in the last
   session`. Under Wine 11 every server stop writes one, after the save
   (#1029).

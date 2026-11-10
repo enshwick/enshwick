@@ -80,22 +80,68 @@ fn the_games_own_crash_names_the_module_it_faulted_in() {
 }
 
 #[test]
-fn the_module_of_an_address_is_found_without_allocating() {
+fn the_module_of_an_address_is_the_image_holding_it_with_its_file_name() {
     let mut name = [0; NAME];
     let at = GetCurrentThreadId as *const () as usize;
-    let (base, len) = module_at(at, &mut name).unwrap();
-    assert!(base <= at, "{base:#x} above {at:#x}");
-    // The export's code lives in kernel32 or, forwarded, in kernelbase.
-    let name = String::from_utf8(name[..len].to_vec())
-        .unwrap()
-        .to_lowercase();
-    assert!(name == "kernel32.dll" || name == "kernelbase.dll", "{name}");
+    let (base, file) = module_at(at, &mut name).unwrap();
+    let file = String::from_utf8(file.to_vec()).unwrap();
+    let wide: Vec<u16> = file.encode_utf16().chain(Some(0)).collect();
+    // SAFETY: a NUL-terminated name; the handle of a loaded module needs no
+    // freeing.
+    let module =
+        unsafe { windows_sys::Win32::System::LibraryLoader::GetModuleHandleW(wide.as_ptr()) };
+    let (start, end) = range_of(module).unwrap();
+    assert_eq!(base, start, "{file}");
+    assert!((start..end).contains(&at), "{at:#x} outside {file}");
     let local = 0u64;
     assert_eq!(
         module_at((&raw const local).addr(), &mut [0; NAME]),
         None,
         "a stack address lies in no module"
     );
+}
+
+#[test]
+fn a_game_fault_on_a_stack_not_searched_whole_is_not_called_the_games() {
+    // A mod's hook that recurses through game code until the stack
+    // overflows leaves no frames to search, as does a mod's frame deeper
+    // than the walk keeps.
+    let settled = settle(Blame::Game, false, true);
+    assert_eq!(settled, Blame::Unknown(NOT_WALKED));
+    let line = text_in(Some((0x7000, b"game.dll")), settled, 0x7123, None);
+    assert!(line.contains(NOT_WALKED), "{line}");
+    assert!(!line.contains(crate::diag::GAME_CRASHED), "{line}");
+    assert_eq!(
+        crate::diag::crash_heading(line.trim_end()),
+        "the last session crashed"
+    );
+}
+
+#[test]
+fn a_game_fault_in_code_no_module_names_is_not_called_the_games() {
+    // A loader trampoline or mid-hook stub lives in private memory, which
+    // no range and no image holds.
+    let settled = settle(Blame::Game, true, false);
+    assert_eq!(settled, Blame::Unknown(NO_MODULE));
+    let line = text(settled, 0x7_7000, None);
+    assert!(!line.contains(crate::diag::GAME_CRASHED), "{line}");
+}
+
+#[test]
+fn only_the_game_blame_is_settled() {
+    assert_eq!(settle(Blame::Game, true, true), Blame::Game);
+    for blame in [Blame::Code(1), Blame::Loader(2), Blame::Stack(0, 3)] {
+        assert_eq!(settle(blame, false, false), blame);
+    }
+}
+
+#[test]
+fn a_module_is_looked_up_only_outside_the_ranges_and_never_on_an_overflowed_stack() {
+    let r = ranges();
+    assert!(names_module(&r, 0x7_7000, EXCEPTION_ACCESS_VIOLATION));
+    assert!(!names_module(&r, 0x1800, EXCEPTION_ACCESS_VIOLATION));
+    assert!(!names_module(&r, 0x9800, EXCEPTION_ACCESS_VIOLATION));
+    assert!(!names_module(&r, 0x7_7000, EXCEPTION_STACK_OVERFLOW));
 }
 
 #[test]

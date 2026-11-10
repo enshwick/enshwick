@@ -62,6 +62,9 @@ const CRASH_SOURCE: &str = "enshwick-crash";
 const KEPT_CRASHES: usize = 10;
 /// The longest crash file path, in UTF-16 units with its NUL.
 const CRASH_PATH: usize = 1024;
+/// The longest mapped file path the crash line reads a module's name from, in
+/// UTF-16 units, kept small for the stack of a dying thread.
+const MAPPED_PATH: usize = 512;
 
 /// A module's address range and whom it belongs to, kept without
 /// allocation for the filter.
@@ -122,8 +125,42 @@ pub(crate) enum Blame {
     /// It faulted in the loader, with no mod's callback running or code on
     /// the stack.
     Loader(usize),
-    /// Neither a mod's code nor the loader's anywhere near it.
+    /// Neither a mod's code nor the loader's anywhere near it, over a stack
+    /// searched whole, in a module's code.
     Game,
+    /// No mod's or loader's code found, but the search could not rule them
+    /// out: the words that say why.
+    Unknown(&'static str),
+}
+
+/// What a crash line says when the walk found no mod's or loader's code but
+/// did not search the whole stack: an overflowed one, or one deeper than
+/// [`FRAMES`].
+pub(crate) const NOT_WALKED: &str =
+    "whose code led there is not known: the stack was not searched whole";
+
+/// What a crash line says when the fault lies in code no module names, such
+/// as a trampoline, a hook stub or code a mod generated.
+pub(crate) const NO_MODULE: &str =
+    "in code no module names, with no mod's or loader's code on the stack";
+
+/// The blame [`blame`] gave, kept as the game's only when `walked` says the
+/// whole stack was searched and `named` that a module holds the fault.
+#[must_use]
+pub(crate) const fn settle(blame: Blame, walked: bool, named: bool) -> Blame {
+    match blame {
+        Blame::Game if !walked => Blame::Unknown(NOT_WALKED),
+        Blame::Game if !named => Blame::Unknown(NO_MODULE),
+        other => other,
+    }
+}
+
+/// Whether the crash line looks up the module `at` lies in: only when no
+/// range holds it, and never on an overflowed stack, which has no room for
+/// the lookup.
+#[must_use]
+pub(crate) fn names_module(ranges: &[Range], at: usize, code: NTSTATUS) -> bool {
+    code != EXCEPTION_STACK_OVERFLOW && !ranges.iter().any(|r| r.holds(at))
 }
 
 /// Whom the fault at `at` is blamed on, from the ranges, the callback the
@@ -325,6 +362,9 @@ pub(crate) fn describe(
         }
         Blame::Game => {
             line.text(b", ").text(crate::diag::GAME_CRASHED.as_bytes());
+        }
+        Blame::Unknown(words) => {
+            line.text(b", ").text(words.as_bytes());
         }
     }
     if let Some((kind, address)) = access {
@@ -578,29 +618,33 @@ pub(crate) fn range_of(module: HMODULE) -> Option<(usize, usize)> {
     (ok != 0).then(|| (start, start + info.SizeOfImage as usize))
 }
 
-/// The base of the module `at` lies in, with its file name written into
-/// `name`, non-ASCII as `?`: the name's length beside the base. `None`
-/// outside a mapped image or when Windows does not name the file.
+/// The base of the module `at` lies in and its file name, written into
+/// `name` with bytes outside printable ASCII as `?`. `None` outside a mapped
+/// image, or when Windows does not name the file in [`MAPPED_PATH`] units.
 ///
 /// Allocates nothing and takes no loader lock, which another thread of the
-/// dying process may hold, so the report may call it.
-fn module_at(at: usize, name: &mut [u8; NAME]) -> Option<(usize, usize)> {
+/// dying process may hold, so the report may call it: `VirtualQuery` and
+/// `GetMappedFileNameW` only ask the kernel about the address
+/// (`NtQueryVirtualMemory`, in the `kernelbase` of Wine and the `psapi` of `ReactOS`;
+/// Windows does not document it).
+fn module_at(at: usize, name: &mut [u8; NAME]) -> Option<(usize, &[u8])> {
     let region = crate::pages::query(at).filter(|r| r.kind == MEM_IMAGE)?;
-    let mut path = [0u16; CRASH_PATH];
+    let mut path = [0u16; MAPPED_PATH];
     // SAFETY: `GetCurrentProcess` takes no arguments and has no
     // preconditions; the pseudo handle needs no closing.
     let process = unsafe { GetCurrentProcess() };
     // SAFETY: `GetMappedFileNameW` reads no memory at the base, which it
-    // only looks up, and writes at most `CRASH_PATH` units into `path`.
+    // only looks up, and writes at most `MAPPED_PATH` units into `path`.
     let len = unsafe {
         GetMappedFileNameW(
             process,
             core::ptr::with_exposed_provenance(region.allocation),
             path.as_mut_ptr(),
-            u32::try_from(CRASH_PATH).unwrap_or(0),
+            u32::try_from(MAPPED_PATH).unwrap_or(0),
         )
-    };
-    let path = path.get(..len as usize)?;
+    } as usize;
+    // A full buffer may hold a cut path, whose last part is no file name.
+    let path = path.get(..len).filter(|_| len < MAPPED_PATH)?;
     // A Windows path ends in `\name`; one under Wine may end in `/name`.
     let file = path
         .rsplit(|&unit| unit == u16::from(b'\\') || unit == u16::from(b'/'))
@@ -610,10 +654,10 @@ fn module_at(at: usize, name: &mut [u8; NAME]) -> Option<(usize, usize)> {
     for (byte, &unit) in name.iter_mut().zip(file) {
         *byte = u8::try_from(unit)
             .ok()
-            .filter(u8::is_ascii_graphic)
+            .filter(|byte| byte.is_ascii_graphic() || *byte == b' ')
             .unwrap_or(b'?');
     }
-    Some((region.allocation, file.len()))
+    Some((region.allocation, &name[..file.len()]))
 }
 
 /// Opens `path` for the filter, `access` as given; 0 when it cannot.
@@ -857,8 +901,19 @@ unsafe fn record(state: &State, pointers: &EXCEPTION_POINTERS, thread: u32, line
         // contract is stopped in the fault or runs this.
         unsafe { unwind(context, &mut frames) }
     };
+    let walked = code != EXCEPTION_STACK_OVERFLOW && found < FRAMES;
     let callback = noted(thread, at).map(|(owner, f)| (owner, f.name()));
-    let blame = blame(&state.ranges, at, callback, &frames[..found]);
+    let mut name = [0; NAME];
+    let module = if names_module(&state.ranges, at, code) {
+        module_at(at, &mut name)
+    } else {
+        None
+    };
+    let blame = settle(
+        blame(&state.ranges, at, callback, &frames[..found]),
+        walked,
+        module.is_some(),
+    );
     let access = (code == EXCEPTION_ACCESS_VIOLATION && record.NumberParameters >= 2).then(|| {
         (
             record.ExceptionInformation[0] as u64,
@@ -877,12 +932,6 @@ unsafe fn record(state: &State, pointers: &EXCEPTION_POINTERS, thread: u32, line
     };
     // SAFETY: `time` is a writable `SYSTEMTIME`.
     unsafe { GetSystemTime(&raw mut time) };
-    let mut name = [0; NAME];
-    let module = if state.ranges.iter().any(|r| r.holds(at)) {
-        None
-    } else {
-        module_at(at, &mut name).map(|(base, len)| (base, &name[..len]))
-    };
     describe(
         line,
         [
