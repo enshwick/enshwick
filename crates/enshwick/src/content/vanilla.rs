@@ -30,6 +30,7 @@ pub use experience::{ExperienceBalanceValue, experience_values};
 
 mod names;
 
+#[cfg(feature = "unstable")]
 pub(crate) use names::item_exactly;
 pub use names::{VanillaItem, VanillaRecipe, item_by_display_name, items, recipes};
 
@@ -832,6 +833,7 @@ impl Vanilla {
 
     /// The vanilla item the game knows by `id`, [`Guid::fnv1a`] of its
     /// GUID; `None` for none, or without the registry.
+    #[cfg(any(feature = "unstable", test))]
     pub(crate) fn item_with_id(&self, id: u32) -> Option<Guid> {
         self.names()
             .ok()?

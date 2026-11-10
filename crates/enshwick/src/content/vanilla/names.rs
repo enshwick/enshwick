@@ -197,6 +197,7 @@ pub fn item_by_display_name(name: &str) -> Result<Guid, VanillaError> {
 /// The vanilla item `name` names exactly, by its debug name or a name the
 /// game shows whatever the case; `None` for no item or several, without
 /// the search for near names a miss of [`item`](super::item) makes.
+#[cfg(feature = "unstable")]
 pub(crate) fn item_exactly(name: &str) -> Option<Guid> {
     if let Ok(names) = game().and_then(Vanilla::names) {
         match names.get(name).map(Vec::as_slice) {
