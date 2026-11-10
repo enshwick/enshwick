@@ -411,6 +411,20 @@ lib/count.luau:2.7-2.12: LocalUnused: Variable 'unused' is never used; prefix wi
     }
 
     #[test]
+    fn a_log_line_after_a_problem_stays_out_of_its_message() {
+        let found =
+            findings("main.luau:1.1-1.2: TypeError: wrong\n[INFO] done\n[WARN] slow\n  more\n");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].message, "wrong more");
+    }
+
+    #[test]
+    fn a_line_whose_kind_is_not_one_word_starts_no_problem() {
+        assert_eq!(finding("main.luau:1.1-1.2: not a kind: wrong"), None);
+        assert_eq!(finding("main.luau:1.1-1.2: : wrong"), None);
+    }
+
+    #[test]
     fn a_data_pack_needs_no_luau_lsp() {
         let dir = crate::pack::tests::pack(
             "check-data",

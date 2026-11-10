@@ -124,6 +124,19 @@ fn cache_dir() -> Option<PathBuf> {
     base.map(|base| base.join("enshwick"))
 }
 
+/// Refuses `bytes` whose SHA-256 is not the one `release` pins.
+fn pinned(bytes: &[u8], release: &Release) -> Result<(), String> {
+    let found = hex(&Sha256::digest(bytes));
+    if found == release.sha256 {
+        Ok(())
+    } else {
+        Err(format!(
+            "SHA-256 {found}, but the pin says {}",
+            release.sha256
+        ))
+    }
+}
+
 /// Downloads `release` with curl, which Windows, macOS and Linux ship,
 /// checks its SHA-256 and unpacks the tool into `dir`.
 fn download(release: &Release, dir: &Path) -> Result<(), Error> {
@@ -154,13 +167,7 @@ fn download(release: &Release, dir: &Path) -> Result<(), Error> {
     }
     let bytes = std::fs::read(&archive).map_err(io(&archive))?;
     let _gone = std::fs::remove_file(&archive);
-    let found = hex(&Sha256::digest(&bytes));
-    if found != release.sha256 {
-        return Err(failed(format!(
-            "SHA-256 {found}, but the pin says {}",
-            release.sha256
-        )));
-    }
+    pinned(&bytes, release).map_err(failed)?;
     let exe = unpack(&bytes).map_err(failed)?;
     let part = dir.join(format!("{EXE}.{pid}.part"));
     std::fs::write(&part, exe).map_err(io(&part))?;
@@ -207,6 +214,21 @@ fn hex(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_download_is_taken_only_with_the_pinned_digest() {
+        let release = Release {
+            version: "1".to_owned(),
+            asset: "a.zip".to_owned(),
+            sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".to_owned(),
+        };
+        assert_eq!(pinned(b"", &release), Ok(()));
+        let why = pinned(b"other", &release).unwrap_err();
+        assert!(
+            why.ends_with(&format!("the pin says {}", release.sha256)),
+            "{why}"
+        );
+    }
 
     #[test]
     fn every_host_of_the_pin_names_one_version_and_a_digest() {
