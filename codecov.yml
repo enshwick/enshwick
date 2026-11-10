@@ -1,0 +1,26 @@
+# Coverage informs and never gates: statuses always pass, and pull requests
+# get no comment or annotation.
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
+
+comment: false
+
+github_checks:
+  annotations: false
+
+# Tests, tooling and the typed API generated from the game's reflection.
+ignore:
+  - "**/tests/**"
+  - "**/tests.rs"
+  - crates/enshwick/src/typed.rs
+  - crates/enshwick/src/typed/**
+  - crates/enshwick-gamedata/src/typed/ids.rs
+  - examples/**
+  - fuzz/**
+  - tools/**

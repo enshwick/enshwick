@@ -1,0 +1,81 @@
+# Line coverage of the host tests on each push to main, uploaded to Codecov.
+# Pull requests and the merge queue never run it, so it adds nothing to their
+# lane; the Windows-only crates stay out, as in the host check.
+name: coverage
+
+on:
+  push:
+    branches: [main, "feat/*-ci-codecov"]
+    paths:
+      - "**/*.rs"
+      - "**/Cargo.toml"
+      - Cargo.lock
+      - rust-toolchain.toml
+      - .config/nextest.toml
+      - codecov.yml
+      - .github/workflows/coverage.yml
+      - .github/actions/setup-rust/**
+
+permissions: {}
+
+concurrency:
+  group: coverage-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  coverage:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      # Codecov takes the upload on the run's OIDC token, no stored secret.
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.tool_cache }}/rustup
+          key: rustup-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml') }}
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.tool_cache }}/apt-archives
+          key: apt-${{ runner.os }}-host-v2
+
+      - uses: ./.github/actions/setup-rust
+        with:
+          tools: cargo-nextest@0.9.151,cargo-llvm-cov@0.9.1
+
+      # Instrumented builds share nothing with the check's, so they keep a
+      # cache of their own.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          prefix-key: v1-rust
+          key: coverage
+
+      # The luau-lsp the tests download, kept per pin.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/enshwick
+          key: luau-lsp-${{ runner.os }}-${{ hashFiles('crates/cargo-enshwick/luau-lsp.toml') }}
+
+      - name: Host tests under coverage
+        env:
+          # The features `cargo xtask check` tests with (TEST_FEATURE).
+          FEATURES: enshwick/test,enshwick/unstable,enshwick/typed,xtask/compat
+        run: |
+          args=(--workspace --features "$FEATURES")
+          for package in $(cargo metadata --no-deps --format-version 1 | jq -r \
+            '.packages[] | select(.metadata.xtask["windows-only"] == true) | .name'); do
+            args+=(--exclude "$package")
+          done
+          cargo llvm-cov nextest "${args[@]}" --no-tests=pass --lcov --output-path lcov.info
+
+      - uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          use_oidc: true
+          files: lcov.info
+          disable_search: true
+          fail_ci_if_error: true
