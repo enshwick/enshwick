@@ -101,7 +101,7 @@ Portuguese, then to English.
 | `Action::new(id, label)`            | a button; `id` is 1 to 32 of `[a-z0-9-]`, its name on the console                                |
 | `Action::per_player(id, label, on)` | a list of players with a switch each; `on` names the players switched on                         |
 | `.help(key)`                        | a line under the label, and what `help <id>` answers on a typed line                             |
-| `.group(key)`                       | the group the [help](commands.md#help-and-mistyped-lines) lists it under                          |
+| `.group(key)`                       | the group the [help](commands.md#help-and-mistyped-lines) lists it under, and a window shows over it |
 | `.with_self()`                      | its players include the player who looks, first; without it they hold only the others            |
 | `.arg(Arg::...)`                    | an argument, in order; its kinds follow this table                                               |
 | `.allow(fn)`, `.admins()`           | who sees the action and may run it                                                               |
@@ -195,7 +195,7 @@ takes `default`. In Luau it is the method `:optional(value)` of an argument.
 | Which kinds | a choice, a number, on or off, a text; never a player. A text only as the last argument |
 | The default | a value the argument takes, or an empty text |
 | In the help | the argument stands in square brackets: `give <player> <Item> [1-999]` |
-| From the interface | values left out at the end take their defaults too |
+| From the interface | a window opens the field with its default; values left out at the end take their defaults too |
 
 A text or a player that only optional arguments follow takes the rest of
 the line up to them. The last words go to the optional arguments, in

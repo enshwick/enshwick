@@ -12,11 +12,15 @@ Each entry names the pull request that made the change.
   items by the names the player's own game shows, with a search, and sends
   the picked item's GUID. A typed line takes a debug name, GUID, content id
   or shown name. The server refuses an item its game does not know before
-  the handler runs. Luau `enshwick.actions.item`.
+  the handler runs. Luau `enshwick.actions.item` (#1033).
+- `actions`: a window opens an optional argument's field with its default
+  and runs while only optional fields are empty, and shows an action's
+  group over it. The sheet carries both in new line kinds, which an older
+  client skips (`Entry::group`, `ArgView::default`) (#1033).
 - `content`: `Vanilla::items` lists the items with their name tags and
   reads each tag once; `vanilla::items` no longer reads the archive on each
-  call, and an item registry that does not read yet is read again later.
-
+  call, and an item registry that does not read yet is read again later
+  (#1033).
 - `abi`: `HostApi::resource_buffer`, ABI 11.20, lends a resource patch
   bytes for its output that the loader owns: the game's first build keeps
   the last patch's output for the process, and the loader frees every other
