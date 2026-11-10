@@ -60,6 +60,24 @@ pub(crate) fn matching(items: &[Shown], query: &str, most: usize) -> Vec<usize> 
     starts
 }
 
+/// `found` with the item `picked` first when a search left it out, so the
+/// list still shows the pick; at most `most`.
+pub(crate) fn keep_pick(
+    found: &mut Vec<usize>,
+    items: &[Shown],
+    picked: Option<Guid>,
+    most: usize,
+) {
+    let Some(picked) = picked else { return };
+    if found.iter().any(|&at| items[at].item == picked) {
+        return;
+    }
+    if let Some(at) = items.iter().position(|shown| shown.item == picked) {
+        found.insert(0, at);
+        found.truncate(most);
+    }
+}
+
 /// The list read last; a frame loads it without a lock.
 #[cfg(windows)]
 static LIST: ArcSwapOption<List> = ArcSwapOption::const_empty();
@@ -125,5 +143,18 @@ mod tests {
         assert_eq!(matching(&items, "", 3), [0, 1, 2], "every name, in order");
         assert!(matching(&items, "shield", 8).is_empty());
         assert_eq!(matching(&items, "ax", 8), [2, 0, 1, 4]);
+
+        let torch = items[3].item;
+        let mut found = matching(&items, "axe", 3);
+        keep_pick(&mut found, &items, Some(torch), 3);
+        assert_eq!(found, [3, 2, 0], "the pick first, the last match out");
+        keep_pick(&mut found, &items, Some(torch), 3);
+        assert_eq!(found, [3, 2, 0], "listed once");
+        keep_pick(&mut found, &items, Some(Guid([9; 16])), 3);
+        assert_eq!(
+            found,
+            [3, 2, 0],
+            "an item without a shown name adds nothing"
+        );
     }
 }

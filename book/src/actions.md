@@ -251,8 +251,11 @@ does not know before the handler runs: "No item …".
 
 | Where | How the player names the item |
 | --- | --- |
-| A window | a list of the items by the names the game shows in the player's language, with a search field; up to 64 matches show at once |
-| A typed line | its debug name (`Tool_Torch01`), its GUID, a content id (`you.lamps:lamp`), or a name the game shows where the server has the game's texts, as in single player and a game a player hosts |
+| A window | a list of items by the names the game shows in the player's language, with a search field. Up to 64 matches show at once. |
+| A typed line | its debug name (`Tool_Torch01`), its GUID or a content id (`you.lamps:lamp`). A name the game shows works where the server has the game's texts. |
+
+A server has the game's texts in single player and in a game a player
+hosts.
 
 The names come from the player's own game, so a dedicated server needs no
 texts and sends none. A window lists vanilla items; a typed line also takes

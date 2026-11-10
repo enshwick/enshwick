@@ -559,6 +559,7 @@ fn item_field(paint: &Painter<'_>, label: &[u8], state: &mut Field) -> Option<Va
         .is_none_or(|(text, language)| (text.as_str(), *language) != search)
     {
         state.found = crate::item_names::matching(&list.items, search.0, MAX_OPTIONS);
+        crate::item_names::keep_pick(&mut state.found, &list.items, state.item, MAX_OPTIONS);
         state.searched = Some((search.0.to_owned(), search.1));
     }
     let mut names: [&[u8]; MAX_OPTIONS] = [&[]; MAX_OPTIONS];
@@ -581,13 +582,13 @@ fn item_field(paint: &Painter<'_>, label: &[u8], state: &mut Field) -> Option<Va
     } else {
         paint.dropdown(label, &names[..state.found.len()], index, false)
     };
-    state.item = match chosen {
-        Some(at) => usize::try_from(at)
-            .ok()
-            .and_then(|at| state.found.get(at))
-            .map(|&at| list.items[at].item),
-        None => pick.map(|at| list.items[state.found[at]].item),
-    };
+    // The pick stays until the player picks another, whatever the search shows.
+    if let Some(&at) = chosen
+        .and_then(|at| usize::try_from(at).ok())
+        .and_then(|at| state.found.get(at))
+    {
+        state.item = Some(list.items[at].item);
+    }
     search_field(state);
     state.item.map(Value::Item)
 }
