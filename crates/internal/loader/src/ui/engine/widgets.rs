@@ -709,6 +709,13 @@ mod dropdown_tests {
     }
 
     #[test]
+    fn two_keys_in_one_window_keep_ids_apart() {
+        let mut twins = Twins::new();
+        twins.enter(2);
+        assert_ne!(twins.id(1, 1), twins.id(1, 3));
+    }
+
+    #[test]
     fn dropdowns_past_the_kept_ones_still_get_ids_of_their_own() {
         let mut twins = Twins::new();
         twins.enter(1);

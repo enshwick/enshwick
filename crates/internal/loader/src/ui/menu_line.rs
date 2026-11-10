@@ -75,7 +75,7 @@ fn line(loader: &Loader) -> super::engine::UiText {
                 .into_iter()
                 .filter_map(|(shown, note)| shown.then_some(note))
                 .collect();
-            let total = loader.mods.len() + crate::off_line::skipped_off(loader).count();
+            let total = crate::off_line::mods_counted(loader);
             crate::diag::menu_line(env!("CARGO_PKG_VERSION"), total, off, &notes)
         });
         copy(&[line.as_bytes()])

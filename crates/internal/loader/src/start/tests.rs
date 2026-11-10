@@ -165,6 +165,11 @@ fn a_second_copy_skipped_at_start_is_kept_with_its_reason_but_its_running_mod_is
         "you.safes runs"
     );
     assert_eq!(crate::off_line::mods_off_count(&loader), 0);
+    assert_eq!(
+        crate::off_line::mods_counted(&loader),
+        1,
+        "one mod, two files"
+    );
 }
 
 #[test]
@@ -178,8 +183,20 @@ fn the_off_names_and_count_follow_a_mod_that_turns_off() {
     altars.off.store(true, Ordering::Release);
     assert_eq!(crate::off_line::mods_off(&loader), ["you.altars"]);
     assert_eq!(crate::off_line::mods_off_count(&loader), 1);
+    assert_eq!(crate::off_line::mods_counted(&loader), 2);
     let names = crate::off_line::names(&loader);
     assert_eq!(names.first().map(String::as_str), Some("you.altars"));
+    let mut loader = loader;
+    loader.skipped.push(resolve::Skipped {
+        id: "you.map".into(),
+        version: "1.0.0".into(),
+        label: "Map".into(),
+        file: "you.map/you.map.dll".into(),
+        reason: resolve::Skip::Missing { id: "you.x".into() },
+    });
+    assert_eq!(crate::off_line::mods_off(&loader), ["you.altars", "Map"]);
+    assert_eq!(crate::off_line::mods_off_count(&loader), 2);
+    assert_eq!(crate::off_line::mods_counted(&loader), 3);
 }
 
 /// The handle of the mod `id` in `loader`'s load order.

@@ -79,6 +79,14 @@ pub(crate) fn mods_off_count(loader: &crate::host::Loader) -> usize {
     off_records(loader).count() + skipped_off(loader).count()
 }
 
+/// How many mods the main menu line counts: the loaded ones and those
+/// skipped at start that count as off.
+#[cfg(windows)]
+#[must_use]
+pub(crate) fn mods_counted(loader: &crate::host::Loader) -> usize {
+    loader.mods.len() + skipped_off(loader).count()
+}
+
 #[cfg(windows)]
 fn off_records(loader: &crate::host::Loader) -> impl Iterator<Item = &crate::host::ModRecord> + '_ {
     use std::sync::atomic::Ordering;

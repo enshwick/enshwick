@@ -27,6 +27,12 @@ pub(super) enum Listed {
     Bindings(String, String),
 }
 
+/// Whether a mod's row has a gear: settings where this place shows a gear
+/// for them (`here`), or key bindings.
+const fn has_gear(settings: bool, here: bool, bindings: bool) -> bool {
+    settings && here || bindings
+}
+
 /// What a click on mod `index`'s Details button or gear opens: the Details
 /// button the mod's own page, the gear its settings.
 const fn clicked(details: bool, gear: bool, index: usize) -> Option<Listed> {
@@ -285,8 +291,11 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
             .settings_schema()
             .is_some_and(|s| !s.fields.is_empty());
         let sent = record.server_values.relock().is_some();
-        let opens = settings && mods_screen::gear(world, sent)
-            || super::controls::any_in(&controls, &record.id);
+        let opens = has_gear(
+            settings,
+            mods_screen::gear(world, sent),
+            super::controls::any_in(&controls, &record.id),
+        );
         // The Details button on every mod, at the same place; the gear under
         // it where the mod has something to set here, else its place kept.
         let clicked = paint.row(
@@ -362,8 +371,16 @@ pub(super) fn pages(paint: &Painter<'_>, listing: Listing, first: &mut usize, co
 
 #[cfg(test)]
 mod tests {
-    use super::{Listed, clicked, metadata, state_text, store_off};
+    use super::{Listed, clicked, has_gear, metadata, state_text, store_off};
     use crate::texts;
+
+    #[test]
+    fn a_row_has_a_gear_for_settings_shown_here_or_for_key_bindings() {
+        assert!(has_gear(true, true, false));
+        assert!(!has_gear(true, false, false), "settings not shown here");
+        assert!(!has_gear(false, true, false), "nothing to set");
+        assert!(has_gear(false, false, true), "key bindings anywhere");
+    }
 
     #[test]
     fn the_details_button_opens_the_mod_s_page_and_only_the_gear_its_settings() {
