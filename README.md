@@ -1,9 +1,18 @@
 # Enshwick
 
 Enshwick is the modding framework and API for
-[Enshrouded](https://enshrouded.com), with a mod loader for PCs and dedicated
-servers. Mod makers write mods against its API; players install the loader once,
-and it runs every mod.
+[Enshrouded](https://enshrouded.com). Its mod loader runs mods on your PC or
+dedicated server. Write mods in Rust, Luau, C, C++ or as data.
+
+<!--
+The paragraph before this comment is `site.description` of src/data/texts.json
+in enshwick/docs, the source of the project's words. Change it there first.
+-->
+
+Enshwick is in alpha: version 1.0 is not out yet. Until 1.0, anything may
+change between alphas, so back up your saves before you update. The site,
+[enshwick.com](https://enshwick.com), has the guides for players and server
+admins and the docs for mod makers.
 
 ## For mod makers
 
@@ -43,7 +52,8 @@ loads every mod from the `mods/` folder beside it.
 2. Extract it into the folder with `enshrouded.exe` (players) or
    `enshrouded_server.exe` (servers). You get `powrprof.dll` and a `mods`
    folder.
-3. Download the mods you want. Each mod's page below links its own archive.
+3. Download the mods you want. Each mod's page links its own archive
+   ([Mods](#mods)).
    Extract each one into the same folder.
 4. Start the game or the server. "Mods" in the main menu and in the pause menu
    lists the mods.
@@ -58,16 +68,9 @@ delete its folder. To remove Enshwick, delete `powrprof.dll`.
 
 ### Mods
 
-| Mod                                                                                   | What it does                                                       |
-| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| [Better Altars](https://github.com/enshwick/mods/tree/main/better-altars)             | twice the altars per Flame level; touching zones grow together     |
-| [Survivors per Altar](https://github.com/enshwick/mods/tree/main/survivors-per-altar) | a copy of each survivor at every altar, with beds of its own altar |
-| [Personal Safes](https://github.com/enshwick/mods/tree/main/personal-safes)           | a craftable chest only the player who placed it can use            |
-| [Game Rates](https://github.com/enshwick/mods/tree/main/game-rates)                   | building recipe output and furniture comfort, twice by default     |
-| [Build Camera](https://github.com/enshwick/mods/tree/main/build-camera)               | the building fly mode for every player, without the skill          |
-| [Shared Experience](https://github.com/enshwick/mods/tree/main/shared-experience)     | every character keeps up with the one furthest ahead in experience |
-| [Area Loot](https://github.com/enshwick/mods/tree/main/area-loot)                     | emptying one enemy corpse takes the loot of the others around it   |
-| [Optimizer](https://github.com/enshwick/mods/tree/main/optimizer)                     | less CPU on Windows and under Wine and Proton, for servers         |
+[Mods by the Enshwick team](https://enshwick.com/#mods) lists our mods, each
+with a page that says what it changes. Their code is in
+[enshwick/mods](https://github.com/enshwick/mods).
 
 ### Playing on a server
 
