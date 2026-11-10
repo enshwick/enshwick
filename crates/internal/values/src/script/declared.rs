@@ -74,6 +74,7 @@ impl Declared {
 }
 
 /// `functions` as a script declares them, each with its place in the list.
+#[doc(hidden)]
 pub fn declare<T: 'static>(functions: impl Iterator<Item = &'static Function<T>>) -> Vec<Declared> {
     functions
         .enumerate()

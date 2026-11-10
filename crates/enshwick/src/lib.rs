@@ -704,6 +704,7 @@ pub use hook::{FnPtr, Hook, Next};
 pub use host::{Host, host};
 pub use load::{Load, Mod, Off};
 pub use locks::{Relock, RelockRw, RelockWait};
+#[doc(no_inline)]
 pub use shape::Shape;
 pub use world_error::WorldError;
 
