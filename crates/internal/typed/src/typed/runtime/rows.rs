@@ -267,6 +267,18 @@ mod tests {
     }
 
     #[test]
+    fn a_blank_value_reads_as_its_type_with_every_field_empty_or_zero() {
+        let blank: Outer = crate::typed::runtime::blank().unwrap();
+        assert_eq!((blank.base.level, blank.r#type), (0, 0));
+        assert_eq!(blank.mood, Mood::Calm, "an enum's first constant");
+        assert!(blank.inners.is_empty() && blank.spare.is_none());
+        let leaves: Leaves = crate::typed::runtime::blank().unwrap();
+        assert_eq!(leaves.id, Guid([0; 16]));
+        assert!(leaves.name.is_empty() && leaves.held.is_none() && leaves.moods.0.is_empty());
+        assert!(!leaves.flag && leaves.raw == Data::Nil);
+    }
+
+    #[test]
     fn a_variant_name_reads_and_a_wrong_one_names_the_way_out() {
         assert_eq!(
             <Mood as FromScript>::from_value(Value::String("Calm".into())).unwrap(),
