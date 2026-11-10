@@ -83,17 +83,17 @@ fn a_registry_that_does_not_read_yet_is_read_again_and_each_name_tag_once_it_doe
         Arc::new(AtomicBool::new(false)),
         Arc::new(AtomicUsize::new(0)),
     );
-    let (is_ready, reads) = (Arc::clone(&ready), Arc::clone(&tag_reads));
+    let (gate, counter) = (Arc::clone(&ready), Arc::clone(&tag_reads));
     let vanilla = Vanilla::with_parts(
         ITEMS,
         super::super::workshops::tests::LAYOUT,
         HASHES,
         move |key| {
-            if !is_ready.load(Ordering::Relaxed) {
+            if !gate.load(Ordering::Relaxed) {
                 return None;
             }
             if key.type_hash == HASHES.item {
-                reads.fetch_add(1, Ordering::Relaxed);
+                counter.fetch_add(1, Ordering::Relaxed);
             }
             data.get(&key).cloned()
         },
@@ -104,7 +104,7 @@ fn a_registry_that_does_not_read_yet_is_read_again_and_each_name_tag_once_it_doe
         Err(VanillaError::Unreadable("item registry"))
     );
     ready.store(true, Ordering::Relaxed);
-    let expected = [names::VanillaItem {
+    let expected = [VanillaItem {
         guid: torch,
         name: "Tool_Torch01".into(),
         name_tag: Some(tag),

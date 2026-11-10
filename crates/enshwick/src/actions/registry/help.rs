@@ -39,7 +39,7 @@ impl Registry {
                     .collect::<Vec<_>>()
                     .join("|"),
                 ArgView::NUMBER => format!("{}-{}", arg.range.0, arg.range.1),
-                ArgView::TEXT => self.say(&arg.label, language, &[]),
+                ArgView::TEXT | ArgView::ITEM => self.say(&arg.label, language, &[]),
                 _ => on_off.clone(),
             };
             let (open, close) = if arg.default.is_some() {

@@ -732,6 +732,14 @@ impl ActionFns {
         Arg::text(label, max_bytes)
     }
 
+    /// One of the game's items, which the client lists by the names its
+    /// game shows, as [`Arg::item`] makes it.
+    #[script]
+    #[must_use]
+    pub fn item(self, label: &str) -> Arg {
+        Arg::item(label)
+    }
+
     /// Whether `id` can name an action or a window, as
     /// [`is_valid_id`](super::is_valid_id) says.
     #[script]

@@ -357,7 +357,7 @@ pub struct Vanilla {
     /// build reflects it.
     item_name: Option<usize>,
     /// Every item with its names, kept once the registry reads.
-    item_entries: OnceLock<Vec<names::VanillaItem>>,
+    item_entries: OnceLock<Vec<VanillaItem>>,
     /// The recipe layout and the recipe registry's type hash, when the
     /// build reflects them.
     recipes: Option<(RecipeLayout, u32)>,
