@@ -165,8 +165,8 @@ These calls need the `typed` feature.
 
 ## Reading the journal and where a player stands
 
-`load.quests()` gives the `Quests` of the running game, the same for every
-call of one mod. On first use they read the journal as the game's first
+The `enshwick::quests` module reads the journal. `load.quests()` gives the
+`Quests` of the running game, the same for every call of one mod. On first use they read the journal as the game's first
 read builds it, every mod's quests and changes in:
 
 | Call | What it gives |
@@ -184,14 +184,26 @@ query. It also reads as unknown for a form enshwick does not read
 (`KnowledgeTest::Unknown`) and for a player not in the game.
 
 ```rust
-fn report(load: &mut enshwick::Load<'_>, player: enshwick::Entity) {
-    let quests = load.quests();
+use enshwick::quests::Quests;
+
+fn report(quests: &Quests, player: enshwick::Entity) {
     for quest in quests.all() {
-        if quests.state(player, quest.id).is_some_and(|state| state.done) {
-            enshwick::info!("quest {} done", quest.id);
+        if quests.state(player, quest.id).is_some_and(|state| state.rewarded) {
+            enshwick::info!("quest {} done, {} steps", quest.id, quest.steps.len());
         }
     }
 }
+```
+
+```luau
+local function report(player: number)
+    for _, quest in enshwick.quests.all() do
+        local state = enshwick.quests.state(player, quest.id)
+        if state and state.rewarded then
+            enshwick.log.info(`quest {quest.id} done, {#quest.steps} steps`)
+        end
+    end
+end
 ```
 
 ## From Luau
@@ -242,15 +254,6 @@ enshwick.on("QuestCompleted", function(done)
         end)
     end
 end)
-
-local function report(player: number)
-    for _, quest in enshwick.quests.all() do
-        local state = enshwick.quests.state(player, quest.id)
-        if state and state.done then
-            enshwick.log.info(`quest {quest.id} done`)
-        end
-    end
-end
 ```
 
 ## Who needs the mod
