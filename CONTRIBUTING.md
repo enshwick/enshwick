@@ -114,8 +114,8 @@ that players, admins or mod authors get, at most one a day:
    hand on `main`, makes the GitHub prerelease `v1.0.0-alpha.N`:
    `enshwick.zip` with the PDB and CycloneDX SBOM of each DLL and their build
    provenance. `cargo xtask notes` writes its notes: a warning in English and
-   Ukrainian that anything may change before 1.0, the game builds the
-   loader's tables support, each crate's changelog section and the known
+   Ukrainian that anything may change before 1.0, the game version
+   the alpha was checked against, each crate's changelog section and the known
    issues the run is given. A version on GitHub or crates.io already is
    refused, and so is one whose changelogs lack its section or still hold
    changes under Unreleased. The workflow scans the archive on VirusTotal.

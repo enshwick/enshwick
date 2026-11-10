@@ -70,9 +70,9 @@ enshwick = { git = "https://github.com/enshwick/enshwick", tag = "v1.0.0-alpha.N
 Each alpha is a GitHub prerelease tagged
 `v1.0.0-alpha.N` on the
 [releases page](https://github.com/enshwick/enshwick/releases). Its
-`enshwick.zip` holds the stub and the loader, and no mod. Enshwick supports
-the latest game version. Its notes name the game version the alpha was checked
-against and what changed. Before 1.0 any alpha may change
+`enshwick.zip` holds the stub and the loader, and no mod. Its notes name the
+game version the alpha was checked against and what changed, since Enshwick
+supports the latest game version. Before 1.0 any alpha may change
 the API, the ABI, file layouts, settings and mod ids. So a mod built for one
 alpha may need a rebuild for the next. A build of `main` between two alphas
 carries the version of the last one. So the join check does not tell it apart

@@ -1,7 +1,7 @@
 # Name policy
 
 The [MIT licence](LICENSE) covers Enshwick's code. It does not cover the name
-Enshwick. This policy says who may ship a build under that name.
+Enshwick.
 
 ## Who may build and ship the code?
 

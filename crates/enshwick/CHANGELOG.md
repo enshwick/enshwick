@@ -165,8 +165,8 @@ Each entry names the pull request that made the change.
 - The book's new chapter "Performance" gives what Rust, C, C++ and Luau
   mods cost at run time, with each measured cost and its source; the Luau
   chapter says a script runs in an interpreter (#1034).
-- The book and the alpha release notes say Enshwick supports the latest game
-  version and name only the game version an alpha was checked against; the
+- The book says Enshwick supports the latest game version, and the alpha
+  release notes name only the game version an alpha was checked against; the
   repository has a name policy, `NAME-POLICY.md` (#1034).
 
 ### Fixed
