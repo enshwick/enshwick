@@ -882,6 +882,13 @@ mod tests {
             Some(Voxel::READ_MAX)
         );
     }
+
+    #[test]
+    fn an_empty_box_or_one_past_the_end_reads_no_voxels() {
+        assert_eq!(Voxel::read_count([0; 3], [0, 3, 4]), None);
+        assert_eq!(Voxel::read_count([Voxel::END, 0, 0], [1; 3]), None);
+        assert_eq!(Voxel::read_count([Voxel::END - 1, 0, 0], [1; 3]), Some(1));
+    }
 }
 
 #[cfg(test)]
