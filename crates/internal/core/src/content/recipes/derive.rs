@@ -425,7 +425,7 @@ impl RecipeEdit<'_> {
     }
 
     /// Multiplies the count of each item the recipe makes by `factor`,
-    /// rounded half away from zero by [`scale_whole`](crate::rates::scale_whole):
+    /// rounded half away from zero as `rates::scale_whole` rounds:
     /// a stack the recipe made still makes at least one.
     pub fn scale_output_by(&mut self, factor: f32) {
         let Some((start, count)) = self.blob.array(self.at + self.layout.output) else {
