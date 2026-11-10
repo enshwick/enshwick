@@ -8,6 +8,15 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `actions`: `Arg::item` and `Value::Item`. A window lists the game's
+  items by the names the player's own game shows, with a search, and sends
+  the picked item's GUID. A typed line takes a debug name, GUID, content id
+  or shown name. The server refuses an item its game does not know before
+  the handler runs. Luau `enshwick.actions.item`.
+- `content`: `Vanilla::items` lists the items with their name tags and
+  reads each tag once; `vanilla::items` no longer reads the archive on each
+  call, and an item registry that does not read yet is read again later.
+
 - `abi`: `HostApi::resource_buffer`, ABI 11.20, lends a resource patch
   bytes for its output that the loader owns: the game's first build keeps
   the last patch's output for the process, and the loader frees every other

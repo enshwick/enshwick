@@ -243,6 +243,44 @@ local give = {
 }
 ```
 
+## Items from the game's list
+
+`Arg::item(label)` asks for one of the game's items. The handler gets
+`Value::Item` with the item's GUID. The server refuses an item its game
+does not know before the handler runs: "No item …".
+
+| Where | How the player names the item |
+| --- | --- |
+| A window | a list of the items by the names the game shows in the player's language, with a search field; up to 64 matches show at once |
+| A typed line | its debug name (`Tool_Torch01`), its GUID, a content id (`you.lamps:lamp`), or a name the game shows where the server has the game's texts, as in single player and a game a player hosts |
+
+The names come from the player's own game, so a dedicated server needs no
+texts and sends none. A window lists vanilla items; a typed line also takes
+a mod's item by its content id. On a typed line the item takes words as a
+text does: `spawn Stone Axe 5` is the item `Stone Axe` five times.
+
+```rust
+use enshwick::actions::{Action, Arg, Value};
+
+let spawn = Action::new("spawn", "Spawn an item")
+    .admins()
+    .arg(Arg::item("Item"))
+    .arg(Arg::number("Count", 1.0..=999.0, 1.0).optional(Value::Number(1.0)));
+assert_eq!(spawn.id(), "spawn");
+```
+
+```luau
+local spawn = {
+    id = "spawn",
+    label = "Spawn an item",
+    admins = true,
+    args = {
+        enshwick.actions.item("Item"),
+        enshwick.actions.number("Count", 1, 999, 1):optional({ Number = 1 }),
+    },
+}
+```
+
 ## Players who are offline
 
 An administrator bans or allows players who are not online. `.known(fn)`
