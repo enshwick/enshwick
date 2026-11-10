@@ -26,7 +26,7 @@ mod join_check;
 mod library;
 pub(crate) mod record;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 pub use dry_run::{DryMod, DryRun, DryRunError, dry_run};
 pub(crate) use join_check::TABLE_IDS;

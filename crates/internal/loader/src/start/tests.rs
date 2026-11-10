@@ -122,6 +122,11 @@ fn loader(mods: &[TestMod], developer_tools: bool) -> (Loader, Vec<Library>) {
     (loader, order)
 }
 
+/// A server's loader with no game and no mods, for the tests of other parts.
+pub(crate) fn bare_loader() -> Loader {
+    loader(&[], false).0
+}
+
 /// The handle of the mod `id` in `loader`'s load order.
 fn handle_of(loader: &Loader, id: &str) -> usize {
     let index = loader.mods.iter().position(|m| m.id == id).unwrap();

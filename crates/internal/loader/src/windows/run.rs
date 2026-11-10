@@ -296,6 +296,38 @@ mod tests {
     }
 
     #[test]
+    fn a_show_is_refused_for_a_bad_change_id_or_crowd_and_for_a_mod_without_actions() {
+        let mut loader = crate::start::tests::bare_loader();
+        let owner = ModIndex::new(0);
+        let one = [PlayerKey::new(7)];
+        let crowd = vec![PlayerKey::new(7); MAX_PLAYERS + 1];
+        let bad = Status::BAD_ARGS;
+        assert_eq!(
+            show(&loader, owner, "panel", &one, 3),
+            bad,
+            "an unknown change"
+        );
+        assert_eq!(show(&loader, owner, "Bad Id", &one, 0), bad);
+        assert_eq!(
+            show(&loader, owner, "panel", &crowd, 0),
+            bad,
+            "too many players"
+        );
+        assert_eq!(
+            show(&loader, owner, "panel", &crowd[..MAX_PLAYERS], 2),
+            Status::REFUSED,
+            "the bound itself passes, and a mod that declared no actions is refused"
+        );
+        loader.side = Side::CLIENT;
+        assert_eq!(
+            show(&loader, owner, "panel", &one, 0),
+            Status::MISSING,
+            "a client that hosts no game carries no windows"
+        );
+        assert!(WINDOWS.waiting.relock().is_empty());
+    }
+
+    #[test]
     fn what_waits_is_taken_out_of_its_locks_so_a_mod_told_of_it_may_queue_more() {
         let mine = ModIndex::new(0);
         let show = |key| Waiting {
