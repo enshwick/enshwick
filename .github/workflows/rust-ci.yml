@@ -111,6 +111,7 @@ jobs:
           echo "skip=$reason" >> "$GITHUB_OUTPUT"
 
   part:
+    name: part (${{ matrix.part }})
     needs: scope
     if: needs.scope.outputs.skip == ''
     runs-on: ubuntu-26.04
@@ -214,12 +215,12 @@ jobs:
       # The test builds the API crate again under target/tests/trybuild,
       # which alone took longer than the rest of the host part's tests. It
       # runs on every change that builds, with the host part's features; a
-      # renamed test binary fails here instead of going untested.
+      # moved test fails here instead of going untested.
       - name: The trybuild test
         if: matrix.part == 'trybuild'
         run: |
           mapfile -t args < <(cargo xtask host-args)
-          cargo nextest run "${args[@]}" --test config_files --no-tests=fail
+          cargo nextest run "${args[@]}" --test main --profile trybuild --no-tests=fail
 
       # A version that claims less change than the public API made fails;
       # unreleased changes keep the released version and pass.
