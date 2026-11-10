@@ -1,0 +1,47 @@
+name: Compile through sccache
+description: >-
+  sccache as the rustc wrapper for the rest of the job, with the GitHub
+  Actions cache as its storage. Swatinem/rust-cache keeps only the
+  dependencies, and cargo would rebuild workspace crates from a restored
+  target anyway, since a fresh checkout changes every file's mtime; sccache
+  keys on content, so a workspace crate a change leaves alone comes from the
+  cache.
+
+inputs:
+  mode:
+    description: "`read` takes the objects other runs stored; `write` also stores its own."
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # Every version here must be in install-action's manifests at this SHA.
+    - uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
+      with:
+        tool: sccache@0.19.0
+
+    # The cache service's address and token reach only actions, not run
+    # steps; sccache reads them from the environment.
+    - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      with:
+        script: |
+          core.exportVariable('ACTIONS_RESULTS_URL', process.env.ACTIONS_RESULTS_URL || '');
+          core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+    - name: sccache as the rustc wrapper
+      shell: bash
+      env:
+        MODE: ${{ inputs.mode }}
+      run: | # zizmor: ignore[github-env] fixed values only
+        case "$MODE" in
+          read) rw=READ_ONLY ;;
+          write) rw=READ_WRITE ;;
+          *) echo "::error::mode is read or write, not $MODE"; exit 1 ;;
+        esac
+        {
+          echo "ACTIONS_CACHE_SERVICE_V2=on"
+          echo "SCCACHE_GHA_ENABLED=true"
+          echo "SCCACHE_GHA_RW_MODE=$rw"
+          echo "RUSTC_WRAPPER=sccache"
+        } >> "$GITHUB_ENV"
+        sccache --version

@@ -19,12 +19,6 @@ inputs:
   fuzz:
     description: Install the nightly compiler and cargo-fuzz, for the short fuzz runs of `cargo xtask check --part fuzz`.
     default: "false"
-  sccache:
-    description: >-
-      Compile through sccache with the GitHub Actions cache: `read` takes the
-      objects other runs stored, `write` also stores its own, `false` leaves
-      sccache out.
-    default: "false"
 
 runs:
   using: composite
@@ -123,31 +117,6 @@ runs:
         ln -sf "$(dirname "$lld")/llvm-ar" "$RUNNER_TEMP/lld/llvm-lib"
         echo "$RUNNER_TEMP/lld" >> "$GITHUB_PATH"
         "$lld" -flavor link --version
-
-    # Swatinem/rust-cache keeps only the dependencies, and cargo would
-    # rebuild workspace crates from a restored target anyway, since a fresh
-    # checkout changes every file's mtime. sccache keys on content, so a
-    # workspace crate a change leaves alone comes from the cache.
-    - if: inputs.sccache != 'false'
-      uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
-      with:
-        version: v0.19.0
-    - name: Compile through sccache
-      if: inputs.sccache != 'false'
-      shell: bash
-      env:
-        MODE: ${{ inputs.sccache }}
-      run: | # zizmor: ignore[github-env] fixed values only
-        case "$MODE" in
-          read) rw=READ_ONLY ;;
-          write) rw=READ_WRITE ;;
-          *) echo "::error::sccache is false, read or write, not $MODE"; exit 1 ;;
-        esac
-        {
-          echo "SCCACHE_GHA_ENABLED=true"
-          echo "SCCACHE_GHA_RW_MODE=$rw"
-          echo "RUSTC_WRAPPER=sccache"
-        } >> "$GITHUB_ENV"
 
     # Every version here must be in install-action's manifests at this SHA:
     # a version it lacks falls back to cargo-binstall.
