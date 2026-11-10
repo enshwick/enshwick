@@ -12,7 +12,6 @@ mod tests {
 
     impl Mod for Joined {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            // An object whose box lies in two zones' bounding box.
             load.on_building_zone_check(|check| {
                 check.zones.len() >= 2
                     && (0..3).all(|a| {

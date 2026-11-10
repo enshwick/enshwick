@@ -37,12 +37,45 @@ mod tests {
         "#
     );
 
+    fn info(id: KnowledgeId, kind: u8, scope: u8) -> KnowledgeInfo {
+        KnowledgeInfo {
+            header: Header::of::<KnowledgeInfo>(),
+            id,
+            kind,
+            scope,
+            reserved: 0,
+            value: 0,
+            flags: 0,
+        }
+    }
+
+    /// The probe's ids as the game knows them, so every call names an id of
+    /// the kind and scope the loader takes.
     fn started() -> (enshwick::test::Installed, &'static Knowledge) {
         let loader = enshwick::test::FakeHost::new().install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Teacher)`.
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.faults());
+        let player = Some(Entity(2));
+        loader.set_knowledge(
+            &[
+                (
+                    player,
+                    info(RECIPE, KnowledgeInfo::FLAGS, KnowledgeInfo::PLAYER),
+                ),
+                (
+                    player,
+                    info(
+                        TUTORIAL_COUNTER,
+                        KnowledgeInfo::COUNTER,
+                        KnowledgeInfo::PLAYER,
+                    ),
+                ),
+                (None, info(PLACE, KnowledgeInfo::BOOL, KnowledgeInfo::WORLD)),
+            ],
+            &[],
+        );
         (loader, KNOWLEDGE.get().unwrap())
     }
 

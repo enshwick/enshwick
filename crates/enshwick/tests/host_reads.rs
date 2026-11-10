@@ -70,7 +70,7 @@ mod tests {
     }
 
     #[test]
-    fn the_game_version_reads_or_is_missing() {
+    fn the_game_version_reads_as_the_archive_names_it() {
         let _loader = start(enshwick::test::FakeHost::new().game_version("1283531|release|2026"));
         let host = enshwick::host().unwrap();
         assert_eq!(host.game_version(), Ok("1283531|release|2026"));

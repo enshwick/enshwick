@@ -67,7 +67,13 @@ mod tests {
                 .any(|c| c.entity == ENEMY && c.stat == doom)
         );
         stats.watch(ENEMY, false);
-        CHANGES.lock().unwrap().clear();
+        assert!(buffs.remove(ENEMY, CURSED).unwrap());
         assert_eq!(loader.settle_stats(), 0, "no longer watched");
+        stats.watch(ENEMY, true);
+        assert_eq!(
+            loader.settle_stats(),
+            1,
+            "watched again, the lifted curse counts"
+        );
     }
 }

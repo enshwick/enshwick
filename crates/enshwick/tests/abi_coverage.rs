@@ -20,7 +20,7 @@ mod tests {
             .collect()
     }
 
-    /// The entries of the chapter's host table rows, in order.
+    /// The entries of the rows of the chapter's entries table, in order.
     fn chapter_entries() -> Vec<String> {
         let chapter = std::fs::read_to_string(
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../book/src/abi-coverage.md"),
@@ -28,6 +28,9 @@ mod tests {
         .unwrap();
         chapter
             .lines()
+            .skip_while(|line| *line != "## The entries")
+            .skip(1)
+            .take_while(|line| !line.starts_with("## "))
             .filter_map(|line| line.strip_prefix("| `"))
             .filter_map(|rest| rest.split_once('`'))
             .map(|(entry, _)| entry.to_owned())
