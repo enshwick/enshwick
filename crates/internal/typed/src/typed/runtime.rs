@@ -25,14 +25,19 @@ pub fn blank<T: Reflected + Shaped>() -> Result<T, ShapeError> {
 }
 
 /// The Rust path of the item `$name` as the API crate shows it, for a
-/// generated type's name in a script and in a refusal: `enshwick::typed::...`.
+/// generated type's name in a script and in a refusal: `enshwick::typed::...`,
+/// from this crate or `enshwick-core`, whose modules the API crate shows.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! item_path {
     ($name:ident) => {
         $crate::__private::str_replace!(
-            ::core::concat!(::core::module_path!(), "::", ::core::stringify!($name)),
-            "enshwick_typed::",
+            $crate::__private::str_replace!(
+                ::core::concat!(::core::module_path!(), "::", ::core::stringify!($name)),
+                "enshwick_typed::",
+                "enshwick::"
+            ),
+            "enshwick_core::",
             "enshwick::"
         )
     };

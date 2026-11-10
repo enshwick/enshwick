@@ -38,6 +38,15 @@ fn derived() -> Value {
 }
 
 #[test]
+fn a_reflected_type_declared_here_is_named_by_its_path_in_the_facade() {
+    use crate::script::{Ty, Typed};
+    let Ty::Record(record) = <Derived as Typed>::TY else {
+        unreachable!()
+    };
+    assert_eq!(record.name(), "enshwick::typed::runtime::tests::Derived");
+}
+
+#[test]
 fn a_derived_struct_reads_its_base_and_writes_it_back_first() {
     let value = Derived::from_value(&derived()).unwrap();
     assert_eq!(value.base.level, 3);
