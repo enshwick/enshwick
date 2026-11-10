@@ -270,12 +270,12 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
         let sent = record.server_values.relock().is_some();
         let opens = settings && mods_screen::gear(world, sent)
             || super::controls::any_in(&controls, &record.id);
-        let icon = if opens {
-            Some(Icon::Settings)
-        } else {
-            (!detail_lines(loader, index, record).is_empty()).then_some(Icon::Info)
-        };
-        let opened = paint.row(|| state(paint, record), || icon.is_some_and(button));
+        // The Details button on every mod, at the same place; the gear under
+        // it where the mod has something to set here.
+        let opened = paint.row(
+            || state(paint, record),
+            || button(Icon::Info) | (opens && button(Icon::Settings)),
+        );
         if opened {
             done = Listed::Settings(index);
         }

@@ -64,8 +64,9 @@ const LINE: SeparatorConfig = SeparatorConfig {
 const CELL_GAP: f32 = 10.0;
 /// The gap between the lines of a row's left cell, as the players list's.
 const LINE_GAP: f32 = 5.0;
-/// A row's padding above and below, the players list's side padding.
-const ROW_PADDING: [f32; 4] = [0.0, 10.0, 0.0, 10.0];
+/// A row's padding above and below, the players list's, and at its right,
+/// which keeps a row's button clear of the scroll bar beside the list.
+const ROW_PADDING: [f32; 4] = [0.0, 10.0, 24.0, 10.0];
 
 /// The row's and the separator's functions.
 #[derive(Debug)]
@@ -108,21 +109,28 @@ fn apart(row: FrameGapFn, column: FrameGapFn) -> Result<(), Missing> {
     Ok(())
 }
 
-/// A row's own frames, kept in place from its start to its end: the row and
-/// the column of its left cell.
+/// A row's own frames, kept in place from its start to its end: the row,
+/// the column of its left cell and the column of its right cell.
 pub(in crate::ui) struct Row {
-    row: Buf<FRAME_SIZE>,
+    frame: Buf<FRAME_SIZE>,
     column: Buf<FRAME_SIZE>,
+    side: Buf<FRAME_SIZE>,
 }
 
 impl Row {
     pub(in crate::ui) fn new() -> Self {
         Self {
-            row: Buf::zeroed(),
+            frame: Buf::zeroed(),
             column: Buf::zeroed(),
+            side: Buf::zeroed(),
         }
     }
 }
+
+/// The alignment word that puts the right cell at the top right of its
+/// row, as `ui.button` places its key hint (client 26430625): the low byte
+/// across (3 right), the high byte down (1 top).
+const SIDE_ALIGN: u16 = 0x103;
 
 impl Engine {
     /// Opens a row as wide as its column and the left cell in it, which
@@ -140,10 +148,10 @@ impl Engine {
         };
         // SAFETY: `fns.row` is the game's `ui.row`, checked in
         // `Rows::resolve`, inside the window this function's `# Safety`
-        // gives; `row.row` holds `FRAME_SIZE` bytes, the room of a frame as
+        // gives; `row.frame` holds `FRAME_SIZE` bytes, the room of a frame as
         // for `ui.column`, its twin, and stays in place.
-        unsafe { (fns.row)(row.row.ptr(), CELL_GAP) };
-        let node = self.frame_node(&row.row);
+        unsafe { (fns.row)(row.frame.ptr(), CELL_GAP) };
+        let node = self.frame_node(&row.frame);
         // SAFETY: `self.node_stretch` is the game's `ui.node_stretch`,
         // checked in `Engine::resolve`, on the node the game just wrote
         // into the row.
@@ -164,7 +172,9 @@ impl Engine {
         true
     }
 
-    /// Ends the row's left cell: what is drawn next sits at its right.
+    /// Ends the row's left cell and opens its right cell, a column at the
+    /// top right of the row: what is drawn next stacks there, at the same
+    /// place in every row whatever its height.
     ///
     /// # Safety
     ///
@@ -176,6 +186,18 @@ impl Engine {
         // in `Engine::resolve`, on the column `row_begin` opened, in place
         // and with nothing open inside it by this function's `# Safety`.
         unsafe { (self.frame_close)(row.column.ptr()) };
+        let Some(fns) = &self.rows else {
+            return;
+        };
+        // SAFETY: `fns.column` is the game's `ui.column`, checked in
+        // `Rows::resolve`, inside the row `row_begin` opened; `row.side`
+        // holds `FRAME_SIZE` bytes and stays in place.
+        unsafe { (fns.column)(row.side.ptr(), LINE_GAP) };
+        let node = self.frame_node(&row.side);
+        // SAFETY: `self.node_align` is the game's `ui.node_align`, checked in
+        // `Engine::resolve`, on the node the game just wrote into the
+        // column, with a live alignment word.
+        unsafe { (self.node_align)(node, &SIDE_ALIGN) };
     }
 
     /// Ends the row.
@@ -187,10 +209,15 @@ impl Engine {
     /// - Every frame opened in the right cell is closed.
     pub(in crate::ui) unsafe fn row_end(&self, row: &mut Row) {
         // SAFETY: `self.frame_close` is the game's `ui.frame_close`, checked
+        // in `Engine::resolve`, on the right cell's column `row_side` opened
+        // (it returns before opening one only on a build without rows, where
+        // `row_begin` returned false and this does not run), in place and
+        // with nothing open inside it by this function's `# Safety`.
+        unsafe { (self.frame_close)(row.side.ptr()) };
+        // SAFETY: `self.frame_close` is the game's `ui.frame_close`, checked
         // in `Engine::resolve`, on the row `row_begin` opened, in place,
-        // its column closed by `row_side` and nothing else open inside it
-        // by this function's `# Safety`.
-        unsafe { (self.frame_close)(row.row.ptr()) };
+        // its columns closed and nothing else open inside it.
+        unsafe { (self.frame_close)(row.frame.ptr()) };
     }
 
     /// Draws the thin line the game puts between the entries of a list;
