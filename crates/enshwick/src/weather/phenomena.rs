@@ -571,75 +571,51 @@ mod tests {
         Guid([n; 16])
     }
 
+    /// A value of the generated type `T` with every field empty or zero:
+    /// only the generated types' own crate writes one out whole.
+    fn blank<T: crate::typed::Reflected + crate::typed::runtime::Shaped>() -> T {
+        crate::typed::runtime::blank().unwrap()
+    }
+
     fn phenomenon(n: u8) -> WeatherSystemPhenomenonResource {
-        let float2 = crate::typed::Float2 { x: 0.0, y: 0.0 };
-        WeatherSystemPhenomenonResource {
-            guid: guid(n),
-            debug_name: format!("vanilla {n}"),
-            phenomenon: guid(100 + n),
-            probability: 0.25,
-            flags: crate::typed::Flags(Vec::new()),
-            duration_min: Time { value: 60 },
-            duration_max: Time { value: 120 },
-            position_y_min: 0.0,
-            position_y_max: 1.0,
-            radius_min: 10.0,
-            radius_max: f32::from(n) * 100.0,
-            move_speed_min: 0.0,
-            move_speed_max: 1.0,
-            spawn_fade_time: Time { value: 1 },
-            despawn_fade_time: Time { value: 1 },
-            strength: 0.5,
-            cloud_map_range: crate::typed::FloatRange {
-                min_value: 0.0,
-                max_value: 1.0,
-            },
-            height: 1.0,
-            rain_threshold: 0.5,
-            rain_mask_index: 0,
-            render_weather: guid(0),
-            fog_model: guid(0),
-            fog_model_half_size_xz: float2,
-            effect: GameEffect::None,
-        }
+        let time = crate::typed::runtime::made::time;
+        let mut phenomenon: WeatherSystemPhenomenonResource = blank();
+        phenomenon.guid = guid(n);
+        phenomenon.debug_name = format!("vanilla {n}");
+        phenomenon.phenomenon = guid(100 + n);
+        phenomenon.probability = 0.25;
+        phenomenon.duration_min = time(60);
+        phenomenon.duration_max = time(120);
+        phenomenon.position_y_max = 1.0;
+        phenomenon.radius_min = 10.0;
+        phenomenon.radius_max = f32::from(n) * 100.0;
+        phenomenon.move_speed_max = 1.0;
+        phenomenon.spawn_fade_time = time(1);
+        phenomenon.despawn_fade_time = time(1);
+        phenomenon.strength = 0.5;
+        phenomenon.cloud_map_range.max_value = 1.0;
+        phenomenon.height = 1.0;
+        phenomenon.rain_threshold = 0.5;
+        phenomenon.effect = GameEffect::None;
+        phenomenon
     }
 
     fn layer(n: u8, start: u8, count: u8) -> crate::typed::WeatherSystemLayerResource {
-        crate::typed::WeatherSystemLayerResource {
-            guid: guid(n),
-            restrict_mask_index: 0,
-            exclude_mask_index: 0,
-            phenomenon_index_range: crate::typed::Range8 { start, count },
-            nothing_phenomenon: phenomenon(0),
-        }
+        let mut layer: crate::typed::WeatherSystemLayerResource = blank();
+        layer.guid = guid(n);
+        layer.phenomenon_index_range.start = start;
+        layer.phenomenon_index_range.count = count;
+        layer.nothing_phenomenon = phenomenon(0);
+        layer
     }
 
     /// Layer 10 holds phenomena 1 and 2, layer 20 phenomenon 3; phenomenon
     /// 4 is in no layer, as the game's debug ones.
     fn system() -> WeatherSystemResource {
-        let mask = crate::typed::WeatherSystemMaskResource {
-            world_to_relative: crate::typed::Float2 { x: 0.0, y: 0.0 },
-            bbox_min: crate::typed::Float2 { x: 0.0, y: 0.0 },
-            bbox_max: crate::typed::Float2 { x: 0.0, y: 0.0 },
-            original_size: crate::typed::Uint2 { x: 0, y: 0 },
-            pixel_offset: crate::typed::Uint2 { x: 0, y: 0 },
-            pixel_count: crate::typed::Uint2 { x: 0, y: 0 },
-            pixel_data: Vec::new(),
-        };
-        WeatherSystemResource {
-            guid: guid(0),
-            data_hash: crate::typed::HashKey32 { value: 0 },
-            world_size: crate::typed::Uint2 { x: 0, y: 0 },
-            snow_border_range_mapping: crate::typed::Float2 { x: 0.0, y: 0.0 },
-            snow_border_mask: mask,
-            layers: vec![layer(10, 0, 2), layer(20, 2, 1)],
-            layer_masks: Vec::new(),
-            phenomenons: (1..=4).map(phenomenon).collect(),
-            rain_masks: Vec::new(),
-            state_configurations: Vec::new(),
-            layer_state_configurations: Vec::new(),
-            new_world_state_configuration: guid(0),
-        }
+        let mut system: WeatherSystemResource = blank();
+        system.layers = vec![layer(10, 0, 2), layer(20, 2, 1)];
+        system.phenomenons = (1..=4).map(phenomenon).collect();
+        system
     }
 
     fn ranges(system: &WeatherSystemResource) -> Vec<(u8, u8)> {

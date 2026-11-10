@@ -11,8 +11,23 @@ pub mod rows;
 pub mod shape;
 pub use shape::{Shape, Shaped};
 
+/// A value of the generated type `T` with every field empty or zero, to set
+/// fields on: a generated struct is non-exhaustive, so code outside this
+/// crate cannot write one out.
+///
+/// # Errors
+///
+/// [`ShapeError`] when `T`'s shape and its Rust type disagree, which the
+/// tests of every generated type hold apart.
+#[doc(hidden)]
+pub fn blank<T: Reflected + Shaped>() -> Result<T, ShapeError> {
+    T::from_value(&T::SHAPE.blank())
+}
+
 /// The Rust path of the item `$name` as the API crate shows it, for a
 /// generated type's name in a script and in a refusal: `enshwick::typed::...`.
+#[doc(hidden)]
+#[macro_export]
 macro_rules! item_path {
     ($name:ident) => {
         ::const_format::str_replace!(
@@ -22,7 +37,7 @@ macro_rules! item_path {
         )
     };
 }
-pub(crate) use item_path;
+pub use item_path;
 
 /// Why a [`Value`] is not the shape a generated type expects: a field the
 /// build lacks, or a value of another kind.
@@ -490,6 +505,8 @@ impl Compiled {
 }
 
 /// The table of every generated type with a role, a [`Row`] each.
+#[doc(hidden)]
+#[macro_export]
 macro_rules! named_table {
     ($($id:literal => $ty:ty,)*) => {
         /// Every generated type with a role, by id, with its shape.
@@ -511,7 +528,7 @@ macro_rules! named_table {
             &[$($crate::typed::runtime::Compiled::of::<$ty>()),*];
     };
 }
-pub(crate) use named_table;
+pub use named_table;
 
 /// `name` without the `r#` of a raw identifier: a field's name in a script.
 #[must_use]
@@ -542,6 +559,8 @@ pub const OTHER_DOC: &str =
 /// A generated struct: its fields by the game's names, read from and
 /// written to a [`Value`], and by its Rust names in a script, as a record
 /// named by its Rust path; a derived type holds its base first.
+#[doc(hidden)]
+#[macro_export]
 macro_rules! reflected_struct {
     (
         #[doc = $doc:literal]
@@ -672,6 +691,8 @@ macro_rules! reflected_struct {
 }
 
 /// The shape of a generated struct's base, or none.
+#[doc(hidden)]
+#[macro_export]
 macro_rules! base_shape {
     () => {
         ::core::option::Option::None
@@ -680,12 +701,14 @@ macro_rules! base_shape {
         ::core::option::Option::Some(|| <$base as $crate::typed::runtime::Shaped>::SHAPE)
     };
 }
-pub(crate) use base_shape;
-pub(crate) use reflected_struct;
+pub use base_shape;
+pub use reflected_struct;
 
 /// A generated enum: a variant per constant the build names, and `Other`
 /// for a constant it does not; in a script, a variant's Rust name, or
 /// `{ Other = <name or number> }`.
+#[doc(hidden)]
+#[macro_export]
 macro_rules! reflected_enum {
     (
         #[doc = $doc:literal]
@@ -788,9 +811,11 @@ macro_rules! reflected_enum {
         }
     };
 }
-pub(crate) use reflected_enum;
+pub use reflected_enum;
 
 /// Gives a generated type enshwick's id and its roles.
+#[doc(hidden)]
+#[macro_export]
 macro_rules! named {
     ($name:ident = $id:literal: $($role:ident),+) => {
         impl $crate::typed::runtime::sealed::Sealed for $name {}
@@ -802,7 +827,7 @@ macro_rules! named {
         $(impl $crate::typed::$role for $name {})+
     };
 }
-pub(crate) use named;
+pub use named;
 
 macro_rules! integers {
     ($($int:ty => $name:literal, $form:ident),* $(,)?) => {$(

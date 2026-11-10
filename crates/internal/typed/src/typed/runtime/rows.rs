@@ -1,19 +1,21 @@
-//! A generated type's row as a script reaches it: its values cross as
-//! tables by the generated items' Rust names, read and written through the
-//! type's [`Shape`](super::Shape), which takes and refuses what the
-//! generated Rust type does.
+//! A generated type's row as a script reaches it.
+//!
+//! Its values cross as tables by the generated items' Rust names, read and
+//! written through the type's [`Shape`](super::Shape), which takes and
+//! refuses what the generated Rust type does.
 
 use super::{Role, Row};
 use crate::Off;
 use crate::resources::Value as Data;
-#[cfg(any(test, feature = "test"))]
-use crate::script::Ty;
+use crate::script::Value;
 use crate::script::convert::Fields;
-use crate::script::{Error, Value};
+#[cfg(any(test, feature = "test"))]
+use crate::script::{Error, Ty};
 
 /// `value`, of `ty`, with each record a table by its fields' names, as a
 /// script holds game data: the compiled path the tests hold every shape to.
 #[cfg(any(test, feature = "test"))]
+#[must_use]
 pub fn by_name(value: Value, ty: &Ty) -> Value {
     match (value, ty) {
         (Value::Record(values), Ty::Record(record)) => Value::Map(
@@ -162,6 +164,7 @@ impl Row {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::content::Guid;
     use crate::script::{FromScript, IntoScript, Typed};
     use crate::typed::runtime::{Compiled, Shaped, reflected_enum, reflected_struct};
 
@@ -315,7 +318,7 @@ mod tests {
         assert!(
             record
                 .name()
-                .ends_with("typed::runtime::script::tests::Outer")
+                .ends_with("typed::runtime::rows::tests::Outer")
         );
         assert_eq!(record.fields()[3].name(), "type");
     }

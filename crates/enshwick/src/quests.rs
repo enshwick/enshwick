@@ -588,7 +588,7 @@ mod tests {
     use crate::content::knowledge::KnowledgeTest;
     use crate::knowledge::Scope;
     use crate::typed::runtime::Constant;
-    use crate::typed::{CompareOperator, HashKey32, KnowledgeQueryData, KnowledgeQueryDataType};
+    use crate::typed::{CompareOperator, KnowledgeQueryData, KnowledgeQueryDataType};
 
     fn data(
         id: u32,
@@ -596,13 +596,14 @@ mod tests {
         op: CompareOperator,
         value: u32,
     ) -> KnowledgeQueryData {
-        KnowledgeQueryData {
-            knowledge_or_query_id: HashKey32 { value: id },
-            compare_value: value,
-            compare_operator: op,
-            r#type: kind,
-            is_explicit_player_knowledge_query: true,
-        }
+        // Only the generated types' own crate writes one out whole.
+        let mut data: KnowledgeQueryData = crate::typed::runtime::blank().unwrap();
+        data.knowledge_or_query_id.value = id;
+        data.compare_value = value;
+        data.compare_operator = op;
+        data.r#type = kind;
+        data.is_explicit_player_knowledge_query = true;
+        data
     }
 
     #[test]

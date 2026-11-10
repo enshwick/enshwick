@@ -1,5 +1,5 @@
 use super::*;
-use crate::resources::{Field, Kind, Registry, Type};
+use crate::resources::{Field, Kind, Registry, Type, Value};
 
 reflected_enum! {
     /// A test enum.
