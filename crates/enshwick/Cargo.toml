@@ -15,6 +15,7 @@ autotests = false
 
 [dependencies]
 enshwick-macros = { path = "../enshwick-macros", version = "=1.0.0-alpha.14" }
+enshwick-typed = { workspace = true, optional = true }
 enshwick-values.workspace = true
 aho-corasick.workspace = true
 bcdec_rs.workspace = true
@@ -45,7 +46,7 @@ serde = { workspace = true, features = ["derive"] }
 
 [features]
 ## `test`: a fake loader for a mod's unit tests.
-test = []
+test = ["enshwick-typed?/test"]
 ## `packs::schemas`: the JSON Schemas of a data pack's files, for tools.
 schema = ["dep:schemars", "dep:serde_json"]
 ## `unstable`: the parts of the API that may still change in any release:
@@ -55,7 +56,7 @@ unstable = ["dep:hound"]
 ## `typed`: every component, event and resource the game reflects as typed
 ## items generated from its reflection, a few thousand of them; it builds on
 ## `unstable`.
-typed = ["unstable"]
+typed = ["unstable", "dep:enshwick-typed"]
 
 # One binary for every file in `tests/`, each a module of `tests/main.rs`:
 # one link instead of one per file. nextest still runs each test in a

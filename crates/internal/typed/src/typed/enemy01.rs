@@ -224,7 +224,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::reflected_struct! {
     /// The game's struct `enemy01::AttackDesscriptionResource`, 156 bytes.
     ///
-    /// A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// A resource: read and serve it through [`crate::typed::ResourceType`](../struct.ResourceType.html).
     AttackDesscriptionResource {
         /// `guid`, of `Guid`.
         guid: crate::content::Guid = "guid",
@@ -457,7 +457,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::reflected_struct! {
     /// The game's struct `enemy01::BehaviorDesscriptionResource`, 88 bytes.
     ///
-    /// A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// A resource: read and serve it through [`crate::typed::ResourceType`](../struct.ResourceType.html).
     BehaviorDesscriptionResource: BehaviorDesscription {
         /// `guid`, of `Guid`.
         guid: crate::content::Guid = "guid",

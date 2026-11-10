@@ -19,7 +19,7 @@
 crate::typed::runtime::reflected_struct! {
     /// The game's struct `anim_graph::BlendProfileEntryResource`, 8 bytes.
     ///
-    /// A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// A resource: read and serve it through [`crate::typed::ResourceType`](../struct.ResourceType.html).
     BlendProfileEntryResource {
         /// `boneIndex`, of `uint8`.
         bone_index: u8 = "boneIndex",
@@ -32,7 +32,7 @@ crate::typed::runtime::named!(BlendProfileEntryResource = "anim_graph::BlendProf
 crate::typed::runtime::reflected_struct! {
     /// The game's struct `anim_graph::BlendProfileResource`, 8 bytes.
     ///
-    /// A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// A resource: read and serve it through [`crate::typed::ResourceType`](../struct.ResourceType.html).
     BlendProfileResource {
         /// `entries`, of `BlobArray<anim_graph::BlendProfileEntryResource>`.
         entries: ::std::vec::Vec<BlendProfileEntryResource> = "entries",
@@ -43,7 +43,7 @@ crate::typed::runtime::named!(BlendProfileResource = "anim_graph::BlendProfileRe
 crate::typed::runtime::reflected_struct! {
     /// The game's struct `anim_graph::BoneMaskEntryResource`, 8 bytes.
     ///
-    /// A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// A resource: read and serve it through [`crate::typed::ResourceType`](../struct.ResourceType.html).
     BoneMaskEntryResource {
         /// `boneIndex`, of `uint8`.
         bone_index: u8 = "boneIndex",
@@ -56,7 +56,7 @@ crate::typed::runtime::named!(BoneMaskEntryResource = "anim_graph::BoneMaskEntry
 crate::typed::runtime::reflected_struct! {
     /// The game's struct `anim_graph::BoneMaskResource`, 8 bytes.
     ///
-    /// A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// A resource: read and serve it through [`crate::typed::ResourceType`](../struct.ResourceType.html).
     BoneMaskResource {
         /// `entries`, of `BlobArray<anim_graph::BoneMaskEntryResource>`.
         entries: ::std::vec::Vec<BoneMaskEntryResource> = "entries",
@@ -77,7 +77,7 @@ crate::typed::runtime::reflected_struct! {
 crate::typed::runtime::reflected_struct! {
     /// The game's struct `anim_graph::RetargetDataEntryResource`, 20 bytes.
     ///
-    /// A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// A resource: read and serve it through [`crate::typed::ResourceType`](../struct.ResourceType.html).
     RetargetDataEntryResource {
         /// `boneIndex`, of `uint16`.
         bone_index: u16 = "boneIndex",
@@ -94,7 +94,7 @@ crate::typed::runtime::named!(RetargetDataEntryResource = "anim_graph::RetargetD
 crate::typed::runtime::reflected_struct! {
     /// The game's struct `anim_graph::RetargetDataResource`, 12 bytes.
     ///
-    /// A resource: read and serve it through [`crate::typed::ResourceType`].
+    /// A resource: read and serve it through [`crate::typed::ResourceType`](../struct.ResourceType.html).
     RetargetDataResource {
         /// `entries`, of `BlobArray<anim_graph::RetargetDataEntryResource>`.
         entries: ::std::vec::Vec<RetargetDataEntryResource> = "entries",

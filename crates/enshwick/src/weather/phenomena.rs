@@ -8,7 +8,7 @@ use crate::abi::Level;
 use crate::content::{Guid, Id};
 use crate::resources::Registry;
 use crate::typed::{
-    ResourceType, Time, WeatherPhenomenonEffect as GameEffect, WeatherSystemPhenomenonResource,
+    ResourceType, WeatherPhenomenonEffect as GameEffect, WeatherSystemPhenomenonResource,
     WeatherSystemResource,
 };
 use crate::{Load, Off};
@@ -157,8 +157,8 @@ impl PhenomenonChange {
 
     /// Writes the values set into `phenomenon`.
     fn apply(&self, phenomenon: &mut WeatherSystemPhenomenonResource) {
-        let time = |d: Duration| Time {
-            value: i64::try_from(d.as_nanos()).unwrap_or(i64::MAX),
+        let time = |d: Duration| {
+            crate::typed::runtime::made::time(i64::try_from(d.as_nanos()).unwrap_or(i64::MAX))
         };
         if let Some(p) = self.probability {
             phenomenon.probability = p;

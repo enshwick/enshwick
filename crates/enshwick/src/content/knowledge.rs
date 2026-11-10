@@ -297,7 +297,7 @@ impl KnowledgeQuery {
             CompareOperator::GreaterThan => Some(held > value),
             CompareOperator::LessThan => Some(held < value),
             CompareOperator::Equals => Some(held == value),
-            CompareOperator::Other(_) => None,
+            _ => None,
         };
         let test = match data.r#type {
             KnowledgeQueryDataType::SimpleBool => Some(KnowledgeTest::IsSet),
