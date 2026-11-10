@@ -174,13 +174,12 @@ jobs:
           sanitizers: ${{ matrix.part == 'fuzz' }}
           fuzz: ${{ matrix.part == 'fuzz' }}
 
-
       # Only main's runs store objects: the repository's cache storage is
       # full, and a pull request's entries would evict the ones every run
       # starts from.
       - uses: ./.github/actions/sccache
         with:
-          mode: write
+          mode: ${{ github.event_name == 'push' && 'write' || 'read' }}
 
       # The build itself, per part: each job builds a different target.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
@@ -270,9 +269,10 @@ jobs:
           rustup toolchain install
           rustc --version
 
+      # Stores objects only on main, as the job `part` does.
       - uses: ./.github/actions/sccache
         with:
-          mode: write
+          mode: ${{ github.event_name == 'push' && 'write' || 'read' }}
 
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
