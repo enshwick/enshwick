@@ -265,7 +265,6 @@ impl Registry {
                 .filter(|n| n.is_finite() && *n >= arg.range.0 && *n <= arg.range.1)
                 .map(Value::Number),
             ArgView::TEXT => arg.takes_text(word).then(|| Value::Text(word.to_owned())),
-            ArgView::ITEM => self.item_word(word),
             ArgView::TOGGLE => toggle_word(word, &self.texts, language).map(Value::Toggle),
             _ => None,
         }
@@ -441,16 +440,6 @@ impl Registry {
                 },
             }),
         }
-    }
-
-    /// The item the one word `word` names exactly, which only chooses how
-    /// a line splits, so a miss looks for no near names.
-    fn item_word(&self, word: &str) -> Option<Value> {
-        Guid::try_parse(word)
-            .or_else(|| Guid::try_named(word))
-            .filter(|&item| self.knows_item(item))
-            .or_else(|| crate::content::vanilla::item_exactly(word))
-            .map(Value::Item)
     }
 
     /// Whether the server's game knows `item` by this very GUID. The game

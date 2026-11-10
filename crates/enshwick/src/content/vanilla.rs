@@ -30,8 +30,6 @@ pub use experience::{ExperienceBalanceValue, experience_values};
 
 mod names;
 
-#[cfg(feature = "unstable")]
-pub(crate) use names::item_exactly;
 pub use names::{VanillaItem, VanillaRecipe, item_by_display_name, items, recipes};
 
 /// Reads one resource of the game's archive.
