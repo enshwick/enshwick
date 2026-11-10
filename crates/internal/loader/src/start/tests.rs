@@ -167,6 +167,21 @@ fn a_second_copy_skipped_at_start_is_kept_with_its_reason_but_its_running_mod_is
     assert_eq!(crate::off_line::mods_off_count(&loader), 0);
 }
 
+#[test]
+fn the_off_names_and_count_follow_a_mod_that_turns_off() {
+    let (loader, _order) = loader(
+        &[TestMod::plain("you.safes"), TestMod::plain("you.altars")],
+        false,
+    );
+    assert!(crate::off_line::mods_off(&loader).is_empty());
+    let altars = loader.mods.iter().find(|m| m.id == "you.altars").unwrap();
+    altars.off.store(true, Ordering::Release);
+    assert_eq!(crate::off_line::mods_off(&loader), ["you.altars"]);
+    assert_eq!(crate::off_line::mods_off_count(&loader), 1);
+    let names = crate::off_line::names(&loader);
+    assert_eq!(names.first().map(String::as_str), Some("you.altars"));
+}
+
 /// The handle of the mod `id` in `loader`'s load order.
 fn handle_of(loader: &Loader, id: &str) -> usize {
     let index = loader.mods.iter().position(|m| m.id == id).unwrap();
