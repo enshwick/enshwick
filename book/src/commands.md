@@ -86,8 +86,8 @@ mod cannot declare an action named `help`.
 the actions without a group first, then each group under its name, in the
 order the mod declared them. The first line shows the mod's name as the
 Mods screen shows it, and the command as the caller typed it. An optional
-argument stands in square brackets. A long help reaches the chat whole while the chat has room: replies to typed
-commands take at most half of the 256 lines that wait to be posted.
+argument stands in square brackets. A long help reaches the chat whole while the chat has room. Replies to typed
+commands take at most half of the 256 lines waiting to be posted.
 
 A command is a second way to an action, never the only one. Players reach
 every action through the mod's controls and panels too.
