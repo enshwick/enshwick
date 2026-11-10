@@ -13,6 +13,8 @@ pub(crate) struct Package {
     pub(crate) dir: String,
     /// Workspace packages it depends on, in any dependency kind.
     pub(crate) deps: Vec<String>,
+    /// The name of its library target, as Rust paths name it, if it has one.
+    pub(crate) lib: Option<String>,
     /// Builds only for Windows (`package.metadata.xtask.windows-only`):
     /// off Windows it stays out of host builds.
     pub(crate) windows_only: bool,
@@ -111,6 +113,7 @@ mod tests {
             version: "0.0.0-dev".to_owned(),
             dir: dir.to_owned(),
             deps: deps.iter().map(|d| (*d).to_owned()).collect(),
+            lib: None,
             windows_only: false,
             windows_tests: false,
         }

@@ -10,6 +10,8 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use crate::affected::Package;
+
 /// The folder of the internal crates, relative to the workspace root.
 const INTERNAL: &str = "crates/internal";
 /// The facade's copies of the wrapped examples, relative to the workspace root.
@@ -153,39 +155,24 @@ struct Crate {
     sources: Vec<PathBuf>,
 }
 
-/// The internal crates under `root` that do not depend on the facade.
-fn crates(root: &Path) -> Result<Vec<Crate>, String> {
-    let folder = root.join(INTERNAL);
+/// The internal crates among `packages` under `root` that do not depend on
+/// the facade in any dependency kind, each by its library's name.
+fn crates(root: &Path, packages: &[Package]) -> Result<Vec<Crate>, String> {
     let mut found = Vec::new();
-    let entries = std::fs::read_dir(&folder).map_err(|e| format!("{INTERNAL}: {e}"))?;
-    for entry in entries {
-        let dir = entry.map_err(|e| format!("{INTERNAL}: {e}"))?.path();
-        let manifest = dir.join("Cargo.toml");
-        if !manifest.is_file() {
-            continue;
-        }
-        let text = read(&manifest)?;
-        let table: toml::Table = toml::from_str(&text)
-            .map_err(|e| format!("{}: {}", manifest.display(), e.message()))?;
-        let Some(name) = table
-            .get("package")
-            .and_then(|package| package.get("name"))
-            .and_then(toml::Value::as_str)
-        else {
+    for package in packages {
+        let internal = package
+            .dir
+            .strip_prefix(INTERNAL)
+            .is_some_and(|rest| rest.starts_with('/'));
+        let above = package.deps.iter().any(|dep| dep == FACADE);
+        let Some(lib) = package.lib.as_ref().filter(|_| internal && !above) else {
             continue;
         };
-        let above = table
-            .get("dependencies")
-            .and_then(toml::Value::as_table)
-            .is_some_and(|dependencies| dependencies.contains_key(FACADE));
-        if above {
-            continue;
-        }
         let mut sources = Vec::new();
-        rust_files(&dir.join("src"), &mut sources)?;
+        rust_files(&root.join(&package.dir).join("src"), &mut sources)?;
         sources.sort();
         found.push(Crate {
-            lib: name.replace('-', "_"),
+            lib: lib.clone(),
             sources,
         });
     }
@@ -224,8 +211,8 @@ type Places = BTreeMap<(String, String), Vec<String>>;
 
 /// The problems of the internal crates' examples under `root`, one line
 /// each.
-pub(crate) fn check(root: &Path) -> Vec<String> {
-    let crates = match crates(root) {
+pub(crate) fn check(root: &Path, packages: &[Package]) -> Vec<String> {
+    let crates = match crates(root, packages) {
         Ok(crates) => crates,
         Err(error) => return vec![error],
     };
@@ -317,10 +304,10 @@ fn unpaired(wrapped: &Places, copy_places: &Places) -> Vec<String> {
 ///
 /// # Errors
 ///
-/// When a crate's manifest or a source does not read or write.
-pub(crate) fn run(root: &Path) -> Result<bool, String> {
+/// When a source does not read or write.
+pub(crate) fn run(root: &Path, packages: &[Package]) -> Result<bool, String> {
     let mut written = 0usize;
-    for krate in crates(root)? {
+    for krate in crates(root, packages)? {
         for source in &krate.sources {
             let text = read(source)?;
             let (aliased, count) = with_aliases(&text, &krate.lib);
@@ -551,34 +538,41 @@ impl Thing {
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, text).unwrap();
         };
-        write(
-            "crates/internal/core/Cargo.toml",
-            "[package]\nname = \"enshwick-core\"\n",
-        );
-        write(
-            "crates/internal/core/src/deep/item.rs",
-            "/// ```\n/// let load = enshwick::Load::new();\n/// ```\npub struct Item;\n",
-        );
-        write(
-            "crates/internal/loader/Cargo.toml",
-            "[package]\nname = \"enshwick-loader\"\n\n[dependencies]\nenshwick = \"1\"\n",
-        );
-        write(
-            "crates/internal/loader/src/lib.rs",
-            "/// ```\n/// let load = enshwick::Load::new();\n/// ```\npub struct Loader;\n",
-        );
+        let package = |dir: &str, lib: Option<&str>, deps: &[&str]| Package {
+            name: dir.rsplit('/').next().unwrap_or_default().to_owned(),
+            version: String::new(),
+            dir: dir.to_owned(),
+            deps: deps.iter().map(|dep| (*dep).to_owned()).collect(),
+            lib: lib.map(str::to_owned),
+            windows_only: false,
+            windows_tests: false,
+        };
+        let example = "/// ```\n/// let load = enshwick::Load::new();\n/// ```\npub struct Item;\n";
+        write("crates/internal/core/src/deep/item.rs", example);
+        write("crates/internal/stub/src/lib.rs", example);
+        write("crates/internal/loader/src/lib.rs", example);
         write("crates/internal/notes/README.md", "No crate.\n");
+        write("crates/internal-tools/src/lib.rs", example);
         write(COPIES, "/// ```\n/// let gone = 1;\n/// ```\nmod gone {}\n");
-        let before = check(&root);
-        let written = run(&root);
-        let after = check(&root);
+        let packages = [
+            package("crates/internal/core", Some("enshwick_core"), &[]),
+            package("crates/internal/stub", Some("powrprof"), &[]),
+            package("crates/internal/loader", Some("enshwick_loader"), &[FACADE]),
+            package("crates/internal/notes", None, &[]),
+            package("crates/internal-tools", Some("tools"), &[]),
+        ];
+        let before = check(&root, &packages);
+        let written = run(&root, &packages);
+        let after = check(&root, &packages);
         let item =
             std::fs::read_to_string(root.join("crates/internal/core/src/deep/item.rs")).unwrap();
+        let stub = std::fs::read_to_string(root.join("crates/internal/stub/src/lib.rs")).unwrap();
         std::fs::remove_dir_all(&root).unwrap();
         assert_eq!(
             before,
             [
                 "crates/internal/core/src/deep/item.rs:1: no `# extern crate enshwick_core as enshwick;` line; `cargo xtask alias-examples` writes it".to_owned(),
+                "crates/internal/stub/src/lib.rs:1: no `# extern crate powrprof as enshwick;` line; `cargo xtask alias-examples` writes it".to_owned(),
                 format!("{COPIES}:1: no wrapped example of {INTERNAL} equals this copy; bring it in line or remove it"),
             ]
         );
@@ -586,6 +580,7 @@ impl Thing {
         assert!(
             item.contains("/// ```\n/// # extern crate enshwick_core as enshwick;\n/// let load")
         );
+        assert!(stub.contains("/// # extern crate powrprof as enshwick;"));
         assert_eq!(
             after,
             [format!(

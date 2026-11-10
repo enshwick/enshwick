@@ -99,7 +99,9 @@ fn run(args: &[String]) -> Result<bool, String> {
         "notes" => return notes::run(rest),
         "tag-lines" => return tag_lines::run(rest),
         "header" if rest.is_empty() => return header::run(&workspace_root()),
-        "alias-examples" if rest.is_empty() => return lower_examples::run(&workspace_root()),
+        "alias-examples" if rest.is_empty() => {
+            return lower_examples::run(&workspace_root(), &packages()?);
+        }
         "host-args" if rest.is_empty() => {
             // One argument a line, for CI runs that test the host as the check does.
             for arg in host_args(&packages()?, cfg!(windows)) {
@@ -233,7 +235,7 @@ fn tree_problems(root: &std::path::Path, packages: &[Package]) -> Result<Vec<Str
             .map(|problem| format!("crate rule: {problem}")),
     );
     problems.extend(
-        lower_examples::check(root)
+        lower_examples::check(root, packages)
             .into_iter()
             .map(|problem| format!("internal example: {problem}")),
     );
@@ -306,6 +308,9 @@ impl Part {
     }
 }
 
+/// The kinds cargo metadata gives a library target.
+const LIB_KINDS: [&str; 6] = ["lib", "rlib", "dylib", "cdylib", "staticlib", "proc-macro"];
+
 /// The workspace packages, from `cargo metadata`.
 fn packages() -> Result<Vec<Package>, String> {
     let output = Command::new(cargo())
@@ -345,11 +350,25 @@ fn packages() -> Result<Vec<Package>, String> {
                 .filter(|name| names.contains(name))
                 .map(str::to_owned)
                 .collect();
+            let lib = package["targets"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .find(|target| {
+                    target["kind"].as_array().is_some_and(|kinds| {
+                        kinds
+                            .iter()
+                            .any(|kind| LIB_KINDS.contains(&kind.as_str().unwrap_or_default()))
+                    })
+                })
+                .and_then(|target| target["name"].as_str())
+                .map(|name| name.replace('-', "_"));
             Package {
                 name: package["name"].as_str().unwrap_or_default().to_owned(),
                 version: package["version"].as_str().unwrap_or_default().to_owned(),
                 dir,
                 deps,
+                lib,
                 windows_only: package["metadata"]["xtask"]["windows-only"].as_bool() == Some(true),
                 windows_tests: ["windows-tests", "windows-only"]
                     .iter()
@@ -709,6 +728,7 @@ mod tests {
             version: "0.0.0-dev".to_owned(),
             dir: name.to_owned(),
             deps: Vec::new(),
+            lib: None,
             windows_only,
             windows_tests: windows_only,
         };
