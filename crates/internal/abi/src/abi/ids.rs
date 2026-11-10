@@ -50,11 +50,13 @@
 #[shape(api = "entity")]
 pub struct Entity(pub u32);
 
+// Public only for the safe layer above this crate, which reads and writes the
+// engine's 0; hidden, since a mod is handed no entity as `None`.
 impl Entity {
     /// The engine's id for no entity.
     ///
     /// cbindgen:ignore
-    // Public for the API crate above this one, and no part of the C header.
+    // No part of the C header.
     #[doc(hidden)]
     pub const NONE: Self = Self(0);
 

@@ -52,6 +52,7 @@ use core::ffi::c_void;
 
 use crate::Off;
 use crate::WorldError;
+#[doc(no_inline)]
 pub use crate::abi::KnowledgeId;
 #[cfg(feature = "unstable")]
 use crate::abi::KnowledgeInput;

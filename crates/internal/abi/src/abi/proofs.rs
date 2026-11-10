@@ -1,6 +1,6 @@
 //! Bounded proofs that the headed copies stay inside the size the other
 //! side's header states. Each check runs twice: Kani proves it for every
-//! input (`cargo kani -p enshwick --tests`), and proptest runs it on random
+//! input (`cargo kani -p enshwick-abi --tests`), and proptest runs it on random
 //! inputs in every test run.
 
 use proptest::prelude::*;

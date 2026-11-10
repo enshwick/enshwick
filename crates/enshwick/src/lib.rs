@@ -251,6 +251,8 @@ pub mod weather;
 pub mod world;
 mod world_error;
 
+// Listed as re-exports, not as second pages beside their `abi` ones.
+#[doc(no_inline)]
 pub use abi::{Entity, ItemId, PlayerKey, RecipeId};
 pub use enshwick_macros::Config;
 /// Describes a type for script languages through [`script::Typed`],

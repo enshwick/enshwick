@@ -121,6 +121,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror",
  "toml",
  "toml_edit",
@@ -312,10 +313,12 @@ dependencies = [
  "aho-corasick",
  "bcdec_rs",
  "bytemuck",
- "const-sha1",
  "const_format",
  "document-features",
+ "enshwick-abi",
  "enshwick-macros",
+ "enshwick-typed",
+ "enshwick-values",
  "fastrand",
  "hound",
  "memchr",
@@ -329,6 +332,16 @@ dependencies = [
  "toml",
  "zune-core",
  "zune-png",
+]
+
+[[package]]
+name = "enshwick-abi"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "bytemuck",
+ "enshwick-values",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]
@@ -353,6 +366,7 @@ dependencies = [
  "memchr",
  "rustc-hash",
  "ruzstd",
+ "semver",
  "serde",
  "serde_json",
  "thiserror",
@@ -377,7 +391,6 @@ dependencies = [
  "rustc-hash",
  "semver",
  "serde",
- "serde_json",
  "sha2",
  "strsim",
  "thiserror",
@@ -405,6 +418,26 @@ dependencies = [
  "quote",
  "syn 3.0.10",
  "toml",
+]
+
+[[package]]
+name = "enshwick-typed"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "enshwick-values",
+ "thiserror",
+]
+
+[[package]]
+name = "enshwick-values"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "const-sha1",
+ "const_format",
+ "enshwick-macros",
+ "rustc-hash",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]

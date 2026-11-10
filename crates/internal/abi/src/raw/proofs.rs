@@ -1,6 +1,6 @@
 //! Bounded proofs of the game memory reader's offset arithmetic. Each check
 //! runs twice: Kani proves it for every input
-//! (`cargo kani -p enshwick --tests`), and proptest runs it on random
+//! (`cargo kani -p enshwick-abi --tests`), and proptest runs it on random
 //! inputs in every test run.
 
 use proptest::prelude::*;

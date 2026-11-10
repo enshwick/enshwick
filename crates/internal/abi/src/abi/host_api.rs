@@ -32,7 +32,7 @@ use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, NpcId, PlayerKey, Reci
 ///
 /// # Examples
 ///
-/// The safe layer wraps this table; see [`crate::Load`](../struct.Load.html).
+/// The safe layer wraps this table; see [`enshwick::Load`](../struct.Load.html).
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct HostApi {

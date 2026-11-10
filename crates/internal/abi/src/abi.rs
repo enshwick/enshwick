@@ -4,7 +4,7 @@
 //! the contract: structs start with a [`Header`], enums are integers, strings
 //! are borrowed for the call, and no function unwinds. A loader loads the
 //! mods built for its own [`ABI_MAJOR`] and its [`ABI_MINOR`] or an older
-//! one ([`check_abi`]). Mods normally use the safe layer of this crate
+//! one ([`check_abi`]). Mods normally use the safe layer of `enshwick`
 //! instead of these types.
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of

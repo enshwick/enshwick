@@ -34,6 +34,7 @@ use crate::WorldError;
 use crate::abi::{ActiveBuff, BuffRequest, BuffTypeInfo, Header, Status};
 use crate::{Host, Load};
 
+#[doc(no_inline)]
 pub use crate::abi::BuffTypeId;
 
 /// Where an entity holds a buff.
