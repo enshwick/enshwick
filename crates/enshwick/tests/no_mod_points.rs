@@ -19,11 +19,17 @@ mod tests {
 
     #[test]
     fn the_api_crate_declares_no_point() {
+        let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
         let mut found = Vec::new();
-        sources(
-            &Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
-            &mut found,
-        );
+        // The internal crates whose modules this crate re-exports.
+        for src in [
+            crate_dir.join("src"),
+            crate_dir.join("../internal/abi/src"),
+            crate_dir.join("../internal/values/src"),
+            crate_dir.join("../internal/typed/src"),
+        ] {
+            sources(&src, &mut found);
+        }
         let declaring: Vec<&str> = found
             .iter()
             .filter(|(_, text)| {
