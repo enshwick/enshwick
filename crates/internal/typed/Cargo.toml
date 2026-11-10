@@ -14,7 +14,6 @@ publish = true
 
 [dependencies]
 enshwick-values.workspace = true
-const_format.workspace = true
 thiserror.workspace = true
 
 [features]
