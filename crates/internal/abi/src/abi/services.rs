@@ -11,6 +11,7 @@ use crate::abi::{Header, Str};
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{LayoutField, Str};
 ///
 /// let field = LayoutField { name: Str::new("price"), hash: 7 };
@@ -31,6 +32,7 @@ pub struct LayoutField {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::Layout;
 ///
 /// let layout = Layout { fields: core::ptr::null(), count: 0, size: 0 };
@@ -52,6 +54,7 @@ pub struct Layout {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, Layout, ServiceSpec, Str};
 ///
 /// let spec = ServiceSpec {
@@ -85,6 +88,7 @@ impl_headed!(ServiceSpec);
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::ServiceFound;
 ///
 /// let found = ServiceFound::EMPTY;
@@ -126,6 +130,7 @@ impl ServiceFound {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{EventSpec, Header, Layout, Str};
 ///
 /// let spec = EventSpec {
@@ -162,6 +167,7 @@ pub type ModEventFn = unsafe extern "system" fn(data: *const c_void, user: *mut 
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{CallSpec, Header, Layout, Str};
 ///
 /// let none = Layout { fields: core::ptr::null(), count: 0, size: 0 };

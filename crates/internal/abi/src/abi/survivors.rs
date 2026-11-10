@@ -14,6 +14,7 @@ use crate::abi::{Entity, Header, ItemId, NpcId};
 /// # Examples
 ///
 /// ```
+/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::abi::{Header, SurvivorLookup};
 ///
 /// let lookup = SurvivorLookup {
@@ -27,6 +28,7 @@ use crate::abi::{Entity, Header, ItemId, NpcId};
 ///     token: core::ptr::null_mut(),
 /// };
 /// assert_eq!(lookup.purpose, SurvivorLookup::SPAWN);
+/// # }
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
@@ -101,10 +103,12 @@ pub type SurvivorLookupFn = unsafe extern "system" fn(
 /// # Examples
 ///
 /// ```
+/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::abi::{BedCheck, Header};
 ///
 /// let check = BedCheck { header: Header::of::<BedCheck>(), npc_id: enshwick::survivors::NpcId::new(7), entity: enshwick::Entity(4096), bed_id: enshwick::Entity(4100), home: [0; 3], bed_at: [4, 0, 4] };
 /// assert_eq!(check.bed_id, enshwick::Entity(4100));
+/// # }
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
@@ -140,6 +144,7 @@ pub type BedCheckFn = unsafe extern "system" fn(check: *const BedCheck, user: *m
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, Summon};
 ///
 /// let summon = Summon {

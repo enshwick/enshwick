@@ -16,6 +16,7 @@
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::is_valid_id;
 ///
 /// assert!(is_valid_id("you.trading-post"));
@@ -55,6 +56,7 @@ pub const fn is_valid_id(id: &str) -> bool {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::is_valid_old_form_id;
 ///
 /// assert!(is_valid_old_form_id("trading-post"));
@@ -87,6 +89,7 @@ pub const fn is_valid_old_form_id(id: &str) -> bool {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{ABI_MAJOR, ABI_MINOR, Header, Manifest};
 ///
 /// let header = Header::of::<Manifest>();
@@ -134,6 +137,7 @@ impl Header {
     /// # Examples
     ///
     /// ```
+    /// # extern crate enshwick_abi as enshwick;
     /// use enshwick::abi::{Header, Manifest};
     ///
     /// let header = Header::of::<Manifest>();
@@ -162,6 +166,7 @@ impl Header {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Headed, Header, TickData};
 ///
 /// fn size_of_headed<T: Headed>() -> usize {
@@ -216,6 +221,7 @@ macro_rules! impl_headed {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{TickData, read_headed};
 ///
 /// let mut old = TickData::new(7);
@@ -273,6 +279,7 @@ pub unsafe fn read_headed<T: Headed>(raw: *const T, required: usize) -> Option<T
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{TickData, write_headed};
 ///
 /// let mut old = TickData::new(0);
@@ -333,6 +340,7 @@ mod script;
 mod services;
 mod stats;
 mod survivors;
+mod terrain;
 mod transactions;
 mod ui;
 mod version;
@@ -361,6 +369,7 @@ pub use rates::*;
 pub use services::*;
 pub use stats::*;
 pub use survivors::*;
+pub use terrain::*;
 pub use transactions::*;
 pub use ui::*;
 pub use version::*;
@@ -373,6 +382,7 @@ pub use writes::*;
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::Str;
 ///
 /// let id = Str::new("you.lockers");
@@ -415,6 +425,7 @@ impl Str {
     /// # Examples
     ///
     /// ```
+    /// # extern crate enshwick_abi as enshwick;
     /// use enshwick::abi::Str;
     ///
     /// assert_eq!(Str::new("abc").len(), 3);
@@ -429,6 +440,7 @@ impl Str {
     /// # Examples
     ///
     /// ```
+    /// # extern crate enshwick_abi as enshwick;
     /// use enshwick::abi::Str;
     ///
     /// assert!(Str::EMPTY.is_empty());
@@ -472,6 +484,7 @@ impl Str {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::Status;
 ///
 /// assert!(Status::OK.is_ok());
@@ -548,6 +561,7 @@ impl Status {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::Side;
 ///
 /// assert!(Side::BOTH.includes(Side::CLIENT));
@@ -584,6 +598,7 @@ impl Side {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::Level;
 ///
 /// assert!(Level::ERROR.0 < Level::DEBUG.0);
@@ -607,6 +622,7 @@ impl Level {
     /// # Examples
     ///
     /// ```
+    /// # extern crate enshwick_abi as enshwick;
     /// use enshwick::abi::Level;
     ///
     /// assert_eq!(Level::WARN.name(), "warn");
@@ -660,6 +676,7 @@ impl<'de> serde::Deserialize<'de> for Level {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::Level;
 ///
 /// assert!("loud".parse::<Level>().is_err());
@@ -673,6 +690,7 @@ pub struct ParseLevelError;
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// assert_eq!(enshwick::abi::exports::INIT, "enshwick_mod_init");
 /// ```
 pub mod exports {

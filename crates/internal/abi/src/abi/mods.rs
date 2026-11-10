@@ -10,6 +10,7 @@ use crate::abi::{Header, ManifestFlags, Side, Str};
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, ManifestFlags, ModInfo, Side, Str};
 ///
 /// let post = ModInfo {
@@ -72,6 +73,7 @@ impl ModInfo {
     /// # Examples
     ///
     /// ```
+    /// # extern crate enshwick_abi as enshwick;
     /// use enshwick::abi::{ModInfo, Str};
     ///
     /// let post = ModInfo { id: Str::new("you.trading-post"), ..ModInfo::EMPTY };
@@ -108,6 +110,7 @@ unsafe impl Sync for ModInfo {}
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::ModHandle;
 ///
 /// assert_eq!(ModHandle::NONE, ModHandle(0));

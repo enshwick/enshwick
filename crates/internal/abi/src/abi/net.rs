@@ -10,6 +10,7 @@ use crate::abi::{Header, PlayerKey};
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, NetMessage};
 ///
 /// let bytes = [1u8, 2, 3];

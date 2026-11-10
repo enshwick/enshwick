@@ -9,6 +9,7 @@ use crate::abi::{Entity, Header, ItemId};
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::InventoryOp;
 ///
 /// // Everything from a chest (entity 40) to a player (entity 2).
@@ -74,6 +75,7 @@ impl InventoryOp {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, InventoryOp, InventoryRequest};
 ///
 /// let ops = [InventoryOp { kind: InventoryOp::GIVE, target: 2, item: enshwick::ItemId::new(0x1234), count: 5, ..Default::default() }];
@@ -119,6 +121,7 @@ impl InventoryRequest {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::InventoryOpResult;
 ///
 /// let done = InventoryOpResult { error: 0, remaining: 0 };
@@ -144,6 +147,7 @@ impl InventoryOpResult {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::InventoryResult;
 ///
 /// assert_ne!(InventoryResult::COMMITTED, InventoryResult::ROLLED_BACK);
@@ -193,6 +197,7 @@ pub type InventoryResultFn =
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, ItemData};
 ///
 /// let sword = ItemData {

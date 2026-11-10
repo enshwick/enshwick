@@ -10,6 +10,7 @@ use crate::abi::{Entity, Header};
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::Bounds;
 ///
 /// let zone = Bounds { min: [0, 0, 0], max: [80, 80, 80] };
@@ -32,6 +33,7 @@ pub struct Bounds {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{AltarInfo, Bounds, Header};
 ///
 /// let mut altar = AltarInfo::EMPTY;
@@ -100,6 +102,7 @@ impl AltarInfo {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{AltarZone, Header};
 ///
 /// let zone = AltarZone { header: Header::of::<AltarZone>(), altar: enshwick::Entity(4096), level: 2, reserved: [0; 3], grow: 0, height: 60 };
@@ -142,6 +145,7 @@ pub type AltarZoneFn = unsafe extern "system" fn(zone: *mut AltarZone, user: *mu
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Bounds, Header, BuildingZoneCheck};
 ///
 /// let check = BuildingZoneCheck {

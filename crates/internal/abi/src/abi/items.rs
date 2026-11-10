@@ -16,6 +16,7 @@ use crate::abi::{Entity, Header, ItemId};
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, ItemAction};
 ///
 /// let call = ItemAction {

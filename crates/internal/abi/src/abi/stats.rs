@@ -10,6 +10,7 @@ use crate::abi::{Entity, Header, ItemId, Str};
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, StatDefData, Str};
 ///
 /// let crit = StatDefData {
@@ -71,6 +72,7 @@ impl StatDefData {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::StatRef;
 ///
 /// let health = StatRef { index: 0, key: 0x1234 };
@@ -90,6 +92,7 @@ pub struct StatRef {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::StatModifierData;
 ///
 /// let more = StatModifierData { stat: 0, op: StatModifierData::ADD, reserved: [0; 3], value: 50.0 };
@@ -126,6 +129,7 @@ impl StatModifierData {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, StatModifierData, StatModify};
 ///
 /// let blessing = StatModify {
@@ -172,6 +176,7 @@ impl StatModify {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{Header, StatChange, StatRef};
 ///
 /// let change = StatChange { header: Header::of::<StatChange>(), entity: enshwick::Entity(2), stat: StatRef { index: 0, key: 0x1234 }, old: 0.0, new: 50.0, reserved: 0 };
@@ -210,6 +215,7 @@ pub type StatChangeFn = unsafe extern "system" fn(change: *const StatChange, use
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{StatModifierData, StatSource};
 ///
 /// let ring = StatSource { kind: StatSource::ITEM, op: StatModifierData::ADD, reserved: 0, stat: 0, value: 20.0, id: 900, owner: 0x5e01 };
@@ -240,6 +246,7 @@ pub struct StatSource {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{AffixDefData, AffixModifierData, Header, StatModifierData, Str};
 ///
 /// let ranges = [AffixModifierData { stat: 0, op: StatModifierData::ADD, reserved: [0; 3], min: 10.0, max: 30.0, step: 1.0 }];
@@ -310,6 +317,7 @@ pub struct AffixModifierData {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{AffixRoll, Header};
 ///
 /// let roll = AffixRoll { header: Header::of::<AffixRoll>(), pide: enshwick::Entity(900), item: enshwick::ItemId::new(7), min: 1, max: 2, max_rarity: 4, flags: AffixRoll::ONCE, seed: 42 };
@@ -351,6 +359,7 @@ impl AffixRoll {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{ItemLine, StatModifierData};
 ///
 /// let line = ItemLine { modifier: StatModifierData { stat: 0, op: StatModifierData::ADD, reserved: [0; 3], value: 20.0 }, affix: 0 };

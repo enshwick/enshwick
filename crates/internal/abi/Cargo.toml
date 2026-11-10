@@ -25,3 +25,8 @@ syn = { version = "=3.0.9", default-features = false, features = ["full", "parsi
 
 [lints]
 workspace = true
+
+# The mod whose content this crate's documentation examples name with `id!`.
+[package.metadata.enshwick]
+id = "you.hello"
+side = "both"

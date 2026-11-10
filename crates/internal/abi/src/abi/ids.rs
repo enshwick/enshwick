@@ -15,6 +15,7 @@
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::Entity;
 ///
 /// let entity = Entity(1210);
@@ -24,6 +25,7 @@
 /// A kept file cannot hold one:
 ///
 /// ```compile_fail
+/// # extern crate enshwick_abi as enshwick;
 /// #[derive(serde::Serialize)]
 /// struct Owners {
 ///     chest: enshwick::Entity,
@@ -50,6 +52,9 @@ pub struct Entity(pub u32);
 
 impl Entity {
     /// The engine's id for no entity.
+    ///
+    /// cbindgen:ignore
+    // Public for the API crate above this one, and no part of the C header.
     #[doc(hidden)]
     pub const NONE: Self = Self(0);
 
@@ -74,6 +79,7 @@ impl Entity {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::ItemId;
 ///
 /// let torch = ItemId::from(1_042);
@@ -108,6 +114,7 @@ pub struct ItemId(pub u32);
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::PlayerKey;
 ///
 /// let account = PlayerKey::from(0x5eed_u64);
@@ -142,6 +149,7 @@ pub struct PlayerKey(pub u64);
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::RecipeId;
 ///
 /// let recipe = RecipeId::from(77);
@@ -177,6 +185,7 @@ pub struct RecipeId(pub u32);
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::SkillNode;
 ///
 /// let node = SkillNode::from(0x2a_u32);
@@ -214,12 +223,14 @@ pub struct SkillNode(pub u32);
 /// # Examples
 ///
 /// ```
+/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::RecipeId;
 /// use enshwick::knowledge::KnowledgeId;
 ///
 /// let quest = KnowledgeId::new(0x51);
 /// assert_eq!(quest.get(), 0x51);
 /// assert_eq!(KnowledgeId::from(RecipeId::new(0x1d)), KnowledgeId::new(0x1d));
+/// # }
 /// ```
 #[repr(transparent)]
 #[derive(
@@ -250,10 +261,12 @@ pub struct KnowledgeId(pub u32);
 /// # Examples
 ///
 /// ```
+/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::{buffs::BuffTypeId, content::id};
 ///
 /// const WARMTH: BuffTypeId = BuffTypeId::from_guid(id!("warmth").guid());
 /// assert_eq!(WARMTH.to_string(), WARMTH.get().to_string());
+/// # }
 /// ```
 #[repr(transparent)]
 #[derive(
@@ -284,10 +297,12 @@ pub struct BuffTypeId(pub u32);
 /// # Examples
 ///
 /// ```
+/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::survivors::NpcId;
 ///
 /// let blacksmith = NpcId::new(1_201_801_546);
 /// assert_eq!(blacksmith.get(), 1_201_801_546);
+/// # }
 /// ```
 #[repr(transparent)]
 #[derive(
@@ -391,6 +406,7 @@ macro_rules! guid_ids {
             /// # Examples
             ///
             /// ```
+            /// # extern crate enshwick_abi as enshwick;
             /// use enshwick::content::{Id, id};
             ///
             /// const LOCKER: Id = id!("locker");
@@ -415,6 +431,7 @@ macro_rules! guid_ids {
             /// # Examples
             ///
             /// ```
+            /// # extern crate enshwick_abi as enshwick;
             /// use enshwick::content::Guid;
             ///
             #[doc = concat!("const LOCKER: enshwick::abi::", stringify!($id), " = enshwick::abi::", stringify!($id), "::named(\"you.lockers:locker\");")]

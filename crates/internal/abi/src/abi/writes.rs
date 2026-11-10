@@ -8,6 +8,7 @@ use crate::abi::{Header, ItemId};
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{DropRequest, Header};
 ///
 /// let logs = DropRequest {

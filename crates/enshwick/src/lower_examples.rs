@@ -74,6 +74,176 @@
 /// ```
 mod values {}
 
+/// `abi::BuffTypeInfo`:
+///
+/// ```
+/// use enshwick::abi::{BuffTypeInfo, Header};
+///
+/// let rested = BuffTypeInfo {
+///     header: Header::of::<BuffTypeInfo>(),
+///     id: enshwick::buffs::BuffTypeId::new(0xcdbe_3e80),
+///     slot: BuffTypeInfo::RESTED,
+///     flags: BuffTypeInfo::SAVED,
+///     name: 1_237_250_642,
+///     duration: 5_000_000_000,
+/// };
+/// assert_eq!(rested.slot, BuffTypeInfo::RESTED);
+/// ```
+///
+/// `abi::ActiveBuff`:
+///
+/// ```
+/// use enshwick::abi::{ActiveBuff, Header};
+///
+/// let fed = ActiveBuff {
+///     header: Header::of::<ActiveBuff>(),
+///     id: enshwick::buffs::BuffTypeId::new(7),
+///     entity: enshwick::Entity(4100),
+///     slot: 0,
+///     level: 0,
+///     duration: 600_000_000_000,
+///     remaining: 120_000_000_000,
+/// };
+/// assert!(fed.remaining < fed.duration);
+/// ```
+///
+/// `abi::BuffRequest`:
+///
+/// ```
+/// use enshwick::abi::{BuffRequest, Header};
+///
+/// let request = BuffRequest {
+///     header: Header::of::<BuffRequest>(),
+///     entity: enshwick::Entity(2),
+///     id: enshwick::buffs::BuffTypeId::new(7),
+///     level: 0,
+///     reserved: 0,
+///     duration: 0,
+/// };
+/// assert_eq!(request.duration, 0, "the type's own duration");
+/// ```
+///
+/// `abi::KnowledgeData`:
+///
+/// ```
+/// use enshwick::abi::{Header, KnowledgeData};
+///
+/// let learnt = KnowledgeData { header: Header::of::<KnowledgeData>(), entity: enshwick::Entity(2), id: enshwick::knowledge::KnowledgeId::new(0x1d), value: 3 };
+/// assert_eq!(learnt.value, 3);
+/// ```
+///
+/// `abi::QuestData`:
+///
+/// ```
+/// use enshwick::abi::{Header, QuestData};
+///
+/// let done = QuestData { header: Header::of::<QuestData>(), entity: enshwick::Entity(2), quest: enshwick::knowledge::KnowledgeId::new(0x51) };
+/// assert_eq!(done.entity, enshwick::Entity(2));
+/// ```
+///
+/// `abi::KnowledgeInput`:
+///
+/// ```
+/// use enshwick::abi::{Header, KnowledgeInfo, KnowledgeInput};
+///
+/// let seen = KnowledgeInput {
+///     header: Header::of::<KnowledgeInput>(),
+///     player: enshwick::Entity(2),
+///     id: enshwick::knowledge::KnowledgeId::new(0x1d),
+///     kind: KnowledgeInfo::FLAGS,
+///     scope: KnowledgeInfo::PLAYER,
+///     reserved: 0,
+///     value: 0,
+///     refusal: KnowledgeInput::ALLOWED,
+///     allowed: 1,
+/// };
+/// assert_eq!(seen.allowed, 1);
+/// ```
+///
+/// `abi::KnowledgeId`:
+///
+/// ```
+/// use enshwick::RecipeId;
+/// use enshwick::knowledge::KnowledgeId;
+///
+/// let quest = KnowledgeId::new(0x51);
+/// assert_eq!(quest.get(), 0x51);
+/// assert_eq!(KnowledgeId::from(RecipeId::new(0x1d)), KnowledgeId::new(0x1d));
+/// ```
+///
+/// `abi::BuffTypeId`:
+///
+/// ```
+/// use enshwick::{buffs::BuffTypeId, content::id};
+///
+/// const WARMTH: BuffTypeId = BuffTypeId::from_guid(id!("warmth").guid());
+/// assert_eq!(WARMTH.to_string(), WARMTH.get().to_string());
+/// ```
+///
+/// `abi::NpcId`:
+///
+/// ```
+/// use enshwick::survivors::NpcId;
+///
+/// let blacksmith = NpcId::new(1_201_801_546);
+/// assert_eq!(blacksmith.get(), 1_201_801_546);
+/// ```
+///
+/// `abi::SurvivorLookup`:
+///
+/// ```
+/// use enshwick::abi::{Header, SurvivorLookup};
+///
+/// let lookup = SurvivorLookup {
+///     header: Header::of::<SurvivorLookup>(),
+///     survivor: enshwick::survivors::NpcId::new(0x47a1_5e4a),
+///     vanilla: enshwick::Entity(4096),
+///     purpose: SurvivorLookup::SPAWN,
+///     entity: enshwick::Entity(0),
+///     cell: [10, 0, 10],
+///     bed_of: None,
+///     token: core::ptr::null_mut(),
+/// };
+/// assert_eq!(lookup.purpose, SurvivorLookup::SPAWN);
+/// ```
+///
+/// `abi::BedCheck`:
+///
+/// ```
+/// use enshwick::abi::{BedCheck, Header};
+///
+/// let check = BedCheck { header: Header::of::<BedCheck>(), npc_id: enshwick::survivors::NpcId::new(7), entity: enshwick::Entity(4096), bed_id: enshwick::Entity(4100), home: [0; 3], bed_at: [4, 0, 4] };
+/// assert_eq!(check.bed_id, enshwick::Entity(4100));
+/// ```
+///
+/// `abi::CheckAbiError`:
+///
+/// ```
+/// use enshwick::abi::{ABI_MAJOR, CheckAbiError, check_abi};
+///
+/// let why = check_abi(ABI_MAJOR - 1, 0).unwrap_err();
+/// assert!(matches!(why, CheckAbiError::OtherMajor { .. }));
+/// assert!(why.to_string().ends_with(enshwick::VERSION));
+/// ```
+///
+/// `abi::KnowledgeInfo`:
+///
+/// ```
+/// use enshwick::abi::{Header, KnowledgeInfo};
+///
+/// let recipe = KnowledgeInfo {
+///     header: Header::of::<KnowledgeInfo>(),
+///     id: enshwick::knowledge::KnowledgeId::new(0x1d),
+///     kind: KnowledgeInfo::FLAGS,
+///     scope: KnowledgeInfo::PLAYER,
+///     reserved: 0,
+///     value: 1,
+///     flags: 3,
+/// };
+/// assert_eq!(recipe.value & 1, 1);
+/// ```
+mod abi {}
+
 /// `script::Function`:
 ///
 /// ```rust,standalone_crate

@@ -4,6 +4,7 @@
 //! host takes its turn behind a lock under `cargo test`.
 
 mod abi_coverage;
+mod abi_header;
 mod abi_versions;
 #[cfg(feature = "unstable")]
 mod accounts;

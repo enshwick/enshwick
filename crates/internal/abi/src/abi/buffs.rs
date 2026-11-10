@@ -8,6 +8,7 @@ use crate::abi::{BuffTypeId, Entity, Header};
 /// # Examples
 ///
 /// ```
+/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::abi::{BuffTypeInfo, Header};
 ///
 /// let rested = BuffTypeInfo {
@@ -19,6 +20,7 @@ use crate::abi::{BuffTypeId, Entity, Header};
 ///     duration: 5_000_000_000,
 /// };
 /// assert_eq!(rested.slot, BuffTypeInfo::RESTED);
+/// # }
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
@@ -63,6 +65,7 @@ impl BuffTypeInfo {
 /// # Examples
 ///
 /// ```
+/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::abi::{ActiveBuff, Header};
 ///
 /// let fed = ActiveBuff {
@@ -75,6 +78,7 @@ impl BuffTypeInfo {
 ///     remaining: 120_000_000_000,
 /// };
 /// assert!(fed.remaining < fed.duration);
+/// # }
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
@@ -102,6 +106,7 @@ impl_headed!(ActiveBuff);
 /// # Examples
 ///
 /// ```
+/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::abi::{BuffRequest, Header};
 ///
 /// let request = BuffRequest {
@@ -113,6 +118,7 @@ impl_headed!(ActiveBuff);
 ///     duration: 0,
 /// };
 /// assert_eq!(request.duration, 0, "the type's own duration");
+/// # }
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
