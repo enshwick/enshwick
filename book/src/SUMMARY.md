@@ -106,6 +106,7 @@
   - [The join check](concepts/join-check.md)
   - [Threads](concepts/threads.md)
   - [Typed types across game builds](concepts/typed-stability.md)
+  - [Performance](concepts/performance.md)
 
 # Reference
 

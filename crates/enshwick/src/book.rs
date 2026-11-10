@@ -28,6 +28,7 @@ chapters! {
     ReachingIntoTheGame => "reaching-into-the-game.md",
     FindingTheGame => "finding-the-game.md",
     TypedStability => "concepts/typed-stability.md",
+    Performance => "concepts/performance.md",
     ResourceValues => "resource-values.md",
     Hooks => "hooks.md",
     MidFunctionHooks => "mid-function-hooks.md",

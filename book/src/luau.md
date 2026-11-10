@@ -302,6 +302,10 @@ A table or text the script builds still allocates in Luau.
 
 ## What a mod costs
 
+A script runs in Luau's interpreter, so it runs slower than the same logic in
+a native mod. Write a mod whose code runs on every hit or frame in Rust, C or
+C++. The measured costs are in [Performance](concepts/performance.md).
+
 With `diagnostics = true`, the status summary shows what each Luau mod
 costs ([Logging and diagnostics](logging.md)). It lists the mod's memory
 and its peak, its calls, how many ran past their budget, and the time its

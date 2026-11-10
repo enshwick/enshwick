@@ -154,3 +154,6 @@ with them skip when it is not set.
 with Keen Games. The repository holds none of Keen's code or assets, only the
 facts that [What the repository holds of the game](#what-the-repository-holds-of-the-game)
 lists.
+
+The licence covers the code, not the name. Who may ship a build under the name
+Enshwick is in the [name policy](NAME-POLICY.md).

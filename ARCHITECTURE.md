@@ -80,7 +80,9 @@ cargo-enshwick ──▶ enshwick, enshwick-gamedata
   is generated from, lie outside the repository, in the game data folder
   `ENSH_GAMEDATA` names; the tests compare the routes and anchors with them
   and skip without them, and the loader does not read them. `reports/`
-  holds the public compatibility report of each build.
+  holds the compatibility report of each build, a sealed test record that
+  `cargo xtask check` reads. Enshwick supports the latest game version: the
+  docs site and the release notes name only the newest report of each side.
 - `crates/enshwick-gamedata/anchors/classes.toml` classes every table entry:
   found from the engine, or a pattern because research found no route, each
   with its reason; a test fails on an entry without one.
