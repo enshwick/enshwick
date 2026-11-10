@@ -458,6 +458,38 @@ different windows under one id.
 `actions.close(id, &players)` closes it on their clients. A mod keeps the
 newest 1,024 windows, counted per player, each up to 64 items. A player
 whose window went past that sees it close at their next update.
+
+| Call | Where the window shows after it |
+| --- | --- |
+| `actions.show(window, &players)` | on every client named: it opens, or updates where it shows |
+| `actions.update(window, &players)` | only on the clients named that still show it; it opens for no one |
+| `actions.close(id, &players)` | on none of the clients named |
+
+Use `update` for a list that changes while players hold it, such as a
+roster when a player joins: a player who closed the window does not get it
+back. When a client closes a window, or its player leaves, the mod forgets
+that window for the player. `actions.on_closed(fn)` tells the mod of it,
+with the player's account key and the window's id, or no id for a player
+who left:
+
+```rust
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
+    actions.on_closed(|player, window| match window {
+        Some(id) => enshwick::info!("{player:?} closed {id}"),
+        None => enshwick::info!("{player:?} left"),
+    });
+    Ok(())
+}
+```
+
+```luau
+local actions = enshwick.actions.actions(enshwick.i18n.parse(""))
+actions:on_closed(function(player, window)
+    enshwick.log.info(`{player} closed {window or "every window: they left"}`)
+end)
+```
+
 A window carries at most 7,168 bytes
 to one player. When it does not fit, the players its actions' arguments
 offer go first, and the player names one by typing. Then items past the
@@ -527,7 +559,8 @@ The server decides what each player sees:
   switches as they are now.
 - The player closes a window on their client with Close. The newest window
   shows; the one under it shows when it closes. The server renders a closed
-  window for that player again only when the mod shows it again.
+  window for that player again only when the mod shows it again, and the
+  mod hears of the close.
 - A client that loses its server closes every window.
 
 A client without Enshwick gets no window and plays on. A dedicated server, a
@@ -556,8 +589,11 @@ the loader does:
 - `ask_actions(ActionCall::SHEET, &player, language, "", "")` returns the
   mod's sheet, which `actions::sheet::decode` reads.
 - `carried_windows(&player, language)` returns the windows that player's
-  client holds after the mod's shows and closes, which
+  client holds after the mod's shows, updates and closes, which
   `actions::window::decode` reads.
+- `close_window(&player, id)` closes a window as that player's client does,
+  and `player_left(key)` makes the player leave as far as windows go. The
+  mod hears of both as the loader tells it.
 - `console::run("<mod id> <action> ...")` runs the console form. The fake
   hands a line to the mod's own actions unless `console_answer` gave its first
   word an answer.

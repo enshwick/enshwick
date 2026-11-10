@@ -16,6 +16,10 @@ mod tests {
 
     static ACTIONS: OnceLock<Actions> = OnceLock::new();
 
+    /// What the mod heard of closed windows: the player's key and the
+    /// window, `None` for a player who left.
+    static CLOSED: std::sync::Mutex<Vec<(u64, Option<String>)>> = std::sync::Mutex::new(Vec::new());
+
     /// How often the mod was asked whether a player may wave.
     static ALLOWS: AtomicUsize = AtomicUsize::new(0);
 
@@ -78,6 +82,12 @@ mod tests {
                     Err(why) => Outcome::refused(why.to_string()),
                 },
             )?;
+            actions.on_closed(|player, window| {
+                CLOSED
+                    .lock()
+                    .unwrap()
+                    .push((player.get(), window.map(str::to_owned)));
+            });
             let _first = ACTIONS.set(actions);
             Ok(Self)
         }
@@ -191,6 +201,106 @@ mod tests {
         let carried = loader.carried_windows(&root, 0);
         assert_eq!(carried.len(), 1);
         assert_eq!(carried[0].0, "note");
+    }
+
+    /// The panel with `count` players online, and the count the window
+    /// `text` shows.
+    fn roster(count: &str) -> Window {
+        Window::new("panel", "panel").text("online", &[("count", count)])
+    }
+
+    fn shown_count(carried: &[(String, String)]) -> Option<String> {
+        let (_, text) = carried.iter().find(|(id, _)| id == "panel")?;
+        match decode(text)?.items.first()? {
+            ItemView::Text(line) => Some(line.clone()),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn an_update_changes_a_window_only_where_its_player_still_shows_it() {
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let eve = player(5, 6, "Eve", PlayerInfo::CAN_KICK_BAN);
+        let loader = start(enshwick::test::FakeHost::new().player(root).player(eve));
+        let actions = actions();
+        let both = [root.key, eve.key];
+
+        actions.show(roster("2"), &[root.key]).unwrap();
+        assert_eq!(
+            shown_count(&loader.carried_windows(&root, 0)).as_deref(),
+            Some("2 online")
+        );
+
+        actions.update(roster("3"), &both).unwrap();
+        assert_eq!(
+            shown_count(&loader.carried_windows(&root, 0)).as_deref(),
+            Some("3 online"),
+            "where it shows, it updates"
+        );
+        assert!(
+            loader.carried_windows(&eve, 0).is_empty(),
+            "an update opens the window for no one"
+        );
+
+        loader.close_window(&root, "panel");
+        assert_eq!(*CLOSED.lock().unwrap(), [(9, Some("panel".to_owned()))]);
+        actions.update(roster("4"), &both).unwrap();
+        assert!(
+            loader.carried_windows(&root, 0).is_empty(),
+            "a window its player closed stays closed"
+        );
+        assert_eq!(
+            loader
+                .ask_actions(ActionCall::WINDOW, &root, 0, "panel", "")
+                .as_deref(),
+            Some(""),
+            "and the mod keeps it for them no more"
+        );
+
+        actions.show(roster("5"), &[root.key]).unwrap();
+        assert_eq!(
+            shown_count(&loader.carried_windows(&root, 0)).as_deref(),
+            Some("5 online"),
+            "a show opens it again"
+        );
+        assert!(
+            actions.update(Window::new("Bad Id", "x"), &both).is_err(),
+            "an update is checked as a show is"
+        );
+    }
+
+    #[test]
+    fn a_player_who_left_holds_no_window_and_the_mod_forgets_theirs() {
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let eve = player(5, 6, "Eve", PlayerInfo::CAN_KICK_BAN);
+        let loader = start(enshwick::test::FakeHost::new().player(root).player(eve));
+        let actions = actions();
+        actions.show(roster("2"), &[root.key, eve.key]).unwrap();
+        actions
+            .show(Window::new("bans", "panel"), &[root.key])
+            .unwrap();
+        assert_eq!(loader.carried_windows(&root, 0).len(), 2);
+        assert_eq!(loader.carried_windows(&eve, 0).len(), 1);
+
+        loader.player_left(root.key);
+        assert_eq!(*CLOSED.lock().unwrap(), [(9, None)]);
+        assert!(loader.carried_windows(&root, 0).is_empty());
+        for id in ["panel", "bans"] {
+            assert_eq!(
+                loader
+                    .ask_actions(ActionCall::WINDOW, &root, 0, id, "")
+                    .as_deref(),
+                Some(""),
+                "the mod forgot {id} for the player who left"
+            );
+        }
+        actions.update(roster("1"), &[root.key, eve.key]).unwrap();
+        assert!(loader.carried_windows(&root, 0).is_empty());
+        assert_eq!(
+            shown_count(&loader.carried_windows(&eve, 0)).as_deref(),
+            Some("1 online"),
+            "the player who stayed keeps and updates theirs"
+        );
     }
 
     #[test]
@@ -382,7 +492,12 @@ mod tests {
         );
         assert_eq!(call("panel", core::ptr::null(), 1, 0), Status::BAD_ARGS);
         assert_eq!(call("panel", core::ptr::null(), 0, 0), Status::OK);
-        assert_eq!(call("panel", keys.as_ptr(), 1, 2), Status::BAD_ARGS);
+        assert_eq!(
+            call("panel", keys.as_ptr(), 1, 3),
+            Status::BAD_ARGS,
+            "past the update"
+        );
+        assert_eq!(call("panel", keys.as_ptr(), 1, 2), Status::OK, "an update");
         assert_eq!(call("panel", keys.as_ptr(), 1, 1), Status::OK);
         assert_eq!(call("Bad Id", keys.as_ptr(), 1, 0), Status::BAD_ARGS);
         assert_eq!(call("", keys.as_ptr(), 1, 0), Status::BAD_ARGS);

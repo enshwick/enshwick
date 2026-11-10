@@ -387,7 +387,9 @@ impl Installed {
             let key = player.key.get();
             table::with((), |s| {
                 let held = s.commands.carried.iter().filter(|(k, _, _)| *k == key);
-                let again: Vec<_> = held.map(|(k, id, _)| (*k, id.clone(), false)).collect();
+                let again: Vec<_> = held
+                    .map(|(k, id, _)| (*k, id.clone(), crate::abi::WINDOW_UPDATE))
+                    .collect();
                 s.commands.windows.extend(again);
             });
         }
@@ -485,8 +487,15 @@ impl Installed {
             let online = s.host.players.iter().any(|p| p.key == player.key);
             (s.actions, if online { mine } else { Vec::new() })
         });
-        for (_, id, close) in waiting {
-            let text = match (close, actions) {
+        for (_, id, change) in waiting {
+            let holds = table::with(false, |s| {
+                let mut carried = s.commands.carried.iter();
+                carried.any(|(k, i, _)| *k == key && *i == id)
+            });
+            if change == crate::abi::WINDOW_UPDATE && !holds {
+                continue;
+            }
+            let text = match (change == crate::abi::WINDOW_CLOSE, actions) {
                 (false, Some(actions)) => ask(
                     actions,
                     crate::abi::ActionCall::WINDOW,
@@ -522,6 +531,92 @@ impl Installed {
                 .map(|(_, id, text)| (id.clone(), text.clone()))
                 .collect()
         })
+    }
+
+    /// `player`'s client closes the mod's window `id`, as when the player
+    /// presses its Close: the client holds it no more, and the mod hears of
+    /// it as the loader tells it after the step.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{Header, PlayerInfo};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// let player = PlayerInfo {
+    ///     header: Header::of::<PlayerInfo>(),
+    ///     slot: 0,
+    ///     entity: enshwick::Entity(2),
+    ///     key: enshwick::PlayerKey::new(7),
+    ///     permissions: 0,
+    ///     name_len: 0,
+    ///     name: [0; 64],
+    /// };
+    /// loader.close_window(&player, "panel");
+    /// assert!(loader.carried_windows(&player, 0).is_empty());
+    /// ```
+    #[cfg(feature = "unstable")]
+    pub fn close_window(&self, player: &PlayerInfo, id: &str) {
+        let key = player.key.get();
+        table::with((), |s| {
+            s.commands
+                .carried
+                .retain(|(k, i, _)| !(*k == key && i == id));
+        });
+        self.tell_window_closed(player.key, id);
+    }
+
+    /// `player` leaves, as far as the mod's windows go: their client holds
+    /// none any more, what waited for it is dropped, and the mod hears that
+    /// the player left, as the loader tells every mod with actions.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.player_left(enshwick::PlayerKey::new(7));
+    /// ```
+    #[cfg(feature = "unstable")]
+    pub fn player_left(&self, player: crate::PlayerKey) {
+        let key = player.get();
+        table::with((), |s| {
+            s.commands.carried.retain(|(k, _, _)| *k != key);
+            s.commands.windows.retain(|(k, _, _)| *k != key);
+        });
+        self.tell_window_closed(player, "");
+    }
+
+    /// Tells the mod that `player`'s client closed its window `id`, or with
+    /// an empty id that the player left, with the key alone as the loader
+    /// does.
+    #[cfg(feature = "unstable")]
+    #[expect(
+        clippy::unused_self,
+        reason = "only an installed fake has a mod to tell"
+    )]
+    fn tell_window_closed(&self, player: crate::PlayerKey, id: &str) {
+        let Some(actions) = table::with(None, |s| s.actions) else {
+            return;
+        };
+        let who = PlayerInfo {
+            header: Header::of::<PlayerInfo>(),
+            slot: u32::MAX,
+            entity: crate::Entity(0),
+            key: player,
+            permissions: 0,
+            name_len: 0,
+            name: [0; 64],
+        };
+        let closed = crate::abi::ActionCall::WINDOW_CLOSED;
+        let _heard = ask(
+            actions,
+            closed,
+            &who,
+            0,
+            id,
+            "",
+            crate::abi::ActionTarget::NONE,
+        );
     }
 
     /// Runs the mod's action `action` with `args` for `player` as the

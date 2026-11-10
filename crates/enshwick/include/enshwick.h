@@ -32,6 +32,21 @@
 // status to show.
 #define ENSHWICK_SURVIVOR_STATUS_SET 256
 
+// The `close` value of
+// `HostApi::action_window` that closes a
+// window.
+#define ENSHWICK_WINDOW_CLOSE 1
+
+// The `close` value of
+// `HostApi::action_window` that shows a
+// window: it opens, or updates where it shows.
+#define ENSHWICK_WINDOW_SHOW 0
+
+// The `close` value of
+// `HostApi::action_window` that updates a
+// window only on the clients that still show it. ABI 11.23.
+#define ENSHWICK_WINDOW_UPDATE 2
+
 // An account action of `HostApi::account_action`,
 // with the values of the game's own `AccountActionType`.
 typedef uint8_t EnshwickAccountActionType;
@@ -160,9 +175,10 @@ typedef struct EnshwickActionReply {
 typedef struct EnshwickActionCall {
   // Size and version of this struct.
   struct EnshwickHeader header;
-  // What the loader asks: `ActionCall::SHEET`, `ActionCall::RUN`,
-  // `ActionCall::CONSOLE`, `ActionCall::CHAT` or
-  // `ActionCall::REMOTE`; a mod built for an older minor answers a kind
+  // What the loader asks or tells: `ActionCall::SHEET`,
+  // `ActionCall::RUN`, `ActionCall::CONSOLE`, `ActionCall::CHAT`,
+  // `ActionCall::REMOTE`, `ActionCall::WINDOW` or
+  // `ActionCall::WINDOW_CLOSED`; a mod built for an older minor answers a kind
   // it does not know with an empty reply.
   uint32_t kind;
   // The language the player reads the game in, a
@@ -228,6 +244,12 @@ typedef struct EnshwickActionCall {
 // window for them or the player may not run an action it names. ABI
 // 11.22.
 #define EnshwickActionCall_WINDOW 6
+// The client of the player whose account key `player` holds closed
+// the calling mod's window `action`; or, with an empty `action`, that
+// player left, and holds none of the mod's windows any more. The mod
+// forgets what it kept for them. `player` holds the account key alone:
+// no character, name or permission. No reply is read. ABI 11.23.
+#define EnshwickActionCall_WINDOW_CLOSED 7
 
 // A buff type of the game by its id, the
 // `Guid::fnv1a` of its GUID, to apply,
@@ -5092,8 +5114,13 @@ typedef struct EnshwickHostApi {
                                uint32_t query,
                                uint32_t *holds);
   // Shows the calling mod's window `id`, 1 to 32 of `[a-z0-9-]`, to the
-  // `count` players whose account keys `players` holds, or closes it
-  // on their clients when `close` is 1. After the server's step the
+  // `count` players whose account keys `players` holds; closes it on
+  // their clients when `close` is 1; or, when `close` is 2, updates it
+  // only on the clients that still show it, opening none (ABI 11.23; a
+  // loader before it answers `Status::BAD_ARGS`). When a client closes
+  // a window or its player leaves, the loader tells the mod with
+  // `ActionCall::WINDOW_CLOSED`.
+  // After the server's step the
   // loader asks the mod for the window as each player sees it
   // (`ActionCall::WINDOW`) and carries the
   // text to that player's client, which draws it; an empty answer closes

@@ -77,6 +77,10 @@ export type Actions = {
 	show: (self: Actions, window: ActionWindow, players: {string}) -> (),
 	--- Closes the window `id` on the clients of the players with the account keys `players`, as `Actions.close` does.
 	close: (self: Actions, id: string, players: {string}) -> (),
+	--- Puts `window` in place of the one of its id on the clients of `players` that still show it, opening it for no one, as `Actions.update` does.
+	update: (self: Actions, window: ActionWindow, players: {string}) -> (),
+	--- Calls `closed` with a player's account key and a window's id when their client closed that window, and with the key alone when the player left, as `Actions.on_closed` does.
+	on_closed: (self: Actions, closed: (arg1: string, arg2: string?) -> ()) -> (),
 }
 
 --- Rolls on crafted items, for `Load.add_craft_affixes`.
@@ -186,6 +190,8 @@ export type Apply = {
 
 --- An argument of an action: a typed choice, or a line of text of bounded bytes.
 export type Arg = {
+	--- The argument as one a typed line may leave out, taking `default` then, as `Arg.optional` makes it.
+	optional: (self: Arg, default: ActionValue) -> Arg,
 }
 
 --- A change of an arsenal: the attacks and behaviours it picks from, and the values of some of its attacks.
@@ -1914,6 +1920,10 @@ export type PlayerAction = {
 	label: string,
 	--- A line on what the action does, a text key, as `Action.help` sets it.
 	help: string?,
+	--- The group the help lists it under, a text key, as `Action.group` sets it.
+	group: string?,
+	--- Whether its players include the one who looks, as `Action.with_self` sets it.
+	with_self: boolean?,
 	--- The arguments in order, as `Action.arg` adds them; a list takes none.
 	args: {Arg}?,
 	--- Whether only the server's administrators see and run it, as `Action.admins` sets it.

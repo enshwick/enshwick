@@ -15,9 +15,9 @@ pub(crate) struct FakeCommands {
     pub(crate) rules_changed: u32,
     /// The strings `command_list` last handed out: name, alias, mod id.
     pub(crate) listed: Vec<[Box<str>; 3]>,
-    /// Shows and closes of the mod's windows not carried yet: account key,
-    /// window id and whether it closes.
-    pub(crate) windows: Vec<(u64, String, bool)>,
+    /// Shows, closes and updates of the mod's windows not carried yet:
+    /// account key, window id and the `close` value of the call.
+    pub(crate) windows: Vec<(u64, String, u32)>,
     /// The windows each client holds: account key, window id and text.
     pub(crate) carried: Vec<(u64, String, String)>,
 }
@@ -54,7 +54,10 @@ pub(crate) extern "system" fn action_window(
     let Some(id) = (unsafe { id.as_str() }).filter(|id| is_window_id(id)) else {
         return Status::BAD_ARGS;
     };
-    if count as usize > MAX_CALL_PLAYERS || (players.is_null() && count != 0) || close > 1 {
+    if count as usize > MAX_CALL_PLAYERS
+        || (players.is_null() && count != 0)
+        || close > crate::abi::WINDOW_UPDATE
+    {
         return Status::BAD_ARGS;
     }
     let keys: Vec<u64> = if count == 0 {
@@ -76,7 +79,7 @@ pub(crate) extern "system" fn action_window(
         }
         s.commands
             .windows
-            .extend(keys.into_iter().map(|key| (key, id.to_owned(), close == 1)));
+            .extend(keys.into_iter().map(|key| (key, id.to_owned(), close)));
         Status::OK
     })
 }

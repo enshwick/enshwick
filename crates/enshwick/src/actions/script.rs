@@ -643,6 +643,37 @@ impl Actions {
     pub(crate) fn close_script(&self, id: &str, players: Vec<PlayerKey>) -> Result<(), Off> {
         self.close(id, &players)
     }
+
+    /// Puts `window` in place of the one of its id on the clients of
+    /// `players` that still show it, opening it for no one, as
+    /// [`Actions::update`] does.
+    ///
+    /// # Errors
+    ///
+    /// As [`Actions::update`].
+    #[script(name = "update")]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "a script hands the list over as its own copy"
+    )]
+    pub(crate) fn update_script(
+        &self,
+        window: ScriptWindow,
+        players: Vec<PlayerKey>,
+    ) -> Result<(), Off> {
+        self.update(window.into_window(), &players)
+    }
+
+    /// Calls `closed` with a player's account key and a window's id when
+    /// their client closed that window, and with the key alone when the
+    /// player left, as [`Actions::on_closed`] does.
+    #[script(name = "on_closed")]
+    pub(crate) fn on_closed_script(
+        &self,
+        closed: impl Fn(PlayerKey, Option<String>) + Send + Sync + 'static,
+    ) {
+        self.on_closed(move |player, window| closed(player, window.map(str::to_owned)));
+    }
 }
 
 /// The free functions of [`actions`](super) as a script's namespace
