@@ -45,6 +45,7 @@ pub use item_path;
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_typed as enshwick;
 /// use enshwick::resources::Value;
 /// use enshwick::typed::Reflected;
 ///
@@ -97,6 +98,7 @@ impl From<ShapeError> for Off {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_typed as enshwick;
 /// use enshwick::resources::Value;
 /// use enshwick::typed::Reflected;
 ///
@@ -122,6 +124,7 @@ pub trait Reflected: Sized {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_typed as enshwick;
 /// fn id<T: enshwick::typed::Named>() -> &'static str {
 ///     T::ID
 /// }
@@ -161,26 +164,26 @@ impl Role {
     }
 }
 
-/// A generated ECS component, read and written through [`ComponentType`].
+/// A generated ECS component, read and written through [`ComponentType`](struct.ComponentType.html).
 ///
 /// # Examples
 ///
-/// See [`ComponentType`].
+/// See [`ComponentType`](struct.ComponentType.html).
 pub trait Component: Named {}
 
-/// A generated game event, handled through [`EventType`].
+/// A generated game event, handled through [`EventType`](struct.EventType.html).
 ///
 /// # Examples
 ///
-/// See [`EventType`].
+/// See [`EventType`](struct.EventType.html).
 pub trait Event: Named {}
 
 /// A generated resource of the game's content, read and served through
-/// [`ResourceType`].
+/// [`ResourceType`](struct.ResourceType.html).
 ///
 /// # Examples
 ///
-/// See [`ResourceType`].
+/// See [`ResourceType`](struct.ResourceType.html).
 pub trait Resource: Named {}
 
 pub mod sealed {
@@ -194,6 +197,7 @@ pub mod sealed {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_typed as enshwick;
 /// use enshwick::typed::Constant;
 ///
 /// assert_ne!(Constant::Number(3), Constant::Name("Three".into()));
@@ -306,6 +310,7 @@ pub fn no_variant(text: &str, name: &str) -> crate::script::Error {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_typed as enshwick;
 /// use enshwick::resources::Value;
 /// use enshwick::typed::{Flags, Reflected};
 ///

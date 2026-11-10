@@ -47,7 +47,7 @@ crate::typed::runtime::reflected_enum! {
 crate::typed::runtime::reflected_struct! {
     /// The game's struct `ecs::Fuel`, 8 bytes.
     ///
-    /// An ECS component: read and write it through [`crate::typed::ComponentType`]. The game holds it on the server only.
+    /// An ECS component: read and write it through [`crate::typed::ComponentType`](../struct.ComponentType.html). The game holds it on the server only.
     Fuel: Component {
         /// `amount`, of `float32`.
         amount: f32 = "amount",
@@ -60,7 +60,7 @@ crate::typed::runtime::named!(Fuel = "ecs::Fuel": Component);
 crate::typed::runtime::reflected_struct! {
     /// The game's struct `ecs::Rang`, 16 bytes.
     ///
-    /// A game event: handle it through [`crate::typed::EventType`].
+    /// A game event: handle it through [`crate::typed::EventType`](../struct.EventType.html).
     Rang: Event {
         /// `faction`, of `ecs::Faction`.
         faction: Faction = "faction",
