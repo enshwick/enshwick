@@ -2,8 +2,8 @@
 
 use crate::content::Guid;
 
-/// A value of a reflected type, as [`Registry::decode`](super::Registry::decode)
-/// reads it from a resource and [`Registry::encode`](super::Registry::encode)
+/// A value of a reflected type, as [`Registry::decode`](struct.Registry.html#method.decode)
+/// reads it from a resource and [`Registry::encode`](struct.Registry.html#method.encode)
 /// writes it back.
 ///
 /// Each kind has one form: a struct is its fields by name, an enum its
@@ -15,6 +15,7 @@ use crate::content::Guid;
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_values as enshwick;
 /// use enshwick::resources::Value;
 ///
 /// let mut table = Value::Struct(vec![("damage".into(), Value::Float(2.5))]);
@@ -63,6 +64,7 @@ pub enum Value {
 /// # Examples
 ///
 /// ```
+/// # extern crate enshwick_values as enshwick;
 /// use enshwick::resources::{Value, Variant};
 ///
 /// let shape = Value::Variant(Box::new(Variant::new("demo::ecs::SphereShape", Value::Float(1.0))));
@@ -113,6 +115,7 @@ impl Variant {
     /// # Examples
     ///
     /// ```
+    /// # extern crate enshwick_values as enshwick;
     /// use enshwick::resources::{Value, Variant};
     ///
     /// let mut variant = Variant::new("demo::float32", Value::Float(1.0));

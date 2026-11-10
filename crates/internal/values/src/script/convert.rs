@@ -3,7 +3,9 @@ use std::time::Duration;
 
 use super::{Answer, Callback, Error, FromScript, IntoScript, Signature, Ty, Typed, Value};
 
-pub(crate) fn expected(what: &str, value: &Value) -> Error {
+/// The error for a `value` that is not `what`.
+#[must_use]
+pub fn expected(what: &str, value: &Value) -> Error {
     let got = match value {
         Value::Nil => "nil",
         Value::Bool(_) => "a boolean",
@@ -201,74 +203,6 @@ impl Typed for std::path::PathBuf {
 impl IntoScript for std::path::PathBuf {
     fn into_value(self) -> Value {
         Value::String(self.to_string_lossy().into_owned())
-    }
-}
-
-/// A side by name, as `mods.side` answers it.
-impl Typed for crate::abi::Side {
-    const TY: &'static Ty = &Ty::Choice(&super::Choice::new(
-        "Side",
-        "Which binary of the game runs, or where a mod runs.",
-        &[
-            (
-                "server",
-                "The dedicated server; as a mod's side, where the world runs.",
-            ),
-            (
-                "client",
-                "The game client, as a binary; never a mod's side.",
-            ),
-            (
-                "both",
-                "As a mod's side, where the world runs and on every client in it.",
-            ),
-        ],
-    ));
-}
-
-impl IntoScript for crate::abi::Side {
-    fn into_value(self) -> Value {
-        use crate::abi::Side;
-        let name = match self {
-            Side::CLIENT => "client",
-            Side::BOTH => "both",
-            _ => "server",
-        };
-        Value::Name(name)
-    }
-}
-
-impl FromScript for crate::abi::Side {
-    fn from_value(value: Value) -> Result<Self, Error> {
-        use crate::abi::Side;
-        match String::from_value(value)?.as_str() {
-            "server" => Ok(Side::SERVER),
-            "client" => Ok(Side::CLIENT),
-            "both" => Ok(Side::BOTH),
-            other => Err(Error::new(format!(
-                "{other:?} is not one of \"server\", \"client\", \"both\""
-            ))),
-        }
-    }
-}
-
-/// A log level by name, as settings and log lines spell it.
-impl Typed for crate::abi::Level {
-    const TY: &'static Ty = &Ty::Choice(&super::Choice::new(
-        "Level",
-        "How much a log keeps, from errors alone to development detail.",
-        &[
-            ("error", "Something failed and a feature is off."),
-            ("warn", "Something unexpected that the mod handled."),
-            ("info", "A milestone worth one line."),
-            ("debug", "Detail for development, off in releases."),
-        ],
-    ));
-}
-
-impl IntoScript for crate::abi::Level {
-    fn into_value(self) -> Value {
-        Value::Name(self.name())
     }
 }
 
@@ -636,7 +570,6 @@ pub fn argument_or_default<T: FromScript + Default>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::abi::Side;
 
     #[test]
     fn a_count_takes_only_whole_numbers_from_zero_to_two_to_the_53() {
@@ -660,22 +593,6 @@ mod tests {
                 Value::Number(0.0),
             ]);
             assert!(<[i64; 3]>::from_value(list).is_err(), "{refused}");
-        }
-    }
-
-    #[test]
-    fn a_side_reads_back_from_its_name() {
-        for (side, name) in [
-            (Side::SERVER, "server"),
-            (Side::CLIENT, "client"),
-            (Side::BOTH, "both"),
-        ] {
-            assert!(matches!(side.into_value(), Value::Name(text) if text == name));
-            assert_eq!(Side::from_value(Value::Name(name)).ok(), Some(side));
-            assert_eq!(
-                Side::from_value(Value::String(name.into())).ok(),
-                Some(side)
-            );
         }
     }
 

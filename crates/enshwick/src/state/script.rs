@@ -60,6 +60,7 @@ fn data_to_toml(data: Data) -> Option<toml::Value> {
                 .collect(),
         ),
         Data::Variant(variant) => data_to_toml(variant.value().clone())?,
+        _ => return None,
     })
 }
 

@@ -5,6 +5,7 @@ use std::sync::OnceLock;
 use crate::Off;
 
 mod ids;
+mod script;
 
 #[doc(hidden)]
 pub use enshwick_macros::id;

@@ -14,11 +14,13 @@ pub mod content;
 mod off;
 #[doc(hidden)]
 pub mod reason;
+pub mod resources;
+pub mod script;
 pub mod shape;
 
-pub use enshwick_macros::Shape;
 #[doc(hidden)]
 pub use enshwick_macros::deps;
+pub use enshwick_macros::{Script, Shape, script};
 pub use off::Off;
 pub use shape::Shape;
 
@@ -26,4 +28,12 @@ pub use shape::Shape;
 #[doc(hidden)]
 pub mod __private {
     pub use const_format::concatcp;
+
+    pub use crate::script::convert::{argument, argument_or_default, record_fields};
+
+    /// A copy of `this`, for a `#[script]` method that takes `self` by value.
+    #[must_use]
+    pub fn owned<T: Clone>(this: &T) -> T {
+        this.clone()
+    }
 }

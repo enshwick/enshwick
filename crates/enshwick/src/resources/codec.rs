@@ -471,6 +471,7 @@ fn mismatch(ty: &Type<'_>, value: &Value) -> CodecError {
         Value::Struct(_) => "a struct",
         Value::Variant(_) => "a variant",
         Value::Bytes(_) => "bytes",
+        _ => "a value of another kind",
     };
     CodecError::new(format!(
         "{} ({:?}) does not take {given}",
