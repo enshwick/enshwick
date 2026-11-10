@@ -52,6 +52,10 @@ pub const MAX_BYTES: usize = 7_168;
 /// Fills a text key with values in one reader's language.
 type Say<'a> = &'a dyn Fn(&str, &[(&str, &str)]) -> String;
 
+/// Says what is wrong with an action an item names and the values a button
+/// gives it, `None` for an action drawn whole.
+type Check<'a> = &'a dyn Fn(&str, Option<&[Value]>) -> Option<String>;
+
 /// A text key and the values it is filled with, in each player's language.
 #[derive(Clone, Debug, Default, PartialEq)]
 struct Text {
@@ -204,10 +208,7 @@ impl Window {
     /// `check` finds wrong with an action an item names and the values a
     /// button gives it, `None` for an action drawn whole; `None` when it
     /// can.
-    pub(super) fn fault(
-        &self,
-        check: &dyn Fn(&str, Option<&[Value]>) -> Option<String>,
-    ) -> Option<String> {
+    pub(super) fn fault(&self, check: Check<'_>) -> Option<String> {
         if self.items.len() > MAX_ITEMS {
             return Some(format!("{} items, at most {MAX_ITEMS}", self.items.len()));
         }
