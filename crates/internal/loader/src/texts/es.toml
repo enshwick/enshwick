@@ -5,6 +5,7 @@
 "windows.cancel" = "Cancelar"
 "windows.name" = "O escribe un nombre"
 "windows.text" = "Escribe aquí"
+"windows.item" = "Buscar un objeto"
 "controls.title" = "Asignación de teclas"
 "controls.belongs" = "Estas teclas son tuyas en este ordenador. No pertenecen al mundo."
 "mods.carried" = "Se ejecuta en el servidor al que te uniste. Aquí puedes cambiar sus teclas."

@@ -1,9 +1,14 @@
 use std::sync::{Arc, RwLock};
 
+mod fit;
 mod help;
+
+use fit::takes_line;
+pub(super) use fit::{button_fault, fits, optional_fault};
 
 use crate::Host;
 use crate::PlayerKey;
+use crate::content::Guid;
 use crate::i18n::{Language, Texts};
 use crate::locks::RelockRw;
 use crate::world::Player;
@@ -59,6 +64,13 @@ enum ReadArgsError {
     /// A text is longer than its argument takes.
     #[error("{label} takes at most {max} bytes")]
     TooLong { label: String, max: String },
+    /// No item the game knows has the name; `near` lists names that look
+    /// like it.
+    #[error("no item {name}")]
+    NoItem { name: String, near: Vec<String> },
+    /// Several items have the name.
+    #[error("several items are named {name}")]
+    SeveralItems { name: String },
 }
 
 /// A word of a console line: a run without white space, or a run between
@@ -113,35 +125,6 @@ fn run_of_line<'a>(line: &'a str, words: &[Word<'a>]) -> Option<&'a str> {
         [only] => Some(only.text),
         [first, .., last] => Some(&line[first.from..last.to]),
     }
-}
-
-/// What is wrong with the optional arguments among `args`: one before an
-/// argument that is not optional, an optional player, or a default its
-/// argument does not take; `None` when they are well declared.
-pub(super) fn optional_fault(args: &[Arg]) -> Option<String> {
-    let required = args
-        .iter()
-        .rposition(|arg| arg.default.is_none())
-        .map_or(0, |last| last + 1);
-    if args[..required].iter().any(|arg| arg.default.is_some()) {
-        return Some("only its last arguments may be optional".to_owned());
-    }
-    let last = args.len().saturating_sub(1);
-    let early_text =
-        |(i, arg): (usize, &Arg)| i < last && arg.kind == ArgView::TEXT && arg.default.is_some();
-    if args.iter().enumerate().any(early_text) {
-        return Some("an optional text must be its last argument".to_owned());
-    }
-    let at = args.iter().position(|arg| match &arg.default {
-        None => false,
-        Some(_) if arg.kind == ArgView::PLAYER => true,
-        Some(Value::Text(text)) if arg.kind == ArgView::TEXT && text.is_empty() => false,
-        Some(default) => !takes(default, arg),
-    })?;
-    Some(format!(
-        "its argument {} is a player, which is never optional, or does not take its default",
-        at + 1
-    ))
 }
 
 pub(super) struct Registry {
@@ -209,6 +192,17 @@ impl Registry {
                 language,
                 &[("label", &self.say(label, language, &[])), ("max", max)],
             ),
+            ReadArgsError::NoItem { name, near } if near.is_empty() => {
+                self.say("actions.no_item", language, &[("name", name)])
+            }
+            ReadArgsError::NoItem { name, near } => self.say(
+                "actions.no_item_near",
+                language,
+                &[("name", name), ("near", &near.join(", "))],
+            ),
+            ReadArgsError::SeveralItems { name } => {
+                self.say("actions.several_items", language, &[("name", name)])
+            }
         }
     }
 
@@ -279,10 +273,10 @@ impl Registry {
     /// The values the `words` of `line` give the optional arguments
     /// `optional`, which fill in order: each word reads as its argument,
     /// and the arguments left without a word take their defaults. An
-    /// optional text, always the last, takes what is left of the line,
-    /// starting at the first word that does not read as the argument
-    /// before it. Without such a text a word that does not read, or one
-    /// too many, is an error.
+    /// optional text or item, always the last, takes what is left of the
+    /// line, starting at the first word that does not read as the argument
+    /// before it. Without one a word that does not read, or one too many,
+    /// is an error.
     fn optional_values(
         &self,
         optional: &[Arg],
@@ -291,7 +285,7 @@ impl Registry {
         language: Language,
     ) -> Result<Vec<Value>, ReadArgsError> {
         let (text, plain) = match optional.split_last() {
-            Some((last, plain)) if last.kind == ArgView::TEXT => (Some(last), plain),
+            Some((last, plain)) if takes_line(last) => (Some(last), plain),
             _ => (None, optional),
         };
         let default = |arg: &Arg| arg.default.clone().ok_or(ReadArgsError::Usage);
@@ -318,6 +312,9 @@ impl Registry {
             }
         }
         match (text, run_of_line(line, rest)) {
+            (Some(arg), Some(typed)) if arg.kind == ArgView::ITEM => {
+                values.push(self.item_named(typed)?);
+            }
             (Some(arg), Some(typed)) => values.push(Self::text_value(arg, typed)?),
             (Some(arg), None) => values.push(default(arg)?),
             (None, Some(_)) => return Err(ReadArgsError::Usage),
@@ -357,16 +354,16 @@ impl Registry {
         let args = &d.action.args;
         let required = args.iter().take_while(|arg| arg.default.is_none()).count();
         let (required, optional) = args.split_at(required);
-        // A last optional text takes the rest of the line itself, so the
-        // arguments before it take one word each.
-        let text_ends = optional.last().is_some_and(|arg| arg.kind == ArgView::TEXT);
+        // A last optional text or item takes the rest of the line itself,
+        // so the arguments before it take one word each.
+        let text_ends = optional.last().is_some_and(takes_line);
         let mut values = Vec::with_capacity(args.len());
         let mut rest = words;
         let mut tail = None;
         for (i, arg) in required.iter().enumerate() {
             let takes_rest = i + 1 == required.len() && !text_ends;
             let value = match arg.kind {
-                ArgView::PLAYER | ArgView::TEXT => {
+                ArgView::PLAYER | ArgView::TEXT | ArgView::ITEM => {
                     let taken = if takes_rest {
                         let (taken, given) = (1..=rest.len())
                             .find_map(|kept| {
@@ -384,9 +381,10 @@ impl Registry {
                     rest = if takes_rest { &[] } else { after };
                     if arg.kind == ArgView::PLAYER {
                         self.player_named(&joined(mine), &known)?
+                    } else if arg.kind == ArgView::ITEM {
+                        self.item_named(run_of_line(line, mine).ok_or_else(bad)?)?
                     } else {
-                        let text = run_of_line(line, mine).ok_or_else(bad)?;
-                        Self::text_value(arg, text)?
+                        Self::text_value(arg, run_of_line(line, mine).ok_or_else(bad)?)?
                     }
                 }
                 _ => {
@@ -403,6 +401,66 @@ impl Registry {
         };
         values.extend(tail);
         Ok(values)
+    }
+
+    /// The item `text` names on the console: its GUID, a content id in
+    /// full, a vanilla debug name, or a name the game shows where the
+    /// server's game has its texts. A GUID or content id of an item the
+    /// server's game does not know is refused under the text typed.
+    fn item_named(&self, text: &str) -> Result<Value, ReadArgsError> {
+        use crate::content::vanilla::{self, VanillaError};
+
+        if let Some(item) = Guid::try_parse(text).or_else(|| Guid::try_named(text)) {
+            return if self.knows_item(item) {
+                Ok(Value::Item(item))
+            } else {
+                Err(ReadArgsError::NoItem {
+                    name: text.to_owned(),
+                    near: Vec::new(),
+                })
+            };
+        }
+        let several = || ReadArgsError::SeveralItems {
+            name: text.to_owned(),
+        };
+        let debug_near = match vanilla::item(text) {
+            Ok(item) => return Ok(Value::Item(item)),
+            Err(VanillaError::Ambiguous { .. }) => return Err(several()),
+            Err(VanillaError::Unknown { near, .. }) => near,
+            Err(_) => Vec::new(),
+        };
+        match vanilla::item_by_display_name(text) {
+            Ok(item) => Ok(Value::Item(item)),
+            Err(VanillaError::Ambiguous { .. }) => Err(several()),
+            Err(error) => Err(ReadArgsError::NoItem {
+                name: text.to_owned(),
+                near: match error {
+                    VanillaError::Unknown { near, .. } if !near.is_empty() => near,
+                    _ => debug_near,
+                },
+            }),
+        }
+    }
+
+    /// Whether the server's game knows `item` by this very GUID. The game
+    /// keys items by [`Guid::fnv1a`], so a GUID that shares a vanilla
+    /// item's key but is not that item is refused; a mod's item never
+    /// shares one, as content ids that collide are refused.
+    // shortcut: a GUID crafted to share a mod item's key passes; an exact check needs the GUID of an item id from the loader.
+    fn knows_item(&self, item: Guid) -> bool {
+        let id = crate::ItemId::from_guid(item);
+        crate::inventory::item_data(&self.host, id).is_some()
+            && crate::content::vanilla::Vanilla::game()
+                .and_then(|vanilla| vanilla.item_with_id(id.get()))
+                .is_none_or(|vanilla_item| vanilla_item == item)
+    }
+
+    /// The first item of `values` the server's game does not know.
+    fn unknown_item(&self, values: &[Value]) -> Option<Guid> {
+        values.iter().find_map(|value| match value {
+            Value::Item(item) if !self.knows_item(*item) => Some(*item),
+            _ => None,
+        })
     }
 
     /// `text` as the value of the text argument `arg`, or why it takes
@@ -528,6 +586,13 @@ impl Registry {
                 &[("usage", &self.usage(&d.action, language))],
             ));
         }
+        if let Some(item) = self.unknown_item(values) {
+            let unknown = ReadArgsError::NoItem {
+                name: item.to_string(),
+                near: Vec::new(),
+            };
+            return Outcome::refused(self.refusal(&unknown, &d.action, language));
+        }
         (d.handler)(&Request {
             player,
             subject: subject.as_ref(),
@@ -584,6 +649,11 @@ impl Registry {
         let mut entry = Entry {
             id: d.action.id.clone(),
             label: self.say(&d.action.label, language, &[]),
+            group: if d.action.group.is_empty() {
+                String::new()
+            } else {
+                self.say(&d.action.group, language, &[])
+            },
             help: if d.action.help.is_empty() {
                 String::new()
             } else {
@@ -649,6 +719,7 @@ impl Registry {
                 } else {
                     Vec::new()
                 },
+                default: arg.default.clone(),
             });
         }
         entry
@@ -795,51 +866,6 @@ impl Registry {
     }
 }
 
-/// Whether `value` fits `arg`: its type and range, or the default the
-/// argument takes when a typed line leaves it out.
-pub(super) fn fits(value: &Value, arg: &Arg) -> bool {
-    arg.default.as_ref() == Some(value) || takes(value, arg)
-}
-
-/// Whether `value` is of `arg`'s type and within its range.
-fn takes(value: &Value, arg: &Arg) -> bool {
-    match (value, arg.kind) {
-        (Value::Player { .. }, ArgView::PLAYER) | (Value::Toggle(_), ArgView::TOGGLE) => true,
-        (Value::Choice(index), ArgView::CHOICE) => *index < arg.choices.len(),
-        (Value::Number(n), ArgView::NUMBER) => {
-            n.is_finite() && *n >= arg.range.0 && *n <= arg.range.1
-        }
-        (Value::Text(text), ArgView::TEXT) => arg.takes_text(text),
-        _ => false,
-    }
-}
-
-/// What is wrong with the `values` a window's button gives `action` first:
-/// a list takes its player and on or off, any other action no more values
-/// than its arguments, each fitting its own; `None` when they fit.
-pub(super) fn button_fault(action: &Action, values: &[Value]) -> Option<String> {
-    let id = &action.id;
-    if action.on.is_some() {
-        return (!matches!(values, [Value::Player { .. }, Value::Toggle(_)]))
-            .then(|| format!("a button gives the list {id} other than a player and on or off"));
-    }
-    if values.len() > action.args.len() {
-        return Some(format!(
-            "a button gives {} values to {id}, which takes {}",
-            values.len(),
-            action.args.len()
-        ));
-    }
-    let at = values
-        .iter()
-        .zip(&action.args)
-        .position(|(v, a)| !fits(v, a))?;
-    Some(format!(
-        "a button gives {id} a value its argument {} does not take",
-        at + 1
-    ))
-}
-
 /// On or off, from a console word.
 pub(super) fn toggle_word(word: &str, texts: &Texts, language: Language) -> Option<bool> {
     let word = word.to_lowercase();
@@ -892,74 +918,5 @@ mod tests {
         );
         let unclosed = r#"say "no end"#;
         assert_eq!(words(unclosed)[1].to, unclosed.len());
-    }
-
-    #[test]
-    fn only_the_last_arguments_may_be_optional_and_each_takes_its_default() {
-        let count = || Arg::number("Count", 1.0..=99.0, 1.0);
-        let one = Value::Number(1.0);
-        assert_eq!(optional_fault(&[]), None);
-        assert_eq!(
-            optional_fault(&[Arg::text("Item", 8), count().optional(one.clone())]),
-            None
-        );
-        assert_eq!(
-            optional_fault(&[Arg::text("Why", 8).optional(Value::Text(String::new()))]),
-            None,
-            "an empty text may stand for a text left out"
-        );
-        let first = optional_fault(&[count().optional(one.clone()), Arg::text("Item", 8)]);
-        assert!(first.unwrap().contains("only its last arguments"));
-        let note = || Arg::text("Note", 8).optional(Value::Text(String::new()));
-        let mid = optional_fault(&[note(), count().optional(one.clone())]).unwrap();
-        assert!(mid.contains("an optional text must be its last"), "{mid}");
-        assert_eq!(
-            optional_fault(&[count().optional(one.clone()), note()]),
-            None
-        );
-        let far = optional_fault(&[count().optional(Value::Number(100.0))]).unwrap();
-        assert!(far.contains("argument 1"), "{far}");
-        let other = optional_fault(&[Arg::text("Item", 8), count().optional(Value::Toggle(true))]);
-        assert!(other.unwrap().contains("argument 2"));
-        let who = Value::Player {
-            key: PlayerKey::new(7),
-            name: "Ann".into(),
-        };
-        assert!(optional_fault(&[Arg::player("Player").optional(who)]).is_some());
-        let blank = optional_fault(&[count().optional(Value::Text(String::new()))]);
-        assert!(
-            blank.unwrap().contains("argument 1"),
-            "an empty text stands only for a text"
-        );
-    }
-
-    #[test]
-    fn a_button_s_values_fit_its_action_or_name_their_fault() {
-        let ann = Value::Player {
-            key: PlayerKey::new(7),
-            name: "Ann".into(),
-        };
-        let list = Action::per_player("allowed", "Allowed", |_, _| Vec::new());
-        let whole = [ann.clone(), Value::Toggle(true)];
-        assert_eq!(button_fault(&list, &whole), None);
-        for short in [&[][..], &whole[..1], &[Value::Toggle(true), ann.clone()]] {
-            let fault = button_fault(&list, short).expect("a list takes a player and on or off");
-            assert!(fault.contains("the list allowed"), "{fault}");
-        }
-
-        let ban = Action::new("ban", "Ban")
-            .arg(Arg::player("Player"))
-            .arg(Arg::text("Reason", 8));
-        assert_eq!(button_fault(&ban, &[]), None);
-        assert_eq!(button_fault(&ban, core::slice::from_ref(&ann)), None);
-        let long = Value::Text("too long a reason".into());
-        let fault = button_fault(&ban, &[ann.clone(), long]).unwrap();
-        assert!(
-            fault.contains("ban") && fault.contains("argument 2"),
-            "{fault}"
-        );
-        let three = [ann.clone(), Value::Text("ok".into()), ann];
-        let fault = button_fault(&ban, &three).unwrap();
-        assert!(fault.contains("3 values to ban, which takes 2"), "{fault}");
     }
 }

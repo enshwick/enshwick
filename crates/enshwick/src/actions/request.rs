@@ -1,5 +1,6 @@
 use core::ops::RangeInclusive;
 
+use crate::content::Guid;
 use crate::i18n::{Language, Texts};
 use crate::world::Player;
 use crate::{Entity, PlayerKey};
@@ -41,6 +42,9 @@ pub enum Value {
     /// The text typed for an [`Arg::text`], within its bytes and without a
     /// control character.
     Text(String),
+    /// The item picked for an [`Arg::item`]: one the server's game knows,
+    /// checked before the handler runs.
+    Item(Guid),
 }
 
 /// An argument of an action: a typed choice, or a line of text of at most
@@ -185,6 +189,38 @@ impl Arg {
         let mut arg = Self::new(ArgView::TEXT, label);
         arg.range = (1.0, f64::from(max));
         arg
+    }
+
+    /// One of the game's items, vanilla or a mod's. A window lists the
+    /// vanilla items by the names the game shows in the player's language,
+    /// searched by typing, and sends the server the picked item; the names
+    /// come from the client's own game, so the server needs none. A console
+    /// line names any item by its GUID or content id, and a vanilla item
+    /// also by its debug name or, where the server's game has its texts as
+    /// in a game a player hosts, by a name the game shows; it takes words
+    /// as a [text](Self::text) does, and an optional item, like an optional
+    /// text, is the last argument. The server refuses an item its game does
+    /// not know before the handler runs.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::actions::{Action, Arg, Outcome, Value};
+    ///
+    /// let spawn = Action::new("spawn", "Spawn an item").admins().arg(Arg::item("Item"));
+    /// assert_eq!(spawn.id(), "spawn");
+    /// let picked = |args: &[Value]| match args {
+    ///     [Value::Item(item)] => Outcome::done(format!("spawned {item}")),
+    ///     _ => Outcome::refused("no item"),
+    /// };
+    /// assert!(!picked(&[]).is_done());
+    /// ```
+    #[must_use]
+    pub fn item(label: &str) -> Self {
+        Self {
+            kind: ArgView::ITEM,
+            ..Self::text(label, super::MAX_TEXT)
+        }
     }
 
     /// Whether `text` fits this text argument: its bytes within the range

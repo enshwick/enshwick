@@ -88,6 +88,8 @@ mod input_hint;
 #[cfg(feature = "unstable")]
 mod interaction_targets;
 mod inventory;
+#[cfg(feature = "unstable")]
+mod item_arguments;
 mod item_changes;
 #[cfg(feature = "unstable")]
 mod item_data;

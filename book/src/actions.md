@@ -101,7 +101,7 @@ Portuguese, then to English.
 | `Action::new(id, label)`            | a button; `id` is 1 to 32 of `[a-z0-9-]`, its name on the console                                |
 | `Action::per_player(id, label, on)` | a list of players with a switch each; `on` names the players switched on                         |
 | `.help(key)`                        | a line under the label, and what `help <id>` answers on a typed line                             |
-| `.group(key)`                       | the group the [help](commands.md#help-and-mistyped-lines) lists it under                          |
+| `.group(key)`                       | the group the [help](commands.md#help-and-mistyped-lines) lists it under, and a window shows over it |
 | `.with_self()`                      | its players include the player who looks, first; without it they hold only the others            |
 | `.arg(Arg::...)`                    | an argument, in order; its kinds follow this table                                               |
 | `.allow(fn)`, `.admins()`           | who sees the action and may run it                                                               |
@@ -192,12 +192,12 @@ takes `default`. In Luau it is the method `:optional(value)` of an argument.
 | Rule | Detail |
 | --- | --- |
 | Which arguments | only the last ones of an action; `actions.add` refuses any other |
-| Which kinds | a choice, a number, on or off, a text; never a player. A text only as the last argument |
+| Which kinds | a choice, a number, on or off, a text, an item; never a player. A text or an item only as the last argument |
 | The default | a value the argument takes, or an empty text |
 | In the help | the argument stands in square brackets: `give <player> <Item> [1-999]` |
-| From the interface | values left out at the end take their defaults too |
+| From the interface | a window opens the field with its default; values left out at the end take their defaults too |
 
-A text or a player that only optional arguments follow takes the rest of
+A text, an item or a player that only optional arguments follow takes the rest of
 the line up to them. The last words go to the optional arguments, in
 order, as far as each reads as its argument:
 
@@ -209,8 +209,8 @@ order, as far as each reads as its argument:
 | `give Ann "Stone 5"` | `Stone 5` | 1 |
 | `give Ann Stone Axe 5000` | `Stone Axe 5000` | 1 |
 
-An optional text is always the last argument, and takes what is left of the
-line itself. The arguments before it then take one word each, or a run in
+An optional text or item is always the last argument, and takes what is
+left of the line itself. The arguments before it then take one word each, or a run in
 double quotes:
 
 | The line, for `warn <player> [1-60] [Reason]` | The minutes | The reason |
@@ -238,6 +238,47 @@ local give = {
     args = {
         enshwick.actions.player("Player"),
         enshwick.actions.text("Item", 64),
+        enshwick.actions.number("Count", 1, 999, 1):optional({ Number = 1 }),
+    },
+}
+```
+
+## Items from the game's list
+
+`Arg::item(label)` asks for one of the game's items. The handler gets
+`Value::Item` with the item's GUID. The server refuses an item its game
+does not know before the handler runs: "No item …".
+
+| Where | How the player names the item |
+| --- | --- |
+| A window | a list of items by the names the game shows in the player's language, with a search field. Up to 64 matches show at once. |
+| A typed line | its debug name (`Tool_Torch01`), its GUID or a content id (`you.lamps:lamp`). A name the game shows works where the server has the game's texts. |
+
+A server has the game's texts in single player and in a game a player
+hosts.
+
+The names come from the player's own game, so a dedicated server needs no
+texts and sends none. A window lists vanilla items; a typed line also takes
+a mod's item by its content id. On a typed line the item takes words as a
+text does: `spawn Stone Axe 5` is the item `Stone Axe` five times.
+
+```rust
+use enshwick::actions::{Action, Arg, Value};
+
+let spawn = Action::new("spawn", "Spawn an item")
+    .admins()
+    .arg(Arg::item("Item"))
+    .arg(Arg::number("Count", 1.0..=999.0, 1.0).optional(Value::Number(1.0)));
+assert_eq!(spawn.id(), "spawn");
+```
+
+```luau
+local spawn = {
+    id = "spawn",
+    label = "Spawn an item",
+    admins = true,
+    args = {
+        enshwick.actions.item("Item"),
         enshwick.actions.number("Count", 1, 999, 1):optional({ Number = 1 }),
     },
 }

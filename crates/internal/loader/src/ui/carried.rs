@@ -17,6 +17,8 @@ use enshwick::abi::UiWidget;
 use enshwick::actions::Value;
 use enshwick::actions::sheet::{ArgView, Entry, encode_args};
 use enshwick::actions::window::{ButtonView, ItemView, View, decode};
+use enshwick::content::Guid;
+use enshwick::ui::MAX_OPTIONS;
 
 use super::engine::{Engine, Scroll, TextBuffer, Window};
 use super::{Painter, copy};
@@ -106,6 +108,14 @@ struct Field {
     number: f32,
     on: bool,
     text: Box<TextBuffer>,
+    /// The item picked, for an item argument.
+    item: Option<Guid>,
+    /// The search the items in `found` match, and the language of their
+    /// list; `None` before the first.
+    searched: Option<(String, u32)>,
+    /// The items of the list that match the search, at most
+    /// [`MAX_OPTIONS`].
+    found: Vec<usize>,
 }
 
 impl Field {
@@ -114,7 +124,7 @@ impl Field {
         reason = "a slider takes an f32; the server checks the value it gets"
     )]
     fn new(arg: &ArgView) -> Self {
-        Self {
+        let mut field = Self {
             pick: if arg.kind == ArgView::PLAYER {
                 NO_PICK
             } else {
@@ -124,7 +134,19 @@ impl Field {
             number: arg.min as f32,
             on: false,
             text: TextBuffer::new(),
+            item: None,
+            searched: None,
+            found: Vec::new(),
+        };
+        match &arg.default {
+            Some(Value::Choice(at)) => field.pick = u32::try_from(*at).unwrap_or(0),
+            Some(Value::Number(number)) => field.number = *number as f32,
+            Some(Value::Toggle(on)) => field.on = *on,
+            Some(Value::Text(text)) => field.text.set(text),
+            Some(Value::Item(item)) => field.item = Some(*item),
+            _ => {}
         }
+        field
     }
 }
 
@@ -298,7 +320,20 @@ unsafe fn window(engine: &Engine, context: usize, view: &View, drawn: &mut Drawn
 /// Draws the window's items; what the player did.
 fn items(paint: &Painter<'_>, view: &View, drawn: &mut Drawn) -> Click {
     let mut click = Click::Nothing;
+    let mut group = "";
     for item in &view.items {
+        let entry = match item {
+            ItemView::Action(id) => view.entries.iter().find(|e| e.id == *id),
+            _ => None,
+        };
+        if let Some(entry) = entry
+            && entry.group != group
+        {
+            group = &entry.group;
+            if !group.is_empty() {
+                paint.label(group.as_bytes(), UiWidget::STYLE_H2, true, false);
+            }
+        }
         let done = match item {
             ItemView::Text(text) => {
                 paint.label(text.as_bytes(), UiWidget::STYLE_BODY, true, false);
@@ -314,11 +349,9 @@ fn items(paint: &Painter<'_>, view: &View, drawn: &mut Drawn) -> Click {
                 }
                 pressed
             }
-            ItemView::Action(id) => view
-                .entries
-                .iter()
-                .find(|e| e.id == *id)
-                .map_or(Click::Nothing, |entry| action(paint, entry, drawn)),
+            ItemView::Action(_) => {
+                entry.map_or(Click::Nothing, |entry| action(paint, entry, drawn))
+            }
             _ => Click::Nothing,
         };
         if done != Click::Nothing {
@@ -431,7 +464,8 @@ fn fields(
 ) -> Option<Vec<Value>> {
     let mut values = Some(Vec::new());
     for (index, arg) in args.iter().enumerate().skip(from) {
-        let value = field(paint, arg, drawn.field(action, index, arg));
+        let value =
+            field(paint, arg, drawn.field(action, index, arg)).or_else(|| arg.default.clone());
         values = values.zip(value).map(|(mut all, value)| {
             all.push(value);
             all
@@ -499,8 +533,65 @@ fn field(paint: &Painter<'_>, arg: &ArgView, state: &mut Field) -> Option<Value>
             );
             text_value(arg, state.text.text())
         }
+        ArgView::ITEM => item_field(paint, label, state),
         _ => None,
     }
+}
+
+/// Draws an item argument's field: a search over the items this client's
+/// game names in its language, and a list of those that match.
+fn item_field(paint: &Painter<'_>, label: &[u8], state: &mut Field) -> Option<Value> {
+    let search_field = |state: &mut Field| {
+        let _typed = paint.text_field(
+            &mut state.text,
+            texts::text("windows.item").as_bytes(),
+            false,
+        );
+    };
+    let Some(list) = crate::item_names::items(texts::language()) else {
+        paint.label(label, UiWidget::STYLE_SECONDARY, false, false);
+        search_field(state);
+        return None;
+    };
+    let search = (state.text.text(), list.language);
+    if state
+        .searched
+        .as_ref()
+        .is_none_or(|(text, language)| (text.as_str(), *language) != search)
+    {
+        state.found = crate::item_names::matching(&list.items, search.0, MAX_OPTIONS);
+        crate::item_names::keep_pick(&mut state.found, &list.items, state.item, MAX_OPTIONS);
+        state.searched = Some((search.0.to_owned(), search.1));
+    }
+    let mut names: [&[u8]; MAX_OPTIONS] = [&[]; MAX_OPTIONS];
+    for (name, &at) in names.iter_mut().zip(&state.found) {
+        *name = list.items[at].name.as_bytes();
+    }
+    let shown = |item: Guid| {
+        state
+            .found
+            .iter()
+            .position(|&at| list.items[at].item == item)
+    };
+    let pick = state.item.and_then(shown);
+    let index = pick
+        .and_then(|at| u32::try_from(at).ok())
+        .unwrap_or(NO_PICK);
+    let chosen = if state.found.is_empty() {
+        paint.label(label, UiWidget::STYLE_SECONDARY, false, false);
+        None
+    } else {
+        paint.dropdown(label, &names[..state.found.len()], index, false)
+    };
+    // The pick stays until the player picks another, whatever the search shows.
+    if let Some(&at) = chosen
+        .and_then(|at| usize::try_from(at).ok())
+        .and_then(|at| state.found.get(at))
+    {
+        state.item = Some(list.items[at].item);
+    }
+    search_field(state);
+    state.item.map(Value::Item)
 }
 
 /// The row of the account `picked` in `players` as an update left them: a
@@ -810,6 +901,37 @@ mod tests {
         assert_eq!(drawn.field("ban", 0, &arg).pick, 0, "another argument");
         assert_eq!(drawn.field("ban", 1, &arg).pick, 3, "the same field");
         assert_eq!(drawn.fields.len(), 3);
+    }
+
+    #[test]
+    fn a_field_opens_with_its_argument_s_default() {
+        let with = |kind: u8, default: Value| ArgView {
+            kind,
+            min: 1.0,
+            max: 99.0,
+            default: Some(default),
+            ..ArgView::default()
+        };
+        let count = Field::new(&with(ArgView::NUMBER, Value::Number(5.0)));
+        assert!((count.number - 5.0).abs() < f32::EPSILON);
+        assert!(Field::new(&with(ArgView::TOGGLE, Value::Toggle(true))).on);
+        assert_eq!(Field::new(&with(ArgView::CHOICE, Value::Choice(2))).pick, 2);
+        let note = Field::new(&with(ArgView::TEXT, Value::Text("spam".into())));
+        assert_eq!(note.text.text(), "spam");
+        let torch = Guid([7; 16]);
+        assert_eq!(
+            Field::new(&with(ArgView::ITEM, Value::Item(torch))).item,
+            Some(torch)
+        );
+        let plain = Field::new(&ArgView {
+            kind: ArgView::NUMBER,
+            min: 1.0,
+            ..ArgView::default()
+        });
+        assert!(
+            (plain.number - 1.0).abs() < f32::EPSILON,
+            "no default: the least value"
+        );
     }
 
     fn held() -> Vec<(String, String)> {

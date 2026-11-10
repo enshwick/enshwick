@@ -40,7 +40,7 @@ export type ActionTarget = {
 }
 
 --- A value the player picked for an argument, in the order of `Action.arg`; a list hands the player and the switch.
-export type ActionValue = { Player: ActionValuePlayer } | { Choice: number } | { Number: number } | { Toggle: boolean } | { Text: string }
+export type ActionValue = { Player: ActionValuePlayer } | { Choice: number } | { Number: number } | { Toggle: boolean } | { Text: string } | { Item: string }
 
 --- One of the server's players: the account key, and the name as the server knows it.
 export type ActionValuePlayer = {
@@ -3464,6 +3464,8 @@ declare enshwick: {
 		toggle: (label: string) -> Arg,
 		--- A line of text of 1 to `max_bytes` bytes, as `Arg.text` makes it.
 		text: (label: string, max_bytes: number) -> Arg,
+		--- One of the game's items, which the client lists by the names its game shows, as `Arg.item` makes it.
+		item: (label: string) -> Arg,
 		--- Whether `id` can name an action or a window, as `is_valid_id` says.
 		is_valid_id: (id: string) -> boolean,
 		--- What an action acts on, as `Subject.new` makes it.

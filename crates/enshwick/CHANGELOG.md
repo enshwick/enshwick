@@ -8,6 +8,20 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `actions`: `Arg::item` and `Value::Item`. A window lists the game's
+  vanilla items by the names the player's own game shows, with a search,
+  and sends the picked item's GUID; a name several items share is followed
+  by each one's debug name. A typed line takes a debug name, GUID, content
+  id or shown name. The server refuses an item its game does not know before
+  the handler runs. Luau `enshwick.actions.item` (#1033).
+- `actions`: a window opens an optional argument's field with its default
+  and runs while only optional fields are empty, and shows an action's
+  group over it. The sheet carries both in new line kinds, which an older
+  client skips (`Entry::group`, `ArgView::default`) (#1033).
+- `content`: `Vanilla::items` lists the items with their name tags and
+  reads each tag once; `vanilla::items` no longer reads the archive on each
+  call, and an item registry that does not read yet is read again later
+  (#1033).
 - `abi`: `HostApi::resource_buffer`, ABI 11.20, lends a resource patch
   bytes for its output that the loader owns: the game's first build keeps
   the last patch's output for the process, and the loader frees every other
@@ -107,6 +121,11 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- `actions`: **breaking.** `sheet::Entry` has the field `group` and
+  `sheet::ArgView` the field `default`, so a struct literal of either names
+  them or ends in `..Default::default()`. An optional item, like an
+  optional text, must be an action's last argument, and takes the rest of a
+  typed line (#1033).
 - `commands`: **breaking.** A mod's command is named after its id, the
   part after the author: `you.admin-tools` gets `/admin-tools`.
   `Actions::commands` takes only the alias, in Rust and in Luau, and
