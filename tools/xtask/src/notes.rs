@@ -1,7 +1,7 @@
 //! `cargo xtask notes`: the notes of an alpha release of the loader, the
 //! version the workspace carries: the warning that anything may change, the
-//! game builds the compatibility reports cover, each crate's changelog section of
-//! that version and the known issues.
+//! game version it was checked against, each crate's changelog section of that
+//! version and the known issues.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -29,6 +29,7 @@ const INSTALL: &str = "Extract `enshwick.zip` into the folder that holds \
 `enshrouded.exe` or `enshrouded_server.exe`. It holds the loader and no mod: \
 each mod ships in its own archive.";
 const NO_KNOWN_ISSUES: &str = "None reported for this alpha.";
+const SUPPORT: &str = "Enshwick supports the latest version of Enshrouded.";
 
 pub(crate) fn run(args: &[String]) -> Result<bool, String> {
     let root = workspace_root();
@@ -73,7 +74,8 @@ fn options(root: &Path, args: &[String]) -> Result<(PathBuf, String), String> {
 }
 
 /// One game build a compatibility report covers; a report may leave out
-/// either number, as the loader's own reading allows.
+/// either number, as the loader's own reading allows. The Steam build only
+/// orders two reports of one game version and is not published.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct GameBuild {
     side: String,
@@ -81,7 +83,9 @@ struct GameBuild {
     steam_build: Option<u64>,
 }
 
-/// The builds of every report in `dir`, newest first on each side.
+/// The newest build of each side among the reports in `dir`, sides in name
+/// order: Enshwick supports the latest game version, and older reports stay
+/// the test record.
 fn builds(dir: &Path) -> Result<Vec<GameBuild>, String> {
     let entries = std::fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let mut builds = Vec::new();
@@ -98,7 +102,7 @@ fn builds(dir: &Path) -> Result<Vec<GameBuild>, String> {
         builds.push(build(&text).map_err(|e| format!("{}: {e}", path.display()))?);
     }
     builds.sort_by(|a, b| a.side.cmp(&b.side).then(b.cmp(a)));
-    builds.dedup();
+    builds.dedup_by(|later, kept| later.side == kept.side);
     Ok(builds)
 }
 
@@ -185,6 +189,28 @@ fn section<'a>(changelog: &'a str, version: &str) -> Option<&'a str> {
         .filter(|s| !s.is_empty())
 }
 
+/// The game version `builds` name, once when every side has the same one,
+/// else per side.
+fn checked(builds: &[GameBuild]) -> String {
+    let known = |build: &GameBuild| {
+        build.game_version.map_or_else(
+            || "an unknown game version".to_owned(),
+            |n| format!("game version {n}"),
+        )
+    };
+    match builds {
+        [] => "no game version".to_owned(),
+        [first, rest @ ..] if rest.iter().all(|b| b.game_version == first.game_version) => {
+            known(first)
+        }
+        _ => builds
+            .iter()
+            .map(|b| format!("{} on the {}", known(b), b.side))
+            .collect::<Vec<_>>()
+            .join(" and "),
+    }
+}
+
 fn notes(
     version: &str,
     builds: &[GameBuild],
@@ -197,18 +223,10 @@ fn notes(
             "{version} is not a prerelease; alpha notes need one"
         ));
     }
-    let mut text = format!("{WARNING}\n{INSTALL}\n\n## Supported game builds\n\n");
-    text.push_str("| Side | Game version | Steam build |\n| --- | --- | --- |\n");
-    let known = |n: Option<u64>| n.map_or_else(|| "unknown".to_owned(), |n| n.to_string());
-    for build in builds {
-        let _infallible = writeln!(
-            text,
-            "| {} | {} | {} |",
-            build.side,
-            known(build.game_version),
-            known(build.steam_build)
-        );
-    }
+    let mut text = format!(
+        "{WARNING}\n{INSTALL}\n\n## Game version\n\n{SUPPORT} This alpha was checked against {}.\n",
+        checked(builds)
+    );
     text.push_str("\n## What changed\n");
     for (package, section) in changes {
         let _infallible = write!(text, "\n### `{package}`\n\n");
@@ -309,7 +327,11 @@ mod tests {
     #[test]
     fn the_notes_list_builds_changes_one_level_down_and_known_issues() -> Result<(), String> {
         let text = sample()?;
-        assert!(text.contains("| server | 1287369 | 26430253 |"));
+        assert!(text.contains(
+            "## Game version\n\nEnshwick supports the latest version of Enshrouded. \
+             This alpha was checked against game version 1287369.\n"
+        ));
+        assert!(!text.contains("26430253"));
         assert!(text.contains("### `enshwick`\n\n#### Added\n\n- controls (#930)\n"));
         assert!(text.ends_with(&format!("## Known issues\n\n{NO_KNOWN_ISSUES}\n")));
         Ok(())
@@ -353,7 +375,63 @@ mod tests {
             &[("enshwick".to_owned(), "- a".to_owned())],
             "",
         )?;
-        assert!(text.contains("| client | unknown | unknown |"));
+        assert!(text.contains("checked against an unknown game version.\n"));
+        Ok(())
+    }
+
+    fn side(side: &str, game_version: u64, steam_build: u64) -> GameBuild {
+        GameBuild {
+            side: side.to_owned(),
+            game_version: Some(game_version),
+            steam_build: Some(steam_build),
+        }
+    }
+
+    #[test]
+    fn sides_on_different_game_versions_are_named_each() {
+        let builds = [side("client", 1_287_369, 1), side("server", 1_283_531, 2)];
+        assert_eq!(
+            checked(&builds),
+            "game version 1287369 on the client and game version 1283531 on the server"
+        );
+    }
+
+    #[test]
+    fn only_the_newest_report_of_each_side_counts() -> Result<(), String> {
+        let dir = std::env::temp_dir().join(format!("xtask-notes-builds-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        for (file, text) in [
+            (
+                "server-a.toml",
+                "side = \"server\"\ngame_version = 1273043\nsteam_build = 3\n",
+            ),
+            (
+                "server-b.toml",
+                "side = \"server\"\ngame_version = 1287369\nsteam_build = 2\n",
+            ),
+            (
+                "server-c.toml",
+                "side = \"server\"\ngame_version = 1287369\nsteam_build = 1\n",
+            ),
+            (
+                "client-a.toml",
+                "side = \"client\"\ngame_version = 1269579\n",
+            ),
+            ("notes.txt", "not a report"),
+        ] {
+            std::fs::write(dir.join(file), text).map_err(|e| e.to_string())?;
+        }
+        assert_eq!(
+            builds(&dir)?,
+            [
+                GameBuild {
+                    side: "client".to_owned(),
+                    game_version: Some(1_269_579),
+                    steam_build: None,
+                },
+                side("server", 1_287_369, 2),
+            ]
+        );
         Ok(())
     }
 
@@ -470,8 +548,8 @@ mod tests {
     #[test]
     fn every_report_of_the_loader_reads() -> Result<(), String> {
         let builds = builds(&workspace_root().join(REPORTS))?;
-        assert!(builds.iter().any(|b| b.side == "client"));
-        assert!(builds.iter().any(|b| b.side == "server"));
+        let sides: Vec<&str> = builds.iter().map(|b| b.side.as_str()).collect();
+        assert_eq!(sides, ["client", "server"]);
         Ok(())
     }
 }
