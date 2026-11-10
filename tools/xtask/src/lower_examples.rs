@@ -42,8 +42,9 @@ struct Example {
     /// The text of each line inside the fences, after the comment marker and
     /// its one space.
     lines: Vec<String>,
-    /// The comment marker and the indent before it, as the fence line has
-    /// them, such as `    /// `.
+    /// What precedes the opening fence's backticks: the indent, the comment
+    /// marker and the spaces after it, such as `    /// ` or, in a list
+    /// item, `///   `.
     prefix: String,
 }
 
@@ -94,23 +95,25 @@ impl Example {
     }
 }
 
-/// The code blocks of the doc comments (`///`, `//!`) of the Rust `text`.
+/// The code blocks of the doc comments (`///`, `//!`) of the Rust `text`; a
+/// block left open runs to the end of its comment, as rustdoc reads it.
 fn examples(text: &str) -> Vec<Example> {
     let mut found = Vec::new();
     let mut open: Option<Example> = None;
     for (at, line) in text.lines().enumerate() {
-        let Some((prefix, doc)) = doc_line(line) else {
-            open = None;
+        let Some(doc) = doc_line(line) else {
+            found.extend(open.take());
             continue;
         };
-        let fence = doc.trim_start().starts_with("```");
+        let code = doc.trim_start();
+        let fence = code.starts_with("```");
         match open.take() {
             None if fence => {
                 open = Some(Example {
                     fence: at,
-                    info: doc.trim_start().trim_start_matches('`').trim().to_owned(),
+                    info: code.trim_start_matches('`').trim().to_owned(),
                     lines: Vec::new(),
-                    prefix: prefix.to_owned(),
+                    prefix: line[..line.len() - code.len()].to_owned(),
                 });
             }
             None => {}
@@ -121,20 +124,18 @@ fn examples(text: &str) -> Vec<Example> {
             }
         }
     }
+    found.extend(open);
     found
 }
 
-/// The marker with its indent and one space, and the text after them, of a
-/// doc comment `line`.
-fn doc_line(line: &str) -> Option<(&str, &str)> {
-    let indent = line.len() - line.trim_start().len();
-    let rest = &line[indent..];
+/// The text of a doc comment `line` after its marker and one space.
+fn doc_line(line: &str) -> Option<&str> {
+    let rest = line.trim_start();
     let marked = ["///", "//!"]
         .iter()
         .find(|marker| rest.starts_with(*marker) && !rest.starts_with("////"))?;
     let text = &rest[marked.len()..];
-    let text_at = indent + marked.len() + usize::from(text.starts_with(' '));
-    Some((&line[..text_at], &line[text_at..]))
+    Some(text.strip_prefix(' ').unwrap_or(text))
 }
 
 /// Whether `token` is an error code a `compile_fail` example expects, such
@@ -499,6 +500,26 @@ impl Thing {
             written.len(),
             SOURCE.len() + "//! # extern crate enshwick_core as enshwick;\n".len()
         );
+    }
+
+    #[test]
+    fn a_fence_left_open_runs_to_the_end_of_its_comment() {
+        let found =
+            examples("/// ```\n/// use enshwick::Load;\nfn f() {}\n//! ```\n//! let a = 1;");
+        assert_eq!(found.len(), 2);
+        assert_eq!(found[0].lines, ["use enshwick::Load;"]);
+        assert_eq!(found[1].lines, ["let a = 1;"]);
+    }
+
+    #[test]
+    fn the_writer_indents_the_alias_as_its_fence_inside_a_list() {
+        let text =
+            "/// - An item:\n///\n///   ```\n///   let load = enshwick::Load::new();\n///   ```\n";
+        let (written, count) = with_aliases(text, "enshwick_core");
+        assert_eq!(count, 1);
+        assert!(written.contains(
+            "///   ```\n///   # extern crate enshwick_core as enshwick;\n///   let load"
+        ));
     }
 
     #[test]
