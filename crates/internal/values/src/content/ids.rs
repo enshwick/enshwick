@@ -289,7 +289,7 @@ impl Guid {
 pub const NAMESPACE: Guid = Guid::parse("e2185889-0e5e-4977-9edd-d6e7bcd1393f");
 
 /// [`NAMESPACE`] in the order UUID version 5 hashes it.
-pub const NAMESPACE_BYTES: [u8; 16] = [
+const NAMESPACE_BYTES: [u8; 16] = [
     0xe2, 0x18, 0x58, 0x89, 0x0e, 0x5e, 0x49, 0x77, 0x9e, 0xdd, 0xd6, 0xe7, 0xbc, 0xd1, 0x39, 0x3f,
 ];
 
@@ -738,13 +738,12 @@ impl core::fmt::Display for Guid {
 /// # Panics
 ///
 /// When `c` is no hex digit.
-#[doc(hidden)]
 #[must_use]
 #[expect(
     clippy::panic,
     reason = "const evaluation: a malformed literal fails the build"
 )]
-pub const fn digit(c: u8) -> u8 {
+const fn digit(c: u8) -> u8 {
     match c {
         b'0'..=b'9' => c - b'0',
         b'a'..=b'f' => c - b'a' + 10,

@@ -30,7 +30,7 @@ pub fn blank<T: Reflected + Shaped>() -> Result<T, ShapeError> {
 #[macro_export]
 macro_rules! item_path {
     ($name:ident) => {
-        ::const_format::str_replace!(
+        $crate::__private::str_replace!(
             ::core::concat!(::core::module_path!(), "::", ::core::stringify!($name)),
             "enshwick_typed::",
             "enshwick::"
@@ -186,7 +186,7 @@ pub trait Event: Named {}
 /// See [`ResourceType`](struct.ResourceType.html).
 pub trait Resource: Named {}
 
-pub mod sealed {
+pub(crate) mod sealed {
     /// Keeps [`Named`](super::Named) to the generated types.
     pub trait Sealed {}
 }

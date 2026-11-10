@@ -11,7 +11,7 @@ mod script;
 pub use enshwick_macros::id;
 pub use ids::{DebugName, Guid, Id, NAMESPACE, is_id};
 #[doc(hidden)]
-pub use ids::{NAME_PART, NAMESPACE_BYTES, digit, part_name};
+pub use ids::{NAME_PART, part_name};
 
 /// A type of game resource by enshwick's name for it, such as
 /// [`types::ITEM_INFO`](types/constant.ITEM_INFO.html); the loader maps it to the running build's type,

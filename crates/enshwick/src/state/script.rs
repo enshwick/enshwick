@@ -59,7 +59,8 @@ fn data_to_toml(data: Data) -> Option<toml::Value> {
                 .collect(),
         ),
         Data::Variant(variant) => data_to_toml(variant.value().clone())?,
-        // Nil, bytes, and a kind the value type gains later.
+        Data::Nil | Data::Bytes(_) => return None,
+        // A kind `Value::kind_name` gains later, which that change decides here.
         _ => return None,
     })
 }

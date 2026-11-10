@@ -128,6 +128,29 @@ impl Variant {
 }
 
 impl Value {
+    /// What kind of value this is, as a refusal names it.
+    ///
+    /// The one match on every kind that the compiler holds whole: crates
+    /// above see `Value` as `non_exhaustive`, so a new kind is named here
+    /// and decided in `data_to_toml` of the API crate's world store.
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn kind_name(&self) -> &'static str {
+        match self {
+            Self::Nil => "nil",
+            Self::Bool(_) => "a bool",
+            Self::Int(_) | Self::Uint(_) | Self::Float(_) => "a number",
+            Self::Name(_) => "a name",
+            Self::Flags(_) => "flags",
+            Self::Text(_) => "text",
+            Self::Guid(_) => "a GUID",
+            Self::List(_) => "a list",
+            Self::Struct(_) => "a struct",
+            Self::Variant(_) => "a variant",
+            Self::Bytes(_) => "bytes",
+        }
+    }
+
     /// The field `name` of a struct; `None` for another kind of value or a
     /// field it lacks.
     ///

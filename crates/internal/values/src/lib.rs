@@ -27,7 +27,7 @@ pub use shape::Shape;
 /// What the macros' output names.
 #[doc(hidden)]
 pub mod __private {
-    pub use const_format::concatcp;
+    pub use const_format::{concatcp, str_replace};
 
     pub use crate::script::convert::{argument, argument_or_default, record_fields};
 
