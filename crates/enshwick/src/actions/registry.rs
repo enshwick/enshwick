@@ -926,6 +926,11 @@ mod tests {
             name: "Ann".into(),
         };
         assert!(optional_fault(&[Arg::player("Player").optional(who)]).is_some());
+        let blank = optional_fault(&[count().optional(Value::Text(String::new()))]);
+        assert!(
+            blank.unwrap().contains("argument 1"),
+            "an empty text stands only for a text"
+        );
     }
 
     #[test]

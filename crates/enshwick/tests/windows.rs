@@ -334,6 +334,17 @@ mod tests {
     }
 
     #[test]
+    fn a_window_the_mod_closes_itself_is_not_told_back_to_it() {
+        let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
+        let loader = start(enshwick::test::FakeHost::new().player(root));
+        actions().show(roster("2"), &[root.key]).unwrap();
+        assert_eq!(loader.carried_windows(&root, 0).len(), 1);
+        actions().close("panel", &[root.key]).unwrap();
+        assert!(loader.carried_windows(&root, 0).is_empty());
+        assert!(CLOSED.lock().unwrap().is_empty(), "the mod closed it");
+    }
+
+    #[test]
     fn a_window_shown_to_one_player_leaves_another_players_window_of_that_id_alone() {
         let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
         let eve = player(5, 8, "Eve", PlayerInfo::CAN_KICK_BAN);

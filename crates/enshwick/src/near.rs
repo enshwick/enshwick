@@ -57,6 +57,11 @@ mod tests {
         assert_eq!(near("kik", names, 3), ["kick"]);
         assert_eq!(near("onlnie", names, 3), ["online"], "two edits in six");
         assert_eq!(near("tame", names, 3), ["time"]);
+        assert_eq!(
+            near("ban", ["bam", "unban"], 3),
+            ["unban", "bam"],
+            "a name that holds it before one an edit away"
+        );
         assert_eq!(near("dance", names, 3), Vec::<&str>::new());
         assert_eq!(near("", names, 3), Vec::<&str>::new());
         assert_eq!(near("xx", names, 3), Vec::<&str>::new(), "one edit at most");

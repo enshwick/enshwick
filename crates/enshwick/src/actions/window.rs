@@ -506,6 +506,24 @@ mod tests {
     }
 
     #[test]
+    fn an_update_replaces_only_that_window_of_the_players_named() {
+        let (ann, bob) = (PlayerKey::new(7), PlayerKey::new(8));
+        let window = |id: &str, title: &str| Arc::new(Window::new(id, title));
+        let mut kept = Kept::default();
+        kept.keep(&window("w", "old"), &[ann, bob]);
+        kept.keep(&window("v", "other"), &[ann]);
+        kept.replace(&window("w", "new"), &[ann]);
+        let titles: Vec<(u64, &str, &str)> = kept
+            .0
+            .iter()
+            .map(|(p, w)| (p.get(), w.id.as_str(), w.title.key.as_str()))
+            .collect();
+        assert!(titles.contains(&(7, "w", "new")));
+        assert!(titles.contains(&(8, "w", "old")), "bob was not named");
+        assert!(titles.contains(&(7, "v", "other")), "another window stays");
+    }
+
+    #[test]
     fn a_mod_keeps_a_window_per_player_and_drops_the_oldest_past_the_bound() {
         let (ann, bob) = (PlayerKey::new(7), PlayerKey::new(8));
         let window = |id: &str, title: &str| Arc::new(Window::new(id, title));
