@@ -401,7 +401,9 @@ different windows under one id.
 newest 1,024 windows, counted per player, each up to 64 items. A player
 whose window went past that sees it close at their next update.
 A window carries at most 7,168 bytes
-to one player. Items past it are left out. When the actions it names fill
+to one player. When it does not fit, the players its actions' arguments
+offer go first, and the player names one by typing. Then items past the
+bound are left out. When the actions it names fill
 that alone, it closes, and the server's log names the window.
 
 ```rust
@@ -466,7 +468,9 @@ The server decides what each player sees:
   renders the mod's windows that player holds again. So a list shows its
   switches as they are now.
 - The player closes a window on their client with Close. The newest window
-  shows; the one under it shows when it closes.
+  shows; the one under it shows when it closes. The server renders a closed
+  window for that player again only when the mod shows it again.
+- A client that loses its server closes every window.
 
 A client without Enshwick gets no window and plays on. A dedicated server, a
 game a player hosts and single player work alike. The host gets its own

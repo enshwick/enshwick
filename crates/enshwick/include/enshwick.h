@@ -215,11 +215,11 @@ typedef struct EnshwickActionCall {
 // 11.19.
 #define EnshwickActionCall_REMOTE 5
 // The window of the calling mod's that `action` names, as `player`
-// sees it in `language`, after `HostApi::action_window` showed it:
+// sees it in `language`, after
+// `HostApi::action_window` showed it:
 // the reply is the window's text, empty when the mod keeps no such
-// window or the player may not run an action it names. ABI 11.22.
-//
-// `HostApi::action_window`: super::HostApi::action_window
+// window for them or the player may not run an action it names. ABI
+// 11.22.
 #define EnshwickActionCall_WINDOW 6
 
 // A buff type of the game by its id, the

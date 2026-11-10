@@ -1,16 +1,17 @@
 //! Carried windows on the client: the windows the server's mods show this
 //! player, drawn with the game's widgets though the mods have no part here.
 //!
-//! The newest window shows; Close takes it away on this client only, and
-//! the one under it shows. A button or a list's switch runs the mod's
+//! The newest window shows; Close takes it away on this client and tells
+//! the server, which stops updating it, and the one under it shows. A lost
+//! link takes them all. A button or a list's switch runs the mod's
 //! action on the server, which checks it again, and a button whose action
 //! takes more values opens a form for the rest. An action drawn whole shows
 //! its fields above a button that runs it. Long windows scroll.
 
 use core::cell::RefCell;
-use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
+use arc_swap::ArcSwapOption;
 use enshwick::PlayerKey;
 use enshwick::abi::UiWidget;
 use enshwick::actions::Value;
@@ -19,16 +20,16 @@ use enshwick::actions::window::{ButtonView, ItemView, View, decode};
 
 use super::engine::{Engine, Scroll, TextBuffer, Window};
 use super::{Painter, copy};
-use crate::locks::Relock;
+use crate::remote::Message;
 use crate::texts;
+use crate::windows::MAX_HELD;
 
-/// The windows the client keeps at most; a new one past it drops the
-/// oldest, as the server notes it.
-const MAX_HELD: usize = 8;
 /// Rows of a window this far apart.
 const GAP: f32 = 14.0;
 /// The most steps a number's slider takes.
 const MAX_STEPS: f64 = 1_000.0;
+/// A player field's pick while no player is picked: past every row.
+const NO_PICK: u32 = u32::MAX;
 
 /// A window a server's mod showed this client.
 #[derive(Clone, Debug, PartialEq)]
@@ -38,18 +39,19 @@ struct Held {
     view: View,
 }
 
-/// The windows the client holds, the newest last.
-struct Carried {
-    held: Mutex<Vec<Held>>,
-    /// Set while `held` may hold anything, so a frame without windows takes
-    /// no lock.
-    any: AtomicBool,
-}
+/// The windows the client holds, the newest last, and `None` while it
+/// holds none: swapped whole, so a frame reads them without a lock.
+static CARRIED: ArcSwapOption<Vec<Held>> = ArcSwapOption::const_empty();
 
-static CARRIED: Carried = Carried {
-    held: Mutex::new(Vec::new()),
-    any: AtomicBool::new(false),
-};
+/// Changes the windows the client holds with `change`, which may run more
+/// than once.
+fn change(change: impl Fn(&mut Vec<Held>)) {
+    CARRIED.rcu(|held| {
+        let mut held = held.as_deref().cloned().unwrap_or_default();
+        change(&mut held);
+        (!held.is_empty()).then(|| Arc::new(held))
+    });
+}
 
 /// `held` once the server sent mod `id`'s window `window` as `view`: in
 /// place where the client holds it, or last when `open`, the oldest going
@@ -82,22 +84,18 @@ pub(crate) fn heard(id: &str, window: &str, open: bool, text: &str) {
         crate::log!(DEBUG, "windows: {id}:{window} does not read");
         return;
     };
-    let mut held = CARRIED.held.relock();
-    hold(&mut held, id, window, open, view);
-    CARRIED.any.store(!held.is_empty(), Ordering::Release);
+    change(|held| hold(held, id, window, open, view.clone()));
 }
 
-/// The server closed mod `id`'s window `window`.
+/// The server closed mod `id`'s window `window`, or the player did.
 pub(crate) fn closed(id: &str, window: &str) {
-    let mut held = CARRIED.held.relock();
-    held.retain(|h| !(h.mod_id == id && h.window == window));
-    CARRIED.any.store(!held.is_empty(), Ordering::Release);
+    change(|held| held.retain(|h| !(h.mod_id == id && h.window == window)));
 }
 
-/// Forgets every window, as when the client leaves its server.
+/// Forgets every window, as when the client leaves its server or loses
+/// its link to it.
 pub(crate) fn forget() {
-    CARRIED.held.relock().clear();
-    CARRIED.any.store(false, Ordering::Release);
+    CARRIED.store(None);
 }
 
 /// What the player set in one field.
@@ -117,7 +115,11 @@ impl Field {
     )]
     fn new(arg: &ArgView) -> Self {
         Self {
-            pick: 0,
+            pick: if arg.kind == ArgView::PLAYER {
+                NO_PICK
+            } else {
+                0
+            },
             picked: None,
             number: arg.min as f32,
             on: false,
@@ -167,6 +169,23 @@ impl Drawn {
             });
         &mut self.fields[at].1
     }
+
+    /// Takes in what the player did: a press opens its form, and a form, a
+    /// run or a cancel starts the action's fields afresh, so a value typed
+    /// for one run is not sent with the next.
+    fn after(&mut self, click: &Click) {
+        let (form, action) = match click {
+            Click::Form(form) => (Some(form.clone()), form.action.clone()),
+            Click::Run(action, _) => (None, action.clone()),
+            Click::Cancel => {
+                let left = self.form.take().map(|form| form.action);
+                (None, left.unwrap_or_default())
+            }
+            Click::Nothing | Click::Close => return,
+        };
+        self.form = form;
+        self.fields.retain(|((of, _), _)| *of != action);
+    }
 }
 
 thread_local! {
@@ -191,20 +210,15 @@ enum Click {
 /// - `context` is the non-zero context `Engine::context` read in this frame.
 /// - No other window is open.
 pub(super) unsafe fn draw(engine: &Engine, context: usize) {
-    if !CARRIED.any.load(Ordering::Acquire) {
-        DRAWN.set(None);
-        return;
-    }
-    let mut held = CARRIED.held.relock();
-    let Some(top) = held.last() else {
+    let held = CARRIED.load();
+    let Some(top) = held.as_deref().and_then(|held| held.last()) else {
         DRAWN.set(None);
         return;
     };
-    let mod_id = top.mod_id.clone();
     let click = DRAWN.with_borrow_mut(|slot| {
-        let key = (top.mod_id.clone(), top.window.clone());
-        if slot.as_ref().is_none_or(|drawn| drawn.key != key) {
-            *slot = Some(Drawn::new(key));
+        let shows = |drawn: &Drawn| drawn.key.0 == top.mod_id && drawn.key.1 == top.window;
+        if !slot.as_ref().is_some_and(shows) {
+            *slot = Some(Drawn::new((top.mod_id.clone(), top.window.clone())));
         }
         let Some(drawn) = slot.as_mut() else {
             return Click::Nothing;
@@ -212,35 +226,30 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize) {
         // SAFETY: this function's `# Safety` gives the frame, its thread, its
         // `context` and no other open window; `drawn` stays in the
         // thread-local `DRAWN`, borrowed and unmoved for the call.
-        unsafe { window(engine, context, &top.view, drawn) }
+        let click = unsafe { window(engine, context, &top.view, drawn) };
+        drawn.after(&click);
+        click
     });
     match click {
-        Click::Nothing => return,
         Click::Close => {
-            held.pop();
-            CARRIED.any.store(!held.is_empty(), Ordering::Release);
-            DRAWN.set(None);
-            return;
+            closed(&top.mod_id, &top.window);
+            // The server stops updating a window its player closed; one that
+            // takes no messages forgets it when the player leaves.
+            let _sent = crate::net::to_server(&Message::WindowClose {
+                id: top.mod_id.clone(),
+                window: top.window.clone(),
+            });
         }
-        Click::Form(form) => {
-            DRAWN.with_borrow_mut(|d| d.as_mut().map(|d| d.form = Some(form)));
-            return;
+        Click::Run(action, values) => {
+            if !crate::actions::run_on_server(&top.mod_id, &action, &encode_args(&values), None) {
+                crate::log!(
+                    DEBUG,
+                    "windows: the server takes no runs for {}:{action}",
+                    top.mod_id
+                );
+            }
         }
-        Click::Cancel => {
-            DRAWN.with_borrow_mut(|d| d.as_mut().map(|d| d.form = None));
-            return;
-        }
-        Click::Run(..) => {}
-    }
-    drop(held);
-    if let Click::Run(action, values) = click {
-        DRAWN.with_borrow_mut(|d| d.as_mut().map(|d| d.form = None));
-        if !crate::actions::run_on_server(&mod_id, &action, &encode_args(&values), None) {
-            crate::log!(
-                DEBUG,
-                "windows: the server takes no runs for {mod_id}:{action}"
-            );
-        }
+        Click::Nothing | Click::Form(_) | Click::Cancel => {}
     }
 }
 
@@ -266,10 +275,12 @@ unsafe fn window(engine: &Engine, context: usize, view: &View, drawn: &mut Drawn
     // its `context`; `drawn.scroll` stays in place until `scroll_end` below.
     let scrolled = unsafe { engine.scroll_begin(context, &mut drawn.scroll, height, GAP) };
     paint.set_scrolled(scrolled);
-    let mut click = match drawn.form.clone() {
-        Some(form) => form_widgets(&paint, view, &form, drawn),
+    let form = drawn.form.take();
+    let mut click = match &form {
+        Some(form) => form_widgets(&paint, view, form, drawn),
         None => items(&paint, view, drawn),
     };
+    drawn.form = form;
     // SAFETY: `scroll_begin` started `drawn.scroll` in this frame inside this
     // window; it did not move, and the painter's widgets close every frame
     // they open.
@@ -378,11 +389,10 @@ fn action(paint: &Painter<'_>, entry: &Entry, drawn: &mut Drawn) -> Click {
     } else {
         texts::text("windows.run")
     };
-    let ready = entry.offered && values.is_some();
+    // Drawn while a field is not set too, off, so the rows under it stay.
+    let run = paint.button(label.as_bytes(), entry.offered && values.is_some());
     match values {
-        Some(values) if paint.button(label.as_bytes(), ready) => {
-            Click::Run(entry.id.clone(), values)
-        }
+        Some(values) if run => Click::Run(entry.id.clone(), values),
         _ => Click::Nothing,
     }
 }
@@ -442,6 +452,7 @@ fn field(paint: &Painter<'_>, arg: &ArgView, state: &mut Field) -> Option<Value>
                 paint.label(label, UiWidget::STYLE_SECONDARY, false, false);
             } else if let Some(pick) = paint.dropdown(label, &names, state.pick, false) {
                 state.pick = pick;
+                state.text.set("");
             }
             state.picked = usize::try_from(state.pick)
                 .ok()
@@ -492,13 +503,19 @@ fn field(paint: &Painter<'_>, arg: &ArgView, state: &mut Field) -> Option<Value>
     }
 }
 
-/// The row of the account `picked` in `players` as an update left them,
-/// else `pick`: a join or a leave moves the rows under the player's pick.
+/// The row of the account `picked` in `players` as an update left them: a
+/// join or a leave moves the rows under the player's pick, and an account
+/// that is gone leaves no pick rather than the player now in its row. With
+/// no account picked yet, `pick`.
 fn followed(players: &[(PlayerKey, String)], picked: Option<PlayerKey>, pick: u32) -> u32 {
-    picked
-        .and_then(|key| players.iter().position(|(k, _)| *k == key))
+    let Some(key) = picked else {
+        return pick;
+    };
+    players
+        .iter()
+        .position(|(k, _)| *k == key)
         .and_then(|at| u32::try_from(at).ok())
-        .unwrap_or(pick)
+        .unwrap_or(NO_PICK)
 }
 
 /// A player argument's value: the typed name when there is one, which the
@@ -702,13 +719,83 @@ mod tests {
     }
 
     #[test]
-    fn a_player_pick_follows_its_account_when_an_update_moves_the_rows() {
+    fn a_player_pick_follows_its_account_and_goes_when_the_account_does() {
         let (ann, bob) = (PlayerKey::new(7), PlayerKey::new(8));
         let both = [(ann, "Ann".to_owned()), (bob, "Bob".to_owned())];
         assert_eq!(followed(&both, None, 1), 1, "nothing drawn yet");
         assert_eq!(followed(&both, Some(bob), 1), 1);
         assert_eq!(followed(&both[1..], Some(bob), 1), 0, "Ann left");
-        assert_eq!(followed(&both[..1], Some(bob), 1), 1, "Bob left");
+        let carl = [
+            (ann, "Ann".to_owned()),
+            (PlayerKey::new(9), "Carl".to_owned()),
+        ];
+        let pick = followed(&carl, Some(bob), 1);
+        assert_eq!(
+            pick, NO_PICK,
+            "Bob left: Carl, now in his row, is not picked"
+        );
+        let arg = ArgView {
+            kind: ArgView::PLAYER,
+            players: carl.to_vec(),
+            ..ArgView::default()
+        };
+        assert_eq!(player_value(&arg, pick, ""), None, "nothing to run on");
+        assert_eq!(
+            Field::new(&arg).pick,
+            NO_PICK,
+            "a player is picked, never assumed"
+        );
+        let choice = ArgView {
+            kind: ArgView::CHOICE,
+            ..ArgView::default()
+        };
+        assert_eq!(Field::new(&choice).pick, 0);
+    }
+
+    #[test]
+    fn a_form_a_run_or_a_cancel_starts_the_action_s_fields_afresh() {
+        let arg = ArgView {
+            kind: ArgView::TEXT,
+            max: 64.0,
+            ..ArgView::default()
+        };
+        let form = Form {
+            label: "Ban".into(),
+            action: "ban".into(),
+            given: Vec::new(),
+        };
+        let typed =
+            |drawn: &mut Drawn, action: &str| drawn.field(action, 1, &arg).text.text().to_owned();
+        let mut drawn = Drawn::new(("you.admin".into(), "panel".into()));
+        drawn.field("ban", 1, &arg).text.set("griefing");
+        drawn.field("say", 1, &arg).text.set("hello");
+
+        drawn.after(&Click::Nothing);
+        assert_eq!(typed(&mut drawn, "ban"), "griefing");
+        drawn.after(&Click::Run("ban".into(), Vec::new()));
+        assert_eq!(
+            typed(&mut drawn, "ban"),
+            "",
+            "the reason of the last ban is gone"
+        );
+        assert_eq!(
+            typed(&mut drawn, "say"),
+            "hello",
+            "another action's field stays"
+        );
+
+        drawn.field("ban", 1, &arg).text.set("spam");
+        drawn.after(&Click::Form(form.clone()));
+        assert_eq!(drawn.form, Some(form));
+        assert_eq!(typed(&mut drawn, "ban"), "", "a form opens empty");
+        drawn
+            .field("ban", 1, &arg)
+            .text
+            .set("typed, then cancelled");
+        drawn.after(&Click::Cancel);
+        assert_eq!(drawn.form, None);
+        assert_eq!(typed(&mut drawn, "ban"), "");
+        assert_eq!(typed(&mut drawn, "say"), "hello");
     }
 
     #[test]
@@ -725,21 +812,23 @@ mod tests {
         assert_eq!(drawn.fields.len(), 3);
     }
 
+    fn held() -> Vec<(String, String)> {
+        let held = CARRIED.load();
+        let held = held.as_deref().map(Vec::as_slice).unwrap_or_default();
+        held.iter()
+            .map(|h| (h.mod_id.clone(), h.window.clone()))
+            .collect()
+    }
+
     #[test]
     fn the_server_s_close_takes_only_its_own_window() {
         heard("you.admin", "panel", true, "W\tPanel\n");
         heard("you.admin", "bans", true, "W\tBans\n");
         heard("you.other", "panel", true, "W\tOther\n");
         heard("you.admin", "broken", true, "no title");
-        assert!(CARRIED.any.load(Ordering::Acquire));
         closed("you.admin", "panel");
-        let left = |held: &[Held]| -> Vec<(String, String)> {
-            held.iter()
-                .map(|h| (h.mod_id.clone(), h.window.clone()))
-                .collect()
-        };
         assert_eq!(
-            left(&CARRIED.held.relock()),
+            held(),
             [
                 ("you.admin".to_owned(), "bans".to_owned()),
                 ("you.other".to_owned(), "panel".to_owned())
@@ -747,6 +836,14 @@ mod tests {
         );
         closed("you.admin", "bans");
         closed("you.other", "panel");
-        assert!(!CARRIED.any.load(Ordering::Acquire), "nothing held");
+        assert!(CARRIED.load().is_none(), "nothing held");
+    }
+
+    #[test]
+    fn a_lost_link_forgets_the_windows_so_none_draws_over_the_menu() {
+        heard("you.admin", "panel", true, "W\tPanel\n");
+        assert_eq!(held().len(), 1);
+        crate::net::link_lost();
+        assert!(CARRIED.load().is_none());
     }
 }

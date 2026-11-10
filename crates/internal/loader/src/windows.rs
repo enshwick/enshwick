@@ -19,14 +19,12 @@ use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::remote::Message;
 
-/// The most players one show or close names.
-pub(crate) const MAX_PLAYERS: usize = 64;
-/// The most shows, updates and closes that wait for the step, one per
-/// player.
-const MAX_WAITING: usize = 256;
-/// The most windows the server notes as held per client, as the client
-/// keeps them.
-const MAX_HELD: usize = 8;
+pub(crate) use enshwick::actions::window::MAX_CALL_PLAYERS as MAX_PLAYERS;
+use enshwick::actions::window::MAX_WAITING;
+
+/// The most windows a client keeps, the oldest going first, and so the
+/// most the server notes as held per client.
+pub(crate) const MAX_HELD: usize = 8;
 
 /// What happens to a window on one client.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -56,12 +54,16 @@ struct Windows {
     /// The windows each client got and was not told to close: account
     /// key, mod and window.
     held: Mutex<Vec<(u64, ModIndex, String)>>,
+    /// Set once the log named a window past the bound, so a mod that shows
+    /// one again and again fills no log.
+    warned: AtomicBool,
 }
 
 static WINDOWS: Windows = Windows {
     waiting: Mutex::new(Vec::new()),
     any: AtomicBool::new(false),
     held: Mutex::new(Vec::new()),
+    warned: AtomicBool::new(false),
 };
 
 /// Adds `more` to `waiting`, all or none: false past [`MAX_WAITING`].
@@ -135,6 +137,38 @@ pub(crate) fn ran(owner: ModIndex, key: u64) {
     }
 }
 
+/// Player `key`'s client closed mod `id`'s window `window`: the server
+/// renders it for them no more, until the mod shows it again.
+pub(crate) fn closed(loader: &Loader, key: u64, id: String, window: String) {
+    if let Some((index, _)) = loader.find_mod(&id) {
+        let close = Message::WindowClose { id, window };
+        note(
+            &mut WINDOWS.held.relock(),
+            key,
+            ModIndex::new(index),
+            &close,
+        );
+    }
+}
+
+/// The waiting changes with one for each window of a player, where the
+/// first stood: the last show or close, which an update after it leaves as
+/// it is, since a show renders anew and a closed window takes no update.
+fn merged(waiting: Vec<Waiting>) -> Vec<Waiting> {
+    let mut merged: Vec<Waiting> = Vec::with_capacity(waiting.len());
+    for next in waiting {
+        let same = |w: &&mut Waiting| {
+            w.key == next.key && w.owner == next.owner && w.window == next.window
+        };
+        match merged.iter_mut().find(same) {
+            Some(_) if next.change == Change::Update => {}
+            Some(first) => first.change = next.change,
+            None => merged.push(next),
+        }
+    }
+    merged
+}
+
 /// Forgets the windows player `key`'s client held, when the player leaves.
 pub(crate) fn left(key: u64) {
     WINDOWS.held.relock().retain(|(k, _, _)| *k != key);
@@ -165,7 +199,9 @@ fn note(held: &mut Vec<(u64, ModIndex, String)>, key: u64, owner: ModIndex, mess
 /// Carries each waiting change to its player's client, on the server's
 /// game thread after its step: a show or an update as the mod renders it
 /// for that player, in their language, and a close where the mod renders
-/// nothing for them. A player not online is skipped.
+/// nothing for them. A player not online is skipped, and so is one whose
+/// client takes no messages, as one without Enshwick: the mod renders
+/// nothing for it and the server notes nothing as held.
 pub(crate) fn after_step(loader: &Loader) {
     if !WINDOWS.any.swap(false, Ordering::AcqRel) {
         return;
@@ -176,11 +212,14 @@ pub(crate) fn after_step(loader: &Loader) {
         window,
         key,
         change,
-    } in waiting
+    } in merged(waiting)
     {
         let Some(record) = loader.mods.get(owner.get()) else {
             continue;
         };
+        if !crate::net::ready(key) {
+            continue;
+        }
         let Some((player, language)) = crate::actions::commander(loader, key) else {
             continue;
         };
@@ -207,10 +246,10 @@ pub(crate) fn after_step(loader: &Loader) {
 /// the bound.
 fn message(id: &str, window: String, open: bool, text: String) -> Message {
     if text.is_empty() || text.len() > enshwick::actions::window::MAX_BYTES {
-        if !text.is_empty() {
+        if !text.is_empty() && !WINDOWS.warned.swap(true, Ordering::Relaxed) {
             crate::log!(
                 WARN,
-                "windows: {id}:{window} is {} bytes, past the bound, and closes",
+                "windows: {id}:{window} is {} bytes, past the bound, and closes; later ones close unnamed until the world goes",
                 text.len()
             );
         }
@@ -233,6 +272,7 @@ pub(crate) fn forget() {
     WINDOWS.waiting.relock().clear();
     WINDOWS.any.store(false, Ordering::Release);
     WINDOWS.held.relock().clear();
+    WINDOWS.warned.store(false, Ordering::Relaxed);
 }
 
 #[cfg(test)]
@@ -339,6 +379,39 @@ mod tests {
             message("you.admin", "panel".into(), true, most),
             Message::Window { .. }
         ));
+    }
+
+    #[test]
+    fn the_changes_of_one_window_for_one_player_merge_into_its_last_show_or_close() {
+        let change = |owner, key, window: &str, change| Waiting {
+            owner: ModIndex::new(owner),
+            window: window.into(),
+            key,
+            change,
+        };
+        let waiting = vec![
+            change(0, 7, "panel", Change::Show),
+            change(0, 7, "panel", Change::Update),
+            change(0, 8, "panel", Change::Update),
+            change(0, 7, "bans", Change::Show),
+            change(0, 8, "panel", Change::Update),
+            change(0, 7, "bans", Change::Close),
+            change(0, 9, "panel", Change::Close),
+            change(1, 7, "panel", Change::Update),
+            change(0, 9, "panel", Change::Update),
+            change(0, 7, "bans", Change::Show),
+        ];
+        assert_eq!(
+            merged(waiting),
+            [
+                change(0, 7, "panel", Change::Show),
+                change(0, 8, "panel", Change::Update),
+                change(0, 7, "bans", Change::Show),
+                change(0, 9, "panel", Change::Close),
+                change(1, 7, "panel", Change::Update),
+            ],
+            "one render each: a show still opens, a closed window takes no update"
+        );
     }
 
     #[test]

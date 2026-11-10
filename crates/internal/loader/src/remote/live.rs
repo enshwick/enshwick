@@ -200,13 +200,13 @@ fn answer(loader: &Loader, key: u64, message: Message) {
         } => {
             crate::actions::run(loader, key, &id, &action, &args, target);
         }
+        Message::WindowClose { id, window } => crate::windows::closed(loader, key, id, window),
         Message::Sync { .. }
         | Message::Snapshot { .. }
         | Message::Result { .. }
         | Message::Recipes { .. }
         | Message::Controls { .. }
-        | Message::Window { .. }
-        | Message::WindowClose { .. } => {}
+        | Message::Window { .. } => {}
     }
 }
 

@@ -594,7 +594,7 @@ unsafe extern "system" fn detour(state: *mut u8) {
             if let Some(loader) = crate::host::loader() {
                 // SAFETY: the game draws its popup inside the frame on the
                 // interface thread, `context` is non-zero (checked by the
-                // guard before it), `demo::draw` ends its window before it
+                // guard before it), `carried::draw` ends its window before it
                 // returns, and `frame` is the count `mods::next_frame` gave
                 // this frame.
                 unsafe { mods::draw(loader, engine, context, frame) };
