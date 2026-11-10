@@ -588,11 +588,13 @@ fn module_at(at: usize, name: &mut [u8; NAME]) -> Option<(usize, usize)> {
     let region = crate::pages::query(at).filter(|r| r.kind == MEM_IMAGE)?;
     let mut path = [0u16; CRASH_PATH];
     // SAFETY: `GetCurrentProcess` takes no arguments and has no
-    // preconditions; `GetMappedFileNameW` reads no memory at the base, which
-    // it only looks up, and writes at most `CRASH_PATH` units into `path`.
+    // preconditions; the pseudo handle needs no closing.
+    let process = unsafe { GetCurrentProcess() };
+    // SAFETY: `GetMappedFileNameW` reads no memory at the base, which it
+    // only looks up, and writes at most `CRASH_PATH` units into `path`.
     let len = unsafe {
         GetMappedFileNameW(
-            GetCurrentProcess(),
+            process,
             core::ptr::with_exposed_provenance(region.allocation),
             path.as_mut_ptr(),
             u32::try_from(CRASH_PATH).unwrap_or(0),

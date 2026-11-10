@@ -89,10 +89,7 @@ fn the_module_of_an_address_is_found_without_allocating() {
     let name = String::from_utf8(name[..len].to_vec())
         .unwrap()
         .to_lowercase();
-    assert!(
-        name.starts_with("kernel") && name.ends_with(".dll"),
-        "{name}"
-    );
+    assert!(name == "kernel32.dll" || name == "kernelbase.dll", "{name}");
     let local = 0u64;
     assert_eq!(
         module_at((&raw const local).addr(), &mut [0; NAME]),
