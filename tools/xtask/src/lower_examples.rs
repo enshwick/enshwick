@@ -481,4 +481,70 @@ impl Thing {
             SOURCE.len() + "//! # extern crate enshwick_core as enshwick;\n".len()
         );
     }
+
+    #[test]
+    fn a_fence_of_rust_attributes_or_an_edition_compiles_and_another_language_does_not() {
+        let fence = |info: &str| Example {
+            fence: 0,
+            info: info.to_owned(),
+            lines: Vec::new(),
+            prefix: String::new(),
+        };
+        assert!(fence("").compiles());
+        assert!(fence("edition2024").compiles());
+        assert!(fence("rust,no_run").compiles());
+        assert!(!fence("toml").compiles());
+        assert!(!fence("rust,text").compiles());
+    }
+
+    #[test]
+    fn a_tree_is_checked_below_the_facade_and_the_writer_leaves_it_passing() {
+        let root = std::env::temp_dir().join(format!("xtask-lower-{}", std::process::id()));
+        let write = |path: &str, text: &str| {
+            let path = root.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        };
+        write(
+            "crates/internal/core/Cargo.toml",
+            "[package]\nname = \"enshwick-core\"\n",
+        );
+        write(
+            "crates/internal/core/src/deep/item.rs",
+            "/// ```\n/// let load = enshwick::Load::new();\n/// ```\npub struct Item;\n",
+        );
+        write(
+            "crates/internal/loader/Cargo.toml",
+            "[package]\nname = \"enshwick-loader\"\n\n[dependencies]\nenshwick = \"1\"\n",
+        );
+        write(
+            "crates/internal/loader/src/lib.rs",
+            "/// ```\n/// let load = enshwick::Load::new();\n/// ```\npub struct Loader;\n",
+        );
+        write("crates/internal/notes/README.md", "No crate.\n");
+        write(COPIES, "/// ```\n/// let gone = 1;\n/// ```\nmod gone {}\n");
+        let before = check(&root);
+        let written = run(&root);
+        let after = check(&root);
+        let item =
+            std::fs::read_to_string(root.join("crates/internal/core/src/deep/item.rs")).unwrap();
+        std::fs::remove_dir_all(&root).unwrap();
+        assert_eq!(
+            before,
+            [
+                "crates/internal/core/src/deep/item.rs:1: no `# extern crate enshwick_core as enshwick;` line; `cargo xtask alias-examples` writes it".to_owned(),
+                format!("{COPIES}:1: no wrapped example of {INTERNAL} equals this copy; bring it in line or remove it"),
+            ]
+        );
+        assert_eq!(written, Ok(true));
+        assert!(
+            item.contains("/// ```\n/// # extern crate enshwick_core as enshwick;\n/// let load")
+        );
+        assert_eq!(
+            after,
+            [format!(
+                "{COPIES}:1: no wrapped example of {INTERNAL} equals this copy; bring it in line or remove it"
+            )]
+        );
+    }
 }
