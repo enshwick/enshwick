@@ -6,6 +6,7 @@ on:
   pull_request:
     types: [opened, reopened, ready_for_review, closed]
   # Every workflow that runs on a push to main: a failed run is a red main.
+  # Coverage stays out: it only informs.
   # Runs the copy on main and reads nothing from the run it follows.
   workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: [ci, dev-build, docs]

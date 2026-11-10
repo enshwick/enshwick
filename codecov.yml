@@ -1,5 +1,3 @@
-# Coverage informs and never gates: statuses always pass, and pull requests
-# get no comment or annotation.
 coverage:
   status:
     project:
@@ -14,12 +12,14 @@ comment: false
 github_checks:
   annotations: false
 
-# Tests, tooling and the typed API generated from the game's reflection.
+# Generated from the game's reflection, and test files; inline test modules
+# still count, since stable Rust cannot mark them out.
 ignore:
   - "**/tests/**"
   - "**/tests.rs"
   - crates/enshwick/src/typed.rs
   - crates/enshwick/src/typed/**
+  - crates/enshwick/src/ui/screens.rs
   - crates/enshwick-gamedata/src/typed/ids.rs
   - examples/**
   - fuzz/**
