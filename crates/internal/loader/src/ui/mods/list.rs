@@ -11,43 +11,97 @@ use crate::locks::Relock;
 use crate::mods_screen;
 use crate::texts;
 use crate::ui::Painter;
+use crate::ui::engine::Icon;
 
 /// What the player did on the mod list.
 pub(super) enum Listed {
     Nothing,
-    /// Opened mod `index`'s settings and key bindings.
+    /// Opened mod `index`'s settings and key bindings with its gear, which
+    /// for a mod with nothing to set here goes straight to the joined
+    /// server's settings.
     Settings(usize),
+    /// Opened mod `index`'s own page with its Details button.
+    Details(usize),
     /// Opened the key bindings of a mod the joined server runs, by id and
     /// name.
     Bindings(String, String),
 }
 
-/// Paints a mod's plain name, its version and credits dimmed below it, that
+/// Whether a mod's row has a gear: settings where this place shows a gear
+/// for them (`here`), or key bindings.
+const fn has_gear(settings: bool, here: bool, bindings: bool) -> bool {
+    settings && here || bindings
+}
+
+/// What a click on mod `index`'s Details button or gear opens: the Details
+/// button the mod's own page, the gear its settings.
+const fn clicked(details: bool, gear: bool, index: usize) -> Option<Listed> {
+    if gear {
+        Some(Listed::Settings(index))
+    } else if details {
+        Some(Listed::Details(index))
+    } else {
+        None
+    }
+}
+
+/// Paints a mod's plain name, its version and authors dimmed below it, that
 /// it is off or waiting in words and why, and its description.
 fn about(paint: &Painter<'_>, record: &crate::host::ModRecord) {
     let off = record.off.load(Ordering::Acquire);
     let waiting = !off && record.waiting.load(Ordering::Acquire);
     let name = record.label();
-    paint.label(name.as_bytes(), UiWidget::STYLE_H3, true, false);
-    let credits = record.meta.credits();
-    let meta = metadata(&record.version, &credits);
-    paint.label(meta.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
-    if let Some((key, style)) = state_text(off, waiting) {
-        let line = texts::fill(key, &[("name", &name), ("version", &record.version)]);
-        paint.label(line.as_bytes(), style, true, false);
-        let why = if off {
-            record.off_reason_shown()
-        } else {
-            Some(texts::text("mods.waiting.why").to_owned())
-        };
-        if let Some(why) = why {
-            paint.label(why.as_bytes(), style, true, false);
-        }
-    }
+    let why = if off {
+        record.off_reason_shown()
+    } else {
+        waiting.then(|| texts::text("mods.waiting.why").to_owned())
+    };
+    heading(
+        paint,
+        &name,
+        &metadata(&record.version, &record.meta.authors),
+        state_text(off, waiting).map(|state| (state, record.version.as_str(), why)),
+    );
     let description = record.description();
     if !description.is_empty() {
         paint.label(description.as_bytes(), UiWidget::STYLE_BODY, true, false);
     }
+}
+
+/// The top of a mod's row: its name, the dimmed line under it and, for a
+/// mod off or waiting, that state in words with its version, then why.
+fn heading(
+    paint: &Painter<'_>,
+    name: &str,
+    dimmed: &str,
+    state: Option<((&str, u32), &str, Option<String>)>,
+) {
+    paint.name(name.as_bytes());
+    paint.label(dimmed.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
+    if let Some(((key, style), version, why)) = state {
+        let line = texts::fill(key, &[("name", name), ("version", version)]);
+        paint.label(line.as_bytes(), style, true, false);
+        if let Some(why) = why {
+            paint.label(why.as_bytes(), style, true, false);
+        }
+    }
+}
+
+/// Paints a mod the loader skipped at start, as off with its reason; its
+/// dimmed line names its file, so a player finds the copy the reason means.
+fn skipped_row(paint: &Painter<'_>, skipped: &crate::resolve::Skipped) {
+    heading(
+        paint,
+        &skipped.label,
+        &metadata(&skipped.version, core::slice::from_ref(&skipped.file)),
+        state_text(true, false).map(|state| {
+            (
+                state,
+                skipped.version.as_str(),
+                Some(skipped.reason.shown()),
+            )
+        }),
+    );
 }
 
 /// The text that says in words that a mod is off or waiting, with its
@@ -63,10 +117,9 @@ const fn state_text(off: bool, waiting: bool) -> Option<(&'static str, u32)> {
     }
 }
 
-/// Paints the left cell of mod `index`'s row: what it is, then each of its
-/// features that is off in red and the extension points it defines and
-/// extends.
-fn state(loader: &Loader, paint: &Painter<'_>, index: usize, record: &crate::host::ModRecord) {
+/// Paints the left cell of a mod's row: what it is, then each of its
+/// features that is off in red.
+fn state(paint: &Painter<'_>, record: &crate::host::ModRecord) {
     about(paint, record);
     let features = record.features.relock().clone();
     let features = crate::features::shown(&features, record.texts.relock().as_ref());
@@ -81,23 +134,44 @@ fn state(loader: &Loader, paint: &Painter<'_>, index: usize, record: &crate::hos
             paint.label(line.as_bytes(), UiWidget::STYLE_NEGATIVE, true, false);
         }
     }
+}
+
+/// Mod `index`'s technical details, dimmed lines for the top of its page:
+/// its licence, its homepage and the extension points it defines and
+/// extends.
+fn detail_lines(loader: &Loader, index: usize, record: &crate::host::ModRecord) -> Vec<String> {
+    let meta = &record.meta;
     let (defines, extends) = crate::points::screen(index, loader);
-    for (key, points) in [("mods.points", defines), ("mods.extends", extends)] {
-        if !points.is_empty() {
-            let line = texts::fill(key, &[("points", &points.join(", "))]);
-            paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
-        }
+    [
+        ("mods.license", "license", meta.license.clone()),
+        ("mods.homepage", "address", meta.homepage.clone()),
+        ("mods.points", "points", defines.join(", ")),
+        ("mods.extends", "points", extends.join(", ")),
+    ]
+    .into_iter()
+    .filter(|(_, _, value)| !value.is_empty())
+    .map(|(key, name, value)| texts::fill(key, &[(name, &value)]))
+    .collect()
+}
+
+/// Draws mod `index`'s version and authors, then its technical details, at
+/// the top of its page.
+pub(super) fn details(loader: &Loader, paint: &Painter<'_>, index: usize) {
+    let Some(record) = loader.mods.get(index) else {
+        return;
+    };
+    let credits = metadata(&record.version, &record.meta.authors);
+    for line in core::iter::once(credits).chain(detail_lines(loader, index, record)) {
+        paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
     }
 }
 
-/// A mod's dimmed line under its name: its version, then its credits, in
-/// the separator the credits use between their parts.
-fn metadata(version: &str, credits: &str) -> String {
-    if credits.is_empty() {
-        version.to_owned()
-    } else {
-        format!("{version}; {credits}")
-    }
+/// A mod's dimmed line under its name: its version, then its authors.
+fn metadata(version: &str, authors: &[String]) -> String {
+    core::iter::once(version)
+        .chain(authors.iter().map(String::as_str))
+        .collect::<Vec<_>>()
+        .join(texts::text("mods.metadata.gap"))
 }
 
 /// The name the API gives the feature of a world store, before the store's
@@ -197,10 +271,17 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
             false,
         );
     }
+    let count = mods.len() + loader.skipped.len();
     let listing = listing(paint, MODS_PER_PAGE);
-    *first = listing.clamp_first(*first, mods.len());
-    let shown = listing.shown(*first, mods.len());
-    let settings_button = || paint.button_compact(texts::text("mods.settings").as_bytes(), true);
+    *first = listing.clamp_first(*first, count);
+    let shown = listing.shown(*first, count);
+    let button = |icon: Icon| {
+        let fallback = match icon {
+            Icon::Settings => "mods.settings",
+            Icon::Info => "mods.details",
+        };
+        paint.icon_button(icon, texts::text(fallback).as_bytes(), true)
+    };
     let controls = crate::controls::rows();
     for (index, record) in mods.iter().enumerate().take(shown.end).skip(shown.start) {
         if index > shown.start {
@@ -210,21 +291,41 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
             .settings_schema()
             .is_some_and(|s| !s.fields.is_empty());
         let sent = record.server_values.relock().is_some();
-        let opens = settings && mods_screen::gear(world, sent)
-            || super::controls::any_in(&controls, &record.id);
-        let opened = paint.row(
-            || state(loader, paint, index, record),
-            || opens && settings_button(),
+        let opens = has_gear(
+            settings,
+            mods_screen::gear(world, sent),
+            super::controls::any_in(&controls, &record.id),
         );
-        if opened {
-            done = Listed::Settings(index);
+        // The Details button on every mod, at the same place; the gear under
+        // it where the mod has something to set here, else its place kept.
+        let clicked = paint.row(
+            || state(paint, record),
+            || {
+                let details = button(Icon::Info);
+                let settings = opens && button(Icon::Settings);
+                if !opens {
+                    paint.icon_slot();
+                }
+                clicked(details, settings, index)
+            },
+        );
+        if let Some(clicked) = clicked {
+            done = clicked;
+        }
+    }
+    for (index, skipped) in (mods.len()..).zip(&loader.skipped) {
+        if shown.contains(&index) {
+            if index > shown.start {
+                paint.separator();
+            }
+            skipped_row(paint, skipped);
         }
     }
     for (id, name) in super::controls::carried(loader, &controls) {
         paint.separator();
         let opened = paint.row(
             || {
-                paint.label(name.as_bytes(), UiWidget::STYLE_H3, true, false);
+                paint.name(name.as_bytes());
                 paint.label(
                     texts::text("mods.carried").as_bytes(),
                     UiWidget::STYLE_SECONDARY,
@@ -232,7 +333,7 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
                     false,
                 );
             },
-            settings_button,
+            || button(Icon::Settings),
         );
         if opened {
             done = Listed::Bindings(id, name);
@@ -243,7 +344,7 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
         let line = texts::fill("mods.others.beside", &[("files", &beside.join(", "))]);
         paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
     }
-    pages(paint, listing, first, mods.len());
+    pages(paint, listing, first, count);
     done
 }
 
@@ -270,8 +371,23 @@ pub(super) fn pages(paint: &Painter<'_>, listing: Listing, first: &mut usize, co
 
 #[cfg(test)]
 mod tests {
-    use super::{metadata, state_text, store_off};
+    use super::{Listed, clicked, has_gear, metadata, state_text, store_off};
     use crate::texts;
+
+    #[test]
+    fn a_row_has_a_gear_for_settings_shown_here_or_for_key_bindings() {
+        assert!(has_gear(true, true, false));
+        assert!(!has_gear(true, false, false), "settings not shown here");
+        assert!(!has_gear(false, true, false), "nothing to set");
+        assert!(has_gear(false, false, true), "key bindings anywhere");
+    }
+
+    #[test]
+    fn the_details_button_opens_the_mod_s_page_and_only_the_gear_its_settings() {
+        assert!(matches!(clicked(true, false, 3), Some(Listed::Details(3))));
+        assert!(matches!(clicked(false, true, 3), Some(Listed::Settings(3))));
+        assert!(clicked(false, false, 3).is_none());
+    }
 
     #[test]
     fn a_mod_that_is_off_or_waiting_says_so_in_words_not_by_colour_alone() {
@@ -311,11 +427,9 @@ mod tests {
     }
 
     #[test]
-    fn a_mod_s_dimmed_line_holds_its_version_then_its_credits() {
-        assert_eq!(metadata("0.1.1", ""), "0.1.1");
-        assert_eq!(
-            metadata("0.1.1", "by enshwick; MIT"),
-            "0.1.1; by enshwick; MIT"
-        );
+    fn a_mod_s_dimmed_line_holds_its_version_then_its_authors_and_nothing_else() {
+        assert_eq!(metadata("0.1.1", &[]), "0.1.1");
+        let authors = ["themaiby".to_owned(), "enshwick".to_owned()];
+        assert_eq!(metadata("0.2.0", &authors), "0.2.0 · themaiby · enshwick");
     }
 }

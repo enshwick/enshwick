@@ -2,6 +2,32 @@ use super::widgets::slider_format;
 use super::*;
 
 #[test]
+fn a_button_s_icon_fields_must_fit_its_config_clear_of_its_other_fields() {
+    // The button fields of the kept clients' frozen tables: align, centred,
+    // enabled, size mode, padding, scale, sound.
+    let others = [0x4, 0x6, 0x9, 0x10, 0x4c, 0x50, 0x54, 0x58];
+    assert!(icon_fits(&others, 0x38, 0x48), "the kept clients");
+    assert!(
+        !icon_fits(&others, 0x78, 0x48),
+        "the texture past the config"
+    );
+    assert!(!icon_fits(&others, 0x38, BUTTON_CONFIG), "the flag past it");
+    assert!(
+        !icon_fits(&others, 0x38, 0x40),
+        "the flag inside the texture"
+    );
+    assert!(
+        !icon_fits(&others, 0x48, 0x38),
+        "padding inside the texture"
+    );
+    assert!(!icon_fits(&others, 0x38, 0x4c), "the flag on padding");
+    assert!(
+        !icon_fits(&[0x2], 0x38, 0x48),
+        "a field under the kind word"
+    );
+}
+
+#[test]
 fn texts_hash_as_the_game_does() {
     const FNV_PRIME: u64 = 0x0100_0000_01b3;
     assert_eq!(hash(b""), FNV_BASIS);

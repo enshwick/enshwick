@@ -2,7 +2,6 @@
 //! many mods load and what is off.
 
 use core::cell::RefCell;
-use std::sync::atomic::Ordering;
 
 use enshwick::abi::Registers;
 
@@ -60,11 +59,7 @@ pub(super) fn link(loader: &Loader, engine: &Engine) {
 /// The line for this frame in the frame's text arena, built again only when
 /// the count of mods off changed.
 fn line(loader: &Loader) -> super::engine::UiText {
-    let off = loader
-        .mods
-        .iter()
-        .filter(|m| m.off.load(Ordering::Acquire))
-        .count();
+    let off = crate::off_line::mods_off_count(loader);
     LINE.with_borrow_mut(|kept| {
         let line = kept.get(off, || {
             use crate::diag::MenuNote;
@@ -80,7 +75,8 @@ fn line(loader: &Loader) -> super::engine::UiText {
                 .into_iter()
                 .filter_map(|(shown, note)| shown.then_some(note))
                 .collect();
-            crate::diag::menu_line(env!("CARGO_PKG_VERSION"), loader.mods.len(), off, &notes)
+            let total = crate::off_line::mods_counted(loader);
+            crate::diag::menu_line(env!("CARGO_PKG_VERSION"), total, off, &notes)
         });
         copy(&[line.as_bytes()])
     })

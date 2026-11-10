@@ -1,6 +1,8 @@
+use enshwick::abi::UiWidget;
+
 use super::{
-    BAR_HEIGHT, BUTTON_CONFIG, Buf, DROPDOWN_CONFIG, Engine, FRAME_SIZE, LABEL_SIZE, SLIDER_CONFIG,
-    TOGGLE_CONFIG, TOGGLE_ENTRIES, UiText, stretch,
+    BAR_HEIGHT, BUTTON_CONFIG, Buf, DROPDOWN_CONFIG, Engine, FRAME_SIZE, Icon, LABEL_SIZE,
+    SLIDER_CONFIG, TOGGLE_CONFIG, TOGGLE_ENTRIES, UiText, stretch,
 };
 
 /// `ui.button`'s size mode that fits the button to its text; 1 is a fixed
@@ -12,8 +14,15 @@ const BUTTON_FILLS_COLUMN: u64 = 3;
 /// The alignment word that centres a node in its column, as `ui.button`
 /// spells for its own content (client 26430625).
 const BUTTON_ALIGN_CENTRE: u16 = 0x202;
-/// The alignment word that puts a node at the right of its column.
-const BUTTON_ALIGN_RIGHT: u16 = 0x203;
+/// The alignment word that puts a node at the right of its column, centred
+/// down it (client 26430625): the low byte across (3 right), the high byte
+/// down (2 centre).
+pub(super) const BUTTON_ALIGN_RIGHT: u16 = 0x203;
+/// The space an icon leaves above and below it in its button, before the
+/// interface's scale; the game's own gear buttons leave 25 (client 26430625).
+const ICON_MARGIN: f32 = 25.0;
+/// The height of an icon button, which an empty slot keeps free.
+const ICON_SLOT: f32 = 50.0;
 /// The slider's value text without decimals, for a setting that holds whole
 /// numbers whatever its stops.
 const SLIDER_WHOLE: u32 = 2;
@@ -92,6 +101,45 @@ impl Engine {
         wrap: bool,
         center: bool,
     ) {
+        // SAFETY: the caller's contract is `label_sized`'s.
+        unsafe { self.label_sized(context, text, style, wrap, center, None) };
+    }
+
+    /// Draws a list entry's name: the heading style at the bundle's large
+    /// font size, so it stands above the entry's text; wrapped.
+    ///
+    /// # Safety
+    ///
+    /// - Called inside a window, on the frame's thread.
+    /// - `context` is the non-zero context [`Engine::context`] read in this
+    ///   frame.
+    /// - The bytes `text` points at outlive the frame.
+    pub(in crate::ui) unsafe fn name(&self, context: usize, text: &UiText) {
+        let size = self.looks.name_size;
+        // SAFETY: the caller's contract is `label_sized`'s.
+        unsafe { self.label_sized(context, text, UiWidget::STYLE_H3, true, false, size) };
+    }
+
+    /// Draws a label as [`Engine::label`] does, at the font size the look
+    /// bundle holds at `size` when given.
+    ///
+    /// # Safety
+    ///
+    /// - Called inside a window, on the frame's thread.
+    /// - `context` is the non-zero context [`Engine::context`] read in this
+    ///   frame.
+    /// - The bytes `text` points at outlive the frame.
+    /// - `size` is `None` or the reflected offset of a font size, a float, in
+    ///   the look bundle.
+    unsafe fn label_sized(
+        &self,
+        context: usize,
+        text: &UiText,
+        style: u32,
+        wrap: bool,
+        center: bool,
+        size: Option<usize>,
+    ) {
         let bundle = self.bundle(context);
         let style = self
             .looks
@@ -119,6 +167,13 @@ impl Engine {
             // checked in `Engine::resolve`, on the node the game just wrote
             // into `label`.
             unsafe { (self.node_stretch)(node, stretch(1.0, 0.0)) };
+        }
+        if let Some(size) = size {
+            // SAFETY: `bundle` is the frame's look bundle, read from the live
+            // context, and `size` the reflected offset of a font size in it,
+            // a float, by this function's `# Safety`.
+            let size = unsafe { crate::memory::read::<f32>(bundle, size) };
+            label.f32(self.layout.label_font_size, size);
         }
         // SAFETY: `self.label_draw` is the game's `ui.label_draw`, checked in
         // `Engine::resolve`, on the label `label_new` filled, inside the
@@ -211,22 +266,106 @@ impl Engine {
     /// - Called inside a window, on the frame's thread.
     /// - The bytes `text` points at outlive the frame.
     unsafe fn button_as(&self, text: &UiText, enabled: bool, align: u16, size_mode: u64) -> bool {
-        let layout = &self.layout;
-        let mut config = Buf::<BUTTON_CONFIG>::zeroed();
-        config.u16(layout.button_align, align);
-        config.u8(layout.button_centered, 1);
-        config.u8(layout.button_enabled, u8::from(enabled));
-        config.u64(layout.button_size_mode, size_mode);
-        config.f32(layout.button_padding[0], 10.0);
-        config.f32(layout.button_padding[1], 5.0);
-        config.f32(layout.button_scale, 1.0);
-        config.u8(layout.button_sound, 1);
+        let mut config = self.button_config(enabled, align, size_mode, [10.0, 5.0]);
         // SAFETY: `self.button` is the game's `ui.button`, checked in
         // `Engine::resolve`, inside the window this function's `# Safety`
         // gives; `config` holds the table's `ui.button_extent` bytes
         // (`Layout::read`) and `text` outlives the frame by the same contract.
         let clicked = unsafe { (self.button)(config.ptr(), text) } != 0;
         clicked && enabled
+    }
+
+    /// A button's config, aligned as `align` says, sized by `size_mode`,
+    /// with `padding` across and down; for an icon the padding is the space
+    /// the icon leaves in the button.
+    fn button_config(
+        &self,
+        enabled: bool,
+        align: u16,
+        size_mode: u64,
+        padding: [f32; 2],
+    ) -> Buf<BUTTON_CONFIG> {
+        let layout = &self.layout;
+        let mut config = Buf::<BUTTON_CONFIG>::zeroed();
+        config.u16(layout.button_align, align);
+        config.u8(layout.button_centered, 1);
+        config.u8(layout.button_enabled, u8::from(enabled));
+        config.u64(layout.button_size_mode, size_mode);
+        config.f32(layout.button_padding[0], padding[0]);
+        config.f32(layout.button_padding[1], padding[1]);
+        // For an icon, its width over its height (client 26430625).
+        config.f32(layout.button_scale, 1.0);
+        config.u8(layout.button_sound, 1);
+        config
+    }
+
+    /// Draws a small button at the right of its column that shows `icon` of
+    /// the game's look bundle in place of a label, as the game's own gear
+    /// buttons do; whether it was clicked this frame, `None`, drawing
+    /// nothing, on a build whose icons do not read.
+    ///
+    /// # Safety
+    ///
+    /// - Called inside a window, on the frame's thread.
+    /// - `context` is the non-zero context [`Engine::context`] read in this
+    ///   frame.
+    pub(in crate::ui) unsafe fn icon_button(
+        &self,
+        context: usize,
+        icon: Icon,
+        enabled: bool,
+    ) -> Option<bool> {
+        let (texture, shown) = self.layout.button_icon?;
+        let (icons, kind) = self.looks.icons?;
+        let offset = *icons.get(icon as usize)?;
+        // SAFETY: `bundle` is the frame's look bundle, read from the live
+        // context, and `offset` the reflected offset of a `UiTexture`, 16
+        // bytes, inside it.
+        let image = unsafe { crate::memory::read::<[u64; 2]>(self.bundle(context), offset) };
+        // A zero image draws the game's untextured square.
+        if image == [0; 2] {
+            return None;
+        }
+        let mut config = self.button_config(
+            enabled,
+            BUTTON_ALIGN_RIGHT,
+            BUTTON_FITS_TEXT,
+            [0.0, ICON_MARGIN],
+        );
+        config.u32(super::BUTTON_KIND_AT, kind);
+        config.u64(texture, image[0]);
+        config.u64(texture + 8, image[1]);
+        config.u8(shown, 1);
+        // SAFETY: `self.button` is the game's `ui.button`, checked in
+        // `Engine::resolve`, inside the window this function's `# Safety`
+        // gives; `config` holds the table's `ui.button_extent` bytes
+        // (`Layout::read`) with a texture the game's own bundle holds, and the
+        // empty text has no bytes.
+        let clicked = unsafe { (self.button)(config.ptr(), &UiText::EMPTY) } != 0;
+        Some(clicked && enabled)
+    }
+
+    /// Keeps an icon button's place free, so the buttons above it sit where
+    /// they would with one there.
+    ///
+    /// # Safety
+    ///
+    /// - Called inside a window, on the frame's thread.
+    pub(in crate::ui) unsafe fn icon_slot(&self) {
+        let mut frame = Buf::<FRAME_SIZE>::zeroed();
+        // SAFETY: `self.frame_open` is the game's `ui.frame_open`, checked in
+        // `Engine::resolve`, inside the window this function's `# Safety`
+        // gives; `frame` holds the table's `ui.frame_extent` bytes
+        // (`Layout::read`), name 0 for none.
+        unsafe { (self.frame_open)(frame.ptr(), 0) };
+        let node = self.frame_node(&frame);
+        // SAFETY: `self.node_height` is the game's `ui.node_height`, checked
+        // in `Engine::resolve`, on the node the game just wrote into `frame`.
+        unsafe { (self.node_height)(node, ICON_SLOT) };
+        // SAFETY: `self.frame_close` is the game's `ui.frame_close`, checked
+        // in `Engine::resolve`, on the frame `frame_open` opened above, with
+        // nothing opened inside it.
+        unsafe { (self.frame_close)(frame.ptr()) };
     }
 
     pub(super) fn setting_texts(&self, context: usize) -> [UiText; TOGGLE_ENTRIES] {
@@ -406,7 +545,8 @@ impl Engine {
         // `ui.dropdown_count` (`Layout::checked`), and `value` and `clicked`
         // are live locals the game writes.
         let _shown = unsafe { (self.dropdown)(config.ptr(), &raw mut value, &raw mut clicked) };
-        let id = label.hash ^ count as u64;
+        let base = label.hash ^ count as u64;
+        let id = TWINS.with_borrow_mut(|twins| twins.id(crate::ui::mods::frame(), base));
         let open = OPEN_DROPDOWN.get();
         if read_only {
             OPEN_DROPDOWN.set(open.filter(|&o| o != id));
@@ -461,10 +601,70 @@ impl Engine {
 }
 
 thread_local! {
-    /// The dropdown whose options show, by its label's hash and option
-    /// count; one at a time, as the game opens one list at a time.
-    // shortcut: two dropdowns of one label and count open together, upgrade to a per-window id if a screen holds such twins.
+    /// The dropdown whose options show, by its id from [`Twins::id`]; one
+    /// at a time, as the game opens one list at a time.
     static OPEN_DROPDOWN: core::cell::Cell<Option<u64>> = const { core::cell::Cell::new(None) };
+    static TWINS: core::cell::RefCell<Twins> = const { core::cell::RefCell::new(Twins::new()) };
+}
+
+/// Starts counting dropdown twins in the window named by `name_hash`, so a
+/// dropdown's id holds whatever other windows open or close.
+pub(super) fn twins_window(name_hash: u64) {
+    TWINS.with_borrow_mut(|twins| twins.enter(name_hash));
+}
+
+/// Dropdowns drawn in one window that share a label and option count, such
+/// as two "Player" arguments of one window, told apart by the order they
+/// draw in, so each opens alone.
+struct Twins {
+    frame: u64,
+    window: u64,
+    seen: [u64; TWINS_KEPT],
+    /// Dropdowns drawn in the window this frame, the kept ones first.
+    drawn: usize,
+}
+
+/// Dropdowns of one window kept to count twins; one drawn after them takes
+/// an id by its place in the window instead.
+const TWINS_KEPT: usize = 64;
+
+impl Twins {
+    const fn new() -> Self {
+        Self {
+            frame: 0,
+            window: 0,
+            seen: [0; TWINS_KEPT],
+            drawn: 0,
+        }
+    }
+
+    fn enter(&mut self, window: u64) {
+        self.window = window;
+        self.drawn = 0;
+    }
+
+    /// The id of the dropdown keyed `base` drawn next in `frame` in the
+    /// current window: a different id for each twin in the window, the
+    /// same ids every frame the window draws them in one order.
+    fn id(&mut self, frame: u64, base: u64) -> u64 {
+        if frame != self.frame {
+            self.frame = frame;
+            self.drawn = 0;
+        }
+        let before = match self.seen.get_mut(self.drawn) {
+            Some(slot) => {
+                *slot = base;
+                self.seen[..self.drawn]
+                    .iter()
+                    .filter(|&&s| s == base)
+                    .count()
+            }
+            // Past the kept ones, its place: above any count of twins.
+            None => self.drawn,
+        };
+        self.drawn += 1;
+        base ^ self.window ^ (before as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)
+    }
 }
 
 /// The open dropdown after a frame of dropdown `id`: a click on its row
@@ -479,7 +679,52 @@ fn toggled(open: Option<u64>, id: u64, clicked: bool) -> Option<u64> {
 
 #[cfg(test)]
 mod dropdown_tests {
-    use super::toggled;
+    use super::{Twins, toggled};
+
+    #[test]
+    fn two_dropdowns_of_one_label_and_count_get_ids_of_their_own_that_hold_across_frames() {
+        let mut twins = Twins::new();
+        let kick = twins.id(1, 7);
+        let ban = twins.id(1, 7);
+        let other = twins.id(1, 9);
+        assert_eq!(kick, 7, "the first keeps its key");
+        assert_eq!(other, 9);
+        assert_ne!(kick, ban);
+        assert_eq!(twins.id(2, 7), kick, "a new frame counts again");
+        assert_eq!(twins.id(2, 7), ban);
+        let open = toggled(None, ban, true);
+        assert_ne!(open, Some(kick), "a click on one opens only that one");
+    }
+
+    #[test]
+    fn a_dropdown_s_id_holds_when_another_window_opens_or_closes_before_it() {
+        let mut twins = Twins::new();
+        twins.enter(100);
+        let first = twins.id(1, 7);
+        twins.enter(200);
+        let second = twins.id(1, 7);
+        assert_ne!(first, second, "one key in two windows");
+        twins.enter(200);
+        assert_eq!(twins.id(2, 7), second, "the first window closed");
+    }
+
+    #[test]
+    fn two_keys_in_one_window_keep_ids_apart() {
+        let mut twins = Twins::new();
+        twins.enter(2);
+        assert_ne!(twins.id(1, 1), twins.id(1, 3));
+    }
+
+    #[test]
+    fn dropdowns_past_the_kept_ones_still_get_ids_of_their_own() {
+        let mut twins = Twins::new();
+        twins.enter(1);
+        let ids: Vec<u64> = (0..super::TWINS_KEPT + 3).map(|_| twins.id(1, 7)).collect();
+        let mut unique = ids.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(unique.len(), ids.len());
+    }
 
     #[test]
     fn a_click_opens_a_dropdown_closes_it_again_and_moves_to_another() {

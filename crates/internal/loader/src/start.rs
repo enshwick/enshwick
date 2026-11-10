@@ -165,6 +165,7 @@ pub(crate) fn start(
         settings_problems,
         newer_release: OnceLock::new(),
         retry: crate::retry::Retry::default(),
+        skipped: skipped(&libraries, &candidates, &plan),
     };
     let Some(loader) = host::install(loader) else {
         crate::shipped::release();
@@ -255,6 +256,29 @@ fn skip(libraries: &[Library], plan: &resolve::Plan) {
             crate::errors::UNMET_RELATIONS
         );
     }
+}
+
+/// The mods `plan` skips, as the screens name them.
+fn skipped(
+    libraries: &[Library],
+    candidates: &[Candidate],
+    plan: &resolve::Plan,
+) -> Vec<resolve::Skipped> {
+    plan.skipped
+        .iter()
+        .map(|(i, reason)| resolve::Skipped {
+            id: candidates[*i].id.clone(),
+            version: candidates[*i].version.to_string(),
+            // SAFETY: the manifest is the copy `manifest::read` made for the
+            // process or a pack's manifest built for the process, its strings
+            // and lists readable and never written; a skipped mod's DLL stays
+            // loaded through start, and `meta` copies what it reads.
+            label: unsafe { crate::manifest::meta(libraries[*i].manifest) }
+                .label(&candidates[*i].id),
+            file: libraries[*i].file.clone(),
+            reason: reason.clone(),
+        })
+        .collect()
 }
 
 /// The records of the mods `plan` loads, in load order.

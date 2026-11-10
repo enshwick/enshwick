@@ -260,6 +260,19 @@ Each entry names the pull request that made the change.
   name, not by colour alone; a key capture ends when a text setting takes
   the caret; key bindings page on a game build without the scroll area
   (#1023).
+- Mods screen: a mod the loader did not start, such as one whose required
+  mod is missing, shows as off with the reason in the player's language,
+  and the main menu line and the chat line at world load count it as off
+  (#1032).
+- Mods screen: a mod's name is the row's title; one dimmed line under it
+  holds the version and authors; the licence, homepage and extension points
+  are on the mod's page. Each row has two small buttons at its right, the
+  game's own: an info button that opens the mod's page and, under it, a gear
+  for a mod with settings or key bindings here. A game build where the icons
+  do not read shows the buttons as text (#1032).
+- Interface: two dropdowns with the same label and number of options, such
+  as two player arguments of one window, open alone instead of together
+  (#1032).
 - `content`: the docs of `QuestReward`, `NewQuest` and `Load::add_quest`
   no longer say the game pays a quest's items: it gives the experience and
   only draws the item (#1028).

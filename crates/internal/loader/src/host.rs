@@ -227,6 +227,8 @@ pub(crate) struct Loader {
     pub(crate) newer_release: OnceLock<crate::releases::Release>,
     /// The code patches a thread kept out at arming, tried again later.
     pub(crate) retry: crate::retry::Retry,
+    /// The mods that did not load, shown as off with their reason.
+    pub(crate) skipped: Vec<crate::resolve::Skipped>,
 }
 
 /// The warning line and the status entry of `feature` turned off on `build`

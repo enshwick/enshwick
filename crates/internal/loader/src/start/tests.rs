@@ -94,6 +94,7 @@ fn loader(mods: &[TestMod], developer_tools: bool) -> (Loader, Vec<Library>) {
         .collect();
     let plan = resolve::resolve(&candidates);
     let mods = records(&libraries, &candidates, &plan);
+    let skipped = skipped(&libraries, &candidates, &plan);
     let mut slots: Vec<Option<Library>> = libraries.into_iter().map(Some).collect();
     let order = plan
         .order
@@ -118,6 +119,7 @@ fn loader(mods: &[TestMod], developer_tools: bool) -> (Loader, Vec<Library>) {
         settings_problems: Vec::new(),
         newer_release: OnceLock::new(),
         retry: crate::retry::Retry::default(),
+        skipped,
     };
     (loader, order)
 }
@@ -125,6 +127,76 @@ fn loader(mods: &[TestMod], developer_tools: bool) -> (Loader, Vec<Library>) {
 /// A server's loader with no game and no mods, for the tests of other parts.
 pub(crate) fn bare_loader() -> Loader {
     loader(&[], false).0
+}
+
+#[test]
+fn a_second_copy_skipped_at_start_is_kept_with_its_reason_but_its_running_mod_is_not_off() {
+    let (loader, order) = loader(
+        &[TestMod::plain("you.safes"), TestMod::plain("you.safes")],
+        false,
+    );
+    assert_eq!(order.len(), 1);
+    assert_eq!(
+        loader.mods.len(),
+        1,
+        "only the copy that loads has a record"
+    );
+    let [skipped] = loader.skipped.as_slice() else {
+        panic!("{:?}", loader.skipped);
+    };
+    assert_eq!(
+        (
+            skipped.id.as_str(),
+            skipped.label.as_str(),
+            skipped.version.as_str()
+        ),
+        ("you.safes", "you.safes", "1.0.0")
+    );
+    assert_eq!(
+        skipped.reason,
+        resolve::Skip::Copy {
+            id: "you.safes".into(),
+            first: 0
+        }
+    );
+    assert_eq!(skipped.file, "you.safes/you.safes.dll");
+    assert!(
+        crate::off_line::mods_off(&loader).is_empty(),
+        "you.safes runs"
+    );
+    assert_eq!(crate::off_line::mods_off_count(&loader), 0);
+    assert_eq!(
+        crate::off_line::mods_counted(&loader),
+        1,
+        "one mod, two files"
+    );
+}
+
+#[test]
+fn the_off_names_and_count_follow_a_mod_that_turns_off() {
+    let (loader, _order) = loader(
+        &[TestMod::plain("you.safes"), TestMod::plain("you.altars")],
+        false,
+    );
+    assert!(crate::off_line::mods_off(&loader).is_empty());
+    let altars = loader.mods.iter().find(|m| m.id == "you.altars").unwrap();
+    altars.off.store(true, Ordering::Release);
+    assert_eq!(crate::off_line::mods_off(&loader), ["you.altars"]);
+    assert_eq!(crate::off_line::mods_off_count(&loader), 1);
+    assert_eq!(crate::off_line::mods_counted(&loader), 2);
+    let names = crate::off_line::names(&loader);
+    assert_eq!(names.first().map(String::as_str), Some("you.altars"));
+    let mut loader = loader;
+    loader.skipped.push(resolve::Skipped {
+        id: "you.map".into(),
+        version: "1.0.0".into(),
+        label: "Map".into(),
+        file: "you.map/you.map.dll".into(),
+        reason: resolve::Skip::Missing { id: "you.x".into() },
+    });
+    assert_eq!(crate::off_line::mods_off(&loader), ["you.altars", "Map"]);
+    assert_eq!(crate::off_line::mods_off_count(&loader), 2);
+    assert_eq!(crate::off_line::mods_counted(&loader), 3);
 }
 
 /// The handle of the mod `id` in `loader`'s load order.

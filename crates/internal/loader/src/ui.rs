@@ -74,6 +74,8 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::BUTTON_SCALE.id(),
     pinned::ui::BUTTON_SIZE_MODE.id(),
     pinned::ui::BUTTON_SOUND.id(),
+    pinned::ui::BUTTON_ICON.id(),
+    pinned::ui::BUTTON_ICON_SHOWN.id(),
     pinned::ui::COLUMN.id(),
     pinned::ui::CONTEXT.id(),
     pinned::ui::CONTEXT_BUNDLE.id(),

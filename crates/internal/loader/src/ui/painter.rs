@@ -6,7 +6,7 @@ use crate::host::Loader;
 use crate::mod_index::ModIndex;
 use crate::widget_checks;
 
-use super::engine::{Engine, Row, Takes, TextBuffer, Typed, UiText};
+use super::engine::{Engine, Icon, Row, Takes, TextBuffer, Typed, UiText};
 use super::{ARENA, DRAWING, WINDOW};
 use super::{Drawing, ENGINE, gather};
 
@@ -65,6 +65,15 @@ impl<'a> Painter<'a> {
         unsafe { self.engine.label(self.context, &text, style, wrap, center) };
     }
 
+    /// A list entry's name, above the entry's text.
+    pub(super) fn name(&self, text: &[u8]) {
+        let text = copy(&[text]);
+        // SAFETY: a window is open on this thread with `self.context`, by
+        // the contract of `Painter::new`; the text lives in the frame's
+        // arena.
+        unsafe { self.engine.name(self.context, &text) };
+    }
+
     pub(super) fn button(&self, text: &[u8], enabled: bool) -> bool {
         let text = copy(&[text]);
         // SAFETY: a window is open on this thread, by the contract of
@@ -77,6 +86,22 @@ impl<'a> Painter<'a> {
         // SAFETY: a window is open on this thread, by the contract of
         // `Painter::new`; the text lives in the frame's arena.
         unsafe { self.engine.button_compact(&text, enabled) }
+    }
+
+    /// A small button showing the game's `icon`, or a compact button with
+    /// the text `fallback` on a build whose icons do not read.
+    pub(super) fn icon_button(&self, icon: Icon, fallback: &[u8], enabled: bool) -> bool {
+        // SAFETY: a window is open on this thread with `self.context`, by
+        // the contract of `Painter::new`.
+        unsafe { self.engine.icon_button(self.context, icon, enabled) }
+            .unwrap_or_else(|| self.button_compact(fallback, enabled))
+    }
+
+    /// The free place of an icon button that is not there.
+    pub(super) fn icon_slot(&self) {
+        // SAFETY: a window is open on this thread, by the contract of
+        // `Painter::new`.
+        unsafe { self.engine.icon_slot() };
     }
 
     pub(super) fn toggle(&self, label: &[u8], on: bool, read_only: bool) -> Option<bool> {

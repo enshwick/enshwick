@@ -14,7 +14,7 @@ use crate::{builds, log};
 
 use super::game::GAME_DIRS;
 use super::library::{Library, Run, libraries};
-use super::{initialise, read_frame, records};
+use super::{initialise, read_frame, records, skipped};
 
 /// Why a dry run could not start the loader.
 #[derive(Debug, thiserror::Error)]
@@ -172,6 +172,7 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         settings_problems: Vec::new(),
         newer_release: OnceLock::new(),
         retry: crate::retry::Retry::default(),
+        skipped: skipped(&libraries, &candidates, &plan),
     };
     let loader = host::install(loader).ok_or(DryRunError::AlreadyRan)?;
     let order: Vec<&Library> = plan.order.iter().map(|&i| &libraries[i]).collect();

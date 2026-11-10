@@ -59,6 +59,56 @@ pub(crate) fn takers() -> Vec<String> {
         .collect()
 }
 
+/// The mods that are off, by name: the loaded ones that turned off, then
+/// the ones skipped at start but a second copy of a mod that runs; the one
+/// set the main menu line and the chat line at world load share.
+#[cfg(windows)]
+#[must_use]
+pub(crate) fn mods_off(loader: &crate::host::Loader) -> Vec<String> {
+    off_records(loader)
+        .map(crate::host::ModRecord::label)
+        .chain(skipped_off(loader).map(|skipped| skipped.label.clone()))
+        .collect()
+}
+
+/// How many [`mods_off`] names, without building the names, for a line
+/// drawn every frame.
+#[cfg(windows)]
+#[must_use]
+pub(crate) fn mods_off_count(loader: &crate::host::Loader) -> usize {
+    off_records(loader).count() + skipped_off(loader).count()
+}
+
+/// How many mods the main menu line counts: the loaded ones and those
+/// skipped at start that count as off.
+#[cfg(windows)]
+#[must_use]
+pub(crate) fn mods_counted(loader: &crate::host::Loader) -> usize {
+    loader.mods.len() + skipped_off(loader).count()
+}
+
+#[cfg(windows)]
+fn off_records(loader: &crate::host::Loader) -> impl Iterator<Item = &crate::host::ModRecord> + '_ {
+    use std::sync::atomic::Ordering;
+
+    loader
+        .mods
+        .iter()
+        .filter(|record| record.off.load(Ordering::Acquire))
+}
+
+/// The mods skipped at start that count as off: all but a second copy of a
+/// mod that runs.
+#[cfg(windows)]
+pub(crate) fn skipped_off(
+    loader: &crate::host::Loader,
+) -> impl Iterator<Item = &crate::resolve::Skipped> + '_ {
+    loader
+        .skipped
+        .iter()
+        .filter(|skipped| skipped.counts_off(|id| loader.mods.iter().any(|m| m.id == id)))
+}
+
 /// What this server has off, by name: mods off, each mod's features off
 /// (`<mod>: <feature>`), the loader's parts off and the features this game
 /// build lacks.
@@ -69,10 +119,9 @@ pub(crate) fn names(loader: &crate::host::Loader) -> Vec<String> {
 
     use crate::locks::Relock;
 
-    let mut names = Vec::new();
+    let mut names = mods_off(loader);
     for record in &loader.mods {
         if record.off.load(Ordering::Acquire) {
-            names.push(record.label());
             continue;
         }
         let features = record.features.relock();
