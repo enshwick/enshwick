@@ -68,7 +68,7 @@ A knowledge entry or a buff is its GUID.
 
 | Gift                       | In `rewards.toml`                 | What the player gets                                     |
 | -------------------------- | --------------------------------- | -------------------------------------------------------- |
-| `Items { item, count }`    | `{ item = "<item>", count = 2 }`  | The items, all or nothing; a full inventory gets none   |
+| `Items { item, count }`    | `{ item = "<item>", count = 2 }`  | As many of the items as fit; the log names the rest     |
 | `Experience(amount)`       | `{ experience = 50 }`             | Experience on the next gains, at most a level a tick    |
 | `Knowledge(id)`            | `{ knowledge = "<guid>" }`        | The knowledge entry, set                                 |
 | `Buff(id)`                 | `{ buff = "<guid>" }`             | The buff, for its type's own duration                    |

@@ -73,6 +73,74 @@ mod tests {
     }
 
     #[test]
+    fn the_trail_gives_its_torch_when_its_quest_completes_and_no_other() {
+        use enshwick::abi::{
+            Header, InventoryOpResult, InventoryRequest, InventoryResult, QuestData,
+        };
+        use enshwick::events::QuestCompleted;
+        use enshwick::knowledge::KnowledgeId;
+
+        let loader = FakeHost::new()
+            .progression()
+            .items()
+            .world()
+            .inventory_requests()
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Trail)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let completed = |quest| QuestData {
+            header: Header::of::<QuestData>(),
+            entity: enshwick::Entity(2),
+            quest,
+        };
+        let vanilla = KnowledgeId::new(enshwick::test::VANILLA_QUEST);
+        assert_eq!(loader.raise::<QuestCompleted>(&completed(vanilla)), 1);
+        assert!(loader.inventory_requests().is_empty(), "not the trail");
+
+        let trail = KnowledgeId::from_guid(Id::new("you.trail:trail").guid());
+        assert_eq!(loader.raise::<QuestCompleted>(&completed(trail)), 1);
+        let requests = loader.inventory_requests();
+        assert_eq!(requests.len(), 1, "{:?}", loader.logs());
+        assert_ne!(requests[0].flags & InventoryRequest::ALLOW_PARTIAL, 0);
+        let torch = enshwick::content::Guid::parse("224097e5-ed0d-49d2-9d23-43256a6682b3");
+        assert_eq!(
+            (
+                requests[0].ops[0].target,
+                requests[0].ops[0].item,
+                requests[0].ops[0].count
+            ),
+            (2, enshwick::ItemId::from_guid(torch), 1)
+        );
+        let none_fit = InventoryOpResult {
+            error: 0,
+            remaining: 1,
+        };
+        assert!(loader.finish_inventory(InventoryResult::COMMITTED, &[none_fit]));
+        assert!(
+            !loader
+                .logs()
+                .iter()
+                .any(|(_, line)| line.contains("not given")),
+            "a full inventory is no failed request: {:?}",
+            loader.logs()
+        );
+
+        assert_eq!(loader.raise::<QuestCompleted>(&completed(trail)), 1);
+        assert!(loader.finish_inventory(InventoryResult::TIMED_OUT, &[]));
+        assert!(
+            loader
+                .logs()
+                .iter()
+                .any(|(_, line)| line.contains("torch not given: TimedOut")),
+            "{:?}",
+            loader.logs()
+        );
+        assert!(loader.faults().is_empty(), "{:?}", loader.faults());
+    }
+
+    #[test]
     fn the_rewards_name_the_knowledge_the_script_adds() {
         let rewards = read("rewards.toml");
         for entry in ["you.trail:given", "you.trail:wood", "you.trail:resin"] {

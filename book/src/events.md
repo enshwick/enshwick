@@ -66,7 +66,7 @@ The types are in
 | `DayStarted` | none | The day began in the server's world, by the clock or a time a mod set ([time of day](daytime.md)). | game |
 | `NightStarted` | none | The night began in the server's world. | game |
 | `KnowledgeChanged` | `KnowledgeData` | A knowledge value of a player (or the world, entity 0) changed ([knowledge](knowledge.md)). | game |
-| `QuestCompleted` | `QuestData` | A player completed a quest and got its rewards. | game |
+| `QuestCompleted` | `QuestData` | A quest's bool was set for a player: the game gave its experience, not its items. | game |
 | `ChunkLoaded` | `ChunkData` | A 256 m chunk of the server's entities loaded as players came near. Its entities exist now. The terrain's voxels raise no event ([weather and the world's chunks](weather.md)). | game |
 | `ChunkUnloaded` | `ChunkData` | An entity chunk unloaded once no player was near. Its entities are gone. | game |
 | `PlayerDied` | `PlayerDeathData` | A player died from a hit, a fall, the shroud or drowning, and the data names the cause. For a hit, it also names the killer's template and the attacker of the last hit. It is raised after the step. Freezing and an administrator's kill raise none. Any other entity's death is the game event `Died`. Unstable. | game |

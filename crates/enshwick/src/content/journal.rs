@@ -1,9 +1,11 @@
 //! Quests and journal pages from mods, and changes to the game's quests.
 //!
-//! A quest is steps that show and complete on knowledge, and rewards the
-//! game pays when its last step completes: [`Load::add_quest`] adds one to
+//! A quest is steps that show and complete on knowledge, and rewards: the
+//! game gives their experience when the last step completes and only draws
+//! their items, which the mod gives itself (see [`QuestReward`]).
+//! [`Load::add_quest`] adds one to
 //! the journal beside the game's, and a mod moves it on by granting the
-//! knowledge its steps ask for. [`Load::add_journal_page`] adds a lore page
+//! knowledge its steps ask for. `Load::add_journal_page` adds a lore page
 //! whose entries show on knowledge. [`Load::change_quest`] changes a
 //! vanilla quest's rewards, who it unlocks for and its steps' knowledge.
 //! The journal, its tracker and its notices are the game's own screens: a
@@ -48,6 +50,9 @@ use crate::{Host, ItemId, Load, Off};
 
 use super::{EngineFacts, Guid, Id};
 
+#[cfg(feature = "unstable")]
+pub mod lore_category;
+
 /// The game's journal: every quest, lore page and item set (server 387 and
 /// 399, `JournalRegistryResource`).
 pub const JOURNAL_REGISTRY: Guid = Guid::parse("33701b26-ec1d-423f-8e06-49f023b91b7f");
@@ -58,6 +63,7 @@ const COLLECTIONS: &str = "collections";
 const ENTRIES: &str = "entries";
 const ENTRY_ID: &str = "entryId";
 const DOCUMENT: &str = "referencedDocumentName";
+const LORE_CATEGORY: &str = "loreCategory";
 const REWARDS: &str = "rewards";
 const FOR_ALL: &str = "unlockForAllPlayers";
 const SHOWN: &str = "knowledgeRequirement";
@@ -68,9 +74,13 @@ const PROGRESS: &str = "progressStepsRequirement";
 /// common of the game's own quests (server 387).
 const PRIORITY: u32 = 100;
 
-/// What a quest pays when its last step completes.
+/// What the journal shows as a quest's reward.
 ///
-/// The name is enshwick's, not the game's.
+/// The game gives the experience when the quest's last step completes and
+/// only draws the item: its own quests name an NPC, a station or a chest
+/// icon there (client 26430625). A mod hands the items of its own quest out
+/// on [`QuestCompleted`](crate::events::QuestCompleted). The name is
+/// enshwick's, not the game's.
 ///
 /// # Examples
 ///
@@ -200,7 +210,8 @@ pub struct NewQuest {
     pub for_all_players: bool,
     /// Its steps, in order.
     pub steps: Vec<QuestStep>,
-    /// What it pays when its last step completes.
+    /// What the journal shows as its reward; see [`QuestReward`] for what
+    /// the game gives of it.
     #[script(default)]
     pub rewards: Vec<QuestReward>,
 }
@@ -231,7 +242,7 @@ impl NewQuest {
 ///
 /// # Examples
 ///
-/// See [`Load::add_journal_page`].
+/// See `Load::add_journal_page`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 pub struct PageEntry {
     /// Its title's text tag.
@@ -242,18 +253,22 @@ pub struct PageEntry {
     pub shown_when: KnowledgeQuery,
 }
 
-/// A new lore page for [`Load::add_journal_page`].
+/// A new lore page for `Load::add_journal_page`.
 ///
 /// The name is enshwick's; the game's is `JournalCollectionResource`.
 ///
 /// # Examples
 ///
-/// See [`Load::add_journal_page`].
+/// See `Load::add_journal_page`.
 #[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
 pub struct NewJournalPage {
     /// Its content id.
     pub id: Id,
-    /// The text tag of the category the journal lists it under.
+    /// The text tag of the game's lore category the journal lists it under:
+    /// the journal has a card only for its own categories, so
+    /// `Load::add_journal_page` refuses any other tag. Rust names them in
+    /// `journal::lore_category` behind the `unstable` feature; Luau has no
+    /// such names and passes the tag.
     pub category: Guid,
     /// Its title's text tag.
     pub name: Guid,
@@ -341,7 +356,7 @@ fn header(
 ) -> Vec<(String, Value)> {
     vec![
         (ENTRY_ID.into(), hash_key(entry)),
-        ("loreCategory".into(), hash_key(category)),
+        (LORE_CATEGORY.into(), hash_key(category)),
         ("name".into(), hash_key(name.fnv1a())),
         (DOCUMENT.into(), document),
         ("priority".into(), Value::Uint(PRIORITY.into())),
@@ -403,9 +418,56 @@ pub(crate) fn quest_value(new: &NewQuest, document: Value) -> Result<Value, Off>
     Ok(Value::Struct(fields))
 }
 
+/// The key of `new`'s category when a page of `registry` is listed under
+/// it. The client draws a card only for the lore categories of its own UI
+/// data, which are the ones the game's pages name, and drops a page of any
+/// other without a word (client 26430625).
+#[cfg(feature = "unstable")]
+fn category_key(registry: &Value, new: &NewJournalPage) -> Result<u32, Off> {
+    let held = held_categories(registry);
+    let key = new.category.fnv1a();
+    if held.contains(&key) {
+        return Ok(key);
+    }
+    let names: Vec<String> = held
+        .iter()
+        .map(|&held| {
+            lore_category::ALL
+                .iter()
+                .find(|tag| tag.fnv1a() == held)
+                .map_or_else(|| format!("key {held}"), ToString::to_string)
+        })
+        .collect();
+    Err(Off::new(format!(
+        "journal page {}: the game has no lore category {} (key {key}), and the journal shows no page of another; the game's are {}",
+        new.id,
+        new.category,
+        names.join(", ")
+    )))
+}
+
+/// The lore categories the pages of `registry` are listed under, sorted;
+/// the tutorial pages' 0 is no card and left out.
+#[cfg(feature = "unstable")]
+fn held_categories(registry: &Value) -> Vec<u32> {
+    let mut held: Vec<u32> = match registry.field(COLLECTIONS) {
+        Some(Value::List(pages)) => pages
+            .iter()
+            .filter_map(|page| page.field(LORE_CATEGORY).and_then(key_of_hash))
+            .filter(|&key| key != 0)
+            .collect(),
+        _ => Vec::new(),
+    };
+    held.sort_unstable();
+    held.dedup();
+    held
+}
+
 /// Adds the lore page `new` to `registry` after the game's; on an error the
 /// registry is left as it was.
+#[cfg(feature = "unstable")]
 fn add_page_to(registry: &mut Value, new: &NewJournalPage) -> Result<(), Off> {
+    let category = category_key(registry, new)?;
     let page = new.id.guid().fnv1a();
     let ids = step_ids(new.id, new.entries.len());
     if let Some(id) = core::iter::once(page)
@@ -439,13 +501,7 @@ fn add_page_to(registry: &mut Value, new: &NewJournalPage) -> Result<(), Off> {
             Ok(step)
         })
         .collect::<Result<_, Off>>()?;
-    let fields = header(
-        page,
-        new.category.fnv1a(),
-        new.name,
-        document(registry),
-        entries,
-    );
+    let fields = header(page, category, new.name, document(registry), entries);
     list_mut(registry, COLLECTIONS)?.push(Value::Struct(fields));
     Ok(())
 }
@@ -497,6 +553,7 @@ enum Edit {
     /// A quest of its own.
     Quest(NewQuest),
     /// A lore page of its own.
+    #[cfg(feature = "unstable")]
     Page(NewJournalPage),
     /// A change of a vanilla quest.
     Change(KnowledgeId, QuestChange),
@@ -507,6 +564,7 @@ impl Edit {
     fn apply(&self, registry: &mut Value) -> Result<(), Off> {
         match self {
             Self::Quest(new) => add_quest_to(registry, new),
+            #[cfg(feature = "unstable")]
             Self::Page(new) => add_page_to(registry, new),
             Self::Change(quest, change) => change_quest_in(registry, *quest, change),
         }
@@ -558,9 +616,13 @@ impl Load<'_> {
     /// Adds a quest to the journal beside the game's, on the server and the
     /// client alike, and returns its quest id: a player's bool the game
     /// sets when it pays the quest, as for its own. Each step shows while
-    /// its `shown_when` holds and is done once its `done_when` holds; the
-    /// game pays the rewards when the last step is done. A mod moves the
-    /// quest on by granting the knowledge its steps ask for.
+    /// its `shown_when` holds and is done once its `done_when` holds. When
+    /// the last step is done the game gives the experience of the rewards
+    /// and raises [`QuestCompleted`](crate::events::QuestCompleted); it
+    /// draws an item reward and never gives it, so the mod gives its items
+    /// in a handler of that event
+    /// ([`give_what_fits`](crate::inventory::Inventories::give_what_fits)).
+    /// A mod moves the quest on by granting the knowledge its steps ask for.
     ///
     /// # Errors
     ///
@@ -594,26 +656,29 @@ impl Load<'_> {
     }
 
     /// Adds a lore page to the journal, on the server and the client alike:
-    /// its entries show once their knowledge holds, listed under its
-    /// category.
+    /// its entries show once their knowledge holds, on the card of its
+    /// category on the journal's world information screen. The card counts
+    /// the page from the start and lists it once one entry shows.
     ///
     /// # Errors
     ///
-    /// [`Off`] for a page without entries, a count query from 0, or an id
-    /// the loader refuses (see [`Load::declare`]).
+    /// [`Off`] for a page without entries, a count query from 0, a category
+    /// no page of the game's journal is listed under, or an id the loader
+    /// refuses (see [`Load::declare`]).
     ///
     /// # Examples
     ///
     /// ```
     /// use enshwick::content::id;
+    /// use enshwick::content::Guid;
     /// use enshwick::content::journal::{NewJournalPage, PageEntry};
     /// use enshwick::content::knowledge::KnowledgeQuery;
     /// use enshwick::knowledge::{KnowledgeId, Scope};
     ///
-    /// fn init(load: &mut enshwick::Load<'_>, read: KnowledgeId) -> Result<(), enshwick::Off> {
+    /// fn init(load: &mut enshwick::Load<'_>, read: KnowledgeId, general: Guid) -> Result<(), enshwick::Off> {
     ///     load.add_journal_page(NewJournalPage {
     ///         id: id!("shrine-lore"),
-    ///         category: id!("lore.category").guid(),
+    ///         category: general,
     ///         name: id!("shrine-lore.name").guid(),
     ///         entries: vec![PageEntry {
     ///             name: id!("shrine-lore.first").guid(),
@@ -623,6 +688,7 @@ impl Load<'_> {
     ///     })
     /// }
     /// ```
+    #[cfg(feature = "unstable")]
     #[script]
     pub fn add_journal_page(&mut self, new: NewJournalPage) -> Result<(), Off> {
         if new.entries.is_empty() {
@@ -632,6 +698,7 @@ impl Load<'_> {
             entry.shown_when.to_value()?;
         }
         let key = self.journal_key()?;
+        category_key(&self.host().game_value(key)?, &new)?;
         self.declare(new.id)?;
         self.edit_journal(key, Edit::Page(new))
     }
@@ -640,7 +707,10 @@ impl Load<'_> {
     /// client alike: its rewards, whether it unlocks for every player, and
     /// its steps' knowledge. Mods that change one quest change it in load
     /// order, each on the one before's result; [`Knowledge::quests`]
-    /// lists the quest ids.
+    /// lists the quest ids. The game gives an added reward's experience and
+    /// only draws an added item, which the mod gives on
+    /// [`QuestCompleted`](crate::events::QuestCompleted), as for its own
+    /// quest (see [`QuestReward`]).
     ///
     /// [`Knowledge::quests`]: crate::knowledge::Knowledge::quests
     ///
@@ -674,6 +744,9 @@ impl Load<'_> {
 mod tests {
     use super::*;
 
+    /// The category of the game's one page in [`registry`].
+    const CATEGORY: Guid = Guid([14; 16]);
+
     fn query(id: u32) -> KnowledgeQuery {
         KnowledgeQuery::is_set(KnowledgeId::new(id), Scope::Player)
     }
@@ -690,9 +763,14 @@ mod tests {
             )],
         );
         vanilla.rewards = vec![QuestReward::Item(Guid([4; 16]))];
+        let page = header(7, CATEGORY.fnv1a(), Guid([8; 16]), hash_key(0), Vec::new());
+        let tutorial = header(9, 0, Guid([8; 16]), hash_key(0), Vec::new());
         let empty = Value::Struct(vec![
             (QUESTS.into(), Value::List(Vec::new())),
-            (COLLECTIONS.into(), Value::List(Vec::new())),
+            (
+                COLLECTIONS.into(),
+                Value::List(vec![Value::Struct(page), Value::Struct(tutorial)]),
+            ),
         ]);
         let mut held = empty;
         add_quest_to(&mut held, &vanilla).unwrap();
@@ -743,11 +821,12 @@ mod tests {
         assert_eq!(added, before, "left as it was");
     }
 
+    #[cfg(feature = "unstable")]
     #[test]
     fn a_page_s_entries_show_on_knowledge_and_never_complete() {
         let page = NewJournalPage {
             id: Id::new("you.trail:lore"),
-            category: Guid([10; 16]),
+            category: CATEGORY,
             name: Guid([11; 16]),
             entries: vec![PageEntry {
                 name: Guid([12; 16]),
@@ -760,18 +839,62 @@ mod tests {
         let Some(Value::List(pages)) = added.field(COLLECTIONS) else {
             panic!("{added:?}")
         };
-        assert_eq!(
-            pages[0].field("loreCategory"),
-            Some(&hash_key(Guid([10; 16]).fnv1a()))
-        );
-        let Some(Value::List(entries)) = pages[0].field(ENTRIES) else {
-            panic!("{:?}", pages[0])
+        let last = pages.last().unwrap();
+        assert_eq!(last.field(LORE_CATEGORY), Some(&hash_key(CATEGORY.fnv1a())));
+        let Some(Value::List(entries)) = last.field(ENTRIES) else {
+            panic!("{last:?}")
         };
         assert_eq!(entries[0].field(SHOWN), Some(&query(6).to_value().unwrap()));
         assert_eq!(
             entries[0].field(DONE).and_then(|done| done.field("type")),
             Some(&Value::Name("Extern".into()))
         );
+    }
+
+    #[cfg(feature = "unstable")]
+    #[test]
+    fn a_page_of_a_category_no_game_page_has_is_refused_with_the_game_s() {
+        let page = |category| NewJournalPage {
+            id: Id::new("you.trail:lore"),
+            category,
+            name: Guid([11; 16]),
+            entries: vec![PageEntry {
+                name: Guid([12; 16]),
+                text: Guid([13; 16]),
+                shown_when: query(6),
+            }],
+        };
+        let mut before = registry();
+        let general = header(
+            10,
+            lore_category::GENERAL.fnv1a(),
+            Guid([8; 16]),
+            hash_key(0),
+            Vec::new(),
+        );
+        list_mut(&mut before, COLLECTIONS)
+            .unwrap()
+            .push(Value::Struct(general));
+        let mut added = before.clone();
+        let own = Guid([10; 16]);
+        let off = add_page_to(&mut added, &page(own)).unwrap_err().to_string();
+        assert!(off.contains(&own.to_string()), "{off}");
+        assert!(
+            off.contains(&lore_category::GENERAL.to_string()),
+            "a category enshwick names reads as the tag a mod passes: {off}"
+        );
+        assert!(
+            off.contains(&format!("key {}", CATEGORY.fnv1a())),
+            "one it does not name reads as its key: {off}"
+        );
+        assert_eq!(added, before, "left as it was");
+        add_page_to(&mut added, &page(lore_category::GENERAL)).unwrap();
+    }
+
+    #[cfg(feature = "unstable")]
+    #[test]
+    fn the_tutorial_pages_category_0_is_no_category_a_page_may_take() {
+        assert_eq!(held_categories(&registry()), [CATEGORY.fnv1a()]);
     }
 
     #[test]

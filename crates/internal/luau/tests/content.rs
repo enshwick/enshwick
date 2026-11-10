@@ -138,7 +138,7 @@ mod tests {
                 enshwick.log.info(`quest {{quest}}`)
                 enshwick.content.add_journal_page({{
                     id = "you.luau:lore",
-                    category = enshwick.content.guid("you.luau:lore.category"),
+                    category = "{CATEGORY}",
                     name = enshwick.content.guid("you.luau:lore.name"),
                     entries = {{ {{
                         name = enshwick.content.guid("you.luau:lore.1"),
@@ -149,8 +149,20 @@ mod tests {
                 enshwick.content.change_quest({VANILLA}, {{ add_rewards = {{ {{ Item = "{CHEST}" }} }} }})
                 local ok = pcall(enshwick.content.change_quest, 1, {{}})
                 enshwick.log.info(`unknown quest refused {{not ok}}`)
+                local page_ok = pcall(enshwick.content.add_journal_page, {{
+                    id = "you.luau:own",
+                    category = enshwick.content.guid("you.luau:lore.category"),
+                    name = enshwick.content.guid("you.luau:lore.name"),
+                    entries = {{ {{
+                        name = enshwick.content.guid("you.luau:lore.1"),
+                        text = enshwick.content.guid("you.luau:lore.1.text"),
+                        shown_when = is_given,
+                    }} }},
+                }})
+                enshwick.log.info(`own category refused {{not page_ok}}`)
                 "#,
                 VANILLA = enshwick::test::VANILLA_QUEST,
+                CATEGORY = enshwick::test::LORE_CATEGORY,
             ),
         );
         let quest = enshwick::knowledge::KnowledgeId::from_guid(Id::new("you.luau:trail").guid());
@@ -161,6 +173,11 @@ mod tests {
         );
         assert!(
             logged(&loader, "unknown quest refused true"),
+            "{:?}",
+            loader.logs()
+        );
+        assert!(
+            logged(&loader, "own category refused true"),
             "{:?}",
             loader.logs()
         );

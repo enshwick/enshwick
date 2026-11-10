@@ -153,29 +153,37 @@ pub(crate) fn holds(loader: &Loader, entity: Entity, query: u32) -> Result<bool,
     let knowledge = core::ptr::with_exposed_provenance(object);
     let mut data = calls.data;
     data[calls.id..calls.id + 4].copy_from_slice(&query.to_le_bytes());
-    let mut answer: Answer = bytemuck::Zeroable::zeroed();
     if entity == Entity(0) {
-        // SAFETY: `knowledge` is the live knowledge object on the game thread
-        // at a quiet moment (`world::server`); `answer` and `data`, the game's
-        // query data of the build's size, live on this stack for the call.
-        unsafe { (calls.world)(&raw mut answer, knowledge, data.as_ptr()) };
+        answered(|answer| {
+            // SAFETY: `knowledge` is the live knowledge object on the game thread
+            // at a quiet moment (`world::server`); `answer` and `data`, the game's
+            // query data of the build's size, live on this stack for the call.
+            unsafe { (calls.world)(answer, knowledge, data.as_ptr()) };
+        })
     } else {
         // The evaluator indexes the player records with no bounds check.
         record(layout, state, entity)?;
         let mut mode = Mode::PERSONAL;
-        // SAFETY: as for the world call; `record` checked the character's
-        // record exists and is active, and `mode` lives writable on this
-        // stack for the call, as the game's own callers pass it.
-        unsafe {
-            (calls.player)(
-                &raw mut answer,
-                knowledge,
-                data.as_ptr(),
-                entity.0,
-                &raw mut mode,
-            )
-        };
+        answered(|answer| {
+            // SAFETY: `knowledge` is the live knowledge object on the game
+            // thread at a quiet moment (`world::server`); `answer`, `data`
+            // (the game's query data of the build's size) and `mode` live
+            // writable on this stack for the call, `mode` as the game's own
+            // callers pass it; `record` checked the character's record
+            // exists and is active, which the evaluator indexes unchecked.
+            unsafe { (calls.player)(answer, knowledge, data.as_ptr(), entity.0, &raw mut mode) };
+        })
     }
+}
+
+/// Whether the query holds by what the wrapper `call` writes; a wrapper
+/// that returns without writing has not answered.
+fn answered(call: impl FnOnce(*mut Answer)) -> Result<bool, Status> {
+    let mut answer = Answer {
+        status: u8::MAX,
+        ..bytemuck::Zeroable::zeroed()
+    };
+    call(&raw mut answer);
     if answer.status != 0 {
         return Err(Status::MISSING);
     }
@@ -185,6 +193,31 @@ pub(crate) fn holds(loader: &Loader, entity: Entity, query: u32) -> Result<bool,
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn wrote(status: u8, holds: u8) -> impl FnOnce(*mut Answer) {
+        move |out| {
+            // SAFETY: `answered` passes its own live answer.
+            unsafe {
+                out.write(Answer {
+                    status,
+                    holds,
+                    ..bytemuck::Zeroable::zeroed()
+                });
+            }
+        }
+    }
+
+    #[test]
+    fn a_wrapper_that_writes_nothing_reads_as_missing() {
+        assert_eq!(answered(|_| {}), Err(Status::MISSING));
+    }
+
+    #[test]
+    fn a_wrapper_s_answer_is_read_only_at_status_zero() {
+        assert_eq!(answered(wrote(0, 1)), Ok(true));
+        assert_eq!(answered(wrote(0, 0)), Ok(false));
+        assert_eq!(answered(wrote(1, 1)), Err(Status::MISSING));
+    }
 
     #[test]
     fn query_data_fields_must_fit_and_stay_apart() {

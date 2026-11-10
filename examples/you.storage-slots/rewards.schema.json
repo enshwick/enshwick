@@ -65,7 +65,7 @@
       ]
     },
     "ItemsEntry": {
-      "description": "`count` of `item`, all or nothing.",
+      "description": "`count` of `item`, as many as fit; the log names the rest.",
       "type": "object",
       "properties": {
         "count": {
