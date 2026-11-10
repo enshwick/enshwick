@@ -62,6 +62,62 @@ fn items_are_found_by_name_and_near_names_suggested() {
     assert!(near(&names, "nothing").is_empty());
 }
 
+#[test]
+fn a_registry_that_does_not_read_yet_is_read_again_and_each_name_tag_once_it_does() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+    let (torch, tag) = (Guid([7; 16]), Guid([9; 16]));
+    let mut info = vec![0u8; 0x60];
+    info[0x48..0x58].copy_from_slice(&tag.0);
+    let data: rustc_hash::FxHashMap<ResourceKey, Vec<u8>> = [
+        (
+            ITEM_REGISTRY.key_by_hash(HASHES.item_registry),
+            registry(&[(torch, "Tool_Torch01")]),
+        ),
+        (torch.key_by_hash(HASHES.item), info),
+    ]
+    .into_iter()
+    .collect();
+    let (ready, tag_reads) = (
+        Arc::new(AtomicBool::new(false)),
+        Arc::new(AtomicUsize::new(0)),
+    );
+    let (is_ready, reads) = (Arc::clone(&ready), Arc::clone(&tag_reads));
+    let vanilla = Vanilla::with_parts(
+        ITEMS,
+        super::super::workshops::tests::LAYOUT,
+        HASHES,
+        move |key| {
+            if !is_ready.load(Ordering::Relaxed) {
+                return None;
+            }
+            if key.type_hash == HASHES.item {
+                reads.fetch_add(1, Ordering::Relaxed);
+            }
+            data.get(&key).cloned()
+        },
+    )
+    .with_item_names(Some(0x48));
+    assert_eq!(
+        vanilla.items(),
+        Err(VanillaError::Unreadable("item registry"))
+    );
+    ready.store(true, Ordering::Relaxed);
+    let expected = [names::VanillaItem {
+        guid: torch,
+        name: "Tool_Torch01".into(),
+        name_tag: Some(tag),
+    }];
+    assert_eq!(vanilla.items(), Ok(&expected[..]));
+    assert_eq!(vanilla.items(), Ok(&expected[..]));
+    assert_eq!(
+        tag_reads.load(Ordering::Relaxed),
+        1,
+        "each tag is read once"
+    );
+}
+
 /// A game with the items `named`, a forge station of its own workshop,
 /// a survivor's workshop and an item that places a plain template.
 pub(crate) fn game(named: &[(Guid, &str)]) -> Vanilla {

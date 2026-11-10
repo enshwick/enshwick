@@ -77,6 +77,9 @@ impl ArgView {
     pub const TOGGLE: u8 = 3;
     /// A line of text.
     pub const TEXT: u8 = 4;
+    /// One of the game's items, which the client lists by the names its
+    /// game shows.
+    pub const ITEM: u8 = 5;
 }
 
 /// The separator of a list inside a field.
@@ -242,6 +245,7 @@ pub fn encode_args(args: &[Value]) -> String {
             Value::Number(number) => write!(out, "n{number}"),
             Value::Toggle(on) => write!(out, "b{}", u8::from(*on)),
             Value::Text(text) => write!(out, "t{}", clean(text)),
+            Value::Item(item) => write!(out, "i{item}"),
         };
     }
     out
@@ -269,6 +273,7 @@ pub fn decode_args(text: &str) -> Option<Vec<Value>> {
                 "c" => Value::Choice(rest.parse().ok()?),
                 "n" => Value::Number(rest.parse::<f64>().ok().filter(|n| n.is_finite())?),
                 "b" => Value::Toggle(rest == "1"),
+                "i" => Value::Item(crate::content::Guid::try_parse(rest)?),
                 "t" if rest.len() <= super::MAX_TEXT && !rest.chars().any(char::is_control) => {
                     Value::Text(rest.to_owned())
                 }
@@ -342,12 +347,16 @@ mod tests {
                 name: String::new(),
             },
             Value::Toggle(false),
+            Value::Item(crate::content::Guid::parse(
+                "6943053a-32c1-4718-ae22-e61427ddf54d",
+            )),
         ];
         assert_eq!(decode_args(&encode_args(&args)), Some(args));
         assert_eq!(decode_args(""), Some(Vec::new()));
         assert_eq!(decode_args("x1"), None);
         assert_eq!(decode_args("nNaN"), None);
         assert_eq!(decode_args("pzz"), None);
+        assert_eq!(decode_args("i6943053a"), None, "a GUID cut short");
     }
 
     #[test]

@@ -33,6 +33,22 @@ pub(super) struct Layout {
     skip: usize,
 }
 
+/// The static data of `item` as the loader answers it; none for an unknown
+/// item, or while no world runs. Any thread.
+pub(crate) fn item_data(host: &Host, item: ItemId) -> Option<ItemData> {
+    let mut out = ItemData {
+        header: Header::of::<ItemData>(),
+        id: ItemId::new(0),
+        max_stack: 0,
+        category: 0,
+        rarity: 0,
+        flags: 0,
+        placed_entity: [0; 16],
+    };
+    let status = (host.api().item_info)(host.handle(), item, &raw mut out);
+    status.is_ok().then_some(out)
+}
+
 /// Inventory reads and transactions on the server; get it from
 /// [`Load::inventories`]. Copy it anywhere.
 ///
@@ -193,17 +209,8 @@ impl Inventories {
     #[must_use]
     #[script]
     pub fn item_info(&self, item: ItemId) -> Option<ItemInfo> {
-        let mut out = ItemData {
-            header: Header::of::<ItemData>(),
-            id: ItemId::new(0),
-            max_stack: 0,
-            category: 0,
-            rarity: 0,
-            flags: 0,
-            placed_entity: [0; 16],
-        };
-        let status = (self.host.api().item_info)(self.host.handle(), item, &raw mut out);
-        status.is_ok().then_some(ItemInfo {
+        let out = item_data(&self.host, item)?;
+        Some(ItemInfo {
             id: out.id,
             max_stack_size: out.max_stack,
             flags: out.flags,

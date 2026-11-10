@@ -351,7 +351,13 @@ pub struct Vanilla {
     workshops: WorkshopLayout,
     hashes: Hashes,
     read: Reader,
-    names: OnceLock<Option<Names>>,
+    /// The item names, kept once the registry reads.
+    names: OnceLock<Names>,
+    /// Where an item's resource holds the tag of its shown name, when the
+    /// build reflects it.
+    item_name: Option<usize>,
+    /// Every item with its names, kept once the registry reads.
+    item_entries: OnceLock<Vec<names::VanillaItem>>,
     /// The recipe layout and the recipe registry's type hash, when the
     /// build reflects them.
     recipes: Option<(RecipeLayout, u32)>,
@@ -458,12 +464,19 @@ impl Vanilla {
         .with_recipe_facts(facts)
         .with_containers(ContainerLayout::resolve(facts).ok())
         .with_fill_tables(FillTableLayout::resolve(facts).ok())
-        .with_template_names(facts.offset(crate::engine_ids::TEMPLATE_NAME).ok()))
+        .with_template_names(facts.offset(crate::engine_ids::TEMPLATE_NAME).ok())
+        .with_item_names(facts.offset(crate::engine_ids::ITEM_INFO_NAME).ok()))
     }
 
     /// The same, reading template names at `at`.
     fn with_template_names(mut self, at: Option<usize>) -> Self {
         self.template_name = at;
+        self
+    }
+
+    /// The same, reading the tag of an item's shown name at `at`.
+    fn with_item_names(mut self, at: Option<usize>) -> Self {
+        self.item_name = at;
         self
     }
 
@@ -479,6 +492,8 @@ impl Vanilla {
             hashes,
             read: Box::new(read),
             names: OnceLock::new(),
+            item_name: None,
+            item_entries: OnceLock::new(),
             recipes: None,
             recipe_list: OnceLock::new(),
             containers: None,
@@ -798,14 +813,16 @@ impl Vanilla {
             .as_ref()
     }
 
+    /// The item names; a registry that does not read yet, as before the
+    /// archive is ready, is read again on the next call.
     fn names(&self) -> Result<&Names, VanillaError> {
-        self.names
-            .get_or_init(|| {
-                let registry = (self.read)(ITEM_REGISTRY.key_by_hash(self.hashes.item_registry))?;
-                registry_names(&self.items, &registry)
-            })
-            .as_ref()
-            .ok_or(VanillaError::Unreadable("item registry"))
+        if let Some(names) = self.names.get() {
+            return Ok(names);
+        }
+        let names = (self.read)(ITEM_REGISTRY.key_by_hash(self.hashes.item_registry))
+            .and_then(|registry| registry_names(&self.items, &registry))
+            .ok_or(VanillaError::Unreadable("item registry"))?;
+        Ok(self.names.get_or_init(|| names))
     }
 
     /// The vanilla item with the debug name `name`, as the item registry

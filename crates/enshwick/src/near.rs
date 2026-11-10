@@ -9,6 +9,20 @@ pub(crate) fn near<'a>(
     names: impl IntoIterator<Item = &'a str>,
     most: usize,
 ) -> Vec<&'a str> {
+    near_lowered(
+        typed,
+        names.into_iter().map(|name| (name, name.to_lowercase())),
+        most,
+    )
+}
+
+/// [`near`] over names paired with their lower case, made once by the
+/// caller; a name listed twice takes one place.
+pub(crate) fn near_lowered<'a, L: AsRef<str>>(
+    typed: &str,
+    names: impl IntoIterator<Item = (&'a str, L)>,
+    most: usize,
+) -> Vec<&'a str> {
     let needle = typed.to_lowercase();
     if needle.is_empty() {
         return Vec::new();
@@ -17,8 +31,8 @@ pub(crate) fn near<'a>(
     let slack = (typed_len / 3).max(1);
     let mut scored: Vec<(usize, &str)> = names
         .into_iter()
-        .filter_map(|name| {
-            let lower = name.to_lowercase();
+        .filter_map(|(name, lower)| {
+            let lower = lower.as_ref();
             let score = if lower.starts_with(&needle) {
                 0
             } else if lower.contains(&needle) {
@@ -28,7 +42,7 @@ pub(crate) fn near<'a>(
                 if typed_len.abs_diff(lower.chars().count()) > slack {
                     return None;
                 }
-                let edits = strsim::levenshtein(&needle, &lower);
+                let edits = strsim::levenshtein(&needle, lower);
                 if edits > slack {
                     return None;
                 }
@@ -38,6 +52,7 @@ pub(crate) fn near<'a>(
         })
         .collect();
     scored.sort_unstable();
+    scored.dedup();
     scored
         .into_iter()
         .take(most)

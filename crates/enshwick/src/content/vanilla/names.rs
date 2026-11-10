@@ -58,15 +58,7 @@ pub struct VanillaRecipe {
 /// }
 /// ```
 pub fn items() -> Result<Vec<VanillaItem>, VanillaError> {
-    Ok(game()?
-        .item_list()?
-        .into_iter()
-        .map(|(guid, name)| VanillaItem {
-            guid,
-            name,
-            name_tag: crate::content::items::vanilla_name_tag(guid),
-        })
-        .collect())
+    Ok(game()?.items()?.to_vec())
 }
 
 /// Every vanilla recipe of the running game with its debug name and the
@@ -155,10 +147,10 @@ fn by_shown_name(shown: &[Shown], name: &str) -> Result<Guid, VanillaError> {
     match found.as_slice() {
         [one] => Ok(*one),
         [] => {
-            let mut texts: Vec<&str> = shown.iter().map(|shown| shown.text.as_str()).collect();
-            texts.sort_unstable();
-            texts.dedup();
-            let near = crate::near::near(name, texts, NEAR);
+            let texts = shown
+                .iter()
+                .map(|shown| (shown.text.as_str(), shown.lower.as_str()));
+            let near = crate::near::near_lowered(name, texts, NEAR);
             Err(VanillaError::Unknown {
                 name: name.to_owned(),
                 near: near.into_iter().map(str::to_owned).collect(),
@@ -203,6 +195,50 @@ pub fn item_by_display_name(name: &str) -> Result<Guid, VanillaError> {
 }
 
 impl Vanilla {
+    /// Every vanilla item with its debug name and the tag of the name the
+    /// game shows, sorted by debug name. The first call that finds the
+    /// registry reads each item's tag; later calls read nothing.
+    ///
+    /// # Errors
+    ///
+    /// [`VanillaError::Unreadable`] while the registry does not read; a
+    /// later call reads it again.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::vanilla::Vanilla;
+    ///
+    /// if let Some(vanilla) = Vanilla::game() {
+    ///     let named = vanilla.items()?.iter().filter(|item| item.name_tag.is_some()).count();
+    ///     enshwick::info!("{named} items have a shown name");
+    /// }
+    /// # Ok::<(), enshwick::content::vanilla::VanillaError>(())
+    /// ```
+    pub fn items(&self) -> Result<&[VanillaItem], VanillaError> {
+        if let Some(items) = self.item_entries.get() {
+            return Ok(items);
+        }
+        let items = self
+            .item_list()?
+            .into_iter()
+            .map(|(guid, name)| VanillaItem {
+                guid,
+                name,
+                name_tag: self.name_tag(guid),
+            })
+            .collect();
+        Ok(self.item_entries.get_or_init(|| items))
+    }
+
+    /// The tag of the name the game shows for `item`, read from its
+    /// resource; `None` for an item without one.
+    fn name_tag(&self, item: Guid) -> Option<Guid> {
+        let at = self.item_name?;
+        let info = (self.read)(item.key_by_hash(self.hashes.item))?;
+        Some(Guid(info.get(at..at.checked_add(16)?)?.try_into().ok()?))
+    }
+
     /// Every vanilla item with its debug name, sorted by name, or
     /// [`VanillaError::Unreadable`] without the registry.
     fn item_list(&self) -> Result<Vec<(Guid, String)>, VanillaError> {
