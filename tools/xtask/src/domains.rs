@@ -7,10 +7,16 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
+use proc_macro2::{Ident, Spacing, TokenStream, TokenTree};
+use syn::visit::{self, Visit};
+use syn::{Item, ItemMod, UseTree, Visibility};
+
 /// The map, from the workspace root.
 const MAP: &str = "crates/internal/core/domains.toml";
 /// Core's sources, from the workspace root.
 const SOURCES: &str = "crates/internal/core/src";
+/// The script namespaces' per-domain lists, under `src`.
+const LISTS: &str = "script/namespaces/";
 
 /// `domains.toml`.
 #[derive(Debug, serde::Deserialize)]
@@ -42,13 +48,28 @@ fn problems(root: &Path) -> Result<Vec<String>, String> {
     let mut files = Vec::new();
     collect(&sources, &sources, &mut files)?;
     let mut problems = namespace_lists(&map, &files);
-    files.retain(|(path, _)| !map.joins.iter().any(|join| path.starts_with(join.as_str())));
-    let modules: BTreeSet<String> = files.iter().map(|(path, _)| top(path)).collect();
+    let joined = |path: &str| map.joins.iter().any(|join| path.starts_with(join.as_str()));
+    let modules: BTreeSet<String> = files
+        .iter()
+        .filter(|(path, _)| !joined(path))
+        .map(|(path, _)| top(path))
+        .collect();
+    let lib = files.iter().find(|(path, _)| path == "lib.rs");
+    let mut roots = roots(lib.map_or("", |(_, text)| text))?;
+    // A module's own name wins over an item the root re-exports under it.
+    roots.retain(|name, _| !modules.contains(name));
     let mut edges = BTreeSet::new();
     for (path, text) in &files {
-        let from = top(path);
-        for to in names(&code(text), depth(path)) {
-            if to != from && modules.contains(&to) {
+        let named =
+            names(text, depth(path), &roots).map_err(|e| format!("{SOURCES}/{path}: {e}"))?;
+        if let Some(list) = path.strip_prefix(LISTS).and_then(|p| p.strip_suffix(".rs")) {
+            problems.extend(list_strays(&map, list, &named));
+        } else if !joined(path) {
+            let from = top(path);
+            for to in named
+                .into_iter()
+                .filter(|to| *to != from && modules.contains(to))
+            {
                 edges.insert((from.clone(), to));
             }
         }
@@ -57,10 +78,27 @@ fn problems(root: &Path) -> Result<Vec<String>, String> {
     Ok(problems)
 }
 
+/// What the namespace list of `list` names from another domain: each list
+/// holds its own domain's namespaces, and `Load`, which carries every
+/// domain's starting functions.
+fn list_strays(map: &Map, list: &str, named: &BTreeSet<String>) -> Vec<String> {
+    let mut problems = Vec::new();
+    for (domain, modules) in map.modules.iter().filter(|(domain, _)| *domain != list) {
+        for module in modules
+            .iter()
+            .filter(|m| named.contains(*m) && *m != "load")
+        {
+            problems.push(format!(
+                "{SOURCES}/{LISTS}{list}.rs names {module} of {domain}: move its namespace to {LISTS}{domain}.rs"
+            ));
+        }
+    }
+    problems
+}
+
 /// The script namespaces' join: one list file per domain under
 /// `script/namespaces/`, named after it, joined in the map's order.
 fn namespace_lists(map: &Map, files: &[(String, String)]) -> Vec<String> {
-    const LISTS: &str = "script/namespaces/";
     let mut problems = Vec::new();
     let listed: Vec<&str> = files
         .iter()
@@ -180,18 +218,6 @@ fn top(path: &str) -> String {
     first.strip_suffix(".rs").unwrap_or(first).to_owned()
 }
 
-/// `text` without comments, doc examples among them, and without a
-/// trailing `#[cfg(test)] mod tests { .. }`.
-fn code(text: &str) -> String {
-    let cut = text
-        .find("#[cfg(test)]\nmod tests {")
-        .map_or(text, |at| &text[..at]);
-    cut.lines()
-        .map(|line| line.split_once("//").map_or(line, |(code, _)| code))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 /// The module depth of a file under `src`: 1 for `ui.rs` and `ui/mod.rs`,
 /// 2 for `ui/frame.rs`.
 fn depth(path: &str) -> usize {
@@ -203,83 +229,201 @@ fn depth(path: &str) -> usize {
     }
 }
 
-/// The first segment under the crate root of every path in `code`, a file
-/// `depth` modules deep: `crate::` paths and chains of `depth` `super::`,
-/// those of a `{..}` group included.
-///
-/// shortcut: an inline `mod` deepens the file's own depth, so a chain inside
-/// one is read one module short; parse with syn if that ever misleads.
-fn names(code: &str, depth: usize) -> BTreeSet<String> {
-    let mut found = BTreeSet::new();
-    let mut rest = code;
-    while let Some(at) = rest
-        .find("crate::")
-        .into_iter()
-        .chain(rest.find("super::"))
-        .min()
-    {
-        let before = rest[..at].chars().next_back();
-        rest = &rest[at..];
-        let mut supers = 0;
-        while let Some(after) = rest.strip_prefix("super::") {
-            supers += 1;
-            rest = after;
-        }
-        if supers == 0 {
-            rest = &rest["crate::".len()..];
-        }
-        if before.is_some_and(|c| c.is_alphanumeric() || c == '_' || c == ':')
-            || (supers > 0 && supers != depth)
-        {
-            continue;
-        }
-        segments(rest, &mut found);
-    }
-    found
-}
-
-/// The first segment of the path `rest` starts, or of each path in the
-/// `{..}` group it starts.
-fn segments(rest: &str, found: &mut BTreeSet<String>) {
-    let Some(group) = rest.strip_prefix('{') else {
-        found.extend(ident(rest));
-        return;
-    };
-    let mut depth = 1;
-    let end = group
-        .char_indices()
-        .find(|&(_, c)| {
-            depth += match c {
-                '{' => 1,
-                '}' => -1,
-                _ => 0,
-            };
-            depth == 0
-        })
-        .map_or(group.len(), |(i, _)| i);
-    let mut level = 0;
-    let mut start = 0;
-    for (i, c) in group[..end].char_indices().chain([(end, ',')]) {
-        match c {
-            '{' => level += 1,
-            '}' => level -= 1,
-            ',' if level == 0 => {
-                found.extend(ident(group[start..i].trim()));
-                start = i + 1;
+/// The items `lib.rs` re-exports at the crate root, each with the module it
+/// comes from: `Load` with `load` for `pub use load::{Load, Mod, Off}`.
+fn roots(lib: &str) -> Result<BTreeMap<String, String>, String> {
+    fn leaves(tree: &UseTree, module: Option<&str>, out: &mut BTreeMap<String, String>) {
+        match tree {
+            UseTree::Path(path) => {
+                let name = path.ident.to_string();
+                leaves(&path.tree, Some(module.unwrap_or(&name)), out);
             }
-            _ => {}
+            UseTree::Name(name) => {
+                if let Some(module) = module {
+                    out.insert(name.ident.to_string(), module.to_owned());
+                }
+            }
+            UseTree::Rename(rename) => {
+                if let Some(module) = module {
+                    out.insert(rename.rename.to_string(), module.to_owned());
+                }
+            }
+            UseTree::Group(group) => {
+                for tree in &group.items {
+                    leaves(tree, module, out);
+                }
+            }
+            UseTree::Glob(_) => {}
+        }
+    }
+    let file = syn::parse_file(lib).map_err(|e| format!("{SOURCES}/lib.rs: {e}"))?;
+    let mut roots = BTreeMap::new();
+    for item in &file.items {
+        if let Item::Use(item) = item
+            && matches!(item.vis, Visibility::Public(_))
+        {
+            leaves(&item.tree, None, &mut roots);
+        }
+    }
+    Ok(roots)
+}
+
+/// The top-level modules `text`, a file `depth` modules deep, names: the
+/// first segment under the crate root of each `crate::` path and each chain
+/// of `super::` that reaches the root, a root re-export read through
+/// `roots`; comments and `#[cfg(test)]` items left out, macro bodies read as
+/// tokens.
+fn names(
+    text: &str,
+    depth: usize,
+    roots: &BTreeMap<String, String>,
+) -> Result<BTreeSet<String>, String> {
+    let file = syn::parse_file(text).map_err(|e| e.to_string())?;
+    let mut walk = Walk {
+        depth,
+        roots,
+        found: BTreeSet::new(),
+    };
+    walk.visit_file(&file);
+    Ok(walk.found)
+}
+
+/// The walk of [`names`] over one file.
+struct Walk<'a> {
+    /// How many modules deep the walk stands, inline modules counted.
+    depth: usize,
+    roots: &'a BTreeMap<String, String>,
+    found: BTreeSet<String>,
+}
+
+impl Walk<'_> {
+    /// Records the top-level module the path of `segments` names, when it
+    /// starts at the crate root.
+    fn path(&mut self, segments: &[String]) {
+        let supers = segments.iter().take_while(|s| *s == "super").count();
+        let under_root = match segments.first().map(String::as_str) {
+            Some("crate") => &segments[1..],
+            Some("super") if supers == self.depth => &segments[supers..],
+            _ => return,
+        };
+        if let Some(first) = under_root.first() {
+            let module = self.roots.get(first).unwrap_or(first);
+            self.found.insert(module.clone());
+        }
+    }
+
+    /// Records each path of a `use` tree under `prefix`.
+    fn tree(&mut self, prefix: &mut Vec<String>, tree: &UseTree) {
+        match tree {
+            UseTree::Path(path) => {
+                prefix.push(path.ident.to_string());
+                self.tree(prefix, &path.tree);
+                prefix.pop();
+            }
+            UseTree::Name(name) => {
+                prefix.push(name.ident.to_string());
+                self.path(prefix);
+                prefix.pop();
+            }
+            UseTree::Rename(rename) => {
+                prefix.push(rename.ident.to_string());
+                self.path(prefix);
+                prefix.pop();
+            }
+            UseTree::Group(group) => {
+                for tree in &group.items {
+                    self.tree(prefix, tree);
+                }
+            }
+            UseTree::Glob(_) => self.path(prefix),
+        }
+    }
+
+    /// Records each `a::b` path in a macro body, `$crate::` included.
+    fn tokens(&mut self, tokens: TokenStream) {
+        let trees: Vec<TokenTree> = tokens.into_iter().collect();
+        let mut at = 0;
+        while at < trees.len() {
+            match &trees[at] {
+                TokenTree::Group(group) => {
+                    self.tokens(group.stream());
+                    at += 1;
+                }
+                TokenTree::Ident(first) => {
+                    let mut segments = vec![first.to_string()];
+                    at += 1;
+                    while let [
+                        TokenTree::Punct(a),
+                        TokenTree::Punct(b),
+                        TokenTree::Ident(next),
+                        ..,
+                    ] = &trees[at..]
+                        && a.as_char() == ':'
+                        && a.spacing() == Spacing::Joint
+                        && b.as_char() == ':'
+                    {
+                        segments.push(next.to_string());
+                        at += 3;
+                    }
+                    self.path(&segments);
+                }
+                _ => at += 1,
+            }
         }
     }
 }
 
-/// The lowercase identifier `text` starts with, unless a macro call.
-fn ident(text: &str) -> Option<String> {
-    let end = text
-        .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
-        .unwrap_or(text.len());
-    let name = &text[..end];
-    let lower = name.starts_with(|c: char| c.is_ascii_lowercase() || c == '_');
-    (lower && !text[end..].starts_with('!')).then(|| name.to_owned())
+impl<'ast> Visit<'ast> for Walk<'_> {
+    fn visit_item(&mut self, item: &'ast Item) {
+        if !test_only(item) {
+            visit::visit_item(self, item);
+        }
+    }
+
+    fn visit_item_mod(&mut self, item: &'ast ItemMod) {
+        let inline = usize::from(item.content.is_some());
+        self.depth += inline;
+        visit::visit_item_mod(self, item);
+        self.depth -= inline;
+    }
+
+    fn visit_path(&mut self, path: &'ast syn::Path) {
+        let segments: Vec<String> = path.segments.iter().map(|s| s.ident.to_string()).collect();
+        if path.leading_colon.is_none() {
+            self.path(&segments);
+        }
+        visit::visit_path(self, path);
+    }
+
+    fn visit_use_tree(&mut self, tree: &'ast UseTree) {
+        self.tree(&mut Vec::new(), tree);
+    }
+
+    fn visit_macro(&mut self, mac: &'ast syn::Macro) {
+        self.tokens(mac.tokens.clone());
+        visit::visit_macro(self, mac);
+    }
+}
+
+/// Whether `item` exists only in tests, under a plain `#[cfg(test)]`.
+fn test_only(item: &Item) -> bool {
+    let attrs = match item {
+        Item::Const(item) => &item.attrs,
+        Item::Enum(item) => &item.attrs,
+        Item::Fn(item) => &item.attrs,
+        Item::Impl(item) => &item.attrs,
+        Item::Macro(item) => &item.attrs,
+        Item::Mod(item) => &item.attrs,
+        Item::Static(item) => &item.attrs,
+        Item::Struct(item) => &item.attrs,
+        Item::Trait(item) => &item.attrs,
+        Item::Type(item) => &item.attrs,
+        Item::Use(item) => &item.attrs,
+        _ => return false,
+    };
+    attrs.iter().any(|attr| {
+        attr.path().is_ident("cfg") && attr.parse_args::<Ident>().is_ok_and(|arg| arg == "test")
+    })
 }
 
 #[cfg(test)]
@@ -312,19 +456,57 @@ mod tests {
     }
 
     #[test]
-    fn names_reads_paths_groups_and_nested_groups_but_not_macros_or_roots() {
-        let code = "use crate::map::Map;\nuse crate::{host::Host, ui::{Ui, frame}, Load};\ncrate::warn!(\"x\");\nlet a = foo_crate::x;";
-        assert_eq!(names(code, 1), set(&["host", "map", "ui"]));
-        let nested = "use crate::{ui::{Ui, frame::{A, b}}, sound::Sound};\nuse crate::time;";
-        assert_eq!(names(nested, 1), set(&["sound", "time", "ui"]));
+    fn names_reads_paths_groups_nested_groups_and_macro_bodies() -> Result<(), String> {
+        let code = "use crate::map::Map;\nuse crate::{host::Host, ui::{Ui, frame}};\nfn f() { crate::sound::play(); let a = foo_crate::x; log!(crate::time::now()); }\nmacro_rules! m { () => { $crate::world::W } }";
+        assert_eq!(
+            names(code, 1, &BTreeMap::new())?,
+            set(&["host", "map", "sound", "time", "ui", "world"])
+        );
+        Ok(())
     }
 
     #[test]
-    fn names_follows_a_super_chain_to_the_root_but_not_one_that_stays_inside() {
-        let code = "use super::super::ui::Ui;\nuse super::frame::F;\nlet x = super::super::{host::H, map};\nuse self::super::sound;";
-        assert_eq!(names(code, 2), set(&["host", "map", "ui"]));
-        assert_eq!(names("use super::host::Host;", 1), set(&["host"]));
-        assert_eq!(names("use super::super::ui::Ui;", 3), set(&[]));
+    fn names_follows_a_super_chain_to_the_root_and_counts_inline_modules() -> Result<(), String> {
+        let code = "use super::super::ui::Ui;\nuse super::frame::F;\nuse super::super::{host::H, map};\nmod inner { use super::super::super::sound::S; use super::super::time::T; }";
+        assert_eq!(
+            names(code, 2, &BTreeMap::new())?,
+            set(&["host", "map", "sound", "ui"])
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn names_skips_comments_strings_and_test_items_but_reads_code_after_them() -> Result<(), String>
+    {
+        let code = "/// crate::ui::Ui\nuse crate::map; // crate::host\nconst U: &str = \"https://x crate::world\"; use crate::time::T;\n#[cfg(test)]\nmod tests { use crate::ui; }\nuse crate::sound::S;";
+        assert_eq!(
+            names(code, 1, &BTreeMap::new())?,
+            set(&["map", "sound", "time"])
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn names_reads_a_root_re_export_as_the_module_it_comes_from() -> Result<(), String> {
+        let roots = roots(
+            "pub use world_error::WorldError;\npub use load::{Load as L, Mod};\nuse ui::Hidden;",
+        )?;
+        assert_eq!(
+            roots.get("WorldError").map(String::as_str),
+            Some("world_error")
+        );
+        assert_eq!(roots.get("L").map(String::as_str), Some("load"));
+        assert!(!roots.contains_key("Hidden"));
+        let code = "use crate::WorldError;\nfn f() { crate::L::x(); }";
+        assert_eq!(names(code, 1, &roots)?, set(&["load", "world_error"]));
+        Ok(())
+    }
+
+    #[test]
+    fn a_namespace_list_naming_another_domain_fails_but_load_passes() {
+        let problems = list_strays(&map(&[]), "world", &set(&["map", "load", "ui"]));
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].contains("names ui of ui"), "{problems:?}");
     }
 
     #[test]
@@ -333,12 +515,6 @@ mod tests {
         assert_eq!(depth("ui/mod.rs"), 1);
         assert_eq!(depth("ui/frame.rs"), 2);
         assert_eq!(depth("ui/frame/mod.rs"), 2);
-    }
-
-    #[test]
-    fn code_drops_comments_examples_and_the_trailing_tests() {
-        let text = "/// crate::ui::Ui\nuse crate::map; // crate::host\n#[cfg(test)]\nmod tests {\n    use crate::ui;\n}\n";
-        assert_eq!(names(&code(text), 1), set(&["map"]));
     }
 
     #[test]
@@ -361,9 +537,18 @@ mod tests {
     }
 
     #[test]
-    fn a_tree_with_an_edge_up_and_a_join_out_of_order_fails() {
+    fn a_tree_with_an_edge_up_a_stray_namespace_and_a_join_out_of_order_fails() {
+        /// Removes the tree however the test ends.
+        struct Tree(std::path::PathBuf);
+        impl Drop for Tree {
+            fn drop(&mut self) {
+                let _gone = std::fs::remove_dir_all(&self.0);
+            }
+        }
         let root = std::env::temp_dir().join(format!("xtask-domains-{}", std::process::id()));
-        let src = root.join(SOURCES);
+        let _gone = std::fs::remove_dir_all(&root);
+        let tree = Tree(root.clone());
+        let src = tree.0.join(SOURCES);
         let write = |path: &str, text: &str| {
             let path = src.join(path);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -375,18 +560,20 @@ mod tests {
             "order = [\"base\", \"ui\"]\njoins = [\"lib.rs\", \"script/namespaces\"]\nupward = []\n[modules]\nbase = [\"host\", \"script\"]\nui = [\"ui\"]\n",
         )
         .unwrap();
-        write("lib.rs", "mod host; mod ui; mod script;");
-        write("host.rs", "use crate::ui::Ui;\nuse crate::{script, ui};");
+        write("lib.rs", "mod host; mod ui; mod script;\npub use ui::Ui;");
+        write("host.rs", "use crate::Ui;\nuse crate::script;");
         write("ui.rs", "use crate::host::Host;");
         write("script.rs", "mod namespaces;");
         write(
             "script/namespaces.rs",
             "const D: &[&[N]] = &[\n    ui::NAMESPACES,\n    base::NAMESPACES,\n];",
         );
-        write("script/namespaces/base.rs", "");
+        write(
+            "script/namespaces/base.rs",
+            "const N: &[u8] = &[crate::ui::X];",
+        );
         write("script/namespaces/ui.rs", "");
         let problems = check(&root);
-        std::fs::remove_dir_all(&root).unwrap();
         assert!(
             problems.iter().any(|p| p.starts_with("host -> ui goes up")),
             "{problems:?}"
@@ -397,7 +584,13 @@ mod tests {
                 .any(|p| p.contains("joins [\"ui\", \"base\"]")),
             "{problems:?}"
         );
-        assert_eq!(problems.len(), 2, "{problems:?}");
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("base.rs names ui of ui")),
+            "{problems:?}"
+        );
+        assert_eq!(problems.len(), 3, "{problems:?}");
     }
 
     #[test]
