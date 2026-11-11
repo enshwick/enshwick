@@ -243,6 +243,10 @@ pub(super) fn same_keys_as_serde(attrs: &[Attribute]) -> syn::Result<()> {
     Ok(())
 }
 
+/// The struct `input` under `#[enshwick::config(args)]`: serde's derives
+/// through the API's serde, unknown keys refused, every missing key at the
+/// struct's `Default`, the arguments as the `Config` derive's struct
+/// attributes.
 pub(super) fn expand_attribute(
     args: proc_macro2::TokenStream,
     input: &DeriveInput,
