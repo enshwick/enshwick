@@ -11,6 +11,7 @@
 //! file per crate and feature.
 
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use crate::affected::Package;
@@ -422,9 +423,10 @@ fn wrapped(text: &str, fence: usize, item: &str) -> Option<(String, String)> {
             continue;
         }
         if at == close {
-            out.push_str(&format!(
-                "{prefix}{WRAPPER_OPEN} // names items above this crate: enshwick's doctests compile it\n"
-            ));
+            let _written = writeln!(
+                out,
+                "{prefix}{WRAPPER_OPEN} // names items above this crate: enshwick's doctests compile it"
+            );
             for kept in &lines {
                 out.push_str(prefix.trim_end());
                 if !kept.is_empty() {
@@ -433,7 +435,7 @@ fn wrapped(text: &str, fence: usize, item: &str) -> Option<(String, String)> {
                 }
                 out.push('\n');
             }
-            out.push_str(&format!("{prefix}{WRAPPER_CLOSE}\n"));
+            let _written = writeln!(out, "{prefix}{WRAPPER_CLOSE}");
         }
         out.push_str(line);
     }
@@ -467,12 +469,12 @@ pub(crate) fn wrap(root: &Path, packages: &[Package], args: &[String]) -> Result
         let path = root.join(&file);
         let lib = crates
             .iter()
-            .find(|krate| krate.sources.iter().any(|source| *source == path))
+            .find(|krate| krate.sources.contains(&path))
             .map(|krate| krate.lib.clone())
             .ok_or_else(|| format!("{file}: no internal crate below the facade holds it"))?;
         let mut text = read(&path)?;
         let mut file_copies = Vec::new();
-        list.sort_by(|a, b| b.fence.cmp(&a.fence));
+        list.sort_by_key(|one| core::cmp::Reverse(one.fence));
         for one in &list {
             let (next, copy) = wrapped(&text, one.fence - 1, &one.item)
                 .ok_or_else(|| format!("{file}:{}: no unwrapped example opens here", one.fence))?;

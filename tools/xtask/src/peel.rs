@@ -164,16 +164,16 @@ fn block(item: &ItemImpl, text: &str, at: &Offsets<'_>) -> (String, Option<Strin
             let _written = writeln!(lines, "    {}", attr_text(attr, text, at));
         }
         lines.push_str("    ");
-        let sig_at = sig_start(method, at);
+        let signature_start = sig_start(method, at);
         match &method.vis {
-            Visibility::Public(_) => lines.push_str(&text[sig_at..end]),
+            Visibility::Public(_) => lines.push_str(&text[signature_start..end]),
             Visibility::Restricted(r) => {
                 lines.push_str("pub");
                 lines.push_str(&text[at.byte(r.paren_token.span.close().end())..end]);
             }
             Visibility::Inherited => {
                 lines.push_str("pub ");
-                lines.push_str(&text[sig_at..end]);
+                lines.push_str(&text[signature_start..end]);
             }
         }
         moved.push(lines);
@@ -228,7 +228,7 @@ fn sig_start(method: &ImplItemFn, at: &Offsets<'_>) -> usize {
         match &sig.safety {
             syn::Safety::Unsafe(token) => Some(token.span),
             syn::Safety::Safe(token) => Some(token.span),
-            _ => None,
+            syn::Safety::Default => None,
         },
         sig.abi.as_ref().map(|a| a.extern_token.span),
         Some(sig.fn_token.span),
