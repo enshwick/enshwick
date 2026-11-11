@@ -3,9 +3,10 @@ name: Rust CI
 # `cargo xtask check` for a pull request, a merge queue entry or a push to
 # main, on GitHub-hosted runners, with the toolchain, the Windows SDK and the
 # build cached between runs; a push to main runs the full suite and fills the
-# caches pull requests start from. With `split` the host check and the
-# Windows lint run as parallel jobs. The Windows tests run natively on a
-# Windows runner. The job `check` sums them up and is the required check.
+# caches pull requests start from. With `split` the host check, the Windows
+# lint, the trybuild test and cargo-semver-checks run as parallel jobs. The
+# Windows tests run natively on a Windows runner. The job `check` sums them
+# up and is the required check.
 
 on:
   workflow_call:
@@ -19,7 +20,7 @@ on:
         type: boolean
         default: true
       split:
-        description: Run the host check and the Windows lint as parallel jobs and only the Windows tests a change touches; the repository's `cargo xtask check` must know `--part` and `--list-windows-tests`.
+        description: Run the host check, the Windows lint, the trybuild test and cargo-semver-checks as parallel jobs and only the Windows tests a change touches; the repository's `cargo xtask` must know `check --part`, `check --list-windows-tests` and `host-args`, and its `.config/nextest.toml` the profiles `ci` and `trybuild`.
         type: boolean
         default: false
       semver:
@@ -29,6 +30,12 @@ on:
 
 permissions: {}
 
+env:
+  # Only pushes to main store build caches. The repository's cache storage
+  # is full, and entries of pull requests and merge queue groups, which no
+  # other run restores, would evict the ones every run starts from.
+  STORE_CACHES: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+
 jobs:
   scope:
     runs-on: ubuntu-26.04
@@ -37,7 +44,31 @@ jobs:
       contents: read
     outputs:
       skip: ${{ steps.scope.outputs.skip }}
+      parts: ${{ steps.parts.outputs.parts }}
     steps:
+      # One runner per part. A part with `xtask` runs `cargo xtask check
+      # --part <part>`; the others run their own steps in the job `part`.
+      - name: Parts
+        id: parts
+        env:
+          EVENT: ${{ github.event_name }}
+          SEMVER: ${{ inputs.semver }}
+          SPLIT: ${{ inputs.split }}
+        run: |
+          if [ "$SPLIT" = true ]; then
+            parts='{"part":"host","xtask":true},{"part":"windows-lint","xtask":true},{"part":"trybuild","xtask":false}'
+            # A pull request also fuzzes, briefly, the targets its change
+            # reaches; a push to main fuzzes every target and fills the fuzz
+            # build cache pull requests restore.
+            if [ "$EVENT" = pull_request ] || [ "$EVENT" = push ]; then
+              parts+=',{"part":"fuzz","xtask":true}'
+            fi
+            if [ -n "$SEMVER" ]; then parts+=',{"part":"semver","xtask":false}'; fi
+          else
+            parts='{"part":"all","xtask":true}'
+          fi
+          echo "parts={\"include\":[$parts]}" | tee -a "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -86,6 +117,7 @@ jobs:
           echo "skip=$reason" >> "$GITHUB_OUTPUT"
 
   part:
+    name: part (${{ matrix.part }})
     needs: scope
     if: needs.scope.outputs.skip == ''
     runs-on: ubuntu-26.04
@@ -94,11 +126,7 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
-      matrix:
-        # A pull request also fuzzes, briefly, the targets its change
-        # reaches; a push to main fuzzes every target and fills the fuzz
-        # build cache pull requests restore.
-        part: ${{ fromJSON(inputs.split && ((github.event_name == 'pull_request' || github.event_name == 'push') && '["host", "windows-lint", "fuzz"]' || '["host", "windows-lint"]') || '["all"]') }}
+      matrix: ${{ fromJSON(needs.scope.outputs.parts) }}
     env:
       # A merge queue entry is checked against the entry before it (its
       # group's parent): only its own pull request's changes are new.
@@ -116,7 +144,8 @@ jobs:
 
       # The mods the book links files of, for the book link check; ignored
       # by git, so no workspace member, tool or scan of this tree takes it.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - if: matrix.xtask
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: enshwick/mods
           path: .mods
@@ -138,18 +167,23 @@ jobs:
         with:
           path: ${{ runner.tool_cache }}/xwin
           key: xwin-${{ runner.os }}-0.23.1-v1
-      # clang of the toolchain's LLVM.
+      # clang of the toolchain's LLVM; the trybuild and semver parts install
+      # the host part's packages.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.tool_cache }}/apt-archives
-          key: apt-${{ runner.os }}-${{ matrix.part }}-v2
+          key: apt-${{ runner.os }}-${{ (matrix.part == 'trybuild' || matrix.part == 'semver') && 'host' || matrix.part }}-v2
 
       - uses: ./.github/actions/setup-rust
         with:
-          tools: cargo-nextest@0.9.151,cargo-deny@0.20.2,cargo-machete@0.9.2${{ inputs.semver != '' && (matrix.part == 'host' || matrix.part == 'all') && ',cargo-semver-checks@0.51.0' || '' }}
+          tools: cargo-nextest@0.9.151,cargo-deny@0.20.2,cargo-machete@0.9.2${{ inputs.semver != '' && (matrix.part == 'semver' || matrix.part == 'all') && ',cargo-semver-checks@0.51.0' || '' }}
           ast-grep: ${{ matrix.part == 'host' || matrix.part == 'all' }}
           sanitizers: ${{ matrix.part == 'fuzz' }}
           fuzz: ${{ matrix.part == 'fuzz' }}
+
+      - uses: ./.github/actions/sccache
+        with:
+          store: ${{ env.STORE_CACHES }}
 
       # The build itself, per part: each job builds a different target.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
@@ -158,6 +192,7 @@ jobs:
           # never replaced, so only a finished run saves one.
           prefix-key: v1-rust
           key: ${{ matrix.part }}
+          save-if: ${{ env.STORE_CACHES }}
 
       # The luau-lsp the tests download, kept per pin instead of fetched by
       # each test process.
@@ -168,8 +203,12 @@ jobs:
           key: luau-lsp-${{ runner.os }}-${{ hashFiles('crates/cargo-enshwick/luau-lsp.toml') }}
 
       - name: cargo xtask check
+        if: matrix.xtask
         env:
           ENSH_MODS_DIR: ${{ github.workspace }}/.mods
+          # The host part leaves the trybuild test to the part `trybuild`
+          # (.config/nextest.toml).
+          NEXTEST_PROFILE: ${{ matrix.part == 'host' && 'ci' || 'default' }}
         run: |
           args=()
           if [ "$FULL" = true ]; then args+=(--all); else args+=(--base "$BASE"); fi
@@ -177,16 +216,32 @@ jobs:
           if [ "$PART" = all ] || [ "$PART" = host ]; then cargo fmt --all --check; fi
           cargo xtask check "${args[@]}"
 
+      # The test builds the API crate again under target/tests/trybuild,
+      # which alone took longer than the rest of the host part's tests. It
+      # runs on every change that builds, with the host part's features; a
+      # moved test fails here instead of going untested.
+      - name: The trybuild test
+        if: matrix.part == 'trybuild'
+        run: |
+          # A substitution in an assignment fails the step; `< <(...)` would not.
+          host_args=$(cargo xtask host-args)
+          mapfile -t args <<< "$host_args"
+          cargo nextest run "${args[@]}" --test main --profile trybuild --no-tests=fail
+
       # A version that claims less change than the public API made fails;
       # unreleased changes keep the released version and pass.
       - name: cargo semver-checks
-        if: inputs.semver != '' && (matrix.part == 'all' || matrix.part == 'host')
+        if: inputs.semver != '' && (matrix.part == 'semver' || matrix.part == 'all')
         env:
           PACKAGES: ${{ inputs.semver }}
         run: |
           args=()
           for package in $PACKAGES; do args+=(--package "$package"); done
           cargo semver-checks "${args[@]}"
+
+      - name: sccache statistics
+        if: ${{ !cancelled() && env.RUSTC_WRAPPER == 'sccache' }}
+        run: sccache --show-stats
 
   # The tests of the crates marked `windows-tests` or `windows-only`, natively
   # on Windows. With `split` the repository's `cargo xtask check` lists the
@@ -221,13 +276,15 @@ jobs:
           rustup toolchain install
           rustc --version
 
+      - uses: ./.github/actions/sccache
+        with:
+          store: ${{ env.STORE_CACHES }}
+
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           prefix-key: v1-rust
           key: windows
-          # Branch caches would fill the repository's cache storage and evict
-          # the entries main's runs and pull requests restore.
-          save-if: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+          save-if: ${{ env.STORE_CACHES }}
 
       - name: Windows tests to run
         id: list
@@ -268,6 +325,10 @@ jobs:
             echo "::endgroup::"
           fi
           exit "$status"
+
+      - name: sccache statistics
+        if: ${{ !cancelled() && env.RUSTC_WRAPPER == 'sccache' }}
+        run: sccache --show-stats
 
   # The required check: every part passed, or there was nothing to prove.
   check:
