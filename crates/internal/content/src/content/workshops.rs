@@ -557,8 +557,15 @@ impl LoadMethods for crate::BaseLoad {
     }
 }
 
-#[cfg(test)]
-pub(crate) mod tests {
+/// The workshop layout and stations of the tests here, the vanilla game's
+/// and the fake host's.
+#[cfg(any(test, feature = "fake"))]
+pub(crate) mod fixtures {
+    #![expect(
+        clippy::unwrap_used,
+        reason = "a fixture that does not build fails the test that asked for it"
+    )]
+
     use super::*;
 
     pub(crate) const LAYOUT: WorkshopLayout = WorkshopLayout {
@@ -575,6 +582,44 @@ pub(crate) mod tests {
         entry_item_ref: 32,
         entry_npc: 0,
     };
+    pub(crate) const CRAFTING: u32 = 0xc1;
+    pub(crate) const INTERACTION: u32 = 0xc2;
+    pub(crate) const CLIENT: u32 = 0xc3;
+    pub(crate) const OLD: Guid = Guid::parse("965d3192-0287-49a2-ad51-a716139571a6");
+
+    /// A `BlobVariant`: type hash, offset from its second word, size.
+    const VARIANT: usize = 12;
+
+    /// A template with the components `components`, by type hash and size,
+    /// at the old workshop; returns the blob and each data offset.
+    pub(crate) fn station(components: &[(u32, usize)]) -> (Blob, Vec<usize>) {
+        let mut blob = Blob::new(&[0u8; 24]);
+        let variants = blob.append(&vec![0; components.len() * VARIANT], 4);
+        let mut data = Vec::new();
+        for (i, &(hash, size)) in components.iter().enumerate() {
+            let mut bytes = vec![0xee; size];
+            if size >= 20 {
+                bytes[..16].copy_from_slice(&OLD.0);
+            }
+            let at = blob.append(&bytes, 4);
+            let variant = variants + i * VARIANT;
+            let relative = u32::try_from(at - (variant + 4)).unwrap();
+            assert!(blob.write(variant, &hash.to_le_bytes()));
+            assert!(blob.write(variant + 4, &relative.to_le_bytes()));
+            assert!(blob.write(variant + 8, &u32::try_from(size).unwrap().to_le_bytes()));
+            data.push(at);
+        }
+        let count = u32::try_from(components.len()).unwrap();
+        assert!(blob.set_array(16, variants, count));
+        (blob, data)
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::fixtures::*;
+    use super::*;
+
     const ITEMS: ItemLayout = ItemLayout {
         id: 0,
         object: 4,
@@ -588,15 +633,11 @@ pub(crate) mod tests {
         refs: 0,
         names: 0x38,
     };
-    pub(crate) const CRAFTING: u32 = 0xc1;
-    pub(crate) const INTERACTION: u32 = 0xc2;
-    pub(crate) const CLIENT: u32 = 0xc3;
     const ITEM_ID: Id = Id::new("test:bench");
     const WORKSHOP: Guid = Guid::named("test:bench.workshop");
     const ITEM: Guid = ITEM_ID.guid();
     const TEMPLATE: Guid = Guid::named("test:bench.template");
     const NAME: Guid = Guid::named("test:bench.name");
-    const OLD: Guid = Guid::parse("965d3192-0287-49a2-ad51-a716139571a6");
 
     fn new() -> NewWorkshop {
         NewWorkshop {
@@ -629,33 +670,6 @@ pub(crate) mod tests {
 
     fn u32_at(bytes: &[u8], at: usize) -> u32 {
         u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap())
-    }
-
-    /// A `BlobVariant`: type hash, offset from its second word, size.
-    const VARIANT: usize = 12;
-
-    /// A template with the components `components`, by type hash and size,
-    /// at the old workshop; returns the blob and each data offset.
-    pub(crate) fn station(components: &[(u32, usize)]) -> (Blob, Vec<usize>) {
-        let mut blob = Blob::new(&[0u8; 24]);
-        let variants = blob.append(&vec![0; components.len() * VARIANT], 4);
-        let mut data = Vec::new();
-        for (i, &(hash, size)) in components.iter().enumerate() {
-            let mut bytes = vec![0xee; size];
-            if size >= 20 {
-                bytes[..16].copy_from_slice(&OLD.0);
-            }
-            let at = blob.append(&bytes, 4);
-            let variant = variants + i * VARIANT;
-            let relative = u32::try_from(at - (variant + 4)).unwrap();
-            assert!(blob.write(variant, &hash.to_le_bytes()));
-            assert!(blob.write(variant + 4, &relative.to_le_bytes()));
-            assert!(blob.write(variant + 8, &u32::try_from(size).unwrap().to_le_bytes()));
-            data.push(at);
-        }
-        let count = u32::try_from(components.len()).unwrap();
-        assert!(blob.set_array(16, variants, count));
-        (blob, data)
     }
 
     #[test]

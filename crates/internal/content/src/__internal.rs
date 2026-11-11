@@ -12,7 +12,7 @@ use crate::content::workshops::NewWorkshop;
 use crate::content::{Guid, Id};
 #[cfg(feature = "typed")]
 use crate::typed::KnowledgeQueryData;
-use crate::{BaseLoad, Off};
+use crate::{Loading, Off};
 
 /// The fields of an image resource the fake host fills.
 pub const IMAGE_FIELDS: [&str; 6] = crate::content::icons::IMAGE_FIELDS;
@@ -59,8 +59,8 @@ pub fn check_workshop(new: &NewWorkshop) -> Result<(), Off> {
 /// # Errors
 ///
 /// [`Off`] as `Load::add_recipe`.
-pub fn push_recipe(load: &mut BaseLoad, recipe: NewRecipe) -> Result<(), Off> {
-    load.push_recipe(recipe)
+pub fn push_recipe(load: &mut impl Loading, recipe: NewRecipe) -> Result<(), Off> {
+    load.base_mut().push_recipe(recipe)
 }
 
 /// The ABI value of `format`.

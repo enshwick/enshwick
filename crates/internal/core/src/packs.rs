@@ -208,7 +208,7 @@ impl Load<'_> {
     fn add_pack_rest(&mut self, pack: &Pack) -> Result<(), Off> {
         for recipe in &pack.recipes {
             enshwick_content::__internal::push_recipe(
-                &mut self.base,
+                self,
                 NewRecipe {
                     id: id(&recipe.id)?,
                     like: recipe.like,
