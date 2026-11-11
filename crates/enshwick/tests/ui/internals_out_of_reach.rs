@@ -1,7 +1,8 @@
 //! A mod names none of what the internal crates share only among
 //! themselves, and cannot make a `Loading` of its own.
 
-use enshwick::abi::ModHandle;
+use enshwick::WorldError;
+use enshwick::abi::{ModHandle, Status};
 use enshwick::content::Guid;
 use enshwick::content::vanilla::Vanilla;
 use enshwick::content::workshops::NewWorkshop;
@@ -14,6 +15,11 @@ fn reach_content(vanilla: &Vanilla, workshop: &NewWorkshop, guid: Guid) {
     let _ = vanilla.is_item(guid);
     let _ = vanilla.is_recipe(guid);
     let _ = workshop.check();
+}
+
+fn reach_world(status: Status) {
+    let _ = WorldError::from_status(status);
+    let _ = WorldError::check(status, WorldError::Missing);
 }
 
 fn reach(host: Host, scheduler: Scheduler, ty: ComponentType) {

@@ -711,14 +711,12 @@ dependencies = [
  "enshwick-macros",
  "enshwick-typed",
  "enshwick-values",
- "fastrand",
  "insta",
  "postcard",
  "proptest",
  "rustc-hash",
  "serde",
  "thiserror",
- "toml 1.2.1+spec-1.1.0",
 ]
 
 [[package]]

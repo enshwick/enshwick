@@ -20,12 +20,10 @@ enshwick-content.workspace = true
 enshwick-typed = { workspace = true, optional = true }
 enshwick-values.workspace = true
 bytemuck.workspace = true
-fastrand.workspace = true
 postcard.workspace = true
 rustc-hash.workspace = true
 serde.workspace = true
 thiserror.workspace = true
-toml.workspace = true
 
 [dev-dependencies]
 # The examples name the API as a mod does, through the facade, so they build

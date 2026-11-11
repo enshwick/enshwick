@@ -162,6 +162,15 @@ Each entry names the pull request that made the change.
   `inherited_field`, `config::TableConfig::on_change` and
   `script::GameEventKind::subscribe`. `Loading` is new, sealed, at the root
   (#1046).
+- The world domain (`world`, `map`, `altars`, `buffs`, `daytime`,
+  `game_settings`, `terrain`, `voxels`, `weather`, `WorldError` and the
+  typed handles of `typed`) is the internal crate `enshwick-world`, between
+  `enshwick-content` and `enshwick-core`; every path stays (#1050).
+- **Breaking:** the world domain's functions outside `Load` that took the
+  mod's loader take `&impl Loading` or `&mut impl Loading`, so a mod passes
+  its `Load` as before: `world::WritableType::resolve` and `field`, and
+  `resolve`, `on` and `serve` of `typed::ComponentType`, `EventType` and
+  `ResourceType` (#1050).
 - The content domain (`content`, `rates`, and the shape samples of the
   generated `typed` items) is the internal crate
   `enshwick-content`, between `enshwick-base` and `enshwick-core`; every
