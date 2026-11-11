@@ -1,6 +1,17 @@
 //! The examples of `enshwick-base` that name items above its crate,
 //! compiled here as written.
 //!
+//! `script::events::GameEventKind::subscribe`:
+//!
+//! ```rust,standalone_crate
+//! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+//!     let died = enshwick::script::game_events()
+//!         .find(|e| e.name() == "EntityDiedEvent")
+//!         .ok_or(enshwick::Off::new("no such event"))?;
+//!     died.subscribe(load, |data| enshwick::debug!("{:?}", data()))
+//! }
+//! ```
+//!
 //! `points::described::DescribedPoint`:
 //!
 //! ```
