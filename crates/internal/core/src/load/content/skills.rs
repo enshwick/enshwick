@@ -1,6 +1,7 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::content::knowledge::{hash_key, key_of as id_of};
+use crate::content::Guid;
+use crate::content::skills::*;
 use crate::resources::{Registry, Value};
 use crate::typed::ecs::UnlockedSkillNodes;
 use crate::typed::{

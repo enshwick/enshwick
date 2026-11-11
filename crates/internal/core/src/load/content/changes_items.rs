@@ -3,6 +3,7 @@
 use crate::abi::{ChangeOp, DataChange, DataSelect, Header, ItemData, Str};
 use crate::content::Guid;
 use crate::content::categories::ItemCategoryMask;
+use crate::content::changes::*;
 use crate::{Load, Off};
 use enshwick_content::__load::*;
 

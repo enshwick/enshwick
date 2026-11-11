@@ -1,9 +1,8 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
 use crate::abi::Level;
-use crate::content::knowledge::{
-    ExperienceValue, KnowledgeQuery, NewKnowledge, hash_key, key_of_hash, serve_list,
-};
+use crate::content::journal::*;
+use crate::content::knowledge::{ExperienceValue, KnowledgeQuery, NewKnowledge};
 use crate::knowledge::{KnowledgeId, KnowledgeType, Scope};
 use crate::locks::Relock as _;
 use crate::resources::Value;

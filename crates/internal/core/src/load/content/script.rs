@@ -19,6 +19,6 @@ impl Load<'_> {
     #[script(name = "add_recipe_with")]
     pub(crate) fn add_recipe_with_script(
         &mut self,
-        recipe: impl Fn() -> Option<super::recipes::NewRecipe> + Send + Sync + 'static,
+        recipe: impl Fn() -> Option<crate::content::recipes::NewRecipe> + Send + Sync + 'static,
     ) -> Result<(), Off>;
 }

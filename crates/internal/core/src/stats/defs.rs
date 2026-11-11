@@ -169,11 +169,7 @@ impl StatDef {
                 StatType::Multiplicative => StatDefData::MULTIPLICATIVE,
                 StatType::Flag => StatDefData::FLAG,
             },
-            format: match self.format {
-                StatFormat::Number => StatDefData::NUMBER,
-                StatFormat::Signed => StatDefData::SIGNED,
-                StatFormat::Percent => StatDefData::PERCENT,
-            },
+            format: enshwick_content::__internal::stat_format(self.format),
             reserved: 0,
             default: self.default,
             min: self.min,

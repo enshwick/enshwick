@@ -153,7 +153,7 @@ impl StepInfo {
             progress: entry
                 .progress_steps_requirement
                 .iter()
-                .filter_map(KnowledgeQuery::from_data)
+                .filter_map(enshwick_content::__internal::query_from_data)
                 .collect(),
             marker: TextKey::of_key(entry.map_marker_reference.value),
             icon: (entry.item_icon_id.value != 0).then(|| ItemId::new(entry.item_icon_id.value)),

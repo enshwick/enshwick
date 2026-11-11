@@ -2,6 +2,7 @@
 
 use crate::abi::{ChangeOp, DataChange, DataSelect, Header, Str};
 use crate::content::Guid;
+use crate::content::changes::*;
 use crate::content::recipes::RecipeKind;
 use crate::content::workshops::WorkshopId;
 use crate::{Load, Off};

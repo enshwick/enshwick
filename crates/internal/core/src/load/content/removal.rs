@@ -1,6 +1,7 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
 use crate::abi::Status;
+use crate::content::Guid;
 use crate::content::changes::{self, Change, Field};
 use crate::content::recipes::{self, RecipeRule};
 use crate::engine_ids as ids;

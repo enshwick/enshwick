@@ -1,6 +1,7 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
 use crate::abi::ItemData;
+use crate::content::items::*;
 use crate::engine_ids as ids;
 use crate::locks::Relock;
 use crate::{Load, Off};

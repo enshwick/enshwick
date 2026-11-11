@@ -1,5 +1,6 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
+use crate::content::workshops::*;
 use crate::engine_ids as ids;
 use crate::{Load, Off};
 use enshwick_content::__load::*;
@@ -14,7 +15,7 @@ impl Load<'_> {
     /// for the workshop on the client, and optionally a copy of the vanilla
     /// station's recipe that makes the new one. Recipes
     /// target the workshop with [`NewRecipe::workshop`] or
-    /// [`Derived::workshop`](super::recipes::Derived::workshop).
+    /// [`Derived::workshop`](crate::content::recipes::Derived::workshop).
     ///
     /// When the mod is removed, the loader serves the vanilla template under
     /// the new one's GUID, so placed stations load as the vanilla station.

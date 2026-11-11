@@ -1,13 +1,18 @@
 //! What `enshwick-core` calls inside this crate and a mod must not: neither
 //! core nor the facade re-exports it.
 
-use crate::Off;
+use crate::__load::*;
+use crate::abi::StatDefData;
+use crate::content::items::StatFormat;
 #[cfg(feature = "typed")]
 use crate::content::knowledge::{KnowledgeQuery, KnowledgeTest};
+use crate::content::recipes::NewRecipe;
 use crate::content::vanilla::Vanilla;
+use crate::content::workshops::NewWorkshop;
 use crate::content::{Guid, Id};
 #[cfg(feature = "typed")]
 use crate::typed::KnowledgeQueryData;
+use crate::{BaseLoad, Off};
 
 /// The fields of an image resource the fake host fills.
 pub const IMAGE_FIELDS: [&str; 6] = crate::content::icons::IMAGE_FIELDS;
@@ -37,6 +42,35 @@ pub const fn passes(test: KnowledgeTest, value: u32) -> Option<bool> {
 #[must_use]
 pub fn query_from_data(data: &KnowledgeQueryData) -> Option<KnowledgeQuery> {
     KnowledgeQuery::from_data(data)
+}
+
+/// Whether every id `new` derives fits; the reason when one does not.
+///
+/// # Errors
+///
+/// [`Off`] for a derived id that does not fit.
+pub fn check_workshop(new: &NewWorkshop) -> Result<(), Off> {
+    new.check()
+}
+
+/// Adds `recipe` to what the mod serves, as `Load::add_recipe` does for
+/// a recipe already checked.
+///
+/// # Errors
+///
+/// [`Off`] as `Load::add_recipe`.
+pub fn push_recipe(load: &mut BaseLoad, recipe: NewRecipe) -> Result<(), Off> {
+    load.push_recipe(recipe)
+}
+
+/// The ABI value of `format`.
+#[must_use]
+pub const fn stat_format(format: StatFormat) -> u8 {
+    match format {
+        StatFormat::Number => StatDefData::NUMBER,
+        StatFormat::Signed => StatDefData::SIGNED,
+        StatFormat::Percent => StatDefData::PERCENT,
+    }
 }
 
 /// Whether `guid` is one of `vanilla`'s items.

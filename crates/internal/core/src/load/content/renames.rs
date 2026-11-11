@@ -2,6 +2,7 @@
 
 use crate::abi::ContentRename;
 use crate::content::Guid;
+use crate::content::renames::*;
 use crate::{ItemId, Load, Off};
 use enshwick_content::__load::*;
 

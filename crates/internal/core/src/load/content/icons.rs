@@ -1,6 +1,7 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
 use crate::abi::HostApi;
+use crate::content::icons::*;
 use crate::{Load, Off};
 use enshwick_content::__load::*;
 

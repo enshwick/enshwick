@@ -1,6 +1,7 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
 use crate::abi::Level;
+use crate::content::knowledge::*;
 use crate::knowledge::{KnowledgeId, KnowledgeType, Scope};
 use crate::locks::Relock as _;
 use crate::resources::Value;
@@ -49,7 +50,7 @@ impl Load<'_> {
     /// a knowledge entry's [`NewKnowledge::experience`] or a quest's
     /// experience reward. The game counts the experience under its source,
     /// as it does a vanilla value's;
-    /// [`experience_values`](super::vanilla::experience_values) lists those.
+    /// [`experience_values`](crate::content::vanilla::experience_values) lists those.
     /// Adding the same id again replaces its source and gain. One patch of
     /// the balancing table serves all of a mod's values; it adds none when
     /// another mod's value there has the id of one of them.

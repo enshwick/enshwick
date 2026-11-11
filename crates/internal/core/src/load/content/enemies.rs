@@ -1,5 +1,8 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
+use crate::content::Guid;
+use crate::content::enemies::*;
+use crate::content::templates::TemplateId;
 use crate::resources::Value;
 use crate::typed::ecs::{Boss, DamageMod, EnemyArsenalReference, EnemyScaling, Faction, Level};
 use crate::typed::enemy::EnemyArsenalRegistryResource;
