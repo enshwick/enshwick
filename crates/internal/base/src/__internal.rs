@@ -9,7 +9,6 @@ use crate::__private::{MAX_LEVEL, PACK_LEVELS, tagged_level};
 use crate::abi::{HostApi, ModHandle};
 use crate::ecs::ComponentType;
 use crate::game_events::CraftRecipeEvent;
-use crate::schedule::Scheduler;
 use crate::{Entity, Host, RecipeId};
 
 /// Makes `host` the answer of [`crate::host`]; the first call wins.
@@ -25,14 +24,18 @@ pub fn scope<R>(host: Host, call: impl FnOnce() -> R) -> R {
 }
 
 /// The scheduler of the mod `me`, and whether the caller is to subscribe
-/// the tick that runs it.
+/// the tick that runs it; for core's tests, as the base runs the queues
+/// itself.
+#[cfg(any(test, feature = "fake"))]
 #[must_use]
-pub fn scheduler(me: ModHandle) -> (Scheduler, bool) {
-    Scheduler::get(me)
+pub fn scheduler(me: ModHandle) -> (crate::schedule::Scheduler, bool) {
+    crate::schedule::Scheduler::get(me)
 }
 
-/// Runs the tasks of `scheduler` that are due on a pass in `game`.
-pub fn run_due(scheduler: Scheduler, game: u64) {
+/// Runs the tasks of `scheduler` that are due on a pass in `game`; for
+/// core's tests.
+#[cfg(any(test, feature = "fake"))]
+pub fn run_due(scheduler: crate::schedule::Scheduler, game: u64) {
     scheduler.run_due(game);
 }
 
