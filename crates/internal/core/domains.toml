@@ -2,7 +2,7 @@
 # only base, its own domain and the domains before its own in `order`;
 # shared things move down into base. `cargo xtask check` holds it.
 
-# Lowest first: each domain is peeled out of core in the reverse order.
+# Lowest first, which is also the order domains leave core in: base first.
 order = ["base", "content", "world", "inventory", "knowledge", "actions", "ui", "packs"]
 
 # Files and folders under `src` that join every domain's list.
@@ -11,8 +11,8 @@ joins = ["lib.rs", "__private.rs", "__private/", "__fake.rs", "__fake/", "script
 # The edges up the order still in the code, as `from -> to`; a peel removes
 # its own. A new one fails, and so does one that is gone.
 upward = [
-    # The served-resource builder lives in content; it moves to resources
-    # with the content peel.
+    # The served-resource builder lives in content; it moves down into
+    # resources before base leaves core.
     "resources -> content",
     # Rate kinds are declared in rates; the name rules move with them.
     "rules -> rates",

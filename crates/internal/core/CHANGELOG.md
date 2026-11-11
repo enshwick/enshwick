@@ -16,5 +16,5 @@ see is in the changelog of `enshwick`.
   `Load` in a typed slot, so `Load` names no domain (#1044).
 - The script namespaces are one list per domain, joined in the domain
   order (#1044).
-- `ResourceType` and `EngineFacts` live here, below the content domain
-  (#1044).
+- `ResourceType` lives here in the content domain, and `EngineFacts` in the
+  base below it (#1044).
