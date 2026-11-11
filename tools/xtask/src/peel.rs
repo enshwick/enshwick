@@ -457,7 +457,7 @@ impl Load<'_> {
         assert_eq!(
             peeled.forwarders,
             [
-                "#[enshwick_macros::forward(base)]\n#[crate::script(texts)]\nimpl Load<'_> {\n    /// Texts for a script.\n    #[script(name = \"texts\")]\n    pub(crate) fn texts_script(&mut self) -> u32;\n}"
+                "#[cfg(feature = \"unstable\")]\n#[enshwick_macros::forward(base)]\n#[crate::script(texts)]\nimpl Load<'_> {\n    /// Texts for a script.\n    #[script(name = \"texts\")]\n    pub(crate) fn texts_script(&mut self) -> u32;\n}"
             ]
         );
         Ok(())
