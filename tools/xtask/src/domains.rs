@@ -279,6 +279,8 @@ mod tests {
     fn names_reads_paths_groups_and_nested_groups_but_not_macros_or_roots() {
         let code = "use crate::map::Map;\nuse crate::{host::Host, ui::{Ui, frame}, Load};\ncrate::warn!(\"x\");\nlet a = foo_crate::x;";
         assert_eq!(names(code), set(&["host", "map", "ui"]));
+        let nested = "use crate::{ui::{Ui, frame::{A, b}}, sound::Sound};\nuse crate::time;";
+        assert_eq!(names(nested), set(&["sound", "time", "ui"]));
     }
 
     #[test]
@@ -304,6 +306,46 @@ mod tests {
         let problems = judge(&map(&["map -> ui"]), &modules, &BTreeSet::new());
         assert!(problems.iter().any(|p| p.contains("sound has no domain")));
         assert!(problems.iter().any(|p| p.contains("map -> ui is gone")));
+    }
+
+    #[test]
+    fn a_tree_with_an_edge_up_and_a_join_out_of_order_fails() {
+        let root = std::env::temp_dir().join(format!("xtask-domains-{}", std::process::id()));
+        let src = root.join(SOURCES);
+        let write = |path: &str, text: &str| {
+            let path = src.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        };
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(
+            root.join(MAP),
+            "order = [\"base\", \"ui\"]\njoins = [\"lib.rs\", \"script/namespaces\"]\nupward = []\n[modules]\nbase = [\"host\", \"script\"]\nui = [\"ui\"]\n",
+        )
+        .unwrap();
+        write("lib.rs", "mod host; mod ui; mod script;");
+        write("host.rs", "use crate::ui::Ui;\nuse crate::{script, ui};");
+        write("ui.rs", "use crate::host::Host;");
+        write("script.rs", "mod namespaces;");
+        write(
+            "script/namespaces.rs",
+            "const D: &[&[N]] = &[\n    ui::NAMESPACES,\n    base::NAMESPACES,\n];",
+        );
+        write("script/namespaces/base.rs", "");
+        write("script/namespaces/ui.rs", "");
+        let problems = check(&root);
+        std::fs::remove_dir_all(&root).unwrap();
+        assert!(
+            problems.iter().any(|p| p.starts_with("host -> ui goes up")),
+            "{problems:?}"
+        );
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("joins [\"ui\", \"base\"]")),
+            "{problems:?}"
+        );
+        assert_eq!(problems.len(), 2, "{problems:?}");
     }
 
     #[test]
