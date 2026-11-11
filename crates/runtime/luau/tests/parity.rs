@@ -144,19 +144,20 @@ mod tests {
     }
 
     /// The source of the API crate and of the internal crates it re-exports,
-    /// whose public modules carry the API's own paths.
-    fn sources() -> [PathBuf; 8] {
-        let internal = |name: &str| source().join("../../internal").join(name).join("src");
-        [
-            source(),
-            internal("core"),
-            internal("base"),
-            internal("content"),
-            internal("fake"),
-            internal("abi"),
-            internal("values"),
-            internal("typed"),
-        ]
+    /// whose public modules carry the API's own paths: every crate of
+    /// `crates/internal` but the macros', which hold no API items.
+    fn sources() -> Vec<PathBuf> {
+        let internal = source().join("../../internal");
+        let mut crates: Vec<PathBuf> = std::fs::read_dir(&internal)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|dir| dir.file_name().is_some_and(|name| name != "macros"))
+            .map(|dir| dir.join("src"))
+            .filter(|src| src.join("lib.rs").is_file())
+            .collect();
+        crates.sort();
+        assert!(crates.len() >= 8, "crates/internal holds too few crates");
+        std::iter::once(source()).chain(crates).collect()
     }
 
     /// What the top-level module of a hidden module starts with.
@@ -276,10 +277,13 @@ mod tests {
 
     impl Walk {
         fn crate_api() -> Self {
-            let roots = sources().map(|root| {
-                let lib = parse(&root.join("lib.rs"));
-                (root, lib)
-            });
+            let roots: Vec<(PathBuf, syn::File)> = sources()
+                .into_iter()
+                .map(|root| {
+                    let lib = parse(&root.join("lib.rs"));
+                    (root, lib)
+                })
+                .collect();
             let mut walk = Self::default();
             for item in roots.iter().flat_map(|(_, lib)| &lib.items) {
                 match item {
