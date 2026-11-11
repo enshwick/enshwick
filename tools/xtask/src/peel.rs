@@ -53,7 +53,9 @@ impl Form {
     ///
     /// When `from` is no module file of a crate in `crates/internal`.
     fn of(root: &Path, from: &str) -> Result<Self, String> {
-        let path = Path::new(from);
+        // A backslash separates only on Windows; the argument may come from either.
+        let from_slashes = from.replace('\\', "/");
+        let path = Path::new(&from_slashes);
         let relative = path.strip_prefix(root).unwrap_or(path);
         let parts: Vec<String> = relative
             .components()
