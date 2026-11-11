@@ -191,6 +191,7 @@ jobs:
           # never replaced, so only a finished run saves one.
           prefix-key: v1-rust
           key: ${{ matrix.part }}
+          save-if: ${{ env.STORE_CACHES }}
 
       # The luau-lsp the tests download, kept per pin instead of fetched by
       # each test process.
