@@ -16,6 +16,7 @@ autotests = false
 [dependencies]
 enshwick-macros = { path = "../enshwick-macros", version = "=1.0.0-alpha.14" }
 enshwick-abi.workspace = true
+enshwick-base.workspace = true
 enshwick-core.workspace = true
 enshwick-fake = { workspace = true, optional = true }
 enshwick-values.workspace = true

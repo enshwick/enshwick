@@ -48,8 +48,22 @@ macro_rules! __off_from {
 }
 pub(crate) use __off_from as off_from;
 
-/// The mod's loader during its init as a function below [`Off`]'s crate
-/// takes it: the mod's `Load`, or the base handle inside it.
+/// The mod's loader during `init` as the API's functions outside `Load`
+/// take it: pass the mod's `Load`.
+///
+/// Sealed: only `Load` and the base handle it holds implement it.
+///
+/// # Examples
+///
+/// ```
+/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
+/// use enshwick::ecs::ComponentType;
+///
+/// fn used_item(load: &mut enshwick::Load<'_>) -> Result<u32, enshwick::Off> {
+///     Ok(ComponentType::resolve(load, "keen::ecs::UsedItem")?.hash())
+/// }
+/// # }
+/// ```
 pub trait Loading: sealed::Sealed {
     /// The base handle.
     #[doc(hidden)]

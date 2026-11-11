@@ -1,6 +1,16 @@
 //! The examples of `enshwick-base` that name items above its crate,
 //! compiled here as written.
 //!
+//! `load::Loading`:
+//!
+//! ```
+//! use enshwick::ecs::ComponentType;
+//!
+//! fn used_item(load: &mut enshwick::Load<'_>) -> Result<u32, enshwick::Off> {
+//!     Ok(ComponentType::resolve(load, "keen::ecs::UsedItem")?.hash())
+//! }
+//! ```
+//!
 //! `config::table::TableConfig`:
 //!
 //! ```

@@ -433,6 +433,7 @@ dependencies = [
  "criterion",
  "document-features",
  "enshwick-abi",
+ "enshwick-base",
  "enshwick-core",
  "enshwick-fake",
  "enshwick-macros",

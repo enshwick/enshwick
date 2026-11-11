@@ -18,16 +18,11 @@ joins = [
     "__fake.rs",
 ]
 
-# The crate each domain that left core lives in, under `crates/internal`.
-# Its `[dependencies]` name only the crates of `below` and the crates of
-# the domains before its own.
-[crates]
-base = "base"
+# The internal crates below every domain, which a domain's crate may name.
+below = ["enshwick-abi", "enshwick-macros", "enshwick-values"]
 
 # The edges up the order still in the code, as `from -> to`; a peel removes
 # its own. A new one fails, and so does one that is gone.
-[edges]
-below = ["enshwick-abi", "enshwick-macros", "enshwick-typed", "enshwick-values"]
 upward = [
     # The typed handles read components through World.
     "typed -> world",
@@ -35,6 +30,13 @@ upward = [
     "content -> knowledge",
 ]
 
+# The crate each domain that left core lives in, by its folder under
+# `crates/internal`. Its `[dependencies]` name of the internal crates only
+# those of `below` and the crates of the domains before its own.
+[crates]
+base = "base"
+
+# Each domain's top-level modules still in core.
 [modules]
 base = []
 content = ["content", "rates", "typed"]
