@@ -119,7 +119,7 @@ impl Load<'_> {
     /// ```
     pub fn add_pack(&mut self, pack: &Pack) -> Result<(), Off> {
         for name in &pack.named {
-            crate::content::named(id(name)?)?;
+            enshwick_content::__internal::named(id(name)?)?;
         }
         let texts = self.texts_from(&pack.texts)?;
         let tag = |load: &mut Self, key: &Option<String>| -> Result<Option<Guid>, Off> {

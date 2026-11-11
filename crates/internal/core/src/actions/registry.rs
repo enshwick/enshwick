@@ -451,7 +451,7 @@ impl Registry {
         let id = crate::ItemId::from_guid(item);
         crate::inventory::item_data(&self.host, id).is_some()
             && crate::content::vanilla::Vanilla::game()
-                .and_then(|vanilla| vanilla.item_with_id(id.get()))
+                .and_then(|vanilla| enshwick_content::__internal::item_with_id(vanilla, id.get()))
                 .is_none_or(|vanilla_item| vanilla_item == item)
     }
 

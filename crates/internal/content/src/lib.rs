@@ -32,7 +32,7 @@ pub use enshwick_base::{
 /// The base handle's helpers at the path the code here names them by.
 pub(crate) mod load {
     pub(crate) use enshwick_base::__off_from as off_from;
-    pub(crate) use enshwick_base::load::{game_events_of, off_status, ok};
+    pub(crate) use enshwick_base::load::{off_status, ok};
 }
 
 #[doc(inline)]
@@ -63,6 +63,14 @@ pub use enshwick_macros::{Config, Shape, config, event, hook, point, service, te
 pub use shape::Shape;
 
 #[doc(hidden)]
-pub mod __load;
+pub mod __internal;
 #[doc(hidden)]
-pub use enshwick_base::__private;
+pub mod __load;
+/// What the macros' output names: the base's support and the recipe edits
+/// of `#[recipes]`.
+#[doc(hidden)]
+pub mod __private {
+    pub use enshwick_base::__private::*;
+
+    pub use crate::content::recipes::derive::{RecipeEdit, modify_recipes_in};
+}

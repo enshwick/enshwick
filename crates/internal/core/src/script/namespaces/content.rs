@@ -7,40 +7,40 @@ use crate::rates::RateFns;
 use crate::{Load, Off};
 
 pub(super) const NAMESPACES: &[Namespace] = &[
-    Namespace::of::<crate::rates::RateFns>(),
+    Namespace::of::<RateFns>(),
     #[cfg(feature = "unstable")]
-    Namespace::starting("rates", "", &[crate::Load::SCRIPT_RATES]),
-    Namespace::of::<crate::content::Content>(),
+    Namespace::starting("rates", "", &[Load::SCRIPT_RATES]),
+    Namespace::of::<Content>(),
     Namespace::starting(
         "content",
         "",
         &[
-            crate::Load::SCRIPT_CONTENT_IDS,
-            crate::Load::SCRIPT_CONTENT_ITEMS,
-            crate::Load::SCRIPT_CONTENT_RECIPES,
+            Load::SCRIPT_CONTENT_IDS,
+            Load::SCRIPT_CONTENT_ITEMS,
+            Load::SCRIPT_CONTENT_RECIPES,
             #[cfg(feature = "unstable")]
-            crate::Load::SCRIPT_CONTENT_RECIPE_WITH,
-            crate::Load::SCRIPT_CONTENT_WORKSHOPS,
-            crate::Load::SCRIPT_CONTENT_TEMPLATES,
-            crate::Load::SCRIPT_CONTENT_PROPS,
+            Load::SCRIPT_CONTENT_RECIPE_WITH,
+            Load::SCRIPT_CONTENT_WORKSHOPS,
+            Load::SCRIPT_CONTENT_TEMPLATES,
+            Load::SCRIPT_CONTENT_PROPS,
             #[cfg(feature = "typed")]
-            crate::Load::SCRIPT_CONTENT_ENEMIES,
+            Load::SCRIPT_CONTENT_ENEMIES,
             #[cfg(feature = "typed")]
-            crate::Load::SCRIPT_CONTENT_SPAWNS,
+            Load::SCRIPT_CONTENT_SPAWNS,
             #[cfg(feature = "typed")]
-            crate::Load::SCRIPT_CONTENT_KNOWLEDGE,
+            Load::SCRIPT_CONTENT_KNOWLEDGE,
             #[cfg(feature = "typed")]
-            crate::Load::SCRIPT_CONTENT_JOURNAL,
+            Load::SCRIPT_CONTENT_JOURNAL,
             #[cfg(feature = "typed")]
-            crate::Load::SCRIPT_CONTENT_SKILLS,
+            Load::SCRIPT_CONTENT_SKILLS,
             #[cfg(feature = "typed")]
-            crate::Load::SCRIPT_CONTENT_REMOVAL,
-            crate::Load::SCRIPT_CONTENT_ICONS,
-            crate::Load::SCRIPT_CONTENT_RENAMES,
-            crate::Load::SCRIPT_CONTENT_CHANGE,
-            crate::Load::SCRIPT_CONTENT_CHANGE_ITEMS,
-            crate::Load::SCRIPT_CONTENT_CHANGE_RECIPES,
-            crate::Load::SCRIPT_CONTENT_LIVE,
+            Load::SCRIPT_CONTENT_REMOVAL,
+            Load::SCRIPT_CONTENT_ICONS,
+            Load::SCRIPT_CONTENT_RENAMES,
+            Load::SCRIPT_CONTENT_CHANGE,
+            Load::SCRIPT_CONTENT_CHANGE_ITEMS,
+            Load::SCRIPT_CONTENT_CHANGE_RECIPES,
+            Load::SCRIPT_CONTENT_LIVE,
         ],
     ),
 ];

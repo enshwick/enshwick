@@ -17,7 +17,7 @@ use crate::world::HeldState;
 
 /// The fields of an image resource the game's catalogue names, in the order
 /// an icon reads them.
-pub const IMAGE_FIELDS: [&str; 6] = crate::content::icons::IMAGE_FIELDS;
+pub const IMAGE_FIELDS: [&str; 6] = enshwick_content::__internal::IMAGE_FIELDS;
 
 /// The most markers one mod places on the map.
 pub const MARKER_LIMIT: usize = crate::ui::MARKER_LIMIT;

@@ -3,6 +3,7 @@
 use crate::Host;
 use crate::abi::{RateId, Status};
 use crate::content::recipes::RecipeKind;
+use crate::rates::{Rate, RateHandle};
 use crate::{Load, Off};
 use enshwick_content::__load::*;
 

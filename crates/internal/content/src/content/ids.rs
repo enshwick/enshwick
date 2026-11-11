@@ -19,9 +19,9 @@ use crate::abi::ResourceKey;
 /// assert_eq!(LOCKER.guid(), Guid::named("you.hello:locker"));
 /// ```
 pub use enshwick_macros::id;
+pub(crate) use enshwick_values::content::NAME_PART;
 #[doc(inline)]
 pub use enshwick_values::content::{DebugName, Guid, Id, NAMESPACE, is_id};
-pub(crate) use enshwick_values::content::{NAME_PART, part_name};
 
 /// A vanilla resource's bytes from the game's own archive, as the game reads
 /// them before it resolves their references.

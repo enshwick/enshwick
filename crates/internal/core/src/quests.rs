@@ -148,8 +148,8 @@ impl StepInfo {
             entry: EntryId(entry.entry_id.value),
             name: TextKey::of_key(entry.name.value),
             text: TextKey::of_key(entry.text.value),
-            shown_when: KnowledgeQuery::from_data(&entry.knowledge_requirement),
-            done_when: KnowledgeQuery::from_data(&entry.completion_requirement),
+            shown_when: enshwick_content::__internal::query_from_data(&entry.knowledge_requirement),
+            done_when: enshwick_content::__internal::query_from_data(&entry.completion_requirement),
             progress: entry
                 .progress_steps_requirement
                 .iter()
@@ -445,7 +445,7 @@ impl Quests {
             (None, Scope::Player) => return Some(false),
             (None, _) => self.knowledge.world(query.id)?,
         };
-        query.test.passes(known.value)
+        enshwick_content::__internal::passes(query.test, known.value)
     }
 
     /// Whether the game query `query` holds for the character `entity`, or
@@ -610,8 +610,9 @@ mod tests {
     fn the_game_s_query_forms_read_as_the_tests_they_ask() {
         use CompareOperator as Op;
         use KnowledgeQueryDataType as Ty;
-        let read =
-            |kind, op, value| KnowledgeQuery::from_data(&data(7, kind, op, value)).map(|q| q.test);
+        let read = |kind, op, value| {
+            enshwick_content::__internal::query_from_data(&data(7, kind, op, value)).map(|q| q.test)
+        };
         assert_eq!(
             read(Ty::SimpleBool, Op::Equals, 1),
             Some(KnowledgeTest::IsSet)
@@ -639,7 +640,7 @@ mod tests {
         );
         assert_eq!(read(Ty::Extern, Op::Equals, 0), Some(KnowledgeTest::Fails));
         assert_eq!(
-            KnowledgeQuery::from_data(&data(0, Ty::Extern, Op::GreaterThan, 0)),
+            enshwick_content::__internal::query_from_data(&data(0, Ty::Extern, Op::GreaterThan, 0)),
             None,
             "a lore entry's never"
         );
@@ -649,8 +650,9 @@ mod tests {
     fn a_form_enshwick_does_not_read_is_unknown_not_always_or_never() {
         use CompareOperator as Op;
         use KnowledgeQueryDataType as Ty;
-        let read =
-            |kind, op, value| KnowledgeQuery::from_data(&data(7, kind, op, value)).map(|q| q.test);
+        let read = |kind, op, value| {
+            enshwick_content::__internal::query_from_data(&data(7, kind, op, value)).map(|q| q.test)
+        };
         for (kind, op, value, why) in [
             (Ty::SimpleCount, Op::LessThan, 0, "never holds"),
             (Ty::SimpleCount, Op::GreaterThan, u32::MAX, "never holds"),
@@ -666,7 +668,10 @@ mod tests {
         ] {
             assert_eq!(read(kind, op, value), Some(KnowledgeTest::Unknown), "{why}");
         }
-        assert_eq!(KnowledgeTest::Unknown.passes(0), None);
+        assert_eq!(
+            enshwick_content::__internal::passes(KnowledgeTest::Unknown, 0),
+            None
+        );
         let unknown = KnowledgeQuery {
             id: KnowledgeId::new(7),
             scope: Scope::World,
@@ -696,11 +701,18 @@ mod tests {
             };
             let value = query.to_value().unwrap();
             let data = KnowledgeQueryData::from_value(&value).unwrap();
-            assert_eq!(KnowledgeQuery::from_data(&data), Some(query), "{test:?}");
+            assert_eq!(
+                enshwick_content::__internal::query_from_data(&data),
+                Some(query),
+                "{test:?}"
+            );
             if let Some(not) = query.not() {
                 assert_eq!(not.not(), Some(query), "{test:?}");
                 for held in [0, 1, 2, 3, 24, 25, 26] {
-                    if let (Some(a), Some(b)) = (test.passes(held), not.test.passes(held)) {
+                    if let (Some(a), Some(b)) = (
+                        enshwick_content::__internal::passes(test, held),
+                        enshwick_content::__internal::passes(not.test, held),
+                    ) {
                         assert_ne!(a, b, "{test:?} at {held}");
                     }
                 }

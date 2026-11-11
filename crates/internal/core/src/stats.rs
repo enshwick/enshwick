@@ -99,7 +99,7 @@ pub const fn key_of(id: &str) -> StatKey {
 /// ```
 #[must_use]
 pub fn name_key(id: &str) -> Option<String> {
-    crate::content::part_name(id, crate::content::NAME_PART)
+    enshwick_values::content::part_name(id, enshwick_values::content::NAME_PART)
 }
 
 /// The platform's built-in stat kinds, which it applies to the game on the
