@@ -93,7 +93,7 @@ The repository checks this in CI:
 
 ## The exports of a mod
 
-[`declare_mod!`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/declare.rs)
+[`declare_mod!`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/declare.rs)
 writes four exports:
 
 | Export                  | Signature                                 | When the loader calls it                               |

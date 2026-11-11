@@ -32,7 +32,7 @@ mod asked for and what its hooks and handlers do.
    [`Installed`](https://github.com/enshwick/enshwick/blob/main/crates/internal/fake/src/test.rs)
    fake, which is the loader of the process until it drops.
 3. Start the mod with `start(enshwick_mod_init, enshwick_mod_ready)`, the two
-   exports [`declare_mod!`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/declare.rs)
+   exports [`declare_mod!`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/declare.rs)
    writes. `start` runs `init` first. Then it runs `ready`, but only when
    the first returns `Status::OK`.
 4. Check the outcome: the status, the logs, the hooks it linked. Call a detour

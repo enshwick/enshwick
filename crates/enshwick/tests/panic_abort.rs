@@ -50,7 +50,7 @@ mod tests {
 
     #[test]
     fn every_declared_mod_runs_the_unwind_check() {
-        let source = include_str!("../../internal/base/src/declare.rs");
+        let source = include_str!("../../internal/core/src/declare.rs");
         let declare = source
             .split("macro_rules! __declare_exports {")
             .nth(1)

@@ -22,9 +22,8 @@ pub(crate) use enshwick_base::{engine_enum, engine_ids, facts, fresh, locks, nea
 // The macros the base exports, which the code here calls by `crate::`.
 #[doc(hidden)]
 pub use enshwick_base::{
-    __declare_exports, __every, __log, __off_from, __once, __require_unwind, __schema_entry, debug,
-    detour, error, error_every, error_once, info, info_every, info_once, warn, warn_every,
-    warn_once,
+    __every, __log, __off_from, __once, __require_unwind, __schema_entry, debug, detour, error,
+    error_every, error_once, info, info_every, info_once, warn, warn_every, warn_once,
 };
 
 #[doc(inline)]
@@ -44,6 +43,7 @@ pub mod content;
 pub mod controls;
 pub mod damage;
 pub mod daytime;
+mod declare;
 pub mod effects;
 #[cfg(feature = "unstable")]
 pub mod entity_data;

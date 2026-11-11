@@ -733,8 +733,6 @@ pub use enshwick_macros::texts;
 pub use shape::Shape;
 
 #[doc(hidden)]
-pub use enshwick_base::{
-    __declare_exports, __every, __log, __once, __require_unwind, __schema_entry, schema_section,
-};
+pub use enshwick_base::{__every, __log, __once, __require_unwind, __schema_entry, schema_section};
 #[doc(hidden)]
-pub use enshwick_core::__private;
+pub use enshwick_core::{__declare_exports, __private};

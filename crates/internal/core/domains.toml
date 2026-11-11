@@ -10,6 +10,7 @@ order = ["base", "content", "world", "inventory", "knowledge", "actions", "ui", 
 # each domain's handles through `Load`.
 joins = [
     "lib.rs",
+    "declare.rs",
     "load.rs",
     "load/",
     "script.rs",
