@@ -214,8 +214,10 @@ mod tests {
 
     #[test]
     fn a_handler_past_its_budget_per_second_turns_the_mod_off() {
+        // The call budget is far past one 5 ms spin, so a busy machine that
+        // preempts the spin still reaches the per-second budget first.
         let limits = Limits::default()
-            .with_call(Duration::from_millis(20))
+            .with_call(Duration::from_millis(300))
             .with_per_second(Duration::from_millis(30));
         let (loader, status) = run_with(&spinning_handler(5), limits, Scripts::new());
         assert_eq!(status, Status::OK);
