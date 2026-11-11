@@ -491,6 +491,7 @@ version = "1.0.0-alpha.14"
 dependencies = [
  "bcdec_rs",
  "bytemuck",
+ "enshwick",
  "enshwick-abi",
  "enshwick-base",
  "enshwick-macros",
