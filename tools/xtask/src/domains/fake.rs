@@ -503,6 +503,21 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn every_kind_of_item_names_itself_and_a_glob_takes_items_and_re_exports()
+    -> Result<(), syn::Error> {
+        let file = syn::parse_file(
+            "const C: u8 = 0;\nenum E {}\nfn f() {}\nmod m {}\nstatic S: u8 = 0;\nstruct T;\ntrait R {}\ntype A = u8;\nunion U { a: u8 }\nmacro_rules! mac { () => {} }\nimpl T {}\npub use a::B;\nuse c::D;\n#[cfg(test)]\npub use e::F;\n#[cfg(test)]\nfn g() {}",
+        )?;
+        let names = |set: BTreeSet<String>| set.into_iter().collect::<Vec<_>>();
+        let items = ["A", "C", "E", "R", "S", "T", "U", "f", "m", "mac"];
+        assert_eq!(names(defined(&file)), items);
+        let mut exported_names = items.to_vec();
+        exported_names.insert(1, "B");
+        assert_eq!(names(exported(&file)), exported_names);
+        Ok(())
+    }
+
     /// A tree of core and the fake under a temporary root, its core
     /// `__fake.rs` handing down a ui item, a world one and the `__fake` of
     /// a peeled `content` crate.
@@ -516,7 +531,7 @@ mod tests {
         );
         tree.write(
             &format!("{}/{CORE_FAKE}.rs", super::super::SOURCES),
-            "use crate::voxels::Voxel;\npub use enshwick_content::__fake::*;\npub use crate::ui::screens::NAMES;\npub fn raw(v: Voxel) {}\npub fn plain() {}",
+            "use crate::voxels::Voxel;\npub use enshwick_content::__fake::*;\npub use enshwick_content::rates::Rate;\npub use crate::ui::screens::NAMES;\npub fn raw(v: Voxel, h: crate::host::Host) {}\npub fn plain() {}",
         );
         tree.write(
             &format!("crates/internal/content/src/{CORE_FAKE}.rs"),
@@ -547,12 +562,13 @@ mod tests {
         fake(
             &tree,
             "test.rs",
-            "mod base; mod content; mod world; mod ui; mod table;\npub use ui::Drawn;\nuse enshwick_core::ui::Frame;\nuse world::players::{self};",
+            "mod base; mod content; mod world; mod ui; mod table;\npub use ui::Drawn;\nuse enshwick_core::ui::Frame;\nuse world::players::{self};\nuse table as joined;",
         );
+        // The first glob's module lacks the name, so only the second leads.
         fake(
             &tree,
             "test/table.rs",
-            "mod base; mod ui;\nuse ui::*;\npub(crate) fn with() {}",
+            "mod base; mod ui;\nuse base::*;\nuse ui::*;\npub(crate) fn with() {}",
         );
         fake(
             &tree,
@@ -575,6 +591,16 @@ mod tests {
                 "ui",
             ),
             ("join glob", "fn f() { crate::test::table::frame(); }", "ui"),
+            (
+                "path past a join's renamed import",
+                "fn f() { crate::test::joined::ui::frame(); }",
+                "ui",
+            ),
+            (
+                "core's fake re-export from a peeled crate",
+                "use enshwick_core::__fake::Rate;",
+                "content",
+            ),
             (
                 "leading colons",
                 "fn f() { ::enshwick_core::ui::Frame::new(); }",
