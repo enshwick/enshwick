@@ -693,8 +693,8 @@ pub(super) fn recipes(
         // the game does not know may be another mod's item.
         if let (Some((item, Ref::Elsewhere)), false, Some(vanilla)) =
             (like, e.like.contains(':'), reader.vanilla)
-            && (vanilla.is_recipe(item)
-                || vanilla.is_item(item)
+            && (enshwick_content::__internal::is_recipe(vanilla, item)
+                || enshwick_content::__internal::is_item(vanilla, item)
                 || Guid::try_parse(&e.like).is_none())
             && vanilla
                 .recipes_making(item)

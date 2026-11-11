@@ -5,7 +5,7 @@ description: Add an item to the game with Load::add_item: a clone of a vanilla i
 
 # Items
 
-[`Load::add_item`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/items.rs)
+[`Load::add_item`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load/content/items.rs)
 adds an item to the game. The item clones a vanilla one under a
 [content id](../concepts/ids.md) of its own, and looks and behaves
 like it. It takes
@@ -68,7 +68,7 @@ enshwick.content.add_item({
 
 A real mod keeps the texts in `src/texts.toml` and reads them with
 `load.texts()`; see [Texts](texts.md).
-[`vanilla::item`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/vanilla.rs)
+[`vanilla::item`](https://github.com/enshwick/enshwick/blob/main/crates/internal/content/src/content/vanilla.rs)
 names a vanilla item by its debug name.
 [`deps!`](../concepts/loader-and-abi.md#the-manifest) offers it too, as
 `deps::vanilla::item`. A name the game lacks turns the mod off, with the names
@@ -228,7 +228,7 @@ of its own shows through its meter.
 
 The game's item icons are pictures it ships ready-made: UI images, named by
 GUID, whose pixels it reads from its archive. An
-[`Icon`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/icons.rs)
+[`Icon`](https://github.com/enshwick/enshwick/blob/main/crates/internal/content/src/content/icons.rs)
 is a UI image the mod serves under a content id of its own, made when the
 client first shows it:
 
@@ -280,7 +280,7 @@ bytes in the order the game keeps them in memory. It is a `const fn`: in a
 constant, a malformed GUID fails the build.
 
 The game numbers items, recipes and workshops by a 32-bit id.
-[`Guid::fnv1a`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content.rs)
+[`Guid::fnv1a`](https://github.com/enshwick/enshwick/blob/main/crates/internal/content/src/content.rs)
 computes it from the GUID. `ItemId::from_guid` and `RecipeId::from_guid` give
 it its type. The id is what an inventory slot holds and what the
 [inventory](../inventories.md) calls take:

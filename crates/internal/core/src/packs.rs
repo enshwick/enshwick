@@ -119,7 +119,7 @@ impl Load<'_> {
     /// ```
     pub fn add_pack(&mut self, pack: &Pack) -> Result<(), Off> {
         for name in &pack.named {
-            crate::content::named(id(name)?)?;
+            enshwick_content::__internal::named(id(name)?)?;
         }
         let texts = self.texts_from(&pack.texts)?;
         let tag = |load: &mut Self, key: &Option<String>| -> Result<Option<Guid>, Off> {
@@ -139,7 +139,7 @@ impl Load<'_> {
                 debug_name: workshop.debug_name.clone(),
                 ..NewWorkshop::new(id(&workshop.id)?, workshop.like)
             };
-            new.check()?;
+            enshwick_content::__internal::check_workshop(&new)?;
             for (key, tag) in [
                 (&workshop.name, new.name()),
                 (&workshop.description, new.description()),
@@ -207,14 +207,17 @@ impl Load<'_> {
     /// Adds `pack`'s recipes, changes of values and loot.
     fn add_pack_rest(&mut self, pack: &Pack) -> Result<(), Off> {
         for recipe in &pack.recipes {
-            self.push_recipe(NewRecipe {
-                id: id(&recipe.id)?,
-                like: recipe.like,
-                output: recipe.output,
-                output_count: recipe.count,
-                cost: recipe.cost,
-                workshop: recipe.workshop.map(WorkshopId::new),
-            })?;
+            enshwick_content::__internal::push_recipe(
+                self,
+                NewRecipe {
+                    id: id(&recipe.id)?,
+                    like: recipe.like,
+                    output: recipe.output,
+                    output_count: recipe.count,
+                    cost: recipe.cost,
+                    workshop: recipe.workshop.map(WorkshopId::new),
+                },
+            )?;
         }
         for (change, source) in &pack.changes {
             self.change(change, source)?;

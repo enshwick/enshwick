@@ -69,11 +69,13 @@ const TEST_FEATURE: &str = "enshwick/test,enshwick/unstable,enshwick/typed,xtask
 /// it re-exports, without `unstable`: the workspace turns the feature on for
 /// the runtimes, so only a build of their own shows that the stable surface,
 /// its docs and its examples stand without the unstable one.
-const STABLE_API: [&str; 10] = [
+const STABLE_API: [&str; 12] = [
     "--package",
     "enshwick",
     "--package",
     "enshwick-base",
+    "--package",
+    "enshwick-content",
     "--package",
     "enshwick-core",
     "--package",

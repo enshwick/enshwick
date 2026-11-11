@@ -9,6 +9,12 @@ see is in the changelog of `enshwick`.
 
 ### Changed
 
+- The content domain left for `enshwick-content`: `content`, `rates`, the
+  shape samples of the generated typed items, and `KnowledgeType` and
+  `Scope`, which `knowledge` re-exports. `Load` forwards its content
+  methods there through the crate's method traits; the typed handles stay
+  here, in the world domain, and the domain map lists no edge up its
+  order (#1049).
 - The base left for `enshwick-base`. `Load` holds its handle and forwards
   its methods there with `#[forward(base)]`, keeping their docs, examples
   and `#[script]`; the base's `Bound` implementations and namespace list

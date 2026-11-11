@@ -189,6 +189,7 @@ impl Load<'_> {
 
     /// Whether the mod runs on both sides, so it takes part in the join
     /// check, as its manifest says.
+    #[cfg(feature = "unstable")]
     pub(crate) fn joins(&self) -> bool {
         self.base.joins()
     }
@@ -198,12 +199,15 @@ impl Load<'_> {
 mod build;
 mod code;
 mod config;
+mod content;
 mod events;
 mod game_events;
 mod i18n;
 mod net;
 mod pacing;
 mod points;
+#[cfg(feature = "unstable")]
+mod rates;
 mod resources;
 mod services;
 mod settings;

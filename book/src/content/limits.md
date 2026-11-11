@@ -18,7 +18,7 @@ A change takes the same fields, ranges and selections as a pack's. It is merged 
 the same rule with every pack and mod
 ([Several packs on one value](packs.md#several-packs-on-one-value)).
 
-[`Load::change`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content/changes.rs)
+[`Load::change`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load/content/changes.rs)
 declares a change during `init`. With `Load::change_items` and
 `Load::change_recipes` it makes the selections a pack makes. The loader reads
 the selection from the game's data. It merges one change per item in the

@@ -56,23 +56,23 @@ macro_rules! constant {
     }};
 }
 
-use enshwick_core::abi::PlayerDeathData;
-use enshwick_core::affixes::ItemRarity;
+use enshwick::abi::PlayerDeathData;
+use enshwick::affixes::ItemRarity;
 
-use enshwick_core::buffs::{Buff, BuffSlotType, BuffType, BuffTypeId};
-use enshwick_core::content::categories::ItemCategoryMask;
-use enshwick_core::content::changes::Field;
-use enshwick_core::content::items::{FuelSetup, ImpactUiValue};
-use enshwick_core::damage::DamageTypeNew;
-use enshwick_core::daytime::TimeOfDay;
-use enshwick_core::effects::NpcCommandType;
-use enshwick_core::inventory::{InventoryCategory, ItemInfo};
-use enshwick_core::knowledge::{KnowledgeType, Known};
-use enshwick_core::loot::{Container, InteractionOfferRuntime};
-use enshwick_core::survivors::BedCheck;
-use enshwick_core::terrain::TerrainTerraformingConfig;
-use enshwick_core::weather::WeatherPhenomenonEffect;
-use enshwick_core::world::{BuildRefusal, PlayerPermissions};
+use enshwick::buffs::{Buff, BuffSlotType, BuffType, BuffTypeId};
+use enshwick::content::categories::ItemCategoryMask;
+use enshwick::content::changes::Field;
+use enshwick::content::items::{FuelSetup, ImpactUiValue};
+use enshwick::damage::DamageTypeNew;
+use enshwick::daytime::TimeOfDay;
+use enshwick::effects::NpcCommandType;
+use enshwick::inventory::{InventoryCategory, ItemInfo};
+use enshwick::knowledge::{KnowledgeType, Known};
+use enshwick::loot::{Container, InteractionOfferRuntime};
+use enshwick::survivors::BedCheck;
+use enshwick::terrain::TerrainTerraformingConfig;
+use enshwick::weather::WeatherPhenomenonEffect;
+use enshwick::world::{BuildRefusal, PlayerPermissions};
 
 /// Every API name the game names itself outside the catalogue's ids, which
 /// hold the typed events, their values and the game settings.

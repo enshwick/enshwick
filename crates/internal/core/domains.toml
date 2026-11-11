@@ -19,28 +19,26 @@ joins = [
 ]
 
 # The internal crates below every domain, which a domain's crate may name.
-below = ["enshwick-abi", "enshwick-macros", "enshwick-values"]
+below = ["enshwick-abi", "enshwick-macros", "enshwick-typed", "enshwick-values"]
 
 # The edges up the order still in the code, as `from -> to`; a peel removes
 # its own. A new one fails, and so does one that is gone.
-upward = [
-    # The typed handles read components through World.
-    "typed -> world",
-    # Content's journal and knowledge entries name knowledge ids and scopes.
-    "content -> knowledge",
-]
+upward = []
 
 # The crate each domain that left core lives in, by its folder under
 # `crates/internal`. Its `[dependencies]` name of the internal crates only
 # those of `below` and the crates of the domains before its own.
 [crates]
 base = "base"
+content = "content"
 
 # Each domain's top-level modules still in core.
 [modules]
 # The script binding's runtime, which stays in core beside `Load`.
 base = ["script"]
-content = ["content", "rates", "typed"]
+# The typed handles, which read components through `World`; the generated
+# items they hand out live in `enshwick-typed`, which the content crate
+# re-exports with their shape samples.
 world = [
     "altars",
     "buffs",
@@ -48,6 +46,7 @@ world = [
     "game_settings",
     "map",
     "terrain",
+    "typed",
     "voxels",
     "weather",
     "world",

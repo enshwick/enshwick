@@ -18,7 +18,7 @@ test = []
 
 [dependencies]
 enshwick-base.workspace = true
-enshwick-core.workspace = true
+enshwick-content.workspace = true
 iced-x86.workspace = true
 memchr.workspace = true
 ruzstd.workspace = true

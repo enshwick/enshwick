@@ -6,10 +6,12 @@ use crate::RecipeId;
 use crate::content::items::NewItem;
 use crate::content::props::{NewProp, PropId};
 #[cfg(feature = "unstable")]
-use crate::content::{props::RECIPES, recipes::RECIPE_REGISTRY, types};
+use crate::content::{recipes::RECIPE_REGISTRY, types};
 #[cfg(feature = "unstable")]
 use crate::resources::Value;
 use crate::{Load, Off};
+#[cfg(feature = "unstable")]
+use enshwick_content::__internal::PROP_RECIPES as RECIPES;
 
 use super::template_of;
 

@@ -3,12 +3,10 @@
 
 use std::sync::atomic::Ordering;
 
-pub use enshwick_base::__private::*;
+pub use enshwick_content::__private::*;
 
 use crate::abi::{HostApi, ModHandle, Side, Status};
 use crate::{Host, Load, Mod};
-
-pub use crate::content::recipes::derive::{RecipeEdit, modify_recipes_in};
 
 /// The rules the loader and the fake host refuse a mod's requests by.
 pub mod rules {
@@ -25,7 +23,7 @@ pub mod rules {
 /// [`Off`](crate::Off) when the loader refuses the id, as one the
 /// dependency does not export.
 pub fn dependency_id(id: crate::content::Id) -> Result<crate::content::Id, crate::Off> {
-    crate::content::named(id)
+    enshwick_content::__internal::named(id)
 }
 
 /// # Safety

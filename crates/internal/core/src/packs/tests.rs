@@ -66,7 +66,7 @@ fn problems_name_their_file_line_and_column() {
 #[test]
 fn vanilla_content_is_named_by_its_debug_name() {
     let torch = Guid([1; 16]);
-    let vanilla = crate::content::vanilla::tests::game(&[
+    let vanilla = enshwick_content::__fake::game(&[
         (torch, "Tool_Torch01"),
         (Guid([5; 16]), "Prop_Production_T1_Forge"),
         (Guid([7; 16]), "Prop_Storage_24_T1_Box"),
@@ -189,7 +189,7 @@ fn groups_differ_by_pack_and_are_never_a_mod_s() {
 fn vanilla_wood() -> (Vanilla, Guid) {
     let wood = Guid([1; 16]);
     (
-        crate::content::vanilla::tests::game(&[(wood, "Material_T1_Wood_Logs")]),
+        enshwick_content::__fake::game(&[(wood, "Material_T1_Wood_Logs")]),
         wood,
     )
 }
@@ -296,7 +296,7 @@ fn a_pack_without_changes_reaches_players_only_through_its_content() {
 
 fn vanilla_torch() -> (Vanilla, Guid, Guid, Guid) {
     let (torch, wood, recipe) = (Guid([1; 16]), Guid([2; 16]), Guid([3; 16]));
-    let vanilla = crate::content::vanilla::tests::game_with_recipes(
+    let vanilla = enshwick_content::__fake::game_with_recipes(
         &[(torch, "Tool_Torch01"), (wood, "Material_T1_Wood_Logs")],
         &[(recipe, "Tool_Torch01_T0_PK", torch)],
     );
@@ -471,8 +471,7 @@ fn a_chest_s_slots_change_in_pages_of_eight() {
 #[test]
 fn slots_go_only_to_a_container_and_never_shrink_it() {
     let chest = Guid([1; 16]);
-    let vanilla =
-        crate::content::vanilla::tests::game_with_chest(chest, "Prop_Storage_24_T1_Box", 24);
+    let vanilla = enshwick_content::__fake::game_with_chest(chest, "Prop_Storage_24_T1_Box", 24);
     let text = "[[change]]\nitems = [\"Prop_Storage_24_T1_Box\"]\nslots = 8\n";
     let errors = Pack::parse_with("you.chests", &files(text), Some(&vanilla)).unwrap_err();
     assert!(
@@ -615,10 +614,8 @@ fn a_recipe_change_selects_by_kind_or_workshop() {
     use crate::content::changes::{Recipes, RecipesChange};
     use crate::content::recipes::RecipeKind;
     let forge = Guid([5; 16]);
-    let vanilla = crate::content::vanilla::tests::game_with_recipes(
-        &[(forge, "Prop_Production_T1_Forge")],
-        &[],
-    );
+    let vanilla =
+        enshwick_content::__fake::game_with_recipes(&[(forge, "Prop_Production_T1_Forge")], &[]);
     let station = vanilla.workshop(forge).unwrap();
     let text = "[[change]]\nkind = [\"roof\", \"building-block\"]\ncost = { times = 0.5 }\n\n\
                 [[change]]\nworkshop = [\"Prop_Production_T1_Forge\"]\ntime = 0\n";
@@ -863,7 +860,7 @@ fn a_full_content_id_keeps_naming_another_mod_s_content() {
 #[test]
 fn a_loot_change_of_one_container_changes_its_table_alone() {
     let corpses = Guid([7; 16]);
-    let vanilla = crate::content::vanilla::tests::game_with_tables(&[
+    let vanilla = enshwick_content::__fake::game_with_tables(&[
         ("LootContainer_Enemy_Corpse_Vukah", corpses),
         ("LootContainer_Enemy_Wildlife_Vuka_Melee", corpses),
     ]);
@@ -906,7 +903,7 @@ fn a_loot_change_of_one_container_changes_its_table_alone() {
 fn a_recipe_change_moves_recipes_to_a_station() {
     let forge = Guid([5; 16]);
     let (torch, recipe) = (Guid([1; 16]), Guid([3; 16]));
-    let vanilla = crate::content::vanilla::tests::game_with_recipes(
+    let vanilla = enshwick_content::__fake::game_with_recipes(
         &[(forge, "Prop_Production_T1_Forge"), (torch, "Tool_Torch01")],
         &[(recipe, "Tool_Torch01_T0_PK", torch)],
     );

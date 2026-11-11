@@ -4,13 +4,12 @@
 
 mod handles;
 mod outside;
-mod sample;
 pub(crate) mod script;
 
+pub use enshwick_content::typed::sample;
 pub(crate) use enshwick_typed::typed::runtime::*;
 pub use handles::{ComponentType, EventType, ResourceType};
 pub(crate) use handles::{RawComponent, RawEvent, RawResource};
-pub use sample::sample;
 
 #[cfg(test)]
 mod tests;

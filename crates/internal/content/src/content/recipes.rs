@@ -1,0 +1,515 @@
+//! Recipes: a vanilla recipe copied for a new output, with its ingredients
+//! scaled, or the recipes in the registry changed in place.
+
+use crate::__load::*;
+#[cfg(feature = "unstable")]
+use std::sync::Arc;
+
+use crate::Off;
+
+use super::menu;
+use super::types;
+
+mod add;
+mod change;
+pub(crate) mod derive;
+mod kind;
+mod rules;
+
+pub use add::{
+    NewRecipe, RECIPE_REGISTRY, RESERVED_FOR_SINGLE, RecipeLayout, WORKSHOP_RECIPES, add_recipe_to,
+    workshop_limit,
+};
+pub use change::{RecipeChanges, change_recipes_in, recipe_workshops};
+pub use derive::{Derived, RecipeView, derive_recipes_in, derived_guid};
+pub use kind::RecipeKind;
+pub use rules::{Name, RecipeRule, disable, enable, is_disabled};
+
+#[cfg(feature = "unstable")]
+use add::fnv1a;
+pub(crate) use derive::list;
+use derive::menu_entry;
+#[cfg(feature = "unstable")]
+use derive::{derived_entries, recipe_guids, vanilla_registry};
+
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::add_recipe`.
+    #[doc(hidden)]
+    #[cfg(feature = "unstable")]
+    fn add_recipe(&mut self, recipe: NewRecipe) -> Result<(), Off>;
+
+    /// As `Load::add_recipe_with`.
+    #[doc(hidden)]
+    #[cfg(feature = "unstable")]
+    fn add_recipe_with(
+        &mut self,
+        recipe: impl Fn() -> NewRecipe + Send + Sync + 'static,
+    ) -> Result<(), Off>;
+
+    /// As `Load::derive_recipes`.
+    #[doc(hidden)]
+    #[cfg(feature = "unstable")]
+    fn derive_recipes(
+        &mut self,
+        salt: &str,
+        choose: impl Fn(&RecipeView<'_>) -> Option<Derived> + Send + Sync + 'static,
+    ) -> Result<(), Off>;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    #[cfg(feature = "unstable")]
+    fn add_recipe(&mut self, recipe: NewRecipe) -> Result<(), Off> {
+        self.push_recipe(recipe)
+    }
+
+    #[cfg(feature = "unstable")]
+    fn add_recipe_with(
+        &mut self,
+        recipe: impl Fn() -> NewRecipe + Send + Sync + 'static,
+    ) -> Result<(), Off> {
+        let id = recipe().id;
+        self.declare(id)?;
+        let layout = RecipeLayout::resolve(self)?;
+        let registry = types::RECIPE_REGISTRY_RESOURCE.key(RECIPE_REGISTRY)?;
+        let recipe = Arc::new(recipe);
+        let built = Arc::clone(&recipe);
+        self.serve(registry, registry, move |base| {
+            let recipe = NewRecipe { id, ..built() };
+            add_recipe_to(&layout, base, &recipe, workshop_limit())
+        })?;
+        self.allow_rebuild(registry)?;
+        menu::serve(self, move |menu, bundle| {
+            let recipe = NewRecipe { id, ..recipe() };
+            menu::list_recipes(menu, bundle, &[menu_entry(&layout, &recipe)])
+        })
+    }
+
+    #[cfg(feature = "unstable")]
+    fn derive_recipes(
+        &mut self,
+        salt: &str,
+        choose: impl Fn(&RecipeView<'_>) -> Option<Derived> + Send + Sync + 'static,
+    ) -> Result<(), Off> {
+        let layout = RecipeLayout::resolve(self)?;
+        let salt = fnv1a(salt.as_bytes());
+        let registry = types::RECIPE_REGISTRY_RESOURCE.key(RECIPE_REGISTRY)?;
+        let choose = Arc::new(choose);
+        let chosen = Arc::clone(&choose);
+        self.serve(registry, registry, move |base| {
+            let vanilla =
+                vanilla_registry().and_then(|registry| recipe_guids(&layout, &registry));
+            if vanilla.is_none() {
+                crate::warn!(
+                    "derived recipes may copy recipes of other mods: the game's recipe registry does not read"
+                );
+            }
+            derive_recipes_in(&layout, base, salt, workshop_limit(), &|view| {
+                let added = vanilla
+                    .as_ref()
+                    .is_some_and(|vanilla| !vanilla.contains(&view.guid()));
+                if added { None } else { chosen(view) }
+            })
+        })?;
+        menu::serve(self, move |menu, bundle| {
+            let entries = vanilla_registry()
+                .and_then(|registry| derived_entries(&layout, &registry, salt, &*choose));
+            let Some(entries) = entries else {
+                crate::warn!(
+                    "derived recipes stay out of the crafting menu: the recipe registry does not read"
+                );
+                return Some(bundle.to_vec());
+            };
+            menu::list_recipes(menu, bundle, &entries)
+        })
+    }
+}
+
+/// The base handle's helpers of this module for the crate's own code.
+pub(crate) trait LoadHelpers {
+    /// Adds `recipe` as `Load::add_recipe` does, for the workshops and
+    /// data packs that bring their own.
+    fn push_recipe(&mut self, recipe: NewRecipe) -> Result<(), Off>;
+}
+
+impl LoadHelpers for crate::BaseLoad {
+    fn push_recipe(&mut self, recipe: NewRecipe) -> Result<(), Off> {
+        self.declare(recipe.id)?;
+        let layout = RecipeLayout::resolve(self)?;
+        let registry = types::RECIPE_REGISTRY_RESOURCE.key(RECIPE_REGISTRY)?;
+        self.serve(registry, registry, move |base| {
+            add_recipe_to(&layout, base, &recipe, workshop_limit())
+        })?;
+        menu::serve(self, move |menu, bundle| {
+            menu::list_recipes(menu, bundle, &[menu_entry(&layout, &recipe)])
+        })
+    }
+}
+
+/// Builds the recipe registry again with every mod's recipe changes, from any
+/// thread.
+///
+/// For a mod whose `Load::add_recipe_with` reads values that changed, such
+/// as a server's join values on a joined client: the counts the game holds
+/// change in place.
+///
+/// Nothing is done while the game has not built the registry yet. See
+/// [`rebuild`](crate::content::rebuild) for what a rebuild can change.
+///
+/// # Errors
+///
+/// [`Off`] for a mod that adds no recipe with `Load::add_recipe_with`, and
+/// when another mod's patch changed the
+/// registry's length.
+///
+/// # Examples
+///
+/// ```
+/// fn settings_changed() {
+///     if let Err(off) = enshwick::content::recipes::rebuild_recipes() {
+///         enshwick::warn!("recipe counts change at the next start: {off}");
+///     }
+/// }
+/// ```
+pub fn rebuild_recipes() -> Result<(), Off> {
+    crate::content::rebuild(types::RECIPE_REGISTRY_RESOURCE.key(RECIPE_REGISTRY)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::derive::modify_recipes_in;
+    use super::*;
+    use crate::content::workshops::WorkshopId;
+    use crate::content::{Blob, Guid, Id};
+
+    const LAYOUT: RecipeLayout = RecipeLayout {
+        recipes: 8,
+        recipe: 0xa8,
+        guid: 0,
+        id: 0x10,
+        workshop_guid: 0x14,
+        workshop: 0x24,
+        input: 0x28,
+        output: 0x30,
+        completion: 0x5c,
+        relative: [0x28, 0x30, 0x40, 0x78],
+        input_size: 48,
+        stack_size: 24,
+        stack_item: 0x10,
+        stack_count: 0x14,
+    };
+    const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+    const LOCKER: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
+    const RECIPE_ID: Id = Id::new("test:recipe");
+    const RECIPE: Guid = RECIPE_ID.guid();
+
+    fn u32_at(bytes: &[u8], at: usize) -> u32 {
+        u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap())
+    }
+
+    /// The kind after `kind`, in an order with every kind in it: a new kind
+    /// fails to compile here until it joins the order.
+    fn after(kind: RecipeKind) -> Option<RecipeKind> {
+        match kind {
+            RecipeKind::BuildingBlock => Some(RecipeKind::Roof),
+            RecipeKind::Roof => Some(RecipeKind::Overgrowth),
+            RecipeKind::Overgrowth => Some(RecipeKind::Terrain),
+            RecipeKind::Terrain => Some(RecipeKind::Decorative),
+            RecipeKind::Decorative => Some(RecipeKind::ComfortFurniture),
+            RecipeKind::ComfortFurniture => Some(RecipeKind::Other),
+            RecipeKind::Other => None,
+        }
+    }
+
+    fn every_kind() -> Vec<RecipeKind> {
+        std::iter::successors(Some(RecipeKind::BuildingBlock), |&kind| after(kind)).collect()
+    }
+
+    #[test]
+    fn the_list_of_kinds_holds_every_kind_once() {
+        let mut listed = RecipeKind::ALL.to_vec();
+        let mut every = every_kind();
+        let code = |kind: &RecipeKind| crate::abi::RecipeKind::from(*kind).0;
+        listed.sort_by_key(code);
+        every.sort_by_key(code);
+        assert_eq!(listed, every);
+    }
+
+    #[test]
+    fn a_fractional_factor_rounds_each_output_and_keeps_one_at_least() {
+        let mut blob = Blob::new(&[0u8; 16]);
+        let recipe = blob.append(&[0; 0xa8], 8);
+        let mut output = vec![0u8; 24 * 2];
+        output[0x14..0x18].copy_from_slice(&10u32.to_le_bytes());
+        output[24 + 0x14..24 + 0x18].copy_from_slice(&1u32.to_le_bytes());
+        let output_at = blob.append(&output, 8);
+        assert!(blob.set_array(recipe + 0x30, output_at, 2));
+        assert!(blob.set_array(8, recipe, 1));
+        let counts = |factor: f32| {
+            let (built, _) =
+                modify_recipes_in(&LAYOUT, blob.bytes(), &|r| r.scale_output_by(factor)).unwrap();
+            let built = Blob::new(&built);
+            let (outputs, _) = built.array(recipe + 0x30).unwrap();
+            [
+                u32_at(built.bytes(), outputs + 0x14),
+                u32_at(built.bytes(), outputs + 24 + 0x14),
+            ]
+        };
+        assert_eq!(counts(1.5), [15, 2]);
+        assert_eq!(counts(0.0), [1, 1]);
+        assert_eq!(counts(1.0), [10, 1]);
+    }
+
+    #[test]
+    fn every_kind_crosses_the_abi_and_an_unknown_code_reads_as_other() {
+        let kinds = every_kind();
+        for &kind in &kinds {
+            assert_eq!(RecipeKind::from(crate::abi::RecipeKind::from(kind)), kind);
+        }
+        let mut codes: Vec<u32> = kinds
+            .iter()
+            .map(|&kind| crate::abi::RecipeKind::from(kind).0)
+            .collect();
+        codes.sort_unstable();
+        codes.dedup();
+        assert_eq!(codes.len(), kinds.len());
+        assert_eq!(
+            RecipeKind::from(crate::abi::RecipeKind(u32::MAX)),
+            RecipeKind::Other
+        );
+    }
+
+    #[test]
+    fn a_view_outside_the_game_has_no_kind() {
+        let mut blob = Blob::new(&[0u8; 16]);
+        let recipe = blob.append(&[0; 0xa8], 8);
+        let mut output = vec![0u8; 24];
+        output[..16].copy_from_slice(&CHEST.0);
+        let output_at = blob.append(&output, 8);
+        assert!(blob.set_array(recipe + 0x30, output_at, 1));
+        let view = RecipeView {
+            blob: &blob,
+            at: recipe,
+            layout: &LAYOUT,
+        };
+        assert_eq!(view.output().map(|(item, _)| item), Some(CHEST));
+        assert_eq!(view.kind(), None);
+    }
+    #[test]
+    fn the_copy_costs_more_and_makes_the_new_output() {
+        let mut blob = Blob::new(&[0u8; 16]);
+        let recipe = blob.append(&[0; 0xa8], 8);
+        let mut input = vec![0u8; 48];
+        input[0x14..0x18].copy_from_slice(&5u32.to_le_bytes());
+        let input_at = blob.append(&input, 8);
+        let mut output = vec![0u8; 24];
+        output[..16].copy_from_slice(&CHEST.0);
+        let output_at = blob.append(&output, 8);
+        let name_at = blob.append(b"Chest\0", 1);
+        assert!(blob.set_array(recipe + 0x28, input_at, 1));
+        assert!(blob.set_array(recipe + 0x30, output_at, 1));
+        assert!(blob.set_array(recipe + 0x78, name_at, 5));
+        assert!(blob.set_array(8, recipe, 1));
+
+        let new = NewRecipe {
+            id: RECIPE_ID,
+            like: CHEST,
+            output: LOCKER,
+            output_count: 1,
+            cost: 2,
+            workshop: None,
+        };
+        let built =
+            Blob::new(&add_recipe_to(&LAYOUT, blob.bytes(), &new, WORKSHOP_RECIPES).unwrap());
+        let (recipes, count) = built.array(8).unwrap();
+        assert_eq!(count, 2);
+        let copy = recipes + 0xa8;
+        assert_eq!(&built.bytes()[copy..copy + 16], &RECIPE.0);
+        assert_eq!(u32_at(built.bytes(), copy + 0x10), RECIPE.fnv1a());
+        assert_eq!(u32_at(built.bytes(), copy + 0x5c), RECIPE.fnv1a());
+        let (inputs, _) = built.array(copy + 0x28).unwrap();
+        assert_eq!(u32_at(built.bytes(), inputs + 0x14), 10);
+        let (outputs, _) = built.array(copy + 0x30).unwrap();
+        assert_eq!(&built.bytes()[outputs..outputs + 16], &LOCKER.0);
+        assert_eq!(u32_at(built.bytes(), outputs + 0x10), LOCKER.fnv1a());
+        let (name, len) = built.array(copy + 0x78).unwrap();
+        assert_eq!(&built.bytes()[name..name + len as usize], b"Chest");
+        let (inputs, _) = built.array(recipes + 0x28).unwrap();
+        assert_eq!(u32_at(built.bytes(), inputs + 0x14), 5);
+    }
+
+    #[test]
+    fn derived_copies_double_the_output_of_the_chosen_recipes_only() {
+        let mut blob = Blob::new(&[0u8; 16]);
+        let first = blob.append(&[0; 0xa8 * 2], 8);
+        for (i, (name, made)) in [(&b"Block_A\0"[..], 100u32), (&b"Prop_B\0"[..], 1)]
+            .iter()
+            .enumerate()
+        {
+            let at = first + i * 0xa8;
+            let mut output = vec![0u8; 24];
+            output[0x14..0x18].copy_from_slice(&made.to_le_bytes());
+            let output_at = blob.append(&output, 8);
+            let name_at = blob.append(name, 1);
+            assert!(blob.set_array(at + 0x30, output_at, 1));
+            assert!(blob.set_array(at + 0x78, name_at, u32::try_from(name.len() - 1).unwrap()));
+        }
+        assert!(blob.set_array(8, first, 2));
+        let built = derive_recipes_in(&LAYOUT, blob.bytes(), 7, WORKSHOP_RECIPES, &|r| {
+            r.debug_name().starts_with("Block_").then_some(Derived {
+                output: 2,
+                cost: 1,
+                workshop: None,
+            })
+        })
+        .unwrap();
+        let built = Blob::new(&built);
+        let (recipes, count) = built.array(8).unwrap();
+        assert_eq!(count, 3);
+        let copy = RecipeView {
+            blob: &built,
+            at: recipes + 2 * 0xa8,
+            layout: &LAYOUT,
+        };
+        assert_eq!(copy.debug_name(), "Block_A");
+        assert_eq!(copy.output().unwrap().1, 200);
+        assert_eq!(copy.guid(), derived_guid(Guid([0; 16]), 7));
+        let original = RecipeView {
+            blob: &built,
+            at: recipes,
+            layout: &LAYOUT,
+        };
+        assert_eq!(original.output().unwrap().1, 100);
+    }
+
+    #[test]
+    fn a_recipe_can_move_to_another_workshop() {
+        let mut blob = Blob::new(&[0u8; 16]);
+        let recipe = blob.append(&[0; 0xa8], 8);
+        assert!(blob.write(recipe + 0x24, &7u32.to_le_bytes()));
+        let mut output = vec![0u8; 24];
+        output[..16].copy_from_slice(&CHEST.0);
+        let output_at = blob.append(&output, 8);
+        assert!(blob.set_array(recipe + 0x30, output_at, 1));
+        assert!(blob.set_array(8, recipe, 1));
+        let bench = WorkshopId::new(Guid::parse("5b828914-9b48-40f8-b541-72e9b942cee6"));
+        let new = NewRecipe {
+            id: RECIPE_ID,
+            like: CHEST,
+            output: LOCKER,
+            output_count: 1,
+            cost: 1,
+            workshop: Some(bench),
+        };
+        let built = add_recipe_to(&LAYOUT, blob.bytes(), &new, WORKSHOP_RECIPES).unwrap();
+        let built = Blob::new(&built);
+        let (recipes, _) = built.array(8).unwrap();
+        let copy = recipes + 0xa8;
+        assert_eq!(&built.bytes()[copy + 0x14..copy + 0x24], &bench.guid().0);
+        assert_eq!(u32_at(built.bytes(), copy + 0x24), bench.id());
+        assert_eq!(u32_at(built.bytes(), recipes + 0x24), 7);
+
+        // Derived copies move too, and count against the new workshop.
+        let derived = derive_recipes_in(&LAYOUT, blob.bytes(), 7, 1, &|_| {
+            Some(Derived {
+                output: 2,
+                cost: 1,
+                workshop: Some(bench),
+            })
+        })
+        .unwrap();
+        assert_eq!(
+            Blob::new(&derived).array(8).unwrap().1,
+            1,
+            "limit 1, held 0"
+        );
+        let derived = derive_recipes_in(&LAYOUT, blob.bytes(), 7, RESERVED_FOR_SINGLE + 1, &|_| {
+            Some(Derived {
+                output: 2,
+                cost: 1,
+                workshop: Some(bench),
+            })
+        })
+        .unwrap();
+        let derived = Blob::new(&derived);
+        let (recipes, count) = derived.array(8).unwrap();
+        assert_eq!(count, 2);
+        assert_eq!(u32_at(derived.bytes(), recipes + 0xa8 + 0x24), bench.id());
+    }
+
+    #[test]
+    fn modified_recipes_change_in_place_and_stay_one_each() {
+        let mut blob = Blob::new(&[0u8; 16]);
+        let first = blob.append(&[0; 0xa8 * 2], 8);
+        for (i, name) in [&b"Block_A"[..], &b"Prop_Decoration_Chest"[..]]
+            .iter()
+            .enumerate()
+        {
+            let at = first + i * 0xa8;
+            let mut input = vec![0u8; 48 * 2];
+            input[0x14..0x18].copy_from_slice(&3u32.to_le_bytes());
+            input[48 + 0x14..48 + 0x18].copy_from_slice(&4u32.to_le_bytes());
+            let input_at = blob.append(&input, 8);
+            let mut output = vec![0u8; 24];
+            output[0x14..0x18].copy_from_slice(&10u32.to_le_bytes());
+            let output_at = blob.append(&output, 8);
+            let name_at = blob.append(name, 1);
+            assert!(blob.set_array(at + 0x28, input_at, 2));
+            assert!(blob.set_array(at + 0x30, output_at, 1));
+            assert!(blob.set_array(at + 0x78, name_at, u32::try_from(name.len()).unwrap()));
+        }
+        assert!(blob.set_array(8, first, 2));
+        let (built, changed) = modify_recipes_in(&LAYOUT, blob.bytes(), &|recipe| {
+            if recipe.view().debug_name().starts_with("Block_") {
+                recipe.scale_output_by(3.0);
+            }
+        })
+        .unwrap();
+        assert_eq!(changed, 1);
+        assert_eq!(built.len(), blob.bytes().len(), "in place, nothing added");
+        let built = Blob::new(&built);
+        let (recipes, count) = built.array(8).unwrap();
+        assert_eq!(count, 2);
+        let view = |at| RecipeView {
+            blob: &built,
+            at,
+            layout: &LAYOUT,
+        };
+        assert_eq!(view(recipes).output().unwrap().1, 30);
+        assert_eq!(view(recipes + 0xa8).output().unwrap().1, 10);
+        let (inputs, _) = built.array(recipes + 0x28).unwrap();
+        assert_eq!(u32_at(built.bytes(), inputs + 0x14), 3);
+        assert_eq!(u32_at(built.bytes(), inputs + 48 + 0x14), 4);
+
+        // A second patch composes: it sees the first one's counts.
+        let (again, _) = modify_recipes_in(&LAYOUT, built.bytes(), &|recipe| {
+            recipe.scale_output_by(2.0);
+        })
+        .unwrap();
+        let again = Blob::new(&again);
+        let view = |at| RecipeView {
+            blob: &again,
+            at,
+            layout: &LAYOUT,
+        };
+        assert_eq!(view(recipes).output().unwrap().1, 60);
+        assert_eq!(view(recipes + 0xa8).output().unwrap().1, 20);
+    }
+
+    #[test]
+    fn an_item_without_a_recipe_builds_nothing() {
+        let mut blob = Blob::new(&[0u8; 16]);
+        assert!(blob.set_array(8, 16, 0));
+        let new = NewRecipe {
+            id: RECIPE_ID,
+            like: CHEST,
+            output: LOCKER,
+            output_count: 1,
+            cost: 1,
+            workshop: None,
+        };
+        assert!(add_recipe_to(&LAYOUT, blob.bytes(), &new, WORKSHOP_RECIPES).is_none());
+    }
+}

@@ -156,6 +156,8 @@ pub use enshwick_base::game_events;
 #[doc(inline)]
 pub use enshwick_base::i18n;
 #[doc(inline)]
+pub use enshwick_content::content;
+#[doc(inline)]
 pub use enshwick_core::buffs;
 #[doc(inline)]
 pub use enshwick_core::chat;
@@ -165,8 +167,6 @@ pub use enshwick_core::commands;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_core::console;
-#[doc(inline)]
-pub use enshwick_core::content;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_core::controls;
@@ -212,6 +212,9 @@ pub use enshwick_base::pacing;
 pub use enshwick_base::points;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
+pub use enshwick_content::rates;
+#[cfg(feature = "unstable")]
+#[doc(inline)]
 pub use enshwick_core::map;
 #[doc(inline)]
 pub use enshwick_core::packs;
@@ -220,9 +223,6 @@ pub use enshwick_core::progress;
 #[cfg(feature = "typed")]
 #[doc(inline)]
 pub use enshwick_core::quests;
-#[cfg(feature = "unstable")]
-#[doc(inline)]
-pub use enshwick_core::rates;
 #[cfg(doctest)]
 mod refused;
 #[doc(inline)]

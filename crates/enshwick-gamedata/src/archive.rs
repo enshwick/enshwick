@@ -13,7 +13,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use enshwick_core::abi::ResourceKey;
+use enshwick_base::abi::ResourceKey;
 use rustc_hash::FxHashMap;
 
 use enshwick_base::Relock;

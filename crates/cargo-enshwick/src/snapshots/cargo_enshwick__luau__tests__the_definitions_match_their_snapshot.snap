@@ -3386,18 +3386,6 @@ declare enshwick: {
 		--- Only while the mod starts, at the top level of main.luau.
 		add_texts: (texts: Texts, tags: {{string}}) -> (),
 	},
-	--- The game's components, events and resources as the typed API generates them from its reflection.
-	typed: {
-		--- The generated component type `id`, its path in the typed API joined by dots, such as `ecs.Health`, on the running build, its shape checked.
-		--- Only while the mod starts, at the top level of main.luau.
-		component_type: (id: string) -> ComponentType,
-		--- The generated game event type `id`, its path in the typed API joined by dots, such as `ecs.EntityDiedEvent`, on the running build, its shape checked.
-		--- Only while the mod starts, at the top level of main.luau.
-		event_type: (id: string) -> EventType,
-		--- The generated resource type `id`, its path in the typed API joined by dots, such as `ItemCollectionResource`, on the running build, its shape checked.
-		--- Only while the mod starts, at the top level of main.luau.
-		resource_type: (id: string) -> ResourceType,
-	},
 	--- The game's rates, such as experience and drops, each mod's factor on them combined.
 	rates: {
 		--- Whether `factor` is one the loader takes, as `is_valid_factor` says.
@@ -3579,6 +3567,18 @@ declare enshwick: {
 		--- Declares during `init` a change of `field` of `target`, from `source`, whose value the mod sets later through the handle. The loader builds what it reaches from the first read on, so a set after init needs no restart. A field players' games read needs the same value on every side: only a mod with `join: true` declares one, and it sets the value from a synced setting.
 		--- Only while the mod starts, at the top level of main.luau.
 		declare_change: (target: Target, field: ChangeField, source: string) -> ChangeHandle,
+	},
+	--- The game's components, events and resources as the typed API generates them from its reflection.
+	typed: {
+		--- The generated component type `id`, its path in the typed API joined by dots, such as `ecs.Health`, on the running build, its shape checked.
+		--- Only while the mod starts, at the top level of main.luau.
+		component_type: (id: string) -> ComponentType,
+		--- The generated game event type `id`, its path in the typed API joined by dots, such as `ecs.EntityDiedEvent`, on the running build, its shape checked.
+		--- Only while the mod starts, at the top level of main.luau.
+		event_type: (id: string) -> EventType,
+		--- The generated resource type `id`, its path in the typed API joined by dots, such as `ItemCollectionResource`, on the running build, its shape checked.
+		--- Only while the mod starts, at the top level of main.luau.
+		resource_type: (id: string) -> ResourceType,
 	},
 	--- The server's world: players, accounts, entities, props, vitals and edits in transactions. Unstable: may change in any release.
 	world: {

@@ -434,6 +434,7 @@ dependencies = [
  "document-features",
  "enshwick-abi",
  "enshwick-base",
+ "enshwick-content",
  "enshwick-core",
  "enshwick-fake",
  "enshwick-macros",
@@ -486,14 +487,34 @@ dependencies = [
 ]
 
 [[package]]
-name = "enshwick-core"
+name = "enshwick-content"
 version = "1.0.0-alpha.14"
 dependencies = [
  "bcdec_rs",
+ "enshwick",
+ "enshwick-abi",
+ "enshwick-base",
+ "enshwick-macros",
+ "enshwick-typed",
+ "enshwick-values",
+ "insta",
+ "proptest",
+ "rustc-hash",
+ "serde",
+ "thiserror",
+ "zune-core",
+ "zune-png",
+]
+
+[[package]]
+name = "enshwick-core"
+version = "1.0.0-alpha.14"
+dependencies = [
  "bytemuck",
  "enshwick",
  "enshwick-abi",
  "enshwick-base",
+ "enshwick-content",
  "enshwick-macros",
  "enshwick-typed",
  "enshwick-values",
@@ -508,8 +529,6 @@ dependencies = [
  "serde_json",
  "thiserror",
  "toml 1.2.1+spec-1.1.0",
- "zune-core",
- "zune-png",
 ]
 
 [[package]]
@@ -579,7 +598,7 @@ dependencies = [
  "criterion",
  "enshwick",
  "enshwick-base",
- "enshwick-core",
+ "enshwick-content",
  "iced-x86",
  "insta",
  "memchr",

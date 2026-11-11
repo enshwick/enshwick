@@ -5,19 +5,15 @@
 use std::sync::OnceLock;
 
 pub use enshwick_base::__fake::*;
+pub use enshwick_content::__fake::*;
 
 pub use crate::__private::rules;
 use crate::abi::{HostApi, Manifest, ModHandle};
 #[cfg(feature = "unstable")]
 use crate::actions::ActionTarget;
-pub use crate::rates::{Rate, scale_whole};
 use crate::voxels::{EditSource, Voxel};
 #[cfg(feature = "unstable")]
 use crate::world::HeldState;
-
-/// The fields of an image resource the game's catalogue names, in the order
-/// an icon reads them.
-pub const IMAGE_FIELDS: [&str; 6] = crate::content::icons::IMAGE_FIELDS;
 
 /// The most markers one mod places on the map.
 pub const MARKER_LIMIT: usize = crate::ui::MARKER_LIMIT;
@@ -84,18 +80,4 @@ pub fn edit_handle(source: EditSource, me: ModHandle) -> ModHandle {
         EditSource::ThisMod => me,
         EditSource::OtherMod => ModHandle(me.0.wrapping_add(1).max(1)),
     }
-}
-
-/// Whether `factor` is one a mod may set for a rate: finite, from 0 to the
-/// most the loader takes.
-#[must_use]
-pub fn is_valid_factor(factor: f32) -> bool {
-    crate::rates::is_valid_factor(factor)
-}
-
-/// The factor in force for a rate whose declaring mods set `factors`: their
-/// product, held to the range a mod may set; 1 when there are none.
-#[must_use]
-pub fn combine(factors: impl IntoIterator<Item = f32>) -> f32 {
-    crate::rates::combine(factors)
 }

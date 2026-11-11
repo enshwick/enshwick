@@ -2,10 +2,19 @@
 //! themselves, and cannot make a `Loading` of its own.
 
 use enshwick::abi::ModHandle;
+use enshwick::content::Guid;
+use enshwick::content::vanilla::Vanilla;
+use enshwick::content::workshops::NewWorkshop;
 use enshwick::ecs::ComponentType;
 use enshwick::game_events::CraftRecipeEvent;
 use enshwick::schedule::Scheduler;
 use enshwick::{Entity, Host, RecipeId};
+
+fn reach_content(vanilla: &Vanilla, workshop: &NewWorkshop, guid: Guid) {
+    let _ = vanilla.is_item(guid);
+    let _ = vanilla.is_recipe(guid);
+    let _ = workshop.check();
+}
 
 fn reach(host: Host, scheduler: Scheduler, ty: ComponentType) {
     let _ = host.install();
