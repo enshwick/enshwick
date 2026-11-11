@@ -746,6 +746,20 @@ mod tests {
         assert!(Part::parse("doc").is_err());
     }
 
+    #[test]
+    fn the_loader_names_the_facade_its_tests_build_mods_on() {
+        let packages = packages().unwrap();
+        let loader = packages
+            .iter()
+            .find(|p| p.name == "enshwick-loader")
+            .unwrap();
+        assert!(
+            loader.deps.iter().any(|dep| dep == "enshwick"),
+            "{:?}",
+            loader.deps
+        );
+    }
+
     fn planned(parts: &[Part]) -> Vec<String> {
         host_steps(&Scope::All, &[], (true, true), None, true, parts)
             .iter()

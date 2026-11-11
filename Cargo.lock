@@ -578,6 +578,7 @@ dependencies = [
  "arrayvec",
  "bytemuck",
  "criterion",
+ "enshwick",
  "enshwick-abi",
  "enshwick-core",
  "enshwick-gamedata",
