@@ -40,9 +40,7 @@ use super::{EngineFacts, Guid, Id};
 mod experience;
 
 pub use experience::NewExperience;
-pub(crate) use experience::{
-    AddedExperience, balance_parts, balancing_table, source_type, values_of,
-};
+pub(crate) use experience::{balance_parts, balancing_table, source_type, values_of};
 
 /// The game's knowledge: every world and player entry and the skill
 /// points they unlock (server 387 and 399, `GameKnowledgeResource`).
@@ -768,11 +766,11 @@ impl Load<'_> {
     /// The knowledge entries the mod added, reading the game's own ids and
     /// serving the mod's one patch of its knowledge on the first call.
     fn added_knowledge(&mut self) -> Result<&AddedKnowledge, Off> {
-        if self.knowledge.is_none() {
+        if self.slot::<AddedKnowledge>().is_none() {
             let resource = GAME_KNOWLEDGE.key_by_hash(self.hash(GameKnowledgeResource::ID)?);
-            self.knowledge = Some(AddedKnowledge::serve(self.host(), resource)?);
+            *self.slot() = Some(AddedKnowledge::serve(self.host(), resource)?);
         }
-        self.knowledge
+        self.slot::<AddedKnowledge>()
             .as_ref()
             .ok_or_else(|| Off::new("knowledge: the mod's entries are not served"))
     }

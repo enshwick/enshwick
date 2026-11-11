@@ -578,14 +578,14 @@ impl Load<'_> {
     /// ```
     #[must_use]
     pub fn quests(&mut self) -> Quests {
-        if let Some(quests) = self.quests {
+        if let Some(quests) = *self.slot::<Quests>() {
             return quests;
         }
         let quests = Quests {
             knowledge: self.knowledge(),
             journal: Box::leak(Box::default()),
         };
-        self.quests = Some(quests);
+        *self.slot() = Some(quests);
         quests
     }
 }

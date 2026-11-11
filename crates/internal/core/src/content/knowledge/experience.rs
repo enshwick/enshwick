@@ -135,7 +135,7 @@ impl AddedExperience {
 /// Adds `new` to the experience values the mod `load` serves.
 pub(super) fn add(load: &mut Load<'_>, new: NewExperience) -> Result<ExperienceValue, Off> {
     let host = load.host();
-    let experience = match &mut load.experience {
+    let experience = match load.slot::<AddedExperience>() {
         Some(experience) => experience,
         empty => empty.insert(AddedExperience::serve(host)?),
     };

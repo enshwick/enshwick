@@ -603,7 +603,7 @@ impl Load<'_> {
     /// for the mod, serving the patch with the first.
     fn edit_journal(&mut self, key: crate::abi::ResourceKey, edit: Edit) -> Result<(), Off> {
         let host = self.host();
-        let journal = match &mut self.journal {
+        let journal = match self.slot::<AddedJournal>() {
             Some(journal) => journal,
             empty => empty.insert(AddedJournal::serve(host, key)?),
         };

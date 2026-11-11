@@ -143,6 +143,15 @@ pub(crate) enum ReadWavError {
     Empty,
 }
 
+/// What a mod's sounds hold while it initialises: the bytes of its files so
+/// far, and the game's streamed uncompressed sound they build from, once
+/// one was found.
+#[derive(Clone, Copy, Debug, Default)]
+struct Budget {
+    bytes: u64,
+    base: Option<crate::abi::ResourceKey>,
+}
+
 /// A sound's samples as the game stores an uncompressed one: 16-bit
 /// little-endian, the channels of each frame side by side.
 #[derive(Debug, PartialEq, Eq)]
@@ -365,7 +374,7 @@ impl Load<'_> {
         if size > MAX_FILE_BYTES {
             return Err(fail(format!("{file}: {size} bytes, past {MAX_FILE_BYTES}")));
         }
-        if self.sound_bytes + size > MAX_MOD_BYTES {
+        if self.slot::<Budget>().unwrap_or_default().bytes + size > MAX_MOD_BYTES {
             return Err(fail(format!(
                 "{file}: the mod's sounds would pass {MAX_MOD_BYTES} bytes"
             )));
@@ -376,7 +385,7 @@ impl Load<'_> {
         if self.host().build().side != Side::CLIENT {
             let container = self.declare(id)?;
             self.declare(sound_id)?;
-            self.sound_bytes += size;
+            self.slot::<Budget>().get_or_insert_default().bytes += size;
             return Ok(SoundContainerId::from_guid(container));
         }
         let host = self.host();
@@ -389,7 +398,7 @@ impl Load<'_> {
             .ok_or_else(|| fail("this game has no sound container entry".to_owned()))?
             .qualified_name()
             .to_owned();
-        let base = match self.sound_base {
+        let base = match self.slot::<Budget>().unwrap_or_default().base {
             Some(base) => base,
             // One of the game's few uncompressed sounds, all streamed, carries
             // the content category a served sound needs.
@@ -404,13 +413,13 @@ impl Load<'_> {
                     fail("the game holds no streamed uncompressed sound to build from".to_owned())
                 })?,
         };
-        self.sound_base = Some(base);
+        self.slot::<Budget>().get_or_insert_default().base = Some(base);
         let container = self.declare(id)?;
         let sound = self.declare(sound_id)?;
         let host = self.host();
         let hash = host.serve_content(&pcm.bytes)?;
         // Served bytes stay held whatever fails after them.
-        self.sound_bytes += size;
+        self.slot::<Budget>().get_or_insert_default().bytes += size;
         let (stereo, frames, name) = (pcm.stereo, pcm.frames, id.to_string());
         drop(pcm);
         crate::resources::serve_value(
