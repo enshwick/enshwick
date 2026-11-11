@@ -66,17 +66,37 @@ typed_kinds!(
     RevivedPlayerEvent,
 );
 
+impl CraftRecipeEvent {
+    /// The event of a craft check, as the craft veto hands it to a filter.
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn new(
+        crafting_operator_id: Entity,
+        crafting_station_id: Option<Entity>,
+        recipe_id: RecipeId,
+        recipe_amount: u16,
+    ) -> Self {
+        Self {
+            crafting_operator_id,
+            crafting_station_id,
+            recipe_id,
+            recipe_amount,
+        }
+    }
+}
+
 /// A reflected game event type, resolved once at init.
 ///
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
+/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let died = load.game_event_type("keen::ecs::EntityDiedEvent")?;
 ///     assert_eq!(died.name(), "keen::ecs::EntityDiedEvent");
 ///     Ok(())
 /// }
+/// # }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct EventType {
@@ -110,7 +130,7 @@ impl EventType {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
+    /// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let died = load.game_event_type("keen::ecs::EntityDiedEvent")?.hash();
     ///     load.on_every_raw_game_event(move |event| {
@@ -119,6 +139,7 @@ impl EventType {
     ///         }
     ///     })
     /// }
+    /// # }
     /// ```
     #[must_use]
     pub const fn hash(self) -> u32 {
@@ -130,11 +151,12 @@ impl EventType {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
+    /// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     assert_eq!(load.game_event_type("keen::ecs::EntityDiedEvent")?.size(), 16);
     ///     Ok(())
     /// }
+    /// # }
     /// ```
     #[must_use]
     pub const fn size(self) -> u32 {
@@ -151,7 +173,7 @@ impl EventType {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
+    /// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
     /// use enshwick::Entity;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -163,6 +185,7 @@ impl EventType {
     ///         }
     ///     })
     /// }
+    /// # }
     /// ```
     pub fn field<T: Scalar>(self, load: &impl crate::Loading, name: &str) -> Result<Field<T>, Off> {
         self.inherited_field(load, self.name, name)
@@ -179,7 +202,7 @@ impl EventType {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
+    /// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
     /// use enshwick::Entity;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -188,6 +211,7 @@ impl EventType {
     ///     let _ = attacker;
     ///     Ok(())
     /// }
+    /// # }
     /// ```
     pub fn inherited_field<T: Scalar>(
         self,
@@ -408,12 +432,13 @@ impl<T> Field<T> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
+    /// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let died = load.game_event_type("keen::ecs::EntityDiedEvent")?;
     ///     assert_eq!(died.field::<u32>(load, "deadEntityId")?.offset(), 8);
     ///     Ok(())
     /// }
+    /// # }
     /// ```
     #[must_use]
     pub const fn offset(self) -> u32 {

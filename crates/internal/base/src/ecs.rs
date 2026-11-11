@@ -25,10 +25,11 @@ type MarkChanged = unsafe extern "system" fn(
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
+/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<enshwick::ecs::Ecs, enshwick::Off> {
 ///     enshwick::ecs::Ecs::resolve(load)
 /// }
+/// # }
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Ecs {
@@ -319,12 +320,13 @@ type SlotRoot = unsafe extern "system" fn(
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
+/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::ecs::ComponentType;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<ComponentType, enshwick::Off> {
 ///     ComponentType::resolve(load, "keen::ecs::UsedItem")
 /// }
+/// # }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 pub struct ComponentType(u32);
@@ -365,10 +367,11 @@ impl ComponentType {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
+    /// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
     /// fn hash(load: &enshwick::Load<'_>) -> Result<u32, enshwick::Off> {
     ///     Ok(enshwick::ecs::ComponentType::resolve(load, "keen::ecs::UsedItem")?.hash())
     /// }
+    /// # }
     /// ```
     #[must_use]
     pub const fn hash(self) -> u32 {
@@ -394,10 +397,11 @@ impl ComponentType {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
+/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<enshwick::ecs::Components, enshwick::Off> {
 ///     enshwick::ecs::Components::resolve(load)
 /// }
+/// # }
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Components {
@@ -590,10 +594,11 @@ pub fn server_role(process: Side, context_world: u64, server_world: u64) -> bool
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
+/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<enshwick::ecs::Worlds, enshwick::Off> {
 ///     enshwick::ecs::Worlds::resolve(load)
 /// }
+/// # }
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Worlds {
@@ -797,10 +802,11 @@ type AttributeFind = unsafe extern "system" fn(out: *mut u64, attribute: u32, re
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
+/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<enshwick::ecs::Attributes, enshwick::Off> {
 ///     enshwick::ecs::Attributes::resolve(load)
 /// }
+/// # }
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Attributes {

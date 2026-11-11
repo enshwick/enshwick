@@ -368,7 +368,7 @@ impl crate::script::FromScript for Order {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
+/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// #[enshwick::point(name = "price", mode = Override, output = u32)]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Price {
@@ -381,6 +381,7 @@ impl crate::script::FromScript for Order {
 ///     enshwick::info!("item 7 costs {coins}");
 ///     Ok(())
 /// }
+/// # }
 /// ```
 pub struct OwnedPoint<P> {
     host: Host,
@@ -426,7 +427,7 @@ impl<P: Point> OwnedPoint<P> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
+    /// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
     /// #[enshwick::point(name = "price", mode = Override, output = u32)]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct Price {
@@ -438,6 +439,7 @@ impl<P: Point> OwnedPoint<P> {
     ///     assert!(!price.is_extended(), "links run once every mod is initialised");
     ///     Ok(())
     /// }
+    /// # }
     /// ```
     #[must_use]
     pub fn is_extended(&self) -> bool {

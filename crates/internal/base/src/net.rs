@@ -16,7 +16,7 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_base as enshwick;
+//! # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 //! use enshwick::net::Peer;
 //!
 //! #[derive(serde::Serialize, serde::Deserialize)]
@@ -39,6 +39,7 @@
 //!     }
 //!     Ok(())
 //! }
+//! # }
 //! ```
 
 use core::ffi::c_void;

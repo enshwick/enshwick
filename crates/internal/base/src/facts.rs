@@ -11,13 +11,14 @@ use crate::abi::Str;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
+/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::content::EngineFacts;
 /// use enshwick::content::items::ItemLayout;
 ///
 /// fn layout(facts: &impl EngineFacts) -> Result<ItemLayout, enshwick::Off> {
 ///     ItemLayout::resolve(facts)
 /// }
+/// # }
 /// ```
 pub trait EngineFacts {
     /// The byte offset the id names.

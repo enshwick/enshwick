@@ -16,7 +16,7 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_base as enshwick;
+//! # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     let found = load.on_loop_wait(|wait| {
 //!         if wait.ms == 0 && wait.left_ns > 0 {
@@ -28,6 +28,7 @@
 //!     }
 //!     Ok(())
 //! }
+//! # }
 //! ```
 
 use core::ffi::c_void;

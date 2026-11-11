@@ -58,7 +58,7 @@ use std::time::Instant;
 
 use affected::{Package, Scope};
 
-const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|docs|windows-lint|windows-tests|fuzz]... [--list-windows-tests] (--all fuzzes only with --part fuzz) | dist [--out <dir>] | notes [--out <file>] [--known-issues <text>] | tag-lines | header | alias-examples | peel-load <from>=<into>... | host-args | compat <exe> [--mods <path>...] [--report <file>] [--patterns] [--data <file>] | compat refresh (ENSH_EXES lists the executables)";
+const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|docs|windows-lint|windows-tests|fuzz]... [--list-windows-tests] (--all fuzzes only with --part fuzz) | dist [--out <dir>] | notes [--out <file>] [--known-issues <text>] | tag-lines | header | alias-examples | peel-load <from>=<into>... | wrap-examples <doctest log> [--cfg <feature>] | host-args | compat <exe> [--mods <path>...] [--report <file>] [--patterns] [--data <file>] | compat refresh (ENSH_EXES lists the executables)";
 const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// Turned on by name: most of the API crate's test targets need its fake
 /// loader, and without the feature cargo skips them without a word; the
@@ -106,6 +106,7 @@ fn run(args: &[String]) -> Result<bool, String> {
         "tag-lines" => return tag_lines::run(rest),
         "header" if rest.is_empty() => return header::run(&workspace_root()),
         "peel-load" => return peel::run(&workspace_root(), rest),
+        "wrap-examples" => return lower_examples::wrap(&workspace_root(), &packages()?, rest),
         "alias-examples" if rest.is_empty() => {
             return lower_examples::run(&workspace_root(), &packages()?);
         }

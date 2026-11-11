@@ -407,7 +407,7 @@ impl Load<'_> {
         let peeled = peel(source)?;
         assert_eq!(
             peeled.base,
-            "impl BaseLoad {\n    /// As `Load::texts_script`.\n    pub fn texts_script(&mut self) -> u32 {\n        1\n    }\n}\n"
+            "impl BaseLoad {\n    /// As `Load::texts_script`.\n    #[doc(hidden)]\n    pub fn texts_script(&mut self) -> u32 {\n        1\n    }\n}\n"
         );
         assert_eq!(
             peeled.forwarders,

@@ -481,7 +481,7 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_base as enshwick;
+    /// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
     /// use enshwick::content::{Guid, types};
     ///
     /// if let Some(host) = enshwick::host() {
@@ -490,6 +490,7 @@ impl Host {
     ///         let _value = host.served_value(key);
     ///     }
     /// }
+    /// # }
     /// ```
     pub fn served_value(&self, key: crate::abi::ResourceKey) -> Result<super::Value, Off> {
         decode(key, &self.served_resource(key)?)

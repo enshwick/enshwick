@@ -399,7 +399,7 @@ pub fn world_key(host: crate::Host) -> Option<String> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
+/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// #[derive(Default, serde::Deserialize, serde::Serialize)]
 /// struct Bounties {
 ///     paid: u64,
@@ -411,6 +411,7 @@ pub fn world_key(host: crate::Host) -> Option<String> {
 ///         let _paid = bounties.update(|b| b.paid += 1);
 ///     })
 /// }
+/// # }
 /// ```
 pub struct WorldStore<T> {
     slot: std::sync::Arc<std::sync::Mutex<WorldSlot<T>>>,

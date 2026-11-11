@@ -302,7 +302,7 @@ pub fn is_running(id: &str) -> bool {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
+/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::events::JoinRefused;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -312,6 +312,7 @@ pub fn is_running(id: &str) -> bool {
 ///         }
 ///     })
 /// }
+/// # }
 /// ```
 #[must_use]
 pub fn join_missing() -> Vec<ModEntry> {

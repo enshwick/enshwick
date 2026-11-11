@@ -122,7 +122,7 @@ fn spec<C: Call>() -> CallSpec {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
+/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// #[enshwick::call(of = trading_post, name = "price-of", output = u32)]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct PriceOf {
@@ -137,6 +137,7 @@ fn spec<C: Call>() -> CallSpec {
 ///         }
 ///     })
 /// }
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct Caller<C> {
@@ -277,7 +278,7 @@ impl DescribedCall {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
+/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::points::DescribedField;
 /// use enshwick::services::DescribedCall;
 ///
@@ -294,6 +295,7 @@ impl DescribedCall {
 ///     let _answer = price_of.call(&7u32.to_le_bytes(), &mut coins);
 ///     Ok(())
 /// }
+/// # }
 /// ```
 #[derive(Clone, Copy, Debug)]
 pub struct DescribedCaller {

@@ -288,7 +288,7 @@ pub(crate) fn name(name: &'static str) -> Str {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_base as enshwick;
+/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// #[enshwick::event(name = "sold")]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Sold {
@@ -300,6 +300,7 @@ pub(crate) fn name(name: &'static str) -> Str {
 ///     sold.send(&Sold { item: 7 });
 ///     Ok(())
 /// }
+/// # }
 /// ```
 pub struct Emitter<E> {
     host: Host,
