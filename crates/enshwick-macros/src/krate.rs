@@ -37,7 +37,12 @@ pub(crate) fn in_attrs(attrs: &[Attribute], helper: &str) -> syn::Result<Option<
 }
 
 /// `tokens` with every `::enshwick` path start written as `krate`; the same
-/// tokens without one.
+/// tokens without one. A `::enshwick` that continues a path, as in
+/// `crate::enshwick`, stays.
+///
+/// shortcut: the item a mod wrote is rewritten with the expansion, which only
+/// the internal crates that name themselves see; split them if one ever
+/// needs a literal `::enshwick` path.
 pub(crate) fn rename(tokens: TokenStream, krate: Option<&Path>) -> TokenStream {
     match krate {
         Some(krate) => rewrite(tokens, &krate.to_token_stream()),
@@ -60,6 +65,7 @@ fn rewrite(tokens: TokenStream, krate: &TokenStream) -> TokenStream {
             && a.spacing() == Spacing::Joint
             && b.as_char() == ':'
             && name == "enshwick"
+            && !(at > 0 && continues(&trees[at - 1]))
         {
             out.extend(krate.clone());
             at += 3;
@@ -76,6 +82,18 @@ fn rewrite(tokens: TokenStream, krate: &TokenStream) -> TokenStream {
         at += 1;
     }
     out
+}
+
+/// Whether a `::` after `tree` continues a path: after a name or `crate`,
+/// `self`, `super` or `Self`, not after a keyword such as `impl` or `use`.
+fn continues(tree: &TokenTree) -> bool {
+    const KEYWORDS: &[&str] = &[
+        "as", "async", "await", "break", "const", "continue", "dyn", "else", "enum", "extern",
+        "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub",
+        "ref", "return", "static", "struct", "trait", "type", "unsafe", "use", "where", "while",
+        "yield",
+    ];
+    matches!(tree, TokenTree::Ident(ident) if !KEYWORDS.iter().any(|k| ident == k))
 }
 
 /// `path` as the text serde's `crate = "..."` takes.
@@ -115,6 +133,26 @@ mod tests {
         assert_eq!(
             rename(tokens, Some(&krate)).to_string(),
             quote!(crate::Shape + enshwick::Shape + ::enshwick_core::X).to_string()
+        );
+    }
+
+    #[test]
+    fn rename_leaves_an_enshwick_segment_inside_a_path_but_rewrites_one_after_a_keyword() {
+        let krate: Path = syn::parse_quote!(::enshwick_core);
+        let out = rename(
+            quote!(
+                use crate::enshwick::A;
+                impl<T> ::enshwick::B for super::enshwick::C<dyn ::enshwick::D> {}
+            ),
+            Some(&krate),
+        );
+        assert_eq!(
+            out.to_string(),
+            quote!(
+                use crate::enshwick::A;
+                impl<T> ::enshwick_core::B for super::enshwick::C<dyn ::enshwick_core::D> {}
+            )
+            .to_string()
         );
     }
 
