@@ -227,6 +227,10 @@ Each entry names the pull request that made the change.
   `enshwick` re-exports as `enshwick::test` behind its `test` feature: a
   mod's tests still turn that feature on and name every item as before, and
   a build without it holds no test support (#1041).
+- The loader, `enshwick-luau`, `enshwick-gamedata` and `cargo-enshwick`
+  depend on the internal crates `enshwick-core` and `enshwick-abi` instead
+  of `enshwick`, so a change to `enshwick` alone no longer rebuilds them;
+  mods still depend on `enshwick` alone (#1043).
 
 ### Fixed
 

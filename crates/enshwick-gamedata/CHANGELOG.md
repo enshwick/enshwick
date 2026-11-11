@@ -13,6 +13,11 @@ Each entry names the pull request that made the change.
   the text field's look (`ui.text_field_look`), found on every kept client
   build; the compatibility reports list them (#1023).
 
+### Changed
+
+- Depends on the internal crate `enshwick-core` instead of `enshwick`; its
+  types are the same ones `enshwick` re-exports (#1043).
+
 ## [1.0.0-alpha.14] - 2026-11-09
 
 ### Added
