@@ -61,9 +61,29 @@ pub fn near_lowered<'a, L: AsRef<str>>(
         .collect()
 }
 
+/// `; near: ` and the `near` names, to end a reply about a name nothing has,
+/// or nothing when there are none.
+pub fn suffix<S: AsRef<str>>(near: &[S]) -> String {
+    let mut out = String::new();
+    for (i, name) in near.iter().enumerate() {
+        out.push_str(if i == 0 { "; near: " } else { ", " });
+        out.push_str(name.as_ref());
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_suffix_lists_the_near_names_or_says_nothing() {
+        assert_eq!(
+            suffix(&["Tool_Torch01", "Tool_Torch02"]),
+            "; near: Tool_Torch01, Tool_Torch02"
+        );
+        assert_eq!(suffix::<&str>(&[]), "");
+    }
 
     #[test]
     fn near_names_start_with_hold_or_almost_spell_what_was_typed() {

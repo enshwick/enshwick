@@ -62,7 +62,7 @@ pub enum VanillaError {
     #[error("the game's {0} does not read")]
     Unreadable(&'static str),
     /// No vanilla item has the name; `near` lists names that look like it.
-    #[error("no vanilla item {name:?}{}", near_list(near))]
+    #[error("no vanilla item {name:?}{}", crate::near::suffix(near))]
     Unknown {
         /// The name asked for.
         name: String,
@@ -79,7 +79,7 @@ pub enum VanillaError {
     },
     /// No vanilla recipe has the debug name; `near` lists names that look
     /// like it.
-    #[error("no vanilla recipe {name:?}{}", near_list(near))]
+    #[error("no vanilla recipe {name:?}{}", crate::near::suffix(near))]
     UnknownRecipe {
         /// The name asked for.
         name: String,
@@ -96,7 +96,10 @@ pub enum VanillaError {
     },
     /// No vanilla container template of the name rolls a fill table; `near`
     /// lists names that look like it.
-    #[error("no vanilla container {name:?} rolls a loot table{}", near_list(near))]
+    #[error(
+        "no vanilla container {name:?} rolls a loot table{}",
+        crate::near::suffix(near)
+    )]
     NoLootTable {
         /// The name asked for.
         name: String,
@@ -110,7 +113,7 @@ pub enum VanillaError {
     NotAStation(Guid),
     /// No vanilla template has the name; `near` lists names that look like
     /// it.
-    #[error("no vanilla template {name:?}{}", near_list(near))]
+    #[error("no vanilla template {name:?}{}", crate::near::suffix(near))]
     UnknownTemplate {
         /// The name asked for.
         name: String,
@@ -131,14 +134,6 @@ pub enum VanillaError {
 }
 
 crate::load::off_from!(VanillaError);
-
-fn near_list(near: &[String]) -> String {
-    if near.is_empty() {
-        String::new()
-    } else {
-        format!("; near: {}", near.join(", "))
-    }
-}
 
 fn guid_list(items: &[Guid]) -> String {
     items

@@ -16,7 +16,8 @@ use super::entries::{
 };
 use super::files::PackError;
 use super::reader::{Dropped, Reader};
-use super::{ITEMS_FILE, LOOT_FILE, RECIPES_FILE, near, near_names};
+use super::{ITEMS_FILE, LOOT_FILE, NEAR, RECIPES_FILE};
+use crate::near::{near, suffix};
 
 /// A field a recipe change sets, with its ingredient and the name the pack
 /// gave it, and the value.
@@ -185,7 +186,11 @@ fn category(names: &[String]) -> Result<ItemCategoryMask, ReadCategoryError> {
                 .map(|one| mask | one)
                 .ok_or_else(|| ReadCategoryError::Unknown {
                     name: name.clone(),
-                    near: near(ItemCategoryMask::NAMES.iter().map(|(game, _)| *game), name),
+                    near: near(
+                        name,
+                        ItemCategoryMask::NAMES.iter().map(|(game, _)| *game),
+                        NEAR,
+                    ),
                 })
         })
 }
@@ -197,7 +202,7 @@ enum ReadCategoryError {
     #[error("category names no item category")]
     Empty,
     /// A name the game has no category for, with the names near it.
-    #[error("no item category {name:?}{}", near_names(near))]
+    #[error("no item category {name:?}{}", suffix(near))]
     Unknown {
         name: String,
         near: Vec<&'static str>,
@@ -748,7 +753,7 @@ fn select_recipes(
             targets.push((Recipes::Kind(kind), format!("kind {name}")));
             continue;
         }
-        let near = near_names(&near(RecipeKind::ALL.iter().map(|k| k.name()), name));
+        let near = suffix(&near(name, RecipeKind::ALL.iter().map(|k| k.name()), NEAR));
         fail(reader, format!("no recipe kind {name:?}{near}"));
     }
     for name in &e.workshop {

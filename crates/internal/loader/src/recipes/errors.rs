@@ -2,7 +2,9 @@
 
 use enshwick_core::content::Guid;
 
-use super::{list, near_list};
+use enshwick_base::near::suffix;
+
+use super::list;
 
 /// Why a recipe file is no recipe file.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -46,7 +48,7 @@ pub enum ResolveRuleError {
         guids: Vec<Guid>,
     },
     /// No recipe has the debug name.
-    #[error("no recipe {name:?}{}", near_list(near))]
+    #[error("no recipe {name:?}{}", suffix(near))]
     NoRecipe {
         /// The debug name.
         name: String,
@@ -62,7 +64,7 @@ pub enum ResolveRuleError {
         guids: Vec<Guid>,
     },
     /// No item has the debug name.
-    #[error("no item {name:?}{}", near_list(near))]
+    #[error("no item {name:?}{}", suffix(near))]
     NoItem {
         /// The debug name.
         name: String,

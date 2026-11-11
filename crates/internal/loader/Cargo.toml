@@ -21,6 +21,7 @@ doc = false
 arc-swap.workspace = true
 bytemuck.workspace = true
 enshwick-abi.workspace = true
+enshwick-base.workspace = true
 enshwick-core = { workspace = true, features = ["unstable"] }
 enshwick-gamedata.workspace = true
 postcard.workspace = true
@@ -28,7 +29,6 @@ rustc-hash.workspace = true
 semver.workspace = true
 serde.workspace = true
 sha2.workspace = true
-strsim.workspace = true
 thiserror.workspace = true
 toml.workspace = true
 toml_edit.workspace = true

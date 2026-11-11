@@ -18,6 +18,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use rustc_hash::FxHashMap;
 
+use enshwick_base::near::near;
 use enshwick_core::abi::RecipeRuleKind;
 use enshwick_core::content::recipes::RecipeLayout;
 use enshwick_core::content::{Blob, Guid};
@@ -387,7 +388,7 @@ impl Names {
             }),
             _ => Err(ResolveRuleError::NoItem {
                 name: full_id(name),
-                near: full_ids(&near(self.items.keys().map(String::as_str), name)),
+                near: full_ids(&near(name, self.items.keys().map(String::as_str), NEAR)),
             }),
         }
     }
@@ -399,40 +400,6 @@ fn list(guids: &[Guid]) -> String {
         .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join(", ")
-}
-
-fn near_list(near: &[String]) -> String {
-    if near.is_empty() {
-        String::new()
-    } else {
-        format!("; near: {}", near.join(", "))
-    }
-}
-
-/// Names of `names` that look like `name`: the same but for case first,
-/// then those that hold it, then those a few edits away, ignoring case.
-fn near<'a>(names: impl Iterator<Item = &'a str>, name: &str) -> Vec<&'a str> {
-    let wanted = name.to_ascii_lowercase();
-    let mut scored: Vec<(usize, &str)> = names
-        .filter_map(|n| {
-            let lower = n.to_ascii_lowercase();
-            let score = if lower == wanted {
-                0
-            } else if !wanted.is_empty() && lower.contains(&wanted) {
-                1
-            } else {
-                let edits = strsim::levenshtein(&lower, &wanted);
-                if edits > 2 {
-                    return None;
-                }
-                1 + edits
-            };
-            Some((score, n))
-        })
-        .collect();
-    scored.sort_unstable();
-    scored.dedup();
-    scored.into_iter().take(NEAR).map(|(_, n)| n).collect()
 }
 
 /// A name as a reference: a GUID, a content id's GUID, or the game's debug
@@ -509,7 +476,7 @@ pub fn resolve(rule: &Rule, index: &Index, names: &Names) -> Result<Vec<u32>, Re
                 }
                 _ => Err(ResolveRuleError::NoRecipe {
                     name: name.to_owned(),
-                    near: full_ids(&near(index.by_name.keys().map(String::as_str), game)),
+                    near: full_ids(&near(game, index.by_name.keys().map(String::as_str), NEAR)),
                 }),
             },
         },
