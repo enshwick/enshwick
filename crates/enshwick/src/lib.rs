@@ -280,7 +280,7 @@ pub use enshwick_base::{
     error_every, error_once, host, info, info_every, info_once, warn, warn_every, warn_once,
 };
 #[doc(inline)]
-pub use enshwick_core::{Load, Mod, Off};
+pub use enshwick_core::{Load, Mod, Off, WorldError};
 pub use enshwick_macros::Config;
 /// Describes a type for script languages through [`script::Typed`],
 /// [`script::IntoScript`] and, when every field is shown,
@@ -729,8 +729,6 @@ pub use enshwick_macros::service;
 /// # Ok::<(), enshwick::Off>(())
 /// ```
 pub use enshwick_macros::texts;
-#[doc(inline)]
-pub use enshwick_world::WorldError;
 #[doc(no_inline)]
 pub use shape::Shape;
 
