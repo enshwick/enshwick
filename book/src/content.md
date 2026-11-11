@@ -95,7 +95,7 @@ with similar names in the log.
 ## Renamed content
 
 Content whose GUID changed keeps what saves hold under the old one through
-[`Load::rename_content`](https://github.com/enshwick/enshwick/blob/main/crates/internal/content/src/content/renames.rs).
+[`Load::rename_content`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load/content/renames.rs).
 Declare every rename the mod ever made, oldest first, once in `init` and
 before adding the content:
 

@@ -6,7 +6,7 @@ description: Load::serve serves any game resource, new or changed, as if it came
 # Served resources
 
 Items, recipes and workshops are built on one lower-level call,
-[`Load::serve`](https://github.com/enshwick/enshwick/blob/main/crates/internal/content/src/content.rs).
+[`Load::serve`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load/content.rs).
 It serves any game resource, new or changed, as if it came from the game's
 archive. Use it where the high-level calls fall short.
 

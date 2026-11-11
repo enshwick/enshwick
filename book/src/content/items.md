@@ -5,7 +5,7 @@ description: Add an item to the game with Load::add_item: a clone of a vanilla i
 
 # Items
 
-[`Load::add_item`](https://github.com/enshwick/enshwick/blob/main/crates/internal/content/src/content/items.rs)
+[`Load::add_item`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load/content/items.rs)
 adds an item to the game. The item clones a vanilla one under a
 [content id](../concepts/ids.md) of its own, and looks and behaves
 like it. It takes

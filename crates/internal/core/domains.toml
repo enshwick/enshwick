@@ -37,7 +37,8 @@ content = "content"
 # The script binding's runtime, which stays in core beside `Load`.
 base = ["script"]
 # The typed handles, which read components through `World`; the generated
-# items they hand out live in the content crate.
+# items they hand out live in `enshwick-typed`, which the content crate
+# re-exports with their shape samples.
 world = [
     "altars",
     "buffs",

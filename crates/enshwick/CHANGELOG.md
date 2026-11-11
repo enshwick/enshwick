@@ -162,8 +162,8 @@ Each entry names the pull request that made the change.
   `inherited_field`, `config::TableConfig::on_change` and
   `script::GameEventKind::subscribe`. `Loading` is new, sealed, at the root
   (#1046).
-- The content domain (`content`, `rates`, and the generated items of
-  `typed` with their shape samples) is the internal crate
+- The content domain (`content`, `rates`, and the shape samples of the
+  generated `typed` items) is the internal crate
   `enshwick-content`, between `enshwick-base` and `enshwick-core`; every
   path stays, and the Luau definitions list `typed` after `content`
   (#1049).

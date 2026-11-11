@@ -7,9 +7,9 @@ description: Add a single recipe or derive recipes from vanilla ones, set their 
 
 Two calls add recipes:
 
-- [`Load::add_recipe`](https://github.com/enshwick/enshwick/blob/main/crates/internal/content/src/content/recipes.rs)
+- [`Load::add_recipe`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load/content/recipes.rs)
   adds one recipe for a new output, copied from the recipe of a vanilla item;
-- [`Load::derive_recipes`](https://github.com/enshwick/enshwick/blob/main/crates/internal/content/src/content/recipes.rs)
+- [`Load::derive_recipes`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load/content/recipes.rs)
   looks at every recipe in the registry and adds a scaled copy of each one
   you pick.
 
@@ -19,7 +19,7 @@ Both patch the game's recipe registry, which every mod shares; patches
 from several mods run in turn, so their recipes end up side by side. To
 change the counts, cost or time of vanilla recipes, declare a data change
 with
-[`Load::change_recipes`](https://github.com/enshwick/enshwick/blob/main/crates/internal/content/src/content/changes/recipes.rs)
+[`Load::change_recipes`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load/content/changes_recipes.rs)
 ([the fields](packs.md)) or set a recipe output [rate](../rates.md). To take
 recipes out of the game, see [Disabling recipes](disabled-recipes.md).
 

@@ -10,7 +10,7 @@ see is in the changelog of `enshwick`.
 ### Changed
 
 - The content domain left for `enshwick-content`: `content`, `rates`, the
-  generated typed items and their shape samples, and `KnowledgeType` and
+  shape samples of the generated typed items, and `KnowledgeType` and
   `Scope`, which `knowledge` re-exports. `Load` forwards its content
   methods there through the crate's method traits; the typed handles stay
   here, in the world domain, and the domain map lists no edge up its
