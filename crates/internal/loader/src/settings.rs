@@ -13,7 +13,7 @@ pub use enshwick_core::mods::LOADER_ID;
 pub const FILE: &str = "enshwick.toml";
 
 /// Enshwick loader settings, read once at start.
-#[enshwick_core::config]
+#[enshwick_core::config(crate = "::enshwick_core")]
 #[derive(Debug, PartialEq, Eq)]
 #[expect(
     clippy::struct_excessive_bools,
@@ -118,7 +118,7 @@ impl Settings {
 ///
 /// The file is `enshwick.toml` in the loader's folder of the world's
 /// settings, generated like a mod's.
-#[enshwick_core::config(file = "enshwick")]
+#[enshwick_core::config(crate = "::enshwick_core", file = "enshwick")]
 #[derive(Debug, PartialEq, Eq)]
 pub struct WorldRules {
     /// On a server that runs mods of side "both", or in a game this client
