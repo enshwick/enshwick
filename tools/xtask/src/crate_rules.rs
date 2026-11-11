@@ -7,8 +7,9 @@
 //! it, a platform crate depends on the API
 //! crate only for its tests, a package that builds a DLL, such as a mod, names its version, features
 //! name what they add, `anyhow` stays in binaries, `rust-version` is the
-//! pinned toolchain's, and a published crate's path dependencies carry
-//! versions.
+//! pinned toolchain's, a published crate's path dependencies carry
+//! versions, and release-plz versions the API crate and every crate of
+//! `crates/internal` as one group.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -46,11 +47,17 @@ pub(crate) fn check(packages: &[Package]) -> Result<Vec<String>, String> {
     let metadata: serde_json::Value = serde_json::from_slice(&output.stdout)
         .map_err(|error| format!("reading cargo metadata: {error}"))?;
     let toolchain = toolchain(&read(&crate::workspace_root().join("rust-toolchain.toml"))?)?;
+    let root = Path::new(metadata["workspace_root"].as_str().unwrap_or_default());
+    let internal = root.join("crates").join("internal");
+    let mut api_crates = Vec::new();
     let mut problems = Vec::new();
     for package in metadata["packages"].as_array().into_iter().flatten() {
         let name = package["name"].as_str().unwrap_or_default();
         let manifest = Path::new(package["manifest_path"].as_str().unwrap_or_default());
         let dir = manifest.parent().unwrap_or(Path::new("."));
+        if name == FACADE || dir.starts_with(&internal) {
+            api_crates.push(name.to_owned());
+        }
         problems.extend(test_feature(name, package));
         problems.extend(fake_reach(name, package));
         if packages
@@ -88,6 +95,10 @@ pub(crate) fn check(packages: &[Package]) -> Result<Vec<String>, String> {
             );
         }
     }
+    problems.extend(release_group(
+        &api_crates,
+        &read(&root.join("release-plz.toml"))?,
+    )?);
     Ok(problems)
 }
 
@@ -322,6 +333,40 @@ fn toolchain(text: &str) -> Result<String, String> {
         .and_then(toml::Value::as_str)
         .map(major_minor)
         .ok_or_else(|| "rust-toolchain.toml names no channel".to_owned())
+}
+
+/// The release-plz version group of the API crate and its internal parts,
+/// which pin each other exactly and so release at one version.
+const API_GROUP: &str = "api";
+
+/// The problems of `release_plz`, the text of `release-plz.toml`: a crate of
+/// `api_crates` that is not in the [`API_GROUP`] version group.
+///
+/// # Errors
+///
+/// When the text does not read as TOML.
+fn release_group(api_crates: &[String], release_plz: &str) -> Result<Vec<String>, String> {
+    let file: toml::Table =
+        toml::from_str(release_plz).map_err(|e| format!("release-plz.toml: {}", e.message()))?;
+    let grouped: Vec<&str> = file
+        .get("package")
+        .and_then(toml::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|package| {
+            package.get("version_group").and_then(toml::Value::as_str) == Some(API_GROUP)
+        })
+        .filter_map(|package| package.get("name").and_then(toml::Value::as_str))
+        .collect();
+    Ok(api_crates
+        .iter()
+        .filter(|name| !grouped.contains(&name.as_str()))
+        .map(|name| {
+            format!(
+                "{name}: release-plz.toml puts it in the `{API_GROUP}` version group, since the API's crates pin each other exactly"
+            )
+        })
+        .collect())
 }
 
 /// `version`'s major and minor: `1.99` of `1.99.1`.
@@ -786,6 +831,21 @@ mod tests {
             "1.99"
         );
         assert!(toolchain("[toolchain]\n").is_err());
+    }
+
+    #[test]
+    fn an_api_crate_outside_the_api_version_group_is_a_problem() {
+        let release_plz = "[[package]]\nname = \"enshwick\"\nversion_group = \"api\"\n\n\
+                           [[package]]\nname = \"enshwick-world\"\nrelease = false\n";
+        let crates = ["enshwick".to_owned(), "enshwick-world".to_owned()];
+        assert_eq!(
+            release_group(&crates, release_plz).unwrap(),
+            [
+                "enshwick-world: release-plz.toml puts it in the `api` version group, since the API's crates pin each other exactly"
+            ]
+        );
+        assert!(release_group(&crates[..1], release_plz).unwrap().is_empty());
+        assert!(release_group(&crates, "[[package]\n").is_err());
     }
 
     #[test]
