@@ -20,53 +20,50 @@ pub(super) const NAMESPACES: &[Namespace] = &[
     Namespace::starting(
         "typed",
         "The game's components, events and resources as the typed API generates them from its reflection.",
-        &[crate::Load::SCRIPT_TYPED],
+        &[Load::SCRIPT_TYPED],
     ),
     #[cfg(feature = "unstable")]
-    Namespace::of::<crate::world::World>(),
+    Namespace::of::<World>(),
     #[cfg(feature = "unstable")]
     Namespace::starting(
         "world",
         "",
-        &[
-            crate::Load::SCRIPT_WORLD_RENAME,
-            crate::Load::SCRIPT_WRITABLE_TYPE,
-        ],
+        &[Load::SCRIPT_WORLD_RENAME, Load::SCRIPT_WRITABLE_TYPE],
     ),
-    Namespace::of::<crate::buffs::Buffs>(),
-    Namespace::of::<crate::game_settings::GameSettings>(),
-    Namespace::of::<crate::weather::Weather>(),
+    Namespace::of::<Buffs>(),
+    Namespace::of::<GameSettings>(),
+    Namespace::of::<Weather>(),
     Namespace::starting(
         "weather",
         "",
         &[
-            crate::Load::SCRIPT_WEATHER_FRONTS,
+            Load::SCRIPT_WEATHER_FRONTS,
             #[cfg(feature = "typed")]
-            crate::Load::SCRIPT_WEATHER_PHENOMENA,
+            Load::SCRIPT_WEATHER_PHENOMENA,
         ],
     ),
     #[cfg(feature = "unstable")]
-    Namespace::of::<crate::map::Map>(),
+    Namespace::of::<Map>(),
     #[cfg(feature = "unstable")]
-    Namespace::starting("map", "", &[crate::Load::SCRIPT_MAP_EVENTS]),
+    Namespace::starting("map", "", &[Load::SCRIPT_MAP_EVENTS]),
     #[cfg(feature = "unstable")]
-    Namespace::on_request::<crate::map::FogOfWar>("fog_of_war"),
-    Namespace::of::<crate::daytime::Clock>(),
-    Namespace::starting("daytime", "", &[crate::Load::SCRIPT_DAYTIME]),
-    Namespace::on_request::<crate::altars::Altars>("altars"),
+    Namespace::on_request::<FogOfWar>("fog_of_war"),
+    Namespace::of::<Clock>(),
+    Namespace::starting("daytime", "", &[Load::SCRIPT_DAYTIME]),
+    Namespace::on_request::<Altars>("altars"),
     Namespace::starting(
         "altars",
         "",
         &[
-            crate::Load::SCRIPT_ALTARS,
-            crate::Load::SCRIPT_ALTAR_LIMIT,
-            crate::Load::SCRIPT_ALTAR_LIMITS,
-            crate::Load::SCRIPT_FLAME_ALTARS,
+            Load::SCRIPT_ALTARS,
+            Load::SCRIPT_ALTAR_LIMIT,
+            Load::SCRIPT_ALTAR_LIMITS,
+            Load::SCRIPT_FLAME_ALTARS,
         ],
     ),
-    Namespace::of::<crate::voxels::Voxels>(),
-    Namespace::starting("voxels", "", &[crate::Load::SCRIPT_VOXEL_EDITS]),
-    Namespace::of::<crate::terrain::Terrain>(),
+    Namespace::of::<Voxels>(),
+    Namespace::starting("voxels", "", &[Load::SCRIPT_VOXEL_EDITS]),
+    Namespace::of::<Terrain>(),
 ];
 
 #[cfg(feature = "unstable")]

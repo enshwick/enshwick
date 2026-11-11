@@ -35,6 +35,35 @@ pub fn altar_template_of(host: Host, entity: Entity) -> Option<Guid> {
     crate::altars::template_of(host, entity)
 }
 
+/// `status` of a world call as its outcome.
+///
+/// # Errors
+///
+/// The [`WorldError`](crate::WorldError) `status` stands for.
+pub fn world_status(status: crate::abi::Status) -> Result<(), crate::WorldError> {
+    crate::WorldError::from_status(status)
+}
+
+/// `status` of a world call as its outcome, with `missing` for a thing the
+/// call did not find.
+///
+/// # Errors
+///
+/// The [`WorldError`](crate::WorldError) `status` stands for.
+pub fn world_check(
+    status: crate::abi::Status,
+    missing: crate::WorldError,
+) -> Result<(), crate::WorldError> {
+    crate::WorldError::check(status, missing)
+}
+
+/// The player `info` describes, as the loader hands them over.
+#[cfg(feature = "unstable")]
+#[must_use]
+pub fn player(info: &crate::abi::PlayerInfo) -> crate::world::Player {
+    crate::world::Player::from_info(info)
+}
+
 /// The players connected now, from the loader.
 #[cfg(feature = "unstable")]
 #[must_use]

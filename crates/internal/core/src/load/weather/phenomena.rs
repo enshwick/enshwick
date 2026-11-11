@@ -1,15 +1,8 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::abi::Level;
-use crate::content::{Guid, Id};
-use crate::resources::Registry;
-use crate::typed::{
-    ResourceType, WeatherPhenomenonEffect as GameEffect, WeatherSystemPhenomenonResource,
-    WeatherSystemResource,
-};
+use crate::content::Guid;
 use crate::weather::{NewPhenomenon, PhenomenonChange, PhenomenonId};
 use crate::{Load, Off};
-use core::time::Duration;
 use enshwick_world::__load::*;
 
 #[enshwick_macros::forward(base)]

@@ -1,10 +1,7 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::Entity;
-use crate::abi::{AltarInfo, Bounds};
 use crate::altars::{AltarLimit, AltarZone, Altars, BuildingZoneCheck, ZoneSizes};
-use crate::content::Guid;
-use crate::{Host, Load, Off};
+use crate::{Load, Off};
 use enshwick_world::__load::*;
 
 mod kinds;

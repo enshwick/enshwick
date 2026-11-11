@@ -1,13 +1,9 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::engine_ids as ids;
 use crate::locks::Relock;
 use crate::map::{FogOfWarUncovered, MapPinged, WaypointChanged};
-use crate::{Entity, Load, Off, PlayerKey};
+use crate::{Load, Off};
 use enshwick_world::__load::*;
-use rustc_hash::FxHashMap;
-use std::sync::Mutex;
-use std::time::{Duration, Instant};
 
 #[enshwick_macros::forward(base)]
 #[crate::script(map_events)]

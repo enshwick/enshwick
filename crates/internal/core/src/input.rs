@@ -146,13 +146,13 @@ impl Input {
     #[script]
     pub fn held(self, player: Entity) -> Result<Option<InputMask>, WorldError> {
         let host = self.0.host;
-        WorldError::from_status((host.api().world_quiet)(host.handle()))?;
+        enshwick_world::__internal::world_status((host.api().world_quiet)(host.handle()))?;
         let mut out: *const core::ffi::c_void = core::ptr::null();
         let status = (host.api().component)(host.handle(), player, self.0.ty.hash(), &raw mut out);
         if status == Status::MISSING {
             return Ok(None);
         }
-        WorldError::from_status(status)?;
+        enshwick_world::__internal::world_status(status)?;
         if out.is_null() {
             return Ok(None);
         }

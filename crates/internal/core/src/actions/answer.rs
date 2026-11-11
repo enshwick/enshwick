@@ -80,7 +80,7 @@ pub(super) unsafe extern "system" fn answer(
     // `hand_over` leaked for the process, so it is aligned, alive and only
     // read through shared references.
     let registry = unsafe { &*user.cast::<Arc<Registry>>() };
-    let player = Player::from_info(&call.player);
+    let player = enshwick_world::__internal::player(&call.player);
     let language = Language(call.language);
     // SAFETY: the caller keeps the action's bytes alive and unchanged for
     // the call, and `action` is not used after it returns.
