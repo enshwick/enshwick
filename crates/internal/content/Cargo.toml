@@ -1,0 +1,65 @@
+[package]
+name = "enshwick-content"
+version = "1.0.0-alpha.14"
+description = "Internal part of enshwick; depend on enshwick: the game's content, its rates and the generated typed items"
+keywords = ["enshrouded", "modding", "game", "ffi", "hooks"]
+categories = ["game-development", "api-bindings"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = true
+
+[dependencies]
+enshwick-macros = { path = "../macros", version = "=1.0.0-alpha.14" }
+enshwick-abi.workspace = true
+enshwick-base.workspace = true
+enshwick-typed = { workspace = true, optional = true }
+enshwick-values.workspace = true
+bcdec_rs.workspace = true
+bytemuck.workspace = true
+zune-core.workspace = true
+zune-png.workspace = true
+fastrand.workspace = true
+postcard.workspace = true
+rustc-hash.workspace = true
+schemars = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+serde.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+insta.workspace = true
+serde = { workspace = true, features = ["derive"] }
+
+# The features of `enshwick-core`, which turns each of them on here.
+[features]
+fake = ["enshwick-base/fake", "enshwick-typed?/test"]
+schema = ["dep:schemars", "dep:serde_json", "enshwick-base/schema"]
+unstable = ["enshwick-base/unstable"]
+typed = ["unstable", "dep:enshwick-typed"]
+
+[lints]
+workspace = true
+
+# The mod this crate's documentation examples declare with `declare_mod!`.
+[package.metadata.enshwick]
+id = "you.hello"
+side = "both"
+exports = ["content:locker"]
+
+[package.metadata.enshwick.requires]
+lockers = { id = "you.lockers", version = ">=0.1, <1.0" }
+
+[package.metadata.enshwick.after]
+lanterns = "you.lanterns"
+trading_post = "you.trading-post"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-pc-windows-msvc"]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

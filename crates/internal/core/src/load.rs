@@ -198,12 +198,15 @@ impl Load<'_> {
 mod build;
 mod code;
 mod config;
+mod content;
 mod events;
 mod game_events;
 mod i18n;
 mod net;
 mod pacing;
 mod points;
+#[cfg(feature = "unstable")]
+mod rates;
 mod resources;
 mod services;
 mod settings;

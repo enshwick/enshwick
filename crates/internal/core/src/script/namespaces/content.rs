@@ -1,14 +1,12 @@
-//! The content domain's namespaces.
+//! The content domain's namespaces, and how `Load` opens each of its
+//! handles.
 
-use super::Namespace;
+use super::{Bound, Function, Namespace};
+use crate::content::Content;
+use crate::rates::RateFns;
+use crate::{Load, Off};
 
 pub(super) const NAMESPACES: &[Namespace] = &[
-    #[cfg(feature = "typed")]
-    Namespace::starting(
-        "typed",
-        "The game's components, events and resources as the typed API generates them from its reflection.",
-        &[crate::Load::SCRIPT_TYPED],
-    ),
     Namespace::of::<crate::rates::RateFns>(),
     #[cfg(feature = "unstable")]
     Namespace::starting("rates", "", &[crate::Load::SCRIPT_RATES]),
@@ -46,3 +44,25 @@ pub(super) const NAMESPACES: &[Namespace] = &[
         ],
     ),
 ];
+
+impl Bound for RateFns {
+    const NAME: &'static str = "rates";
+    const DOC: &'static str =
+        "The game's rates, such as experience and drops, each mod's factor on them combined.";
+    const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_RATE_FNS];
+
+    fn resolve(_load: &mut Load<'_>) -> Result<Self, Off> {
+        Ok(Self)
+    }
+}
+
+impl Bound for Content {
+    const NAME: &'static str = "content";
+    const DOC: &'static str =
+        "Game content from mods: new items, recipes and workshops, and changes to vanilla ones.";
+    const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_CONTENT_LOOKUPS];
+
+    fn resolve(_load: &mut Load<'_>) -> Result<Self, Off> {
+        Ok(Self)
+    }
+}

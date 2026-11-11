@@ -3,6 +3,12 @@
 use super::Namespace;
 
 pub(super) const NAMESPACES: &[Namespace] = &[
+    #[cfg(feature = "typed")]
+    Namespace::starting(
+        "typed",
+        "The game's components, events and resources as the typed API generates them from its reflection.",
+        &[crate::Load::SCRIPT_TYPED],
+    ),
     #[cfg(feature = "unstable")]
     Namespace::of::<crate::world::World>(),
     #[cfg(feature = "unstable")]

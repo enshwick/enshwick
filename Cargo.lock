@@ -486,6 +486,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "enshwick-content"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "bcdec_rs",
+ "bytemuck",
+ "enshwick-abi",
+ "enshwick-base",
+ "enshwick-macros",
+ "enshwick-typed",
+ "enshwick-values",
+ "fastrand",
+ "insta",
+ "postcard",
+ "proptest",
+ "rustc-hash",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "toml 1.2.1+spec-1.1.0",
+ "zune-core",
+ "zune-png",
+]
+
+[[package]]
 name = "enshwick-core"
 version = "1.0.0-alpha.14"
 dependencies = [
