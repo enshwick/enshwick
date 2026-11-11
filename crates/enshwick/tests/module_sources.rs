@@ -62,8 +62,11 @@ mod tests {
         let macros =
             std::fs::read_to_string(crate_dir.join("../internal/macros/src/lib.rs")).unwrap();
         let lines: Vec<&str> = lib.lines().collect();
+        // Every internal crate but the macros' own, whose macros this crate
+        // takes as they are.
         let from: Vec<String> = crate::internal_crates::internal_crates()
             .into_iter()
+            .filter(|(name, _)| name != "macros")
             .map(|(name, _)| format!("enshwick_{name}"))
             .collect();
         let shared: Vec<(&str, &str)> = attribute_macros(&macros)
