@@ -21,7 +21,7 @@ use super::{
 /// let names: Vec<&str> = enshwick::script::NAMESPACES.iter().map(|n| n.name()).collect();
 /// assert!(names.contains(&"world"));
 /// ```
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Namespace {
     name: &'static str,
     doc: &'static str,
@@ -33,7 +33,7 @@ pub struct Namespace {
 
 /// The start-time call that opens a namespace a script asks for, as a Rust
 /// mod asks [`Load`](crate::Load) for the handle in `init`.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 struct Request {
     name: &'static str,
     signature: &'static Signature,
@@ -257,217 +257,58 @@ fn opened<T: Bound>(this: T) -> Opened {
     }))
 }
 
-/// Every namespace a script reaches, in the order a runtime opens them.
+mod actions;
+mod base;
+mod content;
+mod inventory;
+mod knowledge;
+mod ui;
+mod world;
+
+/// Every namespace a script reaches, in the order a runtime opens them:
+/// each domain's list, lowest domain first.
 ///
 /// # Examples
 ///
 /// See [`Namespace`].
-pub const NAMESPACES: &[Namespace] = &[
-    Namespace::of::<Log>(),
-    #[cfg(feature = "unstable")]
-    Namespace::of::<crate::world::World>(),
-    #[cfg(feature = "unstable")]
-    Namespace::starting(
-        "world",
-        "",
-        &[
-            crate::Load::SCRIPT_WORLD_RENAME,
-            crate::Load::SCRIPT_WRITABLE_TYPE,
-        ],
-    ),
-    Namespace::of::<crate::schedule::Scheduler>(),
-    Namespace::of::<crate::inventory::Inventories>(),
-    Namespace::of::<crate::resources::Resources>(),
-    #[cfg(feature = "typed")]
-    Namespace::starting(
-        "typed",
-        "The game's components, events and resources as the typed API generates them from its reflection.",
-        &[crate::Load::SCRIPT_TYPED],
-    ),
-    Namespace::of::<crate::mods::Mods>(),
-    #[cfg(feature = "unstable")]
-    Namespace::of::<crate::actions::ActionFns>(),
-    #[cfg(feature = "unstable")]
-    Namespace::starting("actions", "", &[crate::Load::SCRIPT_ACTIONS]),
-    #[cfg(feature = "unstable")]
-    Namespace::of::<crate::controls::ControlFns>(),
-    #[cfg(feature = "unstable")]
-    Namespace::starting("controls", "", &[crate::Load::SCRIPT_CONTROLS]),
-    #[cfg(feature = "unstable")]
-    Namespace::of::<crate::console::ConsoleFns>(),
-    #[cfg(feature = "unstable")]
-    Namespace::of::<crate::commands::CommandFns>(),
-    Namespace::of::<crate::net::NetFns>(),
-    Namespace::starting("net", "", &[crate::Load::SCRIPT_NET]),
-    Namespace::starting("pacing", "", &[crate::Load::SCRIPT_PACING]),
-    Namespace::of::<crate::ecs::EcsFns>(),
-    #[cfg(feature = "unstable")]
-    Namespace::starting("damage", "", &[crate::Load::SCRIPT_DAMAGE_FILTER]),
-    Namespace::of::<crate::effects::Effects>(),
-    Namespace::of::<crate::survivors::SurvivorFns>(),
-    Namespace::starting(
-        "survivors",
-        "",
-        &[
-            crate::Load::SCRIPT_SURVIVORS,
-            crate::Load::SCRIPT_SURVIVOR_HOOKS,
-        ],
-    ),
-    #[cfg(feature = "unstable")]
-    Namespace::starting("item_data", "", &[crate::Load::SCRIPT_ITEM_DATA]),
-    #[cfg(feature = "unstable")]
-    Namespace::starting("entity_data", "", &[crate::Load::SCRIPT_ENTITY_DATA]),
-    Namespace::starting(
-        "",
-        "",
-        &[
-            crate::Load::SCRIPT_STATE,
-            crate::Load::SCRIPT_TICKS,
-            crate::Load::SCRIPT_DIRS,
-        ],
-    ),
-    Namespace::of::<crate::state::StateFns>(),
-    Namespace::of::<crate::files::FilesFns>(),
-    Namespace::of::<crate::ui::Ui>(),
-    Namespace::starting(
-        "ui",
-        "",
-        &[
-            crate::Load::SCRIPT_UI,
-            #[cfg(feature = "unstable")]
-            crate::Load::SCRIPT_UI_EXTENSION,
-        ],
-    ),
-    Namespace::starting("vetoes", "", &[crate::Load::SCRIPT_VETOES]),
-    Namespace::starting("chat", "", &[crate::Load::SCRIPT_CHAT]),
-    #[cfg(feature = "unstable")]
-    Namespace::of::<crate::interactions::Targets>(),
-    Namespace::starting("interactions", "", &[crate::Load::SCRIPT_INTERACTIONS]),
-    #[cfg(feature = "unstable")]
-    Namespace::of::<crate::input::Input>(),
-    #[cfg(feature = "unstable")]
-    Namespace::starting("items", "", &[crate::Load::SCRIPT_ITEMS]),
-    #[cfg(feature = "unstable")]
-    Namespace::of::<crate::rewards::Rewards>(),
-    #[cfg(feature = "unstable")]
-    Namespace::starting("rewards", "", &[crate::Load::SCRIPT_REWARDS]),
-    Namespace::starting(
-        "progress",
-        "",
-        &[
-            crate::Load::SCRIPT_PROGRESS,
-            crate::Load::SCRIPT_PROGRESS_HOOKS,
-        ],
-    ),
-    Namespace::starting("status", "", &[crate::Load::SCRIPT_STATUS]),
-    Namespace::of::<crate::buffs::Buffs>(),
-    Namespace::of::<crate::knowledge::Knowledge>(),
-    Namespace::starting("knowledge", "", &[crate::Load::SCRIPT_KNOWLEDGE]),
-    #[cfg(feature = "typed")]
-    Namespace::of::<crate::quests::Quests>(),
-    Namespace::of::<crate::game_settings::GameSettings>(),
-    Namespace::of::<crate::rates::RateFns>(),
-    #[cfg(feature = "unstable")]
-    Namespace::starting("rates", "", &[crate::Load::SCRIPT_RATES]),
-    Namespace::of::<crate::affixes::Affixes>(),
-    Namespace::of::<crate::affixes::AffixFns>(),
-    Namespace::starting(
-        "affixes",
-        "",
-        &[
-            crate::Load::SCRIPT_AFFIX_DEFS,
-            #[cfg(feature = "unstable")]
-            crate::Load::SCRIPT_AFFIX_ROLLS,
-        ],
-    ),
-    Namespace::of::<crate::i18n::I18nFns>(),
-    Namespace::starting("i18n", "", &[crate::Load::SCRIPT_I18N]),
-    Namespace::of::<crate::weather::Weather>(),
-    Namespace::starting(
-        "weather",
-        "",
-        &[
-            crate::Load::SCRIPT_WEATHER_FRONTS,
-            #[cfg(feature = "typed")]
-            crate::Load::SCRIPT_WEATHER_PHENOMENA,
-        ],
-    ),
-    #[cfg(feature = "unstable")]
-    Namespace::of::<crate::map::Map>(),
-    #[cfg(feature = "unstable")]
-    Namespace::starting("map", "", &[crate::Load::SCRIPT_MAP_EVENTS]),
-    #[cfg(feature = "unstable")]
-    Namespace::on_request::<crate::map::FogOfWar>("fog_of_war"),
-    Namespace::of::<crate::daytime::Clock>(),
-    Namespace::starting("daytime", "", &[crate::Load::SCRIPT_DAYTIME]),
-    Namespace::starting(
-        "sound",
-        "",
-        &[
-            crate::Load::SCRIPT_SOUND,
-            #[cfg(feature = "unstable")]
-            crate::Load::SCRIPT_SOUND_ADD,
-        ],
-    ),
-    Namespace::on_request::<crate::altars::Altars>("altars"),
-    Namespace::starting(
-        "altars",
-        "",
-        &[
-            crate::Load::SCRIPT_ALTARS,
-            crate::Load::SCRIPT_ALTAR_LIMIT,
-            crate::Load::SCRIPT_ALTAR_LIMITS,
-            crate::Load::SCRIPT_FLAME_ALTARS,
-        ],
-    ),
-    Namespace::of::<crate::loot::LootFns>(),
-    Namespace::starting(
-        "loot",
-        "",
-        &[
-            crate::Load::SCRIPT_LOOT_DROPS,
-            crate::Load::SCRIPT_LOOT_PASS,
-        ],
-    ),
-    Namespace::on_request::<crate::stats::Stats>("stats"),
-    Namespace::starting("stats", "", &[crate::Load::SCRIPT_STATS]),
-    Namespace::of::<crate::voxels::Voxels>(),
-    Namespace::starting("voxels", "", &[crate::Load::SCRIPT_VOXEL_EDITS]),
-    Namespace::of::<crate::terrain::Terrain>(),
-    Namespace::of::<crate::content::Content>(),
-    Namespace::starting(
-        "content",
-        "",
-        &[
-            crate::Load::SCRIPT_CONTENT_IDS,
-            crate::Load::SCRIPT_CONTENT_ITEMS,
-            crate::Load::SCRIPT_CONTENT_RECIPES,
-            #[cfg(feature = "unstable")]
-            crate::Load::SCRIPT_CONTENT_RECIPE_WITH,
-            crate::Load::SCRIPT_CONTENT_WORKSHOPS,
-            crate::Load::SCRIPT_CONTENT_TEMPLATES,
-            crate::Load::SCRIPT_CONTENT_PROPS,
-            #[cfg(feature = "typed")]
-            crate::Load::SCRIPT_CONTENT_ENEMIES,
-            #[cfg(feature = "typed")]
-            crate::Load::SCRIPT_CONTENT_SPAWNS,
-            #[cfg(feature = "typed")]
-            crate::Load::SCRIPT_CONTENT_KNOWLEDGE,
-            #[cfg(feature = "typed")]
-            crate::Load::SCRIPT_CONTENT_JOURNAL,
-            #[cfg(feature = "typed")]
-            crate::Load::SCRIPT_CONTENT_SKILLS,
-            #[cfg(feature = "typed")]
-            crate::Load::SCRIPT_CONTENT_REMOVAL,
-            crate::Load::SCRIPT_CONTENT_ICONS,
-            crate::Load::SCRIPT_CONTENT_RENAMES,
-            crate::Load::SCRIPT_CONTENT_CHANGE,
-            crate::Load::SCRIPT_CONTENT_CHANGE_ITEMS,
-            crate::Load::SCRIPT_CONTENT_CHANGE_RECIPES,
-            crate::Load::SCRIPT_CONTENT_LIVE,
-        ],
-    ),
+pub const NAMESPACES: &[Namespace] = &joined::<{ count(DOMAINS) }>(DOMAINS);
+
+/// Each domain's namespaces, in the domain order of `domains.toml`.
+const DOMAINS: &[&[Namespace]] = &[
+    base::NAMESPACES,
+    content::NAMESPACES,
+    world::NAMESPACES,
+    inventory::NAMESPACES,
+    knowledge::NAMESPACES,
+    actions::NAMESPACES,
+    ui::NAMESPACES,
 ];
+
+/// How many namespaces `lists` hold together.
+const fn count(lists: &[&[Namespace]]) -> usize {
+    let (mut total, mut at) = (0, 0);
+    while at < lists.len() {
+        total += lists[at].len();
+        at += 1;
+    }
+    total
+}
+
+/// `lists` one after another, as one array of `N`, their count.
+const fn joined<const N: usize>(lists: &[&[Namespace]]) -> [Namespace; N] {
+    let mut out = [Namespace::of::<Log>(); N];
+    let (mut list, mut at) = (0, 0);
+    while list < lists.len() {
+        let mut item = 0;
+        while item < lists[list].len() {
+            out[at] = lists[list][item];
+            at += 1;
+            item += 1;
+        }
+        list += 1;
+    }
+    out
+}
 
 /// The mod's log as a script writes to it: one line per call, under the
 /// mod's id.

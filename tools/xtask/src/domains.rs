@@ -41,6 +41,7 @@ fn problems(root: &Path) -> Result<Vec<String>, String> {
     let sources = root.join(SOURCES);
     let mut files = Vec::new();
     collect(&sources, &sources, &mut files)?;
+    let mut problems = namespace_lists(&map, &files);
     files.retain(|(path, _)| !map.joins.iter().any(|join| path.starts_with(join.as_str())));
     let modules: BTreeSet<String> = files.iter().map(|(path, _)| top(path)).collect();
     let mut edges = BTreeSet::new();
@@ -52,7 +53,45 @@ fn problems(root: &Path) -> Result<Vec<String>, String> {
             }
         }
     }
-    Ok(judge(&map, &modules, &edges))
+    problems.extend(judge(&map, &modules, &edges));
+    Ok(problems)
+}
+
+/// The script namespaces' join: one list file per domain under
+/// `script/namespaces/`, named after it, joined in the map's order.
+fn namespace_lists(map: &Map, files: &[(String, String)]) -> Vec<String> {
+    const LISTS: &str = "script/namespaces/";
+    let mut problems = Vec::new();
+    let listed: Vec<&str> = files
+        .iter()
+        .filter_map(|(path, _)| path.strip_prefix(LISTS)?.strip_suffix(".rs"))
+        .collect();
+    for domain in listed.iter().filter(|d| !map.order.iter().any(|o| o == *d)) {
+        problems.push(format!(
+            "{SOURCES}/{LISTS}{domain}.rs names no domain of {MAP}"
+        ));
+    }
+    let expected: Vec<&str> = map
+        .order
+        .iter()
+        .map(String::as_str)
+        .filter(|domain| listed.contains(domain))
+        .collect();
+    let joined: Vec<&str> = files
+        .iter()
+        .find(|(path, _)| path == "script/namespaces.rs")
+        .map(|(_, text)| {
+            text.lines()
+                .filter_map(|line| line.trim().strip_suffix("::NAMESPACES,"))
+                .collect()
+        })
+        .unwrap_or_default();
+    if joined != expected {
+        problems.push(format!(
+            "{SOURCES}/script/namespaces.rs joins {joined:?}, not the lists in the order of {MAP}: {expected:?}"
+        ));
+    }
+    problems
 }
 
 /// What breaks the rule, given the map, core's top-level modules and the

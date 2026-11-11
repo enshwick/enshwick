@@ -6,7 +6,7 @@
 order = ["base", "content", "world", "inventory", "knowledge", "actions", "ui", "packs"]
 
 # Files and folders under `src` that join every domain's list.
-joins = ["lib.rs", "__private.rs", "__private/", "__fake.rs", "__fake/", "script/namespaces.rs"]
+joins = ["lib.rs", "__private.rs", "__private/", "__fake.rs", "__fake/", "script/namespaces"]
 
 # The edges up the order still in the code, as `from -> to`; a peel removes
 # its own. A new one fails, and so does one that is gone.
