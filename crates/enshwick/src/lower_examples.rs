@@ -1,7 +1,12 @@
 //! The examples of the internal crates that name items above their crate.
 //! Each stays in its item's docs there, outside that crate's own doctests,
-//! and is compiled here, as written. Only `cargo test --doc` reads this
+//! and is compiled here, as written: below, and in a file per crate and
+//! feature in the folder of this module. Only `cargo test --doc` reads this
 //! module.
+
+mod base;
+#[cfg(feature = "unstable")]
+mod base_unstable;
 
 /// `content::Guid`:
 ///

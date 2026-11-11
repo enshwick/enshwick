@@ -8,7 +8,7 @@ mod tests {
     /// Compiles a crate that runs the unwind check under `panic`.
     fn compile_with(panic: &str) -> Output {
         let guard =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../internal/core/src/declare/unwind.rs");
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../internal/base/src/declare/unwind.rs");
         let dir =
             std::env::temp_dir().join(format!("enshwick-panic-{panic}-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();

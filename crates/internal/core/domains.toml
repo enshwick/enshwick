@@ -1,61 +1,45 @@
-# The domains of enshwick-core and the modules of each. A module names
-# only base, its own domain and the domains before its own in `order`;
-# shared things move down into base. `cargo xtask check` holds it.
+# The domains of the API and the modules of each still in enshwick-core.
+# A module names only its own domain and the domains before its own in
+# `order`; shared things move down into base. `cargo xtask check` holds it.
 
-# Lowest first, which is also the order domains leave core in: base first.
+# Lowest first, which is also the order domains leave core in.
 order = ["base", "content", "world", "inventory", "knowledge", "actions", "ui", "packs"]
 
-# Files and folders under `src` that join every domain's list.
-joins = ["lib.rs", "__private.rs", "__private/", "__fake.rs", "__fake/", "script/namespaces"]
+# Files and folders under `src` that join every domain's list: `Load` with
+# its forwarders into the crates below, and the script binding's namespace
+# lists, which open each domain's handles through `Load`.
+joins = [
+    "lib.rs",
+    "declare.rs",
+    "load.rs",
+    "load/",
+    "script/namespaces/",
+    "__private.rs",
+    "__fake.rs",
+]
+
+# The internal crates below every domain, which a domain's crate may name.
+below = ["enshwick-abi", "enshwick-macros", "enshwick-values"]
 
 # The edges up the order still in the code, as `from -> to`; a peel removes
 # its own. A new one fails, and so does one that is gone.
 upward = [
-    # The served-resource builder lives in content; it moves down into
-    # resources before base leaves core.
-    "resources -> content",
-    # Rate kinds are declared in rates; the name rules move with them.
-    "rules -> rates",
     # The typed handles read components through World.
     "typed -> world",
     # Content's journal and knowledge entries name knowledge ids and scopes.
     "content -> knowledge",
 ]
 
+# The crate each domain that left core lives in, by its folder under
+# `crates/internal`. Its `[dependencies]` name of the internal crates only
+# those of `below` and the crates of the domains before its own.
+[crates]
+base = "base"
+
+# Each domain's top-level modules still in core.
 [modules]
-base = [
-    "code",
-    "command_names",
-    "config",
-    "declare",
-    "ecs",
-    "engine_enum",
-    "engine_ids",
-    "events",
-    "facts",
-    "files",
-    "fresh",
-    "game_events",
-    "hook",
-    "host",
-    "i18n",
-    "load",
-    "locks",
-    "mods",
-    "near",
-    "net",
-    "pacing",
-    "points",
-    "resources",
-    "rules",
-    "schedule",
-    "schema_section",
-    "script",
-    "services",
-    "state",
-    "status",
-    "time",
-]
+# The script binding's runtime, which stays in core beside `Load`.
+base = ["script"]
 content = ["content", "rates", "typed"]
 world = [
     "altars",

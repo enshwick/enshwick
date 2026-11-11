@@ -173,7 +173,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 - It must match exactly once. No match and more than one match both give `Off`,
   so a pattern never lands on the wrong place. Make it long enough to be unique.
 
-[`code::Pattern`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/code.rs)
+[`code::Pattern`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/code.rs)
 is the same parser and search, for use on any slice. Its functions are these:
 
 - `parse`;

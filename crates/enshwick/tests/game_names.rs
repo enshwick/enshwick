@@ -21,11 +21,11 @@ mod tests {
             .collect()
     }
 
-    /// A file of `enshwick-core`, which holds the modules this crate
-    /// re-exports, by its path in that crate.
+    /// A file of `enshwick-base`, which holds the engine ids and the typed
+    /// game events this crate re-exports, by its path in that crate.
     fn source(file: &str) -> String {
-        let core = Path::new(env!("CARGO_MANIFEST_DIR")).join("../internal/core");
-        std::fs::read_to_string(core.join(file)).unwrap()
+        let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../internal/base");
+        std::fs::read_to_string(base.join(file)).unwrap()
     }
 
     /// Each id constant of the API's id table with its id.

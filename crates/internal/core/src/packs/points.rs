@@ -448,7 +448,7 @@ impl super::PackManifest {
             let layout = point.layout()?;
             let mut entry = toml::Table::new();
             entry.insert("name".into(), format!("{}:{}", self.id, point.name).into());
-            entry.insert("mode".into(), mode_word(point.mode).into());
+            entry.insert("mode".into(), point.mode.word().into());
             entry.insert("refusable".into(), point.refusable.into());
             entry.insert("input".into(), point.input_type().into());
             entry.insert("doc".into(), point.doc.clone().into());
@@ -492,15 +492,6 @@ impl super::PackManifest {
         schema.insert("point".into(), points.into());
         schema.insert("type".into(), types.into());
         toml::to_string(&schema).ok()
-    }
-}
-
-/// The word a schema gives `mode`.
-const fn mode_word(mode: Mode) -> &'static str {
-    match mode {
-        Mode::Observe => "observe",
-        Mode::Advise => "advise",
-        Mode::Override => "override",
     }
 }
 

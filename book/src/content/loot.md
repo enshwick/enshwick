@@ -122,7 +122,7 @@ assert!(!near([0.0, 0.0, 0.0], [6.0, 5.0, 8.0], 10.0, 4.0));
 A client that hosts a game runs the system in the built-in server's world
 and in its own. `on_loot_pass` calls its handler for the server's world only,
 checked with
-[`Worlds::is_server(ctx)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/ecs.rs),
+[`Worlds::is_server(ctx)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/ecs.rs),
 so the handler needs no check of its own. Entity ids of the two worlds are
 unrelated. See [Sides and hosting](../concepts/sides-and-hosting.md).
 

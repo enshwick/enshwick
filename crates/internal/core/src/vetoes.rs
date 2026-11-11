@@ -68,12 +68,12 @@ where
     let Some(call) = (unsafe { call.as_ref() }) else {
         return 1;
     };
-    let request = CraftRecipeEvent {
-        crafting_operator_id: call.crafting_operator_id,
-        crafting_station_id: Entity::from_raw(call.crafting_station_id.0),
-        recipe_id: call.recipe_id,
-        recipe_amount: call.recipe_amount,
-    };
+    let request = CraftRecipeEvent::new(
+        call.crafting_operator_id,
+        Entity::from_raw(call.crafting_station_id.0),
+        call.recipe_id,
+        call.recipe_amount,
+    );
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let filter = unsafe { &*user.cast::<F>() };
     u8::from(crate::host::guard(

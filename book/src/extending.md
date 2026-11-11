@@ -99,11 +99,11 @@ answer's, as decimal text: a definition checks itself against them.
 
 ## Extending a point
 
-[`load.extend_point(order, link)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/points.rs)
+[`load.extend_point(order, link)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load/points.rs)
 attaches `link`. A mod calls it during `init`. The link gets the point's input and
 the answer so far. That answer is the owner's own, or what the links before
 it left. The link returns a
-[`Verdict`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/points.rs):
+[`Verdict`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/points.rs):
 
 - `Pass` keeps the answer.
 - `Set(value)` changes it.
@@ -168,7 +168,7 @@ for logging or statistics.
 
 Links run one after another, each seeing the answer the ones before left, so
 the last change wins.
-[`Order`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/points.rs)
+[`Order`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/points.rs)
 places a link:
 
 ```rust
@@ -311,7 +311,7 @@ The mode is the owner's choice:
 | `Advise`   | may change the answer; the owner reads `Decision` and may ignore it |
 | `Override` | may change the answer, and the owner takes it                       |
 
-[`decide`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/points.rs)
+[`decide`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/points.rs)
 returns one of three values:
 
 - `Kept(answer)`

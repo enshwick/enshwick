@@ -282,7 +282,7 @@ when it leaves.
 
 ## The schema and the console
 
-[`Config::schema()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/config.rs)
+[`Config::schema()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/config.rs)
 describes every field: key, type, default, range, choices, doc comment and
 text key. `on_settings` hands it to the loader with the file's template.
 The loader writes the file from it and checks values against it before it

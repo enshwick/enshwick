@@ -453,7 +453,7 @@ impl Load<'_> {
     /// See the [module](self).
     #[script]
     pub fn rate(&mut self, rate: Rate) -> Result<RateHandle, Off> {
-        if !crate::rules::may_declare_rate(rate.id(), self.joins()) {
+        if !may_declare_rate(rate.id(), self.joins()) {
             return Err(Off::new(format!(
                 "the rate {rate:?}: clients count it too, so only a mod with `join: true` declares it"
             )));
@@ -469,9 +469,32 @@ impl Load<'_> {
     }
 }
 
+/// Whether a mod may declare the rate `rate`: one clients count too needs a
+/// mod that `joins`, so both sides scale it alike; the loader and the fake
+/// refuse it by this rule.
+#[doc(hidden)]
+#[must_use]
+pub fn may_declare_rate(rate: RateId, joins: bool) -> bool {
+    joins || !Rate::from_id(rate).is_some_and(Rate::seen_by_clients)
+}
+
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
+
+    #[test]
+    fn a_rate_clients_count_needs_a_mod_that_joins() {
+        use super::{Rate, may_declare_rate};
+
+        let seen = Rate::SkillPoints.id();
+        assert!(Rate::from_id(seen).is_some_and(Rate::seen_by_clients));
+        assert!(!may_declare_rate(seen, false));
+        assert!(may_declare_rate(seen, true));
+        let own = Rate::all()
+            .find(|rate| !rate.seen_by_clients())
+            .map(Rate::id);
+        assert!(own.is_some_and(|own| may_declare_rate(own, false)));
+    }
 
     use super::*;
 

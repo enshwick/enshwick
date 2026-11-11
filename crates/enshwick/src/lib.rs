@@ -140,18 +140,28 @@ pub use enshwick_core::altars;
 #[cfg(doctest)]
 mod book;
 #[doc(inline)]
+pub use enshwick_base::code;
+#[doc(hidden)]
+pub use enshwick_base::command_names;
+#[doc(inline)]
+pub use enshwick_base::config::{self};
+#[doc(inline)]
+pub use enshwick_base::ecs;
+#[doc(inline)]
+pub use enshwick_base::events;
+#[doc(inline)]
+pub use enshwick_base::files;
+#[doc(inline)]
+pub use enshwick_base::game_events;
+#[doc(inline)]
+pub use enshwick_base::i18n;
+#[doc(inline)]
 pub use enshwick_core::buffs;
 #[doc(inline)]
 pub use enshwick_core::chat;
-#[doc(inline)]
-pub use enshwick_core::code;
-#[doc(hidden)]
-pub use enshwick_core::command_names;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_core::commands;
-#[doc(inline)]
-pub use enshwick_core::config::{self};
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_core::console;
@@ -165,22 +175,12 @@ pub use enshwick_core::damage;
 #[doc(inline)]
 pub use enshwick_core::daytime;
 #[doc(inline)]
-pub use enshwick_core::ecs;
-#[doc(inline)]
 pub use enshwick_core::effects;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_core::entity_data;
 #[doc(inline)]
-pub use enshwick_core::events;
-#[doc(inline)]
-pub use enshwick_core::files;
-#[doc(inline)]
-pub use enshwick_core::game_events;
-#[doc(inline)]
 pub use enshwick_core::game_settings;
-#[doc(inline)]
-pub use enshwick_core::i18n;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_core::input;
@@ -202,19 +202,19 @@ pub use enshwick_core::loot;
 mod lower_examples;
 #[doc(inline)]
 pub use enshwick_abi::raw;
+#[doc(inline)]
+pub use enshwick_base::mods;
+#[doc(inline)]
+pub use enshwick_base::net;
+#[doc(inline)]
+pub use enshwick_base::pacing;
+#[doc(inline)]
+pub use enshwick_base::points;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_core::map;
 #[doc(inline)]
-pub use enshwick_core::mods;
-#[doc(inline)]
-pub use enshwick_core::net;
-#[doc(inline)]
-pub use enshwick_core::pacing;
-#[doc(inline)]
 pub use enshwick_core::packs;
-#[doc(inline)]
-pub use enshwick_core::points;
 #[doc(inline)]
 pub use enshwick_core::progress;
 #[cfg(feature = "typed")]
@@ -226,31 +226,31 @@ pub use enshwick_core::rates;
 #[cfg(doctest)]
 mod refused;
 #[doc(inline)]
-pub use enshwick_core::resources;
+pub use enshwick_base::resources;
+#[doc(inline)]
+pub use enshwick_base::schedule;
+#[doc(inline)]
+pub use enshwick_base::services;
+#[doc(inline)]
+pub use enshwick_base::state;
+#[doc(inline)]
+pub use enshwick_base::status;
+#[doc(inline)]
+pub use enshwick_base::time;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_core::rewards;
-#[doc(inline)]
-pub use enshwick_core::schedule;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_core::script::{self};
 #[doc(inline)]
-pub use enshwick_core::services;
-#[doc(inline)]
 pub use enshwick_core::sound;
 #[doc(inline)]
-pub use enshwick_core::state;
-#[doc(inline)]
 pub use enshwick_core::stats;
-#[doc(inline)]
-pub use enshwick_core::status;
 #[doc(inline)]
 pub use enshwick_core::survivors;
 #[doc(inline)]
 pub use enshwick_core::terrain;
-#[doc(inline)]
-pub use enshwick_core::time;
 #[cfg(feature = "typed")]
 #[doc(inline)]
 pub use enshwick_core::typed;
@@ -275,14 +275,12 @@ pub use enshwick_values::shape;
 #[doc(no_inline)]
 pub use abi::{Entity, ItemId, PlayerKey, RecipeId};
 #[doc(inline)]
-pub use enshwick_core::{
-    FnPtr, Hook, Host, Load, Mod, Next, Off, Relock, RelockRw, RelockWait, WorldError, host,
+pub use enshwick_base::{
+    FnPtr, Hook, Host, Loading, Next, Relock, RelockRw, RelockWait, debug, detour, error,
+    error_every, error_once, host, info, info_every, info_once, warn, warn_every, warn_once,
 };
 #[doc(inline)]
-pub use enshwick_core::{
-    debug, detour, error, error_every, error_once, info, info_every, info_once, warn, warn_every,
-    warn_once,
-};
+pub use enshwick_core::{Load, Mod, Off, WorldError};
 pub use enshwick_macros::Config;
 /// Describes a type for script languages through [`script::Typed`],
 /// [`script::IntoScript`] and, when every field is shown,
@@ -735,7 +733,6 @@ pub use enshwick_macros::texts;
 pub use shape::Shape;
 
 #[doc(hidden)]
-pub use enshwick_core::{
-    __declare_exports, __every, __log, __once, __private, __require_unwind, __schema_entry,
-    schema_section,
-};
+pub use enshwick_base::{__every, __log, __once, __require_unwind, __schema_entry, schema_section};
+#[doc(hidden)]
+pub use enshwick_core::{__declare_exports, __private};

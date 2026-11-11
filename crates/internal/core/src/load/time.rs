@@ -1,0 +1,21 @@
+//! `Load`'s methods of a module below core, forwarded to the base handle.
+
+use crate::time::StepClock;
+use crate::{Load, Off};
+
+#[enshwick_macros::forward(base)]
+impl Load<'_> {
+    /// The mod's [`StepClock`], moved on by the server's steps: in the
+    /// dedicated server, and on a client while it hosts a game. It moves in
+    /// jumps of [`Ticked::DEFAULT_EVERY`](crate::events::Ticked::DEFAULT_EVERY)
+    /// and costs nothing in between. Every call returns the same clock.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] after init, when the step event can no longer be subscribed.
+    ///
+    /// # Examples
+    ///
+    /// See the [module](crate::time).
+    pub fn step_clock(&mut self) -> Result<&'static StepClock, Off>;
+}

@@ -10,15 +10,17 @@ mod tests {
     /// file under its crate's `src`, with the prefix of [`roots`], and item,
     /// each with its reason.
     const ALLOWED: &[(&str, &str, &str)] = &[
-        ("ecs.rs", "ComponentType", COMPONENT),
-        ("ecs.rs", "hash", COMPONENT),
+        ("base:ecs.rs", "ComponentType", COMPONENT),
+        ("base:ecs.rs", "hash", COMPONENT),
+        ("base:load.rs", "Loading", COMPONENT),
         ("effects.rs", "emit_raw", EVENT),
-        ("game_events.rs", "EventType", EVENT),
-        ("game_events.rs", "field", EVENT),
-        ("game_events.rs", "hash", EVENT),
-        ("game_events.rs", "inherited_field", EVENT),
-        ("game_events.rs", "offset", EVENT),
-        ("game_events.rs", "size", EVENT),
+        ("base:game_events.rs", "EventType", EVENT),
+        ("base:game_events.rs", "field", EVENT),
+        ("base:game_events.rs", "hash", EVENT),
+        ("base:game_events.rs", "inherited_field", EVENT),
+        ("base:game_events.rs", "offset", EVENT),
+        ("base:game_events.rs", "size", EVENT),
+        ("lower_examples/base.rs", "module", COPIES),
         ("load/build.rs", "field_offset", FIELD),
         ("load/build.rs", "type_size", FIELD),
         ("fake:test/hooks.rs", "field_offset", FAKE),
@@ -31,6 +33,7 @@ mod tests {
 
     const EVENT: &str = "`Load::game_event_type` takes any reflected event type by name";
     const FIELD: &str = "`Load::field_offset` and `type_size` read any reflected type";
+    const COPIES: &str = "the copies of the base's examples above, compiled here";
     const COMPONENT: &str =
         "`ComponentType::resolve` and `WritableType::resolve` take any component";
     const FAKE: &str = "the fake host answers the low level names a mod asks for";
@@ -79,13 +82,14 @@ mod tests {
     /// modules it re-exports, each with the prefix its files take in
     /// [`ALLOWED`]. `enshwick-typed` is generated from the reflection, whose
     /// names it carries on purpose.
-    fn roots() -> [(&'static str, PathBuf); 5] {
+    fn roots() -> [(&'static str, PathBuf); 6] {
         let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
         let internal = |name: &str| crate_dir.join("../internal").join(name).join("src");
         [
             ("", crate_dir.join("src")),
             ("", internal("core")),
             ("abi:", internal("abi")),
+            ("base:", internal("base")),
             ("fake:", internal("fake")),
             ("values:", internal("values")),
         ]

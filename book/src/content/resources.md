@@ -221,7 +221,7 @@ for the tag in `language`:
 - `tag` is a `LocaTag`, a declared [content id](../concepts/ids.md)'s
   GUID;
 - `language` is a
-  [`Language`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/i18n.rs)
+  [`Language`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/i18n.rs)
   number.
 
 A served item whose name field holds `tag` shows that text as its

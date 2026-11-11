@@ -310,7 +310,7 @@ impl RawResource {
         self.own(key)?;
         self.own(base)?;
         let Self { id, name, .. } = *self;
-        crate::content::serve(host, key, base, move |bytes| {
+        crate::resources::serve(host, key, base, move |bytes| {
             let changed = Registry::game().and_then(|registry| {
                 Ok(match change(registry.decode(name, bytes)?)? {
                     Some(value) => registry.encode(name, &value, Some(bytes))?,

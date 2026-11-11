@@ -433,6 +433,7 @@ dependencies = [
  "criterion",
  "document-features",
  "enshwick-abi",
+ "enshwick-base",
  "enshwick-core",
  "enshwick-fake",
  "enshwick-macros",
@@ -462,21 +463,42 @@ dependencies = [
 ]
 
 [[package]]
-name = "enshwick-core"
+name = "enshwick-base"
 version = "1.0.0-alpha.14"
 dependencies = [
  "aho-corasick",
- "bcdec_rs",
  "bytemuck",
  "const_format",
  "enshwick-abi",
+ "enshwick-macros",
+ "enshwick-values",
+ "fastrand",
+ "insta",
+ "memchr",
+ "postcard",
+ "proptest",
+ "rustc-hash",
+ "schemars",
+ "serde",
+ "strsim",
+ "thiserror",
+ "toml 1.2.1+spec-1.1.0",
+]
+
+[[package]]
+name = "enshwick-core"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "bcdec_rs",
+ "bytemuck",
+ "enshwick-abi",
+ "enshwick-base",
  "enshwick-macros",
  "enshwick-typed",
  "enshwick-values",
  "fastrand",
  "hound",
  "insta",
- "memchr",
  "postcard",
  "proptest",
  "rustc-hash",

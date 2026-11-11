@@ -3,7 +3,8 @@
 //! code forbids it at its root, the `test` feature is never on by default or
 //! through a normal or build dependency, only where a target asks for it,
 //! only the API crate's `test` feature reaches the fake loader, whose crate
-//! alone turns on the core's `fake`, a platform crate depends on the API
+//! alone turns on the core's `fake` and core alone that of each crate below
+//! it, a platform crate depends on the API
 //! crate only for its tests, a package that builds a DLL, such as a mod, names its version, features
 //! name what they add, `anyhow` stays in binaries, `rust-version` is the
 //! pinned toolchain's, and a published crate's path dependencies carry
@@ -145,7 +146,7 @@ const FAKE_FEATURE: &str = "fake";
 
 /// The problems of `package` with the fake loader: a crate other than the
 /// facade depending on it, the facade reaching it past its `test` feature,
-/// or a crate other than the fake turning on core's `fake`.
+/// or a crate turning on a `fake` feature it may not ([`fake_enabler`]).
 fn fake_reach(name: &str, package: &serde_json::Value) -> Vec<String> {
     let mut problems = Vec::new();
     for (feature, enabled) in package["features"].as_object().into_iter().flatten() {
@@ -164,9 +165,12 @@ fn fake_reach(name: &str, package: &serde_json::Value) -> Vec<String> {
                     "{name}: its feature `{feature}` turns on {FAKE_CRATE}; only `{TEST}` may"
                 ));
             }
-            if dependency == CORE && wanted == FAKE_FEATURE && name != FAKE_CRATE {
+            if let Some(enabler) = fake_enabler(dependency)
+                && wanted == FAKE_FEATURE
+                && name != enabler
+            {
                 problems.push(format!(
-                    "{name}: its feature `{feature}` turns on {CORE}/{FAKE_FEATURE}; only {FAKE_CRATE} may"
+                    "{name}: its feature `{feature}` turns on {dependency}/{FAKE_FEATURE}; only {enabler} may"
                 ));
             }
         }
@@ -180,21 +184,34 @@ fn fake_reach(name: &str, package: &serde_json::Value) -> Vec<String> {
             FAKE_CRATE if dependency["optional"] != true => problems.push(format!(
                 "{name}: its {kind} dependency {FAKE_CRATE} is not optional; only `{TEST}` may turn it on"
             )),
-            CORE if name != FAKE_CRATE
-                && dependency["features"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .any(|feature| feature == FAKE_FEATURE) =>
-            {
-                problems.push(format!(
-                    "{name}: its {kind} dependency {CORE} turns on `{FAKE_FEATURE}`; only {FAKE_CRATE} may"
-                ));
+            other => {
+                if let Some(enabler) = fake_enabler(other)
+                    && name != enabler
+                    && dependency["features"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .any(|feature| feature == FAKE_FEATURE)
+                {
+                    problems.push(format!(
+                        "{name}: its {kind} dependency {other} turns on `{FAKE_FEATURE}`; only {enabler} may"
+                    ));
+                }
             }
-            _ => {}
         }
     }
     problems
+}
+
+/// The one crate that may turn on `dependency`'s test-only `fake` feature:
+/// the fake loader for core, core for every internal crate below it.
+fn fake_enabler(dependency: &str) -> Option<&'static str> {
+    match dependency {
+        CORE => Some(FAKE_CRATE),
+        FAKE_CRATE | FACADE => None,
+        below if below.starts_with("enshwick-") => Some(CORE),
+        _ => None,
+    }
 }
 
 /// The workspace folders of the platform's own crates, which name the
@@ -611,6 +628,32 @@ mod tests {
         });
         assert!(fake_reach("enshwick", &facade).is_empty());
         assert!(fake_reach("enshwick-fake", &fake).is_empty());
+    }
+
+    #[test]
+    fn only_core_turns_on_the_fake_of_a_crate_below_it() {
+        let asks = |by: &str| {
+            fake_reach(
+                by,
+                &serde_json::json!({
+                    "features": { "fake": ["enshwick-base/fake"] },
+                    "dependencies": [{ "name": "enshwick-base", "kind": null, "features": ["fake"] }],
+                }),
+            )
+        };
+        assert!(asks("enshwick-core").is_empty());
+        assert_eq!(fake_enabler("enshwick-base"), Some(CORE));
+        assert_eq!(fake_enabler(CORE), Some(FAKE_CRATE));
+        for none in [FAKE_CRATE, FACADE, "serde"] {
+            assert_eq!(fake_enabler(none), None, "{none}");
+        }
+        assert_eq!(
+            asks("enshwick-loader"),
+            [
+                "enshwick-loader: its feature `fake` turns on enshwick-base/fake; only enshwick-core may",
+                "enshwick-loader: its normal dependency enshwick-base turns on `fake`; only enshwick-core may",
+            ]
+        );
     }
 
     #[test]

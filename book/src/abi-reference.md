@@ -201,7 +201,7 @@ output `RateId`. A mod reads a code it does not know as `OTHER`.
 A mod subscribes with
 [`Load::on`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load.rs)
 and the types in
-[`events`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/events.rs).
+[`events`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/events.rs).
 It may also subscribe with a raw [`Event`](https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi.rs)
 id through `Load::on_raw_event`. See [Events and the scheduler](events.md).
 

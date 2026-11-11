@@ -6,9 +6,7 @@
 //! the field that holds them. [`Blob`] edits them safely: it grows arrays by
 //! moving them to the end and keeps every offset right.
 
-use core::ffi::c_void;
-
-use crate::abi::{ResourceKey, ResourcePatchFn, Status, Str};
+use crate::abi::{ResourceKey, Str};
 use crate::{Load, Off};
 
 pub mod categories;
@@ -44,107 +42,6 @@ pub use crate::facts::EngineFacts;
 pub use ids::*;
 #[doc(hidden)]
 pub use script::{Content, Rule};
-
-impl crate::Host {
-    /// A vanilla resource's bytes from the game's archive; see
-    /// [`game_resource`].
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # extern crate enshwick_core as enshwick;
-    /// use enshwick::content::{Guid, types};
-    ///
-    /// if let Some(host) = enshwick::host() {
-    ///     let chest = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-    ///     if let Ok(key) = types::ITEM_INFO.key(chest) {
-    ///         let _ = host.game_resource(key);
-    ///     }
-    /// }
-    /// ```
-    #[must_use]
-    pub fn game_resource(&self, key: ResourceKey) -> Option<Vec<u8>> {
-        self.read_resource(self.api().resource_read, key).ok()
-    }
-
-    /// A resource's bytes as the game's first read would build them now: a
-    /// served one with every mod's patches, others' included, any other
-    /// from the archive. Call it after init, such as in a patch of another
-    /// key, and once per need: each read runs every patch of the key again
-    /// and frees what they built. When every patch fails, a changed vanilla
-    /// key reads as the archive has it. A patch that reads a key this way
-    /// runs again whenever that key is rebuilt. To give an item another's data,
-    /// use `Load::rekey_item`, which keeps its
-    /// ids.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] during init, for a key neither served nor in the archive,
-    /// and in a patch of a key whose patches already run on this thread
-    /// ([`Status::BUILDING`](crate::abi::Status::BUILDING)), as reading it
-    /// would build it again without end.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # extern crate enshwick_core as enshwick;
-    /// use enshwick::content::{Guid, types};
-    ///
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let resin = types::ITEM_INFO.key(Guid::parse("2f04a05f-697d-489b-a32f-76bb3439f5bc"))?;
-    ///     let wood = types::ITEM_INFO.key(Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"))?;
-    ///     let host = load.host();
-    ///     load.serve(resin, resin, move |resin| {
-    ///         // Wood as other mods serve it; inside a build of wood, resin
-    ///         // stays as it is rather than failing.
-    ///         if let Ok(wood) = host.served_resource(wood) {
-    ///             enshwick::info!("wood is served as {} bytes", wood.len());
-    ///         }
-    ///         Some(resin.to_vec())
-    ///     })
-    /// }
-    /// ```
-    pub fn served_resource(&self, key: ResourceKey) -> Result<Vec<u8>, Off> {
-        self.read_resource(self.api().resource_served, key)
-            .map_err(|status| crate::load::off_status(&format!("read resource {key:?}"), status))
-    }
-
-    /// Reads `key` through `read`, one of the loader's copy calls, into a
-    /// buffer grown to the length it asks for.
-    pub(crate) fn read_resource(
-        &self,
-        read: extern "system" fn(
-            crate::abi::ModHandle,
-            *const ResourceKey,
-            *mut u8,
-            u32,
-            *mut u32,
-        ) -> Status,
-        key: ResourceKey,
-    ) -> Result<Vec<u8>, Status> {
-        let mut buffer = vec![0u8; 64 << 10];
-        loop {
-            let mut len = 0u32;
-            let capacity = u32::try_from(buffer.len()).unwrap_or(u32::MAX);
-            let status = read(
-                self.handle(),
-                &raw const key,
-                buffer.as_mut_ptr(),
-                capacity,
-                &raw mut len,
-            );
-            let len = usize::try_from(len).unwrap_or(usize::MAX);
-            if status.is_ok() {
-                buffer.truncate(len);
-                return Ok(buffer);
-            }
-            if status != Status::BAD_ARGS || len <= buffer.len() {
-                return Err(status);
-            }
-            buffer.resize(len, 0);
-        }
-    }
-}
 
 /// A type of game resource by enshwick's name for it, such as
 /// [`types::ITEM_INFO`]; the loader maps it to the running build's type,
@@ -433,79 +330,6 @@ impl Blob {
     }
 }
 
-/// A served resource's builder, kept for the life of the process.
-type Builder = Box<dyn Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync>;
-
-/// Builds a served resource from its base for the loader.
-///
-/// # Safety
-///
-/// - `base` is null or readable for `base_len` bytes that stay unchanged for
-///   the call.
-/// - `user` is null or the `Box<Builder>` that [`Load::serve`] handed over,
-///   which the loader keeps for the process.
-/// - `out` and `out_len` are null or writable for one value each.
-unsafe extern "system" fn build(
-    base: *const u8,
-    base_len: usize,
-    user: *mut c_void,
-    out: *mut *const u8,
-    out_len: *mut usize,
-) -> Status {
-    if user.is_null() || out.is_null() || out_len.is_null() {
-        return Status::BAD_ARGS;
-    }
-    // SAFETY: `user` is not null, as the early return ensures, and the caller
-    // guarantees it is the boxed `Builder` that `serve` leaked for the process,
-    // so it is aligned, alive and only read through shared references.
-    let builder = unsafe { &*user.cast::<Builder>() };
-    let base = if base.is_null() || base_len == 0 {
-        &[][..]
-    } else {
-        // SAFETY: `base` is not null in this branch, and the caller guarantees
-        // `base_len` readable bytes there, unchanged for the call.
-        unsafe { core::slice::from_raw_parts(base, base_len) }
-    };
-    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| builder(base)));
-    let Ok(Some(bytes)) = built else {
-        return Status::REFUSED;
-    };
-    let len = bytes.len();
-    // Bytes the loader cannot lend a buffer for stay for the process, as
-    // `ResourcePatchFn` allows: they are handed over, never read here again.
-    let at = lent(&bytes)
-        .unwrap_or_else(|| Box::into_raw(bytes.into_boxed_slice()).cast::<u8>())
-        .cast_const();
-    // SAFETY: `out` is not null, as the early return ensures, and the caller
-    // guarantees it is writable for one pointer.
-    unsafe {
-        out.write(at);
-    }
-    // SAFETY: `out_len` is not null, as the early return ensures, and the
-    // caller guarantees it is writable for one `usize`.
-    unsafe {
-        out_len.write(len);
-    }
-    Status::OK
-}
-
-/// `bytes` copied into a buffer the loader lends the running patch
-/// ([`HostApi::resource_buffer`](crate::abi::HostApi::resource_buffer)),
-/// which it frees once no build reads them; `None` when it lends none.
-fn lent(bytes: &[u8]) -> Option<*mut u8> {
-    let host = crate::host()?;
-    let len = u32::try_from(bytes.len()).ok()?;
-    let mut at = core::ptr::null_mut();
-    let status = (host.api().resource_buffer)(host.handle(), len, &raw mut at);
-    if !status.is_ok() || at.is_null() {
-        return None;
-    }
-    // SAFETY: the loader lent `len` writable bytes at `at`, apart from
-    // `bytes`, for the build that runs this patch.
-    unsafe { at.copy_from_nonoverlapping(bytes.as_ptr(), bytes.len()) };
-    Some(at)
-}
-
 /// Builds the resource `key` again from its base with the patches of every mod
 /// still on, and writes the bytes that differ over the resource the game holds.
 ///
@@ -588,11 +412,7 @@ impl Load<'_> {
     /// ```
     #[script]
     pub fn declare(&mut self, id: Id) -> Result<Guid, Off> {
-        let api = self.host().api();
-        let mut out = [0u8; 16];
-        let name = id.to_string();
-        let status = (api.declare_content)(self.host().handle(), Str::new(&name), &raw mut out);
-        crate::load::ok(status, Guid(out), || format!("content id {id}"))
+        crate::resources::declare(self.host(), &id.to_string())
     }
 
     /// Gives `LocaTag` `tag` the text `text` in `language`; the client shows it
@@ -624,14 +444,7 @@ impl Load<'_> {
         language: crate::i18n::Language,
         text: &str,
     ) -> Result<(), Off> {
-        let api = self.host().api();
-        let status = (api.add_text)(
-            self.host().handle(),
-            tag.fnv1a(),
-            language.0,
-            Str::new(text),
-        );
-        crate::load::ok(status, (), || "add text".to_owned())
+        crate::i18n::add_text(self.host(), tag, language, text)
     }
 
     /// Serves the resource `key`, built by `builder` from the resource
@@ -669,35 +482,8 @@ impl Load<'_> {
         base: ResourceKey,
         builder: impl Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync + 'static,
     ) -> Result<(), Off> {
-        serve(self.host(), key, base, builder)
+        crate::resources::serve(self.host(), key, base, builder)
     }
-}
-
-/// [`Load::serve`] for a runtime that holds the mod's host during its init,
-/// such as a script's.
-pub(crate) fn serve(
-    host: crate::Host,
-    key: ResourceKey,
-    base: ResourceKey,
-    builder: impl Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync + 'static,
-) -> Result<(), Off> {
-    let api = host.api();
-    let builder: Box<Builder> = Box::new(Box::new(builder));
-    let user = Box::into_raw(builder);
-    let patch: ResourcePatchFn = build;
-    let status = (api.serve_resource)(
-        host.handle(),
-        &raw const key,
-        &raw const base,
-        patch,
-        user.cast(),
-    );
-    if !status.is_ok() {
-        // SAFETY: `user` came from this function's `Box::into_raw`, and the loader
-        // refused it, so it keeps no copy and this is the only owner.
-        drop(unsafe { Box::from_raw(user) });
-    }
-    crate::load::ok(status, (), || "serve resource".to_owned())
 }
 
 impl Load<'_> {

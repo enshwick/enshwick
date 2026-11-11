@@ -145,17 +145,70 @@ mod tests {
 
     /// The source of the API crate and of the internal crates it re-exports,
     /// whose public modules carry the API's own paths.
-    fn sources() -> [PathBuf; 6] {
+    fn sources() -> [PathBuf; 7] {
         let internal = |name: &str| source().join("../../internal").join(name).join("src");
         [
             source(),
             internal("core"),
+            internal("base"),
             internal("fake"),
             internal("abi"),
             internal("values"),
             internal("typed"),
         ]
     }
+
+    /// What the top-level module of a hidden module starts with.
+    const HIDDEN: &str = "#";
+    /// Core's module of `Load`'s forwarders into the base, a file per base
+    /// module, or per file of the base's own `load`.
+    const FORWARDERS: &str = "load";
+
+    /// Whether the walk enters the module `m` inside the top-level module
+    /// `top`: never a test module, and a hidden one only at a crate root
+    /// when the facade does not keep it hidden too.
+    fn walked(top: &str, m: &syn::ItemMod) -> bool {
+        let test = m.attrs.iter().any(|a| {
+            list(a, "cfg").is_some_and(|cfg| cfg == "test" || cfg.starts_with("all(test,"))
+        });
+        let hidden = left_out(&m.attrs);
+        let kept_hidden = FACADE_HIDDEN.contains(&m.ident.to_string());
+        !test && (!hidden || (top.is_empty() && !kept_hidden))
+    }
+
+    /// Whether `name` is a file of the base's own `load`, whose methods are
+    /// `Load`'s at the root, not a module's.
+    fn base_load_file(name: &str) -> bool {
+        source()
+            .join("../../internal/base/src/load")
+            .join(format!("{name}.rs"))
+            .exists()
+    }
+
+    /// The names the facade re-exports hidden, which no mirror covers.
+    static FACADE_HIDDEN: std::sync::LazyLock<Vec<String>> = std::sync::LazyLock::new(|| {
+        fn names(tree: &syn::UseTree, out: &mut Vec<String>) {
+            match tree {
+                syn::UseTree::Path(path) => names(&path.tree, out),
+                syn::UseTree::Name(name) => out.push(name.ident.to_string()),
+                syn::UseTree::Rename(rename) => out.push(rename.rename.to_string()),
+                syn::UseTree::Group(group) => group.items.iter().for_each(|tree| names(tree, out)),
+                syn::UseTree::Glob(_) => {}
+            }
+        }
+        let mut out = Vec::new();
+        for item in parse(&source().join("lib.rs")).items {
+            if let Item::Use(item) = item
+                && item
+                    .attrs
+                    .iter()
+                    .any(|a| list(a, "doc").is_some_and(|doc| doc == "hidden"))
+            {
+                names(&item.tree, &mut out);
+            }
+        }
+        out
+    });
 
     fn parse(file: &Path) -> syn::File {
         let text =
@@ -266,13 +319,28 @@ mod tests {
         fn items(&mut self, items: &[Item], dir: &Path, top: &str) {
             for item in items {
                 match item {
-                    Item::Mod(m) if !left_out(&m.attrs) => {
+                    // A hidden module is walked as a private one: its items
+                    // reach the API only as the root re-exports them.
+                    Item::Mod(m) if walked(top, m) => {
                         let name = m.ident.to_string();
-                        let top = if top.is_empty() {
-                            name.clone()
-                        } else {
-                            top.to_owned()
-                        };
+                        // A hidden module a public one of the same name joins
+                        // by a glob is that module's.
+                        let top =
+                            if top.is_empty() && left_out(&m.attrs) && !self.public.contains(&name)
+                            {
+                                format!("{HIDDEN}{name}")
+                            } else if top.is_empty() {
+                                name.clone()
+                            } else if top == FORWARDERS
+                                && self.public.contains(&name)
+                                && !base_load_file(&name)
+                            {
+                                // Core's forwarders of a base module's `Load`
+                                // methods stand for that module.
+                                name.clone()
+                            } else {
+                                top.to_owned()
+                            };
                         let inner = dir.join(&name);
                         if let Some((_, items)) = &m.content {
                             self.items(items, &inner, &top);
@@ -312,18 +380,28 @@ mod tests {
                             continue;
                         }
                         for entry in &i.items {
-                            if let ImplItem::Fn(f) = entry
-                                && is_public(&f.vis)
-                                && !left_out(&f.attrs)
-                            {
+                            // A forwarded method has no body; `#[forward]`
+                            // writes it.
+                            let bodiless = match entry {
+                                ImplItem::Verbatim(tokens) => {
+                                    syn::parse2::<syn::ForeignItemFn>(tokens.clone()).ok()
+                                }
+                                _ => None,
+                            };
+                            let (attrs, vis, sig) = match (entry, &bodiless) {
+                                (ImplItem::Fn(f), _) => (&f.attrs, &f.vis, &f.sig),
+                                (_, Some(f)) => (&f.attrs, &f.vis, &f.sig),
+                                _ => continue,
+                            };
+                            if is_public(vis) && !left_out(attrs) {
                                 let receiver =
-                                    matches!(f.sig.inputs.first(), Some(FnArg::Receiver(_)));
+                                    matches!(sig.inputs.first(), Some(FnArg::Receiver(_)));
                                 self.functions.push(RustFn {
                                     module: self.module(top),
                                     owner: owner.clone(),
-                                    name: f.sig.ident.to_string(),
-                                    returns: returned(&f.sig.output),
-                                    takes: f.sig.inputs.len() > usize::from(receiver),
+                                    name: sig.ident.to_string(),
+                                    returns: returned(&sig.output),
+                                    takes: sig.inputs.len() > usize::from(receiver),
                                     receiver,
                                 });
                             }

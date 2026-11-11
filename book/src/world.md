@@ -74,7 +74,7 @@ game; read what you need at once. Its type is an `ecs::ComponentType`.
 Resolve it at init with `ComponentType::resolve`. That call turns the mod
 off when the type is not reflected on the running build. The same type is
 what
-[`ecs::Components`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/ecs.rs)
+[`ecs::Components`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/ecs.rs)
 takes inside systems ([ECS](ecs.md)).
 
 ```rust

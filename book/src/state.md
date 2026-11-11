@@ -130,7 +130,7 @@ same error.
 ## Files of your own
 
 A mod that keeps a file in another format in its data folder uses
-[`enshwick::files`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/files.rs),
+[`enshwick::files`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/files.rs),
 the same calls the stores use:
 
 - Two calls read a file that may be missing: `read_if_present(path)` and
@@ -160,7 +160,7 @@ fn record_visit(dir: &std::path::Path) -> std::io::Result<()> {
 
 Some changes let a world grow past what the vanilla game opens safely, such as
 more altars than the game groups into bases. A mod that makes them sets a
-[`state::Hold`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/state.rs)
+[`state::Hold`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/state.rs)
 while that is so. It clears the hold when it is no longer so.
 
 ```rust

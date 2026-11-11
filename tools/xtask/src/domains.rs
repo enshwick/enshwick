@@ -1,8 +1,11 @@
-//! The domain rule of `enshwick-core`: each top-level module belongs to one
-//! domain of `crates/internal/core/domains.toml`, and a module names only
-//! its own domain and those listed before it. The edges up that order still
-//! in the code are listed there too; a new one, or a listed one that is
-//! gone, fails, so the list only shrinks as domains are peeled out.
+//! The domain rule of the API: each top-level module of `enshwick-core`
+//! belongs to one domain of `crates/internal/core/domains.toml`, and a
+//! module names only its own domain and those listed before it. The edges
+//! up that order still in the code are listed there too; a new one, or a
+//! listed one that is gone, fails, so the list only shrinks as domains are
+//! peeled out. A domain peeled into a crate of its own depends on no
+//! internal crate but those below every domain and the crates of the
+//! domains before its own; the compiler holds the rest.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -26,10 +29,86 @@ struct Map {
     order: Vec<String>,
     /// Files and folders, under `src`, that join every domain's list.
     joins: Vec<String>,
-    /// Each domain's top-level modules.
+    /// Each domain's top-level modules still in core.
     modules: BTreeMap<String, Vec<String>>,
     /// The edges up the order still in the code, as `from -> to`.
     upward: Vec<String>,
+    /// The internal crates below every domain.
+    #[serde(default)]
+    below: Vec<String>,
+    /// Each peeled domain's crate, by its folder under `crates/internal`.
+    #[serde(default)]
+    crates: BTreeMap<String, String>,
+}
+
+/// The internal crates a peeled domain's crate depends on that are not
+/// below it: neither one of `below` nor the crate of a domain before its
+/// own.
+fn crate_problems(root: &Path, map: &Map) -> Vec<String> {
+    let manifest = |dir: &str| -> Result<toml::Table, String> {
+        let path = format!("crates/internal/{dir}/Cargo.toml");
+        let text = std::fs::read_to_string(root.join(&path)).map_err(|e| format!("{path}: {e}"))?;
+        toml::from_str(&text).map_err(|e| format!("{path}: {e}"))
+    };
+    let mut problems = Vec::new();
+    let mut lower: Vec<String> = map.below.clone();
+    for domain in &map.order {
+        let Some(dir) = map.crates.get(domain) else {
+            continue;
+        };
+        let table = match manifest(dir) {
+            Ok(table) => table,
+            Err(error) => {
+                problems.push(error);
+                continue;
+            }
+        };
+        let name = table
+            .get("package")
+            .and_then(|p| p.get("name"))
+            .and_then(toml::Value::as_str)
+            .unwrap_or(dir)
+            .to_owned();
+        let deps = dependencies(&table);
+        for dep in deps
+            .iter()
+            .filter(|dep| dep.contains("enshwick") && !lower.contains(dep))
+        {
+            problems.push(format!(
+                "crates/internal/{dir}/Cargo.toml: {name}, the crate of {domain}, depends on {dep}, which is not below it in {MAP}"
+            ));
+        }
+        lower.push(name);
+    }
+    for domain in map.crates.keys().filter(|d| !map.order.contains(d)) {
+        problems.push(format!(
+            "{MAP}: the crate of {domain} is of no domain in the order"
+        ));
+    }
+    problems
+}
+
+/// The packages a manifest's `[dependencies]` name, a renamed one by its
+/// `package`, those of its `[target.*.dependencies]` included.
+fn dependencies(manifest: &toml::Table) -> Vec<String> {
+    let targets = manifest
+        .get("target")
+        .and_then(toml::Value::as_table)
+        .into_iter()
+        .flat_map(|targets| targets.values());
+    std::iter::once(manifest.get("dependencies"))
+        .chain(targets.map(|target| target.get("dependencies")))
+        .flatten()
+        .filter_map(toml::Value::as_table)
+        .flat_map(|deps| {
+            deps.iter().map(|(key, dep)| {
+                dep.get("package")
+                    .and_then(toml::Value::as_str)
+                    .unwrap_or(key)
+                    .to_owned()
+            })
+        })
+        .collect()
 }
 
 /// The problems of the domain rule under `root`, one line each.
@@ -48,6 +127,7 @@ fn problems(root: &Path) -> Result<Vec<String>, String> {
     let mut files = Vec::new();
     collect(&sources, &sources, &mut files)?;
     let mut problems = namespace_lists(&map, &files);
+    problems.extend(crate_problems(root, &map));
     let joined = |path: &str| map.joins.iter().any(|join| path.starts_with(join.as_str()));
     let modules: BTreeSet<String> = files
         .iter()
@@ -441,7 +521,59 @@ mod tests {
             ]
             .into(),
             upward: upward.iter().map(|&s| s.to_owned()).collect(),
+            below: Vec::new(),
+            crates: BTreeMap::new(),
         }
+    }
+
+    #[test]
+    fn a_peeled_crate_may_name_only_the_crates_below_it() {
+        let root = std::env::temp_dir().join(format!("xtask-crates-{}", std::process::id()));
+        let manifest = |dir: &str, name: &str, deps: &str| {
+            let path = root.join("crates/internal").join(dir);
+            std::fs::create_dir_all(&path).unwrap();
+            std::fs::write(
+                path.join("Cargo.toml"),
+                format!("[package]\nname = \"{name}\"\n[dependencies]\n{deps}"),
+            )
+            .unwrap();
+        };
+        manifest(
+            "base",
+            "enshwick-base",
+            "enshwick-abi.workspace = true\nenshwick-ui.workspace = true\nserde = \"1\"\n",
+        );
+        manifest(
+            "ui",
+            "enshwick-ui",
+            "enshwick-base.workspace = true\nenshwick-core.workspace = true\n",
+        );
+        let mut map = map(&[]);
+        map.below = vec!["enshwick-abi".to_owned()];
+        map.crates = [
+            ("base".to_owned(), "base".to_owned()),
+            ("ui".to_owned(), "ui".to_owned()),
+            ("sound".to_owned(), "sound".to_owned()),
+        ]
+        .into();
+        let problems = crate_problems(&root, &map);
+        let _gone = std::fs::remove_dir_all(&root);
+        assert_eq!(problems.len(), 3, "{problems:?}");
+        assert!(problems[0].contains("enshwick-base, the crate of base, depends on enshwick-ui"));
+        assert!(problems[1].contains("enshwick-ui, the crate of ui, depends on enshwick-core"));
+        assert!(problems[2].contains("the crate of sound is of no domain"));
+    }
+
+    #[test]
+    fn a_renamed_or_target_dependency_counts_by_its_package() -> Result<(), toml::de::Error> {
+        let manifest: toml::Table = toml::from_str(
+            "[dependencies]\nserde = \"1\"\nup = { package = \"enshwick-core\", workspace = true }\n\n[target.'cfg(windows)'.dependencies]\nenshwick-ui.workspace = true\n",
+        )?;
+        assert_eq!(
+            dependencies(&manifest),
+            ["serde", "enshwick-core", "enshwick-ui"]
+        );
+        Ok(())
     }
 
     fn set(items: &[&str]) -> BTreeSet<String> {
