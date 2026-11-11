@@ -309,6 +309,13 @@ mod tests {
                                 format!("{HIDDEN}{name}")
                             } else if top.is_empty() {
                                 name.clone()
+                            } else if top == FORWARDERS
+                                && self.public.contains(&name)
+                                && !base_load_file(&name)
+                            {
+                                // Core's forwarders of a base module's `Load`
+                                // methods stand for that module.
+                                name.clone()
                             } else {
                                 top.to_owned()
                             };
