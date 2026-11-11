@@ -24,6 +24,9 @@ Each entry names the pull request that made the change.
   fields its place takes and the one it is near (#1017).
 - The READMEs `new --luau` and `new --data` write check with
   `cargo enshwick check` (#1017).
+- Depends on the internal crates `enshwick-core` and `enshwick-abi`
+  instead of `enshwick`; `new` still pins `enshwick` at the same version
+  (#1043).
 
 ## [1.0.0-alpha.14] - 2026-11-09
 
