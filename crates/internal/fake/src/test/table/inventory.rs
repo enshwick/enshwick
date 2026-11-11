@@ -2,9 +2,9 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{InventoryRequest, InventoryResultFn, ItemData, ModHandle, Status};
 use crate::test::SubmittedRequest;
 use crate::test::table::{OpenRequest, Registered, with};
+use enshwick_core::abi::{InventoryRequest, InventoryResultFn, ItemData, ModHandle, Status};
 
 pub(crate) extern "system" fn inventory_open(_me: ModHandle) -> Status {
     with(Status::MISSING, |s| {
@@ -18,7 +18,7 @@ pub(crate) extern "system" fn inventory_open(_me: ModHandle) -> Status {
 
 pub(crate) extern "system" fn item_info(
     _me: ModHandle,
-    item: crate::ItemId,
+    item: enshwick_core::ItemId,
     out: *mut ItemData,
 ) -> Status {
     super::found_headed(with(None, |s| s.host.items.get(&item.get()).copied()), out)
@@ -34,7 +34,7 @@ pub(crate) extern "system" fn inventory_submit(
     let required = core::mem::offset_of!(InventoryRequest, op_count) + size_of::<u32>();
     // SAFETY: the safe layer passes null or its version of the request,
     // readable for the size its header states, for the call.
-    let Some(request) = (unsafe { crate::abi::read_headed(request, required) }) else {
+    let Some(request) = (unsafe { enshwick_core::abi::read_headed(request, required) }) else {
         return Status::BAD_ARGS;
     };
     if request.ops.is_null() || request.op_count == 0 {

@@ -1,7 +1,7 @@
 //! Settings: the running world's settings files and the mod's checks.
 
-use crate::abi::Str;
-use crate::abi::{Level, ModHandle};
+use enshwick_core::abi::Str;
+use enshwick_core::abi::{Level, ModHandle};
 
 use super::FakeHost;
 use super::Installed;
@@ -10,7 +10,7 @@ use super::table;
 impl FakeHost {
     /// The text of the running world's `settings.toml` for the mod, which
     /// the mod reads as each world loads: raise
-    /// [`events::SettingsReplaced`](crate::events::SettingsReplaced) after
+    /// [`events::SettingsReplaced`](enshwick_core::events::SettingsReplaced) after
     /// [`install`](Self::install). Without it the world's file is empty
     /// and the mod runs on its defaults.
     ///
@@ -28,7 +28,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new()
     ///     .settings_file("altars", "per_level = [2, 4]\n")
     ///     .install();
@@ -47,7 +46,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new()
     ///     .world_key("world0")
     ///     .data_dir("target/world0-mod-data/bonus")
@@ -68,7 +66,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().mod_dir("target/mods/bonus").install();
     /// # let _ = loader;
     /// ```
@@ -96,7 +93,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{Level, ModHandle};
     ///
     /// let loader = enshwick::test::FakeHost::new()
@@ -119,15 +115,14 @@ impl FakeHost {
 impl Installed {
     /// Replaces the text of the running world's `<file>.toml` for the mod,
     /// as a person's edit or the next world would; raise
-    /// [`events::SettingsChanged`](crate::events::SettingsChanged) for a
+    /// [`events::SettingsChanged`](enshwick_core::events::SettingsChanged) for a
     /// change while the world runs, or
-    /// [`events::SettingsReplaced`](crate::events::SettingsReplaced) for a
+    /// [`events::SettingsReplaced`](enshwick_core::events::SettingsReplaced) for a
     /// world that loads.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::events;
     ///
     /// let loader = enshwick::test::FakeHost::new().settings("limit = 7\n").install();
@@ -142,13 +137,12 @@ impl Installed {
 
     /// Makes `level` the data pack `pack`'s most detailed log level, as an
     /// edit of the loader's settings would; raise
-    /// [`events::LoaderSettingsChanged`](crate::events::LoaderSettingsChanged)
+    /// [`events::LoaderSettingsChanged`](enshwick_core::events::LoaderSettingsChanged)
     /// for the pack to read it, as the loader does after the edit.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{Level, ModHandle};
     /// use enshwick::events;
     ///
@@ -165,13 +159,12 @@ impl Installed {
 
     /// Makes `level` the most detailed log level of every handle without a
     /// level of its own, as an edit of the loader's settings would; raise
-    /// [`events::LoaderSettingsChanged`](crate::events::LoaderSettingsChanged)
+    /// [`events::LoaderSettingsChanged`](enshwick_core::events::LoaderSettingsChanged)
     /// for the mod to read it, as the loader does after the edit.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::Level;
     /// use enshwick::events;
     ///
@@ -184,20 +177,19 @@ impl Installed {
     }
 
     /// The schema of the mod's settings file `file` as the mod handed it
-    /// the loader, which [`Load::on_settings`](crate::Load::on_settings)
+    /// the loader, which [`Load::on_settings`](enshwick_core::Load::on_settings)
     /// does; `None` before.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.config_schema("settings").is_none());
     /// ```
     #[must_use]
-    pub fn config_schema(&self, file: &str) -> Option<crate::config::Schema> {
+    pub fn config_schema(&self, file: &str) -> Option<enshwick_core::config::Schema> {
         table::with(None, |s| s.config_schemas.get(file).cloned())
-            .and_then(|text| crate::config::Schema::parse(&text).ok())
+            .and_then(|text| enshwick_core::config::Schema::parse(&text).ok())
     }
 
     /// Runs the mod's check of a new text of its settings file `file`, as
@@ -211,7 +203,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert_eq!(loader.check_settings("settings", "x = 1"), Ok(()));
     /// ```

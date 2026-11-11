@@ -15,12 +15,11 @@
 //! of one binary share the process; the fake serves one test at a time, and
 //! a second test waits until the first drops its [`Installed`]. State a mod
 //! keeps in a `static` starts afresh only in a
-//! [`ModLocal`](crate::state::ModLocal).
+//! [`ModLocal`](enshwick_core::state::ModLocal).
 //!
 //! # Examples
 //!
 //! ```rust,standalone_crate
-//! # extern crate enshwick_fake as enshwick;
 //! use std::sync::atomic::{AtomicU32, Ordering};
 //!
 //! use enshwick::abi::{Level, Status};
@@ -134,7 +133,7 @@ pub use templates::{
 pub use transactions::{FakeChange, FakeTransaction};
 pub use ui::{Drawn, FakeMarker, Input, ShownDialog};
 
-/// Exports a mod as [`declare_mod!`](crate::declare_mod) does, with its
+/// Exports a mod as [`declare_mod!`](enshwick_core::declare_mod) does, with its
 /// `[package.metadata.enshwick]` table given as TOML, so one test binary may
 /// declare several mods.
 ///
@@ -146,7 +145,6 @@ pub use ui::{Drawn, FakeMarker, Input, ShownDialog};
 /// # Examples
 ///
 /// ```rust,standalone_crate
-/// # extern crate enshwick_fake as enshwick;
 /// struct Lockers;
 ///
 /// impl enshwick::Mod for Lockers {
@@ -179,15 +177,15 @@ use std::sync::MutexGuard;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::FnPtr;
-use crate::abi::{
+use enshwick_core::FnPtr;
+use enshwick_core::abi::{
     CallerFrame, EntityPlace, Fingerprint, HostApi, ItemData, Level, ModHandle, ModInfo,
     PlayerInfo, Side, Status,
 };
 
 use players::{FakeService, ask, console};
 
-/// A mod's `enshwick_mod_init` export, as [`declare_mod!`](crate::declare_mod)
+/// A mod's `enshwick_mod_init` export, as [`declare_mod!`](enshwick_core::declare_mod)
 /// writes it.
 ///
 /// # Examples
@@ -195,7 +193,7 @@ use players::{FakeService, ask, console};
 /// See [`Installed::start`], which takes one.
 pub type InitFn = unsafe extern "system" fn(*const HostApi, ModHandle) -> Status;
 
-/// A mod's `enshwick_mod_ready` export, as [`declare_mod!`](crate::declare_mod)
+/// A mod's `enshwick_mod_ready` export, as [`declare_mod!`](enshwick_core::declare_mod)
 /// writes it.
 ///
 /// # Examples
@@ -203,13 +201,13 @@ pub type InitFn = unsafe extern "system" fn(*const HostApi, ModHandle) -> Status
 /// See [`Installed::start`], which takes one.
 pub type ReadyFn = unsafe extern "system" fn(*const HostApi, ModHandle);
 
-/// A mod's `enshwick_mod_query` export, as [`declare_mod!`](crate::declare_mod)
+/// A mod's `enshwick_mod_query` export, as [`declare_mod!`](enshwick_core::declare_mod)
 /// writes it: the manifest the fake reads before init, as the loader does.
 ///
 /// # Examples
 ///
 /// See [`Installed::start`], which takes one.
-pub type QueryFn = extern "system" fn() -> *const crate::abi::Manifest;
+pub type QueryFn = extern "system" fn() -> *const enshwick_core::abi::Manifest;
 
 /// The id the fake loader gives the mod it runs: the namespace its stats,
 /// item data and services take.
@@ -217,7 +215,6 @@ pub type QueryFn = extern "system" fn() -> *const crate::abi::Manifest;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_fake as enshwick;
 /// assert!(enshwick::abi::is_valid_id(enshwick::test::MOD_ID));
 /// ```
 pub const MOD_ID: &str = "test.fake";
@@ -230,7 +227,6 @@ pub const MOD_ID: &str = "test.fake";
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_fake as enshwick;
 /// extern "system" fn vanilla() {}
 ///
 /// let target = enshwick::test::address(vanilla as extern "system" fn());
@@ -266,7 +262,6 @@ pub(crate) enum BaseCode {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_fake as enshwick;
 /// use enshwick::abi::{Level, Side};
 ///
 /// let loader = enshwick::test::FakeHost::new()
@@ -286,7 +281,7 @@ pub struct FakeHost {
     side: Side,
     base: u64,
     fingerprint: Fingerprint,
-    table: crate::abi::BuildTable,
+    table: enshwick_core::abi::BuildTable,
     handle: ModHandle,
     symbols: FxHashMap<String, u64>,
     systems: FxHashMap<String, u64>,
@@ -309,7 +304,7 @@ pub struct FakeHost {
     mods: Vec<ModInfo>,
     hosting: bool,
     developer_tools: bool,
-    host_key: Option<crate::PlayerKey>,
+    host_key: Option<enshwick_core::PlayerKey>,
     server_world: u64,
     join_missing: Vec<ModInfo>,
     /// What other mods export, by id; a mod left out exports every name.
@@ -329,27 +324,27 @@ pub struct FakeHost {
     other_commands: Vec<(String, String, bool)>,
     placed: Vec<(u32, EntityPlace)>,
     world_key: Option<String>,
-    fog: Option<(crate::abi::FogInfo, Vec<u8>)>,
-    map_markers: Vec<crate::abi::MapMarkerInfo>,
-    map_frame: Option<crate::abi::MapFrameInfo>,
-    map_marker_types: Option<Vec<crate::abi::MapMarkerTypeInfo>>,
+    fog: Option<(enshwick_core::abi::FogInfo, Vec<u8>)>,
+    map_markers: Vec<enshwick_core::abi::MapMarkerInfo>,
+    map_frame: Option<enshwick_core::abi::MapFrameInfo>,
+    map_marker_types: Option<Vec<enshwick_core::abi::MapMarkerTypeInfo>>,
     refused_writes: FxHashSet<u32>,
     static_halves: FxHashSet<u32>,
     net_peers: FxHashSet<u64>,
     icons_ready: bool,
     archive: std::collections::BTreeMap<[u32; 4], Vec<u8>>,
     resources: FxHashMap<([u8; 16], u32, u32), Vec<u8>>,
-    types: Option<std::sync::Arc<crate::resources::TypeTable>>,
+    types: Option<std::sync::Arc<enshwick_core::resources::TypeTable>>,
     /// The types of every [`FakeHost::types`] call, which `types` is built from.
-    type_list: Vec<crate::resources::Type<'static>>,
+    type_list: Vec<enshwick_core::resources::Type<'static>>,
     /// The player's keys by control name, in place of the mod's defaults.
     #[cfg(feature = "unstable")]
-    bindings: Vec<(String, usize, Option<crate::controls::Key>)>,
+    bindings: Vec<(String, usize, Option<enshwick_core::controls::Key>)>,
     game_version: Option<&'static str>,
     game_texts: FxHashMap<(u32, u32), &'static str>,
     disabled_recipes: FxHashSet<u32>,
-    recipe_kinds: FxHashMap<u32, crate::abi::RecipeKind>,
-    missing_rates: FxHashSet<crate::abi::RateId>,
+    recipe_kinds: FxHashMap<u32, enshwick_core::abi::RecipeKind>,
+    missing_rates: FxHashSet<enshwick_core::abi::RateId>,
     voxels: Vec<world::VoxelGrid>,
     zones: world::FakeZones,
     extent: Option<[u32; 3]>,
@@ -389,7 +384,7 @@ impl FakeHost {
                 guid: [0; 16],
                 age: 0,
             },
-            table: crate::abi::BuildTable::EXACT,
+            table: enshwick_core::abi::BuildTable::EXACT,
             handle: ModHandle(1),
             symbols: FxHashMap::default(),
             systems: FxHashMap::default(),
@@ -464,7 +459,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::ModHandle;
     ///
     /// let loader = enshwick::test::FakeHost::new().handle(ModHandle(7)).install();
@@ -483,7 +477,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::i18n::Language;
     ///
     /// let _loader = enshwick::test::FakeHost::new()
@@ -491,22 +484,21 @@ impl FakeHost {
     ///     .install();
     /// ```
     #[must_use]
-    pub const fn language(mut self, language: crate::i18n::Language) -> Self {
+    pub const fn language(mut self, language: enshwick_core::i18n::Language) -> Self {
         self.language = language.0;
         self
     }
 
     /// Whether developer tools are on, as the file
-    /// [`DEVELOPER_TOOLS`](crate::mods::DEVELOPER_TOOLS) turns them on; off
+    /// [`DEVELOPER_TOOLS`](enshwick_core::mods::DEVELOPER_TOOLS) turns them on; off
     /// by default, as in a game players use. While they are off the loader
     /// turns a mod with `developer: true` off before its `init`, so the
-    /// fake's init returns [`Status::REFUSED`](crate::abi::Status::REFUSED)
+    /// fake's init returns [`Status::REFUSED`](enshwick_core::abi::Status::REFUSED)
     /// with the reason in [`Installed::faults`].
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let _loader = enshwick::test::FakeHost::new()
     ///     .developer_tools(true)
     ///     .install();
@@ -567,7 +559,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(!loader.api().is_null());
     /// ```
@@ -591,7 +582,7 @@ impl Installed {
     /// # Safety
     ///
     /// - `init` is the `enshwick_mod_init` that
-    ///   [`declare_mod!`](crate::declare_mod) exported.
+    ///   [`declare_mod!`](enshwick_core::declare_mod) exported.
     ///
     /// # Examples
     ///
@@ -611,7 +602,7 @@ impl Installed {
     /// # Safety
     ///
     /// - `ready` is the `enshwick_mod_ready` that
-    ///   [`declare_mod!`](crate::declare_mod) exported.
+    ///   [`declare_mod!`](enshwick_core::declare_mod) exported.
     /// - Its `enshwick_mod_init` returned [`Status::OK`] on this fake.
     ///
     /// # Examples
@@ -630,15 +621,15 @@ impl Installed {
     ///
     /// A mod with `developer: true` is refused before its init while
     /// [`FakeHost::developer_tools`] is off, and a mod whose side is not
-    /// [`Side::SERVER`](crate::abi::Side::SERVER) or
-    /// [`Side::BOTH`](crate::abi::Side::BOTH) always, as the loader refuses
+    /// [`Side::SERVER`](enshwick_core::abi::Side::SERVER) or
+    /// [`Side::BOTH`](enshwick_core::abi::Side::BOTH) always, as the loader refuses
     /// them.
     ///
     /// # Safety
     ///
     /// - `query`, `init` and `ready` are the `enshwick_mod_query`,
     ///   `enshwick_mod_init` and `enshwick_mod_ready` exports of one mod,
-    ///   such as one [`declare_mod!`](crate::declare_mod) writes.
+    ///   such as one [`declare_mod!`](enshwick_core::declare_mod) writes.
     ///
     /// # Examples
     ///
@@ -677,7 +668,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.faults().is_empty());
     /// ```
@@ -692,7 +682,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.sent().is_empty());
     /// ```

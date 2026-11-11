@@ -5,7 +5,7 @@
 pub(crate) use crate::test::controls::{control, run_action, run_action_at};
 
 #[cfg(not(feature = "unstable"))]
-use crate::abi::{ActionTarget, ControlFn, ControlSpec, ModHandle, Status, Str};
+use enshwick_core::abi::{ActionTarget, ControlFn, ControlSpec, ModHandle, Status, Str};
 
 /// Without the `unstable` feature the fake runs no actions.
 #[cfg(not(feature = "unstable"))]
@@ -16,7 +16,7 @@ pub(crate) extern "system" fn run_action_at(
     target: *const ActionTarget,
 ) -> Status {
     // SAFETY: the safe layer passes null or a live `ActionTarget` for the call.
-    let _read = unsafe { crate::abi::read_headed(target, size_of::<ActionTarget>()) };
+    let _read = unsafe { enshwick_core::abi::read_headed(target, size_of::<ActionTarget>()) };
     Status::MISSING
 }
 
@@ -29,7 +29,7 @@ pub(crate) extern "system" fn control(
     _user: *mut core::ffi::c_void,
 ) -> Status {
     // SAFETY: the safe layer passes a live `ControlSpec` for the call.
-    match unsafe { crate::abi::read_headed(spec, size_of::<ControlSpec>()) } {
+    match unsafe { enshwick_core::abi::read_headed(spec, size_of::<ControlSpec>()) } {
         Some(_) => Status::MISSING,
         None => Status::BAD_ARGS,
     }

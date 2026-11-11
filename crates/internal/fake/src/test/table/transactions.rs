@@ -1,11 +1,11 @@
 //! The fake loader's transactions: commits, undos and statuses.
 
-use crate::abi::{
+use crate::test::table::{put, with};
+use crate::test::{FakeChange, FakeTransaction};
+use enshwick_core::abi::{
     BlockPlace, Header, ModHandle, PropPlace, PropRemove, Status, TerrainEdit, TransactionInfo,
     TransactionOp, Voxel, VoxelRegion, VoxelWrite,
 };
-use crate::test::table::{put, with};
-use crate::test::{FakeChange, FakeTransaction};
 
 /// The most changes the fake takes in one transaction, as the loader.
 const OPS_MAX: u32 = 1024;
@@ -18,12 +18,12 @@ pub(crate) extern "system" fn transaction_commit(
     count: u32,
     id: *mut u64,
 ) -> Status {
-    commit(me, crate::Entity(0), ops, count, id)
+    commit(me, enshwick_core::Entity(0), ops, count, id)
 }
 
 pub(crate) extern "system" fn transaction_commit_for(
     me: ModHandle,
-    actor: crate::Entity,
+    actor: enshwick_core::Entity,
     ops: *const TransactionOp,
     count: u32,
     id: *mut u64,
@@ -36,7 +36,7 @@ pub(crate) extern "system" fn transaction_commit_for(
 
 fn commit(
     me: ModHandle,
-    actor: crate::Entity,
+    actor: enshwick_core::Entity,
     ops: *const TransactionOp,
     count: u32,
     id: *mut u64,
@@ -156,9 +156,9 @@ unsafe fn change(op: &TransactionOp) -> Option<FakeChange> {
         TransactionOp::TERRAIN => {
             // SAFETY: the caller guarantees `op.data` for a terrain op.
             let edit = unsafe {
-                crate::abi::read_headed(
+                enshwick_core::abi::read_headed(
                     op.data.cast::<TerrainEdit>(),
-                    <TerrainEdit as crate::abi::Headed>::BORN,
+                    <TerrainEdit as enshwick_core::abi::Headed>::BORN,
                 )
             }?;
             let valid = edit.flags & TerrainEdit::DRY_RUN == 0
@@ -168,9 +168,9 @@ unsafe fn change(op: &TransactionOp) -> Option<FakeChange> {
         TransactionOp::VOXELS => {
             // SAFETY: the caller guarantees `op.data` for a voxels op.
             let write = unsafe {
-                crate::abi::read_headed(
+                enshwick_core::abi::read_headed(
                     op.data.cast::<VoxelWrite>(),
-                    <VoxelWrite as crate::abi::Headed>::BORN,
+                    <VoxelWrite as enshwick_core::abi::Headed>::BORN,
                 )
             }?;
             let count =
@@ -194,9 +194,9 @@ unsafe fn change(op: &TransactionOp) -> Option<FakeChange> {
         TransactionOp::ERASE => {
             // SAFETY: the caller guarantees `op.data` for an erase op.
             let region = unsafe {
-                crate::abi::read_headed(
+                enshwick_core::abi::read_headed(
                     op.data.cast::<VoxelRegion>(),
-                    <VoxelRegion as crate::abi::Headed>::BORN,
+                    <VoxelRegion as enshwick_core::abi::Headed>::BORN,
                 )
             }?;
             box_count(region.min, region.size)?;
@@ -208,9 +208,9 @@ unsafe fn change(op: &TransactionOp) -> Option<FakeChange> {
         TransactionOp::PLACE_PROP => {
             // SAFETY: the caller guarantees `op.data` for a prop op.
             let prop = unsafe {
-                crate::abi::read_headed(
+                enshwick_core::abi::read_headed(
                     op.data.cast::<PropPlace>(),
-                    <PropPlace as crate::abi::Headed>::BORN,
+                    <PropPlace as enshwick_core::abi::Headed>::BORN,
                 )
             }?;
             let finite = prop.position.iter().all(|v| v.is_finite() && *v >= 0.0)
@@ -221,9 +221,9 @@ unsafe fn change(op: &TransactionOp) -> Option<FakeChange> {
         TransactionOp::REMOVE_PROP => {
             // SAFETY: the caller guarantees `op.data` for a removal op.
             let remove = unsafe {
-                crate::abi::read_headed(
+                enshwick_core::abi::read_headed(
                     op.data.cast::<PropRemove>(),
-                    <PropRemove as crate::abi::Headed>::BORN,
+                    <PropRemove as enshwick_core::abi::Headed>::BORN,
                 )
             }?;
             (!remove.entity.is_none() && remove.flags & !PropRemove::DISCARD_STATE == 0)
@@ -232,9 +232,9 @@ unsafe fn change(op: &TransactionOp) -> Option<FakeChange> {
         TransactionOp::BLOCK => {
             // SAFETY: the caller guarantees `op.data` for a block op.
             let block = unsafe {
-                crate::abi::read_headed(
+                enshwick_core::abi::read_headed(
                     op.data.cast::<BlockPlace>(),
-                    <BlockPlace as crate::abi::Headed>::BORN,
+                    <BlockPlace as enshwick_core::abi::Headed>::BORN,
                 )
             }?;
             let finite = block.position.iter().all(|v| v.is_finite() && *v >= 0.0)
@@ -321,7 +321,7 @@ pub(crate) extern "system" fn transaction_undo(me: ModHandle, id: u64) -> Status
 pub(crate) extern "system" fn transaction_entities(
     me: ModHandle,
     id: u64,
-    out: *mut crate::Entity,
+    out: *mut enshwick_core::Entity,
     capacity: u32,
     count: *mut u32,
 ) -> Status {
@@ -355,7 +355,7 @@ pub(crate) extern "system" fn transaction_status(
     };
     // SAFETY: the safe layer passes `out` null or pointing at a writable
     // `TransactionInfo` whose header names its size.
-    if unsafe { crate::abi::write_headed(out, info) } {
+    if unsafe { enshwick_core::abi::write_headed(out, info) } {
         Status::OK
     } else {
         Status::BAD_ARGS

@@ -6,11 +6,3 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod test;
-
-// The root stands in for the API crate: core's items at their paths beside
-// `test`. The fake's own code names them through `crate::`, the examples
-// name this crate `enshwick` as a mod writes them, and so does the macros'
-// output.
-
-#[doc(hidden)]
-pub use enshwick_core::*;

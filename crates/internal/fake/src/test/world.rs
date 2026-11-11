@@ -1,6 +1,6 @@
 //! The world: components, entities, daytime, game settings, weather, terrain and voxels.
 
-use crate::abi::EntityPlace;
+use enshwick_core::abi::EntityPlace;
 
 use super::FakeHost;
 use super::Installed;
@@ -14,7 +14,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let health = [80.0f32.to_le_bytes(), 100.0f32.to_le_bytes()].concat();
     /// let loader = enshwick::test::FakeHost::new()
     ///     .component(enshwick::Entity(4096), 0x027a_c564, &health)
@@ -23,7 +22,12 @@ impl FakeHost {
     /// # let _ = loader;
     /// ```
     #[must_use]
-    pub fn component(mut self, entity: crate::Entity, type_hash: u32, bytes: &[u8]) -> Self {
+    pub fn component(
+        mut self,
+        entity: enshwick_core::Entity,
+        type_hash: u32,
+        bytes: &[u8],
+    ) -> Self {
         let mut words = vec![0u128; bytes.len().div_ceil(16).max(1)].into_boxed_slice();
         for (word, chunk) in words.iter_mut().zip(bytes.chunks(16)) {
             let mut le = [0u8; 16];
@@ -44,7 +48,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().refuse_write(0x216e_b5f9).install();
     /// # let _ = loader;
     /// ```
@@ -56,13 +59,12 @@ impl FakeHost {
 
     /// Plays a game build without the world's entity commands: destroy,
     /// `set_saved`, teleport and component writes answer
-    /// [`Status::UNAVAILABLE`](crate::abi::Status::UNAVAILABLE), as they do
+    /// [`Status::UNAVAILABLE`](enshwick_core::abi::Status::UNAVAILABLE), as they do
     /// on a client that hosts no game.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().world().without_entity_commands().install();
     /// # let _ = loader;
     /// ```
@@ -75,13 +77,12 @@ impl FakeHost {
     /// Makes the component type `type_hash` the static half of its ECS type,
     /// the template's set-up data: reads find it as
     /// [`FakeHost::component`] gives it, and writes are refused with
-    /// [`Status::STATIC_HALF`](crate::abi::Status::STATIC_HALF), as the loader
+    /// [`Status::STATIC_HALF`](enshwick_core::abi::Status::STATIC_HALF), as the loader
     /// refuses them.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().static_half(0x139a_fbec).install();
     /// # let _ = loader;
     /// ```
@@ -98,20 +99,24 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new()
     ///     .placed(0x027a_c564, enshwick::Entity(4096), [1.0, 2.0, 3.0])
     ///     .install();
     /// # let _ = loader;
     /// ```
     #[must_use]
-    pub fn placed(mut self, type_hash: u32, entity: crate::Entity, position: [f64; 3]) -> Self {
+    pub fn placed(
+        mut self,
+        type_hash: u32,
+        entity: enshwick_core::Entity,
+        position: [f64; 3],
+    ) -> Self {
         self.placed.push((
             type_hash,
             EntityPlace {
-                entity: crate::Entity(entity.0),
+                entity: enshwick_core::Entity(entity.0),
                 reserved: 0,
-                position: crate::ecs::fixed(position),
+                position: enshwick_core::ecs::fixed(position),
             },
         ));
         self
@@ -123,7 +128,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::MapMarkerInfo;
     ///
     /// let marker = MapMarkerInfo { position: [10.0, 40.0, 20.0], ..MapMarkerInfo::EMPTY };
@@ -131,7 +135,7 @@ impl FakeHost {
     /// # let _ = loader;
     /// ```
     #[must_use]
-    pub fn map_marker(mut self, marker: crate::abi::MapMarkerInfo) -> Self {
+    pub fn map_marker(mut self, marker: enshwick_core::abi::MapMarkerInfo) -> Self {
         self.map_markers.push(marker);
         self
     }
@@ -143,7 +147,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::MapFrameInfo;
     ///
     /// let frame = MapFrameInfo { size: [10240.0; 2], metres_per_cell: 8.0, ..MapFrameInfo::EMPTY };
@@ -151,7 +154,7 @@ impl FakeHost {
     /// # let _ = loader;
     /// ```
     #[must_use]
-    pub fn map_frame(mut self, frame: crate::abi::MapFrameInfo) -> Self {
+    pub fn map_frame(mut self, frame: enshwick_core::abi::MapFrameInfo) -> Self {
         self.map_frame = Some(frame);
         self
     }
@@ -163,7 +166,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{MapMarkerTypeInfo, Side};
     ///
     /// let altar = MapMarkerTypeInfo { marker_id: 0x0a0b_0c0d, ..MapMarkerTypeInfo::EMPTY };
@@ -174,7 +176,7 @@ impl FakeHost {
     /// # let _ = loader;
     /// ```
     #[must_use]
-    pub fn map_marker_types(mut self, types: Vec<crate::abi::MapMarkerTypeInfo>) -> Self {
+    pub fn map_marker_types(mut self, types: Vec<enshwick_core::abi::MapMarkerTypeInfo>) -> Self {
         self.map_marker_types = Some(types);
         self
     }
@@ -185,7 +187,7 @@ impl FakeHost {
     ///
     /// See [`FakeHost::component`].
     #[must_use]
-    pub fn template(mut self, entity: crate::Entity, guid: [u8; 16]) -> Self {
+    pub fn template(mut self, entity: enshwick_core::Entity, guid: [u8; 16]) -> Self {
         self.templates.insert(entity.0, guid);
         self
     }
@@ -201,12 +203,11 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.banned().is_empty());
     /// ```
     #[must_use]
-    pub fn banned(&self) -> Vec<crate::PlayerKey> {
+    pub fn banned(&self) -> Vec<enshwick_core::PlayerKey> {
         table::with(Vec::new(), |s| s.banned.clone())
     }
 
@@ -216,7 +217,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.removed().is_empty());
     /// ```
@@ -230,12 +230,11 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.muted().is_empty());
     /// ```
     #[must_use]
-    pub fn muted(&self) -> Vec<crate::PlayerKey> {
+    pub fn muted(&self) -> Vec<enshwick_core::PlayerKey> {
         table::with(Vec::new(), |s| s.muted.clone())
     }
 
@@ -245,7 +244,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// loader.stop_world();
     /// ```
@@ -260,7 +258,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// loader.read_map_markers(true);
     /// ```
@@ -274,7 +271,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{DaytimeInfo, Header};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -290,7 +286,7 @@ impl Installed {
     /// });
     /// assert_eq!(loader.daytime().map(|info| info.time), Some(0));
     /// ```
-    pub fn set_daytime(&self, info: crate::abi::DaytimeInfo) {
+    pub fn set_daytime(&self, info: enshwick_core::abi::DaytimeInfo) {
         table::with((), |s| s.daytime = Some(info));
     }
 
@@ -301,7 +297,7 @@ impl Installed {
     ///
     /// See [`Installed::set_daytime`].
     #[must_use]
-    pub fn daytime(&self) -> Option<crate::abi::DaytimeInfo> {
+    pub fn daytime(&self) -> Option<enshwick_core::abi::DaytimeInfo> {
         table::with(None, |s| s.daytime)
     }
 
@@ -310,7 +306,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert_eq!(loader.clock_speed(), None);
     /// ```
@@ -327,7 +322,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// loader.set_game_settings(vec![0; 144], 0);
     /// assert_eq!(loader.game_settings().map(|(bytes, _)| bytes.len()), Some(144));
@@ -353,7 +347,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.kept_game_settings().is_empty());
     /// ```
@@ -368,12 +361,11 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// loader.set_weather([1.0, 0.0, 0.0, 0.0], &[]);
     /// assert!(loader.forecasts().is_empty());
     /// ```
-    pub fn set_weather(&self, weights: [f32; 4], fronts: &[crate::abi::WeatherFront]) {
+    pub fn set_weather(&self, weights: [f32; 4], fronts: &[enshwick_core::abi::WeatherFront]) {
         table::with((), |s| s.weather = Some((weights, fronts.to_vec())));
     }
 
@@ -394,12 +386,11 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// loader.set_terrain(&[]);
     /// assert!(loader.terrain_edits().is_empty());
     /// ```
-    pub fn set_terrain(&self, materials: &[crate::abi::TerrainMaterialInfo]) {
+    pub fn set_terrain(&self, materials: &[enshwick_core::abi::TerrainMaterialInfo]) {
         table::with((), |s| s.terrain = Some(materials.to_vec()));
     }
 
@@ -409,7 +400,7 @@ impl Installed {
     ///
     /// See [`Installed::set_terrain`].
     #[must_use]
-    pub fn terrain_edits(&self) -> Vec<crate::abi::TerrainEdit> {
+    pub fn terrain_edits(&self) -> Vec<enshwick_core::abi::TerrainEdit> {
         table::with(Vec::new(), |s| s.edits.terrain.clone())
     }
 
@@ -418,7 +409,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.labels().is_empty());
     /// ```
@@ -432,7 +422,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.destroyed().is_empty());
     /// ```
@@ -447,7 +436,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.writes().is_empty());
     /// ```
@@ -462,13 +450,16 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().component(enshwick::Entity(7), 1, &[4, 2]).install();
     /// assert_eq!(loader.component_bytes(enshwick::Entity(7), 1), Some(vec![4, 2]));
     /// assert_eq!(loader.component_bytes(enshwick::Entity(7), 2), None);
     /// ```
     #[must_use]
-    pub fn component_bytes(&self, entity: crate::Entity, type_hash: u32) -> Option<Vec<u8>> {
+    pub fn component_bytes(
+        &self,
+        entity: enshwick_core::Entity,
+        type_hash: u32,
+    ) -> Option<Vec<u8>> {
         let (address, len) = table::with(None, |s| {
             s.host.components.get(&(entity.0, type_hash)).copied()
         })?;
@@ -485,13 +476,17 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().component(enshwick::Entity(7), 1, &[4, 2]).install();
     /// assert!(loader.set_component(enshwick::Entity(7), 1, &[9]));
     /// assert_eq!(loader.component_bytes(enshwick::Entity(7), 1), Some(vec![9, 2]));
     /// ```
     #[must_use = "false means the fake gave `entity` no such component"]
-    pub fn set_component(&self, entity: crate::Entity, type_hash: u32, bytes: &[u8]) -> bool {
+    pub fn set_component(
+        &self,
+        entity: enshwick_core::Entity,
+        type_hash: u32,
+        bytes: &[u8],
+    ) -> bool {
         let Some((address, len)) = table::with(None, |s| {
             s.host.components.get(&(entity.0, type_hash)).copied()
         }) else {
@@ -510,7 +505,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.emits().is_empty());
     /// ```
@@ -525,12 +519,11 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.teleports().is_empty());
     /// ```
     #[must_use]
-    pub fn teleports(&self) -> Vec<crate::abi::TeleportRequest> {
+    pub fn teleports(&self) -> Vec<enshwick_core::abi::TeleportRequest> {
         table::with(Vec::new(), |s| s.teleports.clone())
     }
 
@@ -540,12 +533,11 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.spawns().is_empty());
     /// ```
     #[must_use]
-    pub fn spawns(&self) -> Vec<(u32, crate::abi::SpawnRequest)> {
+    pub fn spawns(&self) -> Vec<(u32, enshwick_core::abi::SpawnRequest)> {
         table::with(Vec::new(), |s| s.spawns.clone())
     }
 
@@ -557,12 +549,11 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.progress_writes().is_empty());
     /// ```
     #[must_use]
-    pub fn progress_writes(&self) -> Vec<(crate::Entity, u32, u32)> {
+    pub fn progress_writes(&self) -> Vec<(enshwick_core::Entity, u32, u32)> {
         table::with(Vec::new(), |s| {
             s.progress_writes.clone().unwrap_or_default()
         })
@@ -574,12 +565,11 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.drops().is_empty());
     /// ```
     #[must_use]
-    pub fn drops(&self) -> Vec<(crate::Entity, crate::abi::DropRequest)> {
+    pub fn drops(&self) -> Vec<(enshwick_core::Entity, enshwick_core::abi::DropRequest)> {
         table::with(Vec::new(), |s| s.drops.clone())
     }
 
@@ -588,7 +578,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert_eq!(loader.saves(), 0);
     /// ```
@@ -603,7 +592,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.voxel_reads().is_empty());
     /// ```
@@ -631,7 +619,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::voxels::{Voxel, VoxelMaterial, VoxelPos};
     ///
     /// let rock = Voxel::new(VoxelMaterial::Terrain(9), 255);
@@ -643,9 +630,9 @@ impl FakeHost {
     #[must_use]
     pub fn voxels(
         mut self,
-        min: crate::voxels::VoxelPos,
+        min: enshwick_core::voxels::VoxelPos,
         size: [u32; 3],
-        voxels: &[crate::voxels::Voxel],
+        voxels: &[enshwick_core::voxels::Voxel],
     ) -> Self {
         let count = size.iter().map(|&axis| axis as usize).product::<usize>();
         assert_eq!(
@@ -676,7 +663,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().world_extent([20_480, 2048, 20_480]).install();
     /// # let _ = loader;
     /// ```
@@ -699,7 +685,7 @@ pub(crate) fn outside(end: Option<[u32; 3]>, min: [u32; 3], size: [u32; 3]) -> b
 }
 
 /// Whether the edit's position lies past a world ending at `end`.
-pub(crate) fn edit_outside(end: Option<[u32; 3]>, edit: &crate::abi::TerrainEdit) -> bool {
+pub(crate) fn edit_outside(end: Option<[u32; 3]>, edit: &enshwick_core::abi::TerrainEdit) -> bool {
     end.is_some_and(|end| {
         edit.position
             .iter()
@@ -710,7 +696,7 @@ pub(crate) fn edit_outside(end: Option<[u32; 3]>, edit: &crate::abi::TerrainEdit
 
 /// Whether the edit's position lies in one of `grids`, when the fake has
 /// any: the loader checks every column of bricks the edit can write.
-pub(crate) fn edit_loaded(grids: &[VoxelGrid], edit: &crate::abi::TerrainEdit) -> bool {
+pub(crate) fn edit_loaded(grids: &[VoxelGrid], edit: &enshwick_core::abi::TerrainEdit) -> bool {
     #[expect(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
@@ -725,12 +711,12 @@ pub(crate) fn edit_loaded(grids: &[VoxelGrid], edit: &crate::abi::TerrainEdit) -
 pub(crate) struct VoxelGrid {
     min: [u32; 3],
     size: [u32; 3],
-    voxels: Vec<crate::abi::Voxel>,
+    voxels: Vec<enshwick_core::abi::Voxel>,
 }
 
 impl VoxelGrid {
     /// The voxel at `at`, when the grid holds it.
-    pub(crate) fn get(&self, at: [u32; 3]) -> Option<crate::abi::Voxel> {
+    pub(crate) fn get(&self, at: [u32; 3]) -> Option<enshwick_core::abi::Voxel> {
         let mut index = 0usize;
         for axis in (0..3).rev() {
             let offset = at[axis].checked_sub(self.min[axis])?;
@@ -749,7 +735,7 @@ impl VoxelGrid {
         grids: &[Self],
         min: [u32; 3],
         size: [u32; 3],
-    ) -> Option<Vec<crate::abi::Voxel>> {
+    ) -> Option<Vec<enshwick_core::abi::Voxel>> {
         let [width, height, depth] = size;
         let mut voxels = Vec::new();
         for z in 0..depth {
@@ -772,7 +758,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new()
     ///     .building_zone([0.0, 0.0, 0.0], [40.0, 40.0, 40.0])
     ///     .install();
@@ -790,7 +775,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new()
     ///     .building_area([0.0, 0.0, 0.0], [4096.0, 1024.0, 4096.0])
     ///     .install();
@@ -808,7 +792,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new()
     ///     .no_build_zone([10.0, 0.0, 10.0], [20.0, 10.0, 20.0], true)
     ///     .install();
@@ -865,7 +848,7 @@ impl FakeZones {
     /// game's terrain tool rule for the permissions, then the building area
     /// and strict no-build tests Enshwick adds from the building cursor.
     pub(crate) fn refusal(&self, permissions: u8, min: [f64; 3], max: [f64; 3]) -> u32 {
-        use crate::abi::{BuildRights, PlayerInfo};
+        use enshwick_core::abi::{BuildRights, PlayerInfo};
         if permissions & PlayerInfo::CAN_EDIT_WORLD == 0 {
             return BuildRights::NO_CAN_EDIT_WORLD;
         }

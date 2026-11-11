@@ -450,7 +450,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::content::EngineFacts;
     ///
     /// let host = enshwick::test::FakeHost::new().enemies();

@@ -2,10 +2,10 @@
 
 use core::sync::atomic::Ordering;
 
-use crate::abi::{HookSpec, MidHookSpec, ModHandle, Status};
 use crate::test::LinkedHook;
 use crate::test::table::{Registered, Registration, put, with};
 use enshwick_core::__fake::rules;
+use enshwick_core::abi::{HookSpec, MidHookSpec, ModHandle, Status};
 
 pub(crate) extern "system" fn hook(_me: ModHandle, spec: *const HookSpec) -> Status {
     // SAFETY: the safe layer passes a valid spec for the call; `as_ref` turns away null.

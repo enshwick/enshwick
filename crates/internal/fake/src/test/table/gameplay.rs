@@ -2,14 +2,14 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{
+use crate::test::table::mods::list;
+use crate::test::table::{Registered, Registration, put, with};
+use enshwick_core::abi::{
     ActiveBuff, AltarInfo, AltarLimitFilterFn, AltarZoneFn, BaseLimitInfo, BedCheckFn, BuffRequest,
     BuffTypeInfo, BuildCheckFn, BuildingZoneCheckFn, ComfortFn, CraftCheckFn, DamageFilterFn,
     ExperiencePassFn, Header, InteractionFn, KnowledgeInfo, KnowledgeInputFn, ModHandle, RateId,
     Side, SkillCheckFn, Status, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
 };
-use crate::test::table::mods::list;
-use crate::test::table::{Registered, Registration, put, with};
 
 pub(crate) extern "system" fn altars_open(_me: ModHandle) -> Status {
     with(Status::MISSING, |s| {
@@ -116,8 +116,8 @@ pub(crate) extern "system" fn summoned(
 
 pub(crate) extern "system" fn summon_item(
     _me: ModHandle,
-    item: crate::ItemId,
-    survivor: crate::survivors::NpcId,
+    item: enshwick_core::ItemId,
+    survivor: enshwick_core::survivors::NpcId,
 ) -> Status {
     with(Status::MISSING, |s| {
         s.summon_items.push((item, survivor));
@@ -153,7 +153,7 @@ pub(crate) extern "system" fn interaction_filter(
 
 pub(crate) extern "system" fn skill_override(
     me: ModHandle,
-    node: crate::abi::SkillNode,
+    node: enshwick_core::abi::SkillNode,
     callback: SkillCheckFn,
     user: *mut c_void,
 ) -> Status {
@@ -264,7 +264,7 @@ pub(crate) extern "system" fn base_limit(_me: ModHandle, out: *mut BaseLimitInfo
     };
     // SAFETY: the safe layer passes `out` null or a `BaseLimitInfo` with
     // its header set, writable for the call.
-    if unsafe { crate::abi::write_headed(out, limit) } {
+    if unsafe { enshwick_core::abi::write_headed(out, limit) } {
         Status::OK
     } else {
         Status::BAD_ARGS
@@ -332,22 +332,22 @@ pub(crate) extern "system" fn build_filter(
 
 pub(crate) extern "system" fn revoke_knowledge(
     _me: ModHandle,
-    entity: crate::Entity,
-    id: crate::abi::KnowledgeId,
+    entity: enshwick_core::Entity,
+    id: enshwick_core::abi::KnowledgeId,
     kind: u32,
     value: u32,
 ) -> Status {
     with(Status::MISSING, |s| {
         s.revokes
-            .push((crate::Entity::from_raw(entity.0), id, kind, value));
+            .push((enshwick_core::Entity::from_raw(entity.0), id, kind, value));
         Status::OK
     })
 }
 
 pub(crate) extern "system" fn account_knowledge(
     _me: ModHandle,
-    key: crate::PlayerKey,
-    id: crate::abi::KnowledgeId,
+    key: enshwick_core::PlayerKey,
+    id: enshwick_core::abi::KnowledgeId,
     kind: u32,
     value: u32,
     revoke: u32,
@@ -393,7 +393,7 @@ pub(crate) extern "system" fn buff_types(
 
 pub(crate) extern "system" fn buffs(
     _me: ModHandle,
-    entity: crate::Entity,
+    entity: enshwick_core::Entity,
     out: *mut ActiveBuff,
     capacity: u32,
     count: *mut u32,
@@ -427,7 +427,7 @@ pub(crate) extern "system" fn apply_buff(_me: ModHandle, request: *const BuffReq
             on.push(ActiveBuff {
                 header: Header::of::<ActiveBuff>(),
                 id: request.id,
-                entity: crate::Entity(0x8000 + u32::try_from(on.len()).unwrap_or(0)),
+                entity: enshwick_core::Entity(0x8000 + u32::try_from(on.len()).unwrap_or(0)),
                 slot: u32::from(ty.slot),
                 level: request.level,
                 duration,
@@ -440,8 +440,8 @@ pub(crate) extern "system" fn apply_buff(_me: ModHandle, request: *const BuffReq
 
 pub(crate) extern "system" fn remove_buff(
     _me: ModHandle,
-    entity: crate::Entity,
-    id: crate::buffs::BuffTypeId,
+    entity: enshwick_core::Entity,
+    id: enshwick_core::buffs::BuffTypeId,
     removed: *mut u8,
 ) -> Status {
     if removed.is_null() {
@@ -462,8 +462,8 @@ pub(crate) extern "system" fn remove_buff(
 
 pub(crate) extern "system" fn knowledge(
     _me: ModHandle,
-    entity: crate::Entity,
-    id: crate::abi::KnowledgeId,
+    entity: enshwick_core::Entity,
+    id: enshwick_core::abi::KnowledgeId,
     out: *mut KnowledgeInfo,
 ) -> Status {
     let (known, found) = with((false, None), |s| {
@@ -482,7 +482,7 @@ pub(crate) extern "system" fn knowledge(
         };
     };
     // SAFETY: the safe layer passes a headed struct for the call.
-    if unsafe { crate::abi::write_headed(out, info) } {
+    if unsafe { enshwick_core::abi::write_headed(out, info) } {
         Status::OK
     } else {
         Status::BAD_ARGS
@@ -491,14 +491,14 @@ pub(crate) extern "system" fn knowledge(
 
 pub(crate) extern "system" fn game_query(
     _me: ModHandle,
-    entity: crate::Entity,
+    entity: enshwick_core::Entity,
     query: u32,
     holds: *mut u32,
 ) -> Status {
     if holds.is_null() {
         return Status::BAD_ARGS;
     }
-    let holder = (entity != crate::Entity(0)).then_some(entity);
+    let holder = (entity != enshwick_core::Entity(0)).then_some(entity);
     let answer = with(Err(Status::MISSING), |s| {
         // As the loader, which refuses a character with no player record.
         if holder.is_some() && !s.host.players.iter().any(|player| player.entity == entity) {
@@ -522,8 +522,8 @@ pub(crate) extern "system" fn game_query(
 
 pub(crate) extern "system" fn grant_knowledge(
     _me: ModHandle,
-    entity: crate::Entity,
-    id: crate::abi::KnowledgeId,
+    entity: enshwick_core::Entity,
+    id: enshwick_core::abi::KnowledgeId,
     kind: u32,
     value: u32,
 ) -> Status {
@@ -540,14 +540,14 @@ pub(crate) extern "system" fn grant_knowledge(
             return Status::BAD_ARGS;
         }
         s.grants
-            .push((crate::Entity::from_raw(entity.0), id, kind, value));
+            .push((enshwick_core::Entity::from_raw(entity.0), id, kind, value));
         Status::OK
     })
 }
 
 pub(crate) extern "system" fn quests(
     _me: ModHandle,
-    out: *mut crate::abi::KnowledgeId,
+    out: *mut enshwick_core::abi::KnowledgeId,
     capacity: u32,
     count: *mut u32,
 ) -> Status {

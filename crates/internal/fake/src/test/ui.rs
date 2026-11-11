@@ -1,6 +1,6 @@
 //! The mod's interface: what it draws, its markers, dialogs and the player's input.
 
-use crate::abi::Header;
+use enshwick_core::abi::Header;
 
 use super::table;
 use super::{FakeHost, Installed};
@@ -29,16 +29,16 @@ fn reads() -> Reads {
 
 /// An in-game frame `token` with `open` the screen and `reads` its prompt
 /// and host, which it borrows.
-fn in_game(token: u64, open: &str, reads: &Reads) -> crate::abi::UiFrame {
-    crate::abi::UiFrame {
-        header: Header::of::<crate::abi::UiFrame>(),
+fn in_game(token: u64, open: &str, reads: &Reads) -> enshwick_core::abi::UiFrame {
+    enshwick_core::abi::UiFrame {
+        header: Header::of::<enshwick_core::abi::UiFrame>(),
         token,
-        screen: crate::abi::UiFrame::IN_GAME,
+        screen: enshwick_core::abi::UiFrame::IN_GAME,
         reserved: 0,
-        hud_screen: crate::abi::Str::new(open),
-        prompt_title: crate::abi::Str::new(&reads.title),
+        hud_screen: enshwick_core::abi::Str::new(open),
+        prompt_title: enshwick_core::abi::Str::new(&reads.title),
         prompt_verb: reads.verb,
-        screen_host: crate::Entity(reads.host),
+        screen_host: enshwick_core::Entity(reads.host),
         screen_host_template: reads.host_read.map_or([0; 16], |(t, _)| t),
         screen_host_position: reads.host_read.map_or([0; 3], |(_, p)| p),
     }
@@ -56,7 +56,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::Side;
     ///
     /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
@@ -92,7 +91,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::Side;
     ///
     /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
@@ -132,7 +130,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::Side;
     /// use enshwick::ui::HudScreenType;
     ///
@@ -141,7 +138,7 @@ impl Installed {
     /// ```
     #[cfg(feature = "unstable")]
     #[must_use]
-    pub fn draw_screen(&self, screen: crate::ui::HudScreenType) -> Vec<(u32, Vec<Drawn>)> {
+    pub fn draw_screen(&self, screen: enshwick_core::ui::HudScreenType) -> Vec<(u32, Vec<Drawn>)> {
         let mut extensions = table::with(Vec::new(), |s| s.extensions.clone());
         extensions.sort_by_key(|&(_, edge, ..)| edge);
         let open = screen.name();
@@ -179,7 +176,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::Side;
     /// use enshwick::ui::HudScreenType;
     ///
@@ -188,9 +184,9 @@ impl Installed {
     /// assert!(loader.draw_frame().is_empty());
     /// ```
     #[cfg(feature = "unstable")]
-    pub fn open_screen(&self, screen: Option<crate::ui::HudScreenType>) {
+    pub fn open_screen(&self, screen: Option<enshwick_core::ui::HudScreenType>) {
         table::with((), |s| {
-            s.open_screen = screen.map_or("", crate::ui::HudScreenType::name);
+            s.open_screen = screen.map_or("", enshwick_core::ui::HudScreenType::name);
         });
     }
 
@@ -201,7 +197,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::Side;
     ///
     /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
@@ -220,7 +215,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::Entity;
     /// use enshwick::abi::Side;
     ///
@@ -228,7 +222,7 @@ impl Installed {
     /// loader.host_screen(Some(Entity(512)));
     /// assert!(loader.draw_frame().is_empty());
     /// ```
-    pub fn host_screen(&self, host: Option<crate::Entity>) {
+    pub fn host_screen(&self, host: Option<enshwick_core::Entity>) {
         table::with((), |s| {
             let host = host.map_or(0, |e| e.0);
             // As in game, a new host has no template until a step reads it.
@@ -247,7 +241,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::Entity;
     /// use enshwick::abi::Side;
     /// use enshwick::content::Guid;
@@ -257,8 +250,8 @@ impl Installed {
     /// loader.read_screen_host(Guid::named("you.safes:safe"), [1.0, 2.0, 3.0]);
     /// assert!(loader.draw_frame().is_empty());
     /// ```
-    pub fn read_screen_host(&self, template: crate::content::Guid, position: [f64; 3]) {
-        let fixed = crate::ecs::fixed(position);
+    pub fn read_screen_host(&self, template: enshwick_core::content::Guid, position: [f64; 3]) {
+        let fixed = enshwick_core::ecs::fixed(position);
         table::with((), |s| s.screen_host_read = Some((template.0, fixed)));
     }
 
@@ -270,7 +263,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::Side;
     ///
     /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
@@ -291,7 +283,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::Side;
     ///
     /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
@@ -306,7 +297,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.markers().is_empty());
     /// ```
@@ -321,7 +311,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::test::Input;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -336,7 +325,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.dialogs().is_empty());
     /// ```
@@ -353,20 +341,22 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::ui::Response;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(!loader.answer(Some(Response::Ok)));
     /// ```
-    pub fn answer(&self, answer: Option<crate::ui::Response>) -> bool {
+    pub fn answer(&self, answer: Option<enshwick_core::ui::Response>) -> bool {
         let first = table::with(None, |s| {
             (!s.dialogs.is_empty()).then(|| s.dialogs.remove(0))
         });
         let Some((_, answered)) = first else {
             return false;
         };
-        let raw = answer.map_or(crate::abi::UiDialog::CLOSED, crate::ui::Response::to_raw);
+        let raw = answer.map_or(
+            enshwick_core::abi::UiDialog::CLOSED,
+            enshwick_core::ui::Response::to_raw,
+        );
         // SAFETY: the mod's answer callback with its own pointer, once.
         answered.run(|callback, user| unsafe { callback(raw, user) });
         true
@@ -378,7 +368,6 @@ impl Installed {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_fake as enshwick;
 /// use enshwick::test::Drawn;
 ///
 /// let drawn = Drawn::Button { text: "Close".into(), enabled: true };
@@ -453,8 +442,8 @@ pub enum Drawn {
     /// A sound, `UiWidget::SOUND_*`.
     Sound(u32),
     /// A sound container played with
-    /// [`Frame::play`](crate::ui::Frame::play), by its GUID.
-    Play(crate::content::Guid),
+    /// [`Frame::play`](enshwick_core::ui::Frame::play), by its GUID.
+    Play(enshwick_core::content::Guid),
     /// The key hint of a game action.
     InputHint {
         /// The action's reflected name.
@@ -529,7 +518,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{FogInfo, Side};
     ///
     /// let info = FogInfo { width: 2, height: 2, metres_per_pixel: 8.0, size_z: 16.0, ..FogInfo::EMPTY };
@@ -540,7 +528,7 @@ impl FakeHost {
     /// # let _ = loader;
     /// ```
     #[must_use]
-    pub fn fog(mut self, info: crate::abi::FogInfo, pixels: Vec<u8>) -> Self {
+    pub fn fog(mut self, info: enshwick_core::abi::FogInfo, pixels: Vec<u8>) -> Self {
         assert_eq!(
             pixels.len(),
             info.width as usize * info.height as usize,
@@ -565,14 +553,13 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{FogInfo, Side};
     ///
     /// let info = FogInfo { width: 1, height: 1, ..FogInfo::EMPTY };
     /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
     /// loader.set_fog(info, vec![255]);
     /// ```
-    pub fn set_fog(&self, info: crate::abi::FogInfo, pixels: Vec<u8>) {
+    pub fn set_fog(&self, info: enshwick_core::abi::FogInfo, pixels: Vec<u8>) {
         assert_eq!(pixels.len(), info.width as usize * info.height as usize);
         table::with((), |s| s.host.fog = Some((info, pixels)));
     }

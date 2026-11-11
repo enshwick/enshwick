@@ -1,21 +1,20 @@
 //! Events: the mod's subscriptions, raised loader and game events, mod events.
 
-use crate::abi::Event;
-use crate::abi::Header;
-use crate::events::LoaderEvent;
+use enshwick_core::abi::Event;
+use enshwick_core::abi::Header;
+use enshwick_core::events::LoaderEvent;
 
 use super::table;
 use super::{FakeHost, Installed};
 
 impl FakeHost {
     /// A game event type of the fake build: listed by
-    /// [`Load::game_event_types`](crate::Load::game_event_types) and resolved by
-    /// [`Load::game_event_type`](crate::Load::game_event_type) under `name`.
+    /// [`Load::game_event_types`](enshwick_core::Load::game_event_types) and resolved by
+    /// [`Load::game_event_type`](enshwick_core::Load::game_event_type) under `name`.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new()
     ///     .game_event_type("you::Rang", 0x0042, 16)
     ///     .install();
@@ -40,7 +39,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.subscriptions().is_empty());
     /// ```
@@ -52,14 +50,13 @@ impl Installed {
     }
 
     /// Raises the event `E` with `data` to every handler of the mod, on this
-    /// thread; returns how many ran. [`Ticked`](crate::events::Ticked)
+    /// thread; returns how many ran. [`Ticked`](enshwick_core::events::Ticked)
     /// reaches every tick handler, periodic ones too, whatever their period;
     /// [`tick`](Self::tick) runs a step as the loader does.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::TickData;
     /// use enshwick::events;
     ///
@@ -86,7 +83,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::Event;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -123,7 +119,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.game_event_types().is_empty());
     /// ```
@@ -139,7 +134,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert_eq!(loader.raise_game_event(0x0042, &[0; 16]), 0);
     /// ```
@@ -152,8 +146,8 @@ impl Installed {
                 .map(|g| g.1)
                 .collect()
         });
-        let data = crate::abi::GameEventData {
-            header: Header::of::<crate::abi::GameEventData>(),
+        let data = enshwick_core::abi::GameEventData {
+            header: Header::of::<enshwick_core::abi::GameEventData>(),
             type_hash,
             size: u32::try_from(bytes.len()).unwrap_or(u32::MAX),
             data: bytes.as_ptr(),
@@ -171,7 +165,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.defined_events().is_empty());
     /// ```
@@ -187,7 +180,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.sent_events().is_empty());
     /// ```
@@ -204,7 +196,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.sent_event_data().is_empty());
     /// ```
@@ -221,7 +212,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// #[enshwick::event(of = trading_post, name = "sold")]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct Sold {
@@ -232,7 +222,7 @@ impl Installed {
     /// assert_eq!(loader.send_mod_event(&Sold { item: 1 }), 0);
     /// ```
     #[must_use = "the count says whether the mod handles the event"]
-    pub fn send_mod_event<E: crate::services::ModEvent>(&self, event: &E) -> usize {
+    pub fn send_mod_event<E: enshwick_core::services::ModEvent>(&self, event: &E) -> usize {
         let offered: Vec<(&str, u64)> = E::LAYOUT
             .iter()
             // SAFETY: the declaration's names are static strings.
@@ -243,7 +233,7 @@ impl Installed {
                 .iter()
                 .filter(|sub| {
                     sub.0 == E::NAME
-                        && crate::services::compare(&table::view(&sub.1), &offered).is_ok()
+                        && enshwick_core::services::compare(&table::view(&sub.1), &offered).is_ok()
                         && sub.2 as usize <= size_of::<E>()
                 })
                 .map(|sub| sub.3)

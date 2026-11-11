@@ -2,12 +2,12 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{
+use crate::test::table::{Registered, found, put, text, with};
+use enshwick_core::abi::{
     AccountActionType, DaytimeInfo, EntityPlace, EventTypeInfo, GameEventFn, Header, ModHandle,
     PlayerInfo, RenameCallFn, Side, SpawnRequest, Status, StatusFn, Str, TeleportRequest,
     TerrainEdit, TerrainMaterialInfo, Voxel, WeatherFront,
 };
-use crate::test::table::{Registered, found, put, text, with};
 
 /// Whether the entity calls cannot run here, where the loader answers
 /// [`Status::UNAVAILABLE`]: no server runs, or the build lacks the commands.
@@ -17,7 +17,7 @@ pub(crate) fn entity_calls_off(s: &crate::test::table::State) -> bool {
 
 pub(crate) extern "system" fn component(
     _me: ModHandle,
-    entity: crate::Entity,
+    entity: enshwick_core::Entity,
     type_hash: u32,
     out: *mut *const c_void,
 ) -> Status {
@@ -48,7 +48,7 @@ pub(crate) extern "system" fn read_only(
 
 pub(crate) extern "system" fn entity_template(
     _me: ModHandle,
-    entity: crate::Entity,
+    entity: enshwick_core::Entity,
     out: *mut [u8; 16],
 ) -> Status {
     found(
@@ -59,7 +59,7 @@ pub(crate) extern "system" fn entity_template(
 
 pub(crate) extern "system" fn player(
     _me: ModHandle,
-    entity: crate::Entity,
+    entity: enshwick_core::Entity,
     out: *mut PlayerInfo,
 ) -> Status {
     let player = with(None, |s| {
@@ -90,7 +90,7 @@ pub(crate) extern "system" fn server_world() -> u64 {
 
 pub(crate) extern "system" fn actions(
     me: ModHandle,
-    callback: crate::abi::ActionFn,
+    callback: enshwick_core::abi::ActionFn,
     user: *mut c_void,
 ) -> Status {
     with(Status::MISSING, |s| {
@@ -102,7 +102,11 @@ pub(crate) extern "system" fn actions(
     })
 }
 
-pub(crate) extern "system" fn chat(_me: ModHandle, to: crate::PlayerKey, value: Str) -> Status {
+pub(crate) extern "system" fn chat(
+    _me: ModHandle,
+    to: enshwick_core::PlayerKey,
+    value: Str,
+) -> Status {
     let value = text(value);
     with(Status::MISSING, |s| {
         s.chat.push((to, value));
@@ -112,7 +116,7 @@ pub(crate) extern "system" fn chat(_me: ModHandle, to: crate::PlayerKey, value: 
 
 pub(crate) extern "system" fn set_label(
     _me: ModHandle,
-    entity: crate::Entity,
+    entity: enshwick_core::Entity,
     value: Str,
 ) -> Status {
     let value = text(value);
@@ -172,12 +176,12 @@ pub(crate) extern "system" fn run_console(_me: ModHandle, line: Str, out: *mut S
             Some(actions) => {
                 let reply = crate::test::ask(
                     actions,
-                    crate::abi::ActionCall::CONSOLE,
+                    enshwick_core::abi::ActionCall::CONSOLE,
                     &crate::test::console(),
                     0,
                     &rest,
                     &word.to_lowercase(),
-                    crate::abi::ActionTarget::NONE,
+                    enshwick_core::abi::ActionTarget::NONE,
                 );
                 reply.get(1..).unwrap_or_default().to_owned()
             }
@@ -265,7 +269,7 @@ pub(crate) extern "system" fn world_quiet(_me: ModHandle) -> Status {
     })
 }
 
-pub(crate) extern "system" fn destroy(_me: ModHandle, entity: crate::Entity) -> Status {
+pub(crate) extern "system" fn destroy(_me: ModHandle, entity: enshwick_core::Entity) -> Status {
     with(Status::MISSING, |s| {
         if entity_calls_off(s) {
             return Status::UNAVAILABLE;
@@ -305,7 +309,7 @@ pub(crate) extern "system" fn world_key(_me: ModHandle, out: *mut Str) -> Status
 
 pub(crate) extern "system" fn component_write(
     _me: ModHandle,
-    entity: crate::Entity,
+    entity: enshwick_core::Entity,
     type_hash: u32,
     out: *mut *mut c_void,
 ) -> Status {
@@ -373,7 +377,11 @@ pub(crate) extern "system" fn teleport(_me: ModHandle, request: *const TeleportR
     })
 }
 
-pub(crate) extern "system" fn notify(_me: ModHandle, key: crate::PlayerKey, value: Str) -> Status {
+pub(crate) extern "system" fn notify(
+    _me: ModHandle,
+    key: enshwick_core::PlayerKey,
+    value: Str,
+) -> Status {
     let value = text(value);
     with(Status::MISSING, |s| {
         if !s.host.net_peers.contains(&key.get()) {
@@ -390,7 +398,7 @@ pub(crate) const FIRST_SPAWNED: u32 = 0x10_0000;
 pub(crate) extern "system" fn spawn(
     _me: ModHandle,
     request: *const SpawnRequest,
-    out: *mut crate::Entity,
+    out: *mut enshwick_core::Entity,
 ) -> Status {
     let Some(request) = super::get_headed(request) else {
         return Status::BAD_ARGS;
@@ -405,18 +413,18 @@ pub(crate) extern "system" fn spawn(
         Some(entity)
     });
     match entity {
-        Some(entity) => put(out, crate::Entity(entity)),
+        Some(entity) => put(out, enshwick_core::Entity(entity)),
         None => Status::MISSING,
     }
 }
 
 pub(crate) extern "system" fn progress_write(
     _me: ModHandle,
-    entity: crate::Entity,
+    entity: enshwick_core::Entity,
     what: u32,
     value: u32,
 ) -> Status {
-    use crate::abi::{
+    use enshwick_core::abi::{
         PROGRESS_ADD_EXPERIENCE, PROGRESS_OPEN, PROGRESS_SET_EXPERIENCE, PROGRESS_SET_LEVEL,
     };
     with(Status::MISSING, |s| {
@@ -460,8 +468,8 @@ pub(crate) extern "system" fn progress_write(
 
 pub(crate) extern "system" fn drop_items(
     _me: ModHandle,
-    request: *const crate::abi::DropRequest,
-    out: *mut crate::Entity,
+    request: *const enshwick_core::abi::DropRequest,
+    out: *mut enshwick_core::Entity,
 ) -> Status {
     let Some(request) = super::get_headed(request) else {
         return Status::BAD_ARGS;
@@ -472,7 +480,7 @@ pub(crate) extern "system" fn drop_items(
     let rarity = u8::try_from(request.rarity).ok();
     if !(1..=u32::from(u16::MAX)).contains(&request.count)
         || rarity
-            .and_then(crate::affixes::ItemRarity::from_raw)
+            .and_then(enshwick_core::affixes::ItemRarity::from_raw)
             .is_none()
     {
         return Status::BAD_ARGS;
@@ -483,11 +491,11 @@ pub(crate) extern "system" fn drop_items(
         }
         // Above every spawn's id, so the two never share one.
         let entity = FIRST_SPAWNED + 0x1_0000 + u32::try_from(s.drops.len()).unwrap_or(0);
-        s.drops.push((crate::Entity(entity), request));
+        s.drops.push((enshwick_core::Entity(entity), request));
         Some(Ok(entity))
     });
     match entity {
-        Some(Ok(entity)) => put(out, crate::Entity(entity)),
+        Some(Ok(entity)) => put(out, enshwick_core::Entity(entity)),
         Some(Err(status)) => status,
         None => Status::MISSING,
     }
@@ -498,7 +506,7 @@ pub(crate) extern "system" fn time_of_day(_me: ModHandle, out: *mut DaytimeInfo)
         return Status::MISSING;
     };
     // SAFETY: the safe layer passes a headed struct for the call.
-    if unsafe { crate::abi::write_headed(out, info) } {
+    if unsafe { enshwick_core::abi::write_headed(out, info) } {
         Status::OK
     } else {
         Status::BAD_ARGS
@@ -758,7 +766,7 @@ pub(crate) extern "system" fn voxel_read(
 /// 0 and up to 16, a position at 0 or more, and for an add or a flatten a
 /// terrain material, for an add a height above 0 and up to 16.
 pub(crate) fn terrain_edit_valid(edit: &TerrainEdit) -> bool {
-    let reach = |metres: f32| metres > 0.0 && metres <= crate::terrain::MAX_RADIUS;
+    let reach = |metres: f32| metres > 0.0 && metres <= enshwick_core::terrain::MAX_RADIUS;
     let material = (1..=0x7f).contains(&edit.material);
     reach(edit.radius)
         && edit
@@ -776,9 +784,9 @@ pub(crate) fn terrain_edit_valid(edit: &TerrainEdit) -> bool {
 
 pub(crate) extern "system" fn build_rights(
     _me: ModHandle,
-    check: *mut crate::abi::BuildRights,
+    check: *mut enshwick_core::abi::BuildRights,
 ) -> Status {
-    use crate::abi::BuildRights;
+    use enshwick_core::abi::BuildRights;
     let Some(mut request) = super::get_headed::<BuildRights>(check.cast_const()) else {
         return Status::BAD_ARGS;
     };
@@ -808,7 +816,7 @@ pub(crate) extern "system" fn build_rights(
     request.refusal = refusal;
     // SAFETY: the safe layer passes `check` non-null (read above) and
     // writable for the size its header states, untouched by other threads.
-    if unsafe { crate::abi::write_headed(check, request) } {
+    if unsafe { enshwick_core::abi::write_headed(check, request) } {
         Status::OK
     } else {
         Status::BAD_ARGS
@@ -817,7 +825,7 @@ pub(crate) extern "system" fn build_rights(
 
 pub(crate) extern "system" fn map_markers(
     _me: ModHandle,
-    out: *mut crate::abi::MapMarkerInfo,
+    out: *mut enshwick_core::abi::MapMarkerInfo,
     entry_size: u32,
     capacity: u32,
     count: *mut u32,
@@ -840,7 +848,7 @@ pub(crate) extern "system" fn map_markers(
 
 pub(crate) extern "system" fn map_frame(
     _me: ModHandle,
-    out: *mut crate::abi::MapFrameInfo,
+    out: *mut enshwick_core::abi::MapFrameInfo,
 ) -> Status {
     if !crate::test::table::on_game_thread() {
         return Status::WRONG_THREAD;
@@ -858,7 +866,7 @@ pub(crate) extern "system" fn map_frame(
         return Status::MISSING;
     };
     // SAFETY: the safe layer passes a headed struct for the call.
-    if unsafe { crate::abi::write_headed(out, frame) } {
+    if unsafe { enshwick_core::abi::write_headed(out, frame) } {
         Status::OK
     } else {
         Status::BAD_ARGS
@@ -901,9 +909,9 @@ pub(crate) extern "system" fn world_persists(
 pub(crate) extern "system" fn account_action(
     _me: ModHandle,
     action: AccountActionType,
-    account: crate::PlayerKey,
+    account: enshwick_core::PlayerKey,
 ) -> Status {
-    if account == crate::PlayerKey::new(0) || action.0 > AccountActionType::UN_BAN.0 {
+    if account == enshwick_core::PlayerKey::new(0) || action.0 > AccountActionType::UN_BAN.0 {
         return Status::BAD_ARGS;
     }
     if !crate::test::table::on_game_thread() {
@@ -944,10 +952,10 @@ fn serving(s: &super::State) -> bool {
 
 pub(crate) extern "system" fn chat_mute_set(
     _me: ModHandle,
-    account: crate::PlayerKey,
+    account: enshwick_core::PlayerKey,
     muted: u8,
 ) -> Status {
-    if account == crate::PlayerKey::new(0) || muted > 1 {
+    if account == enshwick_core::PlayerKey::new(0) || muted > 1 {
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
@@ -974,10 +982,10 @@ pub(crate) extern "system" fn chat_mute_set(
 
 pub(crate) extern "system" fn chat_mute_has(
     _me: ModHandle,
-    account: crate::PlayerKey,
+    account: enshwick_core::PlayerKey,
     muted: *mut u8,
 ) -> Status {
-    if account == crate::PlayerKey::new(0) || muted.is_null() {
+    if account == enshwick_core::PlayerKey::new(0) || muted.is_null() {
         return Status::BAD_ARGS;
     }
     let has = with(None, |s| serving(s).then(|| s.muted.contains(&account)));

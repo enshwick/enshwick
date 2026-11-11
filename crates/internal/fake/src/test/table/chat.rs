@@ -2,8 +2,8 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{ChatFilterFn, ModHandle, Status};
 use crate::test::table::{Registered, Registration, with};
+use enshwick_core::abi::{ChatFilterFn, ModHandle, Status};
 
 pub(crate) extern "system" fn chat_filter(
     me: ModHandle,

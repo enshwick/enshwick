@@ -1,10 +1,10 @@
 //! The fake's mod commands: the names the mod takes, lines run for remote
 //! callers and the list of names, as the loader answers them.
 
-use crate::abi::{
+use crate::test::table::{Registration, put_headed, text, with};
+use enshwick_core::abi::{
     ActionCall, ActionReply, ActionTarget, CommandInfo, ModHandle, PlayerInfo, Status, Str,
 };
-use crate::test::table::{Registration, put_headed, text, with};
 
 /// What the mod did with its commands.
 #[derive(Debug, Default)]
@@ -23,7 +23,7 @@ pub(crate) struct FakeCommands {
 }
 
 #[cfg(feature = "unstable")]
-use crate::actions::{
+use enshwick_core::actions::{
     is_valid_id as is_window_id,
     window::{MAX_CALL_PLAYERS, MAX_WAITING},
 };
@@ -46,7 +46,7 @@ fn is_window_id(id: &str) -> bool {
 pub(crate) extern "system" fn action_window(
     _me: ModHandle,
     id: Str,
-    players: *const crate::PlayerKey,
+    players: *const enshwick_core::PlayerKey,
     count: u32,
     close: u32,
 ) -> Status {
@@ -56,7 +56,7 @@ pub(crate) extern "system" fn action_window(
     };
     if count as usize > MAX_CALL_PLAYERS
         || (players.is_null() && count != 0)
-        || close > crate::abi::WINDOW_UPDATE
+        || close > enshwick_core::abi::WINDOW_UPDATE
     {
         return Status::BAD_ARGS;
     }
@@ -71,7 +71,7 @@ pub(crate) extern "system" fn action_window(
             .collect()
     };
     with(Status::MISSING, |s| {
-        if s.host.side == crate::abi::Side::CLIENT && !s.host.hosting {
+        if s.host.side == enshwick_core::abi::Side::CLIENT && !s.host.hosting {
             return Status::MISSING;
         }
         if s.actions.is_none() || s.commands.windows.len() + keys.len() > MAX_WAITING {
@@ -84,10 +84,10 @@ pub(crate) extern "system" fn action_window(
     })
 }
 
-use crate::command_names::{MAX_LINE, Named, Refusal, check};
+use enshwick_core::command_names::{MAX_LINE, Named, Refusal, check};
 /// The game's permission bits a remote caller may hold.
 #[cfg(feature = "unstable")]
-const ALL_BITS: u8 = crate::world::PlayerPermissions::ALL_BITS;
+const ALL_BITS: u8 = enshwick_core::world::PlayerPermissions::ALL_BITS;
 /// Without the `world` module the fake keeps every bit a caller names.
 #[cfg(not(feature = "unstable"))]
 const ALL_BITS: u8 = u8::MAX;
@@ -243,10 +243,10 @@ fn remote_caller(label: &str, permissions: u32) -> PlayerInfo {
     let mut name = [0u8; 64];
     name[..label.len()].copy_from_slice(label.as_bytes());
     PlayerInfo {
-        header: crate::abi::Header::of::<PlayerInfo>(),
+        header: enshwick_core::abi::Header::of::<PlayerInfo>(),
         slot: u32::MAX,
-        entity: crate::Entity(0),
-        key: crate::PlayerKey::new(0),
+        entity: enshwick_core::Entity(0),
+        key: enshwick_core::PlayerKey::new(0),
         permissions: u8::try_from(permissions & u32::from(ALL_BITS)).unwrap_or(0),
         name_len: u8::try_from(label.len()).unwrap_or(64),
         name,
@@ -272,7 +272,7 @@ pub(crate) extern "system" fn run_command(
     with(Status::MISSING, |s| {
         let kept = s.run_out.insert(text.into());
         let reply = ActionReply {
-            header: crate::abi::Header::of::<ActionReply>(),
+            header: enshwick_core::abi::Header::of::<ActionReply>(),
             done: u8::from(done == "1"),
             text: Str::new(kept),
         };
@@ -300,7 +300,7 @@ pub(crate) extern "system" fn command_list(
             .listed
             .iter()
             .map(|[name, alias, id]| CommandInfo {
-                header: crate::abi::Header::of::<CommandInfo>(),
+                header: enshwick_core::abi::Header::of::<CommandInfo>(),
                 name: Str::new(name),
                 alias: Str::new(alias),
                 mod_id: Str::new(id),

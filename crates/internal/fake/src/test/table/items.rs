@@ -2,8 +2,8 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{ItemActionFn, ModHandle, Status};
 use crate::test::table::{Registered, Registration, with};
+use enshwick_core::abi::{ItemActionFn, ModHandle, Status};
 
 pub(crate) extern "system" fn item_filter(
     me: ModHandle,

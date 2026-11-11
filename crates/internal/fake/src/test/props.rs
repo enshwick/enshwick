@@ -1,12 +1,12 @@
 //! The fake's props: what stands in its world, the state each holds, and how transactions change them.
 
 use super::{FakeHost, FakeTransaction, Installed, table};
-use crate::Entity;
-use crate::ItemId;
-use crate::abi::{PropRemove, Status, TransactionInfo};
 use crate::test::FakeChange;
+use enshwick_core::Entity;
+use enshwick_core::ItemId;
+use enshwick_core::abi::{PropRemove, Status, TransactionInfo};
 #[cfg(feature = "unstable")]
-use crate::world::HeldState;
+use enshwick_core::world::HeldState;
 
 /// Half the side of the box the fake checks a player's rights for around a
 /// prop, in metres, as the loader does for an item without a placement
@@ -39,7 +39,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::ItemId;
     /// use enshwick::Entity;
     ///
@@ -67,7 +66,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::ItemId;
     /// use enshwick::Entity;
     ///
@@ -86,7 +84,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let _loader = enshwick::test::FakeHost::new().item_grows(enshwick::ItemId::new(30)).install();
     /// ```
     #[must_use]
@@ -103,7 +100,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let _loader = enshwick::test::FakeHost::new().item_not_a_prop(enshwick::ItemId::new(30)).install();
     /// ```
     #[must_use]
@@ -119,7 +115,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let _loader = enshwick::test::FakeHost::new().placement_box(enshwick::ItemId::new(30), [-1.0, 0.0, -0.5], [1.0, 2.0, 0.5]).install();
     /// ```
     #[must_use]
@@ -157,7 +152,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::ItemId;
     /// use enshwick::Entity;
     ///
@@ -173,7 +167,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::ItemId;
     /// use enshwick::Entity;
     ///
@@ -191,7 +184,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::ItemId;
     /// use enshwick::Entity;
     /// use enshwick::world::HeldState;
@@ -381,7 +373,8 @@ pub(crate) fn undo(
             return Err((Status::REFUSED, removed.holds));
         }
         let taken = host.props.iter().any(|prop| {
-            prop.item == removed.item && crate::ecs::fixed(prop.at) == crate::ecs::fixed(removed.at)
+            prop.item == removed.item
+                && enshwick_core::ecs::fixed(prop.at) == enshwick_core::ecs::fixed(removed.at)
         });
         if taken {
             return Err((Status::REFUSED, 0));

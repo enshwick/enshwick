@@ -2,12 +2,12 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{
+use crate::test::table::{Registered, State, text, with};
+use enshwick_core::__fake::SCREENS;
+use enshwick_core::abi::{
     FogInfo, MapMarkerTypeInfo, ModHandle, Side, Status, UiAnswerFn, UiDialog, UiExtension,
     UiFrameFn, UiMarker, UiWidget,
 };
-use crate::test::table::{Registered, State, text, with};
-use enshwick_core::__fake::SCREENS;
 
 /// The screens on which the player is in the world with no window open,
 /// as the loader's controls gate counts them; a panel there is refused.
@@ -197,7 +197,7 @@ fn draw(frame: u64, w: &mut UiWidget) -> Status {
                 if !holds_sound(s, w.sound) {
                     return Status::MISSING;
                 }
-                Drawn::Play(crate::content::Guid(w.sound))
+                Drawn::Play(enshwick_core::content::Guid(w.sound))
             }
             UiWidget::WINDOW | UiWidget::END => return Status::REFUSED,
             _ if !open => return Status::REFUSED,

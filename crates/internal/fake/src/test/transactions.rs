@@ -1,8 +1,8 @@
 //! The fake's transactions: what a mod committed, where each stands, and the blocks it knows.
 
 use super::{FakeHost, Installed, table};
-use crate::ItemId;
-use crate::abi::{BlockPlace, ModHandle, Status, TerrainEdit, TransactionInfo, Voxel};
+use enshwick_core::ItemId;
+use enshwick_core::abi::{BlockPlace, ModHandle, Status, TerrainEdit, TransactionInfo, Voxel};
 
 impl FakeHost {
     /// A building shape the fake knows: `shape`'s `VoxelBlueprintItem` of
@@ -12,7 +12,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::ItemId;
     ///
     /// let loader = enshwick::test::FakeHost::new().blueprint(ItemId::new(10), [4, 4, 4]).install();
@@ -32,7 +31,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::ItemId;
     ///
     /// let loader = enshwick::test::FakeHost::new().building_material(ItemId::new(20), 0x83).install();
@@ -57,7 +55,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.transactions().is_empty());
     /// ```
@@ -74,14 +71,13 @@ impl Installed {
     /// player at the commit. The fake keeps the bricks of each change's box as
     /// undo data, and changes nothing it answers reads from. The voxels an
     /// applied transaction writes over a box are raised as its mod's
-    /// [`Event::VOXELS_CHANGED`](crate::abi::Event::VOXELS_CHANGED) brick by
+    /// [`Event::VOXELS_CHANGED`](enshwick_core::abi::Event::VOXELS_CHANGED) brick by
     /// brick, against the fake's loaded voxels, and an undo raises them
     /// back the same way.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// loader.run_transactions();
     /// assert!(loader.transactions().is_empty());
@@ -165,7 +161,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// loader.fail_transaction(1, enshwick::abi::Status::NOT_LOADED);
     /// assert!(loader.transactions().is_empty());
@@ -196,7 +191,6 @@ impl Installed {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_fake as enshwick;
 /// use enshwick::test::FakeChange;
 ///
 /// fn blocks(changes: &[FakeChange]) -> usize {
@@ -209,9 +203,9 @@ pub enum FakeChange {
     /// A terrain add, dig or flatten.
     Terrain(TerrainEdit),
     /// A prop placed.
-    PlaceProp(crate::abi::PropPlace),
+    PlaceProp(enshwick_core::abi::PropPlace),
     /// A prop removed.
-    RemoveProp(crate::abi::PropRemove),
+    RemoveProp(enshwick_core::abi::PropRemove),
     /// Voxels written over the box of `size` from `min`.
     Voxels {
         /// The box's lowest voxel.
@@ -298,7 +292,6 @@ impl FakeChange {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_fake as enshwick;
 /// use enshwick::abi::TransactionInfo;
 ///
 /// fn applied(loader: &enshwick::test::Installed) -> usize {
@@ -323,7 +316,7 @@ pub struct FakeTransaction {
     /// Where it stands, as the mod reads it.
     pub info: TransactionInfo,
     /// The entities of the props it placed and still holds.
-    pub(crate) created: Vec<crate::Entity>,
+    pub(crate) created: Vec<enshwick_core::Entity>,
     /// The props it removed, with the state they held.
     pub(crate) removed: Vec<super::props::FakeProp>,
 }
@@ -343,7 +336,7 @@ impl FakeTransaction {
         let permissions = host
             .players
             .iter()
-            .find(|player| player.entity == crate::Entity(self.actor))
+            .find(|player| player.entity == enshwick_core::Entity(self.actor))
             .map_or(0, |player| player.permissions);
         self.changes
             .iter()
@@ -362,7 +355,7 @@ fn voxels_written(
     host: &FakeHost,
     transaction: &FakeTransaction,
     undo: bool,
-) -> Vec<crate::abi::VoxelChange> {
+) -> Vec<enshwick_core::abi::VoxelChange> {
     transaction
         .changes
         .iter()
@@ -376,7 +369,7 @@ fn voxels_written(
             _ => None,
         })
         .flatten()
-        .map(|change| crate::abi::VoxelChange {
+        .map(|change| enshwick_core::abi::VoxelChange {
             before: if undo { change.after } else { change.before },
             after: if undo { change.before } else { change.after },
             ..change

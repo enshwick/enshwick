@@ -2,15 +2,15 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{
+use crate::test::table::{Registered, put, text, with};
+use enshwick_core::abi::{
     Event, EventFn, EventSpec, ModEventFn, ModHandle, ServiceFound, ServiceSpec, Status, Str,
 };
-use crate::test::table::{Registered, put, text, with};
 
 /// The `(name, hash)` fields of a layout the safe layer passed.
-pub(crate) fn layout_of(layout: &crate::abi::Layout) -> Option<Vec<(String, u64)>> {
+pub(crate) fn layout_of(layout: &enshwick_core::abi::Layout) -> Option<Vec<(String, u64)>> {
     // SAFETY: the safe layer passes the layout of a declared type.
-    unsafe { crate::services::read_layout(layout) }
+    unsafe { enshwick_core::services::read_layout(layout) }
 }
 
 /// Borrowed `(name, hash)` pairs.
@@ -60,7 +60,11 @@ pub(crate) extern "system" fn service(
     };
     let answer = with(Err("no fake installed".to_owned()), |s| {
         if s.manifest.as_ref().is_some_and(|manifest| {
-            manifest.unexported(crate::schema_section::Kind::Service, &name, &s.host.exports)
+            manifest.unexported(
+                enshwick_core::schema_section::Kind::Service,
+                &name,
+                &s.host.exports,
+            )
         }) {
             return Err("its mod does not export it".to_owned());
         }
@@ -71,7 +75,7 @@ pub(crate) extern "system" fn service(
             .chain(&s.published)
             .find(|p| p.name == name && p.major == wanted.major)
             .ok_or_else(|| "no running mod publishes it".to_owned())?;
-        crate::services::compare(&view(&fields), &view(&offered.fields))
+        enshwick_core::services::compare(&view(&fields), &view(&offered.fields))
             .map_err(|e| e.to_string())?;
         Ok((offered.table, offered.fields.len()))
     });
@@ -144,7 +148,11 @@ pub(crate) extern "system" fn subscribe_event(
     };
     with(Status::MISSING, |s| {
         if s.manifest.as_ref().is_some_and(|manifest| {
-            manifest.unexported(crate::schema_section::Kind::Event, &name, &s.host.exports)
+            manifest.unexported(
+                enshwick_core::schema_section::Kind::Event,
+                &name,
+                &s.host.exports,
+            )
         }) {
             return Status::REFUSED;
         }
@@ -189,13 +197,14 @@ pub(crate) extern "system" fn declare_content(
     out: *mut [u8; 16],
 ) -> Status {
     let id = text(id);
-    let Some(guid) = crate::content::Guid::try_named(&id) else {
+    let Some(guid) = enshwick_core::content::Guid::try_named(&id) else {
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
         let clash = s.content_ids.iter().any(|known| {
             *known != id
-                && crate::content::Guid::try_named(known).is_some_and(|g| g.fnv1a() == guid.fnv1a())
+                && enshwick_core::content::Guid::try_named(known)
+                    .is_some_and(|g| g.fnv1a() == guid.fnv1a())
         });
         if clash {
             return Status::REFUSED;
@@ -252,17 +261,21 @@ pub(crate) extern "system" fn crafting_prop(
 
 pub(crate) extern "system" fn use_content(_me: ModHandle, id: Str) -> Status {
     let id = text(id);
-    if crate::content::Guid::try_named(&id).is_none() {
+    if enshwick_core::content::Guid::try_named(&id).is_none() {
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
         let refused = s.manifest.as_ref().is_some_and(|manifest| {
-            manifest.unexported(crate::schema_section::Kind::Content, &id, &s.host.exports)
+            manifest.unexported(
+                enshwick_core::schema_section::Kind::Content,
+                &id,
+                &s.host.exports,
+            )
         });
         if !refused {
             return Status::OK;
         }
-        crate::test::table::warn_unexported(s, crate::schema_section::Kind::Content, &id);
+        crate::test::table::warn_unexported(s, enshwick_core::schema_section::Kind::Content, &id);
         Status::REFUSED
     })
 }

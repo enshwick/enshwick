@@ -2,9 +2,9 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{ModHandle, ResourceKey, ResourcePatchFn, Status, Str};
 use crate::test::ServedResource;
 use crate::test::table::{Registered, found, put, put_list, text, with};
+use enshwick_core::abi::{ModHandle, ResourceKey, ResourcePatchFn, Status, Str};
 
 pub(crate) extern "system" fn serve_resource(
     me: ModHandle,
@@ -54,7 +54,7 @@ pub(crate) extern "system" fn rebuild_resource(_me: ModHandle, key: *const Resou
 
 pub(crate) extern "system" fn recipe_rule(
     _me: ModHandle,
-    kind: crate::abi::RecipeRuleKind,
+    kind: enshwick_core::abi::RecipeRuleKind,
     name: Str,
     disable: u32,
 ) -> Status {
@@ -70,7 +70,7 @@ pub(crate) extern "system" fn recipe_rule(
 
 pub(crate) extern "system" fn recipe_disabled(
     _me: ModHandle,
-    recipe: crate::RecipeId,
+    recipe: enshwick_core::RecipeId,
     out: *mut u32,
 ) -> Status {
     let disabled = with(false, |s| s.host.disabled_recipes.contains(&recipe.get()));
@@ -83,8 +83,8 @@ pub(crate) extern "system" fn recipe_disabled(
 
 pub(crate) extern "system" fn recipe_kind(
     _me: ModHandle,
-    item: crate::ItemId,
-    out: *mut crate::abi::RecipeKind,
+    item: enshwick_core::ItemId,
+    out: *mut enshwick_core::abi::RecipeKind,
 ) -> Status {
     found(
         with(None, |s| s.host.recipe_kinds.get(&item.get()).copied()),
@@ -94,13 +94,16 @@ pub(crate) extern "system" fn recipe_kind(
 
 pub(crate) extern "system" fn change_data(
     _me: ModHandle,
-    change: *const crate::abi::DataChange,
+    change: *const enshwick_core::abi::DataChange,
 ) -> Status {
     // SAFETY: the safe layer passes null or a record with its header, valid
     // for the call; an all-zero record is valid, and `item` reads as zero
     // for a record of a mod built before it.
     let Some(raw) = (unsafe {
-        crate::abi::read_headed(change, core::mem::offset_of!(crate::abi::DataChange, item))
+        enshwick_core::abi::read_headed(
+            change,
+            core::mem::offset_of!(enshwick_core::abi::DataChange, item),
+        )
     }) else {
         return Status::BAD_ARGS;
     };
@@ -108,14 +111,14 @@ pub(crate) extern "system" fn change_data(
     let source = unsafe { raw.source.as_str() }
         .unwrap_or_default()
         .to_owned();
-    if raw.select != crate::abi::DataSelect::ENTRY {
-        if let Ok(Some(change)) = crate::content::changes::RecipesChange::from_abi(&raw) {
+    if raw.select != enshwick_core::abi::DataSelect::ENTRY {
+        if let Ok(Some(change)) = enshwick_core::content::changes::RecipesChange::from_abi(&raw) {
             return with(Status::MISSING, |s| {
                 s.changes.recipes.push((change, source));
                 Status::OK
             });
         }
-        let Ok(Some(change)) = crate::content::changes::ItemsChange::from_abi(&raw) else {
+        let Ok(Some(change)) = enshwick_core::content::changes::ItemsChange::from_abi(&raw) else {
             return Status::BAD_ARGS;
         };
         return with(Status::MISSING, |s| {
@@ -123,7 +126,7 @@ pub(crate) extern "system" fn change_data(
             Status::OK
         });
     }
-    let Ok(Some(change)) = crate::content::changes::Change::from_abi(&raw) else {
+    let Ok(Some(change)) = enshwick_core::content::changes::Change::from_abi(&raw) else {
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
@@ -134,21 +137,24 @@ pub(crate) extern "system" fn change_data(
 
 pub(crate) extern "system" fn declare_change(
     _me: ModHandle,
-    change: *const crate::abi::DataChange,
-    out: *mut crate::abi::ChangeId,
+    change: *const enshwick_core::abi::DataChange,
+    out: *mut enshwick_core::abi::ChangeId,
 ) -> Status {
-    use crate::content::changes::{Change, Field, ItemsChange, Target};
+    use enshwick_core::content::changes::{Change, Field, ItemsChange, Target};
     if out.is_null() {
         return Status::BAD_ARGS;
     }
     // SAFETY: the safe layer passes null or a full record with its header,
     // valid for the call.
     let Some(raw) = (unsafe {
-        crate::abi::read_headed(change, <crate::abi::DataChange as crate::abi::Headed>::BORN)
+        enshwick_core::abi::read_headed(
+            change,
+            <enshwick_core::abi::DataChange as enshwick_core::abi::Headed>::BORN,
+        )
     }) else {
         return Status::BAD_ARGS;
     };
-    let target = if raw.select == crate::abi::DataSelect::ENTRY {
+    let target = if raw.select == enshwick_core::abi::DataSelect::ENTRY {
         Change::from_abi(&raw)
             .ok()
             .flatten()
@@ -173,7 +179,8 @@ pub(crate) extern "system" fn declare_change(
             source,
             value: None,
         });
-        let id = crate::abi::ChangeId(u32::try_from(s.changes.live.len()).unwrap_or(u32::MAX));
+        let id =
+            enshwick_core::abi::ChangeId(u32::try_from(s.changes.live.len()).unwrap_or(u32::MAX));
         // SAFETY: `out` is non-null by the check above and the safe layer
         // points it at a writable `ChangeId` for the call.
         unsafe { out.write(id) };
@@ -183,15 +190,15 @@ pub(crate) extern "system" fn declare_change(
 
 pub(crate) extern "system" fn set_change(
     _me: ModHandle,
-    id: crate::abi::ChangeId,
-    op: crate::abi::ChangeOp,
+    id: enshwick_core::abi::ChangeId,
+    op: enshwick_core::abi::ChangeOp,
     value: f64,
 ) -> Status {
-    use crate::content::changes::Value;
+    use enshwick_core::content::changes::Value;
     let value = match op {
-        crate::abi::ChangeOp::SET => Some(Value::Set(value)),
-        crate::abi::ChangeOp::TIMES => Some(Value::Times(value)),
-        crate::abi::ChangeOp::RESET => None,
+        enshwick_core::abi::ChangeOp::SET => Some(Value::Set(value)),
+        enshwick_core::abi::ChangeOp::TIMES => Some(Value::Times(value)),
+        enshwick_core::abi::ChangeOp::RESET => None,
         _ => return Status::BAD_ARGS,
     };
     with(Status::MISSING, |s| {
@@ -244,7 +251,7 @@ pub(crate) extern "system" fn item_data_open(_me: ModHandle, id: Str, out: *mut 
 pub(crate) extern "system" fn entity_data_open(
     me: ModHandle,
     id: Str,
-    _flags: crate::abi::EntityDataFlags,
+    _flags: enshwick_core::abi::EntityDataFlags,
     out: *mut u32,
 ) -> Status {
     item_data_open(me, id, out)
@@ -253,8 +260,8 @@ pub(crate) extern "system" fn entity_data_open(
 pub(crate) extern "system" fn item_data_get(
     _me: ModHandle,
     kind: u32,
-    pide: crate::Entity,
-    item: crate::ItemId,
+    pide: enshwick_core::Entity,
+    item: enshwick_core::ItemId,
     out: *mut u8,
     capacity: u32,
     len: *mut u32,
@@ -276,8 +283,8 @@ pub(crate) extern "system" fn item_data_get(
 pub(crate) extern "system" fn item_data_set(
     _me: ModHandle,
     kind: u32,
-    pide: crate::Entity,
-    item: crate::ItemId,
+    pide: enshwick_core::Entity,
+    item: enshwick_core::ItemId,
     data: *const u8,
     len: u32,
 ) -> Status {
@@ -559,7 +566,7 @@ pub(crate) extern "system" fn game_text(
     language: u32,
     out: *mut Str,
 ) -> Status {
-    let english = crate::i18n::Language::EN_US.0;
+    let english = enshwick_core::i18n::Language::EN_US.0;
     let found = with(None, |s| {
         let texts = &s.host.game_texts;
         let language = if language == 0 { english } else { language };
@@ -609,7 +616,7 @@ pub(crate) extern "system" fn content_hashes(
 
 pub(crate) extern "system" fn types(
     _me: ModHandle,
-    out: *mut crate::abi::TypeEntry,
+    out: *mut enshwick_core::abi::TypeEntry,
     entry_size: u32,
     capacity: u32,
     count: *mut u32,

@@ -1,6 +1,6 @@
 //! The engine's pacing places, as the loader would run the mod's handlers.
 
-use crate::abi::{Header, LoopWaitData};
+use enshwick_core::abi::{Header, LoopWaitData};
 
 use super::Installed;
 use super::table;
@@ -16,7 +16,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// loader.loop_wait(0, 400_000);
     /// ```
@@ -40,7 +39,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert_eq!(loader.server_wait(1_000_000), 1_000_000);
     /// ```
@@ -60,7 +58,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert_eq!(loader.task_workers(), None);
     /// ```

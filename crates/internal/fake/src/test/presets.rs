@@ -4,23 +4,22 @@
 //! each other, so a test builds its blobs from the layout the preset gives
 //! (through [`EngineFacts`]) rather than from offsets of its own.
 
-use crate::Off;
-use crate::content::EngineFacts;
 use enshwick_core::__fake::IMAGE_FIELDS;
 use enshwick_core::__fake::ids;
+use enshwick_core::Off;
+use enshwick_core::content::EngineFacts;
 
 use super::FakeHost;
 use super::facts::Fact;
 
 impl FakeHost {
     /// Items and the item registry: what
-    /// [`ItemLayout`](crate::content::items::ItemLayout) resolves, with the
+    /// [`ItemLayout`](enshwick_core::content::items::ItemLayout) resolves, with the
     /// type hashes `add_item` serves under.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::content::{EngineFacts, types};
     /// use enshwick::content::items::ItemLayout;
     ///
@@ -55,13 +54,12 @@ impl FakeHost {
     }
 
     /// The recipe registry: what
-    /// [`RecipeLayout`](crate::content::recipes::RecipeLayout) resolves, with
+    /// [`RecipeLayout`](enshwick_core::content::recipes::RecipeLayout) resolves, with
     /// the registry's type hash.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::content::recipes::RecipeLayout;
     ///
     /// let host = enshwick::test::FakeHost::new().recipes();
@@ -96,13 +94,12 @@ impl FakeHost {
     }
 
     /// Workshops, templates and their crafting components: what
-    /// [`WorkshopLayout`](crate::content::workshops::WorkshopLayout) resolves
+    /// [`WorkshopLayout`](enshwick_core::content::workshops::WorkshopLayout) resolves
     /// beside [`FakeHost::items`].
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::content::workshops::WorkshopLayout;
     ///
     /// let host = enshwick::test::FakeHost::new().items().workshops();
@@ -148,13 +145,12 @@ impl FakeHost {
     }
 
     /// The client's crafting menu in its UI bundle: what
-    /// [`MenuLayout`](crate::content::menu::MenuLayout) resolves, with the
+    /// [`MenuLayout`](enshwick_core::content::menu::MenuLayout) resolves, with the
     /// bundle's type hash.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::content::menu::MenuLayout;
     ///
     /// let host = enshwick::test::FakeHost::new().crafting_menu();
@@ -186,13 +182,12 @@ impl FakeHost {
     }
 
     /// The client's UI images, item icons among them: what
-    /// [`ImageLayout`](crate::content::icons::ImageLayout) resolves, with
+    /// [`ImageLayout`](enshwick_core::content::icons::ImageLayout) resolves, with
     /// the image type's hash and size.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::content::{EngineFacts, types};
     /// use enshwick::content::icons::ImageLayout;
     ///
@@ -225,7 +220,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::content::EngineFacts;
     /// use enshwick::test::facts;
     ///
@@ -250,14 +244,13 @@ impl FakeHost {
     }
 
     /// Inventories on the server: the component types, stack size and
-    /// offsets [`Inventories`](crate::inventory::Inventories) reads slots,
+    /// offsets [`Inventories`](enshwick_core::inventory::Inventories) reads slots,
     /// durability and meters by. The ECS reads and the skipped entity stay
     /// the test's own symbols.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::content::EngineFacts;
     /// use enshwick::test::facts;
     ///
@@ -290,13 +283,12 @@ impl FakeHost {
     }
 
     /// [`inventory`](Self::inventory) with the symbols and constants
-    /// [`Load::inventories`](crate::Load::inventories) resolves, so a test
+    /// [`Load::inventories`](enshwick_core::Load::inventories) resolves, so a test
     /// submits and finishes inventory requests.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let host = enshwick::test::FakeHost::new().inventory_requests();
     /// # let _ = host;
     /// ```
@@ -323,7 +315,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::content::EngineFacts;
     /// use enshwick::test::facts;
     ///
@@ -381,7 +372,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::content::EngineFacts;
     /// use enshwick::test::facts;
     ///
@@ -410,7 +400,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::content::EngineFacts;
     /// use enshwick::test::facts;
     ///
@@ -421,7 +410,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn player_input(self) -> Self {
-        use crate::resources::{Constant, Kind, Type};
+        use enshwick_core::resources::{Constant, Kind, Type};
         let controls =
             Type::new("demo::ecs::PlayerInputType", Kind::Enum, 1, 1).with_constants(vec![
                 Constant::new("MainhandAction", 0),
@@ -446,7 +435,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::content::EngineFacts;
     /// use enshwick::test::facts;
     ///
@@ -456,7 +444,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn interaction_targets(self) -> Self {
-        use crate::resources::{Constant, Kind, Type};
+        use enshwick_core::resources::{Constant, Kind, Type};
         let kinds = Type::new("demo::ecs::TargetType", Kind::Enum, 1, 1).with_constants(vec![
             Constant::new("Combat", 0),
             Constant::new("Teleport", 1),
@@ -478,13 +466,12 @@ impl FakeHost {
             .type_hash(ids::TARGET_TYPE, hash)
     }
 
-    /// The events [`Effects`](crate::effects::Effects) raises for an NPC
+    /// The events [`Effects`](enshwick_core::effects::Effects) raises for an NPC
     /// command, a threat and a ping; the toggle event stays off.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::content::EngineFacts;
     /// use enshwick::test::facts;
     ///
@@ -526,7 +513,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::content::EngineFacts;
     /// use enshwick::test::facts;
     ///
@@ -549,7 +535,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::content::EngineFacts;
     ///
     /// let host = enshwick::test::FakeHost::new().meters();
@@ -578,7 +563,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::content::EngineFacts;
     /// use enshwick::test::facts;
     ///
@@ -614,7 +598,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::content::EngineFacts;
     /// use enshwick::test::facts;
     ///

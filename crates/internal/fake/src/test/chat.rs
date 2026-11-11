@@ -1,8 +1,8 @@
 //! Chat lines, as the loader hands them to chat filters and to the mods
 //! that hear the chat.
 
-use crate::PlayerKey;
-use crate::abi::{ChatLine, ChatRewrite, Entity, Event, Header, Str};
+use enshwick_core::PlayerKey;
+use enshwick_core::abi::{ChatLine, ChatRewrite, Entity, Event, Header, Str};
 
 use super::Installed;
 use super::table;
@@ -27,7 +27,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let key = enshwick::PlayerKey::new(7);
     /// assert_eq!(loader.say(key, "hello").as_deref(), Some("hello"));
