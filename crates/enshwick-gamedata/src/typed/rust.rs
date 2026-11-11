@@ -568,7 +568,6 @@ impl Catalogue {
              /// # Examples\n\
              ///\n\
              /// ```\n\
-             /// # extern crate enshwick_core as enshwick;\n\
              /// use enshwick::ui::HudScreenType;\n\
              ///\n\
              /// assert_eq!(HudScreenType::StorageChest.name(), \"StorageChest\");\n\
@@ -590,7 +589,6 @@ impl Catalogue {
              /// # Examples\n    \
              ///\n    \
              /// ```\n    \
-             /// # extern crate enshwick_core as enshwick;\n    \
              /// use enshwick::ui::HudScreenType;\n    \
              ///\n    \
              /// assert!(HudScreenType::ALL.contains(&HudScreenType::Map));\n    \
