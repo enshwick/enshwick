@@ -23,8 +23,8 @@
 //! ```
 
 mod filters;
-mod kinds;
-mod limits;
+pub(crate) mod kinds;
+pub(crate) mod limits;
 mod script;
 
 pub use kinds::{KindZone, NewFlameAltar};

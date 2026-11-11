@@ -5,7 +5,6 @@ use core::time::Duration;
 
 use super::WeatherPhenomenonEffect;
 use crate::__load::*;
-use crate::Off;
 use crate::abi::Level;
 use crate::content::{Guid, Id};
 use crate::resources::Registry;
@@ -13,6 +12,7 @@ use crate::typed::{
     ResourceType, WeatherPhenomenonEffect as GameEffect, WeatherSystemPhenomenonResource,
     WeatherSystemResource,
 };
+use crate::{BaseLoad, Off};
 
 /// A weather phenomenon a mod added, by the GUID its content id maps to.
 ///
@@ -387,7 +387,7 @@ fn change(
 
 /// The game's weather resource type and the key of its one resource.
 fn weather_system(
-    load: &Load<'_>,
+    load: &BaseLoad,
 ) -> Result<(ResourceType<WeatherSystemResource>, crate::abi::ResourceKey), Off> {
     let ty = ResourceType::<WeatherSystemResource>::resolve(load)?;
     let hash = ty.key(Guid([0; 16])).type_hash;

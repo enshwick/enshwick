@@ -30,7 +30,7 @@
 //! ```
 
 #[cfg(feature = "typed")]
-mod phenomena;
+pub(crate) mod phenomena;
 
 use core::time::Duration;
 

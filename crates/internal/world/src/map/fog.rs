@@ -1,7 +1,7 @@
 //! What the player has uncovered of the map, on the client.
 
 use crate::abi::{FogInfo, Header, Status};
-use crate::{Host, Load, Off};
+use crate::{BaseLoad, Host, Off};
 
 /// The client's fog of war: how much of each part of the map the player
 /// has uncovered, the game's `FogOfWar`. Only the player's own machine
@@ -261,7 +261,7 @@ impl FogError {
 
 #[crate::script(fog)]
 impl FogOfWar {
-    pub(crate) fn open(load: &Load<'_>) -> Result<Self, Off> {
+    pub(crate) fn open(load: &BaseLoad) -> Result<Self, Off> {
         let host = load.host();
         let status = (host.api().fog_open)(host.handle());
         crate::load::ok(status, Self { host }, || "the fog of war".to_owned())

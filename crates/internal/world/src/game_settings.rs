@@ -36,10 +36,10 @@
 use core::time::Duration;
 
 use crate::__load::*;
-use crate::WorldError;
 use crate::content::EngineFacts;
 use crate::engine_enum::Values;
 use crate::engine_ids as ids;
+use crate::{BaseLoad, WorldError};
 use crate::{Host, Off};
 
 macro_rules! game_enum {
@@ -228,7 +228,7 @@ impl Enums {
         }
     }
 
-    fn resolve(load: &Load<'_>) -> Self {
+    fn resolve(load: &BaseLoad) -> Self {
         Self {
             preset: Values::resolve(load, GameSettingsPreset::IDS),
             tombstone_mode: Values::resolve(load, TombstoneMode::IDS),
@@ -328,7 +328,7 @@ macro_rules! settings {
         }
 
         impl Offsets {
-            fn resolve(load: &Load<'_>, size: usize) -> Result<Self, Off> {
+            fn resolve(load: &BaseLoad, size: usize) -> Result<Self, Off> {
                 Ok(Self {
                     $($field: {
                         let at = load.offset($id)?;

@@ -9,7 +9,7 @@ use crate::abi::SkillNode;
 use crate::engine_ids as ids;
 use crate::raw::{read_at, write_at};
 use crate::world::{ComponentType, World, WorldError, WritableType};
-use crate::{Host, Load, Off};
+use crate::{BaseLoad, Host, Off};
 
 use crate::__private::ATTRIBUTE_SET_INITIALISED as SET_INITIALISED;
 /// The skill nodes a character keeps.
@@ -164,7 +164,7 @@ static SKILLS: crate::fresh::Fresh<(ComponentType, usize, usize)> = crate::fresh
 
 impl Stats {
     /// The stat reads for the running build.
-    pub(crate) fn resolve(load: &Load<'_>, host: Host) -> Result<Self, Off> {
+    pub(crate) fn resolve(load: &BaseLoad, host: Host) -> Result<Self, Off> {
         let value = |name: &str| {
             load.constant(name).and_then(|v| {
                 u32::try_from(v).map_err(|_| Off::new(format!("constant {name}: out of range")))

@@ -13,12 +13,12 @@ mod build;
 mod capture;
 mod containers;
 mod entities;
-mod fields;
+pub(crate) mod fields;
 mod geometry;
 mod players;
 mod prop_state;
 mod props;
-mod rename;
+pub(crate) mod rename;
 mod saves;
 mod stats;
 mod transactions;
@@ -26,6 +26,7 @@ mod vitals;
 
 use core::ffi::c_void;
 
+use crate::BaseLoad;
 use crate::abi::{EntityPlace, Header, PlayerInfo};
 use crate::ecs::ComponentType;
 use crate::engine_ids as ids;
@@ -82,7 +83,8 @@ impl WritableType {
     /// # Examples
     ///
     /// See [`WritableType`].
-    pub fn resolve(load: &Load<'_>, name: &'static str) -> Result<Self, Off> {
+    pub fn resolve(load: &impl crate::Loading, name: &'static str) -> Result<Self, Off> {
+        let load = load.base();
         Ok(Self {
             ty: ComponentType::resolve(load, name)?,
             size: load.type_size(name)?,
@@ -141,8 +143,8 @@ impl WritableType {
     /// # Examples
     ///
     /// See [`World::set`].
-    pub fn field<T: Scalar>(self, load: &Load<'_>, name: &str) -> Result<Field<T>, Off> {
-        let offset = load.field_offset(self.name, name)?;
+    pub fn field<T: Scalar>(self, load: &impl crate::Loading, name: &str) -> Result<Field<T>, Off> {
+        let offset = load.base().field_offset(self.name, name)?;
         Field::within(self.ty.hash(), self.size, offset).ok_or_else(|| {
             Off::new(format!(
                 "field {}.{name}: past the end of the type",
@@ -153,7 +155,7 @@ impl WritableType {
 
     /// The `T` at the offset the loader resolves for the engine id `id`,
     /// inside this type's size.
-    pub(crate) fn field_by_id<T: Scalar>(self, load: &Load<'_>, id: &str) -> Result<Field<T>, Off> {
+    pub(crate) fn field_by_id<T: Scalar>(self, load: &BaseLoad, id: &str) -> Result<Field<T>, Off> {
         let offset = load.constant(id)?;
         Field::within(self.ty.hash(), self.size, offset)
             .ok_or_else(|| Off::new(format!("field {id}: past the end of {}", self.name)))
@@ -407,7 +409,7 @@ static RESOLVED: crate::state::ModLocal<Resolved> = crate::state::ModLocal::new(
 /// The offset of the orientation inside a `CurrentTransform`, when the
 /// loader resolves it and the template an item places, which the loader
 /// reads into item data from the same reflection.
-fn orientation_offset(load: &Load<'_>) -> Option<usize> {
+fn orientation_offset(load: &BaseLoad) -> Option<usize> {
     load.constant(ids::ITEM_INFO_PLACED_ENTITY).ok()?;
     let transform = load.constant(ids::CURRENT_TRANSFORM_TRANSFORM).ok()?;
     let orientation = load.constant(ids::WORLD_TRANSFORM_ORIENTATION).ok()?;
@@ -416,7 +418,7 @@ fn orientation_offset(load: &Load<'_>) -> Option<usize> {
 
 #[crate::script(things)]
 impl World {
-    pub(crate) fn resolve(load: &Load<'_>) -> Result<Self, Off> {
+    pub(crate) fn resolve(load: &BaseLoad) -> Result<Self, Off> {
         if let Some(resolved) = RESOLVED.get() {
             return Ok(Self(resolved));
         }

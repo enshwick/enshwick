@@ -9,11 +9,11 @@ use super::{Component, Event, Resource, ShapeError, check, sample};
 use crate::content::Guid;
 use crate::resources::{Registry, Type, Value};
 use crate::world::{World, WritableType};
-use crate::{Entity, Host, Load, Off};
+use crate::{BaseLoad, Entity, Host, Loading, Off};
 
 /// The running build's type id and reflected type for the id `id`.
 fn found(
-    load: &Load<'_>,
+    load: &BaseLoad,
     id: &'static str,
 ) -> Result<(crate::ecs::ComponentType, &'static Type<'static>), Off> {
     let host = load.host();
@@ -73,7 +73,7 @@ impl RawComponent {
     /// reaches, such as a designer data kind's on the heap, turns it off,
     /// by name.
     pub(crate) fn resolve(
-        load: &Load<'_>,
+        load: &BaseLoad,
         id: &'static str,
         check: &dyn Fn(&Value) -> Result<(), ShapeError>,
     ) -> Result<Self, Off> {
@@ -205,7 +205,7 @@ pub(crate) struct RawEvent {
 impl RawEvent {
     /// The event type `id` on the running build, its shape held to `check`.
     pub(crate) fn resolve(
-        load: &Load<'_>,
+        load: &BaseLoad,
         id: &'static str,
         check: &dyn Fn(&Value) -> Result<(), ShapeError>,
     ) -> Result<Self, Off> {
@@ -255,7 +255,7 @@ impl RawResource {
     /// The resource type `id` on the running build, its shape held to
     /// `check`.
     pub(crate) fn resolve(
-        load: &Load<'_>,
+        load: &BaseLoad,
         id: &'static str,
         check: &dyn Fn(&Value) -> Result<(), ShapeError>,
     ) -> Result<Self, Off> {
@@ -387,9 +387,9 @@ impl<T: Component> ComponentType<T> {
     /// # Examples
     ///
     /// See [`ComponentType`].
-    pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
+    pub fn resolve(load: &impl Loading) -> Result<Self, Off> {
         Ok(Self {
-            raw: RawComponent::resolve(load, T::ID, &check::<T>)?,
+            raw: RawComponent::resolve(load.base(), T::ID, &check::<T>)?,
             of: PhantomData,
         })
     }
@@ -490,9 +490,9 @@ impl<T: Event> EventType<T> {
     /// # Examples
     ///
     /// See [`EventType`].
-    pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
+    pub fn resolve(load: &impl Loading) -> Result<Self, Off> {
         Ok(Self {
-            raw: RawEvent::resolve(load, T::ID, &check::<T>)?,
+            raw: RawEvent::resolve(load.base(), T::ID, &check::<T>)?,
             of: PhantomData,
         })
     }
@@ -508,11 +508,11 @@ impl<T: Event> EventType<T> {
     /// # Examples
     ///
     /// See [`EventType`].
-    pub fn on<F>(self, load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    pub fn on<F>(self, load: &mut impl Loading, handler: F) -> Result<(), Off>
     where
         F: Fn(&T) + Send + Sync + 'static,
     {
-        self.raw.on(load.host(), move |value| {
+        self.raw.on(load.base().host(), move |value| {
             handler(&T::from_value(value)?);
             Ok(())
         })
@@ -566,9 +566,9 @@ impl<T: Resource> ResourceType<T> {
     /// # Examples
     ///
     /// See [`ResourceType`].
-    pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
+    pub fn resolve(load: &impl Loading) -> Result<Self, Off> {
         Ok(Self {
-            raw: RawResource::resolve(load, T::ID, &check::<T>)?,
+            raw: RawResource::resolve(load.base(), T::ID, &check::<T>)?,
             of: PhantomData,
         })
     }
@@ -622,7 +622,7 @@ impl<T: Resource> ResourceType<T> {
     /// See [`ResourceType`].
     pub fn serve<F>(
         &self,
-        load: &mut Load<'_>,
+        load: &mut impl Loading,
         key: crate::abi::ResourceKey,
         base: crate::abi::ResourceKey,
         change: F,
@@ -630,7 +630,7 @@ impl<T: Resource> ResourceType<T> {
     where
         F: Fn(&mut T) + Send + Sync + 'static,
     {
-        self.raw.serve(load.host(), key, base, move |value| {
+        self.raw.serve(load.base().host(), key, base, move |value| {
             let mut typed = T::from_value(&value)?;
             change(&mut typed);
             Ok(Some(typed.to_value()))

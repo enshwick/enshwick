@@ -39,7 +39,7 @@
 //! }
 //! ```
 
-mod edits;
+pub(crate) mod edits;
 
 pub use edits::{EditSource, VoxelChange, VoxelEdit};
 

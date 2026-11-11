@@ -30,7 +30,7 @@
 //! }
 //! ```
 
-mod events;
+pub(crate) mod events;
 mod fog;
 mod snapshot;
 
@@ -42,7 +42,6 @@ pub use snapshot::{
 };
 
 use crate::__load::*;
-use crate::Entity;
 use crate::Host;
 use crate::Off;
 use crate::WorldError;
@@ -52,6 +51,7 @@ use crate::content::{EngineFacts, Guid};
 use crate::ecs::ComponentType;
 use crate::engine_ids as ids;
 use crate::world::World;
+use crate::{BaseLoad, Entity};
 
 /// The key of a map marker type, as the game's marker type registry
 /// numbers them (`MapMarkerTypeId`).
@@ -326,7 +326,7 @@ static RESOLVED: crate::state::ModLocal<Resolved> = crate::state::ModLocal::new(
 /// The offset of field `id` of type `ty`, refused unless `width` bytes
 /// from there lie inside the type, so every read of the field stays in
 /// the component.
-fn field(load: &Load<'_>, ty: &str, id: &str, width: usize) -> Result<usize, Off> {
+fn field(load: &BaseLoad, ty: &str, id: &str, width: usize) -> Result<usize, Off> {
     let at = load.offset(id)?;
     let size = load.size(ty)?;
     if at.checked_add(width).is_some_and(|end| end <= size) {
@@ -339,7 +339,7 @@ fn field(load: &Load<'_>, ty: &str, id: &str, width: usize) -> Result<usize, Off
 }
 
 impl Waypoint {
-    fn resolve(load: &Load<'_>) -> Result<Self, Off> {
+    fn resolve(load: &BaseLoad) -> Result<Self, Off> {
         Ok(Self {
             ty: ComponentType::resolve(load, ids::PLAYER_WAYPOINT)?,
             enabled_at: field(load, ids::PLAYER_WAYPOINT, ids::PLAYER_WAYPOINT_ENABLED, 1)?,
@@ -355,7 +355,7 @@ impl Waypoint {
 
 #[crate::script(markers)]
 impl Map {
-    pub(crate) fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
+    pub(crate) fn resolve(load: &mut BaseLoad) -> Result<Self, Off> {
         if let Some(resolved) = RESOLVED.get() {
             return Ok(Self(resolved));
         }
