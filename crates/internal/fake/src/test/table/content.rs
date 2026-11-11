@@ -1,10 +1,81 @@
-//! The fake's served resources, recipes, texts and item data.
+//! The fake's served resources, recipes, data changes, game rates, texts
+//! and item data.
 
 use core::ffi::c_void;
 
 use crate::test::ServedResource;
-use crate::test::table::{Registered, found, put, put_list, text, with};
-use enshwick_core::abi::{ModHandle, ResourceKey, ResourcePatchFn, Status, Str};
+use crate::test::table::{Registered, Registration, found, put, put_list, text, with};
+use enshwick_core::abi::{ModHandle, RateId, ResourceKey, ResourcePatchFn, Status, Str};
+
+/// The changes of vanilla values a mod declared, each with its source.
+#[derive(Debug, Default)]
+pub(crate) struct DataChanges {
+    /// Changes of one entry.
+    pub(crate) one: Vec<(enshwick_core::content::changes::Change, String)>,
+    /// Changes of every item a selection picks.
+    pub(crate) items: Vec<(enshwick_core::content::changes::ItemsChange, String)>,
+    /// Changes of every recipe a selection picks.
+    pub(crate) recipes: Vec<(enshwick_core::content::changes::RecipesChange, String)>,
+    /// Changes the mod sets later, numbered from 1 in this order, with
+    /// the value in force.
+    pub(crate) live: Vec<crate::test::LiveChange>,
+}
+
+/// The bytes from `address` to the end of the test's component that holds
+/// it, at most `max`, as the loader counts the read-only set-up data a
+/// component lies in; 0 outside every component.
+pub(crate) extern "system" fn read_only(
+    _me: ModHandle,
+    address: usize,
+    max: usize,
+    out: *mut usize,
+) -> Status {
+    let len = with(0, |s| {
+        s.host
+            .components
+            .values()
+            .find(|&&(start, len)| (start..start + len).contains(&address))
+            .map_or(0, |&(start, len)| (start + len - address).min(max))
+    });
+    put(out, len)
+}
+
+pub(crate) extern "system" fn rate(_me: ModHandle, rate: RateId) -> Status {
+    with(Status::MISSING, |s| {
+        if enshwick_core::__fake::Rate::from_id(rate).is_none() {
+            return Status::BAD_ARGS;
+        }
+        let joins = s.manifest.as_ref().is_none_or(|manifest| manifest.joins);
+        if !enshwick_core::__fake::rules::may_declare_rate(rate, joins) {
+            return Status::REFUSED;
+        }
+        if s.host.missing_rates.contains(&rate) {
+            return Status::MISSING;
+        }
+        if s.registration == Registration::Closed {
+            return Status::TOO_LATE;
+        }
+        if !s.rates.iter().any(|&(declared, _)| declared == rate) {
+            s.rates.push((rate, 1.0));
+        }
+        Status::OK
+    })
+}
+
+pub(crate) extern "system" fn set_rate(_me: ModHandle, rate: RateId, factor: f32) -> Status {
+    if !enshwick_core::__fake::is_valid_factor(factor) {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        match s.rates.iter_mut().find(|(declared, _)| *declared == rate) {
+            Some((_, set)) => {
+                *set = factor;
+                Status::OK
+            }
+            None => Status::BAD_ARGS,
+        }
+    })
+}
 
 pub(crate) extern "system" fn serve_resource(
     me: ModHandle,
@@ -389,7 +460,7 @@ pub(crate) extern "system" fn resource_served(
     unsafe {
         copy_resource(key, out, capacity, len, |key| {
             // As the loader: no read before every patch is in.
-            if with(true, |s| s.registration == super::Registration::Open) {
+            if with(true, |s| s.registration == Registration::Open) {
                 return Err(Status::REFUSED);
             }
             let Some(base) = with(None, |s| {
@@ -401,7 +472,7 @@ pub(crate) extern "system" fn resource_served(
                 return archived(&key);
             };
             let archived = archived(&base)?;
-            match build(&key, &archived) {
+            match build_resource(&key, &archived) {
                 // As the loader: a key whose every patch failed reads as
                 // the archive has it.
                 Err(Status::MISSING) if key == base => Ok(archived),
@@ -493,7 +564,7 @@ pub(crate) extern "system" fn resource_buffer(
 /// in order, as the game's first read of it would: a failed patch is
 /// skipped, and [`Status::MISSING`] when none built. As the loader,
 /// [`Status::BUILDING`] for a key whose patches already run on this thread.
-pub(crate) fn build(key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, Status> {
+pub(crate) fn build_resource(key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, Status> {
     if BUILDING.with_borrow(|building| building.iter().any(|(at, _)| at == key)) {
         return Err(Status::BUILDING);
     }
@@ -624,7 +695,7 @@ pub(crate) extern "system" fn types(
     let Some(table) = with(None, |s| s.host.types.clone()) else {
         return Status::MISSING;
     };
-    crate::test::table::mods::list(table.entries(), out, entry_size, capacity, count)
+    crate::test::table::base::mods::list(table.entries(), out, entry_size, capacity, count)
 }
 
 pub(crate) extern "system" fn game_version(_me: ModHandle, out: *mut Str) -> Status {

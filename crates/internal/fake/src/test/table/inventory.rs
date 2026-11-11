@@ -1,10 +1,111 @@
-//! The fake's inventory requests.
+//! The fake's inventory entries: requests, item filters, damage filters
+//! and survivors.
 
 use core::ffi::c_void;
 
 use crate::test::SubmittedRequest;
-use crate::test::table::{OpenRequest, Registered, with};
-use enshwick_core::abi::{InventoryRequest, InventoryResultFn, ItemData, ModHandle, Status};
+use crate::test::table::{OpenRequest, Registered, Registration, with};
+use enshwick_core::abi::{
+    BedCheckFn, DamageFilterFn, InventoryRequest, InventoryResultFn, ItemActionFn, ItemData,
+    ModHandle, Side, Status, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
+};
+
+pub(crate) extern "system" fn item_filter(
+    me: ModHandle,
+    callback: ItemActionFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        if s.registration == Registration::Closed {
+            return Status::TOO_LATE;
+        }
+        s.item_filters.push(Registered::new(callback, user, me));
+        Status::OK
+    })
+}
+
+pub(crate) extern "system" fn damage_filter(
+    me: ModHandle,
+    callback: DamageFilterFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        s.damage_filters.push(Registered::new(callback, user, me));
+        Status::OK
+    })
+}
+
+pub(crate) extern "system" fn survivor_lookup(
+    me: ModHandle,
+    callback: SurvivorLookupFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        if s.survivor_lookup.is_some() {
+            return Status::REFUSED;
+        }
+        s.survivor_lookup = Some(Registered::new(callback, user, me));
+        Status::OK
+    })
+}
+
+pub(crate) extern "system" fn survivor_bed_check(
+    me: ModHandle,
+    callback: BedCheckFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        s.bed_checks.push(Registered::new(callback, user, me));
+        Status::OK
+    })
+}
+
+pub(crate) extern "system" fn summon_filter(
+    me: ModHandle,
+    callback: SummonFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        s.summons.push(Registered::new(callback, user, me));
+        Status::OK
+    })
+}
+
+pub(crate) extern "system" fn summoned(
+    me: ModHandle,
+    callback: SummonFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        s.summoned.push(Registered::new(callback, user, me));
+        Status::OK
+    })
+}
+
+pub(crate) extern "system" fn summon_item(
+    _me: ModHandle,
+    item: enshwick_core::ItemId,
+    survivor: enshwick_core::survivors::NpcId,
+) -> Status {
+    with(Status::MISSING, |s| {
+        s.summon_items.push((item, survivor));
+        Status::OK
+    })
+}
+
+pub(crate) extern "system" fn survivor_status(
+    me: ModHandle,
+    callback: SurvivorStatusFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        if s.host.side != Side::CLIENT || s.survivor_status.is_some() {
+            return Status::REFUSED;
+        }
+        s.survivor_status = Some(Registered::new(callback, user, me));
+        Status::OK
+    })
+}
 
 pub(crate) extern "system" fn inventory_open(_me: ModHandle) -> Status {
     with(Status::MISSING, |s| {
@@ -21,7 +122,7 @@ pub(crate) extern "system" fn item_info(
     item: enshwick_core::ItemId,
     out: *mut ItemData,
 ) -> Status {
-    super::found_headed(with(None, |s| s.host.items.get(&item.get()).copied()), out)
+    crate::test::table::found_headed(with(None, |s| s.host.items.get(&item.get()).copied()), out)
 }
 
 pub(crate) extern "system" fn inventory_submit(

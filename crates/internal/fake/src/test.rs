@@ -78,60 +78,40 @@
 //! # Ok::<(), &str>(())
 //! ```
 
-mod calls;
-mod chat;
+// The fake's parts, one per domain of `enshwick-core`'s `domains.toml`,
+// lowest first; `table` joins their `HostApi` entries.
+mod actions;
+mod base;
 mod content;
-#[cfg(feature = "unstable")]
-mod controls;
-mod events;
-pub mod facts;
-mod gameplay;
-mod hooks;
 mod inventory;
-mod items;
-mod pacing;
-mod players;
-mod points;
-mod presets;
-#[cfg(feature = "typed")]
-mod progression;
-mod props;
-mod rates;
-#[cfg(feature = "typed")]
-mod removal;
-mod saves;
-mod settings;
-mod stats;
+mod knowledge;
 pub(crate) mod table;
-#[cfg(feature = "typed")]
-mod tags;
-mod templates;
-mod ticks;
-mod transactions;
 mod ui;
-mod voxel_edits;
 mod world;
 
+pub use base::facts;
+pub use base::hooks::LinkedHook;
+pub use base::settings::SettingsRefused;
+#[cfg(feature = "typed")]
+pub use content::removal::{
+    ENTITY_ITEM, FILL_TABLE, LOOT_ITEM, OTHER_ITEM, RANDOM_LOOT, SPARE_ITEM,
+};
+pub use content::templates::{
+    BITE, BOSS_CREATURE, CRAFTING_PROP_ITEM, CREATURE, ENEMY, ENEMY_ARSENAL, HOWL, LUNGE, NEST,
+    NEST_GROUP, OTHER_ARSENAL, PROP_ITEM, VANILLA_CRAFTING_PROPS,
+};
 pub use content::{LiveChange, ServedResource};
-pub use hooks::LinkedHook;
 pub use inventory::SubmittedRequest;
 #[cfg(feature = "typed")]
-pub use progression::{
+pub use knowledge::vanilla::{
     ATTRIBUTE_NODE, BALANCING_TABLE, LORE_CATEGORY, PROGRESSION, QUEST_ITEM, ROOT_NODE, SKILL_ROOM,
     VANILLA_EXPERIENCE, VANILLA_PERK, VANILLA_PLAYER_KNOWLEDGE, VANILLA_QUEST,
     VANILLA_QUEST_EXPERIENCE, VANILLA_UNNAMED_EXPERIENCE, VANILLA_WORLD_KNOWLEDGE,
 };
-#[cfg(feature = "typed")]
-pub use removal::{ENTITY_ITEM, FILL_TABLE, LOOT_ITEM, OTHER_ITEM, RANDOM_LOOT, SPARE_ITEM};
-pub use settings::SettingsRefused;
-#[cfg(feature = "typed")]
-pub use tags::TAG_CONTAINER;
-pub use templates::{
-    BITE, BOSS_CREATURE, CRAFTING_PROP_ITEM, CREATURE, ENEMY, ENEMY_ARSENAL, HOWL, LUNGE, NEST,
-    NEST_GROUP, OTHER_ARSENAL, PROP_ITEM, VANILLA_CRAFTING_PROPS,
-};
-pub use transactions::{FakeChange, FakeTransaction};
 pub use ui::{Drawn, FakeMarker, Input, ShownDialog};
+#[cfg(feature = "typed")]
+pub use world::tags::TAG_CONTAINER;
+pub use world::transactions::{FakeChange, FakeTransaction};
 
 /// Exports a mod as [`declare_mod!`](enshwick_core::declare_mod) does, with its
 /// `[package.metadata.enshwick]` table given as TOML, so one test binary may
@@ -183,7 +163,10 @@ use enshwick_core::abi::{
     PlayerInfo, Side, Status,
 };
 
-use players::{FakeService, ask, console};
+use enshwick_core::Off;
+use enshwick_core::content::EngineFacts;
+
+use world::players::{FakeService, ask, console};
 
 /// A mod's `enshwick_mod_init` export, as [`declare_mod!`](enshwick_core::declare_mod)
 /// writes it.
@@ -349,7 +332,7 @@ pub struct FakeHost {
     zones: world::FakeZones,
     extent: Option<[u32; 3]>,
     blueprints: FxHashMap<u32, [u32; 3]>,
-    props: Vec<props::FakeProp>,
+    props: Vec<world::props::FakeProp>,
     /// The items whose props are logic triggers.
     trigger_items: Vec<u32>,
     /// The items whose props are plants.
@@ -520,12 +503,64 @@ impl FakeHost {
     pub fn install(self) -> Installed {
         let handle = self.handle;
         let turn = table::install(self);
-        enshwick_core::__fake::check_manifests(table::note_manifest);
+        enshwick_core::__fake::check_manifests(table::base::mods::note_manifest);
         enshwick_core::__fake::renew();
         Installed {
             handle,
             _turn: turn,
         }
+    }
+
+    /// Sets a hash for each of `types`, then `sizes` and `offsets`: what
+    /// each domain's presets set at once.
+    fn preset(mut self, types: &[&str], sizes: &[(&str, u32)], offsets: &[(&str, u64)]) -> Self {
+        for &id in types {
+            self = self.type_hash(id, preset_hash(id));
+        }
+        for &(id, size) in sizes {
+            self = self.type_size(id, size);
+        }
+        for &(id, offset) in offsets {
+            self = self.constant(id, offset);
+        }
+        self
+    }
+}
+
+/// The type hash a preset gives `id`: its FNV-1a, so presets never share a
+/// hash and a test's own small hashes stay clear of them.
+fn preset_hash(id: &str) -> u32 {
+    id.bytes().fold(0x811c_9dc5, |hash, byte| {
+        (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193)
+    })
+}
+
+/// The facts the builder holds, so a test lays out its blobs by the same
+/// layouts the mod resolves.
+///
+/// A preset's values claim nothing about a game build; they only agree with
+/// each other, so a test builds its blobs from the layout the preset gives
+/// rather than from offsets of its own.
+impl EngineFacts for FakeHost {
+    fn offset(&self, id: &str) -> Result<usize, Off> {
+        self.constants
+            .get(id)
+            .and_then(|&offset| usize::try_from(offset).ok())
+            .ok_or_else(|| Off::new(format!("offset {id}: not set on the fake")))
+    }
+
+    fn size(&self, id: &str) -> Result<usize, Off> {
+        self.type_sizes
+            .get(id)
+            .and_then(|&size| usize::try_from(size).ok())
+            .ok_or_else(|| Off::new(format!("type {id}: no size set on the fake")))
+    }
+
+    fn hash(&self, id: &str) -> Result<u32, Off> {
+        self.type_hashes
+            .get(id)
+            .copied()
+            .ok_or_else(|| Off::new(format!("type {id}: no hash set on the fake")))
     }
 }
 
@@ -637,8 +672,8 @@ impl Installed {
     pub unsafe fn start(&self, query: QueryFn, init: InitFn, ready: ReadyFn) -> Status {
         // SAFETY: `query` returns null or a manifest valid for the process.
         if let Some(manifest) = unsafe { query().as_ref() }
-            && (table::refuses_side(self.api(), manifest)
-                || table::refuses_developer(self.api(), manifest))
+            && (table::base::mods::refuses_side(self.api(), manifest)
+                || table::base::mods::refuses_developer(self.api(), manifest))
         {
             return Status::REFUSED;
         }

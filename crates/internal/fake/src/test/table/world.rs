@@ -1,60 +1,63 @@
-//! The fake world: players, entities, chat, time, settings, weather, terrain, voxels and build rights.
+//! The fake world's entries: players, entities, chat, saves, transactions,
+//! altars, buffs, its surroundings, the map and build rights.
 
 use core::ffi::c_void;
 
-use crate::test::table::{Registered, found, put, text, with};
+use crate::test::table::{Registered, put, text, with};
 use enshwick_core::abi::{
-    AccountActionType, DaytimeInfo, EntityPlace, EventTypeInfo, GameEventFn, Header, ModHandle,
-    PlayerInfo, RenameCallFn, Side, SpawnRequest, Status, StatusFn, Str, TeleportRequest,
-    TerrainEdit, TerrainMaterialInfo, Voxel, WeatherFront,
+    AccountActionType, EntityPlace, ModHandle, PlayerInfo, RenameCallFn, Side, SpawnRequest,
+    Status, Str, TeleportRequest, TerrainEdit,
 };
+
+pub(crate) mod altars;
+pub(crate) mod buffs;
+pub(crate) mod environment;
+pub(crate) mod saves;
+pub(crate) mod transactions;
+
+/// The changes of the world the mod asked for, and its voxel reads, in
+/// order.
+#[derive(Default)]
+pub(crate) struct WorldEdits {
+    /// The voxel boxes the mod read on the game thread, `(min, size)`.
+    pub(crate) voxel_reads: Vec<([u32; 3], [u32; 3])>,
+    /// Direct terrain edits.
+    pub(crate) terrain: Vec<TerrainEdit>,
+    /// Committed transactions, oldest first.
+    pub(crate) transactions: Vec<crate::test::FakeTransaction>,
+    /// Whether the world has stopped, as between two worlds.
+    pub(crate) stopped: bool,
+    /// Whether the scene's map markers are held as still being read.
+    pub(crate) markers_pending: bool,
+    /// The reads of the scene the mod asked for in this world; the first
+    /// ask of each starts it.
+    pub(crate) scene_asked: Vec<SceneRead>,
+}
+
+/// A read of the scene's data the loader runs once per world.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SceneRead {
+    /// The map markers.
+    Markers,
+    /// The map's frame.
+    Frame,
+}
+
+impl WorldEdits {
+    /// Notes that the mod asked for `read`; whether this was its first ask.
+    pub(crate) fn first_ask(&mut self, read: SceneRead) -> bool {
+        let first = !self.scene_asked.contains(&read);
+        if first {
+            self.scene_asked.push(read);
+        }
+        first
+    }
+}
 
 /// Whether the entity calls cannot run here, where the loader answers
 /// [`Status::UNAVAILABLE`]: no server runs, or the build lacks the commands.
 pub(crate) fn entity_calls_off(s: &crate::test::table::State) -> bool {
     s.host.no_entity_commands || !(s.host.side == Side::SERVER || s.host.hosting)
-}
-
-pub(crate) extern "system" fn component(
-    _me: ModHandle,
-    entity: enshwick_core::Entity,
-    type_hash: u32,
-    out: *mut *const c_void,
-) -> Status {
-    let address = with(None, |s| {
-        s.host.components.get(&(entity.0, type_hash)).map(|c| c.0)
-    });
-    found(address.map(core::ptr::with_exposed_provenance), out)
-}
-
-/// The bytes from `address` to the end of the test's component that holds
-/// it, at most `max`, as the loader counts the read-only set-up data a
-/// component lies in; 0 outside every component.
-pub(crate) extern "system" fn read_only(
-    _me: ModHandle,
-    address: usize,
-    max: usize,
-    out: *mut usize,
-) -> Status {
-    let len = with(0, |s| {
-        s.host
-            .components
-            .values()
-            .find(|&&(start, len)| (start..start + len).contains(&address))
-            .map_or(0, |&(start, len)| (start + len - address).min(max))
-    });
-    put(out, len)
-}
-
-pub(crate) extern "system" fn entity_template(
-    _me: ModHandle,
-    entity: enshwick_core::Entity,
-    out: *mut [u8; 16],
-) -> Status {
-    found(
-        with(None, |s| s.host.templates.get(&entity.0).copied()),
-        out,
-    )
 }
 
 pub(crate) extern "system" fn player(
@@ -76,30 +79,6 @@ pub(crate) extern "system" fn players(
 ) -> Status {
     let players = with(Vec::new(), |s| s.host.players.clone());
     super::put_headed_list(&players, out, capacity, count)
-}
-
-pub(crate) extern "system" fn hosting() -> u8 {
-    with(0, |s| {
-        u8::from(s.host.side == Side::SERVER || s.host.hosting)
-    })
-}
-
-pub(crate) extern "system" fn server_world() -> u64 {
-    with(0, |s| s.host.server_world)
-}
-
-pub(crate) extern "system" fn actions(
-    me: ModHandle,
-    callback: enshwick_core::abi::ActionFn,
-    user: *mut c_void,
-) -> Status {
-    with(Status::MISSING, |s| {
-        if s.actions.is_some() {
-            return Status::REFUSED;
-        }
-        s.actions = Some(Registered::new(callback, user, me));
-        Status::OK
-    })
 }
 
 pub(crate) extern "system" fn chat(
@@ -135,97 +114,6 @@ pub(crate) extern "system" fn rename_filter(
         s.rename_filters.push(Registered::new(callback, user, me));
         Status::OK
     })
-}
-
-pub(crate) extern "system" fn feature(_me: ModHandle, name: Str, off: Str) -> Status {
-    let name = text(name);
-    if name.is_empty() {
-        return Status::BAD_ARGS;
-    }
-    let off = Some(text(off)).filter(|off| !off.is_empty());
-    with(Status::MISSING, |s| {
-        match s.features.iter_mut().find(|(have, _)| *have == name) {
-            Some(kept) => kept.1 = off,
-            None => s.features.push((name, off)),
-        }
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn status(
-    me: ModHandle,
-    callback: StatusFn,
-    user: *mut c_void,
-) -> Status {
-    with(Status::MISSING, |s| {
-        s.status_sources.push(Registered::new(callback, user, me));
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn run_console(_me: ModHandle, line: Str, out: *mut Str) -> Status {
-    let line = text(line);
-    let (word, rest) = line.split_once(' ').unwrap_or((&line, ""));
-    let (word, rest) = (word.to_owned(), rest.trim().to_owned());
-    with((), |s| s.console.push(line.clone()));
-    let answer = match with(None, |s| s.host.console_answers.get(&word).cloned()) {
-        Some(answer) => answer,
-        // The mod's own actions, asked with the table unlocked: they may call
-        // back.
-        None => match with(None, |s| s.actions) {
-            Some(actions) => {
-                let reply = crate::test::ask(
-                    actions,
-                    enshwick_core::abi::ActionCall::CONSOLE,
-                    &crate::test::console(),
-                    0,
-                    &rest,
-                    &word.to_lowercase(),
-                    enshwick_core::abi::ActionTarget::NONE,
-                );
-                reply.get(1..).unwrap_or_default().to_owned()
-            }
-            None => return Status::MISSING,
-        },
-    };
-    with(Status::MISSING, |s| {
-        let kept = s.run_out.insert(answer.into_boxed_str());
-        put(out, Str::new(kept))
-    })
-}
-
-pub(crate) extern "system" fn game_event(
-    me: ModHandle,
-    type_hash: u32,
-    callback: GameEventFn,
-    user: *mut c_void,
-) -> Status {
-    with(Status::MISSING, |s| {
-        s.game_events
-            .push((type_hash, Registered::new(callback, user, me)));
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn event_types(
-    _me: ModHandle,
-    out: *mut EventTypeInfo,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    let found: Vec<EventTypeInfo> = with(Vec::new(), |s| {
-        s.host
-            .event_types
-            .iter()
-            .map(|&(name, hash, size)| EventTypeInfo {
-                header: Header::of::<EventTypeInfo>(),
-                name: Str::new(name),
-                hash,
-                size,
-            })
-            .collect()
-    });
-    super::put_headed_list(&found, out, capacity, count)
 }
 
 pub(crate) extern "system" fn entities(
@@ -501,287 +389,6 @@ pub(crate) extern "system" fn drop_items(
     }
 }
 
-pub(crate) extern "system" fn time_of_day(_me: ModHandle, out: *mut DaytimeInfo) -> Status {
-    let Some(info) = with(None, |s| s.daytime) else {
-        return Status::MISSING;
-    };
-    // SAFETY: the safe layer passes a headed struct for the call.
-    if unsafe { enshwick_core::abi::write_headed(out, info) } {
-        Status::OK
-    } else {
-        Status::BAD_ARGS
-    }
-}
-
-pub(crate) extern "system" fn set_time_of_day(_me: ModHandle, time: i64) -> Status {
-    const DAY: i64 = 24 * 3_600_000_000_000;
-    with(Status::MISSING, |s| match s.daytime.as_mut() {
-        Some(info) => {
-            info.time = time.rem_euclid(DAY);
-            let day = (info.day_start..info.day_end).contains(&info.time);
-            info.flags = if day { DaytimeInfo::DAY } else { 0 };
-            Status::OK
-        }
-        None => Status::MISSING,
-    })
-}
-
-pub(crate) extern "system" fn time_speed_control(_me: ModHandle) -> Status {
-    with(Status::MISSING, |s| {
-        s.clock_speed.get_or_insert(1.0);
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn set_time_speed(_me: ModHandle, factor: f32) -> Status {
-    if !(0.0..=1000.0).contains(&factor) {
-        return Status::BAD_ARGS;
-    }
-    with(Status::MISSING, |s| match s.clock_speed.as_mut() {
-        Some(speed) => {
-            *speed = factor;
-            Status::OK
-        }
-        None => Status::REFUSED,
-    })
-}
-
-pub(crate) extern "system" fn game_settings(
-    _me: ModHandle,
-    out: *mut u8,
-    size: u32,
-    preset: *mut u32,
-) -> Status {
-    let Some((bytes, value)) = with(None, |s| s.game_settings.clone()) else {
-        return Status::MISSING;
-    };
-    if out.is_null() || preset.is_null() || size as usize != bytes.len() {
-        return Status::BAD_ARGS;
-    }
-    // SAFETY: `out` is non-null and `size` equals `bytes.len()`, both checked
-    // just before; the safe layer passes `size` writable bytes at `out`, apart
-    // from the fake's own copy.
-    unsafe {
-        core::ptr::copy_nonoverlapping(bytes.as_ptr(), out, bytes.len());
-    };
-    // SAFETY: `preset` is non-null, checked just before; the safe layer passes
-    // it pointing at a writable, aligned `u32` for the call.
-    unsafe { preset.write(value) };
-    Status::OK
-}
-
-pub(crate) extern "system" fn set_game_settings(
-    _me: ModHandle,
-    data: *const u8,
-    size: u32,
-) -> Status {
-    if data.is_null() {
-        return Status::BAD_ARGS;
-    }
-    // SAFETY: `data` is non-null, checked just before; the safe layer passes
-    // `size` readable bytes there for the call.
-    let bytes = unsafe { core::slice::from_raw_parts(data, size as usize) }.to_vec();
-    with(Status::MISSING, |s| match s.game_settings.as_mut() {
-        Some(current) if current.0.len() == bytes.len() => {
-            *current = (bytes, 4);
-            Status::OK
-        }
-        Some(_) => Status::BAD_ARGS,
-        None => Status::MISSING,
-    })
-}
-
-pub(crate) extern "system" fn keep_game_settings(
-    me: ModHandle,
-    data: *const u8,
-    mask: *const u8,
-    size: u32,
-) -> Status {
-    if mask.is_null() {
-        return Status::BAD_ARGS;
-    }
-    let status = set_game_settings(me, data, size);
-    if status != Status::OK {
-        return status;
-    }
-    // SAFETY: `data` is non-null, since `set_game_settings` refuses null and
-    // returned `OK`; the safe layer passes `size` readable bytes there.
-    let data = unsafe { core::slice::from_raw_parts(data, size as usize) };
-    // SAFETY: `mask` is non-null, checked at the top; the safe layer passes
-    // `size` readable bytes there for the call.
-    let mask = unsafe { core::slice::from_raw_parts(mask, size as usize) };
-    with(Status::MISSING, |s| {
-        s.kept_settings.resize(data.len(), None);
-        for ((kept, &byte), &set) in s.kept_settings.iter_mut().zip(data).zip(mask) {
-            if set != 0 {
-                *kept = Some(byte);
-            }
-        }
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn forget_game_settings(_me: ModHandle) -> Status {
-    with(Status::MISSING, |s| {
-        s.kept_settings.clear();
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn weather_at(
-    _me: ModHandle,
-    position: *const [i64; 3],
-    out: *mut [f32; 4],
-) -> Status {
-    if position.is_null() || out.is_null() {
-        return Status::BAD_ARGS;
-    }
-    match with(None, |s| s.weather.as_ref().map(|w| w.0)) {
-        Some(weights) => {
-            // SAFETY: `out` is non-null, checked at the top; the safe layer
-            // passes it pointing at a writable, aligned `[f32; 4]`.
-            unsafe { out.write(weights) };
-            Status::OK
-        }
-        None => Status::MISSING,
-    }
-}
-
-pub(crate) extern "system" fn weather_fronts(
-    _me: ModHandle,
-    out: *mut WeatherFront,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    let Some(fronts) = with(None, |s| s.weather.as_ref().map(|w| w.1.clone())) else {
-        return Status::MISSING;
-    };
-    super::put_headed_list(&fronts, out, capacity, count)
-}
-
-pub(crate) extern "system" fn set_weather(_me: ModHandle, effect: u32, duration: i64) -> Status {
-    with(Status::MISSING, |s| {
-        if s.weather.is_none() {
-            return Status::MISSING;
-        }
-        s.forecasts.push((effect, duration));
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn terrain_materials(
-    _me: ModHandle,
-    out: *mut TerrainMaterialInfo,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    let Some(materials) = with(None, |s| s.terrain.clone()) else {
-        return Status::MISSING;
-    };
-    super::put_headed_list(&materials, out, capacity, count)
-}
-
-pub(crate) extern "system" fn terrain_edit(
-    _me: ModHandle,
-    edit: *const TerrainEdit,
-    amount: *mut f32,
-) -> Status {
-    let Some(edit) = super::get_headed(edit) else {
-        return Status::BAD_ARGS;
-    };
-    if amount.is_null() {
-        return Status::BAD_ARGS;
-    }
-    if !terrain_edit_valid(&edit) {
-        return Status::BAD_ARGS;
-    }
-    with(Status::MISSING, |s| {
-        if s.terrain.is_none() {
-            return Status::MISSING;
-        }
-        if crate::test::world::edit_outside(s.host.extent, &edit) {
-            return Status::OUTSIDE_WORLD;
-        }
-        if !crate::test::world::edit_loaded(&s.host.voxels, &edit) {
-            return Status::NOT_LOADED;
-        }
-        s.edits.terrain.push(edit);
-        // SAFETY: `amount` is non-null, checked after the edit is read; the
-        // safe layer passes it pointing at a writable, aligned `f32`.
-        unsafe { amount.write(1.0) };
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn voxel_read(
-    _me: ModHandle,
-    min: *const [u32; 3],
-    size: *const [u32; 3],
-    out: *mut Voxel,
-    capacity: u64,
-) -> Status {
-    if min.is_null() || size.is_null() || out.is_null() {
-        return Status::BAD_ARGS;
-    }
-    // SAFETY: `min` is non-null, checked above; the safe layer passes three
-    // `u32`s for the call, and an unaligned read needs no alignment.
-    // The fake host reads the mod's buffer, not game memory.
-    // ast-grep-ignore: game-memory-through-raw
-    let min = unsafe { min.read_unaligned() };
-    // SAFETY: `size` is non-null, checked above; the safe layer passes three
-    // `u32`s for the call, and an unaligned read needs no alignment.
-    // The fake host reads the mod's buffer, not game memory.
-    // ast-grep-ignore: game-memory-through-raw
-    let size = unsafe { size.read_unaligned() };
-    if Voxel::read_count(min, size).is_none_or(|count| count > capacity) {
-        return Status::BAD_ARGS;
-    }
-    if !crate::test::table::on_game_thread() {
-        return Status::WRONG_THREAD;
-    }
-    let read = with(Err(Status::MISSING), |s| {
-        s.edits.voxel_reads.push((min, size));
-        if crate::test::world::outside(s.host.extent, min, size) {
-            return Err(Status::OUTSIDE_WORLD);
-        }
-        crate::test::world::VoxelGrid::read(&s.host.voxels, min, size).ok_or(Status::NOT_LOADED)
-    });
-    let voxels = match read {
-        Ok(voxels) => voxels,
-        Err(status) => return status,
-    };
-    for (i, voxel) in voxels.into_iter().enumerate() {
-        // SAFETY: `out` is non-null, checked above, and `i` is below the
-        // box's count, which is at most `capacity`; the safe layer passes
-        // `capacity` entries at `out`, so the offset stays inside them.
-        let slot = unsafe { out.add(i) };
-        // SAFETY: `slot` is inside the `capacity` writable entries the safe
-        // layer passes at `out`; `Voxel` has alignment 1.
-        unsafe { slot.write(voxel) };
-    }
-    Status::OK
-}
-
-/// Whether the loader takes `edit`: a known kind and shape, a radius above
-/// 0 and up to 16, a position at 0 or more, and for an add or a flatten a
-/// terrain material, for an add a height above 0 and up to 16.
-pub(crate) fn terrain_edit_valid(edit: &TerrainEdit) -> bool {
-    let reach = |metres: f32| metres > 0.0 && metres <= enshwick_core::terrain::MAX_RADIUS;
-    let material = (1..=0x7f).contains(&edit.material);
-    reach(edit.radius)
-        && edit
-            .position
-            .iter()
-            .all(|axis| axis.is_finite() && *axis >= 0.0)
-        && edit.shape <= TerrainEdit::SQUARE
-        && match edit.kind {
-            TerrainEdit::ADD => material && reach(edit.height),
-            TerrainEdit::DIG => true,
-            TerrainEdit::FLATTEN => material,
-            _ => false,
-        }
-}
-
 pub(crate) extern "system" fn build_rights(
     _me: ModHandle,
     check: *mut enshwick_core::abi::BuildRights,
@@ -834,7 +441,7 @@ pub(crate) extern "system" fn map_markers(
         return Status::WRONG_THREAD;
     }
     let Some(markers) = with(None, |s| {
-        let first = s.edits.first_ask(crate::test::table::SceneRead::Markers);
+        let first = s.edits.first_ask(SceneRead::Markers);
         (!s.edits.stopped)
             .then(|| (!first && !s.edits.markers_pending).then(|| s.host.map_markers.clone()))
     }) else {
@@ -843,7 +450,7 @@ pub(crate) extern "system" fn map_markers(
     let Some(markers) = markers else {
         return Status::NOT_LOADED;
     };
-    crate::test::table::mods::list(&markers, out, entry_size, capacity, count)
+    crate::test::table::base::mods::list(&markers, out, entry_size, capacity, count)
 }
 
 pub(crate) extern "system" fn map_frame(
@@ -854,7 +461,7 @@ pub(crate) extern "system" fn map_frame(
         return Status::WRONG_THREAD;
     }
     let Some(frame) = with(None, |s| {
-        let first = s.edits.first_ask(crate::test::table::SceneRead::Frame);
+        let first = s.edits.first_ask(SceneRead::Frame);
         (!s.edits.stopped).then(|| (!first && !s.edits.markers_pending).then_some(s.host.map_frame))
     }) else {
         return Status::MISSING;
