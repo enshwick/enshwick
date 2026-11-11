@@ -181,7 +181,7 @@ pub(crate) fn start(
     // SAFETY: `host::API` is the loader's process-wide table, a static that
     // lives for the process.
     unsafe {
-        enshwick_core::__private::install_host(&raw const host::API, host::LOADER_HANDLE);
+        enshwick_base::__internal::install_host(&raw const host::API, host::LOADER_HANDLE);
     }
     attribute_crashes(loader, &order);
     initialise(loader, &order, watching.as_mut());

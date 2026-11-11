@@ -14,6 +14,10 @@ fn reach(host: Host, scheduler: Scheduler, ty: ComponentType) {
     scheduler.run_due(0);
     let _ = ty.read(host, Entity(2));
     let _ = CraftRecipeEvent::new(Entity(2), None, RecipeId::new(1), 1);
+    enshwick::__private::as_loader(|| ());
+    enshwick::__private::refresh_levels();
+    let _ = enshwick::__private::install_host;
+    let _ = enshwick::__private::as_pack::<()>;
 }
 
 struct Mine;

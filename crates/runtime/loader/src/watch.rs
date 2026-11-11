@@ -183,7 +183,7 @@ fn changed(loader: &Loader, owner: Option<usize>) {
         crate::log!(INFO, "loader settings reloaded");
         // Its own copy of the API, which runs the data packs, subscribes to
         // nothing.
-        enshwick_core::__private::refresh_levels();
+        enshwick_base::__internal::refresh_levels();
         loader.emit(Event::LOADER_SETTINGS_CHANGED, None, core::ptr::null());
         return;
     }

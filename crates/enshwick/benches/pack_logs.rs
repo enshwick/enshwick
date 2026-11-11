@@ -5,8 +5,9 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use enshwick::__private::{Once, as_pack, enabled, install_host};
+use enshwick::__private::{Once, enabled};
 use enshwick::abi::{Level, ModHandle};
+use enshwick_base::__internal::{as_pack, install_host};
 
 static SITE: Once = Once::new();
 

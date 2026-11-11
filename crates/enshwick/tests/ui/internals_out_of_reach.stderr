@@ -1,33 +1,72 @@
-error[E0046]: not all trait items implemented, missing: `base`, `base_mut`
-  --> tests/ui/internals_out_of_reach.rs:21:1
+error[E0425]: cannot find function `as_loader` in module `enshwick::__private`
+  --> tests/ui/internals_out_of_reach.rs:17:26
    |
-21 | impl enshwick::Loading for Mine {}
+17 |     enshwick::__private::as_loader(|| ());
+   |                          ^^^^^^^^^ not found in `enshwick::__private`
+
+error[E0425]: cannot find function `refresh_levels` in module `enshwick::__private`
+  --> tests/ui/internals_out_of_reach.rs:18:26
+   |
+18 |       enshwick::__private::refresh_levels();
+   |                            ^^^^^^^^^^^^^^
+   |
+  ::: $WORKSPACE/crates/internal/base/src/__private.rs
+   |
+   | / pub unsafe extern "system" fn refresh_level(
+   | |     _event: crate::abi::Event,
+   | |     _data: *const core::ffi::c_void,
+   | |     _user: *mut core::ffi::c_void,
+   | | ) {
+   | |_- similarly named function `refresh_level` defined here
+   |
+help: a function with a similar name exists
+   |
+18 -     enshwick::__private::refresh_levels();
+18 +     enshwick::__private::refresh_level();
+   |
+
+error[E0425]: cannot find value `install_host` in module `enshwick::__private`
+  --> tests/ui/internals_out_of_reach.rs:19:34
+   |
+19 |     let _ = enshwick::__private::install_host;
+   |                                  ^^^^^^^^^^^^ not found in `enshwick::__private`
+
+error[E0425]: cannot find value `as_pack` in module `enshwick::__private`
+  --> tests/ui/internals_out_of_reach.rs:20:34
+   |
+20 |     let _ = enshwick::__private::as_pack::<()>;
+   |                                  ^^^^^^^ not found in `enshwick::__private`
+
+error[E0046]: not all trait items implemented, missing: `base`, `base_mut`
+  --> tests/ui/internals_out_of_reach.rs:25:1
+   |
+25 | impl enshwick::Loading for Mine {}
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ missing `base`, `base_mut` in implementation
    |
    = help: implement the missing item: `fn base(&self) -> &enshwick_base::load::BaseLoad { todo!() }`
    = help: implement the missing item: `fn base_mut(&mut self) -> &mut enshwick_base::load::BaseLoad { todo!() }`
 
 error[E0277]: the trait bound `Mine: enshwick_base::load::sealed::Sealed` is not satisfied
-  --> tests/ui/internals_out_of_reach.rs:21:28
+  --> tests/ui/internals_out_of_reach.rs:25:28
    |
-21 | impl enshwick::Loading for Mine {}
+25 | impl enshwick::Loading for Mine {}
    |                            ^^^^ unsatisfied trait bound
    |
 help: the trait `enshwick_base::load::sealed::Sealed` is not implemented for `Mine`
-  --> tests/ui/internals_out_of_reach.rs:19:1
+  --> tests/ui/internals_out_of_reach.rs:23:1
    |
-19 | struct Mine;
+23 | struct Mine;
    | ^^^^^^^^^^^
 help: the following other types implement trait `enshwick_base::load::sealed::Sealed`
-  --> $WORKSPACE/crates/internal/base/src/load.rs
-   |
-   | impl sealed::Sealed for BaseLoad {}
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `enshwick_base::load::BaseLoad`
-   |
-  ::: $WORKSPACE/crates/internal/core/src/load.rs
+  --> $WORKSPACE/crates/internal/core/src/load.rs
    |
    | impl enshwick_base::load::sealed::Sealed for Load<'_> {}
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Load<'_>`
+   |
+  ::: $WORKSPACE/crates/internal/base/src/load.rs
+   |
+   | impl sealed::Sealed for BaseLoad {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `enshwick_base::load::BaseLoad`
 note: required by a bound in `enshwick::Loading`
   --> $WORKSPACE/crates/internal/base/src/load.rs
    |

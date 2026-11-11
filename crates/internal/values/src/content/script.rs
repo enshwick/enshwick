@@ -54,7 +54,7 @@ static SCRIPT_IDS: std::sync::Mutex<ScriptIds> = std::sync::Mutex::new(ScriptIds
 impl ScriptIds {
     /// `text` for the process, the copy kept before when there is one.
     fn keep(text: String) -> &'static str {
-        // The API's `Relock` logs through the loader, above this crate; the
+        // The one `Relock` lives in `enshwick-base`, above this crate; the
         // set stays whole whatever panicked, its one write being an insert.
         // ast-grep-ignore: lock-through-relock
         let mut ids = SCRIPT_IDS

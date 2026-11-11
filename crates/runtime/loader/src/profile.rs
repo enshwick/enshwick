@@ -234,9 +234,9 @@ fn as_pack_or_loader<R>(pack: Option<enshwick_core::abi::ModHandle>, f: impl FnO
     match pack {
         // SAFETY: `API` is the loader's process-wide table, a static.
         Some(pack) => unsafe {
-            enshwick_core::__private::as_pack(&raw const crate::host::API, pack, f)
+            enshwick_base::__internal::as_pack(&raw const crate::host::API, pack, f)
         },
-        None => enshwick_core::__private::as_loader(f),
+        None => enshwick_base::__internal::as_loader(f),
     }
 }
 

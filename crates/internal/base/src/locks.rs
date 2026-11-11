@@ -272,7 +272,7 @@ mod tests {
     #[test]
     fn a_named_sink_hears_where_a_poisoned_lock_was_taken() {
         static HEARD: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-        report_to(|at| {
+        crate::__internal::report_poison_to(|at| {
             assert!(at.file().ends_with("locks.rs"), "{at}");
             HEARD.store(at.line(), std::sync::atomic::Ordering::Relaxed);
         });

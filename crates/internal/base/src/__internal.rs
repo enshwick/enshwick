@@ -1,9 +1,12 @@
-//! What the crates above the base call on its types and a mod must not.
+//! What the crates above the base and the loader call and a mod must not.
 //! Neither `enshwick-core` nor the facade re-exports this module, so a mod,
 //! which depends on `enshwick` alone, cannot name it; a method on a type the
 //! facade shows would be in its reach, hidden or not.
 
-use crate::abi::ModHandle;
+use std::sync::atomic::Ordering;
+
+use crate::__private::{MAX_LEVEL, PACK_LEVELS, tagged_level};
+use crate::abi::{HostApi, ModHandle};
 use crate::ecs::ComponentType;
 use crate::game_events::CraftRecipeEvent;
 use crate::schedule::Scheduler;
@@ -67,4 +70,92 @@ pub const fn craft_recipe_event(
         recipe_id,
         recipe_amount,
     )
+}
+
+/// Makes the table `api` with the handle `me` this process's host, for
+/// the loader's own copy of the API, which runs data packs.
+///
+/// # Safety
+///
+/// - `api` is null, or points at an aligned [`HostApi`] readable for the size its
+///   header states.
+/// - That table stays valid and unchanged for the rest of the process,
+///   as the loader's process-wide table does.
+pub unsafe fn install_host(api: *const HostApi, me: ModHandle) {
+    // SAFETY: `Host::new` needs `api` null or a table readable for its
+    // header's size that outlives the process; this function's `# Safety`
+    // bullets guarantee both.
+    if let Some(host) = unsafe { Host::new(api, me) } {
+        MAX_LEVEL.store(host.install().log_level().0, Ordering::Relaxed);
+    }
+}
+
+/// Runs `call`, the loader's call into code of the data pack `me`, with
+/// [`host`](crate::host()) answering the pack on this thread, so the pack's
+/// logs, settings reads and faults go out under its own handle.
+///
+/// # Safety
+///
+/// - `api` is null, or points at an aligned [`HostApi`] readable for the size its
+///   header states.
+/// - That table stays valid and unchanged for the rest of the process,
+///   as the loader's process-wide table does.
+pub unsafe fn as_pack<R>(api: *const HostApi, me: ModHandle, call: impl FnOnce() -> R) -> R {
+    // SAFETY: `Host::new` needs `api` null or a table readable for its
+    // header's size that outlives the process; this function's `# Safety`
+    // bullets guarantee both.
+    match unsafe { Host::new(api, me) } {
+        Some(host) => host.scope(call),
+        None => call(),
+    }
+}
+
+/// Runs `call`, the loader's call into its own code or a mod DLL's, as the
+/// process's host, also inside a data pack's call.
+///
+/// A panic or a line there is then not the pack's.
+pub fn as_loader<R>(call: impl FnOnce() -> R) -> R {
+    crate::host::running_as(None, call)
+}
+
+/// Rereads the levels this copy of the API keeps from the loader: the
+/// process host's, and in the loader's own copy every data pack's.
+///
+/// A mod's copy runs it on each
+/// [`Event::LOADER_SETTINGS_CHANGED`](crate::abi::Event::LOADER_SETTINGS_CHANGED);
+/// the loader's own copy subscribes to nothing, so the loader calls it before
+/// it raises that event.
+pub fn refresh_levels() {
+    let Some(own) = as_loader(crate::host) else {
+        return;
+    };
+    MAX_LEVEL.store(own.log_level().0, Ordering::Relaxed);
+    for (pack, kept) in PACK_LEVELS.made() {
+        kept.store(tagged_level((own.api().log_level)(pack)), Ordering::Relaxed);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ops::ControlFlow;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::time::Duration;
+
+    use super::*;
+
+    #[test]
+    fn run_due_runs_the_due_tasks_of_the_scheduler_it_is_handed() {
+        let (scheduler, subscribe) = scheduler(ModHandle(61));
+        assert!(subscribe);
+        let runs = Arc::new(AtomicU32::new(0));
+        let count = Arc::clone(&runs);
+        scheduler.every(Duration::ZERO, move || {
+            count.fetch_add(1, Ordering::Relaxed);
+            ControlFlow::Continue(())
+        });
+        run_due(scheduler, 1);
+        run_due(scheduler, 1);
+        assert_eq!(runs.load(Ordering::Relaxed), 2);
+    }
 }
