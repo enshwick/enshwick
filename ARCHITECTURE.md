@@ -13,7 +13,8 @@ safe API.
 | `enshwick-loader`      | `crates/internal/loader`   | the loader DLL: finds the game build, loads and resolves mods, links their hooks, answers the ABI                                                                                                                     | no, in `enshwick.zip`   |
 | `enshwick-luau`        | `crates/internal/luau`     | Luau mods: one sandboxed VM per mod with memory and time budgets, the API bound from the script descriptions of `enshwick` and its internal parts                                                                                      | no                      |
 | `enshwick`             | `crates/enshwick`          | the one crate mods use: the facade that re-exports every module of its internal parts at its own paths, the crate docs, the macros' docs and the features                                                            | yes                     |
-| `enshwick-core` | `crates/internal/core` | internal part of `enshwick`: the safe layer over the ABI and every domain of the API, re-exported under `enshwick`'s paths | yes |
+| `enshwick-core` | `crates/internal/core` | internal part of `enshwick`: `Load` and `World`, the domains not yet in crates of their own, and the script binding, re-exported under `enshwick`'s paths | yes |
+| `enshwick-base` | `crates/internal/base` | internal part of `enshwick`: what every domain shares (the host handle, events, services, points, settings, texts, state, the resource codec, the ECS reads) and the base handle `Load` holds, re-exported under `enshwick`'s paths | yes |
 | `enshwick-fake` | `crates/internal/fake` | internal part of `enshwick`: the fake loader for a mod's unit tests, re-exported as `enshwick::test` behind the `test` feature | yes |
 | `enshwick-macros`      | `crates/enshwick-macros`   | `#[hook]`, `#[config]` and the other macros of the API                                                                                                                                                                | yes                     |
 | `enshwick-values` | `crates/internal/values` | internal part of `enshwick`: the value types its layers share (shape, content ids, resource values, the script value model), re-exported under `enshwick`'s paths | yes |
@@ -35,13 +36,14 @@ stub ──starts──▶ loader ──C ABI──▶ mods (enshwick ▸ enshwi
                    └──▶ enshwick-luau ──▶ enshwick-core (script descriptions)
 cargo-enshwick ──▶ enshwick-core, enshwick-abi, enshwick-gamedata
 enshwick ──▶ enshwick-core ──▶ enshwick-typed ──▶ enshwick-values ──▶ enshwick-macros
-                 enshwick-core ──▶ enshwick-abi ────▶ enshwick-values
+                 enshwick-core ──▶ enshwick-base ──▶ enshwick-abi ──▶ enshwick-values
 enshwick ──test──▶ enshwick-fake ──▶ enshwick-core (its `fake` feature)
 ```
 
 - `enshwick` is the one crate a mod names, a facade over its internal parts,
-  each re-exported under its paths: `enshwick-core`, the safe layer and every
-  domain; `enshwick-fake`, the fake loader; `enshwick-typed`, the generated
+  each re-exported under its paths: `enshwick-core`, `Load` and the domains
+  still in it; `enshwick-base`, what every domain shares; `enshwick-fake`,
+  the fake loader; `enshwick-typed`, the generated
   typed API; `enshwick-abi`, the ABI; `enshwick-values`, the value types the
   layers share. None depends on `enshwick` or on a part above it, so the
   compiler refuses ABI code that names the safe API and core code that names
@@ -77,29 +79,78 @@ enshwick ──test──▶ enshwick-fake ──▶ enshwick-core (its `fake` f
   `cargo-enshwick` writes the Luau definitions from them; neither keeps a
   list of its own. Only `enshwick-luau` links Luau.
 
-## Domains inside the core
+## Domains
 
-`crates/internal/core/domains.toml` puts each top-level module of
-`enshwick-core` in one domain and orders the domains, lowest first: base,
-content, world, inventory, knowledge, actions, ui, packs.
+`crates/internal/core/domains.toml` orders the domains of the API, lowest
+first: base, content, world, inventory, knowledge, actions, ui, packs. It
+puts each top-level module still in `enshwick-core` in one domain, and names
+the crate of each domain that has left it.
 
-- A module names only base, its own domain and the domains before its own.
+- A module names only its own domain and the domains before its own.
   Something two domains share moves down into base or the lower domain.
 - `cargo xtask check` reads the code's `crate::` paths without compiling and
   refuses an edge up the order. The edges up the order the code still has
   are listed in `domains.toml`; a new one fails, and so does a listed one
   that is gone, so the list only shrinks.
+- A domain's crate depends, among the internal crates, only on those below
+  every domain (`below` in `domains.toml`) and on the crates of the domains
+  before its own; the check holds its manifest, and the compiler holds its
+  code.
 - Registration lists are one per domain, joined in the domain order: the
   script namespaces in `script/namespaces/<domain>.rs`, which the check also
   holds to the map. The loader's `TABLE_IDS` are one list per module, joined
   in `table_ids.rs`.
 - Each domain turns its own errors into `Off`, and keeps the state it needs
-  while a mod initialises in `Load`'s typed slots, keyed by a type of its
-  own, so `Load` names no domain.
-- `Load` and `World` stay in `enshwick-core`, the top layer. Domains leave
-  the core downward, lowest first, each into a crate below it that depends
-  on base and lower domains only; the core keeps the domain's `Load` and
-  `World` methods as one-line forwarders with their docs and `#[script]`.
+  while a mod initialises in the base handle's typed slots, keyed by a type
+  of its own, so `Load` names no domain.
+- `Load` and `World` stay in `enshwick-core`, the top layer. `Load` holds the
+  base handle, `BaseLoad`, which every crate below takes for the mod's init;
+  a public function below `Load` that takes the mod's loader takes
+  `&impl Loading` or `&mut impl Loading`, so a mod passes its `Load` as
+  before.
+
+### Peeling a domain out of the core
+
+Domains leave the core downward, lowest first, each in one pull request
+that keeps `enshwick`'s public API equal. Base went first; each later peel
+follows the same steps.
+
+1. Make the crate `crates/internal/<domain>` (`enshwick-<domain>`): exact
+   pins, the description "Internal part of enshwick; depend on enshwick",
+   `#![forbid(unsafe_code)]` where it has none, `extern crate self as
+   enshwick;` and a root that holds the paths the macros emit. Its
+   dependencies are base, the lower domains' crates and the crates of
+   `below`. Name it under `[crates]` in `domains.toml` and drop its modules
+   from `[modules]`.
+2. Move the domain's modules with `git mv`. Each `impl Load` block moves with
+   `cargo xtask peel-load <from>=<into>`: the block becomes an `impl
+   BaseLoad` block whose methods carry one hidden doc line, and its docs,
+   examples and `#[script]` go to a block of bodiless methods on `Load` in
+   `core/src/load/<module>.rs`, whose bodies `#[forward(base)]` writes. A
+   block of a module that `cfg` gates in its parent gets that `cfg` by
+   hand. A method whose closure takes `&mut Self` stays a method of `Load`
+   that runs the closure and hands the outcome down.
+3. Upward edges the moved code still has go first: what a lower layer needs
+   moves down with it, such as the served-resource builder into
+   `resources` and the host's resource reads, and what only an upper domain
+   needs moves up, such as the rate rule into `rates`. An inherent method
+   of a lower type, `Host` included, lives in that type's crate.
+4. The domain's `Bound` implementations and its namespace list stay in
+   `core/src/script/namespaces/<domain>.rs`: a namespace opens its handle
+   through `Load` and lists `Load`'s start functions, which `#[script]` on
+   the forwarders makes.
+5. What core or the fake reads inside the crate becomes `pub` with
+   `#[doc(hidden)]`; the fake's part of it goes into the crate's own hidden
+   `__fake`, behind a `fake` feature that core's turns on. Core re-exports
+   the crate's modules at the paths its own code names them by, and the
+   facade re-exports them at today's paths.
+6. Give each doc example the alias line with `cargo xtask alias-examples`,
+   run the crate's doctests without its features and with them, and feed
+   each log to `cargo xtask wrap-examples <log> [--cfg <feature>]`, which
+   wraps the examples that name items above the crate and writes their
+   copies into `crates/enshwick/src/lower_examples/<crate>[_<feature>].rs`.
+7. A per-domain cargo feature, on by default, is an optional dependency on
+   the crate plus a `cfg` on core's forwarders and the facade's re-exports.
 
 ## The ABI contract
 
