@@ -25,6 +25,7 @@
 
 mod codec;
 mod kind;
+mod read;
 mod registry;
 mod script;
 mod serve;
@@ -40,7 +41,7 @@ pub use script::{Bytes, Resources};
 #[doc(hidden)]
 pub use serve::serve;
 #[doc(hidden)]
-pub use table::{TypeTable, decode, serve_new, serve_value};
+pub use table::{TypeTable, declare, decode, serve_new, serve_value};
 pub use types::{Attribute, Constant, Field, Type, crc32, crc64, fnv1a32};
 
 #[cfg(test)]

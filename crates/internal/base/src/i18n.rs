@@ -676,6 +676,28 @@ fn keep(host: Host, texts: &Texts, over: bool) {
     let _kept = (host.api().texts)(me, crate::abi::Str::new(&all));
 }
 
+/// Gives `LocaTag` `tag` the text `text` in `language` for the mod `host`
+/// serves, as `Load::add_text` does.
+///
+/// # Errors
+///
+/// [`Off`] when the loader refuses the text.
+#[doc(hidden)]
+pub fn add_text(
+    host: Host,
+    tag: crate::content::Guid,
+    language: Language,
+    text: &str,
+) -> Result<(), Off> {
+    let status = (host.api().add_text)(
+        host.handle(),
+        tag.fnv1a(),
+        language.0,
+        crate::abi::Str::new(text),
+    );
+    crate::load::ok(status, (), || "add text".to_owned())
+}
+
 impl BaseLoad {
     /// As `Load::texts`.
     pub fn texts(&mut self) -> Result<Texts, Off> {
@@ -695,11 +717,12 @@ impl BaseLoad {
 
     /// As `Load::add_texts`.
     pub fn add_texts(&mut self, texts: &Texts, tags: &[(&str, Id)]) -> Result<(), Off> {
+        let host = self.host();
         for &(key, tag) in tags {
-            let tag = self.declare(tag)?;
+            let tag = crate::resources::declare(host, &tag.to_string())?;
             let mut any = false;
             for (language, text) in texts.translations(key) {
-                self.add_text(tag, language, text)?;
+                add_text(host, tag, language, text)?;
                 any = true;
             }
             if !any {

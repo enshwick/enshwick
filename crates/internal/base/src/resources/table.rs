@@ -596,7 +596,8 @@ impl crate::BaseLoad {
 
 /// Declares the content id `id`, `<mod>:<name>`, for the mod `host` serves,
 /// and returns its GUID.
-pub(crate) fn declare(host: Host, id: &str) -> Result<crate::content::Guid, Off> {
+#[doc(hidden)]
+pub fn declare(host: Host, id: &str) -> Result<crate::content::Guid, Off> {
     let mut out = [0u8; 16];
     let status = (host.api().declare_content)(host.handle(), Str::new(id), &raw mut out);
     crate::load::ok(status, crate::content::Guid(out), || {

@@ -42,6 +42,20 @@ pub trait EngineFacts {
     fn hash(&self, id: &str) -> Result<u32, Off>;
 }
 
+impl EngineFacts for crate::BaseLoad {
+    fn offset(&self, id: &str) -> Result<usize, Off> {
+        self.host().offset(id)
+    }
+
+    fn size(&self, id: &str) -> Result<usize, Off> {
+        self.host().size(id)
+    }
+
+    fn hash(&self, id: &str) -> Result<u32, Off> {
+        self.host().hash(id)
+    }
+}
+
 impl EngineFacts for crate::Host {
     fn offset(&self, id: &str) -> Result<usize, Off> {
         let mut out = 0u64;
