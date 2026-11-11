@@ -655,4 +655,17 @@ mod tests {
         assert!(bool::from_answer(Ok(Value::Nil)));
         assert!(bool::from_answer(Err(Error::new("boom"))));
     }
+
+    #[test]
+    fn a_result_answer_is_the_value_as_its_type_or_why_it_is_not() {
+        assert!(core::ptr::eq(<Result<u8, Error>>::TY, u8::TY));
+        assert_eq!(
+            <Result<u8, Error>>::from_answer(Ok(Value::Number(7.0))).ok(),
+            Some(7)
+        );
+        assert!(<Result<u8, Error>>::from_answer(Ok(Value::Number(300.0))).is_err());
+        assert!(<Result<u8, Error>>::from_answer(Ok(Value::Bool(true))).is_err());
+        let reported = <Result<String, Error>>::from_answer(Err(Error::new("boom")));
+        assert_eq!(reported.map_err(|e| e.to_string()), Err("boom".to_owned()));
+    }
 }
