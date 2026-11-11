@@ -166,7 +166,8 @@ use enshwick_core::abi::{
 use enshwick_core::Off;
 use enshwick_core::content::EngineFacts;
 
-use world::players::{FakeService, ask, console};
+use actions::commands::{ask, console};
+use base::host::FakeService;
 
 /// A mod's `enshwick_mod_init` export, as [`declare_mod!`](enshwick_core::declare_mod)
 /// writes it.

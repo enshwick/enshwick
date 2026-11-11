@@ -9,6 +9,7 @@ pub(crate) mod calls;
 pub(crate) mod events;
 pub mod facts;
 pub(crate) mod hooks;
+pub(crate) mod host;
 pub(crate) mod pacing;
 pub(crate) mod points;
 pub(crate) mod settings;

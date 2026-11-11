@@ -69,3 +69,12 @@ knowledge = ["knowledge", "progress", "quests", "rewards"]
 actions = ["actions", "chat", "commands", "console", "controls", "input", "interactions", "vetoes"]
 ui = ["sound", "ui"]
 packs = ["packs"]
+
+# The fake loader, `crates/internal/fake/src/test`, cut by the same domains:
+# each file under `test/` and `test/table/` belongs to the domain its folder
+# or file is named after, and `test.rs` and `test/table.rs` join them. A
+# domain's files name only its own domain and those before it, of the fake
+# and of core.
+[fake]
+# The edges up the order still in the fake, as `from -> to`.
+upward = []

@@ -7,6 +7,7 @@ use enshwick_core::abi::Interaction;
 use crate::test::{FakeHost, Installed, table};
 
 pub(crate) mod chat;
+pub(crate) mod commands;
 #[cfg(feature = "unstable")]
 pub(crate) mod controls;
 

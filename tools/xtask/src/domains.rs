@@ -5,7 +5,9 @@
 //! listed one that is gone, fails, so the list only shrinks as domains are
 //! peeled out. A domain peeled into a crate of its own depends on no
 //! internal crate but those below every domain and the crates of the
-//! domains before its own; the compiler holds the rest.
+//! domains before its own; the compiler holds the rest. The fake loader is
+//! cut by the same domains, a file's domain named by its folder, and held
+//! by the same rule with an `upward` list of its own.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -13,6 +15,8 @@ use std::path::Path;
 use proc_macro2::{Ident, Spacing, TokenStream, TokenTree};
 use syn::visit::{self, Visit};
 use syn::{Item, ItemMod, UseTree, Visibility};
+
+mod fake;
 
 /// The map, from the workspace root.
 const MAP: &str = "crates/internal/core/domains.toml";
@@ -39,6 +43,9 @@ struct Map {
     /// Each peeled domain's crate, by its folder under `crates/internal`.
     #[serde(default)]
     crates: BTreeMap<String, String>,
+    /// The fake loader, cut by the same domains.
+    #[serde(default)]
+    fake: fake::Fake,
 }
 
 /// The internal crates a peeled domain's crate depends on that are not
@@ -140,8 +147,8 @@ fn problems(root: &Path) -> Result<Vec<String>, String> {
     roots.retain(|name, _| !modules.contains(name));
     let mut edges = BTreeSet::new();
     for (path, text) in &files {
-        let named =
-            names(text, depth(path), &roots).map_err(|e| format!("{SOURCES}/{path}: {e}"))?;
+        let named = names(text, &module_path(path), &roots)
+            .map_err(|e| format!("{SOURCES}/{path}: {e}"))?;
         if let Some(list) = path.strip_prefix(LISTS).and_then(|p| p.strip_suffix(".rs")) {
             problems.extend(list_strays(&map, list, &named));
         } else if !joined(path) {
@@ -155,6 +162,7 @@ fn problems(root: &Path) -> Result<Vec<String>, String> {
         }
     }
     problems.extend(judge(&map, &modules, &edges));
+    problems.extend(fake::problems(root, &map, &roots)?);
     Ok(problems)
 }
 
@@ -163,10 +171,11 @@ fn problems(root: &Path) -> Result<Vec<String>, String> {
 /// domain's starting functions.
 fn list_strays(map: &Map, list: &str, named: &BTreeSet<String>) -> Vec<String> {
     let mut problems = Vec::new();
+    let own = top(LISTS);
     for (domain, modules) in map.modules.iter().filter(|(domain, _)| *domain != list) {
         for module in modules
             .iter()
-            .filter(|m| named.contains(*m) && *m != "load")
+            .filter(|m| named.contains(*m) && *m != "load" && **m != own)
         {
             problems.push(format!(
                 "{SOURCES}/{LISTS}{list}.rs names {module} of {domain}: move its namespace to {LISTS}{domain}.rs"
@@ -298,15 +307,15 @@ fn top(path: &str) -> String {
     first.strip_suffix(".rs").unwrap_or(first).to_owned()
 }
 
-/// The module depth of a file under `src`: 1 for `ui.rs` and `ui/mod.rs`,
-/// 2 for `ui/frame.rs`.
-fn depth(path: &str) -> usize {
-    let segments = path.split('/').count();
-    if path.ends_with("/mod.rs") {
-        segments - 1
-    } else {
-        segments
+/// The module path of a file under `src`: none for `lib.rs`, `ui` for
+/// `ui.rs` and `ui/mod.rs`, `ui::frame` for `ui/frame.rs`.
+fn module_path(path: &str) -> Vec<String> {
+    let path = path.strip_suffix(".rs").unwrap_or(path);
+    let path = path.strip_suffix("/mod").unwrap_or(path);
+    if path == "lib" {
+        return Vec::new();
     }
+    path.split('/').map(str::to_owned).collect()
 }
 
 /// The items `lib.rs` re-exports at the crate root, each with the module it
@@ -348,47 +357,87 @@ fn roots(lib: &str) -> Result<BTreeMap<String, String>, String> {
     Ok(roots)
 }
 
-/// The top-level modules `text`, a file `depth` modules deep, names: the
-/// first segment under the crate root of each `crate::` path and each chain
-/// of `super::` that reaches the root, a root re-export read through
-/// `roots`; comments and `#[cfg(test)]` items left out, macro bodies read as
-/// tokens.
+/// The top-level modules `text`, a file of module `module`, names: the
+/// first segment under the crate root of each `crate::`, `self::` and
+/// `super::` path, a root re-export read through `roots`; comments and
+/// `#[cfg(test)]` items left out, macro bodies read as tokens.
 fn names(
     text: &str,
-    depth: usize,
+    module: &[String],
     roots: &BTreeMap<String, String>,
 ) -> Result<BTreeSet<String>, String> {
+    let (found, _) = paths(text, module, &[])?;
+    Ok(found
+        .into_iter()
+        .filter_map(|abs| {
+            let first = abs.into_iter().next()?;
+            Some(roots.get(&first).cloned().unwrap_or(first))
+        })
+        .collect())
+}
+
+/// Paths of a file: those under its crate's root, absolute, and those that
+/// start at an external crate.
+type Named = (BTreeSet<Vec<String>>, BTreeSet<Vec<String>>);
+
+/// The paths `text`, a file of module `module`, names: those under its
+/// crate's root, absolute, and those that start at one of `externs`;
+/// comments and `#[cfg(test)]` items left out, macro bodies read as tokens.
+fn paths(text: &str, module: &[String], externs: &[&str]) -> Result<Named, String> {
     let file = syn::parse_file(text).map_err(|e| e.to_string())?;
-    let mut walk = Walk {
-        depth,
-        roots,
-        found: BTreeSet::new(),
-    };
+    let mut walk = Walk::new(module, externs);
     walk.visit_file(&file);
-    Ok(walk.found)
+    Ok((walk.found, walk.external))
 }
 
-/// The walk of [`names`] over one file.
+/// The walk of [`paths`] over one file.
 struct Walk<'a> {
-    /// How many modules deep the walk stands, inline modules counted.
-    depth: usize,
-    roots: &'a BTreeMap<String, String>,
-    found: BTreeSet<String>,
+    /// The module the walk stands in, inline modules counted.
+    module: Vec<String>,
+    /// The crates whose paths count as external.
+    externs: &'a [&'a str],
+    /// The absolute paths under the crate root.
+    found: BTreeSet<Vec<String>>,
+    /// The paths that start at one of `externs`.
+    external: BTreeSet<Vec<String>>,
 }
 
-impl Walk<'_> {
-    /// Records the top-level module the path of `segments` names, when it
-    /// starts at the crate root.
-    fn path(&mut self, segments: &[String]) {
+impl<'a> Walk<'a> {
+    fn new(module: &[String], externs: &'a [&'a str]) -> Self {
+        Self {
+            module: module.to_vec(),
+            externs,
+            found: BTreeSet::new(),
+            external: BTreeSet::new(),
+        }
+    }
+
+    /// The absolute path `segments` stands for when it starts at `crate`,
+    /// `self` or a chain of `super` inside the crate.
+    fn resolve(&self, segments: &[String]) -> Option<Vec<String>> {
         let supers = segments.iter().take_while(|s| *s == "super").count();
-        let under_root = match segments.first().map(String::as_str) {
-            Some("crate") => &segments[1..],
-            Some("super") if supers == self.depth => &segments[supers..],
-            _ => return,
+        let (base, rest) = match segments.first().map(String::as_str) {
+            Some("crate") => (&[][..], &segments[1..]),
+            Some("self") => (&self.module[..], &segments[1..]),
+            Some("super") if supers <= self.module.len() => (
+                &self.module[..self.module.len() - supers],
+                &segments[supers..],
+            ),
+            _ => return None,
         };
-        if let Some(first) = under_root.first() {
-            let module = self.roots.get(first).unwrap_or(first);
-            self.found.insert(module.clone());
+        Some(base.iter().chain(rest).cloned().collect())
+    }
+
+    /// Records the path of `segments`, when it starts at the crate root, in
+    /// the module or at an external crate.
+    fn path(&mut self, segments: &[String]) {
+        if let Some(absolute) = self.resolve(segments) {
+            self.found.insert(absolute);
+        } else if segments
+            .first()
+            .is_some_and(|first| self.externs.contains(&first.as_str()))
+        {
+            self.external.insert(segments.to_vec());
         }
     }
 
@@ -461,10 +510,14 @@ impl<'ast> Visit<'ast> for Walk<'_> {
     }
 
     fn visit_item_mod(&mut self, item: &'ast ItemMod) {
-        let inline = usize::from(item.content.is_some());
-        self.depth += inline;
+        let inline = item.content.is_some();
+        if inline {
+            self.module.push(item.ident.to_string());
+        }
         visit::visit_item_mod(self, item);
-        self.depth -= inline;
+        if inline {
+            self.module.pop();
+        }
     }
 
     fn visit_path(&mut self, path: &'ast syn::Path) {
@@ -523,6 +576,7 @@ mod tests {
             upward: upward.iter().map(|&s| s.to_owned()).collect(),
             below: Vec::new(),
             crates: BTreeMap::new(),
+            fake: fake::Fake::default(),
         }
     }
 
@@ -591,18 +645,35 @@ mod tests {
     fn names_reads_paths_groups_nested_groups_and_macro_bodies() -> Result<(), String> {
         let code = "use crate::map::Map;\nuse crate::{host::Host, ui::{Ui, frame}};\nfn f() { crate::sound::play(); let a = foo_crate::x; log!(crate::time::now()); }\nmacro_rules! m { () => { $crate::world::W } }";
         assert_eq!(
-            names(code, 1, &BTreeMap::new())?,
+            names(code, &module("x"), &BTreeMap::new())?,
             set(&["host", "map", "sound", "time", "ui", "world"])
         );
         Ok(())
     }
 
+    fn module(path: &str) -> Vec<String> {
+        path.split("::").map(str::to_owned).collect()
+    }
+
     #[test]
-    fn names_follows_a_super_chain_to_the_root_and_counts_inline_modules() -> Result<(), String> {
-        let code = "use super::super::ui::Ui;\nuse super::frame::F;\nuse super::super::{host::H, map};\nmod inner { use super::super::super::sound::S; use super::super::time::T; }";
+    fn names_resolves_super_and_self_chains_and_counts_inline_modules() -> Result<(), String> {
+        let code = "use super::super::ui::Ui;\nuse super::frame::F;\nuse self::part::P;\nuse super::super::{host::H, map};\nmod inner { use super::super::super::sound::S; use super::super::time::T; }";
         assert_eq!(
-            names(code, 2, &BTreeMap::new())?,
-            set(&["host", "map", "sound", "ui"])
+            names(code, &module("world::props"), &BTreeMap::new())?,
+            set(&["host", "map", "sound", "ui", "world"])
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn paths_keeps_a_named_crate_s_paths_apart_and_drops_other_crates() -> Result<(), String> {
+        let code = "use enshwick_core::ui::Frame;\nuse std::fmt;\nfn f() { other::x(); enshwick_core::chat::send(); }";
+        let (found, external) = paths(code, &module("test::world"), &[fake::CORE_CRATE])?;
+        assert!(found.is_empty(), "{found:?}");
+        let external: Vec<String> = external.iter().map(|p| p.join("::")).collect();
+        assert_eq!(
+            external,
+            ["enshwick_core::chat::send", "enshwick_core::ui::Frame"]
         );
         Ok(())
     }
@@ -612,7 +683,7 @@ mod tests {
     {
         let code = "/// crate::ui::Ui\nuse crate::map; // crate::host\nconst U: &str = \"https://x crate::world\"; use crate::time::T;\n#[cfg(test)]\nmod tests { use crate::ui; }\nuse crate::sound::S;";
         assert_eq!(
-            names(code, 1, &BTreeMap::new())?,
+            names(code, &module("x"), &BTreeMap::new())?,
             set(&["map", "sound", "time"])
         );
         Ok(())
@@ -630,7 +701,10 @@ mod tests {
         assert_eq!(roots.get("L").map(String::as_str), Some("load"));
         assert!(!roots.contains_key("Hidden"));
         let code = "use crate::WorldError;\nfn f() { crate::L::x(); }";
-        assert_eq!(names(code, 1, &roots)?, set(&["load", "world_error"]));
+        assert_eq!(
+            names(code, &module("x"), &roots)?,
+            set(&["load", "world_error"])
+        );
         Ok(())
     }
 
@@ -642,11 +716,12 @@ mod tests {
     }
 
     #[test]
-    fn depth_counts_the_modules_of_a_file_path() {
-        assert_eq!(depth("ui.rs"), 1);
-        assert_eq!(depth("ui/mod.rs"), 1);
-        assert_eq!(depth("ui/frame.rs"), 2);
-        assert_eq!(depth("ui/frame/mod.rs"), 2);
+    fn module_path_names_the_modules_of_a_file_path() {
+        assert_eq!(module_path("lib.rs"), Vec::<String>::new());
+        assert_eq!(module_path("ui.rs"), module("ui"));
+        assert_eq!(module_path("ui/mod.rs"), module("ui"));
+        assert_eq!(module_path("ui/frame.rs"), module("ui::frame"));
+        assert_eq!(module_path("ui/frame/mod.rs"), module("ui::frame"));
     }
 
     #[test]
@@ -705,6 +780,9 @@ mod tests {
             "const N: &[u8] = &[crate::ui::X];",
         );
         write("script/namespaces/ui.rs", "");
+        let fake = tree.0.join(fake::SOURCES);
+        std::fs::create_dir_all(fake.join(fake::ROOT)).unwrap();
+        std::fs::write(fake.join(format!("{}.rs", fake::ROOT)), "").unwrap();
         let problems = check(&root);
         assert!(
             problems.iter().any(|p| p.starts_with("host -> ui goes up")),

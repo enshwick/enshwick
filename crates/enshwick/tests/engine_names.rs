@@ -23,7 +23,7 @@ mod tests {
         ("lower_examples/base.rs", "module", COPIES),
         ("load/build.rs", "field_offset", FIELD),
         ("load/build.rs", "type_size", FIELD),
-        ("fake:test/hooks.rs", "field_offset", FAKE),
+        ("fake:test/base/hooks.rs", "field_offset", FAKE),
         ("world.rs", "WritableType", COMPONENT),
         ("world.rs", "set", COMPONENT),
         ("world.rs", "size", COMPONENT),
