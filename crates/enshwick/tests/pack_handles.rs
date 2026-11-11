@@ -438,14 +438,10 @@ mod tests {
             })
         };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let before = loader.sent().len();
         assert_eq!(loader.raise::<WorldLoaded>(&()), 1);
-        let faults: Vec<_> = loader
-            .sent()
-            .into_iter()
-            .filter(|(_, level, _)| *level == Level::ERROR)
-            .collect();
         assert_eq!(
-            faults,
+            loader.sent()[before..],
             [(
                 ModHandle(2),
                 Level::ERROR,
