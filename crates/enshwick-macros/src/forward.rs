@@ -74,9 +74,9 @@ fn call(field: &Ident, sig: &Signature) -> syn::Result<TokenStream> {
         .iter()
         .filter_map(|input| match input {
             FnArg::Receiver(_) => None,
-            FnArg::Typed(typed) => Some(typed),
+            FnArg::Typed(arg) => Some(arg),
         })
-        .map(|typed| match &*typed.pat {
+        .map(|arg| match &*arg.pat {
             Pat::Ident(ident) => Ok(&ident.ident),
             other => Err(syn::Error::new_spanned(
                 other,

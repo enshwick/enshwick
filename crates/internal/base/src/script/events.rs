@@ -204,10 +204,10 @@ impl GameEventKind {
     /// ```
     pub fn subscribe(
         &self,
-        load: &mut crate::BaseLoad,
+        load: &mut impl crate::Loading,
         handler: impl Fn(&dyn Fn() -> Value) + Send + Sync + 'static,
     ) -> Result<(), crate::Off> {
-        (self.subscribe)(load, Box::new(handler))
+        (self.subscribe)(load.base_mut(), Box::new(handler))
     }
 }
 

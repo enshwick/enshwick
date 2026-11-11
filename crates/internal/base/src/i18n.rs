@@ -650,6 +650,7 @@ pub(crate) fn hand(host: Host, texts: &Texts) {
 /// Adds `texts` beneath what the loader keeps of the mod `host` names: a
 /// text the mod handed itself, before or after, stays.
 #[cfg(feature = "unstable")]
+#[doc(hidden)]
 pub fn hand_under(host: Host, texts: &Texts) {
     keep(host, texts, false);
 }

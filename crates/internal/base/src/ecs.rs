@@ -7,7 +7,7 @@
 
 use crate::abi::Side;
 use crate::raw::{read_at, read_ptr_at, write_at};
-use crate::{BaseLoad, Entity, Host, Off};
+use crate::{Entity, Host, Off};
 
 type IteratorInit = unsafe extern "system" fn(ctx: *mut u64, iterator: *mut u64, size: u64);
 type IteratorNext = unsafe extern "system" fn(ctx: *mut u64, iterator: *mut u64, size: u64) -> u64;
@@ -62,7 +62,8 @@ impl Ecs {
     /// # Examples
     ///
     /// See [`Ecs`].
-    pub fn resolve(load: &BaseLoad) -> Result<Self, Off> {
+    pub fn resolve(load: &impl crate::Loading) -> Result<Self, Off> {
+        let load = load.base();
         let size = |name| {
             load.constant(name)
                 .map(|v| usize::try_from(v).unwrap_or(usize::MAX))
@@ -338,7 +339,8 @@ impl ComponentType {
     /// # Examples
     ///
     /// See [`ComponentType`].
-    pub fn resolve(load: &BaseLoad, name: &str) -> Result<Self, Off> {
+    pub fn resolve(load: &impl crate::Loading, name: &str) -> Result<Self, Off> {
+        let load = load.base();
         Self::named(load.host(), name)
     }
 
@@ -351,6 +353,8 @@ impl ComponentType {
 
     /// The type whose hash is `hash`, for a hash the loader already checked.
     #[cfg(feature = "unstable")]
+    #[doc(hidden)]
+    #[must_use]
     pub const fn from_hash(hash: u32) -> Self {
         Self(hash)
     }
@@ -373,7 +377,9 @@ impl ComponentType {
     /// A pointer to `entity`'s component of this type on the server's game
     /// thread, valid until the game thread returns to the game; `None` when
     /// the entity has none.
-    pub(crate) fn read(self, host: Host, entity: Entity) -> Option<*const core::ffi::c_void> {
+    #[doc(hidden)]
+    #[must_use]
+    pub fn read(self, host: Host, entity: Entity) -> Option<*const core::ffi::c_void> {
         let mut out: *const core::ffi::c_void = core::ptr::null();
         let status = (host.api().component)(host.handle(), entity, self.0, &raw mut out);
         (status == crate::abi::Status::OK && !out.is_null()).then_some(out)
@@ -411,7 +417,8 @@ impl Components {
     /// # Examples
     ///
     /// See [`Components`].
-    pub fn resolve(load: &BaseLoad) -> Result<Self, Off> {
+    pub fn resolve(load: &impl crate::Loading) -> Result<Self, Off> {
+        let load = load.base();
         let size = |name| {
             load.constant(name)
                 .map(|v| usize::try_from(v).unwrap_or(usize::MAX))
@@ -604,7 +611,8 @@ impl Worlds {
     /// # Examples
     ///
     /// See [`Worlds`].
-    pub fn resolve(load: &BaseLoad) -> Result<Self, Off> {
+    pub fn resolve(load: &impl crate::Loading) -> Result<Self, Off> {
+        let load = load.base();
         let host = load.host();
         let entity_world = load.constant("ecs.context_entity_world")?;
         Ok(Self {
@@ -811,7 +819,8 @@ impl Attributes {
     /// # Examples
     ///
     /// See [`Attributes`].
-    pub fn resolve(load: &BaseLoad) -> Result<Self, Off> {
+    pub fn resolve(load: &impl crate::Loading) -> Result<Self, Off> {
+        let load = load.base();
         let size = |name| {
             load.constant(name)
                 .map(|v| usize::try_from(v).unwrap_or(usize::MAX))

@@ -149,22 +149,24 @@ impl TableConfig {
     /// # Examples
     ///
     /// See [`TableConfig`].
-    pub fn on_change<F>(&self, load: &mut BaseLoad, handler: F) -> Result<(), Off>
+    pub fn on_change<F>(&self, load: &mut impl crate::Loading, handler: F) -> Result<(), Off>
     where
         F: Fn(toml::Table) + Send + Sync + 'static,
     {
         let handler = Arc::new(handler);
         for event in [Event::SETTINGS_REPLACED, Event::SETTINGS_CHANGED] {
             let (settings, handler) = (self.clone(), Arc::clone(&handler));
-            load.on_raw_event(event, move |_| match settings.host.settings_text(FILE) {
-                Ok(text) => handler(
-                    settings
-                        .schema
-                        .read_table(&text, &|line| settings.host.log(Level::WARN, line)),
-                ),
-                Err(off) => settings
-                    .host
-                    .log(Level::WARN, &format!("settings not read: {off}")),
+            load.base_mut().on_raw_event(event, move |_| {
+                match settings.host.settings_text(FILE) {
+                    Ok(text) => handler(
+                        settings
+                            .schema
+                            .read_table(&text, &|line| settings.host.log(Level::WARN, line)),
+                    ),
+                    Err(off) => settings
+                        .host
+                        .log(Level::WARN, &format!("settings not read: {off}")),
+                }
             })?;
         }
         Ok(())

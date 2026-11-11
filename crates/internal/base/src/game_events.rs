@@ -164,7 +164,7 @@ impl EventType {
     ///     })
     /// }
     /// ```
-    pub fn field<T: Scalar>(self, load: &BaseLoad, name: &str) -> Result<Field<T>, Off> {
+    pub fn field<T: Scalar>(self, load: &impl crate::Loading, name: &str) -> Result<Field<T>, Off> {
         self.inherited_field(load, self.name, name)
     }
 
@@ -191,11 +191,11 @@ impl EventType {
     /// ```
     pub fn inherited_field<T: Scalar>(
         self,
-        load: &BaseLoad,
+        load: &impl crate::Loading,
         declared_in: &str,
         name: &str,
     ) -> Result<Field<T>, Off> {
-        let offset = load.field_offset(declared_in, name)?;
+        let offset = load.base().field_offset(declared_in, name)?;
         self.field_at(offset).ok_or_else(|| {
             Off::new(format!(
                 "field {declared_in}.{name}: past the end of {}",
@@ -388,6 +388,8 @@ impl<T: Scalar> Field<T> {
 
     /// The hash of the type the field belongs to.
     #[cfg(feature = "unstable")]
+    #[doc(hidden)]
+    #[must_use]
     pub const fn type_hash(self) -> u32 {
         self.type_hash
     }

@@ -12,8 +12,8 @@ pub struct Values<T: 'static, const N: usize>([(T, Option<u64>); N]);
 
 impl<T: Copy + PartialEq, const N: usize> Values<T, N> {
     /// Each variant with its engine value as given.
-    #[cfg(test)]
-    pub(crate) const fn new(values: [(T, Option<u64>); N]) -> Self {
+    #[must_use]
+    pub const fn new(values: [(T, Option<u64>); N]) -> Self {
         Self(values)
     }
 
