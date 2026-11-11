@@ -25,7 +25,7 @@ mod tests {
 
     impl Mod for Rekey {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let other = OTHER_ITEM.key(types::ITEM_INFO)?;
+            let other = types::ITEM_INFO.key(OTHER_ITEM)?;
             REFUSED_AT_INIT.store(
                 load.host().served_resource(other).is_err(),
                 Ordering::Relaxed,
@@ -58,11 +58,11 @@ mod tests {
         };
         // A patch that always fails, which a served read skips.
         pack(6, |load| {
-            let key = LANTERN.guid().key(types::ITEM_INFO)?;
+            let key = types::ITEM_INFO.key(LANTERN.guid())?;
             load.serve(key, key, |_| None)
         });
         pack(7, |load| {
-            let key = LANTERN.guid().key(types::ITEM_INFO)?;
+            let key = types::ITEM_INFO.key(LANTERN.guid())?;
             load.serve(key, key, |item| {
                 let mut item = item.to_vec();
                 *item.get_mut(CATEGORY_AT)? = CHANGED_CATEGORY;
@@ -80,7 +80,7 @@ mod tests {
     /// The vanilla item `item` as the mods serve it.
     fn built(loader: &Installed, item: Guid) -> Value {
         let host = enshwick::host().unwrap();
-        let key = item.key(types::ITEM_INFO).unwrap();
+        let key = types::ITEM_INFO.key(item).unwrap();
         let built = loader
             .build_resource(&key, &host.game_resource(key).unwrap())
             .unwrap();
@@ -127,7 +127,7 @@ mod tests {
         let _loader = start();
         let host = enshwick::host().unwrap();
         let lantern = host
-            .served_value(LANTERN.guid().key(types::ITEM_INFO).unwrap())
+            .served_value(types::ITEM_INFO.key(LANTERN.guid()).unwrap())
             .unwrap();
         assert_eq!(
             lantern.field("category"),
@@ -145,7 +145,7 @@ mod tests {
         );
         let host = enshwick::host().unwrap();
         let lantern = host
-            .served_resource(LANTERN.guid().key(types::ITEM_INFO).unwrap())
+            .served_resource(types::ITEM_INFO.key(LANTERN.guid()).unwrap())
             .unwrap();
         let value = Registry::game()
             .unwrap()
@@ -155,7 +155,7 @@ mod tests {
             value.field("category"),
             Some(&Value::Uint(u64::from(CHANGED_CATEGORY)))
         );
-        let unserved = ENTITY_ITEM.key(types::ITEM_INFO).unwrap();
+        let unserved = types::ITEM_INFO.key(ENTITY_ITEM).unwrap();
         assert_eq!(
             host.served_resource(unserved).ok(),
             host.game_resource(unserved),

@@ -27,8 +27,8 @@ mod tests {
                 },
             )?;
             load.serve(
-                BELL.key(types::SOUND_CONTAINER_RESOURCE)?,
-                CHEST.key(types::SOUND_CONTAINER_RESOURCE)?,
+                types::SOUND_CONTAINER_RESOURCE.key(BELL)?,
+                types::SOUND_CONTAINER_RESOURCE.key(CHEST)?,
                 |chest| Some(chest.to_vec()),
             )?;
             load.change_sound(
@@ -40,8 +40,8 @@ mod tests {
             )?;
             assert!(
                 load.serve(
-                    BELL.key(types::SOUND_CONTAINER_RESOURCE)?,
-                    Guid::named("you.bells:other").key(types::SOUND_CONTAINER_RESOURCE)?,
+                    types::SOUND_CONTAINER_RESOURCE.key(BELL)?,
+                    types::SOUND_CONTAINER_RESOURCE.key(Guid::named("you.bells:other"))?,
                     |base| Some(base.to_vec()),
                 )
                 .is_err(),

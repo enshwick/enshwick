@@ -1,7 +1,4 @@
-use crate::Off;
 use crate::abi::ResourceKey;
-
-use super::ResourceType;
 
 /// A GUID in memory order: the `bytes_le` of its textual form.
 ///
@@ -144,30 +141,6 @@ impl Guid {
             i += 1;
         }
         hash
-    }
-
-    /// The key of the resource of type `ty` with this GUID, part 0, with
-    /// the type's hash on the running build.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] outside the game or when the build lacks the type.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
-    /// use enshwick::content::{Guid, types};
-    ///
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let chest = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-    ///     assert_eq!(chest.key(types::ITEM_INFO)?.part, 0);
-    ///     Ok(())
-    /// }
-    /// # }
-    /// ```
-    pub fn key(self, ty: ResourceType) -> Result<ResourceKey, Off> {
-        Ok(self.key_by_hash(ty.hash()?))
     }
 
     /// The key of the resource whose type has the hash `type_hash` with
@@ -591,29 +564,6 @@ impl Id {
     #[must_use]
     pub const fn guid(self) -> Guid {
         self.guid
-    }
-
-    /// [`Guid::key`] of its GUID.
-    ///
-    /// # Errors
-    ///
-    /// As [`Guid::key`].
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
-    /// use enshwick::content::{Id, types};
-    ///
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let key = Id::new("you.lockers:locker").key(types::ITEM_INFO)?;
-    ///     assert_eq!(key.guid, Id::new("you.lockers:locker").guid().0);
-    ///     Ok(())
-    /// }
-    /// # }
-    /// ```
-    pub fn key(self, ty: ResourceType) -> Result<ResourceKey, Off> {
-        self.guid.key(ty)
     }
 
     /// [`Guid::key_by_hash`] of its GUID.

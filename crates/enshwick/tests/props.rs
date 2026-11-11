@@ -115,10 +115,10 @@ mod tests {
         let host = enshwick::host().unwrap();
         let placed_at = host.offset("item_info.placed_entity").unwrap();
         let vanilla = host
-            .game_resource(PROP_ITEM.key(types::ITEM_INFO).unwrap())
+            .game_resource(types::ITEM_INFO.key(PROP_ITEM).unwrap())
             .unwrap();
         let item = loader
-            .build_resource(&CRATE.guid().key(types::ITEM_INFO).unwrap(), &vanilla)
+            .build_resource(&types::ITEM_INFO.key(CRATE.guid()).unwrap(), &vanilla)
             .unwrap();
         assert_eq!(
             item[placed_at..placed_at + 16],
@@ -158,8 +158,8 @@ mod tests {
         );
 
         let host = enshwick::host().unwrap();
-        let key = WORKSHOP_REGISTRY
-            .key(types::WORKSHOP_REGISTRY_RESOURCE)
+        let key = types::WORKSHOP_REGISTRY_RESOURCE
+            .key(WORKSHOP_REGISTRY)
             .unwrap();
         let vanilla = host.game_resource(key).unwrap();
         let registry = built(&loader, key, &vanilla, "demo::WorkshopRegistryResource");
@@ -188,8 +188,8 @@ mod tests {
             assert_eq!(id_of(entry.field("item")), Some(prop.item.get().into()));
         }
 
-        let key = RECIPE_REGISTRY
-            .key(types::RECIPE_REGISTRY_RESOURCE)
+        let key = types::RECIPE_REGISTRY_RESOURCE
+            .key(RECIPE_REGISTRY)
             .unwrap();
         let base = FakeHost::recipe_registry(&[(POTION, &[11]), (Guid([3; 16]), &[])]);
         let recipes = built(&loader, key, &base, "demo::RecipeRegistryResource");

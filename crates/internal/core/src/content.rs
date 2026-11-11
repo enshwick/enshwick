@@ -55,7 +55,7 @@ impl crate::Host {
     ///
     /// if let Some(host) = enshwick::host() {
     ///     let chest = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-    ///     if let Ok(key) = chest.key(types::ITEM_INFO) {
+    ///     if let Ok(key) = types::ITEM_INFO.key(chest) {
     ///         let _ = host.game_resource(key);
     ///     }
     /// }
@@ -89,8 +89,8 @@ impl crate::Host {
     /// use enshwick::content::{Guid, types};
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let resin = Guid::parse("2f04a05f-697d-489b-a32f-76bb3439f5bc").key(types::ITEM_INFO)?;
-    ///     let wood = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d").key(types::ITEM_INFO)?;
+    ///     let resin = types::ITEM_INFO.key(Guid::parse("2f04a05f-697d-489b-a32f-76bb3439f5bc"))?;
+    ///     let wood = types::ITEM_INFO.key(Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"))?;
     ///     let host = load.host();
     ///     load.serve(resin, resin, move |resin| {
     ///         // Wood as other mods serve it; inside a build of wood, resin
@@ -144,11 +144,75 @@ impl crate::Host {
     }
 }
 
-/// Answers [`ResourceType::hash`] from the running build, for the value
-/// types' crate, which lies below the loader's table; `None` outside the
-/// game.
-pub(crate) fn type_hash(id: &'static str) -> Option<Result<u32, Off>> {
-    Some(crate::host()?.hash(id))
+/// A type of game resource by enshwick's name for it, such as
+/// [`types::ITEM_INFO`]; the loader maps it to the running build's type,
+/// whose hash resource keys carry.
+///
+/// # Examples
+///
+/// ```
+/// # extern crate enshwick_core as enshwick;
+/// use enshwick::content::{Guid, types};
+///
+/// assert_eq!(types::ITEM_INFO.id(), "item_info");
+/// assert!(types::ITEM_INFO.hash().is_err(), "outside the game");
+///
+/// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+///     let chest = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+///     assert_eq!(types::ITEM_INFO.key(chest)?.part, 0);
+///     Ok(())
+/// }
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ResourceType(&'static str);
+
+impl ResourceType {
+    /// The type the loader's catalogue names `id`.
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn new(id: &'static str) -> Self {
+        Self(id)
+    }
+
+    /// Its enshwick id, which the loader's catalogue maps to the engine.
+    ///
+    /// # Examples
+    ///
+    /// See [`ResourceType`].
+    #[must_use]
+    pub const fn id(self) -> &'static str {
+        self.0
+    }
+
+    /// Its hash on the running build.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] outside the game or when the build lacks the type.
+    ///
+    /// # Examples
+    ///
+    /// See [`ResourceType`].
+    pub fn hash(self) -> Result<u32, Off> {
+        crate::host()
+            .ok_or_else(|| Off::new(format!("type {}: outside the game", self.0)))?
+            .hash(self.0)
+    }
+
+    /// The key of the resource of this type with GUID `guid`, part 0, with
+    /// the type's hash on the running build; for a content id, its
+    /// [`Id::guid`].
+    ///
+    /// # Errors
+    ///
+    /// As [`ResourceType::hash`].
+    ///
+    /// # Examples
+    ///
+    /// See [`ResourceType`].
+    pub fn key(self, guid: Guid) -> Result<ResourceKey, Off> {
+        Ok(guid.key_by_hash(self.hash()?))
+    }
 }
 
 /// Resource types mods commonly serve.
@@ -545,7 +609,7 @@ fn lent(bytes: &[u8]) -> Option<*mut u8> {
 /// const TABLE: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
 ///
 /// fn settings_changed() {
-///     if let Err(off) = TABLE.key(types::ITEM_INFO).and_then(rebuild) {
+///     if let Err(off) = types::ITEM_INFO.key(TABLE).and_then(rebuild) {
 ///         enshwick::warn!("the change applies at the next start: {off}");
 ///     }
 /// }
@@ -663,7 +727,7 @@ impl Load<'_> {
     /// const LOCKER: Guid = Guid::parse("5afe5afe-0000-4000-8000-000000000001");
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.serve(LOCKER.key(types::ITEM_INFO)?, CHEST.key(types::ITEM_INFO)?, |chest| {
+    ///     load.serve(types::ITEM_INFO.key(LOCKER)?, types::ITEM_INFO.key(CHEST)?, |chest| {
     ///         let mut item = Blob::new(chest);
     ///         item.write(0, &enshwick::ItemId::from_guid(LOCKER).get().to_le_bytes());
     ///         item.write(4, &LOCKER.0);
@@ -726,7 +790,7 @@ impl Load<'_> {
     /// const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let key = CHEST.key(types::ITEM_INFO)?;
+    ///     let key = types::ITEM_INFO.key(CHEST)?;
     ///     load.serve(key, key, |chest| Some(chest.to_vec()))?;
     ///     load.allow_rebuild(key)
     /// }

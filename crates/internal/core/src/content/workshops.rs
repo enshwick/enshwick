@@ -409,7 +409,7 @@ pub(crate) fn put(bytes: &mut [u8], at: usize, data: &[u8]) -> bool {
 /// ) -> Result<(), enshwick::Off> {
 ///     let layout = WorkshopLayout::resolve(load)?;
 ///     let items = ItemLayout::resolve(load)?;
-///     let (item, like) = (new.id.key(types::ITEM_INFO)?, new.like.item.key(types::ITEM_INFO)?);
+///     let (item, like) = (types::ITEM_INFO.key(new.id)?, types::ITEM_INFO.key(new.like.item)?);
 ///     load.serve(item, like, move |base| clone_station(&items, &layout, base, &new))
 /// }
 /// ```
@@ -451,7 +451,7 @@ pub fn clone_station(
 ///     new: NewWorkshop,
 /// ) -> Result<(), enshwick::Off> {
 ///     let layout = WorkshopLayout::resolve(load)?;
-///     let registry = WORKSHOP_REGISTRY.key(types::WORKSHOP_REGISTRY_RESOURCE)?;
+///     let registry = types::WORKSHOP_REGISTRY_RESOURCE.key(WORKSHOP_REGISTRY)?;
 ///     load.serve(registry, registry, move |base| list_workshop(&layout, base, &new))
 /// }
 /// ```
@@ -564,17 +564,17 @@ impl Load<'_> {
         })?;
         let station = new.clone();
         self.serve(
-            new.id.key(types::ITEM_INFO)?,
-            like.item.key(types::ITEM_INFO)?,
+            types::ITEM_INFO.key(new.id.guid())?,
+            types::ITEM_INFO.key(like.item)?,
             move |base| clone_station(&item_layout, &layout, base, &station),
         )?;
         let (item, debug_name) = (new.id.guid(), new.debug_name.clone());
-        let registry = items::ITEM_REGISTRY.key(types::ITEM_REGISTRY_RESOURCE)?;
+        let registry = types::ITEM_REGISTRY_RESOURCE.key(items::ITEM_REGISTRY)?;
         self.serve(registry, registry, move |base| {
             items::list_item(&item_layout, base, item, &debug_name)
         })?;
         let cost = new.recipe_cost;
-        let registry = WORKSHOP_REGISTRY.key(types::WORKSHOP_REGISTRY_RESOURCE)?;
+        let registry = types::WORKSHOP_REGISTRY_RESOURCE.key(WORKSHOP_REGISTRY)?;
         self.serve(registry, registry, move |base| {
             list_workshop(&layout, base, &new)
         })?;

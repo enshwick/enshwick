@@ -424,14 +424,14 @@ impl Load<'_> {
         drop(pcm);
         crate::resources::serve_value(
             host,
-            sound.key(types::SOUND_RESOURCE)?,
+            types::SOUND_RESOURCE.key(sound)?,
             base,
             move |value| sound_value(value, stereo, frames, hash, &name),
         )?;
         let value = container_value(sound, scene, &entry_type, fields);
         crate::resources::serve_new(
             host,
-            container.key(types::SOUND_CONTAINER_RESOURCE)?,
+            types::SOUND_CONTAINER_RESOURCE.key(container)?,
             &value,
         )?;
         Ok(SoundContainerId::from_guid(container))

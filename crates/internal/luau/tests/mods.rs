@@ -295,11 +295,11 @@ mod tests {
         let host = enshwick::host().unwrap();
         let at = host.offset("item_info.placed_entity").unwrap();
         let vanilla = host
-            .game_resource(PROP_ITEM.key(types::ITEM_INFO).unwrap())
+            .game_resource(types::ITEM_INFO.key(PROP_ITEM).unwrap())
             .unwrap();
         let item = loader
             .build_resource(
-                &named("you.luau:crate").key(types::ITEM_INFO).unwrap(),
+                &types::ITEM_INFO.key(named("you.luau:crate")).unwrap(),
                 &vanilla,
             )
             .unwrap();

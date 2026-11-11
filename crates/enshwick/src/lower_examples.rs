@@ -12,39 +12,6 @@
 /// assert_eq!(enshwick::ItemId::from_guid(CHEST).get(), 1_302_084_846);
 /// ```
 ///
-/// `content::Guid::key`:
-///
-/// ```
-/// use enshwick::content::{Guid, types};
-///
-/// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     let chest = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-///     assert_eq!(chest.key(types::ITEM_INFO)?.part, 0);
-///     Ok(())
-/// }
-/// ```
-///
-/// `content::Id::key`:
-///
-/// ```
-/// use enshwick::content::{Id, types};
-///
-/// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     let key = Id::new("you.lockers:locker").key(types::ITEM_INFO)?;
-///     assert_eq!(key.guid, Id::new("you.lockers:locker").guid().0);
-///     Ok(())
-/// }
-/// ```
-///
-/// `content::ResourceType`:
-///
-/// ```
-/// use enshwick::content::types;
-///
-/// assert_eq!(types::ITEM_INFO.id(), "item_info");
-/// assert!(types::ITEM_INFO.hash().is_err(), "outside the game");
-/// ```
-///
 /// `Off`:
 ///
 /// ```

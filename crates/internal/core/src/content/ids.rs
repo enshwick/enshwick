@@ -21,7 +21,7 @@ use crate::abi::ResourceKey;
 /// ```
 pub use enshwick_macros::id;
 #[doc(inline)]
-pub use enshwick_values::content::{DebugName, Guid, Id, NAMESPACE, ResourceType, is_id};
+pub use enshwick_values::content::{DebugName, Guid, Id, NAMESPACE, is_id};
 pub(crate) use enshwick_values::content::{NAME_PART, part_name};
 
 /// A vanilla resource's bytes from the game's own archive, as the game reads
@@ -41,7 +41,7 @@ pub(crate) use enshwick_values::content::{NAME_PART, part_name};
 /// use enshwick::content::{game_resource, types};
 /// use enshwick::content::workshops::stations;
 ///
-/// let key = stations::WORKBENCH.item.key(types::ITEM_INFO);
+/// let key = types::ITEM_INFO.key(stations::WORKBENCH.item);
 /// if let Some(item) = key.ok().and_then(game_resource) {
 ///     enshwick::info!("the Workbench item is {} bytes", item.len());
 /// }

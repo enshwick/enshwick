@@ -17,9 +17,9 @@ mod tests {
 
     impl Mod for Keys {
         fn init(_load: &mut Load<'_>) -> Result<Self, Off> {
-            let item = CHEST.key(types::ITEM_INFO)?;
-            let image = CHEST
-                .key(types::UI_TEXTURE_RESOURCE)
+            let item = types::ITEM_INFO.key(CHEST)?;
+            let image = types::UI_TEXTURE_RESOURCE
+                .key(CHEST)
                 .map_err(|off| off.to_string());
             let _first = KEYS.set((item, image));
             Ok(Self)
