@@ -785,6 +785,7 @@ impl Thing {
             lib: lib.map(str::to_owned),
             windows_only: false,
             windows_tests: false,
+            unstable: false,
         };
         let example = "/// ```\n/// let load = enshwick::Load::new();\n/// ```\npub struct Item;\n";
         write("crates/internal/core/src/deep/item.rs", example);
@@ -863,6 +864,7 @@ impl Thing {
             lib: Some("enshwick_base".to_owned()),
             windows_only: false,
             windows_tests: false,
+            unstable: false,
         }];
         let log = log.display().to_string();
         let usage = wrap(

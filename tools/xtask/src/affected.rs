@@ -21,6 +21,8 @@ pub(crate) struct Package {
     /// Has tests of its Windows code, run under Wine off Windows
     /// (`package.metadata.xtask.windows-tests`, or `windows-only`).
     pub(crate) windows_tests: bool,
+    /// Has an `unstable` feature: part of its API stands only with it.
+    pub(crate) unstable: bool,
 }
 
 /// What a change needs checked.
@@ -116,6 +118,7 @@ mod tests {
             lib: None,
             windows_only: false,
             windows_tests: false,
+            unstable: false,
         }
     }
 

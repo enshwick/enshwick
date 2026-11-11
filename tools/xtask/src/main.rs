@@ -70,19 +70,14 @@ const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 const TEST_FEATURE: &str = "enshwick/test,enshwick/unstable,enshwick/typed,xtask/compat";
 /// The API crate, the one crate a mod names.
 const FACADE: &str = "enshwick";
-/// The API crate and the internal crates whose doc examples name it, each a
-/// `--package` argument, with the `test` feature and without `unstable`: the
-/// workspace turns the feature on for the runtimes, so only a build of
+/// The crates of the API with an `unstable` feature, each a `--package`
+/// argument, with the API crate's `test` feature and without `unstable`:
+/// the workspace turns the feature on for the runtimes, so only a build of
 /// their own shows that the stable surface, its docs and its examples stand
-/// without the unstable one. An internal crate's examples name the API
-/// crate when it takes it as a dev-dependency; the others give theirs the
-/// alias line.
+/// without the unstable one.
 fn stable_api(packages: &[Package]) -> Vec<String> {
     let mut args = Vec::new();
-    for package in packages.iter().filter(|p| {
-        p.name == FACADE
-            || (p.dir.starts_with("crates/internal/") && p.deps.iter().any(|d| d == FACADE))
-    }) {
+    for package in packages.iter().filter(|p| p.unstable) {
         args.extend(["--package".to_owned(), package.name.clone()]);
     }
     args.extend(["--features".to_owned(), format!("{FACADE}/test")]);
@@ -402,6 +397,7 @@ fn packages() -> Result<Vec<Package>, String> {
                 windows_tests: ["windows-tests", "windows-only"]
                     .iter()
                     .any(|key| package["metadata"]["xtask"][key].as_bool() == Some(true)),
+                unstable: package["features"].get("unstable").is_some(),
             }
         })
         .collect())
@@ -902,6 +898,7 @@ mod tests {
             lib: None,
             windows_only,
             windows_tests: windows_only,
+            unstable: false,
         };
         let packages = [package("api", false), package("loader", true)];
         let base = ["--workspace", "--features", TEST_FEATURE];
