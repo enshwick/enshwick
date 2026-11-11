@@ -138,7 +138,7 @@ impl Load<'_> {
     ///
     /// The loader matches it once every mod is initialised: with no running
     /// mod serving `C` as declared here, it logs why, and every call answers
-    /// [`CallError::Unmatched`]. Declare the server in the manifest with
+    /// [`CallError::Unmatched`](crate::services::CallError::Unmatched). Declare the server in the manifest with
     /// `after`, or `requires` when this mod is pointless without it: a
     /// required server initialises first, so the loader matches the call
     /// at once.
