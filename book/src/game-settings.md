@@ -5,9 +5,9 @@ description: Read and change the difficulty and gameplay values of a world while
 
 # Game settings
 
-[`load.game_settings()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/game_settings.rs)
+[`load.game_settings()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/world/src/game_settings.rs)
 returns the server's
-[`GameSettings`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/game_settings.rs).
+[`GameSettings`](https://github.com/enshwick/enshwick/blob/main/crates/internal/world/src/game_settings.rs).
 They are the difficulty and gameplay values of its configuration or the
 host's world menu. `enshrouded_server.json` keeps them in
 `gameSettings`. A mod reads them typed and changes them while the world runs.

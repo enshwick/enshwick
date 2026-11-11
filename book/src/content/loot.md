@@ -105,7 +105,7 @@ From inside any hooked system, with its context:
 - `is_player(ctx, entity)` tells whether an entity is a player character,
   such as an offer's `guest_id`.
 
-[`near(center, at, radius, height)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/world/geometry.rs)
+[`near(center, at, radius, height)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/world/src/world/geometry.rs)
 tells whether `at` lies near the centre. It must lie within `radius` metres
 of the centre across the ground, and within `height` metres above or below
 it:

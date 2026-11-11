@@ -38,7 +38,7 @@ serde = { workspace = true, features = ["derive"] }
 
 # The features of `enshwick-core`, which turns each of them on here.
 [features]
-fake = ["enshwick-base/fake", "enshwick-content/fake", "enshwick-typed?/test"]
+fake = ["enshwick-typed?/test"]
 unstable = ["enshwick-base/unstable", "enshwick-content/unstable"]
 typed = ["unstable", "dep:enshwick-typed", "enshwick-content/typed"]
 
