@@ -3,7 +3,6 @@
 use core::ffi::c_void;
 
 use crate::abi::{HostApi, Status, Str};
-use crate::config::ConfigError;
 use crate::host::Host;
 use crate::services::{ModEvent, Service};
 
@@ -30,47 +29,6 @@ pub(crate) fn off_status(what: &str, status: Status) -> Off {
         _ => "failed",
     };
     Off::new(format!("{what}: {why}"))
-}
-
-/// `From<E> for Off` with `E`'s message as the reason.
-macro_rules! off_from {
-    ($($error:ty),* $(,)?) => {$(
-        impl From<$error> for Off {
-            fn from(error: $error) -> Self {
-                Self::new(error.to_string())
-            }
-        }
-    )*};
-}
-
-off_from!(
-    crate::affixes::RollError,
-    crate::altars::ResizeError,
-    crate::code::FindError,
-    crate::code::PatternError,
-    crate::content::vanilla::VanillaError,
-    crate::inventory::BatchError,
-    crate::item_data::SetError,
-    crate::net::SendError,
-    crate::packs::PackError,
-    crate::packs::ReadPackError,
-    crate::resources::CodecError,
-    crate::services::LayoutError,
-    crate::stats::ModifyError,
-    crate::ui::UiError,
-    crate::WorldError,
-);
-
-#[cfg(feature = "unstable")]
-off_from!(crate::console::RunError, crate::rates::RateError);
-
-impl From<ConfigError> for Off {
-    /// `error`'s message as the reason; a [`ConfigError::Text`] stays a text
-    /// of the mod's texts, as from [`Off::text`].
-    fn from(error: ConfigError) -> Self {
-        let text = matches!(error, ConfigError::Text { .. }).then(|| error.to_reason());
-        Self::with_text(error.to_string(), text)
-    }
 }
 
 /// A mod: what the loader initialises when it loads the DLL.

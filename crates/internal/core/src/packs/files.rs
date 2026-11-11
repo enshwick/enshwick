@@ -34,6 +34,12 @@ pub struct PackError {
     pub message: String,
 }
 
+impl From<PackError> for Off {
+    fn from(error: PackError) -> Self {
+        Self::new(error.to_string())
+    }
+}
+
 /// Every problem [`Pack::parse`](super::Pack::parse) found, in file order.
 ///
 /// # Examples
@@ -106,6 +112,12 @@ pub enum ReadPackError {
     /// The pack holds more than [`MAX_SCRIPTS`] scripts.
     #[error("more than {MAX_SCRIPTS} scripts")]
     TooManyScripts,
+}
+
+impl From<ReadPackError> for Off {
+    fn from(error: ReadPackError) -> Self {
+        Self::new(error.to_string())
+    }
 }
 
 /// The files of a pack: their names, such as `items.toml` or

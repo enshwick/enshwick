@@ -268,6 +268,15 @@ pub enum ConfigError {
     },
 }
 
+impl From<ConfigError> for crate::Off {
+    /// `error`'s message as the reason; a [`ConfigError::Text`] stays a text
+    /// of the mod's texts, as from [`Off::text`](crate::Off::text).
+    fn from(error: ConfigError) -> Self {
+        let text = matches!(error, ConfigError::Text { .. }).then(|| error.to_reason());
+        Self::with_text(error.to_string(), text)
+    }
+}
+
 impl ConfigError {
     /// An [`Invalid`](Self::Invalid) with `why`, a reason in one language.
     ///

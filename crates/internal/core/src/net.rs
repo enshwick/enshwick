@@ -162,6 +162,12 @@ pub enum SendError {
     Refused,
 }
 
+impl From<SendError> for Off {
+    fn from(error: SendError) -> Self {
+        Self::new(error.to_string())
+    }
+}
+
 /// A channel of messages of type `M`, from [`Load::channel`]; `Copy`, for
 /// handlers and tasks.
 ///

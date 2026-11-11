@@ -179,6 +179,12 @@ pub enum LayoutError {
     },
 }
 
+impl From<LayoutError> for crate::Off {
+    fn from(error: LayoutError) -> Self {
+        Self::new(error.to_string())
+    }
+}
+
 /// Checks that the `offered` layout starts with the `wanted` one, each as
 /// `(name, hash)` per field.
 ///

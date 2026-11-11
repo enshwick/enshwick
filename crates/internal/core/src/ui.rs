@@ -140,6 +140,12 @@ pub enum UiError {
     Refused,
 }
 
+impl From<UiError> for Off {
+    fn from(error: UiError) -> Self {
+        Self::new(error.to_string())
+    }
+}
+
 impl Ui {
     /// Queues `dialog` and runs `on_answer` with the player's answer, or
     /// `None` when it closed without one, as when the game quits. Dialogs

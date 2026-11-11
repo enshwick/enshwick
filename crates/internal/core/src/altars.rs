@@ -518,6 +518,12 @@ pub enum ResizeError {
     Refused(u32),
 }
 
+impl From<ResizeError> for Off {
+    fn from(error: ResizeError) -> Self {
+        Self::new(error.to_string())
+    }
+}
+
 /// The most zones a [`BuildingZoneCheck`] carries; the engine keeps at most 255.
 pub const MAX_ZONES: usize = 256;
 

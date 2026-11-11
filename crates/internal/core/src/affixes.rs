@@ -85,6 +85,12 @@ pub enum RollError {
     Refused(u32),
 }
 
+impl From<RollError> for Off {
+    fn from(error: RollError) -> Self {
+        Self::new(error.to_string())
+    }
+}
+
 /// The affix pool and rolls; get it from [`Load::affixes`]. Copy it
 /// anywhere.
 ///
