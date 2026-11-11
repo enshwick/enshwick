@@ -41,12 +41,10 @@ fn problems(root: &Path) -> Result<Vec<String>, String> {
     let sources = root.join(SOURCES);
     let mut files = Vec::new();
     collect(&sources, &sources, &mut files)?;
+    files.retain(|(path, _)| !map.joins.iter().any(|join| path.starts_with(join.as_str())));
     let modules: BTreeSet<String> = files.iter().map(|(path, _)| top(path)).collect();
     let mut edges = BTreeSet::new();
     for (path, text) in &files {
-        if map.joins.iter().any(|join| path.starts_with(join.as_str())) {
-            continue;
-        }
         let from = top(path);
         for to in names(&code(text)) {
             if to != from && modules.contains(&to) {
@@ -122,7 +120,7 @@ fn collect(root: &Path, dir: &Path, out: &mut Vec<(String, String)>) -> Result<(
             if name != "tests" {
                 collect(root, &path, out)?;
             }
-        } else if name.ends_with(".rs") && name != "tests.rs" {
+        } else if path.extension().is_some_and(|e| e == "rs") && name != "tests.rs" {
             let text =
                 std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
             let relative = path.strip_prefix(root).unwrap_or(&path);

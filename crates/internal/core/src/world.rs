@@ -340,6 +340,24 @@ fn blank_info() -> PlayerInfo {
 #[derive(Clone, Copy, Debug)]
 pub struct World(&'static Resolved);
 
+impl Load<'_> {
+    /// The server's [`World`]: reads, queries and requests; on a client,
+    /// the built-in server's while it hosts a game.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the game build lacks a type the reads need.
+    ///
+    /// # Examples
+    ///
+    /// See [`World`].
+    pub fn world(&mut self) -> Result<World, Off> {
+        World::resolve(self)
+    }
+}
+
 impl crate::script::Bound for World {
     const NAME: &'static str = "world";
     const DOC: &'static str = "The server's world: players, accounts, entities, props, vitals and edits in transactions. Unstable: may change in any release.";

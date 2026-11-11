@@ -286,6 +286,40 @@ impl MapFrame {
 #[derive(Clone, Copy, Debug)]
 pub struct Map(&'static Resolved);
 
+impl Load<'_> {
+    /// The map's markers and the players' waypoints in the game server,
+    /// dedicated or hosted by the client.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the game build lacks the marker reads.
+    ///
+    /// # Examples
+    ///
+    /// See [`Map`].
+    pub fn map(&mut self) -> Result<Map, Off> {
+        Map::resolve(self)
+    }
+
+    /// The client's fog of war, which the loader copies for the mod from
+    /// now on; a mod asks for it during `init`.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] on a dedicated server, which has no fog, or after `init`.
+    ///
+    /// # Examples
+    ///
+    /// See [`FogOfWar`].
+    pub fn fog_of_war(&mut self) -> Result<FogOfWar, Off> {
+        FogOfWar::open(self)
+    }
+}
+
 impl crate::script::Bound for Map {
     const NAME: &'static str = "map";
     const DOC: &'static str =

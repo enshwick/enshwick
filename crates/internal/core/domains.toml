@@ -10,7 +10,17 @@ joins = ["lib.rs", "__private.rs", "__private/", "__fake.rs", "__fake/", "script
 
 # The edges up the order still in the code, as `from -> to`; a peel removes
 # its own. A new one fails, and so does one that is gone.
-upward = []
+upward = [
+    # The served-resource builder lives in content; it moves to resources
+    # with the content peel.
+    "resources -> content",
+    # Rate kinds are declared in rates; the name rules move with them.
+    "rules -> rates",
+    # The typed handles read components through World.
+    "typed -> world",
+    # Content's journal and knowledge entries name knowledge ids and scopes.
+    "content -> knowledge",
+]
 
 [modules]
 base = [
@@ -22,6 +32,7 @@ base = [
     "engine_enum",
     "engine_ids",
     "events",
+    "facts",
     "files",
     "fresh",
     "game_events",
