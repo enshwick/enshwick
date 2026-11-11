@@ -880,7 +880,7 @@ impl Thing {
             &[log.clone(), "--cfg".to_owned(), "unstable".to_owned()],
         );
         let plain = wrap(&root, &packages, std::slice::from_ref(&log));
-        std::fs::create_dir_all(root.join(COPIES).join("base_odd.rs")).unwrap();
+        std::fs::write(root.join(COPIES).join("base_odd.rs"), [0xff, 0xfe]).unwrap();
         let so_far = std::fs::read_to_string(&path).unwrap();
         std::fs::write(&path, format!("{so_far}{}", example("c"))).unwrap();
         let c_at = so_far.lines().count() + 1;
@@ -891,6 +891,7 @@ impl Thing {
             &[log.clone(), "--cfg".to_owned(), "odd".to_owned()],
         );
         let copies = std::fs::read_to_string(root.join(COPIES).join("base_unstable.rs")).unwrap();
+        let odd = std::fs::read(root.join(COPIES).join("base_odd.rs")).unwrap();
         let wrapped = std::fs::read_to_string(&path).unwrap();
         std::fs::remove_dir_all(&root).unwrap();
         assert!(usage.is_err_and(|e| e.starts_with("usage:")));
@@ -907,6 +908,7 @@ impl Thing {
                 .is_err_and(|e| e.contains("base_odd.rs")),
             "a copies file that does not read is no new file: {unreadable:?}"
         );
+        assert_eq!(odd, [0xff, 0xfe], "and stays as it was");
         assert!(
             copies.starts_with(
                 "//! The examples of `enshwick-base` that name items above its crate,"

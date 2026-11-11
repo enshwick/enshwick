@@ -507,12 +507,14 @@ impl Load<'_> {
             ],
         );
         let unpaired = run(&root, &["base/a.rs".to_owned()]);
-        std::fs::create_dir_all(root.join("core/load/odd.rs")).unwrap();
+        std::fs::create_dir_all(root.join("core/load")).unwrap();
+        std::fs::write(root.join("core/load/odd.rs"), [0xff, 0xfe]).unwrap();
         std::fs::write(root.join("base/d.rs"), module).unwrap();
         let unreadable = run(&root, &["base/d.rs=core/load/odd.rs".to_owned()]);
         let forwarders = std::fs::read_to_string(root.join("core/load/a.rs")).unwrap();
         let peeled = std::fs::read_to_string(root.join("base/a.rs")).unwrap();
         let private_only = root.join("core/load/c.rs").exists();
+        let odd = std::fs::read(root.join("core/load/odd.rs")).unwrap();
         std::fs::remove_dir_all(&root).unwrap();
         assert_eq!(ran, Ok(true));
         assert_eq!(unpaired, Err("base/a.rs: not <from>=<into>".to_owned()));
@@ -520,6 +522,7 @@ impl Load<'_> {
             unreadable.as_ref().is_err_and(|e| e.contains("odd.rs")),
             "a forwarder file that does not read is no new file: {unreadable:?}"
         );
+        assert_eq!(odd, [0xff, 0xfe], "and stays as it was");
         assert!(peeled.contains("impl BaseLoad {"), "{peeled}");
         assert!(
             forwarders.starts_with("//! `Load`'s methods")
