@@ -390,7 +390,7 @@ mod events;
 mod services;
 mod settings;
 #[cfg_attr(
-    not(any(feature = "unstable", feature = "typed")),
+    not(any(test, feature = "unstable", feature = "typed")),
     expect(dead_code, reason = "only unstable and typed domains keep state")
 )]
 mod slots;
