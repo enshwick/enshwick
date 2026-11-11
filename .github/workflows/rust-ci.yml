@@ -20,7 +20,7 @@ on:
         type: boolean
         default: true
       split:
-        description: Run the host check and the Windows lint as parallel jobs and only the Windows tests a change touches; the repository's `cargo xtask check` must know `--part` and `--list-windows-tests`.
+        description: Run the host check, the Windows lint, the trybuild test and cargo-semver-checks as parallel jobs and only the Windows tests a change touches; the repository's `cargo xtask check` must know `--part` and `--list-windows-tests`.
         type: boolean
         default: false
       semver:
