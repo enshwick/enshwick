@@ -374,7 +374,8 @@ impl Load<'_> {
         if size > MAX_FILE_BYTES {
             return Err(fail(format!("{file}: {size} bytes, past {MAX_FILE_BYTES}")));
         }
-        if self.slot::<Budget>().unwrap_or_default().bytes + size > MAX_MOD_BYTES {
+        let mut budget = self.slot::<Budget>().unwrap_or_default();
+        if budget.bytes + size > MAX_MOD_BYTES {
             return Err(fail(format!(
                 "{file}: the mod's sounds would pass {MAX_MOD_BYTES} bytes"
             )));
@@ -385,7 +386,8 @@ impl Load<'_> {
         if self.host().build().side != Side::CLIENT {
             let container = self.declare(id)?;
             self.declare(sound_id)?;
-            self.slot::<Budget>().get_or_insert_default().bytes += size;
+            budget.bytes += size;
+            *self.slot() = Some(budget);
             return Ok(SoundContainerId::from_guid(container));
         }
         let host = self.host();
@@ -398,7 +400,7 @@ impl Load<'_> {
             .ok_or_else(|| fail("this game has no sound container entry".to_owned()))?
             .qualified_name()
             .to_owned();
-        let base = match self.slot::<Budget>().unwrap_or_default().base {
+        let base = match budget.base {
             Some(base) => base,
             // One of the game's few uncompressed sounds, all streamed, carries
             // the content category a served sound needs.
@@ -413,13 +415,14 @@ impl Load<'_> {
                     fail("the game holds no streamed uncompressed sound to build from".to_owned())
                 })?,
         };
-        self.slot::<Budget>().get_or_insert_default().base = Some(base);
+        budget.base = Some(base);
         let container = self.declare(id)?;
         let sound = self.declare(sound_id)?;
         let host = self.host();
         let hash = host.serve_content(&pcm.bytes)?;
         // Served bytes stay held whatever fails after them.
-        self.slot::<Budget>().get_or_insert_default().bytes += size;
+        budget.bytes += size;
+        *self.slot() = Some(budget);
         let (stereo, frames, name) = (pcm.stereo, pcm.frames, id.to_string());
         drop(pcm);
         crate::resources::serve_value(
