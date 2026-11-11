@@ -8,8 +8,8 @@ description: >-
   cache.
 
 inputs:
-  mode:
-    description: "`read` takes the objects other runs stored; `write` also stores its own."
+  store:
+    description: "`true` also stores the objects the job compiles; `false` only takes the ones other runs stored."
     required: true
 
 runs:
@@ -31,17 +31,22 @@ runs:
     - name: sccache as the rustc wrapper
       shell: bash
       env:
-        MODE: ${{ inputs.mode }}
+        STORE: ${{ inputs.store }}
       run: | # zizmor: ignore[github-env] fixed values only
-        case "$MODE" in
-          read) rw=READ_ONLY ;;
-          write) rw=READ_WRITE ;;
-          *) echo "::error::mode is read or write, not $MODE"; exit 1 ;;
+        case "$STORE" in
+          true) rw=READ_WRITE ;;
+          false) rw=READ_ONLY ;;
+          *) echo "::error::store is true or false, not $STORE"; exit 1 ;;
         esac
+        # A fault of the cache service compiles locally instead of failing
+        # the build, and one server lives through the whole job, so its
+        # statistics count every compile.
         {
           echo "ACTIONS_CACHE_SERVICE_V2=on"
           echo "SCCACHE_GHA_ENABLED=true"
           echo "SCCACHE_GHA_RW_MODE=$rw"
+          echo "SCCACHE_IGNORE_SERVER_IO_ERROR=1"
+          echo "SCCACHE_IDLE_TIMEOUT=0"
           echo "RUSTC_WRAPPER=sccache"
         } >> "$GITHUB_ENV"
         sccache --version

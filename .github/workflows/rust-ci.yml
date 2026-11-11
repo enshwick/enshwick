@@ -30,6 +30,12 @@ on:
 
 permissions: {}
 
+env:
+  # Only pushes to main store build caches. The repository's cache storage
+  # is full, and entries of pull requests and merge queue groups, which no
+  # other run restores, would evict the ones every run starts from.
+  STORE_CACHES: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+
 jobs:
   scope:
     runs-on: ubuntu-26.04
@@ -174,12 +180,9 @@ jobs:
           sanitizers: ${{ matrix.part == 'fuzz' }}
           fuzz: ${{ matrix.part == 'fuzz' }}
 
-      # Only main's runs store objects: the repository's cache storage is
-      # full, and a pull request's entries would evict the ones every run
-      # starts from.
       - uses: ./.github/actions/sccache
         with:
-          mode: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && 'write' || 'read' }}
+          store: ${{ env.STORE_CACHES }}
 
       # The build itself, per part: each job builds a different target.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
@@ -271,18 +274,15 @@ jobs:
           rustup toolchain install
           rustc --version
 
-      # Stores objects only on main, as the job `part` does.
       - uses: ./.github/actions/sccache
         with:
-          mode: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && 'write' || 'read' }}
+          store: ${{ env.STORE_CACHES }}
 
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           prefix-key: v1-rust
           key: windows
-          # Branch caches would fill the repository's cache storage and evict
-          # the entries main's runs and pull requests restore.
-          save-if: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+          save-if: ${{ env.STORE_CACHES }}
 
       - name: Windows tests to run
         id: list
