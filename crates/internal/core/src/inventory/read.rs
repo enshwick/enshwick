@@ -531,7 +531,7 @@ impl Reader<'_> {
             return None;
         }
         if self.ctx.is_null() {
-            ty.read(self.inventories.host, entity)
+            enshwick_base::__internal::component(ty, self.inventories.host, entity)
                 .map(<*const c_void>::cast)
         } else {
             // SAFETY: a non-null `ctx` comes only from `read_in`, whose caller

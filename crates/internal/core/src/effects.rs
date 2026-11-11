@@ -706,8 +706,8 @@ impl Effects {
     /// Where `entity` stands, in metres, from its transform.
     fn position(&self, entity: Entity) -> Option<[f64; 3]> {
         let transform = ComponentType::named(self.host, ids::CURRENT_TRANSFORM).ok()?;
-        let data = transform.read(self.host, entity)?;
-        // SAFETY: `read` returned the entity's live CurrentTransform, valid
+        let data = enshwick_base::__internal::component(transform, self.host, entity)?;
+        // SAFETY: `component` returned the entity's live CurrentTransform, valid
         // until the game thread moves on, and it is read at once.
         Some(unsafe { crate::ecs::transform_position(data.cast()) })
     }

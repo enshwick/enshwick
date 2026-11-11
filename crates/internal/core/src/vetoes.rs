@@ -67,7 +67,7 @@ where
     let Some(call) = (unsafe { call.as_ref() }) else {
         return 1;
     };
-    let request = CraftRecipeEvent::new(
+    let request = enshwick_base::__internal::craft_recipe_event(
         call.crafting_operator_id,
         Entity::from_raw(call.crafting_station_id.0),
         call.recipe_id,

@@ -68,9 +68,8 @@ typed_kinds!(
 
 impl CraftRecipeEvent {
     /// The event of a craft check, as the craft veto hands it to a filter.
-    #[doc(hidden)]
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         crafting_operator_id: Entity,
         crafting_station_id: Option<Entity>,
         recipe_id: RecipeId,

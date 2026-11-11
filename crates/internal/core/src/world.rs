@@ -484,7 +484,7 @@ impl World {
     /// See [`World`].
     #[must_use]
     pub fn component(self, entity: Entity, ty: ComponentType) -> Option<*const c_void> {
-        ty.read(self.0.host, entity)
+        enshwick_base::__internal::component(ty, self.0.host, entity)
     }
 
     /// The host this world calls through.

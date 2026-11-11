@@ -476,7 +476,7 @@ fn after_check(next: crate::Next<'_, unsafe extern "system" fn(*mut u64)>, ctx: 
         // its thread, during the hook.
         && unsafe { worlds.is_server(ctx) }
     {
-        host.scope(|| {
+        enshwick_base::__internal::scope(*host, || {
             // Guarded here: the detour's own guard would run the system again.
             crate::host::guard(
                 "panic in a loot pass handler",

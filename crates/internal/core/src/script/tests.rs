@@ -149,10 +149,9 @@ fn every_bound_function_has_a_doc_and_named_parameters() {
     let players = World::functions().find(|f| f.name() == "players").unwrap();
     assert!(matches!(players.signature().ret(), Ty::List(Ty::Record(r)) if r.name() == "Player"));
 }
-
 #[test]
 fn a_task_from_a_script_runs_until_it_answers_false() {
-    let (scheduler, _) = Scheduler::get(ModHandle(41));
+    let (scheduler, _) = enshwick_base::__internal::scheduler(ModHandle(41));
     let runs = Arc::new(AtomicU32::new(0));
     let counted = Arc::clone(&runs);
     let task = Callback::new(move |args| {
@@ -171,14 +170,14 @@ fn a_task_from_a_script_runs_until_it_answers_false() {
         .call(&scheduler, &mut [Value::Number(0.0), Value::Function(task)])
         .unwrap();
     for _ in 0..4 {
-        scheduler.run_due(1);
+        enshwick_base::__internal::run_due(scheduler, 1);
     }
     assert_eq!(runs.load(Ordering::Relaxed), 2);
 }
 
 #[test]
 fn a_call_names_the_argument_of_the_wrong_type() {
-    let (scheduler, _) = Scheduler::get(ModHandle(42));
+    let (scheduler, _) = enshwick_base::__internal::scheduler(ModHandle(42));
     let after = Scheduler::functions()
         .find(|f| f.name() == "after")
         .unwrap();

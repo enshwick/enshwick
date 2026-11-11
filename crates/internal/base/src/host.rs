@@ -191,16 +191,14 @@ impl Host {
     }
 
     /// Makes this the answer of [`host`]; the first call wins.
-    #[doc(hidden)]
     #[must_use]
-    pub fn install(self) -> Self {
+    pub(crate) fn install(self) -> Self {
         *HOST.get_or_init(|| self)
     }
 
     /// Runs `call` with this as the answer of [`host`] on this thread, so a
     /// data pack's code logs, reads and faults as the pack.
-    #[doc(hidden)]
-    pub fn scope<R>(self, call: impl FnOnce() -> R) -> R {
+    pub(crate) fn scope<R>(self, call: impl FnOnce() -> R) -> R {
         running_as(Some(self), call)
     }
 

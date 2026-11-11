@@ -81,6 +81,8 @@ pub use shape::Shape;
 #[doc(hidden)]
 pub mod __fake;
 #[doc(hidden)]
+pub mod __internal;
+#[doc(hidden)]
 pub mod __private;
 #[doc(hidden)]
 pub mod schema_section;
