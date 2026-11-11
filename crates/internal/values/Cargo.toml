@@ -13,7 +13,7 @@ homepage.workspace = true
 publish = true
 
 [dependencies]
-enshwick-macros = { path = "../../enshwick-macros", version = "=1.0.0-alpha.14" }
+enshwick-macros = { path = "../macros", version = "=1.0.0-alpha.14" }
 const-sha1.workspace = true
 const_format.workspace = true
 rustc-hash.workspace = true

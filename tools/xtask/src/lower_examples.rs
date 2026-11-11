@@ -788,8 +788,8 @@ impl Thing {
         };
         let example = "/// ```\n/// let load = enshwick::Load::new();\n/// ```\npub struct Item;\n";
         write("crates/internal/core/src/deep/item.rs", example);
-        write("crates/internal/stub/src/lib.rs", example);
-        write("crates/internal/loader/src/lib.rs", example);
+        write("crates/runtime/stub/src/lib.rs", example);
+        write("crates/runtime/loader/src/lib.rs", example);
         write("crates/internal/notes/README.md", "No crate.\n");
         write("crates/internal-tools/src/lib.rs", example);
         write(&format!("{COPIES}.rs"), "//! The copies.\n\nmod gone;\n");
@@ -800,8 +800,8 @@ impl Thing {
         write(&format!("{COPIES}/stray.rs"), "//! Declared nowhere.\n");
         let packages = [
             package("crates/internal/core", Some("enshwick_core"), &[]),
-            package("crates/internal/stub", Some("powrprof"), &[]),
-            package("crates/internal/loader", Some("enshwick_loader"), &[FACADE]),
+            package("crates/runtime/stub", Some("powrprof"), &[]),
+            package("crates/runtime/loader", Some("enshwick_loader"), &[FACADE]),
             package("crates/internal/notes", None, &[]),
             package("crates/internal-tools", Some("tools"), &[]),
         ];
@@ -810,13 +810,13 @@ impl Thing {
         let after = check(&root, &packages);
         let item =
             std::fs::read_to_string(root.join("crates/internal/core/src/deep/item.rs")).unwrap();
-        let stub = std::fs::read_to_string(root.join("crates/internal/stub/src/lib.rs")).unwrap();
+        let stub = std::fs::read_to_string(root.join("crates/runtime/stub/src/lib.rs")).unwrap();
         std::fs::remove_dir_all(&root).unwrap();
         assert_eq!(
             before,
             [
                 "crates/internal/core/src/deep/item.rs:1: no `# extern crate enshwick_core as enshwick;` line; `cargo xtask alias-examples` writes it".to_owned(),
-                "crates/internal/stub/src/lib.rs:1: no `# extern crate powrprof as enshwick;` line; `cargo xtask alias-examples` writes it".to_owned(),
+                "crates/runtime/stub/src/lib.rs:1: no `# extern crate powrprof as enshwick;` line; `cargo xtask alias-examples` writes it".to_owned(),
                 format!("{COPIES}/stray.rs: {COPIES}.rs does not declare it, so its copies compile nowhere; add `mod stray;`"),
                 format!("{COPIES}/gone.rs:1: no wrapped example of {INTERNAL} equals this copy; bring it in line or remove it"),
             ]

@@ -1,7 +1,7 @@
 # enshwick-loader-stub
 
-Internal, not for mods: a part of [Enshwick](../../../README.md). Mods
-depend on [`enshwick`](../../enshwick) only.
+Runtime of [Enshwick](../../../README.md), shipped in `enshwick.zip`; not a
+dependency of a mod, which depends on [`enshwick`](../../enshwick) only.
 
 The `powrprof.dll` that players put next to `enshrouded.exe` or
 `enshrouded_server.exe`. It forwards every export to the system copy and starts

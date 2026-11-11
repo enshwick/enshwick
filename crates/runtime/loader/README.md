@@ -1,7 +1,7 @@
 # enshwick-loader
 
-Internal, not for mods: a part of [Enshwick](../../../README.md). Mods
-depend on [`enshwick`](../../enshwick) only.
+Runtime of [Enshwick](../../../README.md), shipped in `enshwick.zip`; not a
+dependency of a mod, which depends on [`enshwick`](../../enshwick) only.
 
 The Enshwick loader, installed as `mods/enshwick/enshwick.dll` next to the game.
 The `powrprof.dll` stub starts it; it identifies the game build, loads every mod

@@ -36,7 +36,7 @@ toml.workspace = true
 zip.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-enshwick-loader = { path = "../../crates/internal/loader", optional = true }
+enshwick-loader = { path = "../../crates/runtime/loader", optional = true }
 
 [lints]
 workspace = true

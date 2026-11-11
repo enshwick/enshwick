@@ -4,8 +4,8 @@ members = [
     "crates/cargo-enshwick",
     "crates/enshwick",
     "crates/enshwick-gamedata",
-    "crates/enshwick-macros",
     "crates/internal/*",
+    "crates/runtime/*",
     "examples/chest-panel",
     "examples/haggling",
     "examples/horn",
@@ -37,7 +37,7 @@ arrayvec = { version = "0.7.8", default-features = false, features = ["std"] }
 cbindgen = { version = "0.29.4", default-features = false }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics"] }
 enshwick = { path = "crates/enshwick", version = "=1.0.0-alpha.14" }
-enshwick-luau = { path = "crates/internal/luau", version = "=1.0.0-alpha.14" }
+enshwick-luau = { path = "crates/runtime/luau", version = "=1.0.0-alpha.14" }
 enshwick-abi = { path = "crates/internal/abi", version = "=1.0.0-alpha.14" }
 enshwick-base = { path = "crates/internal/base", version = "=1.0.0-alpha.14" }
 enshwick-core = { path = "crates/internal/core", version = "=1.0.0-alpha.14" }

@@ -1,7 +1,7 @@
 [package]
 name = "enshwick-luau"
 version = "1.0.0-alpha.14"
-description = "Internal, not for mods: runs Luau mods in a sandboxed VM each, over the API's script descriptions"
+description = "Runtime of Enshwick, shipped in enshwick.zip, not a dependency of a mod: runs Luau mods in a sandboxed VM each, over the API's script descriptions"
 keywords = ["enshrouded", "modding", "luau", "scripting"]
 categories = ["game-development"]
 readme = "README.md"

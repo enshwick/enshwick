@@ -7,24 +7,27 @@ safe API.
 
 ## Crates
 
-| Crate                  | Where                      | Owns                                                                                                                                                                                                                  | Published               |
-| ---------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| `enshwick-loader-stub` | `crates/internal/stub`     | the `powrprof.dll` proxy: forwards the system exports, holds the dedicated server's entry point and starts the loader                                                                                                 | no, in `enshwick.zip`   |
-| `enshwick-loader`      | `crates/internal/loader`   | the loader DLL: finds the game build, loads and resolves mods, links their hooks, answers the ABI                                                                                                                     | no, in `enshwick.zip`   |
-| `enshwick-luau`        | `crates/internal/luau`     | Luau mods: one sandboxed VM per mod with memory and time budgets, the API bound from the script descriptions of `enshwick` and its internal parts                                                                                      | no                      |
-| `enshwick`             | `crates/enshwick`          | the one crate mods use: the facade that re-exports every module of its internal parts at its own paths, the crate docs, the macros' docs and the features                                                            | yes                     |
-| `enshwick-core` | `crates/internal/core` | internal part of `enshwick`: `Load` and `World`, the domains not yet in crates of their own, and the script binding, re-exported under `enshwick`'s paths | yes |
-| `enshwick-base` | `crates/internal/base` | internal part of `enshwick`: what every domain shares (the host handle, events, services, points, settings, texts, state, the resource codec, the ECS reads) and the base handle `Load` holds, re-exported under `enshwick`'s paths | yes |
-| `enshwick-fake` | `crates/internal/fake` | internal part of `enshwick`: the fake loader for a mod's unit tests, re-exported as `enshwick::test` behind the `test` feature | yes |
-| `enshwick-macros`      | `crates/enshwick-macros`   | `#[hook]`, `#[config]` and the other macros of the API                                                                                                                                                                | yes                     |
-| `enshwick-values` | `crates/internal/values` | internal part of `enshwick`: the value types its layers share (shape, content ids, resource values, the script value model), re-exported under `enshwick`'s paths | yes |
-| `enshwick-abi` | `crates/internal/abi` | internal part of `enshwick`: the `repr(C)` types that cross between the loader and a mod, the ABI version and its golden layout file, and the reads and writes of game memory, re-exported as `enshwick::abi` and `enshwick::raw` | yes |
-| `enshwick-typed` | `crates/internal/typed` | internal part of `enshwick`: the generated typed API, re-exported as `enshwick::typed` | yes |
-| `enshwick-gamedata`    | `crates/enshwick-gamedata` | the engine routes and anchors, the compatibility reports, the engine's reflection reader (`reflect`) and the game archive reader (`archive`)                                                                          | yes                     |
-| `cargo-enshwick`       | `crates/cargo-enshwick`    | the one tool for mod authors: new mods, install, manifests, content packs, point definitions, the game's types from reflection, porting a table to a new build; its library reads point schemas for tests and fuzzing | yes                     |
-| `xtask`                | `tools/xtask`              | repository checks, the release archive and alpha notes, and `cargo xtask compat`, the maintainers' report of what works on a game build                                                                               | no                      |
-| `enshwick-fuzz`        | `fuzz`                     | the fuzz targets for untrusted input, a workspace of their own                                                                                                                                                        | no                      |
-| examples               | `examples/*`               | the whole mods and packs the book follows                                                                                                                                                                             | no                      |
+`crates/internal/` holds the parts behind the facade, which only `enshwick`
+re-exports; `crates/runtime/` holds what `enshwick.zip` ships into the game.
+
+| Crate | Where | Owns | Published |
+| --- | --- | --- | --- |
+| `enshwick` | `crates/enshwick` | the one crate mods use: the facade that re-exports every module of its internal parts at its own paths, the crate docs, the macros' docs and the features | yes |
+| `enshwick-core` | `crates/internal/core` | `Load` and `World`, the domains not yet in crates of their own, and the script binding | yes |
+| `enshwick-base` | `crates/internal/base` | what every domain shares (the host handle, events, services, points, settings, texts, state, the resource codec, the ECS reads, the lock policy) and the base handle `Load` holds | yes |
+| `enshwick-typed` | `crates/internal/typed` | the generated typed API, re-exported as `enshwick::typed` | yes |
+| `enshwick-values` | `crates/internal/values` | the value types the layers share: shape, content ids, resource values, the script value model | yes |
+| `enshwick-abi` | `crates/internal/abi` | the `repr(C)` types that cross between the loader and a mod, the ABI version and its golden layout file, and the reads and writes of game memory, re-exported as `enshwick::abi` and `enshwick::raw` | yes |
+| `enshwick-macros` | `crates/internal/macros` | `#[hook]`, `#[config]` and the other macros of the API | yes |
+| `enshwick-fake` | `crates/internal/fake` | the fake loader for a mod's unit tests, re-exported as `enshwick::test` behind the `test` feature | yes |
+| `enshwick-loader-stub` | `crates/runtime/stub` | the `powrprof.dll` proxy: forwards the system exports, holds the dedicated server's entry point and starts the loader | no, in `enshwick.zip` |
+| `enshwick-loader` | `crates/runtime/loader` | the loader DLL: finds the game build, loads and resolves mods, links their hooks, answers the ABI | no, in `enshwick.zip` |
+| `enshwick-luau` | `crates/runtime/luau` | Luau mods: one sandboxed VM per mod with memory and time budgets, the API bound from the script descriptions of `enshwick` and its internal parts | no, in `enshwick.zip` |
+| `enshwick-gamedata` | `crates/enshwick-gamedata` | game data the loader and the tools share: the engine routes and anchors, the compatibility reports, the engine's reflection reader (`reflect`) and the game archive reader (`archive`) | yes |
+| `cargo-enshwick` | `crates/cargo-enshwick` | the one tool for mod authors: new mods, install, manifests, content packs, point definitions, the game's types from reflection, porting a table to a new build; its library reads point schemas for tests and fuzzing | yes |
+| `xtask` | `tools/xtask` | repository checks, the release archive and alpha notes, and `cargo xtask compat`, the maintainers' report of what works on a game build | no |
+| `enshwick-fuzz` | `fuzz` | the fuzz targets for untrusted input, a workspace of their own | no |
+| examples | `examples/*` | the whole mods and packs the book follows | no |
 
 ## Layers
 

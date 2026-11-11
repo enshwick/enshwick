@@ -1,7 +1,7 @@
 # enshwick-macros
 
-Internal, not for mods: a part of [Enshwick](https://github.com/enshwick/enshwick). Mods
-depend on [`enshwick`](https://crates.io/crates/enshwick) only.
+Internal part of [Enshwick](https://github.com/enshwick/enshwick); depend on
+[`enshwick`](https://crates.io/crates/enshwick), which re-exports its macros.
 
 Macros for [`enshwick`](https://crates.io/crates/enshwick), re-exported
 from there: `#[config]` writes a mod's commented settings file from its

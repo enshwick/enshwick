@@ -1,5 +1,5 @@
 ---
-source: crates/internal/loader/src/record.rs
+source: crates/runtime/loader/src/record.rs
 expression: record.render()
 ---
 # Written by Enshwick at every load of this world: the mods that ran with it.

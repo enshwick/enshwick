@@ -14,7 +14,7 @@ publish = true
 autotests = false
 
 [dependencies]
-enshwick-macros = { path = "../enshwick-macros", version = "=1.0.0-alpha.14" }
+enshwick-macros = { path = "../internal/macros", version = "=1.0.0-alpha.14" }
 enshwick-abi.workspace = true
 enshwick-base.workspace = true
 enshwick-core.workspace = true

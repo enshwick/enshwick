@@ -1,7 +1,8 @@
 # enshwick-gamedata
 
-Internal, not for mods: a part of [Enshwick](https://github.com/enshwick/enshwick). Mods
-depend on [`enshwick`](https://crates.io/crates/enshwick) only.
+Shared game data for the loader and the tools of
+[Enshwick](https://github.com/enshwick/enshwick); not a dependency of a mod,
+which depends on [`enshwick`](https://crates.io/crates/enshwick) only.
 
 The engine functions and constants reflection does not describe, by
 symbolic id, as SKSE's Address Library does, found on every game build the

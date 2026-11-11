@@ -121,9 +121,9 @@ mod tests {
 
     fn workspace() -> Vec<Package> {
         vec![
-            package("macros", "crates/enshwick-macros", &[]),
+            package("macros", "crates/internal/macros", &[]),
             package("enshwick", "crates/enshwick", &["macros"]),
-            package("loader", "crates/internal/loader", &["enshwick"]),
+            package("loader", "crates/runtime/loader", &["enshwick"]),
             package("trading-post", "mods/trading-post", &["enshwick"]),
             package("haggling", "mods/haggling", &["trading-post"]),
             package("my-mod", "mods/my-mod", &["enshwick"]),
@@ -192,12 +192,12 @@ mod tests {
         let mut packages = workspace();
         packages.push(package(
             "enshwick-luau",
-            "crates/internal/luau",
+            "crates/runtime/luau",
             &["enshwick"],
         ));
         packages.push(package(
             "loader-on-luau",
-            "crates/internal/loader2",
+            "crates/runtime/loader2",
             &["enshwick-luau"],
         ));
         assert_eq!(
@@ -219,7 +219,7 @@ mod tests {
         ));
         packages.push(package(
             "enshwick-luau",
-            "crates/internal/luau",
+            "crates/runtime/luau",
             &["enshwick", "cargo-enshwick"],
         ));
         assert_eq!(

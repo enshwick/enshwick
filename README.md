@@ -121,9 +121,9 @@ has a loader rule of its own, `require_enshwick`, in
 | ------------------------------------------------------ | ------------------------------------------------------------- |
 | [`crates/enshwick`](crates/enshwick)                   | the API crate, with the fake host for tests                   |
 | [`crates/cargo-enshwick`](crates/cargo-enshwick)       | the `cargo enshwick` tool                                     |
-| [`crates/enshwick-macros`](crates/enshwick-macros)     | the macros `enshwick` re-exports                              |
 | [`crates/enshwick-gamedata`](crates/enshwick-gamedata) | the engine routes and anchors and the reader of the game's reflection data |
-| [`crates/internal`](crates/internal)                   | the loader DLL, its `powrprof.dll` stub and the Luau runtime  |
+| [`crates/internal`](crates/internal) | the parts `enshwick` re-exports: the core, the base, the ABI, the value types, the typed API, the macros and the fake host |
+| [`crates/runtime`](crates/runtime) | what `enshwick.zip` ships: the loader DLL, its `powrprof.dll` stub and the Luau runtime |
 | [`examples`](examples)                                 | the whole mods and packs the modding book follows             |
 | [`book`](book)                                         | the modding book                                              |
 

@@ -1,5 +1,5 @@
 ---
-source: crates/internal/loader/src/diag.rs
+source: crates/runtime/loader/src/diag.rs
 expression: summary().short()
 ---
 Enshwick 0.1.5, up 2h 03m, server running: 1 of 2 mods running.

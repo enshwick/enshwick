@@ -21,7 +21,7 @@ cargo-fuzz = true
 cargo-enshwick = { path = "../crates/cargo-enshwick" }
 enshwick = { path = "../crates/enshwick", features = ["unstable"] }
 enshwick-gamedata = { path = "../crates/enshwick-gamedata" }
-enshwick-loader = { path = "../crates/internal/loader" }
+enshwick-loader = { path = "../crates/runtime/loader" }
 libfuzzer-sys = { version = "0.4.13", default-features = false, features = ["link_libfuzzer"] }
 syn = { version = "3.0.9", default-features = false, features = ["full", "parsing"] }
 toml = { version = "1.1.8", default-features = false, features = ["std", "parse", "display", "serde"] }
