@@ -43,6 +43,7 @@ mod fuzz;
 mod header;
 mod lower_examples;
 mod notes;
+mod peel;
 mod ranges;
 mod reports;
 mod rules;
@@ -57,7 +58,7 @@ use std::time::Instant;
 
 use affected::{Package, Scope};
 
-const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|docs|windows-lint|windows-tests|fuzz]... [--list-windows-tests] (--all fuzzes only with --part fuzz) | dist [--out <dir>] | notes [--out <file>] [--known-issues <text>] | tag-lines | header | alias-examples | host-args | compat <exe> [--mods <path>...] [--report <file>] [--patterns] [--data <file>] | compat refresh (ENSH_EXES lists the executables)";
+const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|docs|windows-lint|windows-tests|fuzz]... [--list-windows-tests] (--all fuzzes only with --part fuzz) | dist [--out <dir>] | notes [--out <file>] [--known-issues <text>] | tag-lines | header | alias-examples | peel-load <from>=<into>... | host-args | compat <exe> [--mods <path>...] [--report <file>] [--patterns] [--data <file>] | compat refresh (ENSH_EXES lists the executables)";
 const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// Turned on by name: most of the API crate's test targets need its fake
 /// loader, and without the feature cargo skips them without a word; the
@@ -68,9 +69,11 @@ const TEST_FEATURE: &str = "enshwick/test,enshwick/unstable,enshwick/typed,xtask
 /// it re-exports, without `unstable`: the workspace turns the feature on for
 /// the runtimes, so only a build of their own shows that the stable surface,
 /// its docs and its examples stand without the unstable one.
-const STABLE_API: [&str; 8] = [
+const STABLE_API: [&str; 10] = [
     "--package",
     "enshwick",
+    "--package",
+    "enshwick-base",
     "--package",
     "enshwick-core",
     "--package",
@@ -102,6 +105,7 @@ fn run(args: &[String]) -> Result<bool, String> {
         "notes" => return notes::run(rest),
         "tag-lines" => return tag_lines::run(rest),
         "header" if rest.is_empty() => return header::run(&workspace_root()),
+        "peel-load" => return peel::run(&workspace_root(), rest),
         "alias-examples" if rest.is_empty() => {
             return lower_examples::run(&workspace_root(), &packages()?);
         }

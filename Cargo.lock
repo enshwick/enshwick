@@ -462,6 +462,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "enshwick-base"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "aho-corasick",
+ "bytemuck",
+ "const_format",
+ "enshwick-abi",
+ "enshwick-macros",
+ "enshwick-values",
+ "fastrand",
+ "insta",
+ "memchr",
+ "postcard",
+ "proptest",
+ "rustc-hash",
+ "schemars",
+ "serde",
+ "serde_json",
+ "strsim",
+ "thiserror",
+ "toml 1.2.1+spec-1.1.0",
+]
+
+[[package]]
 name = "enshwick-core"
 version = "1.0.0-alpha.14"
 dependencies = [

@@ -1,8 +1,10 @@
+//! `Load`'s methods of a module below core, forwarded to the base handle.
+
 use crate::abi::Status;
 use crate::services::Service;
+use crate::{Load, Off};
 
-use super::{Load, Off, ok, service_spec};
-
+#[enshwick_macros::forward(base)]
 impl Load<'_> {
     /// Publishes `table` as the service its type declares, for other mods.
     ///
@@ -32,17 +34,7 @@ impl Load<'_> {
     ///     load.publish(&PRICES)
     /// }
     /// ```
-    pub fn publish<T: Service>(&mut self, table: &'static T) -> Result<(), Off> {
-        let spec = service_spec::<T>(core::ptr::from_ref(table).cast());
-        let status = (self.api().publish)(self.host.handle(), &raw const spec);
-        ok(status, (), || {
-            format!(
-                "service {} v{}: published by another mod",
-                T::NAME,
-                T::MAJOR
-            )
-        })
-    }
+    pub fn publish<T: Service>(&mut self, table: &'static T) -> Result<(), Off>;
 
     /// The service `T` declares, published by another mod, once the loader
     /// has checked that the published table starts with every field of
@@ -73,10 +65,7 @@ impl Load<'_> {
     ///     Ok(())
     /// }
     /// ```
-    pub fn service<T: Service>(&self) -> Result<&'static T, Off> {
-        self.find_service::<T>()
-            .map_err(|refused| Off::new(refused.to_string()))
-    }
+    pub fn service<T: Service>(&self) -> Result<&'static T, Off>;
 
     /// The service `T` declares when a running mod publishes a table that
     /// serves it, `None` otherwise: for a service the mod can do without,
@@ -100,68 +89,172 @@ impl Load<'_> {
     /// }
     /// ```
     #[must_use]
-    pub fn optional_service<T: Service>(&self) -> Option<&'static T> {
-        match self.find_service::<T>() {
-            Ok(table) => Some(table),
-            Err(refused) => {
-                let level = if refused.status() == Status::MISSING {
-                    crate::abi::Level::DEBUG
-                } else {
-                    crate::abi::Level::WARN
-                };
-                self.host.log(level, &refused.to_string());
-                None
-            }
-        }
-    }
-
-    fn find_service<T: Service>(&self) -> Result<&'static T, FindServiceError> {
-        let spec = service_spec::<T>(core::ptr::null());
-        let mut found = crate::abi::ServiceFound::EMPTY;
-        let status = (self.api().service)(self.host.handle(), &raw const spec, &raw mut found);
-        if !status.is_ok() {
-            // SAFETY: the loader keeps the reason for the process.
-            let reason = unsafe { found.reason.as_str() }.unwrap_or_default();
-            return Err(FindServiceError::Refused {
-                name: T::NAME,
-                major: T::MAJOR,
-                status,
-                reason: reason.to_owned(),
-            });
-        }
-        // SAFETY: the loader checked the published layout starts with
-        // every field of `T`, and tables are `'static`.
-        unsafe { found.table.cast::<T>().as_ref() }.ok_or(FindServiceError::NullTable {
-            name: T::NAME,
-            major: T::MAJOR,
-        })
-    }
+    pub fn optional_service<T: Service>(&self) -> Option<&'static T>;
 }
 
-/// Why a lookup of a service found no table: the loader's status and
-/// reason, or a table the loader handed over as null.
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
-enum FindServiceError {
-    /// The loader refused the lookup with `status`; `reason` is empty when
-    /// it gave none.
-    #[error("service {name} v{major}: {}", if reason.is_empty() { "not found" } else { reason.as_str() })]
-    Refused {
-        name: &'static str,
-        major: u32,
-        status: Status,
-        reason: String,
-    },
-    /// The loader found the service but handed over no table.
-    #[error("service {name} v{major}: null table")]
-    NullTable { name: &'static str, major: u32 },
+#[enshwick_macros::forward(base)]
+impl Load<'_> {
+    /// Serves the call `C` with `handler` for other mods to call, from the
+    /// caller's thread. A panic in `handler` fails that call alone.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// `C` comes from [`#[call]`](macro@crate::call), named after this mod:
+    /// `<id>:<call>`, as [how ids are namespaced](https://github.com/enshwick/enshwick/blob/main/book/src/concepts/ids.md)
+    /// sets out. Mark it `export` so other mods may call it and its schema
+    /// reaches their tools.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the name is outside this mod's id, the call and major
+    /// are served already, or when called after `init`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_core as enshwick;
+    /// #[enshwick::call(name = "price-of", output = u32)]
+    /// #[derive(Clone, Copy, Debug)]
+    /// pub struct PriceOf {
+    ///     pub item: u32,
+    /// }
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     load.serve_call(|input: &PriceOf| input.item * 10)
+    /// }
+    /// ```
+    pub fn serve_call<C, F>(&mut self, handler: F) -> Result<(), Off>
+    where
+        C: Call,
+        F: Fn(&C) -> C::Output + Send + Sync + 'static;
+
+    /// Asks for another mod's call `C`, and returns the handle that runs it.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// The loader matches it once every mod is initialised: with no running
+    /// mod serving `C` as declared here, it logs why, and every call answers
+    /// [`CallError::Unmatched`]. Declare the server in the manifest with
+    /// `after`, or `requires` when this mod is pointless without it: a
+    /// required server initialises first, so the loader matches the call
+    /// at once.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when called after `init`, when this mod asked for `C`
+    /// already with another declaration, or when this mod requires the
+    /// server and it does not serve `C` as declared here; the log says why.
+    ///
+    /// # Examples
+    ///
+    /// See [`Caller`].
+    pub fn caller<C: Call>(&mut self) -> Result<Caller<C>, Off>;
+
+    /// Serves the described call `call` with `handler`, which gets the
+    /// input's bytes and writes the answer's, as [`Load::serve_call`] does for a
+    /// type; it returns `false` to fail the call.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::serve_call`].
+    ///
+    /// # Safety
+    ///
+    /// - Every answer `handler` writes and returns `true` for is a valid
+    ///   value of the type the answer's hash names, since a caller reads it
+    ///   as that type: a `bool` is 0 or 1, an enum one of its variants.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_core as enshwick;
+    /// use enshwick::points::DescribedField;
+    /// use enshwick::services::DescribedCall;
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let price_of = DescribedCall::new(
+    ///         "you.trading-post:price-of",
+    ///         1,
+    ///         (vec![DescribedField::new("item", 1)], 4),
+    ///         (vec![DescribedField::new("output", 2)], 4),
+    ///     );
+    ///     // SAFETY: the answer is one `u32`, for which any bytes are valid.
+    ///     unsafe {
+    ///         load.serve_described_call(&price_of, |input, output| {
+    ///             output.copy_from_slice(input);
+    ///             true
+    ///         })
+    ///     }
+    /// }
+    /// ```
+    pub unsafe fn serve_described_call<F>(
+        &mut self,
+        call: &DescribedCall,
+        handler: F,
+    ) -> Result<(), Off>
+    where
+        F: Fn(&[u8], &mut [u8]) -> bool + Send + Sync + 'static;
+
+    /// Asks for another mod's described call `call`, as [`Load::caller`]
+    /// does for a type.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::caller`].
+    ///
+    /// # Safety
+    ///
+    /// - Every input passed to the returned caller is a valid value of the
+    ///   type each input field's hash names, since the server reads it as
+    ///   that type: a `bool` is 0 or 1, an enum one of its variants.
+    ///
+    /// # Examples
+    ///
+    /// See [`DescribedCaller`].
+    pub unsafe fn described_caller(&mut self, call: &DescribedCall)
+    -> Result<DescribedCaller, Off>;
 }
 
-impl FindServiceError {
-    /// The status of the lookup: the loader's, or missing for a null table.
-    const fn status(&self) -> Status {
-        match self {
-            Self::Refused { status, .. } => *status,
-            Self::NullTable { .. } => Status::MISSING,
-        }
-    }
+#[enshwick_macros::forward(base)]
+impl Load<'_> {
+    /// Calls `handler` with the data of every described mod event `event`
+    /// another mod sends, as [`on_mod_event`](Self::on_mod_event) does for a
+    /// type: the loader checks the layout hashes against the definition.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when called after `init`.
+    ///
+    /// # Examples
+    ///
+    /// See [`DescribedEvent`].
+    pub fn on_described_mod_event<F>(
+        &mut self,
+        event: &DescribedEvent,
+        handler: F,
+    ) -> Result<(), Off>
+    where
+        F: Fn(&[u8]) + Send + Sync + 'static;
+
+    /// Defines the described mod event `event` for other mods to subscribe
+    /// to, as [`define_event`](Self::define_event) does for a type.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the name is outside this mod's id or defined twice.
+    ///
+    /// # Safety
+    ///
+    /// - Every byte pattern sent through the returned emitter is a valid
+    ///   value of the type each field's hash names, since a subscriber reads
+    ///   the data as that type: a `bool` is 0 or 1, an enum one of its
+    ///   variants.
+    ///
+    /// # Examples
+    ///
+    /// See [`DescribedEmitter`].
+    pub unsafe fn define_described_event(
+        &mut self,
+        event: &DescribedEvent,
+    ) -> Result<DescribedEmitter, Off>;
 }

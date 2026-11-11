@@ -14,6 +14,7 @@ use syn::{
 };
 
 mod declare;
+mod forward;
 mod krate;
 mod schema;
 mod texts;
@@ -713,6 +714,20 @@ pub fn script(args: TokenStream, item: TokenStream) -> TokenStream {
     };
     let item = parse_macro_input!(item as syn::ItemImpl);
     renamed(Ok(krate), script::expand_impl(&part, item))
+}
+
+/// Writes the bodies of an `impl` block's methods declared without one:
+/// `#[forward(base)]` makes `fn on<E>(&mut self, handler: H);` call
+/// `self.base.on::<E>(handler)`. For `enshwick-core`'s `Load`, whose
+/// methods of the crates below forward to the base handle with their docs.
+#[doc(hidden)]
+#[proc_macro_attribute]
+pub fn forward(args: TokenStream, item: TokenStream) -> TokenStream {
+    let field = parse_macro_input!(args as Ident);
+    let item = parse_macro_input!(item as syn::ItemImpl);
+    forward::expand(&field, item)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
 }
 
 /// The expansion `out` with its `::enshwick` paths written as the crate a

@@ -1,7 +1,9 @@
+//! `Load`'s methods of a module below core, forwarded to the base handle.
+
 use crate::abi::Str;
+use crate::{Load, Off};
 
-use super::{Load, Off, ok};
-
+#[enshwick_macros::forward(base)]
 impl Load<'_> {
     /// The absolute address of a symbolic id, such as `npc.lookup`, on the
     /// running build.
@@ -22,15 +24,7 @@ impl Load<'_> {
     ///     Ok(())
     /// }
     /// ```
-    pub fn symbol(&self, name: &str) -> Result<u64, Off> {
-        let mut out = 0;
-        let status = (self.api().symbol)(self.host.handle(), Str::new(name), &raw mut out);
-        let address = ok(status, out, || format!("symbol {name}"))?;
-        if address == 0 {
-            return Err(Off::new(format!("symbol {name}: null on this game build")));
-        }
-        Ok(address)
-    }
+    pub fn symbol(&self, name: &str) -> Result<u64, Off>;
 
     /// An engine constant of the running build, such as a field offset that
     /// reflection does not describe.
@@ -49,11 +43,7 @@ impl Load<'_> {
     ///     Ok(())
     /// }
     /// ```
-    pub fn constant(&self, name: &str) -> Result<u64, Off> {
-        let mut out = 0;
-        let status = (self.api().constant)(self.host.handle(), Str::new(name), &raw mut out);
-        ok(status, out, || format!("constant {name}"))
-    }
+    pub fn constant(&self, name: &str) -> Result<u64, Off>;
 
     /// The update function of an ECS system, found by its reflected name, so it
     /// survives game updates.
@@ -72,11 +62,7 @@ impl Load<'_> {
     ///     Ok(())
     /// }
     /// ```
-    pub fn system(&self, name: &str) -> Result<u64, Off> {
-        let mut out = 0;
-        let status = (self.api().system)(Str::new(name), &raw mut out);
-        ok(status, out, || format!("system {name}"))
-    }
+    pub fn system(&self, name: &str) -> Result<u64, Off>;
 
     /// The offset of a field in a reflected type.
     ///
@@ -94,11 +80,7 @@ impl Load<'_> {
     ///     Ok(())
     /// }
     /// ```
-    pub fn field_offset(&self, type_name: &str, field: &str) -> Result<u64, Off> {
-        let mut out = 0;
-        let status = (self.api().field_offset)(Str::new(type_name), Str::new(field), &raw mut out);
-        ok(status, out, || format!("field {type_name}.{field}"))
-    }
+    pub fn field_offset(&self, type_name: &str, field: &str) -> Result<u64, Off>;
 
     /// The size of a reflected type.
     ///
@@ -116,9 +98,5 @@ impl Load<'_> {
     ///     Ok(())
     /// }
     /// ```
-    pub fn type_size(&self, type_name: &str) -> Result<u32, Off> {
-        let mut out = 0;
-        let status = (self.api().type_size)(Str::new(type_name), &raw mut out);
-        ok(status, out, || format!("type {type_name}"))
-    }
+    pub fn type_size(&self, type_name: &str) -> Result<u32, Off>;
 }

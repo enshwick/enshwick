@@ -1,0 +1,63 @@
+[package]
+name = "enshwick-base"
+version = "1.0.0-alpha.14"
+description = "Internal part of enshwick; depend on enshwick: what every domain of the API shares"
+keywords = ["enshrouded", "modding", "game", "ffi", "hooks"]
+categories = ["game-development", "api-bindings"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = true
+
+[dependencies]
+enshwick-macros = { path = "../../enshwick-macros", version = "=1.0.0-alpha.14" }
+enshwick-abi.workspace = true
+enshwick-values.workspace = true
+aho-corasick.workspace = true
+bytemuck.workspace = true
+const_format.workspace = true
+fastrand.workspace = true
+memchr.workspace = true
+postcard.workspace = true
+rustc-hash.workspace = true
+schemars = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+serde.workspace = true
+strsim.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+insta.workspace = true
+serde = { workspace = true, features = ["derive"] }
+
+# The features of `enshwick-core`, which turns each of them on here.
+[features]
+fake = []
+schema = ["dep:schemars", "dep:serde_json"]
+unstable = []
+
+[lints]
+workspace = true
+
+# The mod this crate's documentation examples declare with `declare_mod!`.
+[package.metadata.enshwick]
+id = "you.hello"
+side = "both"
+exports = ["content:locker"]
+
+[package.metadata.enshwick.requires]
+lockers = { id = "you.lockers", version = ">=0.1, <1.0" }
+
+[package.metadata.enshwick.after]
+lanterns = "you.lanterns"
+trading_post = "you.trading-post"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-pc-windows-msvc"]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

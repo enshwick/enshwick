@@ -24,22 +24,13 @@
 //! assert!(matches!(Purse { coins: 3 }.into_value(), Value::Record(_)));
 //! ```
 
-mod events;
 mod namespaces;
 #[cfg(test)]
 #[cfg(feature = "unstable")]
 mod tests;
 
 #[doc(inline)]
-pub use enshwick_values::script::*;
-#[cfg_attr(
-    not(feature = "unstable"),
-    expect(
-        unused_imports,
-        reason = "the script binding is public only with `unstable`"
-    )
-)]
-pub use events::{EventKind, GameEventKind, events, game_events};
+pub use enshwick_base::script::*;
 #[cfg_attr(
     not(feature = "unstable"),
     expect(
