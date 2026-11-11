@@ -655,6 +655,19 @@ mod tests {
         assert!(!in_platform_dir(Path::new("/elsewhere/crates/a"), root));
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn a_windows_workspace_path_with_a_drive_finds_the_platform_folders() {
+        let root = Path::new(r"D:\w");
+        assert!(in_platform_dir(
+            Path::new(r"D:\w\crates\internal\loader"),
+            root
+        ));
+        assert!(in_platform_dir(Path::new(r"D:\w\tools\xtask"), root));
+        assert!(!in_platform_dir(Path::new(r"D:\w\examples\horn"), root));
+        assert!(!in_platform_dir(Path::new(r"E:\w\crates\a"), root));
+    }
+
     #[test]
     fn a_platform_crate_depends_on_the_facade_only_for_its_tests() {
         let loader = serde_json::json!({
@@ -663,13 +676,20 @@ mod tests {
                 { "name": "enshwick", "kind": "build" },
                 { "name": "enshwick", "kind": "dev", "features": ["test"] },
                 { "name": "enshwick-core", "kind": null },
+                { "name": "enshwick", "kind": null, "rename": "api" },
+                { "name": "enshwick", "kind": null, "target": "cfg(windows)" },
+                { "name": "enshwick", "kind": null, "optional": true },
             ],
         });
+        let normal = "loader: its normal dependency enshwick is the mods' crate; name the internal crate it needs, such as enshwick-core, and keep enshwick for tests";
         assert_eq!(
             facade_use("loader", &loader),
             [
-                "loader: its normal dependency enshwick is the mods' crate; name the internal crate it needs, such as enshwick-core, and keep enshwick for tests",
+                normal,
                 "loader: its build dependency enshwick is the mods' crate; name the internal crate it needs, such as enshwick-core, and keep enshwick for tests",
+                normal,
+                normal,
+                normal,
             ]
         );
         let facade = serde_json::json!({
