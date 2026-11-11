@@ -5,6 +5,7 @@ use crate::abi;
 use crate::script::{
     Error as ScriptError, Field as ScriptField, FromScript, IntoScript, Record, Ty, Typed, Value,
 };
+use crate::voxels::Voxels;
 use crate::{Host, Load};
 use enshwick_world::__load::*;
 

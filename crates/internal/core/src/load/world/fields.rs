@@ -4,6 +4,7 @@ use crate::abi::Str;
 use crate::game_events::{Field, Scalar};
 use crate::resources::{Bytes, Value as Data};
 use crate::script::{Class, Function, Object};
+use crate::world::WritableType;
 use crate::{Entity, Load, Off, WorldError};
 use enshwick_world::__load::*;
 

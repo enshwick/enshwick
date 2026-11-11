@@ -2,6 +2,7 @@
 
 use crate::Entity;
 use crate::abi::{AltarInfo, Bounds};
+use crate::altars::{AltarLimit, AltarZone, Altars, BuildingZoneCheck, ZoneSizes};
 use crate::content::Guid;
 use crate::{Host, Load, Off};
 use enshwick_world::__load::*;

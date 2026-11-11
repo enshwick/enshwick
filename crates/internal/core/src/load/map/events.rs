@@ -2,6 +2,7 @@
 
 use crate::engine_ids as ids;
 use crate::locks::Relock;
+use crate::map::{FogOfWarUncovered, MapPinged, WaypointChanged};
 use crate::{Entity, Load, Off, PlayerKey};
 use enshwick_world::__load::*;
 use rustc_hash::FxHashMap;

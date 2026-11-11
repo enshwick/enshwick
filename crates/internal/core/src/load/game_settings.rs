@@ -4,6 +4,7 @@ use crate::WorldError;
 use crate::content::EngineFacts;
 use crate::engine_enum::Values;
 use crate::engine_ids as ids;
+use crate::game_settings::GameSettings;
 use crate::{Host, Load, Off};
 use core::time::Duration;
 use enshwick_world::__load::*;

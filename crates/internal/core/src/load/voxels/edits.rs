@@ -1,5 +1,6 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
+use crate::voxels::VoxelEdit;
 use crate::{Load, Off, abi};
 use enshwick_world::__load::*;
 

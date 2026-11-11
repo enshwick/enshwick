@@ -3,6 +3,7 @@
 use crate::Entity;
 use crate::abi::{RenameCall, Str, read_headed};
 use crate::world::Player;
+use crate::world::Rename;
 use crate::{Load, Off};
 use core::ffi::c_void;
 use enshwick_world::__load::*;

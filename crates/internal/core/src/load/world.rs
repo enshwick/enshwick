@@ -4,6 +4,7 @@ use crate::abi::{EntityPlace, Header, PlayerInfo};
 use crate::ecs::ComponentType;
 use crate::engine_ids as ids;
 use crate::game_events::{Field, Scalar};
+use crate::world::World;
 use crate::{Entity, ItemId, PlayerKey};
 use crate::{Host, Load, Off, WorldError};
 use core::ffi::c_void;

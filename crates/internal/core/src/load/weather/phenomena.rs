@@ -7,6 +7,7 @@ use crate::typed::{
     ResourceType, WeatherPhenomenonEffect as GameEffect, WeatherSystemPhenomenonResource,
     WeatherSystemResource,
 };
+use crate::weather::{NewPhenomenon, PhenomenonChange, PhenomenonId};
 use crate::{Load, Off};
 use core::time::Duration;
 use enshwick_world::__load::*;

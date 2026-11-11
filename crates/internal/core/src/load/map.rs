@@ -8,6 +8,7 @@ use crate::altars::Altars;
 use crate::content::{EngineFacts, Guid};
 use crate::ecs::ComponentType;
 use crate::engine_ids as ids;
+use crate::map::{FogOfWar, Map};
 use crate::world::World;
 use crate::{Load, Off};
 use enshwick_world::__load::*;

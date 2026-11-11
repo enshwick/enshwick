@@ -14,7 +14,7 @@ use crate::{Entity, Host, Off};
 use enshwick_typed::typed::runtime::rows::Fields;
 
 /// A generated component type on the running build, as a script holds it.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ComponentType {
     row: &'static Row,
     raw: RawComponent,
@@ -75,7 +75,7 @@ impl crate::script::Object for ComponentType {
 }
 
 /// A generated game event type on the running build, as a script holds it.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct EventType {
     row: &'static Row,
     raw: RawEvent,
@@ -111,7 +111,7 @@ impl crate::script::Object for EventType {
 }
 
 /// A generated resource type on the running build, as a script holds it.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ResourceType {
     row: &'static Row,
     raw: RawResource,

@@ -2,6 +2,7 @@
 
 use crate::WorldError;
 use crate::abi::{DaytimeInfo, Header, Status};
+use crate::daytime::{Clock, ClockSpeed};
 use crate::{Host, Load, Off};
 use core::time::Duration;
 use enshwick_world::__load::*;

@@ -1,5 +1,6 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
+use crate::altars::NewFlameAltar;
 use crate::content::props::PropId;
 use crate::{Load, Off};
 #[cfg(feature = "unstable")]

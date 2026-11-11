@@ -3,6 +3,7 @@
 use crate::Off;
 use crate::WorldError;
 use crate::abi::{Header, Status, WeatherFront};
+use crate::weather::{FrontChanged, Weather};
 use crate::{Host, Load};
 use core::time::Duration;
 use enshwick_world::__load::*;

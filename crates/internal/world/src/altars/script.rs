@@ -7,6 +7,7 @@ use super::{
     Altar, Altars, Base, BaseLimit, Bounds, BuildingZoneCheck, Grouping, ZoneSizes, base_limit,
     bases_of, cell_of_fixed, cell_of_metres, grouping,
 };
+#[cfg(feature = "unstable")]
 use crate::Off;
 use crate::script::{Class, Field, Function, IntoScript, Object, Record, Ty, Typed, Value};
 

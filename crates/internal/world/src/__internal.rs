@@ -35,6 +35,20 @@ pub fn altar_template_of(host: Host, entity: Entity) -> Option<Guid> {
     crate::altars::template_of(host, entity)
 }
 
+/// The players connected now, from the loader.
+#[cfg(feature = "unstable")]
+#[must_use]
+pub fn online(host: Host) -> Vec<crate::world::Player> {
+    crate::world::online(host)
+}
+
+/// The map marker type `info` describes, as the loader lists them.
+#[cfg(feature = "unstable")]
+#[must_use]
+pub fn map_marker_type(info: &crate::abi::MapMarkerTypeInfo) -> crate::map::MapMarkerType {
+    crate::map::MapMarkerType::from_info(info)
+}
+
 /// What a frame of the interface runs for `Load::on_fog_uncovered`: it
 /// looks at `fog` four times a second and calls `handler` with each window
 /// of new ground.

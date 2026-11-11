@@ -19,7 +19,9 @@ pub use enshwick_base::{
     ecs, events, files, game_events, i18n, mods, net, pacing, points, resources, schedule, script,
     services, state, status, time,
 };
-pub(crate) use enshwick_base::{engine_enum, engine_ids, fresh, locks};
+pub(crate) use enshwick_base::{engine_enum, engine_ids};
+#[cfg(feature = "unstable")]
+pub(crate) use enshwick_base::{fresh, locks};
 #[doc(hidden)]
 pub use enshwick_content::{content, rates};
 // The macros the base exports, which the code here calls by `crate::`.

@@ -248,6 +248,9 @@ impl Ui {
             }
             capacity = count;
         };
-        Ok(infos.iter().map(MapMarkerType::from_info).collect())
+        Ok(infos
+            .iter()
+            .map(enshwick_world::__internal::map_marker_type)
+            .collect())
     }
 }

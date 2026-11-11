@@ -50,7 +50,7 @@ fn off(id: &str, host: Host, why: &str) -> Off {
 
 /// A component type resolved on the running build by its id: reads and
 /// writes of an entity's component as the codec's [`Value`].
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct RawComponent {
     id: &'static str,
     ty: crate::ecs::ComponentType,
@@ -195,7 +195,7 @@ impl RawComponent {
 }
 
 /// A game event type resolved on the running build by its id.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct RawEvent {
     id: &'static str,
     ty: crate::game_events::EventType,
@@ -244,7 +244,7 @@ impl RawEvent {
 
 /// A resource type resolved on the running build by its id: the keys of
 /// its resources, their game values and changes served in load order.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct RawResource {
     id: &'static str,
     hash: u32,

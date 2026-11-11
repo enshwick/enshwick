@@ -3,6 +3,7 @@
 use crate::Off;
 use crate::WorldError;
 use crate::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo};
+use crate::terrain::Terrain;
 use crate::{Host, ItemId, Load};
 use enshwick_world::__load::*;
 
