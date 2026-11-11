@@ -52,10 +52,11 @@ enshwick ──test──▶ enshwick-fake ──▶ enshwick-core (its `fake` f
   module, which only core's `fake` feature builds and only `enshwick-fake`
   turns on, so a mod's release build holds no test support. Core asks the
   fake about a mod's manifest through one check the fake hands down at
-  install. The fake's root holds core's public items at their paths beside
-  `test`: its code names them through `crate::`, and its examples name it
-  `enshwick` as the other parts do.
-- An internal part's doc example names its own crate `enshwick` by a hidden
+  install. The fake's code names core as `enshwick_core`.
+- `enshwick-core` and `enshwick-fake` take `enshwick` as a dev-dependency,
+  so their doc examples name the real facade and build as one binary; cargo
+  drops a dev-dependency without a version when it publishes. Another
+  internal part's doc example names its own crate `enshwick` by a hidden
   `# extern crate <crate> as enshwick;` line. One that names items above its
   crate sits in a hidden wrapper, and `crates/enshwick/src/lower_examples.rs`
   compiles its copy; `cargo xtask check` holds both.
@@ -143,8 +144,12 @@ follows the same steps.
    `core/src/script/namespaces/<domain>.rs`: a namespace opens its handle
    through `Load` and lists `Load`'s start functions, which `#[script]` on
    the forwarders makes.
-5. What core or the fake reads inside the crate becomes `pub` with
-   `#[doc(hidden)]`; the fake's part of it goes into the crate's own hidden
+5. What core calls inside the crate and a mod must not becomes a function
+   of the crate's hidden `__internal` module, which neither core nor the
+   facade re-exports, and the method behind it stays `pub(crate)`: a method
+   on a type the facade shows is in a mod's reach, hidden or not.
+   `crates/enshwick/tests/ui/internals_out_of_reach.rs` holds that a mod
+   names none of them. The fake's part goes into the crate's own hidden
    `__fake`, behind a `fake` feature that core's turns on. Core re-exports
    the crate's modules at the paths its own code names them by, and the
    facade re-exports them at today's paths.
