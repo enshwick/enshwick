@@ -33,13 +33,30 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<bool, String> {
         let text =
             std::fs::read_to_string(&from).map_err(|e| format!("{}: {e}", from.display()))?;
         let peeled = peel(&text).map_err(|e| format!("{}: {e}", from.display()))?;
-        std::fs::write(&from, &peeled.base).map_err(|e| format!("{}: {e}", from.display()))?;
-        if peeled.forwarders.is_empty() {
-            continue;
+        // The forwarders, which keep the docs, are written before `from`
+        // loses them.
+        if !peeled.forwarders.is_empty() {
+            write_forwarders(&into, &peeled)?;
+            crate::say(&format!(
+                "{}: {} forwarder blocks into {}",
+                from.display(),
+                peeled.forwarders.len(),
+                into.display()
+            ));
         }
-        let mut out = match std::fs::read_to_string(&into) {
+        std::fs::write(&from, &peeled.base).map_err(|e| format!("{}: {e}", from.display()))?;
+    }
+    Ok(true)
+}
+
+/// Appends the forwarders of `peeled` to `into`, a new file when it is
+/// missing.
+fn write_forwarders(into: &Path, peeled: &Peeled) -> Result<(), String> {
+    {
+        let mut out = match std::fs::read_to_string(into) {
             Ok(kept) => kept,
-            Err(_) => header(&peeled.uses),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => header(&peeled.uses),
+            Err(e) => return Err(format!("{}: {e}", into.display())),
         };
         for block in &peeled.forwarders {
             out.push('\n');
@@ -49,18 +66,11 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<bool, String> {
         if let Some(dir) = into.parent() {
             std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         }
-        std::fs::write(&into, out).map_err(|e| format!("{}: {e}", into.display()))?;
-        crate::say(&format!(
-            "{}: {} forwarder blocks into {}",
-            from.display(),
-            peeled.forwarders.len(),
-            into.display()
-        ));
+        std::fs::write(into, out).map_err(|e| format!("{}: {e}", into.display()))?;
     }
-    Ok(true)
+    Ok(())
 }
 
-/// A new forwarder file: its doc line and the `use` items of its source.
 fn header(uses: &[String]) -> String {
     let mut out = String::from(
         "//! `Load`'s methods of a module below core, forwarded to the base handle.\n\n",
@@ -69,7 +79,16 @@ fn header(uses: &[String]) -> String {
         out.push_str(line);
         out.push('\n');
     }
-    out.push_str("use crate::{Load, Off};\n");
+    // `Load` and `Off`, each unless a copied import names it already.
+    let named = |name: &str| {
+        uses.iter().any(|line| {
+            line.split(|c: char| !c.is_alphanumeric() && c != '_')
+                .any(|word| word == name)
+        })
+    };
+    for name in ["Load", "Off"].into_iter().filter(|name| !named(name)) {
+        let _written = writeln!(out, "use crate::{name};");
+    }
     out
 }
 
@@ -180,17 +199,25 @@ fn block(item: &ItemImpl, text: &str, at: &Offsets<'_>) -> (String, Option<Strin
         let sig = text[start..sig_end].trim_end();
         bodiless.push(format!("    {};", sig.strip_suffix(',').unwrap_or(sig)));
     }
-    let moved = format!("impl {BASE} {{\n{}\n}}", moved.join("\n\n"));
-    if bodiless.is_empty() {
-        return (moved, None);
-    }
-    let mut head = format!("#[enshwick_macros::forward({FIELD})]\n");
-    for attr in item.attrs.iter().filter(|a| {
+    // The block's own attributes, such as a `cfg`, hold for both blocks;
+    // `#[script]` names `Load`'s functions and goes with the forwarders.
+    let is_script = |a: &&Attribute| {
         a.path()
             .segments
             .last()
             .is_some_and(|s| s.ident == "script")
-    }) {
+    };
+    let mut kept = String::new();
+    for attr in item.attrs.iter().filter(|a| !is_script(a)) {
+        kept.push_str(attr_text(attr, text, at));
+        kept.push('\n');
+    }
+    let moved = format!("{kept}impl {BASE} {{\n{}\n}}", moved.join("\n\n"));
+    if bodiless.is_empty() {
+        return (moved, None);
+    }
+    let mut head = format!("{kept}#[enshwick_macros::forward({FIELD})]\n");
+    for attr in item.attrs.iter().filter(is_script) {
         head.push_str(attr_text(attr, text, at));
         head.push('\n');
     }
@@ -398,7 +425,9 @@ impl Load<'_> {
     #[test]
     fn a_new_forwarder_file_names_load_and_its_source_s_imports() {
         let text = header(&["use core::time::Duration;".to_owned()]);
-        assert!(text.ends_with("use core::time::Duration;\nuse crate::{Load, Off};\n"));
+        assert!(text.ends_with("use core::time::Duration;\nuse crate::Load;\nuse crate::Off;\n"));
+        let text = header(&["use crate::{Host, Off};".to_owned()]);
+        assert!(text.ends_with("use crate::{Host, Off};\nuse crate::Load;\n"));
     }
 
     #[test]
@@ -419,11 +448,11 @@ impl Load<'_> {
 
     #[test]
     fn a_script_adapter_moves_public_and_keeps_its_visibility_on_load() -> Result<(), String> {
-        let source = "#[crate::script(texts)]\nimpl Load<'_> {\n    /// Texts for a script.\n    #[script(name = \"texts\")]\n    pub(crate) fn texts_script(&mut self) -> u32 {\n        1\n    }\n}\n";
+        let source = "#[cfg(feature = \"unstable\")]\n#[crate::script(texts)]\nimpl Load<'_> {\n    /// Texts for a script.\n    #[script(name = \"texts\")]\n    pub(crate) fn texts_script(&mut self) -> u32 {\n        1\n    }\n}\n";
         let peeled = peel(source)?;
         assert_eq!(
             peeled.base,
-            "impl BaseLoad {\n    /// As `Load::texts_script`.\n    #[doc(hidden)]\n    pub fn texts_script(&mut self) -> u32 {\n        1\n    }\n}\n"
+            "#[cfg(feature = \"unstable\")]\nimpl BaseLoad {\n    /// As `Load::texts_script`.\n    #[doc(hidden)]\n    pub fn texts_script(&mut self) -> u32 {\n        1\n    }\n}\n"
         );
         assert_eq!(
             peeled.forwarders,
