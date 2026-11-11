@@ -218,7 +218,9 @@ jobs:
       - name: The trybuild test
         if: matrix.part == 'trybuild'
         run: |
-          mapfile -t args < <(cargo xtask host-args)
+          # A substitution in an assignment fails the step; `< <(...)` would not.
+          host_args=$(cargo xtask host-args)
+          mapfile -t args <<< "$host_args"
           cargo nextest run "${args[@]}" --test main --profile trybuild --no-tests=fail
 
       # A version that claims less change than the public API made fails;
