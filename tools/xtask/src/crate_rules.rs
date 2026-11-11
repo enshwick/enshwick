@@ -50,12 +50,7 @@ pub(crate) fn check() -> Result<Vec<String>, String> {
         let dir = manifest.parent().unwrap_or(Path::new("."));
         problems.extend(test_feature(name, package));
         problems.extend(fake_reach(name, package));
-        let platform = dir
-            .strip_prefix(root)
-            .ok()
-            .and_then(|inside| inside.components().next())
-            .is_some_and(|first| PLATFORM_DIRS.iter().any(|d| first.as_os_str() == *d));
-        if platform {
+        if in_platform_dir(dir, root) {
             problems.extend(facade_use(name, package));
         }
         problems.extend(manifest_facts(name, package, &toolchain));
@@ -200,6 +195,15 @@ fn fake_reach(name: &str, package: &serde_json::Value) -> Vec<String> {
 /// The workspace folders of the platform's own crates, which name the
 /// internal crate they need; the mods in `examples/` depend on [`FACADE`].
 const PLATFORM_DIRS: [&str; 2] = ["crates", "tools"];
+
+/// Whether the package folder `dir` lies in one of the [`PLATFORM_DIRS`] of
+/// the workspace at `root`.
+fn in_platform_dir(dir: &Path, root: &Path) -> bool {
+    dir.strip_prefix(root)
+        .ok()
+        .and_then(|inside| inside.components().next())
+        .is_some_and(|first| PLATFORM_DIRS.iter().any(|d| first.as_os_str() == *d))
+}
 
 /// The problems of `package`, a platform crate, depending on [`FACADE`]
 /// other than for its tests: it names the layer it needs, so the facade
@@ -636,6 +640,19 @@ mod tests {
                 "a: its dev dependency enshwick-core turns on `fake`; only enshwick-fake may",
             ]
         );
+    }
+
+    #[test]
+    fn the_crates_and_tools_folders_hold_the_platform_and_examples_do_not() {
+        let root = Path::new("/w");
+        assert!(in_platform_dir(
+            Path::new("/w/crates/internal/loader"),
+            root
+        ));
+        assert!(in_platform_dir(Path::new("/w/tools/xtask"), root));
+        assert!(!in_platform_dir(Path::new("/w/examples/horn"), root));
+        assert!(!in_platform_dir(Path::new("/w"), root));
+        assert!(!in_platform_dir(Path::new("/elsewhere/crates/a"), root));
     }
 
     #[test]

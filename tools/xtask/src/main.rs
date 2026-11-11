@@ -772,6 +772,21 @@ mod tests {
         assert!(order(&host).is_sorted() && order(&docs).is_sorted());
     }
 
+    #[test]
+    fn a_change_to_the_api_docs_alone_plans_the_stable_steps_in_the_docs_part() {
+        let docs_of = |name: &str| Scope::Some {
+            code: BTreeSet::new(),
+            docs: [name.to_owned()].into(),
+        };
+        let stable = |scope: &Scope| {
+            host_steps(scope, &[], (false, true), Some(""), false, &[Part::Docs])
+                .iter()
+                .any(|step| step.args.ends_with(&STABLE_API.map(str::to_owned)))
+        };
+        assert!(stable(&docs_of("enshwick")));
+        assert!(!stable(&docs_of("enshwick-luau")));
+    }
+
     fn runs_stable_rustdoc(steps: &[Step]) -> bool {
         steps.iter().any(|step| {
             step.args
