@@ -24,11 +24,11 @@ mod tests {
         ("load/build.rs", "field_offset", FIELD),
         ("load/build.rs", "type_size", FIELD),
         ("fake:test/base/hooks.rs", "field_offset", FAKE),
-        ("world.rs", "WritableType", COMPONENT),
-        ("world.rs", "set", COMPONENT),
-        ("world.rs", "size", COMPONENT),
-        ("world.rs", "update", COMPONENT),
-        ("world/entities.rs", "entities", COMPONENT),
+        ("world:world.rs", "WritableType", COMPONENT),
+        ("world:world.rs", "set", COMPONENT),
+        ("world:world.rs", "size", COMPONENT),
+        ("world:world.rs", "update", COMPONENT),
+        ("world:world/entities.rs", "entities", COMPONENT),
     ];
 
     const EVENT: &str = "`Load::game_event_type` takes any reflected event type by name";
