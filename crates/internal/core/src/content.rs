@@ -6,9 +6,7 @@
 //! the field that holds them. [`Blob`] edits them safely: it grows arrays by
 //! moving them to the end and keeps every offset right.
 
-use core::ffi::c_void;
-
-use crate::abi::{ResourceKey, ResourcePatchFn, Status, Str};
+use crate::abi::{ResourceKey, Str};
 use crate::{Load, Off};
 
 pub mod categories;

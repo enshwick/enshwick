@@ -3,7 +3,9 @@
 
 pub(crate) use enshwick_base::__off_from as off_from;
 use enshwick_base::BaseLoad;
-pub(crate) use enshwick_base::load::{CHECK_WHY, game_events_of, hand_over, off_status, ok};
+#[cfg(feature = "typed")]
+pub(crate) use enshwick_base::load::game_events_of;
+pub(crate) use enshwick_base::load::{hand_over, off_status, ok};
 #[doc(inline)]
 pub use enshwick_values::Off;
 
@@ -185,11 +187,6 @@ impl Load<'_> {
         &mut self.base
     }
 
-    /// The mod's `src/texts.toml`, as `declare_mod!` embedded it.
-    pub(crate) fn embedded_texts(&self) -> Option<&'static str> {
-        self.base.embedded_texts()
-    }
-
     /// The state of type `T` a domain keeps while the mod initialises, empty
     /// until the domain fills it.
     #[cfg_attr(
@@ -204,10 +201,6 @@ impl Load<'_> {
     /// check, as its manifest says.
     pub(crate) fn joins(&self) -> bool {
         self.base.joins()
-    }
-
-    fn api(&self) -> &'static crate::abi::HostApi {
-        self.base.api()
     }
 }
 

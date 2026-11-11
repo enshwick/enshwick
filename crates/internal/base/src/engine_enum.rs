@@ -86,9 +86,13 @@ impl Bits {
 }
 
 /// Asserts that every variant of `ids` is named after the engine constant
-/// its id stands for, as the catalogue names each id after its constant.
-#[cfg(test)]
-pub(crate) fn assert_named_after_engine<T: core::fmt::Debug>(ids: &[(T, &str)]) {
+/// its id stands for, as the catalogue names each id after its constant;
+/// for the tests of each domain's enums.
+///
+/// # Panics
+///
+/// When a variant's name differs from its constant's.
+pub fn assert_named_after_engine<T: core::fmt::Debug>(ids: &[(T, &str)]) {
     let plain = |name: &str| -> String {
         name.chars()
             .filter(|&c| c != '_')

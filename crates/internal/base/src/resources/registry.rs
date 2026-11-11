@@ -145,6 +145,7 @@ impl<'a> Registry<'a> {
     /// The fields of struct `ty` and of its bases, the base's first, with
     /// each field's offset from the start of `ty`.
     #[doc(hidden)]
+    #[must_use]
     pub fn all_fields<'r>(&'r self, ty: &'r Type<'a>) -> Vec<&'r Field<'a>> {
         let mut chain = vec![ty];
         for base in self.bases(ty) {

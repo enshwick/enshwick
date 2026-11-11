@@ -51,6 +51,7 @@ pub fn host() -> Option<Host> {
 
 /// The data pack whose code this thread runs in the loader's copy of the
 /// API; `None` in a mod's own copy and in the loader's own code.
+#[must_use]
 pub fn pack() -> Option<Host> {
     RUNNING
         .get()
@@ -173,6 +174,7 @@ impl Host {
     /// - That table stays valid and unchanged for the rest of the process,
     ///   as the loader's does.
     #[doc(hidden)]
+    #[must_use]
     pub unsafe fn new(api: *const HostApi, me: ModHandle) -> Option<Self> {
         // SAFETY: by this function's `# Safety`, `api` is null or an aligned
         // table that starts with its header and lives for the process;
@@ -190,6 +192,7 @@ impl Host {
 
     /// Makes this the answer of [`host`]; the first call wins.
     #[doc(hidden)]
+    #[must_use]
     pub fn install(self) -> Self {
         *HOST.get_or_init(|| self)
     }

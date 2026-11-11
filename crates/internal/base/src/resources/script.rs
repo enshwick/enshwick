@@ -175,6 +175,7 @@ impl Resources {
     /// `key` as script data: `{ guid, type, part }`, the type by its
     /// qualified name when the build has it.
     #[doc(hidden)]
+    #[must_use]
     pub fn key_data(registry: &Registry<'_>, key: ResourceKey) -> Data {
         let ty = registry
             .hashed(key.type_hash)

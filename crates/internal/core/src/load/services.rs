@@ -1,7 +1,9 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
+use crate::services::Service;
+#[cfg(feature = "unstable")]
 use crate::services::{
-    Call, Caller, DescribedCall, DescribedCaller, DescribedEmitter, DescribedEvent, Service,
+    Call, Caller, DescribedCall, DescribedCaller, DescribedEmitter, DescribedEvent,
 };
 use crate::{Load, Off};
 
@@ -93,6 +95,7 @@ impl Load<'_> {
     pub fn optional_service<T: Service>(&self) -> Option<&'static T>;
 }
 
+#[cfg(feature = "unstable")]
 #[enshwick_macros::forward(base)]
 impl Load<'_> {
     /// Serves the call `C` with `handler` for other mods to call, from the
@@ -216,6 +219,7 @@ impl Load<'_> {
     -> Result<DescribedCaller, Off>;
 }
 
+#[cfg(feature = "unstable")]
 #[enshwick_macros::forward(base)]
 impl Load<'_> {
     /// Calls `handler` with the data of every described mod event `event`

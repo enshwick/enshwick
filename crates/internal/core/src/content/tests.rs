@@ -1,32 +1,6 @@
 use super::*;
 
 #[test]
-fn a_builder_reads_a_null_base_as_empty() {
-    let builder: Builder = Box::new(|base: &[u8]| Some(vec![u8::from(base.is_empty())]));
-    let user = core::ptr::from_ref(&builder).cast_mut().cast();
-    let (mut out, mut out_len) = (core::ptr::null::<u8>(), 0usize);
-    // SAFETY: a null base, `user` points at the `Builder` alive in this
-    // frame, and both out pointers are writable locals.
-    let status = unsafe { build(core::ptr::null(), 0, user, &raw mut out, &raw mut out_len) };
-    assert_eq!(status, Status::OK);
-    // SAFETY: `build` returned OK and set `out` to the `out_len` bytes it
-    // leaked, which are never freed.
-    assert_eq!(unsafe { core::slice::from_raw_parts(out, out_len) }, [1]);
-    // SAFETY: `user` points at the `Builder` alive in this frame, and
-    // `build` refuses a null `out` before it writes anything.
-    let refused = unsafe {
-        build(
-            core::ptr::null(),
-            0,
-            user,
-            core::ptr::null_mut(),
-            &raw mut out_len,
-        )
-    };
-    assert_eq!(refused, Status::BAD_ARGS);
-}
-
-#[test]
 fn a_guid_parses_to_memory_order_and_its_game_id() {
     let chest = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
     assert_eq!(&chest.0[..4], &[0x3a, 0x05, 0x43, 0x69]);

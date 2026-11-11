@@ -43,8 +43,15 @@ pub struct Fresh<T> {
     cell: AtomicPtr<(u64, T)>,
 }
 
+impl<T> Default for Fresh<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(not(feature = "fake"))]
 impl<T> Fresh<T> {
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             cell: std::sync::OnceLock::new(),
@@ -67,6 +74,7 @@ impl<T> Fresh<T> {
 
 #[cfg(feature = "fake")]
 impl<T> Fresh<T> {
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             cell: AtomicPtr::new(core::ptr::null_mut()),

@@ -1,11 +1,10 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::points::{
-    DescribedOwnedPoint, DescribedPoint, DescribedVerdict, Order, OwnedPoint, Point, Verdict,
-};
+#[cfg(feature = "unstable")]
+use crate::points::{DescribedOwnedPoint, DescribedPoint, DescribedVerdict};
+use crate::points::{Order, OwnedPoint, Point, Verdict};
 use crate::{Load, Off};
 
-#[cfg(feature = "unstable")]
 #[enshwick_macros::forward(base)]
 impl Load<'_> {
     /// Defines the extension point `P` for other mods to extend, and returns
@@ -100,6 +99,7 @@ impl Load<'_> {
     ) -> Result<(), Off>;
 }
 
+#[cfg(feature = "unstable")]
 #[enshwick_macros::forward(base)]
 impl Load<'_> {
     /// Links `link` into another mod's extension point described by

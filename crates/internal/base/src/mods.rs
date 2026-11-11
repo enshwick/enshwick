@@ -380,6 +380,7 @@ pub(crate) fn folder(file: &str) -> Option<&str> {
 /// Whether the relative path `relative` stays inside the folder it is joined
 /// to: no root, drive prefix or `..`.
 #[doc(hidden)]
+#[must_use]
 pub fn stays_inside(relative: &str) -> bool {
     std::path::Path::new(relative).components().all(|part| {
         matches!(

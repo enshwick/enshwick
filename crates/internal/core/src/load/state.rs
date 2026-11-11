@@ -1,7 +1,7 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
+use crate::Load;
 use crate::state::DataStore;
-use crate::{Load, Off};
 
 #[enshwick_macros::forward(base)]
 #[crate::script(state)]
