@@ -300,10 +300,17 @@ impl LoadMethods for crate::BaseLoad {
 
 /// The base handle's helpers of this module for the crate's own code.
 pub(crate) trait LoadHelpers {
+    /// The bits of the game's crafting prop mask and the count of the
+    /// game's own crafting props.
     fn crafting_prop_bounds(&self) -> Result<(u8, u8), Off>;
 
+    /// The index the loader gives the crafting prop `prop`.
     fn crafting_prop_index(&self, prop: Guid) -> Result<u8, Off>;
 
+    /// Makes `prop`, the prop of the item `item` named `name`, a crafting
+    /// prop: listed in the workshop registry and required by `setup`'s
+    /// recipes. Runs once the prop's template and item are added, so a
+    /// refusal before it takes no bit.
     fn add_crafting_prop(
         &mut self,
         prop: Id,

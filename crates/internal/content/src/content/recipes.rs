@@ -129,6 +129,8 @@ impl LoadMethods for crate::BaseLoad {
 
 /// The base handle's helpers of this module for the crate's own code.
 pub(crate) trait LoadHelpers {
+    /// Adds `recipe` as `Load::add_recipe` does, for the workshops and
+    /// data packs that bring their own.
     fn push_recipe(&mut self, recipe: NewRecipe) -> Result<(), Off>;
 }
 

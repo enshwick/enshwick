@@ -654,8 +654,11 @@ impl LoadMethods for crate::BaseLoad {
 
 /// The base handle's helpers of this module for the crate's own code.
 pub(crate) trait LoadHelpers {
+    /// The journal's resource key on the running build.
     fn journal_key(&self) -> Result<crate::abi::ResourceKey, Off>;
 
+    /// Adds `edit` to the changes the one patch of the journal `key` makes
+    /// for the mod, serving the patch with the first.
     fn edit_journal(&mut self, key: crate::abi::ResourceKey, edit: Edit) -> Result<(), Off>;
 }
 

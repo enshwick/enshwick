@@ -15,7 +15,7 @@ re-exports; `crates/runtime/` holds what `enshwick.zip` ships into the game.
 | `enshwick` | `crates/enshwick` | the one crate mods use: the facade that re-exports every module of its internal parts at its own paths, the crate docs, the macros' docs and the features | yes |
 | `enshwick-core` | `crates/internal/core` | `Load` and `World`, the domains not yet in crates of their own, and the script binding | yes |
 | `enshwick-base` | `crates/internal/base` | what every domain shares (the host handle, events, services, points, settings, texts, state, the resource codec, the ECS reads, the lock policy) and the base handle `Load` holds | yes |
-| `enshwick-content` | `crates/internal/content` | the content domain: content, rates, and the generated typed items with their shape samples; the typed handles that read a live world stay in core | yes |
+| `enshwick-content` | `crates/internal/content` | the content domain: content, rates, and the shape samples of the generated typed items, which it re-exports from `enshwick-typed`; the typed handles that read a live world stay in core | yes |
 | `enshwick-typed` | `crates/internal/typed` | the generated typed API, re-exported as `enshwick::typed` | yes |
 | `enshwick-values` | `crates/internal/values` | the value types the layers share: shape, content ids, resource values, the script value model | yes |
 | `enshwick-abi` | `crates/internal/abi` | the `repr(C)` types that cross between the loader and a mod, the ABI version and its golden layout file, and the reads and writes of game memory, re-exported as `enshwick::abi` and `enshwick::raw` | yes |
@@ -147,13 +147,18 @@ each later peel follows the same steps.
    `LoadMethods` and the rest on the crate-private `LoadHelpers`, each
    implemented for `BaseLoad` with the bodies as written; the crate's
    `src/__load.rs` re-exports each trait as `_`, and the forwarder file
-   imports them all with `use enshwick_<domain>::__load::*`. A module that
-   is private becomes `pub(crate)`, so `__load` reaches its trait, and a
-   module `cfg` gates in its parent gives its `__load` lines and forwarder
-   `mod` that `cfg` by hand. A
-   block of a module that `cfg` gates in its parent gets that `cfg` by
-   hand. A method whose closure takes `&mut Self` stays a method of `Load`
-   that runs the closure and hands the outcome down.
+   imports them all with `use enshwick_<domain>::__load::*`, as does each
+   peeled module that calls a method another module of the run moved; a
+   peeled module loses its import of core's `Load`. The traits stay
+   nameable, hidden, under the facade's modules: they offer nothing `Load`
+   does not, and hiding them would take a nested module and a glob import of
+   its parent in every peeled module. Peel the domain's
+   modules in one run, so each knows the others' methods. A module that is
+   private becomes `pub(crate)`, so `__load` reaches its trait. A module
+   that `cfg` gates in its parent gives its blocks, its `__load` lines and
+   its forwarder `mod` that `cfg` by hand. A method whose closure takes
+   `&mut Self` stays a method of `Load` that runs the closure and hands the
+   outcome down.
 3. Upward edges the moved code still has go first: what a lower layer needs
    moves down with it, such as the served-resource builder into
    `resources` and the host's resource reads, and what only an upper domain

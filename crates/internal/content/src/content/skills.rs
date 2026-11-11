@@ -457,10 +457,15 @@ impl LoadMethods for crate::BaseLoad {
 
 /// The base handle's helpers of this module for the crate's own code.
 pub(crate) trait LoadHelpers {
+    /// The skill tree's resource key on the running build.
     fn skill_tree(&self) -> Result<crate::abi::ResourceKey, Off>;
 
+    /// How many nodes a player's save keeps unlocked: the count of the
+    /// saved unlocks' array, from the game's reflection.
     fn skill_room(&self) -> Result<usize, Off>;
 
+    /// Checks `new` against the vanilla tree and declares its id: the room
+    /// a save keeps, the spacing of the vanilla nodes and the tree's key.
     fn check_skill_node(
         &mut self,
         new: &NewSkillNode,

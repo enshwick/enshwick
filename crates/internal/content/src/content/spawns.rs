@@ -246,6 +246,7 @@ impl LoadMethods for crate::BaseLoad {
 
 /// The base handle's helpers of this module for the crate's own code.
 pub(crate) trait LoadHelpers {
+    /// The vanilla spawner templates `pick` names.
     fn spawners(&self, pick: SpawnerPick) -> Result<Vec<Guid>, Off>;
 }
 

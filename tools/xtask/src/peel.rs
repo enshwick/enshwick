@@ -8,7 +8,9 @@
 //! doc line. Above it Rust allows no inherent method on `BaseLoad` (E0116),
 //! so a module's blocks become one hidden trait, `LoadMethods`, and its
 //! `impl` for `BaseLoad`; the crate's `src/__load.rs` re-exports each such
-//! trait as `_`, and the forwarder file imports them all with a glob.
+//! trait as `_`, and the forwarder file imports them all with a glob, as
+//! does a peeled module that calls a method another module of the run moved;
+//! a peeled module loses its import of core's `Load`.
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -43,12 +45,27 @@ enum Form {
 }
 
 impl Form {
-    /// The form for a module file at `from`, a path from the workspace
-    /// root: the trait form in a crate of `crates/internal` other than base.
-    fn of(from: &str) -> Self {
-        let parts: Vec<&str> = from.split(['/', '\\']).collect();
+    /// The form for a module file at `from`, a path from the workspace root
+    /// or under it: inherent blocks in `crates/internal/base`, the trait
+    /// form in any other crate of `crates/internal`.
+    ///
+    /// # Errors
+    ///
+    /// When `from` is no module file of a crate in `crates/internal`.
+    fn of(root: &Path, from: &str) -> Result<Self, String> {
+        let path = Path::new(from);
+        let relative = path.strip_prefix(root).unwrap_or(path);
+        let parts: Vec<String> = relative
+            .components()
+            .filter_map(|part| match part {
+                std::path::Component::Normal(name) => Some(name.to_string_lossy().into_owned()),
+                _ => None,
+            })
+            .collect();
+        let parts: Vec<&str> = parts.iter().map(String::as_str).collect();
         match parts.as_slice() {
-            ["crates", "internal", dir, "src", rest @ ..] if *dir != "base" && !rest.is_empty() => {
+            ["crates", "internal", "base", "src", _, ..] => Ok(Self::Base),
+            ["crates", "internal", dir, "src", rest @ ..] if !rest.is_empty() => {
                 let mut module: Vec<&str> = rest.to_vec();
                 if let Some(last) = module.last_mut() {
                     *last = last.strip_suffix(".rs").unwrap_or(last);
@@ -56,31 +73,29 @@ impl Form {
                 if module.last() == Some(&"mod") || module.as_slice() == ["lib"] {
                     module.pop();
                 }
-                Self::Trait {
+                Ok(Self::Trait {
                     krate: format!("enshwick_{}", dir.replace('-', "_")),
                     module: module.join("::"),
                     reexports: format!("crates/internal/{dir}/src/{REEXPORTS}.rs"),
-                }
+                })
             }
-            _ => Self::Base,
+            _ => Err(format!(
+                "{from}: not a module file of a crate in crates/internal"
+            )),
         }
     }
 }
 
-/// Peels each `from=into` pair of `args`, paths from the workspace root.
-///
-/// # Errors
-///
-/// When an argument is no pair, or a file does not read, parse or write.
 pub(crate) fn run(root: &Path, args: &[String]) -> Result<bool, String> {
     if args.is_empty() {
         return Err("usage: cargo xtask peel-load <from>=<into>...".to_owned());
     }
+    let mut traits = Vec::new();
     for arg in args {
         let (from, into) = arg
             .split_once('=')
             .ok_or_else(|| format!("{arg}: not <from>=<into>"))?;
-        let form = Form::of(from);
+        let form = Form::of(root, from)?;
         let (from, into) = (root.join(from), root.join(into));
         let text =
             std::fs::read_to_string(&from).map_err(|e| format!("{}: {e}", from.display()))?;
@@ -92,6 +107,7 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<bool, String> {
             for name in &peeled.traits {
                 reexport(&root.join(reexports), module, name)?;
             }
+            traits.push((from.clone(), root.join(reexports)));
         }
         // The forwarders, which keep the docs, are written before `from`
         // loses them.
@@ -106,7 +122,107 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<bool, String> {
         }
         std::fs::write(&from, &peeled.base).map_err(|e| format!("{}: {e}", from.display()))?;
     }
+    // Once every module of the run is peeled, each that calls a method
+    // another module moved imports the crate's traits.
+    for (file, reexports) in traits {
+        let others = moved_methods(&reexports, &file)?;
+        let text =
+            std::fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+        if let Some(out) =
+            with_load_glob(&text, &others).map_err(|e| format!("{}: {e}", file.display()))?
+        {
+            std::fs::write(&file, out).map_err(|e| format!("{}: {e}", file.display()))?;
+        }
+    }
     Ok(true)
+}
+
+/// The methods the traits re-exported in `reexports`, a crate's
+/// `__load.rs`, hold, but those of `own`, a module file of the crate.
+fn moved_methods(reexports: &Path, own: &Path) -> Result<Vec<String>, String> {
+    let listed =
+        std::fs::read_to_string(reexports).map_err(|e| format!("{}: {e}", reexports.display()))?;
+    let src = reexports.parent().unwrap_or(reexports);
+    let mut found = Vec::new();
+    for line in listed.lines() {
+        let Some(path) = line
+            .split_once("use crate::")
+            .and_then(|(_, rest)| rest.strip_suffix(" as _;"))
+        else {
+            continue;
+        };
+        let (module, name) = path.rsplit_once("::").unwrap_or(("", path));
+        let file = if module.is_empty() {
+            src.join("lib.rs")
+        } else {
+            let stem = src.join(module.replace("::", "/"));
+            let flat = stem.with_extension("rs");
+            if flat.is_file() {
+                flat
+            } else {
+                stem.join("mod.rs")
+            }
+        };
+        if file == own {
+            continue;
+        }
+        let text =
+            std::fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+        let parsed = syn::parse_file(&text).map_err(|e| format!("{}: {e}", file.display()))?;
+        for item in parsed.items {
+            if let Item::Trait(item) = item
+                && item.ident == name
+            {
+                found.extend(item.items.iter().filter_map(|entry| match entry {
+                    syn::TraitItem::Fn(method) => Some(method.sig.ident.to_string()),
+                    _ => None,
+                }));
+            }
+        }
+    }
+    Ok(found)
+}
+
+/// `text`, a peeled module file, with the glob of its crate's method
+/// traits after its last import, when it calls one of `others`, the
+/// methods other modules moved, and lacks it; `None` when it needs none.
+fn with_load_glob(text: &str, others: &[String]) -> Result<Option<String>, String> {
+    let line = format!("use crate::{REEXPORTS}::*;");
+    if text.contains(&line)
+        || !others
+            .iter()
+            .any(|name| text.contains(&format!(".{name}(")))
+    {
+        return Ok(None);
+    }
+    let file = syn::parse_file(text).map_err(|e| e.to_string())?;
+    let at = Offsets::new(text);
+    let last_use = file.items.iter().rev().find_map(|item| match item {
+        Item::Use(item) => Some(at.byte(item.semi_token.span.end())),
+        _ => None,
+    });
+    let mut out = text.to_owned();
+    if let Some(end) = last_use {
+        out.insert_str(end, &format!("\n{line}"));
+    } else {
+        out.insert_str(after_inner_docs(text), &format!("{line}\n\n"));
+    }
+    Ok(Some(out))
+}
+
+/// Where a file's text after its inner doc comments, inner attributes and
+/// the blank lines after them starts.
+fn after_inner_docs(text: &str) -> usize {
+    let mut at = 0;
+    for line in text.split_inclusive('\n') {
+        let trimmed = line.trim();
+        if trimmed.starts_with("//!") || trimmed.starts_with("#![") || trimmed.is_empty() {
+            at += line.len();
+        } else {
+            break;
+        }
+    }
+    at
 }
 
 /// Appends the forwarders of `peeled` to `into`, a new file when it is
@@ -133,8 +249,6 @@ fn write_forwarders(into: &Path, peeled: &Peeled) -> Result<(), String> {
     Ok(())
 }
 
-/// `kept`, a forwarder file, with the glob of `krate`'s method traits
-/// after its doc lines when it lacks it.
 fn with_glob(kept: String, krate: Option<&str>) -> String {
     let Some(krate) = krate else {
         return kept;
@@ -143,7 +257,7 @@ fn with_glob(kept: String, krate: Option<&str>) -> String {
     if kept.contains(&line) {
         return kept;
     }
-    let at = kept.find("\n\n").map_or(0, |at| at + 2);
+    let at = after_inner_docs(&kept);
     let mut out = kept;
     out.insert_str(at, &line);
     out
@@ -271,7 +385,6 @@ impl Methods {
                         .to_owned(),
                 );
             };
-            let start = item_start(method, at);
             let sig_end = at.byte(method.block.brace_token.span.open().start());
             let end = at.byte(method.block.brace_token.span.close().end());
             let after_vis = after_visibility(method, at);
@@ -288,6 +401,12 @@ impl Methods {
                     }
                 }
                 signature.push_str("    #[doc(hidden)]\n");
+            } else {
+                // A forwarded method's docs are `Load`'s; a helper keeps its
+                // own, often the invariant it holds.
+                for attr in method.attrs.iter().filter(|a| a.path().is_ident("doc")) {
+                    let _written = writeln!(signature, "    {}", attr_text(attr, text, at));
+                }
             }
             let mut body = String::new();
             for cfg in &block_cfgs {
@@ -318,8 +437,7 @@ impl Methods {
             part.signatures.push(signature);
             part.bodies.push(body);
             if forwarded {
-                let sig = text[start..sig_end].trim_end();
-                bodiless.push(format!("    {};", sig.strip_suffix(',').unwrap_or(sig)));
+                bodiless.push(bodiless_forwarder(method, text, at));
             }
         }
         Ok(forwarder(item, &bodiless, text, at))
@@ -413,6 +531,7 @@ fn peel(text: &str, form: &Form) -> Result<Peeled, String> {
     let mut forwarders = Vec::new();
     let mut uses = Vec::new();
     let mut cuts = Vec::new();
+    let mut imports = Vec::new();
     let mut methods = Methods::default();
     let children: Vec<String> = file
         .items
@@ -424,10 +543,23 @@ fn peel(text: &str, form: &Form) -> Result<Peeled, String> {
         .collect();
     for item in &file.items {
         match item {
-            Item::Use(item) if imports_from_above(item, &children) => {
+            Item::Use(item) => {
                 let start = at.byte(item.use_token.span.start());
                 let end = at.byte(item.semi_token.span.end());
-                uses.push(text[attrs_start(&item.attrs, &at).unwrap_or(start)..end].to_owned());
+                let start = attrs_start(&item.attrs, &at).unwrap_or(start);
+                if imports_from_above(item, &children) {
+                    uses.push(text[start..end].to_owned());
+                }
+                // `Load` is core's: it names nothing in a crate below core.
+                if matches!(form, Form::Trait { .. }) && names_load(&item.tree) {
+                    let kept = without_load(&text[start..end]);
+                    let end = if kept.is_empty() && text[end..].starts_with('\n') {
+                        end + 1
+                    } else {
+                        end
+                    };
+                    imports.push((start, end, kept));
+                }
             }
             Item::Impl(item) if is_load(item) => {
                 let line = item.impl_token.span.start().line;
@@ -469,6 +601,8 @@ fn peel(text: &str, form: &Form) -> Result<Peeled, String> {
     {
         first.2 = methods.render();
     }
+    cuts.extend(imports);
+    cuts.sort_by_key(|cut| cut.0);
     for (start, end, moved) in cuts.into_iter().rev() {
         base.replace_range(start..end, &moved);
     }
@@ -498,6 +632,43 @@ fn is_load(item: &ItemImpl) -> bool {
             if path.path.segments.last().is_some_and(|s| s.ident == "Load"))
 }
 
+/// Whether `tree` imports `Load` by that name.
+fn names_load(tree: &syn::UseTree) -> bool {
+    match tree {
+        syn::UseTree::Path(path) => names_load(&path.tree),
+        syn::UseTree::Name(name) => name.ident == "Load",
+        syn::UseTree::Group(group) => group.items.iter().any(names_load),
+        syn::UseTree::Rename(_) | syn::UseTree::Glob(_) => false,
+    }
+}
+
+/// `item`, a `use` item's text, without its `Load`: empty when it imports
+/// nothing else.
+fn without_load(item: &str) -> String {
+    let word = |c: char| c.is_alphanumeric() || c == '_';
+    let mut out = item.to_owned();
+    let found = out.match_indices("Load").map(|(at, _)| at).find(|&at| {
+        !out[..at].ends_with(word) && !out[at + 4..].starts_with(|c: char| word(c) || c == ':')
+    });
+    let Some(at) = found else {
+        return out;
+    };
+    let after = &out[at + 4..];
+    let trailing = after.len() - after.trim_start_matches([',', ' ', '\n']).len();
+    if after.starts_with(',') {
+        out.replace_range(at..at + 4 + trailing, "");
+        return out;
+    }
+    let before = out[..at].trim_end_matches([' ', '\n']);
+    if let Some(comma) = before.strip_suffix(',') {
+        let cut = comma.len();
+        out.replace_range(cut..at + 4, "");
+        return out;
+    }
+    // `Load` alone, in braces or not.
+    String::new()
+}
+
 /// Whether `item` is a private import that a forwarder file in core can
 /// copy: of the crate or another crate, not of the module's own `super`,
 /// `self` or `children`; a re-export stays with its module.
@@ -525,7 +696,6 @@ fn block(item: &ItemImpl, text: &str, at: &Offsets<'_>) -> (String, Option<Strin
             continue;
         };
         let start = item_start(method, at);
-        let sig_end = at.byte(method.block.brace_token.span.open().start());
         let end = at.byte(method.block.brace_token.span.close().end());
         let public = matches!(method.vis, Visibility::Public(_));
         // A script adapter names the scripts' function on `Load`, whatever
@@ -565,8 +735,7 @@ fn block(item: &ItemImpl, text: &str, at: &Offsets<'_>) -> (String, Option<Strin
             }
         }
         moved.push(lines);
-        let sig = text[start..sig_end].trim_end();
-        bodiless.push(format!("    {};", sig.strip_suffix(',').unwrap_or(sig)));
+        bodiless.push(bodiless_forwarder(method, text, at));
     }
     let moved = format!(
         "{}impl {BASE} {{\n{}\n}}",
@@ -614,6 +783,30 @@ fn forwarder(item: &ItemImpl, bodiless: &[String], text: &str, at: &Offsets<'_>)
         "{head}impl Load<'_> {{\n{}\n}}",
         bodiless.join("\n\n")
     ))
+}
+
+/// A forwarded method's bodiless signature on `Load`, with its attributes
+/// but those that set a lint level: the lint they meet is in the body,
+/// which moved, and on the forwarder an `#[expect]` would go unmet.
+// shortcut: a lint on the signature alone, such as `too_many_arguments`,
+// fires on the forwarder too; it takes its `#[expect]` by hand.
+fn bodiless_forwarder(method: &ImplItemFn, text: &str, at: &Offsets<'_>) -> String {
+    let mut out = String::from("    ");
+    for attr in method.attrs.iter().filter(|a| !is_lint_level(a)) {
+        out.push_str(attr_text(attr, text, at));
+        out.push_str("\n    ");
+    }
+    let sig_end = at.byte(method.block.brace_token.span.open().start());
+    let sig = text[sig_start(method, at)..sig_end].trim_end();
+    let _written = write!(out, "{};", sig.strip_suffix(',').unwrap_or(sig));
+    out
+}
+
+/// Whether `attr` sets a lint level.
+fn is_lint_level(attr: &Attribute) -> bool {
+    ["expect", "allow", "warn", "deny", "forbid"]
+        .iter()
+        .any(|level| attr.path().is_ident(level))
 }
 
 /// The `# Safety` section of a method's doc comment, a blank doc line

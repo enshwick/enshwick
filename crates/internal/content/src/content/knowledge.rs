@@ -709,10 +709,17 @@ impl LoadMethods for crate::BaseLoad {
 
 /// The base handle's helpers of this module for the crate's own code.
 pub(crate) trait LoadHelpers {
+    /// The knowledge entries the mod added, reading the game's own ids and
+    /// serving the mod's one patch of its knowledge on the first call.
     fn added_knowledge(&mut self) -> Result<&AddedKnowledge, Off>;
 
+    /// Refuses the entry `id` when the game's own knowledge holds it: other
+    /// mods' ids are refused by `declare`, the game's only here, so a quest
+    /// never goes in without its knowledge.
     fn knowledge_without(&mut self, id: Id) -> Result<(), Off>;
 
+    /// Adds `new`, whose id the mod declared, to the entries the mod's one
+    /// patch of the game's knowledge serves.
     fn serve_knowledge(&mut self, new: NewKnowledge) -> Result<KnowledgeId, Off>;
 }
 

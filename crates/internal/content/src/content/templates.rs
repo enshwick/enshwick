@@ -606,6 +606,8 @@ impl LoadMethods for crate::BaseLoad {
 
 /// The base handle's helpers of this module for the crate's own code.
 pub(crate) trait LoadHelpers {
+    /// `changes` resolved on the running build and checked against the
+    /// vanilla template `vanilla`, which `what` names in a refusal.
     fn resolve_changes(
         &self,
         template: &'static Type<'static>,
@@ -614,6 +616,7 @@ pub(crate) trait LoadHelpers {
         what: &str,
     ) -> Result<Vec<Resolved>, Off>;
 
+    /// Serves `key`, built from the template `base` with `changes`.
     fn serve_template(
         &self,
         template: &'static Type<'static>,
@@ -622,6 +625,7 @@ pub(crate) trait LoadHelpers {
         changes: Vec<Resolved>,
     ) -> Result<(), Off>;
 
+    /// Lists `template` in the game's template collection after the others.
     fn list_template(&self, template: Guid) -> Result<(), Off>;
 }
 

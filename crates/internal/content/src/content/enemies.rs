@@ -466,6 +466,9 @@ impl LoadMethods for crate::BaseLoad {
 
 /// The base handle's helpers of this module for the crate's own code.
 pub(crate) trait LoadHelpers {
+    /// Serves the arsenal registry with `target` changed, or added as a
+    /// copy of `like`, after checking at init that every attack and
+    /// behaviour `change` names is a vanilla one.
     fn serve_arsenal(
         &self,
         target: Guid,
