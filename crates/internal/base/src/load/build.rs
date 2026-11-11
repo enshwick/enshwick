@@ -1,6 +1,6 @@
 use crate::abi::Str;
 
-use super::{Load, Off, ok};
+use super::{BaseLoad, Off, ok};
 
 impl BaseLoad {
     /// As `Load::symbol`.

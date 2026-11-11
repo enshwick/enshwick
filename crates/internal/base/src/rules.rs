@@ -1,7 +1,6 @@
 //! The rules the loader and the fake host both refuse a mod's requests by.
 
-use crate::abi::{HookFlags, RateId};
-use crate::rates::Rate;
+use crate::abi::HookFlags;
 
 /// Whether a hook names both a target and a detour: without either it is a
 /// bad request.
@@ -35,13 +34,6 @@ pub fn spans_overlap(a: (usize, usize), b: (usize, usize)) -> bool {
 pub fn is_named_after(name: &str, id: &str) -> bool {
     name.split_once(':')
         .is_some_and(|(owner, what)| owner == id && !what.is_empty())
-}
-
-/// Whether a mod may declare the rate `rate`: one clients count too needs a
-/// mod that `joins`, so both sides scale it alike.
-#[must_use]
-pub fn may_declare_rate(rate: RateId, joins: bool) -> bool {
-    joins || !Rate::from_id(rate).is_some_and(Rate::seen_by_clients)
 }
 
 /// The first of `exports` that is not `<kind>:<local name>`, the kind one
@@ -163,18 +155,6 @@ mod tests {
     }
 
     #[test]
-    fn a_rate_clients_count_needs_a_mod_that_joins() {
-        let seen = Rate::SkillPoints.id();
-        assert!(seen_by_clients(seen));
-        assert!(!may_declare_rate(seen, false));
-        assert!(may_declare_rate(seen, true));
-        let own = Rate::all()
-            .find(|rate| !rate.seen_by_clients())
-            .map(Rate::id);
-        assert!(own.is_some_and(|own| may_declare_rate(own, false)));
-    }
-
-    #[test]
     fn an_exported_content_name_exports_its_parts_too() {
         let exports = ["content:locker", "content:bench.recipe"];
         let content = |name| exports_name(&exports, Kind::Content, name);
@@ -214,9 +194,5 @@ mod tests {
         assert!(!exports_name(&exports, Kind::Event, "price"));
         assert!(!exports_name(&exports, Kind::Call, "sold"));
         assert!(!exports_name(&exports, Kind::Point, "price.part"));
-    }
-
-    fn seen_by_clients(rate: RateId) -> bool {
-        Rate::from_id(rate).is_some_and(Rate::seen_by_clients)
     }
 }

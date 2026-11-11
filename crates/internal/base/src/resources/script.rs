@@ -554,14 +554,12 @@ impl Resources {
     }
 }
 
-impl crate::script::Bound for Resources {
-    const NAME: &'static str = "resources";
-    const DOC: &'static str =
-        "The game's types, its resources by type and as values, and resources served from an edit.";
-    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_LOOKUPS];
-
-    fn resolve(load: &mut crate::Load<'_>) -> Result<Self, Off> {
-        Ok(Self { host: load.host() })
+impl Resources {
+    /// The namespace for the mod `host` serves.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn open(host: crate::Host) -> Self {
+        Self { host }
     }
 }
 

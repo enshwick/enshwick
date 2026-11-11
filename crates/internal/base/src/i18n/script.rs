@@ -3,8 +3,8 @@
 //! language and a key or text as the list `{ code, text }`.
 
 use super::{Language, Texts};
-use crate::script::{Bound, Class, FromScript as _, Function, Object, Value};
-use crate::{Load, Off};
+use crate::script::{Class, FromScript as _, Function, Object, Value};
+use crate::{BaseLoad, Off};
 use enshwick_values::content::Id;
 
 /// Each of `pairs` with its language as its code.
@@ -145,16 +145,6 @@ impl I18nFns {
     #[script]
     pub fn parse(self, toml: &str) -> Result<Texts, Off> {
         Texts::parse(toml)
-    }
-}
-
-impl Bound for I18nFns {
-    const NAME: &'static str = "i18n";
-    const DOC: &'static str = "The game's languages and texts, and a mod's own translations.";
-    const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_I18N_FNS];
-
-    fn resolve(_load: &mut Load<'_>) -> Result<Self, Off> {
-        Ok(Self)
     }
 }
 

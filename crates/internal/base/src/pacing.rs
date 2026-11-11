@@ -33,7 +33,7 @@
 use core::ffi::c_void;
 
 use crate::abi::{LoopWaitData, LoopWaitSites};
-use crate::{Load, Off};
+use crate::{BaseLoad, Off};
 
 /// The server loop's wait with nobody online.
 pub const SERVER_IDLE_WAIT_NS: u64 = 40_000_000;

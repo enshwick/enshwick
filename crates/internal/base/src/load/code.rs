@@ -3,7 +3,7 @@ use core::ffi::c_void;
 use crate::abi::{HookFlags, MidHookSpec, Registers};
 use crate::hook::{FnPtr, Hook};
 
-use super::{Load, MidHook, Off, ok};
+use super::{BaseLoad, MidHook, Off, ok};
 
 impl BaseLoad {
     /// As `Load::hook`.

@@ -8,7 +8,7 @@ use core::ffi::c_void;
 use crate::abi::{Header, Layout, LayoutField, Str};
 use crate::load::{hand_over, ok};
 use crate::points::DescribedField;
-use crate::{Host, Load, Off};
+use crate::{BaseLoad, Host, Off};
 
 /// A mod event as its schema describes it, for code that reads and writes
 /// its data as bytes.

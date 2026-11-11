@@ -27,6 +27,7 @@ mod codec;
 mod kind;
 mod registry;
 mod script;
+mod serve;
 mod table;
 mod types;
 
@@ -37,12 +38,9 @@ pub use kind::Kind;
 pub use registry::Registry;
 pub use script::{Bytes, Resources};
 #[doc(hidden)]
-pub use table::TypeTable;
-#[cfg(feature = "typed")]
-pub(crate) use table::decode;
-#[cfg(feature = "unstable")]
-pub(crate) use table::serve_new;
-pub(crate) use table::serve_value;
+pub use serve::serve;
+#[doc(hidden)]
+pub use table::{TypeTable, decode, serve_new, serve_value};
 pub use types::{Attribute, Constant, Field, Type, crc32, crc64, fnv1a32};
 
 #[cfg(test)]

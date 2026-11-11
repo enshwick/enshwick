@@ -172,8 +172,8 @@ impl<'a> Registry<'a> {
     }
 
     /// Every struct derived from `base`, directly or through other bases.
-    #[cfg(feature = "typed")]
-    pub(crate) fn derived<'r>(&'r self, base: &'r Type<'a>) -> impl Iterator<Item = &'r Type<'a>> {
+    #[doc(hidden)]
+    pub fn derived<'r>(&'r self, base: &'r Type<'a>) -> impl Iterator<Item = &'r Type<'a>> {
         self.types
             .iter()
             .filter(move |ty| self.derives_from(ty, base))

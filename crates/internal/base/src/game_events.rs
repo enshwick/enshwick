@@ -19,8 +19,8 @@ mod values;
 use core::marker::PhantomData;
 
 use crate::abi::{EventTypeInfo, GameEventData, Header, Str};
+use crate::{BaseLoad, Off};
 use crate::{Entity, ItemId, PlayerKey, RecipeId};
-use crate::{Load, Off};
 
 pub use kinds::{
     AcceptOfferedInteractionEvent, Block, BuildingPickUpEvent, BuildingPlaceEvent,
@@ -86,7 +86,7 @@ pub struct EventType {
 }
 
 impl EventType {
-    pub(crate) fn resolve(load: &Load<'_>, name: &'static str) -> Result<Self, Off> {
+    pub(crate) fn resolve(load: &BaseLoad, name: &'static str) -> Result<Self, Off> {
         let api = load.host().api();
         let mut hash = 0;
         let status = (api.type_hash)(Str::new(name), &raw mut hash);
@@ -164,7 +164,7 @@ impl EventType {
     ///     })
     /// }
     /// ```
-    pub fn field<T: Scalar>(self, load: &Load<'_>, name: &str) -> Result<Field<T>, Off> {
+    pub fn field<T: Scalar>(self, load: &BaseLoad, name: &str) -> Result<Field<T>, Off> {
         self.inherited_field(load, self.name, name)
     }
 
@@ -191,7 +191,7 @@ impl EventType {
     /// ```
     pub fn inherited_field<T: Scalar>(
         self,
-        load: &Load<'_>,
+        load: &BaseLoad,
         declared_in: &str,
         name: &str,
     ) -> Result<Field<T>, Off> {
@@ -251,7 +251,7 @@ impl EventType {
 
     /// The `T` at the offset the loader resolves for the engine id `id`,
     /// inside this type's size.
-    pub(crate) fn field_by_id<T: Scalar>(self, load: &Load<'_>, id: &str) -> Result<Field<T>, Off> {
+    pub(crate) fn field_by_id<T: Scalar>(self, load: &BaseLoad, id: &str) -> Result<Field<T>, Off> {
         let offset = load.constant(id)?;
         self.field_at(offset)
             .ok_or_else(|| Off::new(format!("field {id}: past the end of {}", self.name)))

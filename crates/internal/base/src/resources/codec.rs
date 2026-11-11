@@ -5,7 +5,7 @@
 //! offset from their own header to their data. Writing keeps every byte of
 //! the base whose value did not change, writes changed values in place, and
 //! moves data that no longer fits to the end of the bytes, as
-//! [`Blob`](crate::content::Blob) does.
+//! `content::Blob` does.
 
 mod rebase;
 

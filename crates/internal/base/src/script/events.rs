@@ -109,7 +109,7 @@ pub fn events() -> impl Iterator<Item = &'static EventKind> {
 }
 
 /// The function behind [`GameEventKind::subscribe`].
-type SubscribeGame = fn(&mut crate::Load<'_>, Box<GameHandler>) -> Result<(), crate::Off>;
+type SubscribeGame = fn(&mut crate::BaseLoad, Box<GameHandler>) -> Result<(), crate::Off>;
 
 /// A handler of a typed game event: it gets the event's data as a function
 /// that converts it, so a handler with nothing to do converts nothing.
@@ -204,7 +204,7 @@ impl GameEventKind {
     /// ```
     pub fn subscribe(
         &self,
-        load: &mut crate::Load<'_>,
+        load: &mut crate::BaseLoad,
         handler: impl Fn(&dyn Fn() -> Value) + Send + Sync + 'static,
     ) -> Result<(), crate::Off> {
         (self.subscribe)(load, Box::new(handler))
@@ -212,7 +212,7 @@ impl GameEventKind {
 }
 
 fn subscribe_game<E>(
-    load: &mut crate::Load<'_>,
+    load: &mut crate::BaseLoad,
     handler: Box<GameHandler>,
 ) -> Result<(), crate::Off>
 where

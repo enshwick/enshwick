@@ -6,7 +6,7 @@ use crate::events::{LoaderEvent, TickPeriod, Ticked};
 use crate::host::Host;
 use crate::services::{Emitter, ModEvent};
 
-use super::{Load, Off, event_spec, hand_over, ok};
+use super::{BaseLoad, Off, event_spec, hand_over, ok};
 
 impl BaseLoad {
     /// As `Load::on`.
@@ -114,12 +114,7 @@ impl BaseLoad {
 /// [`Load::on_raw_game_event`] for a runtime that holds the mod's host
 /// during its init, such as a script's: `handler` on every game event of the
 /// type hashed `type_hash`, `what` naming it in a refusal.
-pub(crate) fn game_events_of<F>(
-    host: Host,
-    type_hash: u32,
-    what: &str,
-    handler: F,
-) -> Result<(), Off>
+pub fn game_events_of<F>(host: Host, type_hash: u32, what: &str, handler: F) -> Result<(), Off>
 where
     F: Fn(&crate::game_events::RawGameEvent<'_>) + Send + Sync + 'static,
 {

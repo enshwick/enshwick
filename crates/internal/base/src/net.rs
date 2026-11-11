@@ -46,7 +46,7 @@ use core::marker::PhantomData;
 
 use crate::abi::{NetMessage, Status, Str};
 use crate::resources::{Bytes, Value as Data};
-use crate::{Host, Load, Off, PlayerKey};
+use crate::{BaseLoad, Host, Off, PlayerKey};
 
 /// The largest message a channel carries, encoded, in bytes.
 pub const MAX_MESSAGE: usize = 8192;
@@ -401,16 +401,6 @@ impl NetFns {
     #[must_use]
     pub fn looks_like_code(self, bytes: &Bytes) -> bool {
         looks_like_code(&bytes.0)
-    }
-}
-
-impl crate::script::Bound for NetFns {
-    const NAME: &'static str = "net";
-    const DOC: &'static str = "Messages between a mod's server part and its client part.";
-    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_NET_FNS];
-
-    fn resolve(_load: &mut Load<'_>) -> Result<Self, Off> {
-        Ok(Self)
     }
 }
 

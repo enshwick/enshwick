@@ -123,13 +123,15 @@ impl Mods {
     }
 }
 
-impl crate::script::Bound for Mods {
-    const NAME: &'static str = "mods";
-    const DOC: &'static str =
-        "The loaded mods, the side the mod runs on, and its own folder, read-only.";
-    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_FOLDER];
-
-    fn resolve(load: &mut crate::Load<'_>) -> Result<Self, Off> {
+impl Mods {
+    /// The namespace for the mod `load` initialises, its folder kept for
+    /// the process.
+    ///
+    /// # Errors
+    ///
+    /// As `Load::mod_dir`.
+    #[doc(hidden)]
+    pub fn open(load: &crate::BaseLoad) -> Result<Self, Off> {
         let dir: &'static Path = Box::leak(load.mod_dir()?.into_boxed_path());
         Ok(Self {
             host: load.host(),

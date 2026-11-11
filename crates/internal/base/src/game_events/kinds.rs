@@ -13,8 +13,8 @@ use crate::game_events::values::{
 use crate::game_events::{EventType, Field, RawGameEvent};
 #[cfg(feature = "unstable")]
 use crate::raw::read_at;
+use crate::{BaseLoad, Off};
 use crate::{Entity, ItemId, RecipeId};
-use crate::{Load, Off};
 
 /// `Some(entity)` unless it is [`Entity::NONE`].
 fn some(entity: Entity) -> Option<Entity> {
@@ -22,7 +22,7 @@ fn some(entity: Entity) -> Option<Entity> {
 }
 
 /// Subscribes `handler` to the events `decode` turns into an `E`.
-fn on<E, D, F>(load: &mut Load<'_>, ty: EventType, decode: D, handler: F) -> Result<(), Off>
+fn on<E, D, F>(load: &mut BaseLoad, ty: EventType, decode: D, handler: F) -> Result<(), Off>
 where
     D: Fn(&RawGameEvent<'_>) -> Option<E> + Send + Sync + 'static,
     F: Fn(&E) + Send + Sync + 'static,
@@ -79,7 +79,7 @@ pub struct HitEvent {
 impl crate::events::Kind for HitEvent {
     type Data = Self;
 
-    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    fn subscribe<F>(load: &mut BaseLoad, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
@@ -173,7 +173,7 @@ struct Credit {
 
 #[cfg(feature = "unstable")]
 impl Credit {
-    fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
+    fn resolve(load: &mut BaseLoad) -> Result<Self, Off> {
         let offset = |id: &str| {
             load.constant(id).and_then(|o| {
                 usize::try_from(o).map_err(|_| Off::new(format!("{id}: out of range")))
@@ -236,7 +236,7 @@ impl Credit {
 impl crate::events::Kind for EntityDiedEvent {
     type Data = Self;
 
-    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    fn subscribe<F>(load: &mut BaseLoad, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
@@ -288,7 +288,7 @@ pub struct LevelUpEvent {
 impl crate::events::Kind for LevelUpEvent {
     type Data = Self;
 
-    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    fn subscribe<F>(load: &mut BaseLoad, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
@@ -339,7 +339,7 @@ pub struct XpGainedEvent {
 impl crate::events::Kind for XpGainedEvent {
     type Data = Self;
 
-    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    fn subscribe<F>(load: &mut BaseLoad, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
@@ -397,7 +397,7 @@ pub struct CraftRecipeEvent {
 impl crate::events::Kind for CraftRecipeEvent {
     type Data = Self;
 
-    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    fn subscribe<F>(load: &mut BaseLoad, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
@@ -448,7 +448,7 @@ pub struct CraftRecipeSuccessEvent {
 impl crate::events::Kind for CraftRecipeSuccessEvent {
     type Data = Self;
 
-    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    fn subscribe<F>(load: &mut BaseLoad, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
@@ -502,7 +502,7 @@ pub struct AcceptOfferedInteractionEvent {
 impl crate::events::Kind for AcceptOfferedInteractionEvent {
     type Data = Self;
 
-    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    fn subscribe<F>(load: &mut BaseLoad, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
@@ -570,7 +570,7 @@ struct BlockFields {
 }
 
 impl BlockFields {
-    fn resolve(load: &Load<'_>, ty: EventType, ids: BlockIds) -> Result<Self, Off> {
+    fn resolve(load: &BaseLoad, ty: EventType, ids: BlockIds) -> Result<Self, Off> {
         let vector = |id: &str| -> Result<[Field<f32>; 3], Off> {
             let at: Field<f32> = ty.field_by_id(load, id)?;
             let next = |step: u64| {
@@ -628,7 +628,7 @@ pub struct BuildingPlaceEvent {
 impl crate::events::Kind for BuildingPlaceEvent {
     type Data = Self;
 
-    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    fn subscribe<F>(load: &mut BaseLoad, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
@@ -682,7 +682,7 @@ pub struct BuildingTearDownEvent {
 impl crate::events::Kind for BuildingTearDownEvent {
     type Data = Self;
 
-    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    fn subscribe<F>(load: &mut BaseLoad, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
@@ -735,7 +735,7 @@ pub struct BuildingPickUpEvent {
 impl crate::events::Kind for BuildingPickUpEvent {
     type Data = Self;
 
-    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    fn subscribe<F>(load: &mut BaseLoad, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
@@ -793,7 +793,7 @@ pub struct FlameAltarEvent {
 impl crate::events::Kind for FlameAltarEvent {
     type Data = Self;
 
-    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    fn subscribe<F>(load: &mut BaseLoad, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
@@ -849,7 +849,7 @@ pub struct LootInteractionEvent {
 impl crate::events::Kind for LootInteractionEvent {
     type Data = Self;
 
-    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    fn subscribe<F>(load: &mut BaseLoad, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
@@ -896,7 +896,7 @@ pub struct HandleEquipmentSlotChangedEvent {
 impl crate::events::Kind for HandleEquipmentSlotChangedEvent {
     type Data = Self;
 
-    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    fn subscribe<F>(load: &mut BaseLoad, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
@@ -953,7 +953,7 @@ pub struct RevivedPlayerEvent {
 impl crate::events::Kind for RevivedPlayerEvent {
     type Data = Self;
 
-    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    fn subscribe<F>(load: &mut BaseLoad, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {

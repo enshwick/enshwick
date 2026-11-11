@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crate::abi::{Event, Level, Status, Str};
 use crate::config::{Config, ConfigError, reason};
 
-use super::{CHECK_WHY, Load, Off};
+use super::{BaseLoad, CHECK_WHY, Off};
 
 impl BaseLoad {
     /// As `Load::on_settings`.

@@ -7,7 +7,7 @@
 
 use crate::abi::Side;
 use crate::raw::{read_at, read_ptr_at, write_at};
-use crate::{Entity, Host, Load, Off};
+use crate::{BaseLoad, Entity, Host, Off};
 
 type IteratorInit = unsafe extern "system" fn(ctx: *mut u64, iterator: *mut u64, size: u64);
 type IteratorNext = unsafe extern "system" fn(ctx: *mut u64, iterator: *mut u64, size: u64) -> u64;
@@ -62,7 +62,7 @@ impl Ecs {
     /// # Examples
     ///
     /// See [`Ecs`].
-    pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
+    pub fn resolve(load: &BaseLoad) -> Result<Self, Off> {
         let size = |name| {
             load.constant(name)
                 .map(|v| usize::try_from(v).unwrap_or(usize::MAX))
@@ -338,7 +338,7 @@ impl ComponentType {
     /// # Examples
     ///
     /// See [`ComponentType`].
-    pub fn resolve(load: &Load<'_>, name: &str) -> Result<Self, Off> {
+    pub fn resolve(load: &BaseLoad, name: &str) -> Result<Self, Off> {
         Self::named(load.host(), name)
     }
 
@@ -411,7 +411,7 @@ impl Components {
     /// # Examples
     ///
     /// See [`Components`].
-    pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
+    pub fn resolve(load: &BaseLoad) -> Result<Self, Off> {
         let size = |name| {
             load.constant(name)
                 .map(|v| usize::try_from(v).unwrap_or(usize::MAX))
@@ -604,7 +604,7 @@ impl Worlds {
     /// # Examples
     ///
     /// See [`Worlds`].
-    pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
+    pub fn resolve(load: &BaseLoad) -> Result<Self, Off> {
         let host = load.host();
         let entity_world = load.constant("ecs.context_entity_world")?;
         Ok(Self {
@@ -751,16 +751,6 @@ impl EcsFns {
     }
 }
 
-impl crate::script::Bound for EcsFns {
-    const NAME: &'static str = "ecs";
-    const DOC: &'static str = "The world's fixed-point coordinates and metres.";
-    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_ECS_FNS];
-
-    fn resolve(_load: &mut Load<'_>) -> Result<Self, Off> {
-        Ok(Self)
-    }
-}
-
 /// The position a `CurrentTransform` component holds, in metres: x, y and z
 /// in 32.32 fixed point come first, y up.
 ///
@@ -821,7 +811,7 @@ impl Attributes {
     /// # Examples
     ///
     /// See [`Attributes`].
-    pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
+    pub fn resolve(load: &BaseLoad) -> Result<Self, Off> {
         let size = |name| {
             load.constant(name)
                 .map(|v| usize::try_from(v).unwrap_or(usize::MAX))

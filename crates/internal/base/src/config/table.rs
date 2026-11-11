@@ -8,7 +8,7 @@ use std::sync::Arc;
 use crate::abi::{Event, Level, Status, Str};
 use crate::config::{ConfigError, Schema, reason};
 use crate::host::Host;
-use crate::{Load, Off};
+use crate::{BaseLoad, Off};
 
 /// The file of every settings table, as of a type without its own file.
 const FILE: &str = "settings";
@@ -148,7 +148,7 @@ impl TableConfig {
     /// # Examples
     ///
     /// See [`TableConfig`].
-    pub fn on_change<F>(&self, load: &mut Load<'_>, handler: F) -> Result<(), Off>
+    pub fn on_change<F>(&self, load: &mut BaseLoad, handler: F) -> Result<(), Off>
     where
         F: Fn(toml::Table) + Send + Sync + 'static,
     {

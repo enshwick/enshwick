@@ -497,7 +497,7 @@ impl Host {
 }
 
 /// The value of `bytes`, a resource of `key`'s type.
-pub(crate) fn decode(key: crate::abi::ResourceKey, bytes: &[u8]) -> Result<super::Value, Off> {
+pub fn decode(key: crate::abi::ResourceKey, bytes: &[u8]) -> Result<super::Value, Off> {
     let registry = Registry::game()?;
     let ty = registry.hashed(key.type_hash).ok_or_else(|| {
         Off::new(format!(
@@ -515,7 +515,7 @@ pub(crate) fn decode(key: crate::abi::ResourceKey, bytes: &[u8]) -> Result<super
 /// does not fit the type is logged; then a changed game resource (`key` is
 /// `base`) is served unchanged, and a new one turns the mod off, as
 /// [`Load::serve`](crate::Load::serve) does for a builder's `None`.
-pub(crate) fn serve_value(
+pub fn serve_value(
     host: Host,
     key: crate::abi::ResourceKey,
     base: crate::abi::ResourceKey,
@@ -526,7 +526,7 @@ pub(crate) fn serve_value(
         .hashed(base.type_hash)
         .ok_or_else(|| Off::new("the base's type is not a type of this build"))?
         .qualified_name();
-    crate::content::serve(host, key, base, move |bytes| {
+    crate::resources::serve(host, key, base, move |bytes| {
         let keep = |error: &dyn std::fmt::Display| {
             host.log(crate::abi::Level::WARN, &format!("serve {name}: {error}"));
             fallback(key, base, bytes)
@@ -559,7 +559,7 @@ fn fallback(
 /// Serves `value` as the new resource `key`, of the type its key names; the
 /// loader builds it from any vanilla resource of that type, whose bytes the
 /// value replaces.
-pub(crate) fn serve_new(
+pub fn serve_new(
     host: Host,
     key: crate::abi::ResourceKey,
     value: &super::Value,
@@ -580,10 +580,10 @@ pub(crate) fn serve_new(
         .next()
         .ok_or_else(|| Off::new(format!("the game has no {name} to build a new one from")))?;
     let bytes = registry.encode(name, value, None)?;
-    crate::content::serve(host, key, base, move |_| Some(bytes.clone()))
+    crate::resources::serve(host, key, base, move |_| Some(bytes.clone()))
 }
 
-impl BaseLoad {
+impl crate::BaseLoad {
     /// As `Load::serve_new`.
     pub fn serve_new(
         &mut self,

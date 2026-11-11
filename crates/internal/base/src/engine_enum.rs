@@ -2,7 +2,7 @@
 //! engine constant's name through the loader, so no engine number is
 //! compiled into a mod.
 
-use crate::Load;
+use crate::BaseLoad;
 use crate::facts::EngineFacts;
 
 /// The engine value of each variant of `T`; a variant whose constant the
@@ -52,7 +52,7 @@ pub(crate) struct Bits([u16; 16]);
 
 impl Bits {
     /// The mapping for `ids`: the API's bit and the id of its engine bit.
-    pub(crate) fn resolve<const N: usize>(load: &Load<'_>, ids: [(u16, &str); N]) -> Self {
+    pub(crate) fn resolve<const N: usize>(load: &BaseLoad, ids: [(u16, &str); N]) -> Self {
         Self::from_indices(
             ids.into_iter()
                 .map(|(ours, id)| (ours, load.constant(id).ok())),

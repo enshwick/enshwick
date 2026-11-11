@@ -3,6 +3,14 @@ use proptest::prelude::*;
 use super::*;
 use crate::content::Guid;
 
+/// The start and count of the blob array whose header opens `bytes`: an
+/// offset from the header, then the count.
+fn array_at(bytes: &[u8]) -> Option<(usize, u32)> {
+    let word = |at: usize| Some(u32::from_le_bytes(bytes.get(at..at + 4)?.try_into().ok()?));
+    let start = isize::try_from(word(0)?.cast_signed()).ok()?;
+    Some((0usize.checked_add_signed(start)?, word(4)?))
+}
+
 /// A registry with every kind a resource holds, under `demo::Root`.
 fn registry() -> Registry<'static> {
     Registry::new([
@@ -625,7 +633,7 @@ fn a_grown_array_keeps_its_old_elements_unreflected_bytes_and_their_strings() {
     let registry = element_registry();
     let holder = Value::Struct(vec![("elems".into(), Value::List(vec![elem("first", 1)]))]);
     let mut base = registry.encode("demo::Holder", &holder, None).unwrap();
-    let (start, _) = crate::content::Blob::new(&base).array(0).unwrap();
+    let (start, _) = array_at(&base).unwrap();
     base[start + 12..start + 16].copy_from_slice(&0xabcd_u32.to_le_bytes());
     let grown = Value::Struct(vec![(
         "elems".into(),
@@ -635,7 +643,7 @@ fn a_grown_array_keeps_its_old_elements_unreflected_bytes_and_their_strings() {
         .encode("demo::Holder", &grown, Some(&base))
         .unwrap();
     assert_eq!(registry.decode("demo::Holder", &bytes).unwrap(), grown);
-    let (moved, count) = crate::content::Blob::new(&bytes).array(0).unwrap();
+    let (moved, count) = array_at(&bytes).unwrap();
     assert_eq!(count, 2);
     assert_ne!(moved, start, "the array moved");
     assert_eq!(

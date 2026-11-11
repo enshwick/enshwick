@@ -16,6 +16,10 @@ pub mod code;
 #[doc(hidden)]
 pub mod command_names;
 pub mod config;
+// The content ids, which the macros and the base name here; the content
+// domain's module joins them with the rest.
+#[doc(hidden)]
+pub use enshwick_values::content;
 #[doc(hidden)]
 pub mod declare;
 pub mod ecs;

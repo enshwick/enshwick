@@ -5,7 +5,7 @@ use core::any::Any;
 use core::panic::{RefUnwindSafe, UnwindSafe};
 
 /// What a slot may hold: what keeps `Load` `Send`, `Sync` and unwind safe.
-pub(crate) trait Slot: Any + Send + Sync + UnwindSafe + RefUnwindSafe {}
+pub trait Slot: Any + Send + Sync + UnwindSafe + RefUnwindSafe {}
 
 impl<T: Any + Send + Sync + UnwindSafe + RefUnwindSafe> Slot for T {}
 

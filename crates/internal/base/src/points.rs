@@ -27,7 +27,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 
 use crate::abi::{LayoutField, PointFlags, PointMode, PointVerdict, Status, Str};
 use crate::load::{hand_over, ok};
-use crate::{Host, Load, Off};
+use crate::{BaseLoad, Host, Off};
 
 #[cfg(feature = "unstable")]
 pub use described::{DescribedField, DescribedOwnedPoint, DescribedPoint, DescribedVerdict};

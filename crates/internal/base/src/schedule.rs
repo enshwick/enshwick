@@ -109,17 +109,6 @@ pub struct Scheduler {
     queue: &'static Queue,
 }
 
-impl crate::script::Bound for Scheduler {
-    const NAME: &'static str = "schedule";
-    const DOC: &'static str =
-        "Work for the server's game thread: on the next pass, after a delay, or repeatedly.";
-    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_TASKS];
-
-    fn resolve(load: &mut crate::Load<'_>) -> Result<Self, crate::Off> {
-        load.scheduler()
-    }
-}
-
 impl core::fmt::Debug for Scheduler {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Scheduler")

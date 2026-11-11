@@ -1,7 +1,7 @@
 use crate::abi::Status;
 use crate::services::Service;
 
-use super::{Load, Off, ok, service_spec};
+use super::{BaseLoad, Off, ok, service_spec};
 
 impl BaseLoad {
     /// As `Load::publish`.

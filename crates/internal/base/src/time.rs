@@ -32,7 +32,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use crate::{Load, Off};
+use crate::{BaseLoad, Off};
 
 /// Time counted by the server's steps, readable from any thread.
 ///

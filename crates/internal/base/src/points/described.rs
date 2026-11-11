@@ -8,7 +8,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use crate::abi::{Header, Layout, LayoutField, PointFlags, PointVerdict, Status, Str};
 use crate::load::{hand_over, ok};
 use crate::points::{Decision, Mode, Order};
-use crate::{Load, Off};
+use crate::{BaseLoad, Off};
 
 /// A field of a described input or answer: its name and the layout hash the
 /// owner's build wrote for it.

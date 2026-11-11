@@ -14,7 +14,7 @@ use core::ffi::c_void;
 use std::cell::RefCell;
 
 use crate::abi::Str;
-use crate::{Load, Off};
+use crate::{BaseLoad, Off};
 
 thread_local! {
     /// The last status text, alive until the next source runs on this thread.

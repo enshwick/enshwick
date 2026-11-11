@@ -54,7 +54,7 @@ pub trait Kind: sealed::Sealed + 'static {
 
     /// Resolves what the event needs on this build and subscribes `handler`.
     #[doc(hidden)]
-    fn subscribe<F>(load: &mut crate::Load<'_>, handler: F) -> Result<(), crate::Off>
+    fn subscribe<F>(load: &mut crate::BaseLoad, handler: F) -> Result<(), crate::Off>
     where
         F: Fn(&Self::Data) + Send + Sync + 'static;
 }
@@ -118,7 +118,7 @@ macro_rules! without_data {
         impl Kind for $name {
             type Data = ();
 
-            fn subscribe<F>(load: &mut crate::Load<'_>, handler: F) -> Result<(), crate::Off>
+            fn subscribe<F>(load: &mut crate::BaseLoad, handler: F) -> Result<(), crate::Off>
             where
                 F: Fn(&()) + Send + Sync + 'static,
             {
@@ -192,7 +192,7 @@ macro_rules! with_data {
         impl Kind for $name {
             type Data = $data;
 
-            fn subscribe<F>(load: &mut crate::Load<'_>, handler: F) -> Result<(), crate::Off>
+            fn subscribe<F>(load: &mut crate::BaseLoad, handler: F) -> Result<(), crate::Off>
             where
                 F: Fn(&$data) + Send + Sync + 'static,
             {
@@ -312,7 +312,7 @@ impl Ticked {
 }
 
 /// [`Ticked`] through [`Load::on`](crate::Load::on): on the default period.
-fn subscribe_ticked<F>(load: &mut crate::Load<'_>, handler: F) -> Result<(), crate::Off>
+fn subscribe_ticked<F>(load: &mut crate::BaseLoad, handler: F) -> Result<(), crate::Off>
 where
     F: Fn(&TickData) + Send + Sync + 'static,
 {

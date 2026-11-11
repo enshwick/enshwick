@@ -180,17 +180,7 @@ impl StateFns {
     }
 }
 
-impl crate::script::Bound for StateFns {
-    const NAME: &'static str = "state";
-    const DOC: &'static str = "The data a mod keeps for a world, and holds on its saves.";
-    const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_STATE_FNS];
-
-    fn resolve(_load: &mut crate::Load<'_>) -> Result<Self, crate::Off> {
-        Ok(Self)
-    }
-}
-
-impl BaseLoad {
+impl crate::BaseLoad {
     /// As `Load::world_store_script`.
     pub fn world_store_script(&mut self, name: &str) -> Result<DataStore, crate::Off> {
         self.world_store(name).map(DataStore)

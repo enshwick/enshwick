@@ -263,17 +263,6 @@ impl FilesFns {
     }
 }
 
-impl crate::script::Bound for FilesFns {
-    const NAME: &'static str = "files";
-    const DOC: &'static str =
-        "Files a mod writes whole, such as exports for tools outside the game.";
-    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_FILES_FNS];
-
-    fn resolve(_load: &mut crate::Load<'_>) -> Result<Self, crate::Off> {
-        Ok(Self)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

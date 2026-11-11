@@ -17,7 +17,7 @@ use std::collections::BTreeMap;
 use rustc_hash::FxHashMap;
 
 use crate::locks::Relock;
-use crate::{Host, Load, Off};
+use crate::{BaseLoad, Host, Off};
 use enshwick_values::content::Id;
 
 pub(crate) use enshwick_values::reason;

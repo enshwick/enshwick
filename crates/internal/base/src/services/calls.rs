@@ -16,7 +16,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use crate::abi::{CallSpec, Header, Layout, LayoutField, Status, Str};
 use crate::load::{hand_over, ok};
 use crate::points::DescribedField;
-use crate::{Host, Load, Off};
+use crate::{BaseLoad, Host, Off};
 
 /// A call: the input struct one mod hands another, which answers with
 /// [`Call::Output`].
