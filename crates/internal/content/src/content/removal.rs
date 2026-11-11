@@ -2,12 +2,12 @@
 //! vanilla item answering with another's data.
 //!
 //! Nothing leaves the game's data and nothing is written to a save:
-//! [`Load::remove_item`] keeps the item registered, so the stacks players
+//! [`Load::remove_item`](../../struct.Load.html#method.remove_item) keeps the item registered, so the stacks players
 //! hold survive and a world opens as vanilla without the mod, while no
-//! recipe makes it and no loot gives it. [`Load::remove_workshop`] takes a
+//! recipe makes it and no loot gives it. [`Load::remove_workshop`](../../struct.Load.html#method.remove_workshop) takes a
 //! station's recipes and its own out of play, and leaves placed ones
-//! standing. [`Load::remove_loot_table`] serves a table that gives
-//! nothing. [`Load::rekey_item`] serves an item under its own id with the
+//! standing. [`Load::remove_loot_table`](../../struct.Load.html#method.remove_loot_table) serves a table that gives
+//! nothing. [`Load::rekey_item`](../../struct.Load.html#method.rekey_item) serves an item under its own id with the
 //! data of another. A recipe goes with [`recipes::disable`].
 //!
 //! ```

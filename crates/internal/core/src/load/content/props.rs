@@ -20,8 +20,8 @@ impl Load<'_> {
     /// # Errors
     ///
     /// [`Off`] when the vanilla item places nothing, the id takes no derived
-    /// part (see [`Id::try_part`]), a template change does not fit (see
-    /// [`ComponentChange`]), the crafting prop mask is full or the loader
+    /// part (see [`Id::try_part`](crate::content::Id::try_part)), a template change does not fit (see
+    /// [`ComponentChange`](crate::content::templates::ComponentChange)), the crafting prop mask is full or the loader
     /// refuses one of the ids (see [`Load::declare`]).
     ///
     /// # Examples

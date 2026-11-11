@@ -13,7 +13,7 @@ impl Load<'_> {
     /// template, both listed beside what other mods add, a crafting menu
     /// for the workshop on the client, and optionally a copy of the vanilla
     /// station's recipe that makes the new one. Recipes
-    /// target the workshop with [`NewRecipe::workshop`] or
+    /// target the workshop with [`NewRecipe::workshop`](crate::content::recipes::NewRecipe::workshop) or
     /// [`Derived::workshop`](crate::content::recipes::Derived::workshop).
     ///
     /// When the mod is removed, the loader serves the vanilla template under
@@ -22,8 +22,8 @@ impl Load<'_> {
     /// # Errors
     ///
     /// [`Off`] when a layout is not reflected, the id takes no derived part
-    /// (see [`Id::try_part`]), the vanilla station's template lacks a
-    /// crafting component (see [`at_workshop`]) or the loader refuses one of
+    /// (see [`Id::try_part`](crate::content::Id::try_part)), the vanilla station's template lacks a
+    /// crafting component (see [`at_workshop`](crate::content::workshops::at_workshop)) or the loader refuses one of
     /// the ids (see [`Load::declare`]); a station item that does not place
     /// the station's template turns the mod off when the game first reads it.
     ///

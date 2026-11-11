@@ -127,7 +127,7 @@ impl Load<'_> {
 
 #[enshwick_macros::forward(base)]
 impl Load<'_> {
-    /// Lets [`rebuild`] build the resource `key`, which this mod serves,
+    /// Lets [`rebuild`](crate::content::rebuild) build the resource `key`, which this mod serves,
     /// again later: the loader keeps a copy of its base from its first
     /// build. Call it during `init`, after [`Load::serve`].
     ///

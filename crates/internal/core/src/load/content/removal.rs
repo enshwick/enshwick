@@ -24,7 +24,7 @@ impl Load<'_> {
     ///
     /// # Examples
     ///
-    /// See the [module](self).
+    /// See the [module](crate::content::removal).
     #[script]
     pub fn remove_item(&mut self, item: Guid) -> Result<(), Off>;
 
@@ -93,7 +93,7 @@ impl Load<'_> {
     ///
     /// # Examples
     ///
-    /// See the [module](self).
+    /// See the [module](crate::content::removal).
     #[script]
     pub fn rekey_item(&mut self, old: Guid, new: Guid) -> Result<(), Off>;
 }

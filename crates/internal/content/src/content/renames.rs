@@ -1,7 +1,7 @@
 //! Content renames, so content saved under an old GUID reads as the new one.
 //!
 //! A renamed item's old stacks and placed objects stay; a mod declares its
-//! renames once with [`Load::rename_content`].
+//! renames once with [`Load::rename_content`](../../struct.Load.html#method.rename_content).
 
 use crate::abi::ContentRename;
 use crate::content::Guid;

@@ -93,7 +93,7 @@ impl WorkshopId {
     }
 }
 
-/// A new workshop for [`Load::add_workshop`], named by one id.
+/// A new workshop for [`Load::add_workshop`](../../struct.Load.html#method.add_workshop), named by one id.
 ///
 /// The station item is `id`; the station's other ids derive from it with
 /// [`Id::part`]: its template `<id>.template`, its workshop `<id>.workshop`,
@@ -126,7 +126,7 @@ pub struct NewWorkshop {
     pub id: Id,
     /// Whether the station takes the name [`NewWorkshop::name`], which also
     /// names the workshop; `false` keeps the vanilla names. Give the tag its
-    /// text with [`Load::add_texts`].
+    /// text with [`Load::add_texts`](../../struct.Load.html#method.add_texts).
     pub named: bool,
     /// Whether the station item takes the description
     /// [`NewWorkshop::description`]; `false` keeps the vanilla one.
@@ -163,7 +163,7 @@ impl NewWorkshop {
     /// # Panics
     ///
     /// When `id` is a part already or too long to take the part; see
-    /// [`Id::part`]. [`Load::add_workshop`] refuses such an id first.
+    /// [`Id::part`]. [`Load::add_workshop`](../../struct.Load.html#method.add_workshop) refuses such an id first.
     ///
     /// # Examples
     ///
@@ -288,7 +288,7 @@ pub struct WorkshopLayout {
 }
 
 impl WorkshopLayout {
-    /// The layout `facts` give: the running game's through [`Load`], a game
+    /// The layout `facts` give: the running game's through [`Load`](../../struct.Load.html), a game
     /// image's in a tool.
     ///
     /// # Errors

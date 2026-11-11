@@ -33,7 +33,7 @@ pub struct ContainerLayout {
 
 impl ContainerLayout {
     /// The layout `facts` give: the running game's through
-    /// [`Load`](crate::Load), a game image's in the loader and in tools.
+    /// [`Load`](../../struct.Load.html), a game image's in the loader and in tools.
     ///
     /// # Errors
     ///

@@ -3,10 +3,10 @@
 //! A quest is steps that show and complete on knowledge, and rewards: the
 //! game gives their experience when the last step completes and only draws
 //! their items, which the mod gives itself (see [`QuestReward`]).
-//! [`Load::add_quest`] adds one to
+//! [`Load::add_quest`](../../struct.Load.html#method.add_quest) adds one to
 //! the journal beside the game's, and a mod moves it on by granting the
 //! knowledge its steps ask for. `Load::add_journal_page` adds a lore page
-//! whose entries show on knowledge. [`Load::change_quest`] changes a
+//! whose entries show on knowledge. [`Load::change_quest`](../../struct.Load.html#method.change_quest) changes a
 //! vanilla quest's rewards, who it unlocks for and its steps' knowledge.
 //! The journal, its tracker and its notices are the game's own screens: a
 //! client draws a mod's quest from the data when it runs the mod too.
@@ -120,7 +120,7 @@ impl QuestReward {
 /// See the [module](self).
 #[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
 pub struct QuestStep {
-    /// Its title's text tag; give it text with [`Load::add_text`].
+    /// Its title's text tag; give it text with [`Load::add_text`](../../struct.Load.html#method.add_text).
     pub name: Guid,
     /// Its text's tag.
     pub text: Guid,
@@ -188,7 +188,7 @@ impl QuestStep {
     }
 }
 
-/// A new quest for [`Load::add_quest`].
+/// A new quest for [`Load::add_quest`](../../struct.Load.html#method.add_quest).
 ///
 /// # Examples
 ///
@@ -281,7 +281,7 @@ pub struct NewJournalPage {
 ///
 /// # Examples
 ///
-/// See [`Load::change_quest`].
+/// See [`Load::change_quest`](../../struct.Load.html#method.change_quest).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 pub struct StepChange {
     /// The step, from 0.
@@ -292,12 +292,12 @@ pub struct StepChange {
     pub done_when: Option<KnowledgeQuery>,
 }
 
-/// A change of a vanilla quest for [`Load::change_quest`]; `None` and empty
+/// A change of a vanilla quest for [`Load::change_quest`](../../struct.Load.html#method.change_quest); `None` and empty
 /// lists keep what the quest holds.
 ///
 /// # Examples
 ///
-/// See [`Load::change_quest`].
+/// See [`Load::change_quest`](../../struct.Load.html#method.change_quest).
 #[derive(Clone, Debug, Default, PartialEq, Eq, crate::Script)]
 pub struct QuestChange {
     /// The rewards in place of the quest's.

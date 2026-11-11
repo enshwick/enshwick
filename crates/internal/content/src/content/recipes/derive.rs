@@ -249,7 +249,7 @@ pub struct Derived {
     /// The vanilla ingredient counts times this.
     pub cost: u32,
     /// The workshop the copy is made at, such as one from
-    /// [`Load::add_workshop`](crate::Load::add_workshop); `None` keeps the vanilla recipe's.
+    /// [`Load::add_workshop`](../../struct.Load.html#method.add_workshop); `None` keeps the vanilla recipe's.
     pub workshop: Option<WorkshopId>,
 }
 

@@ -1,12 +1,12 @@
 //! Skill nodes and perks from mods.
 //!
-//! [`Load::add_skill_node`] adds a node to the skill tree: a copy of a
+//! [`Load::add_skill_node`](../../struct.Load.html#method.add_skill_node) adds a node to the skill tree: a copy of a
 //! vanilla node's effect at a place of its own, linked from vanilla or mod
 //! nodes, with its own texts, cost and levels. A player's save keeps room
 //! for a fixed count of unlocked nodes, read from the game's reflection, so
 //! the few free places are shared by every mod and a node beyond them is
-//! refused. [`Load::add_perk`] adds a copy of a vanilla perk with its own
-//! texts. [`Load::skill_nodes`] lists the vanilla nodes to link from.
+//! refused. [`Load::add_perk`](../../struct.Load.html#method.add_perk) adds a copy of a vanilla perk with its own
+//! texts. [`Load::skill_nodes`](../../struct.Load.html#method.skill_nodes) lists the vanilla nodes to link from.
 //!
 //! ```
 //! use enshwick::content::id;
@@ -94,7 +94,7 @@ impl SkillNodeId {
     }
 }
 
-/// A vanilla node of the skill tree, from [`Load::skill_nodes`].
+/// A vanilla node of the skill tree, from [`Load::skill_nodes`](../../struct.Load.html#method.skill_nodes).
 ///
 /// The name is enshwick's: it holds a few fields of the game's
 /// `SkillTreeNode`.
@@ -115,7 +115,7 @@ pub struct SkillNode {
     pub y: f32,
 }
 
-/// A new skill node for [`Load::add_skill_node`]: a copy of the vanilla
+/// A new skill node for [`Load::add_skill_node`](../../struct.Load.html#method.add_skill_node): a copy of the vanilla
 /// node `like`, its effect and icons among it, with the values it gives.
 ///
 /// # Examples
@@ -191,12 +191,12 @@ impl NewSkillNode {
     }
 }
 
-/// A new perk for [`Load::add_perk`]: a copy of the vanilla perk `like`
+/// A new perk for [`Load::add_perk`](../../struct.Load.html#method.add_perk): a copy of the vanilla perk `like`
 /// with its own texts.
 ///
 /// # Examples
 ///
-/// See [`Load::add_perk`].
+/// See [`Load::add_perk`](../../struct.Load.html#method.add_perk).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 pub struct NewPerk {
     /// Its content id, its GUID the perk's.
@@ -234,7 +234,7 @@ fn position(node: &Value) -> Option<(f64, f64)> {
     }
 }
 
-/// The nodes of `tree`, as [`Load::skill_nodes`] lists them.
+/// The nodes of `tree`, as [`Load::skill_nodes`](../../struct.Load.html#method.skill_nodes) lists them.
 fn nodes_of(tree: &Value) -> Vec<SkillNode> {
     list(tree, NODES)
         .iter()

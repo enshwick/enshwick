@@ -9,7 +9,7 @@ use enshwick_content::__load::*;
 impl Load<'_> {
     /// Adds an item to the game, on the server and the client alike: the
     /// item data cloned from a vanilla item, listed in the item registry
-    /// beside items other mods add, and with a [`FuelSetup`] its entity
+    /// beside items other mods add, and with a [`FuelSetup`](crate::content::items::FuelSetup) its entity
     /// template, listed in the template collection. Players see it once a
     /// recipe, loot or an action gives it to them.
     ///

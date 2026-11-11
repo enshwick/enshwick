@@ -2,11 +2,11 @@
 //! health, damage, faction and arsenal, and arsenals of vanilla attacks.
 //!
 //! An enemy is an entity [template](super::templates) whose components hold
-//! its rules; [`Load::add_enemy`] copies a vanilla one and sets the common
+//! its rules; [`Load::add_enemy`](../../struct.Load.html#method.add_enemy) copies a vanilla one and sets the common
 //! values, which the server reads when it spawns one. What an enemy attacks
-//! with is its arsenal: [`Load::add_arsenal`] makes one from a vanilla
+//! with is its arsenal: [`Load::add_arsenal`](../../struct.Load.html#method.add_arsenal) makes one from a vanilla
 //! arsenal and a pick of vanilla attacks and behaviours, and
-//! [`Load::change_arsenal`] changes a vanilla one. Models, animations and
+//! [`Load::change_arsenal`](../../struct.Load.html#method.change_arsenal) changes a vanilla one. Models, animations and
 //! attacks stay the game's: the client has to have them.
 //!
 //! ```
@@ -112,13 +112,13 @@ impl ArsenalId {
     }
 }
 
-/// A new enemy for [`Load::add_enemy`]: a copy of the vanilla enemy
+/// A new enemy for [`Load::add_enemy`](../../struct.Load.html#method.add_enemy): a copy of the vanilla enemy
 /// template `like` under `id`, with the values it gives set, then `changes`
 /// applied in order.
 ///
 /// # Examples
 ///
-/// See [`Load::add_enemy`].
+/// See [`Load::add_enemy`](../../struct.Load.html#method.add_enemy).
 #[derive(Clone, Debug, crate::Script)]
 pub struct NewEnemy {
     /// The new enemy's content id, its template's.
@@ -133,7 +133,7 @@ pub struct NewEnemy {
     pub damage: Option<f32>,
     /// Its faction, which decides whom it fights.
     pub faction: Option<FactionType>,
-    /// Its arsenal: a vanilla one or one from [`Load::add_arsenal`].
+    /// Its arsenal: a vanilla one or one from [`Load::add_arsenal`](../../struct.Load.html#method.add_arsenal).
     pub arsenal: Option<ArsenalId>,
     /// Whether it is a boss.
     pub boss: Option<bool>,
@@ -147,7 +147,7 @@ impl NewEnemy {
     ///
     /// # Examples
     ///
-    /// See [`Load::add_enemy`].
+    /// See [`Load::add_enemy`](../../struct.Load.html#method.add_enemy).
     #[must_use]
     pub const fn new(id: Id, like: Guid) -> Self {
         Self {
@@ -277,12 +277,12 @@ impl AttackChange {
     }
 }
 
-/// A new arsenal for [`Load::add_arsenal`]: a copy of the vanilla arsenal
+/// A new arsenal for [`Load::add_arsenal`](../../struct.Load.html#method.add_arsenal): a copy of the vanilla arsenal
 /// `like` under `id`, with `change` applied.
 ///
 /// # Examples
 ///
-/// See [`Load::add_arsenal`].
+/// See [`Load::add_arsenal`](../../struct.Load.html#method.add_arsenal).
 #[derive(Clone, Debug, PartialEq, crate::Script)]
 pub struct NewArsenal {
     /// The new arsenal's content id.

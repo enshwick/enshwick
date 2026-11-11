@@ -29,7 +29,7 @@ impl Load<'_> {
     ///
     /// # Examples
     ///
-    /// See the [module](self).
+    /// See the [module](crate::content::journal).
     #[script]
     pub fn add_quest(&mut self, new: NewQuest) -> Result<KnowledgeId, Off>;
 
@@ -77,7 +77,7 @@ impl Load<'_> {
     /// lists the quest ids. The game gives an added reward's experience and
     /// only draws an added item, which the mod gives on
     /// [`QuestCompleted`](crate::events::QuestCompleted), as for its own
-    /// quest (see [`QuestReward`]).
+    /// quest (see [`QuestReward`](crate::content::journal::QuestReward)).
     ///
     /// [`Knowledge::quests`]: crate::knowledge::Knowledge::quests
     ///

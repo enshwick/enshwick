@@ -19,7 +19,7 @@ const SOURCE: &str = "source";
 const EXPERIENCE_VALUE_ID: &str = "experienceValueId";
 const EXPERIENCE_GAIN: &str = "experienceGain";
 
-/// A new experience value for [`Load::add_experience`]: the experience of
+/// A new experience value for [`Load::add_experience`](../../struct.Load.html#method.add_experience): the experience of
 /// one source that a knowledge entry or a quest reward gives.
 ///
 /// # Examples

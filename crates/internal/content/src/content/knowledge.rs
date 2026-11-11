@@ -1,10 +1,10 @@
 //! Knowledge from mods: bools, counters and flags of the world or of each
 //! player, stored, granted and saved by the game like its own.
 //!
-//! [`Load::add_knowledge`] adds an entry to the game's knowledge, with
+//! [`Load::add_knowledge`](../../struct.Load.html#method.add_knowledge) adds an entry to the game's knowledge, with
 //! skill points and experience for a player's entry; the game then grants,
 //! sends and saves it as it does a vanilla one, through
-//! [`Knowledge`](crate::knowledge::Knowledge). A [`KnowledgeQuery`] tests
+//! [`Knowledge`](../../knowledge/struct.Knowledge.html). A [`KnowledgeQuery`] tests
 //! one entry, vanilla or a mod's, where quests, journal pages and skill
 //! nodes ask for knowledge.
 //!
@@ -365,7 +365,7 @@ impl GameQuery {
     }
 }
 
-/// A new knowledge entry for [`Load::add_knowledge`].
+/// A new knowledge entry for [`Load::add_knowledge`](../../struct.Load.html#method.add_knowledge).
 ///
 /// # Examples
 ///

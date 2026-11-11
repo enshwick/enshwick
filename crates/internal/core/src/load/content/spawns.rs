@@ -19,7 +19,7 @@ impl Load<'_> {
     ///
     /// # Examples
     ///
-    /// See [`spawns`](self).
+    /// See [`spawns`](crate::content::spawns).
     #[script]
     pub fn add_spawn_entry(&mut self, entry: SpawnEntry) -> Result<(), Off>;
 

@@ -1,6 +1,6 @@
 //! Game rates: multipliers on what the game hands out, such as experience.
 //!
-//! A mod declares each [`Rate`] with [`Load::rate`] at init and sets its
+//! A mod declares each [`Rate`] with [`Load::rate`](../struct.Load.html#method.rate) at init and sets its
 //! factor through the [`RateHandle`]; the game uses the product of every
 //! declaring mod's factor ([`combine`]).
 //!

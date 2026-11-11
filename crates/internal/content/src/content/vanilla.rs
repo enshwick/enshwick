@@ -5,7 +5,7 @@
 //! [`item`], [`recipe`], [`loot_table`], [`station`] and [`workshop`] name
 //! the running game's content, and `experience_values` (`typed`) lists its
 //! experience values, so a mod's code holds no vanilla GUID or id;
-//! [`deps!`](crate::deps) offers them as `deps::vanilla`. [`Vanilla::game`]
+//! [`deps!`](../../macro.deps.html) offers them as `deps::vanilla`. [`Vanilla::game`]
 //! reads the running game's data; [`Vanilla::new`] reads any game's through
 //! a function of the caller's, as a tool outside the game does.
 
@@ -148,7 +148,7 @@ fn game() -> Result<&'static Vanilla, VanillaError> {
 
 /// The running game's vanilla item with the debug name `name`, such as
 /// `Prop_Production_T1_Forge`: what a mod writes in place of the item's GUID,
-/// also as `deps::vanilla::item` of [`deps!`](crate::deps).
+/// also as `deps::vanilla::item` of [`deps!`](../../macro.deps.html).
 ///
 /// # Errors
 ///
@@ -204,7 +204,7 @@ pub fn loot_table(name: &str) -> Result<LootTable, VanillaError> {
 }
 
 /// The running game's vanilla crafting station whose item has the debug
-/// name `name`, to clone with [`crate::Load::add_workshop`].
+/// name `name`, to clone with [`Load::add_workshop`](../../struct.Load.html#method.add_workshop).
 ///
 /// # Errors
 ///
@@ -277,7 +277,7 @@ pub struct Enemy {
 }
 
 /// The running game's vanilla enemy whose template is named `name`, to copy
-/// with [`crate::Load::add_enemy`] or to give its arsenal to another.
+/// with [`Load::add_enemy`](../../struct.Load.html#method.add_enemy) or to give its arsenal to another.
 ///
 /// # Errors
 ///
@@ -726,7 +726,7 @@ impl Vanilla {
     }
 
     /// The vanilla crafting station whose item is `item`, to clone with
-    /// [`crate::Load::add_workshop`].
+    /// [`Load::add_workshop`](../../struct.Load.html#method.add_workshop).
     ///
     /// # Errors
     ///

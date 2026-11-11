@@ -113,7 +113,7 @@ pub fn vanilla_name(item: Guid, language: crate::i18n::Language) -> Option<&'sta
     crate::i18n::game_text_in(vanilla_name_tag(item)?.fnv1a(), language)
 }
 
-/// A new item for [`Load::add_item`].
+/// A new item for [`Load::add_item`](../../struct.Load.html#method.add_item).
 ///
 /// # Examples
 ///
@@ -132,7 +132,7 @@ pub struct NewItem {
     pub id: Id,
     /// The vanilla item it is cloned from: what it looks like and does.
     pub like: Guid,
-    /// The tag of its name, given text with [`Load::add_texts`]; `None` keeps
+    /// The tag of its name, given text with [`Load::add_texts`](../../struct.Load.html#method.add_texts); `None` keeps
     /// the vanilla item's name.
     pub name: Option<Guid>,
     /// The tag of its description; `None` keeps the vanilla one.
@@ -178,8 +178,8 @@ impl NewItem {
 /// water: it saves it with the world, sends it to players and draws it as a
 /// bar on the item's slot. Read and change it with
 /// `World::item_meter`; set it for each
-/// new item with [`Op::Give`](crate::inventory::Op::Give)'s `fill` or a
-/// [`Drop`](crate::loot::Drop)'s fill.
+/// new item with [`Op::Give`](../../inventory/enum.Op.html#variant.Give)'s `fill` or a
+/// [`Drop`](../../loot/struct.Drop.html)'s fill.
 ///
 /// The item gets an entity template, cloned from the water pouch's:
 /// `template` is that template's id, the mod's own and fixed forever, as
@@ -293,7 +293,7 @@ pub fn fill(count: u16, max: u16) -> f32 {
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 pub struct ImpactUiValue {
-    /// The tag of the line's text, given text with [`Load::add_texts`].
+    /// The tag of the line's text, given text with [`Load::add_texts`](../../struct.Load.html#method.add_texts).
     pub loca_id: Guid,
     /// The number.
     pub value: i32,
@@ -365,7 +365,7 @@ pub struct ItemLayout {
 }
 
 impl ItemLayout {
-    /// The layout `facts` give: the running game's through [`Load`], a game
+    /// The layout `facts` give: the running game's through [`Load`](../../struct.Load.html), a game
     /// image's in a tool.
     ///
     /// # Errors
@@ -415,8 +415,8 @@ const BLOB_STRING: usize = 8;
 ///
 /// `None` when `like` is too short for the layout, or when the item has a meter
 /// and `like` already has an entity of its own (a weapon's durability), which
-/// the meter's would replace. [`Load::add_item`] serves it; call it from a
-/// [`Load::serve`] builder of your own for an edit `add_item` does not make.
+/// the meter's would replace. [`Load::add_item`](../../struct.Load.html#method.add_item) serves it; call it from a
+/// [`Load::serve`](../../struct.Load.html#method.serve) builder of your own for an edit `add_item` does not make.
 ///
 /// # Examples
 ///

@@ -1,7 +1,7 @@
 //! Changes of vanilla values, such as how many of an item one slot holds,
 //! which the loader merges across every mod and data pack.
 //!
-//! A mod declares a [`Change`] at init with [`Load::change`]. The loader
+//! A mod declares a [`Change`] at init with [`Load::change`](../../struct.Load.html#method.change). The loader
 //! takes every mod's sets in load order, the last one winning and each
 //! overridden one reported, then multiplies every factor, and builds the
 //! resource the first time the game reads it.

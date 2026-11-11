@@ -9,7 +9,7 @@ use enshwick_content::__load::*;
 impl Load<'_> {
     /// Declares `change` during `init`, from `source`, such as
     /// `items.toml:12`, which the conflict reports name. The loader merges it
-    /// with every mod's changes as the [module](self) says, and applies it on
+    /// with every mod's changes as the [module](crate::content::changes) says, and applies it on
     /// this side; a value players' games read needs the same change on
     /// every side, so such a mod is a join mod. The loader keeps every stack
     /// size above the game's that a world was saved with and never serves
@@ -22,7 +22,7 @@ impl Load<'_> {
     ///
     /// # Examples
     ///
-    /// See the [module](self).
+    /// See the [module](crate::content::changes).
     #[script]
     pub fn change(&mut self, change: &Change, source: &str) -> Result<(), Off>;
 }

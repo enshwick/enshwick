@@ -5,7 +5,7 @@
 //! build menu beside the vanilla one, and optionally a crafting prop that
 //! recipes made near it require.
 //!
-//! [`Load::add_prop`] copies the vanilla prop's item and the template it
+//! [`Load::add_prop`](../../struct.Load.html#method.add_prop) copies the vanilla prop's item and the template it
 //! places; the item places the copy, so a placed mod prop reports the mod's
 //! item in `world::Prop::item`. A crafting prop, such as
 //! a mortar beside a workbench, takes one bit of the game's crafting prop
@@ -70,13 +70,13 @@ const IN_RANGE: &str = "craftingPropsInRange";
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq, crate::Script)]
 pub struct CraftingPropSetup {
-    /// The recipes, vanilla or added before [`Load::add_prop`], that
+    /// The recipes, vanilla or added before [`Load::add_prop`](../../struct.Load.html#method.add_prop), that
     /// require the prop besides the props they require already.
     #[script(default)]
     pub recipes: Vec<Guid>,
 }
 
-/// A new prop type for [`Load::add_prop`].
+/// A new prop type for [`Load::add_prop`](../../struct.Load.html#method.add_prop).
 ///
 /// The prop's item is [`NewProp::item`]; its other ids derive from the
 /// item's with [`Id::part`]: its template `<id>.template`, its recipe
@@ -133,7 +133,7 @@ impl NewProp {
 ///
 /// # Examples
 ///
-/// See [`Load::add_prop`].
+/// See [`Load::add_prop`](../../struct.Load.html#method.add_prop).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 pub struct PropId {
     /// The prop's item, which `world::Prop::item`

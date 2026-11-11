@@ -85,11 +85,11 @@ pub enum SetChangeError {
 }
 
 /// A change of a vanilla value whose value the mod sets after init, any
-/// number of times; from [`Load::declare_change`].
+/// number of times; from [`Load::declare_change`](../../struct.Load.html#method.declare_change).
 ///
 /// Until [`set`](Self::set) the mod changes nothing. Each set merges again
 /// with every mod's and pack's changes by the same rule as
-/// [`Load::change`], and the loader builds what the change reaches anew in
+/// [`Load::change`](../../struct.Load.html#method.change), and the loader builds what the change reaches anew in
 /// place, so the game reads the new value from then on.
 ///
 /// # Examples

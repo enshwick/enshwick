@@ -329,7 +329,7 @@ impl Blob {
 /// Builds the resource `key` again from its base with the patches of every mod
 /// still on, and writes the bytes that differ over the resource the game holds.
 ///
-/// The mod serves `key` and asked to rebuild it with [`Load::allow_rebuild`];
+/// The mod serves `key` and asked to rebuild it with [`Load::allow_rebuild`](../struct.Load.html#method.allow_rebuild);
 /// any thread may call this, for values a patch reads that changed after the
 /// first build, such as a server's join values.
 ///

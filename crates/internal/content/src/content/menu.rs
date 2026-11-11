@@ -4,7 +4,7 @@
 //! The menu does not walk the recipe registry. It walks a tree per workshop
 //! (groups of sets of recipe ids) in the UI bundle, and a recipe whose id no
 //! tree names never shows, whatever the registry holds. `Load::add_recipe`,
-//! `Load::derive_recipes` and [`Load::add_workshop`] list what they add
+//! `Load::derive_recipes` and [`Load::add_workshop`](../../struct.Load.html#method.add_workshop) list what they add
 //! here on the client; the dedicated server has no UI bundle.
 
 use crate::__load::*;

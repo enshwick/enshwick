@@ -23,7 +23,7 @@ impl Load<'_> {
     ///
     /// # Examples
     ///
-    /// See the [module](self).
+    /// See the [module](crate::rates).
     #[script]
     pub fn rate(&mut self, rate: Rate) -> Result<RateHandle, Off>;
 }

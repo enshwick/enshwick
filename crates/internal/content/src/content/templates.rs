@@ -3,9 +3,9 @@
 //! server and the client alike.
 //!
 //! A template is what a placed object or a creature is made of: its family
-//! and a list of components. [`Load::add_template`] copies a vanilla one,
+//! and a list of components. [`Load::add_template`](../../struct.Load.html#method.add_template) copies a vanilla one,
 //! which keeps its family, model and proxy model, so the copy looks like it;
-//! [`Load::change_template`] changes a vanilla one. Neither is written to a
+//! [`Load::change_template`](../../struct.Load.html#method.change_template) changes a vanilla one. Neither is written to a
 //! save or the archive. Mods that change one template change it in load
 //! order, each on the one before's result. With the `typed` feature a
 //! [`ComponentChange`] names its component by its generated type.
@@ -353,7 +353,7 @@ impl ComponentChange {
     }
 }
 
-/// A new entity template for [`Load::add_template`]: a copy of the vanilla
+/// A new entity template for [`Load::add_template`](../../struct.Load.html#method.add_template): a copy of the vanilla
 /// template `like` under the mod's content id `id`, with `changes` applied
 /// in order.
 ///

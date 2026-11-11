@@ -2,10 +2,10 @@
 //! spawners' counts and timeouts changed.
 //!
 //! A random spawner is a template whose spawner component lists the
-//! templates it spawns, each with a weight. [`Load::add_spawn_entry`] adds
+//! templates it spawns, each with a weight. [`Load::add_spawn_entry`](../../struct.Load.html#method.add_spawn_entry) adds
 //! one, a vanilla enemy or a mod's own from
-//! [`Load::add_enemy`](crate::Load::add_enemy), and
-//! [`Load::change_spawner`] changes how many it spawns and how often. Both are
+//! [`Load::add_enemy`](../../struct.Load.html#method.add_enemy), and
+//! [`Load::change_spawner`](../../struct.Load.html#method.change_spawner) changes how many it spawns and how often. Both are
 //! [template changes](super::templates): in memory, in load order. Spawns
 //! are the server's: a mod that adds only vanilla enemies to spawners is a
 //! server mod.
@@ -53,7 +53,7 @@ pub enum SpawnerPick {
     Listing(Guid),
 }
 
-/// A template a spawner spawns, for [`Load::add_spawn_entry`].
+/// A template a spawner spawns, for [`Load::add_spawn_entry`](../../struct.Load.html#method.add_spawn_entry).
 ///
 /// # Examples
 ///
@@ -99,7 +99,7 @@ impl SpawnEntry {
     }
 }
 
-/// New counts and timeouts of a spawner, for [`Load::change_spawner`];
+/// New counts and timeouts of a spawner, for [`Load::change_spawner`](../../struct.Load.html#method.change_spawner);
 /// `None` keeps a value.
 ///
 /// # Examples

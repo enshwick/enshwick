@@ -17,7 +17,7 @@ impl Load<'_> {
     ///
     /// # Examples
     ///
-    /// See the [module](self).
+    /// See the [module](crate::content::skills).
     #[script]
     pub fn skill_nodes(&self) -> Result<Vec<SkillNode>, Off>;
 
@@ -45,7 +45,7 @@ impl Load<'_> {
     ///
     /// # Examples
     ///
-    /// See the [module](self).
+    /// See the [module](crate::content::skills).
     #[script]
     pub fn add_skill_node(&mut self, new: NewSkillNode) -> Result<SkillNodeId, Off>;
 

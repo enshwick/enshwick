@@ -28,7 +28,7 @@ pub struct ExperienceBalanceValue {
 
 /// The running game's vanilla experience values, in the balancing table's
 /// order: what a mod's knowledge entry or quest reward may name in place of
-/// a value of its own from [`crate::Load::add_experience`].
+/// a value of its own from [`Load::add_experience`](../../struct.Load.html#method.add_experience).
 ///
 /// # Errors
 ///

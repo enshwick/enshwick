@@ -15,7 +15,7 @@ impl Load<'_> {
     /// of the recipe that makes `like`, at the same workshop and unlocked with
     /// it, making `output` instead, beside recipes other mods add. The
     /// client's crafting menu lists it right after the copied recipe (see
-    /// [`menu`](super::menu)).
+    /// [`menu`](crate::content::menu)).
     ///
     /// Unstable: needs the `unstable` feature and may change in any release.
     ///
@@ -50,7 +50,7 @@ impl Load<'_> {
     /// Adds a recipe as [`add_recipe`](Self::add_recipe) does, asking
     /// `recipe` for it each time the registry is built, so a cost read from
     /// settings that change, such as a world's or a server's join values,
-    /// applies through [`rebuild_recipes`]. Every answer keeps the id of the
+    /// applies through [`rebuild_recipes`](crate::content::recipes::rebuild_recipes). Every answer keeps the id of the
     /// first.
     ///
     /// Unstable: needs the `unstable` feature and may change in any release.

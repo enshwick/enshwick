@@ -65,7 +65,7 @@ pub struct NewRecipe {
     /// The copied recipe's ingredient counts times this.
     pub cost: u32,
     /// The workshop the recipe is made at, such as one from
-    /// [`Load::add_workshop`](crate::Load::add_workshop); `None` keeps the copied recipe's.
+    /// [`Load::add_workshop`](../../struct.Load.html#method.add_workshop); `None` keeps the copied recipe's.
     pub workshop: Option<WorkshopId>,
 }
 
@@ -109,7 +109,7 @@ pub struct RecipeLayout {
 }
 
 impl RecipeLayout {
-    /// The layout `facts` give: the running game's through [`Load`](crate::Load), a game
+    /// The layout `facts` give: the running game's through [`Load`](../../struct.Load.html), a game
     /// image's in the loader and in tools.
     ///
     /// # Errors
@@ -163,7 +163,7 @@ pub(super) fn fnv1a(bytes: &[u8]) -> u32 {
 /// already holds `limit` recipes.
 ///
 /// `Load::add_recipe` serves it with [`workshop_limit`]; call it from a
-/// [`Load::serve`](crate::Load::serve) builder of your own to combine it with other edits.
+/// [`Load::serve`](../../struct.Load.html#method.serve) builder of your own to combine it with other edits.
 ///
 /// # Examples
 ///
