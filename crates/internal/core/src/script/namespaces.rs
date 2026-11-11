@@ -310,6 +310,23 @@ const fn joined<const N: usize>(lists: &[&[Namespace]]) -> [Namespace; N] {
     out
 }
 
+#[cfg(test)]
+mod tests {
+    use super::{DOMAINS, NAMESPACES};
+
+    #[test]
+    fn the_namespaces_are_every_domain_list_in_turn() {
+        let expected: Vec<&str> = DOMAINS
+            .iter()
+            .flat_map(|list| list.iter().map(|n| n.name()))
+            .collect();
+        let joined: Vec<&str> = NAMESPACES.iter().map(|n| n.name()).collect();
+        assert_eq!(joined, expected);
+        assert_eq!(joined.first(), Some(&"log"));
+        assert_eq!(joined.last(), Some(&"sound"));
+    }
+}
+
 /// The mod's log as a script writes to it: one line per call, under the
 /// mod's id.
 ///
