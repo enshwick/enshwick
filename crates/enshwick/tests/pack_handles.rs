@@ -348,6 +348,38 @@ mod tests {
     }
 
     #[test]
+    fn a_poisoned_lock_in_a_pack_s_call_is_logged_as_the_pack_not_to_the_loader_s_sink() {
+        use std::sync::Mutex;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        use enshwick::Relock as _;
+        use enshwick::abi::Level;
+
+        static SUNK: AtomicBool = AtomicBool::new(false);
+        let loader = FakeHost::new().install();
+        // SAFETY: the fake host's table lives for the process.
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        enshwick_base::__internal::report_poison_to(|_| SUNK.store(true, Ordering::Relaxed));
+        let lock = Mutex::new(0);
+        let _panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _held = lock.lock();
+            panic!("while holding");
+        }));
+        // SAFETY: the fake host's table lives for the process.
+        unsafe {
+            enshwick_base::__internal::as_pack(loader.api(), ModHandle(2), || drop(lock.relock()));
+        }
+        assert!(!SUNK.load(Ordering::Relaxed), "the loader's sink heard it");
+        let sent = loader.sent();
+        assert!(
+            sent.iter().any(|(me, level, line)| *me == ModHandle(2)
+                && *level == Level::WARN
+                && line.contains("a thread panicked holding this lock")),
+            "{sent:?}"
+        );
+    }
+
+    #[test]
     fn a_pack_s_level_read_in_one_fake_life_is_read_again_in_the_next() {
         use enshwick::abi::Level;
 

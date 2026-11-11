@@ -121,9 +121,8 @@ impl<T: ?Sized> Relock<T> for Mutex<T> {
     fn relock(&self) -> MutexGuard<'_, T> {
         let at = Location::caller();
         self.lock().unwrap_or_else(|poisoned| {
-            poisoned_at(at);
-            self.clear_poison();
-            poisoned.into_inner()
+            let_go(poisoned, || self.clear_poison(), at);
+            self.lock().unwrap_or_else(PoisonError::into_inner)
         })
     }
 
@@ -134,9 +133,12 @@ impl<T: ?Sized> Relock<T> for Mutex<T> {
             Ok(guard) => Some(guard),
             Err(TryLockError::WouldBlock) => None,
             Err(TryLockError::Poisoned(poisoned)) => {
-                poisoned_at(Location::caller());
-                self.clear_poison();
-                Some(poisoned.into_inner())
+                let_go(poisoned, || self.clear_poison(), Location::caller());
+                match self.try_lock() {
+                    Ok(guard) => Some(guard),
+                    Err(TryLockError::WouldBlock) => None,
+                    Err(TryLockError::Poisoned(again)) => Some(again.into_inner()),
+                }
             }
         }
     }
@@ -148,9 +150,8 @@ impl<T: ?Sized> RelockRw<T> for RwLock<T> {
     fn relock_read(&self) -> RwLockReadGuard<'_, T> {
         let at = Location::caller();
         self.read().unwrap_or_else(|poisoned| {
-            poisoned_at(at);
-            self.clear_poison();
-            PoisonError::into_inner(poisoned)
+            let_go(poisoned, || self.clear_poison(), at);
+            self.read().unwrap_or_else(PoisonError::into_inner)
         })
     }
 
@@ -159,11 +160,20 @@ impl<T: ?Sized> RelockRw<T> for RwLock<T> {
     fn relock_write(&self) -> RwLockWriteGuard<'_, T> {
         let at = Location::caller();
         self.write().unwrap_or_else(|poisoned| {
-            poisoned_at(at);
-            self.clear_poison();
-            PoisonError::into_inner(poisoned)
+            let_go(poisoned, || self.clear_poison(), at);
+            self.write().unwrap_or_else(PoisonError::into_inner)
         })
     }
+}
+
+/// Clears the poison of the lock `poisoned` holds, lets the lock go and
+/// reports `at`, so the report may take that lock too, as the loader's log
+/// takes its own; the caller takes the lock again.
+#[cold]
+fn let_go<G>(poisoned: PoisonError<G>, clear: impl FnOnce(), at: &Location<'_>) {
+    clear();
+    drop(poisoned);
+    poisoned_at(at);
 }
 
 impl RelockWait for Condvar {
@@ -230,10 +240,13 @@ pub(crate) fn report_to(sink: fn(&Location<'_>)) {
     let _first = SINK.set(sink);
 }
 
-/// Reports that the lock taken at `at` was poisoned.
+/// Reports that the lock taken at `at` was poisoned: in a data pack's code
+/// to the pack's log, as its other lines, else to the sink if one is named.
 #[cold]
 fn poisoned_at(at: &Location<'_>) {
-    if let Some(sink) = SINK.get() {
+    if crate::host::pack().is_none()
+        && let Some(sink) = SINK.get()
+    {
         sink(at);
         return;
     }
@@ -270,17 +283,36 @@ mod tests {
     }
 
     #[test]
-    fn a_named_sink_hears_where_a_poisoned_lock_was_taken() {
-        static HEARD: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    fn a_named_sink_hears_where_a_poisoned_lock_was_taken_once_it_is_let_go() {
+        static LOCK: Mutex<u32> = Mutex::new(0);
+        thread_local! {
+            // Per thread: the sink is the process's, and other tests poison locks too.
+            static HEARD: std::cell::Cell<Option<(u32, bool)>> = const { std::cell::Cell::new(None) };
+        }
         crate::__internal::report_poison_to(|at| {
-            assert!(at.file().ends_with("locks.rs"), "{at}");
-            HEARD.store(at.line(), std::sync::atomic::Ordering::Relaxed);
+            let free = !matches!(LOCK.try_lock(), Err(TryLockError::WouldBlock));
+            HEARD.set(Some((at.line(), free)));
         });
-        let lock = Mutex::new(0);
-        poisoned(&lock, 1);
+        poisoned(&LOCK, 1);
         let line = line!() + 1;
-        assert_eq!(*lock.relock(), 1);
-        assert_eq!(HEARD.load(std::sync::atomic::Ordering::Relaxed), line);
+        assert_eq!(*LOCK.relock(), 1);
+        assert_eq!(HEARD.get(), Some((line, true)));
+        poisoned(&LOCK, 2);
+        let line = line!() + 1;
+        assert_eq!(LOCK.try_relock().as_deref(), Some(&2));
+        assert_eq!(HEARD.get(), Some((line, true)));
+    }
+
+    #[test]
+    fn a_poisoned_lock_is_tried_with_its_state_kept_and_healed() {
+        let lock = Mutex::new(vec![1]);
+        poisoned(&lock, vec![1, 2]);
+        assert_eq!(lock.try_relock().as_deref(), Some(&vec![1, 2]));
+        assert!(!lock.is_poisoned());
+        let held = lock.relock();
+        assert!(lock.try_relock().is_none(), "held");
+        drop(held);
+        assert!(lock.try_relock().is_some());
     }
 
     #[test]
