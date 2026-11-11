@@ -36,6 +36,10 @@ mod tests {
         "field",
     ];
 
+    /// The names the loader reaches the API's accessors under: its own
+    /// dependencies and the root alias the settings macros need.
+    const API_CRATES: [&str; 3] = ["enshwick_core::", "enshwick_abi::", "enshwick::"];
+
     /// The paths an accessor is called through; any other path (`fs::write`,
     /// `ptr::read`) is not game memory.
     const ACCESSOR_PATHS: &[&str] = &["", "memory::", "raw::"];
@@ -203,7 +207,10 @@ mod tests {
                 .next()
                 .unwrap_or("");
             let path = path.strip_prefix("crate::").unwrap_or(path);
-            let path = path.strip_prefix("enshwick_core::").unwrap_or(path);
+            let path = API_CRATES
+                .iter()
+                .find_map(|api| path.strip_prefix(api))
+                .unwrap_or(path);
             if !ACCESSOR_PATHS.contains(&path) {
                 continue;
             }
@@ -370,6 +377,15 @@ mod tests {
             ),
             1
         );
+        for api in API_CRATES {
+            assert_eq!(
+                count_in(&format!(
+                    "let v = unsafe {{ {api}raw::read_at::<u32>(base, 0x48) }};"
+                )),
+                1,
+                "{api}"
+            );
+        }
     }
 
     #[test]
