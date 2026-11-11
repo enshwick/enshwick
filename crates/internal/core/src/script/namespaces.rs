@@ -312,15 +312,15 @@ const fn joined<const N: usize>(lists: &[&[Namespace]]) -> [Namespace; N] {
 
 #[cfg(test)]
 mod tests {
-    use super::{DOMAINS, NAMESPACES};
+    use super::{DOMAINS, NAMESPACES, Namespace};
 
     #[test]
     fn the_namespaces_are_every_domain_list_in_turn() {
         let expected: Vec<&str> = DOMAINS
             .iter()
-            .flat_map(|list| list.iter().map(|n| n.name()))
+            .flat_map(|list| list.iter().map(Namespace::name))
             .collect();
-        let joined: Vec<&str> = NAMESPACES.iter().map(|n| n.name()).collect();
+        let joined: Vec<&str> = NAMESPACES.iter().map(Namespace::name).collect();
         assert_eq!(joined, expected);
         assert_eq!(joined.first(), Some(&"log"));
         assert_eq!(joined.last(), Some(&"sound"));
