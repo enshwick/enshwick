@@ -45,35 +45,35 @@ pub struct Fresh<T> {
 
 #[cfg(not(feature = "fake"))]
 impl<T> Fresh<T> {
-    pub(crate) const fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             cell: std::sync::OnceLock::new(),
         }
     }
 
-    pub(crate) fn get(&self) -> Option<&T> {
+    pub fn get(&self) -> Option<&T> {
         self.cell.get()
     }
 
     /// Keeps `value`; hands it back when the cell holds one already.
-    pub(crate) fn set(&self, value: T) -> Result<(), T> {
+    pub fn set(&self, value: T) -> Result<(), T> {
         self.cell.set(value)
     }
 
-    pub(crate) fn get_or_init(&self, init: impl FnOnce() -> T) -> &T {
+    pub fn get_or_init(&self, init: impl FnOnce() -> T) -> &T {
         self.cell.get_or_init(init)
     }
 }
 
 #[cfg(feature = "fake")]
 impl<T> Fresh<T> {
-    pub(crate) const fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             cell: AtomicPtr::new(core::ptr::null_mut()),
         }
     }
 
-    pub(crate) fn get(&self) -> Option<&T> {
+    pub fn get(&self) -> Option<&T> {
         let kept = self.cell.load(Ordering::Acquire);
         // SAFETY: a non-null pointer comes from `Box::into_raw` in `set`, and
         // what it points to is never freed or written again.
@@ -83,11 +83,11 @@ impl<T> Fresh<T> {
 
     /// Keeps `value`; hands it back when the cell holds one for this life
     /// already.
-    pub(crate) fn set(&self, value: T) -> Result<(), T> {
+    pub fn set(&self, value: T) -> Result<(), T> {
         self.keep(value).map(|_| ())
     }
 
-    pub(crate) fn get_or_init(&self, init: impl FnOnce() -> T) -> &T {
+    pub fn get_or_init(&self, init: impl FnOnce() -> T) -> &T {
         if let Some(value) = self.get() {
             return value;
         }

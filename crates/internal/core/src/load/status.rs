@@ -55,5 +55,9 @@ impl Load<'_> {
         &mut self,
         name: &str,
         init: impl FnOnce(&mut Self) -> Result<T, Off>,
-    ) -> Option<T>;
+    ) -> Option<T> {
+        // Not forwarded: `init` gets this `Load`, not the base handle.
+        let outcome = init(self);
+        self.base.report_feature(name, outcome)
+    }
 }

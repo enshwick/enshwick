@@ -52,6 +52,120 @@ pub struct Load<'a> {
     _init: core::marker::PhantomData<&'a ()>,
 }
 
+#[enshwick_macros::forward(base)]
+#[crate::script(dirs)]
+impl Load<'_> {
+    /// The loader's services, also available later through
+    /// [`host()`](crate::host()).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_core as enshwick;
+    /// fn init(load: &mut enshwick::Load<'_>) {
+    ///     let side = load.host().build().side;
+    ///     let _ = side;
+    /// }
+    /// ```
+    #[must_use]
+    pub fn host(&self) -> Host;
+
+    /// The mod's [`Scheduler`](crate::schedule::Scheduler), which runs work on
+    /// the server's game thread on a tick of the default period: the dedicated
+    /// server's, or the built-in server's while a client hosts a game.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the loader raises no ticks.
+    ///
+    /// # Examples
+    ///
+    /// See [`Scheduler`](crate::schedule::Scheduler).
+    pub fn scheduler(&mut self) -> Result<crate::schedule::Scheduler, Off>;
+
+    /// The mod's data folder in the world that runs, `<stem>-mod-data/<id>`
+    /// beside the world's save; `None` while no world runs, as during init
+    /// before a hosted game or a dedicated server's world loads. A world's
+    /// state belongs there; [`WorldStore`](crate::state::WorldStore) keeps
+    /// it for you, and `World::data_dir`
+    /// answers the same once the world runs.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_core as enshwick;
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     if let Some(dir) = load.data_dir() {
+    ///         enshwick::info!("this world's data: {}", dir.display());
+    ///     }
+    ///     Ok(())
+    /// }
+    /// ```
+    #[must_use]
+    #[script]
+    pub fn data_dir(&self) -> Option<std::path::PathBuf>;
+
+    /// The mod's folder in `mods/`, which holds its installation, such as an
+    /// installation [`Hold`](crate::state::Hold).
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the loader names no folder or a path that is not UTF-8.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_core as enshwick;
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let hold = enshwick::state::Hold::new(&load.mod_dir()?);
+    ///     let _ = hold.reason();
+    ///     Ok(())
+    /// }
+    /// ```
+    #[script]
+    pub fn mod_dir(&self) -> Result<std::path::PathBuf, Off>;
+
+    /// The folder `export/<id>/` in the game folder, named by the mod id
+    /// whatever the mod's folder in `mods/` is called, where a mod writes
+    /// files for tools outside the game, such as a wiki or a map; a mod may
+    /// write to any other path too.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::mod_dir`], for a mod folder outside a `mods/` folder, and
+    /// when the loader lists no mod in that folder.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_core as enshwick;
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let items = load.export_dir()?.join("items.json");
+    ///     enshwick::files::write_atomically(&items, "[]").map_err(|e| enshwick::Off::new(e.to_string()))
+    /// }
+    /// ```
+    #[script]
+    pub fn export_dir(&self) -> Result<std::path::PathBuf, Off>;
+
+    /// A value of type `T` kept per world in the mod's data folder of that
+    /// world, opened when the world loads and written when it saves; see
+    /// [`WorldStore`](crate::state::WorldStore). A world file that does not
+    /// read keeps the store shut, with the reason in the status summary and
+    /// on the Mods screen, as the feature `world store <name>` off.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when `name` is not 1 to 64 of `[a-z0-9_-]` or the world
+    /// events are refused.
+    ///
+    /// # Examples
+    ///
+    /// See [`WorldStore`](crate::state::WorldStore).
+    pub fn world_store<T>(&mut self, name: &str) -> Result<crate::state::WorldStore<T>, Off>
+    where
+        T: serde::de::DeserializeOwned + serde::Serialize + Default + Send + 'static;
+}
+
 impl Load<'_> {
     pub(crate) fn new(host: Host) -> Self {
         Self::of(host, false, None)

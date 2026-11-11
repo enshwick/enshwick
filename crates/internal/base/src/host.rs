@@ -172,7 +172,8 @@ impl Host {
     ///   header states.
     /// - That table stays valid and unchanged for the rest of the process,
     ///   as the loader's does.
-    pub(crate) unsafe fn new(api: *const HostApi, me: ModHandle) -> Option<Self> {
+    #[doc(hidden)]
+    pub unsafe fn new(api: *const HostApi, me: ModHandle) -> Option<Self> {
         // SAFETY: by this function's `# Safety`, `api` is null or an aligned
         // table that starts with its header and lives for the process;
         // `as_ref` maps null to `None`.
@@ -188,13 +189,15 @@ impl Host {
     }
 
     /// Makes this the answer of [`host`]; the first call wins.
-    pub(crate) fn install(self) -> Self {
+    #[doc(hidden)]
+    pub fn install(self) -> Self {
         *HOST.get_or_init(|| self)
     }
 
     /// Runs `call` with this as the answer of [`host`] on this thread, so a
     /// data pack's code logs, reads and faults as the pack.
-    pub(crate) fn scope<R>(self, call: impl FnOnce() -> R) -> R {
+    #[doc(hidden)]
+    pub fn scope<R>(self, call: impl FnOnce() -> R) -> R {
         running_as(Some(self), call)
     }
 
@@ -341,7 +344,8 @@ impl Host {
     }
 
     /// Subscribes `callback` to `event`.
-    pub(crate) fn subscribe(&self, event: Event, callback: EventFn, user: *mut c_void) -> Status {
+    #[doc(hidden)]
+    pub fn subscribe(&self, event: Event, callback: EventFn, user: *mut c_void) -> Status {
         (self.api.subscribe)(self.me, event, callback, user)
     }
 

@@ -252,7 +252,8 @@ impl EventType {
 
     /// The `T` at the offset the loader resolves for the engine id `id`,
     /// inside this type's size.
-    pub(crate) fn field_by_id<T: Scalar>(self, load: &BaseLoad, id: &str) -> Result<Field<T>, Off> {
+    #[doc(hidden)]
+    pub fn field_by_id<T: Scalar>(self, load: &BaseLoad, id: &str) -> Result<Field<T>, Off> {
         let offset = load.constant(id)?;
         self.field_at(offset)
             .ok_or_else(|| Off::new(format!("field {id}: past the end of {}", self.name)))
@@ -372,7 +373,8 @@ impl<T> Copy for Field<T> {}
 impl<T: Scalar> Field<T> {
     /// The `T` at `offset` of the type `type_hash` whose values are `size`
     /// bytes, when it lies inside them.
-    pub(crate) fn within(type_hash: u32, size: u32, offset: u64) -> Option<Self> {
+    #[doc(hidden)]
+    pub fn within(type_hash: u32, size: u32, offset: u64) -> Option<Self> {
         let end = offset.checked_add(size_of::<T>() as u64)?;
         (end <= u64::from(size)).then_some(Self {
             type_hash,

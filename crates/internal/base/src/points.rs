@@ -57,6 +57,17 @@ pub enum Mode {
 }
 
 impl Mode {
+    /// The word a schema gives the mode, as a pack's manifest writes it.
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn word(self) -> &'static str {
+        match self {
+            Self::Observe => "observe",
+            Self::Advise => "advise",
+            Self::Override => "override",
+        }
+    }
+
     /// Whether links may change the answer.
     ///
     /// # Examples

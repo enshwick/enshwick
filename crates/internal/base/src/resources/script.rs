@@ -174,7 +174,8 @@ pub struct Resources {
 impl Resources {
     /// `key` as script data: `{ guid, type, part }`, the type by its
     /// qualified name when the build has it.
-    pub(crate) fn key_data(registry: &Registry<'_>, key: ResourceKey) -> Data {
+    #[doc(hidden)]
+    pub fn key_data(registry: &Registry<'_>, key: ResourceKey) -> Data {
         let ty = registry
             .hashed(key.type_hash)
             .map_or(Data::Uint(key.type_hash.into()), |ty| {
@@ -189,7 +190,8 @@ impl Resources {
 
     /// The key `data` names: a GUID as text, a type by qualified name or
     /// hash, a part (0 when left out).
-    pub(crate) fn key_of(data: &Data) -> Result<ResourceKey, Off> {
+    #[doc(hidden)]
+    pub fn key_of(data: &Data) -> Result<ResourceKey, Off> {
         let guid = match data.field("guid") {
             Some(Data::Text(text)) => Guid::try_parse(text),
             Some(Data::Guid(guid)) => Some(*guid),

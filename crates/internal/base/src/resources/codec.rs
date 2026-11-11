@@ -148,7 +148,8 @@ fn word(bytes: &[u8], at: usize) -> Result<u32, CodecError> {
 
 impl<'a> Registry<'a> {
     /// The type `ty` names, through its typedefs.
-    pub(crate) fn underlying<'r>(&'r self, ty: &'r Type<'a>) -> Result<&'r Type<'a>, CodecError> {
+    #[doc(hidden)]
+    pub fn underlying<'r>(&'r self, ty: &'r Type<'a>) -> Result<&'r Type<'a>, CodecError> {
         let mut ty = ty;
         for _ in 0..MAX_TYPEDEFS {
             if ty.kind() != Kind::Typedef {

@@ -62,6 +62,13 @@ impl BaseLoad {
         init: impl FnOnce(&mut Self) -> Result<T, Off>,
     ) -> Option<T> {
         let outcome = init(self);
+        self.report_feature(name, outcome)
+    }
+
+    /// Reports the part `name` to the loader, on or off as `outcome` says,
+    /// and gives back its value when on.
+    #[doc(hidden)]
+    pub fn report_feature<T>(&self, name: &str, outcome: Result<T, Off>) -> Option<T> {
         let reason = outcome.as_ref().err().map_or("", Off::to_reason);
         let host = self.host();
         let _status = (host.api().feature)(host.handle(), Str::new(name), Str::new(reason));

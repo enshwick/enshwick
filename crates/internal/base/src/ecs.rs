@@ -345,7 +345,8 @@ impl ComponentType {
     }
 
     /// The component type named `name` on the host's build.
-    pub(crate) fn named(host: Host, name: &str) -> Result<Self, Off> {
+    #[doc(hidden)]
+    pub fn named(host: Host, name: &str) -> Result<Self, Off> {
         let mut hash = 0;
         let status = (host.api().type_hash)(crate::abi::Str::new(name), &raw mut hash);
         crate::load::ok(status, Self(hash), || format!("component type {name}"))

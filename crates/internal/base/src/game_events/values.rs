@@ -240,7 +240,8 @@ pub enum ExperienceSourceType {
 
 impl ExperienceSourceType {
     /// Each source with the id of its engine constant.
-    pub(crate) const IDS: [(Self, &'static str); 7] = [
+    #[doc(hidden)]
+    pub const IDS: [(Self, &'static str); 7] = [
         (Self::None, ids::EXPERIENCE_SOURCE_NONE),
         (Self::Exploration, ids::EXPERIENCE_SOURCE_EXPLORATION),
         (Self::Lore, ids::EXPERIENCE_SOURCE_LORE),
