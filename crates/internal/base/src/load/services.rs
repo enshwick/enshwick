@@ -5,6 +5,7 @@ use super::{BaseLoad, Off, ok, service_spec};
 
 impl BaseLoad {
     /// As `Load::publish`.
+    #[doc(hidden)]
     pub fn publish<T: Service>(&mut self, table: &'static T) -> Result<(), Off> {
         let spec = service_spec::<T>(core::ptr::from_ref(table).cast());
         let status = (self.api().publish)(self.host.handle(), &raw const spec);
@@ -18,12 +19,14 @@ impl BaseLoad {
     }
 
     /// As `Load::service`.
+    #[doc(hidden)]
     pub fn service<T: Service>(&self) -> Result<&'static T, Off> {
         self.find_service::<T>()
             .map_err(|refused| Off::new(refused.to_string()))
     }
 
     /// As `Load::optional_service`.
+    #[doc(hidden)]
     #[must_use]
     pub fn optional_service<T: Service>(&self) -> Option<&'static T> {
         match self.find_service::<T>() {

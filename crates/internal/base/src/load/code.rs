@@ -7,6 +7,7 @@ use super::{BaseLoad, MidHook, Off, ok};
 
 impl BaseLoad {
     /// As `Load::hook`.
+    #[doc(hidden)]
     pub unsafe fn hook<F: FnPtr>(
         &mut self,
         hook: &'static Hook<F>,
@@ -18,6 +19,7 @@ impl BaseLoad {
     }
 
     /// As `Load::code`.
+    #[doc(hidden)]
     pub fn code(&self) -> Result<&[u8], Off> {
         let api = self.api();
         let (mut start, mut len) = (0u64, 0u64);
@@ -36,6 +38,7 @@ impl BaseLoad {
     }
 
     /// As `Load::find_code`.
+    #[doc(hidden)]
     pub fn find_code(&self, pattern: &str) -> Result<u64, Off> {
         let parsed = crate::code::Pattern::parse(pattern)
             .map_err(|e| Off::new(format!("code pattern {pattern:?}: {e}")))?;
@@ -47,6 +50,7 @@ impl BaseLoad {
     }
 
     /// As `Load::patch_code`.
+    #[doc(hidden)]
     pub unsafe fn patch_code(
         &mut self,
         address: u64,
@@ -72,6 +76,7 @@ impl BaseLoad {
     }
 
     /// As `Load::hook_at`.
+    #[doc(hidden)]
     pub unsafe fn hook_at<F>(&mut self, address: u64, handler: F) -> Result<(), Off>
     where
         F: Fn(&mut Registers) + Send + Sync + 'static,

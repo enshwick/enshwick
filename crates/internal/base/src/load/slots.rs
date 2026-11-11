@@ -1,4 +1,4 @@
-//! The state a domain keeps on [`Load`](crate::Load) while a mod initialises,
+//! The state a domain keeps on `Load` while a mod initialises,
 //! one slot per type, so `Load` names no domain.
 
 use core::any::Any;
@@ -46,7 +46,7 @@ mod tests {
     fn slots_keep_load_send_sync_and_unwind_safe() {
         fn held<T: Send + Sync + core::panic::UnwindSafe + core::panic::RefUnwindSafe>() {}
         held::<Slots>();
-        held::<crate::Load<'static>>();
+        held::<crate::BaseLoad>();
     }
 
     #[test]

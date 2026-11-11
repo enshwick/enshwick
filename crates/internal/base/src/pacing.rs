@@ -147,6 +147,7 @@ impl TaskWorkers {
 
 impl BaseLoad {
     /// As `Load::on_server_wait_script`.
+    #[doc(hidden)]
     pub fn on_server_wait_script(
         &mut self,
         handler: impl Fn(u64) -> Option<u64> + Send + Sync + 'static,
@@ -159,6 +160,7 @@ impl BaseLoad {
     }
 
     /// As `Load::on_loop_wait`.
+    #[doc(hidden)]
     pub fn on_loop_wait<F>(&mut self, handler: F) -> Result<LoopWaits, Off>
     where
         F: Fn(LoopWait) + Send + Sync + 'static,
@@ -177,6 +179,7 @@ impl BaseLoad {
     }
 
     /// As `Load::on_server_wait`.
+    #[doc(hidden)]
     pub fn on_server_wait<F>(&mut self, handler: F) -> Result<bool, Off>
     where
         F: Fn(&mut u64) + Send + Sync + 'static,
@@ -194,6 +197,7 @@ impl BaseLoad {
     }
 
     /// As `Load::cap_task_workers`.
+    #[doc(hidden)]
     pub fn cap_task_workers(&mut self, caps: TaskWorkers) -> Result<bool, Off> {
         if caps == TaskWorkers::default() {
             return Ok(false);

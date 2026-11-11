@@ -497,6 +497,11 @@ impl Host {
 }
 
 /// The value of `bytes`, a resource of `key`'s type.
+///
+/// # Errors
+///
+/// [`Off`] when the game's types do not read, the type is not one of this
+/// build or the bytes do not decode as it.
 pub fn decode(key: crate::abi::ResourceKey, bytes: &[u8]) -> Result<super::Value, Off> {
     let registry = Registry::game()?;
     let ty = registry.hashed(key.type_hash).ok_or_else(|| {
@@ -509,12 +514,18 @@ pub fn decode(key: crate::abi::ResourceKey, bytes: &[u8]) -> Result<super::Value
 }
 
 /// Serves the resource `key`, built from the resource `base` the first time
-/// the game reads it: `patch` gets the base's value and returns the value to
-/// serve, which may name only the fields it changes; nil serves the base
-/// unchanged. A base that does not read, a patch that fails, or a value that
-/// does not fit the type is logged; then a changed game resource (`key` is
-/// `base`) is served unchanged, and a new one turns the mod off, as
-/// [`Load::serve`](crate::Load::serve) does for a builder's `None`.
+/// the game reads it, through `patch` on the base's value.
+///
+/// `patch` returns the value to serve, which may name only the fields it
+/// changes; nil serves the base unchanged. A base that does not read, a
+/// patch that fails, or a value that does not fit the type is logged; then
+/// a changed game resource (`key` is `base`) is served unchanged, and a new
+/// one turns the mod off, as `Load::serve` does for a builder's `None`.
+///
+/// # Errors
+///
+/// [`Off`] when the game's types do not read, the base's type is not one of
+/// this build, or the loader refuses the resource.
 pub fn serve_value(
     host: Host,
     key: crate::abi::ResourceKey,
@@ -559,6 +570,11 @@ fn fallback(
 /// Serves `value` as the new resource `key`, of the type its key names; the
 /// loader builds it from any vanilla resource of that type, whose bytes the
 /// value replaces.
+///
+/// # Errors
+///
+/// [`Off`] when the game's types do not read, the type is not one of this
+/// build, the value does not encode, or the loader refuses the resource.
 pub fn serve_new(
     host: Host,
     key: crate::abi::ResourceKey,
@@ -585,6 +601,7 @@ pub fn serve_new(
 
 impl crate::BaseLoad {
     /// As `Load::serve_new`.
+    #[doc(hidden)]
     pub fn serve_new(
         &mut self,
         key: crate::abi::ResourceKey,

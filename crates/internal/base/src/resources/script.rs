@@ -558,7 +558,7 @@ impl Resources {
     /// The namespace for the mod `host` serves.
     #[doc(hidden)]
     #[must_use]
-    pub fn open(host: crate::Host) -> Self {
+    pub fn open(host: Host) -> Self {
         Self { host }
     }
 }

@@ -8,7 +8,7 @@ use crate::facts::EngineFacts;
 /// The engine value of each variant of `T`; a variant whose constant the
 /// build lacks has none and is never decoded.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct Values<T: 'static, const N: usize>([(T, Option<u64>); N]);
+pub struct Values<T: 'static, const N: usize>([(T, Option<u64>); N]);
 
 impl<T: Copy + PartialEq, const N: usize> Values<T, N> {
     /// Each variant with its engine value as given.
@@ -18,7 +18,7 @@ impl<T: Copy + PartialEq, const N: usize> Values<T, N> {
     }
 
     /// Each variant with the value the loader answers for its id.
-    pub(crate) fn resolve(facts: &(impl EngineFacts + ?Sized), ids: [(T, &str); N]) -> Self {
+    pub fn resolve(facts: &(impl EngineFacts + ?Sized), ids: [(T, &str); N]) -> Self {
         Self(ids.map(|(variant, id)| {
             let value = facts
                 .offset(id)
@@ -29,7 +29,7 @@ impl<T: Copy + PartialEq, const N: usize> Values<T, N> {
     }
 
     /// The variant whose engine value is `raw`.
-    pub(crate) fn variant(&self, raw: u64) -> Option<T> {
+    pub fn variant(&self, raw: u64) -> Option<T> {
         self.0
             .iter()
             .find(|&&(_, value)| value == Some(raw))
@@ -37,7 +37,7 @@ impl<T: Copy + PartialEq, const N: usize> Values<T, N> {
     }
 
     /// The engine value of `variant`; `None` when the build lacks it.
-    pub(crate) fn value(&self, variant: T) -> Option<u64> {
+    pub fn value(&self, variant: T) -> Option<u64> {
         self.0
             .iter()
             .find(|&&(known, _)| known == variant)

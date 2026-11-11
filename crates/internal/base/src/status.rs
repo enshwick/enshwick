@@ -41,6 +41,7 @@ where
 
 impl BaseLoad {
     /// As `Load::add_status`.
+    #[doc(hidden)]
     pub fn add_status<F>(&mut self, source: F) -> Result<(), Off>
     where
         F: Fn() -> String + Send + Sync + 'static,
@@ -54,6 +55,7 @@ impl BaseLoad {
     }
 
     /// As `Load::feature`.
+    #[doc(hidden)]
     pub fn feature<T>(
         &mut self,
         name: &str,

@@ -10,6 +10,7 @@ use super::{BaseLoad, Off, event_spec, hand_over, ok};
 
 impl BaseLoad {
     /// As `Load::on`.
+    #[doc(hidden)]
     pub fn on<E: crate::events::Kind>(
         &mut self,
         handler: impl Fn(&E::Data) + Send + Sync + 'static,
@@ -18,6 +19,7 @@ impl BaseLoad {
     }
 
     /// As `Load::on_raw_event`.
+    #[doc(hidden)]
     pub fn on_raw_event<F>(&mut self, event: Event, handler: F) -> Result<(), Off>
     where
         F: Fn(*const c_void) + Send + Sync + 'static,
@@ -31,6 +33,7 @@ impl BaseLoad {
     }
 
     /// As `Load::on_tick`.
+    #[doc(hidden)]
     pub fn on_tick(
         &mut self,
         every: Duration,
@@ -42,6 +45,7 @@ impl BaseLoad {
     }
 
     /// As `Load::on_every_step`.
+    #[doc(hidden)]
     pub fn on_every_step(
         &mut self,
         handler: impl Fn(&TickData) + Send + Sync + 'static,
@@ -50,6 +54,7 @@ impl BaseLoad {
     }
 
     /// As `Load::game_event_type`.
+    #[doc(hidden)]
     pub fn game_event_type(
         &self,
         name: &'static str,
@@ -58,6 +63,7 @@ impl BaseLoad {
     }
 
     /// As `Load::on_raw_game_event`.
+    #[doc(hidden)]
     pub fn on_raw_game_event<F>(
         &mut self,
         ty: crate::game_events::EventType,
@@ -70,6 +76,7 @@ impl BaseLoad {
     }
 
     /// As `Load::on_every_raw_game_event`.
+    #[doc(hidden)]
     pub fn on_every_raw_game_event<F>(&mut self, handler: F) -> Result<(), Off>
     where
         F: Fn(&crate::game_events::RawGameEvent<'_>) + Send + Sync + 'static,
@@ -90,6 +97,7 @@ impl BaseLoad {
     }
 
     /// As `Load::define_event`.
+    #[doc(hidden)]
     pub fn define_event<E: ModEvent>(&mut self) -> Result<Emitter<E>, Off> {
         let spec = event_spec::<E>();
         let mut id = 0;
@@ -103,6 +111,7 @@ impl BaseLoad {
     }
 
     /// As `Load::on_mod_event`.
+    #[doc(hidden)]
     pub fn on_mod_event<E: ModEvent>(
         &mut self,
         handler: impl Fn(&E) + Send + Sync + 'static,

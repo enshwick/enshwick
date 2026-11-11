@@ -35,7 +35,7 @@ pub fn renew() {
 
 /// A cell set once per mod life, like a `OnceLock`.
 #[derive(Debug)]
-pub(crate) struct Fresh<T> {
+pub struct Fresh<T> {
     #[cfg(not(feature = "fake"))]
     cell: std::sync::OnceLock<T>,
     /// The value with the life that set it, leaked.

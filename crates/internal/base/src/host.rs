@@ -120,10 +120,12 @@ pub(crate) fn panic_text(payload: &(dyn core::any::Any + Send)) -> &str {
 const NO_MESSAGE: &str = "a panic without a message";
 
 /// Logs every panic of this mod's code through the loader, with its message,
-/// place and thread, before the panic's own handling runs. Each mod DLL has
-/// its own panic hook, so the line goes to the mod's log; the previous hook
-/// still runs.
-pub(crate) fn log_panics() {
+/// place and thread.
+///
+/// The line comes before the panic's own handling. Each mod DLL has its own
+/// panic hook, so the line goes to the mod's log; the previous hook still
+/// runs.
+pub fn log_panics() {
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| {
         let previous = std::panic::take_hook();

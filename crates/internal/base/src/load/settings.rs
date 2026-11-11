@@ -8,6 +8,7 @@ use super::{BaseLoad, CHECK_WHY, Off};
 
 impl BaseLoad {
     /// As `Load::on_settings`.
+    #[doc(hidden)]
     pub fn on_settings<T, F>(&mut self, handler: F) -> Result<(), Off>
     where
         T: Config + 'static,
@@ -17,6 +18,7 @@ impl BaseLoad {
     }
 
     /// As `Load::on_settings_change`.
+    #[doc(hidden)]
     pub fn on_settings_change<T, F>(&mut self, handler: F) -> Result<(), Off>
     where
         T: Config + 'static,

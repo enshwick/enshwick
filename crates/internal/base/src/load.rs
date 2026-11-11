@@ -122,7 +122,7 @@ impl BaseLoad {
 
     /// The state of type `T` a domain keeps while the mod initialises, empty
     /// until the domain fills it.
-    pub fn slot<T: slots::Slot>(&mut self) -> &mut Option<T> {
+    pub fn slot<T: Slot>(&mut self) -> &mut Option<T> {
         self.slots.of()
     }
 
@@ -142,12 +142,14 @@ impl BaseLoad {
 
 impl BaseLoad {
     /// As `Load::host`.
+    #[doc(hidden)]
     #[must_use]
     pub fn host(&self) -> Host {
         self.host
     }
 
     /// As `Load::scheduler`.
+    #[doc(hidden)]
     pub fn scheduler(&mut self) -> Result<crate::schedule::Scheduler, Off> {
         let (scheduler, subscribe) = crate::schedule::Scheduler::get(self.host.handle());
         if subscribe
@@ -161,12 +163,14 @@ impl BaseLoad {
     }
 
     /// As `Load::data_dir`.
+    #[doc(hidden)]
     #[must_use]
     pub fn data_dir(&self) -> Option<std::path::PathBuf> {
         crate::state::data_dir(self.host)
     }
 
     /// As `Load::mod_dir`.
+    #[doc(hidden)]
     pub fn mod_dir(&self) -> Result<std::path::PathBuf, Off> {
         let mut out = Str::EMPTY;
         let status = (self.api().mod_dir)(self.host.handle(), &raw mut out);
@@ -177,6 +181,7 @@ impl BaseLoad {
     }
 
     /// As `Load::export_dir`.
+    #[doc(hidden)]
     pub fn export_dir(&self) -> Result<std::path::PathBuf, Off> {
         let dir = self.mod_dir()?;
         let game = dir
@@ -205,6 +210,7 @@ impl BaseLoad {
     }
 
     /// As `Load::world_store`.
+    #[doc(hidden)]
     pub fn world_store<T>(&mut self, name: &str) -> Result<crate::state::WorldStore<T>, Off>
     where
         T: serde::de::DeserializeOwned + serde::Serialize + Default + Send + 'static,

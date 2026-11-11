@@ -207,6 +207,7 @@ impl EventType {
 
 impl BaseLoad {
     /// As `Load::game_event_types`.
+    #[doc(hidden)]
     pub fn game_event_types(&self) -> Result<Vec<EventType>, Off> {
         let api = self.host().api();
         let me = self.host().handle();
@@ -387,7 +388,7 @@ impl<T: Scalar> Field<T> {
 
     /// The hash of the type the field belongs to.
     #[cfg(feature = "unstable")]
-    pub(crate) const fn type_hash(self) -> u32 {
+    pub const fn type_hash(self) -> u32 {
         self.type_hash
     }
 }

@@ -476,6 +476,7 @@ pub(crate) fn spec<P: Point>() -> crate::abi::PointSpec {
 
 impl BaseLoad {
     /// As `Load::define_point`.
+    #[doc(hidden)]
     pub fn define_point<P: Point>(&mut self) -> Result<OwnedPoint<P>, Off> {
         let spec = spec::<P>();
         let mut handle = crate::abi::PointHandle::EMPTY;
@@ -508,6 +509,7 @@ impl BaseLoad {
     }
 
     /// As `Load::extend_point`.
+    #[doc(hidden)]
     pub fn extend_point<P: Point>(
         &mut self,
         order: &Order,
@@ -517,6 +519,7 @@ impl BaseLoad {
     }
 
     /// As `Load::observe_point`.
+    #[doc(hidden)]
     pub fn observe_point<P: Point>(
         &mut self,
         order: &Order,

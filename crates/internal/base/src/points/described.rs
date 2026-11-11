@@ -175,6 +175,7 @@ struct Link<F> {
 
 impl BaseLoad {
     /// As `Load::extend_described_point`.
+    #[doc(hidden)]
     pub unsafe fn extend_described_point<F>(
         &mut self,
         point: &DescribedPoint,
@@ -221,6 +222,7 @@ impl BaseLoad {
     }
 
     /// As `Load::define_described_point`.
+    #[doc(hidden)]
     pub unsafe fn define_described_point(
         &mut self,
         point: &DescribedPoint,

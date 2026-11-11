@@ -317,6 +317,7 @@ where
 
 impl BaseLoad {
     /// As `Load::channel`.
+    #[doc(hidden)]
     pub fn channel<M, F>(&mut self, name: &str, version: u16, handler: F) -> Result<Channel<M>, Off>
     where
         M: serde::Serialize + serde::de::DeserializeOwned + 'static,
@@ -406,6 +407,7 @@ impl NetFns {
 
 impl BaseLoad {
     /// As `Load::channel_script`.
+    #[doc(hidden)]
     pub fn channel_script(
         &mut self,
         name: &str,

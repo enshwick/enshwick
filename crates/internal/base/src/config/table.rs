@@ -106,6 +106,7 @@ impl Schema {
 
 impl BaseLoad {
     /// As `Load::table_config`.
+    #[doc(hidden)]
     pub fn table_config(&mut self, schema: Schema) -> Result<(TableConfig, toml::Table), Off> {
         refuse_unsupported(&schema)?;
         let host = self.host();

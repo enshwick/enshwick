@@ -351,7 +351,7 @@ impl ComponentType {
 
     /// The type whose hash is `hash`, for a hash the loader already checked.
     #[cfg(feature = "unstable")]
-    pub(crate) const fn from_hash(hash: u32) -> Self {
+    pub const fn from_hash(hash: u32) -> Self {
         Self(hash)
     }
 

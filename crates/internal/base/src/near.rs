@@ -1,10 +1,11 @@
 //! Names close to a mistyped one, for replies that say what may be meant.
 
-/// Up to `most` of `names` close to `typed`, the closest first and equally
-/// close ones by name, whatever the case: a name that starts
+/// Up to `most` of `names` close to `typed`, the closest first.
+///
+/// Equally close ones go by name, whatever the case: a name that starts
 /// with what was typed, then one that holds it, then one within a third of
 /// the typed length in edits, one edit at least.
-pub(crate) fn near<'a>(
+pub fn near<'a>(
     typed: &str,
     names: impl IntoIterator<Item = &'a str>,
     most: usize,
@@ -18,7 +19,7 @@ pub(crate) fn near<'a>(
 
 /// [`near`] over names paired with their lower case, made once by the
 /// caller; a name listed twice takes one place.
-pub(crate) fn near_lowered<'a, L: AsRef<str>>(
+pub fn near_lowered<'a, L: AsRef<str>>(
     typed: &str,
     names: impl IntoIterator<Item = (&'a str, L)>,
     most: usize,

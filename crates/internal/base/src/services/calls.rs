@@ -345,6 +345,7 @@ struct Described<F> {
 
 impl BaseLoad {
     /// As `Load::serve_call`.
+    #[doc(hidden)]
     pub fn serve_call<C, F>(&mut self, handler: F) -> Result<(), Off>
     where
         C: Call,
@@ -364,6 +365,7 @@ impl BaseLoad {
     }
 
     /// As `Load::caller`.
+    #[doc(hidden)]
     pub fn caller<C: Call>(&mut self) -> Result<Caller<C>, Off> {
         let spec = spec::<C>();
         let mut id = 0;
@@ -381,6 +383,7 @@ impl BaseLoad {
     }
 
     /// As `Load::serve_described_call`.
+    #[doc(hidden)]
     pub unsafe fn serve_described_call<F>(
         &mut self,
         call: &DescribedCall,
@@ -411,6 +414,7 @@ impl BaseLoad {
     }
 
     /// As `Load::described_caller`.
+    #[doc(hidden)]
     pub unsafe fn described_caller(
         &mut self,
         call: &DescribedCall,

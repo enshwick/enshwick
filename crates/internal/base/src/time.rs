@@ -113,6 +113,7 @@ static CLOCK: crate::fresh::Fresh<StepClock> = crate::fresh::Fresh::new();
 
 impl BaseLoad {
     /// As `Load::step_clock`.
+    #[doc(hidden)]
     pub fn step_clock(&mut self) -> Result<&'static StepClock, Off> {
         if let Some(clock) = CLOCK.get() {
             return Ok(clock);

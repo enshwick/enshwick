@@ -131,6 +131,7 @@ impl Mods {
     ///
     /// As `Load::mod_dir`.
     #[doc(hidden)]
+    #[doc(hidden)]
     pub fn open(load: &crate::BaseLoad) -> Result<Self, Off> {
         let dir: &'static Path = Box::leak(load.mod_dir()?.into_boxed_path());
         Ok(Self {

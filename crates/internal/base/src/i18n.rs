@@ -650,7 +650,7 @@ pub(crate) fn hand(host: Host, texts: &Texts) {
 /// Adds `texts` beneath what the loader keeps of the mod `host` names: a
 /// text the mod handed itself, before or after, stays.
 #[cfg(feature = "unstable")]
-pub(crate) fn hand_under(host: Host, texts: &Texts) {
+pub fn hand_under(host: Host, texts: &Texts) {
     keep(host, texts, false);
 }
 
@@ -700,6 +700,7 @@ pub fn add_text(
 
 impl BaseLoad {
     /// As `Load::texts`.
+    #[doc(hidden)]
     pub fn texts(&mut self) -> Result<Texts, Off> {
         let embedded = self
             .embedded_texts()
@@ -708,6 +709,7 @@ impl BaseLoad {
     }
 
     /// As `Load::texts_from`.
+    #[doc(hidden)]
     pub fn texts_from(&mut self, toml: &str) -> Result<Texts, Off> {
         let texts = Texts::parse(toml)?;
         hand(self.host(), &texts);
@@ -716,6 +718,7 @@ impl BaseLoad {
     }
 
     /// As `Load::add_texts`.
+    #[doc(hidden)]
     pub fn add_texts(&mut self, texts: &Texts, tags: &[(&str, Id)]) -> Result<(), Off> {
         let host = self.host();
         for &(key, tag) in tags {

@@ -151,7 +151,11 @@ fn block(item: &ItemImpl, text: &str, at: &Offsets<'_>) -> (String, Option<Strin
             moved.push(format!("    {}", &text[start..end]));
             continue;
         }
-        let mut lines = format!("    /// As `Load::{}`.\n", method.sig.ident);
+        // Hidden: its docs, `# Errors` and `# Safety` sections are `Load`'s.
+        let mut lines = format!(
+            "    /// As `Load::{}`.\n    #[doc(hidden)]\n",
+            method.sig.ident
+        );
         for attr in method
             .attrs
             .iter()
@@ -342,6 +346,7 @@ pub struct Kept;
 
 impl BaseLoad {
     /// As `Load::on_tick`.
+    #[doc(hidden)]
     #[must_use]
     pub fn on_tick<E: Copy, const N: usize>(
         &mut self,

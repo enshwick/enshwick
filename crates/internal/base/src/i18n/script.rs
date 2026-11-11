@@ -150,6 +150,7 @@ impl I18nFns {
 
 impl BaseLoad {
     /// As `Load::texts_script`.
+    #[doc(hidden)]
     pub fn texts_script(&mut self) -> Result<Texts, Off> {
         let path = self.mod_dir()?.join(super::TEXTS_FILE);
         let toml = std::fs::read_to_string(&path)
@@ -158,11 +159,13 @@ impl BaseLoad {
     }
 
     /// As `Load::texts_from_script`.
+    #[doc(hidden)]
     pub fn texts_from_script(&mut self, toml: &str) -> Result<Texts, Off> {
         self.texts_from(toml)
     }
 
     /// As `Load::add_texts_script`.
+    #[doc(hidden)]
     pub fn add_texts_script(
         &mut self,
         texts: &Texts,

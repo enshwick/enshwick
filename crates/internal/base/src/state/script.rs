@@ -182,6 +182,7 @@ impl StateFns {
 
 impl crate::BaseLoad {
     /// As `Load::world_store_script`.
+    #[doc(hidden)]
     pub fn world_store_script(&mut self, name: &str) -> Result<DataStore, crate::Off> {
         self.world_store(name).map(DataStore)
     }

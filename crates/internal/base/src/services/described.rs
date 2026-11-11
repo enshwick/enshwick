@@ -126,6 +126,7 @@ struct Handler<F> {
 
 impl BaseLoad {
     /// As `Load::on_described_mod_event`.
+    #[doc(hidden)]
     pub fn on_described_mod_event<F>(
         &mut self,
         event: &DescribedEvent,
@@ -151,6 +152,7 @@ impl BaseLoad {
     }
 
     /// As `Load::define_described_event`.
+    #[doc(hidden)]
     pub unsafe fn define_described_event(
         &mut self,
         event: &DescribedEvent,

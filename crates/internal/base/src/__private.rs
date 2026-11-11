@@ -448,7 +448,7 @@ pub static INITIALISED: crate::fresh::Fresh<()> = crate::fresh::Fresh::new();
 
 /// Whether the mod's `init` has returned, so a slow first read runs inside
 /// the game's frame rather than at start.
-pub(crate) fn initialised() -> bool {
+pub fn initialised() -> bool {
     INITIALISED.get().is_some()
 }
 
