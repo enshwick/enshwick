@@ -11,7 +11,6 @@
 //! server mod.
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::content::Guid;
 //! use enshwick::content::spawns::{SpawnEntry, SpawnerPick};
 //!
@@ -58,7 +57,6 @@ pub enum SpawnerPick {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::Guid;
 /// use enshwick::content::spawns::{SpawnEntry, SpawnerPick};
 ///
@@ -106,7 +104,6 @@ impl SpawnEntry {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::spawns::SpawnerChange;
 ///
 /// let crowded = SpawnerChange { max_entities_alive: Some(12), ..SpawnerChange::default() };
@@ -289,7 +286,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::Guid;
     /// use enshwick::content::spawns::{SpawnerChange, SpawnerPick};
     ///

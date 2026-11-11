@@ -12,7 +12,6 @@
 //! mask, which all mods share; the loader refuses one past its width.
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::content::{Guid, id};
 //! use enshwick::content::items::NewItem;
 //! use enshwick::content::props::NewProp;
@@ -62,7 +61,6 @@ const IN_RANGE: &str = "craftingPropsInRange";
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::Guid;
 /// use enshwick::content::props::CraftingPropSetup;
 ///
@@ -89,7 +87,6 @@ pub struct CraftingPropSetup {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::{Guid, id};
 /// use enshwick::content::items::NewItem;
 /// use enshwick::content::props::NewProp;
@@ -329,7 +326,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::{Guid, id};
     /// use enshwick::content::items::NewItem;
     /// use enshwick::content::props::{CraftingPropSetup, NewProp};

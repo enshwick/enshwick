@@ -9,7 +9,6 @@ use super::{MAX_INVENTORIES, MAX_OPS, OP_LOG, inventories};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::Entity;
 /// use enshwick::inventory::Op;
 ///
@@ -214,7 +213,6 @@ impl Op {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// let empty = enshwick::inventory::Batch::new();
 /// assert_eq!(empty.check(), Err(enshwick::inventory::BatchError::Empty));
 /// ```
@@ -246,7 +244,6 @@ crate::load::off_from!(BatchError);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::Entity;
 /// use enshwick::inventory::{Batch, Op};
 ///
@@ -347,7 +344,6 @@ impl Batch {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// let mut batch = enshwick::inventory::Batch::new();
     /// batch.push(enshwick::inventory::Op::DestroySlot(enshwick::inventory::SlotRef(0x41)));
     /// assert_eq!(batch.ops().len(), 1);
@@ -362,7 +358,6 @@ impl Batch {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::Entity;
     /// use enshwick::inventory::{Batch, Op};
     ///
@@ -383,7 +378,6 @@ impl Batch {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::Entity;
     /// use enshwick::inventory::{Batch, Op};
     ///
@@ -406,7 +400,6 @@ impl Batch {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::Entity;
     /// use enshwick::inventory::{Batch, Op};
     ///
@@ -463,7 +456,6 @@ impl Batch {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::Entity;
     /// use enshwick::inventory::{Batch, Op};
     ///

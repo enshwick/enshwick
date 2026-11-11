@@ -6,8 +6,7 @@
 //!
 //! # Examples
 //!
-//! ```rust,standalone_crate
-//! # extern crate enshwick_core as enshwick;
+//! ```
 //! use enshwick::rates::{ExperienceGroup, Rate};
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -48,8 +47,7 @@ impl ExperienceGroup {
     ///
     /// # Examples
     ///
-    /// ```rust,standalone_crate
-    /// # extern crate enshwick_core as enshwick;
+    /// ```
     /// use enshwick::game_events::ExperienceSourceType;
     /// use enshwick::rates::ExperienceGroup;
     ///
@@ -78,8 +76,7 @@ impl ExperienceGroup {
 ///
 /// # Examples
 ///
-/// ```rust,standalone_crate
-/// # extern crate enshwick_core as enshwick;
+/// ```
 /// use enshwick::rates::Rate;
 ///
 /// assert_eq!(Rate::from_id(Rate::FactoryProductionSpeed.id()), Some(Rate::FactoryProductionSpeed));
@@ -138,8 +135,7 @@ impl Rate {
     ///
     /// # Examples
     ///
-    /// ```rust,standalone_crate
-    /// # extern crate enshwick_core as enshwick;
+    /// ```
     /// use enshwick::rates::Rate;
     ///
     /// assert!(Rate::all().any(|rate| rate == Rate::FactoryProductionSpeed));
@@ -155,8 +151,7 @@ impl Rate {
     ///
     /// # Examples
     ///
-    /// ```rust,standalone_crate
-    /// # extern crate enshwick_core as enshwick;
+    /// ```
     /// use enshwick::abi::RateId;
     /// use enshwick::rates::Rate;
     ///
@@ -184,8 +179,7 @@ impl Rate {
     ///
     /// # Examples
     ///
-    /// ```rust,standalone_crate
-    /// # extern crate enshwick_core as enshwick;
+    /// ```
     /// use enshwick::abi::RateId;
     /// use enshwick::rates::Rate;
     ///
@@ -202,8 +196,7 @@ impl Rate {
     ///
     /// # Examples
     ///
-    /// ```rust,standalone_crate
-    /// # extern crate enshwick_core as enshwick;
+    /// ```
     /// use enshwick::rates::{ExperienceGroup, Rate};
     ///
     /// assert!(Rate::FactoryProductionSpeed.seen_by_clients() && Rate::SkillPoints.seen_by_clients());
@@ -222,8 +215,7 @@ impl Rate {
 ///
 /// # Examples
 ///
-/// ```rust,standalone_crate
-/// # extern crate enshwick_core as enshwick;
+/// ```
 /// use enshwick::rates::is_valid_factor;
 ///
 /// assert!(is_valid_factor(0.0) && is_valid_factor(2.5));
@@ -242,8 +234,7 @@ pub fn is_valid_factor(factor: f32) -> bool {
 ///
 /// # Examples
 ///
-/// ```rust,standalone_crate
-/// # extern crate enshwick_core as enshwick;
+/// ```
 /// use enshwick::rates::combine;
 ///
 /// assert_eq!(combine([2.0, 1.5]), 3.0);
@@ -268,8 +259,7 @@ pub fn combine(factors: impl IntoIterator<Item = f32>) -> f32 {
 ///
 /// # Examples
 ///
-/// ```rust,standalone_crate
-/// # extern crate enshwick_core as enshwick;
+/// ```
 /// use enshwick::rates::scale_whole;
 ///
 /// assert_eq!(scale_whole(3, 1.5), 5);
@@ -291,8 +281,7 @@ pub fn scale_whole(value: i64, factor: f32) -> i64 {
 ///
 /// # Examples
 ///
-/// ```rust,standalone_crate
-/// # extern crate enshwick_core as enshwick;
+/// ```
 /// use enshwick::rates::RateError;
 ///
 /// assert_eq!(RateError::OutOfRange(-1.0).to_string(), "factor -1 is not between 0 and 100");
@@ -392,8 +381,7 @@ impl RateHandle {
     ///
     /// # Examples
     ///
-    /// ```rust,standalone_crate
-    /// # extern crate enshwick_core as enshwick;
+    /// ```
     /// use enshwick::rates::{Rate, RateHandle};
     ///
     /// fn is_speed(handle: &RateHandle) -> bool {

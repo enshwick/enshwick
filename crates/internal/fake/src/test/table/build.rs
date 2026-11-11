@@ -1,8 +1,8 @@
 //! The fake's answers about the game build: symbols, systems, layouts and constants.
 
-use crate::abi::{BuildInfo, CallerFrame, Header, Level, ModHandle, Status, Str};
 use crate::test::FakeHost;
 use crate::test::table::{found, put, text, with};
+use enshwick_core::abi::{BuildInfo, CallerFrame, Header, Level, ModHandle, Status, Str};
 
 pub(crate) extern "system" fn build(out: *mut BuildInfo) {
     let host = with(FakeHost::new(), |s| s.host.clone());

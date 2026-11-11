@@ -4,8 +4,8 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{LoopWaitFn, LoopWaitSites, ModHandle, ServerWaitFn, Side, Status};
 use crate::test::table::{Registered, put, with};
+use enshwick_core::abi::{LoopWaitFn, LoopWaitSites, ModHandle, ServerWaitFn, Side, Status};
 
 pub(crate) extern "system" fn loop_wait(
     me: ModHandle,

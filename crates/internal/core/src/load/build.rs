@@ -16,7 +16,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let lookup = load.symbol("npc.lookup")?;
     ///     assert_ne!(lookup, 0);
@@ -35,7 +34,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let row = load.constant("ecs.context_row")?;
     ///     assert_eq!(row, 8);
@@ -54,7 +52,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let system = load.system("add_buildzones_server")?;
     ///     assert_ne!(system, 0);
@@ -72,7 +69,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let x = load.field_offset("keen::ecs::TriggerShape", "rangeX")?;
     ///     assert_eq!(x, 4);
@@ -90,7 +86,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let size = load.type_size("keen::ecs::TriggerShape")?;
     ///     assert!(size >= 16);

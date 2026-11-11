@@ -688,7 +688,7 @@ mod tests {
 
     #[test]
     fn the_crates_and_tools_folders_hold_the_platform_and_examples_do_not() {
-        assert!(in_platform_dir("crates/internal/loader"));
+        assert!(in_platform_dir("crates/runtime/loader"));
         assert!(in_platform_dir("tools/xtask"));
         assert!(!in_platform_dir("examples/horn"));
         assert!(!in_platform_dir(""));

@@ -491,6 +491,7 @@ version = "1.0.0-alpha.14"
 dependencies = [
  "bcdec_rs",
  "bytemuck",
+ "enshwick",
  "enshwick-abi",
  "enshwick-base",
  "enshwick-macros",
@@ -505,7 +506,6 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
- "strsim",
  "thiserror",
  "toml 1.2.1+spec-1.1.0",
  "zune-core",
@@ -563,6 +563,7 @@ name = "enshwick-fake"
 version = "1.0.0-alpha.14"
 dependencies = [
  "bytemuck",
+ "enshwick",
  "enshwick-core",
  "enshwick-macros",
  "postcard",
@@ -577,6 +578,7 @@ version = "1.0.0-alpha.14"
 dependencies = [
  "criterion",
  "enshwick",
+ "enshwick-base",
  "enshwick-core",
  "iced-x86",
  "insta",
@@ -602,6 +604,7 @@ dependencies = [
  "criterion",
  "enshwick",
  "enshwick-abi",
+ "enshwick-base",
  "enshwick-core",
  "enshwick-gamedata",
  "enshwick-luau",
@@ -615,7 +618,6 @@ dependencies = [
  "semver",
  "serde",
  "sha2",
- "strsim",
  "thiserror",
  "toml 1.2.1+spec-1.1.0",
  "toml_edit",

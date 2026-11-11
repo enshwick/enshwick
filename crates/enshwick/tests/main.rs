@@ -92,6 +92,8 @@ mod input_hint;
 mod interaction_filter;
 #[cfg(feature = "unstable")]
 mod interaction_targets;
+#[cfg(feature = "unstable")]
+mod internals;
 mod inventory;
 #[cfg(feature = "unstable")]
 mod item_arguments;

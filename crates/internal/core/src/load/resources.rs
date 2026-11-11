@@ -19,7 +19,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::{Id, id};
     /// use enshwick::resources::Value;
     ///

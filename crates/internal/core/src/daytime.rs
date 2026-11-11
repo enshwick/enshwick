@@ -15,7 +15,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::events::WorldLoaded;
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -45,7 +44,6 @@ const HOUR: f64 = 3_600_000_000_000.0;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// fn report(clock: &enshwick::daytime::Clock) -> String {
 ///     match clock.now() {
 ///         Some(now) if now.is_day => format!("{:.1} h, day", now.hours),
@@ -171,7 +169,6 @@ impl Clock {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::events::WorldLoaded;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {

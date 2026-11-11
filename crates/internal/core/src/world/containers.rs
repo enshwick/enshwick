@@ -15,7 +15,6 @@ use crate::world::{ComponentType, Placed, World};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::world::ContainerKinds;
 ///
 /// let kinds = ContainerKinds::PLACED | ContainerKinds::CHARACTERS;

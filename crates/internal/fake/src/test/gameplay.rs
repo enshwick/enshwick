@@ -1,21 +1,21 @@
 //! Gameplay answers: damage, knowledge, buffs, altars, survivors, stats and checks.
 
-use crate::Entity;
-use crate::abi::AltarInfo;
-use crate::abi::AltarLimit;
-use crate::abi::AltarZone;
-use crate::abi::BedCheck;
-use crate::abi::Bounds;
-use crate::abi::BuildingZoneCheck;
-use crate::abi::Comfort;
-use crate::abi::ExperiencePass;
-use crate::abi::ExperienceRow;
-use crate::abi::Header;
-use crate::abi::Interaction;
-use crate::abi::KnowledgeId;
-use crate::abi::SkillCheck;
-use crate::abi::Summon;
-use crate::abi::SurvivorLookup;
+use enshwick_core::Entity;
+use enshwick_core::abi::AltarInfo;
+use enshwick_core::abi::AltarLimit;
+use enshwick_core::abi::AltarZone;
+use enshwick_core::abi::BedCheck;
+use enshwick_core::abi::Bounds;
+use enshwick_core::abi::BuildingZoneCheck;
+use enshwick_core::abi::Comfort;
+use enshwick_core::abi::ExperiencePass;
+use enshwick_core::abi::ExperienceRow;
+use enshwick_core::abi::Header;
+use enshwick_core::abi::Interaction;
+use enshwick_core::abi::KnowledgeId;
+use enshwick_core::abi::SkillCheck;
+use enshwick_core::abi::Summon;
+use enshwick_core::abi::SurvivorLookup;
 
 use super::FakeHost;
 use super::Installed;
@@ -31,7 +31,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().without_base_limit().install();
     /// # let _ = loader;
     /// ```
@@ -49,7 +48,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().without_bases_past_16().install();
     /// # let _ = loader;
     /// ```
@@ -67,12 +65,11 @@ impl FakeHost {
 impl Installed {
     /// Makes `altars` the altars of the world, as the loader lists them to a
     /// mod that opened altars, and raises
-    /// [`AltarsChanged`](crate::events::AltarsChanged) as the loader does.
+    /// [`AltarsChanged`](enshwick_core::events::AltarsChanged) as the loader does.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::AltarInfo;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -82,7 +79,7 @@ impl Installed {
     /// ```
     pub fn set_altars(&self, altars: &[AltarInfo]) {
         table::with((), |s| s.altars = altars.to_vec());
-        let _handled = self.raise::<crate::events::AltarsChanged>(&());
+        let _handled = self.raise::<enshwick_core::events::AltarsChanged>(&());
     }
 
     /// Runs the mod's damage filters on `check` as the loader does before
@@ -91,7 +88,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{DamageCheck, Header};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -107,7 +103,10 @@ impl Installed {
     /// assert_eq!(loader.damage(fall), fall, "no filters, no change");
     /// ```
     #[must_use]
-    pub fn damage(&self, mut check: crate::abi::DamageCheck) -> crate::abi::DamageCheck {
+    pub fn damage(
+        &self,
+        mut check: enshwick_core::abi::DamageCheck,
+    ) -> enshwick_core::abi::DamageCheck {
         // One filter at a time, outside the lock, without copying the list:
         // a bench of a filter counts its own allocations alone.
         let mut at = 0;
@@ -127,7 +126,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{Header, KnowledgeInfo, KnowledgeInput};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -145,7 +143,7 @@ impl Installed {
     /// assert!(!loader.knowledge_input(quest), "no filters, the guard's verdict");
     /// ```
     #[must_use]
-    pub fn knowledge_input(&self, mut request: crate::abi::KnowledgeInput) -> bool {
+    pub fn knowledge_input(&self, mut request: enshwick_core::abi::KnowledgeInput) -> bool {
         let filters = table::with(Vec::new(), |s| s.knowledge_input_filters.clone());
         for filter in filters {
             // SAFETY: the filter the mod registered, with its pointer.
@@ -163,7 +161,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{BuffTypeInfo, Header};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -171,7 +168,7 @@ impl Installed {
     /// loader.set_buffs(&[ty], &[enshwick::Entity(2)]);
     /// assert_eq!(loader.buffs_of(enshwick::Entity(2)), Some(Vec::new()));
     /// ```
-    pub fn set_buffs(&self, types: &[crate::abi::BuffTypeInfo], holders: &[Entity]) {
+    pub fn set_buffs(&self, types: &[enshwick_core::abi::BuffTypeInfo], holders: &[Entity]) {
         table::with((), |s| {
             s.buff_types = types.to_vec();
             s.buffs = holders.iter().map(|&e| (e.0, Vec::new())).collect();
@@ -185,7 +182,7 @@ impl Installed {
     ///
     /// See [`Installed::set_buffs`].
     #[must_use]
-    pub fn buffs_of(&self, entity: Entity) -> Option<Vec<crate::abi::ActiveBuff>> {
+    pub fn buffs_of(&self, entity: Entity) -> Option<Vec<enshwick_core::abi::ActiveBuff>> {
         table::with(None, |s| s.buffs.get(&entity.0).cloned())
     }
 
@@ -195,7 +192,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{Header, KnowledgeInfo};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -205,7 +201,7 @@ impl Installed {
     /// ```
     pub fn set_knowledge(
         &self,
-        values: &[(Option<Entity>, crate::abi::KnowledgeInfo)],
+        values: &[(Option<Entity>, enshwick_core::abi::KnowledgeInfo)],
         quests: &[KnowledgeId],
     ) {
         table::with((), |s| {
@@ -222,7 +218,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::content::knowledge::GameQuery;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -231,7 +226,11 @@ impl Installed {
     #[cfg(feature = "typed")]
     pub fn set_game_queries(
         &self,
-        answers: &[(Option<Entity>, crate::content::knowledge::GameQuery, bool)],
+        answers: &[(
+            Option<Entity>,
+            enshwick_core::content::knowledge::GameQuery,
+            bool,
+        )],
     ) {
         let answers = answers
             .iter()
@@ -255,7 +254,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.revokes().is_empty());
     /// ```
@@ -270,12 +268,11 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.account_changes().is_empty());
     /// ```
     #[must_use]
-    pub fn account_changes(&self) -> Vec<(crate::PlayerKey, KnowledgeId, u32, u32, bool)> {
+    pub fn account_changes(&self) -> Vec<(enshwick_core::PlayerKey, KnowledgeId, u32, u32, bool)> {
         table::with(Vec::new(), |s| s.account_changes.clone())
     }
 
@@ -284,7 +281,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert_eq!(loader.altars_opened(), (false, false));
     /// ```
@@ -301,7 +297,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert_eq!(loader.altar_zone(enshwick::Entity(4096), 2, 60), (0, 60));
     /// ```
@@ -333,7 +328,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert_eq!(loader.zone_resizes(), 0);
     /// ```
@@ -348,7 +342,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::Bounds;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -373,14 +366,13 @@ impl Installed {
     /// Asks the mod's survivor lookup as the game would: survivor
     /// `survivor`, the game's answer `vanilla`, `purpose` one of the
     /// [`SurvivorLookup`] constants with its `entity` and `cell`; `beds`
-    /// answers [`Lookup::bed_of`](crate::survivors::Lookup::bed_of). The
-    /// mod's answer, [`Answer::Vanilla`](crate::survivors::Answer::Vanilla)
+    /// answers [`Lookup::bed_of`](enshwick_core::survivors::Lookup::bed_of). The
+    /// mod's answer, [`Answer::Vanilla`](enshwick_core::survivors::Answer::Vanilla)
     /// without a lookup.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::SurvivorLookup;
     /// use enshwick::survivors::{Answer, NpcId};
     ///
@@ -392,13 +384,13 @@ impl Installed {
     #[must_use]
     pub fn survivor_lookup(
         &self,
-        survivor: crate::survivors::NpcId,
+        survivor: enshwick_core::survivors::NpcId,
         vanilla: Option<Entity>,
         purpose: u32,
         entity: Option<Entity>,
         cell: [i64; 3],
         beds: &[(Entity, Entity)],
-    ) -> crate::survivors::Answer {
+    ) -> enshwick_core::survivors::Answer {
         /// # Safety
         ///
         /// - `token` points at the `beds` slice of a running
@@ -411,7 +403,7 @@ impl Installed {
                 .find(|(e, _)| *e == entity)
                 .map_or(Entity::NONE, |(_, bed)| *bed)
         }
-        use crate::survivors::Answer;
+        use enshwick_core::survivors::Answer;
         let Some(registered) = table::with(None, |s| s.survivor_lookup) else {
             return Answer::Vanilla;
         };
@@ -443,7 +435,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{BedCheck, Header};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -466,7 +457,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{Header, Summon};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -505,7 +495,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{Header, Summon};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -538,26 +527,24 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::Entity;
     /// use enshwick::inventory::ItemInstance;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
     /// loader.wear(Entity(2), ItemInstance { pide: Entity(900), item: enshwick::ItemId::new(0x5e01) });
     /// ```
-    pub fn wear(&self, entity: Entity, item: crate::inventory::ItemInstance) {
+    pub fn wear(&self, entity: Entity, item: enshwick_core::inventory::ItemInstance) {
         table::with((), |s| s.stats.worn.entry(entity.0).or_default().push(item));
     }
 
     /// Works out the stat values of every watched entity and runs the mod's
-    /// [`on_stats_changed`](crate::Load::on_stats_changed) handlers for each
+    /// [`on_stats_changed`](enshwick_core::Load::on_stats_changed) handlers for each
     /// that changed since the last call, as the loader does after a step;
     /// how many changes it raised.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert_eq!(loader.settle_stats(), 0);
     /// ```
@@ -572,7 +559,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.stat_modifiers().is_empty());
     /// ```
@@ -586,12 +572,11 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.summon_items().is_empty());
     /// ```
     #[must_use]
-    pub fn summon_items(&self) -> Vec<(crate::ItemId, crate::survivors::NpcId)> {
+    pub fn summon_items(&self) -> Vec<(enshwick_core::ItemId, enshwick_core::survivors::NpcId)> {
         table::with(Vec::new(), |s| s.summon_items.clone())
     }
 
@@ -601,14 +586,13 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert_eq!(loader.survivor_status(enshwick::survivors::NpcId::new(7), &[1, 3]), None);
     /// ```
     #[must_use]
     pub fn survivor_status(
         &self,
-        survivor: crate::survivors::NpcId,
+        survivor: enshwick_core::survivors::NpcId,
         statuses: &[u8],
     ) -> Option<u8> {
         let registered = table::with(None, |s| s.survivor_status)?;
@@ -616,7 +600,7 @@ impl Installed {
         let answer = registered.run(|callback, user| unsafe {
             callback(survivor, statuses.as_ptr(), statuses.len(), user)
         });
-        (answer & crate::abi::SURVIVOR_STATUS_SET != 0).then(|| answer.to_le_bytes()[0])
+        (answer & enshwick_core::abi::SURVIVOR_STATUS_SET != 0).then(|| answer.to_le_bytes()[0])
     }
 
     /// Asks the mod's interaction filters about `call` as the loader would;
@@ -625,7 +609,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{Header, Interaction};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -657,7 +640,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{Header, SkillCheck};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -685,7 +667,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{Comfort, Header};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -700,7 +681,9 @@ impl Installed {
             // SAFETY: a valid registration; `user` is the mod's pointer.
             filter.run(|callback, user| unsafe { callback(&raw const call, user) })
         });
-        let factor = self.rate_of(crate::abi::RateId::COMFORT).unwrap_or(1.0);
+        let factor = self
+            .rate_of(enshwick_core::abi::RateId::COMFORT)
+            .unwrap_or(1.0);
         let scaled = enshwick_core::__fake::scale_whole(i64::from(filtered), factor);
         i32::try_from(scaled).unwrap_or(if scaled < 0 { i32::MIN } else { i32::MAX })
     }
@@ -711,7 +694,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::Entity;
     /// use enshwick::progress::Experience;
     ///
@@ -722,7 +704,7 @@ impl Installed {
     /// ```
     pub fn experience(
         &self,
-        rows: &mut [crate::progress::Experience],
+        rows: &mut [enshwick_core::progress::Experience],
         cap: u32,
         need: fn(u32) -> u32,
     ) {
@@ -759,7 +741,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert_eq!(loader.altar_limit(3, 6), 6);
     /// ```
@@ -789,7 +770,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert_eq!(loader.requested_base_limits(), None);
     /// ```
@@ -803,7 +783,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// loader.set_grouping(17, 16);
     /// ```
@@ -817,7 +796,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{CraftCheck, Header};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -825,7 +803,7 @@ impl Installed {
     /// assert!(loader.craft(&craft));
     /// ```
     #[must_use]
-    pub fn craft(&self, call: &crate::abi::CraftCheck) -> bool {
+    pub fn craft(&self, call: &enshwick_core::abi::CraftCheck) -> bool {
         let filters = table::with(Vec::new(), |s| s.craft_filters.clone());
         filters.iter().all(|filter| {
             // SAFETY: a filter the mod registered with its own pointer.
@@ -845,7 +823,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{BuildCheck, Header};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -858,10 +835,10 @@ impl Installed {
     /// };
     /// assert_eq!(loader.build(&wall), Ok(()));
     /// ```
-    pub fn build(&self, call: &crate::abi::BuildCheck) -> Result<(), Option<String>> {
+    pub fn build(&self, call: &enshwick_core::abi::BuildCheck) -> Result<(), Option<String>> {
         let filters = table::with(Vec::new(), |s| s.build_filters.clone());
         for filter in filters {
-            let mut reason = crate::abi::Str::new("");
+            let mut reason = enshwick_core::abi::Str::new("");
             let mut asked = *call;
             asked.reason = &raw mut reason;
             // SAFETY: a filter the mod registered with its own pointer; `asked`

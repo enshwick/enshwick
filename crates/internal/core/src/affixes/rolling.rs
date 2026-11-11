@@ -41,7 +41,6 @@ impl Affixes {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::affixes::RollRules;
     ///
     /// fn reroll(affixes: &enshwick::affixes::Affixes, item: enshwick::inventory::ItemInstance) {
@@ -124,7 +123,6 @@ impl AffixLoot {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::affixes::{AffixLoot, ItemRarity};
     /// use enshwick::loot::Source;
     ///
@@ -143,7 +141,6 @@ impl AffixLoot {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::affixes::{AffixCraft, RollRules};
 ///
 /// let rule = AffixCraft::new(0.25, RollRules::new(1, 2));
@@ -246,7 +243,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::affixes::{AffixCraft, RollRules};
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {

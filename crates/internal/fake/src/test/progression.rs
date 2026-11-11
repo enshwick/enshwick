@@ -1,8 +1,8 @@
 //! The fake's progression: its knowledge reflected, with a small vanilla
 //! knowledge of the world and the players, which mod knowledge joins.
 
-use crate::content::Guid;
-use crate::resources::{Constant, Field, Kind, Registry, Type, Value, fnv1a32};
+use enshwick_core::content::Guid;
+use enshwick_core::resources::{Constant, Field, Kind, Registry, Type, Value, fnv1a32};
 
 use super::FakeHost;
 
@@ -55,7 +55,7 @@ pub const VANILLA_QUEST: u32 = 0x0000_0500;
 /// The text tag of the lore category the vanilla journal's one page is
 /// listed under, the game's "General": the one category a mod's page may
 /// take here.
-pub const LORE_CATEGORY: Guid = crate::content::journal::lore_category::GENERAL;
+pub const LORE_CATEGORY: Guid = enshwick_core::content::journal::lore_category::GENERAL;
 /// The item [`VANILLA_QUEST`] pays.
 pub const QUEST_ITEM: Guid = Guid::parse("c0ffee00-0000-4000-8000-0000000a0e57");
 /// The document the fake's journal entries name.
@@ -735,7 +735,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::content::EngineFacts;
     ///
     /// let host = enshwick::test::FakeHost::new().progression();

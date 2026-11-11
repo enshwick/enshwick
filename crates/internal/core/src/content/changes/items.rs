@@ -18,7 +18,6 @@ use super::{Change, Field, Value, ValueError, field_and_value};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::changes::{Field, ItemTraits, Items};
 ///
 /// let wood = ItemTraits { max_stack: 20, category: 9, flags: 0, slots: None, backpack_slots: None };
@@ -116,7 +115,6 @@ impl Field {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::changes::Field;
     ///
     /// assert!(Field::MaxStackSize.selectable());
@@ -133,7 +131,6 @@ impl Field {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::changes::{Field, Items, ItemsChange, Value};
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -176,7 +173,6 @@ impl ItemsChange {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::changes::{Field, Items, ItemsChange, Value};
     ///
     /// let output = ItemsChange::new(Items::Stackable, Field::Output, Value::Set(2.0));
@@ -197,7 +193,6 @@ impl ItemsChange {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::Guid;
     /// use enshwick::content::changes::{Field, Items, ItemsChange, Value};
     ///
@@ -220,7 +215,6 @@ impl ItemsChange {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::abi::{ChangeOp, DataChange, DataField, DataSelect, Header, Str};
     /// use enshwick::content::changes::{Items, ItemsChange, Value};
     ///

@@ -13,7 +13,7 @@ on:
       - "crates/enshwick/src/lib.rs"
       - "crates/internal/abi/src/abi.rs"
       - "crates/enshwick-gamedata/reports/**"
-      - "crates/internal/loader/src/errors.toml"
+      - "crates/runtime/loader/src/errors.toml"
       - .github/workflows/docs.yml
 
 permissions: {}

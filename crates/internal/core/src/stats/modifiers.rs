@@ -37,7 +37,6 @@ impl Op {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::abi::StatModifierData;
     /// use enshwick::stats::Op;
     ///
@@ -81,7 +80,6 @@ impl Op {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::stats::{Op, StatDef, aggregate};
 ///
 /// let health = StatDef::additive().range(-100.0, 1000.0);
@@ -125,7 +123,6 @@ pub fn aggregate(def: &StatDef, modifiers: impl IntoIterator<Item = (Op, f32)>) 
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::stats::{Modifier, Op};
 ///
 /// fn more_health(health: enshwick::stats::Stat) -> Modifier {
@@ -167,7 +164,6 @@ impl Modifier {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::stats::{Modifier, Op};
     ///
     /// fn stored(stat: enshwick::stats::Stat) -> bool {
@@ -207,7 +203,6 @@ pub struct ItemModifier {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::stats::{ItemModifier, ItemStats, Op, key_of};
 ///
 /// let ring = ItemStats {
@@ -251,7 +246,6 @@ pub enum Lasting {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::stats::ModifyError;
 ///
 /// assert_eq!(ModifyError::NotServer.to_string(), "only the server keeps modifiers");
@@ -278,7 +272,6 @@ crate::load::off_from!(ModifyError);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::stats::Origin;
 ///
 /// fn worn(origin: Origin) -> bool {

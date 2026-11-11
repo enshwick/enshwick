@@ -37,7 +37,6 @@ pub trait RecipeChanges {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::Guid;
 /// use enshwick::content::changes::Field;
 /// use enshwick::content::recipes::{RecipeChanges, RecipeLayout, change_recipes_in};
@@ -257,7 +256,6 @@ fn change_time(
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::recipes::{RecipeLayout, recipe_workshops};
 ///
 /// fn stations(layout: &RecipeLayout, registry: &[u8]) -> usize {

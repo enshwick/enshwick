@@ -10,7 +10,6 @@
 //! attacks stay the game's: the client has to have them.
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::content::{Guid, id};
 //! use enshwick::content::enemies::NewEnemy;
 //! use enshwick::typed::FactionType;
@@ -81,7 +80,6 @@ const MAX_RANGE: &str = "maxRange";
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::id;
 /// use enshwick::content::enemies::ArsenalId;
 ///
@@ -217,7 +215,6 @@ impl NewEnemy {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::Guid;
 /// use enshwick::content::enemies::{ArsenalChange, AttackChange};
 ///
@@ -477,7 +474,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::{Guid, id};
     /// use enshwick::content::enemies::NewEnemy;
     ///
@@ -515,7 +511,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::{Guid, id};
     /// use enshwick::content::enemies::{ArsenalChange, NewArsenal};
     ///
@@ -549,7 +544,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::Guid;
     /// use enshwick::content::enemies::{ArsenalChange, AttackChange};
     ///

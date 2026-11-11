@@ -1,6 +1,6 @@
 //! The world's save, as the loader reports it and mods hold it.
 
-use crate::abi::SaveInfo;
+use enshwick_core::abi::SaveInfo;
 
 use super::Installed;
 use super::table;
@@ -16,7 +16,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{Header, SaveInfo};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -34,7 +33,7 @@ impl Installed {
     }
 
     /// Shuts the hosted game down as the loader does: the mod's hold on saves
-    /// lets go, [`ShutdownStarted`](crate::events::ShutdownStarted) reaches
+    /// lets go, [`ShutdownStarted`](enshwick_core::events::ShutdownStarted) reaches
     /// the mod, and the final save runs unless the mod held saves again while
     /// it heard that event; whether it ran. A hold asked for after the event
     /// is not taken.
@@ -42,7 +41,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().world().install();
     /// assert!(loader.shut_down(), "nothing holds the final save");
     /// ```
@@ -53,8 +51,12 @@ impl Installed {
             s.save.shut = false;
         });
         // SAFETY: the event carries no data.
-        let _heard =
-            unsafe { self.raise_raw(crate::abi::Event::SHUTDOWN_STARTED, core::ptr::null()) };
+        let _heard = unsafe {
+            self.raise_raw(
+                enshwick_core::abi::Event::SHUTDOWN_STARTED,
+                core::ptr::null(),
+            )
+        };
         table::with(false, |s| {
             s.save.shut = true;
             !s.save.held
@@ -66,7 +68,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(!loader.saves_held());
     /// ```
@@ -81,14 +82,17 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.unsaved().is_empty());
     /// ```
     #[must_use]
-    pub fn unsaved(&self) -> Vec<crate::Entity> {
+    pub fn unsaved(&self) -> Vec<enshwick_core::Entity> {
         table::with(Vec::new(), |s| {
-            s.save.unsaved.iter().map(|&e| crate::Entity(e)).collect()
+            s.save
+                .unsaved
+                .iter()
+                .map(|&e| enshwick_core::Entity(e))
+                .collect()
         })
     }
 }

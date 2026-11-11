@@ -1,0 +1,16 @@
+id: one-lock-policy
+language: rust
+severity: error
+message: take a lock through `enshwick_base`'s `Relock` traits, not a copy of them
+note: >-
+  `enshwick-base` holds the lock poison policy every crate shares: the state
+  a panicking thread left is kept, the poison cleared and the place reported,
+  to a mod's log or to the sink a crate with a log of its own names once. A
+  second `Relock`, `RelockRw` or `RelockWait` trait drifts from it.
+ignores:
+  - "crates/internal/base/**"
+rule:
+  kind: trait_item
+  has:
+    field: name
+    regex: '^Relock(Rw|Wait)?$'

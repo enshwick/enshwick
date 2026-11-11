@@ -1,8 +1,8 @@
 //! The fake's `ecs::EntityTagContainer` reflected: a component whose one
 //! field, a `BlobArray`, keeps its data in the set-up data after it.
 
-use crate::content::Guid;
-use crate::resources::{Field, Kind, Type, fnv1a32};
+use enshwick_core::content::Guid;
+use enshwick_core::resources::{Field, Kind, Type, fnv1a32};
 
 use super::FakeHost;
 
@@ -22,7 +22,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::resources::fnv1a32;
     /// use enshwick::test::{FakeHost, TAG_CONTAINER};
     ///
@@ -69,7 +68,7 @@ impl FakeHost {
     ///
     /// See [`FakeHost::entity_tags`].
     #[must_use]
-    pub fn tagged(self, entity: crate::Entity, count: u32, held: &[Guid]) -> Self {
+    pub fn tagged(self, entity: enshwick_core::Entity, count: u32, held: &[Guid]) -> Self {
         let mut bytes = [8i32.to_le_bytes(), count.to_le_bytes()].concat();
         for tag in held {
             bytes.extend_from_slice(&tag.0);

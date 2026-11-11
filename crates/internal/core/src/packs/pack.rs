@@ -46,7 +46,6 @@ pub(super) struct PackItem {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::packs::{Pack, PackFiles};
 ///
 /// let items = "[[item]]\nid = \"tonic\"\nlike = \"6943053a-32c1-4718-ae22-e61427ddf54d\"\non = { consume = \"drink\" }\n";
@@ -159,7 +158,6 @@ impl Pack {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::packs::{Pack, PackFiles};
     ///
     /// let files = PackFiles::new().with("items.toml", "[[item]]\nid = \"torch\"\nlike = \"Tool_Torch01\"\n");
@@ -337,7 +335,6 @@ impl Pack {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::packs::{Pack, PackFiles};
     ///
     /// let files = PackFiles::new().with("loot.toml", r#"
@@ -364,7 +361,6 @@ impl Pack {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::packs::{Pack, PackFiles};
     ///
     /// let files = PackFiles::new().with("items.toml", "[[item]]\nid = \"torch\"\nlike = \"00000000-0000-0000-0000-000000000001\"\n");
@@ -384,7 +380,6 @@ impl Pack {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::changes::{Field, Value};
     /// use enshwick::packs::{Pack, PackFiles};
     ///
@@ -410,7 +405,6 @@ impl Pack {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::changes::Items;
     /// use enshwick::packs::{Pack, PackFiles};
     ///
@@ -432,7 +426,6 @@ impl Pack {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::changes::Recipes;
     /// use enshwick::content::recipes::RecipeKind;
     /// use enshwick::packs::{Pack, PackFiles};
@@ -456,7 +449,6 @@ impl Pack {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::packs::{Pack, PackFiles};
     ///
     /// let loot = PackFiles::new().with("loot.toml", r#"
@@ -489,7 +481,6 @@ impl Pack {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::packs::{Pack, PackFiles};
     ///
     /// let files = PackFiles::new();

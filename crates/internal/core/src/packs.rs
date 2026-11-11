@@ -18,7 +18,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::packs::{Pack, PackFiles};
 //!
 //! let files = PackFiles::new()
@@ -105,7 +104,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::packs::{Pack, PackFiles};
     ///
     /// const ITEMS: &str = r#"
@@ -348,31 +346,7 @@ pub fn declared_settings(load: &Load<'_>) -> Option<(crate::config::TableConfig,
         .map(|(_, declared)| declared.clone())
 }
 
-/// The names of `names` closest to `wanted` within two edits, ignoring
-/// case: the ones a misspelt name is near.
-fn near<'a>(names: impl IntoIterator<Item = &'a str>, wanted: &str) -> Vec<&'a str> {
-    let wanted = wanted.to_lowercase();
-    let edits: Vec<(&str, usize)> = names
-        .into_iter()
-        .map(|name| (name, strsim::levenshtein(&name.to_lowercase(), &wanted)))
-        .filter(|&(_, edits)| edits <= 2)
-        .collect();
-    let closest = edits.iter().map(|&(_, edits)| edits).min();
-    edits
-        .into_iter()
-        .filter(|&(_, edits)| Some(edits) == closest)
-        .map(|(name, _)| name)
-        .collect()
-}
-
-/// `; near: ` and `near`, or nothing when it is empty.
-fn near_names(near: &[&str]) -> String {
-    if near.is_empty() {
-        String::new()
-    } else {
-        format!("; near: {}", near.join(", "))
-    }
-}
+use crate::near::NEAR;
 
 mod changes;
 mod entries;

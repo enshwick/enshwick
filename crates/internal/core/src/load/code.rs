@@ -24,7 +24,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// enshwick::detour! {
     ///     static UPGRADE: unsafe extern "system" fn(ctx: *mut u64) = upgrade;
     /// }
@@ -54,7 +53,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let code = load.code()?;
     ///     enshwick::info!("code at {:p}, {} bytes", code.as_ptr(), code.len());
@@ -76,7 +74,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let site = load.find_code("B9 00 02 00 00 66 3B C1 0F 84 ?? ?? ?? ??")?;
     ///     assert_ne!(site, 0);
@@ -111,7 +108,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     // `cmp eax, 8; jb` becomes `cmp eax, 16; jb`.
     ///     let site = load.find_code("83 F8 08 72 ??")?;
@@ -156,7 +152,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     // An instruction inside a function, pinned per build in the mod's rows.
     ///     let site = load.symbol("building.range_check")?;

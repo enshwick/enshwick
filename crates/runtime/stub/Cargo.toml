@@ -1,0 +1,37 @@
+[package]
+name = "enshwick-loader-stub"
+version = "1.0.0-alpha.14"
+description = "Runtime of Enshwick, shipped in enshwick.zip, not a dependency of a mod: the POWRPROF.dll proxy that starts the Enshwick loader inside Enshrouded"
+keywords = ["enshrouded", "modding", "loader", "proxy"]
+categories = ["game-development"]
+readme = "README.md"
+build = "build.rs"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+name = "powrprof"
+crate-type = ["cdylib"]
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_SystemInformation",
+    "Win32_System_SystemServices",
+    "Win32_System_Threading",
+] }
+
+[package.metadata.xtask]
+# Builds only for Windows: off Windows, `cargo xtask check` lints it through
+# cargo xwin and skips its tests.
+windows-only = true
+
+[lints]
+workspace = true

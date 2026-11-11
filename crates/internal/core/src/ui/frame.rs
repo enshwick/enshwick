@@ -74,7 +74,6 @@ impl Frame<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::ui::HudScreenType;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -111,7 +110,6 @@ impl Frame<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.on_frame(|frame| {
     ///         if let Some(prompt) = frame.prompt() {
@@ -144,7 +142,6 @@ impl Frame<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.on_frame(|frame| {
     ///         if let Some(host) = frame.screen_host() {
@@ -169,7 +166,6 @@ impl Frame<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::id;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -198,7 +194,6 @@ impl Frame<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.on_frame(|frame| {
     ///         if let Some([x, _, z]) = frame.screen_host_position() {
@@ -374,7 +369,6 @@ impl Frame<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::ui::Frame;
     ///
     /// fn loading(frame: &mut Frame<'_>, done: u32, total: u32) {
@@ -447,7 +441,6 @@ impl Frame<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::typed::input_mapping::runtime::GameplayAction;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {

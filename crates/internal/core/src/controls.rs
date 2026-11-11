@@ -18,7 +18,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::controls::{Control, GameAction, Key, Phase};
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -107,7 +106,6 @@ macro_rules! game_actions {
         /// # Examples
         ///
         /// ```
-        /// # extern crate enshwick_core as enshwick;
         /// use enshwick::controls::GameAction;
         ///
         /// assert_eq!(GameAction::ContextualAction.name(), "ContextualAction");
@@ -125,7 +123,6 @@ macro_rules! game_actions {
             /// # Examples
             ///
             /// ```
-            /// # extern crate enshwick_core as enshwick;
             /// use enshwick::controls::GameAction;
             ///
             /// assert!(GameAction::ALL.contains(&GameAction::Jump));
@@ -315,7 +312,6 @@ impl Control {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::{Action, Outcome};
     /// use enshwick::controls::{Control, Key};
     /// use enshwick::i18n::Texts;
@@ -349,7 +345,6 @@ impl Control {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::controls::{Control, Key};
     ///
     /// let horn = Control::new("horn", "Horn").key(Key::parse("H")?).second(Key::parse("Mouse4")?);
@@ -381,7 +376,6 @@ impl Control {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::controls::{Control, Phase};
     ///
     /// let throttle = Control::new("throttle", "Throttle").fires(&[Phase::Press, Phase::Release]);
@@ -400,7 +394,6 @@ impl Control {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::controls::{Control, Phase};
     ///
     /// let charge = Control::new("charge", "Charge")

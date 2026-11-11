@@ -33,7 +33,6 @@ pub mod stations {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::workshops::stations;
 ///
 /// let workbench = stations::WORKBENCH;
@@ -52,7 +51,6 @@ pub struct Station {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::Guid;
 /// use enshwick::content::workshops::WorkshopId;
 ///
@@ -108,7 +106,6 @@ impl WorkshopId {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::{Id, id};
 /// use enshwick::content::workshops::{NewWorkshop, stations};
 ///
@@ -300,7 +297,6 @@ impl WorkshopLayout {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let layout = enshwick::content::workshops::WorkshopLayout::resolve(load)?;
     ///     assert_eq!(layout.entry, 56);
@@ -344,7 +340,6 @@ const REFERENCE: usize = 16;
 /// # Examples
 ///
 /// ```
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::content::Guid;
 /// use enshwick::content::workshops::{WorkshopId, at_workshop};
 ///
@@ -352,7 +347,6 @@ const REFERENCE: usize = 16;
 /// let changes = at_workshop(&host, WorkshopId::new(Guid::named("you.mod:bench.workshop")))?;
 /// assert_eq!(changes[0].component(), "crafting");
 /// # Ok::<(), enshwick::Off>(())
-/// # }
 /// ```
 pub fn at_workshop(
     facts: &(impl EngineFacts + ?Sized),
@@ -398,7 +392,6 @@ pub(crate) fn put(bytes: &mut [u8], at: usize, data: &[u8]) -> bool {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::items::ItemLayout;
 /// use enshwick::content::types;
 /// use enshwick::content::workshops::{NewWorkshop, WorkshopLayout, clone_station};
@@ -440,7 +433,6 @@ pub fn clone_station(
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::types;
 /// use enshwick::content::workshops::{
 ///     NewWorkshop, WORKSHOP_REGISTRY, WorkshopLayout, list_workshop,
@@ -532,7 +524,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::{Id, id};
     /// use enshwick::content::workshops::{NewWorkshop, stations};
     ///

@@ -9,8 +9,9 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
+use crate::__internal::refresh_levels;
 use crate::Host;
-use crate::abi::{HostApi, Level, ModHandle};
+use crate::abi::{Level, ModHandle};
 
 pub use crate::engine_ids::ALL as ENGINE_IDS;
 /// The ids the API asks the loader for engine facts by, for the loader and
@@ -455,7 +456,7 @@ pub fn initialised() -> bool {
 /// The kept word for a data pack's `level` read in this mod life: the life
 /// above the level's byte, so a word of an earlier life, or 0, reads as
 /// unread.
-fn tagged_level(level: Level) -> u64 {
+pub(crate) fn tagged_level(level: Level) -> u64 {
     crate::fresh::life() << 8 | u64::from(level.0)
 }
 
@@ -468,7 +469,7 @@ fn kept_level(word: u64) -> Option<u8> {
 /// handles from `2^k - 1` on and is made at the first line of a pack in it,
 /// so a line finds its pack's word with one bit scan, no lock and no hash.
 /// A handle past the last chunk keeps no word and asks the loader each time.
-struct PackLevels([OnceLock<Box<[AtomicU64]>>; PACK_CHUNKS]);
+pub(crate) struct PackLevels([OnceLock<Box<[AtomicU64]>>; PACK_CHUNKS]);
 
 /// The chunks [`PackLevels`] makes at most: about a million handles, far
 /// past the mods a game loads, and at most 8 MiB, so no handle value makes
@@ -501,7 +502,7 @@ impl PackLevels {
     }
 
     /// Every word made so far, with its handle.
-    fn made(&self) -> impl Iterator<Item = (ModHandle, &AtomicU64)> {
+    pub(crate) fn made(&self) -> impl Iterator<Item = (ModHandle, &AtomicU64)> {
         self.0
             .iter()
             .enumerate()
@@ -515,7 +516,7 @@ impl PackLevels {
 }
 
 /// The data packs' levels the loader's own copy of the API keeps.
-static PACK_LEVELS: PackLevels = PackLevels([const { OnceLock::new() }; PACK_CHUNKS]);
+pub(crate) static PACK_LEVELS: PackLevels = PackLevels([const { OnceLock::new() }; PACK_CHUNKS]);
 
 #[inline]
 #[must_use]
@@ -556,23 +557,6 @@ fn first_pack_level(pack: Host, kept: &AtomicU64, word: u64) -> u8 {
     ) {
         Ok(_) => level.0,
         Err(newer) => kept_level(newer).unwrap_or(level.0),
-    }
-}
-
-/// Rereads the levels this copy of the API keeps from the loader: the
-/// process host's, and in the loader's own copy every data pack's.
-///
-/// A mod's copy runs it on each
-/// [`Event::LOADER_SETTINGS_CHANGED`](crate::abi::Event::LOADER_SETTINGS_CHANGED);
-/// the loader's own copy subscribes to nothing, so the loader calls it before
-/// it raises that event.
-pub fn refresh_levels() {
-    let Some(own) = as_loader(crate::host) else {
-        return;
-    };
-    MAX_LEVEL.store(own.log_level().0, Ordering::Relaxed);
-    for (pack, kept) in PACK_LEVELS.made() {
-        kept.store(tagged_level((own.api().log_level)(pack)), Ordering::Relaxed);
     }
 }
 
@@ -774,52 +758,6 @@ impl<M> Default for Slot<M> {
 /// code, so the fake host writes the same line; a loader test holds the
 /// two equal.
 pub const MOD_OFF: &str = "E2003, see https://enshwick.com/errors/e2003/";
-
-/// Makes the table `api` with the handle `me` this process's host, for
-/// the loader's own copy of the API, which runs data packs.
-///
-/// # Safety
-///
-/// - `api` is null, or points at an aligned [`HostApi`] readable for the size its
-///   header states.
-/// - That table stays valid and unchanged for the rest of the process,
-///   as the loader's process-wide table does.
-pub unsafe fn install_host(api: *const HostApi, me: ModHandle) {
-    // SAFETY: `Host::new` needs `api` null or a table readable for its
-    // header's size that outlives the process; this function's `# Safety`
-    // bullets guarantee both.
-    if let Some(host) = unsafe { Host::new(api, me) } {
-        MAX_LEVEL.store(host.install().log_level().0, Ordering::Relaxed);
-    }
-}
-
-/// Runs `call`, the loader's call into code of the data pack `me`, with
-/// [`host`](crate::host()) answering the pack on this thread, so the pack's
-/// logs, settings reads and faults go out under its own handle.
-///
-/// # Safety
-///
-/// - `api` is null, or points at an aligned [`HostApi`] readable for the size its
-///   header states.
-/// - That table stays valid and unchanged for the rest of the process,
-///   as the loader's process-wide table does.
-pub unsafe fn as_pack<R>(api: *const HostApi, me: ModHandle, call: impl FnOnce() -> R) -> R {
-    // SAFETY: `Host::new` needs `api` null or a table readable for its
-    // header's size that outlives the process; this function's `# Safety`
-    // bullets guarantee both.
-    match unsafe { Host::new(api, me) } {
-        Some(host) => host.scope(call),
-        None => call(),
-    }
-}
-
-/// Runs `call`, the loader's call into its own code or a mod DLL's, as the
-/// process's host, also inside a data pack's call.
-///
-/// A panic or a line there is then not the pack's.
-pub fn as_loader<R>(call: impl FnOnce() -> R) -> R {
-    crate::host::running_as(None, call)
-}
 
 #[cfg(test)]
 mod tests;

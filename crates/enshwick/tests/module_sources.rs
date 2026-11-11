@@ -60,7 +60,7 @@ mod tests {
         let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
         let lib = std::fs::read_to_string(crate_dir.join("src/lib.rs")).unwrap();
         let macros =
-            std::fs::read_to_string(crate_dir.join("../enshwick-macros/src/lib.rs")).unwrap();
+            std::fs::read_to_string(crate_dir.join("../internal/macros/src/lib.rs")).unwrap();
         let lines: Vec<&str> = lib.lines().collect();
         // The internal crates whose modules this crate re-exports by name.
         let from = ["enshwick_base", "enshwick_core"];

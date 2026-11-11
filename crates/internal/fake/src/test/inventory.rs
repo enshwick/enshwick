@@ -1,9 +1,9 @@
 //! Inventory requests the mod submits and their outcomes.
 
-use crate::abi::Header;
-use crate::abi::InventoryOp;
-use crate::abi::InventoryOpResult;
-use crate::abi::InventoryResult;
+use enshwick_core::abi::Header;
+use enshwick_core::abi::InventoryOp;
+use enshwick_core::abi::InventoryOpResult;
+use enshwick_core::abi::InventoryResult;
 
 use super::FakeHost;
 use super::Installed;
@@ -16,7 +16,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().without_inventories().install();
     /// # let _ = loader;
     /// ```
@@ -38,7 +37,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.inventory_requests().is_empty());
     /// ```
@@ -60,7 +58,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::InventoryResult;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();

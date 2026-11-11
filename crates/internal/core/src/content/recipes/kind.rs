@@ -44,7 +44,6 @@ impl RecipeKind {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::recipes::RecipeKind;
     ///
     /// assert!(RecipeKind::ALL.contains(&RecipeKind::Roof));
@@ -64,7 +63,6 @@ impl RecipeKind {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::recipes::RecipeKind;
     ///
     /// assert_eq!(RecipeKind::BuildingBlock.name(), "building-block");
@@ -87,7 +85,6 @@ impl RecipeKind {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::recipes::RecipeKind;
     ///
     /// assert_eq!(RecipeKind::named("roof"), Some(RecipeKind::Roof));
@@ -102,7 +99,6 @@ impl RecipeKind {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::abi;
     /// use enshwick::content::recipes::RecipeKind;
     ///

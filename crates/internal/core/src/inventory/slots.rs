@@ -7,7 +7,6 @@ use crate::{Entity, ItemId};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::Entity;
 /// use enshwick::inventory::SlotRef;
 ///
@@ -57,7 +56,6 @@ impl SlotRef {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::inventory::InventoryCategory;
 ///
 /// assert_ne!(InventoryCategory::GENERIC, InventoryCategory::EQUIPMENT);
@@ -85,7 +83,6 @@ impl InventoryCategory {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::Entity;
 /// use enshwick::inventory::{InventoryCategory, Slot, SlotRef};
 ///
@@ -123,7 +120,6 @@ impl Slot {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// fn stackable(inventories: &enshwick::inventory::Inventories, item: enshwick::ItemId) -> bool {
 ///     inventories.item_info(item).is_some_and(|info| info.max_stack_size > 1 && !info.has_pide())
 /// }
@@ -183,7 +179,6 @@ impl ItemInfo {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// let worn = enshwick::inventory::Bar { current: 40, max: 160 };
 /// assert!(worn.current < worn.max);
 /// ```
@@ -202,7 +197,6 @@ pub struct Bar {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::inventory::Fill;
 ///
 /// let three_of_five = Fill::of(3, 5);
@@ -250,7 +244,6 @@ impl Fill {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::Entity;
 /// use enshwick::inventory::{InventoryCategory, ItemInstance, Slot, SlotRef};
 ///

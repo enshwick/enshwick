@@ -20,7 +20,6 @@ use crate::PlayerKey;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::actions::sheet::{Entry, decode, encode};
 ///
 /// let entry = Entry { id: "list".into(), label: "Who may use it".into(), ..Entry::default() };
@@ -102,7 +101,6 @@ const PAIR: char = '\u{1e}';
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::actions::sheet::clean;
 ///
 /// assert_eq!(clean("two\tparts\n"), "two parts ");
@@ -254,7 +252,6 @@ pub fn decode(text: &str) -> Vec<Entry> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::actions::Value;
 /// use enshwick::actions::sheet::{decode_args, encode_args};
 ///

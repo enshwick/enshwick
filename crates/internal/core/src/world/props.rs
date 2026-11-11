@@ -16,7 +16,6 @@ use super::{World, WorldError};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::world::WorldTransform;
 ///
 /// let upright = WorldTransform { position: [10.0, 2.0, 4.5], orientation: [0.0, 0.0, 0.0, 1.0] };
@@ -70,7 +69,6 @@ pub struct Prop {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::ItemId;
 /// use enshwick::world::{CapturedProp, Prop, WorldTransform};
 ///
@@ -126,7 +124,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::WorldError;
     /// use enshwick::world::World;
     ///

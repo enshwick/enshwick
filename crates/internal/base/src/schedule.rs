@@ -126,8 +126,7 @@ impl Scheduler {
     /// The scheduler of the mod `me`, and whether the caller is to
     /// subscribe the tick that runs it: true once, and again after
     /// [`Scheduler::unsubscribed`].
-    #[doc(hidden)]
-    pub fn get(me: ModHandle) -> (Self, bool) {
+    pub(crate) fn get(me: ModHandle) -> (Self, bool) {
         let queue = {
             let mut queues = QUEUES.get_or_init(|| Mutex::new(Vec::new())).relock();
             if let Some(&(_, queue)) = queues.iter().find(|(handle, _)| *handle == me) {
@@ -210,8 +209,7 @@ impl Scheduler {
 
     /// Runs the tasks that are due on a pass in `game`; called on each pass.
     #[inline]
-    #[doc(hidden)]
-    pub fn run_due(self, game: u64) {
+    pub(crate) fn run_due(self, game: u64) {
         if self.queue.game.load(Ordering::Relaxed) != game {
             self.enter_game(game);
         }

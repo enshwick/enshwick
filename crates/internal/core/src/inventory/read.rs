@@ -55,7 +55,6 @@ pub(crate) fn item_data(host: &Host, item: ItemId) -> Option<ItemData> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::Entity;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -188,7 +187,6 @@ impl Inventories {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// unsafe fn held(inventories: &enshwick::inventory::Inventories, ctx: *mut u64, player: enshwick::Entity) -> u32 {
     ///     // SAFETY: called from a system's hook with its live context, used at once.
     ///     unsafe { inventories.read_in(ctx) }.count(player, enshwick::ItemId::new(0x0c01))
@@ -228,7 +226,6 @@ impl Inventories {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::Entity;
     /// use enshwick::inventory::{Batch, Inventories, Op};
     ///
@@ -284,7 +281,6 @@ impl Inventories {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn first_item(inventories: &enshwick::inventory::Inventories, player: enshwick::Entity) -> Option<enshwick::ItemId> {
     ///     inventories.slots(player).into_iter().find(|s| !s.is_empty()).map(|s| s.item)
     /// }
@@ -301,7 +297,6 @@ impl Inventories {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn coins(inventories: &enshwick::inventory::Inventories, player: enshwick::Entity) -> u32 {
     ///     inventories.count(player, enshwick::ItemId::new(0x0c01))
     /// }
@@ -324,7 +319,6 @@ impl Inventories {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn reward(inventories: &enshwick::inventory::Inventories, player: enshwick::Entity) {
     ///     inventories.give(player, enshwick::ItemId::new(0x0c01), 10, |outcome| {
     ///         if !outcome.is_committed() {
@@ -361,7 +355,6 @@ impl Inventories {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn reward(inventories: &enshwick::inventory::Inventories, player: enshwick::Entity) {
     ///     inventories.give_what_fits(player, enshwick::ItemId::new(0x0c01), 10, |left, outcome| {
     ///         if !outcome.is_committed() {
@@ -396,7 +389,6 @@ impl Inventories {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn charge(inventories: &enshwick::inventory::Inventories, player: enshwick::Entity) {
     ///     inventories.take(player, enshwick::ItemId::new(0x0c01), 5, |outcome| enshwick::info!("paid: {}", outcome.is_committed()));
     /// }
@@ -417,7 +409,6 @@ impl Inventories {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn burn(inventories: &enshwick::inventory::Inventories, slot: enshwick::inventory::SlotRef) {
     ///     inventories.destroy_slot(slot, |_| {});
     /// }
@@ -437,7 +428,6 @@ impl Inventories {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn hand_over(inventories: &enshwick::inventory::Inventories, slot: enshwick::inventory::SlotRef, player: enshwick::Entity) {
     ///     inventories.move_slot(slot, player, None, |_| {});
     /// }
@@ -486,7 +476,6 @@ impl Inventories {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::events::PlayerJoined;
     /// use enshwick::inventory::Fill;
     ///
@@ -542,7 +531,7 @@ impl Reader<'_> {
             return None;
         }
         if self.ctx.is_null() {
-            ty.read(self.inventories.host, entity)
+            enshwick_base::__internal::component(ty, self.inventories.host, entity)
                 .map(<*const c_void>::cast)
         } else {
             // SAFETY: a non-null `ctx` comes only from `read_in`, whose caller
@@ -656,7 +645,6 @@ impl Reader<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn holds(reader: &enshwick::inventory::Reader<'_>, slot: enshwick::inventory::SlotRef) -> bool {
     ///     reader.slot(slot).is_some_and(|s| !s.is_empty())
     /// }
@@ -699,7 +687,6 @@ impl Reader<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn owner(reader: &enshwick::inventory::Reader<'_>, slot: enshwick::inventory::SlotRef) {
     ///     if let Some(root) = reader.root(slot) {
     ///         enshwick::info!("slot of {}", root.0);
@@ -731,7 +718,6 @@ impl Reader<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn worn(reader: &enshwick::inventory::Reader<'_>, slot: &enshwick::inventory::Slot) -> bool {
     ///     slot.pide.and_then(|pide| reader.durability(pide)).is_some_and(|d| d.current * 4 < d.max)
     /// }
@@ -749,7 +735,6 @@ impl Reader<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn charges(reader: &enshwick::inventory::Reader<'_>, slot: &enshwick::inventory::Slot) -> u16 {
     ///     slot.pide.and_then(|pide| reader.meter(pide)).map_or(0, |m| m.current)
     /// }

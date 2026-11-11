@@ -26,7 +26,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::Entity;
 //! use enshwick::entity_data::Replication;
 //!
@@ -159,7 +158,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::Entity;
     ///
     /// fn forget(owners: &enshwick::entity_data::EntityData<u64>, chest: Entity) {

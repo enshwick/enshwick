@@ -10,7 +10,6 @@
 //! last step is done and sets the quest's own bool.
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::quests::Quests;
 //!
 //! fn report(quests: &Quests, player: enshwick::Entity) {
@@ -42,7 +41,6 @@ use crate::knowledge::{Knowledge, KnowledgeId, Scope};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::Guid;
 /// use enshwick::quests::TextKey;
 ///
@@ -85,7 +83,6 @@ impl TextKey {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::quests::EntryId;
 ///
 /// assert_eq!(EntryId::new(9).get(), 9);
@@ -172,7 +169,6 @@ impl StepInfo {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// fn titled(quests: &enshwick::quests::Quests) -> usize {
 ///     quests.pages().iter().filter(|page| page.name.is_some()).count()
 /// }
@@ -297,7 +293,6 @@ pub struct StepState {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// fn at(quests: &enshwick::quests::Quests, player: enshwick::Entity, quest: enshwick::knowledge::KnowledgeId) -> Option<usize> {
 ///     let state = quests.state(player, quest)?;
 ///     state.steps.iter().position(|step| step.done != Some(true))
@@ -506,7 +501,6 @@ impl Quests {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn steps(quests: &enshwick::quests::Quests, quest: enshwick::knowledge::KnowledgeId) -> usize {
     ///     quests.quest(quest).map_or(0, |info| info.steps.len())
     /// }
@@ -552,7 +546,6 @@ impl Quests {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn shown(quests: &enshwick::quests::Quests, quest: enshwick::knowledge::KnowledgeId) -> bool {
     ///     quests.world_state(quest).is_some_and(|state| state.started)
     /// }
@@ -571,7 +564,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> enshwick::quests::Quests {
     ///     load.quests()
     /// }

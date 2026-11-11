@@ -4,9 +4,8 @@
 #[cfg(feature = "unstable")]
 use core::ffi::c_void;
 
-pub use crate::__private::{
-    EXPERIENCE_SOURCES, MOD_OFF, as_loader, as_pack, copy_out, ids, refresh_levels,
-};
+pub use crate::__internal::{as_loader, as_pack, refresh_levels};
+pub use crate::__private::{EXPERIENCE_SOURCES, MOD_OFF, copy_out, ids};
 #[cfg(feature = "unstable")]
 use crate::abi::CallFn;
 use crate::abi::PointFn;

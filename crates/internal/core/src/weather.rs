@@ -17,7 +17,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use core::time::Duration;
 //! use enshwick::weather::{Forecast, Weather};
 //!
@@ -68,7 +67,6 @@ pub enum WeatherState {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::weather::WeatherState;
 ///
 /// fn wet(weather: &enshwick::weather::Weather, at: [f64; 3]) -> bool {
@@ -133,7 +131,6 @@ pub enum WeatherPhenomenonEffect {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::weather::WeatherPhenomenonEffect;
 ///
 /// fn storms(weather: &enshwick::weather::Weather) -> usize {
@@ -189,7 +186,6 @@ pub enum Forecast {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use core::time::Duration;
 /// use enshwick::weather::MAX_RESTORED_REMAINING;
 ///
@@ -421,7 +417,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::weather::WeatherPhenomenonEffect;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {

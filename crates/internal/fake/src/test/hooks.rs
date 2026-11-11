@@ -1,10 +1,10 @@
 //! Game lookups and hooks: symbols, constants, layouts, detours and code patches.
 
-use crate::FnPtr;
-use crate::Hook;
-use crate::abi::CallerFrame;
-use crate::abi::Fingerprint;
-use crate::abi::HookFlags;
+use enshwick_core::FnPtr;
+use enshwick_core::Hook;
+use enshwick_core::abi::CallerFrame;
+use enshwick_core::abi::Fingerprint;
+use enshwick_core::abi::HookFlags;
 
 use super::FakeHost;
 use super::Installed;
@@ -17,7 +17,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().base(0x1_4000_0000).install();
     /// # let _ = loader;
     /// ```
@@ -32,7 +31,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{Fingerprint, guid};
     ///
     /// let build = Fingerprint { guid: guid("1c129660cd6efc4f9f0b21652d5ff2bf"), age: 387 };
@@ -46,12 +44,11 @@ impl FakeHost {
     }
 
     /// Whether the loader found every entry it knows on the build;
-    /// [`BuildTable::EXACT`](crate::abi::BuildTable::EXACT) by default.
+    /// [`BuildTable::EXACT`](enshwick_core::abi::BuildTable::EXACT) by default.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::BuildTable;
     ///
     /// let loader = enshwick::test::FakeHost::new()
@@ -60,7 +57,7 @@ impl FakeHost {
     /// # let _ = loader;
     /// ```
     #[must_use]
-    pub fn build_table(mut self, table: crate::abi::BuildTable) -> Self {
+    pub fn build_table(mut self, table: enshwick_core::abi::BuildTable) -> Self {
         self.table = table;
         self
     }
@@ -104,7 +101,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new()
     ///     .field_offset("keen::ecs::TriggerShape", "rangeX", 4)
     ///     .type_size("keen::ecs::TriggerShape", 16)
@@ -149,7 +145,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::CallerFrame;
     ///
     /// let frame = CallerFrame { rsp: 0x1000, ..CallerFrame::default() };
@@ -167,7 +162,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().refuse_hook(0x1_4009_0a60).install();
     /// # let _ = loader;
     /// ```
@@ -182,7 +176,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// static CODE: [u8; 4] = [0x90, 0xb9, 0x00, 0x02];
     /// let loader = enshwick::test::FakeHost::new().code(&CODE).install();
     /// # let _ = loader;
@@ -199,7 +192,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().workshop_recipes(u32::MAX).install();
     /// # let _ = loader;
     /// ```
@@ -220,7 +212,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.hooks().iter().all(|hook| hook.priority == 0));
     /// ```
@@ -234,7 +225,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.mid_hooks().is_empty());
     /// ```
@@ -249,13 +239,12 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let mut registers = enshwick::abi::Registers::default();
     /// assert_eq!(loader.run_at(0x1_4000_1000, &mut registers), 0);
     /// ```
     #[must_use = "the count says whether the mod hooks the address"]
-    pub fn run_at(&self, address: u64, registers: &mut crate::abi::Registers) -> usize {
+    pub fn run_at(&self, address: u64, registers: &mut enshwick_core::abi::Registers) -> usize {
         let handlers: Vec<_> = table::with(Vec::new(), |s| {
             s.mid_hooks
                 .iter()
@@ -292,7 +281,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.code_patches().is_empty());
     /// ```

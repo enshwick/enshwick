@@ -1,6 +1,6 @@
 //! The engine facts the [`FakeHost`](super::FakeHost) presets set that a test
 //! lays its blobs out by: read each back through
-//! [`EngineFacts`](crate::content::EngineFacts) with [`Fact::id`].
+//! [`EngineFacts`](enshwick_core::content::EngineFacts) with [`Fact::id`].
 
 use enshwick_core::__fake::ids;
 
@@ -10,7 +10,6 @@ use enshwick_core::__fake::ids;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_fake as enshwick;
 /// use enshwick::content::EngineFacts;
 /// use enshwick::test::facts;
 ///
@@ -26,7 +25,7 @@ use enshwick_core::__fake::ids;
 pub struct Fact(&'static str);
 
 impl Fact {
-    /// Its enshwick id, which [`EngineFacts`](crate::content::EngineFacts)
+    /// Its enshwick id, which [`EngineFacts`](enshwick_core::content::EngineFacts)
     /// answers by.
     ///
     /// # Examples

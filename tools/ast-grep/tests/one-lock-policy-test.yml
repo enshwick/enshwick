@@ -1,0 +1,7 @@
+id: one-lock-policy
+valid:
+  - "use enshwick_base::Relock;"
+  - "pub(crate) trait Relocate {}"
+invalid:
+  - "pub(crate) trait Relock<T: ?Sized> { fn relock(&self); }"
+  - "trait RelockWait {}"

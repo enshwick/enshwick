@@ -15,7 +15,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use core::time::Duration;
 //! use enshwick::buffs::{Apply, BuffTypeId, Buffs};
 //!
@@ -78,7 +77,6 @@ impl BuffSlotType {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::buffs::BuffSlotType;
 ///
 /// fn food(buffs: &enshwick::buffs::Buffs) -> usize {
@@ -112,7 +110,6 @@ pub struct BuffType {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// fn longest(buffs: &enshwick::buffs::Buffs, entity: enshwick::Entity) -> Option<u32> {
 ///     let on = buffs.of(entity).ok()?;
 ///     on.iter().max_by_key(|buff| buff.remaining).map(|buff| buff.type_id.0)
@@ -145,7 +142,6 @@ pub struct Buff {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use core::time::Duration;
 /// use enshwick::buffs::Apply;
 ///
@@ -303,7 +299,6 @@ impl Buffs {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::buffs::BuffTypeId;
     ///
     /// fn starving(buffs: &enshwick::buffs::Buffs, player: enshwick::Entity) -> bool {
@@ -365,7 +360,6 @@ impl Buffs {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::buffs::BuffTypeId;
     ///
     /// fn cure(buffs: &enshwick::buffs::Buffs, player: enshwick::Entity, poison: BuffTypeId) -> bool {

@@ -381,9 +381,8 @@ impl ComponentType {
     /// A pointer to `entity`'s component of this type on the server's game
     /// thread, valid until the game thread returns to the game; `None` when
     /// the entity has none.
-    #[doc(hidden)]
     #[must_use]
-    pub fn read(self, host: Host, entity: Entity) -> Option<*const core::ffi::c_void> {
+    pub(crate) fn read(self, host: Host, entity: Entity) -> Option<*const core::ffi::c_void> {
         let mut out: *const core::ffi::c_void = core::ptr::null();
         let status = (host.api().component)(host.handle(), entity, self.0, &raw mut out);
         (status == crate::abi::Status::OK && !out.is_null()).then_some(out)

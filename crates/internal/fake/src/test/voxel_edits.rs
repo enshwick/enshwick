@@ -1,7 +1,7 @@
 //! Writes of the world's voxels, as the loader raises them after a step.
 
-use crate::abi::{self, Event, Header, ModHandle};
-use crate::voxels::{EditSource, VoxelChange};
+use enshwick_core::abi::{self, Event, Header, ModHandle};
+use enshwick_core::voxels::{EditSource, VoxelChange};
 
 use super::Installed;
 use super::world::VoxelGrid;
@@ -21,7 +21,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::voxels::EditSource;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();

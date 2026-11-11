@@ -11,7 +11,6 @@ use super::super::{DebugName, Guid, Id};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::recipes::Name;
 /// use enshwick::content::{DebugName, Guid, Id, id};
 ///
@@ -88,7 +87,6 @@ impl<'a> RecipeRule<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::{Id, id};
     /// use enshwick::content::recipes::{Name, RecipeRule};
     ///
@@ -105,7 +103,6 @@ impl<'a> RecipeRule<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::DebugName;
     /// use enshwick::content::recipes::RecipeRule;
     ///
@@ -122,7 +119,6 @@ impl<'a> RecipeRule<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::DebugName;
     /// use enshwick::content::recipes::RecipeRule;
     ///
@@ -184,7 +180,6 @@ fn rule(rule: RecipeRule<'_>, disable: bool) -> Result<(), Off> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::DebugName;
 /// use enshwick::content::recipes::{RecipeRule, disable, enable};
 ///
@@ -221,7 +216,6 @@ pub fn enable(rule: RecipeRule<'_>) -> Result<(), Off> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::{Guid, Id, id};
 /// use enshwick::content::recipes::is_disabled;
 ///

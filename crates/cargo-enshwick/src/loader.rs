@@ -339,7 +339,7 @@ mod tests {
     #[test]
     fn the_tool_carries_the_version_of_the_loader_it_puts_in() {
         let loader: toml::Table =
-            toml::from_str(include_str!("../../internal/loader/Cargo.toml")).unwrap();
+            toml::from_str(include_str!("../../runtime/loader/Cargo.toml")).unwrap();
         assert_eq!(
             loader["package"]["version"].as_str(),
             Some(version()),

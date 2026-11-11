@@ -20,7 +20,6 @@ use crate::host::Host;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// struct Quiet;
 ///
 /// impl enshwick::Mod for Quiet {
@@ -63,7 +62,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) {
     ///     let side = load.host().build().side;
     ///     let _ = side;
@@ -95,7 +93,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     if let Some(dir) = load.data_dir() {
     ///         enshwick::info!("this world's data: {}", dir.display());
@@ -117,7 +114,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let hold = enshwick::state::Hold::new(&load.mod_dir()?);
     ///     let _ = hold.reason();
@@ -140,7 +136,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let items = load.export_dir()?.join("items.json");
     ///     enshwick::files::write_atomically(&items, "[]").map_err(|e| enshwick::Off::new(e.to_string()))

@@ -7,7 +7,6 @@ use crate::stats::{Op, Stat};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::affixes::ItemRarity;
 ///
 /// assert!(ItemRarity::Common < ItemRarity::Legendary);
@@ -63,7 +62,6 @@ impl ItemRarity {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::affixes::Range;
 /// use enshwick::stats::Op;
 ///
@@ -180,7 +178,6 @@ impl AffixDef {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::affixes::AffixDef;
     /// use enshwick::content::categories::ItemCategoryMask;
     ///
@@ -208,7 +205,6 @@ impl AffixDef {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::affixes::AffixDef;
     /// use enshwick::content::categories::ItemCategoryMask;
     ///
@@ -244,7 +240,6 @@ impl AffixDef {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::affixes::AffixDef;
     /// use enshwick::content::categories::ItemCategoryMask;
     ///
@@ -281,7 +276,6 @@ impl AffixDef {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::abi::StatRef;
     /// use enshwick::affixes::{AffixDef, Range};
     /// use enshwick::content::categories::ItemCategoryMask;
@@ -374,7 +368,6 @@ pub(crate) enum DefineAffixError {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::affixes::AffixId;
 ///
 /// let affix = AffixId::new(3);
@@ -390,7 +383,6 @@ enshwick_abi::id_conversions!(AffixId(u32));
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::affixes::AffixKey;
 ///
 /// assert_eq!(AffixKey::of("rpg:bear"), AffixKey::of("rpg:bear"));

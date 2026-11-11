@@ -10,7 +10,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::events::AltarsChanged;
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -42,7 +41,6 @@ use crate::{Host, Load, Off};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::altars::CellBox;
 ///
 /// let zone = CellBox::new([0, 0, 0], [80, 80, 80]);
@@ -74,7 +72,6 @@ impl CellBox {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::altars::CellBox;
     ///
     /// assert!(CellBox::default().is_empty());
@@ -101,7 +98,6 @@ impl CellBox {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::altars::CellBox;
     ///
     /// let a = CellBox::new([0, 0, 0], [10, 10, 10]);
@@ -120,7 +116,6 @@ impl CellBox {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::altars::CellBox;
     ///
     /// let a = CellBox::new([0, 0, 0], [10, 10, 10]);
@@ -162,7 +157,6 @@ impl CellBox {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::altars::cell_of_fixed;
 ///
 /// assert_eq!(cell_of_fixed([3 << 32, 1 << 31, -1]), [6, 1, -1]);
@@ -177,7 +171,6 @@ pub const fn cell_of_fixed(fixed: [i64; 3]) -> [i64; 3] {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::altars::cell_of_metres;
 ///
 /// assert_eq!(cell_of_metres([3.0, 0.75, -0.25]), [6, 1, -1]);
@@ -196,7 +189,6 @@ pub fn cell_of_metres(metres: [f64; 3]) -> [i64; 3] {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::altars::{Altar, CellBox};
 /// use enshwick::Entity;
 ///
@@ -257,7 +249,6 @@ impl Altar {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::altars::{bases_of, Altar, CellBox};
 /// use enshwick::Entity;
 ///
@@ -367,7 +358,6 @@ impl Altars {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn levels(altars: &enshwick::altars::Altars) -> Vec<u8> {
     ///     altars.list().iter().map(|altar| altar.level).collect()
     /// }
@@ -413,7 +403,6 @@ impl Altars {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn based(altars: &enshwick::altars::Altars, cell: [i64; 3]) -> bool {
     ///     altars.bases().iter().any(|base| base.contains(cell))
     /// }
@@ -499,7 +488,6 @@ impl ZoneSizes {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::altars::ResizeError;
 ///
 /// assert_eq!(
@@ -572,7 +560,6 @@ impl BaseLimit {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::altars::{base_limit, grouping};
     ///
     /// let held = grouping().zip(base_limit()).is_some_and(|(g, l)| l.past_vanilla(g));
@@ -596,7 +583,6 @@ impl BaseLimit {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::altars::{base_limit, grouping};
 ///
 /// let full = grouping().zip(base_limit()).is_some_and(|(g, l)| g.zones >= l.zones);
@@ -644,7 +630,6 @@ pub fn base_limit() -> Option<BaseLimit> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// fn apply(bases: u32) -> Result<(), enshwick::Off> {
 ///     enshwick::altars::set_base_cap(bases)
 /// }
@@ -713,7 +698,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     // Every altar two cells wider on each side.
     ///     let sizes = load.on_altar_zone(|zone| zone.grow += 2)?;
@@ -748,7 +732,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     // Accept an object whose box lies in two zones' bounding box.
     ///     load.on_building_zone_check(|check| {
@@ -816,7 +799,6 @@ pub struct Grouping {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::altars::grouping;
 ///
 /// let bases = grouping().map_or(0, |g| g.bases);
@@ -852,7 +834,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     // Two more altars than the game allows at every level.
     ///     load.on_altar_limit(|limit| limit.allowed = limit.allowed.saturating_add(2))

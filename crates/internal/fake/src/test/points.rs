@@ -5,10 +5,10 @@
 use core::ffi::c_void;
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use crate::abi::{
+use enshwick_core::abi::{
     ModHandle, PointFn, PointHandle, PointLink, PointSpec, PointVerdict, Status, Str,
 };
-use crate::points::{Decision, LinkPlace, Point, Verdict, order};
+use enshwick_core::points::{Decision, LinkPlace, Point, Verdict, order};
 
 use super::Installed;
 use super::table::{Registered, Registration, put, view, with};
@@ -20,7 +20,7 @@ struct Declared {
     name: String,
     input: Vec<(String, u64)>,
     output: Vec<(String, u64)>,
-    mode: crate::abi::PointMode,
+    mode: enshwick_core::abi::PointMode,
     refuse: bool,
     input_size: u32,
     output_size: u32,
@@ -28,7 +28,7 @@ struct Declared {
 
 impl Declared {
     fn of<P: Point>() -> Self {
-        let fields = |layout: &[crate::abi::LayoutField]| {
+        let fields = |layout: &[enshwick_core::abi::LayoutField]| {
             layout
                 .iter()
                 // SAFETY: the declaration's names are static strings.
@@ -49,7 +49,7 @@ impl Declared {
     /// Whether a link declared as `link` serves this point.
     fn serves(&self, link: &Self) -> bool {
         self.name == link.name
-            && crate::services::compare(&view(&link.input), &view(&self.input)).is_ok()
+            && enshwick_core::services::compare(&view(&link.input), &view(&self.input)).is_ok()
             && self.output == link.output
             && (self.mode, self.refuse) == (link.mode, link.refuse)
             && link.input_size <= self.input_size
@@ -99,16 +99,16 @@ fn declared(spec: *const PointSpec) -> Option<Declared> {
     let name = unsafe { spec.name.as_str() }?.to_owned();
     // SAFETY: the safe layer passes the input layout of a declared type, its
     // fields and their names borrowed and unchanged for the call.
-    let input = unsafe { crate::services::read_layout(&spec.input) }?;
+    let input = unsafe { enshwick_core::services::read_layout(&spec.input) }?;
     // SAFETY: the safe layer passes the output layout of a declared type, its
     // fields and their names borrowed and unchanged for the call.
-    let output = unsafe { crate::services::read_layout(&spec.output) }?;
+    let output = unsafe { enshwick_core::services::read_layout(&spec.output) }?;
     Some(Declared {
         name,
         input,
         output,
         mode: spec.mode,
-        refuse: spec.flags.contains(crate::abi::PointFlags::REFUSE),
+        refuse: spec.flags.contains(enshwick_core::abi::PointFlags::REFUSE),
         input_size: spec.input.size,
         output_size: spec.output.size,
     })
@@ -164,7 +164,7 @@ pub(crate) extern "system" fn define_point(
         Ok((id, live)) => super::table::put_headed(
             out,
             PointHandle {
-                header: crate::abi::Header::of::<PointHandle>(),
+                header: enshwick_core::abi::Header::of::<PointHandle>(),
                 id,
                 live,
             },
@@ -206,7 +206,7 @@ pub(crate) extern "system" fn attach_point(
             .is_some_and(|manifest| manifest.requires_owner_of(&attached.declared.name));
         let unexported = s.manifest.as_ref().is_some_and(|manifest| {
             manifest.unexported(
-                crate::schema_section::Kind::Point,
+                enshwick_core::schema_section::Kind::Point,
                 &attached.declared.name,
                 &s.host.exports,
             )
@@ -272,7 +272,7 @@ pub(crate) extern "system" fn run_point(
         s.points.defined.get(point as usize).map(|d| {
             (
                 d.links.clone(),
-                d.declared.mode != crate::abi::PointMode::OBSERVE,
+                d.declared.mode != enshwick_core::abi::PointMode::OBSERVE,
                 d.declared.refuse,
             )
         })
@@ -308,7 +308,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::points::Verdict;
     ///
     /// #[enshwick::point(name = "limit", mode = Override, output = u32)]
@@ -365,7 +364,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// #[enshwick::point(of = lockers, name = "price", mode = Override, output = u32)]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct Price {
@@ -384,7 +382,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.defined_points().is_empty());
     /// ```
@@ -404,7 +401,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.attached_points().is_empty());
     /// ```
@@ -426,7 +422,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::points::Decision;
     ///
     /// #[enshwick::point(of = lockers, name = "limit", mode = Override, output = u32)]
@@ -475,7 +470,7 @@ impl Installed {
         let mut value = answer;
         let (verdict, panicked) = run(
             &links,
-            owner.mode != crate::abi::PointMode::OBSERVE,
+            owner.mode != enshwick_core::abi::PointMode::OBSERVE,
             owner.refuse,
             core::ptr::from_ref(input).cast(),
             (&raw mut value).cast(),

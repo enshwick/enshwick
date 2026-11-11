@@ -41,15 +41,13 @@ type Reader = Box<dyn Fn(ResourceKey) -> Option<Vec<u8>> + Send + Sync>;
 /// Item debug names to the items that carry them.
 type Names = BTreeMap<String, Vec<Guid>>;
 
-/// The most near names a [`VanillaError::Unknown`] suggests.
-const NEAR: usize = 5;
+use crate::near::NEAR;
 
 /// Why a vanilla name or station was not found.
 ///
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::vanilla::VanillaError;
 ///
 /// let unknown = VanillaError::Unknown { name: "Tool_Torch1".into(), near: vec!["Tool_Torch01".into()] };
@@ -62,7 +60,7 @@ pub enum VanillaError {
     #[error("the game's {0} does not read")]
     Unreadable(&'static str),
     /// No vanilla item has the name; `near` lists names that look like it.
-    #[error("no vanilla item {name:?}{}", near_list(near))]
+    #[error("no vanilla item {name:?}{}", crate::near::suffix(near))]
     Unknown {
         /// The name asked for.
         name: String,
@@ -79,7 +77,7 @@ pub enum VanillaError {
     },
     /// No vanilla recipe has the debug name; `near` lists names that look
     /// like it.
-    #[error("no vanilla recipe {name:?}{}", near_list(near))]
+    #[error("no vanilla recipe {name:?}{}", crate::near::suffix(near))]
     UnknownRecipe {
         /// The name asked for.
         name: String,
@@ -96,7 +94,10 @@ pub enum VanillaError {
     },
     /// No vanilla container template of the name rolls a fill table; `near`
     /// lists names that look like it.
-    #[error("no vanilla container {name:?} rolls a loot table{}", near_list(near))]
+    #[error(
+        "no vanilla container {name:?} rolls a loot table{}",
+        crate::near::suffix(near)
+    )]
     NoLootTable {
         /// The name asked for.
         name: String,
@@ -110,7 +111,7 @@ pub enum VanillaError {
     NotAStation(Guid),
     /// No vanilla template has the name; `near` lists names that look like
     /// it.
-    #[error("no vanilla template {name:?}{}", near_list(near))]
+    #[error("no vanilla template {name:?}{}", crate::near::suffix(near))]
     UnknownTemplate {
         /// The name asked for.
         name: String,
@@ -131,14 +132,6 @@ pub enum VanillaError {
 }
 
 crate::load::off_from!(VanillaError);
-
-fn near_list(near: &[String]) -> String {
-    if near.is_empty() {
-        String::new()
-    } else {
-        format!("; near: {}", near.join(", "))
-    }
-}
 
 fn guid_list(items: &[Guid]) -> String {
     items
@@ -164,7 +157,6 @@ fn game() -> Result<&'static Vanilla, VanillaError> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::vanilla::{self, VanillaError};
 ///
 /// match vanilla::item("Prop_Production_T1_Forge") {
@@ -187,7 +179,6 @@ pub fn item(name: &str) -> Result<Guid, VanillaError> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// let torch = enshwick::content::vanilla::recipe("Tool_Torch01");
 /// assert!(torch.is_err(), "no game runs here");
 /// ```
@@ -205,7 +196,6 @@ pub fn recipe(name: &str) -> Result<Guid, VanillaError> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// let vukah = enshwick::content::vanilla::loot_table("LootContainer_Enemy_Corpse_Vukah");
 /// assert!(vukah.is_err(), "no game runs here");
 /// ```
@@ -224,7 +214,6 @@ pub fn loot_table(name: &str) -> Result<LootTable, VanillaError> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// let forge = enshwick::content::vanilla::station("Prop_Production_T1_Forge");
 /// assert!(forge.is_err(), "no game runs here");
 /// ```
@@ -244,7 +233,6 @@ pub fn station(name: &str) -> Result<Station, VanillaError> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// let forge = enshwick::content::vanilla::workshop("Prop_Production_T1_Forge");
 /// assert!(forge.is_err(), "no game runs here");
 /// ```
@@ -265,7 +253,6 @@ pub fn workshop(name: &str) -> Result<WorkshopId, VanillaError> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// let wolf = enshwick::content::vanilla::template("Enemy_Wildbeast_Wolf");
 /// assert!(wolf.is_err(), "no game runs here");
 /// ```
@@ -300,7 +287,6 @@ pub struct Enemy {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// let wolf = enshwick::content::vanilla::enemy("Enemy_Wildbeast_Wolf");
 /// assert!(wolf.is_err(), "no game runs here");
 /// ```
@@ -350,7 +336,6 @@ pub fn enemy(name: &str) -> Result<Enemy, VanillaError> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::vanilla::Vanilla;
 ///
 /// if let Some(vanilla) = Vanilla::game() {
@@ -450,7 +435,6 @@ impl Vanilla {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::EngineFacts;
     /// use enshwick::content::vanilla::Vanilla;
     ///
@@ -541,7 +525,6 @@ impl Vanilla {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::vanilla::Vanilla;
     ///
     /// if let Some(vanilla) = Vanilla::game() {
@@ -611,7 +594,6 @@ impl Vanilla {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::vanilla::Vanilla;
     ///
     /// if let Some(vanilla) = Vanilla::game() {
@@ -643,7 +625,6 @@ impl Vanilla {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::vanilla::Vanilla;
     ///
     /// if let Some(vanilla) = Vanilla::game() {
@@ -792,7 +773,6 @@ impl Vanilla {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::vanilla::Vanilla;
     ///
     /// if let Some(vanilla) = Vanilla::game() {

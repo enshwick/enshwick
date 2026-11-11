@@ -36,7 +36,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::knowledge::{Grant, Knowledge, KnowledgeId};
 //!
 //! fn learn(knowledge: &Knowledge, player: enshwick::Entity, recipe: KnowledgeId) -> Result<(), enshwick::WorldError> {
@@ -100,7 +99,6 @@ pub enum Scope {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::knowledge::KnowledgeType;
 ///
 /// fn crafted(knowledge: &enshwick::knowledge::Knowledge, player: enshwick::Entity, recipe: enshwick::RecipeId) -> bool {
@@ -283,7 +281,6 @@ impl Knowledge {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn found(knowledge: &enshwick::knowledge::Knowledge, place: enshwick::knowledge::KnowledgeId) -> bool {
     ///     knowledge.world(place).is_some_and(|known| known.is_set())
     /// }
@@ -331,7 +328,6 @@ impl Knowledge {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::knowledge::Grant;
     ///
     /// fn reveal(knowledge: &enshwick::knowledge::Knowledge, place: enshwick::knowledge::KnowledgeId) {
@@ -365,7 +361,6 @@ impl Knowledge {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::knowledge::Revoke;
     ///
     /// fn unlearn(knowledge: &enshwick::knowledge::Knowledge, player: enshwick::Entity, recipe: enshwick::RecipeId) {
@@ -402,7 +397,6 @@ impl Knowledge {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::knowledge::Revoke;
     ///
     /// fn hide(knowledge: &enshwick::knowledge::Knowledge, place: enshwick::knowledge::KnowledgeId) {
@@ -432,7 +426,6 @@ impl Knowledge {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::knowledge::Grant;
     ///
     /// fn reward(knowledge: &enshwick::knowledge::Knowledge, account: enshwick::PlayerKey, recipe: enshwick::RecipeId) {
@@ -464,7 +457,6 @@ impl Knowledge {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::knowledge::Revoke;
     ///
     /// fn punish(knowledge: &enshwick::knowledge::Knowledge, account: enshwick::PlayerKey, recipe: enshwick::RecipeId) {
@@ -507,7 +499,6 @@ impl Knowledge {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn done(knowledge: &enshwick::knowledge::Knowledge, player: enshwick::Entity) -> usize {
     ///     knowledge.quests().into_iter().filter(|&quest| knowledge.completed(player, quest)).count()
     /// }
@@ -578,7 +569,6 @@ impl Knowledge {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn alone(knowledge: &enshwick::knowledge::Knowledge, player: enshwick::Entity) {
     ///     if knowledge.quest_progression(player) == Some(false) {
     ///         let _ = knowledge.set_quest_progression(player, true);
@@ -745,7 +735,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::knowledge::Refusal;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {

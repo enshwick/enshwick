@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex};
 use enshwick_core::abi::ResourceKey;
 use rustc_hash::FxHashMap;
 
-use crate::locks::Relock;
+use enshwick_base::Relock;
 
 /// A content hash as the game keeps it: the size, then three words.
 pub type ContentHash = [u32; 4];

@@ -1,9 +1,9 @@
 //! Game rates: rates a build lacks, and the factor in force for each.
 
-use crate::abi::RateId;
-#[cfg(feature = "unstable")]
-use crate::rates::Rate;
 use enshwick_core::__fake::combine;
+use enshwick_core::abi::RateId;
+#[cfg(feature = "unstable")]
+use enshwick_core::rates::Rate;
 
 use super::{FakeHost, Installed, table};
 
@@ -13,7 +13,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::rates::Rate;
     ///
     /// let loader = enshwick::test::FakeHost::new().without_rate(Rate::FactoryProductionSpeed).install();
@@ -39,7 +38,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::rates::Rate;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -65,10 +63,10 @@ impl Installed {
 #[cfg(test)]
 #[cfg(feature = "unstable")]
 mod tests {
-    use crate::abi::{HostApi, ModHandle, Status};
-    use crate::rates::{ExperienceGroup, Rate};
     use crate::test::FakeHost;
     use crate::test::table::TABLE;
+    use enshwick_core::abi::{HostApi, ModHandle, Status};
+    use enshwick_core::rates::{ExperienceGroup, Rate};
 
     fn api(_loader: &crate::test::Installed) -> &'static HostApi {
         &TABLE
@@ -95,7 +93,7 @@ mod tests {
         let drops = Rate::ResourceDropStackAmount.id();
         assert_eq!((api.rate)(ModHandle(1), speed), Status::MISSING);
         assert_eq!(
-            (api.rate)(ModHandle(1), crate::abi::RateId(0)),
+            (api.rate)(ModHandle(1), enshwick_core::abi::RateId(0)),
             Status::BAD_ARGS
         );
         assert_eq!((api.set_rate)(ModHandle(1), drops, 2.0), Status::BAD_ARGS);

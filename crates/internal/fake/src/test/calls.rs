@@ -4,9 +4,9 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{CallFn, CallSpec, ModHandle, Status};
+use enshwick_core::abi::{CallFn, CallSpec, ModHandle, Status};
 #[cfg(feature = "unstable")]
-use crate::services::{Call, CallError};
+use enshwick_core::services::{Call, CallError};
 
 use super::Installed;
 use super::table::{Registered, put, with};
@@ -26,7 +26,7 @@ struct Declared {
 #[cfg(feature = "unstable")]
 impl Declared {
     fn of<C: Call>() -> Self {
-        let fields = |layout: &[crate::abi::LayoutField]| {
+        let fields = |layout: &[enshwick_core::abi::LayoutField]| {
             layout
                 .iter()
                 // SAFETY: the declaration's names are static strings.
@@ -71,10 +71,10 @@ fn declared(spec: *const CallSpec) -> Option<Declared> {
     let name = unsafe { spec.name.as_str() }?.to_owned();
     // SAFETY: the safe layer passes the input layout, its fields and their
     // names borrowed and unchanged for the call.
-    let input = unsafe { crate::services::read_layout(&spec.input) }?;
+    let input = unsafe { enshwick_core::services::read_layout(&spec.input) }?;
     // SAFETY: the safe layer passes the output layout, its fields and their
     // names borrowed and unchanged for the call.
-    let output = unsafe { crate::services::read_layout(&spec.output) }?;
+    let output = unsafe { enshwick_core::services::read_layout(&spec.output) }?;
     Some(Declared {
         name,
         major: spec.major,
@@ -126,7 +126,7 @@ pub(crate) extern "system" fn find_call(
             .is_some_and(|manifest| manifest.requires_owner_of(&declared.name));
         let unexported = s.manifest.as_ref().is_some_and(|manifest| {
             manifest.unexported(
-                crate::schema_section::Kind::Call,
+                enshwick_core::schema_section::Kind::Call,
                 &declared.name,
                 &s.host.exports,
             )
@@ -190,7 +190,7 @@ pub(crate) extern "system" fn call(
 )]
 impl Installed {
     /// Serves the call `C` with `handler`, as another mod would, for the
-    /// mod's [`Caller`](crate::services::Caller)s of `C`.
+    /// mod's [`Caller`](enshwick_core::services::Caller)s of `C`.
     ///
     /// Serve a call of a mod the mod requires before the mod's init: a
     /// required mod initialises first, so the fake, as the loader, refuses
@@ -199,7 +199,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// #[enshwick::call(of = trading_post, name = "price-of", output = u32)]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct PriceOf {
@@ -234,7 +233,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::services::CallError;
     ///
     /// #[enshwick::call(name = "price-of", output = u32)]
@@ -284,7 +282,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.served_calls().is_empty());
     /// ```

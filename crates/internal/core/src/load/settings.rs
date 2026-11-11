@@ -32,7 +32,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use std::sync::atomic::{AtomicU32, Ordering};
     ///
     /// /// Altar settings.
@@ -69,7 +68,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use std::sync::atomic::{AtomicU32, Ordering};
     ///
     /// /// Comfort settings.

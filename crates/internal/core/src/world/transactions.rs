@@ -26,7 +26,6 @@ impl TransactionId {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn note(id: enshwick::world::TransactionId) {
     ///     enshwick::info!("transaction {}", id.get());
     /// }
@@ -43,7 +42,6 @@ impl TransactionId {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::world::{TransactionId, TransactionStatus, World};
 ///
 /// fn settled(world: World, id: TransactionId) -> bool {
@@ -131,7 +129,6 @@ impl TransactionStatus {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::terrain::Shape;
 /// use enshwick::WorldError;
 /// use enshwick::world::{TransactionId, World};
@@ -275,7 +272,6 @@ impl Transaction {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::terrain::Shape;
     ///
     /// fn pads(world: enshwick::world::World, stone: u8) -> bool {
@@ -311,7 +307,6 @@ impl Transaction {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::voxels::{VoxelBox, VoxelPos, Voxels};
     /// use enshwick::world::World;
     ///
@@ -341,7 +336,6 @@ impl Transaction {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::voxels::VoxelPos;
     ///
     /// fn clear(world: enshwick::world::World, corner: VoxelPos) -> bool {
@@ -372,7 +366,6 @@ impl Transaction {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::ItemId;
     /// use enshwick::world::{World, WorldTransform};
     ///
@@ -408,7 +401,6 @@ impl Transaction {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::ItemId;
     /// use enshwick::world::{World, WorldTransform};
     ///
@@ -444,7 +436,6 @@ impl Transaction {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::Entity;
     ///
     /// fn tidy(world: enshwick::world::World, crate_entity: Entity) -> bool {
@@ -473,7 +464,6 @@ impl Transaction {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::Entity;
     ///
     /// fn clear_ruin(world: enshwick::world::World, ruined: Entity) -> bool {
@@ -495,7 +485,6 @@ impl Transaction {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn empty(world: enshwick::world::World) -> bool {
     ///     world.transaction().is_empty()
     /// }
@@ -593,7 +582,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::voxels::VoxelPos;
     /// use enshwick::world::{Player, World};
     ///
@@ -644,7 +632,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn placed(world: enshwick::world::World, id: enshwick::world::TransactionId) -> usize {
     ///     world.transaction_entities(id).len()
     /// }

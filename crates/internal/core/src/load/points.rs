@@ -45,7 +45,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::points::{Order, Verdict};
     ///
     /// #[enshwick::point(of = trading_post, name = "price", mode = Override, output = u32)]
@@ -77,7 +76,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::points::Order;
     ///
     /// #[enshwick::point(of = trading_post, name = "price", mode = Observe, output = u32)]

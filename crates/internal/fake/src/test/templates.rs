@@ -1,11 +1,11 @@
 //! The fake's reflection of entity templates and the components our content
 //! edits in them, and the vanilla templates those edits start from.
 
-use crate::content::items::METER_TEMPLATE_BASE;
-use crate::content::workshops::stations;
-use crate::content::{EngineFacts, Guid};
-use crate::resources::{Constant, Field, Kind, Registry, Type, Value, Variant, fnv1a32};
 use enshwick_core::__fake::ids;
+use enshwick_core::content::items::METER_TEMPLATE_BASE;
+use enshwick_core::content::workshops::stations;
+use enshwick_core::content::{EngineFacts, Guid};
+use enshwick_core::resources::{Constant, Field, Kind, Registry, Type, Value, Variant, fnv1a32};
 
 use super::FakeHost;
 
@@ -341,14 +341,13 @@ impl FakeHost {
     /// Entity templates as the game reflects them, and in the archive the
     /// vanilla templates content edits start from: the Workbench's, the
     /// water pouch's, [`CREATURE`] and [`BOSS_CREATURE`]. What
-    /// [`Load::add_template`](crate::Load::add_template) and
-    /// [`Load::change_template`](crate::Load::change_template) resolve;
+    /// [`Load::add_template`](enshwick_core::Load::add_template) and
+    /// [`Load::change_template`](enshwick_core::Load::change_template) resolve;
     /// [`FakeHost::workshops`] and [`FakeHost::meters`] add it.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::content::EngineFacts;
     /// use enshwick::test::FakeHost;
     ///
@@ -479,12 +478,11 @@ impl FakeHost {
     /// reflected, and in the archive the vanilla [`PROP_ITEM`] and
     /// [`CRAFTING_PROP_ITEM`] with their templates and a workshop registry
     /// of [`VANILLA_CRAFTING_PROPS`] crafting props. What
-    /// [`Load::add_prop`](crate::Load::add_prop) resolves.
+    /// [`Load::add_prop`](enshwick_core::Load::add_prop) resolves.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::content::EngineFacts;
     /// use enshwick::test::FakeHost;
     ///
@@ -529,7 +527,7 @@ impl FakeHost {
             }
         }
         if let Ok(bytes) = registry.encode(WORKSHOP_REGISTRY, &workshops, None) {
-            let key = crate::content::workshops::WORKSHOP_REGISTRY;
+            let key = enshwick_core::content::workshops::WORKSHOP_REGISTRY;
             host = host.resource(key.key_by_hash(hash(WORKSHOP_REGISTRY)), bytes);
         }
         let item = host.hash(ids::ITEM_INFO).unwrap_or(0);
@@ -552,7 +550,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::content::Guid;
     ///
     /// let base = enshwick::test::FakeHost::recipe_registry(&[(Guid([1; 16]), &[])]);
@@ -586,7 +583,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::content::Guid;
     ///
     /// let claim = (Guid([1; 16]), 7, 0);
@@ -606,7 +602,7 @@ impl FakeHost {
                 ])
             })
             .collect();
-        let key = crate::content::recipes::RECIPE_REGISTRY;
+        let key = enshwick_core::content::recipes::RECIPE_REGISTRY;
         self.resource(
             key.key_by_hash(fnv1a32(RECIPE_REGISTRY.as_bytes())),
             encode_recipes(recipes),

@@ -4,13 +4,17 @@
 use core::ffi::c_void;
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::abi::{
+use enshwick_core::abi::{
     AffixDefData, AffixRoll, Header, ItemLine, ModHandle, StatChange, StatChangeFn, StatDefData,
     StatModifierData, StatModify, StatRef, StatSource, Status, Str,
 };
-use crate::affixes::{AffixDef, AffixKey, Candidate, ItemRarity, RollRules, lines_of, reroll};
-use crate::inventory::ItemInstance;
-use crate::stats::{ItemStats, Op, Stat, StatDef, StatKey, aggregate, builtin, key_of, name_key};
+use enshwick_core::affixes::{
+    AffixDef, AffixKey, Candidate, ItemRarity, RollRules, lines_of, reroll,
+};
+use enshwick_core::inventory::ItemInstance;
+use enshwick_core::stats::{
+    ItemStats, Op, Stat, StatDef, StatKey, aggregate, builtin, key_of, name_key,
+};
 
 use super::table::{Registered, with};
 
@@ -131,10 +135,14 @@ pub(crate) extern "system" fn stat_open(
     let opened = with(Err(Status::MISSING), |s| {
         let unexported = parsed.is_none()
             && s.manifest.as_ref().is_some_and(|manifest| {
-                manifest.unexported(crate::schema_section::Kind::Stat, &id, &s.host.exports)
+                manifest.unexported(
+                    enshwick_core::schema_section::Kind::Stat,
+                    &id,
+                    &s.host.exports,
+                )
             });
         if unexported {
-            super::table::warn_unexported(s, crate::schema_section::Kind::Stat, &id);
+            super::table::warn_unexported(s, enshwick_core::schema_section::Kind::Stat, &id);
             return Err(Status::REFUSED);
         }
         let own = is_own(s, &id);
@@ -274,7 +282,7 @@ fn value(s: &mut super::table::State, entity: u32, stat: u32) -> Option<f32> {
 
 pub(crate) extern "system" fn stat_value(
     _me: ModHandle,
-    entity: crate::Entity,
+    entity: enshwick_core::Entity,
     stat: u32,
     out: *mut f32,
 ) -> Status {
@@ -353,7 +361,7 @@ pub(crate) extern "system" fn stats_changed(
 
 pub(crate) extern "system" fn stat_sources(
     _me: ModHandle,
-    entity: crate::Entity,
+    entity: enshwick_core::Entity,
     stat: u32,
     out: *mut StatSource,
     capacity: u32,
@@ -365,7 +373,7 @@ pub(crate) extern "system" fn stat_sources(
 
 pub(crate) extern "system" fn stat_watch(
     _me: ModHandle,
-    entity: crate::Entity,
+    entity: enshwick_core::Entity,
     watch: u8,
 ) -> Status {
     with(Status::MISSING, |s| {
@@ -410,7 +418,7 @@ pub(crate) fn settle() -> usize {
                     let key = key_of(&s.stats.kinds[stat as usize].id).0;
                     changes.push(StatChange {
                         header: Header::of::<StatChange>(),
-                        entity: crate::Entity(entity),
+                        entity: enshwick_core::Entity(entity),
                         stat: StatRef { index: stat, key },
                         old,
                         new,
@@ -449,7 +457,7 @@ pub(crate) fn modifiers() -> Vec<(u32, u32, u32, u8, f32, u32, u64)> {
 fn record(s: &super::table::State, item: ItemInstance) -> ItemStats {
     s.item_kinds
         .iter()
-        .position(|k| k == crate::stats::ITEM_KIND)
+        .position(|k| k == enshwick_core::stats::ITEM_KIND)
         .and_then(|kind| s.item_values.get(&(u32::try_from(kind).ok()?, item.pide.0)))
         .filter(|(held, _)| *held == item.item.get())
         .and_then(|(_, bytes)| postcard::from_bytes::<ItemStats>(bytes).ok())
@@ -567,9 +575,10 @@ pub(crate) extern "system" fn affix_roll(
         let at = s
             .item_kinds
             .iter()
-            .position(|k| k == crate::stats::ITEM_KIND)
+            .position(|k| k == enshwick_core::stats::ITEM_KIND)
             .unwrap_or_else(|| {
-                s.item_kinds.push(crate::stats::ITEM_KIND.to_owned());
+                s.item_kinds
+                    .push(enshwick_core::stats::ITEM_KIND.to_owned());
                 s.item_kinds.len() - 1
             });
         s.item_values.insert(
@@ -586,8 +595,8 @@ pub(crate) extern "system" fn affix_roll(
 
 pub(crate) extern "system" fn item_lines(
     _me: ModHandle,
-    pide: crate::Entity,
-    item: crate::ItemId,
+    pide: enshwick_core::Entity,
+    item: enshwick_core::ItemId,
     out: *mut ItemLine,
     capacity: u32,
     count: *mut u32,

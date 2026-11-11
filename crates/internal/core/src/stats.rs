@@ -25,7 +25,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use core::time::Duration;
 //! use enshwick::content::id;
 //! use enshwick::events::PlayerJoined;
@@ -68,7 +67,6 @@ pub const ITEM_KIND: &str = "enshwick:stats";
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::Guid;
 /// use enshwick::stats::{StatKey, key_of};
 ///
@@ -90,7 +88,6 @@ pub const fn key_of(id: &str) -> StatKey {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::Id;
 /// use enshwick::stats::{builtin, name_key};
 ///
@@ -118,7 +115,6 @@ pub fn name_key(id: &str) -> Option<String> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::stats::builtin;
 ///
 /// assert_eq!(builtin::DAMAGE_FIRE.to_string(), "enshwick:damage_fire");
@@ -256,7 +252,6 @@ impl Stats {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn glows(stats: &enshwick::stats::Stats, glow: enshwick::stats::Stat, entity: enshwick::Entity) -> bool {
     ///     stats.is_on(entity, glow)
     /// }
@@ -304,7 +299,6 @@ impl Stats {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn unbless(stats: &enshwick::stats::Stats, health: enshwick::stats::Stat, player: enshwick::Entity) {
     ///     let _removed = stats.remove(player, "bless", health);
     /// }
@@ -348,7 +342,6 @@ impl Stats {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn bonuses(stats: &enshwick::stats::Stats, item: enshwick::inventory::ItemInstance) -> usize {
     ///     stats.item(item).modifiers.len()
     /// }
@@ -374,7 +367,6 @@ impl Stats {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::stats::{ItemStats, Modifier, Op};
     ///
     /// fn enchant(stats: &enshwick::stats::Stats, fire: enshwick::stats::Stat, ring: enshwick::inventory::ItemInstance) {
@@ -399,7 +391,6 @@ impl Stats {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::stats::Origin;
     ///
     /// fn from_items(stats: &enshwick::stats::Stats, player: enshwick::Entity) -> usize {
@@ -461,7 +452,6 @@ impl Stats {
     /// # Examples
     ///
     /// ```rust,standalone_crate
-    /// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
     /// use std::sync::OnceLock;
     ///
     /// use enshwick::content::id;
@@ -491,7 +481,6 @@ impl Stats {
     /// assert_eq!(info.id, "you.hello:luck");
     /// assert_eq!(info.text, "luck.name");
     /// # Ok::<(), &str>(())
-    /// # }
     /// ```
     #[must_use]
     #[script]
@@ -522,7 +511,6 @@ impl Stats {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn curse(stats: &enshwick::stats::Stats, enemy: enshwick::Entity) {
     ///     stats.watch(enemy, true);
     /// }
@@ -642,7 +630,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::buffs::BuffTypeId;
     /// use enshwick::stats::{Modifier, Op, builtin};
     ///
@@ -678,7 +665,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// enshwick::deps!();
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {

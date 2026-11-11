@@ -1,6 +1,6 @@
 //! Players' actions with items, as the loader hands them to item filters.
 
-use crate::abi::ItemAction;
+use enshwick_core::abi::ItemAction;
 
 use super::Installed;
 use super::table;
@@ -22,7 +22,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{Header, ItemAction};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -58,7 +57,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{Header, ItemAction};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();

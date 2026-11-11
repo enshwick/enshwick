@@ -1,11 +1,11 @@
 //! Players and mods: sides, players, loaded mods, actions, chat, messages and services.
 
-use crate::abi::Header;
-use crate::abi::ModInfo;
-use crate::abi::PlayerInfo;
-use crate::abi::RenameCall;
-use crate::abi::Side;
-use crate::abi::Str;
+use enshwick_core::abi::Header;
+use enshwick_core::abi::ModInfo;
+use enshwick_core::abi::PlayerInfo;
+use enshwick_core::abi::RenameCall;
+use enshwick_core::abi::Side;
+use enshwick_core::abi::Str;
 
 use super::FakeHost;
 use super::Installed;
@@ -29,7 +29,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::Side;
     ///
     /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).hosting(true).install();
@@ -47,7 +46,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::Side;
     ///
     /// let loader = enshwick::test::FakeHost::new()
@@ -58,7 +56,7 @@ impl FakeHost {
     /// # let _ = loader;
     /// ```
     #[must_use]
-    pub fn host_key(mut self, key: crate::PlayerKey) -> Self {
+    pub fn host_key(mut self, key: enshwick_core::PlayerKey) -> Self {
         self.host_key = Some(key);
         self
     }
@@ -69,7 +67,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().server_world(0x2000).install();
     /// # let _ = loader;
     /// ```
@@ -80,22 +77,21 @@ impl FakeHost {
     }
 
     /// A peer that takes mod messages: a player's account key on the
-    /// server, or [`Peer::Server`](crate::net::Peer::Server) on a client.
+    /// server, or [`Peer::Server`](enshwick_core::net::Peer::Server) on a client.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::net::Peer;
     ///
     /// let loader = enshwick::test::FakeHost::new().net_peer(Peer::Player(enshwick::PlayerKey::new(7))).install();
     /// # let _ = loader;
     /// ```
     #[must_use]
-    pub fn net_peer(mut self, peer: crate::net::Peer) -> Self {
+    pub fn net_peer(mut self, peer: enshwick_core::net::Peer) -> Self {
         let raw = match peer {
-            crate::net::Peer::Server => crate::abi::NetMessage::SERVER,
-            crate::net::Peer::Player(key) => key,
+            enshwick_core::net::Peer::Server => enshwick_core::abi::NetMessage::SERVER,
+            enshwick_core::net::Peer::Player(key) => key,
         };
         self.net_peers.insert(raw.get());
         self
@@ -108,7 +104,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().world_key("world0").install();
     /// # let _ = loader;
     /// ```
@@ -123,7 +118,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{Header, PlayerInfo};
     ///
     /// let player = PlayerInfo {
@@ -150,7 +144,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{Header, ManifestFlags, ModInfo, Side, Str};
     ///
     /// let loader = enshwick::test::FakeHost::new()
@@ -185,7 +178,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new()
     ///     .exports("you.trading-post", &["call:price-of", "event:sold"])
     ///     .install();
@@ -218,7 +210,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{Header, ModInfo, Side, Str};
     ///
     /// let loader = enshwick::test::FakeHost::new()
@@ -254,7 +245,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new()
     ///     .console_answer("enshwick", "Enshwick 0.0.0-test: no mods")
     ///     .install();
@@ -270,14 +260,13 @@ impl FakeHost {
     /// Another running mod, `mod_id`, loaded before the mod under test,
     /// that named its actions as commands with `alias`: the mod under test
     /// gets no alias another mod holds,
-    /// [`commands::list`](crate::commands::list) names both, and a command
+    /// [`commands::list`](enshwick_core::commands::list) names both, and a command
     /// line to the other mod gets the
     /// [console answer](Self::console_answer) of the word used, as done.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new()
     ///     .other_mod_commands("you.weather", "wx")
     ///     .install();
@@ -298,7 +287,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new()
     ///     .later_mod_commands("you.weather", "wx")
     ///     .install();
@@ -317,7 +305,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// #[enshwick::service(of = trading_post, name = "prices")]
     /// pub struct Prices {
     ///     pub price: extern "system" fn(item: u32) -> u32,
@@ -333,7 +320,7 @@ impl FakeHost {
     /// # let _ = loader;
     /// ```
     #[must_use]
-    pub fn service<T: crate::services::Service>(mut self, table: &'static T) -> Self {
+    pub fn service<T: enshwick_core::services::Service>(mut self, table: &'static T) -> Self {
         self.services.push(FakeService {
             name: T::NAME.to_owned(),
             major: T::MAJOR,
@@ -354,16 +341,15 @@ impl FakeHost {
 )]
 impl Installed {
     /// Asks the mod's player actions as the loader does: `kind` is one of
-    /// [`ActionCall::SHEET`](crate::abi::ActionCall::SHEET),
-    /// [`ActionCall::RUN`](crate::abi::ActionCall::RUN) or
-    /// [`ActionCall::CONSOLE`](crate::abi::ActionCall::CONSOLE), for
+    /// [`ActionCall::SHEET`](enshwick_core::abi::ActionCall::SHEET),
+    /// [`ActionCall::RUN`](enshwick_core::abi::ActionCall::RUN) or
+    /// [`ActionCall::CONSOLE`](enshwick_core::abi::ActionCall::CONSOLE), for
     /// `player` reading `language`; `action` and `args` for a run. `None` when the
     /// mod has no actions.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{ActionCall, Header, PlayerInfo};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -395,14 +381,14 @@ impl Installed {
             language,
             action,
             args,
-            crate::abi::ActionTarget::NONE,
+            enshwick_core::abi::ActionTarget::NONE,
         );
-        if kind == crate::abi::ActionCall::RUN {
+        if kind == enshwick_core::abi::ActionCall::RUN {
             let key = player.key.get();
             table::with((), |s| {
                 let held = s.commands.carried.iter().filter(|(k, _, _)| *k == key);
                 let again: Vec<_> = held
-                    .map(|(k, id, _)| (*k, id.clone(), crate::abi::WINDOW_UPDATE))
+                    .map(|(k, id, _)| (*k, id.clone(), enshwick_core::abi::WINDOW_UPDATE))
                     .collect();
                 s.commands.windows.extend(again);
             });
@@ -418,7 +404,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{Header, PlayerInfo};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -446,16 +431,15 @@ impl Installed {
         if !own {
             return None;
         }
-        table::commands::answer(line, crate::abi::ActionCall::CHAT, player, language)
+        table::commands::answer(line, enshwick_core::abi::ActionCall::CHAT, player, language)
     }
 
     /// How often the mod said who may run its actions changed, with
-    /// [`Actions::rules_changed`](crate::actions::Actions::rules_changed).
+    /// [`Actions::rules_changed`](enshwick_core::actions::Actions::rules_changed).
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert_eq!(loader.rules_changed(), 0);
     /// ```
@@ -477,7 +461,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{Header, PlayerInfo};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -509,22 +492,22 @@ impl Installed {
                 let mut carried = s.commands.carried.iter();
                 carried.any(|(k, i, _)| *k == key && *i == id)
             });
-            if change == crate::abi::WINDOW_UPDATE && !holds {
+            if change == enshwick_core::abi::WINDOW_UPDATE && !holds {
                 continue;
             }
-            let text = match (change == crate::abi::WINDOW_CLOSE, actions) {
+            let text = match (change == enshwick_core::abi::WINDOW_CLOSE, actions) {
                 (false, Some(actions)) => ask(
                     actions,
-                    crate::abi::ActionCall::WINDOW,
+                    enshwick_core::abi::ActionCall::WINDOW,
                     player,
                     language,
                     &id,
                     "",
-                    crate::abi::ActionTarget::NONE,
+                    enshwick_core::abi::ActionTarget::NONE,
                 ),
                 _ => String::new(),
             };
-            let text = if text.len() > crate::actions::window::MAX_BYTES {
+            let text = if text.len() > enshwick_core::actions::window::MAX_BYTES {
                 String::new()
             } else {
                 text
@@ -535,7 +518,7 @@ impl Installed {
                 match (at, text.is_empty()) {
                     (Some(at), true) => {
                         let (_, id, _) = carried.remove(at);
-                        (change != crate::abi::WINDOW_CLOSE).then_some(id)
+                        (change != enshwick_core::abi::WINDOW_CLOSE).then_some(id)
                     }
                     (Some(at), false) => {
                         carried[at].2 = text;
@@ -546,7 +529,7 @@ impl Installed {
                         let mine: Vec<usize> = (0..carried.len())
                             .filter(|&i| carried[i].0 == key)
                             .collect();
-                        (mine.len() > crate::actions::window::MAX_HELD)
+                        (mine.len() > enshwick_core::actions::window::MAX_HELD)
                             .then(|| carried.remove(mine[0]).1)
                     }
                     (None, true) => None,
@@ -574,7 +557,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{Header, PlayerInfo};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -612,12 +594,11 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// loader.player_left(enshwick::PlayerKey::new(7));
     /// ```
     #[cfg(feature = "unstable")]
-    pub fn player_left(&self, player: crate::PlayerKey) {
+    pub fn player_left(&self, player: enshwick_core::PlayerKey) {
         let key = player.get();
         table::with((), |s| {
             s.commands.carried.retain(|(k, _, _)| *k != key);
@@ -634,20 +615,20 @@ impl Installed {
         clippy::unused_self,
         reason = "only an installed fake has a mod to tell"
     )]
-    fn tell_window_closed(&self, player: crate::PlayerKey, id: &str) {
+    fn tell_window_closed(&self, player: enshwick_core::PlayerKey, id: &str) {
         let Some(actions) = table::with(None, |s| s.actions) else {
             return;
         };
         let who = PlayerInfo {
             header: Header::of::<PlayerInfo>(),
             slot: u32::MAX,
-            entity: crate::Entity(0),
+            entity: enshwick_core::Entity(0),
             key: player,
             permissions: 0,
             name_len: 0,
             name: [0; 64],
         };
-        let closed = crate::abi::ActionCall::WINDOW_CLOSED;
+        let closed = enshwick_core::abi::ActionCall::WINDOW_CLOSED;
         let _heard = ask(
             actions,
             closed,
@@ -655,19 +636,18 @@ impl Installed {
             0,
             id,
             "",
-            crate::abi::ActionTarget::NONE,
+            enshwick_core::abi::ActionTarget::NONE,
         );
     }
 
     /// Runs the mod's action `action` with `args` for `player` as the
     /// loader does when a client named `target` with
-    /// [`Actions::run_at`](crate::actions::Actions::run_at); the reply, or
+    /// [`Actions::run_at`](enshwick_core::actions::Actions::run_at); the reply, or
     /// `None` when the mod has no actions.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::abi::{Header, PlayerInfo};
     /// use enshwick::actions::ActionTarget;
     ///
@@ -692,10 +672,10 @@ impl Installed {
         language: u32,
         action: &str,
         args: &str,
-        target: crate::actions::ActionTarget,
+        target: enshwick_core::actions::ActionTarget,
     ) -> Option<String> {
         let actions = table::with(None, |s| s.actions)?;
-        let run = crate::abi::ActionCall::RUN;
+        let run = enshwick_core::abi::ActionCall::RUN;
         Some(ask(
             actions,
             run,
@@ -713,7 +693,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.console().is_empty());
     /// ```
@@ -723,13 +702,12 @@ impl Installed {
     }
 
     /// The mod's features as it last reported them with
-    /// [`Load::feature`](crate::Load::feature), in the order it first named
+    /// [`Load::feature`](enshwick_core::Load::feature), in the order it first named
     /// them: the name and, for one that is off, the reason.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.features().is_empty());
     /// ```
@@ -744,7 +722,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.status().is_empty());
     /// ```
@@ -770,28 +747,26 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.chat().is_empty());
     /// ```
     #[must_use]
-    pub fn chat(&self) -> Vec<(crate::PlayerKey, String)> {
+    pub fn chat(&self) -> Vec<(enshwick_core::PlayerKey, String)> {
         table::with(Vec::new(), |s| s.chat.clone())
     }
 
     /// The messages the mod sent: the channel's full name (`name@version`),
-    /// the raw peer ([`NetMessage::SERVER`](crate::abi::NetMessage::SERVER),
+    /// the raw peer ([`NetMessage::SERVER`](enshwick_core::abi::NetMessage::SERVER),
     /// a player's key, or 0 for every client) and the encoded bytes.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.net_sent().is_empty());
     /// ```
     #[must_use]
-    pub fn net_sent(&self) -> Vec<(String, crate::PlayerKey, Vec<u8>)> {
+    pub fn net_sent(&self) -> Vec<(String, enshwick_core::PlayerKey, Vec<u8>)> {
         table::with(Vec::new(), |s| {
             s.net_sent
                 .iter()
@@ -814,7 +789,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::net::Peer;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -824,7 +798,7 @@ impl Installed {
     pub fn net_deliver<M: serde::Serialize>(
         &self,
         name: &str,
-        from: crate::net::Peer,
+        from: enshwick_core::net::Peer,
         message: &M,
     ) -> bool {
         let Ok(bytes) = postcard::to_allocvec(message) else {
@@ -837,11 +811,11 @@ impl Installed {
             return false;
         };
         let peer = match from {
-            crate::net::Peer::Server => crate::abi::NetMessage::SERVER,
-            crate::net::Peer::Player(key) => key,
+            enshwick_core::net::Peer::Server => enshwick_core::abi::NetMessage::SERVER,
+            enshwick_core::net::Peer::Player(key) => key,
         };
-        let raw = crate::abi::NetMessage {
-            header: Header::of::<crate::abi::NetMessage>(),
+        let raw = enshwick_core::abi::NetMessage {
+            header: Header::of::<enshwick_core::abi::NetMessage>(),
             channel: id,
             reserved: 0,
             peer,
@@ -861,12 +835,11 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.notices().is_empty());
     /// ```
     #[must_use]
-    pub fn notices(&self) -> Vec<(crate::PlayerKey, String)> {
+    pub fn notices(&self) -> Vec<(enshwick_core::PlayerKey, String)> {
         table::with(Vec::new(), |s| s.notices.clone())
     }
 
@@ -876,22 +849,26 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.rename(enshwick::Entity(4096), None, "Tools"));
     /// ```
     #[must_use]
-    pub fn rename(&self, entity: crate::Entity, player: Option<&PlayerInfo>, text: &str) -> bool {
+    pub fn rename(
+        &self,
+        entity: enshwick_core::Entity,
+        player: Option<&PlayerInfo>,
+        text: &str,
+    ) -> bool {
         let filters = table::with(Vec::new(), |s| s.rename_filters.clone());
         let call = RenameCall {
             header: Header::of::<RenameCall>(),
-            entity: crate::Entity(entity.0),
+            entity: enshwick_core::Entity(entity.0),
             known: u8::from(player.is_some()),
             player: player.copied().unwrap_or(PlayerInfo {
                 header: Header::of::<PlayerInfo>(),
                 slot: u32::MAX,
-                entity: crate::Entity(0),
-                key: crate::PlayerKey::new(0),
+                entity: enshwick_core::Entity(0),
+                key: enshwick_core::PlayerKey::new(0),
                 permissions: 0,
                 name_len: 0,
                 name: [0; 64],
@@ -912,8 +889,8 @@ pub(crate) fn console() -> PlayerInfo {
     PlayerInfo {
         header: Header::of::<PlayerInfo>(),
         slot: u32::MAX,
-        entity: crate::Entity(0),
-        key: crate::PlayerKey::new(0),
+        entity: enshwick_core::Entity(0),
+        key: enshwick_core::PlayerKey::new(0),
         permissions: PlayerInfo::CAN_KICK_BAN
             | PlayerInfo::CAN_ACCESS_INVENTORIES
             | PlayerInfo::CAN_EDIT_BASE
@@ -929,16 +906,16 @@ pub(crate) fn console() -> PlayerInfo {
 /// the arguments of a run, or the word that named the mod for a typed line
 /// (the console, chat or a remote caller).
 pub(crate) fn ask(
-    actions: table::Registered<crate::abi::ActionFn>,
+    actions: table::Registered<enshwick_core::abi::ActionFn>,
     kind: u32,
     player: &PlayerInfo,
     language: u32,
     action: &str,
     extra: &str,
-    target: crate::abi::ActionTarget,
+    target: enshwick_core::abi::ActionTarget,
 ) -> String {
-    let mut call = crate::abi::ActionCall {
-        header: Header::of::<crate::abi::ActionCall>(),
+    let mut call = enshwick_core::abi::ActionCall {
+        header: Header::of::<enshwick_core::abi::ActionCall>(),
         kind,
         language,
         player: *player,
@@ -949,17 +926,17 @@ pub(crate) fn ask(
         word: Str::EMPTY,
     };
     let typed = [
-        crate::abi::ActionCall::CONSOLE,
-        crate::abi::ActionCall::CHAT,
-        crate::abi::ActionCall::REMOTE,
+        enshwick_core::abi::ActionCall::CONSOLE,
+        enshwick_core::abi::ActionCall::CHAT,
+        enshwick_core::abi::ActionCall::REMOTE,
     ];
     if typed.contains(&kind) {
         call.word = Str::new(extra);
     } else {
         call.args = Str::new(extra);
     }
-    let mut written: crate::abi::ActionReply = bytemuck::Zeroable::zeroed();
-    if kind != crate::abi::ActionCall::SHEET {
+    let mut written: enshwick_core::abi::ActionReply = bytemuck::Zeroable::zeroed();
+    if kind != enshwick_core::abi::ActionCall::SHEET {
         call.reply = &raw mut written;
     }
     let mut reply = Str::EMPTY;

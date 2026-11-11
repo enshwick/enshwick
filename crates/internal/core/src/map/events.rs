@@ -151,7 +151,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.on_waypoint(|change| match change.position {
     ///         Some(at) => enshwick::info!("{:?} marks {at:?}", change.player),
@@ -220,7 +219,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.on_fog_uncovered(|new| {
     ///         enshwick::info!("{} pixels of new ground near {:?}", new.pixels, new.min);
@@ -262,7 +260,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.on_ping(|ping| enshwick::info!("{:?} pings {:?}", ping.player, ping.position))
     /// }

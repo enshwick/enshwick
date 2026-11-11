@@ -4,10 +4,12 @@
 use core::ffi::c_void;
 use core::time::Duration;
 
-use crate::abi::{
+use enshwick_core::abi::{
     ControlEvent, ControlFn, ControlSpec, Header, ModHandle, PlayerInfo, Status, Str, read_headed,
 };
-use crate::controls::{GameAction, Key, Tracker, chords, is_valid_name, phases, valid_phases};
+use enshwick_core::controls::{
+    GameAction, Key, Tracker, chords, is_valid_name, phases, valid_phases,
+};
 
 use super::table::{Registered, Registration, text, with};
 use super::{FakeHost, Installed};
@@ -39,7 +41,7 @@ pub(crate) struct FakeControls {
     /// The action runs the mod sent the server: action and arguments.
     runs: Vec<(String, String)>,
     /// The object each run named, in the order of `runs`.
-    targets: Vec<Option<crate::actions::ActionTarget>>,
+    targets: Vec<Option<enshwick_core::actions::ActionTarget>>,
 }
 
 pub(crate) extern "system" fn control(
@@ -101,7 +103,7 @@ pub(crate) extern "system" fn control(
 pub(crate) extern "system" fn run_action(_me: ModHandle, action: Str, args: Str) -> Status {
     let (action, args) = (text(action), text(args));
     with(Status::MISSING, |s| {
-        if s.host.side != crate::abi::Side::CLIENT {
+        if s.host.side != enshwick_core::abi::Side::CLIENT {
             return Status::MISSING;
         }
         s.controls.runs.push((action, args));
@@ -114,10 +116,10 @@ pub(crate) extern "system" fn run_action_at(
     _me: ModHandle,
     action: Str,
     args: Str,
-    target: *const crate::abi::ActionTarget,
+    target: *const enshwick_core::abi::ActionTarget,
 ) -> Status {
     // SAFETY: the safe layer passes null or a live `ActionTarget` for the call.
-    let named = match unsafe { crate::abi::ActionTarget::read(target) } {
+    let named = match unsafe { enshwick_core::abi::ActionTarget::read(target) } {
         Ok(named) => named,
         Err(status) => return status,
     };
@@ -126,7 +128,7 @@ pub(crate) extern "system" fn run_action_at(
         .and_then(enshwick_core::__fake::action_target);
     let (action, args) = (text(action), text(args));
     with(Status::MISSING, |s| {
-        if s.host.side != crate::abi::Side::CLIENT {
+        if s.host.side != enshwick_core::abi::Side::CLIENT {
             return Status::MISSING;
         }
         s.controls.runs.push((action, args));
@@ -143,7 +145,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::controls::Key;
     ///
     /// let loader = enshwick::test::FakeHost::new()
@@ -187,8 +188,8 @@ fn deliver(calls: &[Call], server: Option<&PlayerInfo>) -> usize {
     let zero = PlayerInfo {
         header: Header::of::<PlayerInfo>(),
         slot: 0,
-        entity: crate::Entity(0),
-        key: crate::PlayerKey::new(0),
+        entity: enshwick_core::Entity(0),
+        key: enshwick_core::PlayerKey::new(0),
         permissions: 0,
         name_len: 0,
         name: [0; 64],
@@ -218,7 +219,7 @@ impl Installed {
     /// Looks at the keys as the client's key reader does, `after` the last
     /// look: `down` are the keys held now, and the modifiers of all of them
     /// are held together, as on a keyboard. Each control the rule of the
-    /// [controls](crate::controls) brings down fires what the look decides.
+    /// [controls](enshwick_core::controls) brings down fires what the look decides.
     /// As in the loader, only a client reads keys: on a server nothing
     /// fires, nor for a mod of side server on a client that does not
     /// host. Returns how many calls the mod got.
@@ -226,7 +227,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use std::time::Duration;
     /// use enshwick::controls::Key;
     ///
@@ -240,7 +240,7 @@ impl Installed {
             // In another's world a mod of side server fires on its server,
             // which carries the control to the client.
             let server_mod = s.manifest.as_ref().is_some_and(|m| !m.joins);
-            if s.host.side != crate::abi::Side::CLIENT || (server_mod && !s.host.hosting) {
+            if s.host.side != enshwick_core::abi::Side::CLIENT || (server_mod && !s.host.hosting) {
                 return Vec::new();
             }
             let now = advance(&mut s.controls, after);
@@ -280,7 +280,7 @@ impl Installed {
     /// Looks at `player`'s game actions on the server as the loader does
     /// once a step, `after` the last look: `held` are the actions the
     /// player's input sets now. Each control linked to one of them fires
-    /// what the look decides: [`Phase::Press`](crate::controls::Phase::Press)
+    /// what the look decides: [`Phase::Press`](enshwick_core::controls::Phase::Press)
     /// when it comes on, then hold and release. As in the loader, they fire
     /// in a server's world only: a fake on the client side, a client in
     /// another's world, fires nothing. Returns how many calls the mod got.
@@ -288,7 +288,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use std::time::Duration;
     /// use enshwick::abi::{Header, PlayerInfo};
     /// use enshwick::controls::GameAction;
@@ -310,7 +309,7 @@ impl Installed {
     pub fn game_actions(&self, player: &PlayerInfo, held: &[GameAction], after: Duration) -> usize {
         let entity = player.entity.0;
         let calls = with(Vec::new(), |s| {
-            if s.host.side == crate::abi::Side::CLIENT {
+            if s.host.side == enshwick_core::abi::Side::CLIENT {
                 return Vec::new();
             }
             let now = advance(&mut s.controls, after);
@@ -342,7 +341,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.controls().is_empty());
     /// ```
@@ -352,8 +350,8 @@ impl Installed {
             let texts = s
                 .published_texts
                 .as_deref()
-                .and_then(|toml| crate::i18n::Texts::parse(toml).ok());
-            let language = crate::i18n::Language(s.host.language);
+                .and_then(|toml| enshwick_core::i18n::Texts::parse(toml).ok());
+            let language = enshwick_core::i18n::Language(s.host.language);
             s.controls
                 .controls
                 .iter()
@@ -369,15 +367,14 @@ impl Installed {
     }
 
     /// The player actions the mod asked the server to run, with
-    /// [`Actions::run`](crate::actions::Actions::run) or a control's
-    /// [`Control::runs`](crate::controls::Control::runs): action and arguments
+    /// [`Actions::run`](enshwick_core::actions::Actions::run) or a control's
+    /// [`Control::runs`](enshwick_core::controls::Control::runs): action and arguments
     /// in the sheet's encoding, in order. As in the loader, only a client
     /// sends them: a fake on the server side refuses the run.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.action_runs().is_empty());
     /// ```
@@ -387,18 +384,17 @@ impl Installed {
     }
 
     /// The object each of [`action_runs`](Self::action_runs) named with
-    /// [`Actions::run_at`](crate::actions::Actions::run_at), in the same
+    /// [`Actions::run_at`](enshwick_core::actions::Actions::run_at), in the same
     /// order; `None` for a run without one.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert!(loader.action_targets().is_empty());
     /// ```
     #[must_use]
-    pub fn action_targets(&self) -> Vec<Option<crate::actions::ActionTarget>> {
+    pub fn action_targets(&self) -> Vec<Option<enshwick_core::actions::ActionTarget>> {
         with(Vec::new(), |s| s.controls.targets.clone())
     }
 }

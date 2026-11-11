@@ -14,7 +14,6 @@ use super::{Entry, Field, Value, ValueError, field_and_value};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::Guid;
 /// use enshwick::content::changes::{RecipeTraits, Recipes};
 /// use enshwick::content::recipes::RecipeKind;
@@ -87,7 +86,6 @@ impl Recipes {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::changes::{Field, Recipes, RecipesChange, Value};
 /// use enshwick::content::recipes::RecipeKind;
 ///
@@ -131,7 +129,6 @@ impl RecipesChange {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::changes::{Field, Recipes, RecipesChange, Value};
     /// use enshwick::content::recipes::RecipeKind;
     ///
@@ -153,7 +150,6 @@ impl RecipesChange {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::Guid;
     /// use enshwick::content::changes::{Field, Recipes, RecipesChange, Value};
     /// use enshwick::content::recipes::RecipeKind;
@@ -177,7 +173,6 @@ impl RecipesChange {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::abi::{ChangeOp, DataChange, DataField, DataSelect, Header, RecipeKind, Str};
     /// use enshwick::content::changes::{Recipes, RecipesChange};
     ///

@@ -3,8 +3,8 @@
 
 use std::sync::{Mutex, MutexGuard};
 
-use crate::Relock;
-use crate::abi::{
+use enshwick_core::Relock;
+use enshwick_core::abi::{
     ActiveBuff, AltarInfo, AltarLimitFilterFn, AltarZoneFn, BedCheckFn, BuffTypeInfo, BuildCheckFn,
     BuildingZoneCheckFn, ComfortFn, ConfigCheckFn, CraftCheckFn, DamageFilterFn, DaytimeInfo,
     Event, EventFn, ExperiencePassFn, GameEventFn, Header, HostApi, InteractionFn,
@@ -188,7 +188,7 @@ pub(crate) struct State {
     /// The changes of vanilla values the mod declared, with their sources.
     pub(crate) changes: DataChanges,
     /// The mod's recipe rules in force: kind and name.
-    pub(crate) recipe_rules: Vec<(crate::abi::RecipeRuleKind, String)>,
+    pub(crate) recipe_rules: Vec<(enshwick_core::abi::RecipeRuleKind, String)>,
     pub(crate) texts: Vec<(u32, u32, String)>,
     pub(crate) code_patches: Vec<(u64, Vec<u8>, Vec<u8>)>,
     pub(crate) published: Vec<super::FakeService>,
@@ -206,8 +206,8 @@ pub(crate) struct State {
     /// the game's count and the mask's bits of the first call.
     pub(crate) crafting_props: (Option<(u8, u8)>, Vec<[u8; 16]>),
     /// The mod's player actions callback, once registered.
-    pub(crate) actions: Option<Registered<crate::abi::ActionFn>>,
-    pub(crate) chat: Vec<(crate::PlayerKey, String)>,
+    pub(crate) actions: Option<Registered<enshwick_core::abi::ActionFn>>,
+    pub(crate) chat: Vec<(enshwick_core::PlayerKey, String)>,
     pub(crate) labels: Vec<(u32, String)>,
     pub(crate) rename_filters: Vec<Registered<RenameCallFn>>,
     pub(crate) inventory_requests: Vec<OpenRequest>,
@@ -222,11 +222,11 @@ pub(crate) struct State {
     /// How many saves the mod asked for.
     pub(crate) saves: usize,
     /// The accounts on the fake server's ban list, in the order banned.
-    pub(crate) banned: Vec<crate::PlayerKey>,
+    pub(crate) banned: Vec<enshwick_core::PlayerKey>,
     /// The accounts the mod removed from the game, by kick or ban, in order.
     pub(crate) removed: Vec<u64>,
     /// The accounts muted in the fake server's chat, in the order muted.
-    pub(crate) muted: Vec<crate::PlayerKey>,
+    pub(crate) muted: Vec<enshwick_core::PlayerKey>,
     /// The components the mod asked to write, `(entity, type hash)`.
     pub(crate) writes: Vec<(u32, u32)>,
     /// The game events the mod raised: type hash and bytes.
@@ -240,18 +240,18 @@ pub(crate) struct State {
     pub(crate) spawn_steps: Vec<u64>,
     /// The level and experience writes the mod asked for: character, what
     /// and value; `None` until it asks for them in `init`.
-    pub(crate) progress_writes: Option<Vec<(crate::Entity, u32, u32)>>,
+    pub(crate) progress_writes: Option<Vec<(enshwick_core::Entity, u32, u32)>>,
     /// The step each of `progress_writes` was asked in.
     pub(crate) progress_steps: Vec<u64>,
     /// The drops the mod asked for, with the ids handed out.
-    pub(crate) drops: Vec<(crate::Entity, crate::abi::DropRequest)>,
+    pub(crate) drops: Vec<(enshwick_core::Entity, enshwick_core::abi::DropRequest)>,
     pub(crate) craft_filters: Vec<Registered<CraftCheckFn>>,
     /// Channels the mod opened: full name, id, handler and pointer.
     pub(crate) channels: Vec<(String, u32, Registered<NetMessageFn>)>,
     /// Messages the mod sent: channel id, raw peer and bytes.
-    pub(crate) net_sent: Vec<(u32, crate::PlayerKey, Vec<u8>)>,
+    pub(crate) net_sent: Vec<(u32, enshwick_core::PlayerKey, Vec<u8>)>,
     /// Notices the mod showed: account key and text.
-    pub(crate) notices: Vec<(crate::PlayerKey, String)>,
+    pub(crate) notices: Vec<(enshwick_core::PlayerKey, String)>,
     pub(crate) build_filters: Vec<Registered<BuildCheckFn>>,
     /// The clock `time_of_day` writes, settable while installed.
     pub(crate) daytime: Option<DaytimeInfo>,
@@ -268,18 +268,34 @@ pub(crate) struct State {
     /// The buffs of each entity that holds buffs.
     pub(crate) buffs: rustc_hash::FxHashMap<u32, Vec<ActiveBuff>>,
     /// Knowledge values by `(character or 0, id)`.
-    pub(crate) knowledge: Vec<(Option<crate::Entity>, KnowledgeInfo)>,
+    pub(crate) knowledge: Vec<(Option<enshwick_core::Entity>, KnowledgeInfo)>,
     /// Whether each game query holds, by `(character or 0, query)`.
-    pub(crate) game_queries: Vec<(Option<crate::Entity>, u32, bool)>,
+    pub(crate) game_queries: Vec<(Option<enshwick_core::Entity>, u32, bool)>,
     /// The grants the mod asked for: character, id, kind, value.
-    pub(crate) grants: Vec<(Option<crate::Entity>, crate::abi::KnowledgeId, u32, u32)>,
+    pub(crate) grants: Vec<(
+        Option<enshwick_core::Entity>,
+        enshwick_core::abi::KnowledgeId,
+        u32,
+        u32,
+    )>,
     /// The revokes the mod asked for: character, id, kind, value.
-    pub(crate) revokes: Vec<(Option<crate::Entity>, crate::abi::KnowledgeId, u32, u32)>,
+    pub(crate) revokes: Vec<(
+        Option<enshwick_core::Entity>,
+        enshwick_core::abi::KnowledgeId,
+        u32,
+        u32,
+    )>,
     /// The changes the mod asked for accounts: key, id, kind, value,
     /// whether a revoke.
-    pub(crate) account_changes: Vec<(crate::PlayerKey, crate::abi::KnowledgeId, u32, u32, bool)>,
+    pub(crate) account_changes: Vec<(
+        enshwick_core::PlayerKey,
+        enshwick_core::abi::KnowledgeId,
+        u32,
+        u32,
+        bool,
+    )>,
     /// The quest ids the fake knows.
-    pub(crate) quests: Vec<crate::abi::KnowledgeId>,
+    pub(crate) quests: Vec<enshwick_core::abi::KnowledgeId>,
     /// The weather weights everywhere and the fronts, settable.
     pub(crate) weather: Option<([f32; 4], Vec<WeatherFront>)>,
     /// The weather the mod started: effect and duration.
@@ -358,7 +374,7 @@ pub(crate) struct State {
     /// Content served or put in the fake archive, by hash.
     pub(crate) content: std::collections::BTreeMap<[u32; 4], Vec<u8>>,
     pub(crate) item_values: std::collections::BTreeMap<(u32, u32), (u32, Vec<u8>)>,
-    pub(crate) summon_items: Vec<(crate::ItemId, crate::survivors::NpcId)>,
+    pub(crate) summon_items: Vec<(enshwick_core::ItemId, enshwick_core::survivors::NpcId)>,
     /// Stat kinds, modifiers and worn items.
     pub(crate) stats: super::stats::FakeStats,
     /// Extension points the mod defined and links it attached.
@@ -372,17 +388,17 @@ pub(crate) struct State {
     pub(crate) controls: super::controls::FakeControls,
     pub(crate) survivor_status: Option<Registered<SurvivorStatusFn>>,
     pub(crate) interaction_filters: Vec<Registered<InteractionFn>>,
-    pub(crate) item_filters: Vec<Registered<crate::abi::ItemActionFn>>,
-    pub(crate) chat_filters: Vec<Registered<crate::abi::ChatFilterFn>>,
+    pub(crate) item_filters: Vec<Registered<enshwick_core::abi::ItemActionFn>>,
+    pub(crate) chat_filters: Vec<Registered<enshwick_core::abi::ChatFilterFn>>,
     /// Each account's chat rate: the start of its window in fake server
     /// time and the lines heard in it.
-    pub(crate) chat_rate: Vec<(crate::PlayerKey, u64, u32)>,
+    pub(crate) chat_rate: Vec<(enshwick_core::PlayerKey, u64, u32)>,
     /// The world's save on disk and the mod's hold on saves.
     pub(crate) save: Saves,
-    pub(crate) skills: Vec<(crate::abi::SkillNode, Registered<SkillCheckFn>)>,
+    pub(crate) skills: Vec<(enshwick_core::abi::SkillNode, Registered<SkillCheckFn>)>,
     pub(crate) comfort_filters: Vec<Registered<ComfortFn>>,
     /// The rates the mod declared, with the factor it set for each.
-    pub(crate) rates: Vec<(crate::abi::RateId, f32)>,
+    pub(crate) rates: Vec<(enshwick_core::abi::RateId, f32)>,
     /// What the mod asked of the engine's pacing places.
     pub(crate) pacing: Pacing,
     pub(crate) experience_filters: Vec<Registered<ExperiencePassFn>>,
@@ -460,7 +476,7 @@ pub(crate) struct ManifestFacts {
 
 impl ManifestFacts {
     /// The facts of `manifest`.
-    fn of(manifest: &crate::abi::Manifest) -> Self {
+    fn of(manifest: &enshwick_core::abi::Manifest) -> Self {
         let dependencies = if manifest.dependencies.is_null() {
             &[][..]
         } else {
@@ -470,10 +486,10 @@ impl ManifestFacts {
         };
         Self {
             id: text(manifest.id),
-            joins: manifest.side == crate::abi::Side::BOTH,
+            joins: manifest.side == enshwick_core::abi::Side::BOTH,
             requires: dependencies
                 .iter()
-                .filter(|d| d.relation == crate::abi::Relation::REQUIRES)
+                .filter(|d| d.relation == enshwick_core::abi::Relation::REQUIRES)
                 .map(|d| text(d.id))
                 .collect(),
         }
@@ -485,7 +501,7 @@ impl ManifestFacts {
     /// refuses the mod.
     pub(crate) fn unexported(
         &self,
-        kind: crate::schema_section::Kind,
+        kind: enshwick_core::schema_section::Kind,
         name: &str,
         exports: &rustc_hash::FxHashMap<String, Vec<String>>,
     ) -> bool {
@@ -506,7 +522,7 @@ impl ManifestFacts {
 
 /// Logs the loader's warning for a mod refused the `kind` `id`,
 /// `<owner>:<what>`, whose owner does not export it.
-pub(crate) fn warn_unexported(s: &mut State, kind: crate::schema_section::Kind, id: &str) {
+pub(crate) fn warn_unexported(s: &mut State, kind: enshwick_core::schema_section::Kind, id: &str) {
     let owner = id.split_once(':').map_or(id, |(owner, _)| owner);
     let offered = s.host.exports.get(owner).cloned().unwrap_or_default();
     s.logs.push((
@@ -521,7 +537,7 @@ pub(crate) fn warn_unexported(s: &mut State, kind: crate::schema_section::Kind, 
 /// export that lacks its kind or its local name; `None` when it takes it.
 pub(crate) fn note_manifest(
     api: *const HostApi,
-    manifest: &crate::abi::Manifest,
+    manifest: &enshwick_core::abi::Manifest,
 ) -> Option<String> {
     if !core::ptr::eq(api, &raw const TABLE) {
         return None;
@@ -548,8 +564,8 @@ pub(crate) fn note_manifest(
 /// Whether the fake, when `api` is its table, refuses the mod of `manifest`
 /// before its init, as the loader skips a mod whose side is not server or
 /// both; records the reason as a fault.
-pub(crate) fn refuses_side(api: *const HostApi, manifest: &crate::abi::Manifest) -> bool {
-    use crate::abi::Side;
+pub(crate) fn refuses_side(api: *const HostApi, manifest: &enshwick_core::abi::Manifest) -> bool {
+    use enshwick_core::abi::Side;
     core::ptr::eq(api, &raw const TABLE)
         && !matches!(manifest.side, Side::SERVER | Side::BOTH)
         && with(false, |s| {
@@ -567,16 +583,19 @@ pub(crate) fn refuses_side(api: *const HostApi, manifest: &crate::abi::Manifest)
 /// off before its init, as the loader does a mod with `developer: true`
 /// while developer tools are off; records the off reason as the loader
 /// does when it does.
-pub(crate) fn refuses_developer(api: *const HostApi, manifest: &crate::abi::Manifest) -> bool {
+pub(crate) fn refuses_developer(
+    api: *const HostApi,
+    manifest: &enshwick_core::abi::Manifest,
+) -> bool {
     core::ptr::eq(api, &raw const TABLE)
         && manifest
             .flags
-            .contains(crate::abi::ManifestFlags::DEVELOPER)
+            .contains(enshwick_core::abi::ManifestFlags::DEVELOPER)
         && with(false, |s| {
             if s.host.developer_tools {
                 return false;
             }
-            let reason = crate::mods::DEVELOPER_TOOL_OFF;
+            let reason = enshwick_core::mods::DEVELOPER_TOOL_OFF;
             s.faults.push(reason.to_owned());
             s.logs.push((
                 Level::ERROR,
@@ -621,11 +640,11 @@ pub(crate) struct Pacing {
 #[derive(Debug, Default)]
 pub(crate) struct DataChanges {
     /// Changes of one entry.
-    pub(crate) one: Vec<(crate::content::changes::Change, String)>,
+    pub(crate) one: Vec<(enshwick_core::content::changes::Change, String)>,
     /// Changes of every item a selection picks.
-    pub(crate) items: Vec<(crate::content::changes::ItemsChange, String)>,
+    pub(crate) items: Vec<(enshwick_core::content::changes::ItemsChange, String)>,
     /// Changes of every recipe a selection picks.
-    pub(crate) recipes: Vec<(crate::content::changes::RecipesChange, String)>,
+    pub(crate) recipes: Vec<(enshwick_core::content::changes::RecipesChange, String)>,
     /// Changes the mod sets later, numbered from 1 in this order, with
     /// the value in force.
     pub(crate) live: Vec<crate::test::content::LiveChange>,
@@ -872,22 +891,22 @@ pub(crate) fn put_list<T: Copy>(
 }
 
 /// A mod's struct that starts with a header, read as the loader reads it: it
-/// needs only [`Headed::BORN`](crate::abi::Headed::BORN), and the fields past
+/// needs only [`Headed::BORN`](enshwick_core::abi::Headed::BORN), and the fields past
 /// what the mod wrote read zero, so a mod of an older minor works here as in
 /// the game.
-pub(crate) fn get_headed<T: crate::abi::Headed>(raw: *const T) -> Option<T> {
+pub(crate) fn get_headed<T: enshwick_core::abi::Headed>(raw: *const T) -> Option<T> {
     // SAFETY: the safe layer passes null or its version of `T`, readable for
     // the size its header states, with no other writer during the call.
-    unsafe { crate::abi::read_headed(raw, T::BORN) }
+    unsafe { enshwick_core::abi::read_headed(raw, T::BORN) }
 }
 
 /// Writes `value` to a mod's struct that starts with a header, as the loader
 /// does: only as far as the mod's header says, with that size written back.
-pub(crate) fn put_headed<T: crate::abi::Headed>(out: *mut T, value: T) -> Status {
+pub(crate) fn put_headed<T: enshwick_core::abi::Headed>(out: *mut T, value: T) -> Status {
     // SAFETY: the safe layer passes null or its version of `T`, its header
     // stating the size it may be written for, untouched by others during the
     // call.
-    if unsafe { crate::abi::write_headed(out, value) } {
+    if unsafe { enshwick_core::abi::write_headed(out, value) } {
         Status::OK
     } else {
         Status::BAD_ARGS
@@ -896,7 +915,7 @@ pub(crate) fn put_headed<T: crate::abi::Headed>(out: *mut T, value: T) -> Status
 
 /// [`found`] for a struct that starts with a header, written as
 /// [`put_headed`] writes it.
-pub(crate) fn found_headed<T: crate::abi::Headed>(value: Option<T>, out: *mut T) -> Status {
+pub(crate) fn found_headed<T: enshwick_core::abi::Headed>(value: Option<T>, out: *mut T) -> Status {
     value.map_or(Status::MISSING, |value| put_headed(out, value))
 }
 
@@ -904,7 +923,10 @@ pub(crate) fn found_headed<T: crate::abi::Headed>(value: Option<T>, out: *mut T)
 /// entries are as far apart as the first one's header says, every one states
 /// that size, and each is read as [`get_headed`] reads one. `None` for a
 /// null list with entries, or entries of different sizes.
-pub(crate) fn get_headed_list<T: crate::abi::Headed>(raw: *const T, count: u32) -> Option<Vec<T>> {
+pub(crate) fn get_headed_list<T: enshwick_core::abi::Headed>(
+    raw: *const T,
+    count: u32,
+) -> Option<Vec<T>> {
     if count == 0 {
         return Some(Vec::new());
     }
@@ -935,7 +957,7 @@ pub(crate) fn get_headed_list<T: crate::abi::Headed>(raw: *const T, count: u32) 
 /// Writes up to `capacity` of `items` to a mod's list of headed entries, as
 /// the loader does: entries are as far apart as the first one's header says,
 /// and each gets only what both sides know.
-pub(crate) fn put_headed_list<T: crate::abi::Headed>(
+pub(crate) fn put_headed_list<T: enshwick_core::abi::Headed>(
     items: &[T],
     out: *mut T,
     capacity: u32,

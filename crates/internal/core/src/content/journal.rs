@@ -12,7 +12,6 @@
 //! client draws a mod's quest from the data when it runs the mod too.
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::content::{Guid, id};
 //! use enshwick::content::journal::{NewQuest, QuestReward, QuestStep};
 //! use enshwick::content::knowledge::{KnowledgeQuery, NewKnowledge};
@@ -670,7 +669,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::id;
     /// use enshwick::content::Guid;
     /// use enshwick::content::journal::{NewJournalPage, PageEntry};
@@ -724,7 +722,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::Guid;
     /// use enshwick::content::journal::{QuestChange, QuestReward};
     ///

@@ -1,10 +1,14 @@
 //! Names close to a mistyped one, for replies that say what may be meant.
 
+/// How many names a reply about a misspelt one suggests.
+pub const NEAR: usize = 5;
+
 /// Up to `most` of `names` close to `typed`, the closest first.
 ///
-/// Equally close ones go by name, whatever the case: a name that starts
+/// Closest is the name itself in another case, then a name that starts
 /// with what was typed, then one that holds it, then one within a third of
-/// the typed length in edits, one edit at least.
+/// the typed length in edits, one edit at least; equally close ones go by
+/// name.
 pub fn near<'a>(
     typed: &str,
     names: impl IntoIterator<Item = &'a str>,
@@ -34,10 +38,12 @@ pub fn near_lowered<'a, L: AsRef<str>>(
         .into_iter()
         .filter_map(|(name, lower)| {
             let lower = lower.as_ref();
-            let score = if lower.starts_with(&needle) {
+            let score = if lower == needle {
                 0
-            } else if lower.contains(&needle) {
+            } else if lower.starts_with(&needle) {
                 1
+            } else if lower.contains(&needle) {
+                2
             } else {
                 // The edits are at least the length difference, which costs nothing to know.
                 if typed_len.abs_diff(lower.chars().count()) > slack {
@@ -47,7 +53,7 @@ pub fn near_lowered<'a, L: AsRef<str>>(
                 if edits > slack {
                     return None;
                 }
-                1 + edits
+                2 + edits
             };
             Some((score, name))
         })
@@ -61,9 +67,29 @@ pub fn near_lowered<'a, L: AsRef<str>>(
         .collect()
 }
 
+/// `; near: ` and the `near` names, to end a reply about a name nothing has,
+/// or nothing when there are none.
+pub fn suffix<S: AsRef<str>>(near: &[S]) -> String {
+    let mut out = String::new();
+    for (i, name) in near.iter().enumerate() {
+        out.push_str(if i == 0 { "; near: " } else { ", " });
+        out.push_str(name.as_ref());
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_suffix_lists_the_near_names_or_says_nothing() {
+        assert_eq!(
+            suffix(&["Tool_Torch01", "Tool_Torch02"]),
+            "; near: Tool_Torch01, Tool_Torch02"
+        );
+        assert_eq!(suffix::<&str>(&[]), "");
+    }
 
     #[test]
     fn near_names_start_with_hold_or_almost_spell_what_was_typed() {
@@ -77,6 +103,11 @@ mod tests {
             near("ban", ["bam", "unban"], 3),
             ["unban", "bam"],
             "a name that holds it before one an edit away"
+        );
+        assert_eq!(
+            near("wood", ["WOOD_A", "WOOD_B", "WOOD_C", "Wood"], 1),
+            ["Wood"],
+            "the name in another case before names that start with it"
         );
         assert_eq!(near("dance", names, 3), Vec::<&str>::new());
         assert_eq!(near("", names, 3), Vec::<&str>::new());

@@ -23,7 +23,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::Entity;
 //! use enshwick::effects::Effects;
 //!
@@ -96,7 +95,6 @@ impl Teleport {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::effects::Teleport;
     ///
     /// let north = Teleport::new().facing_yaw(0.0);
@@ -115,7 +113,6 @@ impl Teleport {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use core::time::Duration;
 /// use enshwick::effects::Spawn;
 ///
@@ -163,7 +160,6 @@ impl Spawn {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::effects::Spawn;
     ///
     /// assert!(Spawn::new().do_not_save().do_not_save);
@@ -201,7 +197,6 @@ impl Spawn {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::effects::Spawn;
     ///
     /// assert!(Spawn::new().orientation_yaw(1.0).orientation.is_some());
@@ -220,7 +215,6 @@ impl Spawn {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::affixes::ItemRarity;
 /// use enshwick::effects::ItemDrop;
 ///
@@ -324,7 +318,6 @@ struct Ping {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::effects::NpcCommandType;
 ///
 /// let order = NpcCommandType::GoToPosition([10.0, 50.0, -3.0]);
@@ -436,7 +429,6 @@ impl Effects {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::effects::{Effects, NpcCommandType};
     ///
     /// fn gather(effects: &Effects, survivor: u32, at: [f64; 3]) {
@@ -473,7 +465,6 @@ impl Effects {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn open(effects: &enshwick::effects::Effects, lever: enshwick::Entity, signal: u32) {
     ///     let _sent = effects.set_toggle(lever, signal, true);
     /// }
@@ -498,7 +489,6 @@ impl Effects {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::Entity;
     ///
     /// fn taunt(effects: &enshwick::effects::Effects, enemy: Entity, player: Entity) {
@@ -532,7 +522,6 @@ impl Effects {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn mark(effects: &enshwick::effects::Effects, player: enshwick::Entity, at: [f64; 3]) {
     ///     let _pinged = effects.ping(player, at);
     /// }
@@ -560,7 +549,6 @@ impl Effects {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let effects = load.effects();
     ///     let ping = load.game_event_type("keen::ecs::UiPingEvent")?;
@@ -593,7 +581,6 @@ impl Effects {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::effects::{Effects, Teleport};
     ///
     /// fn home(effects: &Effects, me: enshwick::Entity) -> Result<(), enshwick::WorldError> {
@@ -641,7 +628,6 @@ impl Effects {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::PlayerKey;
     /// use enshwick::effects::{Effects, Teleport};
     ///
@@ -673,7 +659,6 @@ impl Effects {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::PlayerKey;
     /// use enshwick::effects::{Effects, Teleport};
     ///
@@ -721,8 +706,8 @@ impl Effects {
     /// Where `entity` stands, in metres, from its transform.
     fn position(&self, entity: Entity) -> Option<[f64; 3]> {
         let transform = ComponentType::named(self.host, ids::CURRENT_TRANSFORM).ok()?;
-        let data = transform.read(self.host, entity)?;
-        // SAFETY: `read` returned the entity's live CurrentTransform, valid
+        let data = enshwick_base::__internal::component(transform, self.host, entity)?;
+        // SAFETY: `component` returned the entity's live CurrentTransform, valid
         // until the game thread moves on, and it is read at once.
         Some(unsafe { crate::ecs::transform_position(data.cast()) })
     }
@@ -748,7 +733,6 @@ impl Effects {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::effects::{Effects, ItemDrop};
     ///
     /// fn logs(effects: &Effects, wood: enshwick::ItemId, at: [f64; 3]) -> Result<enshwick::Entity, enshwick::WorldError> {
@@ -795,7 +779,6 @@ impl Effects {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::effects::{Effects, Spawn};
     ///
     /// fn beside(effects: &Effects, template: [u8; 16], [x, y, z]: [f64; 3]) -> Result<enshwick::Entity, enshwick::WorldError> {

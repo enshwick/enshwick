@@ -1,0 +1,39 @@
+[package]
+name = "enshwick-luau"
+version = "1.0.0-alpha.14"
+description = "Runtime of Enshwick, shipped in enshwick.zip, not a dependency of a mod: runs Luau mods in a sandboxed VM each, over the API's script descriptions"
+keywords = ["enshrouded", "modding", "luau", "scripting"]
+categories = ["game-development"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+autotests = false
+
+[dependencies]
+arc-swap.workspace = true
+enshwick-core = { workspace = true, features = ["typed"] }
+thiserror.workspace = true
+toml.workspace = true
+mlua.workspace = true
+
+[dev-dependencies]
+enshwick = { workspace = true, features = ["test", "typed"] }
+criterion.workspace = true
+proptest.workspace = true
+enshwick-gamedata.workspace = true
+cargo-enshwick.workspace = true
+syn = { version = "=3.0.9", default-features = false, features = ["full", "parsing"] }
+
+[lints]
+workspace = true
+
+# One binary for every file in `tests/`, each a module of `tests/main.rs`.
+[[test]]
+name = "main"
+
+[[bench]]
+name = "damage_filter"
+harness = false

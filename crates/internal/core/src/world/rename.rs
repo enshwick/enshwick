@@ -74,7 +74,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     // Only administrators rename anything.
     ///     load.on_rename(|rename| rename.player.as_ref().is_some_and(|p| p.is_admin()))

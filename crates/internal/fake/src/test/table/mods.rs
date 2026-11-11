@@ -2,8 +2,8 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{ConfigCheckFn, ContentRename, Level, ModHandle, ModInfo, Status, Str};
 use crate::test::table::{Registered, found, put, text, with};
+use enshwick_core::abi::{ConfigCheckFn, ContentRename, Level, ModHandle, ModInfo, Status, Str};
 
 pub(crate) extern "system" fn fault(me: ModHandle, reason: Str) {
     let reason = text(reason);
@@ -108,7 +108,7 @@ pub(crate) fn list<T: Copy>(
     let shared = stride.min(size_of::<T>());
     let capacity = usize::try_from(capacity).unwrap_or(0);
     if !out.is_null() {
-        if stride < size_of::<crate::abi::Header>() {
+        if stride < size_of::<enshwick_core::abi::Header>() {
             return Status::BAD_ARGS;
         }
         let size = u32::try_from(shared).unwrap_or(u32::MAX);
@@ -134,7 +134,9 @@ pub(crate) extern "system" fn config_schema(
     _template: Str,
 ) -> Status {
     let (file, text) = (text(file), text(schema));
-    if !crate::config::__file_name(&file) || crate::config::Schema::parse(&text).is_err() {
+    if !enshwick_core::config::__file_name(&file)
+        || enshwick_core::config::Schema::parse(&text).is_err()
+    {
         return Status::BAD_ARGS;
     }
     with(Status::REFUSED, |s| {

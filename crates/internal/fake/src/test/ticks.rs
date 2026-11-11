@@ -4,7 +4,7 @@
 use core::ffi::c_void;
 use core::time::Duration;
 
-use crate::abi::{Event, EventFn, ModHandle, Status, TickData, TickHandle};
+use enshwick_core::abi::{Event, EventFn, ModHandle, Status, TickData, TickHandle};
 
 use super::Installed;
 use super::table::{Registered, put, with};
@@ -84,7 +84,7 @@ fn due(now: u64, last: Option<(u64, u64)>, every: u64) -> bool {
 )]
 impl Installed {
     /// Runs one server step `elapsed` after the one before, as the loader
-    /// does: every handler of [`Load::on_every_step`](crate::Load::on_every_step)
+    /// does: every handler of [`Load::on_every_step`](enshwick_core::Load::on_every_step)
     /// runs, and every periodic handler whose period has passed since its
     /// last call, with the steps and time since then. Returns how many
     /// handlers ran.
@@ -92,7 +92,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use std::time::Duration;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -152,7 +151,6 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use std::time::Duration;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();

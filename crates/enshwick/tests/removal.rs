@@ -213,7 +213,7 @@ mod tests {
 
         let loader = FakeHost::new().items().removal().install();
         // SAFETY: the fake host's table lives for the process.
-        unsafe { enshwick::__private::install_host(loader.api(), ModHandle(9)) };
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
         let init = |me, call: fn(&mut Load<'_>) -> Result<(), Off>| {
             // SAFETY: the fake host's table lives for the process.
             unsafe { enshwick::__private::init_pack(loader.api(), ModHandle(me), call) }

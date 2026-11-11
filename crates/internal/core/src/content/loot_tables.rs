@@ -61,7 +61,6 @@ impl LootLayout {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let layout = enshwick::content::loot_tables::LootLayout::resolve(load)?;
     ///     enshwick::info!("a fill stack is {} bytes", layout.stack);
@@ -119,7 +118,6 @@ impl FillTableLayout {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let layout = enshwick::content::loot_tables::FillTableLayout::resolve(load)?;
     ///     enshwick::info!("a template's fill table at +{:#x}", layout.table);
@@ -142,7 +140,6 @@ impl FillTableLayout {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::Guid;
 /// use enshwick::content::loot_tables::{FillTableLayout, template_table};
 ///
@@ -198,7 +195,6 @@ fn whole<T: TryFrom<i64>>(value: f64) -> Option<T> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::changes::{Field, Value};
 /// use enshwick::content::loot_tables::{LootLayout, change_random_loot};
 ///
@@ -254,7 +250,6 @@ pub fn change_random_loot(
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::loot_tables::scaled_ceiling;
 ///
 /// // A ceiling of 20 for a largest stack of 10: doubled to 20, the ceiling becomes 40.
@@ -323,7 +318,6 @@ fn walk(
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::changes::{Field, Value};
 /// use enshwick::content::loot_tables::{LootLayout, change_fill_table, fill_items};
 ///

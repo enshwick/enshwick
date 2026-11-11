@@ -1,8 +1,8 @@
 //! The fake's items and loot tables reflected, for removing and re-keying
 //! vanilla content: four items, a random loot table and a fill table.
 
-use crate::content::Guid;
-use crate::resources::{Constant, Field, Kind, Registry, Type, Value, fnv1a32};
+use enshwick_core::content::Guid;
+use enshwick_core::resources::{Constant, Field, Kind, Registry, Type, Value, fnv1a32};
 
 use super::FakeHost;
 
@@ -139,7 +139,6 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_fake as enshwick;
     /// use enshwick::content::EngineFacts;
     ///
     /// let host = enshwick::test::FakeHost::new().removal();

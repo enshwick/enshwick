@@ -36,7 +36,6 @@ pub enum Done {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::inventory::{OpError, Outcome};
 ///
 /// fn split(outcome: &Outcome) -> bool {
@@ -115,7 +114,6 @@ impl OpResult {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::inventory::{Done, Outcome};
 ///
 /// fn report(outcome: &Outcome) {
@@ -204,7 +202,6 @@ impl Outcome {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// fn finished(ticket: &enshwick::inventory::Ticket) -> bool {
 ///     ticket.outcome().is_some_and(|outcome| outcome.is_committed())
 /// }
@@ -228,7 +225,6 @@ impl Ticket {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// assert!(!enshwick::inventory::Ticket::default().is_done());
     /// ```
     #[must_use]

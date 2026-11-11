@@ -50,7 +50,6 @@ pub use script::{Content, Rule};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::{Guid, types};
 ///
 /// assert_eq!(types::ITEM_INFO.id(), "item_info");
@@ -147,7 +146,6 @@ pub mod types {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::Blob;
 ///
 /// // A root with one array field at 0: two u32 elements right after it.
@@ -210,7 +208,6 @@ impl Blob {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// let mut blob = enshwick::content::Blob::new(&[0; 8]);
     /// assert!(blob.write(4, &7u32.to_le_bytes()));
     /// assert_eq!(blob.read_u32(4), Some(7));
@@ -259,7 +256,6 @@ impl Blob {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// let mut blob = enshwick::content::Blob::new(&[0; 3]);
     /// assert_eq!(blob.append(&[9], 4), 4);
     /// ```
@@ -355,7 +351,6 @@ impl Blob {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::{Guid, rebuild, types};
 ///
 /// const TABLE: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
@@ -399,7 +394,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::{Id, id};
     ///
     /// const LOCKER: Id = id!("locker");
@@ -426,7 +420,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::Guid;
     /// use enshwick::i18n::Language;
     ///
@@ -461,7 +454,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::{Blob, Guid, types};
     ///
     /// const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
@@ -498,7 +490,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::{Guid, types};
     ///
     /// const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");

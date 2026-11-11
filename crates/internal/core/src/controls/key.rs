@@ -14,7 +14,6 @@ use core::fmt;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::controls::Key;
 ///
 /// let key = Key::parse("Shift+E")?;
@@ -210,7 +209,6 @@ impl Key {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::controls::Key;
     ///
     /// let key = Key::parse("Alt+G")?;
@@ -245,7 +243,6 @@ impl Key {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::controls::Key;
     ///
     /// assert_eq!(Key::parse("Shift+E")?.code(), Key::parse("E")?.code());
@@ -261,7 +258,6 @@ impl Key {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::controls::Key;
     ///
     /// assert_eq!(Key::parse("E")?.modifiers(), 0);
@@ -285,7 +281,6 @@ impl Key {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::controls::Key;
     ///
     /// assert!(Key::parse("Mouse4")?.is_mouse());

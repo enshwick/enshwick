@@ -58,7 +58,7 @@ pub unsafe fn init<M: Mod>(
     let Some(host) = (unsafe { Host::new(api, me) }) else {
         return Status::BAD_ARGS;
     };
-    let host = host.install();
+    let host = enshwick_base::__internal::install(host);
     crate::host::log_panics();
     MAX_LEVEL.store(host.log_level().0, Ordering::Relaxed);
     let _watched = host.subscribe(
@@ -125,7 +125,7 @@ pub unsafe fn init_pack(
     // on a change of its settings (`refresh_levels`).
     forget_pack_level(me);
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        host.scope(|| init(&mut Load::new(host)))
+        enshwick_base::__internal::scope(host, || init(&mut Load::new(host)))
     }));
     match outcome {
         Ok(Ok(())) => Status::OK,

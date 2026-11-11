@@ -9,7 +9,6 @@
 //! nodes ask for knowledge.
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::content::id;
 //! use enshwick::content::knowledge::{KnowledgeQuery, NewKnowledge};
 //! use enshwick::knowledge::{KnowledgeType, Scope};
@@ -66,7 +65,6 @@ const AMOUNT: &str = "amount";
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::knowledge::ExperienceValue;
 ///
 /// let value = ExperienceValue::new(1_674_984_971);
@@ -152,7 +150,6 @@ impl KnowledgeTest {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::knowledge::{KnowledgeQuery, KnowledgeTest};
 /// use enshwick::knowledge::{KnowledgeId, Scope};
 ///
@@ -205,7 +202,6 @@ impl KnowledgeQuery {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::knowledge::{GameQuery, KnowledgeQuery, KnowledgeTest};
     ///
     /// let met = KnowledgeQuery::game(GameQuery::new(0x5e11_c0de));
@@ -228,7 +224,6 @@ impl KnowledgeQuery {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::knowledge::{KnowledgeQuery, KnowledgeTest};
     /// use enshwick::knowledge::{KnowledgeId, Scope};
     ///
@@ -359,7 +354,6 @@ impl GameQuery {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::knowledge::GameQuery;
     ///
     /// assert_eq!(GameQuery::new(7).get(), 7);
@@ -706,7 +700,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::id;
     /// use enshwick::content::knowledge::NewKnowledge;
     /// use enshwick::knowledge::{KnowledgeType, Scope};
@@ -745,7 +738,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::id;
     /// use enshwick::content::knowledge::NewExperience;
     /// use enshwick::game_events::ExperienceSourceType;

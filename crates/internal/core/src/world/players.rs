@@ -24,7 +24,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn owner_name(world: &enshwick::world::World, owner: enshwick::PlayerKey) -> Option<String> {
     ///     world.player_by_key(owner).map(|player| player.name)
     /// }
@@ -42,7 +41,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn find(world: &enshwick::world::World, name: &str) -> Result<enshwick::world::Player, String> {
     ///     match <[_; 1]>::try_from(world.players_named(name)) {
     ///         Ok([player]) => Ok(player),
@@ -67,7 +65,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::events::BuildingPlaced;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -92,7 +89,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn announce(world: &enshwick::world::World) {
     ///     world.broadcast("The server restarts in five minutes");
     /// }
@@ -108,7 +104,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn welcome(world: &enshwick::world::World, player: &enshwick::world::Player) {
     ///     world.tell(player, "Welcome back");
     /// }
@@ -128,7 +123,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::world::Notice;
     ///
     /// fn warn_low_fuel(world: &enshwick::world::World, player: &enshwick::world::Player) {
@@ -156,7 +150,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn storm(world: &enshwick::world::World) {
     ///     world.notify_all("A storm is coming");
     /// }
@@ -177,7 +170,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn count(world: &enshwick::world::World) -> usize {
     ///     world.players().len()
     /// }

@@ -21,7 +21,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::voxels::{VoxelMaterial, VoxelPos, Voxels};
 //!
 //! fn ground(voxels: &Voxels, [x, y, z]: [f64; 3]) -> Result<String, enshwick::WorldError> {
@@ -62,7 +61,6 @@ pub const PER_METRE: f64 = 2.0;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::voxels::VoxelPos;
 ///
 /// let at = VoxelPos::from_metres([10.2, 4.0, 7.9]).ok_or("outside the world")?;
@@ -128,7 +126,6 @@ impl VoxelPos {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// assert_eq!(enshwick::voxels::VoxelPos::new(1, 2, 3).x(), 1);
     /// ```
     #[must_use]
@@ -141,7 +138,6 @@ impl VoxelPos {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// assert_eq!(enshwick::voxels::VoxelPos::new(1, 2, 3).y(), 2);
     /// ```
     #[must_use]
@@ -154,7 +150,6 @@ impl VoxelPos {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// assert_eq!(enshwick::voxels::VoxelPos::new(1, 2, 3).z(), 3);
     /// ```
     #[must_use]
@@ -167,7 +162,6 @@ impl VoxelPos {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// assert_eq!(enshwick::voxels::VoxelPos::new(1, 2, 3).to_array(), [1, 2, 3]);
     /// ```
     #[must_use]
@@ -205,7 +199,6 @@ fn index(metres: f64) -> Option<u32> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::voxels::VoxelMaterial;
 ///
 /// fn is_ground(material: VoxelMaterial) -> bool {
@@ -238,7 +231,6 @@ pub enum VoxelMaterial {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::voxels::{Voxel, VoxelMaterial};
 ///
 /// let rock = Voxel::new(VoxelMaterial::Terrain(9), 255);
@@ -330,7 +322,6 @@ impl Voxel {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::voxels::{VoxelPos, Voxels};
 ///
 /// fn solid(voxels: &Voxels, corner: VoxelPos) -> Result<usize, enshwick::WorldError> {
@@ -458,7 +449,6 @@ impl VoxelBox {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::voxels::{Voxel, VoxelBox, VoxelPos};
     ///
     /// fn top(block: &VoxelBox) -> Option<Voxel> {
@@ -478,7 +468,6 @@ impl VoxelBox {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::voxels::{Voxel, VoxelBox, VoxelMaterial, VoxelPos};
     ///
     /// fn hollow(block: &mut VoxelBox) {
@@ -502,7 +491,6 @@ impl VoxelBox {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::voxels::{Voxel, VoxelBox, VoxelMaterial, VoxelPos};
     ///
     /// let stone = Voxel::new(VoxelMaterial::Building(0x83), 0);
@@ -523,7 +511,6 @@ impl VoxelBox {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::voxels::{VoxelBox, VoxelPos};
     ///
     /// fn copy_up(block: &VoxelBox) -> VoxelBox {
@@ -554,7 +541,6 @@ impl VoxelBox {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn all_air(block: &enshwick::voxels::VoxelBox) -> bool {
     ///     block.as_slice().iter().all(|voxel| voxel.is_air())
     /// }

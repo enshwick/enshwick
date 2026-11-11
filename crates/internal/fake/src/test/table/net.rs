@@ -2,8 +2,8 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{ModHandle, NetMessageFn, Status, Str};
 use crate::test::table::{Registered, put, text, with};
+use enshwick_core::abi::{ModHandle, NetMessageFn, Status, Str};
 
 pub(crate) extern "system" fn net_channel(
     me: ModHandle,
@@ -33,11 +33,11 @@ pub(crate) extern "system" fn net_channel(
 pub(crate) extern "system" fn net_send(
     _me: ModHandle,
     channel: u32,
-    peer: crate::PlayerKey,
+    peer: enshwick_core::PlayerKey,
     data: *const u8,
     size: u32,
 ) -> Status {
-    if size as usize > crate::net::MAX_MESSAGE {
+    if size as usize > enshwick_core::net::MAX_MESSAGE {
         return Status::BAD_ARGS;
     }
     let bytes = if size == 0 || data.is_null() {
@@ -55,7 +55,7 @@ pub(crate) extern "system" fn net_send(
     })
 }
 
-pub(crate) extern "system" fn net_ready(_me: ModHandle, peer: crate::PlayerKey) -> Status {
+pub(crate) extern "system" fn net_ready(_me: ModHandle, peer: enshwick_core::PlayerKey) -> Status {
     with(Status::MISSING, |s| {
         if s.host.net_peers.contains(&peer.get()) {
             Status::OK

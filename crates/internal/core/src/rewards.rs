@@ -10,7 +10,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::rewards::{Action, Give, Limit, Reward};
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -178,7 +177,6 @@ impl Reward {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::rewards::{Action, Reward};
     ///
     /// let rare = Reward::new("rare", Action::Loot).with_chance(0.1);
@@ -608,7 +606,6 @@ fn grant_later(shared: &'static Shared, name: &str, player: Entity) {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::rewards::{Action, Give, Reward};
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -672,7 +669,6 @@ impl Rewards {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::rewards::{Give, Rewards};
     ///
     /// fn bonus(rewards: Rewards, player: enshwick::Entity) {
@@ -789,7 +785,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     // No rewards for the first player, entity 1.
     ///     load.on_reward(|grant| grant.player != enshwick::Entity(1))

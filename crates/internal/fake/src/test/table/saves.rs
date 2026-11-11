@@ -1,7 +1,7 @@
 //! The fake's world saves.
 
-use crate::abi::{ModHandle, SaveInfo, Status};
 use crate::test::table::with;
+use enshwick_core::abi::{ModHandle, SaveInfo, Status};
 
 /// The fake world's save.
 #[derive(Debug, Clone)]
@@ -19,10 +19,10 @@ pub(crate) struct Saves {
 
 pub(crate) extern "system" fn set_saved(
     _me: ModHandle,
-    entity: crate::Entity,
+    entity: enshwick_core::Entity,
     saved: u8,
 ) -> Status {
-    if entity == crate::Entity(0) {
+    if entity == enshwick_core::Entity(0) {
         return Status::BAD_ARGS;
     }
     if with(false, |s| super::world::entity_calls_off(s)) {

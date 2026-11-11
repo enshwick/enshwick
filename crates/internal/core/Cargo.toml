@@ -13,7 +13,7 @@ homepage.workspace = true
 publish = true
 
 [dependencies]
-enshwick-macros = { path = "../../enshwick-macros", version = "=1.0.0-alpha.14" }
+enshwick-macros = { path = "../macros", version = "=1.0.0-alpha.14" }
 enshwick-abi.workspace = true
 enshwick-base.workspace = true
 enshwick-typed = { workspace = true, optional = true }
@@ -29,11 +29,15 @@ rustc-hash.workspace = true
 schemars = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 serde.workspace = true
-strsim.workspace = true
 thiserror.workspace = true
 toml.workspace = true
 
 [dev-dependencies]
+# The examples name the API as a mod does, through the facade, so they build
+# as one binary; cargo drops a dev-dependency without a version when it
+# publishes. `unstable` and `typed` come from the command line, so the
+# stable API's own build stays without them.
+enshwick = { path = "../../enshwick", features = ["test"] }
 proptest.workspace = true
 insta.workspace = true
 serde = { workspace = true, features = ["derive"] }

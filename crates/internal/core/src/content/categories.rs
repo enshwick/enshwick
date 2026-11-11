@@ -6,7 +6,6 @@
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::categories::ItemCategoryMask;
 ///
 /// let gear = ItemCategoryMask::EQUIPMENT | ItemCategoryMask::WEAPONS;
@@ -62,7 +61,6 @@ impl ItemCategoryMask {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::categories::ItemCategoryMask;
     ///
     /// assert!(ItemCategoryMask::NAMES.contains(&("Materials", ItemCategoryMask::MATERIALS)));
@@ -93,7 +91,6 @@ impl ItemCategoryMask {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::categories::ItemCategoryMask;
     ///
     /// assert_eq!(ItemCategoryMask::named("FishingRod"), Some(ItemCategoryMask::FISHING_ROD));

@@ -139,6 +139,21 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** internals that were public only for the API's own crates
+  are out of a mod's reach: `Host::install`, `Host::scope`,
+  `schedule::Scheduler::get` and `run_due`, `ecs::ComponentType::read` and
+  `game_events::CraftRecipeEvent::new`. They were hidden and never part of
+  the API (#1047).
+- A misspelt name gets its suggestions by one rule in a data pack's
+  problems, a vanilla lookup and the loader's recipe file: names that start
+  with what was typed, then names that hold it, then names within a third
+  of its length in edits, at least one, ignoring case, five at most (#1047).
+- The loader, `enshwick-gamedata` and the API take locks under one poison
+  policy, `enshwick-base`'s; the loader writes a poisoned lock's place to
+  its own log as before (#1047).
+- The crates behind the facade, the macros among them, sit in
+  `crates/internal/`, and the loader, its stub and the Luau runtime in
+  `crates/runtime/`; package names stay (#1047).
 - **Breaking:** the API's functions outside `Load` that took the mod's
   loader take `&impl Loading` or `&mut impl Loading`, which `Load`
   implements, so a mod passes its `Load` as before: `ecs::Ecs::resolve`,

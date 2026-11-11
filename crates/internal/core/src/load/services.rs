@@ -21,7 +21,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// #[enshwick::service(name = "prices")]
     /// pub struct Prices {
     ///     pub price: extern "system" fn(item: u32) -> u32,
@@ -56,7 +55,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// #[enshwick::service(of = trading_post, name = "prices")]
     /// pub struct Prices {
     ///     pub price: extern "system" fn(item: u32) -> u32,
@@ -78,7 +76,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// #[enshwick::service(of = trading_post, name = "prices")]
     /// pub struct Prices {
     ///     pub price: extern "system" fn(item: u32) -> u32,
@@ -116,7 +113,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// #[enshwick::call(name = "price-of", output = u32)]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct PriceOf {
@@ -171,7 +167,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::points::DescribedField;
     /// use enshwick::services::DescribedCall;
     ///

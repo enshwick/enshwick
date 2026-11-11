@@ -8,8 +8,7 @@
 //!
 //! # Examples
 //!
-//! ```rust,standalone_crate
-//! # extern crate enshwick_core as enshwick;
+//! ```
 //! use enshwick::script::{IntoScript, Ty, Typed, Value};
 //!
 //! #[derive(Clone, Debug, enshwick::Script)]
@@ -54,8 +53,7 @@ pub type InitCall = fn(&mut crate::Load<'_>, &mut [Value]) -> Result<Value, Erro
 ///
 /// # Examples
 ///
-/// ```rust,standalone_crate
-/// # extern crate enshwick_core as enshwick;
+/// ```
 /// use enshwick::script::{InitFunction, Value};
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -180,8 +178,7 @@ pub trait Bound: Copy + Send + Sync + 'static {
     ///
     /// # Examples
     ///
-    /// ```rust,standalone_crate
-    /// # extern crate enshwick_core as enshwick;
+    /// ```
     /// use enshwick::script::Bound;
     ///
     /// assert!(enshwick::world::World::functions().any(|f| f.name() == "broadcast"));

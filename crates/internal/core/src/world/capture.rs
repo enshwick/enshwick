@@ -36,7 +36,6 @@ const VOXEL_METRES: f64 = 0.5;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::voxels::VoxelPos;
 /// use enshwick::WorldError;
 /// use enshwick::world::{Capture, World};
@@ -124,7 +123,6 @@ impl Capture {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn solid(capture: &enshwick::world::Capture) -> usize {
     ///     capture.voxels().iter().filter(|(_, voxel)| !voxel.is_air()).count()
     /// }
@@ -156,7 +154,6 @@ impl Capture {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn turned(capture: &enshwick::world::Capture) {
     ///     let [x, y, z] = capture.size();
     ///     assert_eq!(capture.rotated(1).size(), [z, y, x]);
@@ -207,7 +204,6 @@ impl Capture {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::voxels::VoxelPos;
     ///
     /// fn moved(capture: &enshwick::world::Capture) -> Option<VoxelPos> {

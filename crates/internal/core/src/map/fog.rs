@@ -15,7 +15,6 @@ use crate::{Host, Load, Off};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use core::ops::ControlFlow;
 /// use std::time::Duration;
 ///
@@ -60,7 +59,6 @@ impl crate::script::Object for FogOfWar {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::map::FogState;
 ///
 /// fn corner(state: FogState) -> Option<[u32; 2]> {
@@ -104,7 +102,6 @@ impl FogState {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::map::FogState;
     ///
     /// let state = FogState {
@@ -143,7 +140,6 @@ impl FogState {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::map::FogOfWar;
 ///
 /// fn uncovered(fog: FogOfWar) -> usize {
@@ -219,7 +215,6 @@ impl FogImage {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::map::FogImage;
     ///
     /// fn first(image: &FogImage) -> Option<u8> {
@@ -246,7 +241,6 @@ impl FogImage {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::map::FogError;
 ///
 /// assert_eq!(FogError::Missing.to_string(), "no fog of war to read");
