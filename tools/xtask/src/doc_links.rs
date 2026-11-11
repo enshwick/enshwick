@@ -5,8 +5,8 @@
 //! `target/doc` must reach a page that exists and, when it names one, an
 //! anchor that page has. No network is used.
 
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
 
 /// The crate whose rendered pages are checked: the facade, which re-exports
@@ -47,11 +47,11 @@ pub(crate) fn check(doc: &Path, krate: &str) -> Result<Vec<String>, String> {
     let mut pages = Vec::new();
     html_files(&doc.join(krate), &mut pages)?;
     pages.sort();
-    let mut anchors: HashMap<PathBuf, Option<HashSet<String>>> = HashMap::new();
+    let mut anchors: BTreeMap<PathBuf, Option<BTreeSet<String>>> = BTreeMap::new();
     let mut problems = Vec::new();
     for page in &pages {
         let text = read(page)?;
-        let mut seen = HashSet::new();
+        let mut seen = BTreeSet::new();
         for href in attribute_values(&text, "href") {
             if !seen.insert(href.clone()) {
                 continue;
@@ -69,7 +69,7 @@ pub(crate) fn check(doc: &Path, krate: &str) -> Result<Vec<String>, String> {
                             .collect(),
                     )
                 } else {
-                    Some(HashSet::new())
+                    Some(BTreeSet::new())
                 };
                 anchors.insert(target.clone(), ids);
             }
@@ -203,10 +203,7 @@ mod tests {
             &doc.join("enshwick/struct.Load.html"),
             r##"<h4 id="method.add_item">add_item</h4><a href="#method.add_item">self</a>"##,
         );
-        write(
-            &doc.join("src/enshwick/lib.rs.html"),
-            r##"<a id="1">1</a>"##,
-        );
+        write(&doc.join("src/enshwick/lib.rs.html"), r#"<a id="1">1</a>"#);
         write(
             &doc.join("enshwick/content/index.html"),
             concat!(
@@ -236,11 +233,11 @@ mod tests {
     #[test]
     fn entities_in_attributes_are_decoded() {
         assert_eq!(
-            attribute_values(r##"<a href="a.html#x&amp;y" id="i&lt;T&gt;">"##, "href"),
+            attribute_values(r#"<a href="a.html#x&amp;y" id="i&lt;T&gt;">"#, "href"),
             ["a.html#x&y"]
         );
         assert_eq!(
-            attribute_values(r##"<a href="a.html" id="i&lt;T&gt;">"##, "id"),
+            attribute_values(r#"<a href="a.html" id="i&lt;T&gt;">"#, "id"),
             ["i<T>"]
         );
     }

@@ -1,7 +1,6 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
 use crate::Load;
-use crate::script::{FromScript, IntoScript, Typed};
 use crate::voxels::Voxels;
 use enshwick_world::__load::*;
 

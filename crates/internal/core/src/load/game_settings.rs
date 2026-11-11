@@ -1,6 +1,5 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::content::EngineFacts;
 use crate::game_settings::GameSettings;
 use crate::{Load, Off};
 use enshwick_world::__load::*;

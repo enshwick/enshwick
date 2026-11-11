@@ -439,6 +439,7 @@ dependencies = [
  "enshwick-fake",
  "enshwick-macros",
  "enshwick-values",
+ "enshwick-world",
  "hound",
  "insta",
  "postcard",

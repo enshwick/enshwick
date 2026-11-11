@@ -587,8 +587,7 @@ mod tests {
     use super::*;
     use crate::content::knowledge::KnowledgeTest;
     use crate::knowledge::Scope;
-    use crate::typed::runtime::Constant;
-    use crate::typed::{CompareOperator, KnowledgeQueryData, KnowledgeQueryDataType};
+    use crate::typed::{CompareOperator, Constant, KnowledgeQueryData, KnowledgeQueryDataType};
 
     fn data(
         id: u32,
@@ -597,7 +596,7 @@ mod tests {
         value: u32,
     ) -> KnowledgeQueryData {
         // Only the generated types' own crate writes one out whole.
-        let mut data: KnowledgeQueryData = crate::typed::runtime::blank().unwrap();
+        let mut data: KnowledgeQueryData = enshwick_typed::typed::runtime::blank().unwrap();
         data.knowledge_or_query_id.value = id;
         data.compare_value = value;
         data.compare_operator = op;

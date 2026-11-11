@@ -104,26 +104,8 @@ fn main() -> ExitCode {
 
 fn run(args: &[String]) -> Result<bool, String> {
     let (task, rest) = args.split_first().ok_or(USAGE)?;
-    match task.as_str() {
-        "check" => {}
-        "dist" => return dist::run(rest),
-        "notes" => return notes::run(rest),
-        "tag-lines" => return tag_lines::run(rest),
-        "header" if rest.is_empty() => return header::run(&workspace_root()),
-        "doc-links" if rest.is_empty() => return doc_links::run(&workspace_root()),
-        "peel-load" => return peel::run(&workspace_root(), rest),
-        "wrap-examples" => return lower_examples::wrap(&workspace_root(), &packages()?, rest),
-        "alias-examples" if rest.is_empty() => {
-            return lower_examples::run(&workspace_root(), &packages()?);
-        }
-        "host-args" if rest.is_empty() => {
-            // One argument a line, for CI runs that test the host as the check does.
-            for arg in host_args(&packages()?, cfg!(windows)) {
-                let _shown = writeln!(std::io::stdout(), "{arg}");
-            }
-            return Ok(true);
-        }
-        _ => return Err(USAGE.to_owned()),
+    if task != "check" {
+        return other_task(task, rest);
     }
     let mut all = false;
     let mut windows = false;
@@ -206,6 +188,28 @@ fn run(args: &[String]) -> Result<bool, String> {
         return Ok(true);
     }
     Ok(wine::run(&windows_tests, windows))
+}
+
+/// Runs `task`, any task but `check`, with its arguments `rest`.
+fn other_task(task: &str, rest: &[String]) -> Result<bool, String> {
+    match task {
+        "dist" => dist::run(rest),
+        "notes" => notes::run(rest),
+        "tag-lines" => tag_lines::run(rest),
+        "header" if rest.is_empty() => header::run(&workspace_root()),
+        "doc-links" if rest.is_empty() => doc_links::run(&workspace_root()),
+        "peel-load" => peel::run(&workspace_root(), rest),
+        "wrap-examples" => lower_examples::wrap(&workspace_root(), &packages()?, rest),
+        "alias-examples" if rest.is_empty() => lower_examples::run(&workspace_root(), &packages()?),
+        "host-args" if rest.is_empty() => {
+            // One argument a line, for CI runs that test the host as the check does.
+            for arg in host_args(&packages()?, cfg!(windows)) {
+                let _shown = writeln!(std::io::stdout(), "{arg}");
+            }
+            Ok(true)
+        }
+        _ => Err(USAGE.to_owned()),
+    }
 }
 
 /// The problems the checks that compile nothing find in the tree: manifest
