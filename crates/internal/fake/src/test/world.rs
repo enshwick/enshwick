@@ -1,12 +1,78 @@
-//! The world: components, entities, daytime, game settings, weather, terrain and voxels.
+//! The world: components, entities, players, altars, buffs, props, saves,
+//! daytime, game settings, weather, terrain and voxels.
 
+use enshwick_core::__fake::ids;
 use enshwick_core::abi::EntityPlace;
 
-use super::FakeHost;
-use super::Installed;
-use super::table;
+use crate::test::{FakeHost, Installed, table};
+
+pub(crate) mod altars;
+pub(crate) mod buffs;
+pub(crate) mod players;
+pub(crate) mod props;
+pub(crate) mod saves;
+#[cfg(feature = "typed")]
+pub(crate) mod tags;
+pub(crate) mod transactions;
+pub(crate) mod voxel_edits;
 
 impl FakeHost {
+    /// The world's own component types and where a placed thing keeps its
+    /// transform: what `World` needs before it resolves, and what its prop
+    /// reads and the effects' transforms lay out by.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::EngineFacts;
+    /// use enshwick::test::facts;
+    ///
+    /// let host = enshwick::test::FakeHost::new().world();
+    /// let transform = host.hash(facts::CURRENT_TRANSFORM.id())?;
+    /// let loader = host.placed(transform, enshwick::Entity(2), [0.0; 3]).install();
+    /// # let _ = loader;
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    #[must_use]
+    pub fn world(self) -> Self {
+        self.preset(
+            &[ids::CURRENT_TRANSFORM, ids::USED_ITEM],
+            &[],
+            &[
+                (ids::CURRENT_TRANSFORM_TRANSFORM, 0),
+                (ids::WORLD_TRANSFORM_POSITION, 0),
+                (ids::WORLD_TRANSFORM_ORIENTATION, 24),
+                (ids::WORLD_TRANSFORM_SCALE, 40),
+            ],
+        )
+    }
+
+    /// Each player's map waypoint: what `Map::waypoint` reads beside the
+    /// markers.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::EngineFacts;
+    /// use enshwick::test::facts;
+    ///
+    /// let host = enshwick::test::FakeHost::new().map_waypoints();
+    /// let position = host.offset(facts::PLAYER_WAYPOINT_POSITION.id())?;
+    /// assert!(position + 24 <= host.size(facts::PLAYER_WAYPOINT.id())?);
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    #[must_use]
+    pub fn map_waypoints(self) -> Self {
+        self.preset(
+            &[ids::PLAYER_WAYPOINT],
+            &[(ids::PLAYER_WAYPOINT, 32)],
+            &[
+                (ids::PLAYER_WAYPOINT_ENABLED, 0),
+                (ids::PLAYER_WAYPOINT_POSITION, 8),
+            ],
+        )
+    }
+
     /// The component of type `type_hash` that `entity` has, holding a copy
     /// of `bytes` that the fake keeps, 16-byte aligned, for the rest of the
     /// process; the mod's writes land in that copy.

@@ -1,16 +1,251 @@
-//! Content: items, archives, resources, texts and what the mod serves.
+//! Content: items, recipes, workshops, archives, resources, texts, rates,
+//! templates and what the mod serves.
 
+use enshwick_core::__fake::IMAGE_FIELDS;
+use enshwick_core::__fake::ids;
 use enshwick_core::abi::Header;
 use enshwick_core::abi::ItemData;
 use enshwick_core::abi::ResourceKey;
 use enshwick_core::abi::Status;
 use enshwick_core::content::Guid;
 
-use super::FakeHost;
-use super::Installed;
-use super::table;
+use crate::test::{FakeHost, Installed, table};
+
+pub(crate) mod rates;
+#[cfg(feature = "typed")]
+pub(crate) mod removal;
+pub(crate) mod templates;
+
+/// The facts the builder holds, so a test lays out its blobs by the same
+/// layouts the mod resolves.
+///
+/// A preset's values claim nothing about a game build; they only agree with
+/// each other, so a test builds its blobs from the layout the preset gives
+/// rather than from offsets of its own.
+impl enshwick_core::content::EngineFacts for FakeHost {
+    fn offset(&self, id: &str) -> Result<usize, enshwick_core::Off> {
+        self.constants
+            .get(id)
+            .and_then(|&offset| usize::try_from(offset).ok())
+            .ok_or_else(|| enshwick_core::Off::new(format!("offset {id}: not set on the fake")))
+    }
+
+    fn size(&self, id: &str) -> Result<usize, enshwick_core::Off> {
+        self.type_sizes
+            .get(id)
+            .and_then(|&size| usize::try_from(size).ok())
+            .ok_or_else(|| enshwick_core::Off::new(format!("type {id}: no size set on the fake")))
+    }
+
+    fn hash(&self, id: &str) -> Result<u32, enshwick_core::Off> {
+        self.type_hashes
+            .get(id)
+            .copied()
+            .ok_or_else(|| enshwick_core::Off::new(format!("type {id}: no hash set on the fake")))
+    }
+}
 
 impl FakeHost {
+    /// Items and the item registry: what
+    /// [`ItemLayout`](enshwick_core::content::items::ItemLayout) resolves, with the
+    /// type hashes `add_item` serves under.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::{EngineFacts, types};
+    /// use enshwick::content::items::ItemLayout;
+    ///
+    /// let host = enshwick::test::FakeHost::new().items();
+    /// let layout = ItemLayout::resolve(&host)?;
+    /// assert!(layout.name < host.size(types::ITEM_INFO.id())?);
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    #[must_use]
+    pub fn items(self) -> Self {
+        self.preset(
+            &[ids::ITEM_INFO, ids::ITEM_REGISTRY],
+            &[(ids::ITEM_INFO, 0xc0), (ids::ITEM_STAT, 0x28)],
+            &[
+                (ids::ITEM_INFO_ID, 0),
+                (ids::ITEM_INFO_OBJECT, 4),
+                (ids::ITEM_INFO_NAME, 0x48),
+                (ids::ITEM_INFO_ICON_IMAGE, 0x58),
+                (ids::ITEM_INFO_DESCRIPTION, 0x68),
+                (ids::ITEM_INFO_FLAGS, 0x78),
+                (ids::ITEM_INFO_PID_ENTITY, 0x80),
+                (ids::ITEM_INFO_UI_VALUES, 0x90),
+                (ids::ITEM_INFO_PLACED_ENTITY, 0xb0),
+                (ids::ITEM_STAT_LABEL, 0),
+                (ids::ITEM_STAT_FORMAT, 4),
+                (ids::ITEM_STAT_VALUE, 8),
+                (ids::ITEM_STAT_SIGNED, 0x24),
+                (ids::ITEM_REGISTRY_REFS, 0),
+                (ids::ITEM_REGISTRY_NAMES, 0x38),
+            ],
+        )
+    }
+
+    /// The recipe registry: what
+    /// [`RecipeLayout`](enshwick_core::content::recipes::RecipeLayout) resolves, with
+    /// the registry's type hash.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::recipes::RecipeLayout;
+    ///
+    /// let host = enshwick::test::FakeHost::new().recipes();
+    /// let layout = RecipeLayout::resolve(&host)?;
+    /// assert!(layout.output < layout.recipe);
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    #[must_use]
+    pub fn recipes(self) -> Self {
+        self.preset(
+            &[ids::RECIPE_REGISTRY],
+            &[
+                (ids::RECIPE, 0xa8),
+                (ids::RECIPE_INGREDIENT, 0x18),
+                (ids::RECIPE_STACK, 0x18),
+            ],
+            &[
+                (ids::RECIPE_REGISTRY_RECIPES, 0),
+                (ids::RECIPE_GUID, 0),
+                (ids::RECIPE_ID, 0x10),
+                (ids::RECIPE_WORKSHOP_GUID, 0x14),
+                (ids::RECIPE_WORKSHOP, 0x24),
+                (ids::RECIPE_INPUT, 0x28),
+                (ids::RECIPE_OUTPUT, 0x30),
+                (ids::RECIPE_REQUIRED_PROPS, 0x38),
+                (ids::RECIPE_DEBUG_NAME, 0x40),
+                (ids::RECIPE_COMPLETION, 0x5c),
+                (ids::RECIPE_STACK_ITEM, 0x10),
+                (ids::RECIPE_STACK_COUNT, 0x14),
+            ],
+        )
+    }
+
+    /// Workshops, templates and their crafting components: what
+    /// [`WorkshopLayout`](enshwick_core::content::workshops::WorkshopLayout) resolves
+    /// beside [`FakeHost::items`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::workshops::WorkshopLayout;
+    ///
+    /// let host = enshwick::test::FakeHost::new().items().workshops();
+    /// let layout = WorkshopLayout::resolve(&host)?;
+    /// assert!(layout.entry_npc < layout.entry);
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    #[must_use]
+    pub fn workshops(self) -> Self {
+        self.preset(
+            &[
+                ids::TEMPLATE,
+                ids::TEMPLATE_COLLECTION,
+                ids::WORKSHOP_REGISTRY,
+                ids::CRAFTING,
+                ids::CRAFTING_INTERACTION,
+                ids::CLIENT_CRAFTING_INTERACTION,
+            ],
+            &[
+                (ids::CRAFTING, 0x18),
+                (ids::CRAFTING_INTERACTION, 0x20),
+                (ids::CLIENT_CRAFTING_INTERACTION, 0x10),
+                (ids::WORKSHOP, 0x40),
+            ],
+            &[
+                (ids::TEMPLATE_COMPONENTS, 0x10),
+                (ids::TEMPLATE_COLLECTION_TEMPLATES, 0),
+                (ids::CRAFTING_WORKSHOP, 0),
+                (ids::CRAFTING_WORKSHOP_ID, 0x10),
+                (ids::CRAFTING_INTERACTION_WORKSHOP, 12),
+                (ids::CRAFTING_INTERACTION_WORKSHOP_ID, 28),
+                (ids::CLIENT_CRAFTING_INTERACTION_WORKSHOP_ID, 12),
+                (ids::WORKSHOP_REGISTRY_WORKSHOPS, 0),
+                (ids::WORKSHOP_GUID, 0),
+                (ids::WORKSHOP_ID, 0x10),
+                (ids::WORKSHOP_NAME, 0x14),
+                (ids::WORKSHOP_ITEM, 0x24),
+                (ids::WORKSHOP_ITEM_REF, 0x34),
+                (ids::WORKSHOP_NPC, 0x3c),
+            ],
+        )
+        .templates()
+    }
+
+    /// The client's crafting menu in its UI bundle: what
+    /// [`MenuLayout`](enshwick_core::content::menu::MenuLayout) resolves, with the
+    /// bundle's type hash.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::menu::MenuLayout;
+    ///
+    /// let host = enshwick::test::FakeHost::new().crafting_menu();
+    /// let layout = MenuLayout::resolve(&host)?;
+    /// assert!(layout.sets < layout.group);
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    #[must_use]
+    pub fn crafting_menu(self) -> Self {
+        self.preset(
+            &[ids::UI_BUNDLE],
+            &[
+                (ids::CRAFTING_MENU_TREE, 8),
+                (ids::CRAFTING_MENU_GROUP, 0x38),
+                (ids::CRAFTING_MENU_SET, 0x28),
+            ],
+            &[
+                (ids::UI_BUNDLE_CRAFTING_MENU, 0x40),
+                (ids::CRAFTING_MENU_WORKSHOPS, 0),
+                (ids::CRAFTING_MENU_TREES, 8),
+                (ids::CRAFTING_MENU_MAX_GROUPS, 0x10),
+                (ids::CRAFTING_MENU_MAX_SETS, 0x14),
+                (ids::CRAFTING_MENU_TREE_GROUPS, 0),
+                (ids::CRAFTING_MENU_GROUP_ID, 0),
+                (ids::CRAFTING_MENU_GROUP_SETS, 0x30),
+                (ids::CRAFTING_MENU_SET_ENTRIES, 0x20),
+            ],
+        )
+    }
+
+    /// The client's UI images, item icons among them: what
+    /// [`ImageLayout`](enshwick_core::content::icons::ImageLayout) resolves, with
+    /// the image type's hash and size.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::{EngineFacts, types};
+    /// use enshwick::content::icons::ImageLayout;
+    ///
+    /// let host = enshwick::test::FakeHost::new().ui_images();
+    /// let layout = ImageLayout::resolve(&host)?;
+    /// assert!(layout.levels < host.size(types::UI_TEXTURE_RESOURCE.id())?);
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    #[must_use]
+    pub fn ui_images(self) -> Self {
+        let [content, width, height, flags, format, levels] = IMAGE_FIELDS;
+        self.preset(
+            &[ids::UI_IMAGE],
+            &[(ids::UI_IMAGE, 0x40)],
+            &[
+                (content, 0),
+                (width, 0x28),
+                (height, 0x2c),
+                (flags, 0x30),
+                (format, 0x31),
+                (levels, 0x32),
+            ],
+        )
+    }
+
     /// The static data of item `item`, for `item_info`.
     ///
     /// # Examples
@@ -470,7 +705,7 @@ impl Installed {
     /// assert_eq!(loader.build_resource(&key, &[]), Err(Status::MISSING));
     /// ```
     pub fn build_resource(&self, key: &ResourceKey, base: &[u8]) -> Result<Vec<u8>, Status> {
-        table::content::build(key, base)
+        table::content::build_resource(key, base)
     }
 
     /// The texts the mod added, as `(tag, language, text)`, in order.

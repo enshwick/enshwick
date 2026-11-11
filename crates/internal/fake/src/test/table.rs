@@ -1,158 +1,57 @@
-// Long file: the fake's one state struct and its `HostApi` table, which grow with every ABI entry.
-//! The loader's table, answering from the installed fake.
+//! The loader's table, answering from the installed fake: the one state
+//! struct and the join of each domain's entries.
+// Clippy leaves wildcard imports alone in a test build.
+#![cfg_attr(
+    not(test),
+    expect(
+        clippy::wildcard_imports,
+        reason = "the join takes each domain's entries whole, so a new entry touches only its domain"
+    )
+)]
 
 use std::sync::{Mutex, MutexGuard};
 
 use enshwick_core::Relock;
 use enshwick_core::abi::{
-    ActiveBuff, AltarInfo, AltarLimitFilterFn, AltarZoneFn, BedCheckFn, BuffTypeInfo, BuildCheckFn,
+    ActiveBuff, AltarInfo, AltarLimitFilterFn, BedCheckFn, BuffTypeInfo, BuildCheckFn,
     BuildingZoneCheckFn, ComfortFn, ConfigCheckFn, CraftCheckFn, DamageFilterFn, DaytimeInfo,
-    Event, EventFn, ExperiencePassFn, GameEventFn, Header, HostApi, InteractionFn,
-    InventoryResultFn, KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, MidHookFn, ModEventFn,
-    ModHandle, NetMessageFn, RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn,
-    SkillCheckFn, SpawnRequest, Status, StatusFn, Str, SummonFn, SurvivorLookupFn,
-    SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo, UiAnswerFn, UiFrameFn,
-    WeatherFront,
+    Event, EventFn, ExperiencePassFn, GameEventFn, Header, HostApi, InteractionFn, KnowledgeInfo,
+    KnowledgeInputFn, Level, MidHookFn, ModEventFn, ModHandle, NetMessageFn, RenameCallFn,
+    ResourceKey, ResourcePatchFn, SkillCheckFn, SpawnRequest, StatusFn, Str, SummonFn,
+    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainMaterialInfo, UiAnswerFn,
+    UiFrameFn, WeatherFront,
 };
 
-use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
+use super::{FakeHost, LinkedHook, ServedResource};
 
-mod build;
-mod chat;
-pub(crate) mod commands;
+// Each domain's entries, lowest first, as `domains.toml` orders them.
+pub(crate) mod actions;
+pub(crate) mod base;
 pub(super) mod content;
-mod controls;
-pub(crate) mod gameplay;
-#[cfg(test)]
-mod headed_tests;
-mod hooks;
 mod inventory;
-mod items;
-mod mods;
-mod net;
-mod pacing;
-mod saves;
-mod services;
-mod transactions;
+mod knowledge;
 mod ui;
 pub(crate) mod world;
 
-use build::{
-    build, caller_frame, constant, data_dir, field_offset, log_level, mod_dir, symbol, system,
-    type_hash, type_size,
+use actions::{commands::*, *};
+pub(crate) use base::io::{
+    found, found_headed, get_headed, get_headed_list, put, put_headed, put_headed_list, put_list,
+    text,
 };
-use chat::chat_filter;
-use content::{
-    add_text, change_data, content_hashes, content_read, content_serve, declare_change,
-    entity_data_open, game_text, game_version, icons_ready, item_data_get, item_data_open,
-    item_data_set, rebuild_resource, recipe_disabled, recipe_kind, recipe_rule, resource_buffer,
-    resource_keys, resource_read, resource_served, serve_resource, set_change, types,
-};
-use controls::{control, run_action, run_action_at};
-use gameplay::{
-    account_knowledge, altar_limit_filter, altar_zone_filter, altar_zones_changed, altars,
-    altars_open, apply_buff, base_limit, base_zones, buff_types, buffs, build_filter,
-    building_zone_check_filter, comfort_filter, craft_filter, damage_filter, experience_filter,
-    grant_knowledge, interaction_filter, knowledge, knowledge_input_filter, quests,
-    raise_base_limit, rate, remove_buff, request_base_limits, revoke_knowledge, set_rate,
-    skill_override, summon_filter, summon_item, summoned, survivor_bed_check, survivor_lookup,
-    survivor_status,
-};
-use hooks::{code_range, hook, hook_at, patch_code, workshop_recipes};
-use inventory::{inventory_open, inventory_submit, item_info};
-use items::item_filter;
-use mods::{
-    config_check, config_schema, fault, join_missing, language, log, mods, rename_content,
-    settings, texts,
-};
-use net::{net_channel, net_ready, net_send};
-use saves::{Saves, hold_saves, save_info, set_saved};
-pub(crate) use services::view;
-use services::{
-    crafting_prop, declare_content, define_event, publish, send_event, service, subscribe,
-    subscribe_event, use_content,
-};
-use transactions::{
-    transaction_commit, transaction_commit_for, transaction_entities, transaction_status,
-    transaction_undo,
-};
-use ui::{
-    fog_open, fog_read, local_held, map_marker_types, ui_dialog, ui_extension, ui_frame, ui_hud,
-    ui_markers, ui_widget,
-};
-use world::{
-    account_action, actions, build_rights, chat, chat_mute_has, chat_mute_set, component,
-    component_write, destroy, emit, entities, entity_template, event_types, feature,
-    forget_game_settings, game_event, game_settings, hosting, keep_game_settings, map_frame,
-    map_markers, notify, player, players, read_only, rename_filter, run_console, save_world,
-    server_world, set_game_settings, set_label, set_time_of_day, set_time_speed, set_weather,
-    spawn, status, teleport, terrain_edit, terrain_materials, time_of_day, time_speed_control,
-    voxel_read, weather_at, weather_fronts, world_key, world_persists, world_quiet,
-};
-
-/// A submitted inventory request and where its result goes.
-pub(crate) struct OpenRequest {
-    pub(crate) request: SubmittedRequest,
-    pub(crate) done: Registered<InventoryResultFn>,
-}
+pub(crate) use base::registered::Registered;
+pub(crate) use base::services::view;
+use base::{build::*, hooks::*, host::*, mods::*, net::*, pacing::*, services::*};
+use content::*;
+use inventory::*;
+use knowledge::*;
+use ui::*;
+use world::{altars::*, buffs::*, environment::*, saves::*, transactions::*, *};
 
 /// A defined mod event: name, layout and the size of its data.
 pub(crate) type DefinedEvent = (String, Vec<(String, u64)>, u32);
 
 /// A mod event handler: name, layout, the bytes it reads and the handler.
 pub(crate) type ModEventSubscription = (String, Vec<(String, u64)>, u32, Registered<ModEventFn>);
-
-/// A callback the mod registered with its pointer and the handle that
-/// registered it, so the fake calls it as that mod or data pack, and only
-/// through [`run`](Self::run).
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct Registered<F> {
-    callback: F,
-    user: usize,
-    /// `None` for a test's stand-in for another mod, which runs as the
-    /// loader, as another DLL's callback runs outside the pack's scope.
-    owner: Option<ModHandle>,
-}
-
-impl<F: Copy> Registered<F> {
-    pub(crate) fn new(callback: F, user: *mut core::ffi::c_void, owner: ModHandle) -> Self {
-        Self {
-            callback,
-            user: user.expose_provenance(),
-            owner: Some(owner),
-        }
-    }
-
-    /// A test's stand-in for another mod's callback.
-    pub(crate) fn unowned(callback: F, user: *mut core::ffi::c_void) -> Self {
-        Self {
-            callback,
-            user: user.expose_provenance(),
-            owner: None,
-        }
-    }
-
-    /// The handle that registered the callback; `None` for a stand-in.
-    pub(crate) const fn owner(&self) -> Option<ModHandle> {
-        self.owner
-    }
-
-    /// Runs `call` with the callback and its pointer as the owner, as the
-    /// loader runs a callback in its owner's profile scope.
-    pub(crate) fn run<R>(&self, call: impl FnOnce(F, *mut core::ffi::c_void) -> R) -> R {
-        let (callback, user) = (
-            self.callback,
-            core::ptr::with_exposed_provenance_mut(self.user),
-        );
-        match self.owner {
-            // SAFETY: `TABLE` is the fake's table, a static.
-            Some(owner) => unsafe {
-                enshwick_core::__fake::as_pack(&raw const TABLE, owner, || call(callback, user))
-            },
-            None => enshwick_core::__fake::as_loader(|| call(callback, user)),
-        }
-    }
-}
 
 /// An extension of a game screen: screen name, edge, callback and the host
 /// templates it shows for (empty for every host).
@@ -345,7 +244,6 @@ pub(crate) struct State {
     pub(crate) config_checks: std::collections::BTreeMap<String, Registered<ConfigCheckFn>>,
     /// The texts the mod handed the loader last, as TOML.
     pub(crate) published_texts: Option<String>,
-    /// The mod's answer to an update pick.
     /// The frame drawing now: its token, whether a window is open and what
     /// was drawn.
     pub(crate) frame: Option<(u64, bool, Vec<super::Drawn>)>,
@@ -376,16 +274,16 @@ pub(crate) struct State {
     pub(crate) item_values: std::collections::BTreeMap<(u32, u32), (u32, Vec<u8>)>,
     pub(crate) summon_items: Vec<(enshwick_core::ItemId, enshwick_core::survivors::NpcId)>,
     /// Stat kinds, modifiers and worn items.
-    pub(crate) stats: super::stats::FakeStats,
+    pub(crate) stats: super::inventory::stats::FakeStats,
     /// Extension points the mod defined and links it attached.
-    pub(crate) points: super::points::FakePoints,
+    pub(crate) points: super::base::points::FakePoints,
     /// Calls the mod serves and asks for.
-    pub(crate) calls: super::calls::FakeCalls,
+    pub(crate) calls: super::base::calls::FakeCalls,
     /// The fake steps and the mod's periodic tick handlers.
-    pub(crate) ticks: super::ticks::FakeTicks,
+    pub(crate) ticks: super::base::ticks::FakeTicks,
     /// The mod's controls and the action runs it sent.
     #[cfg(feature = "unstable")]
-    pub(crate) controls: super::controls::FakeControls,
+    pub(crate) controls: super::actions::controls::FakeControls,
     pub(crate) survivor_status: Option<Registered<SurvivorStatusFn>>,
     pub(crate) interaction_filters: Vec<Registered<InteractionFn>>,
     pub(crate) item_filters: Vec<Registered<enshwick_core::abi::ItemActionFn>>,
@@ -409,7 +307,7 @@ pub(crate) struct State {
     pub(crate) grouping: Option<(u32, u32)>,
     /// The command name and alias the mod took, and how often it said
     /// its rules changed.
-    pub(crate) commands: commands::FakeCommands,
+    pub(crate) commands: FakeCommands,
     /// The answer `run_console` last handed out, alive until the next call.
     run_out: Option<Box<str>>,
     /// The settings texts handed out, alive while the fake is installed.
@@ -460,233 +358,6 @@ pub(crate) enum Registration {
     Open,
     /// The mod's init returned; such requests come too late.
     Closed,
-}
-
-/// What the fake reads from the mod's manifest, as the loader does.
-#[derive(Debug)]
-pub(crate) struct ManifestFacts {
-    /// The mod's id.
-    pub(crate) id: String,
-    /// Whether the mod runs on both sides, so it takes part in the join
-    /// check.
-    pub(crate) joins: bool,
-    /// The ids of the mods it requires.
-    pub(crate) requires: Vec<String>,
-}
-
-impl ManifestFacts {
-    /// The facts of `manifest`.
-    fn of(manifest: &enshwick_core::abi::Manifest) -> Self {
-        let dependencies = if manifest.dependencies.is_null() {
-            &[][..]
-        } else {
-            // SAFETY: a manifest points at `dependency_count` dependencies,
-            // `declare_mod!`'s static array, alive for the process.
-            unsafe { core::slice::from_raw_parts(manifest.dependencies, manifest.dependency_count) }
-        };
-        Self {
-            id: text(manifest.id),
-            joins: manifest.side == enshwick_core::abi::Side::BOTH,
-            requires: dependencies
-                .iter()
-                .filter(|d| d.relation == enshwick_core::abi::Relation::REQUIRES)
-                .map(|d| text(d.id))
-                .collect(),
-        }
-    }
-
-    /// Whether the `kind` `name`, `<id>:<what>`, is of another mod whose
-    /// exports [`FakeHost::exports`] gave and lack `<kind>:<what>`, or for
-    /// content and stats also the name it is a part of, which the loader
-    /// refuses the mod.
-    pub(crate) fn unexported(
-        &self,
-        kind: enshwick_core::schema_section::Kind,
-        name: &str,
-        exports: &rustc_hash::FxHashMap<String, Vec<String>>,
-    ) -> bool {
-        name.split_once(':').is_some_and(|(owner, what)| {
-            owner != self.id
-                && exports.get(owner).is_some_and(|names| {
-                    !enshwick_core::__fake::rules::exports_name(names, kind, what)
-                })
-        })
-    }
-
-    /// Whether the mod requires the mod side of `name`, `<id>:<what>`.
-    pub(crate) fn requires_owner_of(&self, name: &str) -> bool {
-        name.split_once(':')
-            .is_some_and(|(owner, _)| self.requires.iter().any(|id| id == owner))
-    }
-}
-
-/// Logs the loader's warning for a mod refused the `kind` `id`,
-/// `<owner>:<what>`, whose owner does not export it.
-pub(crate) fn warn_unexported(s: &mut State, kind: enshwick_core::schema_section::Kind, id: &str) {
-    let owner = id.split_once(':').map_or(id, |(owner, _)| owner);
-    let offered = s.host.exports.get(owner).cloned().unwrap_or_default();
-    s.logs.push((
-        Level::WARN,
-        enshwick_core::__fake::rules::unexported_reason(kind, id, &offered),
-    ));
-}
-
-/// Notes the manifest of the mod whose init runs on `api`, when `api` is the
-/// fake's table, so the fake refuses by the mod's names and side.
-/// Why the fake refuses the manifest, as the loader refuses one with an
-/// export that lacks its kind or its local name; `None` when it takes it.
-pub(crate) fn note_manifest(
-    api: *const HostApi,
-    manifest: &enshwick_core::abi::Manifest,
-) -> Option<String> {
-    if !core::ptr::eq(api, &raw const TABLE) {
-        return None;
-    }
-    let exports: Vec<String> = if manifest.exports.is_null() {
-        Vec::new()
-    } else {
-        // SAFETY: a manifest points at `export_count` names that live as
-        // long as it, which outlives the mod's init.
-        unsafe { core::slice::from_raw_parts(manifest.exports, manifest.export_count) }
-            .iter()
-            .map(|name| text(*name))
-            .collect()
-    };
-    if let Some(bad) = enshwick_core::__fake::rules::bad_export(&exports) {
-        return Some(format!(
-            "the export {bad:?} lacks its kind or its local name: write <kind>:<name>"
-        ));
-    }
-    with((), |s| s.manifest = Some(ManifestFacts::of(manifest)));
-    None
-}
-
-/// Whether the fake, when `api` is its table, refuses the mod of `manifest`
-/// before its init, as the loader skips a mod whose side is not server or
-/// both; records the reason as a fault.
-pub(crate) fn refuses_side(api: *const HostApi, manifest: &enshwick_core::abi::Manifest) -> bool {
-    use enshwick_core::abi::Side;
-    core::ptr::eq(api, &raw const TABLE)
-        && !matches!(manifest.side, Side::SERVER | Side::BOTH)
-        && with(false, |s| {
-            let reason = format!(
-                "side {} is not a mod's side: a mod runs on the server or on both",
-                manifest.side.0
-            );
-            s.logs.push((Level::WARN, format!("skipped: {reason}")));
-            s.faults.push(reason);
-            true
-        })
-}
-
-/// Whether the fake, when `api` is its table, turns the mod of `manifest`
-/// off before its init, as the loader does a mod with `developer: true`
-/// while developer tools are off; records the off reason as the loader
-/// does when it does.
-pub(crate) fn refuses_developer(
-    api: *const HostApi,
-    manifest: &enshwick_core::abi::Manifest,
-) -> bool {
-    core::ptr::eq(api, &raw const TABLE)
-        && manifest
-            .flags
-            .contains(enshwick_core::abi::ManifestFlags::DEVELOPER)
-        && with(false, |s| {
-            if s.host.developer_tools {
-                return false;
-            }
-            let reason = enshwick_core::mods::DEVELOPER_TOOL_OFF;
-            s.faults.push(reason.to_owned());
-            s.logs.push((
-                Level::ERROR,
-                format!("off: {reason} ({})", enshwick_core::__fake::MOD_OFF),
-            ));
-            true
-        })
-}
-
-/// The base limits the mod asked for, and whether the hooks are armed.
-#[derive(Clone, Copy, Debug, Default)]
-pub(crate) struct BaseLimitState {
-    /// The largest zones and bases the mod asked for, once it asked.
-    pub(crate) requested: Option<(u32, u32)>,
-    /// The mod's init returned and its hooks are armed.
-    pub(crate) armed: bool,
-    /// The mod's latest base cap, once it set one.
-    pub(crate) cap: Option<u32>,
-}
-
-/// The mod's altar zone filters, and how often it asked for a new sizing.
-#[derive(Debug, Default)]
-pub(crate) struct ZoneSizing {
-    /// The filters and their pointers.
-    pub(crate) filters: Vec<Registered<AltarZoneFn>>,
-    /// How often the mod asked for the zones to be sized again.
-    pub(crate) resizes: usize,
-}
-
-/// What the mod asked of the engine's pacing places.
-#[derive(Debug, Default)]
-pub(crate) struct Pacing {
-    /// The loop wait handlers and their pointers.
-    pub(crate) loop_waits: Vec<Registered<LoopWaitFn>>,
-    /// The server wait handlers and their pointers.
-    pub(crate) server_waits: Vec<Registered<ServerWaitFn>>,
-    /// The lowest worker caps asked for, default and background.
-    pub(crate) task_workers: Option<(u32, u32)>,
-}
-
-/// The changes of vanilla values a mod declared, each with its source.
-#[derive(Debug, Default)]
-pub(crate) struct DataChanges {
-    /// Changes of one entry.
-    pub(crate) one: Vec<(enshwick_core::content::changes::Change, String)>,
-    /// Changes of every item a selection picks.
-    pub(crate) items: Vec<(enshwick_core::content::changes::ItemsChange, String)>,
-    /// Changes of every recipe a selection picks.
-    pub(crate) recipes: Vec<(enshwick_core::content::changes::RecipesChange, String)>,
-    /// Changes the mod sets later, numbered from 1 in this order, with
-    /// the value in force.
-    pub(crate) live: Vec<crate::test::content::LiveChange>,
-}
-
-/// The changes of the world the mod asked for, and its voxel reads, in
-/// order.
-#[derive(Default)]
-pub(crate) struct WorldEdits {
-    /// The voxel boxes the mod read on the game thread, `(min, size)`.
-    pub(crate) voxel_reads: Vec<([u32; 3], [u32; 3])>,
-    /// Direct terrain edits.
-    pub(crate) terrain: Vec<TerrainEdit>,
-    /// Committed transactions, oldest first.
-    pub(crate) transactions: Vec<crate::test::FakeTransaction>,
-    /// Whether the world has stopped, as between two worlds.
-    pub(crate) stopped: bool,
-    /// Whether the scene's map markers are held as still being read.
-    pub(crate) markers_pending: bool,
-    /// The reads of the scene the mod asked for in this world; the first
-    /// ask of each starts it.
-    pub(crate) scene_asked: Vec<SceneRead>,
-}
-
-/// A read of the scene's data the loader runs once per world.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum SceneRead {
-    /// The map markers.
-    Markers,
-    /// The map's frame.
-    Frame,
-}
-
-impl WorldEdits {
-    /// Notes that the mod asked for `read`; whether this was its first ask.
-    pub(crate) fn first_ask(&mut self, read: SceneRead) -> bool {
-        let first = !self.scene_asked.contains(&read);
-        if first {
-            self.scene_asked.push(read);
-        }
-        first
-    }
 }
 
 /// Waits for the table to be free, then answers from `host`.
@@ -800,12 +471,12 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         content: std::collections::BTreeMap::new(),
         item_values: std::collections::BTreeMap::new(),
         summon_items: Vec::new(),
-        stats: super::stats::FakeStats::default(),
-        points: super::points::FakePoints::default(),
-        calls: super::calls::FakeCalls::default(),
-        ticks: super::ticks::FakeTicks::default(),
+        stats: super::inventory::stats::FakeStats::default(),
+        points: super::base::points::FakePoints::default(),
+        calls: super::base::calls::FakeCalls::default(),
+        ticks: super::base::ticks::FakeTicks::default(),
         #[cfg(feature = "unstable")]
-        controls: super::controls::FakeControls::default(),
+        controls: super::actions::controls::FakeControls::default(),
         survivor_status: None,
         interaction_filters: Vec::new(),
         item_filters: Vec::new(),
@@ -825,7 +496,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         altar_limits: Vec::new(),
         base_limit: BaseLimitState::default(),
         grouping: None,
-        commands: commands::FakeCommands::default(),
+        commands: FakeCommands::default(),
         run_out: None,
         settings: Vec::new(),
     });
@@ -840,140 +511,6 @@ pub(crate) fn uninstall() {
 /// `f` on the installed fake's state, or `default` when none is installed.
 pub(crate) fn with<R>(default: R, f: impl FnOnce(&mut State) -> R) -> R {
     state().as_mut().map_or(default, f)
-}
-
-/// Writes `value` through `out`, which the safe layer passes valid or null.
-pub(crate) fn put<T>(out: *mut T, value: T) -> Status {
-    // SAFETY: the safe layer passes a valid out pointer; `as_mut` turns away null.
-    match unsafe { out.as_mut() } {
-        Some(slot) => {
-            *slot = value;
-            Status::OK
-        }
-        None => Status::BAD_ARGS,
-    }
-}
-
-pub(crate) fn found<T>(value: Option<T>, out: *mut T) -> Status {
-    value.map_or(Status::MISSING, |value| put(out, value))
-}
-
-pub(crate) fn text(s: Str) -> String {
-    // SAFETY: strings are borrowed for the call.
-    unsafe { s.as_str() }.map_or_else(|| "<not UTF-8>".to_owned(), str::to_owned)
-}
-
-/// Writes up to `capacity` of `items` to `out` and their number to `count`.
-pub(crate) fn put_list<T: Copy>(
-    items: &[T],
-    out: *mut T,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    if count.is_null() {
-        return Status::BAD_ARGS;
-    }
-    if !out.is_null() {
-        for (i, item) in items.iter().take(capacity as usize).enumerate() {
-            // SAFETY: `i` is below `capacity` and the safe layer passes a
-            // non-null `out` with room for `capacity` entries, so the offset
-            // stays inside that array.
-            let slot = unsafe { out.add(i) };
-            // SAFETY: `slot` is inside the `capacity` writable, aligned
-            // entries the safe layer passes at `out`.
-            unsafe { slot.write(*item) };
-        }
-    }
-    // SAFETY: `count` is non-null, checked at the top; the safe layer passes
-    // it pointing at a writable, aligned `u32` for the call.
-    unsafe { count.write(u32::try_from(items.len()).unwrap_or(u32::MAX)) };
-    Status::OK
-}
-
-/// A mod's struct that starts with a header, read as the loader reads it: it
-/// needs only [`Headed::BORN`](enshwick_core::abi::Headed::BORN), and the fields past
-/// what the mod wrote read zero, so a mod of an older minor works here as in
-/// the game.
-pub(crate) fn get_headed<T: enshwick_core::abi::Headed>(raw: *const T) -> Option<T> {
-    // SAFETY: the safe layer passes null or its version of `T`, readable for
-    // the size its header states, with no other writer during the call.
-    unsafe { enshwick_core::abi::read_headed(raw, T::BORN) }
-}
-
-/// Writes `value` to a mod's struct that starts with a header, as the loader
-/// does: only as far as the mod's header says, with that size written back.
-pub(crate) fn put_headed<T: enshwick_core::abi::Headed>(out: *mut T, value: T) -> Status {
-    // SAFETY: the safe layer passes null or its version of `T`, its header
-    // stating the size it may be written for, untouched by others during the
-    // call.
-    if unsafe { enshwick_core::abi::write_headed(out, value) } {
-        Status::OK
-    } else {
-        Status::BAD_ARGS
-    }
-}
-
-/// [`found`] for a struct that starts with a header, written as
-/// [`put_headed`] writes it.
-pub(crate) fn found_headed<T: enshwick_core::abi::Headed>(value: Option<T>, out: *mut T) -> Status {
-    value.map_or(Status::MISSING, |value| put_headed(out, value))
-}
-
-/// A mod's list of `count` headed entries, read as the loader reads it: the
-/// entries are as far apart as the first one's header says, every one states
-/// that size, and each is read as [`get_headed`] reads one. `None` for a
-/// null list with entries, or entries of different sizes.
-pub(crate) fn get_headed_list<T: enshwick_core::abi::Headed>(
-    raw: *const T,
-    count: u32,
-) -> Option<Vec<T>> {
-    if count == 0 {
-        return Some(Vec::new());
-    }
-    if raw.is_null() {
-        return None;
-    }
-    // SAFETY: a non-null list from the safe layer starts with an entry's
-    // header, readable for its eight bytes.
-    // The mod's headed list, not game memory.
-    // ast-grep-ignore: game-memory-through-raw
-    let stride = unsafe { raw.cast::<Header>().read_unaligned() }.size as usize;
-    if stride < size_of::<Header>() {
-        return None;
-    }
-    (0..count as usize)
-        .map(|index| {
-            let entry = raw.cast::<u8>().wrapping_add(index * stride).cast::<T>();
-            // SAFETY: the safe layer passes `count` entries of `stride` bytes,
-            // so `entry` starts one of them, its header readable.
-            // The mod's headed list, not game memory.
-            // ast-grep-ignore: game-memory-through-raw
-            let size = unsafe { entry.cast::<Header>().read_unaligned() }.size as usize;
-            (size == stride).then(|| get_headed(entry))?
-        })
-        .collect()
-}
-
-/// Writes up to `capacity` of `items` to a mod's list of headed entries, as
-/// the loader does: entries are as far apart as the first one's header says,
-/// and each gets only what both sides know.
-pub(crate) fn put_headed_list<T: enshwick_core::abi::Headed>(
-    items: &[T],
-    out: *mut T,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    if out.is_null() || capacity == 0 {
-        return mods::list(items, core::ptr::null_mut(), 0, 0, count);
-    }
-    let stride = {
-        // SAFETY: a non-null list with room for an entry, checked above,
-        // starts with that entry's header, readable for its eight bytes.
-        // The mod's headed list, not game memory.
-        // ast-grep-ignore: game-memory-through-raw
-        unsafe { out.cast::<Header>().read_unaligned() }.size
-    };
-    mods::list(items, out, stride, capacity, count)
 }
 
 /// The table every installed fake answers through.
@@ -1085,21 +622,21 @@ pub(crate) static TABLE: HostApi = HostApi {
     content_serve,
     content_read,
     icons_ready,
-    stat_open: super::stats::stat_open,
-    stat_info: super::stats::stat_info,
-    stat_value: super::stats::stat_value,
-    stat_modify: super::stats::stat_modify,
-    stat_buff: super::stats::stat_buff,
-    stats_changed: super::stats::stats_changed,
-    stat_sources: super::stats::stat_sources,
-    stat_watch: super::stats::stat_watch,
+    stat_open: super::inventory::stats::stat_open,
+    stat_info: super::inventory::stats::stat_info,
+    stat_value: super::inventory::stats::stat_value,
+    stat_modify: super::inventory::stats::stat_modify,
+    stat_buff: super::inventory::stats::stat_buff,
+    stats_changed: super::inventory::stats::stats_changed,
+    stat_sources: super::inventory::stats::stat_sources,
+    stat_watch: super::inventory::stats::stat_watch,
     define_event,
     subscribe_event,
     send_event,
-    affix_open: super::stats::affix_open,
-    affix_roll: super::stats::affix_roll,
-    item_lines: super::stats::item_lines,
-    affix_info: super::stats::affix_info,
+    affix_open: super::inventory::stats::affix_open,
+    affix_roll: super::inventory::stats::affix_roll,
+    item_lines: super::inventory::stats::item_lines,
+    affix_info: super::inventory::stats::affix_info,
     rename_content,
     declare_content,
     entity_data_open,
@@ -1114,9 +651,9 @@ pub(crate) static TABLE: HostApi = HostApi {
     rebuild_resource,
     recipe_rule,
     recipe_disabled,
-    define_point: super::points::define_point,
-    attach_point: super::points::attach_point,
-    run_point: super::points::run_point,
+    define_point: super::base::points::define_point,
+    attach_point: super::base::points::attach_point,
+    run_point: super::base::points::run_point,
     actions,
     event_types,
     recipe_kind,
@@ -1124,9 +661,9 @@ pub(crate) static TABLE: HostApi = HostApi {
     rate,
     set_rate,
     change_data,
-    loop_wait: pacing::loop_wait,
-    server_wait: pacing::server_wait,
-    task_workers: pacing::task_workers,
+    loop_wait,
+    server_wait,
+    task_workers,
     altar_zone_filter,
     altar_zones_changed,
     altar_limit_filter,
@@ -1140,14 +677,14 @@ pub(crate) static TABLE: HostApi = HostApi {
     transaction_status,
     transaction_commit_for,
     world_quiet,
-    serve_call: super::calls::serve_call,
-    find_call: super::calls::find_call,
-    call: super::calls::call,
+    serve_call: super::base::calls::serve_call,
+    find_call: super::base::calls::find_call,
+    call: super::base::calls::call,
     transaction_entities,
     world_persists,
     account_action,
-    subscribe_tick: super::ticks::subscribe_tick,
-    set_tick_every: super::ticks::set_tick_every,
+    subscribe_tick: super::base::ticks::subscribe_tick,
+    set_tick_every: super::base::ticks::set_tick_every,
     map_frame,
     request_base_limits,
     map_marker_types,
@@ -1155,7 +692,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     chat_mute_set,
     chat_mute_has,
     mod_dir,
-    set_base_cap: gameplay::set_base_cap,
+    set_base_cap,
     resource_keys,
     content_hashes,
     types,
@@ -1173,13 +710,13 @@ pub(crate) static TABLE: HostApi = HostApi {
     local_held,
     read_only,
     resource_served,
-    commands: commands::commands,
-    run_command: commands::run_command,
-    command_list: commands::command_list,
-    actions_changed: commands::actions_changed,
+    commands,
+    run_command,
+    command_list,
+    actions_changed,
     resource_buffer,
-    game_query: gameplay::game_query,
-    action_window: commands::action_window,
-    progress_write: world::progress_write,
-    drop_items: world::drop_items,
+    game_query,
+    action_window,
+    progress_write,
+    drop_items,
 };
