@@ -25,15 +25,24 @@ pub(crate) fn in_attrs(attrs: &[Attribute], helper: &str) -> syn::Result<Option<
         attr.parse_nested_meta(|meta| {
             if meta.path.is_ident(KEY) {
                 found = Some(value(&meta)?);
-            } else if meta.input.peek(syn::Token![=]) {
-                let _skipped: syn::Expr = meta.value()?.parse()?;
-            } else if meta.input.peek(syn::token::Paren) {
-                let _skipped: Group = meta.input.parse()?;
+                Ok(())
+            } else {
+                skip(&meta)
             }
-            Ok(())
         })?;
     }
     Ok(found)
+}
+
+/// Reads past the `= value` or `(..)` of the argument at `meta`, so a reader
+/// that wants other arguments goes on to the next one.
+pub(crate) fn skip(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<()> {
+    if meta.input.peek(syn::Token![=]) {
+        let _skipped: syn::Expr = meta.value()?.parse()?;
+    } else if meta.input.peek(syn::token::Paren) {
+        let _skipped: Group = meta.input.parse()?;
+    }
+    Ok(())
 }
 
 /// `tokens` with every `::enshwick` path start written as `krate`; the same
