@@ -133,6 +133,8 @@ mod tests {
     fn a_bodiless_method_calls_the_field_s_method_with_its_arguments_and_types() -> syn::Result<()>
     {
         let item: TokenStream = quote! {
+            /// A block's own docs and aliases are no hiding.
+            #[doc(alias = "loader")]
             impl Load<'_> {
                 /// Docs stay.
                 #[script]

@@ -642,6 +642,11 @@ mod tests {
             )
         };
         assert!(asks("enshwick-core").is_empty());
+        assert_eq!(fake_enabler("enshwick-base"), Some(CORE));
+        assert_eq!(fake_enabler(CORE), Some(FAKE_CRATE));
+        for none in [FAKE_CRATE, FACADE, "serde"] {
+            assert_eq!(fake_enabler(none), None, "{none}");
+        }
         assert_eq!(
             asks("enshwick-loader"),
             [

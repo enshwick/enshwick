@@ -507,12 +507,19 @@ impl Load<'_> {
             ],
         );
         let unpaired = run(&root, &["base/a.rs".to_owned()]);
+        std::fs::create_dir_all(root.join("core/load/odd.rs")).unwrap();
+        std::fs::write(root.join("base/d.rs"), module).unwrap();
+        let unreadable = run(&root, &["base/d.rs=core/load/odd.rs".to_owned()]);
         let forwarders = std::fs::read_to_string(root.join("core/load/a.rs")).unwrap();
         let peeled = std::fs::read_to_string(root.join("base/a.rs")).unwrap();
         let private_only = root.join("core/load/c.rs").exists();
         std::fs::remove_dir_all(&root).unwrap();
         assert_eq!(ran, Ok(true));
         assert_eq!(unpaired, Err("base/a.rs: not <from>=<into>".to_owned()));
+        assert!(
+            unreadable.as_ref().is_err_and(|e| e.contains("odd.rs")),
+            "a forwarder file that does not read is no new file: {unreadable:?}"
+        );
         assert!(peeled.contains("impl BaseLoad {"), "{peeled}");
         assert!(
             forwarders.starts_with("//! `Load`'s methods")
@@ -555,12 +562,14 @@ impl Load<'_> {
     #[test]
     fn a_forwarder_file_takes_no_re_export_nor_an_import_of_the_module_s_own_children()
     -> Result<(), String> {
-        let source = "mod script;\n\n#[doc(hidden)]\npub use script::Fns;\nuse script::Inner;\nuse self::x::Y;\nuse super::Z;\n#[cfg(test)]\nuse crate::Host;\nuse serde::Deserialize as _;\n";
+        let source = "mod script;\n\n#[doc(hidden)]\npub use script::Fns;\nuse script::Inner;\nuse self::x::Y;\nuse super::Z;\n#[cfg(test)]\nuse crate::Host;\nuse serde::Deserialize as _;\nuse toml;\nuse bytemuck as bm;\nuse script;\n";
         assert_eq!(
             peel(source)?.uses,
             [
                 "#[cfg(test)]\nuse crate::Host;",
-                "use serde::Deserialize as _;"
+                "use serde::Deserialize as _;",
+                "use toml;",
+                "use bytemuck as bm;"
             ]
         );
         Ok(())
