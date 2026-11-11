@@ -1,7 +1,7 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
 use crate::content::Guid;
-use crate::content::skills::*;
+use crate::content::skills::{NewPerk, NewSkillNode, SkillNode, SkillNodeId};
 use crate::{Load, Off};
 use enshwick_content::__load::*;
 

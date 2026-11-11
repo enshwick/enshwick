@@ -22,6 +22,7 @@ mod recipes;
 #[cfg(feature = "typed")]
 mod removal;
 mod renames;
+#[cfg(feature = "unstable")]
 mod script;
 #[cfg(feature = "typed")]
 mod skills;

@@ -189,6 +189,7 @@ impl Load<'_> {
 
     /// Whether the mod runs on both sides, so it takes part in the join
     /// check, as its manifest says.
+    #[cfg(feature = "unstable")]
     pub(crate) fn joins(&self) -> bool {
         self.base.joins()
     }

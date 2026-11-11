@@ -1,6 +1,6 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::content::journal::*;
+use crate::content::journal::{NewJournalPage, NewQuest, QuestChange};
 use crate::knowledge::KnowledgeId;
 use crate::{Load, Off};
 use enshwick_content::__load::*;

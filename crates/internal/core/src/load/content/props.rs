@@ -1,6 +1,6 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::content::props::*;
+use crate::content::props::{NewProp, PropId};
 use crate::{Load, Off};
 use enshwick_content::__load::*;
 

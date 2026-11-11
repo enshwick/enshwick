@@ -1,6 +1,6 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::content::items::*;
+use crate::content::items::NewItem;
 use crate::{Load, Off};
 use enshwick_content::__load::*;
 

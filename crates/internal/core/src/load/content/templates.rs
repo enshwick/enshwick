@@ -1,7 +1,7 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
 use crate::content::Guid;
-use crate::content::templates::*;
+use crate::content::templates::{ComponentChange, NewTemplate, TemplateId};
 use crate::{Load, Off};
 use enshwick_content::__load::*;
 

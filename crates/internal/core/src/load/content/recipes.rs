@@ -1,7 +1,11 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::content::recipes::*;
-use crate::{Load, Off};
+use crate::Load;
+#[cfg(feature = "unstable")]
+use crate::Off;
+#[cfg(feature = "unstable")]
+use crate::content::recipes::{Derived, NewRecipe, RecipeView};
+#[cfg(feature = "unstable")]
 use enshwick_content::__load::*;
 
 #[enshwick_macros::forward(base)]

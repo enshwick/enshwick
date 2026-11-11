@@ -47,10 +47,6 @@ impl Load<'_> {
     /// }
     /// ```
     #[script]
-    #[expect(
-        clippy::unused_self,
-        reason = "an init call beside the other removals, where mods and scripts find it"
-    )]
     pub fn remove_workshop(&mut self, station: Guid) -> Result<(), Off>;
 
     /// Serves the vanilla loot table `table`, random or a container's fill

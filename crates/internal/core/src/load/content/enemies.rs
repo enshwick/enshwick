@@ -1,7 +1,7 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
 use crate::content::Guid;
-use crate::content::enemies::*;
+use crate::content::enemies::{ArsenalChange, ArsenalId, NewArsenal, NewEnemy};
 use crate::content::templates::TemplateId;
 use crate::{Load, Off};
 use enshwick_content::__load::*;

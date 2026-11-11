@@ -1,6 +1,6 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::content::knowledge::*;
+use crate::content::knowledge::{ExperienceValue, NewExperience, NewKnowledge};
 use crate::knowledge::KnowledgeId;
 use crate::{Load, Off};
 use enshwick_content::__load::*;
