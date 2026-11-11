@@ -7,10 +7,10 @@
 
 pub mod test;
 
-// The examples here are written as a mod writes them, against `enshwick`.
-// Each names this crate `enshwick`, so the root stands in for the API
-// crate: the core's items at their paths beside `test`, which the macros'
-// output names too.
+// The root stands in for the API crate: core's items at their paths beside
+// `test`. The fake's own code names them through `crate::`, the examples
+// name this crate `enshwick` as a mod writes them, and so does the macros'
+// output.
 
 #[doc(hidden)]
 pub use enshwick_core::*;
