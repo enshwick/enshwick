@@ -409,7 +409,7 @@ pub(crate) fn put(bytes: &mut [u8], at: usize, data: &[u8]) -> bool {
 /// ) -> Result<(), enshwick::Off> {
 ///     let layout = WorkshopLayout::resolve(load)?;
 ///     let items = ItemLayout::resolve(load)?;
-///     let (item, like) = (types::ITEM_INFO.key(new.id)?, types::ITEM_INFO.key(new.like.item)?);
+///     let (item, like) = (types::ITEM_INFO.key(new.id.guid())?, types::ITEM_INFO.key(new.like.item)?);
 ///     load.serve(item, like, move |base| clone_station(&items, &layout, base, &new))
 /// }
 /// ```
