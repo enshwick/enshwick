@@ -805,11 +805,17 @@ mod tests {
         assert!(starts(&docs, "cargo test --doc") && starts(&docs, "cargo doc"));
         assert!(!starts(&docs, "cargo nextest") && !starts(&docs, "cargo fmt"));
         let every = planned(&Part::every(false));
+        // A step that runs twice, such as the link check after each docs
+        // build, takes its next place in the full run.
         let order = |steps: &[String]| -> Vec<usize> {
-            steps
-                .iter()
-                .map(|step| every.iter().position(|s| s == step).unwrap())
-                .collect()
+            let mut taken: Vec<usize> = Vec::new();
+            for step in steps {
+                let at = (0..every.len())
+                    .find(|at| every[*at] == *step && !taken.contains(at))
+                    .unwrap();
+                taken.push(at);
+            }
+            taken
         };
         assert_eq!(every.len(), host.len() + docs.len());
         assert!(order(&host).is_sorted() && order(&docs).is_sorted());
