@@ -3,13 +3,12 @@
 
 #[cfg(feature = "typed")]
 use crate::Off;
+use crate::content::Guid;
 #[cfg(feature = "typed")]
 use crate::content::journal::NewQuest;
 #[cfg(feature = "typed")]
 use crate::content::knowledge::KnowledgeQuery;
-pub use crate::content::vanilla::fixtures::{
-    game, game_with_chest, game_with_recipes, game_with_tables,
-};
+use crate::content::vanilla::{Vanilla, fixtures};
 pub use crate::rates::{Rate, scale_whole};
 #[cfg(feature = "typed")]
 use crate::resources::Value;
@@ -17,6 +16,34 @@ use crate::resources::Value;
 /// The fields of an image resource the game's catalogue names, in the order
 /// an icon reads them.
 pub const IMAGE_FIELDS: [&str; 6] = crate::content::icons::IMAGE_FIELDS;
+
+/// A vanilla game with the items `named`, a forge station of its own
+/// workshop, a survivor's workshop and an item that places a plain template.
+#[must_use]
+pub fn game(named: &[(Guid, &str)]) -> Vanilla {
+    fixtures::game(named)
+}
+
+/// [`game`] with a recipe registry: each recipe's GUID, debug name and the
+/// item it makes.
+#[must_use]
+pub fn game_with_recipes(named: &[(Guid, &str)], recipes: &[(Guid, &str, Guid)]) -> Vanilla {
+    fixtures::game_with_recipes(named, recipes)
+}
+
+/// [`game`] with the item `chest`, named `name`, which places a container
+/// of `slots` slots.
+#[must_use]
+pub fn game_with_chest(chest: Guid, name: &str, slots: u8) -> Vanilla {
+    fixtures::game_with_chest(chest, name, slots)
+}
+
+/// A vanilla game whose templates are the containers `containers`: name
+/// and fill table each.
+#[must_use]
+pub fn game_with_tables(containers: &[(&str, Guid)]) -> Vanilla {
+    fixtures::game_with_tables(containers)
+}
 
 /// Whether `factor` is one a mod may set for a rate: finite, from 0 to the
 /// most the loader takes.

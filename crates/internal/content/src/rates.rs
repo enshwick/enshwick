@@ -17,6 +17,7 @@
 //! ```
 
 use crate::Host;
+#[cfg(feature = "unstable")]
 use crate::Off;
 use crate::abi::{RateId, Status};
 use crate::content::recipes::RecipeKind;

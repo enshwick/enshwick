@@ -390,7 +390,7 @@ pub(crate) mod fixtures {
         reason = "a fixture that does not build fails the test that asked for it"
     )]
 
-    use super::*;
+    use super::{Blob, FillTableLayout, Guid};
 
     pub(crate) const FILL: FillTableLayout = FillTableLayout {
         name: 0,

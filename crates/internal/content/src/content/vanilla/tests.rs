@@ -1,4 +1,7 @@
-use super::fixtures::*;
+use super::fixtures::{
+    HASHES, ITEMS, game, game_with_chest, game_with_container, game_with_recipes, game_with_tables,
+    registry,
+};
 use super::*;
 
 #[test]

@@ -180,10 +180,6 @@ impl LoadMethods for crate::BaseLoad {
         Ok(())
     }
 
-    #[expect(
-        clippy::unused_self,
-        reason = "an init call beside the other removals, where mods and scripts find it"
-    )]
     fn remove_workshop(&mut self, station: Guid) -> Result<(), Off> {
         recipes::disable(RecipeRule::Workshop(station.into()))?;
         recipes::disable(RecipeRule::Output(station.into()))

@@ -1,9 +1,7 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
 use crate::content::props::*;
-use crate::engine_ids as ids;
-use crate::resources::{Registry, Value};
-use crate::{ItemId, Load, Off};
+use crate::{Load, Off};
 use enshwick_content::__load::*;
 
 #[enshwick_macros::forward(base)]

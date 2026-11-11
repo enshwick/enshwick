@@ -11,6 +11,7 @@ use super::templates::ComponentChange;
 use super::vanilla::{self, LootTable, Vanilla};
 use super::workshops::{Station, WorkshopId};
 use super::{Guid, Id, is_id};
+#[cfg(feature = "unstable")]
 use crate::__load::*;
 use crate::resources::{Bytes, Value as Data};
 use crate::script::{

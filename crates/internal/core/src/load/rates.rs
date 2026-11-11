@@ -1,8 +1,5 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::Host;
-use crate::abi::{RateId, Status};
-use crate::content::recipes::RecipeKind;
 use crate::rates::{Rate, RateHandle};
 use crate::{Load, Off};
 use enshwick_content::__load::*;

@@ -8,9 +8,12 @@
 use super::super::containers::fixtures::{LAYOUT as CONTAINERS, chest as template};
 use super::super::loot_tables::fixtures::{FILL, container};
 use super::super::workshops::fixtures::{CLIENT, CRAFTING, INTERACTION, LAYOUT, station};
-use super::*;
+use super::{
+    Blob, Guid, Hashes, ITEM_REGISTRY, ItemLayout, RECIPE_REGISTRY, RecipeLayout, ResourceKey,
+    Vanilla, WORKSHOP_REGISTRY,
+};
 
-pub(crate) const HASHES: Hashes = Hashes {
+pub(super) const HASHES: Hashes = Hashes {
     item: 1,
     item_registry: 2,
     template: 3,
@@ -53,8 +56,7 @@ pub(crate) fn registry(items: &[(Guid, &str)]) -> Vec<u8> {
 
 /// A game with the items `named`, a forge station of its own workshop,
 /// a survivor's workshop and an item that places a plain template.
-#[must_use]
-pub fn game(named: &[(Guid, &str)]) -> Vanilla {
+pub(crate) fn game(named: &[(Guid, &str)]) -> Vanilla {
     let data = game_data(named);
     Vanilla::with_parts(ITEMS, LAYOUT, HASHES, move |key| data.get(&key).cloned())
 }
@@ -82,8 +84,7 @@ const RECIPES: RecipeLayout = RecipeLayout {
 
 /// [`game`] with a recipe registry: each recipe's GUID, debug name and
 /// the item it makes.
-#[must_use]
-pub fn game_with_recipes(named: &[(Guid, &str)], recipes: &[(Guid, &str, Guid)]) -> Vanilla {
+pub(crate) fn game_with_recipes(named: &[(Guid, &str)], recipes: &[(Guid, &str, Guid)]) -> Vanilla {
     let mut blob = Blob::new(&[0u8; 16]);
     let at = blob.append(&vec![0u8; 0xa8 * recipes.len()], 8);
     for (i, (guid, name, output)) in recipes.iter().enumerate() {
@@ -108,8 +109,7 @@ pub fn game_with_recipes(named: &[(Guid, &str)], recipes: &[(Guid, &str, Guid)])
 
 /// [`game`] with the item `chest`, named `name`, which places a
 /// container of `slots` slots.
-#[must_use]
-pub fn game_with_chest(chest: Guid, name: &str, slots: u8) -> Vanilla {
+pub(crate) fn game_with_chest(chest: Guid, name: &str, slots: u8) -> Vanilla {
     game_with_container(chest, name, slots, 0x3c0)
 }
 
@@ -128,8 +128,7 @@ pub(crate) fn game_with_container(chest: Guid, name: &str, slots: u8, at: usize)
 
 /// A game whose templates are the containers `containers`: name and
 /// fill table each.
-#[must_use]
-pub fn game_with_tables(containers: &[(&str, Guid)]) -> Vanilla {
+pub(crate) fn game_with_tables(containers: &[(&str, Guid)]) -> Vanilla {
     let mut data = game_data(&[]);
     let mut guids = Vec::new();
     for (i, (name, table)) in containers.iter().enumerate() {

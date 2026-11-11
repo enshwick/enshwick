@@ -1,9 +1,7 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::abi::ContentRename;
-use crate::content::Guid;
 use crate::content::renames::*;
-use crate::{ItemId, Load, Off};
+use crate::{Load, Off};
 use enshwick_content::__load::*;
 
 #[enshwick_macros::forward(base)]

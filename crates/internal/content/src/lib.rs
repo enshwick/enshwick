@@ -13,6 +13,8 @@
 extern crate self as enshwick;
 
 // The base's modules at the paths the code here names them by.
+#[cfg(feature = "typed")]
+pub(crate) use enshwick_base::engine_enum;
 #[doc(hidden)]
 pub use enshwick_base::{
     code, command_names,
@@ -20,7 +22,7 @@ pub use enshwick_base::{
     ecs, events, files, game_events, i18n, mods, net, pacing, points, resources, schedule, script,
     services, state, status, time,
 };
-pub(crate) use enshwick_base::{engine_enum, engine_ids, facts, fresh, locks, near};
+pub(crate) use enshwick_base::{engine_ids, facts, fresh, locks, near};
 // The macros the base exports, which the code here calls by `crate::`.
 pub(crate) use enshwick_base::load::BaseLoad;
 #[doc(hidden)]
@@ -32,7 +34,9 @@ pub use enshwick_base::{
 /// The base handle's helpers at the path the code here names them by.
 pub(crate) mod load {
     pub(crate) use enshwick_base::__off_from as off_from;
-    pub(crate) use enshwick_base::load::{off_status, ok};
+    #[cfg(feature = "unstable")]
+    pub(crate) use enshwick_base::load::off_status;
+    pub(crate) use enshwick_base::load::ok;
 }
 
 #[doc(inline)]

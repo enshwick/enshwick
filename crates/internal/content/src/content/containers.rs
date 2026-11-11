@@ -149,7 +149,7 @@ pub(crate) mod fixtures {
         reason = "a fixture that does not build fails the test that asked for it"
     )]
 
-    use super::*;
+    use super::{Blob, ContainerLayout, VARIANT};
 
     pub(crate) const LAYOUT: ContainerLayout = ContainerLayout {
         components: 0,

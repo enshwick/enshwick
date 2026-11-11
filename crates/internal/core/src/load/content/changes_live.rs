@@ -1,9 +1,7 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::abi::{ChangeId, ChangeOp, DataChange, DataSelect, Header, Status, Str};
-use crate::content::Guid;
 use crate::content::changes::*;
-use crate::{Host, Load, Off};
+use crate::{Load, Off};
 use enshwick_content::__load::*;
 
 #[enshwick_macros::forward(base)]

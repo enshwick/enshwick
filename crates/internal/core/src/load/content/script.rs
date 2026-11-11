@@ -1,11 +1,7 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
 use crate::Load;
-use crate::resources::{Bytes, Value as Data};
-use crate::script::{
-    Class, Error, Field, FromScript, Function, IntoScript, Object, Record, Ty, Typed, Value,
-};
-use crate::{ItemId, Off, RecipeId};
+use crate::Off;
 use enshwick_content::__load::*;
 
 #[cfg(feature = "unstable")]

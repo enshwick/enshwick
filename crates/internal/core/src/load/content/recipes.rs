@@ -3,8 +3,6 @@
 use crate::content::recipes::*;
 use crate::{Load, Off};
 use enshwick_content::__load::*;
-#[cfg(feature = "unstable")]
-use std::sync::Arc;
 
 #[enshwick_macros::forward(base)]
 #[crate::script(content_recipes)]

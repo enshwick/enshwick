@@ -2,11 +2,8 @@
 
 use crate::content::Guid;
 use crate::content::templates::*;
-use crate::resources::{Registry, Type, Value, Variant};
 use crate::{Load, Off};
 use enshwick_content::__load::*;
-use rustc_hash::{FxHashMap, FxHashSet};
-use std::sync::Arc;
 
 #[enshwick_macros::forward(base)]
 #[crate::script(content_templates)]

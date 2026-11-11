@@ -1,6 +1,6 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::abi::{ResourceKey, Str};
+use crate::abi::ResourceKey;
 use crate::content::{Guid, Id};
 use crate::{Load, Off};
 use enshwick_content::__load::*;

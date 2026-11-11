@@ -566,7 +566,7 @@ pub(crate) mod fixtures {
         reason = "a fixture that does not build fails the test that asked for it"
     )]
 
-    use super::*;
+    use super::{Blob, Guid, WorkshopLayout};
 
     pub(crate) const LAYOUT: WorkshopLayout = WorkshopLayout {
         components: 16,

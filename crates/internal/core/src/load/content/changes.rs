@@ -1,7 +1,5 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::abi::{ChangeOp, DataChange, DataField, DataSelect, Header, Str};
-use crate::content::Guid;
 use crate::content::changes::*;
 use crate::{Load, Off};
 use enshwick_content::__load::*;

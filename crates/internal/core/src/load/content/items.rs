@@ -1,12 +1,8 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::abi::ItemData;
 use crate::content::items::*;
-use crate::engine_ids as ids;
-use crate::locks::Relock;
 use crate::{Load, Off};
 use enshwick_content::__load::*;
-use std::sync::Mutex;
 
 #[enshwick_macros::forward(base)]
 #[crate::script(content_items)]

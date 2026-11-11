@@ -1,9 +1,6 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
 use crate::content::spawns::*;
-use crate::resources::Value;
-use crate::typed::ecs::{RandomSpawner, SpawnConditionFlags};
-use crate::typed::{Flags, Named as _};
 use crate::{Load, Off};
 use enshwick_content::__load::*;
 

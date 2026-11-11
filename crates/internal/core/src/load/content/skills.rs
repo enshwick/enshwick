@@ -2,11 +2,6 @@
 
 use crate::content::Guid;
 use crate::content::skills::*;
-use crate::resources::{Registry, Value};
-use crate::typed::ecs::UnlockedSkillNodes;
-use crate::typed::{
-    Named as _, PerkCollectionResource, Reflected as _, SkillNodeType, SkillTreeResource,
-};
 use crate::{Load, Off};
 use enshwick_content::__load::*;
 

@@ -83,6 +83,7 @@ pub fn is_recipe(vanilla: &Vanilla, guid: Guid) -> bool {
 }
 
 /// The vanilla item of the item id `id`.
+#[cfg(feature = "unstable")]
 #[must_use]
 pub fn item_with_id(vanilla: &Vanilla, id: u32) -> Option<Guid> {
     vanilla.item_with_id(id)

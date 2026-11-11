@@ -1,16 +1,9 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::abi::Level;
 use crate::content::knowledge::*;
-use crate::knowledge::{KnowledgeId, KnowledgeType, Scope};
-use crate::locks::Relock as _;
-use crate::resources::Value;
-use crate::typed::{
-    CompareOperator, GameKnowledgeResource, KnowledgeQueryData, KnowledgeQueryDataType, Named as _,
-};
-use crate::{Host, Load, Off};
+use crate::knowledge::KnowledgeId;
+use crate::{Load, Off};
 use enshwick_content::__load::*;
-use std::sync::{Arc, Mutex};
 
 #[enshwick_macros::forward(base)]
 #[crate::script(content_knowledge)]

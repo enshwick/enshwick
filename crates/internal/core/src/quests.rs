@@ -699,7 +699,7 @@ mod tests {
                 scope: Scope::Player,
                 test,
             };
-            let value = query.to_value().unwrap();
+            let value = enshwick_content::__fake::query_value(query).unwrap();
             let data = KnowledgeQueryData::from_value(&value).unwrap();
             assert_eq!(
                 enshwick_content::__internal::query_from_data(&data),
@@ -729,7 +729,10 @@ mod tests {
                 scope: Scope::World,
                 test: refused,
             };
-            assert!(query.to_value().is_err(), "{refused:?}");
+            assert!(
+                enshwick_content::__fake::query_value(query).is_err(),
+                "{refused:?}"
+            );
         }
     }
 
@@ -760,9 +763,7 @@ mod tests {
                 )],
             )
         };
-        let value =
-            crate::content::journal::quest_value(&new, crate::content::knowledge::hash_key(0))
-                .unwrap();
+        let value = enshwick_content::__fake::quest_value(&new, 0).unwrap();
         let quest = QuestInfo::of(&JournalQuestResource::from_value(&value).unwrap());
         assert_eq!(quest.id, KnowledgeId::from_guid(new.id.guid()));
         assert_eq!(quest.name, Some(TextKey::of(crate::content::Guid([5; 16]))));
