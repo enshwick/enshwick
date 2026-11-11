@@ -598,7 +598,7 @@ dependencies = [
  "criterion",
  "enshwick",
  "enshwick-base",
- "enshwick-core",
+ "enshwick-content",
  "iced-x86",
  "insta",
  "memchr",

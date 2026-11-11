@@ -1,6 +1,6 @@
 //! A table resolved for the running build, and choosing that table.
 
-use enshwick_core::code::Pattern;
+use enshwick_base::code::Pattern;
 
 use crate::reflect::Fingerprint;
 use crate::{Body, Routed, Side, Table, TableError};

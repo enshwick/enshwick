@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use enshwick_core::code::{Pattern, find_each_unique};
+use enshwick_base::code::{Pattern, find_each_unique};
 
 #[cfg(test)]
 mod carry;
