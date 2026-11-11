@@ -385,6 +385,12 @@ impl BaseLoad {
     }
 
     /// As `Load::serve_described_call`.
+    ///
+    /// # Safety
+    ///
+    /// - Every answer `handler` writes and returns `true` for is a valid
+    ///   value of the type the answer's hash names, since a caller reads it
+    ///   as that type: a `bool` is 0 or 1, an enum one of its variants.
     #[doc(hidden)]
     pub unsafe fn serve_described_call<F>(
         &mut self,
@@ -416,6 +422,12 @@ impl BaseLoad {
     }
 
     /// As `Load::described_caller`.
+    ///
+    /// # Safety
+    ///
+    /// - Every input passed to the returned caller is a valid value of the
+    ///   type each input field's hash names, since the server reads it as
+    ///   that type: a `bool` is 0 or 1, an enum one of its variants.
     #[doc(hidden)]
     pub unsafe fn described_caller(
         &mut self,

@@ -4,7 +4,6 @@ use crate::content::Id;
 use crate::i18n::Texts;
 use crate::{Load, Off};
 
-#[doc(hidden)]
 #[enshwick_macros::forward(base)]
 impl Load<'_> {
     /// The mod's texts: its `src/texts.toml`, which

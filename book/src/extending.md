@@ -99,7 +99,7 @@ answer's, as decimal text: a definition checks itself against them.
 
 ## Extending a point
 
-[`load.extend_point(order, link)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/points.rs)
+[`load.extend_point(order, link)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load/points.rs)
 attaches `link`. A mod calls it during `init`. The link gets the point's input and
 the answer so far. That answer is the owner's own, or what the links before
 it left. The link returns a

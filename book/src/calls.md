@@ -65,7 +65,7 @@ enshwick::declare_mod!(TradingPost);
 
 ## Serving
 
-[`load.serve_call(handler)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/services/calls.rs)
+[`load.serve_call(handler)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load/services.rs)
 serves the call during `init`. The handler runs on the caller's thread, so it
 takes only what is safe from any thread:
 
@@ -105,7 +105,7 @@ cargo enshwick deps trading_post --from <game folder>
 `#[enshwick::call(name = "price-of", of = trading_post, ..)]`. `--from` is the server's DLL, a folder with it in it
 or in its `mods/`, or a schema file the server published. The file ends with
 checks that hold it to the server's layout.
-[`load.caller::<C>()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/services/calls.rs)
+[`load.caller::<C>()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load/services.rs)
 then gives a `Caller`. It is `Copy` and runs the call from any thread:
 
 ```rust

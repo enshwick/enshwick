@@ -66,7 +66,7 @@ The game's English reads as `en-us`, which falls back to `en`.
 
 Keep the file at `src/texts.toml`, beside `lib.rs`.
 [`declare_mod!`](../concepts/loader-and-abi.md#the-manifest) embeds it.
-[`Load::texts`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/i18n.rs)
+[`Load::texts`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load/i18n.rs)
 reads it during `init`.
 [`enshwick::texts!()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs)
 writes a module `texts` with a constant per key, so code names a key the
@@ -120,12 +120,12 @@ The mod does not build when the file has one of these faults:
 
 `load.texts` needs `src/texts.toml` in the crate. Without it, the call
 returns `Err(Off)`.
-[`Load::texts_from(toml)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/i18n.rs)
+[`Load::texts_from(toml)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load/i18n.rs)
 hands over texts from a string, as for a data pack.
 
 ## Texts the game shows
 
-[`Load::add_texts(&texts, pairs)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/i18n.rs)
+[`Load::add_texts(&texts, pairs)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load/i18n.rs)
 gives game tags their texts. Each pair is a key of the texts file and a tag.
 The tag is a [content id](../concepts/ids.md) of the mod's own. The
 tag's GUID goes into a [`NewItem`](items.md). There it fills the `name` and

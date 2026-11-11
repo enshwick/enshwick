@@ -6,15 +6,14 @@
 order = ["base", "content", "world", "inventory", "knowledge", "actions", "ui", "packs"]
 
 # Files and folders under `src` that join every domain's list: `Load` with
-# its forwarders into the crates below, and the script binding, which opens
-# each domain's handles through `Load`.
+# its forwarders into the crates below, and the script binding's namespace
+# lists, which open each domain's handles through `Load`.
 joins = [
     "lib.rs",
     "declare.rs",
     "load.rs",
     "load/",
-    "script.rs",
-    "script/",
+    "script/namespaces/",
     "__private.rs",
     "__fake.rs",
 ]
@@ -39,7 +38,8 @@ base = "base"
 
 # Each domain's top-level modules still in core.
 [modules]
-base = []
+# The script binding's runtime, which stays in core beside `Load`.
+base = ["script"]
 content = ["content", "rates", "typed"]
 world = [
     "altars",

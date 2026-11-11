@@ -154,6 +154,13 @@ impl BaseLoad {
     }
 
     /// As `Load::define_described_event`.
+    ///
+    /// # Safety
+    ///
+    /// - Every byte pattern sent through the returned emitter is a valid
+    ///   value of the type each field's hash names, since a subscriber reads
+    ///   the data as that type: a `bool` is 0 or 1, an enum one of its
+    ///   variants.
     #[doc(hidden)]
     pub unsafe fn define_described_event(
         &mut self,

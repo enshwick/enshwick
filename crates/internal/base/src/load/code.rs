@@ -7,6 +7,15 @@ use super::{BaseLoad, MidHook, Off, ok};
 
 impl BaseLoad {
     /// As `Load::hook`.
+    ///
+    /// # Safety
+    ///
+    /// - `target` is the first byte of a game function, not the middle of one.
+    /// - That function has the type `F`: the same arguments, return type and
+    ///   calling convention. The loader checks neither, and the game calls
+    ///   the hook's body with what it passes.
+    /// - When `F` is a safe `fn` type, the function is safe to call with any
+    ///   arguments, since the body calls it through `next` without `unsafe`.
     #[doc(hidden)]
     pub unsafe fn hook<F: FnPtr>(
         &mut self,
@@ -50,6 +59,14 @@ impl BaseLoad {
     }
 
     /// As `Load::patch_code`.
+    ///
+    /// # Safety
+    ///
+    /// - `replacement` is valid machine code at `address` for every path the
+    ///   game takes through those bytes, including jumps into them.
+    /// - The patched code keeps every register, stack and memory state the
+    ///   game code after it relies on; the loader checks the bytes it
+    ///   replaces, never what the new ones do.
     #[doc(hidden)]
     pub unsafe fn patch_code(
         &mut self,
@@ -76,6 +93,15 @@ impl BaseLoad {
     }
 
     /// As `Load::hook_at`.
+    ///
+    /// # Safety
+    ///
+    /// - `address` is the first byte of an instruction in a game function.
+    /// - No code jumps into the 5 bytes from `address` other than to
+    ///   `address` itself.
+    /// - Every register `handler` writes holds a value the game code at
+    ///   `address` can take: a wrong pointer or count in a register is a
+    ///   wrong pointer or count in the game.
     #[doc(hidden)]
     pub unsafe fn hook_at<F>(&mut self, address: u64, handler: F) -> Result<(), Off>
     where

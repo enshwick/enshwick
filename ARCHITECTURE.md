@@ -126,7 +126,11 @@ follows the same steps.
    `cargo xtask peel-load <from>=<into>`: the block becomes an `impl
    BaseLoad` block whose methods carry one hidden doc line, and its docs,
    examples and `#[script]` go to a block of bodiless methods on `Load` in
-   `core/src/load/<module>.rs`, whose bodies `#[forward(base)]` writes. A
+   `core/src/load/<module>.rs`, whose bodies `#[forward(base)]` writes. This
+   holds only in `enshwick-base`, the crate of `BaseLoad`: Rust lets no other
+   crate add inherent methods to it, so a domain above base implements its
+   methods on `BaseLoad` through a hidden trait of its own crate, which the
+   forwarder file imports; `peel-load` writes only the base form. A
    block of a module that `cfg` gates in its parent gets that `cfg` by
    hand. A method whose closure takes `&mut Self` stays a method of `Load`
    that runs the closure and hands the outcome down.

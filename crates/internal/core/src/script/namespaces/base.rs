@@ -53,7 +53,7 @@ impl Bound for crate::mods::Mods {
     const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_FOLDER];
 
     fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
-        Self::open(load.base())
+        Self::open(crate::Loading::base_mut(load))
     }
 }
 

@@ -176,6 +176,12 @@ struct Link<F> {
 
 impl BaseLoad {
     /// As `Load::extend_described_point`.
+    ///
+    /// # Safety
+    ///
+    /// - The bytes of every [`DescribedVerdict::Set`] the link answers are a
+    ///   valid value of the owner's answer type: a `bool` is 0 or 1, an enum
+    ///   one of its variants, every field of a struct likewise.
     #[doc(hidden)]
     pub unsafe fn extend_described_point<F>(
         &mut self,
@@ -223,6 +229,13 @@ impl BaseLoad {
     }
 
     /// As `Load::define_described_point`.
+    ///
+    /// # Safety
+    ///
+    /// - The input and the answer of every [`DescribedOwnedPoint::decide`]
+    ///   are valid values of the types the hashes name, since links read them
+    ///   as those types: a `bool` is 0 or 1, an enum one of its variants, and
+    ///   no byte is padding.
     #[doc(hidden)]
     pub unsafe fn define_described_point(
         &mut self,

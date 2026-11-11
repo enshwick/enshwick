@@ -182,11 +182,6 @@ impl Load<'_> {
         }
     }
 
-    /// The base handle, for what a domain registers through it.
-    pub(crate) fn base(&mut self) -> &mut BaseLoad {
-        &mut self.base
-    }
-
     /// The state of type `T` a domain keeps while the mod initialises, empty
     /// until the domain fills it.
     #[cfg_attr(
@@ -235,14 +230,23 @@ impl crate::Loading for Load<'_> {
 
 impl crate::facts::EngineFacts for Load<'_> {
     fn offset(&self, id: &str) -> Result<usize, Off> {
-        self.host().offset(id)
+        crate::facts::EngineFacts::offset(&self.base, id)
     }
 
     fn size(&self, id: &str) -> Result<usize, Off> {
-        self.host().size(id)
+        crate::facts::EngineFacts::size(&self.base, id)
     }
 
     fn hash(&self, id: &str) -> Result<u32, Off> {
-        self.host().hash(id)
+        crate::facts::EngineFacts::hash(&self.base, id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn load_stays_send_sync_and_unwind_safe() {
+        fn held<T: Send + Sync + core::panic::UnwindSafe + core::panic::RefUnwindSafe>() {}
+        held::<super::Load<'static>>();
     }
 }

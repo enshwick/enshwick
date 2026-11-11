@@ -69,11 +69,7 @@ fn crate_problems(root: &Path, map: &Map) -> Vec<String> {
             .and_then(toml::Value::as_str)
             .unwrap_or(dir)
             .to_owned();
-        let deps = table
-            .get("dependencies")
-            .and_then(toml::Value::as_table)
-            .map(|deps| deps.keys().cloned().collect::<Vec<_>>())
-            .unwrap_or_default();
+        let deps = dependencies(&table);
         for dep in deps
             .iter()
             .filter(|dep| dep.contains("enshwick") && !lower.contains(dep))
@@ -90,6 +86,29 @@ fn crate_problems(root: &Path, map: &Map) -> Vec<String> {
         ));
     }
     problems
+}
+
+/// The packages a manifest's `[dependencies]` name, a renamed one by its
+/// `package`, those of its `[target.*.dependencies]` included.
+fn dependencies(manifest: &toml::Table) -> Vec<String> {
+    let targets = manifest
+        .get("target")
+        .and_then(toml::Value::as_table)
+        .into_iter()
+        .flat_map(|targets| targets.values());
+    std::iter::once(manifest.get("dependencies"))
+        .chain(targets.map(|target| target.get("dependencies")))
+        .flatten()
+        .filter_map(toml::Value::as_table)
+        .flat_map(|deps| {
+            deps.iter().map(|(key, dep)| {
+                dep.get("package")
+                    .and_then(toml::Value::as_str)
+                    .unwrap_or(key)
+                    .to_owned()
+            })
+        })
+        .collect()
 }
 
 /// The problems of the domain rule under `root`, one line each.
@@ -543,6 +562,18 @@ mod tests {
         assert!(problems[0].contains("enshwick-base, the crate of base, depends on enshwick-ui"));
         assert!(problems[1].contains("enshwick-ui, the crate of ui, depends on enshwick-core"));
         assert!(problems[2].contains("the crate of sound is of no domain"));
+    }
+
+    #[test]
+    fn a_renamed_or_target_dependency_counts_by_its_package() -> Result<(), toml::de::Error> {
+        let manifest: toml::Table = toml::from_str(
+            "[dependencies]\nserde = \"1\"\nup = { package = \"enshwick-core\", workspace = true }\n\n[target.'cfg(windows)'.dependencies]\nenshwick-ui.workspace = true\n",
+        )?;
+        assert_eq!(
+            dependencies(&manifest),
+            ["serde", "enshwick-core", "enshwick-ui"]
+        );
+        Ok(())
     }
 
     fn set(items: &[&str]) -> BTreeSet<String> {

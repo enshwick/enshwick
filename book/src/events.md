@@ -298,7 +298,7 @@ The scheduler's delays are wall-clock time. A wait that should not run out
 while the server stands still counts in the server's steps instead. Such
 waits include a hold on a container or a grace period after a player's
 action. For them,
-[`load.step_clock()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/time.rs)
+[`load.step_clock()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load/time.rs)
 returns the mod's
 [`StepClock`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/time.rs).
 Its `Ticked` handler moves the clock on by the time the tick carries. It

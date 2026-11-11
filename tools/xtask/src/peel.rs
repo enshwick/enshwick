@@ -111,17 +111,33 @@ fn peel(text: &str) -> Result<Peeled, String> {
     let mut forwarders = Vec::new();
     let mut uses = Vec::new();
     let mut cuts = Vec::new();
+    let children: Vec<String> = file
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Mod(module) => Some(module.ident.to_string()),
+            _ => None,
+        })
+        .collect();
     for item in &file.items {
         match item {
-            Item::Use(item) => {
+            Item::Use(item) if imports_from_above(item, &children) => {
                 let start = at.byte(item.use_token.span.start());
                 let end = at.byte(item.semi_token.span.end());
-                let line = &text[attrs_start(&item.attrs, &at).unwrap_or(start)..end];
-                if !line.contains("super::") {
-                    uses.push(line.to_owned());
-                }
+                uses.push(text[attrs_start(&item.attrs, &at).unwrap_or(start)..end].to_owned());
             }
             Item::Impl(item) if is_load(item) => {
+                if item.items.iter().any(|entry| {
+                    !matches!(
+                        entry,
+                        ImplItem::Fn(_) | ImplItem::Const(_) | ImplItem::Type(_)
+                    )
+                }) {
+                    return Err(format!(
+                        "line {}: an `impl Load` block with an item other than a method, constant or type; move it by hand",
+                        item.impl_token.span.start().line
+                    ));
+                }
                 let start =
                     attrs_start(&item.attrs, &at).unwrap_or(at.byte(item.impl_token.span.start()));
                 let end = at.byte(item.brace_token.span.close().end());
@@ -149,6 +165,22 @@ fn is_load(item: &ItemImpl) -> bool {
             if path.path.segments.last().is_some_and(|s| s.ident == "Load"))
 }
 
+/// Whether `item` is a private import that a forwarder file in core can
+/// copy: of the crate or another crate, not of the module's own `super`,
+/// `self` or `children`; a re-export stays with its module.
+fn imports_from_above(item: &syn::ItemUse, children: &[String]) -> bool {
+    let first = match &item.tree {
+        syn::UseTree::Path(path) => path.ident.to_string(),
+        syn::UseTree::Name(name) => name.ident.to_string(),
+        syn::UseTree::Rename(rename) => rename.ident.to_string(),
+        _ => return false,
+    };
+    matches!(item.vis, Visibility::Inherited)
+        && first != "super"
+        && first != "self"
+        && !children.contains(&first)
+}
+
 /// The base block that replaces `item` and its forwarder block, if it has a
 /// public method.
 fn block(item: &ItemImpl, text: &str, at: &Offsets<'_>) -> (String, Option<String>) {
@@ -170,11 +202,15 @@ fn block(item: &ItemImpl, text: &str, at: &Offsets<'_>) -> (String, Option<Strin
             moved.push(format!("    {}", &text[start..end]));
             continue;
         }
-        // Hidden: its docs, `# Errors` and `# Safety` sections are `Load`'s.
-        let mut lines = format!(
-            "    /// As `Load::{}`.\n    #[doc(hidden)]\n",
-            method.sig.ident
-        );
+        // Hidden: its docs and `# Errors` are `Load`'s; an `unsafe fn` keeps
+        // its `# Safety`, the contract of any caller through the base.
+        let mut lines = format!("    /// As `Load::{}`.\n", method.sig.ident);
+        if matches!(method.sig.safety, syn::Safety::Unsafe(_)) {
+            for line in safety_section(&method.attrs, text, at) {
+                let _written = writeln!(lines, "    {line}");
+            }
+        }
+        lines.push_str("    #[doc(hidden)]\n");
         for attr in method
             .attrs
             .iter()
@@ -223,6 +259,33 @@ fn block(item: &ItemImpl, text: &str, at: &Offsets<'_>) -> (String, Option<Strin
     }
     let forwarder = format!("{head}impl Load<'_> {{\n{}\n}}", bodiless.join("\n\n"));
     (moved, Some(forwarder))
+}
+
+/// The `# Safety` section of a method's doc comment, a blank doc line
+/// first, up to the next section or the end of its docs.
+fn safety_section<'t>(attrs: &[Attribute], text: &'t str, at: &Offsets<'_>) -> Vec<&'t str> {
+    let docs: Vec<&str> = attrs
+        .iter()
+        .filter(|a| a.path().is_ident("doc"))
+        .map(|a| attr_text(a, text, at).trim())
+        .collect();
+    let Some(start) = docs.iter().position(|line| *line == "/// # Safety") else {
+        return Vec::new();
+    };
+    let mut section: Vec<&str> = std::iter::once("///")
+        .chain(
+            docs[start..]
+                .iter()
+                .copied()
+                .enumerate()
+                .take_while(|(n, line)| *n == 0 || !line.starts_with("/// # "))
+                .map(|(_, line)| line),
+        )
+        .collect();
+    while section.last() == Some(&"///") {
+        section.pop();
+    }
+    section
 }
 
 /// The text of an impl item other than a method, from its first attribute.
@@ -423,6 +486,49 @@ impl Load<'_> {
     }
 
     #[test]
+    fn peel_load_writes_each_module_and_starts_or_extends_its_forwarder_file() {
+        let root = std::env::temp_dir().join(format!("xtask-peel-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("base")).unwrap();
+        let module =
+            "use crate::Host;\n\nimpl Load<'_> {\n    /// Docs.\n    pub fn f(&self) {}\n}\n";
+        std::fs::write(root.join("base/a.rs"), module).unwrap();
+        std::fs::write(root.join("base/b.rs"), module.replace("fn f", "fn g")).unwrap();
+        std::fs::write(
+            root.join("base/c.rs"),
+            "impl Load<'_> {\n    fn h(&self) {}\n}\n",
+        )
+        .unwrap();
+        let ran = run(
+            &root,
+            &[
+                "base/a.rs=core/load/a.rs".to_owned(),
+                "base/b.rs=core/load/a.rs".to_owned(),
+                "base/c.rs=core/load/c.rs".to_owned(),
+            ],
+        );
+        let unpaired = run(&root, &["base/a.rs".to_owned()]);
+        let forwarders = std::fs::read_to_string(root.join("core/load/a.rs")).unwrap();
+        let peeled = std::fs::read_to_string(root.join("base/a.rs")).unwrap();
+        let private_only = root.join("core/load/c.rs").exists();
+        std::fs::remove_dir_all(&root).unwrap();
+        assert_eq!(ran, Ok(true));
+        assert_eq!(unpaired, Err("base/a.rs: not <from>=<into>".to_owned()));
+        assert!(peeled.contains("impl BaseLoad {"), "{peeled}");
+        assert!(
+            forwarders.starts_with("//! `Load`'s methods")
+                && forwarders.contains("use crate::Host;\nuse crate::Load;\nuse crate::Off;\n")
+                && forwarders.contains("pub fn f(&self);")
+                && forwarders.ends_with("    /// Docs.\n    pub fn g(&self);\n}\n"),
+            "{forwarders}"
+        );
+        assert_eq!(forwarders.matches("//! `Load`'s").count(), 1, "one header");
+        assert!(
+            !private_only,
+            "a block without a public method forwards nothing"
+        );
+    }
+
+    #[test]
     fn a_new_forwarder_file_names_load_and_its_source_s_imports() {
         let text = header(&["use core::time::Duration;".to_owned()]);
         assert!(text.ends_with("use core::time::Duration;\nuse crate::Load;\nuse crate::Off;\n"));
@@ -432,7 +538,7 @@ impl Load<'_> {
 
     #[test]
     fn other_impls_stay_and_a_load_block_keeps_its_consts_and_types() -> Result<(), String> {
-        let source = "impl Other {\n    pub fn f(&self) {}\n}\n\nimpl Clone for Load<'_> {\n    fn clone(&self) -> Self {\n        todo!()\n    }\n}\n\nimpl Load<'_> {\n    /// A part.\n    pub const PART: u32 = 1;\n\n    fn inner(&self) {}\n}\n";
+        let source = "impl Other {\n    pub fn f(&self) {}\n}\n\nimpl Clone for Load<'_> {\n    fn clone(&self) -> Self {\n        todo!()\n    }\n}\n\nimpl Load<'_> {\n    /// A part.\n    pub const PART: u32 = 1;\n\n    type Kind = u8;\n\n    fn inner(&self) {}\n}\n";
         let peeled = peel(source)?;
         assert!(peeled.forwarders.is_empty());
         assert!(
@@ -441,9 +547,42 @@ impl Load<'_> {
             )
         );
         assert!(peeled.base.ends_with(
-            "impl BaseLoad {\n    /// A part.\n    pub const PART: u32 = 1;\n\n    fn inner(&self) {}\n}\n"
+            "impl BaseLoad {\n    /// A part.\n    pub const PART: u32 = 1;\n\n    type Kind = u8;\n\n    fn inner(&self) {}\n}\n"
         ));
         Ok(())
+    }
+
+    #[test]
+    fn a_forwarder_file_takes_no_re_export_nor_an_import_of_the_module_s_own_children()
+    -> Result<(), String> {
+        let source = "mod script;\n\n#[doc(hidden)]\npub use script::Fns;\nuse script::Inner;\nuse self::x::Y;\nuse super::Z;\n#[cfg(test)]\nuse crate::Host;\nuse serde::Deserialize as _;\n";
+        assert_eq!(
+            peel(source)?.uses,
+            [
+                "#[cfg(test)]\nuse crate::Host;",
+                "use serde::Deserialize as _;"
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_moved_unsafe_method_keeps_its_safety_section() -> Result<(), String> {
+        let source = "impl Load<'_> {\n    /// Hooks.\n    ///\n    /// # Safety\n    ///\n    /// - `at` starts a function.\n    ///\n    /// # Errors\n    ///\n    /// When refused.\n    pub unsafe fn hook(&mut self, at: u64) {}\n}\n";
+        assert_eq!(
+            peel(source)?.base,
+            "impl BaseLoad {\n    /// As `Load::hook`.\n    ///\n    /// # Safety\n    ///\n    /// - `at` starts a function.\n    #[doc(hidden)]\n    pub unsafe fn hook(&mut self, at: u64) {}\n}\n"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_macro_call_in_a_load_block_is_refused_rather_than_dropped() {
+        let source = "impl Other {\n    m!();\n}\n\nimpl Load<'_> {\n    pub fn f(&self) {}\n\n    m!();\n}\n";
+        assert_eq!(
+            peel(source),
+            Err("line 5: an `impl Load` block with an item other than a method, constant or type; move it by hand".to_owned())
+        );
     }
 
     #[test]

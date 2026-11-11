@@ -172,7 +172,7 @@ mod tests {
             list(a, "cfg").is_some_and(|cfg| cfg == "test" || cfg.starts_with("all(test,"))
         });
         let hidden = left_out(&m.attrs);
-        let kept_hidden = FACADE_HIDDEN.contains(&m.ident.to_string().as_str());
+        let kept_hidden = FACADE_HIDDEN.contains(&m.ident.to_string());
         !test && (!hidden || (top.is_empty() && !kept_hidden))
     }
 
@@ -185,9 +185,30 @@ mod tests {
             .exists()
     }
 
-    /// The hidden modules the facade keeps hidden too, which no mirror
-    /// covers.
-    const FACADE_HIDDEN: [&str; 3] = ["__private", "__fake", "schema_section"];
+    /// The names the facade re-exports hidden, which no mirror covers.
+    static FACADE_HIDDEN: std::sync::LazyLock<Vec<String>> = std::sync::LazyLock::new(|| {
+        fn names(tree: &syn::UseTree, out: &mut Vec<String>) {
+            match tree {
+                syn::UseTree::Path(path) => names(&path.tree, out),
+                syn::UseTree::Name(name) => out.push(name.ident.to_string()),
+                syn::UseTree::Rename(rename) => out.push(rename.rename.to_string()),
+                syn::UseTree::Group(group) => group.items.iter().for_each(|tree| names(tree, out)),
+                syn::UseTree::Glob(_) => {}
+            }
+        }
+        let mut out = Vec::new();
+        for item in parse(&source().join("lib.rs")).items {
+            if let Item::Use(item) = item
+                && item
+                    .attrs
+                    .iter()
+                    .any(|a| list(a, "doc").is_some_and(|doc| doc == "hidden"))
+            {
+                names(&item.tree, &mut out);
+            }
+        }
+        out
+    });
 
     fn parse(file: &Path) -> syn::File {
         let text =

@@ -251,7 +251,8 @@ pub(crate) fn check(root: &Path, packages: &[Package]) -> Vec<String> {
     }
     copy_files[1..].sort();
     let mut copy_places = Places::new();
-    for path in &copy_files {
+    let mut module = String::new();
+    for (at, path) in copy_files.iter().enumerate() {
         let text = match read(path) {
             Ok(text) => text,
             Err(error) => {
@@ -260,6 +261,18 @@ pub(crate) fn check(root: &Path, packages: &[Package]) -> Vec<String> {
             }
         };
         let file = shown(path, root);
+        if at == 0 {
+            module.clone_from(&text);
+        } else if let Some(stem) = path.file_stem().and_then(|s| s.to_str())
+            && !module
+                .lines()
+                .any(|line| line.trim() == format!("mod {stem};"))
+        {
+            // An undeclared file's copies compile nowhere, though they pair.
+            problems.push(format!(
+                "{file}: {COPIES}.rs does not declare it, so its copies compile nowhere; add `mod {stem};`"
+            ));
+        }
         for copy in examples(&text) {
             let key = (copy.info, copy.lines.join("\n"));
             copy_places
@@ -476,7 +489,10 @@ pub(crate) fn wrap(root: &Path, packages: &[Package], args: &[String]) -> Result
         let mut file_copies = Vec::new();
         list.sort_by_key(|one| core::cmp::Reverse(one.fence));
         for one in &list {
-            let (next, copy) = wrapped(&text, one.fence - 1, &one.item)
+            let (next, copy) = one
+                .fence
+                .checked_sub(1)
+                .and_then(|fence| wrapped(&text, fence, &one.item))
                 .ok_or_else(|| format!("{file}:{}: no unwrapped example opens here", one.fence))?;
             text = next;
             file_copies.push(copy);
@@ -493,15 +509,19 @@ pub(crate) fn wrap(root: &Path, packages: &[Package], args: &[String]) -> Result
     }
     for (name, (short, added)) in copies {
         let path = root.join(COPIES).join(format!("{name}.rs"));
-        let mut text = std::fs::read_to_string(&path).unwrap_or_else(|_| {
-            crate::say(&format!(
-                "{}: new; declare it in the facade's lower_examples.rs",
-                path.display()
-            ));
-            format!(
-                "//! The examples of `enshwick-{short}` that name items above its crate,\n//! compiled here as written.\n"
-            )
-        });
+        let mut text = match std::fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                crate::say(&format!(
+                    "{}: new; declare it in the facade's lower_examples.rs",
+                    path.display()
+                ));
+                format!(
+                    "//! The examples of `enshwick-{short}` that name items above its crate,\n//! compiled here as written.\n"
+                )
+            }
+            Err(e) => return Err(format!("{}: {e}", path.display())),
+        };
         text.push_str(&added);
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -777,6 +797,7 @@ impl Thing {
             &format!("{COPIES}/gone.rs"),
             "//! ```\n//! let gone = 1;\n//! ```\n",
         );
+        write(&format!("{COPIES}/stray.rs"), "//! Declared nowhere.\n");
         let packages = [
             package("crates/internal/core", Some("enshwick_core"), &[]),
             package("crates/internal/stub", Some("powrprof"), &[]),
@@ -796,6 +817,7 @@ impl Thing {
             [
                 "crates/internal/core/src/deep/item.rs:1: no `# extern crate enshwick_core as enshwick;` line; `cargo xtask alias-examples` writes it".to_owned(),
                 "crates/internal/stub/src/lib.rs:1: no `# extern crate powrprof as enshwick;` line; `cargo xtask alias-examples` writes it".to_owned(),
+                format!("{COPIES}/stray.rs: {COPIES}.rs does not declare it, so its copies compile nowhere; add `mod stray;`"),
                 format!("{COPIES}/gone.rs:1: no wrapped example of {INTERNAL} equals this copy; bring it in line or remove it"),
             ]
         );
@@ -806,9 +828,73 @@ impl Thing {
         assert!(stub.contains("/// # extern crate powrprof as enshwick;"));
         assert_eq!(
             after,
-            [format!(
-                "{COPIES}/gone.rs:1: no wrapped example of {INTERNAL} equals this copy; bring it in line or remove it"
-            )]
+            [
+                format!(
+                    "{COPIES}/stray.rs: {COPIES}.rs does not declare it, so its copies compile nowhere; add `mod stray;`"
+                ),
+                format!(
+                    "{COPIES}/gone.rs:1: no wrapped example of {INTERNAL} equals this copy; bring it in line or remove it"
+                ),
+            ]
         );
+    }
+
+    #[test]
+    fn wrap_examples_wraps_a_failed_example_and_adds_its_copy_to_its_crate_s_file() {
+        let root = std::env::temp_dir().join(format!("xtask-wrap-{}", std::process::id()));
+        let source = "crates/internal/base/src/lib.rs";
+        let path = root.join(source);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let example = |name: &str| {
+            format!(
+                "/// ```\n/// # extern crate enshwick_base as enshwick;\n/// let {name} = enshwick::Load::new();\n/// ```\npub struct {name};\n"
+            )
+        };
+        std::fs::write(&path, format!("{}{}", example("a"), example("b"))).unwrap();
+        let log = root.join("doctests.log");
+        std::fs::write(&log, format!("failures:\n    {source} - a (line 1)\n")).unwrap();
+        let packages = [Package {
+            name: "base".to_owned(),
+            version: String::new(),
+            dir: "crates/internal/base".to_owned(),
+            deps: Vec::new(),
+            lib: Some("enshwick_base".to_owned()),
+            windows_only: false,
+            windows_tests: false,
+        }];
+        let log = log.display().to_string();
+        let usage = wrap(
+            &root,
+            &packages,
+            &[log.clone(), "--feature".to_owned(), "x".to_owned()],
+        );
+        let first = wrap(
+            &root,
+            &packages,
+            &[log.clone(), "--cfg".to_owned(), "unstable".to_owned()],
+        );
+        std::fs::write(root.join(&log), format!("    {source} - b (line 7)\n")).unwrap();
+        let second = wrap(
+            &root,
+            &packages,
+            &[log.clone(), "--cfg".to_owned(), "unstable".to_owned()],
+        );
+        let plain = wrap(&root, &packages, std::slice::from_ref(&log));
+        let copies = std::fs::read_to_string(root.join(COPIES).join("base_unstable.rs")).unwrap();
+        let wrapped = std::fs::read_to_string(&path).unwrap();
+        std::fs::remove_dir_all(&root).unwrap();
+        assert!(usage.is_err_and(|e| e.starts_with("usage:")));
+        assert_eq!((first, second), (Ok(true), Ok(true)));
+        assert!(plain.is_err(), "b is wrapped already: {plain:?}");
+        assert!(
+            copies.starts_with(
+                "//! The examples of `enshwick-base` that name items above its crate,"
+            ) && copies.contains("//! `a`:")
+                && copies.ends_with(
+                    "//! `b`:\n//!\n//! ```\n//! let b = enshwick::Load::new();\n//! ```\n"
+                ),
+            "{copies}"
+        );
+        assert_eq!(wrapped.matches(WRAPPER_OPEN).count(), 2, "{wrapped}");
     }
 }
