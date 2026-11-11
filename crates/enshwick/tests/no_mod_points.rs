@@ -25,6 +25,7 @@ mod tests {
         for src in [
             crate_dir.join("src"),
             crate_dir.join("../internal/core/src"),
+            crate_dir.join("../internal/base/src"),
             crate_dir.join("../internal/abi/src"),
             crate_dir.join("../internal/fake/src"),
             crate_dir.join("../internal/values/src"),
