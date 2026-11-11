@@ -71,7 +71,8 @@ pub use enshwick_macros::{Config, Shape, config, event, hook, point, service, te
 pub use enshwick_macros::{Script, call, script};
 pub use hook::{FnPtr, Hook, Next};
 pub use host::{Host, host};
-pub use load::{BaseLoad, Loading, Off};
+pub(crate) use load::BaseLoad;
+pub use load::{Loading, Off};
 pub use locks::{Relock, RelockRw, RelockWait};
 #[doc(no_inline)]
 pub use shape::Shape;

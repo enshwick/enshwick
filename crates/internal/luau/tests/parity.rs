@@ -86,6 +86,9 @@ mod tests {
         takes: bool,
         /// Whether it takes `self`.
         receiver: bool,
+        /// Whether it sits in a hidden module, which reaches the API only
+        /// as the root re-exports its items.
+        hidden: bool,
     }
 
     impl RustFn {
@@ -145,17 +148,37 @@ mod tests {
 
     /// The source of the API crate and of the internal crates it re-exports,
     /// whose public modules carry the API's own paths.
-    fn sources() -> [PathBuf; 6] {
+    fn sources() -> [PathBuf; 7] {
         let internal = |name: &str| source().join("../../internal").join(name).join("src");
         [
             source(),
             internal("core"),
+            internal("base"),
             internal("fake"),
             internal("abi"),
             internal("values"),
             internal("typed"),
         ]
     }
+
+    /// What the top-level module of a hidden module starts with.
+    const HIDDEN: &str = "#";
+    /// Core's module of `Load`'s forwarders into the base, a file per base
+    /// module, or per file of the base's own `load`.
+    const FORWARDERS: &str = "load";
+
+    /// Whether `name` is a file of the base's own `load`, whose methods are
+    /// `Load`'s at the root, not a module's.
+    fn base_load_file(name: &str) -> bool {
+        source()
+            .join("../../internal/base/src/load")
+            .join(format!("{name}.rs"))
+            .exists()
+    }
+
+    /// The hidden modules the facade keeps hidden too, which no mirror
+    /// covers.
+    const FACADE_HIDDEN: [&str; 3] = ["__private", "__fake", "schema_section"];
 
     fn parse(file: &Path) -> syn::File {
         let text =
@@ -266,13 +289,29 @@ mod tests {
         fn items(&mut self, items: &[Item], dir: &Path, top: &str) {
             for item in items {
                 match item {
-                    Item::Mod(m) if !left_out(&m.attrs) => {
+                    // A hidden module is walked as a private one: its items
+                    // reach the API only as the root re-exports them.
+                    Item::Mod(m)
+                        if !m.attrs.iter().any(|a| {
+                            list(a, "cfg")
+                                .is_some_and(|cfg| cfg == "test" || cfg.starts_with("all(test,"))
+                        }) && (top.is_empty() || !left_out(&m.attrs))
+                            && !(top.is_empty()
+                                && left_out(&m.attrs)
+                                && FACADE_HIDDEN.contains(&m.ident.to_string().as_str())) =>
+                    {
                         let name = m.ident.to_string();
-                        let top = if top.is_empty() {
-                            name.clone()
-                        } else {
-                            top.to_owned()
-                        };
+                        // A hidden module a public one of the same name joins
+                        // by a glob is that module's.
+                        let top =
+                            if top.is_empty() && left_out(&m.attrs) && !self.public.contains(&name)
+                            {
+                                format!("{HIDDEN}{name}")
+                            } else if top.is_empty() {
+                                name.clone()
+                            } else {
+                                top.to_owned()
+                            };
                         let inner = dir.join(&name);
                         if let Some((_, items)) = &m.content {
                             self.items(items, &inner, &top);
@@ -294,6 +333,7 @@ mod tests {
                             returns: returned(&f.sig.output),
                             takes: !f.sig.inputs.is_empty(),
                             receiver: false,
+                            hidden: top.starts_with(HIDDEN),
                         });
                     }
                     Item::Impl(i) if !left_out(&i.attrs) => {
@@ -312,19 +352,30 @@ mod tests {
                             continue;
                         }
                         for entry in &i.items {
-                            if let ImplItem::Fn(f) = entry
-                                && is_public(&f.vis)
-                                && !left_out(&f.attrs)
-                            {
+                            // A forwarded method has no body; `#[forward]`
+                            // writes it.
+                            let bodiless = match entry {
+                                ImplItem::Verbatim(tokens) => {
+                                    syn::parse2::<syn::ForeignItemFn>(tokens.clone()).ok()
+                                }
+                                _ => None,
+                            };
+                            let (attrs, vis, sig) = match (entry, &bodiless) {
+                                (ImplItem::Fn(f), _) => (&f.attrs, &f.vis, &f.sig),
+                                (_, Some(f)) => (&f.attrs, &f.vis, &f.sig),
+                                _ => continue,
+                            };
+                            if is_public(vis) && !left_out(attrs) {
                                 let receiver =
-                                    matches!(f.sig.inputs.first(), Some(FnArg::Receiver(_)));
+                                    matches!(sig.inputs.first(), Some(FnArg::Receiver(_)));
                                 self.functions.push(RustFn {
                                     module: self.module(top),
                                     owner: owner.clone(),
-                                    name: f.sig.ident.to_string(),
-                                    returns: returned(&f.sig.output),
-                                    takes: f.sig.inputs.len() > usize::from(receiver),
+                                    name: sig.ident.to_string(),
+                                    returns: returned(&sig.output),
+                                    takes: sig.inputs.len() > usize::from(receiver),
                                     receiver,
+                                    hidden: top.starts_with(HIDDEN),
                                 });
                             }
                         }

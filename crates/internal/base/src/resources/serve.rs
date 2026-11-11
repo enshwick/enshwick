@@ -16,6 +16,7 @@ type Builder = Box<dyn Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync>;
 /// # Errors
 ///
 /// [`Off`] when the loader refuses it, such as after init.
+#[doc(hidden)]
 pub fn serve(
     host: crate::Host,
     key: ResourceKey,

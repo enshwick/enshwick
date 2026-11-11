@@ -503,6 +503,7 @@ impl Host {
 ///
 /// [`Off`] when the game's types do not read, the type is not one of this
 /// build or the bytes do not decode as it.
+#[doc(hidden)]
 pub fn decode(key: crate::abi::ResourceKey, bytes: &[u8]) -> Result<super::Value, Off> {
     let registry = Registry::game()?;
     let ty = registry.hashed(key.type_hash).ok_or_else(|| {
@@ -527,6 +528,7 @@ pub fn decode(key: crate::abi::ResourceKey, bytes: &[u8]) -> Result<super::Value
 ///
 /// [`Off`] when the game's types do not read, the base's type is not one of
 /// this build, or the loader refuses the resource.
+#[doc(hidden)]
 pub fn serve_value(
     host: Host,
     key: crate::abi::ResourceKey,
@@ -576,6 +578,7 @@ fn fallback(
 ///
 /// [`Off`] when the game's types do not read, the type is not one of this
 /// build, the value does not encode, or the loader refuses the resource.
+#[doc(hidden)]
 pub fn serve_new(
     host: Host,
     key: crate::abi::ResourceKey,

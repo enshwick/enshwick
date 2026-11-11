@@ -2,7 +2,7 @@
 //! methods forward to the base handle it holds.
 
 pub(crate) use enshwick_base::__off_from as off_from;
-use enshwick_base::BaseLoad;
+use enshwick_base::load::BaseLoad;
 #[cfg(feature = "typed")]
 pub(crate) use enshwick_base::load::game_events_of;
 pub(crate) use enshwick_base::load::{hand_over, off_status, ok};
