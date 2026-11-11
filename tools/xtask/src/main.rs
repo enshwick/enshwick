@@ -232,7 +232,7 @@ fn tree_problems(root: &std::path::Path, packages: &[Package]) -> Result<Vec<Str
             .map(|problem| format!("tag line: {problem}")),
     );
     problems.extend(
-        crate_rules::check()?
+        crate_rules::check(packages)?
             .into_iter()
             .map(|problem| format!("crate rule: {problem}")),
     );

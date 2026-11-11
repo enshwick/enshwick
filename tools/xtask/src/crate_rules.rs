@@ -12,6 +12,8 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::affected::Package;
+
 /// The test-only feature of the API and of any crate that has one.
 const TEST: &str = "test";
 /// The crate kinds whose root is a crate the rules apply to; tests,
@@ -26,12 +28,13 @@ const CRATE_KINDS: [&str; 7] = [
     "bin",
 ];
 
-/// The problems of the workspace's crates, one line each.
+/// The problems of the workspace's crates, one line each; `packages` says
+/// where each one lies.
 ///
 /// # Errors
 ///
 /// When `cargo metadata` does not run or its output does not read.
-pub(crate) fn check() -> Result<Vec<String>, String> {
+pub(crate) fn check(packages: &[Package]) -> Result<Vec<String>, String> {
     let output = Command::new(crate::cargo())
         .args(["metadata", "--format-version", "1", "--no-deps"])
         .output()
@@ -42,7 +45,6 @@ pub(crate) fn check() -> Result<Vec<String>, String> {
     let metadata: serde_json::Value = serde_json::from_slice(&output.stdout)
         .map_err(|error| format!("reading cargo metadata: {error}"))?;
     let toolchain = toolchain(&read(&crate::workspace_root().join("rust-toolchain.toml"))?)?;
-    let root = Path::new(metadata["workspace_root"].as_str().unwrap_or_default());
     let mut problems = Vec::new();
     for package in metadata["packages"].as_array().into_iter().flatten() {
         let name = package["name"].as_str().unwrap_or_default();
@@ -50,7 +52,10 @@ pub(crate) fn check() -> Result<Vec<String>, String> {
         let dir = manifest.parent().unwrap_or(Path::new("."));
         problems.extend(test_feature(name, package));
         problems.extend(fake_reach(name, package));
-        if in_platform_dir(dir, root) {
+        if packages
+            .iter()
+            .any(|p| p.name == name && in_platform_dir(&p.dir))
+        {
             problems.extend(facade_use(name, package));
         }
         problems.extend(manifest_facts(name, package, &toolchain));
@@ -196,22 +201,18 @@ fn fake_reach(name: &str, package: &serde_json::Value) -> Vec<String> {
 /// internal crate they need; the mods in `examples/` depend on [`FACADE`].
 const PLATFORM_DIRS: [&str; 2] = ["crates", "tools"];
 
-/// Whether the package folder `dir` lies in one of the [`PLATFORM_DIRS`] of
-/// the workspace at `root`.
-fn in_platform_dir(dir: &Path, root: &Path) -> bool {
-    dir.strip_prefix(root)
-        .ok()
-        .and_then(|inside| inside.components().next())
-        .is_some_and(|first| PLATFORM_DIRS.iter().any(|d| first.as_os_str() == *d))
+/// Whether the package folder `dir` (relative to the workspace, with `/`)
+/// lies in one of the [`PLATFORM_DIRS`].
+fn in_platform_dir(dir: &str) -> bool {
+    dir.split('/')
+        .next()
+        .is_some_and(|first| PLATFORM_DIRS.contains(&first))
 }
 
 /// The problems of `package`, a platform crate, depending on [`FACADE`]
 /// other than for its tests: it names the layer it needs, so the facade
 /// stays what only mods build on.
 fn facade_use(name: &str, package: &serde_json::Value) -> Vec<String> {
-    if name == FACADE {
-        return Vec::new();
-    }
     package["dependencies"]
         .as_array()
         .into_iter()
@@ -644,28 +645,11 @@ mod tests {
 
     #[test]
     fn the_crates_and_tools_folders_hold_the_platform_and_examples_do_not() {
-        let root = Path::new("/w");
-        assert!(in_platform_dir(
-            Path::new("/w/crates/internal/loader"),
-            root
-        ));
-        assert!(in_platform_dir(Path::new("/w/tools/xtask"), root));
-        assert!(!in_platform_dir(Path::new("/w/examples/horn"), root));
-        assert!(!in_platform_dir(Path::new("/w"), root));
-        assert!(!in_platform_dir(Path::new("/elsewhere/crates/a"), root));
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn a_windows_workspace_path_with_a_drive_finds_the_platform_folders() {
-        let root = Path::new(r"D:\w");
-        assert!(in_platform_dir(
-            Path::new(r"D:\w\crates\internal\loader"),
-            root
-        ));
-        assert!(in_platform_dir(Path::new(r"D:\w\tools\xtask"), root));
-        assert!(!in_platform_dir(Path::new(r"D:\w\examples\horn"), root));
-        assert!(!in_platform_dir(Path::new(r"E:\w\crates\a"), root));
+        assert!(in_platform_dir("crates/internal/loader"));
+        assert!(in_platform_dir("tools/xtask"));
+        assert!(!in_platform_dir("examples/horn"));
+        assert!(!in_platform_dir(""));
+        assert!(!in_platform_dir("crates-old/a"));
     }
 
     #[test]
@@ -692,10 +676,6 @@ mod tests {
                 normal,
             ]
         );
-        let facade = serde_json::json!({
-            "dependencies": [{ "name": "enshwick", "kind": null }],
-        });
-        assert!(facade_use("enshwick", &facade).is_empty());
     }
 
     #[test]
