@@ -11,7 +11,7 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::content::{Guid, types};
     ///
     /// if let Some(host) = enshwick::host() {
@@ -46,7 +46,7 @@ impl Host {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::content::{Guid, types};
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {

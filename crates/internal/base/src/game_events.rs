@@ -71,7 +71,7 @@ typed_kinds!(
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let died = load.game_event_type("keen::ecs::EntityDiedEvent")?;
 ///     assert_eq!(died.name(), "keen::ecs::EntityDiedEvent");
@@ -110,7 +110,7 @@ impl EventType {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let died = load.game_event_type("keen::ecs::EntityDiedEvent")?.hash();
     ///     load.on_every_raw_game_event(move |event| {
@@ -130,7 +130,7 @@ impl EventType {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     assert_eq!(load.game_event_type("keen::ecs::EntityDiedEvent")?.size(), 16);
     ///     Ok(())
@@ -151,7 +151,7 @@ impl EventType {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::Entity;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -179,7 +179,7 @@ impl EventType {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::Entity;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -271,7 +271,7 @@ impl EventType {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::game_events::Scalar;
 ///
 /// fn width<T: Scalar>() -> usize {
@@ -408,7 +408,7 @@ impl<T> Field<T> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let died = load.game_event_type("keen::ecs::EntityDiedEvent")?;
     ///     assert_eq!(died.field::<u32>(load, "deadEntityId")?.offset(), 8);
@@ -438,7 +438,7 @@ impl<'a> RawGameEvent<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::game_events::RawGameEvent;
     ///
     /// let bytes = [0u8; 16];
@@ -490,7 +490,7 @@ impl<'a> RawGameEvent<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::game_events::RawGameEvent;
     ///
     /// let mut bytes = [0u8; 16];

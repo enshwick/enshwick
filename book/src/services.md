@@ -196,7 +196,7 @@ does not serve `T`.
 ## Mod events
 
 The definer defines its event during `init` and keeps the
-[`Emitter`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/services.rs)
+[`Emitter`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/services.rs)
 it gets back. Sending calls every subscriber's handler on the sending
 thread, with no queue and no allocation:
 

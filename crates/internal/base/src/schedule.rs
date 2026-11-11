@@ -90,7 +90,7 @@ static QUEUES: crate::fresh::Fresh<Mutex<Vec<(ModHandle, &'static Queue)>>> =
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use std::ops::ControlFlow;
 /// use std::time::Duration;
 ///

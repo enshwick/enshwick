@@ -13,7 +13,7 @@ use super::{Field, Type};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::resources::{Kind, Registry, Type, fnv1a32};
 ///
 /// let registry = Registry::new([Type::new("demo::uint32", Kind::Uint32, 4, 4)]);
@@ -93,7 +93,7 @@ impl<'a> Registry<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::resources::{Kind, Registry, Type, fnv1a32};
     ///
     /// let registry = Registry::new([Type::new("demo::uint32", Kind::Uint32, 4, 4)]);
@@ -109,7 +109,7 @@ impl<'a> Registry<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::resources::{Kind, Registry, Type};
     ///
     /// let registry = Registry::new([Type::new("demo::uint8", Kind::Uint8, 1, 1)]);
@@ -134,7 +134,7 @@ impl<'a> Registry<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// assert!(enshwick::resources::Registry::default().is_empty());
     /// ```
     #[must_use]

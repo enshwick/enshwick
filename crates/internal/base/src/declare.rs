@@ -108,7 +108,7 @@ macro_rules! __declare_exports {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// enshwick::error!("solver failed: {}", "no zones");
 /// ```
 #[macro_export]
@@ -121,7 +121,7 @@ macro_rules! error {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// enshwick::warn!("unexpected bed {}", 1210);
 /// ```
 #[macro_export]
@@ -136,7 +136,7 @@ macro_rules! warn {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// enshwick::info!("{} altars merged", 3);
 /// ```
 #[macro_export]
@@ -152,7 +152,7 @@ macro_rules! info {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// enshwick::debug!("bed {} checked", 1210);
 /// ```
 #[macro_export]
@@ -165,7 +165,7 @@ macro_rules! debug {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// for altar in 0..3 {
 ///     enshwick::info_once!("first altar seen: {altar}");
 /// }
@@ -180,7 +180,7 @@ macro_rules! info_once {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// for _ in 0..3 {
 ///     enshwick::warn_once!("an altar without a zone");
 /// }
@@ -195,7 +195,7 @@ macro_rules! warn_once {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// for _ in 0..3 {
 ///     enshwick::error_once!("the altar table could not be read");
 /// }
@@ -211,7 +211,7 @@ macro_rules! error_once {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use std::time::Duration;
 ///
 /// for player in 0..100 {
@@ -229,7 +229,7 @@ macro_rules! info_every {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use std::time::Duration;
 ///
 /// for bed in 0..100 {
@@ -247,7 +247,7 @@ macro_rules! warn_every {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use std::time::Duration;
 ///
 /// enshwick::error_every!(Duration::from_secs(60), "the zone table is full");

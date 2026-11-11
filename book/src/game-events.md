@@ -6,7 +6,7 @@ description: The game's systems tell each other what happens through ECS events.
 # Game events
 
 The game's own systems tell each other what happens through ECS events.
-[`game_events`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/game_events.rs)
+[`game_events`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/game_events.rs)
 lets a mod observe them, typed for the common ones and by reflected name for
 any other.
 

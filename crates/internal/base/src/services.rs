@@ -42,7 +42,7 @@ pub use described::{DescribedEmitter, DescribedEvent};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::services::Service;
 ///
 /// #[enshwick::service(name = "prices", version = 1)]
@@ -79,7 +79,7 @@ pub unsafe trait Service: Sync + 'static {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::services::ModEvent;
 ///
 /// #[enshwick::event(name = "sold")]
@@ -118,7 +118,7 @@ pub unsafe trait ModEvent: Copy + 'static {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::Shape;
 /// use enshwick::services::layout_hash;
 ///
@@ -143,7 +143,7 @@ pub const fn layout_hash(name: &str, shape: u64, size: usize, align: usize, offs
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::services::{LayoutError, compare};
 ///
 /// let wanted = [("price", 1), ("refund", 2)];
@@ -191,7 +191,7 @@ crate::load::off_from!(LayoutError);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::services::compare;
 ///
 /// let older = [("price", 1)];
@@ -233,7 +233,7 @@ pub fn compare(wanted: &[(&str, u64)], offered: &[(&str, u64)]) -> Result<(), La
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::abi::{Layout, LayoutField, Str};
 /// use enshwick::services::read_layout;
 ///
@@ -288,7 +288,7 @@ pub(crate) fn name(name: &'static str) -> Str {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// #[enshwick::event(name = "sold")]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Sold {

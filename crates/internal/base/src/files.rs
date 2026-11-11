@@ -11,7 +11,7 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
+//! # extern crate enshwick_base as enshwick;
 //! use enshwick::files;
 //!
 //! let path = std::env::temp_dir().join("enshwick-files-doc/progress.toml");
@@ -34,7 +34,7 @@ use std::path::{Path, PathBuf};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// let path = std::env::temp_dir().join("enshwick-files-doc-none.bin");
 /// assert_eq!(enshwick::files::read_if_present(&path)?, None);
 /// # Ok::<(), std::io::Error>(())
@@ -70,7 +70,7 @@ fn absent_as_none<T>(read: io::Result<T>) -> io::Result<Option<T>> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use std::path::Path;
 ///
 /// let backup = enshwick::files::backup_path(Path::new("worlds/w/owners.toml"));

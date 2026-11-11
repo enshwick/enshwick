@@ -12,7 +12,7 @@ pub use script::Mods;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::mods::LOADER_ID;
 ///
 /// let mods = enshwick::mods::all();
@@ -30,7 +30,7 @@ pub const LOADER_ID: &str = "enshwick";
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::mods::GAME_ID;
 ///
 /// let torch = format!("{GAME_ID}:Tool_Torch01_T0_PK");
@@ -47,7 +47,7 @@ pub const GAME_ID: &str = "enshrouded";
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::mods::{DEVELOPER_TOOLS, LOADER_ID};
 ///
 /// assert_eq!(DEVELOPER_TOOLS, format!("mods/{LOADER_ID}/developer-tools"));
@@ -60,7 +60,7 @@ pub const DEVELOPER_TOOLS: &str = "mods/enshwick/developer-tools";
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::mods::{DEVELOPER_TOOL_OFF, DEVELOPER_TOOLS};
 ///
 /// assert_eq!(
@@ -76,7 +76,7 @@ pub const DEVELOPER_TOOL_OFF: &str =
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// assert!(enshwick::mods::LOADER_FILES.contains(&enshwick::mods::STUB_FILE));
 /// ```
 pub const STUB_FILE: &str = "powrprof.dll";
@@ -87,7 +87,7 @@ pub const STUB_FILE: &str = "powrprof.dll";
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::mods::{LOADER_FILE, LOADER_ID};
 ///
 /// let loader = enshwick::mods::all().into_iter().find(|m| m.id == LOADER_ID);
@@ -101,7 +101,7 @@ pub const LOADER_FILE: &str = "mods/enshwick/enshwick.dll";
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::mods::LOADER_FILES;
 ///
 /// let taken = |file: &str| LOADER_FILES.contains(&file);
@@ -115,7 +115,7 @@ pub const LOADER_FILES: [&str; 2] = [STUB_FILE, LOADER_FILE];
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::mods::ModIndex;
 ///
 /// if let Some(entry) = ModIndex(0).entry() {
@@ -132,7 +132,7 @@ impl ModIndex {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// let first = enshwick::mods::ModIndex(0).entry();
     /// assert!(first.is_none_or(|entry| entry.id != enshwick::mods::LOADER_ID));
     /// ```
@@ -153,7 +153,7 @@ impl core::fmt::Display for ModIndex {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// for entry in enshwick::mods::all() {
 ///     enshwick::info!("{} {} from {}", entry.id, entry.version, entry.file);
 /// }
@@ -196,7 +196,7 @@ impl Default for ModEntry {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::mods::ModEntry;
     ///
     /// let post = ModEntry { id: "you.trading-post".into(), ..ModEntry::default() };
@@ -226,7 +226,7 @@ impl ModEntry {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// let shown: Vec<String> = enshwick::mods::all().iter().map(|entry| entry.label()).collect();
     /// for entry in enshwick::mods::all() {
     ///     enshwick::info!("{} {}", entry.id, entry.version);
@@ -255,7 +255,7 @@ pub fn label(name: &str, id: &str) -> String {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// let mods = enshwick::mods::all();
 /// let joining = mods.iter().filter(|m| m.side == enshwick::abi::Side::BOTH).count();
 /// assert!(joining <= mods.len());
@@ -277,7 +277,7 @@ pub fn all() -> Vec<ModEntry> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// if enshwick::mods::is_running("you.lanterns") {
 ///     enshwick::info!("lanterns light the stalls");
 /// }
@@ -302,7 +302,7 @@ pub fn is_running(id: &str) -> bool {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::events::JoinRefused;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {

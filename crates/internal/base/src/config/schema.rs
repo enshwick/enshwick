@@ -10,7 +10,7 @@ use crate::config::ConfigError;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::config::Kind;
 ///
 /// assert_eq!(Kind::of(&toml::Value::Integer(3)), Kind::Integer);
@@ -74,7 +74,7 @@ impl Kind {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::config::Field;
 ///
 /// let field = Field::new("radius", &8.0_f32).with_range(Some(1.0), Some(50.0));
@@ -151,7 +151,7 @@ impl Field {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::config::Field;
     ///
     /// let per_level = Field::new("per_level", &[2, 4]).with_first(0);
@@ -194,7 +194,7 @@ impl Field {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::config::Field;
     ///
     /// let field = Field::new("mode", "auto").with_choices(&["auto", "on", "off"]);
@@ -217,7 +217,7 @@ impl Field {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::config::Field;
     ///
     /// let field = Field::new("limit", &4).with_doc("How many.", "lockers.limit");
@@ -237,7 +237,7 @@ impl Field {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::config::Field;
     ///
     /// let field = Field::new("password", "").with_secret(true);
@@ -329,7 +329,7 @@ impl Field {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::config::{Field, Kind};
     ///
     /// let per_level = Field::new("per_level", &[2, 4, 8]);
@@ -377,7 +377,7 @@ impl Field {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::config::Field;
     ///
     /// let field = Field::new("limit", &4).with_range(Some(1.0), Some(16.0));
@@ -416,7 +416,7 @@ const fn kind_name(kind: Kind) -> &'static str {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::config::{Field, Schema};
 ///
 /// let schema = Schema::new("Locker settings.", "config", vec![Field::new("limit", &4)]);
@@ -463,7 +463,7 @@ impl Group {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// let group = enshwick::config::Group::new("comfort", "Comfort rules.");
     /// assert_eq!(group.text, "config.comfort");
     /// ```
@@ -518,7 +518,7 @@ fn value_at_mut<'a>(settings: &'a mut toml::Table, key: &str) -> Option<&'a mut 
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// let settings: toml::Table = toml::from_str("limit = 4\n[comfort]\nmultiplier = 2.0\n")?;
 /// let at = |key| enshwick::config::value_at(&settings, key).cloned();
 /// assert_eq!(at("comfort.multiplier"), Some(toml::Value::Float(2.0)));
@@ -557,7 +557,7 @@ impl Schema {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::config::{Field, Group, Schema};
     ///
     /// let multiplier = Field::new("comfort.multiplier", &1.0);
@@ -622,7 +622,7 @@ impl Schema {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::config::{Group, Schema};
     ///
     /// let schema = Schema::new("", "config", vec![])
@@ -692,7 +692,7 @@ impl Schema {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::config::{Field, Schema};
     ///
     /// let limit = Field::new("limit", &4).with_range(Some(1.0), Some(16.0));

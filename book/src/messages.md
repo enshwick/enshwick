@@ -11,7 +11,7 @@ server decides.
 
 ## Opening a channel
 
-[`load.channel::<M, _>(name, version, handler)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/net.rs)
+[`load.channel::<M, _>(name, version, handler)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/net.rs)
 opens one during `init`, on both sides. It carries messages of type `M`, any
 type that serde serializes. `handler` runs on each message that comes in,
 with who sent it, a `Peer`:

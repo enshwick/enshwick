@@ -63,7 +63,7 @@ pub use values::{__check_field, __entry};
 /// error naming the file and pointing at both types:
 ///
 /// ```compile_fail,E0428
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// /// Altars.
 /// #[enshwick::config]
 /// #[derive(Default)]
@@ -85,7 +85,7 @@ pub use values::{__check_field, __entry};
 /// build, so a type is declared through the attribute:
 ///
 /// ```compile_fail
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// /// Settings.
 /// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
 /// struct Settings {
@@ -97,7 +97,7 @@ pub use values::{__check_field, __entry};
 /// A file name is lowercase letters, digits, `-` and `_`:
 ///
 /// ```compile_fail
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// /// Settings.
 /// #[enshwick::config(file = "Altars.toml")]
 /// #[derive(Default)]
@@ -111,7 +111,7 @@ pub use values::{__check_field, __entry};
 /// a serde attribute that reads another key fails the build:
 ///
 /// ```compile_fail
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// /// Settings.
 /// #[enshwick::config]
 /// #[derive(Default)]
@@ -125,7 +125,7 @@ pub use values::{__check_field, __entry};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::config::Config;
 ///
 /// /// Altar settings.
@@ -161,7 +161,7 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::config::Config;
     ///
     /// /// Locker settings.
@@ -200,7 +200,7 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     /// whose error is any `Display`:
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::config::Config;
     ///
     /// /// Comfort settings.
@@ -231,7 +231,7 @@ pub trait Config: serde::de::DeserializeOwned + Default {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::config::{ConfigError, Field};
 ///
 /// let field = Field::new("limit", &4).with_range(Some(1.0), Some(16.0));
@@ -283,7 +283,7 @@ impl ConfigError {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::config::ConfigError;
     ///
     /// assert_eq!(ConfigError::invalid("first after last").to_string(), "first after last");
@@ -301,7 +301,7 @@ impl ConfigError {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::config::ConfigError;
     ///
     /// let refused = ConfigError::text("config.too-few", &[("min", "2")]);

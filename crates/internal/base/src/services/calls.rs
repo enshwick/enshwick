@@ -36,7 +36,7 @@ use crate::{BaseLoad, Host, Off};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::services::Call;
 ///
 /// #[enshwick::call(name = "price-of", output = u32)]
@@ -72,7 +72,7 @@ pub unsafe trait Call: Copy + 'static {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::services::CallError;
 ///
 /// assert_eq!(CallError::Unmatched.to_string(), "no running mod serves the call as declared here");
@@ -122,7 +122,7 @@ fn spec<C: Call>() -> CallSpec {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// #[enshwick::call(of = trading_post, name = "price-of", output = u32)]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct PriceOf {
@@ -189,7 +189,7 @@ impl<C: Call> Caller<C> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::points::DescribedField;
 /// use enshwick::services::DescribedCall;
 ///
@@ -277,7 +277,7 @@ impl DescribedCall {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::points::DescribedField;
 /// use enshwick::services::DescribedCall;
 ///

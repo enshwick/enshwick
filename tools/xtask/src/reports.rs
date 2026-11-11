@@ -24,8 +24,8 @@ pub(crate) type Inputs = [u8; 32];
 /// not. The loader's feature table is spread over its parts, so a test of
 /// the compat tool holds it instead.
 const INPUTS: &[&str] = &[
-    "crates/internal/core/src/code.rs",
-    "crates/internal/core/src/code",
+    "crates/internal/base/src/code.rs",
+    "crates/internal/base/src/code",
     "crates/enshwick-gamedata/anchors",
     "crates/enshwick-gamedata/src/lib.rs",
     "crates/enshwick-gamedata/src/archive.rs",
@@ -388,7 +388,7 @@ pub(crate) mod tests {
         let root = repository("scanner");
         write_file(
             &root,
-            "crates/internal/core/src/code/each.rs",
+            "crates/internal/base/src/code/each.rs",
             "fn each() {}\n",
         );
         assert_eq!(stale(&root, &[]).len(), 1);

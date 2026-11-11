@@ -16,7 +16,7 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
+//! # extern crate enshwick_base as enshwick;
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     let found = load.on_loop_wait(|wait| {
 //!         if wait.ms == 0 && wait.left_ns > 0 {
@@ -62,7 +62,7 @@ pub struct LoopWait {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// let none = enshwick::pacing::LoopWaits::default();
 /// assert!(!none.handles && !none.messages);
 /// ```
@@ -113,7 +113,7 @@ where
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// let game_sized = enshwick::pacing::TaskWorkers::default();
 /// assert_eq!((game_sized.default, game_sized.background), (0, 0));
 /// ```
@@ -132,7 +132,7 @@ impl TaskWorkers {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// let caps = enshwick::pacing::TaskWorkers::at_most(4);
     /// assert_eq!((caps.default, caps.background), (4, 4));
     /// ```

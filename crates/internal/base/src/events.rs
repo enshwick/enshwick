@@ -34,7 +34,7 @@ pub(crate) mod sealed {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::events::{Kind, PlayerJoined};
 /// use enshwick::game_events::EntityDiedEvent;
 ///
@@ -65,7 +65,7 @@ pub trait Kind: sealed::Sealed + 'static {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::abi::Event;
 /// use enshwick::events::{LoaderEvent, PlayerJoined};
 ///
@@ -303,7 +303,7 @@ impl Ticked {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use std::time::Duration;
     ///
     /// assert_eq!(enshwick::events::Ticked::DEFAULT_EVERY, Duration::from_millis(100));
@@ -326,7 +326,7 @@ where
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use std::time::Duration;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {

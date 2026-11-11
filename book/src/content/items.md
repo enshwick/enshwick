@@ -274,7 +274,7 @@ serves an icon alone, for an item a mod serves itself.
 
 ## GUIDs and item ids
 
-[`Guid::parse`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/code.rs)
+[`Guid::parse`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/code.rs)
 reads the textual form `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` and stores the
 bytes in the order the game keeps them in memory. It is a `const fn`: in a
 constant, a malformed GUID fails the build.

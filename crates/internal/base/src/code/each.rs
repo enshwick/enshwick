@@ -19,7 +19,7 @@ const MIN_CHUNK: usize = 1 << 20;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::code::{FindError, Pattern, find_each_unique};
 ///
 /// let call = Pattern::parse("E8 ?? ?? ?? ?? C3")?;

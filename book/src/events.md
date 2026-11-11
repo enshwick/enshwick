@@ -46,7 +46,7 @@ and gives the handler the raw data pointer, null for events without data.
 ## Event kinds
 
 The types are in
-[`enshwick::events`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/events.rs).
+[`enshwick::events`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/events.rs).
 
 | Event | Data | When | Thread |
 | --- | --- | --- | --- |
@@ -250,7 +250,7 @@ A killed process raises no `ShutdownStarted`.
 
 [`load.scheduler()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load.rs)
 returns a
-[`Scheduler`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/schedule.rs).
+[`Scheduler`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/schedule.rs).
 It is a `Copy` handle that puts work on the server's game thread after a simulation
 step. The scheduler looks for due tasks on a tick of the default period, so
 its precision is `Ticked::DEFAULT_EVERY` (100 ms):
@@ -298,9 +298,9 @@ The scheduler's delays are wall-clock time. A wait that should not run out
 while the server stands still counts in the server's steps instead. Such
 waits include a hold on a container or a grace period after a player's
 action. For them,
-[`load.step_clock()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/time.rs)
+[`load.step_clock()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/time.rs)
 returns the mod's
-[`StepClock`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/time.rs).
+[`StepClock`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/time.rs).
 Its `Ticked` handler moves the clock on by the time the tick carries. It
 moves at most `StepClock::MAX_STEP` (250 ms) for each step in the tick. A stalled server, a world
 loading or a debugger's pause takes no steps, so the clock stands still with

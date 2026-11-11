@@ -11,12 +11,12 @@ says when to use one.
 
 ## Declaring a hook
 
-[`detour!`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/hook.rs)
+[`detour!`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/hook.rs)
 declares a static
-[`Hook`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/hook.rs):
+[`Hook`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/hook.rs):
 the mod's link, with an entry point that has the game function's signature and
 catches panics. The body is an ordinary function that takes a
-[`Next`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/hook.rs)
+[`Next`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/hook.rs)
 and the target's arguments:
 
 ```rust

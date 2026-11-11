@@ -55,7 +55,7 @@ It answers a `BuildVerdict`:
 - `RefuseBecause` refuses it with a reason the builder reads.
 
 The reason is a key of the mod's
-[texts](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/i18n.rs),
+[texts](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/i18n.rs),
 shown in the player's language, or plain words. A client that runs the mod
 shows it under the build cursor while the player aims there. Some clients do
 not show it. The server tells such a player once, as a notice, or in chat to a

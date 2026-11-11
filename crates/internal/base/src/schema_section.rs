@@ -58,7 +58,7 @@ impl Kind {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::schema_section::Kind;
     ///
     /// assert_eq!(Kind::Content.word(), "content");
@@ -81,7 +81,7 @@ impl Kind {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::schema_section::Kind;
     ///
     /// assert_eq!(Kind::Content.label(), "content id");
@@ -99,7 +99,7 @@ impl Kind {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::schema_section::Kind;
     ///
     /// assert_eq!(Kind::of_word("stat"), Some(Kind::Stat));
@@ -116,7 +116,7 @@ impl Kind {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::schema_section::Kind;
     ///
     /// assert_eq!(Kind::of_export("event:sold"), Some((Kind::Event, "sold")));
@@ -133,7 +133,7 @@ impl Kind {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::schema_section::Kind;
     ///
     /// assert!(Kind::words().starts_with("point, event"));
@@ -173,7 +173,7 @@ impl<'a> Entry<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::schema_section::Section;
     ///
     /// let section = Section::parse(b"[[call]]\nname = \"you.a:fee\"\n")?;
@@ -193,7 +193,7 @@ impl<'a> Entry<'a> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::schema_section::Section;
 ///
 /// let section = Section::parse(b"schema = 3\nmod = \"you.a\"\n")?;
@@ -242,7 +242,7 @@ impl<'a> Section<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::schema_section::{Kind, Section};
     ///
     /// let section = Section::parse(
@@ -318,7 +318,7 @@ impl<'a> Section<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::schema_section::Section;
     ///
     /// let section = Section::parse(
@@ -346,7 +346,7 @@ impl<'a> Section<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::schema_section::Section;
     ///
     /// let section = Section::parse(
@@ -391,7 +391,7 @@ fn value<'a>(text: &'a str, key: &str) -> Option<&'a str> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::schema_section::head_id;
 ///
 /// assert_eq!(head_id("schema = 3\nmod = \"you.a\"\nversion = \"1.0.0\"\n"), Some("you.a"));

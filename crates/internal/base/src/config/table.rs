@@ -23,7 +23,7 @@ const FILE: &str = "settings";
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::config::{Field, Schema};
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -46,7 +46,7 @@ impl Schema {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::config::{Field, Schema};
     ///
     /// let limit = Field::new("limit", &4).with_doc("How many.", "");

@@ -61,23 +61,23 @@ pub(crate) const TARGETS: &[(&str, &[&str])] = &[
             "crates/internal/loader/src/wire",
         ],
     ),
-    ("pattern", &["crates/internal/core/src/code"]),
+    ("pattern", &["crates/internal/base/src/code"]),
     (
         "point_schemas",
         &[
             "crates/cargo-enshwick/src/points",
-            "crates/internal/core/src/schema_section",
+            "crates/internal/base/src/schema_section",
         ],
     ),
     ("reflection", &["crates/enshwick-gamedata/src/reflect"]),
-    ("remote_edit", &["crates/internal/core/src/config"]),
+    ("remote_edit", &["crates/internal/base/src/config"]),
     ("remote_message", &["crates/internal/loader/src/remote"]),
     ("server_rules", &["crates/internal/loader/src/join"]),
     (
         "settings_files",
         &[
-            "crates/internal/core/src/config",
-            "crates/internal/core/src/i18n",
+            "crates/internal/base/src/config",
+            "crates/internal/base/src/i18n",
             "crates/internal/core/src/packs",
             "crates/internal/loader/src/record",
             "crates/internal/values/src/off",

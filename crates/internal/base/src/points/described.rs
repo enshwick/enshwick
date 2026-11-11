@@ -50,7 +50,7 @@ impl DescribedField {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::points::{DescribedField, DescribedPoint, DescribedVerdict, Mode, Order};
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -134,7 +134,7 @@ impl DescribedPoint {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::points::{DescribedPoint, Mode};
     ///
     /// assert!(DescribedPoint::new("you.post:price", Mode::Override).refusable(true).refusable);
@@ -305,7 +305,7 @@ impl DescribedPoint {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::points::{DescribedField, DescribedPoint, Mode};
 /// use enshwick::services::layout_hash;
 /// use enshwick::Shape as _;

@@ -10,7 +10,7 @@ use super::{IntoScript, Record, Ty, Value};
 /// # Examples
 ///
 /// ```rust,standalone_crate
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// let joined = enshwick::script::events().find(|e| e.name() == "PlayerJoined");
 /// assert!(joined.is_some_and(|e| e.event() == enshwick::abi::Event::PLAYER_JOINED));
 /// ```
@@ -121,7 +121,7 @@ type GameHandler = dyn Fn(&dyn Fn() -> Value) + Send + Sync;
 /// # Examples
 ///
 /// ```rust,standalone_crate
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// let died = enshwick::script::game_events().find(|e| e.name() == "EntityDiedEvent");
 /// assert!(died.is_some());
 /// ```
@@ -194,7 +194,7 @@ impl GameEventKind {
     /// # Examples
     ///
     /// ```rust,standalone_crate
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let died = enshwick::script::game_events()
     ///         .find(|e| e.name() == "EntityDiedEvent")

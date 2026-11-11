@@ -166,7 +166,7 @@ log. It lists:
 `enshwick status` also answers the console with a short form of it.
 
 A mod adds its own lines with
-[`load.add_status(|| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/status.rs).
+[`load.add_status(|| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/status.rs).
 The closure returns a `String`; each non-empty line shows under the mod. It
 runs only when the summary is written, and only while the mod runs. It runs on
 a loader thread or the game thread, never inside a hook. Keep what it reports in
@@ -185,7 +185,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ## Features that turn off alone
 
 A mod made of parts that can fail apart wraps each part's setup in
-[`load.feature(name, |load| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/status.rs).
+[`load.feature(name, |load| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/status.rs).
 When the closure returns an `Off`, only that part is off. The mod keeps
 running, and its log names the part and the reason. The status summary and
 the Mods screen show it too. The closure's value comes back as `Some` when the

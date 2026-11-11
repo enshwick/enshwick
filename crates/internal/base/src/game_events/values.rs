@@ -139,7 +139,7 @@ mask! {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::game_events::DamageTypeMask;
     ///
     /// let types = DamageTypeMask::MAGICAL_FIRE | DamageTypeMask::PHYSICAL_CUT;
@@ -186,7 +186,7 @@ mask! {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::game_events::AttackCategoryMask;
     ///
     /// let categories = AttackCategoryMask::MELEE | AttackCategoryMask::AOE;

@@ -13,7 +13,7 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
+//! # extern crate enshwick_base as enshwick;
 //! use std::time::Duration;
 //!
 //! use enshwick::time::StepClock;
@@ -43,7 +43,7 @@ use crate::{BaseLoad, Off};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use std::time::Duration;
 ///
 /// use enshwick::time::StepClock;

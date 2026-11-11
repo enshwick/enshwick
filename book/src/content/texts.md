@@ -7,7 +7,7 @@ description: A mod ships its texts, item names, descriptions and chat phrases, i
 
 A mod ships its texts, item names, descriptions and chat phrases, in one
 TOML file with a table per language. The
-[`i18n`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/i18n.rs)
+[`i18n`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/i18n.rs)
 module reads it.
 
 ## The texts file
@@ -26,7 +26,7 @@ module reads it.
 ```
 
 - Each table is a language code.
-  [`Language`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/i18n.rs)
+  [`Language`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/i18n.rs)
   lists every language the game knows. Examples are `en-us` and `pt-br`.
   Codes ignore case; an unknown code is an error.
 - Keys are the mod's own names for its texts; values must be strings.
@@ -34,7 +34,7 @@ module reads it.
   the `en` text.
 
 A regional language looks in its main variety first.
-[`Language::lookup_order`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/i18n.rs)
+[`Language::lookup_order`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/i18n.rs)
 gives the order:
 
 | Language | Looks in            |
@@ -66,7 +66,7 @@ The game's English reads as `en-us`, which falls back to `en`.
 
 Keep the file at `src/texts.toml`, beside `lib.rs`.
 [`declare_mod!`](../concepts/loader-and-abi.md#the-manifest) embeds it.
-[`Load::texts`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/i18n.rs)
+[`Load::texts`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/i18n.rs)
 reads it during `init`.
 [`enshwick::texts!()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs)
 writes a module `texts` with a constant per key, so code names a key the
@@ -120,12 +120,12 @@ The mod does not build when the file has one of these faults:
 
 `load.texts` needs `src/texts.toml` in the crate. Without it, the call
 returns `Err(Off)`.
-[`Load::texts_from(toml)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/i18n.rs)
+[`Load::texts_from(toml)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/i18n.rs)
 hands over texts from a string, as for a data pack.
 
 ## Texts the game shows
 
-[`Load::add_texts(&texts, pairs)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/i18n.rs)
+[`Load::add_texts(&texts, pairs)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/i18n.rs)
 gives game tags their texts. Each pair is a key of the texts file and a tag.
 The tag is a [content id](../concepts/ids.md) of the mod's own. The
 tag's GUID goes into a [`NewItem`](items.md). There it fills the `name` and
@@ -165,7 +165,7 @@ names its mods to it with the manifest's name.
 ## Texts the mod uses itself
 
 The returned
-[`Texts`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/i18n.rs)
+[`Texts`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/i18n.rs)
 also serves the mod's own strings, such as chat replies:
 
 - `get(key, language)` returns the text in `language`. It falls back to
@@ -213,7 +213,7 @@ assert!(!texts.missing_in(Language::OFFERED).is_empty());
 ```
 
 On a client,
-[`i18n::language()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/i18n.rs)
+[`i18n::language()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/i18n.rs)
 is the language the player reads the game in, for the mod's own dialogs and
 windows:
 
@@ -241,7 +241,7 @@ back to `Language::FALLBACK`.
 A mod that names vanilla things, such as a survivor in its item's name,
 reads the game's own text. It ships no copy of that text, so the player sees
 it in their language as the game spells it.
-[`i18n::game_text(id)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/i18n.rs)
+[`i18n::game_text(id)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/i18n.rs)
 is the text of a tag in the language the player reads the game in.
 `game_text_in(id, language)` is the text in any language. The `id` is the
 tag's game id: `Guid::fnv1a` of the tag a resource names. A text missing in a language comes

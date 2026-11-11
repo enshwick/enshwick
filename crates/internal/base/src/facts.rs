@@ -11,7 +11,7 @@ use crate::abi::Str;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::content::EngineFacts;
 /// use enshwick::content::items::ItemLayout;
 ///

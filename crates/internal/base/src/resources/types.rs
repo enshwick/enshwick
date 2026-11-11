@@ -8,7 +8,7 @@ use super::Kind;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::resources::Attribute;
 ///
 /// let tooltip = Attribute::new("tooltip", "Damage of a level 0 weapon");
@@ -45,7 +45,7 @@ impl<'a> Attribute<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::resources::Attribute;
     ///
     /// let attribute = Attribute::new("converter", "parse").with_value_type("demo::string");
@@ -94,7 +94,7 @@ impl<'a> Attribute<'a> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::resources::Field;
 ///
 /// let health = Field::new("health", 4, "demo::float32");
@@ -132,7 +132,7 @@ impl<'a> Field<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::resources::Field;
     ///
     /// assert_eq!(Field::new("pad", 0, "demo::uint8").untyped().type_name(), None);
@@ -148,7 +148,7 @@ impl<'a> Field<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::resources::{Attribute, Field};
     ///
     /// let field = Field::new("damage", 0, "demo::float32")
@@ -209,7 +209,7 @@ impl<'a> Field<'a> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::resources::Constant;
 ///
 /// let invalid = Constant::new("Invalid", 0);
@@ -263,7 +263,7 @@ impl<'a> Constant<'a> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::resources::{Field, Kind, Type};
 ///
 /// let health = Type::new("demo::ecs::Health", Kind::Struct, 8, 4)
@@ -324,7 +324,7 @@ impl<'a> Type<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::resources::{Kind, Type};
     ///
     /// let ty = Type::new("demo::ecs::TemplateResource", Kind::Struct, 24, 4)
@@ -344,7 +344,7 @@ impl<'a> Type<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::resources::{Kind, Type};
     ///
     /// let ty = Type::new("demo::ItemId", Kind::Typedef, 4, 4).with_inner("demo::uint32");
@@ -363,7 +363,7 @@ impl<'a> Type<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::resources::{Kind, Type};
     ///
     /// let ty = Type::new("demo::Thing", Kind::Struct, 8, 4).with_layout(4, 2, 0x1234);
@@ -382,7 +382,7 @@ impl<'a> Type<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::resources::{Kind, Type};
     ///
     /// let ty = Type::new("demo::StaticArray<demo::uint8,4>", Kind::StaticArray, 4, 1)
@@ -413,7 +413,7 @@ impl<'a> Type<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::resources::{Constant, Kind, Type};
     ///
     /// let ty = Type::new("demo::Side", Kind::Enum, 1, 1)
@@ -432,7 +432,7 @@ impl<'a> Type<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::resources::{Attribute, Kind, Type};
     ///
     /// let ty = Type::new("demo::Table", Kind::Struct, 8, 4)
@@ -495,7 +495,7 @@ impl<'a> Type<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::resources::{Kind, Type, fnv1a32};
     ///
     /// let ty = Type::new("demo::Thing", Kind::Struct, 8, 4);
@@ -627,7 +627,7 @@ impl<'a> Type<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
+    /// # extern crate enshwick_base as enshwick;
     /// use enshwick::resources::{Kind, Type};
     ///
     /// let died = Type::new("demo::ecs::DiedEvent", Kind::Struct, 8, 4).with_inner("demo::ecs::Event");
@@ -697,7 +697,7 @@ fn last_part(qualified: &str) -> &str {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// assert_eq!(enshwick::resources::crc32(b"123456789"), 0xcbf4_3926);
 /// ```
 #[must_use]
@@ -722,7 +722,7 @@ pub const fn crc32(bytes: &[u8]) -> u32 {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// assert_eq!(enshwick::resources::crc64(b"123456789"), 0x6c40_df5f_0b49_7347);
 /// ```
 #[must_use]
@@ -747,7 +747,7 @@ pub const fn crc64(bytes: &[u8]) -> u64 {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::resources::fnv1a32;
 ///
 /// assert_eq!(fnv1a32(b""), 0x811c_9dc5);

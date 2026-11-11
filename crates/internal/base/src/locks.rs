@@ -24,7 +24,7 @@ mod sealed {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use std::sync::Mutex;
 ///
 /// use enshwick::Relock as _;
@@ -47,7 +47,7 @@ pub trait Relock<T: ?Sized>: sealed::Sealed {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use std::sync::RwLock;
 ///
 /// use enshwick::RelockRw as _;
@@ -78,7 +78,7 @@ pub trait RelockRw<T: ?Sized>: sealed::Sealed {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use std::sync::{Condvar, Mutex};
 /// use std::time::Duration;
 ///

@@ -18,7 +18,7 @@ use crate::{BaseLoad, Host, Off};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::points::DescribedField;
 /// use enshwick::services::DescribedEvent;
 ///
@@ -83,7 +83,7 @@ impl DescribedEvent {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # extern crate enshwick_base as enshwick;
 /// use enshwick::points::DescribedField;
 /// use enshwick::services::DescribedEvent;
 ///
