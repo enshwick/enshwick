@@ -6,7 +6,9 @@
 use core::ffi::c_void;
 use std::sync::OnceLock;
 
-pub use crate::__private::{EXPERIENCE_SOURCES, ids, rules};
+pub use crate::__private::{
+    EXPERIENCE_SOURCES, MOD_OFF, as_loader, as_pack, copy_out, ids, refresh_levels, rules,
+};
 #[cfg(feature = "unstable")]
 use crate::abi::CallFn;
 use crate::abi::{HostApi, Manifest, ModHandle, PointFn};

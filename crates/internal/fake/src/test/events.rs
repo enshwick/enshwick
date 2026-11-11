@@ -98,7 +98,7 @@ impl Installed {
     pub unsafe fn raise_raw(&self, event: Event, data: *const core::ffi::c_void) -> usize {
         if event == Event::LOADER_SETTINGS_CHANGED {
             // As the loader refreshes its own copy, which runs the packs.
-            crate::__private::refresh_levels();
+            enshwick_core::__fake::refresh_levels();
         }
         let handlers: Vec<_> = table::with(Vec::new(), |s| {
             let periodic = (event == Event::TICKED).then(|| s.ticks.handlers());

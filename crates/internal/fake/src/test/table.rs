@@ -147,9 +147,9 @@ impl<F: Copy> Registered<F> {
         match self.owner {
             // SAFETY: `TABLE` is the fake's table, a static.
             Some(owner) => unsafe {
-                crate::__private::as_pack(&raw const TABLE, owner, || call(callback, user))
+                enshwick_core::__fake::as_pack(&raw const TABLE, owner, || call(callback, user))
             },
-            None => crate::__private::as_loader(|| call(callback, user)),
+            None => enshwick_core::__fake::as_loader(|| call(callback, user)),
         }
     }
 }
@@ -580,7 +580,7 @@ pub(crate) fn refuses_developer(api: *const HostApi, manifest: &crate::abi::Mani
             s.faults.push(reason.to_owned());
             s.logs.push((
                 Level::ERROR,
-                format!("off: {reason} ({})", crate::__private::MOD_OFF),
+                format!("off: {reason} ({})", enshwick_core::__fake::MOD_OFF),
             ));
             true
         })

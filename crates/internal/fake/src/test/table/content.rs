@@ -270,7 +270,7 @@ pub(crate) extern "system" fn item_data_get(
     };
     // SAFETY: the safe layer passes `len` null or a writable, aligned `u32`,
     // and `out` null or `capacity` writable bytes apart from the fake's own.
-    unsafe { crate::__private::copy_out(&value, out, capacity, len) }
+    unsafe { enshwick_core::__fake::copy_out(&value, out, capacity, len) }
 }
 
 pub(crate) extern "system" fn item_data_set(
@@ -349,7 +349,7 @@ pub(crate) extern "system" fn content_read(
     };
     // SAFETY: the safe layer passes `len` null or a writable, aligned `u32`,
     // and `out` null or `capacity` writable bytes apart from the fake's own.
-    unsafe { crate::__private::copy_out(&data, out, capacity, len) }
+    unsafe { enshwick_core::__fake::copy_out(&data, out, capacity, len) }
 }
 
 pub(crate) extern "system" fn icons_ready(_me: ModHandle) -> Status {
@@ -443,7 +443,7 @@ unsafe fn copy_resource(
     // SAFETY: the caller guarantees `len` null or writable and aligned, and
     // `out` null or `capacity` writable bytes apart from `data`, which this
     // function owns.
-    unsafe { crate::__private::copy_out(&data, out, capacity, len) }
+    unsafe { enshwick_core::__fake::copy_out(&data, out, capacity, len) }
 }
 
 /// A served key whose patches run, with the buffers they took, freed when

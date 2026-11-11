@@ -50,8 +50,9 @@ enshwick ──test──▶ enshwick-fake ──▶ enshwick-core (its `fake` f
   module, which only core's `fake` feature builds and only `enshwick-fake`
   turns on, so a mod's release build holds no test support. Core asks the
   fake about a mod's manifest through one check the fake hands down at
-  install. The fake's root holds core's items at their paths beside `test`,
-  so its examples name it `enshwick` as the other parts do.
+  install. The fake's root holds core's public items at their paths beside
+  `test`: its code names them through `crate::`, and its examples name it
+  `enshwick` as the other parts do.
 - An internal part's doc example names its own crate `enshwick` by a hidden
   `# extern crate <crate> as enshwick;` line. One that names items above its
   crate sits in a hidden wrapper, and `crates/enshwick/src/lower_examples.rs`
