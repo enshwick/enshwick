@@ -84,7 +84,10 @@ pub(super) fn toml_string(text: &str) -> String {
     quoted
 }
 
-pub(super) fn expand_shape(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
+pub(super) fn expand_shape(
+    input: &DeriveInput,
+    krate: &proc_macro2::TokenStream,
+) -> syn::Result<proc_macro2::TokenStream> {
     let ident = &input.ident;
     if !input.generics.params.is_empty() {
         return Err(syn::Error::new_spanned(
@@ -94,8 +97,8 @@ pub(super) fn expand_shape(input: &DeriveInput) -> syn::Result<proc_macro2::Toke
     }
     let ShapeAttributes { reprs, values, api } = shape_attributes(&input.attrs)?;
     let name = ident.unraw().to_string();
-    let shape = quote!(::enshwick::Shape);
-    let schema = shape_schema(input, &name, &reprs, &values, api.as_deref());
+    let shape = quote!(#krate::Shape);
+    let schema = shape_schema(input, &name, &reprs, &values, api.as_deref(), krate);
     let parts = match &input.data {
         Data::Struct(data) => {
             if !reprs.iter().any(|r| r == "C" || r == "transparent") {
@@ -171,13 +174,13 @@ pub(super) fn expand_shape(input: &DeriveInput) -> syn::Result<proc_macro2::Toke
             ));
         }
     };
-    let padding_free = padding_free(&input.data);
+    let padding_free = padding_free(&input.data, krate);
     Ok(quote! {
         // SAFETY: the hash covers the type's name, size and alignment, and
         // every field with its shape and offset, every variant with its
         // discriminant, or every named value.
         unsafe impl #shape for #ident {
-            const SHAPE: u64 = ::enshwick::shape::ShapeHasher::new(#name)
+            const SHAPE: u64 = #krate::shape::ShapeHasher::new(#name)
                 .layout::<Self>()
                 #parts
                 .finish();
@@ -189,8 +192,8 @@ pub(super) fn expand_shape(input: &DeriveInput) -> syn::Result<proc_macro2::Toke
 
 /// The `PADDING_FREE` of a derived [`Shape`]: an enum's every byte is its
 /// integer's; a struct's fields fill it and have no padding of their own.
-fn padding_free(data: &Data) -> proc_macro2::TokenStream {
-    let shape = quote!(::enshwick::Shape);
+fn padding_free(data: &Data, krate: &proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+    let shape = quote!(#krate::Shape);
     let Data::Struct(data) = data else {
         return quote!(true);
     };
@@ -210,12 +213,13 @@ pub(super) fn shape_schema(
     reprs: &[String],
     values: &[Ident],
     api: Option<&str>,
+    krate: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
     if let Some(api) = api {
         let api = format!("enshwick.{api}");
         return quote!(const SCHEMA_NAME: &'static str = #api;);
     }
-    let shape = quote!(::enshwick::Shape);
+    let shape = quote!(#krate::Shape);
     let ident = &input.ident;
     let head = format!(
         "[[type]]\nname = {}\ndoc = {}\n",
@@ -282,6 +286,6 @@ pub(super) fn shape_schema(
     quote! {
         const SCHEMA_NAME: &'static str = #name;
         const SCHEMA_TYPES: &'static str =
-            ::enshwick::__private::concatcp!(#(#parts,)* #(#nested,)*);
+            #krate::__private::concatcp!(#(#parts,)* #(#nested,)*);
     }
 }

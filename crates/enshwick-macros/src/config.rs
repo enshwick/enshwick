@@ -280,9 +280,9 @@ pub(super) fn expand_attribute(
     Ok(crate::krate::rename(
         quote! {
             #[derive(
-                ::enshwick::__private::serde::Deserialize,
-                ::enshwick::__private::serde::Serialize,
-                ::enshwick::Config,
+                #krate::__private::serde::Deserialize,
+                #krate::__private::serde::Serialize,
+                #krate::Config,
             )]
             #[serde(crate = #serde, default, deny_unknown_fields)]
             #forwarded
@@ -353,12 +353,12 @@ pub(super) fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
         group,
     } = struct_config(&input.attrs)?;
     let claim = if group {
-        quote!(impl ::enshwick::config::__Group for #name {})
+        quote!(impl #krate::config::__Group for #name {})
     } else {
         file_claim(name, &file)
     };
     let own_check = validate
-        .map(|path| quote!(#path(self).map_err(::core::convert::Into::<::enshwick::config::ConfigError>::into)?;));
+        .map(|path| quote!(#path(self).map_err(::core::convert::Into::<#krate::config::ConfigError>::into)?;));
     let mut entries = Vec::new();
     let mut described = Vec::new();
     let mut checks = Vec::new();
@@ -377,24 +377,24 @@ pub(super) fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
         let doc = comment(&field.attrs);
         entries.push(quote! {
             #text.push_str(#doc);
-            #text.push_str(&::enshwick::config::__entry(#key, &#defaults.#ident));
+            #text.push_str(&#krate::config::__entry(#key, &#defaults.#ident));
         });
         checks.push(quote! {
-            ::enshwick::config::__check_field(&#schema, #key, &self.#ident)?;
+            #krate::config::__check_field(&#schema, #key, &self.#ident)?;
         });
         described.push(described_field(&key, ident, config, field, &defaults));
     }
     let header = comment(&input.attrs);
     let header_text = doc_text(&input.attrs);
     let (path, fields_of, groups_of) = (local("path"), local("fields"), local("groups"));
-    let config = quote!(::enshwick::config::Config);
+    let config = quote!(#krate::config::Config);
     let GroupTokens {
         tables: group_tables,
         schemas: group_schemas,
         checks: group_checks,
     } = group_tokens(&groups, &text, &path, &fields_of, &groups_of);
     Ok(quote! {
-        impl ::enshwick::config::Config for #name {
+        impl #krate::config::Config for #name {
             const FILE: &'static str = #file;
 
             fn template() -> ::std::string::String {
@@ -415,22 +415,22 @@ pub(super) fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
                 #text
             }
 
-            fn schema() -> ::enshwick::config::Schema {
+            fn schema() -> #krate::config::Schema {
                 let #defaults = <Self as ::core::default::Default>::default();
-                let mut #fields_of: ::std::vec::Vec<::enshwick::config::Field> =
+                let mut #fields_of: ::std::vec::Vec<#krate::config::Field> =
                     ::std::vec![#(#described),*];
-                let mut #groups_of: ::std::vec::Vec<::enshwick::config::Group> =
+                let mut #groups_of: ::std::vec::Vec<#krate::config::Group> =
                     ::std::vec::Vec::new();
                 #(#group_schemas)*
                 let _ = &#defaults;
-                ::enshwick::config::Schema::new(#header_text, #title, #fields_of)
+                #krate::config::Schema::new(#header_text, #title, #fields_of)
                     .with_groups(#groups_of)
             }
 
             fn validate(
                 &self,
-            ) -> ::core::result::Result<(), ::enshwick::config::ConfigError> {
-                let #schema = <Self as ::enshwick::config::Config>::schema();
+            ) -> ::core::result::Result<(), #krate::config::ConfigError> {
+                let #schema = <Self as #krate::config::Config>::schema();
                 #(#checks)*
                 #(#group_checks)*
                 #own_check
@@ -494,7 +494,7 @@ pub(super) fn described_field(
     let secret = config.secret;
     let first = config.first.map(|n| quote!(.with_first(#n)));
     quote! {
-        ::enshwick::config::Field::new(#key, &#defaults.#ident)
+        #krate::config::Field::new(#key, &#defaults.#ident)
         .with_range(#min, #max)
         #choices
         .with_doc(#plain, #label)
@@ -522,7 +522,7 @@ pub(super) fn group_tokens(
     fields_of: &Ident,
     groups_of: &Ident,
 ) -> GroupTokens {
-    let config = quote!(::enshwick::config::Config);
+    let config = quote!(#krate::config::Config);
     let tables = groups
         .iter()
         .map(|(_, key, field)| {
@@ -543,7 +543,7 @@ pub(super) fn group_tokens(
         quote! {
             let inner = <#ty as #config>::schema();
             let doc = if #doc.is_empty() { inner.doc.clone() } else { ::std::string::String::from(#doc) };
-            #groups_of.push(::enshwick::config::Group::new(#key, &doc));
+            #groups_of.push(#krate::config::Group::new(#key, &doc));
             #groups_of.extend(inner.groups.into_iter().map(|g| g.__in_group(#key)));
             #fields_of.extend(inner.fields.into_iter().map(|f| f.__in_group(#key)));
         }
@@ -553,7 +553,7 @@ pub(super) fn group_tokens(
         .map(|(ident, _, field)| {
             let ty = &field.ty;
             quote! {
-                ::enshwick::config::__group::<#ty>();
+                #krate::config::__group::<#ty>();
                 <#ty as #config>::validate(&self.#ident)?;
             }
         })

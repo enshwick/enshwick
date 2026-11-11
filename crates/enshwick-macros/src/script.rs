@@ -70,7 +70,7 @@ fn type_name(input: &DeriveInput) -> String {
 }
 
 fn derive_record(input: &DeriveInput, named: &FieldsNamed) -> TokenStream {
-    let script = quote!(::enshwick::script);
+    let script = quote!(#krate::script);
     let ident = &input.ident;
     let name = type_name(input);
     let doc = schema_doc(&input.attrs);
@@ -124,12 +124,12 @@ fn derive_record(input: &DeriveInput, named: &FieldsNamed) -> TokenStream {
             } else {
                 quote!(argument)
             };
-            quote!(#field: ::enshwick::__private::#read(&mut fields, #label)?)
+            quote!(#field: #krate::__private::#read(&mut fields, #label)?)
         });
         quote! {
             impl #script::FromScript for #ident {
                 fn from_value(value: #script::Value) -> ::core::result::Result<Self, #script::Error> {
-                    let mut fields = ::enshwick::__private::record_fields(value, #count)?;
+                    let mut fields = #krate::__private::record_fields(value, #count)?;
                     ::core::result::Result::Ok(Self { #(#fields,)* })
                 }
             }
@@ -175,7 +175,7 @@ fn has_word(attrs: &[syn::Attribute], word: &str) -> bool {
 }
 
 fn derive_newtype(ident: &Ident, inner: &Type) -> TokenStream {
-    let script = quote!(::enshwick::script);
+    let script = quote!(#krate::script);
     quote! {
         impl #script::Typed for #ident {
             const TY: &'static #script::Ty = <#inner as #script::Typed>::TY;
@@ -196,7 +196,7 @@ fn derive_newtype(ident: &Ident, inner: &Type) -> TokenStream {
 }
 
 fn derive_choice(input: &DeriveInput, data: &syn::DataEnum) -> syn::Result<TokenStream> {
-    let script = quote!(::enshwick::script);
+    let script = quote!(#krate::script);
     let ident = &input.ident;
     let name = type_name(input);
     let doc = schema_doc(&input.attrs);
@@ -274,7 +274,7 @@ fn derive_choice(input: &DeriveInput, data: &syn::DataEnum) -> syn::Result<Token
     reason = "one pass over the variants builds the description and both conversions together"
 )]
 fn derive_union(input: &DeriveInput, data: &syn::DataEnum) -> syn::Result<TokenStream> {
-    let script = quote!(::enshwick::script);
+    let script = quote!(#krate::script);
     let ident = &input.ident;
     let name = type_name(input);
     let doc = schema_doc(&input.attrs);
@@ -339,10 +339,10 @@ fn derive_union(input: &DeriveInput, data: &syn::DataEnum) -> syn::Result<TokenS
                     #script::Value::Record(::std::vec![#(#script::IntoScript::into_value(#names)),*]),
                 )])));
                 from_table.push(quote!(#(#cfg)* #label => {
-                    let mut fields = ::enshwick::__private::record_fields(value, #count)
+                    let mut fields = #krate::__private::record_fields(value, #count)
                         .map_err(|e| #script::Error::new(::std::format!("{}: {e}", #label)))?;
                     ::core::result::Result::Ok(Self::#v {
-                        #(#names: ::enshwick::__private::argument(&mut fields, #labels)?,)*
+                        #(#names: #krate::__private::argument(&mut fields, #labels)?,)*
                     })
                 }));
             }
@@ -454,7 +454,7 @@ struct Parameter {
 }
 
 fn parameter(index: usize, typed: &PatType, generics: &syn::Generics) -> syn::Result<Parameter> {
-    let script = quote!(::enshwick::script);
+    let script = quote!(#krate::script);
     let param = match &*typed.pat {
         Pat::Ident(p) => p.ident.to_string(),
         other => {
@@ -485,7 +485,7 @@ fn parameter(index: usize, typed: &PatType, generics: &syn::Generics) -> syn::Re
     };
     Ok(Parameter {
         describe: quote!(#script::Param::new(#param, <#owned as #script::Typed>::TY)),
-        read: quote!(let #local: #owned = ::enshwick::__private::argument(&mut args, #param)?;),
+        read: quote!(let #local: #owned = #krate::__private::argument(&mut args, #param)?;),
         pass,
     })
 }
@@ -523,7 +523,7 @@ fn generic_closure(ty: &Type, generics: &syn::Generics) -> Option<(Vec<Type>, Ty
 /// argument hands it `T`'s [`Context`] view, and what the function returns
 /// besides nil is applied back to it.
 fn closure(param: &str, local: &Ident, inputs: &[Type], output: &Type) -> syn::Result<Parameter> {
-    let script = quote!(::enshwick::script);
+    let script = quote!(#krate::script);
     let names: Vec<Ident> = (0..inputs.len()).map(|n| format_ident!("p{n}")).collect();
     let context = inputs
         .iter()
@@ -598,7 +598,7 @@ fn closure(param: &str, local: &Ident, inputs: &[Type], output: &Type) -> syn::R
         },
         read: quote! {
             let #local = {
-                let callback: #script::Callback = ::enshwick::__private::argument(&mut args, #param)?;
+                let callback: #script::Callback = #krate::__private::argument(&mut args, #param)?;
                 move |#(#names: #inputs),*| -> #output { #body }
             };
         },
@@ -609,13 +609,13 @@ fn closure(param: &str, local: &Ident, inputs: &[Type], output: &Type) -> syn::R
 /// The answer type's description and the body that calls the method and
 /// converts what it returns.
 fn answer(method: &ImplItemFn, passes: &[TokenStream]) -> syn::Result<(TokenStream, TokenStream)> {
-    let script = quote!(::enshwick::script);
+    let script = quote!(#krate::script);
     let name = &method.sig.ident;
     // A method that takes `self` by value runs on a copy of the script's
     // object, as a builder does: `tx:place_prop(...)` returns the next one.
     let by_value = matches!(method.sig.inputs.first(), Some(FnArg::Receiver(r)) if matches!(r.kind, syn::ReceiverKind::Value));
     let call = if by_value {
-        quote!(::enshwick::__private::owned(this).#name(#(#passes),*))
+        quote!(#krate::__private::owned(this).#name(#(#passes),*))
     } else {
         quote!(this.#name(#(#passes),*))
     };
@@ -676,7 +676,7 @@ fn function(
     starting: bool,
     name: Option<String>,
 ) -> syn::Result<TokenStream> {
-    let script = quote!(::enshwick::script);
+    let script = quote!(#krate::script);
     let label = name.unwrap_or_else(|| method.sig.ident.to_string());
     let doc = schema_doc(&method.attrs);
     if doc.is_empty() {
@@ -713,7 +713,7 @@ fn function(
         quote!(let mut args = args.iter_mut().map(|value| ::core::mem::replace(value, #script::Value::Nil));)
     };
     let (kind, this) = if starting {
-        (quote!(InitFunction), quote!(&mut ::enshwick::Load<'_>))
+        (quote!(InitFunction), quote!(&mut #krate::Load<'_>))
     } else {
         (quote!(Function), quote!(&#self_ty))
     };
@@ -732,7 +732,7 @@ fn function(
 }
 
 pub(crate) fn expand_impl(part: &Ident, mut item: ItemImpl) -> syn::Result<TokenStream> {
-    let script = quote!(::enshwick::script);
+    let script = quote!(#krate::script);
     let self_ty = item.self_ty.clone();
     // `impl Load` methods run while the mod starts, as in a Rust mod's init.
     let starting = matches!(&*self_ty, Type::Path(p) if p.path.segments.last().is_some_and(|s| s.ident == "Load"));

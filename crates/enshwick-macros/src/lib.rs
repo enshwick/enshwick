@@ -90,10 +90,9 @@ pub fn declare_test_mod(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(Config, attributes(config))]
 pub fn derive_config(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    renamed(
-        krate::in_attrs(&input.attrs, "config"),
-        expand_config(&input).map(Into::into),
-    )
+    with_crate(krate::in_attrs(&input.attrs, "config"), |krate| {
+        expand_config(&input, krate)
+    })
 }
 
 /// Declares a settings struct: derives serde's `Deserialize` and
@@ -140,16 +139,16 @@ pub fn hook(args: TokenStream, item: TokenStream) -> TokenStream {
     });
     parse_macro_input!(args with settings);
     let function = parse_macro_input!(item as ItemFn);
-    renamed(
-        Ok(krate),
-        expand_hook(&function, priority.as_ref(), flags.as_ref()).map(Into::into),
-    )
+    let krate = krate::path(krate.as_ref());
+    expand_hook(&function, priority.as_ref(), flags.as_ref(), &krate)
+        .unwrap_or_else(|e| e.to_compile_error().into())
 }
 
 fn expand_hook(
     function: &ItemFn,
     priority: Option<&Expr>,
     flags: Option<&Expr>,
+    krate: &proc_macro2::TokenStream,
 ) -> syn::Result<TokenStream> {
     let sig = &function.sig;
     if let syn::Safety::Unsafe(unsafety) = &sig.safety {
@@ -204,7 +203,7 @@ fn expand_hook(
         .iter()
         .filter(|a| a.path().is_ident("doc") || a.path().is_ident("cfg"));
     let priority = priority.map_or_else(|| quote!(0), |p| quote!(#p));
-    let flags = flags.map_or_else(|| quote!(::enshwick::abi::HookFlags::NONE), |f| quote!(#f));
+    let flags = flags.map_or_else(|| quote!(#krate::abi::HookFlags::NONE), |f| quote!(#f));
     let (entry, next, value, frame, returned) = (
         Ident::new("__enshwick_entry", Span::mixed_site()),
         Ident::new("next", Span::mixed_site()),
@@ -212,26 +211,26 @@ fn expand_hook(
         Ident::new("frame", Span::mixed_site()),
         Ident::new("returned", Span::mixed_site()),
     );
-    let copies = copy_checks(&arg_types, output);
+    let copies = copy_checks(&arg_types, output, krate);
     // The entry point is a safe fn, which coerces to the target's type
     // whether that is `unsafe` or not, so `F` may be any name for it.
     Ok(quote! {
         #function
 
         #(#kept)*
-        #vis static #name: ::enshwick::Hook<#target> = {
+        #vis static #name: #krate::Hook<#target> = {
             const _: () = {
                 #copies
             };
             extern "system" fn #entry(#(#idents: #arg_types),*) #output {
-                let #frame = ::enshwick::__private::Frame::new();
+                let #frame = #krate::__private::Frame::new();
                 let #next = #name.next(&#frame);
                 match ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(
                     || #body(#next, #(#idents),*),
                 )) {
                     ::core::result::Result::Ok(#value) => #value,
                     ::core::result::Result::Err(__enshwick_panic) => {
-                        ::enshwick::__private::fault_in(::core::stringify!(#name), __enshwick_panic.as_ref());
+                        #krate::__private::fault_in(::core::stringify!(#name), __enshwick_panic.as_ref());
                         match #frame.take() {
                             ::core::option::Option::Some(#returned) => #returned,
                             #[allow(
@@ -247,7 +246,7 @@ fn expand_hook(
                     }
                 }
             }
-            ::enshwick::Hook::new(::core::stringify!(#name), #entry, #priority, #flags)
+            #krate::Hook::new(::core::stringify!(#name), #entry, #priority, #flags)
         };
     }
     .into())
@@ -290,6 +289,7 @@ pub fn service(args: TokenStream, item: TokenStream) -> TokenStream {
     });
     parse_macro_input!(args with settings);
     let item = parse_macro_input!(item as syn::ItemStruct);
+    let krate = krate::path(krate.as_ref());
     let (name, tracked, owner) = match resolve(name, of.as_ref()) {
         Ok(resolved) => resolved,
         Err(e) => return e.to_compile_error().into(),
@@ -300,24 +300,26 @@ pub fn service(args: TokenStream, item: TokenStream) -> TokenStream {
         &owner,
         of.as_ref(),
         export.as_ref(),
-        &quote!(<#ident as ::enshwick::services::Service>),
+        &quote!(<#ident as #krate::services::Service>),
         Kind::Service,
+        &krate,
     ) {
         Ok(entry) => entry,
         Err(e) => return e.to_compile_error().into(),
     };
     let major = version.map_or_else(|| quote!(1), |v| quote!(#v));
-    let schema = service_schema(&item, name.as_ref());
+    let schema = service_schema(&item, name.as_ref(), &krate);
     let declared = proc_macro2::TokenStream::from(
         expand_declaration(
             &item,
             name,
             &quote!(const MAJOR: u32 = #major; #schema),
             &quote!(services::Service),
+            &krate,
         )
         .unwrap_or_else(|e| e.to_compile_error().into()),
     );
-    krate::rename(quote!(#declared #tracked #entry), krate.as_ref()).into()
+    quote!(#declared #tracked #entry).into()
 }
 
 /// Declares a mod event: makes the struct `repr(C)` and implements
@@ -351,28 +353,30 @@ pub fn event(args: TokenStream, item: TokenStream) -> TokenStream {
     });
     parse_macro_input!(args with settings);
     let item = parse_macro_input!(item as syn::ItemStruct);
+    let krate = krate::path(krate.as_ref());
     let (name, tracked, owner) = match resolve(name, of.as_ref()) {
         Ok(resolved) => resolved,
         Err(e) => return e.to_compile_error().into(),
     };
-    let schema = event_schema(&item, name.as_ref());
-    let padding = padding_free_assert(&item, "a mod event's data");
+    let schema = event_schema(&item, name.as_ref(), &krate);
+    let padding = padding_free_assert(&item, "a mod event's data", &krate);
     let ident = &item.ident;
     let entry = match schema_entry(
         name.as_ref(),
         &owner,
         of.as_ref(),
         export.as_ref(),
-        &quote!(<#ident as ::enshwick::services::ModEvent>),
+        &quote!(<#ident as #krate::services::ModEvent>),
         Kind::Event,
+        &krate,
     ) {
         Ok(entry) => entry,
         Err(e) => return e.to_compile_error().into(),
     };
-    match expand_declaration(&item, name, &schema, &quote!(services::ModEvent)) {
+    match expand_declaration(&item, name, &schema, &quote!(services::ModEvent), &krate) {
         Ok(declared) => {
             let declared = proc_macro2::TokenStream::from(declared);
-            krate::rename(quote!(#declared #padding #tracked #entry), krate.as_ref()).into()
+            quote!(#declared #padding #tracked #entry).into()
         }
         Err(e) => e.to_compile_error().into(),
     }
@@ -484,7 +488,7 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
             &owner,
             of.as_ref(),
             export.as_ref(),
-            &quote!(<#ident as ::enshwick::points::Point>),
+            &quote!(<#ident as #krate::points::Point>),
             Kind::Point,
         )?;
         let mode = mode.ok_or_else(|| {
@@ -503,15 +507,15 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
             .ok_or_else(|| syn::Error::new_spanned(&ident, "name the answer: `output = <type>`"))?;
         let schema = point_schema(&item, name.as_ref(), &mode, &output, refusable);
         let extra = quote! {
-            const MODE: ::enshwick::points::Mode =
-                ::enshwick::points::Mode::#mode;
+            const MODE: #krate::points::Mode =
+                #krate::points::Mode::#mode;
             const REFUSE: bool = #refusable;
-            const OUTPUT: &'static [::enshwick::abi::LayoutField] =
-                &[::enshwick::abi::LayoutField {
-                    name: ::enshwick::abi::Str::new("output"),
-                    hash: ::enshwick::services::layout_hash(
+            const OUTPUT: &'static [#krate::abi::LayoutField] =
+                &[#krate::abi::LayoutField {
+                    name: #krate::abi::Str::new("output"),
+                    hash: #krate::services::layout_hash(
                         "output",
-                        <#output as ::enshwick::Shape>::SHAPE,
+                        <#output as #krate::Shape>::SHAPE,
                         ::core::mem::size_of::<#output>(),
                         ::core::mem::align_of::<#output>(),
                         0,
@@ -533,7 +537,7 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
             #tracked
             #entry
             const _: () = assert!(
-                <#output as ::enshwick::Shape>::PADDING_FREE,
+                <#output as #krate::Shape>::PADDING_FREE,
                 "a point's answer has padding, which another language would read uninitialised: add the bytes as fields",
             );
         }
@@ -549,7 +553,7 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
 fn padding_free_assert(item: &syn::ItemStruct, what: &str) -> proc_macro2::TokenStream {
     let ident = &item.ident;
     let types: Vec<&Type> = item.fields.iter().map(|f| &f.ty).collect();
-    let shape = quote!(::enshwick::Shape);
+    let shape = quote!(#krate::Shape);
     let message = format!(
         "{what} has padding, which another language would read uninitialised: add the bytes as fields"
     );
@@ -606,7 +610,7 @@ pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
             &owner,
             of.as_ref(),
             export.as_ref(),
-            &quote!(<#ident as ::enshwick::services::Call>),
+            &quote!(<#ident as #krate::services::Call>),
             Kind::Call,
         )?;
         let output = output
@@ -615,12 +619,12 @@ pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
         let schema = call_schema(&item, name.as_ref(), &output);
         let extra = quote! {
             const MAJOR: u32 = #major;
-            const OUTPUT: &'static [::enshwick::abi::LayoutField] =
-                &[::enshwick::abi::LayoutField {
-                    name: ::enshwick::abi::Str::new("output"),
-                    hash: ::enshwick::services::layout_hash(
+            const OUTPUT: &'static [#krate::abi::LayoutField] =
+                &[#krate::abi::LayoutField {
+                    name: #krate::abi::Str::new("output"),
+                    hash: #krate::services::layout_hash(
                         "output",
-                        <#output as ::enshwick::Shape>::SHAPE,
+                        <#output as #krate::Shape>::SHAPE,
                         ::core::mem::size_of::<#output>(),
                         ::core::mem::align_of::<#output>(),
                         0,
@@ -636,7 +640,7 @@ pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
             &quote!(services::Call),
         )?);
         let types: Vec<&Type> = item.fields.iter().map(|f| &f.ty).collect();
-        let shape = quote!(::enshwick::Shape);
+        let shape = quote!(#krate::Shape);
         Ok(quote! {
             #declared
             #tracked
@@ -808,11 +812,11 @@ fn expand_declaration(
         let ty = &field.ty;
         let field_name = field_ident.unraw().to_string();
         Some(quote! {
-            ::enshwick::abi::LayoutField {
-                name: ::enshwick::abi::Str::new(#field_name),
-                hash: ::enshwick::services::layout_hash(
+            #krate::abi::LayoutField {
+                name: #krate::abi::Str::new(#field_name),
+                hash: #krate::services::layout_hash(
                     #field_name,
-                    <#ty as ::enshwick::Shape>::SHAPE,
+                    <#ty as #krate::Shape>::SHAPE,
                     ::core::mem::size_of::<#ty>(),
                     ::core::mem::align_of::<#ty>(),
                     ::core::mem::offset_of!(#ident, #field_ident),
@@ -826,10 +830,10 @@ fn expand_declaration(
 
         // SAFETY: the layout lists every field of the `repr(C)` struct in
         // order, with its size, alignment and offset.
-        unsafe impl ::enshwick::#trait_path for #ident {
+        unsafe impl #krate::#trait_path for #ident {
             const NAME: &'static str = #name;
             #extra
-            const LAYOUT: &'static [::enshwick::abi::LayoutField] = &[#(#entries),*];
+            const LAYOUT: &'static [#krate::abi::LayoutField] = &[#(#entries),*];
         }
     }
     .into())
@@ -844,15 +848,19 @@ fn local(name: &str) -> Ident {
 /// The checks that a hook's arguments and return value are `Copy`: the
 /// arguments go to the body and, after a panic, to `next` again, and the
 /// value `next` returned is kept for a panic after it.
-fn copy_checks(arg_types: &[&Type], output: &syn::ReturnType) -> proc_macro2::TokenStream {
+fn copy_checks(
+    arg_types: &[&Type],
+    output: &syn::ReturnType,
+    krate: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
     let arguments = arg_types.iter().map(|ty| {
         quote::quote_spanned! {ty.span()=>
-            ::enshwick::__private::hook_argument::<#ty>();
+            #krate::__private::hook_argument::<#ty>();
         }
     });
     let value = match output {
         syn::ReturnType::Type(_, ty) => quote::quote_spanned! {ty.span()=>
-            ::enshwick::__private::hook_return::<#ty>();
+            #krate::__private::hook_return::<#ty>();
         },
         syn::ReturnType::Default => quote!(),
     };

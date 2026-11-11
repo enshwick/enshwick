@@ -28,6 +28,7 @@ pub(crate) fn schema_entry(
     export: Option<&Ident>,
     declared: &TokenStream,
     kind: Kind,
+    krate: &TokenStream,
 ) -> syn::Result<TokenStream> {
     let Some(export) = export else {
         return Ok(TokenStream::new());
@@ -77,7 +78,7 @@ pub(crate) fn schema_entry(
                 ::core::compile_error!(#message);
                 #[cfg(test)]
                 const _: () = {
-                    ::enshwick::__schema_entry!(#schema);
+                    #krate::__schema_entry!(#schema);
                 };
             })
         }
@@ -90,7 +91,7 @@ pub(crate) fn schema_entry(
                     );
                 }
             });
-            Ok(quote!(#check ::enshwick::__schema_entry!(#schema);))
+            Ok(quote!(#check #krate::__schema_entry!(#schema);))
         }
     }
 }
@@ -111,9 +112,13 @@ pub(crate) enum Kind {
 /// The `SCHEMA` of a mod event: its `[[event]]` table with the layout
 /// hashes, then the `[[type]]` tables of its data; `DESCRIBED` says whether
 /// a schema describes every field's type.
-pub(crate) fn event_schema(item: &syn::ItemStruct, name: Option<&syn::LitStr>) -> TokenStream {
-    let shape = quote!(::enshwick::Shape);
-    let event = quote!(::enshwick::services::ModEvent);
+pub(crate) fn event_schema(
+    item: &syn::ItemStruct,
+    name: Option<&syn::LitStr>,
+    krate: &TokenStream,
+) -> TokenStream {
+    let shape = quote!(#krate::Shape);
+    let event = quote!(#krate::services::ModEvent);
     let ident = &item.ident;
     let data = ident.unraw().to_string();
     let head = format!(
@@ -150,7 +155,7 @@ pub(crate) fn event_schema(item: &syn::ItemStruct, name: Option<&syn::LitStr>) -
     );
     quote! {
         const DESCRIBED: bool = #(#described)&&*;
-        const SCHEMA: &'static str = ::enshwick::__private::concatcp!(
+        const SCHEMA: &'static str = #krate::__private::concatcp!(
             #(#parts,)* #table, #(#fields,)* #(#nested,)*
         );
     }
@@ -162,9 +167,13 @@ pub(crate) fn event_schema(item: &syn::ItemStruct, name: Option<&syn::LitStr>) -
 /// with `unsafe ` before it for an unsafe one. Evaluating it, which an
 /// exported service does, fails the build on a field a schema cannot
 /// describe.
-pub(crate) fn service_schema(item: &syn::ItemStruct, name: Option<&syn::LitStr>) -> TokenStream {
-    let shape = quote!(::enshwick::Shape);
-    let service = quote!(::enshwick::services::Service);
+pub(crate) fn service_schema(
+    item: &syn::ItemStruct,
+    name: Option<&syn::LitStr>,
+    krate: &TokenStream,
+) -> TokenStream {
+    let shape = quote!(#krate::Shape);
+    let service = quote!(#krate::services::Service);
     let ident = &item.ident;
     let table = ident.unraw().to_string();
     let head = format!(
@@ -232,7 +241,7 @@ pub(crate) fn service_schema(item: &syn::ItemStruct, name: Option<&syn::LitStr>)
     quote! {
         const SCHEMA: &'static str = {
             #(#checks)*
-            ::enshwick::__private::concatcp!(#(#parts,)* #table, #(#fields,)* #(#nested,)*)
+            #krate::__private::concatcp!(#(#parts,)* #table, #(#fields,)* #(#nested,)*)
         };
     }
 }
@@ -256,9 +265,10 @@ pub(crate) fn call_schema(
     item: &syn::ItemStruct,
     name: Option<&syn::LitStr>,
     output: &Type,
+    krate: &TokenStream,
 ) -> TokenStream {
-    let shape = quote!(::enshwick::Shape);
-    let call = quote!(::enshwick::services::Call);
+    let shape = quote!(#krate::Shape);
+    let call = quote!(#krate::services::Call);
     let ident = &item.ident;
     let input = ident.unraw().to_string();
     let head = format!(
@@ -309,7 +319,7 @@ pub(crate) fn call_schema(
     quote! {
         const SCHEMA: &'static str = {
             const _: () = { #(#checks)* };
-            ::enshwick::__private::concatcp!(
+            #krate::__private::concatcp!(
                 #(#parts,)* #table, #(#fields,)* #(#nested,)* <#output as #shape>::SCHEMA_TYPES,
             )
         };
@@ -325,9 +335,10 @@ pub(crate) fn point_schema(
     mode: &Ident,
     output: &Type,
     refusable: bool,
+    krate: &TokenStream,
 ) -> TokenStream {
-    let shape = quote!(::enshwick::Shape);
-    let point = quote!(::enshwick::points::Point);
+    let shape = quote!(#krate::Shape);
+    let point = quote!(#krate::points::Point);
     let ident = &item.ident;
     let input = ident.unraw().to_string();
     let head = format!(
@@ -375,7 +386,7 @@ pub(crate) fn point_schema(
     quote! {
         const SCHEMA: &'static str = {
             const _: () = { #(#checks)* };
-            ::enshwick::__private::concatcp!(
+            #krate::__private::concatcp!(
                 #(#parts,)* #table, #(#fields,)* #(#nested,)* <#output as #shape>::SCHEMA_TYPES,
             )
         };
