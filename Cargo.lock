@@ -506,7 +506,6 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
- "strsim",
  "thiserror",
  "toml 1.2.1+spec-1.1.0",
  "zune-core",
