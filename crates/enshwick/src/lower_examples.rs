@@ -279,3 +279,63 @@ mod abi {}
 /// ```
 #[cfg(feature = "unstable")]
 mod unstable_values {}
+
+/// `content::items::FuelSetup::change`:
+///
+/// ```
+/// use enshwick::content::id;
+/// use enshwick::content::items::FuelSetup;
+///
+/// let host = enshwick::test::FakeHost::new().meters();
+/// let meter = FuelSetup { template: id!("charges"), max_fuel_charges: 4, start: 1 };
+/// assert_eq!(meter.change(&host)?.component(), "fuel_setup");
+/// # Ok::<(), enshwick::Off>(())
+/// ```
+///
+/// `content::workshops::at_workshop`:
+///
+/// ```
+/// use enshwick::content::Guid;
+/// use enshwick::content::workshops::{WorkshopId, at_workshop};
+///
+/// let host = enshwick::test::FakeHost::new().workshops();
+/// let changes = at_workshop(&host, WorkshopId::new(Guid::named("you.mod:bench.workshop")))?;
+/// assert_eq!(changes[0].component(), "crafting");
+/// # Ok::<(), enshwick::Off>(())
+/// ```
+///
+/// `stats::Stats::info`:
+///
+/// ```rust,standalone_crate
+/// use std::sync::OnceLock;
+///
+/// use enshwick::content::id;
+/// use enshwick::stats::{Stat, StatDef, Stats};
+/// use enshwick::{Load, Mod, Off};
+///
+/// static LUCK: OnceLock<(Stats, Stat)> = OnceLock::new();
+///
+/// struct Lucky;
+///
+/// impl Mod for Lucky {
+///     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+///         let luck = load.define_stat(id!("luck"), &StatDef::additive())?;
+///         let _first = LUCK.set((load.stats()?, luck));
+///         Ok(Self)
+///     }
+/// }
+///
+/// enshwick::test::declare_mod!(Lucky, "id = \"you.hello\"\nside = \"server\"");
+///
+/// let loader = enshwick::test::FakeHost::new().install();
+/// // SAFETY: both functions are the exports of `declare_mod!(Lucky)`.
+/// let status = unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+/// assert!(status.is_ok());
+/// let (stats, luck) = LUCK.get().ok_or("init ran")?;
+/// let info = stats.info(*luck).ok_or("luck is defined")?;
+/// assert_eq!(info.id, "you.hello:luck");
+/// assert_eq!(info.text, "luck.name");
+/// # Ok::<(), &str>(())
+/// ```
+#[cfg(feature = "test")]
+mod fake {}

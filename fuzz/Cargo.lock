@@ -311,8 +311,11 @@ name = "enshwick"
 version = "1.0.0-alpha.14"
 dependencies = [
  "document-features",
+ "enshwick-abi",
  "enshwick-core",
+ "enshwick-fake",
  "enshwick-macros",
+ "enshwick-values",
 ]
 
 [[package]]
@@ -350,6 +353,19 @@ dependencies = [
  "toml",
  "zune-core",
  "zune-png",
+]
+
+[[package]]
+name = "enshwick-fake"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "bytemuck",
+ "enshwick-core",
+ "enshwick-macros",
+ "postcard",
+ "rustc-hash",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]

@@ -305,7 +305,7 @@ game is hosted. See [Sides and hosting](concepts/sides-and-hosting.md).
 
 ## Testing
 
-[The test fake](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/test.rs)
+[The test fake](https://github.com/enshwick/enshwick/blob/main/crates/internal/fake/src/test.rs)
 records a mod's requests. `inventory_requests()` lists them, and
 `finish_inventory(outcome, results)` answers the oldest as the game would.
 `item` and `without_inventories` set what the build has. See

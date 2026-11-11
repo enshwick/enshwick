@@ -64,6 +64,7 @@ mod experience_content;
 mod export_dir;
 mod exports;
 mod fake_per_test;
+mod fake_reach;
 mod fake_refusals;
 mod fake_second_install;
 mod features;

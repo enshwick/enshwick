@@ -344,7 +344,7 @@ const REFERENCE: usize = 16;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
+/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::content::Guid;
 /// use enshwick::content::workshops::{WorkshopId, at_workshop};
 ///
@@ -352,6 +352,7 @@ const REFERENCE: usize = 16;
 /// let changes = at_workshop(&host, WorkshopId::new(Guid::named("you.mod:bench.workshop")))?;
 /// assert_eq!(changes[0].component(), "crafting");
 /// # Ok::<(), enshwick::Off>(())
+/// # }
 /// ```
 pub fn at_workshop(
     facts: &(impl EngineFacts + ?Sized),
@@ -695,20 +696,8 @@ pub(crate) mod tests {
         (blob, data)
     }
 
-    #[cfg(feature = "test")]
     #[test]
-    fn a_station_crafts_at_its_workshop_through_its_three_components() {
-        let host = crate::test::FakeHost::new().workshops();
-        let changes = at_workshop(&host, WorkshopId::new(WORKSHOP)).unwrap();
-        let names: Vec<&str> = changes.iter().map(ComponentChange::component).collect();
-        assert_eq!(
-            names,
-            [
-                ids::CRAFTING,
-                ids::CRAFTING_INTERACTION,
-                ids::CLIENT_CRAFTING_INTERACTION
-            ]
-        );
+    fn a_write_inside_the_bytes_lands_and_one_past_their_end_is_refused() {
         let mut bytes = [0u8; 4];
         assert!(put(&mut bytes, 0, &[1, 2]) && !put(&mut bytes, 3, &[1, 2]));
         assert_eq!(bytes, [1, 2, 0, 0]);

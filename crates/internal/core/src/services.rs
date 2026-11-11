@@ -23,7 +23,7 @@ use crate::shape::ShapeHasher;
 
 #[cfg(feature = "unstable")]
 pub use calls::{Call, CallError, Caller, DescribedCall, DescribedCaller};
-#[cfg(all(feature = "test", feature = "unstable"))]
+#[cfg(all(feature = "fake", feature = "unstable"))]
 pub(crate) use calls::{Served, run_typed};
 #[cfg(feature = "unstable")]
 pub use described::{DescribedEmitter, DescribedEvent};

@@ -257,6 +257,25 @@ mod tests {
         assert_eq!(loader.build_resource(&key, &bundle()), Err(Status::MISSING));
     }
 
+    #[test]
+    fn a_station_crafts_at_its_workshop_through_its_three_components() {
+        use enshwick::__private::ids;
+        use enshwick::content::templates::ComponentChange;
+        use enshwick::content::workshops::at_workshop;
+
+        let host = FakeHost::new().workshops();
+        let changes = at_workshop(&host, WorkshopId::new(BENCH.guid())).unwrap();
+        let names: Vec<&str> = changes.iter().map(ComponentChange::component).collect();
+        assert_eq!(
+            names,
+            [
+                ids::CRAFTING,
+                ids::CRAFTING_INTERACTION,
+                ids::CLIENT_CRAFTING_INTERACTION
+            ]
+        );
+    }
+
     /// FNV-1a, the salt `derive_recipes` makes of the mod id.
     fn fnv1a(bytes: &[u8]) -> u32 {
         bytes.iter().fold(0x811c_9dc5_u32, |hash, &b| {

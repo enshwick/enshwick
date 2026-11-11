@@ -223,6 +223,10 @@ Each entry names the pull request that made the change.
 - `packs::schemas`: a description in a pack file's JSON Schema leaves out the
   hidden lines of its examples, as the API docs do, so an editor no longer
   shows lines such as `# Ok::<(), PackError>(())` (#1040).
+- The fake host now lives in the internal crate `enshwick-fake`, which
+  `enshwick` re-exports as `enshwick::test` behind its `test` feature: a
+  mod's tests still turn that feature on and name every item as before, and
+  a build without it holds no test support (#1041).
 
 ### Fixed
 

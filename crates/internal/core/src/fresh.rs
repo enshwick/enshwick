@@ -6,44 +6,44 @@
 //! reference handed out stays valid for the process, and an earlier life's
 //! value is left in place, unreachable.
 
-#[cfg(feature = "test")]
+#[cfg(feature = "fake")]
 use std::sync::atomic::{AtomicPtr, AtomicU64, Ordering};
 
 /// The mod life the process is in; every install of the fake starts the
 /// next.
-#[cfg(feature = "test")]
+#[cfg(feature = "fake")]
 static LIFE: AtomicU64 = AtomicU64::new(1);
 
 /// The mod life the process is in.
-#[cfg(feature = "test")]
+#[cfg(feature = "fake")]
 pub(crate) fn life() -> u64 {
     LIFE.load(Ordering::Acquire)
 }
 
 /// The mod life the process is in: the only one in the game.
-#[cfg(not(feature = "test"))]
+#[cfg(not(feature = "fake"))]
 #[inline]
 pub(crate) const fn life() -> u64 {
     1
 }
 
-/// Starts the next mod life: every [`Fresh`] cell reads empty again.
-#[cfg(feature = "test")]
-pub(crate) fn renew() {
+/// Starts the next mod life: every `Fresh` cell reads empty again.
+#[cfg(feature = "fake")]
+pub fn renew() {
     LIFE.fetch_add(1, Ordering::AcqRel);
 }
 
 /// A cell set once per mod life, like a `OnceLock`.
 #[derive(Debug)]
 pub(crate) struct Fresh<T> {
-    #[cfg(not(feature = "test"))]
+    #[cfg(not(feature = "fake"))]
     cell: std::sync::OnceLock<T>,
     /// The value with the life that set it, leaked.
-    #[cfg(feature = "test")]
+    #[cfg(feature = "fake")]
     cell: AtomicPtr<(u64, T)>,
 }
 
-#[cfg(not(feature = "test"))]
+#[cfg(not(feature = "fake"))]
 impl<T> Fresh<T> {
     pub(crate) const fn new() -> Self {
         Self {
@@ -65,7 +65,7 @@ impl<T> Fresh<T> {
     }
 }
 
-#[cfg(feature = "test")]
+#[cfg(feature = "fake")]
 impl<T> Fresh<T> {
     pub(crate) const fn new() -> Self {
         Self {
@@ -130,10 +130,10 @@ impl<T> Fresh<T> {
 }
 
 #[cfg(test)]
+#[cfg(feature = "fake")]
 mod tests {
     use super::*;
 
-    #[cfg(feature = "test")]
     #[test]
     fn a_cell_reads_empty_in_the_next_life_and_keeps_old_references() {
         static CELL: Fresh<u32> = Fresh::new();

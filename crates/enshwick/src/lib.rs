@@ -249,9 +249,6 @@ pub use enshwick_core::status;
 pub use enshwick_core::survivors;
 #[doc(inline)]
 pub use enshwick_core::terrain;
-#[cfg(feature = "test")]
-#[doc(inline)]
-pub use enshwick_core::test;
 #[doc(inline)]
 pub use enshwick_core::time;
 #[cfg(feature = "typed")]
@@ -268,6 +265,9 @@ pub use enshwick_core::weather;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_core::world;
+#[cfg(feature = "test")]
+#[doc(inline)]
+pub use enshwick_fake::test;
 #[doc(inline)]
 pub use enshwick_values::shape;
 

@@ -63,15 +63,17 @@ const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// API's unstable calls, its generated typed API and the compat task are
 /// linted and tested with the rest.
 const TEST_FEATURE: &str = "enshwick/test,enshwick/unstable,enshwick/typed,xtask/compat";
-/// The API crate and its core, whose modules and examples it re-exports,
-/// without `unstable`: the workspace turns the feature on for the runtimes,
-/// so only a build of their own shows that the stable surface, its docs and
-/// its examples stand without the unstable one.
-const STABLE_API: [&str; 6] = [
+/// The API crate, its core and its fake loader, whose modules and examples
+/// it re-exports, without `unstable`: the workspace turns the feature on for
+/// the runtimes, so only a build of their own shows that the stable surface,
+/// its docs and its examples stand without the unstable one.
+const STABLE_API: [&str; 8] = [
     "--package",
     "enshwick",
     "--package",
     "enshwick-core",
+    "--package",
+    "enshwick-fake",
     "--features",
     "enshwick/test",
 ];

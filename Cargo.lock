@@ -432,6 +432,7 @@ dependencies = [
  "document-features",
  "enshwick-abi",
  "enshwick-core",
+ "enshwick-fake",
  "enshwick-macros",
  "enshwick-values",
  "hound",
@@ -531,6 +532,19 @@ dependencies = [
  "arc-swap",
  "enshwick",
  "serde",
+]
+
+[[package]]
+name = "enshwick-fake"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "bytemuck",
+ "enshwick-core",
+ "enshwick-macros",
+ "postcard",
+ "rustc-hash",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]

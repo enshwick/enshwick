@@ -461,7 +461,7 @@ impl Stats {
     /// # Examples
     ///
     /// ```rust,standalone_crate
-    /// # extern crate enshwick_core as enshwick;
+    /// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
     /// use std::sync::OnceLock;
     ///
     /// use enshwick::content::id;
@@ -491,6 +491,7 @@ impl Stats {
     /// assert_eq!(info.id, "you.hello:luck");
     /// assert_eq!(info.text, "luck.name");
     /// # Ok::<(), &str>(())
+    /// # }
     /// ```
     #[must_use]
     #[script]

@@ -101,5 +101,8 @@ mod tests {
         assert!(loader.markers().is_empty());
         let many = vec![Marker::new([0.0; 3]); enshwick::ui::MAX_MARKERS + 1];
         assert!(ui.set_markers(&many).is_err());
+        let most = vec![Marker::new([0.0; 3]); enshwick::ui::MAX_MARKERS];
+        ui.set_markers(&most).unwrap();
+        assert_eq!(loader.markers().len(), enshwick::ui::MAX_MARKERS);
     }
 }

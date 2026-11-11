@@ -40,9 +40,11 @@ proptest.workspace = true
 insta.workspace = true
 serde = { workspace = true, features = ["derive"] }
 
-# The features of `enshwick`, which turns each of them on here.
+# The features of `enshwick`, which turns each of them on here, and `fake`:
+# what the fake loader reads inside this crate and a mod life per install,
+# which only `enshwick-fake` turns on.
 [features]
-test = ["enshwick-typed?/test"]
+fake = ["enshwick-typed?/test"]
 schema = ["dep:schemars", "dep:serde_json"]
 unstable = ["dep:hound"]
 typed = ["unstable", "dep:enshwick-typed"]

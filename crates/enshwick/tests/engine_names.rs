@@ -21,7 +21,7 @@ mod tests {
         ("game_events.rs", "size", EVENT),
         ("load/build.rs", "field_offset", FIELD),
         ("load/build.rs", "type_size", FIELD),
-        ("test/hooks.rs", "field_offset", FAKE),
+        ("fake:test/hooks.rs", "field_offset", FAKE),
         ("world.rs", "WritableType", COMPONENT),
         ("world.rs", "set", COMPONENT),
         ("world.rs", "size", COMPONENT),
@@ -79,13 +79,14 @@ mod tests {
     /// modules it re-exports, each with the prefix its files take in
     /// [`ALLOWED`]. `enshwick-typed` is generated from the reflection, whose
     /// names it carries on purpose.
-    fn roots() -> [(&'static str, PathBuf); 4] {
+    fn roots() -> [(&'static str, PathBuf); 5] {
         let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
         let internal = |name: &str| crate_dir.join("../internal").join(name).join("src");
         [
             ("", crate_dir.join("src")),
             ("", internal("core")),
             ("abi:", internal("abi")),
+            ("fake:", internal("fake")),
             ("values:", internal("values")),
         ]
     }

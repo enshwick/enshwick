@@ -422,4 +422,140 @@ mod tests {
         assert_eq!(loader.tick(Duration::from_millis(50)), 1);
         assert_eq!(handle(), Some(ModHandle(9)), "the loader's after the calls");
     }
+
+    #[test]
+    fn a_pack_s_panicking_handler_faults_the_pack_and_not_the_loader() {
+        use enshwick::abi::Level;
+
+        let loader = FakeHost::new().install();
+        // SAFETY: the fake host's table lives for the process.
+        unsafe { enshwick::__private::install_host(loader.api(), ModHandle(9)) };
+        // SAFETY: the fake host's table lives for the process.
+        let status = unsafe {
+            enshwick::__private::init_pack(loader.api(), ModHandle(2), |load| {
+                load.on::<WorldLoaded>(|()| panic!("the pack's"))?;
+                Ok(())
+            })
+        };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let before = loader.sent().len();
+        assert_eq!(loader.raise::<WorldLoaded>(&()), 1);
+        assert_eq!(
+            loader.sent()[before..],
+            [(
+                ModHandle(2),
+                Level::ERROR,
+                "off: panic in an event handler: the pack's".to_owned()
+            )]
+        );
+    }
+
+    #[test]
+    fn a_thread_spawned_in_a_pack_s_scope_runs_as_the_pack() {
+        let loader = FakeHost::new().install();
+        // SAFETY: the fake host's table lives for the process.
+        unsafe { enshwick::__private::install_host(loader.api(), ModHandle(9)) };
+        let (sender, seen) = std::sync::mpsc::channel();
+        // SAFETY: the fake host's table lives for the process.
+        let spawned = unsafe {
+            enshwick::__private::as_pack(loader.api(), ModHandle(2), || {
+                enshwick_core::__fake::spawn("pack-thread", move || {
+                    let _sent = sender.send(handle());
+                })
+            })
+        };
+        spawned.expect("a thread").join().expect("no panic");
+        assert_eq!(seen.recv().ok(), Some(Some(ModHandle(2))));
+    }
+
+    /// A site state whose making panics, as a panic in `Box::new` would.
+    #[derive(Debug)]
+    struct Refused;
+
+    impl Default for Refused {
+        fn default() -> Self {
+            panic!("no state")
+        }
+    }
+
+    #[test]
+    fn a_pack_s_site_after_a_poisoned_lock_logs_the_lock_and_works() {
+        use enshwick::__private::Once;
+        use enshwick_core::__fake::for_pack;
+
+        static BROKEN: Refused = Refused;
+        static SITE: Once = Once::new();
+        let loader = FakeHost::new().install();
+        // SAFETY: the fake host's table lives for the process.
+        unsafe { enshwick::__private::install_host(loader.api(), ModHandle(9)) };
+        let panicked = std::panic::catch_unwind(|| {
+            // SAFETY: the fake host's table lives for the process.
+            unsafe {
+                enshwick::__private::as_pack(loader.api(), ModHandle(2), || {
+                    let _state = for_pack(&BROKEN);
+                });
+            }
+        });
+        assert!(panicked.is_err());
+        // SAFETY: the fake host's table lives for the process.
+        let first =
+            unsafe { enshwick::__private::as_pack(loader.api(), ModHandle(2), || SITE.first()) };
+        assert!(first);
+        assert!(
+            loader
+                .sent()
+                .iter()
+                .any(|(by, _, line)| *by == ModHandle(2) && line.contains("panicked holding")),
+            "{:?}",
+            loader.sent()
+        );
+    }
+
+    /// The site a [`Reentering`] state asks for while it is made.
+    static INNER: enshwick::__private::Once = enshwick::__private::Once::new();
+    /// Whether that inner ask got the shared site back.
+    static INNER_SHARED: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+    /// A site state whose making reaches the pack's sites again, as a line
+    /// logged while the states' lock is held does.
+    #[derive(Debug)]
+    struct Reentering;
+
+    impl Default for Reentering {
+        fn default() -> Self {
+            let inner = enshwick_core::__fake::for_pack(&INNER);
+            INNER_SHARED.store(
+                u8::from(core::ptr::eq(inner, &raw const INNER)),
+                std::sync::atomic::Ordering::Relaxed,
+            );
+            Self
+        }
+    }
+
+    #[test]
+    fn a_site_reached_again_while_the_states_lock_is_held_takes_the_shared_state() {
+        use enshwick_core::__fake::for_pack;
+
+        static OUTER: Reentering = Reentering;
+        let loader = FakeHost::new().install();
+        // SAFETY: the fake host's table lives for the process.
+        unsafe { enshwick::__private::install_host(loader.api(), ModHandle(9)) };
+        // SAFETY: the fake host's table lives for the process.
+        let outer = unsafe {
+            enshwick::__private::as_pack(loader.api(), ModHandle(3), || for_pack(&OUTER))
+        };
+        assert!(
+            !core::ptr::eq(outer, &raw const OUTER),
+            "the pack's own state"
+        );
+        assert_eq!(INNER_SHARED.load(std::sync::atomic::Ordering::Relaxed), 1);
+        // SAFETY: the fake host's table lives for the process.
+        let later = unsafe {
+            enshwick::__private::as_pack(loader.api(), ModHandle(3), || for_pack(&INNER))
+        };
+        assert!(
+            !core::ptr::eq(later, &raw const INNER),
+            "the lock is free again"
+        );
+    }
 }

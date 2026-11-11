@@ -21,8 +21,8 @@ The platform's crates carry versions of their own:
 - the loader, `enshwick-loader`
 - the `powrprof.dll` stub, `enshwick-loader-stub`
 - `enshwick` and `enshwick-macros`
-- `enshwick-core`, the safe layer with the test fake, an internal part of the
-  API crate released at its version
+- `enshwick-core`, the safe layer, and `enshwick-fake`, the test fake,
+  internal parts of the API crate released at its version
 - `enshwick-values` and `enshwick-typed`, internal parts of the API crate
   released at its version
 - `enshwick-abi`, the ABI types, an internal part of the API crate released

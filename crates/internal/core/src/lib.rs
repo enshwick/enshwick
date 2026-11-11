@@ -1,6 +1,5 @@
 //! Internal part of [`enshwick`](https://crates.io/crates/enshwick): the safe
-//! layer over the ABI and every domain of the API, from [`Load`] to the
-//! fake host.
+//! layer over the ABI and every domain of the API, from [`Load`] on.
 //!
 //! Mods depend on `enshwick`, which re-exports every module here at the
 //! same path; this crate's own paths carry no promise.
@@ -116,8 +115,6 @@ pub mod stats;
 pub mod status;
 pub mod survivors;
 pub mod terrain;
-#[cfg(feature = "test")]
-pub mod test;
 pub mod time;
 #[cfg(feature = "typed")]
 pub mod typed;
@@ -147,6 +144,9 @@ pub use locks::{Relock, RelockRw, RelockWait};
 pub use shape::Shape;
 pub use world_error::WorldError;
 
+#[cfg(feature = "fake")]
+#[doc(hidden)]
+pub mod __fake;
 #[doc(hidden)]
 pub mod __private;
 #[doc(hidden)]

@@ -394,49 +394,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "test")]
-    #[test]
-    fn a_panic_guarded_in_a_scope_faults_the_scoped_mod() {
-        let loader = crate::test::FakeHost::new().install();
-        // SAFETY: the fake host's table lives for the process.
-        unsafe { crate::__private::install_host(loader.api(), ModHandle(9)) };
-        // SAFETY: the fake host's table lives for the process.
-        let pack = unsafe { Host::new(loader.api(), ModHandle(2)) }.expect("the fake's table");
-        pack.scope(|| {
-            guard(
-                "panic in a loot pass handler",
-                || (),
-                || panic!("the pack's"),
-            );
-        });
-        assert_eq!(
-            loader.sent(),
-            [(
-                ModHandle(2),
-                Level::ERROR,
-                "off: panic in a loot pass handler: the pack's".to_owned()
-            )]
-        );
-    }
-
-    #[cfg(feature = "test")]
-    #[test]
-    fn a_thread_spawned_in_a_pack_s_scope_runs_as_the_pack() {
-        let loader = crate::test::FakeHost::new().install();
-        // SAFETY: the fake host's table lives for the process.
-        unsafe { crate::__private::install_host(loader.api(), ModHandle(9)) };
-        // SAFETY: the fake host's table lives for the process.
-        let pack = unsafe { Host::new(loader.api(), ModHandle(2)) }.expect("the fake's table");
-        let (sender, seen) = std::sync::mpsc::channel();
-        let spawned = pack.scope(|| {
-            spawn("pack-thread", move || {
-                let _sent = sender.send(host().map(|host| host.handle()));
-            })
-        });
-        spawned.expect("a thread").join().expect("no panic");
-        assert_eq!(seen.recv().ok(), Some(Some(ModHandle(2))));
-    }
-
     #[test]
     fn a_table_serves_mods_of_its_major_up_to_its_minor() {
         assert!(serves(table(ABI_MAJOR, 1), 0));

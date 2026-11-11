@@ -308,7 +308,7 @@ impl Voxel {
     }
 
     /// The voxel as the loader writes it, and reads it from a mod.
-    #[cfg(any(test, feature = "test", feature = "unstable"))]
+    #[cfg(any(test, feature = "fake", feature = "unstable"))]
     pub(crate) const fn to_abi(self) -> abi::Voxel {
         let (kind, material) = match self.material {
             VoxelMaterial::Air => (abi::Voxel::AIR, 0),
