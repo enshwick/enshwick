@@ -16,7 +16,7 @@ use crate::abi::{HostApi, Manifest, ModHandle, PointFn};
 use crate::actions::ActionTarget;
 pub use crate::fresh::renew;
 use crate::points::{Point, Verdict};
-pub use crate::rates::{Rate, combine, is_valid_factor, scale_whole};
+pub use crate::rates::{Rate, scale_whole};
 #[cfg(feature = "unstable")]
 use crate::services::Call;
 use crate::voxels::{EditSource, Voxel};
@@ -118,6 +118,20 @@ pub fn edit_handle(source: EditSource, me: ModHandle) -> ModHandle {
         EditSource::ThisMod => me,
         EditSource::OtherMod => ModHandle(me.0.wrapping_add(1).max(1)),
     }
+}
+
+/// Whether `factor` is one a mod may set for a rate: finite, from 0 to the
+/// most the loader takes.
+#[must_use]
+pub fn is_valid_factor(factor: f32) -> bool {
+    crate::rates::is_valid_factor(factor)
+}
+
+/// The factor in force for a rate whose declaring mods set `factors`: their
+/// product, held to the range a mod may set; 1 when there are none.
+#[must_use]
+pub fn combine(factors: impl IntoIterator<Item = f32>) -> f32 {
+    crate::rates::combine(factors)
 }
 
 // The two below serve this crate's own tests that need the fake, which run
