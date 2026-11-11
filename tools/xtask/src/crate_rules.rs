@@ -2,6 +2,8 @@
 //! `cargo metadata` without compiling: a crate whose package has no unsafe
 //! code forbids it at its root, the `test` feature is never on by default or
 //! through a normal or build dependency, only where a target asks for it,
+//! only the API crate's `test` feature reaches the fake loader, whose crate
+//! alone turns on the core's `fake`,
 //! a package that builds a DLL, such as a mod, names its version, features
 //! name what they add, `anyhow` stays in binaries, `rust-version` is the
 //! pinned toolchain's, and a published crate's path dependencies carry
@@ -46,6 +48,7 @@ pub(crate) fn check() -> Result<Vec<String>, String> {
         let manifest = Path::new(package["manifest_path"].as_str().unwrap_or_default());
         let dir = manifest.parent().unwrap_or(Path::new("."));
         problems.extend(test_feature(name, package));
+        problems.extend(fake_reach(name, package));
         problems.extend(manifest_facts(name, package, &toolchain));
         let builds_a_dll = package["targets"]
             .as_array()
@@ -115,6 +118,71 @@ fn test_feature(name: &str, package: &serde_json::Value) -> Vec<String> {
                 "{name}: its {kind} dependency {} turns on `test`; only a dev-dependency may",
                 dependency["name"].as_str().unwrap_or_default()
             ));
+        }
+    }
+    problems
+}
+
+/// The fake loader's crate, which only [`FACADE`] depends on, through its
+/// [`TEST`] feature alone, so the fake's features are always the facade's.
+const FAKE_CRATE: &str = "enshwick-fake";
+/// The API crate mods depend on.
+const FACADE: &str = "enshwick";
+/// The crate whose test-only feature [`FAKE_FEATURE`] only [`FAKE_CRATE`]
+/// turns on.
+const CORE: &str = "enshwick-core";
+/// What [`CORE`] builds for the fake: its hooks and a mod life per install.
+const FAKE_FEATURE: &str = "fake";
+
+/// The problems of `package` with the fake loader: a crate other than the
+/// facade depending on it, the facade reaching it past its `test` feature,
+/// or a crate other than the fake turning on core's `fake`.
+fn fake_reach(name: &str, package: &serde_json::Value) -> Vec<String> {
+    let mut problems = Vec::new();
+    for (feature, enabled) in package["features"].as_object().into_iter().flatten() {
+        for enabled in enabled
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(serde_json::Value::as_str)
+        {
+            let target = enabled.strip_prefix("dep:").unwrap_or(enabled);
+            let (dependency, wanted) = target.split_once('/').unwrap_or((target, ""));
+            let weak = dependency.ends_with('?');
+            let dependency = dependency.trim_end_matches('?');
+            if dependency == FAKE_CRATE && !weak && feature != TEST {
+                problems.push(format!(
+                    "{name}: its feature `{feature}` turns on {FAKE_CRATE}; only `{TEST}` may"
+                ));
+            }
+            if dependency == CORE && wanted == FAKE_FEATURE && name != FAKE_CRATE {
+                problems.push(format!(
+                    "{name}: its feature `{feature}` turns on {CORE}/{FAKE_FEATURE}; only {FAKE_CRATE} may"
+                ));
+            }
+        }
+    }
+    for dependency in package["dependencies"].as_array().into_iter().flatten() {
+        let kind = dependency["kind"].as_str().unwrap_or("normal");
+        match dependency["name"].as_str().unwrap_or_default() {
+            FAKE_CRATE if name != FACADE => problems.push(format!(
+                "{name}: it depends on {FAKE_CRATE}; a test reaches the fake through {FACADE}'s `{TEST}`"
+            )),
+            FAKE_CRATE if dependency["optional"] != true => problems.push(format!(
+                "{name}: its {kind} dependency {FAKE_CRATE} is not optional; only `{TEST}` may turn it on"
+            )),
+            CORE if name != FAKE_CRATE
+                && dependency["features"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .any(|feature| feature == FAKE_FEATURE) =>
+            {
+                problems.push(format!(
+                    "{name}: its {kind} dependency {CORE} turns on `{FAKE_FEATURE}`; only {FAKE_CRATE} may"
+                ));
+            }
+            _ => {}
         }
     }
     problems
@@ -487,6 +555,53 @@ mod tests {
             ],
         });
         assert!(test_feature("a", &package).is_empty());
+    }
+
+    #[test]
+    fn the_facade_reaching_the_fake_through_test_and_the_fake_asking_core_for_fake_pass() {
+        let facade = serde_json::json!({
+            "features": {
+                "test": ["dep:enshwick-fake"],
+                "unstable": ["enshwick-core/unstable", "enshwick-fake?/unstable"],
+            },
+            "dependencies": [{ "name": "enshwick-fake", "kind": null, "optional": true }],
+        });
+        let fake = serde_json::json!({
+            "features": { "unstable": ["enshwick-core/unstable"] },
+            "dependencies": [{ "name": "enshwick-core", "kind": null, "features": ["fake"] }],
+        });
+        assert!(fake_reach("enshwick", &facade).is_empty());
+        assert!(fake_reach("enshwick-fake", &fake).is_empty());
+    }
+
+    #[test]
+    fn the_fake_reached_past_the_facade_s_test_feature_is_a_problem() {
+        let facade = serde_json::json!({
+            "features": { "test": [], "unstable": ["enshwick-fake/unstable"] },
+            "dependencies": [{ "name": "enshwick-fake", "kind": null, "optional": false }],
+        });
+        assert_eq!(
+            fake_reach("enshwick", &facade),
+            [
+                "enshwick: its feature `unstable` turns on enshwick-fake; only `test` may",
+                "enshwick: its normal dependency enshwick-fake is not optional; only `test` may turn it on",
+            ]
+        );
+        let other = serde_json::json!({
+            "features": { "extra": ["enshwick-core?/fake"] },
+            "dependencies": [
+                { "name": "enshwick-fake", "kind": "dev" },
+                { "name": "enshwick-core", "kind": "dev", "features": ["fake"] },
+            ],
+        });
+        assert_eq!(
+            fake_reach("a", &other),
+            [
+                "a: its feature `extra` turns on enshwick-core/fake; only enshwick-fake may",
+                "a: it depends on enshwick-fake; a test reaches the fake through enshwick's `test`",
+                "a: its dev dependency enshwick-core turns on `fake`; only enshwick-fake may",
+            ]
+        );
     }
 
     #[test]
