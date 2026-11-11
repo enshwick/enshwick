@@ -1,5 +1,5 @@
 //! The engine functions and constants that reflection does not describe,
-//! by symbolic id, found on any game build without a table made for it; [`NoSuchItem`].
+//! by symbolic id, found on any game build without a table made for it.
 //!
 //! The [`Routes`] find entries in the game's own code through what the
 //! engine names, the same way on every build ([`Resolved::route`]); the
