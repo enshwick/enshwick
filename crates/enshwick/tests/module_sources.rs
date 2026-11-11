@@ -62,22 +62,26 @@ mod tests {
         let macros =
             std::fs::read_to_string(crate_dir.join("../enshwick-macros/src/lib.rs")).unwrap();
         let lines: Vec<&str> = lib.lines().collect();
-        let shared: Vec<&str> = attribute_macros(&macros)
+        // The internal crates whose modules this crate re-exports by name.
+        let from = ["enshwick_base", "enshwick_core"];
+        let shared: Vec<(&str, &str)> = attribute_macros(&macros)
             .into_iter()
-            .filter(|name| {
-                let path = format!("pub use enshwick_core::{name}");
+            .flat_map(|name| from.iter().map(move |krate| (*krate, name)))
+            .filter(|(krate, name)| {
+                let path = format!("pub use {krate}::{name}");
                 lines.iter().any(|line| {
                     line.strip_prefix(path.as_str())
                         .is_some_and(|rest| rest == ";" || rest == "::{self};")
                 })
             })
             .collect();
-        assert!(shared.contains(&"config"));
-        for name in shared {
-            // rustdoc drops the docs of core's re-export of the macro here.
+        assert!(shared.iter().any(|&(_, name)| name == "config"));
+        for (krate, name) in shared {
+            // rustdoc drops the docs of the internal crate's re-export of the
+            // macro here.
             assert!(
-                lines.contains(&format!("pub use enshwick_core::{name}::{{self}};").as_str()),
-                "`{name}` takes the macro through core instead of the module alone"
+                lines.contains(&format!("pub use {krate}::{name}::{{self}};").as_str()),
+                "`{name}` takes the macro through {krate} instead of the module alone"
             );
             let at = lines
                 .iter()
