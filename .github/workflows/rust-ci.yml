@@ -240,7 +240,7 @@ jobs:
           cargo semver-checks "${args[@]}"
 
       - name: sccache statistics
-        if: always() && env.RUSTC_WRAPPER == 'sccache'
+        if: ${{ !cancelled() && env.RUSTC_WRAPPER == 'sccache' }}
         run: sccache --show-stats
 
   # The tests of the crates marked `windows-tests` or `windows-only`, natively
@@ -327,7 +327,7 @@ jobs:
           exit "$status"
 
       - name: sccache statistics
-        if: always() && env.RUSTC_WRAPPER == 'sccache'
+        if: ${{ !cancelled() && env.RUSTC_WRAPPER == 'sccache' }}
         run: sccache --show-stats
 
   # The required check: every part passed, or there was nothing to prove.
