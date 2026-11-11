@@ -14,9 +14,6 @@ use crate::content::{Guid, Id};
 use crate::typed::KnowledgeQueryData;
 use crate::{Loading, Off};
 
-/// The fields of an image resource the fake host fills.
-pub const IMAGE_FIELDS: [&str; 6] = crate::content::icons::IMAGE_FIELDS;
-
 /// The part of a crafting prop that lists its recipes.
 pub const PROP_RECIPES: &str = crate::content::props::RECIPES;
 

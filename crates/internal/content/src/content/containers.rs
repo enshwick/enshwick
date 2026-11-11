@@ -140,8 +140,15 @@ pub fn resize_container(layout: &ContainerLayout, template: &[u8], slots: u8) ->
     Some(blob.into_bytes())
 }
 
-#[cfg(test)]
-pub(crate) mod tests {
+/// The container layout and template of the tests here, the vanilla
+/// game's and the fake host's.
+#[cfg(any(test, feature = "fake"))]
+pub(crate) mod fixtures {
+    #![expect(
+        clippy::unwrap_used,
+        reason = "a fixture that does not build fails the test that asked for it"
+    )]
+
     use super::*;
 
     pub(crate) const LAYOUT: ContainerLayout = ContainerLayout {
@@ -179,6 +186,12 @@ pub(crate) mod tests {
         assert!(blob.set_array(0, list_at, 3));
         blob.into_bytes()
     }
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::fixtures::*;
+    use super::*;
 
     #[test]
     fn a_chest_s_slots_read_and_change_in_every_count() {

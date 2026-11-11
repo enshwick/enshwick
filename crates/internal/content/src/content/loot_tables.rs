@@ -381,31 +381,16 @@ pub fn change_fill_table(
     Some((blob.into_bytes(), changed))
 }
 
-#[cfg(test)]
-pub(crate) mod tests {
-    use super::*;
-    use crate::content::changes::Value;
+/// The fill table layout and container of the tests here, the vanilla
+/// game's and the fake host's.
+#[cfg(any(test, feature = "fake"))]
+pub(crate) mod fixtures {
+    #![expect(
+        clippy::unwrap_used,
+        reason = "a fixture that does not build fails the test that asked for it"
+    )]
 
-    const LAYOUT: LootLayout = LootLayout {
-        items: 0x14,
-        item: 0x24,
-        item_id: 0,
-        stack_min: 0x18,
-        stack_max: 0x1a,
-        stack_max_scaled: 0x1c,
-        root: 0,
-        group: 0x24,
-        stacks: 0x4,
-        groups: 0xc,
-        stack: 0x28,
-        stack_item: 0x10,
-        count_min: 0x14,
-        count_max: 0x18,
-        probability: 0x1c,
-        weight: 0x20,
-    };
-    const WOOD: u32 = 722_268_629;
-    const STONE: u32 = 631_520_303;
+    use super::*;
 
     pub(crate) const FILL: FillTableLayout = FillTableLayout {
         name: 0,
@@ -432,6 +417,34 @@ pub(crate) mod tests {
         assert!(blob.set_array(0x10, list_at, 1));
         blob.into_bytes()
     }
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::fixtures::*;
+    use super::*;
+    use crate::content::changes::Value;
+
+    const LAYOUT: LootLayout = LootLayout {
+        items: 0x14,
+        item: 0x24,
+        item_id: 0,
+        stack_min: 0x18,
+        stack_max: 0x1a,
+        stack_max_scaled: 0x1c,
+        root: 0,
+        group: 0x24,
+        stacks: 0x4,
+        groups: 0xc,
+        stack: 0x28,
+        stack_item: 0x10,
+        count_min: 0x14,
+        count_max: 0x18,
+        probability: 0x1c,
+        weight: 0x20,
+    };
+    const WOOD: u32 = 722_268_629;
+    const STONE: u32 = 631_520_303;
 
     #[test]
     fn a_container_names_itself_and_its_fill_table() {

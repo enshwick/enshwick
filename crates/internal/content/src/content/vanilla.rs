@@ -844,5 +844,7 @@ fn near(names: &Names, name: &str) -> Vec<String> {
         .collect()
 }
 
+#[cfg(any(test, feature = "fake"))]
+pub(crate) mod fixtures;
 #[cfg(test)]
 pub(crate) mod tests;
