@@ -220,7 +220,7 @@ pub struct Altar {
     /// the next; empty while the level is unknown.
     pub levels: Vec<CellBox>,
     /// Its template, which names its kind: the vanilla altar's or one from
-    /// [`Load::add_flame_altar`]; `None` off the server's game thread.
+    /// [`Load::add_flame_altar`](../struct.Load.html#method.add_flame_altar); `None` off the server's game thread.
     pub template: Option<Guid>,
 }
 
@@ -340,7 +340,7 @@ fn root(group: &mut [usize], mut i: usize) -> usize {
     i
 }
 
-/// The altars, from [`Load::altars`].
+/// The altars, from [`Load::altars`](../struct.Load.html#method.altars).
 ///
 /// # Examples
 ///
@@ -414,13 +414,13 @@ impl Altars {
     }
 }
 
-/// One altar's zone as the loader sizes it; see [`Load::on_altar_zone`].
+/// One altar's zone as the loader sizes it; see [`Load::on_altar_zone`](../struct.Load.html#method.on_altar_zone).
 /// A filter sees the size the filters before it left, the vanilla one first,
 /// and may change `grow` and `height`.
 ///
 /// # Examples
 ///
-/// See [`Load::on_altar_zone`].
+/// See [`Load::on_altar_zone`](../struct.Load.html#method.on_altar_zone).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[script(context)]
 #[non_exhaustive]
@@ -437,12 +437,12 @@ pub struct AltarZone {
 }
 
 /// The mod's place among the altar zone filters, from
-/// [`Load::on_altar_zone`]: the altars, and a way to have the zones sized
+/// [`Load::on_altar_zone`](../struct.Load.html#method.on_altar_zone): the altars, and a way to have the zones sized
 /// again.
 ///
 /// # Examples
 ///
-/// See [`Load::on_altar_zone`].
+/// See [`Load::on_altar_zone`](../struct.Load.html#method.on_altar_zone).
 #[derive(Clone, Copy, Debug)]
 pub struct ZoneSizes {
     host: Host,
@@ -454,7 +454,7 @@ impl ZoneSizes {
     ///
     /// # Examples
     ///
-    /// See [`Load::on_altar_zone`].
+    /// See [`Load::on_altar_zone`](../struct.Load.html#method.on_altar_zone).
     #[must_use]
     #[script]
     pub const fn altars(&self) -> Altars {
@@ -471,7 +471,7 @@ impl ZoneSizes {
     ///
     /// # Examples
     ///
-    /// See [`Load::on_altar_zone`].
+    /// See [`Load::on_altar_zone`](../struct.Load.html#method.on_altar_zone).
     #[script]
     pub fn changed(&self) -> Result<(), ResizeError> {
         match (self.host.api().altar_zones_changed)(self.host.handle()) {
@@ -512,11 +512,11 @@ crate::load::off_from!(ResizeError);
 pub const MAX_ZONES: usize = 256;
 
 /// How many altars a Flame level allows, as an altar limit filter sees it;
-/// see [`Load::on_altar_limit`].
+/// see [`Load::on_altar_limit`](../struct.Load.html#method.on_altar_limit).
 ///
 /// # Examples
 ///
-/// See [`Load::on_altar_limit`].
+/// See [`Load::on_altar_limit`](../struct.Load.html#method.on_altar_limit).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[script(context)]
 #[non_exhaustive]
@@ -575,8 +575,8 @@ impl BaseLimit {
 /// loader. Any thread.
 ///
 /// That is the game's own, or the largest request once either base limit
-/// request ([`Load::raise_base_limit`], `Load::request_base_limits`) is in
-/// force, which is from [`Mod::ready`](crate::Mod::ready) on, after the
+/// request ([`Load::raise_base_limit`](../struct.Load.html#method.raise_base_limit), `Load::request_base_limits`) is in
+/// force, which is from [`Mod::ready`](../trait.Mod.html#method.ready) on, after the
 /// loader arms its hooks; bases past 16 hold only where the loader armed
 /// every hook they need, and [`BaseLimit::max_bases`] then reads 179.
 ///
@@ -647,7 +647,7 @@ pub fn set_base_cap(bases: u32) -> Result<(), Off> {
 }
 
 /// A placement the game refused because the object does not lie in a single
-/// building zone; see [`Load::on_building_zone_check`]. Coordinates are 32.32
+/// building zone; see [`Load::on_building_zone_check`](../struct.Load.html#method.on_building_zone_check). Coordinates are 32.32
 /// fixed-point metres.
 ///
 /// The name is enshwick's, after the game's building zone: the check the game makes has no name, and its refusal is the cursor
@@ -655,7 +655,7 @@ pub fn set_base_cap(bases: u32) -> Result<(), Off> {
 ///
 /// # Examples
 ///
-/// See [`Load::on_building_zone_check`].
+/// See [`Load::on_building_zone_check`](../struct.Load.html#method.on_building_zone_check).
 #[derive(Clone, Copy, Debug)]
 pub struct BuildingZoneCheck<'a> {
     /// The building zones, half-open.
@@ -772,7 +772,7 @@ pub struct Grouping {
 }
 
 /// The game's last grouping of altar zones into bases, once either base
-/// limit request ([`Load::raise_base_limit`], `Load::request_base_limits`)
+/// limit request ([`Load::raise_base_limit`](../struct.Load.html#method.raise_base_limit), `Load::request_base_limits`)
 /// is in force; `None` before the first grouping. Any thread.
 ///
 /// # Examples

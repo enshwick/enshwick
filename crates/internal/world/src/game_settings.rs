@@ -453,7 +453,7 @@ impl Settings {
     }
 }
 
-/// The server's game settings; get it from [`Load::game_settings`].
+/// The server's game settings; get it from [`Load::game_settings`](../struct.Load.html#method.game_settings).
 ///
 /// # Examples
 ///

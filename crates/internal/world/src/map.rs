@@ -188,7 +188,7 @@ impl MarkerTypeSorting {
 )]
 pub struct MapMarkerType {
     /// Its key, `markerId`, which [`MapMarker::marker_type`] names and
-    /// [`Marker::marker_type`](crate::ui::Marker::marker_type) takes.
+    /// [`Marker::marker_type`](../ui/struct.Marker.html#method.marker_type) takes.
     pub marker_type: MapMarkerTypeId,
     /// The text tag of its name, `typeName`; `None` for most types, which
     /// have none.

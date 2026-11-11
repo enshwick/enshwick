@@ -35,7 +35,7 @@ const ID_VALUE: &str = "value";
 ///
 /// # Examples
 ///
-/// See [`Load::add_flame_altar`].
+/// See [`Load::add_flame_altar`](../struct.Load.html#method.add_flame_altar).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 pub struct KindZone {
     /// Cells added to the vanilla zone on every horizontal side, at least 0.
@@ -44,12 +44,12 @@ pub struct KindZone {
     pub height: i32,
 }
 
-/// A new Flame Altar kind for [`Load::add_flame_altar`]: a prop copied from
+/// A new Flame Altar kind for [`Load::add_flame_altar`](../struct.Load.html#method.add_flame_altar): a prop copied from
 /// a vanilla altar, with its own zone at each level.
 ///
 /// # Examples
 ///
-/// See [`Load::add_flame_altar`].
+/// See [`Load::add_flame_altar`](../struct.Load.html#method.add_flame_altar).
 #[derive(Clone, Debug, crate::Script)]
 pub struct NewFlameAltar {
     /// The altar's item, a copy of a vanilla altar's item; its other ids

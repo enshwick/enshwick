@@ -96,7 +96,7 @@ fn hours(ns: i64) -> f32 {
     (ns as f64 / HOUR) as f32
 }
 
-/// The clock of the server's world; get it from [`Load::clock`].
+/// The clock of the server's world; get it from [`Load::clock`](../struct.Load.html#method.clock).
 ///
 /// The name is enshwick's, not the game's.
 ///
@@ -160,7 +160,7 @@ impl Clock {
 }
 
 /// The mod's say in how fast the server's clock runs; get it from
-/// [`Load::clock_speed`].
+/// [`Load::clock_speed`](../struct.Load.html#method.clock_speed).
 ///
 /// The clock runs at the game's own speed times every mod's factor, so mods
 /// compose: one that doubles the day and one that halves it leave it as it

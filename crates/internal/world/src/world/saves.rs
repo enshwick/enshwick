@@ -112,13 +112,13 @@ impl World {
     ///
     /// With `saved` false the game's own `DoNotSave` component leaves it out:
     /// it is gone after the server restarts, while the world goes on. Only
-    /// entities a mod spawned ([`Effects::spawn`](crate::effects::Effects::spawn))
+    /// entities a mod spawned ([`Effects::spawn`](../effects/struct.Effects.html#method.spawn))
     /// or placed (a transaction's props) since the world loaded are allowed,
     /// from the step after their spawn, so no mod drops the game's own data
     /// from a save; once the world loads again, they count as the game's.
     /// The change shows from the next step and counts from the next save
     /// that starts after it. For a new entity,
-    /// [`Spawn::do_not_save`](crate::effects::Spawn::do_not_save) keeps it
+    /// [`Spawn::do_not_save`](../effects/struct.Spawn.html#method.do_not_save) keeps it
     /// out from its first step. On the server's game thread only.
     ///
     /// # Errors

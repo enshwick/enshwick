@@ -68,24 +68,26 @@ const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// API's unstable calls, its generated typed API and the compat task are
 /// linted and tested with the rest.
 const TEST_FEATURE: &str = "enshwick/test,enshwick/unstable,enshwick/typed,xtask/compat";
-/// The API crate, its core and its fake loader, whose modules and examples
-/// it re-exports, without `unstable`: the workspace turns the feature on for
-/// the runtimes, so only a build of their own shows that the stable surface,
-/// its docs and its examples stand without the unstable one.
-const STABLE_API: [&str; 12] = [
-    "--package",
-    "enshwick",
-    "--package",
-    "enshwick-base",
-    "--package",
-    "enshwick-content",
-    "--package",
-    "enshwick-core",
-    "--package",
-    "enshwick-fake",
-    "--features",
-    "enshwick/test",
-];
+/// The API crate, the one crate a mod names.
+const FACADE: &str = "enshwick";
+/// The API crate and the internal crates whose doc examples name it, each a
+/// `--package` argument, with the `test` feature and without `unstable`: the
+/// workspace turns the feature on for the runtimes, so only a build of
+/// their own shows that the stable surface, its docs and its examples stand
+/// without the unstable one. An internal crate's examples name the API
+/// crate when it takes it as a dev-dependency; the others give theirs the
+/// alias line.
+fn stable_api(packages: &[Package]) -> Vec<String> {
+    let mut args = Vec::new();
+    for package in packages.iter().filter(|p| {
+        p.name == FACADE
+            || (p.dir.starts_with("crates/internal/") && p.deps.iter().any(|d| d == FACADE))
+    }) {
+        args.extend(["--package".to_owned(), package.name.clone()]);
+    }
+    args.extend(["--features".to_owned(), format!("{FACADE}/test")]);
+    args
+}
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -562,13 +564,13 @@ fn say(text: &str) {
 
 /// The checks of the API crate's stable surface, built without `unstable`:
 /// its lints when its code changed, its examples and its rustdoc whenever
-/// it changed.
-fn stable_api_steps(code: bool) -> Vec<Step> {
+/// it changed. `stable` names the crates and features ([`stable_api`]).
+fn stable_api_steps(code: bool, stable: &[String]) -> Vec<Step> {
     let mut steps = Vec::new();
     if code {
         steps.push(
             Step::new(&["clippy", "--all-targets"])
-                .then(&STABLE_API)
+                .then_owned(stable)
                 .then(&["--", "-D", "warnings"]),
         );
     }
@@ -579,7 +581,7 @@ fn stable_api_steps(code: bool) -> Vec<Step> {
     // takes minutes; merged they share one binary and take seconds. The
     // test names carry the source path with the host's separator.
     let mut doctests = Step::new(&["test", "--doc"])
-        .then(&STABLE_API)
+        .then_owned(stable)
         .then(&["--"]);
     for module in ["src/script", "src/rates.rs", "src/item_data.rs"] {
         let windows = module.replace('/', "\\");
@@ -591,7 +593,7 @@ fn stable_api_steps(code: bool) -> Vec<Step> {
     // its dependencies.
     steps.push(
         Step::new(&["doc", "--no-deps"])
-            .then(&STABLE_API)
+            .then_owned(stable)
             .env("RUSTDOCFLAGS", "-D warnings"),
     );
     steps.push(doc_links_step());
@@ -637,10 +639,12 @@ fn host_args(packages: &[Package], on_windows: bool) -> Vec<String> {
 
 /// The host steps of `parts`, one after another, in the order a check of
 /// every part runs them: `code` and `docs` say what changed, and `tests` is
-/// the nextest filter of the changed packages (`None`: every test).
+/// the nextest filter of the changed packages (`None`: every test);
+/// `workspace` and `stable` are the arguments of a workspace build and of
+/// the stable API's ([`host_args`], [`stable_api`]).
 fn host_steps(
     scope: &Scope,
-    workspace: &[String],
+    (workspace, stable): (&[String], &[String]),
     (code, docs): (bool, bool),
     tests: Option<&str>,
     full: bool,
@@ -670,10 +674,10 @@ fn host_steps(
     // documents as well as with its code.
     let api_docs = match scope {
         Scope::All => true,
-        Scope::Some { docs, .. } => docs.iter().any(|name| name == "enshwick"),
+        Scope::Some { docs, .. } => docs.iter().any(|name| name == FACADE),
     };
-    if run_docs && (touches(scope, "enshwick") || api_docs) {
-        steps.extend(stable_api_steps(touches(scope, "enshwick")));
+    if run_docs && (touches(scope, FACADE) || api_docs) {
+        steps.extend(stable_api_steps(touches(scope, FACADE), stable));
     }
     if run_docs && workspace_rustdoc(code, full) {
         steps.push(host(&["doc", "--no-deps"]).env("RUSTDOCFLAGS", "-D warnings"));
@@ -725,9 +729,10 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
         say("checking the whole workspace");
     }
     let workspace = host_args(packages, on_windows);
+    let stable = stable_api(packages);
     let host_steps = host_steps(
         scope,
-        &workspace,
+        (&workspace, &stable),
         (code, docs),
         tests.as_deref(),
         full,
@@ -790,10 +795,17 @@ mod tests {
     }
 
     fn planned(parts: &[Part]) -> Vec<String> {
-        host_steps(&Scope::All, &[], (true, true), None, true, parts)
-            .iter()
-            .map(Step::line)
-            .collect()
+        host_steps(
+            &Scope::All,
+            (&[], &stable()),
+            (true, true),
+            None,
+            true,
+            parts,
+        )
+        .iter()
+        .map(Step::line)
+        .collect()
     }
 
     #[test]
@@ -828,9 +840,16 @@ mod tests {
             docs: [name.to_owned()].into(),
         };
         let stable = |scope: &Scope| {
-            host_steps(scope, &[], (false, true), Some(""), false, &[Part::Docs])
-                .iter()
-                .any(|step| step.args.ends_with(&STABLE_API.map(str::to_owned)))
+            host_steps(
+                scope,
+                (&[], &stable()),
+                (false, true),
+                Some(""),
+                false,
+                &[Part::Docs],
+            )
+            .iter()
+            .any(|step| step.args.ends_with(&stable()))
         };
         assert!(stable(&docs_of("enshwick")));
         assert!(!stable(&docs_of("enshwick-luau")));
@@ -840,12 +859,37 @@ mod tests {
         steps.iter().any(|step| {
             step.args
                 .starts_with(&["doc".to_owned(), "--no-deps".to_owned()])
-                && step.args.ends_with(&STABLE_API.map(str::to_owned))
+                && step.args.ends_with(&stable())
                 && step
                     .env
                     .iter()
                     .any(|(name, value)| *name == "RUSTDOCFLAGS" && value == "-D warnings")
         })
+    }
+
+    /// The stable API's arguments for this workspace.
+    fn stable() -> Vec<String> {
+        stable_api(&packages().unwrap())
+    }
+
+    #[test]
+    fn the_stable_api_is_the_facade_and_each_internal_crate_whose_examples_name_it() {
+        let stable = stable();
+        let named = |name: &str| stable.iter().any(|arg| arg == name);
+        for name in [
+            "enshwick",
+            "enshwick-core",
+            "enshwick-base",
+            "enshwick-content",
+            "enshwick-world",
+            "enshwick-fake",
+        ] {
+            assert!(named(name), "{name}");
+        }
+        for name in ["enshwick-values", "enshwick-abi", "enshwick-luau", "xtask"] {
+            assert!(!named(name), "{name}");
+        }
+        assert!(stable.ends_with(&["--features".to_owned(), "enshwick/test".to_owned()]));
     }
 
     #[test]
@@ -870,12 +914,12 @@ mod tests {
 
     #[test]
     fn a_change_to_the_api_code_builds_its_stable_rustdoc() {
-        assert!(runs_stable_rustdoc(&stable_api_steps(true)));
+        assert!(runs_stable_rustdoc(&stable_api_steps(true, &stable())));
     }
 
     #[test]
     fn a_change_to_the_book_alone_builds_the_stable_rustdoc() {
-        assert!(runs_stable_rustdoc(&stable_api_steps(false)));
+        assert!(runs_stable_rustdoc(&stable_api_steps(false, &stable())));
     }
 
     #[test]
@@ -887,7 +931,7 @@ mod tests {
 
     #[test]
     fn the_stable_doctests_skip_unstable_modules_under_either_path_separator() {
-        let steps = stable_api_steps(false);
+        let steps = stable_api_steps(false, &stable());
         let skipped = |name: &str| {
             steps.iter().any(|step| {
                 step.args

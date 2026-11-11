@@ -7,11 +7,11 @@ use crate::Off;
 use crate::abi::{RenameCall, Str, read_headed};
 use crate::world::Player;
 
-/// A player's rename of an entity, for [`Load::on_rename`].
+/// A player's rename of an entity, for [`Load::on_rename`](../struct.Load.html#method.on_rename).
 ///
 /// # Examples
 ///
-/// See [`Load::on_rename`].
+/// See [`Load::on_rename`](../struct.Load.html#method.on_rename).
 #[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
 pub struct Rename {
     /// The entity being renamed.

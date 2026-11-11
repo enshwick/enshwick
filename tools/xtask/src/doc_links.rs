@@ -1,9 +1,9 @@
 //! The links of the API crate's rendered docs, checked after rustdoc wrote
 //! them: rustdoc checks an intra-doc link, but not a link written as a
 //! relative URL, which a domain crate below `Load` must use to reach it. Each
-//! `href` of a page under `target/doc/enshwick` that stays inside
-//! `target/doc` must reach a page that exists and, when it names one, an
-//! anchor that page has. No network is used.
+//! `href` of a page under `target/doc/enshwick` that stays inside that
+//! folder must reach a page that exists and, when it names one, an anchor
+//! that page has. No network is used.
 
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -59,6 +59,11 @@ pub(crate) fn check(doc: &Path, krate: &str) -> Result<Vec<String>, String> {
             let Some((target, fragment)) = resolve(doc, page, &href) else {
                 continue;
             };
+            // Links into another crate's pages are rustdoc's own, and those
+            // pages exist only when the same run documented that crate.
+            if !target.starts_with(doc.join(krate)) {
+                continue;
+            }
             if !anchors.contains_key(&target) {
                 let ids = if !target.is_file() {
                     None
@@ -210,6 +215,7 @@ mod tests {
                 r##"<a href="../struct.Load.html#method.add_item">good</a>"##,
                 r##"<a href="../../src/enshwick/lib.rs.html#1-4">lines</a>"##,
                 r##"<a href="https://docs.rs/serde">away</a>"##,
+                r##"<a href="../../enshwick_values/trait.Object.html#x">another crate</a>"##,
                 r##"<a href="../../../outside.html">out of the docs</a>"##,
                 r##"<a href="../struct.Load.html#method.add_itemx">bad anchor</a>"##,
                 r##"<a href="../struct.World.html">bad page</a>"##,

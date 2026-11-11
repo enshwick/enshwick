@@ -312,7 +312,7 @@ fn blank_info() -> PlayerInfo {
     }
 }
 
-/// The world reads; get it from [`Load::world`].
+/// The world reads; get it from [`Load::world`](../struct.Load.html#method.world).
 ///
 /// # Examples
 ///

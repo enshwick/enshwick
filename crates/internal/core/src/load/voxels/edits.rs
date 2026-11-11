@@ -18,7 +18,7 @@ impl Load<'_> {
     /// loads: read a box over them with
     /// [`Voxels::read`](crate::voxels::Voxels::read), which loads it, until it
     /// answers, then write it back with a transaction's `write_voxels`, and
-    /// skip the edits whose source is [`EditSource::ThisMod`]. A world's
+    /// skip the edits whose source is [`EditSource::ThisMod`](crate::voxels::EditSource::ThisMod). A world's
     /// save keeps edits only inside a base, a Flame Altar's building zone.
     ///
     /// On a game build without the editor's write the handler never runs,

@@ -91,7 +91,7 @@ impl Shape {
     }
 }
 
-/// The terrain of the server's world; get it from [`Load::terrain`].
+/// The terrain of the server's world; get it from [`Load::terrain`](../struct.Load.html#method.terrain).
 ///
 /// # Examples
 ///

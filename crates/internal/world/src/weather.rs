@@ -193,7 +193,7 @@ pub enum Forecast {
 /// ```
 pub const MAX_RESTORED_REMAINING: Duration = Duration::from_mins(30);
 
-/// The weather of the server's world; get it from [`Load::weather`].
+/// The weather of the server's world; get it from [`Load::weather`](../struct.Load.html#method.weather).
 ///
 /// # Examples
 ///
@@ -372,11 +372,11 @@ impl LoadMethods for crate::BaseLoad {
     }
 }
 
-/// A front that started or ended, for [`Load::on_front`].
+/// A front that started or ended, for [`Load::on_front`](../struct.Load.html#method.on_front).
 ///
 /// # Examples
 ///
-/// See [`Load::on_front`].
+/// See [`Load::on_front`](../struct.Load.html#method.on_front).
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct FrontChanged {
@@ -386,7 +386,7 @@ pub struct FrontChanged {
     pub started: bool,
 }
 
-/// How often [`Load::on_front`] looks at the fronts; a front lasts minutes.
+/// How often [`Load::on_front`](../struct.Load.html#method.on_front) looks at the fronts; a front lasts minutes.
 const FRONT_POLL: Duration = Duration::from_secs(1);
 
 /// Whether `now` is the front `before` was, a poll later: the same

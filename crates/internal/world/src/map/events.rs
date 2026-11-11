@@ -19,12 +19,12 @@ const WAYPOINT_EVERY: Duration = Duration::from_millis(100);
 /// game's own pings come from player input, which a client controls.
 const PING_GAP: Duration = Duration::from_millis(100);
 
-/// A player's waypoint set, moved or cleared, from [`Load::on_waypoint`].
+/// A player's waypoint set, moved or cleared, from [`Load::on_waypoint`](../struct.Load.html#method.on_waypoint).
 /// The name is enshwick's.
 ///
 /// # Examples
 ///
-/// See [`Load::on_waypoint`].
+/// See [`Load::on_waypoint`](../struct.Load.html#method.on_waypoint).
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct WaypointChanged {
@@ -38,11 +38,11 @@ pub struct WaypointChanged {
 }
 
 /// A ping on the map and in the world, the game's `UiPingEvent`, from
-/// [`Load::on_ping`].
+/// [`Load::on_ping`](../struct.Load.html#method.on_ping).
 ///
 /// # Examples
 ///
-/// See [`Load::on_ping`].
+/// See [`Load::on_ping`](../struct.Load.html#method.on_ping).
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct MapPinged {
@@ -61,12 +61,12 @@ pub struct MapPinged {
 const FOG_EVERY: Duration = Duration::from_millis(250);
 
 /// Fog of war the local player uncovered since the window before, closed
-/// at most once a second, from [`Load::on_fog_uncovered`]. The name is the game's
+/// at most once a second, from [`Load::on_fog_uncovered`](../struct.Load.html#method.on_fog_uncovered). The name is the game's
 /// `FogOfWar` with a verb of enshwick's.
 ///
 /// # Examples
 ///
-/// See [`Load::on_fog_uncovered`].
+/// See [`Load::on_fog_uncovered`](../struct.Load.html#method.on_fog_uncovered).
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct FogOfWarUncovered {
@@ -100,7 +100,7 @@ fn uncovering(
     })
 }
 
-/// What [`Load::on_waypoint`] keeps between its looks.
+/// What [`Load::on_waypoint`](../struct.Load.html#method.on_waypoint) keeps between its looks.
 #[derive(Default)]
 struct Watched {
     /// Each player's waypoint at the last look.

@@ -194,7 +194,7 @@ impl Apply {
     }
 }
 
-/// The buffs of the server's world; get it from [`Load::buffs`].
+/// The buffs of the server's world; get it from [`Load::buffs`](../struct.Load.html#method.buffs).
 ///
 /// # Examples
 ///

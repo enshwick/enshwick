@@ -609,7 +609,7 @@ impl Iterator for Iter<'_> {
 
 impl ExactSizeIterator for Iter<'_> {}
 
-/// Voxel reads of the server's world; get it from [`Load::voxels`].
+/// Voxel reads of the server's world; get it from [`Load::voxels`](../struct.Load.html#method.voxels).
 ///
 /// # Examples
 ///

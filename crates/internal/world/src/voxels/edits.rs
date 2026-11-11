@@ -1,4 +1,4 @@
-//! Every write of the world's voxels, as [`Load::on_voxels_changed`] hears
+//! Every write of the world's voxels, as [`Load::on_voxels_changed`](../struct.Load.html#method.on_voxels_changed) hears
 //! it.
 
 use super::{Voxel, VoxelPos};
@@ -8,7 +8,7 @@ use crate::{Off, abi};
 ///
 /// # Examples
 ///
-/// See [`Load::on_voxels_changed`].
+/// See [`Load::on_voxels_changed`](../struct.Load.html#method.on_voxels_changed).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum EditSource {
@@ -26,7 +26,7 @@ pub enum EditSource {
 ///
 /// # Examples
 ///
-/// See [`Load::on_voxels_changed`].
+/// See [`Load::on_voxels_changed`](../struct.Load.html#method.on_voxels_changed).
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, crate::Script,
 )]
@@ -60,12 +60,12 @@ impl VoxelChange {
 }
 
 /// One write of the world's voxels and the voxels it changed, from
-/// [`Load::on_voxels_changed`]. The name is enshwick's: the game names no
+/// [`Load::on_voxels_changed`](../struct.Load.html#method.on_voxels_changed). The name is enshwick's: the game names no
 /// such write.
 ///
 /// # Examples
 ///
-/// See [`Load::on_voxels_changed`].
+/// See [`Load::on_voxels_changed`](../struct.Load.html#method.on_voxels_changed).
 #[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct VoxelEdit {

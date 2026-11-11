@@ -608,7 +608,7 @@ impl<T: Resource> ResourceType<T> {
     /// `T` and changed by `change`, the first time the game reads it; the
     /// bytes of what `T` does not hold stay as `base` has them. Mods that
     /// serve one key change it in load order, each on the one before's
-    /// result, as [`Load::serve`] does. A base that does not read as `T`,
+    /// result, as [`Load::serve`](../struct.Load.html#method.serve) does. A base that does not read as `T`,
     /// or a change that does not fit the type, is logged and the base is
     /// served unchanged.
     ///

@@ -96,7 +96,7 @@ impl Load<'_> {
     /// Runs `filter` when the game asks how many altars a Flame level
     /// allows, on both sides. Filters of several mods run in load order, each
     /// on the count the last one left, the game's own first; the loader keeps
-    /// the answer within the zones the game can group ([`base_limit`]).
+    /// the answer within the zones the game can group ([`base_limit`](crate::altars::base_limit)).
     ///
     /// # Errors
     ///
