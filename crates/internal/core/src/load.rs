@@ -114,7 +114,7 @@ impl Load<'_> {
         not(any(feature = "unstable", feature = "typed")),
         expect(dead_code, reason = "only unstable and typed domains keep state")
     )]
-    pub(crate) fn slot<T: core::any::Any + Send>(&mut self) -> &mut Option<T> {
+    pub(crate) fn slot<T: slots::Slot>(&mut self) -> &mut Option<T> {
         self.slots.of()
     }
 
