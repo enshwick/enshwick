@@ -145,12 +145,13 @@ mod tests {
 
     /// The source of the API crate and of the internal crates it re-exports,
     /// whose public modules carry the API's own paths.
-    fn sources() -> [PathBuf; 7] {
+    fn sources() -> [PathBuf; 8] {
         let internal = |name: &str| source().join("../../internal").join(name).join("src");
         [
             source(),
             internal("core"),
             internal("base"),
+            internal("content"),
             internal("fake"),
             internal("abi"),
             internal("values"),

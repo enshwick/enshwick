@@ -44,7 +44,6 @@ pub use enshwick_abi::abi;
 pub mod content;
 #[doc(hidden)]
 pub mod knowledge;
-#[doc(hidden)]
 pub mod rates;
 #[doc(inline)]
 pub use enshwick_abi::raw;

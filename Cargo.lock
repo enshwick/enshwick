@@ -434,6 +434,7 @@ dependencies = [
  "document-features",
  "enshwick-abi",
  "enshwick-base",
+ "enshwick-content",
  "enshwick-core",
  "enshwick-fake",
  "enshwick-macros",
