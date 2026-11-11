@@ -162,11 +162,7 @@ pub enum SendError {
     Refused,
 }
 
-impl From<SendError> for Off {
-    fn from(error: SendError) -> Self {
-        Self::new(error.to_string())
-    }
-}
+crate::load::off_from!(SendError);
 
 /// A channel of messages of type `M`, from [`Load::channel`]; `Copy`, for
 /// handlers and tasks.

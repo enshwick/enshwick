@@ -130,11 +130,7 @@ pub enum VanillaError {
     NotAnEnemy(Guid),
 }
 
-impl From<VanillaError> for Off {
-    fn from(error: VanillaError) -> Self {
-        Self::new(error.to_string())
-    }
-}
+crate::load::off_from!(VanillaError);
 
 fn near_list(near: &[String]) -> String {
     if near.is_empty() {

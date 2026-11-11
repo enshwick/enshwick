@@ -34,11 +34,7 @@ pub struct PackError {
     pub message: String,
 }
 
-impl From<PackError> for Off {
-    fn from(error: PackError) -> Self {
-        Self::new(error.to_string())
-    }
-}
+crate::load::off_from!(PackError);
 
 /// Every problem [`Pack::parse`](super::Pack::parse) found, in file order.
 ///
@@ -114,11 +110,7 @@ pub enum ReadPackError {
     TooManyScripts,
 }
 
-impl From<ReadPackError> for Off {
-    fn from(error: ReadPackError) -> Self {
-        Self::new(error.to_string())
-    }
-}
+crate::load::off_from!(ReadPackError);
 
 /// The files of a pack: their names, such as `items.toml` or
 /// `icons/lantern.png`, and their bytes.

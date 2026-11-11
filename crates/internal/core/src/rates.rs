@@ -309,11 +309,7 @@ pub enum RateError {
 }
 
 #[cfg(feature = "unstable")]
-impl From<RateError> for Off {
-    fn from(error: RateError) -> Self {
-        Self::new(error.to_string())
-    }
-}
+crate::load::off_from!(RateError);
 
 /// A rate the mod declared; sets the mod's factor for it.
 ///

@@ -52,11 +52,7 @@ pub enum PatternError {
     Token(String),
 }
 
-impl From<PatternError> for crate::Off {
-    fn from(error: PatternError) -> Self {
-        Self::new(error.to_string())
-    }
-}
+crate::load::off_from!(PatternError);
 
 /// Why a search did not find exactly one match.
 ///
@@ -82,11 +78,7 @@ pub enum FindError {
     Many,
 }
 
-impl From<FindError> for crate::Off {
-    fn from(error: FindError) -> Self {
-        Self::new(error.to_string())
-    }
-}
+crate::load::off_from!(FindError);
 
 impl Pattern {
     /// Parses hex bytes separated by spaces, `??` or `?` for any byte.

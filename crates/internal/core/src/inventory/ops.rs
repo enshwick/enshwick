@@ -238,11 +238,7 @@ pub enum BatchError {
     TooLarge,
 }
 
-impl From<BatchError> for crate::Off {
-    fn from(error: BatchError) -> Self {
-        Self::new(error.to_string())
-    }
-}
+crate::load::off_from!(BatchError);
 
 /// Operations to run as one transaction: every one succeeds, or nothing
 /// changes.

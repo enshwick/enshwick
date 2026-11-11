@@ -43,11 +43,7 @@ pub struct CodecError {
     why: String,
 }
 
-impl From<CodecError> for crate::Off {
-    fn from(error: CodecError) -> Self {
-        Self::new(error.to_string())
-    }
-}
+crate::load::off_from!(CodecError);
 
 impl CodecError {
     fn new(why: impl Into<String>) -> Self {

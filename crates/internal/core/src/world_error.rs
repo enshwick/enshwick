@@ -74,11 +74,7 @@ pub enum WorldError {
     NotAProp,
 }
 
-impl From<WorldError> for crate::Off {
-    fn from(error: WorldError) -> Self {
-        Self::new(error.to_string())
-    }
-}
+crate::load::off_from!(WorldError);
 
 impl WorldError {
     /// The error the loader's `status` stands for, with `missing` for

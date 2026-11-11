@@ -270,11 +270,7 @@ pub enum ModifyError {
     Refused(u32),
 }
 
-impl From<ModifyError> for crate::Off {
-    fn from(error: ModifyError) -> Self {
-        Self::new(error.to_string())
-    }
-}
+crate::load::off_from!(ModifyError);
 
 /// Where a modifier that counts toward a stat comes from, from
 /// [`Stats::sources`](crate::stats::Stats::sources).

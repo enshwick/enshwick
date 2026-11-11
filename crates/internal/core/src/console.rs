@@ -42,11 +42,7 @@ pub enum RunError {
     Refused(u32),
 }
 
-impl From<RunError> for crate::Off {
-    fn from(error: RunError) -> Self {
-        Self::new(error.to_string())
-    }
-}
+crate::load::off_from!(RunError);
 
 /// Runs the console line `line`, such as `enshwick status` or
 /// `you.my-mod world`, as the server's console, and returns its answer.

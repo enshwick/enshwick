@@ -31,6 +31,19 @@ pub(crate) fn off_status(what: &str, status: Status) -> Off {
     Off::new(format!("{what}: {why}"))
 }
 
+/// `From<E> for Off` with `E`'s message as the reason, called beside each
+/// domain's error type.
+macro_rules! off_from {
+    ($($error:ty),* $(,)?) => {$(
+        impl From<$error> for $crate::Off {
+            fn from(error: $error) -> Self {
+                Self::new(error.to_string())
+            }
+        }
+    )*};
+}
+pub(crate) use off_from;
+
 /// A mod: what the loader initialises when it loads the DLL.
 ///
 /// Implement it on the mod's state type and export it with
