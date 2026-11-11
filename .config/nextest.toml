@@ -5,7 +5,7 @@
 # into the host run; keep both filters equal.
 
 [profile.ci]
-default-filter = "not (binary_id(enshwick::main) & test(/^config_files::/))"
+default-filter = "not (binary_id(enshwick::main) & test(/^(config_files|internals)::/))"
 
 [profile.trybuild]
-default-filter = "binary_id(enshwick::main) & test(/^config_files::/)"
+default-filter = "binary_id(enshwick::main) & test(/^(config_files|internals)::/)"
