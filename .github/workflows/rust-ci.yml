@@ -145,7 +145,8 @@ jobs:
 
       # The mods the book links files of, for the book link check; ignored
       # by git, so no workspace member, tool or scan of this tree takes it.
-      - if: matrix.xtask
+      # Only the host part runs that check.
+      - if: matrix.part == 'host' || matrix.part == 'all'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: enshwick/mods

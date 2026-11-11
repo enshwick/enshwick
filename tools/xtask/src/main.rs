@@ -142,9 +142,9 @@ fn run(args: &[String]) -> Result<bool, String> {
     }
     let packages = packages()?;
     let root = workspace_root();
-    let problems = tree_problems(&root, &packages)?;
     let changed = changed_files(&base);
     if parts.contains(&Part::Host) && !list {
+        let problems = tree_problems(&root, &packages)?;
         for problem in &problems {
             say(problem);
         }
