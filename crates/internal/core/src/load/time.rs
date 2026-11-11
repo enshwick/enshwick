@@ -16,6 +16,6 @@ impl Load<'_> {
     ///
     /// # Examples
     ///
-    /// See the [module](self).
+    /// See the [module](crate::time).
     pub fn step_clock(&mut self) -> Result<&'static StepClock, Off>;
 }

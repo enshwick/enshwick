@@ -19,7 +19,7 @@ impl Load<'_> {
     ///
     /// # Examples
     ///
-    /// See the [module](self).
+    /// See the [module](crate::net).
     pub fn channel<M, F>(
         &mut self,
         name: &str,

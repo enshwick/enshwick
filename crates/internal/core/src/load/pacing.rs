@@ -49,8 +49,8 @@ impl Load<'_> {
         F: Fn(LoopWait) + Send + Sync + 'static;
 
     /// Runs `handler` where the server's game loop has picked its wait between
-    /// two passes, in nanoseconds: [`SERVER_IDLE_WAIT_NS`],
-    /// [`SERVER_ONLINE_WAIT_NS`] or [`SERVER_SLOW_WAIT_NS`]. The handler may
+    /// two passes, in nanoseconds: [`SERVER_IDLE_WAIT_NS`](crate::pacing::SERVER_IDLE_WAIT_NS),
+    /// [`SERVER_ONLINE_WAIT_NS`](crate::pacing::SERVER_ONLINE_WAIT_NS) or [`SERVER_SLOW_WAIT_NS`](crate::pacing::SERVER_SLOW_WAIT_NS). The handler may
     /// change it; the loop waits on its handles for that long, so events still
     /// end the wait early. On the server's game thread, once a pass; `false`
     /// when this build lacks the site. Allowed during
