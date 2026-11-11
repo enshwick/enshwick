@@ -134,7 +134,7 @@ fn is_load(item: &ItemImpl) -> bool {
 /// public method.
 fn block(item: &ItemImpl, text: &str, at: &Offsets<'_>) -> (String, Option<String>) {
     let mut moved = Vec::new();
-    let mut forwarded = Vec::new();
+    let mut bodiless = Vec::new();
     for entry in &item.items {
         let ImplItem::Fn(method) = entry else {
             moved.push(format!("    {}", slice_of(entry, text, at)));
@@ -178,10 +178,10 @@ fn block(item: &ItemImpl, text: &str, at: &Offsets<'_>) -> (String, Option<Strin
         }
         moved.push(lines);
         let sig = text[start..sig_end].trim_end();
-        forwarded.push(format!("    {};", sig.strip_suffix(',').unwrap_or(sig)));
+        bodiless.push(format!("    {};", sig.strip_suffix(',').unwrap_or(sig)));
     }
     let moved = format!("impl {BASE} {{\n{}\n}}", moved.join("\n\n"));
-    if forwarded.is_empty() {
+    if bodiless.is_empty() {
         return (moved, None);
     }
     let mut head = format!("#[enshwick_macros::forward({FIELD})]\n");
@@ -194,7 +194,7 @@ fn block(item: &ItemImpl, text: &str, at: &Offsets<'_>) -> (String, Option<Strin
         head.push_str(attr_text(attr, text, at));
         head.push('\n');
     }
-    let forwarder = format!("{head}impl Load<'_> {{\n{}\n}}", forwarded.join("\n\n"));
+    let forwarder = format!("{head}impl Load<'_> {{\n{}\n}}", bodiless.join("\n\n"));
     (moved, Some(forwarder))
 }
 
