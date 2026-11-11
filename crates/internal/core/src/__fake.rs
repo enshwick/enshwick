@@ -30,7 +30,8 @@ pub const IMAGE_FIELDS: [&str; 6] = crate::content::icons::IMAGE_FIELDS;
 /// The most markers one mod places on the map.
 pub const MARKER_LIMIT: usize = crate::ui::MARKER_LIMIT;
 
-/// The game's screens a mod may extend, by name.
+/// Every one of the game's screens by name, the open-play screens a mod may
+/// not extend among them.
 pub const SCREENS: &[&str] = &crate::ui::screens::NAMES;
 
 /// Why the fake refuses the manifest of a mod whose init runs on a table,
