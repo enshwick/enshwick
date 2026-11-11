@@ -261,6 +261,16 @@ fn a_module_above_base_gets_one_method_trait_for_all_its_blocks() -> Result<(), 
         header(&[], peeled.krate.as_deref()),
         "//! `Load`'s methods of a module below core, forwarded to the base handle.\n\nuse enshwick_content::__load::*;\nuse crate::Load;\nuse crate::Off;\n"
     );
+    let helpers_only = peel("impl Load<'_> {\n    fn quiet(&self) {}\n}\n", &form)?;
+    assert_eq!(helpers_only.traits, ["LoadHelpers"]);
+    assert!(
+        helpers_only
+            .base
+            .contains("impl LoadHelpers for crate::BaseLoad {\n    fn quiet(&self) {}\n}"),
+        "a module of private methods alone keeps them: {}",
+        helpers_only.base
+    );
+    assert!(helpers_only.forwarders.is_empty());
     assert_eq!(Form::of("crates/internal/base/src/load/a.rs"), Form::Base);
     assert!(
         matches!(Form::of("crates/internal/content/src/lib.rs"), Form::Trait { module, .. } if module.is_empty()),
