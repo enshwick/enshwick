@@ -6,7 +6,6 @@
 //! Mods depend on `enshwick`, which re-exports every module here at the
 //! same path; this crate's own paths carry no promise.
 #![cfg_attr(docsrs, feature(doc_cfg))]
-#![forbid(unsafe_code)]
 
 // The macros name the API crate by its path, as mods see it; for the code
 // here that crate is this one, whose root has the same paths.
@@ -20,7 +19,7 @@ pub use enshwick_base::{
     ecs, events, files, game_events, i18n, mods, net, pacing, points, resources, schedule, script,
     services, state, status, time,
 };
-pub(crate) use enshwick_base::{engine_enum, engine_ids, facts, fresh, locks, near};
+pub(crate) use enshwick_base::{engine_enum, engine_ids, fresh, locks};
 #[doc(hidden)]
 pub use enshwick_content::{content, rates};
 // The macros the base exports, which the code here calls by `crate::`.
@@ -76,6 +75,8 @@ pub use world_error::WorldError;
 #[cfg(feature = "fake")]
 #[doc(hidden)]
 pub mod __fake;
+#[doc(hidden)]
+pub mod __internal;
 #[doc(hidden)]
 pub mod __load;
 /// What the macros' output names: the base's support.

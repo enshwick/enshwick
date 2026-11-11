@@ -31,7 +31,6 @@ pub use kinds::{KindZone, NewFlameAltar};
 
 use filters::{run_building_zone_check, run_limit, run_zone};
 
-use crate::__load::*;
 use crate::Entity;
 use crate::abi::{AltarInfo, Bounds};
 use crate::content::Guid;
@@ -794,7 +793,7 @@ pub fn grouping() -> Option<Grouping> {
 
 /// `entity`'s template; `None` off the server's game thread or for an entity
 /// the loader cannot read.
-fn template_of(host: Host, entity: Entity) -> Option<Guid> {
+pub(crate) fn template_of(host: Host, entity: Entity) -> Option<Guid> {
     let mut out = [0u8; 16];
     let status = (host.api().entity_template)(host.handle(), entity, &raw mut out);
     status.is_ok().then_some(Guid(out))

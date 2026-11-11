@@ -15,6 +15,7 @@ use enshwick_content::__internal::PROP_RECIPES as RECIPES;
 
 use super::template_of;
 use crate::__load::*;
+use enshwick_content::__load::*;
 
 /// The game's names of the recipe fields the level limit reads
 /// (`RecipeInfo`).
@@ -110,11 +111,18 @@ pub trait LoadMethods {
     /// As `Load::add_flame_altar`.
     #[doc(hidden)]
     fn add_flame_altar(&mut self, new: NewFlameAltar) -> Result<PropId, Off>;
+}
 
-    /// As `Load::limit_altar_level`.
-    #[doc(hidden)]
-    #[cfg(feature = "unstable")]
-    fn limit_altar_level(&mut self, kind: PropId, max_level: u8) -> Result<(), Off>;
+/// The ids of the altar upgrade recipes in the game's recipe registry that
+/// raise an altar from `max` or above ([`upgrades_from`]).
+///
+/// # Errors
+///
+/// [`Off`] when the registry does not read or holds no altar claim recipe.
+#[cfg(feature = "unstable")]
+pub(crate) fn upgrades_in_registry(host: crate::Host, max: u8) -> Result<Vec<RecipeId>, Off> {
+    let registry = types::RECIPE_REGISTRY_RESOURCE.key(RECIPE_REGISTRY)?;
+    upgrades_from(&host.game_value(registry)?, max)
 }
 
 impl LoadMethods for crate::BaseLoad {
@@ -136,19 +144,5 @@ impl LoadMethods for crate::BaseLoad {
             })?;
         }
         Ok(prop)
-    }
-
-    #[cfg(feature = "unstable")]
-    fn limit_altar_level(&mut self, kind: PropId, max_level: u8) -> Result<(), Off> {
-        let registry = types::RECIPE_REGISTRY_RESOURCE.key(RECIPE_REGISTRY)?;
-        let refused = upgrades_from(&self.host().game_value(registry)?, max_level)?;
-        let (host, kind) = (self.host(), kind.template.guid());
-        self.on_craft(move |craft| {
-            !(refused.contains(&craft.recipe_id)
-                && craft
-                    .crafting_station_id
-                    .and_then(|at| template_of(host, at))
-                    == Some(kind))
-        })
     }
 }

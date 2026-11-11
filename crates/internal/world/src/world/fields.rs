@@ -3,7 +3,6 @@
 //! data; a 64-bit value crosses as decimal text, as other game data does.
 
 use super::{World, WritableType};
-use crate::__load::*;
 use crate::abi::Str;
 use crate::game_events::{Field, Scalar};
 use crate::resources::{Bytes, Value as Data};

@@ -34,7 +34,6 @@ use crate::game_events::{Field, Scalar};
 use crate::{Entity, ItemId, PlayerKey};
 use crate::{Host, Off, WorldError};
 
-use crate::__load::*;
 pub use accounts::AccountAction;
 pub use build::{BuildRefusal, PlayerPermissions};
 pub use capture::{CAPTURE_TILES, Capture};
@@ -345,7 +344,7 @@ pub trait LoadMethods {
     fn world(&mut self) -> Result<World, Off>;
 }
 
-impl LoadMethods for crate::BaseLoad {
+impl LoadMethods for BaseLoad {
     fn world(&mut self) -> Result<World, Off> {
         World::resolve(self)
     }

@@ -34,7 +34,6 @@
 //! }
 //! ```
 
-use crate::__load::*;
 use crate::WorldError;
 use crate::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo};
 use crate::{Host, ItemId};

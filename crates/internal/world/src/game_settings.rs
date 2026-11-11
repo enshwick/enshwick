@@ -35,7 +35,6 @@
 
 use core::time::Duration;
 
-use crate::__load::*;
 use crate::content::EngineFacts;
 use crate::engine_enum::Values;
 use crate::engine_ids as ids;
@@ -633,7 +632,7 @@ pub trait LoadMethods {
     fn game_settings(&mut self) -> Result<GameSettings, Off>;
 }
 
-impl LoadMethods for crate::BaseLoad {
+impl LoadMethods for BaseLoad {
     fn game_settings(&mut self) -> Result<GameSettings, Off> {
         let host = self.host();
         let size = self.size(ids::GAME_SETTINGS)?;

@@ -63,7 +63,11 @@ impl Load<'_> {
     #[script]
     pub fn on_fog_uncovered<F>(&mut self, handler: F) -> Result<(), Off>
     where
-        F: Fn(&FogOfWarUncovered) + Send + Sync + 'static;
+        F: Fn(&FogOfWarUncovered) + Send + Sync + 'static,
+    {
+        let mut look = enshwick_world::__internal::fog_uncovered(self.fog_of_war()?, handler);
+        self.on_frame(move |_| look())
+    }
 
     /// Calls `handler` on the server's game thread for each ping a player
     /// makes on the map or in the world, and each one a mod raises with

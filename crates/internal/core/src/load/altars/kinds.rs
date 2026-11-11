@@ -1,16 +1,9 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-#[cfg(feature = "unstable")]
-use crate::RecipeId;
-use crate::content::items::NewItem;
-use crate::content::props::{NewProp, PropId};
-#[cfg(feature = "unstable")]
-use crate::content::{recipes::RECIPE_REGISTRY, types};
-#[cfg(feature = "unstable")]
-use crate::resources::Value;
+use crate::content::props::PropId;
 use crate::{Load, Off};
 #[cfg(feature = "unstable")]
-use enshwick_content::__internal::PROP_RECIPES as RECIPES;
+use enshwick_world::__internal;
 use enshwick_world::__load::*;
 
 #[enshwick_macros::forward(base)]
@@ -81,5 +74,15 @@ impl Load<'_> {
     /// ```
     #[cfg(feature = "unstable")]
     #[script]
-    pub fn limit_altar_level(&mut self, kind: PropId, max_level: u8) -> Result<(), Off>;
+    pub fn limit_altar_level(&mut self, kind: PropId, max_level: u8) -> Result<(), Off> {
+        let refused = __internal::altar_upgrades_from(self.host(), max_level)?;
+        let (host, kind) = (self.host(), kind.template.guid());
+        self.on_craft(move |craft| {
+            !(refused.contains(&craft.recipe_id)
+                && craft
+                    .crafting_station_id
+                    .and_then(|at| __internal::altar_template_of(host, at))
+                    == Some(kind))
+        })
+    }
 }

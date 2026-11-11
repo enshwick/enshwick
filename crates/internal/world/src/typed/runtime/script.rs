@@ -15,7 +15,7 @@ use enshwick_typed::typed::runtime::rows::Fields;
 
 /// A generated component type on the running build, as a script holds it.
 #[derive(Clone)]
-pub(crate) struct ComponentType {
+pub struct ComponentType {
     row: &'static Row,
     raw: RawComponent,
     /// The world, or why the build lacks it: only reads and writes need it.
@@ -76,7 +76,7 @@ impl crate::script::Object for ComponentType {
 
 /// A generated game event type on the running build, as a script holds it.
 #[derive(Clone)]
-pub(crate) struct EventType {
+pub struct EventType {
     row: &'static Row,
     raw: RawEvent,
     host: Host,
@@ -112,7 +112,7 @@ impl crate::script::Object for EventType {
 
 /// A generated resource type on the running build, as a script holds it.
 #[derive(Clone)]
-pub(crate) struct ResourceType {
+pub struct ResourceType {
     row: &'static Row,
     raw: RawResource,
     host: Host,

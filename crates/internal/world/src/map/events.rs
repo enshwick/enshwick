@@ -135,6 +135,30 @@ fn heard(last: &mut FxHashMap<Entity, Instant>, sender: Entity, now: Instant) ->
     true
 }
 
+/// What each frame of the interface runs for `Load::on_fog_uncovered`,
+/// which core keeps, since the interface's frames are a domain above this
+/// one: a look at `fog` at most every [`FOG_EVERY`], and `handler` called
+/// with each window of new ground.
+pub(crate) fn fog_uncovered<F>(fog: super::FogOfWar, handler: F) -> impl FnMut() + Send + 'static
+where
+    F: Fn(&FogOfWarUncovered) + Send + Sync + 'static,
+{
+    let mut seen = None;
+    let mut looked: Option<Instant> = None;
+    move || {
+        let now = Instant::now();
+        if looked.is_some_and(|at| now.duration_since(at) < FOG_EVERY) {
+            return;
+        }
+        looked = Some(now);
+        if let Ok(info) = fog.info()
+            && let Some(event) = uncovering(&mut seen, &info)
+        {
+            handler(&event);
+        }
+    }
+}
+
 /// `Load`'s methods of this module on the base handle, which core's
 /// forwarders call.
 #[doc(hidden)]
@@ -144,12 +168,6 @@ pub trait LoadMethods {
     fn on_waypoint<F>(&mut self, handler: F) -> Result<(), Off>
     where
         F: Fn(&WaypointChanged) + Send + Sync + 'static;
-
-    /// As `Load::on_fog_uncovered`.
-    #[doc(hidden)]
-    fn on_fog_uncovered<F>(&mut self, handler: F) -> Result<(), Off>
-    where
-        F: Fn(&FogOfWarUncovered) + Send + Sync + 'static;
 
     /// As `Load::on_ping`.
     #[doc(hidden)]
@@ -201,27 +219,6 @@ impl LoadMethods for crate::BaseLoad {
             }
         })?;
         Ok(())
-    }
-
-    fn on_fog_uncovered<F>(&mut self, handler: F) -> Result<(), Off>
-    where
-        F: Fn(&FogOfWarUncovered) + Send + Sync + 'static,
-    {
-        let fog = self.fog_of_war()?;
-        let mut seen = None;
-        let mut looked: Option<Instant> = None;
-        self.on_frame(move |_| {
-            let now = Instant::now();
-            if looked.is_some_and(|at| now.duration_since(at) < FOG_EVERY) {
-                return;
-            }
-            looked = Some(now);
-            if let Ok(info) = fog.info()
-                && let Some(event) = uncovering(&mut seen, &info)
-            {
-                handler(&event);
-            }
-        })
     }
 
     fn on_ping<F>(&mut self, handler: F) -> Result<(), Off>

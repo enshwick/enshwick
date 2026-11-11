@@ -295,7 +295,7 @@ pub trait LoadMethods {
     fn fog_of_war(&mut self) -> Result<FogOfWar, Off>;
 }
 
-impl LoadMethods for crate::BaseLoad {
+impl LoadMethods for BaseLoad {
     fn map(&mut self) -> Result<Map, Off> {
         Map::resolve(self)
     }

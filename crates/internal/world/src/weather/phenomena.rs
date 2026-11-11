@@ -4,7 +4,6 @@
 use core::time::Duration;
 
 use super::WeatherPhenomenonEffect;
-use crate::__load::*;
 use crate::abi::Level;
 use crate::content::{Guid, Id};
 use crate::resources::Registry;
@@ -417,7 +416,7 @@ pub trait LoadMethods {
     ) -> Result<(), Off>;
 }
 
-impl LoadMethods for crate::BaseLoad {
+impl LoadMethods for BaseLoad {
     fn add_weather_phenomenon(&mut self, new: NewPhenomenon) -> Result<PhenomenonId, Off> {
         let what = |e: PhenomenonError| Off::new(format!("weather phenomenon {}: {e}", new.id));
         new.values.check().map_err(what)?;

@@ -2,7 +2,6 @@
 //! it.
 
 use super::{Voxel, VoxelPos};
-use crate::__load::*;
 use crate::{Off, abi};
 
 /// Who made a [`VoxelEdit`].

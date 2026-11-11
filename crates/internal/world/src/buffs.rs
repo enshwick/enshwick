@@ -34,7 +34,6 @@ use crate::Host;
 use crate::WorldError;
 use crate::abi::{ActiveBuff, BuffRequest, BuffTypeInfo, Header, Status};
 
-use crate::__load::*;
 #[doc(no_inline)]
 pub use crate::abi::BuffTypeId;
 

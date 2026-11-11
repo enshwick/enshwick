@@ -1,11 +1,7 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::content::Guid;
-use crate::resources::{Registry, Resources, Value as Data};
-use crate::script::{Class, Error, Value};
-use crate::world::World;
-use crate::{Entity, Host, Load, Off};
-use enshwick_typed::typed::runtime::rows::Fields;
+use crate::{Load, Off};
+use enshwick_world::__internal::typed_script::{ComponentType, EventType, ResourceType};
 use enshwick_world::__load::*;
 
 #[enshwick_macros::forward(base)]

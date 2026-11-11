@@ -706,7 +706,6 @@ impl LoadMethods for crate::BaseLoad {
     }
 }
 
-use crate::__load::*;
 use crate::script::{
     Error as ScriptError, Field as ScriptField, FromScript, IntoScript, Record, Ty, Typed, Value,
 };

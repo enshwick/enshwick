@@ -37,7 +37,6 @@ use core::time::Duration;
 #[cfg(feature = "typed")]
 pub use phenomena::{NewPhenomenon, PhenomenonChange, PhenomenonId};
 
-use crate::__load::*;
 use crate::Host;
 use crate::WorldError;
 use crate::abi::{Header, Status, WeatherFront};
