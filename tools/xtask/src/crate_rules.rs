@@ -3,8 +3,8 @@
 //! code forbids it at its root, the `test` feature is never on by default or
 //! through a normal or build dependency, only where a target asks for it,
 //! only the API crate's `test` feature reaches the fake loader, whose crate
-//! alone turns on the core's `fake`,
-//! a package that builds a DLL, such as a mod, names its version, features
+//! alone turns on the core's `fake`, a platform crate depends on the API
+//! crate only for its tests, a package that builds a DLL, such as a mod, names its version, features
 //! name what they add, `anyhow` stays in binaries, `rust-version` is the
 //! pinned toolchain's, and a published crate's path dependencies carry
 //! versions.
@@ -42,6 +42,7 @@ pub(crate) fn check() -> Result<Vec<String>, String> {
     let metadata: serde_json::Value = serde_json::from_slice(&output.stdout)
         .map_err(|error| format!("reading cargo metadata: {error}"))?;
     let toolchain = toolchain(&read(&crate::workspace_root().join("rust-toolchain.toml"))?)?;
+    let root = Path::new(metadata["workspace_root"].as_str().unwrap_or_default());
     let mut problems = Vec::new();
     for package in metadata["packages"].as_array().into_iter().flatten() {
         let name = package["name"].as_str().unwrap_or_default();
@@ -49,6 +50,14 @@ pub(crate) fn check() -> Result<Vec<String>, String> {
         let dir = manifest.parent().unwrap_or(Path::new("."));
         problems.extend(test_feature(name, package));
         problems.extend(fake_reach(name, package));
+        let platform = dir
+            .strip_prefix(root)
+            .ok()
+            .and_then(|inside| inside.components().next())
+            .is_some_and(|first| PLATFORM_DIRS.iter().any(|d| first.as_os_str() == *d));
+        if platform {
+            problems.extend(facade_use(name, package));
+        }
         problems.extend(manifest_facts(name, package, &toolchain));
         let builds_a_dll = package["targets"]
             .as_array()
@@ -186,6 +195,31 @@ fn fake_reach(name: &str, package: &serde_json::Value) -> Vec<String> {
         }
     }
     problems
+}
+
+/// The workspace folders of the platform's own crates, which name the
+/// internal crate they need; the mods in `examples/` depend on [`FACADE`].
+const PLATFORM_DIRS: [&str; 2] = ["crates", "tools"];
+
+/// The problems of `package`, a platform crate, depending on [`FACADE`]
+/// other than for its tests: it names the layer it needs, so the facade
+/// stays what only mods build on.
+fn facade_use(name: &str, package: &serde_json::Value) -> Vec<String> {
+    if name == FACADE {
+        return Vec::new();
+    }
+    package["dependencies"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|dependency| dependency["name"] == FACADE && dependency["kind"] != "dev")
+        .map(|dependency| {
+            format!(
+                "{name}: its {} dependency {FACADE} is the mods' crate; name the internal crate it needs, such as {CORE}, and keep {FACADE} for tests",
+                dependency["kind"].as_str().unwrap_or("normal")
+            )
+        })
+        .collect()
 }
 
 /// The feature prefixes that say how a feature adds instead of what it adds.
@@ -602,6 +636,29 @@ mod tests {
                 "a: its dev dependency enshwick-core turns on `fake`; only enshwick-fake may",
             ]
         );
+    }
+
+    #[test]
+    fn a_platform_crate_depends_on_the_facade_only_for_its_tests() {
+        let loader = serde_json::json!({
+            "dependencies": [
+                { "name": "enshwick", "kind": null },
+                { "name": "enshwick", "kind": "build" },
+                { "name": "enshwick", "kind": "dev", "features": ["test"] },
+                { "name": "enshwick-core", "kind": null },
+            ],
+        });
+        assert_eq!(
+            facade_use("loader", &loader),
+            [
+                "loader: its normal dependency enshwick is the mods' crate; name the internal crate it needs, such as enshwick-core, and keep enshwick for tests",
+                "loader: its build dependency enshwick is the mods' crate; name the internal crate it needs, such as enshwick-core, and keep enshwick for tests",
+            ]
+        );
+        let facade = serde_json::json!({
+            "dependencies": [{ "name": "enshwick", "kind": null }],
+        });
+        assert!(facade_use("enshwick", &facade).is_empty());
     }
 
     #[test]
