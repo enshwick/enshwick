@@ -1,7 +1,8 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::abi::Status;
-use crate::services::Service;
+use crate::services::{
+    Call, Caller, DescribedCall, DescribedCaller, DescribedEmitter, DescribedEvent, Service,
+};
 use crate::{Load, Off};
 
 #[enshwick_macros::forward(base)]

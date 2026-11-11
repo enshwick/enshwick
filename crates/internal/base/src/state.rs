@@ -356,7 +356,8 @@ pub fn holds(dir: &Path) -> Vec<(String, String)> {
 
 /// The mod's data folder in the world that runs, from the loader; `None`
 /// while no world runs.
-pub(crate) fn data_dir(host: crate::Host) -> Option<PathBuf> {
+#[doc(hidden)]
+pub fn data_dir(host: crate::Host) -> Option<PathBuf> {
     let mut out = crate::abi::Str::EMPTY;
     if !(host.api().data_dir)(host.handle(), &raw mut out).is_ok() {
         return None;
@@ -367,7 +368,8 @@ pub(crate) fn data_dir(host: crate::Host) -> Option<PathBuf> {
 }
 
 /// The key of the world the server runs, from the loader.
-pub(crate) fn world_key(host: crate::Host) -> Option<String> {
+#[doc(hidden)]
+pub fn world_key(host: crate::Host) -> Option<String> {
     let api = host.api();
     let mut out = crate::abi::Str::EMPTY;
     if !(api.world_key)(host.handle(), &raw mut out).is_ok() {

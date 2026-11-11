@@ -1,9 +1,7 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::abi::{LoopWaitData, LoopWaitSites};
+use crate::pacing::{LoopWait, LoopWaits, TaskWorkers};
 use crate::{Load, Off};
-use crate::{Load, Off};
-use core::ffi::c_void;
 
 #[enshwick_macros::forward(base)]
 #[crate::script(pacing)]

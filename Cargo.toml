@@ -39,6 +39,7 @@ bytemuck = { version = "1.25.2", default-features = false, features = ["derive",
 enshwick = { path = "crates/enshwick", version = "=1.0.0-alpha.14" }
 enshwick-luau = { path = "crates/internal/luau", version = "=1.0.0-alpha.14" }
 enshwick-abi = { path = "crates/internal/abi", version = "=1.0.0-alpha.14" }
+enshwick-base = { path = "crates/internal/base", version = "=1.0.0-alpha.14" }
 enshwick-core = { path = "crates/internal/core", version = "=1.0.0-alpha.14" }
 enshwick-fake = { path = "crates/internal/fake", version = "=1.0.0-alpha.14" }
 enshwick-values = { path = "crates/internal/values", version = "=1.0.0-alpha.14" }

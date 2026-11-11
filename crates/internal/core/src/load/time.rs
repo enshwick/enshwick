@@ -1,9 +1,7 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
+use crate::time::StepClock;
 use crate::{Load, Off};
-use crate::{Load, Off};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
 
 #[enshwick_macros::forward(base)]
 impl Load<'_> {

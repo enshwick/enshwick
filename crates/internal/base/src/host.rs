@@ -51,7 +51,7 @@ pub fn host() -> Option<Host> {
 
 /// The data pack whose code this thread runs in the loader's copy of the
 /// API; `None` in a mod's own copy and in the loader's own code.
-pub(crate) fn pack() -> Option<Host> {
+pub fn pack() -> Option<Host> {
     RUNNING
         .get()
         .filter(|running| HOST.get().is_none_or(|own| own.me != running.me))
@@ -89,7 +89,7 @@ pub(crate) fn spawn(
 /// Runs a mod's callback for the loader; a panic faults the mod with
 /// `reason` and the panic's message, and `fallback` answers in its place.
 #[inline]
-pub(crate) fn guard<R>(reason: &str, fallback: impl FnOnce() -> R, call: impl FnOnce() -> R) -> R {
+pub fn guard<R>(reason: &str, fallback: impl FnOnce() -> R, call: impl FnOnce() -> R) -> R {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(call)).unwrap_or_else(|payload| {
         fault_with(reason, payload.as_ref());
         fallback()
@@ -100,14 +100,14 @@ pub(crate) fn guard<R>(reason: &str, fallback: impl FnOnce() -> R, call: impl Fn
 /// left `payload`.
 #[cold]
 #[inline(never)]
-pub(crate) fn fault_with(reason: &str, payload: &(dyn core::any::Any + Send)) {
+pub fn fault_with(reason: &str, payload: &(dyn core::any::Any + Send)) {
     if let Some(host) = host() {
         host.fault(&format!("{reason}: {}", panic_text(payload)));
     }
 }
 
 /// The first line of a panic's message, which a reason shows on one line.
-pub(crate) fn panic_text(payload: &(dyn core::any::Any + Send)) -> &str {
+pub fn panic_text(payload: &(dyn core::any::Any + Send)) -> &str {
     let text = payload
         .downcast_ref::<&str>()
         .copied()

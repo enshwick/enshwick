@@ -494,6 +494,7 @@ dependencies = [
  "bytemuck",
  "const_format",
  "enshwick-abi",
+ "enshwick-base",
  "enshwick-macros",
  "enshwick-typed",
  "enshwick-values",

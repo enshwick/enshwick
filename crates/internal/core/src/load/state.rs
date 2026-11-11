@@ -1,7 +1,6 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::resources::Value as Data;
-use crate::script::{Class, Error, Function, Object};
+use crate::state::DataStore;
 use crate::{Load, Off};
 
 #[enshwick_macros::forward(base)]

@@ -1,19 +1,7 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::abi::{EventTypeInfo, GameEventData, Header, Str};
-use crate::{Entity, ItemId, PlayerKey, RecipeId};
+use crate::game_events::EventType;
 use crate::{Load, Off};
-use crate::{Load, Off};
-use core::marker::PhantomData;
-use kinds::{
-    AcceptOfferedInteractionEvent, Block, BuildingPickUpEvent, BuildingPlaceEvent,
-    BuildingTearDownEvent, CraftRecipeEvent, CraftRecipeSuccessEvent, EntityDiedEvent,
-    FlameAltarEvent, HandleEquipmentSlotChangedEvent, HitEvent, LevelUpEvent, LootInteractionEvent,
-    RevivedPlayerEvent, XpGainedEvent,
-};
-use values::{
-    AttackCategoryMask, DamageTypeMask, EquipmentSlot, ExperienceSourceType, FlameAltarActionType,
-};
 
 #[enshwick_macros::forward(base)]
 impl Load<'_> {

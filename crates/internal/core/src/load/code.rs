@@ -1,9 +1,7 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::abi::{HookFlags, MidHookSpec, Registers};
-use crate::hook::{FnPtr, Hook};
-use crate::{Load, Off};
-use core::ffi::c_void;
+use crate::abi::Registers;
+use crate::{FnPtr, Hook, Load, Off};
 
 #[enshwick_macros::forward(base)]
 impl Load<'_> {

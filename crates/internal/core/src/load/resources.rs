@@ -1,7 +1,5 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::abi::{Status, Str, TypeAttribute, TypeConstant, TypeEntry, TypeField};
-use crate::{Host, Off};
 use crate::{Load, Off};
 
 #[enshwick_macros::forward(base)]
@@ -36,6 +34,6 @@ impl Load<'_> {
     pub fn serve_new(
         &mut self,
         key: crate::abi::ResourceKey,
-        value: &super::Value,
+        value: &crate::resources::Value,
     ) -> Result<(), Off>;
 }

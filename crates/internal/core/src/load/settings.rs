@@ -1,10 +1,7 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::abi::{Event, Level, Status, Str};
-use crate::config::{Config, ConfigError, reason};
+use crate::config::Config;
 use crate::{Load, Off};
-use core::ffi::c_void;
-use std::sync::Arc;
 
 #[enshwick_macros::forward(base)]
 impl Load<'_> {

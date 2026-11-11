@@ -15,6 +15,7 @@ publish = true
 [dependencies]
 enshwick-macros = { path = "../../enshwick-macros", version = "=1.0.0-alpha.14" }
 enshwick-abi.workspace = true
+enshwick-base.workspace = true
 enshwick-typed = { workspace = true, optional = true }
 enshwick-values.workspace = true
 aho-corasick.workspace = true
@@ -44,9 +45,9 @@ serde = { workspace = true, features = ["derive"] }
 # what the fake loader reads inside this crate and a mod life per install,
 # which only `enshwick-fake` turns on.
 [features]
-fake = ["enshwick-typed?/test"]
-schema = ["dep:schemars", "dep:serde_json"]
-unstable = ["dep:hound"]
+fake = ["enshwick-base/fake", "enshwick-typed?/test"]
+schema = ["dep:schemars", "dep:serde_json", "enshwick-base/schema"]
+unstable = ["dep:hound", "enshwick-base/unstable"]
 typed = ["unstable", "dep:enshwick-typed"]
 
 [lints]

@@ -21,7 +21,7 @@ pub use enshwick_base::{
 pub(crate) use enshwick_base::{
     declare, engine_enum, engine_ids, facts, fresh,
     hook::{self},
-    host, locks, near, rules,
+    locks, near, rules,
 };
 // The macros the base exports, which the code here calls by `crate::`.
 #[doc(hidden)]

@@ -1,12 +1,12 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::abi::{Event, TickData, TickHandle};
-use crate::events::{LoaderEvent, TickPeriod, Ticked};
-use crate::host::Host;
-use crate::services::{Emitter, ModEvent};
-use crate::{Load, Off};
 use core::ffi::c_void;
 use core::time::Duration;
+
+use crate::abi::{Event, TickData};
+use crate::events::TickPeriod;
+use crate::services::{Emitter, ModEvent};
+use crate::{Load, Off};
 
 #[enshwick_macros::forward(base)]
 #[crate::script(ticks)]

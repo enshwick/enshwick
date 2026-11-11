@@ -1,6 +1,5 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::abi::Str;
 use crate::{Load, Off};
 
 #[enshwick_macros::forward(base)]

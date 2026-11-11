@@ -3,7 +3,7 @@
 
 pub(crate) use enshwick_base::__off_from as off_from;
 use enshwick_base::BaseLoad;
-pub(crate) use enshwick_base::load::{CHECK_WHY, hand_over, off_status, ok};
+pub(crate) use enshwick_base::load::{CHECK_WHY, game_events_of, hand_over, off_status, ok};
 #[doc(inline)]
 pub use enshwick_values::Off;
 

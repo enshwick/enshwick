@@ -1,15 +1,10 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::locks::Relock;
-use crate::{Host, Load, Off};
+use crate::content::Id;
+use crate::i18n::Texts;
 use crate::{Load, Off};
-use enshwick_values::content::Id;
-use enshwick_values::reason;
-use rustc_hash::FxHashMap;
-#[doc(hidden)]
-pub use script::I18nFns;
-use std::collections::BTreeMap;
 
+#[doc(hidden)]
 #[enshwick_macros::forward(base)]
 impl Load<'_> {
     /// The mod's texts: its `src/texts.toml`, which

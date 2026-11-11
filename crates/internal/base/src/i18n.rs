@@ -24,7 +24,8 @@ pub(crate) use enshwick_values::reason;
 mod script;
 
 /// The texts file of a mod's folder or a pack's.
-pub(crate) const TEXTS_FILE: &str = "texts.toml";
+#[doc(hidden)]
+pub const TEXTS_FILE: &str = "texts.toml";
 #[doc(hidden)]
 pub use script::I18nFns;
 
