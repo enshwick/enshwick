@@ -5,8 +5,8 @@ use core::ffi::c_void;
 
 use crate::test::table::{Registered, put, text, with};
 use enshwick_core::abi::{
-    AccountActionType, EntityPlace, ModHandle, PlayerInfo, RenameCallFn, Side, SpawnRequest,
-    Status, Str, TeleportRequest, TerrainEdit,
+    AccountActionType, EntityPlace, ModHandle, PlayerInfo, RenameCallFn, Side, Status, Str,
+    TerrainEdit,
 };
 
 pub(crate) mod altars;
@@ -226,43 +226,12 @@ pub(crate) extern "system" fn component_write(
     }
 }
 
-pub(crate) extern "system" fn emit(
+pub(crate) extern "system" fn item_info(
     _me: ModHandle,
-    type_hash: u32,
-    data: *const u8,
-    size: u32,
+    item: enshwick_core::ItemId,
+    out: *mut enshwick_core::abi::ItemData,
 ) -> Status {
-    if data.is_null() {
-        return Status::BAD_ARGS;
-    }
-    // SAFETY: the safe layer passes `size` bytes at `data` for the call.
-    let bytes = unsafe { core::slice::from_raw_parts(data, size as usize) }.to_vec();
-    with(Status::MISSING, |s| {
-        s.emits.push((type_hash, bytes));
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn teleport(_me: ModHandle, request: *const TeleportRequest) -> Status {
-    let Some(request) = super::get_headed(request) else {
-        return Status::BAD_ARGS;
-    };
-    with(Status::MISSING, |s| {
-        if entity_calls_off(s) {
-            return Status::UNAVAILABLE;
-        }
-        if !s.host.templates.contains_key(&request.entity.0)
-            && !s
-                .host
-                .placed
-                .iter()
-                .any(|(_, p)| p.entity == request.entity)
-        {
-            return Status::MISSING;
-        }
-        s.teleports.push(request);
-        Status::OK
-    })
+    crate::test::table::found_headed(with(None, |s| s.host.items.get(&item.get()).copied()), out)
 }
 
 pub(crate) extern "system" fn notify(
@@ -282,29 +251,6 @@ pub(crate) extern "system" fn notify(
 
 /// The first entity id the fake hands out for a spawn.
 pub(crate) const FIRST_SPAWNED: u32 = 0x10_0000;
-
-pub(crate) extern "system" fn spawn(
-    _me: ModHandle,
-    request: *const SpawnRequest,
-    out: *mut enshwick_core::Entity,
-) -> Status {
-    let Some(request) = super::get_headed(request) else {
-        return Status::BAD_ARGS;
-    };
-    if request.template == [0; 16] {
-        return Status::BAD_ARGS;
-    }
-    let entity = with(None, |s| {
-        let entity = FIRST_SPAWNED + u32::try_from(s.spawns.len()).unwrap_or(0);
-        s.spawns.push((entity, request));
-        s.spawn_steps.push(s.ticks.step);
-        Some(entity)
-    });
-    match entity {
-        Some(entity) => put(out, enshwick_core::Entity(entity)),
-        None => Status::MISSING,
-    }
-}
 
 pub(crate) extern "system" fn progress_write(
     _me: ModHandle,

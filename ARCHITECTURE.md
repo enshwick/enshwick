@@ -108,7 +108,10 @@ the crate of each domain that has left it.
   `crates/internal/fake/src/test/` and `test/table/` sits in the folder of
   its domain, `test.rs` and `test/table.rs` join them, and the check holds
   its edges, to the fake's domains and to core's, by the same rule with
-  their own `upward` list under `[fake]`.
+  their own `upward` list under `[fake]`. The fake stays one crate above
+  core: a peel moves no fake file into its domain's crate, since the
+  presets are inherent methods of `FakeHost`, which only this crate may
+  add.
 - Each domain turns its own errors into `Off`, and keeps the state it needs
   while a mod initialises in the base handle's typed slots, keyed by a type
   of its own, so `Load` names no domain.

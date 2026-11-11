@@ -163,9 +163,6 @@ use enshwick_core::abi::{
     PlayerInfo, Side, Status,
 };
 
-use enshwick_core::Off;
-use enshwick_core::content::EngineFacts;
-
 use actions::commands::{ask, console};
 use base::host::FakeService;
 
@@ -510,58 +507,6 @@ impl FakeHost {
             handle,
             _turn: turn,
         }
-    }
-
-    /// Sets a hash for each of `types`, then `sizes` and `offsets`: what
-    /// each domain's presets set at once.
-    fn preset(mut self, types: &[&str], sizes: &[(&str, u32)], offsets: &[(&str, u64)]) -> Self {
-        for &id in types {
-            self = self.type_hash(id, preset_hash(id));
-        }
-        for &(id, size) in sizes {
-            self = self.type_size(id, size);
-        }
-        for &(id, offset) in offsets {
-            self = self.constant(id, offset);
-        }
-        self
-    }
-}
-
-/// The type hash a preset gives `id`: its FNV-1a, so presets never share a
-/// hash and a test's own small hashes stay clear of them.
-fn preset_hash(id: &str) -> u32 {
-    id.bytes().fold(0x811c_9dc5, |hash, byte| {
-        (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193)
-    })
-}
-
-/// The facts the builder holds, so a test lays out its blobs by the same
-/// layouts the mod resolves.
-///
-/// A preset's values claim nothing about a game build; they only agree with
-/// each other, so a test builds its blobs from the layout the preset gives
-/// rather than from offsets of its own.
-impl EngineFacts for FakeHost {
-    fn offset(&self, id: &str) -> Result<usize, Off> {
-        self.constants
-            .get(id)
-            .and_then(|&offset| usize::try_from(offset).ok())
-            .ok_or_else(|| Off::new(format!("offset {id}: not set on the fake")))
-    }
-
-    fn size(&self, id: &str) -> Result<usize, Off> {
-        self.type_sizes
-            .get(id)
-            .and_then(|&size| usize::try_from(size).ok())
-            .ok_or_else(|| Off::new(format!("type {id}: no size set on the fake")))
-    }
-
-    fn hash(&self, id: &str) -> Result<u32, Off> {
-        self.type_hashes
-            .get(id)
-            .copied()
-            .ok_or_else(|| Off::new(format!("type {id}: no hash set on the fake")))
     }
 }
 

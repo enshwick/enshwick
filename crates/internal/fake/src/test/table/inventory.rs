@@ -1,13 +1,19 @@
-//! The fake's inventory entries: requests, item filters, damage filters
-//! and survivors.
+//! The fake's inventory entries: requests, item filters, damage filters,
+//! survivors and effects (game events, teleports, spawns and drops).
 
 use core::ffi::c_void;
 
 use crate::test::SubmittedRequest;
-use crate::test::table::{OpenRequest, Registered, Registration, with};
+use crate::test::table::{Registered, Registration, with};
+
+/// A submitted inventory request and where its result goes.
+pub(crate) struct OpenRequest {
+    pub(crate) request: SubmittedRequest,
+    pub(crate) done: Registered<InventoryResultFn>,
+}
 use enshwick_core::abi::{
-    BedCheckFn, DamageFilterFn, InventoryRequest, InventoryResultFn, ItemActionFn, ItemData,
-    ModHandle, Side, Status, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
+    BedCheckFn, DamageFilterFn, InventoryRequest, InventoryResultFn, ItemActionFn, ModHandle, Side,
+    SpawnRequest, Status, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest,
 };
 
 pub(crate) extern "system" fn item_filter(
@@ -57,6 +63,69 @@ pub(crate) extern "system" fn drop_items(
     match entity {
         Some(Ok(entity)) => crate::test::table::put(out, enshwick_core::Entity(entity)),
         Some(Err(status)) => status,
+        None => Status::MISSING,
+    }
+}
+
+pub(crate) extern "system" fn emit(
+    _me: ModHandle,
+    type_hash: u32,
+    data: *const u8,
+    size: u32,
+) -> Status {
+    if data.is_null() {
+        return Status::BAD_ARGS;
+    }
+    // SAFETY: the safe layer passes `size` bytes at `data` for the call.
+    let bytes = unsafe { core::slice::from_raw_parts(data, size as usize) }.to_vec();
+    with(Status::MISSING, |s| {
+        s.emits.push((type_hash, bytes));
+        Status::OK
+    })
+}
+
+pub(crate) extern "system" fn teleport(_me: ModHandle, request: *const TeleportRequest) -> Status {
+    let Some(request) = crate::test::table::get_headed(request) else {
+        return Status::BAD_ARGS;
+    };
+    with(Status::MISSING, |s| {
+        if crate::test::table::world::entity_calls_off(s) {
+            return Status::UNAVAILABLE;
+        }
+        if !s.host.templates.contains_key(&request.entity.0)
+            && !s
+                .host
+                .placed
+                .iter()
+                .any(|(_, p)| p.entity == request.entity)
+        {
+            return Status::MISSING;
+        }
+        s.teleports.push(request);
+        Status::OK
+    })
+}
+
+pub(crate) extern "system" fn spawn(
+    _me: ModHandle,
+    request: *const SpawnRequest,
+    out: *mut enshwick_core::Entity,
+) -> Status {
+    let Some(request) = crate::test::table::get_headed(request) else {
+        return Status::BAD_ARGS;
+    };
+    if request.template == [0; 16] {
+        return Status::BAD_ARGS;
+    }
+    let entity = with(None, |s| {
+        let entity =
+            crate::test::table::world::FIRST_SPAWNED + u32::try_from(s.spawns.len()).unwrap_or(0);
+        s.spawns.push((entity, request));
+        s.spawn_steps.push(s.ticks.step);
+        Some(entity)
+    });
+    match entity {
+        Some(entity) => crate::test::table::put(out, enshwick_core::Entity(entity)),
         None => Status::MISSING,
     }
 }
@@ -152,14 +221,6 @@ pub(crate) extern "system" fn inventory_open(_me: ModHandle) -> Status {
             Status::OK
         }
     })
-}
-
-pub(crate) extern "system" fn item_info(
-    _me: ModHandle,
-    item: enshwick_core::ItemId,
-    out: *mut ItemData,
-) -> Status {
-    crate::test::table::found_headed(with(None, |s| s.host.items.get(&item.get()).copied()), out)
 }
 
 pub(crate) extern "system" fn inventory_submit(

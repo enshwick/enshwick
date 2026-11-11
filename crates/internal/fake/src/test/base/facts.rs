@@ -24,6 +24,36 @@ use enshwick_core::__fake::ids;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Fact(&'static str);
 
+impl crate::test::FakeHost {
+    /// Sets a hash for each of `types`, then `sizes` and `offsets`: what
+    /// each domain's presets set at once.
+    pub(crate) fn preset(
+        mut self,
+        types: &[&str],
+        sizes: &[(&str, u32)],
+        offsets: &[(&str, u64)],
+    ) -> Self {
+        for &id in types {
+            self = self.type_hash(id, preset_hash(id));
+        }
+        for &(id, size) in sizes {
+            self = self.type_size(id, size);
+        }
+        for &(id, offset) in offsets {
+            self = self.constant(id, offset);
+        }
+        self
+    }
+}
+
+/// The type hash a preset gives `id`: its FNV-1a, so presets never share a
+/// hash and a test's own small hashes stay clear of them.
+fn preset_hash(id: &str) -> u32 {
+    id.bytes().fold(0x811c_9dc5, |hash, byte| {
+        (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193)
+    })
+}
+
 impl Fact {
     /// Its enshwick id, which [`EngineFacts`](enshwick_core::content::EngineFacts)
     /// answers by.

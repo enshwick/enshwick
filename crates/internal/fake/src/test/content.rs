@@ -16,6 +16,35 @@ pub(crate) mod rates;
 pub(crate) mod removal;
 pub(crate) mod templates;
 
+/// The facts the builder holds, so a test lays out its blobs by the same
+/// layouts the mod resolves.
+///
+/// A preset's values claim nothing about a game build; they only agree with
+/// each other, so a test builds its blobs from the layout the preset gives
+/// rather than from offsets of its own.
+impl enshwick_core::content::EngineFacts for FakeHost {
+    fn offset(&self, id: &str) -> Result<usize, enshwick_core::Off> {
+        self.constants
+            .get(id)
+            .and_then(|&offset| usize::try_from(offset).ok())
+            .ok_or_else(|| enshwick_core::Off::new(format!("offset {id}: not set on the fake")))
+    }
+
+    fn size(&self, id: &str) -> Result<usize, enshwick_core::Off> {
+        self.type_sizes
+            .get(id)
+            .and_then(|&size| usize::try_from(size).ok())
+            .ok_or_else(|| enshwick_core::Off::new(format!("type {id}: no size set on the fake")))
+    }
+
+    fn hash(&self, id: &str) -> Result<u32, enshwick_core::Off> {
+        self.type_hashes
+            .get(id)
+            .copied()
+            .ok_or_else(|| enshwick_core::Off::new(format!("type {id}: no hash set on the fake")))
+    }
+}
+
 impl FakeHost {
     /// Items and the item registry: what
     /// [`ItemLayout`](enshwick_core::content::items::ItemLayout) resolves, with the
