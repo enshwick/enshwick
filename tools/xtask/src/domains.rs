@@ -47,7 +47,7 @@ fn problems(root: &Path) -> Result<Vec<String>, String> {
     let mut edges = BTreeSet::new();
     for (path, text) in &files {
         let from = top(path);
-        for to in names(&code(text)) {
+        for to in names(&code(text), depth(path)) {
             if to != from && modules.contains(&to) {
                 edges.insert((from.clone(), to));
             }
@@ -192,48 +192,84 @@ fn code(text: &str) -> String {
         .join("\n")
 }
 
-/// The first segment of every `crate::` path in `code`, those of a
-/// `crate::{..}` group included.
-fn names(code: &str) -> BTreeSet<String> {
+/// The module depth of a file under `src`: 1 for `ui.rs` and `ui/mod.rs`,
+/// 2 for `ui/frame.rs`.
+fn depth(path: &str) -> usize {
+    let segments = path.split('/').count();
+    if path.ends_with("/mod.rs") {
+        segments - 1
+    } else {
+        segments
+    }
+}
+
+/// The first segment under the crate root of every path in `code`, a file
+/// `depth` modules deep: `crate::` paths and chains of `depth` `super::`,
+/// those of a `{..}` group included.
+///
+/// shortcut: an inline `mod` deepens the file's own depth, so a chain inside
+/// one is read one module short; parse with syn if that ever misleads.
+fn names(code: &str, depth: usize) -> BTreeSet<String> {
     let mut found = BTreeSet::new();
     let mut rest = code;
-    while let Some(at) = rest.find("crate::") {
+    while let Some(at) = rest
+        .find("crate::")
+        .into_iter()
+        .chain(rest.find("super::"))
+        .min()
+    {
         let before = rest[..at].chars().next_back();
-        rest = &rest[at + "crate::".len()..];
-        if before.is_some_and(|c| c.is_alphanumeric() || c == '_') {
+        rest = &rest[at..];
+        let mut supers = 0;
+        while let Some(after) = rest.strip_prefix("super::") {
+            supers += 1;
+            rest = after;
+        }
+        if supers == 0 {
+            rest = &rest["crate::".len()..];
+        }
+        if before.is_some_and(|c| c.is_alphanumeric() || c == '_' || c == ':')
+            || (supers > 0 && supers != depth)
+        {
             continue;
         }
-        if let Some(group) = rest.strip_prefix('{') {
-            let mut depth = 1;
-            let end = group
-                .char_indices()
-                .find(|&(_, c)| {
-                    depth += match c {
-                        '{' => 1,
-                        '}' => -1,
-                        _ => 0,
-                    };
-                    depth == 0
-                })
-                .map_or(group.len(), |(i, _)| i);
-            let mut level = 0;
-            let mut start = 0;
-            for (i, c) in group[..end].char_indices().chain([(end, ',')]) {
-                match c {
-                    '{' => level += 1,
-                    '}' => level -= 1,
-                    ',' if level == 0 => {
-                        found.extend(ident(group[start..i].trim()));
-                        start = i + 1;
-                    }
-                    _ => {}
-                }
-            }
-        } else {
-            found.extend(ident(rest));
-        }
+        segments(rest, &mut found);
     }
     found
+}
+
+/// The first segment of the path `rest` starts, or of each path in the
+/// `{..}` group it starts.
+fn segments(rest: &str, found: &mut BTreeSet<String>) {
+    let Some(group) = rest.strip_prefix('{') else {
+        found.extend(ident(rest));
+        return;
+    };
+    let mut depth = 1;
+    let end = group
+        .char_indices()
+        .find(|&(_, c)| {
+            depth += match c {
+                '{' => 1,
+                '}' => -1,
+                _ => 0,
+            };
+            depth == 0
+        })
+        .map_or(group.len(), |(i, _)| i);
+    let mut level = 0;
+    let mut start = 0;
+    for (i, c) in group[..end].char_indices().chain([(end, ',')]) {
+        match c {
+            '{' => level += 1,
+            '}' => level -= 1,
+            ',' if level == 0 => {
+                found.extend(ident(group[start..i].trim()));
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
 }
 
 /// The lowercase identifier `text` starts with, unless a macro call.
@@ -278,15 +314,31 @@ mod tests {
     #[test]
     fn names_reads_paths_groups_and_nested_groups_but_not_macros_or_roots() {
         let code = "use crate::map::Map;\nuse crate::{host::Host, ui::{Ui, frame}, Load};\ncrate::warn!(\"x\");\nlet a = foo_crate::x;";
-        assert_eq!(names(code), set(&["host", "map", "ui"]));
+        assert_eq!(names(code, 1), set(&["host", "map", "ui"]));
         let nested = "use crate::{ui::{Ui, frame::{A, b}}, sound::Sound};\nuse crate::time;";
-        assert_eq!(names(nested), set(&["sound", "time", "ui"]));
+        assert_eq!(names(nested, 1), set(&["sound", "time", "ui"]));
+    }
+
+    #[test]
+    fn names_follows_a_super_chain_to_the_root_but_not_one_that_stays_inside() {
+        let code = "use super::super::ui::Ui;\nuse super::frame::F;\nlet x = super::super::{host::H, map};\nuse self::super::sound;";
+        assert_eq!(names(code, 2), set(&["host", "map", "ui"]));
+        assert_eq!(names("use super::host::Host;", 1), set(&["host"]));
+        assert_eq!(names("use super::super::ui::Ui;", 3), set(&[]));
+    }
+
+    #[test]
+    fn depth_counts_the_modules_of_a_file_path() {
+        assert_eq!(depth("ui.rs"), 1);
+        assert_eq!(depth("ui/mod.rs"), 1);
+        assert_eq!(depth("ui/frame.rs"), 2);
+        assert_eq!(depth("ui/frame/mod.rs"), 2);
     }
 
     #[test]
     fn code_drops_comments_examples_and_the_trailing_tests() {
         let text = "/// crate::ui::Ui\nuse crate::map; // crate::host\n#[cfg(test)]\nmod tests {\n    use crate::ui;\n}\n";
-        assert_eq!(names(&code(text)), set(&["map"]));
+        assert_eq!(names(&code(text), 1), set(&["map"]));
     }
 
     #[test]
