@@ -75,6 +75,32 @@ mod tests {
     }
 
     #[test]
+    fn a_hook_body_keeps_its_own_enshwick_paths_under_another_crate() -> syn::Result<()> {
+        let function: syn::ItemFn = syn::parse_quote! {
+            fn count(next: Next<'_, Target>, a: u32) -> u32 {
+                ::enshwick::info!("counted");
+                next.call(a)
+            }
+        };
+        let krate = path(Some(&syn::parse_quote!(::enshwick_core)));
+        let out = crate::expand_hook(&function, None, None, &krate)?.to_string();
+        assert!(
+            out.contains(&quote!(::enshwick::info!).to_string()),
+            "{out}"
+        );
+        assert!(
+            out.contains(&quote!(::enshwick_core::Hook<Target>).to_string()),
+            "{out}"
+        );
+        assert_eq!(
+            out.matches(&quote!(::enshwick::).to_string()).count(),
+            1,
+            "{out}"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn in_attrs_finds_the_crate_beside_other_arguments() -> syn::Result<()> {
         let attrs: Vec<Attribute> = vec![
             syn::parse_quote!(#[config(validate = check, crate = "::enshwick_core")]),

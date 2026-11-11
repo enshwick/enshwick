@@ -21,13 +21,13 @@ fn hidden(field: &syn::Field) -> bool {
     private || underscored || header
 }
 
-pub(crate) fn expand_derive(input: &DeriveInput) -> syn::Result<TokenStream> {
+pub(crate) fn expand_derive(input: &DeriveInput, krate: &TokenStream) -> syn::Result<TokenStream> {
     let ident = &input.ident;
     match &input.data {
         Data::Struct(data) => match &data.fields {
-            Fields::Named(named) => Ok(derive_record(input, named)),
+            Fields::Named(named) => Ok(derive_record(input, named, krate)),
             Fields::Unnamed(unnamed) if unnamed.unnamed.len() == 1 => {
-                Ok(derive_newtype(ident, &unnamed.unnamed[0].ty))
+                Ok(derive_newtype(ident, &unnamed.unnamed[0].ty, krate))
             }
             _ => Err(syn::Error::new_spanned(
                 ident,
@@ -40,9 +40,9 @@ pub(crate) fn expand_derive(input: &DeriveInput) -> syn::Result<TokenStream> {
                 .iter()
                 .all(|v| matches!(v.fields, Fields::Unit)) =>
         {
-            derive_choice(input, data)
+            derive_choice(input, data, krate)
         }
-        Data::Enum(data) => derive_union(input, data),
+        Data::Enum(data) => derive_union(input, data, krate),
         Data::Union(_) => Err(syn::Error::new_spanned(
             ident,
             "`Script` takes a struct or an enum",
@@ -69,7 +69,7 @@ fn type_name(input: &DeriveInput) -> String {
     name
 }
 
-fn derive_record(input: &DeriveInput, named: &FieldsNamed) -> TokenStream {
+fn derive_record(input: &DeriveInput, named: &FieldsNamed, krate: &TokenStream) -> TokenStream {
     let script = quote!(#krate::script);
     let ident = &input.ident;
     let name = type_name(input);
@@ -174,7 +174,7 @@ fn has_word(attrs: &[syn::Attribute], word: &str) -> bool {
     found
 }
 
-fn derive_newtype(ident: &Ident, inner: &Type) -> TokenStream {
+fn derive_newtype(ident: &Ident, inner: &Type, krate: &TokenStream) -> TokenStream {
     let script = quote!(#krate::script);
     quote! {
         impl #script::Typed for #ident {
@@ -195,7 +195,11 @@ fn derive_newtype(ident: &Ident, inner: &Type) -> TokenStream {
     }
 }
 
-fn derive_choice(input: &DeriveInput, data: &syn::DataEnum) -> syn::Result<TokenStream> {
+fn derive_choice(
+    input: &DeriveInput,
+    data: &syn::DataEnum,
+    krate: &TokenStream,
+) -> syn::Result<TokenStream> {
     let script = quote!(#krate::script);
     let ident = &input.ident;
     let name = type_name(input);
@@ -273,7 +277,11 @@ fn derive_choice(input: &DeriveInput, data: &syn::DataEnum) -> syn::Result<Token
     clippy::too_many_lines,
     reason = "one pass over the variants builds the description and both conversions together"
 )]
-fn derive_union(input: &DeriveInput, data: &syn::DataEnum) -> syn::Result<TokenStream> {
+fn derive_union(
+    input: &DeriveInput,
+    data: &syn::DataEnum,
+    krate: &TokenStream,
+) -> syn::Result<TokenStream> {
     let script = quote!(#krate::script);
     let ident = &input.ident;
     let name = type_name(input);
@@ -453,7 +461,12 @@ struct Parameter {
     pass: TokenStream,
 }
 
-fn parameter(index: usize, typed: &PatType, generics: &syn::Generics) -> syn::Result<Parameter> {
+fn parameter(
+    index: usize,
+    typed: &PatType,
+    generics: &syn::Generics,
+    krate: &TokenStream,
+) -> syn::Result<Parameter> {
     let script = quote!(#krate::script);
     let param = match &*typed.pat {
         Pat::Ident(p) => p.ident.to_string(),
@@ -467,7 +480,7 @@ fn parameter(index: usize, typed: &PatType, generics: &syn::Generics) -> syn::Re
     let local = format_ident!("arg{index}");
     let ty = &*typed.ty;
     if let Some((inputs, output)) = closure_bound(ty).or_else(|| generic_closure(ty, generics)) {
-        return closure(&param, &local, &inputs, &output);
+        return closure(&param, &local, &inputs, &output, krate);
     }
     let (owned, pass): (Type, TokenStream) = match ty {
         Type::Reference(r) if matches!(&*r.elem, Type::Path(p) if p.path.is_ident("str")) => {
@@ -522,7 +535,13 @@ fn generic_closure(ty: &Type, generics: &syn::Generics) -> Option<(Vec<Type>, Ty
 /// argument as a value. A `&T` argument hands the script a copy; a `&mut T`
 /// argument hands it `T`'s [`Context`] view, and what the function returns
 /// besides nil is applied back to it.
-fn closure(param: &str, local: &Ident, inputs: &[Type], output: &Type) -> syn::Result<Parameter> {
+fn closure(
+    param: &str,
+    local: &Ident,
+    inputs: &[Type],
+    output: &Type,
+    krate: &TokenStream,
+) -> syn::Result<Parameter> {
     let script = quote!(#krate::script);
     let names: Vec<Ident> = (0..inputs.len()).map(|n| format_ident!("p{n}")).collect();
     let context = inputs
@@ -608,7 +627,11 @@ fn closure(param: &str, local: &Ident, inputs: &[Type], output: &Type) -> syn::R
 
 /// The answer type's description and the body that calls the method and
 /// converts what it returns.
-fn answer(method: &ImplItemFn, passes: &[TokenStream]) -> syn::Result<(TokenStream, TokenStream)> {
+fn answer(
+    method: &ImplItemFn,
+    passes: &[TokenStream],
+    krate: &TokenStream,
+) -> syn::Result<(TokenStream, TokenStream)> {
     let script = quote!(#krate::script);
     let name = &method.sig.ident;
     // A method that takes `self` by value runs on a copy of the script's
@@ -675,6 +698,7 @@ fn function(
     self_ty: &Type,
     starting: bool,
     name: Option<String>,
+    krate: &TokenStream,
 ) -> syn::Result<TokenStream> {
     let script = quote!(#krate::script);
     let label = name.unwrap_or_else(|| method.sig.ident.to_string());
@@ -701,12 +725,12 @@ fn function(
             FnArg::Receiver(_) => None,
         })
         .enumerate()
-        .map(|(i, typed)| parameter(i, typed, &method.sig.generics))
+        .map(|(i, typed)| parameter(i, typed, &method.sig.generics, krate))
         .collect::<syn::Result<Vec<_>>>()?;
     let describes = parameters.iter().map(|p| &p.describe);
     let reads = parameters.iter().map(|p| &p.read);
     let passes: Vec<TokenStream> = parameters.iter().map(|p| p.pass.clone()).collect();
-    let (ret, body) = answer(method, &passes)?;
+    let (ret, body) = answer(method, &passes, krate)?;
     let take = if parameters.is_empty() {
         quote!(let _no_arguments = args;)
     } else {
@@ -731,7 +755,11 @@ fn function(
     })
 }
 
-pub(crate) fn expand_impl(part: &Ident, mut item: ItemImpl) -> syn::Result<TokenStream> {
+pub(crate) fn expand_impl(
+    part: &Ident,
+    mut item: ItemImpl,
+    krate: &TokenStream,
+) -> syn::Result<TokenStream> {
     let script = quote!(#krate::script);
     let self_ty = item.self_ty.clone();
     // `impl Load` methods run while the mod starts, as in a Rust mod's init.
@@ -771,7 +799,7 @@ pub(crate) fn expand_impl(part: &Ident, mut item: ItemImpl) -> syn::Result<Token
         };
         // A method behind a `cfg` keeps its entry behind the same one.
         let cfgs = method.attrs.iter().filter(|a| a.path().is_ident("cfg"));
-        let entry = function(method, &self_ty, starting, name)?;
+        let entry = function(method, &self_ty, starting, name, krate)?;
         functions.push(quote!(#(#cfgs)* #entry));
     }
     if functions.is_empty() {
@@ -813,7 +841,7 @@ mod tests {
             }
         };
         assert_eq!(type_name(&input), "Renamed");
-        let out = expand_derive(&input)?.to_string();
+        let out = expand_derive(&input, &quote!(::enshwick))?.to_string();
         assert!(out.contains("Context for Kept"), "{out}");
         assert!(out.contains("argument_or_default"), "{out}");
         Ok(())

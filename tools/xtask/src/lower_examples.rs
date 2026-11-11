@@ -301,57 +301,11 @@ fn example_problem(example: &Example, lib: &str, at: &str, wrapped: &mut Places)
         Some(named) if named != lib => Some(format!(
             "{at}: the alias line names {named}; this example is {lib}'s"
         )),
-        Some(_) => example.lines.iter().find_map(|line| proc_macro_call(line)).map(|name| format!(
-            "{at}: it calls `{name}`, whose output names `::enshwick`, which the alias line does not make in rustdoc's merged build, so every example of {lib} builds alone; give the crate the facade as a dev-dependency, as enshwick-core has, and drop its alias lines"
-        )),
         None if example.lines.iter().any(|line| line.contains(NAMES_FACADE)) => Some(format!(
             "{at}: no `# extern crate {lib} as enshwick;` line; `cargo xtask alias-examples` writes it"
         )),
         _ => None,
     }
-}
-
-/// The API's procedural macros, whose output names the facade by the
-/// absolute path `::enshwick`.
-const PROC_MACROS: [&str; 15] = [
-    "declare_mod",
-    "declare_test_mod",
-    "id",
-    "deps",
-    "texts",
-    "config",
-    "hook",
-    "service",
-    "event",
-    "point",
-    "call",
-    "script",
-    "Config",
-    "Shape",
-    "Script",
-];
-
-/// The procedural macro of the API that `line` calls, as a function-like
-/// macro (`id!`), an attribute (`#[config]`, `#[enshwick::hook]`) or a
-/// derive, if any.
-fn proc_macro_call(line: &str) -> Option<&'static str> {
-    let ident = |c: char| c.is_alphanumeric() || c == '_';
-    PROC_MACROS.into_iter().find(|name| {
-        line.match_indices(name).any(|(at, _)| {
-            let (before, after) = (&line[..at], &line[at + name.len()..]);
-            if before.chars().next_back().is_some_and(ident)
-                || after.chars().next().is_some_and(ident)
-            {
-                return false;
-            }
-            after.starts_with('!')
-                || before.ends_with("#[")
-                || before.ends_with("#[enshwick::")
-                || before
-                    .rfind("derive(")
-                    .is_some_and(|open| !before[open..].contains(')'))
-        })
-    })
 }
 
 /// The wrapped examples without an equal copy and the copies without an
@@ -678,33 +632,6 @@ impl Thing {
             None
         );
         assert_eq!(wrapped.values().flatten().collect::<Vec<_>>(), ["a.rs:9"]);
-    }
-
-    #[test]
-    fn an_aliased_example_calling_a_procedural_macro_of_the_api_is_refused() {
-        let found = examples(
-            "/// ```\n/// # extern crate enshwick_base as enshwick;\n/// const LOCKER: enshwick::content::Id = enshwick::content::id!(\"locker\");\n/// ```\n",
-        );
-        let problem = example_problem(&found[0], "enshwick_base", "a.rs:1", &mut Places::new());
-        assert!(
-            problem
-                .as_deref()
-                .is_some_and(|p| p.starts_with("a.rs:1: it calls `id`")),
-            "{problem:?}"
-        );
-        assert_eq!(
-            proc_macro_call("#[enshwick::hook(symbol = \"a\")]"),
-            Some("hook")
-        );
-        assert_eq!(proc_macro_call("#[config]"), Some("config"));
-        assert_eq!(
-            proc_macro_call("#[derive(Clone, enshwick::Shape)]"),
-            Some("Shape")
-        );
-        assert_eq!(proc_macro_call("enshwick::deps!();"), Some("deps"));
-        assert_eq!(proc_macro_call("let valid = ids.call(1);"), None);
-        assert_eq!(proc_macro_call("#[derive(Debug)] struct Shape;"), None);
-        assert_eq!(proc_macro_call("enshwick::info!(\"config\");"), None);
     }
 
     #[test]

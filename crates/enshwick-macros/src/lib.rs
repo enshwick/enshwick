@@ -141,7 +141,8 @@ pub fn hook(args: TokenStream, item: TokenStream) -> TokenStream {
     let function = parse_macro_input!(item as ItemFn);
     let krate = krate::path(krate.as_ref());
     expand_hook(&function, priority.as_ref(), flags.as_ref(), &krate)
-        .unwrap_or_else(|e| e.to_compile_error().into())
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
 }
 
 fn expand_hook(
@@ -149,7 +150,7 @@ fn expand_hook(
     priority: Option<&Expr>,
     flags: Option<&Expr>,
     krate: &proc_macro2::TokenStream,
-) -> syn::Result<TokenStream> {
+) -> syn::Result<proc_macro2::TokenStream> {
     let sig = &function.sig;
     if let syn::Safety::Unsafe(unsafety) = &sig.safety {
         return Err(syn::Error::new_spanned(
@@ -248,8 +249,7 @@ fn expand_hook(
             }
             #krate::Hook::new(::core::stringify!(#name), #entry, #priority, #flags)
         };
-    }
-    .into())
+    })
 }
 
 /// Declares a service table: makes the struct `repr(C)` and implements

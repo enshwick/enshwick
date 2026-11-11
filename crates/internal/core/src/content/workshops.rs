@@ -340,7 +340,6 @@ const REFERENCE: usize = 16;
 /// # Examples
 ///
 /// ```
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
 /// use enshwick::content::Guid;
 /// use enshwick::content::workshops::{WorkshopId, at_workshop};
 ///
@@ -348,7 +347,6 @@ const REFERENCE: usize = 16;
 /// let changes = at_workshop(&host, WorkshopId::new(Guid::named("you.mod:bench.workshop")))?;
 /// assert_eq!(changes[0].component(), "crafting");
 /// # Ok::<(), enshwick::Off>(())
-/// # }
 /// ```
 pub fn at_workshop(
     facts: &(impl EngineFacts + ?Sized),
