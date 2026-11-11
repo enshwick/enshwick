@@ -596,8 +596,8 @@ unsafe fn read_text(text: *const [usize; 2], max: usize) -> String {
     // `bytes`' length, readable and unchanged for the call by this
     // function's `# Safety`.
     unsafe {
-        enshwick_core::raw::read_bytes_at(core::ptr::with_exposed_provenance(ptr), 0, &mut bytes)
-    };
+        enshwick_core::raw::read_bytes_at(core::ptr::with_exposed_provenance(ptr), 0, &mut bytes);
+    }
     let mut text = String::from_utf8_lossy(&bytes).into_owned();
     // A replaced byte takes three, so a peer's line could pass the limit.
     text.truncate(text.floor_char_boundary(max));

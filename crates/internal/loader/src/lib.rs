@@ -10,6 +10,10 @@
 // compiler, to leave the walks over other threads' stacks unchecked.
 #![cfg_attr(enshwick_asan, feature(sanitize))]
 
+// The settings macros name the API crate by its path, as mods see it; for the
+// loader that crate is the API's core, whose root has the same paths.
+extern crate enshwick_core as enshwick;
+
 #[cfg(windows)]
 mod actions;
 pub mod admission;

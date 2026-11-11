@@ -18,12 +18,12 @@ path = "src/compat.rs"
 required-features = ["compat"]
 
 [features]
-compat = ["dep:clap", "dep:enshwick", "dep:enshwick-gamedata", "dep:enshwick-loader", "dep:memchr"]
+compat = ["dep:clap", "dep:enshwick-abi", "dep:enshwick-gamedata", "dep:enshwick-loader", "dep:memchr"]
 
 [dependencies]
 cbindgen.workspace = true
 clap = { workspace = true, optional = true }
-enshwick = { workspace = true, optional = true }
+enshwick-abi = { workspace = true, optional = true }
 enshwick-gamedata = { workspace = true, optional = true }
 memchr = { workspace = true, optional = true }
 semver.workspace = true

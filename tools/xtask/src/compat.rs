@@ -261,8 +261,8 @@ fn build(args: &Args) -> Result<Build, String> {
 #[cfg(windows)]
 fn steam_build(dir: &Path, side: tables::Side) -> Option<u64> {
     let running = match side {
-        tables::Side::Server => enshwick::abi::Side::SERVER,
-        tables::Side::Client => enshwick::abi::Side::CLIENT,
+        tables::Side::Server => enshwick_abi::abi::Side::SERVER,
+        tables::Side::Client => enshwick_abi::abi::Side::CLIENT,
     };
     enshwick_loader::builds::steam_build(dir, running).map(enshwick_gamedata::SteamBuild::get)
 }
@@ -588,7 +588,7 @@ fn start_mods(args: &Args, dlls: &[PathBuf]) -> Result<Vec<ModOutcome>, String> 
     for dll in dlls {
         let bytes = std::fs::read(dll).map_err(|e| format!("{}: {e}", dll.display()))?;
         let is_mod =
-            memchr::memmem::find(&bytes, enshwick::abi::exports::QUERY.as_bytes()).is_some();
+            memchr::memmem::find(&bytes, enshwick_abi::abi::exports::QUERY.as_bytes()).is_some();
         if let (true, Some(name)) = (is_mod, dll.file_name()) {
             std::fs::write(mods.join(name), &bytes).map_err(|e| e.to_string())?;
         }
