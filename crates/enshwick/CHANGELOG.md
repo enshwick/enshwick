@@ -139,6 +139,16 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- **Breaking:** the API's functions outside `Load` that took the mod's
+  loader take `&impl Loading` or `&mut impl Loading`, which `Load`
+  implements, so a mod passes its `Load` as before: `ecs::Ecs::resolve`,
+  `ComponentType::resolve`, `Components::resolve`, `Worlds::resolve`,
+  `Attributes::resolve`, `game_events::EventType::field` and
+  `inherited_field`, `config::TableConfig::on_change` and
+  `script::GameEventKind::subscribe`. `Loading` is new, sealed, at the root
+  (#1046).
+- What every domain of the API shares is the internal crate
+  `enshwick-base` below `enshwick-core`; every path stays (#1046).
 - `content`: **breaking.** A resource key comes from its type:
   `types::ITEM_INFO.key(guid)` (`ResourceType::key`) replaces
   `guid.key(types::ITEM_INFO)` and `id.key(..)`, which are gone; a content

@@ -9,6 +9,14 @@ see is in the changelog of `enshwick`.
 
 ### Changed
 
+- The base left for `enshwick-base`. `Load` holds its handle and forwards
+  its methods there with `#[forward(base)]`, keeping their docs, examples
+  and `#[script]`; the base's `Bound` implementations and namespace list
+  stay here, in `script/namespaces/base.rs` (#1046).
+- `domains.toml` names each peeled domain's crate, and `cargo xtask check`
+  refuses one that depends on a crate above it (#1046).
+- The rate rule `may_declare_rate` lives in `rates` (#1046).
+
 - `domains.toml` puts each module in a domain, lowest first, and
   `cargo xtask check` refuses a module that names a domain above its own
   (#1044).
