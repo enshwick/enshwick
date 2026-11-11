@@ -18,7 +18,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use rustc_hash::FxHashMap;
 
-use enshwick_base::near::near;
+use enshwick_base::near::{NEAR, near};
 use enshwick_core::abi::RecipeRuleKind;
 use enshwick_core::content::recipes::RecipeLayout;
 use enshwick_core::content::{Blob, Guid};
@@ -28,8 +28,6 @@ use enshwick_core::mods::GAME_ID;
 pub const WORLD_FILE: &str = "recipes.toml";
 /// The workshop of crafting by hand.
 pub const HAND: &str = "hand";
-/// The most near names a problem suggests.
-const NEAR: usize = 5;
 
 /// The recipe file the loader writes as a world first loads.
 pub const TEMPLATE: &str = r#"# Recipes nobody crafts in this world. They leave every crafting menu (by

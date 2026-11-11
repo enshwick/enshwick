@@ -41,8 +41,7 @@ type Reader = Box<dyn Fn(ResourceKey) -> Option<Vec<u8>> + Send + Sync>;
 /// Item debug names to the items that carry them.
 type Names = BTreeMap<String, Vec<Guid>>;
 
-/// The most near names a [`VanillaError::Unknown`] suggests.
-const NEAR: usize = 5;
+use crate::near::NEAR;
 
 /// Why a vanilla name or station was not found.
 ///

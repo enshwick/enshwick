@@ -346,8 +346,7 @@ pub fn declared_settings(load: &Load<'_>) -> Option<(crate::config::TableConfig,
         .map(|(_, declared)| declared.clone())
 }
 
-/// How many names a reply about a misspelt one suggests.
-const NEAR: usize = 5;
+use crate::near::NEAR;
 
 mod changes;
 mod entries;
