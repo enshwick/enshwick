@@ -1,6 +1,6 @@
 //! Luau mods for the Enshwick loader: each mod runs in a sandboxed Luau VM
 //! of its own, and reaches the game only through the API's script
-//! descriptions ([`enshwick::script`](mod@enshwick_core::script)); [`NoSuchItem`].
+//! descriptions ([`enshwick::script`](mod@enshwick_core::script)).
 //!
 //! A script error, a Rust panic in a call it made, or a script past its
 //! memory or time budget turns that mod off through the loader's fault; the
