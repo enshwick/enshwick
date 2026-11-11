@@ -90,7 +90,6 @@ impl Def {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::stats::builtin;
     ///
     /// let (_, def) = builtin::ALL[3];
@@ -145,7 +144,6 @@ pub const ALL: [(Id, Def); 21] = [
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::stats::builtin;
 ///
 /// assert_eq!(builtin::BY_DAMAGE_TYPE[3], Some((builtin::DAMAGE_FIRE, builtin::RESISTANCE_FIRE)));

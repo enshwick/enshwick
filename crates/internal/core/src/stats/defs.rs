@@ -24,7 +24,6 @@ pub enum StatType {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::items::StatFormat;
 /// use enshwick::stats::{StatDef, StatType};
 ///
@@ -85,7 +84,6 @@ impl StatDef {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::stats::{Op, StatDef, aggregate};
     ///
     /// let glows = StatDef::flag();
@@ -116,7 +114,6 @@ impl StatDef {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::stats::StatDef;
     ///
     /// assert_eq!(StatDef::additive().starting_at(5.0).default, 5.0);
@@ -157,7 +154,6 @@ impl StatDef {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::abi::StatDefData;
     /// use enshwick::stats::StatDef;
     ///
@@ -192,7 +188,6 @@ impl StatDef {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::stats::StatDef;
     ///
     /// let haste = StatDef::multiplicative();
@@ -280,7 +275,6 @@ impl Stat {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn same(a: enshwick::stats::Stat, b: enshwick::stats::Stat) -> bool {
     ///     a.key() == b.key()
     /// }
@@ -296,7 +290,6 @@ impl Stat {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn index(stat: enshwick::stats::Stat) -> u32 {
     ///     stat.index()
     /// }
@@ -312,7 +305,6 @@ impl Stat {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::abi::StatRef;
     /// use enshwick::stats::{Stat, StatKey};
     ///

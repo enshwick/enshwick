@@ -11,7 +11,6 @@ use crate::abi::ResourceKey;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::{Guid, Id, id};
 ///
 /// // This crate's mod id is `you.hello`.
@@ -37,7 +36,6 @@ pub(crate) use enshwick_values::content::{NAME_PART, part_name};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::{game_resource, types};
 /// use enshwick::content::workshops::stations;
 ///

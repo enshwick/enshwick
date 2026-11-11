@@ -16,7 +16,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let types = load.game_event_types()?;
     ///     enshwick::info!("{} game event types on this build", types.len());

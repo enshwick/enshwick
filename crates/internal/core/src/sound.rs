@@ -8,7 +8,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::content::Guid;
 //! use enshwick::sound::SoundContainerId;
 //!
@@ -60,7 +59,6 @@ const PRIORITY: &str = "priority";
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::Guid;
 /// use enshwick::sound::SoundContainerId;
 ///
@@ -200,7 +198,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::Guid;
     /// use enshwick::sound::{SoundChange, SoundContainerId};
     ///

@@ -14,7 +14,6 @@ use super::sheet::ArgView;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::actions::Value;
 ///
 /// fn minutes(args: &[Value]) -> Option<f64> {
@@ -96,7 +95,6 @@ impl Arg {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::{Action, Arg, Value};
     ///
     /// let give = Action::new("give", "Give an item")
@@ -117,7 +115,6 @@ impl Arg {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::{Action, Arg};
     ///
     /// let action = Action::new("invite", "Invite").arg(Arg::player("Who"));
@@ -162,7 +159,6 @@ impl Arg {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::{Action, Arg};
     ///
     /// let action = Action::new("pvp", "Fights between players").arg(Arg::toggle("On"));
@@ -182,7 +178,6 @@ impl Arg {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::{Action, Arg};
     ///
     /// let say = Action::new("say", "Announce").admins().arg(Arg::text("Message", 200));
@@ -210,7 +205,6 @@ impl Arg {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::{Action, Arg, Outcome, Value};
     ///
     /// let spawn = Action::new("spawn", "Spawn an item").admins().arg(Arg::item("Item"));
@@ -244,7 +238,6 @@ impl Arg {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::actions::Subject;
 ///
 /// let locker = Subject::new(42, "Your locker at (2, 10, -4)");
@@ -267,7 +260,6 @@ pub struct Subject {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::actions::FindSubjectError;
 ///
 /// let none: FindSubjectError = "No gate near you".into();
@@ -351,7 +343,6 @@ pub struct Ask<'a> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::actions::ActionTarget;
 ///
 /// let chest = ActionTarget::at([10.0, 2.0, -4.5]);
@@ -377,7 +368,6 @@ impl ActionTarget {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// let chest = enshwick::actions::ActionTarget::entity(enshwick::Entity(4096));
     /// assert_eq!(chest.entity, Some(enshwick::Entity(4096)));
     /// ```
@@ -408,7 +398,6 @@ impl ActionTarget {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::ActionTarget;
     ///
     /// let chest = ActionTarget::entity(enshwick::Entity(4096)).with_position([1.0, 2.0, 3.0]);
@@ -486,7 +475,6 @@ pub enum Via {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::actions::{Outcome, Request};
 ///
 /// fn greet(request: &Request<'_>) -> Outcome {
@@ -530,7 +518,6 @@ impl Request<'_> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::actions::Outcome;
 ///
 /// let done: Outcome = "Done".into();
@@ -585,7 +572,6 @@ impl Outcome {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::Outcome;
     ///
     /// assert_eq!(Outcome::done("Ann may use it").text(), "Ann may use it");

@@ -20,7 +20,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::i18n::Language;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -41,7 +40,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let texts = load.texts_from("[en]\n\"locker.name\" = \"Locker\"\n")?;
     ///     let _ = texts;
@@ -62,7 +60,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::{Id, id};
     ///
     /// const LOCKER_NAME: Id = id!("locker.name");

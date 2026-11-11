@@ -66,7 +66,6 @@ impl MenuLayout {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::menu::MenuLayout;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -121,7 +120,6 @@ pub struct MenuEntry {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::menu::{MenuEntry, MenuLayout, UI_BUNDLE, list_recipes};
 /// use enshwick::content::{Guid, Id, id, types};
 ///
@@ -189,7 +187,6 @@ pub fn list_recipes(layout: &MenuLayout, bundle: &[u8], entries: &[MenuEntry]) -
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::menu::{MenuLayout, UI_BUNDLE, move_recipes};
 /// use enshwick::content::workshops::WorkshopId;
 /// use enshwick::content::{Guid, types};
@@ -369,7 +366,6 @@ fn group_entries(layout: &MenuLayout, blob: &Blob, group: usize) -> Option<usize
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::menu::{MenuLayout, UI_BUNDLE, list_workshop};
 /// use enshwick::content::workshops::WorkshopId;
 /// use enshwick::content::{Id, id, types};

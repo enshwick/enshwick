@@ -22,7 +22,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::game_settings::GameSettings;
 //!
 //! fn harder(settings: &GameSettings) -> Result<f32, enshwick::WorldError> {
@@ -508,7 +507,6 @@ impl GameSettings {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn durability(settings: &enshwick::game_settings::GameSettings) -> Option<bool> {
     ///     settings.read().map(|(now, _preset)| now.enable_durability)
     /// }
@@ -556,7 +554,6 @@ impl GameSettings {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::game_settings::{GameSettings, TombstoneMode};
     ///
     /// fn keep_everything(settings: &GameSettings) -> Result<(), enshwick::WorldError> {
@@ -594,7 +591,6 @@ impl GameSettings {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn reset(settings: &enshwick::game_settings::GameSettings) {
     ///     let _forgotten = settings.forget_kept();
     /// }

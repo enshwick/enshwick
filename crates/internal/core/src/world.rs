@@ -53,7 +53,6 @@ pub use transactions::{Transaction, TransactionId, TransactionStatus};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::world::WritableType;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -95,7 +94,6 @@ impl WritableType {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn readable(world: &enshwick::world::World, flags: enshwick::world::WritableType, entity: enshwick::Entity) -> bool {
     ///     world.component(entity, flags.ty()).is_some()
     /// }
@@ -110,7 +108,6 @@ impl WritableType {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let flags = enshwick::world::WritableType::resolve(load, "keen::ecs::CombatFlags")?;
     ///     enshwick::debug!("{} is {} bytes", flags.name(), flags.size());
@@ -200,7 +197,6 @@ impl Player {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::Entity;
     /// use enshwick::world::Player;
     ///
@@ -229,7 +225,6 @@ impl Player {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::Entity;
     /// use enshwick::abi::PlayerInfo;
     /// use enshwick::world::{Player, PlayerPermissions};
@@ -271,7 +266,6 @@ impl Placed {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::Entity;
     /// use enshwick::world::Placed;
     ///
@@ -321,7 +315,6 @@ fn blank_info() -> PlayerInfo {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::events::PlayerJoined;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -519,7 +512,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::{Action, Outcome};
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let world = load.world()?;
@@ -603,7 +595,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::{Action, Arg, Outcome, Value};
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let world = load.world()?;
@@ -705,7 +696,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::Entity;
     ///
     /// fn unnamed(world: &enshwick::world::World, chest: Entity) -> bool {
@@ -752,7 +742,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn checkpoint(world: &enshwick::world::World) {
     ///     if let Err(why) = world.save() {
     ///         enshwick::warn!("no save now: {why}");
@@ -774,7 +763,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn named(world: &enshwick::world::World) -> String {
     ///     world.key().unwrap_or_else(|| "no world".to_owned())
     /// }
@@ -794,7 +782,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn hold(world: &enshwick::world::World) -> Option<enshwick::state::Hold> {
     ///     world.data_dir().map(|dir| enshwick::state::Hold::new(&dir))
     /// }

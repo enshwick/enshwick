@@ -17,7 +17,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use std::sync::atomic::{AtomicU64, Ordering};
     ///
     /// static MERGED: AtomicU64 = AtomicU64::new(0);
@@ -43,7 +42,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     if let Some(glow) = load.feature("glow", |load| load.symbol("lantern.glow")) {
     ///         let _ = glow;

@@ -198,7 +198,6 @@ impl PhenomenonChange {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use core::time::Duration;
 /// use enshwick::content::{Guid, Id};
 /// use enshwick::weather::{NewPhenomenon, PhenomenonChange, WeatherPhenomenonEffect};
@@ -450,7 +449,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::Guid;
     /// use enshwick::weather::PhenomenonChange;
     ///

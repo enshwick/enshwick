@@ -26,7 +26,6 @@ impl HudScreenType {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::ui::HudScreenType;
     ///
     /// assert_eq!(HudScreenType::from_name("Map"), Some(HudScreenType::Map));
@@ -95,7 +94,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::ui::{Edge, HudScreenType, Label, Style};
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -137,7 +135,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::id;
     /// use enshwick::ui::{Edge, HudScreenType};
     ///
@@ -206,7 +203,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::ui::HudScreenType;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {

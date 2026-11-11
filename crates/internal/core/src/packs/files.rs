@@ -13,7 +13,6 @@ use super::{
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::packs::{Pack, PackFiles};
 ///
 /// let files = PackFiles::new().with("items.toml", "[[item]]\nid = \"lantern\"\n");
@@ -76,7 +75,6 @@ impl From<ParsePackError> for Off {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::packs::ReadPackError;
 ///
 /// let large = ReadPackError::TooLarge { file: "items.toml".into(), limit: 4 << 20 };
@@ -118,7 +116,6 @@ crate::load::off_from!(ReadPackError);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::packs::PackFiles;
 ///
 /// let files = PackFiles::new().with("texts.toml", "[en]\n");
@@ -167,7 +164,6 @@ impl PackFiles {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::packs::PackFiles;
     ///
     /// let files = PackFiles::read_dir(std::path::Path::new("no such folder"))?;
@@ -227,7 +223,6 @@ impl PackFiles {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::packs::PackFiles;
     ///
     /// let files = PackFiles::new().with("main.luau", "print('hi')").with("items.toml", "");
@@ -354,7 +349,6 @@ pub(super) fn near_field(message: &str) -> String {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// let scripts = enshwick::packs::script_files(std::path::Path::new("no such folder"))?;
 /// assert!(scripts.is_empty());
 /// # Ok::<(), enshwick::packs::ReadPackError>(())

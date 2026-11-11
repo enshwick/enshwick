@@ -86,7 +86,6 @@ impl HeldState {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::WorldError;
 /// use enshwick::world::{HeldState, TransactionStatus, World};
 ///
@@ -123,7 +122,6 @@ impl PropState {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn list(state: enshwick::world::PropState) -> Vec<String> {
     ///     state.iter().map(|kind| format!("{kind:?}")).collect()
     /// }

@@ -51,7 +51,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::{Guid, id};
     /// use enshwick::content::recipes::NewRecipe;
     ///
@@ -101,7 +100,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use std::sync::atomic::{AtomicU32, Ordering};
     ///
     /// use enshwick::content::{Guid, id};
@@ -158,7 +156,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::recipes::Derived;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -230,7 +227,6 @@ impl Load<'_> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// fn settings_changed() {
 ///     if let Err(off) = enshwick::content::recipes::rebuild_recipes() {
 ///         enshwick::warn!("recipe counts change at the next start: {off}");

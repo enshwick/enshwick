@@ -7,7 +7,6 @@
 //! resource the first time the game reads it.
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::content::Guid;
 //! use enshwick::content::changes::{Change, Field, Value};
 //!
@@ -38,7 +37,6 @@ pub const MAX_FACTOR: f64 = 100.0;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::changes::{Field, Value};
 ///
 /// assert!(Field::MaxStackSize.check(Value::Set(999.0)).is_ok());
@@ -143,7 +141,6 @@ impl Field {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::changes::Field;
     ///
     /// assert_eq!(Field::MaxStackSize.name(), "max_stack");
@@ -176,7 +173,6 @@ impl Field {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::changes::{Entry, Field};
     ///
     /// assert_eq!(Field::MaxStackSize.entry(), Entry::Item);
@@ -304,7 +300,6 @@ impl Field {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::changes::{Field, Value};
     ///
     /// let values = [Value::Times(2.0), Value::Set(100.0), Value::Times(1.5)];
@@ -342,7 +337,6 @@ impl Field {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::changes::Field;
     ///
     /// assert!(Field::MaxStackSize.seen_by_clients());
@@ -383,7 +377,6 @@ impl Field {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::abi::DataField;
     /// use enshwick::content::changes::Field;
     ///
@@ -423,7 +416,6 @@ pub enum Entry {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::changes::Value;
 ///
 /// assert_eq!(Value::Times(2.0).to_string(), "times 2");
@@ -452,7 +444,6 @@ impl core::fmt::Display for Value {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::changes::{Field, Value};
 ///
 /// let error = Field::MaxStackSize.check(Value::Set(70000.0)).unwrap_err();
@@ -592,7 +583,6 @@ impl Change {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::Guid;
     /// use enshwick::content::changes::{Change, Field, Value};
     ///
@@ -618,7 +608,6 @@ impl Change {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::Guid;
     /// use enshwick::content::changes::{Change, Field, Value};
     /// use enshwick::content::workshops::WorkshopId;
@@ -639,7 +628,6 @@ impl Change {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::Guid;
     /// use enshwick::content::changes::{Change, Field, Value};
     ///
@@ -668,7 +656,6 @@ impl Change {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::Guid;
     /// use enshwick::content::changes::{Change, Field, Value};
     ///
@@ -701,7 +688,6 @@ impl Change {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::abi::{ChangeOp, DataChange, DataField, DataSelect, Header, Str};
     /// use enshwick::content::changes::{Change, Field, Value};
     ///

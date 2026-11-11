@@ -23,7 +23,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::terrain::{Shape, Terrain};
 //!
 //! fn crater(terrain: &Terrain, at: [f64; 3]) -> Result<f32, enshwick::WorldError> {
@@ -47,7 +46,6 @@ pub const MAX_RADIUS: f32 = 16.0;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// fn dirt(terrain: &enshwick::terrain::Terrain, dirt_item: enshwick::ItemId) -> Option<u8> {
 ///     terrain.materials().iter().find(|m| m.terrain_item == dirt_item).map(|m| m.terrain_material)
 /// }
@@ -195,7 +193,6 @@ impl Terrain {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::terrain::Shape;
     ///
     /// fn hill(terrain: &enshwick::terrain::Terrain, at: [f64; 3], dirt: u8) {
@@ -256,7 +253,6 @@ impl Terrain {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::terrain::Shape;
     ///
     /// fn pad(terrain: &enshwick::terrain::Terrain, at: [f64; 3], stone: u8) -> bool {
@@ -281,7 +277,6 @@ impl Terrain {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::terrain::{Shape, Terrain};
     ///
     /// fn solid(terrain: &Terrain, at: [f64; 3]) -> bool {

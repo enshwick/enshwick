@@ -11,7 +11,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::content::{Id, id};
 //! use enshwick::items::Kind;
 //!
@@ -73,7 +72,6 @@ impl Kind {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::items::Kind;
     ///
     /// assert!(Kind::Consume.can_refuse());
@@ -181,7 +179,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::items::Kind;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {

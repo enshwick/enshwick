@@ -21,7 +21,6 @@ pub struct WorldGuid(pub [u8; 16]);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// fn last_save(world: &enshwick::world::World) {
 ///     if let Some(info) = world.save_info() {
 ///         enshwick::info!("saved {} s after the epoch, {} bytes", info.saved_at.as_secs(), info.size);
@@ -94,7 +93,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn guard(world: &enshwick::world::World, in_danger: bool) {
     ///     if let Err(why) = world.hold_saves(in_danger) {
     ///         enshwick::warn!("saves not held: {why}");
@@ -135,7 +133,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn forget(world: &enshwick::world::World, decoy: enshwick::Entity) {
     ///     if let Err(why) = world.set_saved(decoy, false) {
     ///         enshwick::warn!("decoy {decoy} stays in the save: {why}");

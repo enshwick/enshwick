@@ -13,7 +13,6 @@
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::ui::HudScreenType;
 ///
 /// assert_eq!(HudScreenType::StorageChest.name(), "StorageChest");
@@ -137,7 +136,6 @@ impl HudScreenType {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::ui::HudScreenType;
     ///
     /// assert!(HudScreenType::ALL.contains(&HudScreenType::Map));

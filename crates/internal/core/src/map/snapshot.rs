@@ -20,7 +20,6 @@ pub const MAP_SNAPSHOT_FORMAT: u16 = 2;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::map::{MapPlayer, MapSnapshot};
 ///
 /// let mut snapshot = MapSnapshot::default();
@@ -71,7 +70,6 @@ pub struct MapPlayer {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::map::MapAltar;
 ///
 /// let altar = MapAltar {
@@ -102,7 +100,6 @@ pub struct MapAltar {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::map::MapPoint;
 ///
 /// let ruin = MapPoint { position: [512.0, 60.0, 2048.0], marker_type: Some(0x1234_5678), label: None };
@@ -124,7 +121,6 @@ pub struct MapPoint {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::map::{MapSnapshot, SnapshotError};
 ///
 /// assert_eq!(MapSnapshot::from_bytes(&[9, 0]), Err(SnapshotError::Format(9)));

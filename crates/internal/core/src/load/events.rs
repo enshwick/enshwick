@@ -24,7 +24,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::events::{PlayerJoined, WorldSaved};
     /// use enshwick::game_events::EntityDiedEvent;
     ///
@@ -50,7 +49,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::abi::Event;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -75,7 +73,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use std::time::Duration;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -106,7 +103,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.on_every_step(|tick| enshwick::debug!("step {}", tick.step))
     /// }
@@ -162,7 +158,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use std::sync::atomic::{AtomicU64, Ordering};
     ///
     /// static SEEN: AtomicU64 = AtomicU64::new(0);
@@ -207,7 +202,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// #[enshwick::event(of = trading_post, name = "sold")]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct Sold {

@@ -24,7 +24,6 @@ const SKILL_LEVEL_SHIFT: u8 = 5;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::world::Meter;
 ///
 /// let health = Meter { current: 150, max: 200 };

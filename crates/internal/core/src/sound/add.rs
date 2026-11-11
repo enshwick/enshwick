@@ -75,7 +75,6 @@ impl SoundContainerScene {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::id;
 /// use enshwick::sound::{NewSound, SoundChange, SoundContainerScene};
 ///
@@ -336,7 +335,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::id;
     /// use enshwick::sound::NewSound;
     ///

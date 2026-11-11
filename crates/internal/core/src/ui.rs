@@ -24,7 +24,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::ui::{Label, Slider, Style};
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -94,7 +93,6 @@ pub const MAX_OPTIONS: usize = 64;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::ui::{Dialog, Response};
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -116,7 +114,6 @@ pub struct Ui {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::ui::UiError;
 ///
 /// assert_eq!(UiError::Busy.to_string(), "too many dialogs wait");
@@ -174,7 +171,6 @@ impl Ui {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::ui::{Dialog, Response, Ui};
     ///
     /// fn confirm(ui: Ui) -> bool {

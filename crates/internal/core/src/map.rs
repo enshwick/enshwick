@@ -12,7 +12,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use core::ops::ControlFlow;
 //! use std::time::Duration;
 //!
@@ -59,7 +58,6 @@ use crate::{Load, Off};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::Guid;
 /// use enshwick::map::MapMarkerTypeId;
 ///
@@ -109,7 +107,6 @@ impl MapMarkerTypeId {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::map::{Map, MapMarker};
 ///
 /// fn labelled(map: Map) -> Vec<MapMarker> {
@@ -172,7 +169,6 @@ impl MarkerTypeSorting {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::map::{MapMarkerType, MarkerTypeSorting};
 /// use enshwick::ui::Ui;
 ///
@@ -234,7 +230,6 @@ impl MapMarkerType {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::map::MapFrame;
 ///
 /// let frame = MapFrame { origin: [0.0, 0.0], size: [10240.0, 10240.0], metres_per_cell: 8.0 };
@@ -440,7 +435,6 @@ impl Map {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::map::Map;
     ///
     /// fn near_spawn(map: Map) -> usize {
@@ -502,7 +496,6 @@ impl Map {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::map::Map;
     ///
     /// fn cells(map: Map) -> Option<[f64; 2]> {
@@ -575,7 +568,6 @@ impl Map {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use core::ops::ControlFlow;
     /// use std::time::Duration;
     ///

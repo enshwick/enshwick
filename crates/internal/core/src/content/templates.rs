@@ -11,7 +11,6 @@
 //! [`ComponentChange`] names its component by its generated type.
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! # #[cfg(feature = "typed")]
 //! # mod typed {
 //! use enshwick::content::{Guid, Id, id};
@@ -52,7 +51,6 @@ pub const TEMPLATE_COLLECTION: Guid = Guid::parse("377f61dc-c7b8-4e4f-830f-7d2c3
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::id;
 /// use enshwick::content::templates::TemplateId;
 ///
@@ -110,7 +108,6 @@ type BytesFn = Arc<dyn Fn(&mut [u8]) -> bool + Send + Sync>;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::templates::ComponentChange;
 ///
 /// let change = ComponentChange::remove_named("ecs::Aggro");
@@ -172,7 +169,6 @@ impl ComponentChange {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::templates::ComponentChange;
     /// use enshwick::resources::Value;
     ///
@@ -196,7 +192,6 @@ impl ComponentChange {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::templates::ComponentChange;
     /// use enshwick::resources::Value;
     ///
@@ -234,7 +229,6 @@ impl ComponentChange {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::templates::ComponentChange;
     ///
     /// let first = ComponentChange::edit_bytes("ecs::Faction", |bytes| {
@@ -295,7 +289,6 @@ impl ComponentChange {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::templates::ComponentChange;
     /// use enshwick::typed::ecs::Faction;
     ///
@@ -318,7 +311,6 @@ impl ComponentChange {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::templates::ComponentChange;
     /// use enshwick::typed::ecs::Aggro;
     ///
@@ -339,7 +331,6 @@ impl ComponentChange {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::templates::ComponentChange;
     /// use enshwick::typed::FactionType;
     /// use enshwick::typed::ecs::Faction;
@@ -371,7 +362,6 @@ impl ComponentChange {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::{Guid, id};
 /// use enshwick::content::templates::NewTemplate;
 ///
@@ -696,7 +686,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::{Guid, id};
     /// use enshwick::content::templates::{ComponentChange, NewTemplate};
     ///
@@ -737,7 +726,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::Guid;
     /// use enshwick::content::templates::ComponentChange;
     ///

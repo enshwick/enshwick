@@ -47,7 +47,6 @@ impl VoxelChange {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::voxels::{Voxel, VoxelChange, VoxelMaterial, VoxelPos};
     ///
     /// let rock = Voxel::new(VoxelMaterial::Terrain(9), 255);
@@ -146,7 +145,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::voxels::{EditSource, VoxelMaterial};
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {

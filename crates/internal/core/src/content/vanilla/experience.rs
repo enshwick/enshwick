@@ -38,7 +38,6 @@ pub struct ExperienceBalanceValue {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::vanilla;
 /// use enshwick::game_events::ExperienceSourceType;
 ///

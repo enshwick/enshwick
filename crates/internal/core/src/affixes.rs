@@ -22,7 +22,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::affixes::{AffixDef, Range, ItemRarity};
 //! use enshwick::content::categories::ItemCategoryMask;
 //! use enshwick::content::id;
@@ -66,7 +65,6 @@ pub struct AffixInfo {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::affixes::RollError;
 ///
 /// assert_eq!(RollError::Rolled.to_string(), "the item rolled before");
@@ -107,7 +105,6 @@ impl Affixes {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn tooltip(affixes: &enshwick::affixes::Affixes, item: enshwick::inventory::ItemInstance) -> usize {
     ///     affixes.lines(item).iter().filter(|line| line.affix.is_some()).count()
     /// }
@@ -154,7 +151,6 @@ impl Affixes {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn name(affixes: &enshwick::affixes::Affixes, line: &enshwick::affixes::Line) -> Option<String> {
     ///     affixes.info(line.affix?).map(|info| info.text)
     /// }

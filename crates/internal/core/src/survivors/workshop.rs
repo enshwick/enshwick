@@ -10,7 +10,6 @@ use super::NpcId;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::survivors::WorkshopSurvivor;
 ///
 /// let smith = WorkshopSurvivor::find("blacksmith").ok_or("no blacksmith")?;
@@ -32,7 +31,6 @@ impl WorkshopSurvivor {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::survivors::WorkshopSurvivor;
     ///
     /// assert!(WorkshopSurvivor::find("fisher").is_some());
@@ -48,7 +46,6 @@ impl WorkshopSurvivor {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::survivors::WorkshopSurvivor;
     ///
     /// let smith = WorkshopSurvivor::find("blacksmith").ok_or("no blacksmith")?;
@@ -68,7 +65,6 @@ impl WorkshopSurvivor {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::survivors::WORKSHOP_SURVIVORS;
     ///
     /// assert_eq!(WORKSHOP_SURVIVORS.first().map(|s| s.key()), Some("blacksmith"));
@@ -83,7 +79,6 @@ impl WorkshopSurvivor {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::survivors::{NpcId, WorkshopSurvivor};
     ///
     /// let smith = WorkshopSurvivor::find("blacksmith").ok_or("no blacksmith")?;
@@ -101,7 +96,6 @@ impl WorkshopSurvivor {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::survivors::WorkshopSurvivor;
     ///
     /// let smith = WorkshopSurvivor::find("blacksmith").ok_or("no blacksmith")?;
@@ -121,7 +115,6 @@ impl WorkshopSurvivor {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::i18n::Language;
     /// use enshwick::survivors::WorkshopSurvivor;
     ///
@@ -140,7 +133,6 @@ impl WorkshopSurvivor {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::survivors::WorkshopSurvivor;
     ///
     /// let smith = WorkshopSurvivor::find("blacksmith").ok_or("no blacksmith")?;
@@ -161,7 +153,6 @@ macro_rules! survivors {
         /// # Examples
         ///
         /// ```
-        /// # extern crate enshwick_core as enshwick;
         /// use enshwick::survivors::WORKSHOP_SURVIVORS;
         ///
         /// let assistants = WORKSHOP_SURVIVORS.iter().filter(|s| s.key().ends_with("_assistant"));

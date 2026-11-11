@@ -61,7 +61,6 @@ impl PlayerPermissions {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::world::PlayerPermissions;
     ///
     /// assert_eq!(PlayerPermissions::CanKickBan.bit(), 1);
@@ -85,7 +84,6 @@ impl PlayerPermissions {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::world::{BuildRefusal, PlayerPermissions};
 ///
 /// let refusal = BuildRefusal::NoPermission(PlayerPermissions::CanEditBase);
@@ -134,7 +132,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::world::{BuildRefusal, Player, World};
     ///
     /// fn dig(world: World, player: &Player, at: [f64; 3]) {
@@ -181,7 +178,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::WorldError;
     /// use enshwick::world::World;
     ///

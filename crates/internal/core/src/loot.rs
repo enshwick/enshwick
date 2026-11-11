@@ -62,7 +62,6 @@ pub struct InteractionOfferRuntime {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::Entity;
 /// use enshwick::loot::{Container, InteractionOfferRuntime};
 ///
@@ -151,7 +150,6 @@ struct Layout {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::loot::{Containers, SYSTEM};
 ///
 /// enshwick::detour! {
@@ -272,7 +270,6 @@ impl Containers {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// unsafe fn still_full(
     ///     containers: &enshwick::loot::Containers,
     ///     ctx: *mut u64,
@@ -334,7 +331,6 @@ impl Containers {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// unsafe fn at(c: &enshwick::loot::Containers, ctx: *mut u64, e: enshwick::Entity) -> bool {
     ///     // SAFETY: called from a system's hook with its context.
     ///     unsafe { c.position(ctx, e) }.is_some()
@@ -363,7 +359,6 @@ impl Containers {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// unsafe fn by_player(c: &enshwick::loot::Containers, ctx: *mut u64, e: enshwick::Entity) -> bool {
     ///     // SAFETY: called from a system's hook with its context.
     ///     unsafe { c.is_player(ctx, e) }
@@ -413,7 +408,6 @@ impl LootPass<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn full(pass: &enshwick::loot::LootPass<'_>, e: enshwick::Entity) -> bool {
     ///     pass.container(e).is_some_and(|c| !c.is_empty)
     /// }
@@ -431,7 +425,6 @@ impl LootPass<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn here(pass: &enshwick::loot::LootPass<'_>, e: enshwick::Entity) -> bool {
     ///     pass.position(e).is_some()
     /// }
@@ -449,7 +442,6 @@ impl LootPass<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn by_player(pass: &enshwick::loot::LootPass<'_>, e: enshwick::Entity) -> bool {
     ///     pass.is_player(e)
     /// }
@@ -562,7 +554,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.on_loot_pass(|pass| {
     ///         let mut emptied = 0;

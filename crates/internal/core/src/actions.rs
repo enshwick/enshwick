@@ -24,7 +24,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::actions::{Action, Arg, Outcome, Value};
 //! use enshwick::i18n::Texts;
 //!
@@ -199,7 +198,6 @@ impl Action {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::Action;
     ///
     /// let friends = Action::per_player("friends", "Friends", |_ask, _subject| vec![(enshwick::PlayerKey::new(7), "Ann".into())]);
@@ -231,7 +229,6 @@ impl Action {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::Action;
     ///
     /// let action = Action::new("home", "Go home").help("Takes you to your bed");
@@ -251,7 +248,6 @@ impl Action {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::{Action, Arg};
     ///
     /// let kick = Action::new("kick", "Kick").group("Players").arg(Arg::player("Player"));
@@ -272,7 +268,6 @@ impl Action {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::Action;
     ///
     /// let shielded = Action::per_player("shield", "Shield", |_ask, _subject| Vec::new()).with_self();
@@ -300,7 +295,6 @@ impl Action {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::Action;
     ///
     /// let action = Action::new("wave", "Wave").allow(|player| !player.name.is_empty());
@@ -334,7 +328,6 @@ impl Action {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::Action;
     /// use enshwick::world::PlayerPermissions;
     ///
@@ -356,7 +349,6 @@ impl Action {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::{Action, Subject};
     ///
     /// let action = Action::new("open", "Open the gate").at(|ask| {
@@ -389,7 +381,6 @@ impl Action {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::PlayerKey;
     /// use enshwick::actions::{Action, Arg};
     ///
@@ -479,7 +470,6 @@ impl Actions {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::{Action, Outcome};
     /// use enshwick::controls::{Control, Key};
     /// use enshwick::i18n::Texts;
@@ -514,7 +504,6 @@ impl Actions {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::{Action, ActionTarget, Outcome};
     /// use enshwick::i18n::Texts;
     /// use enshwick::ui::{Edge, HudScreenType};
@@ -565,7 +554,6 @@ impl Actions {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::{Action, Outcome};
     /// use enshwick::controls::Key;
     ///
@@ -620,7 +608,6 @@ impl Actions {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::{Action, Outcome};
     /// use enshwick::i18n::Texts;
     ///
@@ -673,7 +660,6 @@ impl Actions {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use std::sync::Arc;
     /// use std::sync::atomic::{AtomicBool, Ordering};
     ///
@@ -718,7 +704,6 @@ impl Actions {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::{Action, Arg, Outcome, Window};
     /// use enshwick::i18n::Texts;
     ///
@@ -759,7 +744,6 @@ impl Actions {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn close_panel(actions: &enshwick::actions::Actions, admin: enshwick::PlayerKey) {
     ///     let _closed = actions.close("panel", &[admin]);
     /// }
@@ -835,7 +819,6 @@ impl Actions {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::{Actions, Window};
     ///
     /// fn refresh(actions: &Actions, admins: &[enshwick::PlayerKey], online: usize) {
@@ -864,7 +847,6 @@ impl Actions {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let actions = load.actions(enshwick::i18n::Texts::default())?;
     ///     actions.on_closed(|player, window| match window {
@@ -928,7 +910,6 @@ impl Load<'_> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// assert!(enshwick::actions::is_valid_id("ban-list"));
 /// assert!(!enshwick::actions::is_valid_id("Ban List"));
 /// ```

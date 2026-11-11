@@ -49,7 +49,6 @@ const NEAR: usize = 5;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::vanilla::VanillaError;
 ///
 /// let unknown = VanillaError::Unknown { name: "Tool_Torch1".into(), near: vec!["Tool_Torch01".into()] };
@@ -159,7 +158,6 @@ fn game() -> Result<&'static Vanilla, VanillaError> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::vanilla::{self, VanillaError};
 ///
 /// match vanilla::item("Prop_Production_T1_Forge") {
@@ -182,7 +180,6 @@ pub fn item(name: &str) -> Result<Guid, VanillaError> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// let torch = enshwick::content::vanilla::recipe("Tool_Torch01");
 /// assert!(torch.is_err(), "no game runs here");
 /// ```
@@ -200,7 +197,6 @@ pub fn recipe(name: &str) -> Result<Guid, VanillaError> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// let vukah = enshwick::content::vanilla::loot_table("LootContainer_Enemy_Corpse_Vukah");
 /// assert!(vukah.is_err(), "no game runs here");
 /// ```
@@ -219,7 +215,6 @@ pub fn loot_table(name: &str) -> Result<LootTable, VanillaError> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// let forge = enshwick::content::vanilla::station("Prop_Production_T1_Forge");
 /// assert!(forge.is_err(), "no game runs here");
 /// ```
@@ -239,7 +234,6 @@ pub fn station(name: &str) -> Result<Station, VanillaError> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// let forge = enshwick::content::vanilla::workshop("Prop_Production_T1_Forge");
 /// assert!(forge.is_err(), "no game runs here");
 /// ```
@@ -260,7 +254,6 @@ pub fn workshop(name: &str) -> Result<WorkshopId, VanillaError> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// let wolf = enshwick::content::vanilla::template("Enemy_Wildbeast_Wolf");
 /// assert!(wolf.is_err(), "no game runs here");
 /// ```
@@ -295,7 +288,6 @@ pub struct Enemy {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// let wolf = enshwick::content::vanilla::enemy("Enemy_Wildbeast_Wolf");
 /// assert!(wolf.is_err(), "no game runs here");
 /// ```
@@ -345,7 +337,6 @@ pub fn enemy(name: &str) -> Result<Enemy, VanillaError> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::vanilla::Vanilla;
 ///
 /// if let Some(vanilla) = Vanilla::game() {
@@ -445,7 +436,6 @@ impl Vanilla {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::EngineFacts;
     /// use enshwick::content::vanilla::Vanilla;
     ///
@@ -536,7 +526,6 @@ impl Vanilla {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::vanilla::Vanilla;
     ///
     /// if let Some(vanilla) = Vanilla::game() {
@@ -606,7 +595,6 @@ impl Vanilla {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::vanilla::Vanilla;
     ///
     /// if let Some(vanilla) = Vanilla::game() {
@@ -638,7 +626,6 @@ impl Vanilla {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::vanilla::Vanilla;
     ///
     /// if let Some(vanilla) = Vanilla::game() {
@@ -787,7 +774,6 @@ impl Vanilla {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::vanilla::Vanilla;
     ///
     /// if let Some(vanilla) = Vanilla::game() {

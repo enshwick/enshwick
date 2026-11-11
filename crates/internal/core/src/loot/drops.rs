@@ -25,7 +25,6 @@ use crate::{Load, Next, Off};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::loot::Kinds;
 ///
 /// let containers = Kinds::CORPSES.with(Kinds::CHESTS);
@@ -49,7 +48,6 @@ impl Kinds {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::loot::Kinds;
     ///
     /// assert!(Kinds::CONTAINERS.contains(Kinds::CHESTS));
@@ -65,7 +63,6 @@ impl Kinds {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::loot::Kinds;
     ///
     /// assert_eq!(Kinds::CORPSES.with(Kinds::CHESTS), Kinds::CONTAINERS);
@@ -83,7 +80,6 @@ impl Kinds {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::loot::LootContainerId;
 ///
 /// let labels = LootContainerId::new(9);
@@ -121,7 +117,6 @@ pub struct Roll {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::Entity;
 /// use enshwick::loot::{LootContainerId, Source, Kinds, Roll};
 ///
@@ -233,7 +228,6 @@ impl Source {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::{Id, id};
 /// use enshwick::ItemId;
 /// use enshwick::loot::{Drop, Source};
@@ -268,7 +262,6 @@ pub struct Drop {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::loot::MeterRoll;
 ///
 /// let charges = MeterRoll { min: 1, max: 5, of: 5 };
@@ -330,7 +323,6 @@ impl Drop {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::loot::{Drop, MeterRoll, Source};
     ///
     /// let drop = Drop::new(enshwick::ItemId::new(0x5e01), 0.1, Source::bosses()).meter(1, 5, 5);
@@ -839,7 +831,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::{Id, id};
     /// use enshwick::loot::{Drop, Source, Kinds};
     ///
@@ -902,7 +893,6 @@ impl Load<'_> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::{Id, id};
 /// use enshwick::loot::{Drop, Source, replace_drops};
 ///

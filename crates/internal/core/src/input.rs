@@ -19,7 +19,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use std::time::Duration;
 //!
 //! use enshwick::controls::GameAction;
@@ -177,7 +176,6 @@ impl Input {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::controls::GameAction;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -228,7 +226,6 @@ impl InputMask {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::input::InputMask;
     ///
     /// fn count(held: InputMask) -> usize {
@@ -250,7 +247,6 @@ impl InputMask {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::input::InputMask;
     ///
     /// fn idle(held: InputMask) -> bool {

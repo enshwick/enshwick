@@ -27,7 +27,6 @@ pub const RESERVED_FOR_SINGLE: usize = 16;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::recipes::{WORKSHOP_RECIPES, workshop_limit};
 ///
 /// // Outside the game the limit holds.
@@ -120,7 +119,6 @@ impl RecipeLayout {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let layout = enshwick::content::recipes::RecipeLayout::resolve(load)?;
     ///     assert_eq!(layout.recipe, 0xa8);
@@ -170,7 +168,6 @@ pub(super) fn fnv1a(bytes: &[u8]) -> u32 {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::recipes::{
 ///     NewRecipe, RECIPE_REGISTRY, RecipeLayout, add_recipe_to, workshop_limit,
 /// };

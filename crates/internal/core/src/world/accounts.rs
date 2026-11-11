@@ -51,7 +51,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::world::{AccountAction, World};
     ///
     /// fn ban_for_cheating(world: &World, key: enshwick::PlayerKey) {
@@ -86,7 +85,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::world::World;
     ///
     /// fn quiet(world: &World, key: enshwick::PlayerKey) {
@@ -114,7 +112,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::world::World;
     ///
     /// fn may_talk(world: &World, key: enshwick::PlayerKey) -> bool {

@@ -13,7 +13,6 @@ use crate::points::Mode;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::packs::PackManifest;
 /// use enshwick::points::Mode;
 ///
@@ -286,7 +285,6 @@ impl PackPoint {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::packs::PackManifest;
     ///
     /// let manifest = PackManifest::parse("id = \"you.post\"\nversion = \"1.0.0\"\n[[point]]\nname = \"max-stack\"\nmode = \"observe\"\noutput = \"u32\"\n")?;
@@ -424,7 +422,6 @@ impl super::PackManifest {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::packs::PackManifest;
     ///
     /// let manifest = PackManifest::parse("id = \"you.post\"\nversion = \"1.0.0\"\nexports = [\"point:price\"]\n[[point]]\nname = \"price\"\nmode = \"advise\"\noutput = \"u32\"\ninput = [{ name = \"item\", type = \"u32\" }]\n")?;

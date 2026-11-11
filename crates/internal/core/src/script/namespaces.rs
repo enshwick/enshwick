@@ -16,8 +16,7 @@ use super::{
 ///
 /// # Examples
 ///
-/// ```rust,standalone_crate
-/// # extern crate enshwick_core as enshwick;
+/// ```
 /// let names: Vec<&str> = enshwick::script::NAMESPACES.iter().map(|n| n.name()).collect();
 /// assert!(names.contains(&"world"));
 /// ```
@@ -115,8 +114,7 @@ impl Namespace {
     ///
     /// # Examples
     ///
-    /// ```rust,standalone_crate
-    /// # extern crate enshwick_core as enshwick;
+    /// ```
     /// let getters: Vec<&str> = enshwick::script::NAMESPACES
     ///     .iter()
     ///     .filter_map(|n| Some(n.request_function()?.name()))
@@ -200,8 +198,7 @@ impl Namespace {
     ///
     /// # Examples
     ///
-    /// ```rust,standalone_crate
-    /// # extern crate enshwick_core as enshwick;
+    /// ```
     /// let world = enshwick::script::NAMESPACES.iter().find(|n| n.name() == "world");
     /// assert!(world.is_some_and(|w| w.functions().iter().any(|f| f.name() == "players")));
     /// ```
@@ -218,8 +215,7 @@ impl Namespace {
     ///
     /// # Examples
     ///
-    /// ```rust,standalone_crate
-    /// # extern crate enshwick_core as enshwick;
+    /// ```
     /// use enshwick::script::{NAMESPACES, Value};
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {

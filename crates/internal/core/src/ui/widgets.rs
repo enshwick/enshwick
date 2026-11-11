@@ -10,7 +10,6 @@ use crate::abi::UiWidget;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::ui::Screen;
 ///
 /// fn hud_wanted(screen: Screen) -> bool {
@@ -75,7 +74,6 @@ impl Style {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::ui::{Frame, Sound};
 ///
 /// fn refuse(frame: &mut Frame<'_>) {
@@ -111,7 +109,6 @@ impl Sound {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::ui::{Frame, Label, Style};
 ///
 /// fn heading(frame: &mut Frame<'_>) {
@@ -186,7 +183,6 @@ impl<'a> From<&'a str> for Label<'a> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::ui::{Button, Frame};
 ///
 /// fn buttons(frame: &mut Frame<'_>, saved: bool) -> bool {
@@ -236,7 +232,6 @@ impl<'a> From<&'a str> for Button<'a> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::ui::{Frame, Toggle};
 ///
 /// fn rows(frame: &mut Frame<'_>, fast: &mut bool, synced: bool) {
@@ -288,7 +283,6 @@ impl<'a> From<&'a str> for Toggle<'a> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::ui::{Frame, Slider};
 ///
 /// fn rows(frame: &mut Frame<'_>, altars: &mut f32) {
@@ -348,7 +342,6 @@ impl<'a> Slider<'a> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::ui::{Dropdown, Frame};
 ///
 /// fn rows(frame: &mut Frame<'_>, mode: &mut usize) {

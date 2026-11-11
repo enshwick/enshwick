@@ -42,7 +42,6 @@ impl ContainerLayout {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let layout = enshwick::content::containers::ContainerLayout::resolve(load)?;
     ///     enshwick::info!("generic slots at +{:#x}", layout.generic);
@@ -110,7 +109,6 @@ pub fn container_slots(layout: &ContainerLayout, template: &[u8]) -> Option<u8> 
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::containers::{ContainerLayout, container_slots, resize_container};
 ///
 /// fn doubled(layout: &ContainerLayout, template: &[u8]) -> Option<Vec<u8>> {

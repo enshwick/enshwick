@@ -32,7 +32,6 @@ pub enum PackSide {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::packs::{PackManifest, PackSide};
 ///
 /// let manifest = PackManifest::parse(r#"
@@ -115,7 +114,6 @@ pub struct PackManifest {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::packs::PackManifest;
 ///
 /// let manifest = PackManifest::parse(r#"
@@ -170,7 +168,6 @@ pub struct PackSetting {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::packs::PackManifest;
 ///
 /// let manifest = PackManifest::parse(r#"
@@ -298,7 +295,6 @@ impl PackManifest {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::abi::Relation;
     /// use enshwick::packs::PackManifest;
     ///
@@ -495,7 +491,6 @@ impl PackManifest {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::packs::{Pack, PackFiles, PackManifest};
     ///
     /// let text = "id = \"you.stacks\"\nversion = \"1.0.0\"\nside = \"server\"\n";

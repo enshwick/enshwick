@@ -41,7 +41,6 @@ pub struct Candidate<'a> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::affixes::{ItemRarity, RollRules};
 ///
 /// let rules = RollRules::new(1, 3).max_rarity(ItemRarity::Rare);
@@ -96,7 +95,6 @@ impl RollRules {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::affixes::{AffixDef, AffixKey, Candidate, RollRules, roll};
 /// use enshwick::content::categories::ItemCategoryMask;
 ///
@@ -163,7 +161,6 @@ pub fn roll(pool: &[Candidate<'_>], category: u8, rules: RollRules, seed: u64) -
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::affixes::{AffixDef, AffixKey, Candidate, RollRules, reroll};
 /// use enshwick::content::categories::ItemCategoryMask;
 /// use enshwick::stats::ItemStats;
@@ -204,7 +201,6 @@ pub fn reroll(
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::affixes::{lines_of, Candidate};
 /// use enshwick::stats::{ItemModifier, ItemStats, Op, StatKey};
 ///

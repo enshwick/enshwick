@@ -18,7 +18,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::packs::{Pack, PackFiles};
 //!
 //! let files = PackFiles::new()
@@ -105,7 +104,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::packs::{Pack, PackFiles};
     ///
     /// const ITEMS: &str = r#"

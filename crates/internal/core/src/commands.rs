@@ -22,7 +22,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::commands::{Caller, run};
 //! use enshwick::world::PlayerPermissions;
 //!
@@ -85,7 +84,6 @@ impl Caller {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::commands::Caller;
     /// use enshwick::world::PlayerPermissions;
     ///
@@ -103,7 +101,6 @@ impl Caller {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::commands::{Caller, RunCommandError, run};
 ///
 /// assert_eq!(run("  ", &Caller::new("tool")), Err(RunCommandError::Empty));
@@ -193,7 +190,6 @@ pub fn run(line: &str, caller: &Caller) -> Result<Outcome, RunCommandError> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use std::sync::mpsc;
 ///
 /// use enshwick::commands::{Caller, run_later};
@@ -243,7 +239,6 @@ pub struct CommandSet {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// // Outside the game no loader answers.
 /// assert!(enshwick::commands::list().is_empty());
 /// ```

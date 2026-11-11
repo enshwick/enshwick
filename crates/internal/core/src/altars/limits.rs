@@ -18,7 +18,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     if !load.raise_base_limit()? {
     ///         enshwick::info!("the game keeps its own altar zones on this build");
@@ -51,7 +50,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     if !load.request_base_limits(128, 32)? {
     ///         enshwick::info!("the game keeps its own altar zones on this build");

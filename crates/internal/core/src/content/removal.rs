@@ -11,7 +11,6 @@
 //! data of another. A recipe goes with [`recipes::disable`].
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::content::vanilla;
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -191,7 +190,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::vanilla;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -219,7 +217,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::Guid;
     ///
     /// fn init(load: &mut enshwick::Load<'_>, table: Guid) -> Result<(), enshwick::Off> {

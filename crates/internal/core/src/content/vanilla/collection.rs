@@ -32,7 +32,6 @@ impl Vanilla {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::vanilla::Vanilla;
     ///
     /// if let Some(vanilla) = Vanilla::game() {
@@ -104,7 +103,6 @@ impl Vanilla {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::vanilla::Vanilla;
     ///
     /// if let Some(vanilla) = Vanilla::game() {

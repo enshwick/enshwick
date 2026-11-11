@@ -341,7 +341,6 @@ impl RawResource {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::typed::{Component, ComponentType};
 ///
 /// fn watch<T: Component + std::fmt::Debug>(
@@ -428,7 +427,6 @@ impl<T: Component> ComponentType<T> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::typed::{Component, ComponentType};
     ///
     /// fn copy<T: Component>(
@@ -454,7 +452,6 @@ impl<T: Component> ComponentType<T> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::typed::{Event, EventType};
 ///
 /// fn log<T: Event + std::fmt::Debug>(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -528,7 +525,6 @@ impl<T: Event> EventType<T> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::Guid;
 /// use enshwick::typed::{Resource, ResourceType};
 ///
@@ -597,7 +593,6 @@ impl<T: Resource> ResourceType<T> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::Guid;
     /// use enshwick::typed::{Resource, ResourceType};
     ///

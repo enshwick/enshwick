@@ -24,7 +24,6 @@ const EXPERIENCE_GAIN: &str = "experienceGain";
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::id;
 /// use enshwick::content::knowledge::{NewExperience, NewKnowledge};
 /// use enshwick::game_events::ExperienceSourceType;

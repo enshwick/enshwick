@@ -7,7 +7,6 @@
 //! which the running game's journal lists no page is refused like any other.
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::content::journal::lore_category;
 //!
 //! assert!(lore_category::ALL.contains(&lore_category::GENERAL));

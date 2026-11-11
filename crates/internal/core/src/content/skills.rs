@@ -9,7 +9,6 @@
 //! texts. [`Load::skill_nodes`] lists the vanilla nodes to link from.
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::content::id;
 //! use enshwick::content::skills::NewSkillNode;
 //! use enshwick::typed::SkillNodeType;
@@ -65,7 +64,6 @@ const LEVEL_INDEX: &str = "levelIndex";
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::skills::SkillNodeId;
 ///
 /// assert_eq!(SkillNodeId::new(7).get(), 7);
@@ -527,7 +525,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::{Guid, id};
     /// use enshwick::content::skills::NewPerk;
     ///

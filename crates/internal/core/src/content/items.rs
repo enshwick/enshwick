@@ -75,7 +75,6 @@ pub const METER_TEMPLATE_BASE: Guid = Guid::parse("39246eb2-1b9f-4881-8c60-e0e4f
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::Guid;
 /// use enshwick::content::items::vanilla_name_tag;
 ///
@@ -96,7 +95,6 @@ pub fn vanilla_name_tag(item: Guid) -> Option<Guid> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::Guid;
 /// use enshwick::content::items::vanilla_name;
 /// use enshwick::i18n::Language;
@@ -119,7 +117,6 @@ pub fn vanilla_name(item: Guid, language: crate::i18n::Language) -> Option<&'sta
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::{Guid, id};
 /// use enshwick::content::items::NewItem;
 ///
@@ -190,7 +187,6 @@ impl NewItem {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::{Id, id};
 /// use enshwick::content::items::FuelSetup;
 ///
@@ -214,7 +210,6 @@ impl FuelSetup {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::{Id, id};
     /// use enshwick::content::items::FuelSetup;
     ///
@@ -267,7 +262,6 @@ impl FuelSetup {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::items::fill;
 ///
 /// assert!((fill(3, 5) - 0.6).abs() < f32::EPSILON);
@@ -288,7 +282,6 @@ pub fn fill(count: u16, max: u16) -> f32 {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::Guid;
 /// use enshwick::content::items::{ImpactUiValue, StatFormat};
 ///
@@ -383,7 +376,6 @@ impl ItemLayout {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let layout = enshwick::content::items::ItemLayout::resolve(load)?;
     ///     enshwick::info!("an item's id at +{:#x}", layout.id);
@@ -430,7 +422,6 @@ const BLOB_STRING: usize = 8;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::{Guid, Id, id};
 /// use enshwick::content::items::{ItemLayout, NewItem, clone_item};
 ///
@@ -501,7 +492,6 @@ pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem, guid: Guid) 
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::{Guid, types};
 /// use enshwick::content::items::{ITEM_REGISTRY, ItemLayout, list_item};
 ///
@@ -578,7 +568,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::{Guid, Id, id};
     /// use enshwick::content::items::{FuelSetup, NewItem};
     ///

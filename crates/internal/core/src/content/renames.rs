@@ -12,7 +12,6 @@ use crate::{ItemId, Load, Off};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::renames::Renames;
 /// use enshwick::content::{Guid, Id, id};
 ///
@@ -92,7 +91,6 @@ fn renamed_to(list: &[(Guid, Guid)], guid: Guid) -> Vec<Guid> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::ItemId;
 /// use enshwick::content::renames::{Renames, current_id};
 /// use enshwick::content::{Guid, Id, id};

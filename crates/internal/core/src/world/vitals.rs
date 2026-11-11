@@ -10,7 +10,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::events::PlayerJoined;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -41,7 +40,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::{Action, Outcome};
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let world = load.world()?;
@@ -75,7 +73,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn stand_up(world: &enshwick::world::World, player: &enshwick::world::Player) {
     ///     let max = world.vitals(player.entity).map_or(1, |v| v.health.max);
     ///     let _revived = world.revive(player.entity, max / 2);
@@ -97,7 +94,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::game_events::LevelUpEvent;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -125,7 +121,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn refresh(world: &enshwick::world::World, player: &enshwick::world::Player) {
     ///     let max = world.vitals(player.entity).and_then(|v| v.stamina).map_or(0, |s| s.max);
     ///     let _refreshed = world.set_stamina(player.entity, max);
@@ -146,7 +141,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn drain(world: &enshwick::world::World, player: &enshwick::world::Player) {
     ///     let _drained = world.set_mana(player.entity, 0);
     /// }
@@ -164,7 +158,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn charges(world: &enshwick::world::World, slot: &enshwick::inventory::Slot) -> i32 {
     ///     slot.pide.and_then(|pide| world.item_meter(pide)).map_or(0, |m| m.current)
     /// }
@@ -189,7 +182,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn spend(world: &enshwick::world::World, pide: enshwick::Entity) -> bool {
     ///     world.change_item_meter(pide, |charges| charges - 1).is_ok()
     /// }
@@ -210,7 +202,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn left(world: &enshwick::world::World, player: &enshwick::world::Player) -> i32 {
     ///     world.shroud_time(player.entity).map_or(0, |time| time.current)
     /// }
@@ -235,7 +226,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn refill(world: &enshwick::world::World, player: &enshwick::world::Player) {
     ///     let _full = world.change_shroud_time(player.entity, |_| i32::MAX);
     /// }
@@ -255,7 +245,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn exposed(world: &enshwick::world::World, player: &enshwick::world::Player) -> bool {
     ///     world.in_shroud(player.entity) == Some(true)
     /// }
@@ -273,7 +262,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn skilled(world: &enshwick::world::World, player: &enshwick::world::Player) -> usize {
     ///     world.skills(player.entity).map_or(0, |skills| skills.len())
     /// }
@@ -303,7 +291,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn level(world: &enshwick::world::World, player: &enshwick::world::Player) -> u32 {
     ///     world.progress(player.entity).map_or(0, |progress| progress.level)
     /// }
@@ -332,7 +319,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn to_ten(world: &enshwick::world::World, player: &enshwick::world::Player) -> bool {
     ///     world.set_level(player.entity, 10).is_ok()
     /// }
@@ -354,7 +340,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn restart_level(world: &enshwick::world::World, player: &enshwick::world::Player) {
     ///     let _restarted = world.set_experience(player.entity, 0);
     /// }
@@ -376,7 +361,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn reward(world: &enshwick::world::World, player: &enshwick::world::Player) {
     ///     let _given = world.add_experience(player.entity, 500);
     /// }

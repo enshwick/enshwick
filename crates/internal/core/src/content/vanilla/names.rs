@@ -51,7 +51,6 @@ pub struct VanillaRecipe {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::vanilla;
 ///
 /// if let Ok(items) = vanilla::items() {
@@ -73,7 +72,6 @@ pub fn items() -> Result<Vec<VanillaItem>, VanillaError> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::vanilla;
 ///
 /// if let Ok(recipes) = vanilla::recipes() {
@@ -183,7 +181,6 @@ fn by_shown_name(shown: &[Shown], name: &str) -> Result<Guid, VanillaError> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::vanilla::{self, VanillaError};
 ///
 /// match vanilla::item_by_display_name("Glider") {
@@ -210,7 +207,6 @@ impl Vanilla {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::vanilla::Vanilla;
     ///
     /// if let Some(vanilla) = Vanilla::game() {

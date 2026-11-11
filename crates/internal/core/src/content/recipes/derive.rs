@@ -222,7 +222,6 @@ impl RecipeView<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::recipes::{Derived, RecipeKind, RecipeView};
     ///
     /// // Doubles what every decorative recipe makes, at the same cost.
@@ -260,7 +259,6 @@ pub struct Derived {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::Guid;
 /// use enshwick::content::recipes::derived_guid;
 ///
@@ -294,7 +292,6 @@ pub fn derived_guid(base: Guid, salt: u32) -> Guid {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::recipes::{
 ///     Derived, RECIPE_REGISTRY, RecipeLayout, derive_recipes_in, workshop_limit,
 /// };

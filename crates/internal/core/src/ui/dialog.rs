@@ -37,7 +37,6 @@ impl Response {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::abi::UiDialog;
     /// use enshwick::ui::Response;
     ///
@@ -67,7 +66,6 @@ impl Response {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::abi::UiDialog;
     /// use enshwick::ui::Response;
     ///
@@ -96,7 +94,6 @@ impl Response {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::ui::{Dialog, Response};
 ///
 /// let dialog = Dialog::new("Lockers", "Open every locker in the world?")

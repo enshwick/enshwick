@@ -10,7 +10,6 @@ use crate::world::PropState;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::WorldError;
 ///
 /// assert_eq!(WorldError::WrongThread.to_string(), "not on the server's game thread");

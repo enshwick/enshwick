@@ -22,7 +22,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::damage::DamageTypeNew;
 //!
 //! assert_eq!(DamageTypeNew::ALL[DamageTypeNew::MagicalFire.index()], DamageTypeNew::MagicalFire);
@@ -99,7 +98,6 @@ impl DamageTypeNew {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::damage::DamageTypeNew;
     ///
     /// assert_eq!(DamageTypeNew::ALL[DamageTypeNew::Healing.index()], DamageTypeNew::Healing);
@@ -157,7 +155,6 @@ impl DamageCause {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::damage::DamageCause;
     ///
     /// assert!(DamageCause::NAMED.contains(&DamageCause::FallDamage));
@@ -220,7 +217,6 @@ impl Damage<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     // Entity 2 takes no damage at all.
     ///     load.on_damage(|damage| {
@@ -241,7 +237,6 @@ impl Damage<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     // Nothing hurts itself.
     ///     load.on_damage(|damage| {
@@ -266,7 +261,6 @@ impl Damage<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     // Entity 7 deals double damage, by hand or by bow.
     ///     load.on_damage(|damage| {
@@ -290,7 +284,6 @@ impl Damage<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::damage::DamageTypeNew;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -324,7 +317,6 @@ impl Damage<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     // No single blow deals more than 200.
     ///     load.on_damage(|damage| {
@@ -433,7 +425,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::damage::{DamageCause, DamageTypeNew};
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {

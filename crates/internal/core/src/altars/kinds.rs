@@ -117,7 +117,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::altars::{KindZone, NewFlameAltar};
     /// use enshwick::content::{Guid, id};
     /// use enshwick::content::items::NewItem;
@@ -171,7 +170,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::altars::NewFlameAltar;
     /// use enshwick::content::{Guid, id};
     /// use enshwick::content::items::NewItem;

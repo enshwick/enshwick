@@ -25,7 +25,6 @@ pub const MAX_SIDE: u32 = 2048;
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::{Guid, Id, id};
 /// use enshwick::content::icons::{Icon, Pixels, Tint};
 ///
@@ -69,7 +68,6 @@ pub enum Pixels {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::icons::{Tint, tint};
 ///
 /// let mut white = [255, 255, 255, 200];
@@ -130,7 +128,6 @@ pub mod formats {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::icons::{decode, formats};
 ///
 /// let pixels = decode(formats::RGBA8, 1, 1, &[1, 2, 3, 4]).ok_or("no pixels")?;
@@ -189,7 +186,6 @@ fn blocks(
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// assert!(enshwick::content::icons::decode_png(b"not a png").is_none());
 /// ```
 #[must_use]
@@ -231,7 +227,6 @@ pub fn decode_png(png: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::icons::{decode_png, encode_png};
 ///
 /// let png = encode_png(&[255, 0, 0, 255], 1, 1).ok_or("not encoded")?;
@@ -299,7 +294,6 @@ impl ImageLayout {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) {
     ///     let known = enshwick::content::icons::ImageLayout::resolve(load).is_ok();
     ///     enshwick::info!("icons on this build: {known}");
@@ -339,7 +333,6 @@ impl ImageLayout {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::icons::{ImageLayout, clone_image};
 ///
 /// let layout = ImageLayout { content: 0, width: 0x28, height: 0x2c, flags: 0x30, format: 0x31, levels: 0x32 };
@@ -452,7 +445,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::{Guid, Id, id};
     /// use enshwick::content::icons::{Icon, Pixels, Tint};
     ///

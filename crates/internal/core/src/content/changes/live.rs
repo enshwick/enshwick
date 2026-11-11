@@ -62,7 +62,6 @@ impl Target {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::changes::{Field, SetChangeError, Value};
 ///
 /// let why = Field::MaxStackSize.check(Value::Set(0.0)).unwrap_err();
@@ -96,7 +95,6 @@ pub enum SetChangeError {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::content::changes::{ChangeHandle, Field, Items, Target, Value};
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<ChangeHandle, enshwick::Off> {
@@ -119,7 +117,6 @@ impl ChangeHandle {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::changes::{ChangeHandle, Field};
     ///
     /// fn stacks(handle: &ChangeHandle) -> bool {
@@ -164,7 +161,6 @@ impl ChangeHandle {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::content::changes::{ChangeHandle, SetChangeError};
     ///
     /// fn vanilla(handle: &ChangeHandle) -> Result<(), SetChangeError> {

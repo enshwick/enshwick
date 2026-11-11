@@ -61,7 +61,6 @@ impl MarkerColor {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::ui::{Marker, MarkerColor, Ui};
 ///
 /// fn mark(ui: Ui) {
@@ -125,7 +124,6 @@ impl<'a> Marker<'a> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::ui::{Marker, Ui};
     ///
     /// fn mark_altars(ui: Ui, altars: &[[f64; 3]]) {
@@ -201,7 +199,6 @@ impl Ui {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn unmark(ui: enshwick::ui::Ui) {
     ///     let _cleared = ui.clear_markers();
     /// }

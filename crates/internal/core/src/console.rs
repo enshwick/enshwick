@@ -16,7 +16,6 @@ use crate::abi::{Status, Str};
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::console::{RunError, run};
 ///
 /// assert_eq!(run("   "), Err(RunError::Empty));
@@ -58,7 +57,6 @@ crate::load::off_from!(RunError);
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::console::{RunError, run};
 ///
 /// // Outside the game no loader answers.

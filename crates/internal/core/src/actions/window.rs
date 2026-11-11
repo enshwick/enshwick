@@ -118,7 +118,6 @@ enum Item {
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::actions::{Row, Value, Window};
 ///
 /// let ann = Value::Player { key: enshwick::PlayerKey::new(7), name: "Ann".into() };
@@ -389,7 +388,6 @@ const ARG: &str = "\u{1f}";
 /// # Examples
 ///
 /// ```
-/// # extern crate enshwick_core as enshwick;
 /// use enshwick::actions::window::{ItemView, decode};
 ///
 /// let window = decode("W\tPlayers\nT\t2 online\nE\tsay\n").unwrap();

@@ -13,7 +13,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn count(load: &enshwick::Load<'_>, world: &enshwick::world::World) -> Result<usize, enshwick::Off> {
     ///     let beds = enshwick::ecs::ComponentType::resolve(load, "keen::ecs::NpcBed")?;
     ///     Ok(world.entities(beds).len())
@@ -36,7 +35,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn nearby(world: &enshwick::world::World, player: enshwick::Entity) -> usize {
     ///     let Some(at) = world.position(player) else { return 0 };
     ///     world.near(at, 20.0, world.transform_type()).len()
@@ -76,7 +74,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::actions::{Action, Outcome};
     /// use enshwick::world::ContainerKinds;
     ///
@@ -112,7 +109,6 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn clear(world: &enshwick::world::World, drop: enshwick::Entity) {
     ///     if let Err(why) = world.destroy(drop) {
     ///         enshwick::warn!("entity {} stays: {why}", drop);

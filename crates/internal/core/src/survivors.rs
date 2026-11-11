@@ -10,7 +10,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate enshwick_core as enshwick;
 //! use enshwick::survivors::{Answer, Purpose};
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -134,7 +133,6 @@ impl Lookup {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::Entity;
     /// use enshwick::survivors::{Answer, Lookup, Purpose};
     ///
@@ -476,7 +474,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     // Survivors keep beds within 100 m of home.
     ///     load.on_survivor_bed_check(|check| (0..3).all(|a| (check.home[a] - check.bed_at[a]).abs() < 200))
@@ -508,7 +505,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::survivors::SummonVerdict;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -548,7 +544,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.on_summoned(|summon| {
     ///         if let (Some(pide), Some(meter), false) = (summon.pide, summon.meter, summon.consumed) {
@@ -581,7 +576,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// use enshwick::survivors::NpcId;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -616,7 +610,6 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate enshwick_core as enshwick;
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     // Show only the bits every entity has.
     ///     load.on_survivor_status(|_, statuses| {
