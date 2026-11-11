@@ -2,9 +2,11 @@
 //! per item from the game's data when the loader seals the changes, and
 //! the summary of the conflicts many items share.
 
-use enshwick::abi::ChangeId;
-use enshwick::content::Guid;
-use enshwick::content::changes::{Field, ItemTraits, ItemsChange, RecipeTraits, RecipesChange};
+use enshwick_core::abi::ChangeId;
+use enshwick_core::content::Guid;
+use enshwick_core::content::changes::{
+    Field, ItemTraits, ItemsChange, RecipeTraits, RecipesChange,
+};
 use rustc_hash::FxHashSet;
 
 use super::{Conflict, Declared};
@@ -221,11 +223,11 @@ fn same_source(a: &Declared, b: &Declared) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::ItemData;
-    use enshwick::content::categories::ItemCategoryMask;
-    use enshwick::content::changes::{Change, Items, Recipes, Value};
-    use enshwick::content::recipes::RecipeKind;
-    use enshwick::content::workshops::WorkshopId;
+    use enshwick_core::abi::ItemData;
+    use enshwick_core::content::categories::ItemCategoryMask;
+    use enshwick_core::content::changes::{Change, Items, Recipes, Value};
+    use enshwick_core::content::recipes::RecipeKind;
+    use enshwick_core::content::workshops::WorkshopId;
 
     use super::*;
     use crate::data_changes::merge;

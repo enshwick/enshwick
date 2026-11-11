@@ -1,6 +1,6 @@
 //! The game's executable names and the PE header fields the loader reads.
 
-use enshwick::abi::Side;
+use enshwick_core::abi::Side;
 
 /// The dedicated server's executable, lowercase.
 const SERVER_EXE: &str = "enshrouded_server.exe";

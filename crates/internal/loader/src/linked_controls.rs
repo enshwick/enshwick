@@ -5,8 +5,8 @@
 //! thread runs the game's system; what fires waits for the step to end,
 //! when the world may change.
 
-use enshwick::Entity;
-use enshwick::controls::Tracker;
+use enshwick_core::Entity;
+use enshwick_core::controls::Tracker;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
 /// A control that follows a game action.
@@ -63,12 +63,12 @@ impl Players {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::abi::ControlSpec;
+    /// use enshwick_core::abi::ControlSpec;
     /// use enshwick_loader::linked_controls::{Follow, Players};
     ///
     /// let follow = Follow { index: 0, bit: 3, hold_ms: 500, fires: ControlSpec::PRESS };
     /// let mut players = Players::new();
-    /// players.step(&[follow], &[enshwick::Entity(7)], 0, |_| Some(1 << 3));
+    /// players.step(&[follow], &[enshwick_core::Entity(7)], 0, |_| Some(1 << 3));
     /// assert!(players.waiting());
     /// ```
     pub fn step(
@@ -113,14 +113,14 @@ impl Players {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::abi::ControlSpec;
+    /// use enshwick_core::abi::ControlSpec;
     /// use enshwick_loader::linked_controls::{Follow, Players};
     ///
     /// let follow = Follow { index: 0, bit: 0, hold_ms: 500, fires: ControlSpec::PRESS };
     /// let mut players = Players::new();
-    /// players.step(&[follow], &[enshwick::Entity(7)], 0, |_| Some(1));
+    /// players.step(&[follow], &[enshwick_core::Entity(7)], 0, |_| Some(1));
     /// let ready = players.settle(|entity| Some(entity));
-    /// assert_eq!(ready[0].1, enshwick::Entity(7));
+    /// assert_eq!(ready[0].1, enshwick_core::Entity(7));
     /// ```
     pub fn settle<P>(&mut self, find: impl Fn(Entity) -> Option<P>) -> Vec<(Firing, P)> {
         let mut ready = Vec::with_capacity(self.waiting.len());
@@ -144,7 +144,7 @@ impl Players {
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::ControlSpec;
+    use enshwick_core::abi::ControlSpec;
 
     use super::*;
 

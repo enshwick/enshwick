@@ -2,7 +2,7 @@
 
 use std::sync::atomic::Ordering;
 
-use enshwick::abi::UiWidget;
+use enshwick_core::abi::UiWidget;
 
 use super::MODS_PER_PAGE;
 use crate::host::Loader;
@@ -404,7 +404,7 @@ mod tests {
     #[test]
     fn a_world_store_that_is_off_reads_in_the_player_s_language_with_its_file() {
         let reason = r"C:\saves\w-mod-data\you.safes\owners.toml does not parse: expected a string";
-        let uk = Some(enshwick::i18n::Language::UK_UA);
+        let uk = Some(enshwick_core::i18n::Language::UK_UA);
         let line = texts::for_reader(uk, || {
             store_off("Personal Safes", "world store owners", reason)
         })

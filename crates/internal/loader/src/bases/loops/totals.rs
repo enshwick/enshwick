@@ -2,7 +2,7 @@
 //! for the window too, and the count the client's base list sizes itself
 //! by.
 
-use enshwick::raw::{read_at, read_ptr_at, write_at};
+use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
 use super::{
     ANIMAL_COUNTS, BEDS, Game, Layout, ObjFn, ObjWorldFn, RecordFields, add_u16, found_layout,

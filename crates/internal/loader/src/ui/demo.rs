@@ -8,7 +8,7 @@ use core::cell::RefCell;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick::abi::{UiDialog, UiWidget};
+use enshwick_core::abi::{UiDialog, UiWidget};
 
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -315,11 +315,11 @@ fn hud_page(paint: &Painter<'_>, demo: &mut Demo) {
     if let Some(on) = paint.toggle(words("demo.marker.show").as_bytes(), demo.marker, false) {
         demo.marker = on;
         let label = words("demo.marker.label");
-        let marker = enshwick::abi::UiMarker {
-            header: enshwick::abi::Header::of::<enshwick::abi::UiMarker>(),
+        let marker = enshwick_core::abi::UiMarker {
+            header: enshwick_core::abi::Header::of::<enshwick_core::abi::UiMarker>(),
             position,
-            label: enshwick::abi::Str::new(&label),
-            color: enshwick::abi::UiMarker::GREEN,
+            label: enshwick_core::abi::Str::new(&label),
+            color: enshwick_core::abi::UiMarker::GREEN,
             marker_type: 0,
         };
         let fast_travel = crate::host::loader()
@@ -333,7 +333,7 @@ fn hud_page(paint: &Painter<'_>, demo: &mut Demo) {
         let mut markers = Vec::new();
         if on {
             markers.push(marker);
-            markers.extend(fast_travel.map(|marker_type| enshwick::abi::UiMarker {
+            markers.extend(fast_travel.map(|marker_type| enshwick_core::abi::UiMarker {
                 position: [
                     position[0].saturating_add(20 << 32),
                     position[1],

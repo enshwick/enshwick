@@ -1,7 +1,7 @@
 //! The placement cursor's refusal of an altar that would start a base past
 //! the asked limit, with the game's own "too many altars" answer.
 
-use enshwick::raw::{read_at, write_at};
+use enshwick_core::raw::{read_at, write_at};
 
 use super::{ASKED, SITES, known};
 use crate::base_groups::limit::{self, MAX_BASES};
@@ -56,7 +56,7 @@ pub(super) unsafe fn refuse_past_limit(
     // SAFETY: the caller guarantees the cursor's live transform, which
     // starts with the position, three i64.
     let fixed = unsafe { read_at::<[i64; 3]>(transform.cast(), 0) };
-    let candidate = limit::candidate(enshwick::ecs::metres(fixed), size);
+    let candidate = limit::candidate(enshwick_core::ecs::metres(fixed), size);
     if zones.refuses(&candidate, most) {
         // SAFETY: the caller guarantees the cursor's live u32 flags word.
         let refused =

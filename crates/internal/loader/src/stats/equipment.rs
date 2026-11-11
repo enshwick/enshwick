@@ -4,9 +4,9 @@
 
 use std::sync::OnceLock;
 
-use enshwick::Entity;
-use enshwick::inventory::InventoryCategory;
-use enshwick::raw::read_at;
+use enshwick_core::Entity;
+use enshwick_core::inventory::InventoryCategory;
+use enshwick_core::raw::read_at;
 
 use crate::catalogue::{self, ids};
 use crate::host::Loader;

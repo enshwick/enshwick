@@ -1,7 +1,7 @@
 //! The live check the parts that write the weather run before their first
 //! write.
 
-use enshwick::abi::Status;
+use enshwick_core::abi::Status;
 
 use super::Layout;
 use crate::host::Loader;

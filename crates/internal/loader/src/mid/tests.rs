@@ -828,7 +828,7 @@ static RAN_AS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::
 ///
 /// None: it reads neither argument.
 unsafe extern "system" fn host_of(_registers: *mut Registers, _user: *mut c_void) {
-    let handle = enshwick::host().map_or(usize::MAX, |host| host.handle().0);
+    let handle = enshwick_core::host().map_or(usize::MAX, |host| host.handle().0);
     RAN_AS.store(handle, Ordering::Relaxed);
 }
 

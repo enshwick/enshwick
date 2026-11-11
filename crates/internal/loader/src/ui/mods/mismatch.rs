@@ -1,7 +1,7 @@
 //! The mismatch screen's page: the mods that differ from a server's that
 //! refused or kicked this client, a heading per kind, scrolling.
 
-use enshwick::abi::UiWidget;
+use enshwick_core::abi::UiWidget;
 
 use super::list::{listing, pages};
 use crate::join::Row;

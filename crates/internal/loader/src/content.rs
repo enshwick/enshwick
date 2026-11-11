@@ -25,8 +25,8 @@ use core::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use enshwick::abi::{HookFlags, ResourceKey, ResourcePatchFn, Status};
-use enshwick::raw::{read_at, write_at};
+use enshwick_core::abi::{HookFlags, ResourceKey, ResourcePatchFn, Status};
+use enshwick_core::raw::{read_at, write_at};
 #[cfg(test)]
 pub(crate) use patches::enter_build;
 pub(crate) use patches::{builds_begun, hand_out, lend, rebuild, scratch, served_now};
@@ -286,8 +286,8 @@ fn serve_stand_ins(
     for (key, base, builder) in items {
         served.push(Served::new(key, base, vec![patch(builder)], false));
     }
-    let key =
-        enshwick::content::items::ITEM_REGISTRY.key_by_hash(crate::catalogue::types::ITEM_REGISTRY);
+    let key = enshwick_core::content::items::ITEM_REGISTRY
+        .key_by_hash(crate::catalogue::types::ITEM_REGISTRY);
     match served.iter_mut().find(|s| s.key == key) {
         Some(listed) => listed.patches.push(patch(registry)),
         None => served.push(Served::new(key, key, vec![patch(registry)], false)),
@@ -362,7 +362,7 @@ unsafe extern "system" fn build_stand_in(
     let mut copy = vec![0; base_len];
     // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at `base`,
     // unchanged for the call.
-    unsafe { enshwick::raw::read_bytes_at(base, 0, &mut copy) };
+    unsafe { enshwick_core::raw::read_bytes_at(base, 0, &mut copy) };
     let base = copy;
     let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| builder(&base)));
     let Ok(Some(bytes)) = built else {
@@ -435,7 +435,7 @@ fn key_name(key: &ResourceKey) -> String {
         types::UI_IMAGE => "image",
         _ => "resource",
     };
-    format!("{kind} {}", enshwick::content::Guid(key.guid))
+    format!("{kind} {}", enshwick_core::content::Guid(key.guid))
 }
 
 /// What mods serve, for the status summary.
@@ -509,7 +509,7 @@ fn find(key: &ResourceKey) -> Option<(usize, &'static Served)> {
 
 /// The game's recipe registry.
 pub(crate) fn recipe_registry() -> ResourceKey {
-    use enshwick::content::recipes::RECIPE_REGISTRY;
+    use enshwick_core::content::recipes::RECIPE_REGISTRY;
 
     use crate::catalogue::types;
     RECIPE_REGISTRY.key_by_hash(types::RECIPE_REGISTRY)
@@ -732,7 +732,7 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
         crate::code::recipes_served(current, current_len);
         crate::recipes::registry_built(current, current_len);
     }
-    if crate::log::enabled(enshwick::abi::Level::DEBUG, crate::settings::LOADER_ID)
+    if crate::log::enabled(enshwick_core::abi::Level::DEBUG, crate::settings::LOADER_ID)
         && let Some(loader) = LOADED.get()
     {
         let by: Vec<&str> = state

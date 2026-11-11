@@ -58,7 +58,7 @@ pub struct Hello {
     pub nonce: u64,
     /// The language the player reads the game in; `None` for a hello that
     /// names none.
-    pub language: Option<enshwick::i18n::Language>,
+    pub language: Option<enshwick_core::i18n::Language>,
 }
 
 /// A server join mod the player's game lacks or runs in another version.

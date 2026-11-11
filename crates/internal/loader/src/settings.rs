@@ -3,17 +3,17 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use enshwick::abi::Level;
-use enshwick::config::Config as _;
+use enshwick_core::abi::Level;
+use enshwick_core::config::Config as _;
 
 /// The id the loader logs and keeps settings under; no mod may take it.
-pub use enshwick::mods::LOADER_ID;
+pub use enshwick_core::mods::LOADER_ID;
 
 /// The settings file's name in the game's folder.
 pub const FILE: &str = "enshwick.toml";
 
 /// Enshwick loader settings, read once at start.
-#[enshwick::config]
+#[enshwick_core::config]
 #[derive(Debug, PartialEq, Eq)]
 #[expect(
     clippy::struct_excessive_bools,
@@ -89,7 +89,7 @@ impl Settings {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => (
                 Self::default(),
                 Problems {
-                    lines: enshwick::files::write_atomically(path, Self::commented())
+                    lines: enshwick_core::files::write_atomically(path, Self::commented())
                         .err()
                         .map(|e| format!("the defaults could not be written there: {e}"))
                         .into_iter()
@@ -118,7 +118,7 @@ impl Settings {
 ///
 /// The file is `enshwick.toml` in the loader's folder of the world's
 /// settings, generated like a mod's.
-#[enshwick::config(file = "enshwick")]
+#[enshwick_core::config(file = "enshwick")]
 #[derive(Debug, PartialEq, Eq)]
 pub struct WorldRules {
     /// On a server that runs mods of side "both", or in a game this client
@@ -271,7 +271,7 @@ mod tests {
         let settings: Settings = toml::from_str(example).unwrap();
         let ids: Vec<&String> = settings.log_levels.keys().collect();
         assert_eq!(ids.len(), 1);
-        assert!(enshwick::abi::is_valid_id(ids[0]), "{ids:?}");
+        assert!(enshwick_core::abi::is_valid_id(ids[0]), "{ids:?}");
     }
 
     #[test]
@@ -343,7 +343,7 @@ mod tests {
 
     #[test]
     fn a_world_requires_enshwick_unless_its_file_says_false() {
-        use enshwick::config::Config as _;
+        use enshwick_core::config::Config as _;
 
         assert_eq!(WorldRules::FILE, "enshwick");
         let template = WorldRules::template();

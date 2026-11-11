@@ -12,8 +12,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
-use enshwick::Entity;
-use enshwick::abi::Side;
+use enshwick_core::Entity;
+use enshwick_core::abi::Side;
 
 use crate::host::Loader;
 use crate::locks::Relock;
@@ -211,7 +211,11 @@ fn shown_by_client(loader: &Loader, owner: ModIndex, key: u64) -> bool {
 
 /// `reason` in `language`, the game's for `None`, from its mod's texts,
 /// else as the mod gave it.
-fn shown(loader: &Loader, reason: &Reason, language: Option<enshwick::i18n::Language>) -> String {
+fn shown(
+    loader: &Loader,
+    reason: &Reason,
+    language: Option<enshwick_core::i18n::Language>,
+) -> String {
     let language = language.unwrap_or_else(crate::texts::language);
     loader
         .mods

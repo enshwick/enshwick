@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Context as _;
 use clap::Subcommand;
-use enshwick::content::vanilla::Vanilla;
-use enshwick::packs::{MANIFEST_FILE, Pack, PackFiles, PackManifest};
+use enshwick_core::content::vanilla::Vanilla;
+use enshwick_core::packs::{MANIFEST_FILE, Pack, PackFiles, PackManifest};
 
 /// What `cargo enshwick pack` does.
 #[derive(Debug, Subcommand)]
@@ -114,7 +114,7 @@ pub(crate) fn check(
 fn schema(out: &Path) -> anyhow::Result<String> {
     std::fs::create_dir_all(out).with_context(|| out.display().to_string())?;
     let mut written = Vec::new();
-    for (file, schema) in enshwick::packs::schemas() {
+    for (file, schema) in enshwick_core::packs::schemas() {
         let name = file.replace(".toml", ".schema.json");
         let path = out.join(&name);
         std::fs::write(&path, schema).with_context(|| path.display().to_string())?;

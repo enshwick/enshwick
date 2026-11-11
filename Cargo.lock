@@ -553,6 +553,7 @@ version = "1.0.0-alpha.14"
 dependencies = [
  "criterion",
  "enshwick",
+ "enshwick-core",
  "iced-x86",
  "insta",
  "memchr",

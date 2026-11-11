@@ -2,7 +2,7 @@
 //! the screen closes with its menu, which settings a mod's page shows under
 //! which heading and how a settings row reads.
 
-use enshwick::config::Schema;
+use enshwick_core::config::Schema;
 
 use crate::configure::rows::{Lock, Row};
 use crate::texts;

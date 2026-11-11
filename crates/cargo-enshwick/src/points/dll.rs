@@ -1,7 +1,7 @@
 //! The schemas a mod DLL carries in its `.enshpt` section, read from the
 //! file without running it.
 
-use enshwick::schema_section::{Head, ReadSectionError, Section};
+use enshwick_core::schema_section::{Head, ReadSectionError, Section};
 use enshwick_gamedata::reflect::{Image, Layout};
 
 use super::Error;

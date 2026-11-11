@@ -9,9 +9,9 @@ use std::fmt::Write as _;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use enshwick::abi::{Level, PointFn, PointMode, PointVerdict, Status};
-use enshwick::points::{LinkPlace, order};
-use enshwick::services::{LayoutError, compare};
+use enshwick_core::abi::{Level, PointFn, PointMode, PointVerdict, Status};
+use enshwick_core::points::{LinkPlace, order};
+use enshwick_core::services::{LayoutError, compare};
 
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -163,7 +163,7 @@ impl Registry {
         declared: Declared,
     ) -> Result<(u32, &'static AtomicU32), DeclarePointError> {
         let name = &declared.name;
-        if !enshwick::__private::rules::is_named_after(name, owner_id) {
+        if !enshwick_core::__private::rules::is_named_after(name, owner_id) {
             return Err(DeclarePointError::Namespace {
                 name: name.clone(),
                 owner: owner_id.to_owned(),

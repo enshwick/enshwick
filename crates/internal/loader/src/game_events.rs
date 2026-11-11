@@ -16,7 +16,7 @@ use core::ffi::c_void;
 use std::sync::atomic::Ordering;
 use std::sync::{Mutex, OnceLock};
 
-use enshwick::abi::{GameEventData, GameEventFn, Header, HookFlags, Side, Status};
+use enshwick_core::abi::{GameEventData, GameEventFn, Header, HookFlags, Side, Status};
 use rustc_hash::FxHashSet;
 
 use crate::chains::Next;

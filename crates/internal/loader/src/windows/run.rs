@@ -4,8 +4,8 @@
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick::PlayerKey;
-use enshwick::abi::{Side, Status};
+use enshwick_core::PlayerKey;
+use enshwick_core::abi::{Side, Status};
 
 use super::{
     Change, Held, MAX_PLAYERS, Told, Waiting, close_told, heard, holds, leaving, merged, message,
@@ -64,7 +64,7 @@ pub(crate) fn show(
     let Some(change) = Change::of(change) else {
         return Status::BAD_ARGS;
     };
-    if !enshwick::actions::is_valid_id(window) || keys.len() > MAX_PLAYERS {
+    if !enshwick_core::actions::is_valid_id(window) || keys.len() > MAX_PLAYERS {
         return Status::BAD_ARGS;
     }
     if !crate::actions::declaring(loader).contains(&owner) {
@@ -211,7 +211,7 @@ fn carry(loader: &Loader, waiting: Vec<Waiting>, told: &mut Vec<Told>) {
             let language = crate::actions::language_of(key);
             crate::actions::window(loader, owner, player, language, &window).unwrap_or_default()
         };
-        if text.len() > enshwick::actions::window::MAX_BYTES
+        if text.len() > enshwick_core::actions::window::MAX_BYTES
             && !WINDOWS.warned.swap(true, Ordering::Relaxed)
         {
             crate::log!(

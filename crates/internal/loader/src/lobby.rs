@@ -45,7 +45,7 @@ pub(crate) fn plan(
     if !turn_off.is_empty() {
         let lines: Vec<String> = turn_off
             .iter()
-            .map(|id| enshwick::mods::label(names.get(id).map_or("", String::as_str), id))
+            .map(|id| enshwick_core::mods::label(names.get(id).map_or("", String::as_str), id))
             .collect();
         parts.push(format!(
             "The host of this game does not run these Enshwick mods, so they are off while you play in it:\n\n{}",
@@ -71,7 +71,7 @@ mod runtime {
     use std::sync::OnceLock;
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-    use enshwick::abi::UiDialog;
+    use enshwick_core::abi::UiDialog;
 
     use crate::module::Export;
 
@@ -164,7 +164,7 @@ mod runtime {
         // SAFETY: `data` is non-null, checked by the guard before it, and
         // points at Steam's `LobbyEnter_t` of `LOBBY_ENTER_BYTES` bytes,
         // unchanged during the call, by this function's `# Safety`.
-        let record: [u8; LOBBY_ENTER_BYTES] = unsafe { enshwick::raw::read_at(data, 0) };
+        let record: [u8; LOBBY_ENTER_BYTES] = unsafe { enshwick_core::raw::read_at(data, 0) };
         let lobby = record
             .first_chunk::<8>()
             .map_or(0, |b| u64::from_le_bytes(*b));

@@ -32,7 +32,8 @@ pub fn note(needs: &[Need], hello: bool, names: &Names, leaving: Option<Duration
         ));
     }
     for need in needs.iter().take(MAX_NAMED) {
-        let name = enshwick::mods::label(names.get(&need.id).map_or("", String::as_str), &need.id);
+        let name =
+            enshwick_core::mods::label(names.get(&need.id).map_or("", String::as_str), &need.id);
         let mut args = vec![("mod", name.as_str()), ("version", need.version.as_str())];
         let line = match &need.yours {
             Some(yours) => {

@@ -7,7 +7,7 @@ use std::process::ExitCode;
 
 use anyhow::Context as _;
 use clap::{Parser, Subcommand, ValueEnum};
-use enshwick::content::Guid;
+use enshwick_core::content::Guid;
 
 mod check;
 mod deps;

@@ -19,9 +19,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
 use arc_swap::ArcSwapOption;
-use enshwick::Entity;
-use enshwick::abi::{ControlEvent, ControlFn, Header, PlayerInfo, Side, Status, Str};
-use enshwick::controls::{GameAction, Key, Tracker, is_valid_name, phases, valid_phases};
+use enshwick_core::Entity;
+use enshwick_core::abi::{ControlEvent, ControlFn, Header, PlayerInfo, Side, Status, Str};
+use enshwick_core::controls::{GameAction, Key, Tracker, is_valid_name, phases, valid_phases};
 use enshwick_gamedata::catalogue;
 
 use crate::bindings;
@@ -619,7 +619,7 @@ pub(crate) unsafe fn step(players: &[Entity], input: impl Fn(Entity) -> Option<*
             // SAFETY: the caller's contract: `input` is the player's live
             // `PlayerInput`, whose digital input word sits at the
             // reflected `fromClient.digitalInput`.
-            Some(unsafe { enshwick::raw::read_at::<u64>(input, linked.digital) })
+            Some(unsafe { enshwick_core::raw::read_at::<u64>(input, linked.digital) })
         });
     });
 }
@@ -889,7 +889,7 @@ pub(crate) fn set_key(
         kept.clone()
     };
     let path = game_dir(loader).join(bindings::FILE);
-    enshwick::files::write_atomically(&path, bindings::render(&entries, &kept))?;
+    enshwick_core::files::write_atomically(&path, bindings::render(&entries, &kept))?;
     Ok(())
 }
 
@@ -922,7 +922,7 @@ mod tests {
         assert!(
             lines
                 .iter()
-                .any(|(level, _, line)| *level == enshwick::abi::Level::WARN
+                .any(|(level, _, line)| *level == enshwick_core::abi::Level::WARN
                     && line.contains("you.weather day was not sent")),
             "{lines:?}"
         );

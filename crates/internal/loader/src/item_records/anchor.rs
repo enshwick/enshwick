@@ -4,7 +4,7 @@
 //! (server 399). What it keeps is the template and the position of every
 //! placed thing, and an item's place in its owner's inventory.
 
-use enshwick::{Entity, ItemId};
+use enshwick_core::{Entity, ItemId};
 use rustc_hash::FxHashMap;
 
 /// The GUID of a player's character, `keen::CharacterId` (server 399): one

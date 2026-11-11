@@ -65,7 +65,7 @@ pub struct DryRun {
     /// Every mod in `mods/`, in load order, then the skipped ones.
     pub mods: Vec<DryMod>,
     /// Every line the loader and the mods logged.
-    pub lines: Vec<(enshwick::abi::Level, String, String)>,
+    pub lines: Vec<(enshwick_core::abi::Level, String, String)>,
 }
 
 /// How one mod fared in a [`DryRun`].
@@ -196,7 +196,7 @@ fn outcomes(
     libraries: &[Library],
     candidates: &[Candidate],
     plan: &resolve::Plan,
-    lines: &[(enshwick::abi::Level, String, String)],
+    lines: &[(enshwick_core::abi::Level, String, String)],
 ) -> Vec<DryMod> {
     let reason_of = |id: &str| {
         lines

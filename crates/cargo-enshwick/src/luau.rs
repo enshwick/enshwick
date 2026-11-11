@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
-use enshwick::script::{self, Choice, Class, Declared, Record, Signature, Ty, Union};
+use enshwick_core::script::{self, Choice, Class, Declared, Record, Signature, Ty, Union};
 
 /// The file name editors are pointed at.
 pub const DEFINITIONS_FILE: &str = "enshwick.d.luau";
@@ -372,7 +372,7 @@ pub fn type_names() -> impl Iterator<Item = &'static str> {
 #[must_use]
 pub fn typed_definitions() -> String {
     let mut named = BTreeMap::new();
-    for ty in enshwick::typed::SCRIPT_TYPES {
+    for ty in enshwick_core::typed::SCRIPT_TYPES {
         collect(ty, &mut named);
     }
     let mut out = String::from(

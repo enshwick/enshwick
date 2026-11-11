@@ -6,7 +6,7 @@ use std::cell::RefCell;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use enshwick::abi::{
+use enshwick_core::abi::{
     Comfort, ComfortFn, ExperiencePass, ExperiencePassFn, ExperienceRow, Header, HookFlags, Side,
     SkillCheck, SkillCheckFn, Status,
 };
@@ -345,7 +345,7 @@ unsafe fn override_skill(node: u32, bits: *const u64, tree: *const u8) -> u8 {
     let vanilla = unsafe { SKILL_NEXT.get()(node, bits, tree) };
     let check = SkillCheck {
         header: Header::of::<SkillCheck>(),
-        node: enshwick::abi::SkillNode::new(node),
+        node: enshwick_core::abi::SkillNode::new(node),
         gate,
         unlocked: u8::from(vanilla != 0),
         reserved: [0; 3],
@@ -387,7 +387,7 @@ unsafe extern "system" fn register(
             // game's argument to `comfort.base_register`, the provider's
             // position as three floats, which the game does not write during
             // the call.
-            unsafe { enshwick::raw::read_at::<[f32; 3]>(position.cast(), 0) }
+            unsafe { enshwick_core::raw::read_at::<[f32; 3]>(position.cast(), 0) }
         };
         sealed
             .comfort
@@ -416,7 +416,7 @@ unsafe extern "system" fn register(
         .unwrap_or(comfort);
     let comfort = crate::rates::scale_comfort(
         comfort,
-        crate::rate_links::factor(enshwick::abi::RateId::COMFORT),
+        crate::rate_links::factor(enshwick_core::abi::RateId::COMFORT),
     );
     // SAFETY: the game's arguments to `comfort.base_register`, with `comfort`
     // filtered, an `i32` like the game's own, passed on to the rest of the
@@ -576,7 +576,7 @@ unsafe fn experience(loader: &Loader, engine: &Engine, ctx: *mut u64) {
                 let Some((row, old)) = rows
                     .iter()
                     .zip(before.iter())
-                    .find(|(r, _)| r.entity == enshwick::Entity(entity))
+                    .find(|(r, _)| r.entity == enshwick_core::Entity(entity))
                 else {
                     continue;
                 };
@@ -647,7 +647,7 @@ unsafe fn read_row(
     Some(ExperienceRow {
         // SAFETY: `ctx` is the live query context of `player_level`, used on
         // its thread while it runs (the caller's contract).
-        entity: enshwick::Entity(unsafe { engine.entity(ctx) }),
+        entity: enshwick_core::Entity(unsafe { engine.entity(ctx) }),
         level,
         progress,
         need,

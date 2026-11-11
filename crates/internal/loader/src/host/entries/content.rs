@@ -1,7 +1,7 @@
 //! Host functions for served resources, recipes, texts and item data.
 
-use enshwick::abi as api_frame;
-use enshwick::abi::{ModHandle, Status, Str};
+use enshwick_core::abi as api_frame;
+use enshwick_core::abi::{ModHandle, Status, Str};
 
 use crate::host::memory::{put, put_list, text};
 use crate::host::{caller, caller_index, calling, entry};
@@ -45,7 +45,7 @@ pub(crate) extern "system" fn rebuild_resource(
 
 pub(crate) extern "system" fn recipe_rule(
     me: ModHandle,
-    kind: enshwick::abi::RecipeRuleKind,
+    kind: enshwick_core::abi::RecipeRuleKind,
     name: Str,
     disable: u32,
 ) -> Status {
@@ -63,7 +63,7 @@ pub(crate) extern "system" fn recipe_rule(
 
 pub(crate) extern "system" fn recipe_disabled(
     me: ModHandle,
-    recipe: enshwick::RecipeId,
+    recipe: enshwick_core::RecipeId,
     out: *mut u32,
 ) -> Status {
     entry("recipe_disabled", || {
@@ -82,7 +82,7 @@ pub(crate) extern "system" fn recipe_disabled(
 
 pub(crate) extern "system" fn recipe_kind(
     me: ModHandle,
-    item: enshwick::ItemId,
+    item: enshwick_core::ItemId,
     out: *mut api_frame::RecipeKind,
 ) -> Status {
     entry("recipe_kind", || {
@@ -117,14 +117,15 @@ pub(crate) extern "system" fn change_data(
             return Status::BAD_ARGS;
         };
         let source = text(raw.source).unwrap_or_default().to_owned();
-        if let Ok(Some(change)) = enshwick::content::changes::RecipesChange::from_abi(&raw) {
+        if let Ok(Some(change)) = enshwick_core::content::changes::RecipesChange::from_abi(&raw) {
             if !crate::data_changes::reachable(loader, change.field) {
                 return Status::MISSING;
             }
             return crate::data_changes::declare_recipes(index, change, source);
         }
         if raw.select != api_frame::DataSelect::ENTRY {
-            let Ok(Some(change)) = enshwick::content::changes::ItemsChange::from_abi(&raw) else {
+            let Ok(Some(change)) = enshwick_core::content::changes::ItemsChange::from_abi(&raw)
+            else {
                 return Status::BAD_ARGS;
             };
             if !crate::data_changes::reachable(loader, change.field) {
@@ -132,7 +133,7 @@ pub(crate) extern "system" fn change_data(
             }
             return crate::data_changes::declare_items(index, change, source);
         }
-        let Ok(Some(change)) = enshwick::content::changes::Change::from_abi(&raw) else {
+        let Ok(Some(change)) = enshwick_core::content::changes::Change::from_abi(&raw) else {
             return Status::BAD_ARGS;
         };
         if !crate::data_changes::reachable(loader, change.field) {
@@ -161,7 +162,7 @@ pub(crate) extern "system" fn declare_change(
         let Some(mut raw) = (unsafe {
             api_frame::read_headed(
                 change,
-                <api_frame::DataChange as enshwick::abi::Headed>::BORN,
+                <api_frame::DataChange as enshwick_core::abi::Headed>::BORN,
             )
         }) else {
             return Status::BAD_ARGS;
@@ -170,7 +171,7 @@ pub(crate) extern "system" fn declare_change(
         raw.value = 1.0;
         let source = text(raw.source).unwrap_or_default().to_owned();
         let (target, field) = if raw.select == api_frame::DataSelect::ENTRY {
-            match enshwick::content::changes::Change::from_abi(&raw) {
+            match enshwick_core::content::changes::Change::from_abi(&raw) {
                 Ok(Some(change)) => (
                     crate::data_changes::LiveTarget::Entry(change.entry, source),
                     change.field,
@@ -178,7 +179,7 @@ pub(crate) extern "system" fn declare_change(
                 _ => return Status::BAD_ARGS,
             }
         } else {
-            match enshwick::content::changes::ItemsChange::from_abi(&raw) {
+            match enshwick_core::content::changes::ItemsChange::from_abi(&raw) {
                 Ok(Some(change)) => (
                     crate::data_changes::LiveTarget::Items(change.items, source),
                     change.field,
@@ -186,7 +187,7 @@ pub(crate) extern "system" fn declare_change(
                 _ => return Status::BAD_ARGS,
             }
         };
-        if field == enshwick::content::changes::Field::Ingredient {
+        if field == enshwick_core::content::changes::Field::Ingredient {
             return Status::BAD_ARGS;
         }
         if field.seen_by_clients() && !record.joins_when_on() {
@@ -217,8 +218,10 @@ pub(crate) extern "system" fn set_change(
             Err(status) => return status,
         };
         let value = match op {
-            api_frame::ChangeOp::SET => Some(enshwick::content::changes::Value::Set(value)),
-            api_frame::ChangeOp::TIMES => Some(enshwick::content::changes::Value::Times(value)),
+            api_frame::ChangeOp::SET => Some(enshwick_core::content::changes::Value::Set(value)),
+            api_frame::ChangeOp::TIMES => {
+                Some(enshwick_core::content::changes::Value::Times(value))
+            }
             api_frame::ChangeOp::RESET => None,
             _ => return Status::BAD_ARGS,
         };
@@ -280,8 +283,8 @@ pub(crate) extern "system" fn entity_data_open(
 pub(crate) extern "system" fn item_data_get(
     me: ModHandle,
     kind: u32,
-    pide: enshwick::Entity,
-    item: enshwick::ItemId,
+    pide: enshwick_core::Entity,
+    item: enshwick_core::ItemId,
     out: *mut u8,
     capacity: u32,
     len: *mut u32,
@@ -297,15 +300,15 @@ pub(crate) extern "system" fn item_data_get(
         // SAFETY: `HostApi::item_data_get` has the mod pass `len` null or a
         // writable, aligned `u32`, and `out` null or `capacity` writable
         // bytes apart from the loader's own buffer.
-        unsafe { enshwick::__private::copy_out(&value, out, capacity, len) }
+        unsafe { enshwick_core::__private::copy_out(&value, out, capacity, len) }
     })
 }
 
 pub(crate) extern "system" fn item_data_set(
     me: ModHandle,
     kind: u32,
-    pide: enshwick::Entity,
-    item: enshwick::ItemId,
+    pide: enshwick_core::Entity,
+    item: enshwick_core::ItemId,
     data: *const u8,
     len: u32,
 ) -> Status {
@@ -381,13 +384,13 @@ pub(crate) extern "system" fn content_read(
         // SAFETY: `HostApi::content_read` has the mod pass `len` null or a
         // writable, aligned `u32`, and `out` null or `capacity` writable
         // bytes apart from the loader's own buffer.
-        unsafe { enshwick::__private::copy_out(&data, out, capacity, len) }
+        unsafe { enshwick_core::__private::copy_out(&data, out, capacity, len) }
     })
 }
 
 pub(crate) extern "system" fn resource_read(
     me: ModHandle,
-    key: *const enshwick::abi::ResourceKey,
+    key: *const enshwick_core::abi::ResourceKey,
     out: *mut u8,
     capacity: u32,
     len: *mut u32,
@@ -406,7 +409,7 @@ pub(crate) extern "system" fn resource_read(
 
 pub(crate) extern "system" fn resource_served(
     me: ModHandle,
-    key: *const enshwick::abi::ResourceKey,
+    key: *const enshwick_core::abi::ResourceKey,
     out: *mut u8,
     capacity: u32,
     len: *mut u32,
@@ -438,11 +441,11 @@ pub(crate) extern "system" fn resource_served(
 unsafe fn copy_resource(
     call: &'static str,
     me: ModHandle,
-    key: *const enshwick::abi::ResourceKey,
+    key: *const enshwick_core::abi::ResourceKey,
     out: *mut u8,
     capacity: u32,
     len: *mut u32,
-    read: impl FnOnce(enshwick::abi::ResourceKey) -> Result<Vec<u8>, Status>,
+    read: impl FnOnce(enshwick_core::abi::ResourceKey) -> Result<Vec<u8>, Status>,
 ) -> Status {
     if let Err(status) = caller(me) {
         return status;
@@ -469,11 +472,11 @@ unsafe fn copy_resource(
 /// - `out` is null or writable for `capacity` bytes, apart from `read`'s.
 unsafe fn copy_keeping(
     call: &'static str,
-    key: enshwick::abi::ResourceKey,
+    key: enshwick_core::abi::ResourceKey,
     out: *mut u8,
     capacity: u32,
     len: *mut u32,
-    read: impl FnOnce(enshwick::abi::ResourceKey) -> Result<Vec<u8>, Status>,
+    read: impl FnOnce(enshwick_core::abi::ResourceKey) -> Result<Vec<u8>, Status>,
 ) -> Status {
     let data = match short_or(call, key, read) {
         Ok(data) => data,
@@ -482,7 +485,7 @@ unsafe fn copy_keeping(
     // SAFETY: the caller guarantees `len` null or writable and aligned, and
     // `out` null or `capacity` writable bytes apart from `data`, which this
     // function owns.
-    let status = unsafe { enshwick::__private::copy_out(&data, out, capacity, len) };
+    let status = unsafe { enshwick_core::__private::copy_out(&data, out, capacity, len) };
     if status == Status::BAD_ARGS && !out.is_null() {
         keep(call, key, data);
     }
@@ -490,7 +493,7 @@ unsafe fn copy_keeping(
 }
 
 /// Keeps `data` for this thread's retry of `call` with `key`.
-fn keep(call: &'static str, key: enshwick::abi::ResourceKey, data: Vec<u8>) {
+fn keep(call: &'static str, key: enshwick_core::abi::ResourceKey, data: Vec<u8>) {
     SHORT.set(Some(Kept {
         call,
         key,
@@ -530,7 +533,7 @@ pub(crate) extern "system" fn resource_buffer(
 /// A read whose buffer was short, kept for its retry.
 struct Kept {
     call: &'static str,
-    key: enshwick::abi::ResourceKey,
+    key: enshwick_core::abi::ResourceKey,
     /// [`crate::content::builds_begun`] when it was kept.
     begun: u64,
     data: Vec<u8>,
@@ -547,8 +550,8 @@ thread_local! {
 /// Any kept read goes either way.
 fn short_or(
     call: &'static str,
-    key: enshwick::abi::ResourceKey,
-    read: impl FnOnce(enshwick::abi::ResourceKey) -> Result<Vec<u8>, Status>,
+    key: enshwick_core::abi::ResourceKey,
+    read: impl FnOnce(enshwick_core::abi::ResourceKey) -> Result<Vec<u8>, Status>,
 ) -> Result<Vec<u8>, Status> {
     match SHORT.take() {
         Some(kept)
@@ -596,7 +599,7 @@ static RESOURCE_KEYS: std::sync::OnceLock<Option<Vec<api_frame::ResourceKey>>> =
 /// Every content hash of the game's archive, read once.
 static CONTENT_HASHES: std::sync::OnceLock<Option<Vec<[u32; 4]>>> = std::sync::OnceLock::new();
 /// Every reflected type as ABI entries, built once.
-static TYPES: std::sync::OnceLock<Option<enshwick::resources::TypeTable>> =
+static TYPES: std::sync::OnceLock<Option<enshwick_core::resources::TypeTable>> =
     std::sync::OnceLock::new();
 
 pub(crate) extern "system" fn resource_keys(
@@ -672,7 +675,8 @@ pub(crate) extern "system" fn types(
         let Some(table) = TYPES
             .get_or_init(|| {
                 let registry = loader.reflection.registry();
-                (!registry.is_empty()).then(|| enshwick::resources::TypeTable::new(registry.iter()))
+                (!registry.is_empty())
+                    .then(|| enshwick_core::resources::TypeTable::new(registry.iter()))
             })
             .as_ref()
         else {
@@ -705,7 +709,7 @@ pub(crate) extern "system" fn game_version(me: ModHandle, out: *mut Str) -> Stat
 mod tests {
     use core::cell::Cell;
 
-    use enshwick::abi::ResourceKey;
+    use enshwick_core::abi::ResourceKey;
 
     use super::*;
 

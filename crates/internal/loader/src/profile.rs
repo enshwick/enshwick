@@ -174,7 +174,7 @@ pub fn call<R>(owner: ModIndex, feature: Feature, f: impl FnOnce() -> R) -> R {
 #[inline]
 pub(crate) fn call_as<R>(
     owner: ModIndex,
-    pack: Option<enshwick::abi::ModHandle>,
+    pack: Option<enshwick_core::abi::ModHandle>,
     feature: Feature,
     f: impl FnOnce() -> R,
 ) -> R {
@@ -209,7 +209,7 @@ fn as_owner<R>(owner: ModIndex, f: impl FnOnce() -> R) -> R {
 /// The handle of `owner` when the running loader has it as a data pack.
 #[cfg(windows)]
 #[inline]
-pub(crate) fn pack_of(owner: ModIndex) -> Option<enshwick::abi::ModHandle> {
+pub(crate) fn pack_of(owner: ModIndex) -> Option<enshwick_core::abi::ModHandle> {
     crate::host::loader().and_then(|loader| pack_handle(&loader.mods, owner))
 }
 
@@ -220,7 +220,7 @@ pub(crate) fn pack_of(owner: ModIndex) -> Option<enshwick::abi::ModHandle> {
 pub(crate) fn pack_handle(
     mods: &[crate::host::ModRecord],
     owner: ModIndex,
-) -> Option<enshwick::abi::ModHandle> {
+) -> Option<enshwick_core::abi::ModHandle> {
     mods.get(owner.get())
         .filter(|record| record.pack)
         .map(|_| owner.handle())
@@ -230,11 +230,13 @@ pub(crate) fn pack_handle(
 /// as the loader for `None`.
 #[cfg(windows)]
 #[inline]
-fn as_pack_or_loader<R>(pack: Option<enshwick::abi::ModHandle>, f: impl FnOnce() -> R) -> R {
+fn as_pack_or_loader<R>(pack: Option<enshwick_core::abi::ModHandle>, f: impl FnOnce() -> R) -> R {
     match pack {
         // SAFETY: `API` is the loader's process-wide table, a static.
-        Some(pack) => unsafe { enshwick::__private::as_pack(&raw const crate::host::API, pack, f) },
-        None => enshwick::__private::as_loader(f),
+        Some(pack) => unsafe {
+            enshwick_core::__private::as_pack(&raw const crate::host::API, pack, f)
+        },
+        None => enshwick_core::__private::as_loader(f),
     }
 }
 
@@ -711,7 +713,7 @@ mod tests {
     #[test]
     fn a_pack_s_callback_runs_as_the_pack_and_the_loader_s_callback_inside_it_as_the_loader() {
         let pack = ModIndex::new(2).handle();
-        let running = || enshwick::host().map(|host| host.handle());
+        let running = || enshwick_core::host().map(|host| host.handle());
         as_pack_or_loader(Some(pack), || {
             assert_eq!(running(), Some(pack));
             as_pack_or_loader(None, || {

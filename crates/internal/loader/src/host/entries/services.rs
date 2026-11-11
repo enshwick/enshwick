@@ -2,8 +2,8 @@
 
 use std::sync::atomic::Ordering;
 
-use enshwick::abi as api_frame;
-use enshwick::abi::{Event, EventFn, Header, Level, ModHandle, Status, Str, TickHandle};
+use enshwick_core::abi as api_frame;
+use enshwick_core::abi::{Event, EventFn, Header, Level, ModHandle, Status, Str, TickHandle};
 
 use crate::host::join::keep;
 use crate::host::memory::{get_headed, put, put_headed, text};
@@ -67,7 +67,7 @@ pub(crate) unsafe fn spec_parts(
     let name = text(name)?;
     // SAFETY: the caller guarantees `layout`'s fields and their names readable
     // and unchanged for the call.
-    let fields = unsafe { enshwick::services::read_layout(layout) }?;
+    let fields = unsafe { enshwick_core::services::read_layout(layout) }?;
     Some((name, fields))
 }
 
@@ -85,7 +85,7 @@ pub(crate) extern "system" fn publish(
         let Some(spec) = (unsafe {
             get_headed(
                 spec,
-                <api_frame::ServiceSpec as enshwick::abi::Headed>::BORN,
+                <api_frame::ServiceSpec as enshwick_core::abi::Headed>::BORN,
             )
         }) else {
             return Status::BAD_ARGS;
@@ -131,7 +131,7 @@ pub(crate) extern "system" fn service(
         let Some(wanted) = (unsafe {
             get_headed(
                 wanted,
-                <api_frame::ServiceSpec as enshwick::abi::Headed>::BORN,
+                <api_frame::ServiceSpec as enshwick_core::abi::Headed>::BORN,
             )
         }) else {
             return Status::BAD_ARGS;
@@ -188,9 +188,12 @@ pub(crate) extern "system" fn define_event(
         }
         // SAFETY: a mod passes null or its version of the spec, and all of
         // the spec is required.
-        let Some(spec) =
-            (unsafe { get_headed(spec, <api_frame::EventSpec as enshwick::abi::Headed>::BORN) })
-        else {
+        let Some(spec) = (unsafe {
+            get_headed(
+                spec,
+                <api_frame::EventSpec as enshwick_core::abi::Headed>::BORN,
+            )
+        }) else {
             return Status::BAD_ARGS;
         };
         // SAFETY: the ABI has the mod pass the spec's name and layout, with its
@@ -232,9 +235,12 @@ pub(crate) extern "system" fn subscribe_event(
         }
         // SAFETY: a mod passes null or its version of the spec, and all of
         // the spec is required.
-        let Some(spec) =
-            (unsafe { get_headed(spec, <api_frame::EventSpec as enshwick::abi::Headed>::BORN) })
-        else {
+        let Some(spec) = (unsafe {
+            get_headed(
+                spec,
+                <api_frame::EventSpec as enshwick_core::abi::Headed>::BORN,
+            )
+        }) else {
             return Status::BAD_ARGS;
         };
         // SAFETY: the ABI has the mod pass the spec's name and layout, with its
@@ -271,7 +277,12 @@ pub(crate) unsafe fn point_parts(
 ) -> Option<crate::points::Declared> {
     // SAFETY: the caller guarantees `spec` null or readable for the size its
     // header gives, with no concurrent writer; all of the spec is required.
-    let spec = unsafe { get_headed(spec, <api_frame::PointSpec as enshwick::abi::Headed>::BORN) }?;
+    let spec = unsafe {
+        get_headed(
+            spec,
+            <api_frame::PointSpec as enshwick_core::abi::Headed>::BORN,
+        )
+    }?;
     // SAFETY: the caller guarantees the spec's name and layouts readable and
     // unchanged for the call; `spec` is a copy holding the same pointers.
     unsafe { declared(&spec) }
@@ -290,7 +301,7 @@ pub(crate) unsafe fn declared(spec: &api_frame::PointSpec) -> Option<crate::poin
     let (name, input) = unsafe { spec_parts(spec.name, &spec.input) }?;
     // SAFETY: the caller guarantees the spec's `output` layout, its fields and
     // their names, readable and unchanged for the call.
-    let output = unsafe { enshwick::services::read_layout(&spec.output) }?;
+    let output = unsafe { enshwick_core::services::read_layout(&spec.output) }?;
     Some(crate::points::Declared {
         name: name.to_owned(),
         input,
@@ -336,9 +347,12 @@ pub(crate) extern "system" fn define_point(
         }
         // SAFETY: a mod passes null or its version of the spec, and all of
         // the spec is required.
-        let Some(spec) =
-            (unsafe { get_headed(spec, <api_frame::PointSpec as enshwick::abi::Headed>::BORN) })
-        else {
+        let Some(spec) = (unsafe {
+            get_headed(
+                spec,
+                <api_frame::PointSpec as enshwick_core::abi::Headed>::BORN,
+            )
+        }) else {
             return Status::BAD_ARGS;
         };
         // SAFETY: the ABI has the mod pass the spec's name and layouts, with
@@ -353,7 +367,7 @@ pub(crate) extern "system" fn define_point(
         // ast-grep-ignore: game-memory-through-raw
         let room = (!out.is_null()).then(|| unsafe { out.cast::<Header>().read_unaligned() }.size);
         if room.is_none_or(|room| {
-            (room as usize) < <api_frame::PointHandle as enshwick::abi::Headed>::BORN
+            (room as usize) < <api_frame::PointHandle as enshwick_core::abi::Headed>::BORN
         }) {
             return Status::BAD_ARGS;
         }
@@ -396,9 +410,12 @@ pub(crate) extern "system" fn attach_point(
         }
         // SAFETY: a mod passes null or its version of the link, and all of
         // the link is required.
-        let Some(link) =
-            (unsafe { get_headed(link, <api_frame::PointLink as enshwick::abi::Headed>::BORN) })
-        else {
+        let Some(link) = (unsafe {
+            get_headed(
+                link,
+                <api_frame::PointLink as enshwick_core::abi::Headed>::BORN,
+            )
+        }) else {
             return Status::BAD_ARGS;
         };
         // SAFETY: the ABI has the mod pass `link.point` null or its version of
@@ -522,7 +539,7 @@ pub(crate) extern "system" fn crafting_prop(
         if out.is_null() {
             return Status::BAD_ARGS;
         }
-        let prop = enshwick::content::Guid(prop);
+        let prop = enshwick_core::content::Guid(prop);
         // The server sends clients its bits in base and crafting components,
         // so a prop clients lack would shift every bit after it.
         if !record.joins_when_on() {
@@ -555,7 +572,7 @@ pub(crate) extern "system" fn use_content(me: ModHandle, id: Str) -> Status {
             Ok(found) => found,
             Err(status) => return status,
         };
-        let Some(id) = text(id).filter(|id| enshwick::content::Guid::try_named(id).is_some())
+        let Some(id) = text(id).filter(|id| enshwick_core::content::Guid::try_named(id).is_some())
         else {
             return Status::BAD_ARGS;
         };

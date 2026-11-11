@@ -6,7 +6,7 @@
 
 use core::num::NonZeroU32;
 
-use enshwick::abi::{Header, MapMarkerTypeInfo, MarkerTypeSorting};
+use enshwick_core::abi::{Header, MapMarkerTypeInfo, MarkerTypeSorting};
 
 use crate::scene_markers::array;
 
@@ -105,7 +105,7 @@ pub enum ReadTypesError {
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::MarkerTypeSorting;
+/// use enshwick_core::abi::MarkerTypeSorting;
 /// use enshwick_loader::map_marker_types::{TypesLayout, types};
 ///
 /// let layout = TypesLayout {

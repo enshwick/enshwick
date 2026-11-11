@@ -239,7 +239,7 @@ fn the_owners_of_a_failed_mid_function_hook_count_as_failed() {
     use crate::chains::Link;
     use crate::mid::MidLink;
     use crate::mod_index::ModIndex;
-    use enshwick::abi::{HookFlags, Registers};
+    use enshwick_core::abi::{HookFlags, Registers};
 
     static NEXT: [AtomicUsize; 2] = [const { AtomicUsize::new(0) }; 2];
     extern "system" fn handler(_: *mut Registers, _: *mut core::ffi::c_void) {}
@@ -275,7 +275,7 @@ fn the_owners_of_a_failed_mid_function_hook_count_as_failed() {
 fn a_target_another_program_took_stays_its_and_names_who_took_it() {
     use crate::chains::Link;
     use crate::mod_index::ModIndex;
-    use enshwick::abi::HookFlags;
+    use enshwick_core::abi::HookFlags;
     use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 
     static NEXT: [AtomicUsize; 2] = [const { AtomicUsize::new(0) }; 2];

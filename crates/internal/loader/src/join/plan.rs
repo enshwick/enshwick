@@ -18,7 +18,7 @@ pub(crate) fn entries(list: &str) -> impl Iterator<Item = (&str, &str)> {
     list.split(',')
         .filter_map(|entry| entry.split_once('@'))
         .filter(|&(id, version)| {
-            enshwick::abi::is_valid_old_form_id(id)
+            enshwick_core::abi::is_valid_old_form_id(id)
                 && !version.is_empty()
                 && version.len() <= MAX_VERSION
                 && version
@@ -29,7 +29,7 @@ pub(crate) fn entries(list: &str) -> impl Iterator<Item = (&str, &str)> {
 
 /// The name players read for mod `id`, or the id when `names` has none.
 pub(super) fn label(names: &Names, id: &str) -> String {
-    enshwick::mods::label(names.get(id).map_or("", String::as_str), id)
+    enshwick_core::mods::label(names.get(id).map_or("", String::as_str), id)
 }
 
 /// What the client does when it joins.

@@ -16,7 +16,7 @@ mod rust;
 
 use std::fmt::Write as _;
 
-use enshwick::schema_section::ReadSectionError;
+use enshwick_core::schema_section::ReadSectionError;
 use enshwick_gamedata::reflect::ImageError;
 use serde::Deserialize;
 
@@ -25,7 +25,7 @@ pub use luau::{LuauDeps, luau_deps};
 pub use rust::rust_deps;
 
 /// The schema format this tool reads.
-const FORMAT: u32 = enshwick::schema_section::FORMAT;
+const FORMAT: u32 = enshwick_core::schema_section::FORMAT;
 
 /// What to do about a schema of `format`: an older one is the owner's to
 /// rebuild, a newer one this tool's to update.
@@ -628,7 +628,7 @@ const RUST_KEYWORDS: &[&str] = &[
 
 /// Whether `id` is a mod id, of the current or the old form.
 fn is_owner(id: &str) -> bool {
-    enshwick::abi::is_valid_old_form_id(id)
+    enshwick_core::abi::is_valid_old_form_id(id)
 }
 
 /// Whether `name` is `<mod id>:<what>`, the rule `declare_mod!` holds a point's

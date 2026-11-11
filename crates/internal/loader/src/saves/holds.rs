@@ -6,7 +6,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use enshwick::abi::Status;
+use enshwick_core::abi::Status;
 
 use super::{Layout, layout};
 use crate::host::Loader;

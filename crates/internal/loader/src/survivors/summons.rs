@@ -1,9 +1,9 @@
 use std::sync::OnceLock;
 
-use enshwick::Entity;
-use enshwick::abi::{Header, Summon};
-use enshwick::altars::cell_of_fixed;
-use enshwick::raw::{read_at, write_at};
+use enshwick_core::Entity;
+use enshwick_core::abi::{Header, Summon};
+use enshwick_core::altars::cell_of_fixed;
+use enshwick_core::raw::{read_at, write_at};
 
 use crate::host::Loader;
 
@@ -58,7 +58,7 @@ pub(super) fn meter(loader: &Loader, pide: u32) -> [u16; 2] {
     // system, may run on another task worker during this spawn (server 399)
     // and writes the word whole, so the atomic load gives the meter from
     // before or after that write.
-    let Some(both) = (unsafe { enshwick::raw::read_u32_atomic_at(data.cast(), 0) }) else {
+    let Some(both) = (unsafe { enshwick_core::raw::read_u32_atomic_at(data.cast(), 0) }) else {
         return [0; 2];
     };
     let [a, b, c, d] = both.to_le_bytes();

@@ -7,8 +7,8 @@
 //! state the game's query pass last wrote, so the answer is the game's
 //! as of that pass.
 
-use enshwick::Entity;
-use enshwick::abi::Status;
+use enshwick_core::Entity;
+use enshwick_core::abi::Status;
 
 use super::{Layout, layout, record, store_of};
 use crate::host::Loader;

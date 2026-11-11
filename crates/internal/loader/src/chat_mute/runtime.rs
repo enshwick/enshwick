@@ -7,7 +7,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
-use enshwick::abi::Event;
+use enshwick_core::abi::Event;
 
 use crate::host::Loader;
 use crate::locks::Relock;
@@ -51,9 +51,9 @@ fn keep(keys: Vec<u64>) {
 /// game thread, where the players do not read.
 fn admin_online(loader: &Loader, key: u64) -> bool {
     crate::world::players(loader).is_ok_and(|players| {
-        players
-            .iter()
-            .any(|p| p.key == enshwick::PlayerKey::new(key) && crate::console::player_is_admin(p))
+        players.iter().any(|p| {
+            p.key == enshwick_core::PlayerKey::new(key) && crate::console::player_is_admin(p)
+        })
     })
 }
 
@@ -64,7 +64,7 @@ static MUTE_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("chat mutes");
 /// Whether this process runs a server whose chat the mutes hold: the
 /// dedicated one, or the one a client hosts.
 pub(crate) fn serving(loader: &Loader) -> bool {
-    loader.side == enshwick::abi::Side::SERVER || crate::world::hosting()
+    loader.side == enshwick_core::abi::Side::SERVER || crate::world::hosting()
 }
 
 /// Reads the world's file as it loads, and mutes nobody once it shuts
@@ -134,7 +134,7 @@ pub(crate) fn set(loader: &Loader, key: u64, muted: bool, who: &str) -> Result<(
         keep(parse(&text).0);
         return Ok(());
     };
-    enshwick::files::write_atomically(&path, &text)?;
+    enshwick_core::files::write_atomically(&path, &text)?;
     keep(parse(&text).0);
     crate::log!(
         INFO,

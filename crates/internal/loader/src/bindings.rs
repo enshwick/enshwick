@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
-use enshwick::controls::Key;
+use enshwick_core::controls::Key;
 
 /// The file's name in the game's folder.
 pub const FILE: &str = "mod-controls.toml";
@@ -218,7 +218,7 @@ impl Capture {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::controls::Key;
+    /// use enshwick_core::controls::Key;
     /// use enshwick_loader::bindings::{Capture, Captured};
     ///
     /// let keys = [Key::parse("Mouse1")?, Key::parse("G")?];
@@ -229,7 +229,7 @@ impl Capture {
     ///     capture.look(&[true, true], &keys, shift, false),
     ///     Some(Captured::Key(Key::parse("Shift+G")?))
     /// );
-    /// # Ok::<(), enshwick::controls::ParseKeyError>(())
+    /// # Ok::<(), enshwick_core::controls::ParseKeyError>(())
     /// ```
     pub fn look(
         &mut self,

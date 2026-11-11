@@ -3,7 +3,7 @@
 //! the server keeps its own ban list (`bannedAccounts` in
 //! `enshrouded_server.json`).
 
-use enshwick::abi::Status;
+use enshwick_core::abi::Status;
 
 use crate::host::Loader;
 use crate::pinned;

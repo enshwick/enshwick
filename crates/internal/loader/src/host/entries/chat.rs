@@ -1,6 +1,6 @@
 //! Host functions for the server's chat lines.
 
-use enshwick::abi::{ChatFilterFn, ModHandle, Status};
+use enshwick_core::abi::{ChatFilterFn, ModHandle, Status};
 
 use crate::host::{caller_index, entry};
 

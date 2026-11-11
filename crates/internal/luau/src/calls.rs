@@ -4,8 +4,8 @@
 
 use std::sync::{Arc, OnceLock};
 
-use enshwick::points::DescribedField;
-use enshwick::services::{CallError, DescribedCall, DescribedCaller};
+use enshwick_core::points::DescribedField;
+use enshwick_core::services::{CallError, DescribedCall, DescribedCaller};
 use mlua::{Lua, Table, Value as LuaValue};
 
 use crate::points::{Read, decode, encode, read_of, size_of_read};
@@ -58,8 +58,13 @@ impl CallDesc {
             let p = *p;
             let shape = p.shape();
             let given: String = field.get("hash")?;
-            let hash =
-                enshwick::services::layout_hash(&field_name, shape, p.size(), p.align(), offset);
+            let hash = enshwick_core::services::layout_hash(
+                &field_name,
+                shape,
+                p.size(),
+                p.align(),
+                offset,
+            );
             if given.parse::<u64>().ok() != Some(hash) {
                 return Err(bad(format!(
                     "{field_name}: its hash is not the one its read and offset give"
@@ -150,7 +155,7 @@ impl ServedCall {
         } else {
             format!("{id}:{local}")
         };
-        if !name.starts_with(&format!("{id}:")) || !enshwick::content::is_id(&name) {
+        if !name.starts_with(&format!("{id}:")) || !enshwick_core::content::is_id(&name) {
             return Err(bad(format!("{name:?} is no call of this mod")));
         }
         let major = table.get::<Option<u32>>("major")?.unwrap_or(1);
@@ -159,7 +164,7 @@ impl ServedCall {
                 "{name}: a script answers with a number, boolean, GUID or id"
             )));
         };
-        let hash = enshwick::services::layout_hash(
+        let hash = enshwick_core::services::layout_hash(
             "output",
             answer.shape(),
             answer.size(),

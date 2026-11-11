@@ -117,7 +117,7 @@ unsafe extern "system" fn allocate(
     }
     // SAFETY: `base` is a fresh block of at least `PREFIX` bytes, aligned to
     // 16, so the size fits at its start.
-    unsafe { enshwick::raw::write_at(base, 0, bytes) };
+    unsafe { enshwick_core::raw::write_at(base, 0, bytes) };
     base.wrapping_add(PREFIX)
 }
 
@@ -128,7 +128,7 @@ unsafe extern "system" fn free(_heap: *const Heap, block: *mut u8, _zero: usize)
     let base = block.wrapping_sub(PREFIX);
     // SAFETY: `block` came from `allocate`, which wrote its size `PREFIX`
     // bytes before it, 16-aligned.
-    let bytes = unsafe { enshwick::raw::read_at::<usize>(base, 0) };
+    let bytes = unsafe { enshwick_core::raw::read_at::<usize>(base, 0) };
     if let Some(layout) = layout(bytes, PREFIX) {
         // SAFETY: `base` was allocated by `allocate` with this layout: the
         // same size and an alignment of 16, the most `allocate` grants.

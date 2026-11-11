@@ -1,4 +1,4 @@
-use enshwick::config::{Field, Schema};
+use enshwick_core::config::{Field, Schema};
 use proptest::prelude::*;
 
 use super::*;

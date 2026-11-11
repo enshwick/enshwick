@@ -8,7 +8,7 @@
 use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::OnceLock;
 
-use enshwick::abi::RecipeKind;
+use enshwick_core::abi::RecipeKind;
 
 /// Slots of each table: more than the items of the game and its mods.
 pub const CAPACITY: usize = 1 << 14;

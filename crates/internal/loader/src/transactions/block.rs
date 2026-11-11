@@ -1,6 +1,6 @@
 //! A building block a transaction places: checked at commit, written by the game at its step.
 
-use enshwick::abi::Status;
+use enshwick_core::abi::Status;
 
 use super::paste::Region;
 use super::props::Prop;

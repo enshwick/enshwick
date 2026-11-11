@@ -42,13 +42,12 @@ pub const ABI_MINOR: u16 = 24;
 /// # Examples
 ///
 /// ```
-/// # #[cfg(any())] fn in_enshwick() { // names items above this crate: enshwick's doctests compile it
+/// # extern crate enshwick_abi as enshwick;
 /// use enshwick::abi::{ABI_MAJOR, CheckAbiError, check_abi};
 ///
 /// let why = check_abi(ABI_MAJOR - 1, 0).unwrap_err();
 /// assert!(matches!(why, CheckAbiError::OtherMajor { .. }));
 /// assert!(why.to_string().ends_with(enshwick::VERSION));
-/// # }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]

@@ -1,6 +1,6 @@
 //! The `HostApi` table: every entry point a mod calls, in the ABI's field order.
 
-use enshwick::abi::{Header, HostApi, Str};
+use enshwick_core::abi::{Header, HostApi, Str};
 
 use super::entries::build::{
     build, caller_frame, constant, data_dir, event_types, field_offset, log_level, mod_dir, symbol,

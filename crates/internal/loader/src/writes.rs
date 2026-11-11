@@ -11,7 +11,7 @@
 use core::ffi::c_void;
 use std::sync::OnceLock;
 
-use enshwick::abi::Status;
+use enshwick_core::abi::Status;
 use rustc_hash::FxHashSet;
 
 use crate::host::Loader;

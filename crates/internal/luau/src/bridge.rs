@@ -3,7 +3,7 @@
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick::script::{Callback, Choice, Class, Error, Handle, Signature, Ty, Union, Value};
+use enshwick_core::script::{Callback, Choice, Class, Error, Handle, Signature, Ty, Union, Value};
 use mlua::{Lua, MultiValue, Value as LuaValue};
 
 use crate::run::Scope;
@@ -83,7 +83,7 @@ pub(crate) fn to_lua(
             for (name, value) in fields {
                 let ty = union
                     .variant(&name)
-                    .and_then(enshwick::script::Variant::ty)
+                    .and_then(enshwick_core::script::Variant::ty)
                     .unwrap_or(&Ty::Data);
                 table.raw_set(name, to_lua(lua, scope, value, ty)?)?;
             }
@@ -261,7 +261,10 @@ fn union_from_lua(scope: &Scope, value: LuaValue, union: &Union) -> Result<Value
                 )));
             };
             let (name, inner) = pair.map_err(|e| Error::new(e.to_string()))?;
-            let Some(ty) = union.variant(&name).and_then(enshwick::script::Variant::ty) else {
+            let Some(ty) = union
+                .variant(&name)
+                .and_then(enshwick_core::script::Variant::ty)
+            else {
                 return Err(Error::new(format!(
                     "{name:?} is no {} with a value",
                     union.name()
@@ -422,7 +425,7 @@ impl Interned {
     }
 }
 
-/// An [`Object`](enshwick::script::Object) as a script holds it: its
+/// An [`Object`](enshwick_core::script::Object) as a script holds it: its
 /// class's methods, called as `object:method()`.
 struct Object {
     handle: Handle,

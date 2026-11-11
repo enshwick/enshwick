@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use enshwick::abi::Side;
+use enshwick_core::abi::Side;
 use enshwick_gamedata::reflect::{Fingerprint, Image, Layout, Reflection};
 use windows_sys::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW};
 
@@ -140,7 +140,7 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
         crate::log!(
             WARN,
             "developer tools are on: {} exists; never on a game players join",
-            enshwick::mods::DEVELOPER_TOOLS
+            enshwick_core::mods::DEVELOPER_TOOLS
         );
     }
     let applies = if settings_problems.unread {

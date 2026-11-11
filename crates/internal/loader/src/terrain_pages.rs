@@ -20,7 +20,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 #[cfg(windows)]
-use enshwick::abi::{Event, Header, HookFlags, Registers, Side, TerrainPageData};
+use enshwick_core::abi::{Event, Header, HookFlags, Registers, Side, TerrainPageData};
 
 #[cfg(windows)]
 use crate::fuse::Fuse;

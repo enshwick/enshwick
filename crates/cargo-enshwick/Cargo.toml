@@ -20,7 +20,8 @@ pkg-fmt = "bin"
 [dependencies]
 anyhow.workspace = true
 clap = { workspace = true }
-enshwick = { workspace = true, features = ["schema", "typed"] }
+enshwick-abi.workspace = true
+enshwick-core = { workspace = true, features = ["schema", "typed"] }
 enshwick-gamedata.workspace = true
 iced-x86.workspace = true
 memchr.workspace = true
@@ -38,6 +39,8 @@ zip.workspace = true
 windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_System_LibraryLoader", "Win32_System_Registry"] }
 
 [dev-dependencies]
+# The tests compile what the tool writes for mods, which name `enshwick`.
+enshwick = { workspace = true, features = ["typed"] }
 insta.workspace = true
 proptest.workspace = true
 

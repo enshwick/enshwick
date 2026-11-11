@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use enshwick::abi::Side;
+use enshwick_core::abi::Side;
 
 use crate::fuse::Fuse;
 use crate::host::Loader;

@@ -1,6 +1,6 @@
 //! Host functions for the world's saves.
 
-use enshwick::abi::{Header, ModHandle, SaveInfo, Status};
+use enshwick_core::abi::{Header, ModHandle, SaveInfo, Status};
 
 use crate::host::memory::put_headed;
 use crate::host::{caller, caller_index, entry};

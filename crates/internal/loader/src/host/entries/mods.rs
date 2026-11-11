@@ -2,11 +2,11 @@
 
 use std::sync::atomic::Ordering;
 
-use enshwick::abi as api_frame;
-use enshwick::abi::{
+use enshwick_core::abi as api_frame;
+use enshwick_core::abi::{
     ContentRename, Header, Level, ManifestFlags, ModHandle, ModInfo, Side, Status, Str,
 };
-use enshwick::mods::LOADER_FILE;
+use enshwick_core::mods::LOADER_FILE;
 
 use crate::host::memory::{put, slice, text};
 use crate::host::{LOADER_HANDLE, ModRecord, calling, entry, loader};
@@ -248,10 +248,10 @@ pub(crate) extern "system" fn config_schema(
         let Some((_, record)) = loader.record(me) else {
             return Status::BAD_ARGS;
         };
-        let Ok(parsed) = enshwick::config::Schema::parse(schema) else {
+        let Ok(parsed) = enshwick_core::config::Schema::parse(schema) else {
             return Status::BAD_ARGS;
         };
-        if !enshwick::config::__file_name(file) {
+        if !enshwick_core::config::__file_name(file) {
             return Status::BAD_ARGS;
         }
         let mut files = record.settings_files.relock();
@@ -370,7 +370,7 @@ pub(crate) extern "system" fn texts(me: ModHandle, toml: Str) -> Status {
         let Some(toml) = text(toml) else {
             return Status::BAD_ARGS;
         };
-        let Ok(parsed) = enshwick::i18n::Texts::parse(toml) else {
+        let Ok(parsed) = enshwick_core::i18n::Texts::parse(toml) else {
             return Status::BAD_ARGS;
         };
         let mut slot = record.texts.relock();

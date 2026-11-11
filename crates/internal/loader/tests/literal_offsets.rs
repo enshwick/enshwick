@@ -203,7 +203,7 @@ mod tests {
                 .next()
                 .unwrap_or("");
             let path = path.strip_prefix("crate::").unwrap_or(path);
-            let path = path.strip_prefix("enshwick::").unwrap_or(path);
+            let path = path.strip_prefix("enshwick_core::").unwrap_or(path);
             if !ACCESSOR_PATHS.contains(&path) {
                 continue;
             }
@@ -365,7 +365,7 @@ mod tests {
         );
         assert_eq!(
             count_in(
-                "let v = unsafe {\n    enshwick::raw::read_ptr_at::<u8>(\n        base,\n        \
+                "let v = unsafe {\n    enshwick_core::raw::read_ptr_at::<u8>(\n        base,\n        \
                  0x28,\n    )\n};"
             ),
             1

@@ -5,8 +5,8 @@
 
 use std::sync::{Mutex, OnceLock};
 
-use enshwick::abi::{ModEventFn, Status};
-use enshwick::services::{LayoutError, compare};
+use enshwick_core::abi::{ModEventFn, Status};
+use enshwick_core::services::{LayoutError, compare};
 
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -277,7 +277,7 @@ impl Registry {
         fields: Fields,
         size: u32,
     ) -> Result<u32, DeclareServiceError> {
-        if !enshwick::__private::rules::is_named_after(name, owner_id) {
+        if !enshwick_core::__private::rules::is_named_after(name, owner_id) {
             return Err(DeclareServiceError::Namespace {
                 name: name.to_owned(),
                 owner: owner_id.to_owned(),
@@ -421,7 +421,7 @@ pub(crate) fn seal(names: &impl Names) {
     let (slots, idle) = registry().seal(names);
     for (owner, reason) in idle {
         let (id, _) = names.name(owner.get());
-        crate::log::write(enshwick::abi::Level::WARN, id, &reason);
+        crate::log::write(enshwick_core::abi::Level::WARN, id, &reason);
     }
     let count = slots.len();
     if SEALED.set(slots).is_ok() && count > 0 {
@@ -504,7 +504,7 @@ pub(crate) fn send(sender: usize, id: u32, data: *const core::ffi::c_void) -> St
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::Status;
+    use enshwick_core::abi::Status;
 
     use super::{Names, Registry};
     use crate::mod_index::ModIndex;

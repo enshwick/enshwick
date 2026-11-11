@@ -216,16 +216,6 @@ mod values {}
 /// assert_eq!(check.bed_id, enshwick::Entity(4100));
 /// ```
 ///
-/// `abi::CheckAbiError`:
-///
-/// ```
-/// use enshwick::abi::{ABI_MAJOR, CheckAbiError, check_abi};
-///
-/// let why = check_abi(ABI_MAJOR - 1, 0).unwrap_err();
-/// assert!(matches!(why, CheckAbiError::OtherMajor { .. }));
-/// assert!(why.to_string().ends_with(enshwick::VERSION));
-/// ```
-///
 /// `abi::KnowledgeInfo`:
 ///
 /// ```

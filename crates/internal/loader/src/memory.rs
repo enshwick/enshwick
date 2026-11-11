@@ -1,8 +1,8 @@
 //! Game memory at an address the loader holds as an integer, read and written
-//! through [`enshwick::raw`], the one reader of game memory; only the hook
+//! through [`enshwick_core::raw`], the one reader of game memory; only the hook
 //! engine's walks over other threads' stacks read words of their own.
 
-use enshwick::raw::{AnyBitPattern, NoUninit};
+use enshwick_core::raw::{AnyBitPattern, NoUninit};
 
 /// The pointer at `base + offset`, with the provenance the game exposed.
 fn at(base: usize, offset: usize) -> *mut u8 {
@@ -19,7 +19,7 @@ fn at(base: usize, offset: usize) -> *mut u8 {
 pub(crate) unsafe fn read<T: AnyBitPattern>(base: usize, offset: usize) -> T {
     // SAFETY: the caller's guarantee for `base + offset` is the one
     // `read_at` asks for at offset 0.
-    unsafe { enshwick::raw::read_at(at(base, offset), 0) }
+    unsafe { enshwick_core::raw::read_at(at(base, offset), 0) }
 }
 
 /// Reads a pointer to `T` at `base + offset`.
@@ -32,7 +32,7 @@ pub(crate) unsafe fn read<T: AnyBitPattern>(base: usize, offset: usize) -> T {
 pub(crate) unsafe fn read_ptr<T>(base: usize, offset: usize) -> *mut T {
     // SAFETY: the caller's guarantee for `base + offset` is the one
     // `read_ptr_at` asks for at offset 0.
-    unsafe { enshwick::raw::read_ptr_at(at(base, offset), 0) }
+    unsafe { enshwick_core::raw::read_ptr_at(at(base, offset), 0) }
 }
 
 /// Copies `out.len()` bytes at `base + offset` into `out`.
@@ -44,7 +44,7 @@ pub(crate) unsafe fn read_ptr<T>(base: usize, offset: usize) -> *mut T {
 pub(crate) unsafe fn read_bytes(base: usize, offset: usize, out: &mut [u8]) {
     // SAFETY: the caller's guarantee for `base + offset` is the one
     // `read_bytes_at` asks for at offset 0.
-    unsafe { enshwick::raw::read_bytes_at(at(base, offset), 0, out) };
+    unsafe { enshwick_core::raw::read_bytes_at(at(base, offset), 0, out) };
 }
 
 /// Copies `bytes` to `base + offset`.
@@ -57,7 +57,7 @@ pub(crate) unsafe fn read_bytes(base: usize, offset: usize, out: &mut [u8]) {
 pub(crate) unsafe fn write_bytes(base: usize, offset: usize, bytes: &[u8]) {
     // SAFETY: the caller's guarantee for `base + offset` is the one
     // `write_bytes_at` asks for at offset 0.
-    unsafe { enshwick::raw::write_bytes_at(at(base, offset), 0, bytes) };
+    unsafe { enshwick_core::raw::write_bytes_at(at(base, offset), 0, bytes) };
 }
 
 /// Writes `value` at `base + offset`.
@@ -71,7 +71,7 @@ pub(crate) unsafe fn write_bytes(base: usize, offset: usize, bytes: &[u8]) {
 pub(crate) unsafe fn write<T: NoUninit>(base: usize, offset: usize, value: T) {
     // SAFETY: the caller's guarantee for `base + offset` is the one
     // `write_at` asks for at offset 0.
-    unsafe { enshwick::raw::write_at(at(base, offset), 0, value) };
+    unsafe { enshwick_core::raw::write_at(at(base, offset), 0, value) };
 }
 
 /// A blob array in game memory, the game's resource format for a reflected
@@ -117,7 +117,7 @@ impl BlobArray {
 /// Reads the word at `address` on a suspended thread's stack, for the hook
 /// engine's walks over other threads' stacks.
 ///
-/// It reads past [`enshwick::raw`] because the address sanitizer marks the
+/// It reads past [`enshwick_core::raw`] because the address sanitizer marks the
 /// gaps between another thread's locals as poisoned: the check is turned off
 /// on the function that reads, which a test build under the sanitizer sets
 /// with `enshwick_asan`, and the one reader of game memory stays checked.
@@ -138,7 +138,7 @@ pub(crate) unsafe fn read_stack_word(address: usize) -> usize {
 /// Writes the word at `address` on a suspended thread's stack, for the hook
 /// engine's fix-up of return addresses.
 ///
-/// It writes past [`enshwick::raw`] for the reason [`read_stack_word`] reads
+/// It writes past [`enshwick_core::raw`] for the reason [`read_stack_word`] reads
 /// past it.
 ///
 /// # Safety

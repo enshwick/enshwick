@@ -9,9 +9,9 @@ use std::sync::{Arc, OnceLock};
 
 #[cfg(windows)]
 use arc_swap::ArcSwapOption;
-use enshwick::content::Guid;
+use enshwick_core::content::Guid;
 #[cfg(windows)]
-use enshwick::content::vanilla::Vanilla;
+use enshwick_core::content::vanilla::Vanilla;
 
 /// An item with the name the game shows for it, and that name's lower
 /// case, which a search compares.
@@ -133,7 +133,7 @@ static STATE: State = State {
 /// its texts do not read, as on a server, which a later call tries again.
 // shortcut: vanilla items only; a mod's own items join once the loader lists the items it serves with their name tags.
 #[cfg(windows)]
-pub(crate) fn items(language: enshwick::i18n::Language) -> Option<Arc<List>> {
+pub(crate) fn items(language: enshwick_core::i18n::Language) -> Option<Arc<List>> {
     if let Some(list) = STATE
         .list
         .load_full()
@@ -163,7 +163,7 @@ pub(crate) fn items(language: enshwick::i18n::Language) -> Option<Arc<List>> {
 
 /// The list of `language`, read from the client's archive and texts.
 #[cfg(windows)]
-fn build(language: enshwick::i18n::Language) -> Option<List> {
+fn build(language: enshwick_core::i18n::Language) -> Option<List> {
     let vanilla = vanilla()?.items().ok()?;
     let items = listed(vanilla.iter().filter_map(|item| {
         let text = crate::game_texts::text(item.name_tag?.fnv1a(), language.0)?;

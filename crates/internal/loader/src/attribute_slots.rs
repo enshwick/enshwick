@@ -120,7 +120,7 @@ pub(crate) fn supply(
     build: &mut crate::builds::KnownBuild,
     reflection: &enshwick_gamedata::reflect::Reflection<'_>,
     dir: &std::path::Path,
-    side: enshwick::abi::Side,
+    side: enshwick_core::abi::Side,
 ) {
     let wanted = build.attributes().to_vec();
     if wanted.is_empty() {
@@ -236,7 +236,7 @@ mod tests {
         assert_eq!(keys.len(), 1);
         let resource = archive.resource(&keys[0]).unwrap();
         let found = slots(&LAYOUT, &resource).unwrap();
-        let Some(table) = crate::builds::kept(enshwick::abi::Side::CLIENT) else {
+        let Some(table) = crate::builds::kept(enshwick_core::abi::Side::CLIENT) else {
             return;
         };
         let named = table.attributes();

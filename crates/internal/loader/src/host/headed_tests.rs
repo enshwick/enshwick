@@ -2,7 +2,7 @@
 //! as its header says, so a short or malformed struct is never read past its
 //! end.
 
-use enshwick::abi::{Headed, Header};
+use enshwick_core::abi::{Headed, Header};
 
 use super::memory::{get_headed, get_headed_list, put_headed, put_headed_list};
 use super::*;
@@ -369,7 +369,7 @@ fn every_headed_struct_from_a_writer_of_minor_0_reads() {
 #[test]
 fn no_entry_point_requires_more_than_the_born_size_of_a_mod_s_struct() {
     for name in headed_in_abi() {
-        for path in ["", "api_frame::", "enshwick::abi::"] {
+        for path in ["", "api_frame::", "enshwick_core::abi::"] {
             let sized = format!("size_of::<{path}{name}>");
             assert!(
                 !host_source().contains(&sized),

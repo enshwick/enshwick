@@ -24,7 +24,7 @@ use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use enshwick::abi::{Event, Status};
+use enshwick_core::abi::{Event, Status};
 
 use crate::host::Loader;
 use crate::live;
@@ -323,7 +323,7 @@ fn unhex(text: &str) -> Option<Vec<u8>> {
 /// for one that does not read, which then stays as it is.
 fn read_kept(key: &str) -> Option<BTreeMap<String, Vec<u8>>> {
     let path = crate::world_folders::loader_data(key, FILE);
-    let read = enshwick::files::read_to_string_if_present(&path)
+    let read = enshwick_core::files::read_to_string_if_present(&path)
         .map_err(|e| e.to_string())
         .and_then(|text| {
             text.map(|text| toml::from_str::<KeptFile>(&text))
@@ -366,7 +366,7 @@ fn write_kept(key: &str, fields: &BTreeMap<String, Vec<u8>>) {
              # each field by its reflected name, its bytes as hex.\n{}",
             toml::to_string(&kept).unwrap_or_default()
         );
-        enshwick::files::write_atomically(&path, text)
+        enshwick_core::files::write_atomically(&path, text)
     };
     if let Err(error) = written {
         crate::log!(

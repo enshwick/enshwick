@@ -1,7 +1,7 @@
 //! A table's entries: symbols and constants, and how each is found by its
 //! pattern.
 
-use enshwick::code::Pattern;
+use enshwick_core::code::Pattern;
 
 /// Where a symbol lies relative to its pattern's match.
 ///

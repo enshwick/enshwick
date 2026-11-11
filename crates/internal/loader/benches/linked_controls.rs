@@ -5,8 +5,8 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use enshwick::Entity;
-use enshwick::abi::ControlSpec;
+use enshwick_core::Entity;
+use enshwick_core::abi::ControlSpec;
 use enshwick_loader::linked_controls::{Follow, Players};
 
 const PLAYERS: [Entity; 8] = [

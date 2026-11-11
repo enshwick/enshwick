@@ -1,6 +1,6 @@
 //! A task's run in a step: its changes written in order, or its undo newest first.
 
-use enshwick::abi::{Status, TransactionInfo};
+use enshwick_core::abi::{Status, TransactionInfo};
 
 use super::checks::{still_placed, still_removed};
 use super::{

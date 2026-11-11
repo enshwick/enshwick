@@ -124,7 +124,7 @@ unsafe extern "system" fn entry_of(
     let entry = block + offset - offset % ENTRY + CODE;
     // SAFETY: `entry` lies in the sealed, readable block `register` handed
     // the unwinder with this callback, which is never freed or written again.
-    let [begin, end, _]: [u32; 3] = unsafe { enshwick::raw::read_at(entry as *const u8, 0) };
+    let [begin, end, _]: [u32; 3] = unsafe { enshwick_core::raw::read_at(entry as *const u8, 0) };
     if (begin as usize..end as usize).contains(&offset) {
         core::ptr::with_exposed_provenance_mut(entry)
     } else {
@@ -163,7 +163,7 @@ fn function_unwind(span: Span<'_>, function: Function, out: &mut [u8]) -> Result
             .ok_or(UnwindError::Unreadable)?;
         // SAFETY: `reads` checked the four bytes at `at`, in the image the
         // function table names, which stays loaded.
-        let head: [u8; 4] = unsafe { enshwick::raw::read_at(at as *const u8, 0) };
+        let head: [u8; 4] = unsafe { enshwick_core::raw::read_at(at as *const u8, 0) };
         let [flags, prolog, count, frame_here] = head;
         if !matches!(flags & 7, 1 | 2) {
             return Err(UnwindError::BadVersion);

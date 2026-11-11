@@ -7,11 +7,11 @@ use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 use std::time::SystemTime;
 
 use arc_swap::ArcSwap;
-use enshwick::abi::{Level, RecipeRuleKind, Side, Status};
-use enshwick::content::items::{ITEM_REGISTRY, ItemLayout};
-use enshwick::content::recipes::{RECIPE_REGISTRY, RecipeLayout};
-use enshwick::content::workshops::{WORKSHOP_REGISTRY, WorkshopLayout};
-use enshwick::content::{Blob, Guid};
+use enshwick_core::abi::{Level, RecipeRuleKind, Side, Status};
+use enshwick_core::content::items::{ITEM_REGISTRY, ItemLayout};
+use enshwick_core::content::recipes::{RECIPE_REGISTRY, RecipeLayout};
+use enshwick_core::content::workshops::{WORKSHOP_REGISTRY, WorkshopLayout};
+use enshwick_core::content::{Blob, Guid};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::catalogue::{Reflected, types};
@@ -530,7 +530,7 @@ pub(crate) unsafe fn filter(workshop: u32, out: *mut [u64; 2]) {
     };
     // SAFETY: the caller's contract makes `out` readable for a `[u64; 2]`
     // span for the call.
-    let [address, len] = unsafe { enshwick::raw::read_at::<[u64; 2]>(out.cast(), 0) };
+    let [address, len] = unsafe { enshwick_core::raw::read_at::<[u64; 2]>(out.cast(), 0) };
     if address == 0 || len == 0 {
         return;
     }
@@ -549,7 +549,7 @@ pub(crate) unsafe fn filter(workshop: u32, out: *mut [u64; 2]) {
         // world has stepped `retire::GRACE` times and `retire::MIN_AGE` has
         // passed; the game's callers read it before they return.
         unsafe {
-            enshwick::raw::write_at(
+            enshwick_core::raw::write_at(
                 out.cast(),
                 0,
                 [list.as_ptr().expose_provenance() as u64, list.len() as u64],
@@ -615,13 +615,13 @@ unsafe fn filtered(
         let recipe = core::ptr::with_exposed_provenance::<u8>(usize::try_from(recipe).ok()?);
         // SAFETY: the caller's contract makes each non-zero entry (the filter
         // below passes 0 by) a live recipe readable for a `u32` at `id`.
-        Some(unsafe { enshwick::raw::read_at(recipe, id) })
+        Some(unsafe { enshwick_core::raw::read_at(recipe, id) })
     };
     let mut kept = Vec::new();
     for index in 0..len {
         // SAFETY: the caller's contract makes `address` the start of `len`
         // readable `u64` entries, and `index` is below `len`.
-        let recipe: u64 = unsafe { enshwick::raw::read_at(list, index * size_of::<u64>()) };
+        let recipe: u64 = unsafe { enshwick_core::raw::read_at(list, index * size_of::<u64>()) };
         if recipe == 0 || recipe_id(recipe).is_none_or(|id| !disabled.contains(&id)) {
             kept.push(recipe);
         }
@@ -719,7 +719,7 @@ fn change(index: &Index, names: &Names, kind: Kind, name: &str, disable: bool) -
     }
     let shown = path.display().to_string();
     // A file that does not read is never replaced by one with this rule alone.
-    let written = enshwick::files::read_to_string_if_present(&path)
+    let written = enshwick_core::files::read_to_string_if_present(&path)
         .map_err(WriteRuleError::from)
         .and_then(|text| Ok(edit_file(&text.unwrap_or_default(), kind, name, disable)?))
         .and_then(|text| Ok(crate::worlds::write_target(&path, &text)?));

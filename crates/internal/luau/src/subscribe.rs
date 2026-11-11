@@ -1,11 +1,11 @@
 //! What a script subscribes to: a loader event, a typed game event, or a
 //! game event read by its reflected type and the fields the script names.
 
-use enshwick::Entity;
-use enshwick::abi::Event;
-use enshwick::game_events::{Field, RawGameEvent};
-use enshwick::script::{self, EventKind, GameEventKind};
-use enshwick::{Load, Off};
+use enshwick_core::Entity;
+use enshwick_core::abi::Event;
+use enshwick_core::game_events::{Field, RawGameEvent};
+use enshwick_core::script::{self, EventKind, GameEventKind};
+use enshwick_core::{Load, Off};
 use mlua::{Lua, Table, Value as LuaValue};
 
 /// One subscription; handlers of equal ones share the loader's.
@@ -185,7 +185,7 @@ impl RawReader {
         load: &mut Load<'_>,
         spec: &RawSpec,
         types: &[(&'static str, u32)],
-    ) -> Result<(enshwick::game_events::EventType, Self), Off> {
+    ) -> Result<(enshwick_core::game_events::EventType, Self), Off> {
         let name = types
             .iter()
             .map(|(name, _)| *name)

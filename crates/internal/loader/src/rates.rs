@@ -6,11 +6,11 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use enshwick::__private::modify_recipes_in;
-use enshwick::abi::{RateId, Status};
-use enshwick::content::recipes::{RecipeKind, RecipeLayout, RecipeView};
-pub(crate) use enshwick::rates::scale_whole;
-use enshwick::rates::{ExperienceGroup, Rate, combine, is_valid_factor};
+use enshwick_core::__private::modify_recipes_in;
+use enshwick_core::abi::{RateId, Status};
+use enshwick_core::content::recipes::{RecipeKind, RecipeLayout, RecipeView};
+pub(crate) use enshwick_core::rates::scale_whole;
+use enshwick_core::rates::{ExperienceGroup, Rate, combine, is_valid_factor};
 
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -86,7 +86,7 @@ pub(crate) fn links(rate: RateId) -> &'static [Symbol] {
 /// engine value of each source's catalogue id.
 pub(crate) fn experience_rates(value: impl Fn(&str) -> Option<u64>) -> [Option<RateId>; 256] {
     let mut rates = [None; 256];
-    for &(source, id) in enshwick::__private::EXPERIENCE_SOURCES {
+    for &(source, id) in enshwick_core::__private::EXPERIENCE_SOURCES {
         if let Some(slot) = value(id)
             .and_then(|v| usize::try_from(v).ok())
             .and_then(|at| rates.get_mut(at))
@@ -173,7 +173,7 @@ impl Rates {
         if Rate::from_id(rate).is_none() {
             return Status::BAD_ARGS;
         }
-        if !enshwick::__private::rules::may_declare_rate(rate, joins) {
+        if !enshwick_core::__private::rules::may_declare_rate(rate, joins) {
             return Status::REFUSED;
         }
         if !available {
@@ -315,7 +315,7 @@ mod tests {
         rates.set(ModIndex::new(0), COMBAT, 100.0);
         rates.set(ModIndex::new(1), COMBAT, 100.0);
         rates.seal();
-        assert_eq!(rates.factor(COMBAT, on), enshwick::rates::MAX_FACTOR);
+        assert_eq!(rates.factor(COMBAT, on), enshwick_core::rates::MAX_FACTOR);
     }
 
     #[test]
@@ -457,7 +457,7 @@ mod tests {
 
     #[test]
     fn each_recipe_takes_the_factor_of_its_kind() {
-        use enshwick::content::Blob;
+        use enshwick_core::content::Blob;
 
         let mut blob = Blob::new(&[0u8; 16]);
         let first = blob.append(&[0; 0xa8 * 2], 8);

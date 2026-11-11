@@ -4,7 +4,7 @@
 
 use core::fmt::Write as _;
 
-use enshwick::points::{DescribedField, DescribedPoint, Mode, Order};
+use enshwick_core::points::{DescribedField, DescribedPoint, Mode, Order};
 use mlua::{Lua, Table, Value as LuaValue};
 
 /// How one value is read from and written to the owner's bytes.
@@ -209,7 +209,7 @@ impl PointDesc {
         if mode.changes() {
             let verified = matches!(&output_read, Read::Primitive(p)
                 if usize::try_from(output_size).is_ok_and(|size| size == p.size())
-                    && enshwick::services::layout_hash("output", p.shape(), p.size(), p.align(), 0) == output_hash);
+                    && enshwick_core::services::layout_hash("output", p.shape(), p.size(), p.align(), 0) == output_hash);
             if !verified {
                 return Err(bad(
                     "a script changes only an answer of a primitive type, whose layout hash it checks",
@@ -246,7 +246,7 @@ pub(crate) struct OwnedDesc {
 impl OwnedDesc {
     /// The point `declared` of the pack `id`; `None` for one whose layout
     /// `pack.toml`'s check refuses.
-    pub(crate) fn of(id: &str, declared: &enshwick::packs::PackPoint) -> Option<Self> {
+    pub(crate) fn of(id: &str, declared: &enshwick_core::packs::PackPoint) -> Option<Self> {
         let layout = declared.layout()?;
         let read = |ty: &str| {
             Primitive::parse(ty.strip_prefix("enshwick.").unwrap_or(ty)).map(Read::Primitive)
@@ -516,7 +516,7 @@ fn encode_primitive(value: &LuaValue, p: Primitive, out: &mut [u8]) -> mlua::Res
 impl Primitive {
     /// The type's shape hash, as `#[derive(Shape)]` gives it in Rust.
     pub(crate) const fn shape(self) -> u64 {
-        use enshwick::Shape;
+        use enshwick_core::Shape;
         match self {
             Self::U8 => u8::SHAPE,
             Self::I8 => i8::SHAPE,
@@ -529,15 +529,15 @@ impl Primitive {
             Self::F32 => f32::SHAPE,
             Self::F64 => f64::SHAPE,
             Self::Bool => bool::SHAPE,
-            Self::Guid => enshwick::content::Guid::SHAPE,
-            Self::Entity => enshwick::Entity::SHAPE,
-            Self::ItemId => enshwick::ItemId::SHAPE,
-            Self::RecipeId => enshwick::RecipeId::SHAPE,
-            Self::KnowledgeId => enshwick::knowledge::KnowledgeId::SHAPE,
-            Self::SkillNode => enshwick::abi::SkillNode::SHAPE,
-            Self::PlayerKey => enshwick::PlayerKey::SHAPE,
-            Self::BuffTypeId => enshwick::buffs::BuffTypeId::SHAPE,
-            Self::NpcId => enshwick::survivors::NpcId::SHAPE,
+            Self::Guid => enshwick_core::content::Guid::SHAPE,
+            Self::Entity => enshwick_core::Entity::SHAPE,
+            Self::ItemId => enshwick_core::ItemId::SHAPE,
+            Self::RecipeId => enshwick_core::RecipeId::SHAPE,
+            Self::KnowledgeId => enshwick_core::knowledge::KnowledgeId::SHAPE,
+            Self::SkillNode => enshwick_core::abi::SkillNode::SHAPE,
+            Self::PlayerKey => enshwick_core::PlayerKey::SHAPE,
+            Self::BuffTypeId => enshwick_core::buffs::BuffTypeId::SHAPE,
+            Self::NpcId => enshwick_core::survivors::NpcId::SHAPE,
         }
     }
 
@@ -813,7 +813,7 @@ mod tests {
 /// reads.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct EventDesc {
-    pub(crate) event: enshwick::services::DescribedEvent,
+    pub(crate) event: enshwick_core::services::DescribedEvent,
     pub(crate) fields: Vec<(String, usize, Read)>,
 }
 
@@ -834,7 +834,7 @@ impl EventDesc {
                 )));
             };
             let hash =
-                enshwick::services::layout_hash(name, p.shape(), p.size(), p.align(), *offset);
+                enshwick_core::services::layout_hash(name, p.shape(), p.size(), p.align(), *offset);
             if hash != field.hash {
                 return Err(bad(format!(
                     "{name}: its hash is not the one its read and offset give"
@@ -876,7 +876,7 @@ impl EventDesc {
                 (None, None, Read::Primitive(p)) => {
                     let offset = end.div_ceil(p.align()) * p.align();
                     align = align.max(p.align());
-                    let hash = enshwick::services::layout_hash(
+                    let hash = enshwick_core::services::layout_hash(
                         &field_name,
                         p.shape(),
                         p.size(),
@@ -905,7 +905,7 @@ impl EventDesc {
             return Err(bad("a field lies past the data's size"));
         }
         Ok(Self {
-            event: enshwick::services::DescribedEvent::new(&name, described, size),
+            event: enshwick_core::services::DescribedEvent::new(&name, described, size),
             fields,
         })
     }

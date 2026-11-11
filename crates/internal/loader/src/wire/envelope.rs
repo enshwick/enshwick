@@ -63,7 +63,7 @@ pub enum ReadMessageError {
 /// ```
 #[must_use]
 pub fn is_executable(payload: &[u8]) -> bool {
-    enshwick::net::looks_like_code(payload)
+    enshwick_core::net::looks_like_code(payload)
 }
 
 /// Whether `payload` may travel at all: within [`MAX_PAYLOAD`] and not

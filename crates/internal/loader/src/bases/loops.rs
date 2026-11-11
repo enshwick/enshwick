@@ -17,8 +17,8 @@ mod stock;
 mod tests;
 mod totals;
 
-use enshwick::abi::HookFlags;
-use enshwick::raw::{read_at, read_ptr_at, write_at};
+use enshwick_core::abi::HookFlags;
+use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
 use super::Container;
 use super::members::Game;
@@ -668,7 +668,7 @@ unsafe fn add_u16(base: *mut u8, at: usize, by: u16) {
 ///
 /// - `vec` is the game's live container of `T`-sized elements, laid out as
 ///   `c`, whose grow callback, when set, is the game's.
-unsafe fn append<T: enshwick::raw::NoUninit>(vec: *mut u8, c: &Container, value: T) -> bool {
+unsafe fn append<T: enshwick_core::raw::NoUninit>(vec: *mut u8, c: &Container, value: T) -> bool {
     // SAFETY: the caller's live container laid out as `c`; its u64 length.
     let len = unsafe { read_at::<u64>(vec, c.len) };
     // SAFETY: the caller's live container; its u64 capacity.

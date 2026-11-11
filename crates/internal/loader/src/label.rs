@@ -12,8 +12,8 @@ use core::ffi::c_void;
 use std::sync::OnceLock;
 use std::sync::atomic::Ordering;
 
-use enshwick::Entity;
-use enshwick::abi::{Header, HookFlags, PlayerInfo, RenameCall, RenameCallFn, Status, Str};
+use enshwick_core::Entity;
+use enshwick_core::abi::{Header, HookFlags, PlayerInfo, RenameCall, RenameCallFn, Status, Str};
 
 use crate::chains::Next;
 use crate::host::{Loader, Target};
@@ -211,14 +211,14 @@ pub(crate) fn set(loader: &Loader, entity: Entity, text: &str) -> Status {
     let slot = unsafe { (layout.find)(&raw mut found, world, layout.label_type, entity.0) };
     // SAFETY: the lookup returns its out record, whose first word is the
     // component pointer or null.
-    let component = unsafe { enshwick::raw::read_ptr_at::<u8>(slot.cast_const().cast(), 0) };
+    let component = unsafe { enshwick_core::raw::read_ptr_at::<u8>(slot.cast_const().cast(), 0) };
     let old = if component.is_null() {
         0
     } else {
         // SAFETY: `component` is the entity's live `CustomPlayerString`,
         // non-null by the earlier check, on the game thread at a quiet moment;
         // the component is its `u64` string id.
-        unsafe { enshwick::raw::read_at::<u64>(component, 0) }
+        unsafe { enshwick_core::raw::read_at::<u64>(component, 0) }
     };
     let span = [text.as_ptr().expose_provenance(), text.len()];
     let mut result = [0u64; 2];
@@ -236,7 +236,7 @@ pub(crate) fn set(loader: &Loader, entity: Entity, text: &str) -> Status {
         // non-null by the check, on the game thread at a quiet moment; it
         // holds the `u64` string id, which the game's rename path writes the
         // same way.
-        unsafe { enshwick::raw::write_at(component, 0, id) };
+        unsafe { enshwick_core::raw::write_at(component, 0, id) };
     } else if id != 0 {
         let data = [(&raw const id).expose_provenance(), size_of::<u64>()];
         // SAFETY: the game's add-component at the table's `label.add`, with
@@ -266,7 +266,7 @@ unsafe extern "system" fn replace(
     if matches!(refused, Some(true)) && !out.is_null() {
         // SAFETY: `out` is the swap's non-null result record (checked earlier),
         // writable for the call; its first byte is the error code.
-        unsafe { enshwick::raw::write_at(out.cast(), 0, REFUSED) };
+        unsafe { enshwick_core::raw::write_at(out.cast(), 0, REFUSED) };
         return out.cast();
     }
     // SAFETY: the game's own arguments, passed on unchanged to the rest of
@@ -313,7 +313,7 @@ unsafe fn refused(text: *const [usize; 2]) -> bool {
     let machine: u32 = unsafe { crate::memory::read(rdi, 0) };
     // SAFETY: the caller's contract makes the non-null `text` (checked
     // earlier) a readable `[usize; 2]` span for the call.
-    let [ptr, len] = unsafe { enshwick::raw::read_at::<[usize; 2]>(text.cast(), 0) };
+    let [ptr, len] = unsafe { enshwick_core::raw::read_at::<[usize; 2]>(text.cast(), 0) };
     let name = if ptr == 0 || len > 0x1000 {
         String::new()
     } else {
@@ -322,7 +322,11 @@ unsafe fn refused(text: *const [usize; 2]) -> bool {
         // (checked earlier) the address of `len` readable bytes, unchanged
         // during the call.
         unsafe {
-            enshwick::raw::read_bytes_at(core::ptr::with_exposed_provenance(ptr), 0, &mut bytes);
+            enshwick_core::raw::read_bytes_at(
+                core::ptr::with_exposed_provenance(ptr),
+                0,
+                &mut bytes,
+            );
         }
         String::from_utf8_lossy(&bytes).into_owned()
     };
@@ -335,7 +339,7 @@ unsafe fn refused(text: *const [usize; 2]) -> bool {
             header: Header::of::<PlayerInfo>(),
             slot: u32::MAX,
             entity: Entity(0),
-            key: enshwick::PlayerKey::new(0),
+            key: enshwick_core::PlayerKey::new(0),
             permissions: 0,
             name_len: 0,
             name: [0; 64],
@@ -377,7 +381,7 @@ fn renamer(loader: &Loader, machine: u32) -> Option<PlayerInfo> {
     crate::world::players(loader)
         .ok()?
         .into_iter()
-        .find(|p| p.key == enshwick::PlayerKey::new(key))
+        .find(|p| p.key == enshwick_core::PlayerKey::new(key))
 }
 
 #[cfg(test)]

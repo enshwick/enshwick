@@ -51,7 +51,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use arc_swap::ArcSwap;
-use enshwick::abi::{AltarLimitFilterFn, HookFlags, Status};
+use enshwick_core::abi::{AltarLimitFilterFn, HookFlags, Status};
 
 use self::detours::{
     add_base, base_at, check, group, holder_at, in_base, max_altars, view, zones_at,

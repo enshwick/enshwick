@@ -9,8 +9,8 @@
 
 use std::sync::OnceLock;
 
-use enshwick::abi::{DropRequest, Header, SpawnRequest, Status};
-use enshwick::affixes::ItemRarity;
+use enshwick_core::abi::{DropRequest, Header, SpawnRequest, Status};
+use enshwick_core::affixes::ItemRarity;
 
 use crate::host::Loader;
 
@@ -74,7 +74,7 @@ fn read_layout(loader: &Loader) -> Result<Layout, ReadLayoutError> {
         }
         usize::try_from(at).map_err(|_| ReadLayoutError::Field(name))
     };
-    let vanilla = enshwick::content::vanilla::Vanilla::new(
+    let vanilla = enshwick_core::content::vanilla::Vanilla::new(
         &enshwick_gamedata::catalogue::Reflected(reflection),
         |key| crate::archive::game()?.resource(&key),
     );
@@ -172,7 +172,7 @@ mod tests {
     fn request(count: u32, rarity: u32) -> DropRequest {
         DropRequest {
             header: Header::of::<DropRequest>(),
-            item: enshwick::ItemId::new(0x2a),
+            item: enshwick_core::ItemId::new(0x2a),
             count,
             position: [0; 3],
             level: 9,

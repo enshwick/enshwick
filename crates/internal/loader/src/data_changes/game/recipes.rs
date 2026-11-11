@@ -4,14 +4,14 @@
 
 use core::ffi::c_void;
 
-use enshwick::abi::{ResourceKey, Status};
-use enshwick::content::Guid;
-use enshwick::content::changes::{Entry, Field, RecipeTraits};
-use enshwick::content::menu::{MenuLayout, UI_BUNDLE, move_recipes};
-use enshwick::content::recipes::{
+use enshwick_core::abi::{ResourceKey, Status};
+use enshwick_core::content::Guid;
+use enshwick_core::content::changes::{Entry, Field, RecipeTraits};
+use enshwick_core::content::menu::{MenuLayout, UI_BUNDLE, move_recipes};
+use enshwick_core::content::recipes::{
     RECIPE_REGISTRY, RecipeChanges, RecipeKind, RecipeLayout, change_recipes_in, recipe_workshops,
 };
-use enshwick::content::workshops::WorkshopId;
+use enshwick_core::content::workshops::WorkshopId;
 use enshwick_gamedata::catalogue;
 use rustc_hash::FxHashMap;
 
@@ -85,7 +85,11 @@ pub(super) fn vanilla_recipes(loader: &Loader) -> Vec<(Guid, RecipeTraits)> {
 /// recipe and the build reflects recipes.
 pub(super) fn recipe_patch(
     loader: &'static Loader,
-) -> Option<(ResourceKey, enshwick::abi::ResourcePatchFn, *mut c_void)> {
+) -> Option<(
+    ResourceKey,
+    enshwick_core::abi::ResourcePatchFn,
+    *mut c_void,
+)> {
     let sealed = CHANGES.sealed.get()?;
     let recipes = sealed.merged().entries(Entry::Recipe);
     if recipes.is_empty() {
@@ -105,7 +109,11 @@ pub(super) fn recipe_patch(
     let patch: &'static RecipePatch = Box::leak(Box::new(RecipePatch { layout, duration }));
     let key = RECIPE_REGISTRY.key_by_hash(crate::catalogue::types::RECIPE_REGISTRY);
     let user = core::ptr::from_ref(patch).cast_mut().cast::<c_void>();
-    Some((key, build_recipes as enshwick::abi::ResourcePatchFn, user))
+    Some((
+        key,
+        build_recipes as enshwick_core::abi::ResourcePatchFn,
+        user,
+    ))
 }
 
 /// Every recipe some change of `merged` from a mod `on` lets through moves,
@@ -133,9 +141,14 @@ pub(super) fn stations(merged: &Merged, on: impl Fn(ModIndex) -> bool + Copy) ->
 /// station alone.
 pub(super) fn menu_patch(
     loader: &'static Loader,
-) -> Option<(ResourceKey, enshwick::abi::ResourcePatchFn, *mut c_void)> {
+) -> Option<(
+    ResourceKey,
+    enshwick_core::abi::ResourcePatchFn,
+    *mut c_void,
+)> {
     let sealed = CHANGES.sealed.get()?;
-    if loader.side != enshwick::abi::Side::CLIENT || stations(&sealed.merged(), |_| true).is_empty()
+    if loader.side != enshwick_core::abi::Side::CLIENT
+        || stations(&sealed.merged(), |_| true).is_empty()
     {
         return None;
     }
@@ -155,7 +168,7 @@ pub(super) fn menu_patch(
     let patch: &'static MenuPatch = Box::leak(Box::new(MenuPatch { layout, workshops }));
     let key = UI_BUNDLE.key_by_hash(crate::catalogue::types::UI_BUNDLE);
     let user = core::ptr::from_ref(patch).cast_mut().cast::<c_void>();
-    Some((key, build_menu as enshwick::abi::ResourcePatchFn, user))
+    Some((key, build_menu as enshwick_core::abi::ResourcePatchFn, user))
 }
 
 /// What the loader's patch of the crafting menu needs.
@@ -180,7 +193,7 @@ unsafe extern "system" fn build_menu(
     let mut bytes = vec![0; base_len];
     // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at `base`,
     // unchanged for the call.
-    unsafe { enshwick::raw::read_bytes_at(base, 0, &mut bytes) };
+    unsafe { enshwick_core::raw::read_bytes_at(base, 0, &mut bytes) };
     let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let sealed = CHANGES.sealed.get()?;
         let moves: Vec<(Guid, WorkshopId)> = stations(&sealed.merged(), |m| on(sealed.loader, m))
@@ -248,7 +261,7 @@ unsafe extern "system" fn build_recipes(
     let mut bytes = vec![0; base_len];
     // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at `base`,
     // unchanged for the call.
-    unsafe { enshwick::raw::read_bytes_at(base, 0, &mut bytes) };
+    unsafe { enshwick_core::raw::read_bytes_at(base, 0, &mut bytes) };
     let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let sealed = CHANGES.sealed.get()?;
         let merged = sealed.merged();

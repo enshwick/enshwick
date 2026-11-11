@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use arc_swap::ArcSwapOption;
-use enshwick::abi::Status;
+use enshwick_core::abi::Status;
 
 use crate::locks::Relock;
 

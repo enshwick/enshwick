@@ -108,11 +108,11 @@ impl FrameSlot {
 
     /// The caller frame the thunk stored on this thread.
     #[must_use]
-    pub(crate) fn read(self) -> enshwick::abi::CallerFrame {
+    pub(crate) fn read(self) -> enshwick_core::abi::CallerFrame {
         // SAFETY: `allocate` built `self` only from indices `TlsAlloc` gave
         // and the loader never frees; `i` is under their nine.
         let value = |i: usize| unsafe { TlsGetValue(self.0[i]) }.addr() as u64;
-        enshwick::abi::CallerFrame {
+        enshwick_core::abi::CallerFrame {
             rsp: value(0),
             rbx: value(1),
             rbp: value(2),

@@ -3,10 +3,10 @@
 
 use core::ffi::c_void;
 
-use enshwick::abi::{ResourceKey, Status};
-use enshwick::content::Guid;
-use enshwick::content::changes::Field;
-use enshwick::content::loot_tables::{
+use enshwick_core::abi::{ResourceKey, Status};
+use enshwick_core::content::Guid;
+use enshwick_core::content::changes::Field;
+use enshwick_core::content::loot_tables::{
     LootLayout, change_fill_table, change_random_loot, fill_items,
 };
 use enshwick_gamedata::catalogue;
@@ -20,7 +20,11 @@ use crate::host::Loader;
 /// loot table, and each container fill table that names a changed item.
 pub(super) fn loot_patches(
     loader: &'static Loader,
-) -> Vec<(ResourceKey, enshwick::abi::ResourcePatchFn, *mut c_void)> {
+) -> Vec<(
+    ResourceKey,
+    enshwick_core::abi::ResourcePatchFn,
+    *mut c_void,
+)> {
     let Some(sealed) = CHANGES.sealed.get() else {
         return Vec::new();
     };
@@ -59,7 +63,7 @@ pub(super) fn loot_patches(
             table: Guid(key.guid),
         }));
         let user = core::ptr::from_ref(patch).cast_mut().cast::<c_void>();
-        patches.push((key, build_loot as enshwick::abi::ResourcePatchFn, user));
+        patches.push((key, build_loot as enshwick_core::abi::ResourcePatchFn, user));
     };
     for key in archive.keys_of(random) {
         add(key, false);
@@ -112,11 +116,11 @@ unsafe extern "system" fn build_loot(
     let mut bytes = vec![0; base_len];
     // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at `base`,
     // unchanged for the call.
-    unsafe { enshwick::raw::read_bytes_at(base, 0, &mut bytes) };
+    unsafe { enshwick_core::raw::read_bytes_at(base, 0, &mut bytes) };
     let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let sealed = CHANGES.sealed.get()?;
         let merged = sealed.merged();
-        let value = |id: enshwick::ItemId, field: Field, base: f64| {
+        let value = |id: enshwick_core::ItemId, field: Field, base: f64| {
             let item = *patch.items.get(&id.get())?;
             let on = |m| on(sealed.loader, m);
             let every = merged.value(Key::new(item, field), base, on);

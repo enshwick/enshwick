@@ -1,5 +1,5 @@
 //! Holds on the game: a mod that keeps a world the vanilla game cannot open
-//! safely sets one (`enshwick::state::Hold`), and the loader stops the
+//! safely sets one (`enshwick_core::state::Hold`), and the loader stops the
 //! game before the world loads when that mod would not run.
 //!
 //! A hold in a mod's folder, `mods/<mod>/hold.txt`, counts as the loader
@@ -10,8 +10,8 @@
 
 use std::path::Path;
 
-use enshwick::i18n::Texts;
-use enshwick::state::{HOLD_FILE, Hold};
+use enshwick_core::i18n::Texts;
+use enshwick_core::state::{HOLD_FILE, Hold};
 
 /// How long the log gets to write the reasons before the game stops.
 #[cfg(windows)]
@@ -68,7 +68,7 @@ pub fn of_world(key: &str) -> Vec<Held> {
 
 /// The holds in the folders directly in `dir`, of the world `world`.
 fn found(dir: &Path, world: Option<&str>) -> Vec<Held> {
-    enshwick::state::holds(dir)
+    enshwick_core::state::holds(dir)
         .into_iter()
         .map(|(id, reason)| Held {
             file: dir.join(&id).join(HOLD_FILE).display().to_string(),
@@ -212,7 +212,7 @@ mod tests {
 
     #[test]
     fn a_hold_in_a_mod_folder_counts_at_start_and_a_world_hold_with_its_world() {
-        use enshwick::state::Hold;
+        use enshwick_core::state::Hold;
         let root = std::env::temp_dir().join(format!("enshwick-holds-{}", std::process::id()));
         let _gone = std::fs::remove_dir_all(&root);
         let mods = root.join("mods");
@@ -240,7 +240,7 @@ mod tests {
 
     #[test]
     fn a_text_hold_reads_in_the_reader_s_language_and_in_its_line_without_texts() {
-        use enshwick::state::Hold;
+        use enshwick_core::state::Hold;
         let data = std::env::temp_dir().join(format!("enshwick-text-holds-{}", std::process::id()));
         let _gone = std::fs::remove_dir_all(&data);
         let key = data.join("world0").to_string_lossy().into_owned();
@@ -254,7 +254,7 @@ mod tests {
         let world = of_world(&key);
         assert_eq!(world[0].reason, "17 altars");
         assert_eq!(world[0].shown(None), "17 altars, in world world0");
-        let uk = Some(enshwick::i18n::Language::UK_UA);
+        let uk = Some(enshwick_core::i18n::Language::UK_UA);
         assert_eq!(
             crate::texts::for_reader(uk, || world[0].shown(Some(&texts))),
             "17 вівтарів, in world world0"

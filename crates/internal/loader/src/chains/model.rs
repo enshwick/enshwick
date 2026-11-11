@@ -8,7 +8,7 @@
 mod tests {
     use crate::chains::{Chains, Link};
     use crate::mod_index::ModIndex;
-    use enshwick::abi::{HookFlags, Status};
+    use enshwick_core::abi::{HookFlags, Status};
     use loom::sync::atomic::{AtomicUsize, Ordering};
     use loom::thread;
 

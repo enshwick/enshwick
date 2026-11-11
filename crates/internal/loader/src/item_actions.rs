@@ -25,8 +25,8 @@ use core::ffi::c_void;
 use std::sync::OnceLock;
 use std::time::Instant;
 
-use enshwick::abi::{Header, HookFlags, ItemAction, ItemActionFn, Side, Status};
-use enshwick::raw::{read_at, write_at};
+use enshwick_core::abi::{Header, HookFlags, ItemAction, ItemActionFn, Side, Status};
+use enshwick_core::raw::{read_at, write_at};
 
 use crate::chains::Next;
 use crate::ecs::{Components, Engine};
@@ -450,14 +450,14 @@ unsafe fn screen_pending(ctx: *mut u64, equipment: bool) {
         let call = ItemAction {
             header: Header::of::<ItemAction>(),
             kind,
-            player: enshwick::Entity(player),
-            item: enshwick::ItemId::new(item),
+            player: enshwick_core::Entity(player),
+            item: enshwick_core::ItemId::new(item),
             count: if kind == ItemAction::CONSUME {
                 1
             } else {
                 count
             },
-            inventory: enshwick::Entity(inventory),
+            inventory: enshwick_core::Entity(inventory),
             slot: u32::from(index),
         };
         if !ask(&call, true) {
@@ -590,10 +590,10 @@ pub(crate) unsafe fn screen(type_hash: u32, payload: *const u8, size: usize) {
         let call = ItemAction {
             header: Header::of::<ItemAction>(),
             kind: heard.kind,
-            player: enshwick::Entity(player),
-            item: enshwick::ItemId::new(item),
+            player: enshwick_core::Entity(player),
+            item: enshwick_core::ItemId::new(item),
             count,
-            inventory: enshwick::Entity(0),
+            inventory: enshwick_core::Entity(0),
             slot: 0,
         };
         let _heard = ask(&call, false);

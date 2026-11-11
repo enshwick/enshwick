@@ -10,22 +10,22 @@ use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
 
 use arc_swap::{ArcSwap, ArcSwapOption};
-use enshwick::Relock as _;
-use enshwick::abi::{Event, Level, Relation};
-use enshwick::events::Ticked;
-use enshwick::script::{self, Opened, Signature, Ty, Value};
-use enshwick::{Host, Load, Off};
+use enshwick_core::Relock as _;
+use enshwick_core::abi::{Event, Level, Relation};
+use enshwick_core::events::Ticked;
+use enshwick_core::script::{self, Opened, Signature, Ty, Value};
+use enshwick_core::{Host, Load, Off};
 use mlua::{Function, Lua, MultiValue, Table, Value as LuaValue};
 
 use crate::bridge::{Lent, from_lua, to_lua};
-use enshwick::packs::SCRIPT_MAIN as MAIN;
+use enshwick_core::packs::SCRIPT_MAIN as MAIN;
 
 use crate::calls::{CallDesc, ServedCall};
 use crate::files::Scripts;
 use crate::points::{EventDesc, OwnedDesc, PointDesc, Read, decode};
 use crate::subscribe::{RawReader, Subscription, raw_table};
-use enshwick::points::DescribedOwnedPoint;
-use enshwick::services::{DescribedCall, DescribedCaller, DescribedEmitter};
+use enshwick_core::points::DescribedOwnedPoint;
+use enshwick_core::services::{DescribedCall, DescribedCaller, DescribedEmitter};
 use sandbox::describe;
 use std::sync::OnceLock;
 
@@ -417,7 +417,7 @@ pub fn start(
     load: &mut Load<'_>,
     id: &str,
     scripts: Scripts,
-    settings: Option<enshwick::config::Schema>,
+    settings: Option<enshwick_core::config::Schema>,
     limits: Limits,
 ) -> Result<Runtime, Off> {
     begin(load, id, scripts, settings, Vec::new(), Vec::new(), limits)
@@ -447,7 +447,7 @@ pub fn start(
 /// ```
 pub fn start_pack(
     load: &mut Load<'_>,
-    manifest: &enshwick::packs::PackManifest,
+    manifest: &enshwick_core::packs::PackManifest,
     scripts: Scripts,
     limits: Limits,
 ) -> Result<Runtime, Off> {
@@ -462,7 +462,7 @@ pub fn start_pack(
         .filter_map(|point| {
             let desc = OwnedDesc::of(&manifest.id, point);
             if desc.is_none() {
-                enshwick::warn!(
+                enshwick_core::warn!(
                     "point {}: a type of its fields has no Luau form, so the script cannot define it",
                     point.name
                 );
@@ -488,7 +488,7 @@ fn begin(
     load: &mut Load<'_>,
     id: &str,
     scripts: Scripts,
-    settings: Option<enshwick::config::Schema>,
+    settings: Option<enshwick_core::config::Schema>,
     deps: Vec<(String, String)>,
     declared_points: Vec<Arc<OwnedDesc>>,
     limits: Limits,
@@ -536,7 +536,7 @@ fn begin(
     });
     if let Some(schema) = settings {
         // A pack's settings are declared once, by `add_pack` when it ran.
-        let (settings, values) = match enshwick::packs::declared_settings(load) {
+        let (settings, values) = match enshwick_core::packs::declared_settings(load) {
             Some(declared) => declared,
             None => load.table_config(schema)?,
         };
@@ -580,7 +580,7 @@ fn begin(
 /// points.
 fn settle(inner: &Inner, load: &mut Load<'_>) -> Result<(), Off> {
     let defined: Vec<(
-        enshwick::services::DescribedEvent,
+        enshwick_core::services::DescribedEvent,
         Arc<OnceLock<DescribedEmitter>>,
     )> = inner
         .defined

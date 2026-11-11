@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 use std::time::SystemTime;
 
-use enshwick::abi::{Relation, Side};
+use enshwick_core::abi::{Relation, Side};
 use semver::{Version, VersionReq};
 
 /// A mod's manifest, parsed.
@@ -556,7 +556,7 @@ mod tests {
         let skip = Skip::Missing {
             id: "enshwick.not-installed".into(),
         };
-        let uk = Some(enshwick::i18n::Language::UK_UA);
+        let uk = Some(enshwick_core::i18n::Language::UK_UA);
         let shown = crate::texts::for_reader(uk, || skip.shown());
         assert!(shown.contains("enshwick.not-installed"), "{shown}");
         assert_ne!(shown, crate::texts::for_reader(None, || skip.shown()));

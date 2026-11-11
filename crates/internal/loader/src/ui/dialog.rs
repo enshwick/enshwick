@@ -15,7 +15,7 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use enshwick::abi::{Status, UiAnswerFn, UiDialog};
+use enshwick_core::abi::{Status, UiAnswerFn, UiDialog};
 
 use crate::host::Registered;
 use crate::locks::Relock;

@@ -35,7 +35,7 @@
 use core::cell::RefCell;
 use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 
-use enshwick::abi::{Registers, UiWidget};
+use enshwick_core::abi::{Registers, UiWidget};
 use list::{Listed, list};
 use server::{server_list, server_settings};
 use settings::{page_rows, settings};
@@ -117,7 +117,7 @@ enum Page {
         id: String,
         first: usize,
         rows: Vec<Row>,
-        schema: Option<enshwick::config::Schema>,
+        schema: Option<enshwick_core::config::Schema>,
         news: u64,
         entries: Entries,
         from_mod: bool,
@@ -223,7 +223,7 @@ pub(super) fn link(loader: &Loader, engine: &Engine) {
     for (site, handler, part, id) in [
         (
             engine.main_menu_site,
-            main_menu as enshwick::abi::MidHookFn,
+            main_menu as enshwick_core::abi::MidHookFn,
             Part::MAIN_MENU,
             pinned::ui::MAIN_MENU_SITE,
         ),
@@ -242,7 +242,7 @@ pub(super) fn link(loader: &Loader, engine: &Engine) {
             handler,
             user: 0,
             priority: i32::MIN,
-            flags: enshwick::abi::HookFlags::NONE,
+            flags: enshwick_core::abi::HookFlags::NONE,
         };
         let status = loader.mids.relock().add(site, link);
         if !status.is_ok() {
@@ -429,7 +429,7 @@ fn back(screen: &mut Screen) -> bool {
 /// Whether this client is joined to a server it does not host, which takes
 /// messages: whose settings an administrator may change from here.
 fn joined_elsewhere() -> bool {
-    crate::net::ready(enshwick::abi::NetMessage::SERVER.get()) && !crate::world::hosting()
+    crate::net::ready(enshwick_core::abi::NetMessage::SERVER.get()) && !crate::world::hosting()
 }
 
 fn open_server_list(screen: &mut Screen) {

@@ -1,6 +1,6 @@
 //! Why recipe files and rules do not read, resolve or take an edit.
 
-use enshwick::content::Guid;
+use enshwick_core::content::Guid;
 
 use super::{list, near_list};
 

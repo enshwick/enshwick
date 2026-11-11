@@ -50,7 +50,7 @@
 
 use std::sync::Mutex;
 
-use enshwick::abi::Level;
+use enshwick_core::abi::Level;
 use iced_x86::{
     BlockEncoder, BlockEncoderOptions, Code, Decoder, DecoderOptions, FlowControl, Instruction,
     InstructionBlock, InstructionInfoFactory, OpAccess, Register,
@@ -508,7 +508,7 @@ pub(super) fn function_around(address: usize) -> Option<Function> {
     // of a loaded image or a registered table, kept while the image is: the
     // function's start, end and unwind info, offsets from `image`. Hooks arm
     // while the game's and the mods' images stay loaded.
-    let [begin, end, unwind]: [u32; 3] = unsafe { enshwick::raw::read_at(entry.cast(), 0) };
+    let [begin, end, unwind]: [u32; 3] = unsafe { enshwick_core::raw::read_at(entry.cast(), 0) };
     Some(Function {
         image,
         begin: image + begin as usize,

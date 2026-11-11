@@ -1,8 +1,8 @@
 //! The hold a raised stack size sets on the side that keeps the world, and
 //! the stack sizes kept for its saves.
 
-use enshwick::abi::{Event, Level};
-use enshwick::state::Hold;
+use enshwick_core::abi::{Event, Level};
+use enshwick_core::state::Hold;
 
 use super::{CHANGES, loader_dir, on};
 use crate::data_changes::{HoldStep, Kept, hold_reason, hold_step};

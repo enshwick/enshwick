@@ -3,7 +3,7 @@
 
 use std::sync::atomic::Ordering;
 
-use enshwick::{Entity, ItemId};
+use enshwick_core::{Entity, ItemId};
 use rustc_hash::FxHashSet;
 
 use super::{
@@ -523,5 +523,5 @@ pub(super) struct TakenBack {
 pub(super) fn touches_item_stats(found: &[(KindIndex, Entity)]) -> bool {
     found
         .iter()
-        .any(|&(id, _)| kind(id).is_some_and(|k| k.id == enshwick::stats::ITEM_KIND))
+        .any(|&(id, _)| kind(id).is_some_and(|k| k.id == enshwick_core::stats::ITEM_KIND))
 }

@@ -1,7 +1,7 @@
 //! The checks a mod's widget passes before the loader draws it: the order
 //! of its window's start and end, and the numbers and options it hands in.
 
-use enshwick::abi::{Status, UiWidget};
+use enshwick_core::abi::{Status, UiWidget};
 
 /// Whether a widget of `kind` may draw now: `Status::OK`, or why not.
 ///
@@ -56,13 +56,13 @@ pub fn slider(value: f32, min: f32, max: f32) -> Option<((f32, f32), f32)> {
 }
 
 /// How many of a dropdown's `count` options show, at most
-/// [`enshwick::ui::MAX_OPTIONS`]; `None` when it hands in none (`given`
+/// [`enshwick_core::ui::MAX_OPTIONS`]; `None` when it hands in none (`given`
 /// false for a null list).
 #[must_use]
 pub fn options(count: u32, given: bool) -> Option<usize> {
     let count = usize::try_from(count)
         .unwrap_or(usize::MAX)
-        .min(enshwick::ui::MAX_OPTIONS);
+        .min(enshwick_core::ui::MAX_OPTIONS);
     (given && count > 0).then_some(count)
 }
 
@@ -146,6 +146,9 @@ mod tests {
         assert_eq!(options(3, true), Some(3));
         assert_eq!(options(0, true), None);
         assert_eq!(options(3, false), None);
-        assert_eq!(options(u32::MAX, true), Some(enshwick::ui::MAX_OPTIONS));
+        assert_eq!(
+            options(u32::MAX, true),
+            Some(enshwick_core::ui::MAX_OPTIONS)
+        );
     }
 }

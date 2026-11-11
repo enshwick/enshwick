@@ -1,6 +1,6 @@
 //! A loaded mod's place in load order, kept apart from every other number.
 
-use enshwick::abi::ModHandle;
+use enshwick_core::abi::ModHandle;
 
 /// A loaded mod's place in load order, the index of its record. A mod's
 /// [`ModHandle`] is its index plus one, and the loader itself owns links and
@@ -54,7 +54,7 @@ impl ModIndex {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::abi::ModHandle;
+    /// use enshwick_core::abi::ModHandle;
     /// use enshwick_loader::mod_index::ModIndex;
     ///
     /// assert_eq!(ModIndex::looking_up(ModHandle(0), 3), Some(ModIndex::LOADER));

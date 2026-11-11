@@ -15,7 +15,7 @@
 use core::ffi::c_void;
 use std::sync::OnceLock;
 
-use enshwick::abi::{HookFlags, MidHookFn, ModHandle, Registers, Status};
+use enshwick_core::abi::{HookFlags, MidHookFn, ModHandle, Registers, Status};
 use rustc_hash::FxHashMap;
 
 use crate::mod_index::ModIndex;
@@ -205,7 +205,7 @@ impl Mids {
         }
         let links = self.sites.entry(address).or_default();
         let clash = links.iter().any(|l| {
-            enshwick::__private::rules::hooks_clash(l.owner == link.owner, l.flags, link.flags)
+            enshwick_core::__private::rules::hooks_clash(l.owner == link.owner, l.flags, link.flags)
         });
         if clash {
             return Status::REFUSED;

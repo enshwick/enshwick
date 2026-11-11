@@ -11,8 +11,8 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use enshwick::abi::ResourceKey;
-use enshwick::content::Guid;
+use enshwick_core::abi::ResourceKey;
+use enshwick_core::content::Guid;
 use rustc_hash::FxHashMap;
 
 use crate::catalogue::types;
@@ -98,7 +98,7 @@ pub(crate) fn update(
     served: impl IntoIterator<Item = (ResourceKey, ResourceKey)>,
 ) -> FxHashMap<[u8; 16], [u8; 16]> {
     let path = data_dir.join(FILE);
-    let read = enshwick::files::read_to_string_if_present(&path)
+    let read = enshwick_core::files::read_to_string_if_present(&path)
         .map_err(|error| error.to_string())
         .and_then(|text| {
             text.map_or_else(
@@ -138,7 +138,7 @@ pub(crate) fn update(
 fn write(path: &Path, text: &str) -> std::io::Result<()> {
     let header = "# Written by the Enshwick loader: every resource a mod cloned and the\n\
                   # vanilla one it came from. Keep it: saved stations fall back to these.\n\n";
-    enshwick::files::write_atomically(path, format!("{header}{text}"))
+    enshwick_core::files::write_atomically(path, format!("{header}{text}"))
 }
 
 #[cfg(test)]

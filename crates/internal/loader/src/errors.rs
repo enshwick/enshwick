@@ -320,6 +320,6 @@ mod tests {
 
     #[test]
     fn the_fake_host_ends_a_turned_off_mod_s_line_as_the_loader_does() {
-        assert_eq!(MOD_OFF.to_string(), enshwick::__private::MOD_OFF);
+        assert_eq!(MOD_OFF.to_string(), enshwick_core::__private::MOD_OFF);
     }
 }

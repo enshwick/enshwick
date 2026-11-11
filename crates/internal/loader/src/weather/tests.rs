@@ -1,4 +1,4 @@
-use enshwick::abi::Event;
+use enshwick_core::abi::Event;
 
 use super::{LOADED, LOADING, UNLOADED, UNLOADING, as_saved, remapped, turn};
 

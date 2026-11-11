@@ -3,8 +3,8 @@
 
 use core::sync::atomic::{AtomicU64, Ordering};
 
-use enshwick::PlayerKey;
-use enshwick::abi::{PlayerInfo, Side};
+use enshwick_core::PlayerKey;
+use enshwick_core::abi::{PlayerInfo, Side};
 use rustc_hash::FxHashMap;
 
 use super::{DECLARED, Declared, STATE, label_of};
@@ -205,8 +205,8 @@ pub(super) fn carried_for<'a>(
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{ControlEvent, Header};
-    use enshwick::{Entity, PlayerKey};
+    use enshwick_core::abi::{ControlEvent, Header};
+    use enshwick_core::{Entity, PlayerKey};
 
     use super::*;
     use crate::mod_index::ModIndex;

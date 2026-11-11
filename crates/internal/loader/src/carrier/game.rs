@@ -230,7 +230,7 @@ impl Game {
         .ok_or(catalogue::ids::GAME_MESSAGE_CHANNEL_VOICE_CHAT)?;
         let base = offset(pinned::net::CHANNEL_BASE)
             .and_then(|value| u32::try_from(value).map_err(|_| pinned::net::CHANNEL_BASE.id()))?;
-        let client = loader.side == enshwick::abi::Side::CLIENT;
+        let client = loader.side == enshwick_core::abi::Side::CLIENT;
         Ok(Self {
             // SAFETY: `net.socket_create` is the game's socket create on
             // this build, `CreateFn` on server 399 and client 426, checked by

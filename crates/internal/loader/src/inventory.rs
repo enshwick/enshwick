@@ -24,7 +24,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use enshwick::abi::{
+use enshwick_core::abi::{
     Header, HookFlags, InventoryOp, InventoryOpResult, InventoryRequest, InventoryResult,
     InventoryResultFn, ItemData, Registers, Side, Status,
 };
@@ -643,7 +643,7 @@ pub(crate) fn submit(
         return Status::MISSING;
     }
     let count = request.op_count as usize;
-    if request.ops.is_null() || count == 0 || count > enshwick::inventory::MAX_OPS {
+    if request.ops.is_null() || count == 0 || count > enshwick_core::inventory::MAX_OPS {
         return Status::BAD_ARGS;
     }
     // SAFETY: the mod's request carries a non-null `ops` (checked earlier) of
@@ -670,7 +670,7 @@ fn valid(op: &InventoryOp) -> bool {
     match op.kind {
         InventoryOp::GIVE | InventoryOp::TAKE => {
             entity(op.target)
-                && op.item != enshwick::ItemId::new(0)
+                && op.item != enshwick_core::ItemId::new(0)
                 && op.count != 0
                 && i32::try_from(op.count).is_ok()
                 && (op.kind == InventoryOp::TAKE || fill(op).is_some())
@@ -679,7 +679,7 @@ fn valid(op: &InventoryOp) -> bool {
         InventoryOp::RENEW => {
             op.target & 0xffff_ffff != 0
                 && op.other & 0xffff_ffff != 0
-                && op.item != enshwick::ItemId::new(0)
+                && op.item != enshwick_core::ItemId::new(0)
                 && op.count != 0
                 && i32::try_from(op.count).is_ok()
                 && fill(&renew_give(op)).is_some()
@@ -753,26 +753,26 @@ pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemData, Status> 
     let info = item_info_at(loader, &access, item)?.ok_or(Status::MISSING)?;
     Ok(ItemData {
         header: Header::of::<ItemData>(),
-        id: enshwick::ItemId::new(item),
+        id: enshwick_core::ItemId::new(item),
         // SAFETY: the lookup returned the item's non-null `ItemInfo` (checked
         // earlier), live while `access` is held, with `maxStackSize` at the reflected offset.
-        max_stack: unsafe { enshwick::raw::read_at(info, executor.item_max_stack) },
+        max_stack: unsafe { enshwick_core::raw::read_at(info, executor.item_max_stack) },
         // SAFETY: the lookup returned the item's non-null `ItemInfo` (checked
         // earlier), live while `access` is held, with `category` at the reflected offset.
-        category: unsafe { enshwick::raw::read_at(info, executor.item_category) },
+        category: unsafe { enshwick_core::raw::read_at(info, executor.item_category) },
         // SAFETY: the lookup returned the item's non-null `ItemInfo` (checked
         // earlier), live while `access` is held, with `rarity` at the reflected offset.
-        rarity: unsafe { enshwick::raw::read_at(info, executor.item_rarity) },
+        rarity: unsafe { enshwick_core::raw::read_at(info, executor.item_rarity) },
         // SAFETY: the lookup returned the item's non-null `ItemInfo` (checked
         // earlier), live while `access` is held, with `flags` at the reflected offset.
-        flags: unsafe { enshwick::raw::read_at(info, executor.item_flags) },
+        flags: unsafe { enshwick_core::raw::read_at(info, executor.item_flags) },
         placed_entity: executor.item_placed_entity.map_or([0; 16], |at| {
             // SAFETY: the lookup returned the item's non-null `ItemInfo`
             // (checked earlier), live while `access` is held, whose
             // `equipment.placedEntity`
             // at the reflected offset is a 16-byte GUID held inline (server
             // 399, client 426).
-            unsafe { enshwick::raw::read_at(info, at) }
+            unsafe { enshwick_core::raw::read_at(info, at) }
         }),
     })
 }
@@ -925,7 +925,7 @@ unsafe fn in_server_world(executor: &Executor, ctx: usize) -> bool {
     // SAFETY: `descriptor` is the context's non-null live query descriptor
     // (checked earlier), which keeps its entity world pointer at the table's
     // `ecs.context_entity_world`.
-    let world = unsafe { enshwick::raw::read_ptr_at::<u8>(descriptor, executor.entity_world) };
+    let world = unsafe { enshwick_core::raw::read_ptr_at::<u8>(descriptor, executor.entity_world) };
     world.addr() as u64 == server
 }
 

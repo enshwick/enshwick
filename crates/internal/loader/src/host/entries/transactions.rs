@@ -1,6 +1,6 @@
 //! Host functions for transactions of the world: commits, statuses and undos.
 
-use enshwick::abi::{
+use enshwick_core::abi::{
     BlockPlace, ModHandle, PropPlace, PropRemove, Status, TerrainEdit, TransactionInfo,
     TransactionOp, VoxelRegion, VoxelWrite,
 };
@@ -20,13 +20,13 @@ pub(crate) extern "system" fn transaction_commit(
 
 pub(crate) extern "system" fn transaction_commit_for(
     me: ModHandle,
-    actor: enshwick::Entity,
+    actor: enshwick_core::Entity,
     ops: *const TransactionOp,
     count: u32,
     id: *mut u64,
 ) -> Status {
     entry("transaction_commit_for", || {
-        if actor == enshwick::Entity(0) {
+        if actor == enshwick_core::Entity(0) {
             return Status::BAD_ARGS;
         }
         commit(me, Some(actor.0), ops, count, id)
@@ -94,9 +94,9 @@ unsafe fn change(loader: &crate::host::Loader, op: &TransactionOp) -> Result<Cha
         TransactionOp::TERRAIN => {
             // SAFETY: the caller guarantees `op.data` for a terrain op.
             let edit = unsafe {
-                enshwick::abi::read_headed(
+                enshwick_core::abi::read_headed(
                     op.data.cast::<TerrainEdit>(),
-                    <TerrainEdit as enshwick::abi::Headed>::BORN,
+                    <TerrainEdit as enshwick_core::abi::Headed>::BORN,
                 )
             };
             edit.map(Change::Terrain).ok_or(Status::BAD_ARGS)
@@ -104,9 +104,9 @@ unsafe fn change(loader: &crate::host::Loader, op: &TransactionOp) -> Result<Cha
         TransactionOp::VOXELS => {
             // SAFETY: the caller guarantees `op.data` for a voxels op.
             let write = unsafe {
-                enshwick::abi::read_headed(
+                enshwick_core::abi::read_headed(
                     op.data.cast::<VoxelWrite>(),
-                    <VoxelWrite as enshwick::abi::Headed>::BORN,
+                    <VoxelWrite as enshwick_core::abi::Headed>::BORN,
                 )
             }
             .ok_or(Status::BAD_ARGS)?;
@@ -128,9 +128,9 @@ unsafe fn change(loader: &crate::host::Loader, op: &TransactionOp) -> Result<Cha
         TransactionOp::ERASE => {
             // SAFETY: the caller guarantees `op.data` for an erase op.
             let region = unsafe {
-                enshwick::abi::read_headed(
+                enshwick_core::abi::read_headed(
                     op.data.cast::<VoxelRegion>(),
-                    <VoxelRegion as enshwick::abi::Headed>::BORN,
+                    <VoxelRegion as enshwick_core::abi::Headed>::BORN,
                 )
             }
             .ok_or(Status::BAD_ARGS)?;
@@ -140,9 +140,9 @@ unsafe fn change(loader: &crate::host::Loader, op: &TransactionOp) -> Result<Cha
         TransactionOp::BLOCK => {
             // SAFETY: the caller guarantees `op.data` for a block op.
             let block = unsafe {
-                enshwick::abi::read_headed(
+                enshwick_core::abi::read_headed(
                     op.data.cast::<BlockPlace>(),
-                    <BlockPlace as enshwick::abi::Headed>::BORN,
+                    <BlockPlace as enshwick_core::abi::Headed>::BORN,
                 )
             }
             .ok_or(Status::BAD_ARGS)?;
@@ -152,9 +152,9 @@ unsafe fn change(loader: &crate::host::Loader, op: &TransactionOp) -> Result<Cha
         TransactionOp::PLACE_PROP => {
             // SAFETY: the caller guarantees `op.data` for a prop op.
             let prop = unsafe {
-                enshwick::abi::read_headed(
+                enshwick_core::abi::read_headed(
                     op.data.cast::<PropPlace>(),
-                    <PropPlace as enshwick::abi::Headed>::BORN,
+                    <PropPlace as enshwick_core::abi::Headed>::BORN,
                 )
             }
             .ok_or(Status::BAD_ARGS)?;
@@ -163,13 +163,13 @@ unsafe fn change(loader: &crate::host::Loader, op: &TransactionOp) -> Result<Cha
         TransactionOp::REMOVE_PROP => {
             // SAFETY: the caller guarantees `op.data` for a removal op.
             let remove = unsafe {
-                enshwick::abi::read_headed(
+                enshwick_core::abi::read_headed(
                     op.data.cast::<PropRemove>(),
-                    <PropRemove as enshwick::abi::Headed>::BORN,
+                    <PropRemove as enshwick_core::abi::Headed>::BORN,
                 )
             }
             .ok_or(Status::BAD_ARGS)?;
-            if remove.entity == enshwick::Entity(0)
+            if remove.entity == enshwick_core::Entity(0)
                 || remove.flags & !PropRemove::DISCARD_STATE != 0
             {
                 return Err(Status::BAD_ARGS);
@@ -186,7 +186,7 @@ unsafe fn change(loader: &crate::host::Loader, op: &TransactionOp) -> Result<Cha
 pub(crate) extern "system" fn transaction_entities(
     me: ModHandle,
     id: u64,
-    out: *mut enshwick::Entity,
+    out: *mut enshwick_core::Entity,
     capacity: u32,
     count: *mut u32,
 ) -> Status {
@@ -198,7 +198,8 @@ pub(crate) extern "system" fn transaction_entities(
         let Some(created) = crate::transactions::entities(owner, id) else {
             return Status::MISSING;
         };
-        let created: Vec<enshwick::Entity> = created.into_iter().map(enshwick::Entity).collect();
+        let created: Vec<enshwick_core::Entity> =
+            created.into_iter().map(enshwick_core::Entity).collect();
         // SAFETY: `HostApi::transaction_entities` has the mod pass `count`
         // null or a writable `u32`, and `out` null or `capacity` writable
         // `Entity`s, untouched by other threads during the call.

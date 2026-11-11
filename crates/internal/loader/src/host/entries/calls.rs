@@ -1,7 +1,7 @@
 //! Host functions for described services, calls.
 
-use enshwick::abi as api_frame;
-use enshwick::abi::{Level, ModHandle, Status};
+use enshwick_core::abi as api_frame;
+use enshwick_core::abi::{Level, ModHandle, Status};
 
 use crate::host::entries::services::{required_owner, spec_parts, unexported};
 use crate::host::memory::{get_headed, put};
@@ -19,7 +19,7 @@ unsafe fn declared(spec: &api_frame::CallSpec) -> Option<crate::calls::Declared>
     let (name, input) = unsafe { spec_parts(spec.name, &spec.input) }?;
     // SAFETY: the caller guarantees the spec's `output` layout, its fields and
     // their names, readable and unchanged for the call.
-    let output = unsafe { enshwick::services::read_layout(&spec.output) }?;
+    let output = unsafe { enshwick_core::services::read_layout(&spec.output) }?;
     Some(crate::calls::Declared {
         name: name.to_owned(),
         major: spec.major,
@@ -46,9 +46,12 @@ pub(crate) extern "system" fn serve_call(
         }
         // SAFETY: a mod passes null or its version of the spec, and all of
         // the spec is required.
-        let Some(spec) =
-            (unsafe { get_headed(spec, <api_frame::CallSpec as enshwick::abi::Headed>::BORN) })
-        else {
+        let Some(spec) = (unsafe {
+            get_headed(
+                spec,
+                <api_frame::CallSpec as enshwick_core::abi::Headed>::BORN,
+            )
+        }) else {
             return Status::BAD_ARGS;
         };
         // SAFETY: the ABI has the mod pass the spec's name and layouts, with
@@ -91,9 +94,12 @@ pub(crate) extern "system" fn find_call(
         }
         // SAFETY: a mod passes null or its version of the spec, and all of
         // the spec is required.
-        let Some(spec) =
-            (unsafe { get_headed(spec, <api_frame::CallSpec as enshwick::abi::Headed>::BORN) })
-        else {
+        let Some(spec) = (unsafe {
+            get_headed(
+                spec,
+                <api_frame::CallSpec as enshwick_core::abi::Headed>::BORN,
+            )
+        }) else {
             return Status::BAD_ARGS;
         };
         // SAFETY: the ABI has the mod pass the spec's name and layouts, with

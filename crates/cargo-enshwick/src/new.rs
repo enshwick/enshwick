@@ -193,7 +193,7 @@ fn part(pattern: &[u8], text: &[u8]) -> bool {
 fn crate_name(id: &str) -> anyhow::Result<&str> {
     match id.split_once('.') {
         Some((_, name))
-            if enshwick::abi::is_valid_id(id)
+            if enshwick_core::abi::is_valid_id(id)
                 && name.starts_with(|c: char| c.is_ascii_lowercase()) =>
         {
             Ok(name)
@@ -234,7 +234,7 @@ fn files(
     };
     let shown = display_name(name);
     let description = format!("What {shown} does, in one sentence");
-    let enshwick = dependency(enshwick::VERSION, commit);
+    let enshwick = dependency(enshwick_abi::VERSION, commit);
     let fill = |template: &str| {
         template
             .replace("{id}", id)

@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use enshwick::content::Guid;
+use enshwick_core::content::Guid;
 
 /// The file the kept sizes live in, in the loader's data folder.
 pub const KEPT_FILE: &str = "kept-stacks.toml";
@@ -90,7 +90,7 @@ impl Kept {
     /// When the file is there and does not read: its sizes are not known, so
     /// nothing may write over it or release the hold it keeps.
     pub fn load(dir: &Path) -> std::io::Result<Self> {
-        let text = enshwick::files::read_to_string_if_present(&path(dir))?;
+        let text = enshwick_core::files::read_to_string_if_present(&path(dir))?;
         Ok(text.map_or_else(Self::default, |text| Self::from_text(&text)))
     }
 
@@ -100,7 +100,7 @@ impl Kept {
     ///
     /// When the file cannot be written.
     pub fn save(&self, dir: &Path) -> std::io::Result<()> {
-        enshwick::files::write_atomically(&path(dir), self.to_text())
+        enshwick_core::files::write_atomically(&path(dir), self.to_text())
     }
 }
 

@@ -4,8 +4,8 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use enshwick::abi::ItemAction;
-use enshwick::raw::read_at;
+use enshwick_core::abi::ItemAction;
+use enshwick_core::raw::read_at;
 
 use super::Layout;
 use crate::locks::Relock;
@@ -207,7 +207,7 @@ pub(crate) fn forget() {
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::Header;
+    use enshwick_core::abi::Header;
 
     use super::super::tests::LAYOUT;
     use super::*;
@@ -219,10 +219,10 @@ mod tests {
         ItemAction {
             header: Header::of::<ItemAction>(),
             kind: ItemAction::CONSUMED,
-            player: enshwick::Entity(1),
-            item: enshwick::ItemId::new(7),
+            player: enshwick_core::Entity(1),
+            item: enshwick_core::ItemId::new(7),
             count: 1,
-            inventory: enshwick::Entity(inventory),
+            inventory: enshwick_core::Entity(inventory),
             slot,
         }
     }
@@ -373,7 +373,7 @@ mod tests {
         }
         assert_eq!(USES.watched.relock().len(), MAX_WATCHED_PER_PLAYER);
         let other = ItemAction {
-            player: enshwick::Entity(2),
+            player: enshwick_core::Entity(2),
             ..drink(101, 0)
         };
         watch(other, 1, 7, 5, Some(STILL), at);

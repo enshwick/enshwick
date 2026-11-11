@@ -3,7 +3,7 @@
 
 use std::sync::{Mutex, MutexGuard, TryLockError};
 
-use enshwick::raw::{read_at, write_at};
+use enshwick_core::raw::{read_at, write_at};
 
 use super::heap::Slots;
 use super::loops::{Layout, MapFields, ObjectFields, RecordFields, SortFields, StockFields};

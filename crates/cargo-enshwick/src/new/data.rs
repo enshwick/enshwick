@@ -5,8 +5,8 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, bail};
-use enshwick::i18n::Language;
-use enshwick::packs::{
+use enshwick_core::i18n::Language;
+use enshwick_core::packs::{
     ITEMS_FILE, LOOT_FILE, MANIFEST_FILE, RECIPES_FILE, REWARDS_FILE, TEXTS_FILE, WORKSHOPS_FILE,
 };
 
@@ -15,7 +15,7 @@ use crate::Side;
 /// Creates the data pack `id`, `<author>.<name>`, in `<dir>/<id>`, the
 /// folder name the loader wants; what was made, for the user.
 pub(crate) fn create(dir: &Path, id: &str, side: Side) -> anyhow::Result<String> {
-    if !enshwick::abi::is_valid_id(id) {
+    if !enshwick_core::abi::is_valid_id(id) {
         bail!("{id:?} is not <author>.<name>, each part of [a-z0-9-]");
     }
     let root = std::path::absolute(dir.join(id)).with_context(|| dir.display().to_string())?;
@@ -64,7 +64,7 @@ fn files(id: &str, side: Side) -> Vec<(PathBuf, String)> {
         (TEXTS_FILE.into(), texts()),
         ("README.md".into(), fill(README)),
     ];
-    for (file, schema) in enshwick::packs::schemas() {
+    for (file, schema) in enshwick_core::packs::schemas() {
         files.push((file.replace(".toml", ".schema.json").into(), schema));
     }
     files

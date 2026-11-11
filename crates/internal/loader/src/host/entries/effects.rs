@@ -1,7 +1,7 @@
 //! Host functions that change a player's level and experience and drop items on the ground.
 
-use enshwick::Entity;
-use enshwick::abi::{DropRequest, Headed, ModHandle, Status};
+use enshwick_core::Entity;
+use enshwick_core::abi::{DropRequest, Headed, ModHandle, Status};
 
 use crate::host::memory::put;
 use crate::host::{caller, caller_index, entry};
@@ -30,7 +30,8 @@ pub(crate) extern "system" fn drop_items(
     entry("drop_items", || {
         // SAFETY: the caller passes null or a request with its header; an
         // all-zero request is valid.
-        let Some(request) = (unsafe { enshwick::abi::read_headed(request, DropRequest::BORN) })
+        let Some(request) =
+            (unsafe { enshwick_core::abi::read_headed(request, DropRequest::BORN) })
         else {
             return Status::BAD_ARGS;
         };

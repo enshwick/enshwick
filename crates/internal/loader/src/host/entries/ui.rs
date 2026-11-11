@@ -1,7 +1,7 @@
 //! Host functions for the mod's interface.
 
-use enshwick::abi as api_frame;
-use enshwick::abi::{ModHandle, Side, Status};
+use enshwick_core::abi as api_frame;
+use enshwick_core::abi::{ModHandle, Side, Status};
 
 use crate::host::memory::{get_headed, get_headed_list, put, put_headed};
 use crate::host::{caller, caller_index, entry};
@@ -51,9 +51,12 @@ pub(crate) extern "system" fn ui_widget(
         };
         // SAFETY: a mod passes null or its version of the widget, and all of
         // it is required.
-        let Some(mut copy) =
-            (unsafe { get_headed(widget, <api_frame::UiWidget as enshwick::abi::Headed>::BORN) })
-        else {
+        let Some(mut copy) = (unsafe {
+            get_headed(
+                widget,
+                <api_frame::UiWidget as enshwick_core::abi::Headed>::BORN,
+            )
+        }) else {
             return Status::BAD_ARGS;
         };
         let status = crate::ui::widget(loader, index, frame, &mut copy);
@@ -95,7 +98,7 @@ pub(crate) extern "system" fn ui_extension(
         let Some(spec) = (unsafe {
             get_headed(
                 spec,
-                <api_frame::UiExtension as enshwick::abi::Headed>::BORN,
+                <api_frame::UiExtension as enshwick_core::abi::Headed>::BORN,
             )
         }) else {
             return Status::BAD_ARGS;
@@ -135,7 +138,7 @@ pub(crate) extern "system" fn ui_markers(
             get_headed_list(
                 markers,
                 count,
-                <api_frame::UiMarker as enshwick::abi::Headed>::BORN,
+                <api_frame::UiMarker as enshwick_core::abi::Headed>::BORN,
             )
         }) else {
             return Status::BAD_ARGS;
@@ -190,9 +193,12 @@ pub(crate) extern "system" fn ui_dialog(
         };
         // SAFETY: a mod passes null or its version of the dialog, and all of
         // it is required.
-        let Some(dialog) =
-            (unsafe { get_headed(dialog, <api_frame::UiDialog as enshwick::abi::Headed>::BORN) })
-        else {
+        let Some(dialog) = (unsafe {
+            get_headed(
+                dialog,
+                <api_frame::UiDialog as enshwick_core::abi::Headed>::BORN,
+            )
+        }) else {
             return Status::BAD_ARGS;
         };
         crate::ui::mod_dialog(loader, index, &dialog, callback, user)

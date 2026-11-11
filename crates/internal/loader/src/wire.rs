@@ -22,14 +22,14 @@ pub use link::{
 };
 pub use peer::{DATA_AGAIN, Peer};
 
-use enshwick::i18n::Language;
+use enshwick_core::i18n::Language;
 
 use crate::admission::Hello;
 use crate::remote::Message;
 
 /// The version of the control messages, their second byte.
 pub const PROTOCOL: u8 = 3;
-pub use enshwick::net::MAX_MESSAGE;
+pub use enshwick_core::net::MAX_MESSAGE;
 /// The longest control message, in bytes, with its kind and version.
 pub const MAX_CONTROL: usize = MAX_PAYLOAD;
 /// The channel of the protocol's own messages.
@@ -90,7 +90,7 @@ pub fn control(kind: u8) -> Vec<u8> {
 /// # Examples
 ///
 /// ```
-/// use enshwick::i18n::Language;
+/// use enshwick_core::i18n::Language;
 /// use enshwick_loader::wire::{hello, read_hello};
 ///
 /// let said = read_hello(&hello("you.zones@1.0.0", 9, Language::DE_DE)).ok_or("no hello")?;

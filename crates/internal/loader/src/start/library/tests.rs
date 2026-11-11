@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use enshwick::abi::Level;
+use enshwick_core::abi::Level;
 
 use super::{Run, libraries};
 use crate::errors;
@@ -353,7 +353,7 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
         Level::WARN,
         &format!(
             "old-abi/old-abi.dll skipped: {} ({})",
-            enshwick::abi::check_major(HASHED_ABI).unwrap_err(),
+            enshwick_core::abi::check_major(HASHED_ABI).unwrap_err(),
             errors::OTHER_ABI
         ),
     );

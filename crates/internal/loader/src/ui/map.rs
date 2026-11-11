@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use arc_swap::ArcSwap;
-use enshwick::abi::{HookFlags, Status, UiMarker};
+use enshwick_core::abi::{HookFlags, Status, UiMarker};
 use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 
 use enshwick_gamedata::catalogue;
@@ -628,9 +628,9 @@ mod tests {
     #[test]
     fn a_marker_label_shows_each_backslash_as_written() {
         let marker = UiMarker {
-            header: enshwick::abi::Header::of::<UiMarker>(),
+            header: enshwick_core::abi::Header::of::<UiMarker>(),
             position: [0; 3],
-            label: enshwick::abi::Str::new(r"C:\new\owners"),
+            label: enshwick_core::abi::Str::new(r"C:\new\owners"),
             color: UiMarker::GREEN,
             marker_type: 0,
         };

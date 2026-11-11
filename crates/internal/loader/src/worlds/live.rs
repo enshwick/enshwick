@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use enshwick::abi::{Event, Level, Side};
+use enshwick_core::abi::{Event, Level, Side};
 
 use super::{DEFAULT_FILE, SettingsFile, current, set_current, world_file};
 use crate::host::{Loader, ModRecord};
@@ -14,7 +14,7 @@ fn files(record: &ModRecord) -> Vec<SettingsFile> {
 
 /// The text of `path`; a file that does not read shows as absent.
 fn read(path: &Path) -> Option<String> {
-    enshwick::files::read_to_string_if_present(path)
+    enshwick_core::files::read_to_string_if_present(path)
         .ok()
         .flatten()
 }
@@ -25,7 +25,7 @@ fn read(path: &Path) -> Option<String> {
 ///
 /// When the file cannot be written.
 pub(crate) fn write_target(path: &Path, text: &str) -> std::io::Result<()> {
-    enshwick::files::write_atomically(path, text)
+    enshwick_core::files::write_atomically(path, text)
 }
 
 /// What mod `record` reads of its settings file `file` now: the values its
@@ -99,7 +99,7 @@ fn prepare(id: &str, version: &str, files: Vec<SettingsFile>, key: &str) {
     let who = format!("{id} {version}");
     for file in files {
         let path = world_file(id, &file.file, key);
-        let existing = match enshwick::files::read_to_string_if_present(&path) {
+        let existing = match enshwick_core::files::read_to_string_if_present(&path) {
             Ok(existing) => existing,
             Err(e) => {
                 log(
@@ -166,7 +166,7 @@ fn prepare(id: &str, version: &str, files: Vec<SettingsFile>, key: &str) {
 /// Makes or brings in line the loader's own rules for the world `key`,
 /// reads them and applies them to this world.
 fn load_rules(key: &str) {
-    use enshwick::config::Config as _;
+    use enshwick_core::config::Config as _;
 
     use crate::settings::{LOADER_ID, WorldRules};
 

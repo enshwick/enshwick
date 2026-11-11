@@ -15,7 +15,7 @@
 
 pub(crate) mod changes;
 
-use enshwick::abi::{Status, Voxel};
+use enshwick_core::abi::{Status, Voxel};
 
 use crate::pinned;
 

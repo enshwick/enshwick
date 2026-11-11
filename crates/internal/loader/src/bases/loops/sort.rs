@@ -1,6 +1,6 @@
 //! The sort of stock entities into bases, and the list of base ids.
 
-use enshwick::raw::{read_at, write_at};
+use enshwick_core::raw::{read_at, write_at};
 
 use super::{Game, Layout, ObjWorldFn, append, point, rec, window_of, windowed};
 use crate::base_groups::lookup::{self, Bases};

@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 
-use enshwick::abi::AltarLimit;
+use enshwick_core::abi::AltarLimit;
 
 use super::detours::chain_limit;
 use super::*;

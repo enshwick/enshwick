@@ -311,7 +311,7 @@ mod runtime {
             // request the game passes the hooked start, which holds its kind
             // byte at the table's `user.interaction_kind` (client builds 410
             // and 426).
-            && unsafe { enshwick::raw::read_at::<u8>(request, layout.kind) } == layout.join_failed
+            && unsafe { enshwick_core::raw::read_at::<u8>(request, layout.kind) } == layout.join_failed
             && held()
         {
             return 0;

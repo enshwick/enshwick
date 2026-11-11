@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use enshwick::abi::{Level, PointMode, PointVerdict};
+use enshwick_core::abi::{Level, PointMode, PointVerdict};
 
 use crate::mod_index::ModIndex;
 use crate::services::Names;

@@ -5,7 +5,7 @@
 use std::cell::Cell;
 use std::sync::OnceLock;
 
-use enshwick::i18n::{Language, Texts};
+use enshwick_core::i18n::{Language, Texts};
 
 /// The texts the loader ships, a file per language.
 const EMBEDDED: &[&str] = include!(concat!(env!("OUT_DIR"), "/texts.rs"));
@@ -161,9 +161,9 @@ mod tests {
             .unwrap();
         // A built-in stat kind's name is `<kind>.name`; its first part is
         // a kind, not a namespace of texts the code asks for.
-        let stat_names: Vec<String> = enshwick::stats::builtin::ALL
+        let stat_names: Vec<String> = enshwick_core::stats::builtin::ALL
             .iter()
-            .filter_map(|(id, _)| enshwick::stats::name_key(&id.to_string()))
+            .filter_map(|(id, _)| enshwick_core::stats::name_key(&id.to_string()))
             .collect();
         let namespaces: Vec<String> = fallback
             .as_table()
@@ -300,8 +300,8 @@ mod tests {
     #[test]
     fn every_built_in_stat_kind_has_a_name_in_every_language() {
         let texts = shipped();
-        for (id, _) in enshwick::stats::builtin::ALL {
-            let key = enshwick::stats::name_key(&id.to_string()).unwrap();
+        for (id, _) in enshwick_core::stats::builtin::ALL {
+            let key = enshwick_core::stats::name_key(&id.to_string()).unwrap();
             let named: Vec<Language> = texts
                 .translations(&key)
                 .map(|(language, _)| language)
@@ -325,7 +325,7 @@ mod tests {
     fn a_developer_mod_s_english_off_reason_is_the_api_s() {
         assert_eq!(
             shipped().get("mods.developer.off", Language::EN_US),
-            Some(enshwick::mods::DEVELOPER_TOOL_OFF)
+            Some(enshwick_core::mods::DEVELOPER_TOOL_OFF)
         );
     }
 

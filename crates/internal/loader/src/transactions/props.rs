@@ -1,6 +1,6 @@
 //! A prop a transaction places or removes: the game's placed entity of an item.
 
-use enshwick::abi::TransactionInfo;
+use enshwick_core::abi::TransactionInfo;
 
 use super::cover::{BRICK, Bricks};
 
@@ -80,8 +80,8 @@ impl StateReads {
 }
 
 /// Links an `InventorySetup` holds and stacks a sub-inventory holds.
-pub(crate) const LINKS: usize = enshwick::__private::INVENTORY_LINKS;
-pub(crate) const SLOTS: usize = enshwick::__private::INVENTORY_SLOTS as usize;
+pub(crate) const LINKS: usize = enshwick_core::__private::INVENTORY_LINKS;
+pub(crate) const SLOTS: usize = enshwick_core::__private::INVENTORY_SLOTS as usize;
 
 /// Whether an `InventorySetup` has its inventories filled: its
 /// `isInitialized` byte at `initialized`, the reflected offset of the
@@ -95,12 +95,12 @@ pub(crate) unsafe fn setup_initialized(setup: *const u8, initialized: usize) -> 
     // SAFETY: the caller guarantees a live `InventorySetup` readable at
     // `initialized` on its game thread; the byte is read as a `u8`, never a
     // `bool`.
-    unsafe { enshwick::raw::read_at::<u8>(setup, initialized) != 0 }
+    unsafe { enshwick_core::raw::read_at::<u8>(setup, initialized) != 0 }
 }
 /// How deep virtual links nest before the walk stops.
 const MAX_DEPTH: u32 = 4;
 /// The category of a link that leads to more links.
-const VIRTUAL: u8 = enshwick::inventory::InventoryCategory::VIRTUAL.0;
+const VIRTUAL: u8 = enshwick_core::inventory::InventoryCategory::VIRTUAL.0;
 
 /// An entity's `InventorySetup` as read: whether the game set it up, and
 /// its linked entities with their categories.
@@ -217,7 +217,7 @@ pub(crate) struct Prop {
 impl Prop {
     /// Its position in metres.
     pub(crate) fn metres(&self) -> [f64; 3] {
-        enshwick::ecs::metres(self.position)
+        enshwick_core::ecs::metres(self.position)
     }
 
     /// Whether `other` is this prop where it was: the same template and
@@ -281,7 +281,7 @@ impl Prop {
         Self {
             template,
             item,
-            position: enshwick::ecs::fixed(metres),
+            position: enshwick_core::ecs::fixed(metres),
             orientation: [0.0, 0.0, 0.0, 1.0],
             local_box: None,
             logic: false,

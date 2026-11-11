@@ -16,7 +16,7 @@
 use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::OnceLock;
 
-use enshwick::raw::read_at;
+use enshwick_core::raw::read_at;
 
 use crate::base_groups::window;
 
@@ -268,7 +268,7 @@ fn forget_all() {
 mod tests {
     use std::sync::Mutex;
 
-    use enshwick::raw::write_at;
+    use enshwick_core::raw::write_at;
 
     use super::*;
     use crate::bases::fake::{CONSTRUCTED_GROWER, FIELDS, GEOMETRY, LAYOUT, ctor};

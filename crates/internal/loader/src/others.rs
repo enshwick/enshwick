@@ -20,7 +20,7 @@ pub(crate) fn proxies<'a>(
             Path::new(name)
                 .extension()
                 .is_some_and(|e| e.eq_ignore_ascii_case("dll"))
-                && !name.eq_ignore_ascii_case(enshwick::mods::STUB_FILE)
+                && !name.eq_ignore_ascii_case(enshwick_core::mods::STUB_FILE)
                 && takes_place(name)
         })
         .collect();
@@ -90,7 +90,7 @@ const LONGEST_VERSION: u64 = 0x4000;
 #[cfg(windows)]
 pub(crate) fn is_mod_file(path: &Path) -> Option<bool> {
     let bytes = std::fs::read(path).ok()?;
-    exports(&bytes, enshwick::abi::exports::ABI)
+    exports(&bytes, enshwick_core::abi::exports::ABI)
 }
 
 /// Whether the PE file `bytes` exports `name`; `None` when it does not read.
@@ -376,7 +376,7 @@ mod tests {
 
     #[test]
     fn a_dll_is_a_mod_only_when_its_export_table_names_the_interface() {
-        let abi = enshwick::abi::exports::ABI;
+        let abi = enshwick_core::abi::exports::ABI;
         assert_eq!(exports(&pe_exporting(&["DllMain", abi]), abi), Some(true));
         assert_eq!(exports(&pe_exporting(&["DllMain"]), abi), Some(false));
         assert_eq!(exports(&pe_exporting(&[]), abi), Some(false));

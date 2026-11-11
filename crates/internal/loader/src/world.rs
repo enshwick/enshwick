@@ -15,8 +15,8 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use arrayvec::ArrayVec;
-use enshwick::Entity;
-use enshwick::abi::{Header, HookFlags, PlayerInfo, Status};
+use enshwick_core::Entity;
+use enshwick_core::abi::{Header, HookFlags, PlayerInfo, Status};
 
 use crate::chains::Next;
 use crate::host::{Loader, Target};
@@ -586,7 +586,7 @@ pub(crate) fn fixed_position(loader: &Loader, entity: Entity) -> Option<[i64; 3]
     // `CurrentTransform` (checked by `component`), which starts with its
     // position, three fixed-point `i64`; read on the game thread (checked by
     // `reader`), which alone writes it.
-    Some(unsafe { enshwick::raw::read_at::<[i64; 3]>(data.cast(), 0) })
+    Some(unsafe { enshwick_core::raw::read_at::<[i64; 3]>(data.cast(), 0) })
 }
 
 /// The item `entity` was placed from, from its `UsedItem`; on the server's
@@ -607,7 +607,7 @@ pub(crate) fn used_item(loader: &Loader, entity: Entity) -> Option<u32> {
     // (checked by `component`), which reflection sizes at 4 bytes, its u32
     // item id alone (checked above); read on the game thread (checked by
     // `reader`), which alone writes it.
-    Some(unsafe { enshwick::raw::read_at::<u32>(data.cast(), 0) })
+    Some(unsafe { enshwick_core::raw::read_at::<u32>(data.cast(), 0) })
 }
 
 /// Every player in game, in slot order.

@@ -20,7 +20,8 @@ doc = false
 [dependencies]
 arc-swap.workspace = true
 bytemuck.workspace = true
-enshwick = { workspace = true, features = ["unstable"] }
+enshwick-abi.workspace = true
+enshwick-core = { workspace = true, features = ["unstable"] }
 enshwick-gamedata.workspace = true
 postcard.workspace = true
 rustc-hash.workspace = true

@@ -7,13 +7,13 @@
 
 mod facts;
 
-pub use enshwick::__private::ids;
+pub use enshwick_core::__private::ids;
 pub use facts::FACTS;
 
 use crate::reflect::{Reflection, TypeInfo};
-use enshwick::Off;
-use enshwick::content::recipes::RecipeKind;
-use enshwick::content::{EngineFacts, Guid};
+use enshwick_core::Off;
+use enshwick_core::content::recipes::RecipeKind;
+use enshwick_core::content::{EngineFacts, Guid};
 
 /// How one engine fact is found.
 ///

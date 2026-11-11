@@ -18,7 +18,7 @@ mod said;
 
 pub(crate) use said::{Rate, admit, register};
 
-use enshwick::abi::{ChatLine, HookFlags, Status};
+use enshwick_core::abi::{ChatLine, HookFlags, Status};
 
 use crate::chains::Next;
 use crate::host::{Loader, Target};
@@ -381,7 +381,7 @@ unsafe fn read_start(text: *const [usize; 2], start: &mut [u8]) -> Option<usize>
     // SAFETY: `text` is non-null, checked by the guard before it, and is the
     // game's span of two words, readable for the call by this function's
     // `# Safety`.
-    let [ptr, len]: [usize; 2] = unsafe { enshwick::raw::read_at(text.cast(), 0) };
+    let [ptr, len]: [usize; 2] = unsafe { enshwick_core::raw::read_at(text.cast(), 0) };
     if ptr == 0 {
         return None;
     }
@@ -390,7 +390,7 @@ unsafe fn read_start(text: *const [usize; 2], start: &mut [u8]) -> Option<usize>
     // `count`, readable and unchanged for the call by this function's
     // `# Safety`.
     unsafe {
-        enshwick::raw::read_bytes_at(
+        enshwick_core::raw::read_bytes_at(
             core::ptr::with_exposed_provenance(ptr),
             0,
             &mut start[..count],
@@ -440,7 +440,7 @@ unsafe extern "system" fn post(
             // SAFETY: `typed` is set only for a non-null `out`, a result
             // record of at least 8 writable bytes by this function's
             // `# Safety`.
-            unsafe { enshwick::raw::write_at(out, 0, 0u64) };
+            unsafe { enshwick_core::raw::write_at(out, 0, 0u64) };
             return out;
         }
     }
@@ -467,7 +467,7 @@ unsafe extern "system" fn post(
         // SAFETY: only a player's line is dropped, and it is judged only
         // for a non-null `out`, a result record of at least 8 writable
         // bytes by this function's `# Safety`.
-        unsafe { enshwick::raw::write_at(out, 0, 0u64) };
+        unsafe { enshwick_core::raw::write_at(out, 0, 0u64) };
         return out;
     }
     let heard = MODS_FUSE
@@ -483,7 +483,7 @@ unsafe extern "system" fn post(
             // SAFETY: a line is dropped only for a non-null `out` (a typed
             // line), a result record of at least 8 writable bytes by this
             // function's `# Safety`.
-            unsafe { enshwick::raw::write_at(out, 0, 0u64) };
+            unsafe { enshwick_core::raw::write_at(out, 0, 0u64) };
             return out;
         }
         Heard::Rewrite(new) => Some(new),
@@ -587,7 +587,7 @@ unsafe fn read_text(text: *const [usize; 2], max: usize) -> String {
     // SAFETY: `text` is non-null, checked by the guard before it, and is the
     // game's span of two words, readable for the call by this function's
     // `# Safety`.
-    let [ptr, len]: [usize; 2] = unsafe { enshwick::raw::read_at(text.cast(), 0) };
+    let [ptr, len]: [usize; 2] = unsafe { enshwick_core::raw::read_at(text.cast(), 0) };
     if ptr == 0 || len == 0 {
         return String::new();
     }
@@ -595,7 +595,9 @@ unsafe fn read_text(text: *const [usize; 2], max: usize) -> String {
     // SAFETY: `ptr` is non-null and the span holds `len` bytes, at least
     // `bytes`' length, readable and unchanged for the call by this
     // function's `# Safety`.
-    unsafe { enshwick::raw::read_bytes_at(core::ptr::with_exposed_provenance(ptr), 0, &mut bytes) };
+    unsafe {
+        enshwick_core::raw::read_bytes_at(core::ptr::with_exposed_provenance(ptr), 0, &mut bytes)
+    };
     let mut text = String::from_utf8_lossy(&bytes).into_owned();
     // A replaced byte takes three, so a peer's line could pass the limit.
     text.truncate(text.floor_char_boundary(max));

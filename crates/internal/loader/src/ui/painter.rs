@@ -1,6 +1,6 @@
 use core::cell::Cell;
 
-use enshwick::abi::{Status, Str, UiWidget};
+use enshwick_core::abi::{Status, Str, UiWidget};
 
 use crate::host::Loader;
 use crate::mod_index::ModIndex;
@@ -162,7 +162,7 @@ impl<'a> Painter<'a> {
         index: u32,
         read_only: bool,
     ) -> Option<u32> {
-        let mut texts = [UiText::EMPTY; enshwick::ui::MAX_OPTIONS];
+        let mut texts = [UiText::EMPTY; enshwick_core::ui::MAX_OPTIONS];
         for (slot, option) in texts.iter_mut().zip(options) {
             *slot = copy(&[option]);
         }
@@ -408,7 +408,7 @@ fn holds_sound(guid: [u8; 16]) -> bool {
     let Some(type_hash) = catalogue::type_hash(catalogue::ids::SOUND_CONTAINER) else {
         return false;
     };
-    let key = enshwick::abi::ResourceKey {
+    let key = enshwick_core::abi::ResourceKey {
         guid,
         type_hash,
         part: 0,
@@ -460,7 +460,7 @@ pub(super) fn row(
             // there for the call by the ABI's borrow rule; `count` is at most
             // that.
             let given = unsafe { core::slice::from_raw_parts(raw.options, count) };
-            let mut options = [UiText::EMPTY; enshwick::ui::MAX_OPTIONS];
+            let mut options = [UiText::EMPTY; enshwick_core::ui::MAX_OPTIONS];
             for (slot, option) in options.iter_mut().zip(given) {
                 *slot = read(*option).map_or(UiText::EMPTY, |bytes| copy(&[bytes]));
             }

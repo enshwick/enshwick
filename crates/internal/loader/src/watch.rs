@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
 
-use enshwick::abi::Event;
+use enshwick_core::abi::Event;
 
 use crate::host::Loader;
 use crate::locks::Relock;
@@ -183,7 +183,7 @@ fn changed(loader: &Loader, owner: Option<usize>) {
         crate::log!(INFO, "loader settings reloaded");
         // Its own copy of the API, which runs the data packs, subscribes to
         // nothing.
-        enshwick::__private::refresh_levels();
+        enshwick_core::__private::refresh_levels();
         loader.emit(Event::LOADER_SETTINGS_CHANGED, None, core::ptr::null());
         return;
     }

@@ -377,7 +377,7 @@ mod tests {
             let lines = found.missing.len() + found.mismatch.len() + found.extra.len();
             prop_assert!(lines <= MAX_LINES);
             for line in found.missing.iter().chain(&found.mismatch).chain(&found.extra) {
-                prop_assert!(enshwick::abi::is_valid_old_form_id(&line.id));
+                prop_assert!(enshwick_core::abi::is_valid_old_form_id(&line.id));
                 for version in line.needed.iter().chain(&line.installed) {
                     prop_assert!(version.len() <= 64);
                     prop_assert!(version.bytes().all(|b| b.is_ascii_alphanumeric() || b".+-".contains(&b)));
