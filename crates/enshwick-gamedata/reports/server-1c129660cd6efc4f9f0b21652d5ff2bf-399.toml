@@ -2,7 +2,7 @@
 # `sealed` ties it to the code that finds it, so a report edited by hand or
 # left behind by that code fails `cargo xtask check`.
 
-sealed = "5444d43c91d65e16489d54b773b09bd7fb9652c9794955af0abf5f89ba400816"
+sealed = "aa5532613609d832a0256bfe2472a0f68d5f6dc7818ce8a929603423e3709f58"
 build = "server, Steam build 26083076, game 1273043, executable 1c129660cd6efc4f9f0b21652d5ff2bf/399"
 side = "server"
 steam_build = 26083076
