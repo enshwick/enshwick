@@ -543,33 +543,13 @@ impl FromScript for &'static [u8] {
     }
 }
 
-/// A generated type's value in a script: a table by the generated item's
-/// field names, shaped by its record.
-#[doc(hidden)]
-#[derive(Clone, Debug)]
-pub struct Fields(pub Value);
-
-impl Typed for Fields {
-    const TY: &'static Ty = &Ty::Data;
-}
-
-impl IntoScript for Fields {
-    fn into_value(self) -> Value {
-        self.0
-    }
-}
-
-impl FromScript for Fields {
-    fn from_value(value: Value) -> Result<Self, Error> {
-        Ok(Self(value))
-    }
-}
-
-impl Answer for Result<Fields, Error> {
-    const TY: &'static Ty = &Ty::Data;
+/// The script's value as a `T`, or why there is none: an error the runtime
+/// reported, or a return that is not a `T`.
+impl<T: FromScript> Answer for Result<T, Error> {
+    const TY: &'static Ty = T::TY;
 
     fn from_answer(answer: Result<Value, Error>) -> Self {
-        answer.map(Fields)
+        answer.and_then(T::from_value)
     }
 }
 

@@ -7,10 +7,29 @@
 use super::{Role, Row};
 use crate::Off;
 use crate::resources::Value as Data;
-use crate::script::Value;
-use crate::script::convert::Fields;
-#[cfg(any(test, feature = "test"))]
-use crate::script::{Error, Ty};
+use crate::script::{Error, FromScript, IntoScript, Ty, Typed, Value};
+
+/// A generated type's value in a script: a table by the generated item's
+/// field names, shaped by its record.
+#[doc(hidden)]
+#[derive(Clone, Debug)]
+pub struct Fields(pub Value);
+
+impl Typed for Fields {
+    const TY: &'static Ty = &Ty::Data;
+}
+
+impl IntoScript for Fields {
+    fn into_value(self) -> Value {
+        self.0
+    }
+}
+
+impl FromScript for Fields {
+    fn from_value(value: Value) -> Result<Self, Error> {
+        Ok(Self(value))
+    }
+}
 
 /// `value`, of `ty`, with each record a table by its fields' names, as a
 /// script holds game data: the compiled path the tests hold every shape to.

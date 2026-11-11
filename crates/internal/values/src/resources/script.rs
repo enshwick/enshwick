@@ -99,16 +99,6 @@ impl FromScript for Data {
     }
 }
 
-impl Answer for Result<Data, Error> {
-    const TY: &'static Ty = &Ty::Data;
-
-    /// The script's value, or why there is none: an error the runtime
-    /// reported, or a return that is not game data.
-    fn from_answer(answer: Result<Value, Error>) -> Self {
-        answer.and_then(Data::from_value)
-    }
-}
-
 /// A variant as game data: `{ type = <qualified name>, value = ... }`.
 impl Typed for Variant {
     const TY: &'static Ty = &Ty::Data;
