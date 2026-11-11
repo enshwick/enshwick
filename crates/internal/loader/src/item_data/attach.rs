@@ -2,7 +2,7 @@
 
 use std::sync::atomic::Ordering;
 
-use enshwick::{Entity, ItemId};
+use enshwick_core::{Entity, ItemId};
 use rustc_hash::FxHashSet;
 
 use super::{FINDING, KEPT, SERVER, Server, UNREAD, game, insert_found, messages_for, send};

@@ -1,6 +1,6 @@
 //! Voxels a mod writes over a box: their words and how they lie over each brick.
 
-use enshwick::abi::{Status, Voxel};
+use enshwick_core::abi::{Status, Voxel};
 
 use super::cover::{BRICK, BRICK_VOXELS, Brick, Bricks};
 

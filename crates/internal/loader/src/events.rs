@@ -19,8 +19,8 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
-use enshwick::abi::{BuildingData, Event, Header, HookFlags, PlayerData, Side, TickData};
-use enshwick::raw::read_at;
+use enshwick_core::abi::{BuildingData, Event, Header, HookFlags, PlayerData, Side, TickData};
+use enshwick_core::raw::read_at;
 
 use crate::chains::Next;
 use crate::fuse::Fuse;
@@ -140,7 +140,7 @@ impl Session {
     }
 
     /// The game the server steps, from 1, as
-    /// [`TickData::game`](enshwick::abi::TickData::game) counts it.
+    /// [`TickData::game`](enshwick_core::abi::TickData::game) counts it.
     pub(crate) const fn game(&self) -> u64 {
         self.games_ended + 1
     }
@@ -755,12 +755,12 @@ unsafe extern "system" fn place(
     {
         queue(BuildingData {
             header: Header::of::<BuildingData>(),
-            entity: enshwick::Entity(entity),
+            entity: enshwick_core::Entity(entity),
             // SAFETY: `context` is non-null by the check before it and is the
             // hooked function's build context; its u32 acting player sits at
             // the build table's `building.ctx_player` offset.
             player: unsafe { read_at(context, offsets.ctx_player) },
-            item: enshwick::ItemId::new(item),
+            item: enshwick_core::ItemId::new(item),
             kind: BuildingData::PLACED,
             // SAFETY: `context` is non-null by the check before it and is the
             // hooked function's build context; its u8 replay flag sits at the
@@ -818,9 +818,9 @@ unsafe extern "system" fn pickup(context: *mut u8, target: *const u8, tool: u32)
     {
         queue(BuildingData {
             header: Header::of::<BuildingData>(),
-            entity: enshwick::Entity(entity),
-            player: enshwick::Entity(player),
-            item: enshwick::ItemId::new(0),
+            entity: enshwick_core::Entity(entity),
+            player: enshwick_core::Entity(player),
+            item: enshwick_core::ItemId::new(0),
             kind: if mode == 2 {
                 BuildingData::TORN_DOWN
             } else {

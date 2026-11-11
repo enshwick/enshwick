@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use enshwick::abi::{Event, HookFlags, Side, Status};
+use enshwick_core::abi::{Event, HookFlags, Side, Status};
 
 use crate::chains::Next;
 use crate::host::{Loader, Target};
@@ -188,7 +188,7 @@ unsafe extern "system" fn built(result: *mut u8, path: *mut u8, slot: *mut u8) -
     let layout = LAYOUT.get().copied().flatten();
     // SAFETY: `result` is non-null, checked first, and is the result the game
     // passed to `save.path`, whose first byte it wrote, 0 on success.
-    let code = (!result.is_null()).then(|| unsafe { enshwick::raw::read_at::<u8>(result, 0) });
+    let code = (!result.is_null()).then(|| unsafe { enshwick_core::raw::read_at::<u8>(result, 0) });
     if let Some(layout) = layout {
         let _caught = SAVES_FUSE.run("the built", || {
             // SAFETY: `path` is the game's own argument to `save.path`, null
@@ -245,7 +245,7 @@ unsafe fn read_path(layout: &Layout, path: *mut u8) -> Option<String> {
     // engine path's buffer holds the sum of its part lengths, `len`, by this
     // function's `# Safety`.
     unsafe {
-        enshwick::raw::read_bytes_at(core::ptr::with_exposed_provenance(data), 0, &mut bytes);
+        enshwick_core::raw::read_bytes_at(core::ptr::with_exposed_provenance(data), 0, &mut bytes);
     }
     String::from_utf8(bytes).ok()
 }

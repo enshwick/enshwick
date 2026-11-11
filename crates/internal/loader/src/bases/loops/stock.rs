@@ -1,7 +1,7 @@
 //! The building stock cache: one base a call, round robin over the index
 //! list, the object's position counting places in that list.
 
-use enshwick::raw::{read_at, read_ptr_at, write_at};
+use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
 use super::{CODE, Code, Game, Layout, MapFields, occupied, rec, windowed};
 use crate::base_groups::lookup::Bases;

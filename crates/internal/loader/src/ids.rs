@@ -5,7 +5,7 @@
 
 use std::sync::Mutex;
 
-use enshwick::content::Guid;
+use enshwick_core::content::Guid;
 use rustc_hash::FxHashMap;
 
 use crate::locks::Relock;

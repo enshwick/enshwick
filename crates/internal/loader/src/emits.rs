@@ -17,8 +17,8 @@
 
 use std::sync::OnceLock;
 
-use enshwick::Entity;
-use enshwick::abi::{Status, TeleportRequest};
+use enshwick_core::Entity;
+use enshwick_core::abi::{Status, TeleportRequest};
 use rustc_hash::FxHashMap;
 
 use crate::catalogue::{ids, type_name};
@@ -249,11 +249,11 @@ pub(crate) fn push(loader: &Loader, hash: u32, bytes: &[u8]) -> Result<(), Statu
     // SAFETY: `payload` is non-null, checked by the guard before it, and the
     // game's push handed out `size` writable bytes for the event, `size` being
     // `bytes.len()`; nothing else touches them before the next step.
-    unsafe { enshwick::raw::write_bytes_at(payload, 0, bytes) };
+    unsafe { enshwick_core::raw::write_bytes_at(payload, 0, bytes) };
     // SAFETY: the same `size` bytes of the event; `time_offset + 8` is at
     // most `size`, checked at the top, and the event's reflected `timeStamp`
     // is an `i64`.
-    unsafe { enshwick::raw::write_at(payload, layout.time_offset, now) };
+    unsafe { enshwick_core::raw::write_at(payload, layout.time_offset, now) };
     Ok(())
 }
 
@@ -329,14 +329,14 @@ pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(),
     // append handed out `size` writable bytes for the record, which nothing
     // else touches before the next step; the component hash is a `u32` at the
     // table's `ecs.command_set_hash`, in the record's header before its data.
-    unsafe { enshwick::raw::write_at(record, layout.record_hash, teleport.hash) };
+    unsafe { enshwick_core::raw::write_at(record, layout.record_hash, teleport.hash) };
     // SAFETY: the same record of `size` writable bytes; the component size is
     // a `u16` at the table's `ecs.command_set_size`, in the header before its
     // data.
-    unsafe { enshwick::raw::write_at(record, layout.record_size, component_size) };
+    unsafe { enshwick_core::raw::write_at(record, layout.record_size, component_size) };
     // SAFETY: the same record of `size` writable bytes, `size` being
     // `ecs.command_set_data + data.len()`, so the component's bytes fit
     // after its header.
-    unsafe { enshwick::raw::write_bytes_at(record, layout.record_data, &data) };
+    unsafe { enshwick_core::raw::write_bytes_at(record, layout.record_data, &data) };
     Ok(())
 }

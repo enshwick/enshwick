@@ -1,6 +1,6 @@
 //! Host functions for players' actions with items.
 
-use enshwick::abi::{ItemActionFn, ModHandle, Status};
+use enshwick_core::abi::{ItemActionFn, ModHandle, Status};
 
 use crate::host::{caller_index, entry};
 

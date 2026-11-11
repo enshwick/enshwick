@@ -14,8 +14,8 @@
 
 use std::sync::OnceLock;
 
-use enshwick::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo};
-use enshwick::terrain::MAX_RADIUS;
+use enshwick_core::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo};
+use enshwick_core::terrain::MAX_RADIUS;
 
 use crate::host::Loader;
 use crate::memory::{BlobArray, read};
@@ -339,7 +339,7 @@ pub(crate) fn materials(loader: &Loader) -> Result<Vec<TerrainMaterialInfo>, Sta
                 // `config_hardness`.
                 hardness: unsafe { read(config, layout.config_hardness) },
                 reserved: 0,
-                item: enshwick::ItemId::new(enshwick_gamedata::reflect::fnv1a32(&item)),
+                item: enshwick_core::ItemId::new(enshwick_gamedata::reflect::fnv1a32(&item)),
                 // SAFETY: `config` is entry `i < count` of the array the
                 // header points at, `config_size` bytes each; the reflected
                 // `keen::TerrainTerraformingConfig` places its `healthPoints`

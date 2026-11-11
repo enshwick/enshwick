@@ -1,15 +1,15 @@
 //! Reading a mod's manifest into a resolver candidate.
 
-use enshwick::abi::{
+use enshwick_core::abi::{
     CheckAbiError, Dependency, Manifest, Relation, Side, Str, check_abi, read_headed,
 };
-pub use enshwick::schema_section::Kind;
+pub use enshwick_core::schema_section::Kind;
 use semver::{Version, VersionReq};
 
 use crate::resolve::{self, Candidate};
 
 /// Where the fields every mod of this ABI major writes end.
-const REQUIRED: usize = <Manifest as enshwick::abi::Headed>::BORN;
+const REQUIRED: usize = <Manifest as enshwick_core::abi::Headed>::BORN;
 
 /// Why a mod's manifest is refused.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -130,7 +130,7 @@ unsafe fn own(mut manifest: Manifest) -> Manifest {
         let owned: Vec<T> = items.iter().map(|&item| each(item)).collect();
         Box::leak(owned.into_boxed_slice()).as_ptr()
     }
-    let symbol = |s: enshwick::abi::Symbol| enshwick::abi::Symbol {
+    let symbol = |s: enshwick_core::abi::Symbol| enshwick_core::abi::Symbol {
         name: text(s.name),
         ..s
     };
@@ -144,7 +144,7 @@ unsafe fn own(mut manifest: Manifest) -> Manifest {
         }
     });
     manifest.builds = list(manifest.builds, manifest.build_count, |row| {
-        enshwick::abi::BuildRow {
+        enshwick_core::abi::BuildRow {
             symbols: list(row.symbols, row.symbol_count, symbol),
             constants: list(row.constants, row.constant_count, symbol),
             ..row
@@ -202,11 +202,11 @@ pub(crate) fn enshwick_refusal(requirement: &str) -> Option<String> {
             ));
         }
     };
-    let this = Version::parse(enshwick::VERSION).ok()?;
+    let this = Version::parse(enshwick_abi::VERSION).ok()?;
     (!req.matches(&this)).then(|| {
         format!(
             "made for Enshwick {requirement}, this is Enshwick {}",
-            enshwick::VERSION
+            enshwick_abi::VERSION
         )
     })
 }
@@ -236,7 +236,7 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, ManifestError> {
     if id == crate::settings::LOADER_ID {
         return Err(ManifestError::LoadersId(id.to_owned()));
     }
-    if !enshwick::abi::is_valid_id(id) {
+    if !enshwick_core::abi::is_valid_id(id) {
         return Err(ManifestError::BadId(id.to_owned()));
     }
     // SAFETY: the caller guarantees the manifest's lists and strings
@@ -250,7 +250,7 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, ManifestError> {
     if listed.len() != count {
         return Err(ManifestError::NotUtf8("export"));
     }
-    if let Some(bare) = enshwick::__private::rules::bad_export(&listed) {
+    if let Some(bare) = enshwick_core::__private::rules::bad_export(&listed) {
         return Err(ManifestError::ExportWithoutKind(bare.to_owned()));
     }
     // SAFETY: the caller guarantees the manifest's strings readable and
@@ -297,10 +297,10 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, ManifestError> {
 #[must_use]
 pub fn unexported(kind: Kind, name: &str, asker: &str, exports: &[&str]) -> Option<String> {
     let (owner, what) = name.split_once(':')?;
-    if owner == asker || enshwick::__private::rules::exports_name(exports, kind, what) {
+    if owner == asker || enshwick_core::__private::rules::exports_name(exports, kind, what) {
         return None;
     }
-    Some(enshwick::__private::rules::unexported_reason(
+    Some(enshwick_core::__private::rules::unexported_reason(
         kind, name, exports,
     ))
 }
@@ -322,37 +322,37 @@ pub struct Meta {
 
 impl Meta {
     /// The name players read in `language`: the mod's text
-    /// [`MOD_NAME`](enshwick::i18n::MOD_NAME) in `texts`, else the manifest's
+    /// [`MOD_NAME`](enshwick_core::i18n::MOD_NAME) in `texts`, else the manifest's
     /// name; empty when neither names the mod.
     #[must_use]
     pub fn name_in(
         &self,
-        texts: Option<&enshwick::i18n::Texts>,
-        language: enshwick::i18n::Language,
+        texts: Option<&enshwick_core::i18n::Texts>,
+        language: enshwick_core::i18n::Language,
     ) -> String {
         texts
-            .and_then(|t| t.get(enshwick::i18n::MOD_NAME, language))
+            .and_then(|t| t.get(enshwick_core::i18n::MOD_NAME, language))
             .map_or_else(|| self.name.clone(), str::to_owned)
     }
 
     /// What the mod does in `language`: the mod's text
-    /// [`MOD_DESCRIPTION`](enshwick::i18n::MOD_DESCRIPTION) in `texts`, else
+    /// [`MOD_DESCRIPTION`](enshwick_core::i18n::MOD_DESCRIPTION) in `texts`, else
     /// the manifest's description.
     #[must_use]
     pub fn description_in(
         &self,
-        texts: Option<&enshwick::i18n::Texts>,
-        language: enshwick::i18n::Language,
+        texts: Option<&enshwick_core::i18n::Texts>,
+        language: enshwick_core::i18n::Language,
     ) -> String {
         texts
-            .and_then(|t| t.get(enshwick::i18n::MOD_DESCRIPTION, language))
+            .and_then(|t| t.get(enshwick_core::i18n::MOD_DESCRIPTION, language))
             .map_or_else(|| self.description.clone(), str::to_owned)
     }
 
     /// The name players read, or the id when the manifest names none.
     #[must_use]
     pub fn label(&self, id: &str) -> String {
-        enshwick::mods::label(&self.name, id)
+        enshwick_core::mods::label(&self.name, id)
     }
 
     /// `by A, B; MIT; https://...`: what is known of authors, licence and
@@ -453,7 +453,7 @@ unsafe fn dependency(raw: &Dependency) -> Result<resolve::Dependency, ManifestEr
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{ABI_MAJOR, ABI_MINOR, Header, ManifestFlags, Str};
+    use enshwick_core::abi::{ABI_MAJOR, ABI_MINOR, Header, ManifestFlags, Str};
 
     use super::*;
 
@@ -609,7 +609,7 @@ mod tests {
 
     #[test]
     fn a_pack_made_for_another_enshwick_is_refused_with_its_requirement() {
-        let this = format!("={}", enshwick::VERSION);
+        let this = format!("={}", enshwick_abi::VERSION);
         assert_eq!(enshwick_refusal(""), None);
         assert_eq!(enshwick_refusal(&this), None);
         assert_eq!(enshwick_refusal(">=1.0.0-alpha.1, <2"), None);
@@ -617,7 +617,7 @@ mod tests {
             enshwick_refusal("=0.9.0"),
             Some(format!(
                 "made for Enshwick =0.9.0, this is Enshwick {}",
-                enshwick::VERSION
+                enshwick_abi::VERSION
             ))
         );
         let bad = enshwick_refusal("one").unwrap();
@@ -755,7 +755,7 @@ mod tests {
                 format!(
                     "built for ABI major {other}, and Enshwick {v} runs ABI \
                      {ABI_MAJOR}.{ABI_MINOR}: rebuild it for Enshwick {v}",
-                    v = enshwick::VERSION
+                    v = enshwick_abi::VERSION
                 )
             );
         }
@@ -774,7 +774,7 @@ mod tests {
                 "built for ABI {ABI_MAJOR}.{}, newer than ABI {ABI_MAJOR}.{ABI_MINOR} of \
                  Enshwick {}: update Enshwick",
                 ABI_MINOR + 1,
-                enshwick::VERSION
+                enshwick_abi::VERSION
             )
         );
     }
@@ -789,7 +789,7 @@ mod tests {
 
     #[test]
     fn a_mod_s_texts_name_it_in_the_player_s_language() {
-        use enshwick::i18n::{Language, Texts};
+        use enshwick_core::i18n::{Language, Texts};
         let meta = Meta {
             name: "Better Altars".to_owned(),
             description: "More altars.".to_owned(),

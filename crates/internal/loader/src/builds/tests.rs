@@ -758,7 +758,7 @@ fn no_server_table_or_anchor_holds_a_client_only_bases_row() {
 /// code when entries are missing.
 #[test]
 fn a_build_warns_only_when_entries_are_missing() {
-    use enshwick::abi::Level;
+    use enshwick_core::abi::Level;
     if let Some(complete) = kept(Side::SERVER) {
         let (level, line) = complete.start_line();
         assert_eq!(level, Level::INFO);

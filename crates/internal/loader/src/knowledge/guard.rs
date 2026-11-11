@@ -21,7 +21,7 @@ use core::ffi::c_void;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use enshwick::abi::{
+use enshwick_core::abi::{
     Header, HookFlags, KnowledgeInfo, KnowledgeInput, KnowledgeInputFn, Registers, Status,
 };
 
@@ -296,8 +296,8 @@ unsafe extern "system" fn check(registers: *mut Registers, _user: *mut c_void) {
         let refusal = refusal(definition, kind, value);
         let mut call = KnowledgeInput {
             header: Header::of::<KnowledgeInput>(),
-            player: enshwick::Entity(player),
-            id: enshwick::abi::KnowledgeId::new(id),
+            player: enshwick_core::Entity(player),
+            id: enshwick_core::abi::KnowledgeId::new(id),
             kind,
             scope: definition.map_or(KnowledgeInput::NO_SCOPE, |d| d.scope),
             reserved: 0,
@@ -405,8 +405,8 @@ mod tests {
     fn without_filters_the_guards_verdict_stands() {
         let mut call = KnowledgeInput {
             header: Header::of::<KnowledgeInput>(),
-            player: enshwick::Entity(1),
-            id: enshwick::abi::KnowledgeId::new(2),
+            player: enshwick_core::Entity(1),
+            id: enshwick_core::abi::KnowledgeId::new(2),
             kind: KnowledgeInfo::BOOL,
             scope: KnowledgeInfo::PLAYER,
             reserved: 0,

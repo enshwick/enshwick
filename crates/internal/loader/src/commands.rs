@@ -9,7 +9,7 @@
 //! code, as for a console line. Reading names and lines is pure logic here;
 //! the run module keeps them and runs the commands on the game thread.
 
-use enshwick::abi::{Header, PlayerInfo};
+use enshwick_core::abi::{Header, PlayerInfo};
 
 use crate::mod_index::ModIndex;
 
@@ -20,15 +20,15 @@ pub(crate) use run::{
     after_step, any, find, forget, list, queue, register, run_remote, running, seal,
 };
 
-pub use enshwick::commands::MAX_LINE;
+pub use enshwick_core::commands::MAX_LINE;
 /// Every permission bit the game gives, for the console's full rights.
-pub const ALL_PERMISSIONS: u8 = enshwick::world::PlayerPermissions::ALL_BITS;
+pub const ALL_PERMISSIONS: u8 = enshwick_core::world::PlayerPermissions::ALL_BITS;
 
 /// A mod's command name and alias, as the one rule of
-/// [`enshwick::command_names`] grants them.
-pub type Named = enshwick::command_names::Named<ModIndex>;
+/// [`enshwick_core::command_names`] grants them.
+pub type Named = enshwick_core::command_names::Named<ModIndex>;
 /// Why a mod's commands are refused.
-pub type Refusal = enshwick::command_names::Refusal<ModIndex>;
+pub type Refusal = enshwick_core::command_names::Refusal<ModIndex>;
 
 /// The first word of `line` and the rest, trimmed.
 fn split(line: &str) -> (&str, &str) {
@@ -122,8 +122,8 @@ pub fn remote_caller(label: &str, permissions: u32) -> PlayerInfo {
     PlayerInfo {
         header: Header::of::<PlayerInfo>(),
         slot: u32::MAX,
-        entity: enshwick::Entity(0),
-        key: enshwick::PlayerKey::new(0),
+        entity: enshwick_core::Entity(0),
+        key: enshwick_core::PlayerKey::new(0),
         permissions: u8::try_from(permissions & u32::from(ALL_PERMISSIONS)).unwrap_or(0),
         name_len: u8::try_from(label.len()).unwrap_or(64),
         name,
@@ -212,8 +212,8 @@ mod tests {
     fn a_remote_caller_has_no_character_and_only_the_game_s_bits() {
         assert_eq!(ALL_PERMISSIONS, 0x3f, "the game's six permission bits");
         let caller = remote_caller("rcon 10.0.0.2", u32::MAX);
-        assert_eq!(caller.key, enshwick::PlayerKey::new(0));
-        assert_eq!(caller.entity, enshwick::Entity(0));
+        assert_eq!(caller.key, enshwick_core::PlayerKey::new(0));
+        assert_eq!(caller.entity, enshwick_core::Entity(0));
         assert_eq!(caller.permissions, ALL_PERMISSIONS);
         assert_eq!(
             &caller.name[..usize::from(caller.name_len)],

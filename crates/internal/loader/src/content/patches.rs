@@ -16,7 +16,7 @@ use core::mem::ManuallyDrop;
 use core::ptr::NonNull;
 use std::sync::atomic::Ordering;
 
-use enshwick::abi::{ResourceKey, Status};
+use enshwick_core::abi::{ResourceKey, Status};
 
 use super::{
     LOADED, OPEN_NEXT, PENDING, RESOLVE_NEXT, RESOURCES_FUSE, SERVED_LIST, Served, State, hex,
@@ -299,7 +299,7 @@ pub(super) fn write_differences(held: usize, new: usize, len: usize) -> usize {
         let slot = held.wrapping_add(at);
         // SAFETY: `held` is the resource the game reads, `len` bytes the
         // first build kept writable for the process (`ResourcePatchFn`),
-        // and `at` is below `len`. A volatile read, which `enshwick::raw`
+        // and `at` is below `len`. A volatile read, which `enshwick_core::raw`
         // has not: the bytes are the build's own, read while the game reads
         // them.
         // ast-grep-ignore: game-memory-through-raw

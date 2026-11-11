@@ -4,9 +4,9 @@
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-use enshwick::abi::{ActionCall, CommandInfo, Header, Status, Str};
+use enshwick_core::abi::{ActionCall, CommandInfo, Header, Status, Str};
 
-use enshwick::command_names::{alias_asked, check};
+use enshwick_core::command_names::{alias_asked, check};
 
 use super::{MAX_LINE, Named, Refusal, Reply, Typed, parse, remote_caller, reply_by, typed, word};
 use crate::host::Loader;
@@ -114,7 +114,7 @@ pub(crate) fn register(loader: &Loader, owner: ModIndex, alias: &str) -> Status 
         Ok(Err(Refusal::Twice)) => Status::REFUSED,
         Ok(Err(Refusal::Taken(other))) => {
             let (mine, theirs) = (id(owner), id(other));
-            let name = enshwick::commands::name_of(mine);
+            let name = enshwick_core::commands::name_of(mine);
             let feature = format!("commands of {mine}");
             crate::host::report_off(
                 &feature,

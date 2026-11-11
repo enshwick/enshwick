@@ -20,7 +20,8 @@ doc = false
 [dependencies]
 arc-swap.workspace = true
 bytemuck.workspace = true
-enshwick = { workspace = true, features = ["unstable"] }
+enshwick-abi.workspace = true
+enshwick-core = { workspace = true, features = ["unstable"] }
 enshwick-gamedata.workspace = true
 postcard.workspace = true
 rustc-hash.workspace = true
@@ -63,6 +64,8 @@ loom = { version = "0.7.2", default-features = false }
 
 [dev-dependencies]
 criterion.workspace = true
+# The discovery tests build mods against `crates/enshwick` by path.
+enshwick.workspace = true
 enshwick-gamedata = { workspace = true, features = ["test"] }
 insta.workspace = true
 proptest.workspace = true

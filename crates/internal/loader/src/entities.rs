@@ -11,8 +11,8 @@
 
 use std::sync::OnceLock;
 
-use enshwick::Entity;
-use enshwick::abi::{EntityPlace, Status};
+use enshwick_core::Entity;
+use enshwick_core::abi::{EntityPlace, Status};
 
 use crate::host::Loader;
 use crate::pinned;
@@ -319,7 +319,7 @@ pub(crate) fn set_saved(loader: &Loader, entity: Entity, saved: bool) -> Result<
         // table's `ecs.remove_components_size`, which nothing else touches
         // before the next step; its first type hash is a `u32` at the
         // table's `ecs.remove_components_hashes`, inside them.
-        unsafe { enshwick::raw::write_at(command, remove.hash_at, saving.hash) };
+        unsafe { enshwick_core::raw::write_at(command, remove.hash_at, saving.hash) };
     } else {
         let add = saving.add.ok_or(Status::UNAVAILABLE)?;
         let command = append(saving, world, add.kind, add.size, entity)?;
@@ -328,11 +328,11 @@ pub(crate) fn set_saved(loader: &Loader, entity: Entity, saved: bool) -> Result<
         // header, which nothing else touches before the next step; the first
         // type hash is a `u32` at the table's `ecs.command_set_hash`, in the
         // header before the data.
-        unsafe { enshwick::raw::write_at(command, add.hash_at, saving.hash) };
+        unsafe { enshwick_core::raw::write_at(command, add.hash_at, saving.hash) };
         // SAFETY: the same command of `add.size` writable bytes; the first
         // component's size is a `u16` at the table's `ecs.command_set_size`,
         // in the header before the data.
-        unsafe { enshwick::raw::write_at(command, add.size_at, add.component) };
+        unsafe { enshwick_core::raw::write_at(command, add.size_at, add.component) };
     }
     crate::spawns::asked_saved(entity, saved);
     Ok(())

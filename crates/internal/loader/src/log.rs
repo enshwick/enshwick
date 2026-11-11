@@ -21,7 +21,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use arc_swap::ArcSwapOption;
-use enshwick::abi::Level;
+use enshwick_core::abi::Level;
 
 use crate::locks::Relock;
 use crate::settings::{LOADER_ID, Settings};
@@ -479,7 +479,7 @@ fn now() -> u64 {
 #[macro_export]
 macro_rules! log {
     ($level:ident, $($arg:tt)+) => {{
-        let level = ::enshwick::abi::Level::$level;
+        let level = ::enshwick_core::abi::Level::$level;
         if $crate::log::enabled(level, $crate::settings::LOADER_ID) {
             $crate::log::write(level, $crate::settings::LOADER_ID, &::std::format!($($arg)+));
         }

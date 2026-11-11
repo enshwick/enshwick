@@ -1,7 +1,7 @@
 //! Host functions for the game build: symbols, systems, layouts and constants.
 
-use enshwick::abi as api_frame;
-use enshwick::abi::{BuildInfo, EventTypeInfo, Header, Level, ModHandle, Status, Str};
+use enshwick_core::abi as api_frame;
+use enshwick_core::abi::{BuildInfo, EventTypeInfo, Header, Level, ModHandle, Status, Str};
 
 use crate::host::join::keep;
 use crate::host::memory::{put, put_headed, put_headed_list, text};
@@ -22,14 +22,14 @@ pub(crate) extern "system" fn build(out: *mut BuildInfo) {
                     header: Header::of::<BuildInfo>(),
                     side: loader.side,
                     base: loader.base,
-                    fingerprint: enshwick::abi::Fingerprint {
+                    fingerprint: enshwick_core::abi::Fingerprint {
                         guid: loader.fingerprint.guid(),
                         age: loader.fingerprint.age(),
                     },
                     table: if loader.build.complete() {
-                        enshwick::abi::BuildTable::EXACT
+                        enshwick_core::abi::BuildTable::EXACT
                     } else {
-                        enshwick::abi::BuildTable::PATTERNS
+                        enshwick_core::abi::BuildTable::PATTERNS
                     },
                 },
             )

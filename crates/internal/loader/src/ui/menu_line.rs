@@ -3,7 +3,7 @@
 
 use core::cell::RefCell;
 
-use enshwick::abi::Registers;
+use enshwick_core::abi::Registers;
 
 use crate::diag::KeptLine;
 use crate::fuse::Fuse;
@@ -44,7 +44,7 @@ pub(super) fn link(loader: &Loader, engine: &Engine) {
         handler: version_line,
         user: 0,
         priority: i32::MIN,
-        flags: enshwick::abi::HookFlags::NONE,
+        flags: enshwick_core::abi::HookFlags::NONE,
     };
     let status = loader.mids.relock().add(engine.legal_line_site, link);
     if !status.is_ok() {

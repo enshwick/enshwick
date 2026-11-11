@@ -1,8 +1,8 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use enshwick::abi::{HookFlags, Side, Status};
-use enshwick::raw::{read_at, write_at};
+use enshwick_core::abi::{HookFlags, Side, Status};
+use enshwick_core::raw::{read_at, write_at};
 
 use crate::chains::Next;
 use crate::host::{Loader, Target};
@@ -66,8 +66,8 @@ pub(crate) const fn hash(bytes: &[u8]) -> u64 {
 }
 
 /// The language the game shows its texts in, as far as the loader saw.
-pub(crate) fn language() -> enshwick::i18n::Language {
-    enshwick::i18n::Language(LANGUAGE.load(Ordering::Relaxed))
+pub(crate) fn language() -> enshwick_core::i18n::Language {
+    enshwick_core::i18n::Language(LANGUAGE.load(Ordering::Relaxed))
 }
 
 /// Registers a mod text; refused after init.
@@ -124,7 +124,7 @@ pub(super) fn text_for(id: u32, language: u32) -> Option<Handed> {
     }
     let texts = TEXTS.get()?.get(&id)?;
     let pick = |wanted: u32| texts.iter().find(|(l, _)| *l == wanted).map(|(_, t)| *t);
-    enshwick::i18n::Language(language)
+    enshwick_core::i18n::Language(language)
         .lookup_order()
         .find_map(|language| pick(language.0))
         .or_else(|| pick(ENGLISH))

@@ -2,10 +2,10 @@ use core::ffi::c_void;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 
-use enshwick::Entity;
-use enshwick::abi::{Header, Side, SurvivorLookup};
-use enshwick::altars::cell_of_fixed;
-use enshwick::raw::read_at;
+use enshwick_core::Entity;
+use enshwick_core::abi::{Header, Side, SurvivorLookup};
+use enshwick_core::altars::cell_of_fixed;
+use enshwick_core::raw::read_at;
 
 use crate::ecs::Engine;
 use crate::host::Loader;
@@ -44,7 +44,7 @@ pub(super) fn call(
 ) -> SurvivorLookup {
     SurvivorLookup {
         header: Header::of::<SurvivorLookup>(),
-        survivor: enshwick::abi::NpcId::new(survivor),
+        survivor: enshwick_core::abi::NpcId::new(survivor),
         vanilla: Entity(vanilla),
         purpose,
         entity,
@@ -121,7 +121,7 @@ pub(super) unsafe fn resolve(
     found: u32,
     survivor: u32,
     caller: usize,
-    frame: &enshwick::abi::CallerFrame,
+    frame: &enshwick_core::abi::CallerFrame,
 ) -> Option<u32> {
     let c = &layout.callers;
     let o = &layout.offsets;
@@ -349,7 +349,7 @@ pub(super) unsafe fn home(saved: *const u8, transform: *const u8) -> [i64; 3] {
         // earlier) readable for its spawn position in metres at offset 0.
         let spawn: [f32; 3] = unsafe { read_at(saved, 0) };
         if spawn.iter().any(|&v| v.to_bits() != 0) {
-            return enshwick::altars::cell_of_metres(spawn.map(f64::from));
+            return enshwick_core::altars::cell_of_metres(spawn.map(f64::from));
         }
     }
     if transform.is_null() {

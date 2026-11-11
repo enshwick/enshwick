@@ -4,7 +4,7 @@
 
 use std::time::{Duration, Instant};
 
-use enshwick::abi::UiWidget;
+use enshwick_core::abi::UiWidget;
 
 use super::list::{listing, pages};
 use crate::bindings::{self, Capture, Captured, clashes};

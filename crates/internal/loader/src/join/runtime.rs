@@ -2,7 +2,7 @@
 
 use std::sync::OnceLock;
 
-use enshwick::abi::UiDialog;
+use enshwick_core::abi::UiDialog;
 
 use super::super::chains::Next;
 
@@ -56,7 +56,11 @@ pub(crate) unsafe extern "system" fn detour(provider: *mut u8, target: *mut u8) 
         // and 426, the build table's `join.target_*` rows), which `Layout`
         // keeps within `head`.
         unsafe {
-            enshwick::raw::read_bytes_at(target.cast_const(), 0, &mut head[..layout.head_len()]);
+            enshwick_core::raw::read_bytes_at(
+                target.cast_const(),
+                0,
+                &mut head[..layout.head_len()],
+            );
         };
         std::panic::catch_unwind(|| check(layout, &head)).unwrap_or(true)
     };
@@ -74,10 +78,10 @@ pub(crate) unsafe extern "system" fn detour(provider: *mut u8, target: *mut u8) 
     // SAFETY: `target` is non-null, since a null one sets `allowed`, which
     // returns early, and is the join target the game passes the hooked join,
     // whose `u64` host the build's layout places before its password.
-    let host: u64 = unsafe { enshwick::raw::read_at(target.cast_const(), layout.host_at()) };
+    let host: u64 = unsafe { enshwick_core::raw::read_at(target.cast_const(), layout.host_at()) };
     // SAFETY: the same host, writable for the length of this call, and the
     // game reads it only once the chain's rest runs.
-    unsafe { enshwick::raw::write_at(target, layout.host_at(), 0_u64) };
+    unsafe { enshwick_core::raw::write_at(target, layout.host_at(), 0_u64) };
     // SAFETY: the chain's rest takes the provider the game passed and the
     // target with its host cleared.
     let state_changed = unsafe { NEXT.get()(provider, target) };
@@ -85,7 +89,7 @@ pub(crate) unsafe extern "system" fn detour(provider: *mut u8, target: *mut u8) 
     // makes with the target in hand, and the game holds no reference to
     // it once the provider returned (client builds 410 and 426); its
     // host id is a u64 at the layout's `host_at`.
-    unsafe { enshwick::raw::write_at(target, layout.host_at(), host) };
+    unsafe { enshwick_core::raw::write_at(target, layout.host_at(), host) };
     state_changed
 }
 

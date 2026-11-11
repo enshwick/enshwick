@@ -22,9 +22,9 @@ pub(crate) fn game() -> Option<&'static Archive> {
 /// The archive of the game in `dir` on `side`, opened once for the process,
 /// before the loader is installed.
 #[cfg(windows)]
-pub(crate) fn open_game(dir: &Path, side: enshwick::abi::Side) -> Option<&'static Archive> {
+pub(crate) fn open_game(dir: &Path, side: enshwick_core::abi::Side) -> Option<&'static Archive> {
     GAME.get_or_init(|| {
-        let name = if side == enshwick::abi::Side::CLIENT {
+        let name = if side == enshwick_core::abi::Side::CLIENT {
             "enshrouded"
         } else {
             "enshrouded_server"

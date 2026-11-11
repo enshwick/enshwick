@@ -11,10 +11,10 @@ use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use enshwick::abi::{
+use enshwick_core::abi::{
     BedCheckFn, HookFlags, Side, Status, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
 };
-use enshwick::raw::read_at;
+use enshwick_core::raw::read_at;
 use lookup::{cursor_link, lookup_link};
 use menu::{menu_link, registry_link};
 use moves::{bed_check_link, move_link, update_link};

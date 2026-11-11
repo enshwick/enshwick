@@ -6,8 +6,8 @@
 
 use std::sync::OnceLock;
 
-use enshwick::Entity;
-use enshwick::raw::{read_at, write_at};
+use enshwick_core::Entity;
+use enshwick_core::raw::{read_at, write_at};
 
 use crate::host::Loader;
 use crate::pinned;
@@ -40,7 +40,7 @@ struct Layout {
     sets: [Set; 3],
 }
 
-use enshwick::__private::ATTRIBUTE_SET_INITIALISED as SET_INITIALISED;
+use enshwick_core::__private::ATTRIBUTE_SET_INITIALISED as SET_INITIALISED;
 
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 

@@ -23,7 +23,7 @@ mod record;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick::abi::{Status, TransactionInfo};
+use enshwick_core::abi::{Status, TransactionInfo};
 
 use crate::fuse::Fuse;
 use crate::locks::Relock;
@@ -234,7 +234,7 @@ pub(crate) fn forget() {
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{Header, TerrainEdit};
+    use enshwick_core::abi::{Header, TerrainEdit};
 
     use super::*;
 

@@ -6,15 +6,15 @@
 //! in a sandbox of their own (`enshwick-luau`). A change to a pack's files
 //! takes a restart.
 //!
-//! [`Load::add_pack`]: enshwick::Load::add_pack
+//! [`Load::add_pack`]: enshwick_core::Load::add_pack
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use enshwick::abi::{
+use enshwick_core::abi::{
     Dependency, Header, HostApi, Level, Manifest, ManifestFlags, ModHandle, Side, Status, Str,
 };
-use enshwick::packs::{MANIFEST_FILE, Pack, PackFiles, PackManifest, PackSide};
+use enshwick_core::packs::{MANIFEST_FILE, Pack, PackFiles, PackManifest, PackSide};
 use rustc_hash::FxHashMap;
 
 use crate::host::Loader;
@@ -206,7 +206,7 @@ pub(crate) fn sha256_of(id: &str) -> Option<String> {
 }
 
 /// Logs every problem of a pack under its id, one line each.
-fn report(id: &str, errors: &enshwick::packs::ParsePackError) {
+fn report(id: &str, errors: &enshwick_core::packs::ParsePackError) {
     for error in errors.list() {
         crate::log::write(Level::ERROR, id, &error.to_string());
     }
@@ -272,7 +272,7 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
     // SAFETY: `api` is the loader's process-wide table, by this function's
     // `# Safety` contract, which is what `init_pack` asks for.
     let status = unsafe {
-        enshwick::__private::init_pack(api, me, |load| {
+        enshwick_core::__private::init_pack(api, me, |load| {
             load.add_pack(&pack)?;
             let scripts = scripts.map(|s| s.with_items(&pack.item_bindings()));
             let limits = enshwick_luau::Limits::default();
@@ -322,13 +322,13 @@ pub(crate) extern "system" fn ready(_api: *const HostApi, _me: ModHandle) {}
 pub(crate) fn forget(id: &str) {
     let known = with(|packs| packs.remove(id).is_some());
     if known {
-        let _forgotten = enshwick::packs::forget_loot(id);
+        let _forgotten = enshwick_core::packs::forget_loot(id);
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::Relation;
+    use enshwick_core::abi::Relation;
 
     use super::*;
 

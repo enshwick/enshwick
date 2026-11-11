@@ -13,8 +13,8 @@
 use std::sync::atomic::{AtomicU8, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use enshwick::Entity;
-use enshwick::abi::Status;
+use enshwick_core::Entity;
+use enshwick_core::abi::Status;
 
 use crate::host::Loader;
 use crate::locks::Relock;
@@ -249,7 +249,7 @@ pub(crate) unsafe fn raise(loader: &Loader, entity_world: usize) {
                 // earlier) of `size` bytes reserved for this event, which
                 // nothing else touches until the engine moves the stream after
                 // this call; the span ends inside it, checked before.
-                unsafe { enshwick::raw::write_bytes_at(payload, at, bytes) };
+                unsafe { enshwick_core::raw::write_bytes_at(payload, at, bytes) };
             }
         };
         put(layout.time_offset, &now.to_le_bytes());
@@ -264,7 +264,7 @@ pub(crate) unsafe fn raise(loader: &Loader, entity_world: usize) {
 pub(crate) fn send(loader: &Loader, key: u64, text: &str) -> Result<(), Status> {
     let player = crate::world::players(loader)?
         .into_iter()
-        .find(|p| p.key == enshwick::PlayerKey::new(key))
+        .find(|p| p.key == enshwick_core::PlayerKey::new(key))
         .ok_or(Status::MISSING)?;
     if !crate::net::ready(key) {
         return Err(Status::MISSING);

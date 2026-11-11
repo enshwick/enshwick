@@ -14,7 +14,7 @@
 //! the player joins.
 
 use combat::{combat, expire, follow};
-use enshwick::Entity;
+use enshwick_core::Entity;
 
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -33,13 +33,13 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwap;
-use enshwick::abi::{
+use enshwick_core::abi::{
     Event, Header, PlayerData, StatChange, StatChangeFn, StatDefData, StatModifierData, StatModify,
     StatRef, StatSource, Status, Str,
 };
-use enshwick::affixes::lines_of;
-use enshwick::content::Id;
-use enshwick::stats::{ItemStats, Op, StatDef, aggregate, builtin, key_of, name_key};
+use enshwick_core::affixes::lines_of;
+use enshwick_core::content::Id;
+use enshwick_core::stats::{ItemStats, Op, StatDef, aggregate, builtin, key_of, name_key};
 use rustc_hash::FxHashMap;
 
 use crate::host::{Loader, Registered};
@@ -67,8 +67,8 @@ const LOOK_EVERY: u64 = 30;
 /// The file of a world's saved modifiers.
 const FILE: &str = "stats.bin";
 /// The damage types of a hit and the healing entry among them.
-const TYPES: usize = enshwick::abi::DAMAGE_TYPES;
-const HEALING: usize = enshwick::damage::DamageTypeNew::Healing.index();
+const TYPES: usize = enshwick_core::abi::DAMAGE_TYPES;
+const HEALING: usize = enshwick_core::damage::DamageTypeNew::Healing.index();
 
 /// One stat kind.
 #[derive(Debug)]
@@ -383,7 +383,7 @@ pub(crate) fn seal() {
             sealed.kinds.len(),
             sealed.buffs.len()
         );
-        crate::item_data::open_platform(enshwick::stats::ITEM_KIND);
+        crate::item_data::open_platform(enshwick_core::stats::ITEM_KIND);
     }
     let _first = SEALED.set(sealed);
 }
@@ -833,7 +833,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
             let mut key = crate::saves::world_key(loader).map(str::to_owned);
             let read = key.as_deref().map_or(Ok(None), |key| {
                 let path = file(key);
-                enshwick::files::read_if_present(&path)
+                enshwick_core::files::read_if_present(&path)
                     .map_err(|e| e.to_string())
                     .and_then(|bytes| {
                         bytes
@@ -890,7 +890,7 @@ fn save() {
         return;
     };
     let path = file(&key);
-    if let Err(error) = enshwick::files::write_atomically(&path, &bytes) {
+    if let Err(error) = enshwick_core::files::write_atomically(&path, &bytes) {
         crate::log!(WARN, "stats: {} not written: {error}", path.display());
     }
 }

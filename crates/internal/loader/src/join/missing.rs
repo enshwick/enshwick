@@ -4,7 +4,7 @@
 use crate::kept_text::KeptText;
 
 /// The most bytes of server-advertised text kept for
-/// [`HostApi::join_missing`](enshwick::abi::HostApi::join_missing) over the
+/// [`HostApi::join_missing`](enshwick_core::abi::HostApi::join_missing) over the
 /// process: each refused join may bring new text, and none of it is freed.
 pub(crate) const ADVERTISED_BYTES: usize = 64 << 10;
 

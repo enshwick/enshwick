@@ -11,7 +11,7 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::sync::Mutex;
 
-use enshwick::abi::Status;
+use enshwick_core::abi::Status;
 use rustc_hash::FxHashSet;
 
 use crate::code_watch::CodeChange;

@@ -64,7 +64,7 @@ pub(crate) fn write_for_world() {
     let spawned = std::thread::Builder::new()
         .name("enshwick-record".into())
         .spawn(move || {
-            let old = match enshwick::files::read_to_string_if_present(&path) {
+            let old = match enshwick_core::files::read_to_string_if_present(&path) {
                 Ok(text) => text.and_then(|text| Record::parse(&text)),
                 Err(e) => {
                     crate::log!(
@@ -81,7 +81,7 @@ pub(crate) fn write_for_world() {
                 }
             }
             if old.as_ref() != Some(taken)
-                && let Err(e) = enshwick::files::write_atomically(&path, taken.render())
+                && let Err(e) = enshwick_core::files::write_atomically(&path, taken.render())
             {
                 crate::log!(WARN, "{} not written: {e}", record::RECORD_FILE);
             }

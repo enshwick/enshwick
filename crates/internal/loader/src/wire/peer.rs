@@ -34,7 +34,7 @@ pub struct Peer {
         not(windows),
         expect(dead_code, reason = "the server reads it only in the game")
     )]
-    pub(crate) language: Option<enshwick::i18n::Language>,
+    pub(crate) language: Option<enshwick_core::i18n::Language>,
     /// When the peer last got the data a hello brings.
     answered: Option<Instant>,
 }

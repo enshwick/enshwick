@@ -4,7 +4,7 @@
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick::abi::{Event, Level};
+use enshwick_core::abi::{Event, Level};
 
 use crate::host::loader;
 use crate::join::missing::{ADVERTISED_BYTES, Missing, Wanted, listed};

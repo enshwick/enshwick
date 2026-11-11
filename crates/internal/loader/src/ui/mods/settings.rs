@@ -2,7 +2,7 @@
 //! world's settings, or in another's world those its server sent,
 //! read-only; and each settings row drawn with its text field.
 
-use enshwick::abi::UiWidget;
+use enshwick_core::abi::UiWidget;
 
 use super::list::{listing, pages};
 use super::{Entries, ROWS_PER_PAGE};
@@ -105,7 +105,7 @@ pub(super) fn settings(
 pub(super) fn draw_row(
     paint: &Painter<'_>,
     id: &str,
-    schema: &enshwick::config::Schema,
+    schema: &enshwick_core::config::Schema,
     row: &Row,
     entries: &mut Entries,
 ) -> Option<String> {

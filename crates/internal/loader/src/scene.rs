@@ -19,7 +19,7 @@
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
-use enshwick::abi::{
+use enshwick_core::abi::{
     Header, MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MarkerTypeSorting, ResourceKey, Side,
     Status,
 };

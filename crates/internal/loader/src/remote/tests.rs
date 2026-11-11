@@ -59,7 +59,7 @@ fn an_entity_only_run_with_junk_position_bytes_writes_back_to_its_own_message() 
         args: String::new(),
         target: Some(ActionTarget {
             flags: ActionTarget::ENTITY,
-            entity: enshwick::Entity(7),
+            entity: enshwick_core::Entity(7),
             ..ActionTarget::NONE
         }),
     }
@@ -76,7 +76,7 @@ fn an_entity_only_run_with_junk_position_bytes_writes_back_to_its_own_message() 
     let message = Message::read(kind, &body).expect("an entity-only run reads");
     assert_eq!(Message::read(kind, &message.body()), Some(message));
 }
-use enshwick::config::Field;
+use enshwick_core::config::Field;
 
 fn schema() -> Schema {
     Schema::new(
@@ -137,7 +137,7 @@ fn messages_round_trip() {
             args: String::new(),
             target: Some(ActionTarget {
                 flags: ActionTarget::ENTITY | ActionTarget::POSITION,
-                entity: enshwick::Entity(4096),
+                entity: enshwick_core::Entity(4096),
                 position: [10.5, -2.0, 7.25],
                 ..ActionTarget::NONE
             }),
@@ -262,7 +262,7 @@ fn a_server_s_windows_round_trip_and_a_client_refuses_them_out_of_bounds() {
         open: true,
         text,
     };
-    let biggest = "x".repeat(enshwick::actions::window::MAX_BYTES);
+    let biggest = "x".repeat(enshwick_core::actions::window::MAX_BYTES);
     for message in [
         window("you.admin", "panel", "W\tAdmin\nE\tsay\n".into()),
         Message::Window {
@@ -283,7 +283,7 @@ fn a_server_s_windows_round_trip_and_a_client_refuses_them_out_of_bounds() {
         );
     }
     let refused = |message: Message| Message::read(message.kind(), &message.body()).is_none();
-    let past = "x".repeat(enshwick::actions::window::MAX_BYTES + 1);
+    let past = "x".repeat(enshwick_core::actions::window::MAX_BYTES + 1);
     assert!(
         refused(window("you.admin", "panel", past)),
         "past the bytes"

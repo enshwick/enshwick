@@ -4,10 +4,10 @@
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 
-use enshwick::abi::Level;
-use enshwick::points::{Decision, DescribedOwnedPoint, Order};
-use enshwick::script;
-use enshwick::{Load, Relock as _};
+use enshwick_core::abi::Level;
+use enshwick_core::points::{Decision, DescribedOwnedPoint, Order};
+use enshwick_core::script;
+use enshwick_core::{Load, Relock as _};
 use mlua::{Function, Lua, MultiValue, Table, Value as LuaValue};
 
 use super::{Asked, Defined, Inner, Owned, Scope, Vm};
@@ -59,7 +59,7 @@ impl Inner {
             let id = id.clone();
             dep.raw_set(
                 "running",
-                lua.create_function(move |_, ()| Ok(enshwick::mods::is_running(&id)))?,
+                lua.create_function(move |_, ()| Ok(enshwick_core::mods::is_running(&id)))?,
             )?;
             dep.set_readonly(true);
             deps.raw_set(alias.as_str(), dep)?;
@@ -321,7 +321,7 @@ impl Inner {
         let mut desc = EventDesc::parse_definition(event)?;
         if !desc.event.name.contains(':') {
             let full = format!("{}:{}", self.id, desc.event.name);
-            if !enshwick::content::is_id(&full) {
+            if !enshwick_core::content::is_id(&full) {
                 return Err(mlua::Error::runtime(format!(
                     "enshwick.define_event: {:?} is no local name, 1 to 128 of [a-z0-9_./-]",
                     desc.event.name

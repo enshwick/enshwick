@@ -3,7 +3,7 @@
 mod blocks;
 mod props;
 
-use enshwick::abi::{BuildRights, Header, Status, TerrainEdit};
+use enshwick_core::abi::{BuildRights, Header, Status, TerrainEdit};
 
 use super::block::Block;
 use super::cover::{BRICK, BRICK_VOXELS, Brick};
@@ -92,7 +92,7 @@ impl Voxels for Game<'_> {
     fn rights(&mut self, actor: u32, min: [f64; 3], max: [f64; 3]) -> Result<u32, Status> {
         let check = BuildRights {
             header: Header::of::<BuildRights>(),
-            player: enshwick::Entity(actor),
+            player: enshwick_core::Entity(actor),
             refusal: BuildRights::ALLOWED,
             min,
             max,

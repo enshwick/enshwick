@@ -16,8 +16,8 @@ use loom::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 #[cfg(not(loom))]
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
-use enshwick::__private::rules;
-use enshwick::abi::{HookFlags, Status};
+use enshwick_core::__private::rules;
+use enshwick_core::abi::{HookFlags, Status};
 use rustc_hash::FxHashMap;
 
 /// The `next` slot of one of the loader's own links, typed by the function

@@ -1,7 +1,7 @@
 //! The features each mod reports on or off, for the log, the status summary
 //! and the Mods screen.
 
-use enshwick::i18n::Texts;
+use enshwick_core::i18n::Texts;
 
 use crate::configure::mod_reason;
 
@@ -108,7 +108,7 @@ mod tests {
             Some("feature glow off: No glow: lantern.glow is missing.")
         );
         assert_eq!(features[0].off.as_deref(), Some(sent));
-        let uk = Some(enshwick::i18n::Language::UK_UA);
+        let uk = Some(enshwick_core::i18n::Language::UK_UA);
         let shown_uk = crate::texts::for_reader(uk, || shown(&features, Some(&texts)));
         assert_eq!(
             shown_uk[0].off.as_deref(),

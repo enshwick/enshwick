@@ -1,6 +1,6 @@
 //! Reading and writing the ABI's headed structs and lists across the boundary.
 
-use enshwick::abi::{Header, Status, Str};
+use enshwick_core::abi::{Header, Status, Str};
 
 /// A slice from a pointer and a count, empty for a null pointer.
 ///
@@ -21,7 +21,7 @@ pub(crate) unsafe fn slice<'a, T>(ptr: *const T, count: usize) -> &'a [T] {
 }
 
 /// The value of the symbol named `name`.
-pub(crate) fn find(symbols: &[enshwick::abi::Symbol], name: &str) -> Option<u64> {
+pub(crate) fn find(symbols: &[enshwick_core::abi::Symbol], name: &str) -> Option<u64> {
     symbols
         .iter()
         .find_map(|symbol| (text(symbol.name) == Some(name)).then_some(symbol.rva))
@@ -36,11 +36,11 @@ pub(crate) fn find(symbols: &[enshwick::abi::Symbol], name: &str) -> Option<u64>
 ///   header and writable for the size that header states; no alignment is
 ///   needed.
 /// - No other thread reads or writes that struct during the call.
-pub(crate) unsafe fn put_headed<T: enshwick::abi::Headed>(out: *mut T, value: T) -> Status {
+pub(crate) unsafe fn put_headed<T: enshwick_core::abi::Headed>(out: *mut T, value: T) -> Status {
     // SAFETY: `write_headed` needs `out` null or writable for its header's
     // size with no concurrent access, which this function's `# Safety`
     // bullets guarantee.
-    if unsafe { enshwick::abi::write_headed(out, value) } {
+    if unsafe { enshwick_core::abi::write_headed(out, value) } {
         Status::OK
     } else {
         Status::BAD_ARGS
@@ -56,13 +56,13 @@ pub(crate) unsafe fn put_headed<T: enshwick::abi::Headed>(out: *mut T, value: T)
 /// - `raw` is null or points at the mod's version of the struct, readable
 ///   for the size its header gives; no alignment is needed.
 /// - No other thread writes that struct during the copy.
-pub(crate) unsafe fn get_headed<T: enshwick::abi::Headed>(
+pub(crate) unsafe fn get_headed<T: enshwick_core::abi::Headed>(
     raw: *const T,
     required: usize,
 ) -> Option<T> {
     // SAFETY: the caller guarantees `raw` null or readable for the size its
     // header gives, with no concurrent writer, as `read_headed` requires.
-    unsafe { enshwick::abi::read_headed(raw, required) }
+    unsafe { enshwick_core::abi::read_headed(raw, required) }
 }
 
 /// The size of each entry of a mod's list at `out`, from the header of its
@@ -94,7 +94,7 @@ pub(crate) unsafe fn stride_of<T>(out: *const T) -> Option<usize> {
 ///   alignment is needed.
 /// - `count` is null or points at a writable, aligned `u32`.
 /// - No other thread reads or writes the list or `count` during the call.
-pub(crate) unsafe fn put_headed_list<T: enshwick::abi::Headed>(
+pub(crate) unsafe fn put_headed_list<T: enshwick_core::abi::Headed>(
     items: &[T],
     out: *mut T,
     capacity: u32,
@@ -147,7 +147,7 @@ pub(crate) unsafe fn put_headed_list<T: enshwick::abi::Headed>(
 /// - Each entry starts with its header and is readable for the size the
 ///   first entry's header gives; no alignment is needed.
 /// - No other thread writes the list during the copy.
-pub(crate) unsafe fn get_headed_list<T: enshwick::abi::Headed>(
+pub(crate) unsafe fn get_headed_list<T: enshwick_core::abi::Headed>(
     raw: *const T,
     count: u32,
     required: usize,

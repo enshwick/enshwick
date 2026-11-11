@@ -1,4 +1,4 @@
-use enshwick::config::Field;
+use enshwick_core::config::Field;
 
 use super::*;
 use crate::configure::rows::Widget;

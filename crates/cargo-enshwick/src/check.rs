@@ -9,7 +9,7 @@ use std::process::Command;
 
 use anyhow::{Context as _, bail};
 use cargo_enshwick::luau_lsp;
-use enshwick::packs::MANIFEST_FILE;
+use enshwick_core::packs::MANIFEST_FILE;
 
 use crate::new::luau::{DEFINITION_ALIASES, DEFINITIONS_DIR, PLATFORM};
 
@@ -121,7 +121,7 @@ impl core::fmt::Display for Finding {
 /// problem to `out`: how many are errors, and a line saying what was
 /// checked.
 fn scripts(dir: &Path, offline: bool, out: &mut impl Write) -> anyhow::Result<(usize, String)> {
-    let scripts: Vec<String> = enshwick::packs::script_files(dir)?
+    let scripts: Vec<String> = enshwick_core::packs::script_files(dir)?
         .iter()
         .map(|path| relative(dir, path))
         .collect();
@@ -182,7 +182,7 @@ fn definitions(dir: &Path) -> anyhow::Result<Vec<String>> {
             .file_name()
             .to_string_lossy()
             .into_owned();
-        if name.ends_with(enshwick::packs::DEFINITIONS_SUFFIX) {
+        if name.ends_with(enshwick_core::packs::DEFINITIONS_SUFFIX) {
             files.push(format!("{DEFINITIONS_DIR}/{name}"));
         }
     }
@@ -204,7 +204,7 @@ fn analyze_args(definitions: &[String], scripts: &[String]) -> Vec<String> {
             .iter()
             .find(|(of, _)| *of == name)
             .map_or_else(
-                || name.trim_end_matches(enshwick::packs::DEFINITIONS_SUFFIX),
+                || name.trim_end_matches(enshwick_core::packs::DEFINITIONS_SUFFIX),
                 |(_, alias)| alias,
             );
         args.push(format!("--definitions:@{alias}={file}"));

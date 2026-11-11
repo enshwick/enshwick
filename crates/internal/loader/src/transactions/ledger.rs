@@ -14,7 +14,7 @@
 use std::collections::VecDeque;
 use std::hash::{Hash, Hasher};
 
-use enshwick::abi::{Status, TerrainEdit, TransactionInfo};
+use enshwick_core::abi::{Status, TerrainEdit, TransactionInfo};
 use rustc_hash::{FxHashMap, FxHasher};
 
 use super::block::Block;

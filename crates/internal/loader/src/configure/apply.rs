@@ -39,7 +39,7 @@ pub(crate) fn apply(
         return Err(ApplySettingError::NoSchema { id: id.to_owned() });
     };
     let path = crate::worlds::world_file(id, file, &world);
-    let text = enshwick::files::read_to_string_if_present(&path)
+    let text = enshwick_core::files::read_to_string_if_present(&path)
         .map_err(|source| ApplySettingError::Write {
             path: path.clone(),
             source,

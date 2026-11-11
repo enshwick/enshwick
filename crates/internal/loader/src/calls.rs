@@ -5,7 +5,7 @@
 
 use std::sync::{Mutex, OnceLock};
 
-use enshwick::abi::{CallFn, Level, Status};
+use enshwick_core::abi::{CallFn, Level, Status};
 
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -102,7 +102,7 @@ impl Registry {
         user: usize,
     ) -> Result<(), DeclareCallError> {
         let name = &declared.name;
-        if !enshwick::__private::rules::is_named_after(name, owner_id) {
+        if !enshwick_core::__private::rules::is_named_after(name, owner_id) {
             return Err(DeclareCallError::Namespace {
                 name: name.clone(),
                 owner: owner_id.to_owned(),
@@ -461,7 +461,7 @@ fn lines_of(routes: &[Route], offers: &[Offer], mods: &impl Names) -> Vec<String
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::Status;
+    use enshwick_core::abi::Status;
 
     use super::{Declared, Registry, lines_of};
     use crate::mod_index::ModIndex;

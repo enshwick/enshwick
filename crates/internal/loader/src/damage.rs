@@ -19,7 +19,7 @@
 use core::ffi::c_void;
 use std::sync::OnceLock;
 
-use enshwick::abi::{DamageCheck, DamageFilterFn, Header, HookFlags, Registers, Status};
+use enshwick_core::abi::{DamageCheck, DamageFilterFn, Header, HookFlags, Registers, Status};
 
 use crate::host::{Loader, Registered};
 use crate::locks::Relock;
@@ -45,9 +45,9 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 ];
 
 /// Damage types in a hit's vector.
-const TYPES: usize = enshwick::abi::DAMAGE_TYPES;
+const TYPES: usize = enshwick_core::abi::DAMAGE_TYPES;
 /// The healing entry of a hit's vector.
-const HEALING: usize = enshwick::damage::DamageTypeNew::Healing.index();
+const HEALING: usize = enshwick_core::damage::DamageTypeNew::Healing.index();
 /// The carry flag in `rflags`.
 const CARRY: u64 = 1;
 
@@ -192,9 +192,9 @@ fn blank(cause: u32, target: u32) -> DamageCheck {
     DamageCheck {
         header: Header::of::<DamageCheck>(),
         cause,
-        target: enshwick::Entity(target),
-        source: enshwick::Entity(0),
-        attacker: enshwick::Entity(0),
+        target: enshwick_core::Entity(target),
+        source: enshwick_core::Entity(0),
+        attacker: enshwick_core::Entity(0),
         amounts: [0.0; TYPES],
         total: 0.0,
     }
@@ -285,8 +285,8 @@ unsafe extern "system" fn hit(registers: *mut Registers, _user: *mut c_void) {
         // attacker, worked out before it; 1.0 build 1269579.
         let root = low(registers.r12).cast_unsigned();
         let attacker = if root == 0 { source } else { root };
-        check.source = enshwick::Entity(source);
-        check.attacker = enshwick::Entity(attacker);
+        check.source = enshwick_core::Entity(source);
+        check.attacker = enshwick_core::Entity(attacker);
         check.amounts = amounts;
         crate::stats::on_hit(&mut check.amounts, target, attacker);
         check.total = check

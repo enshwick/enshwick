@@ -20,6 +20,6 @@ pub use abi::{Entity, ItemId, PlayerKey, RecipeId};
 #[doc(hidden)]
 pub use enshwick_values::{__private, Script, Shape, content, script, shape};
 
-/// The version of Enshwick the ABI's messages name: the API crate's, which
-/// is released at this crate's version.
-pub(crate) const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// The version of Enshwick the ABI's messages and the loader name: the API
+/// crate's, which is released at this crate's version.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");

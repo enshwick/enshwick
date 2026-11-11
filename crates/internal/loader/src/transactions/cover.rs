@@ -1,8 +1,8 @@
 //! Which 8³-voxel bricks a terrain edit can write, and which edits a transaction takes.
 
-use enshwick::abi::{Status, TerrainEdit, Voxel};
-use enshwick::terrain::MAX_RADIUS;
-use enshwick::voxels::PER_METRE;
+use enshwick_core::abi::{Status, TerrainEdit, Voxel};
+use enshwick_core::terrain::MAX_RADIUS;
+use enshwick_core::voxels::PER_METRE;
 
 use crate::voxels::{TERRAIN, WorldExtent};
 
@@ -172,7 +172,7 @@ fn voxel(voxels: f64) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::Header;
+    use enshwick_core::abi::Header;
 
     use super::*;
 

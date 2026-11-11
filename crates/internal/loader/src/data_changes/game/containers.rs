@@ -10,10 +10,10 @@
 
 use core::ffi::c_void;
 
-use enshwick::abi::{ResourceKey, Status};
-use enshwick::content::Guid;
-use enshwick::content::changes::{Entry, Field};
-use enshwick::content::containers::{ContainerLayout, container_slots, resize_container};
+use enshwick_core::abi::{ResourceKey, Status};
+use enshwick_core::content::Guid;
+use enshwick_core::content::changes::{Entry, Field};
+use enshwick_core::content::containers::{ContainerLayout, container_slots, resize_container};
 use enshwick_gamedata::catalogue;
 use rustc_hash::FxHashMap;
 
@@ -25,7 +25,11 @@ use crate::host::Loader;
 /// slots place: one per template, for every item that places it.
 pub(super) fn container_patches(
     loader: &'static Loader,
-) -> Vec<(ResourceKey, enshwick::abi::ResourcePatchFn, *mut c_void)> {
+) -> Vec<(
+    ResourceKey,
+    enshwick_core::abi::ResourcePatchFn,
+    *mut c_void,
+)> {
     let Some(sealed) = CHANGES.sealed.get() else {
         return Vec::new();
     };
@@ -103,7 +107,11 @@ pub(super) fn container_patches(
             placed_by.insert(*item, key);
         }
         let user = core::ptr::from_ref(patch).cast_mut().cast::<c_void>();
-        patches.push((key, build_container as enshwick::abi::ResourcePatchFn, user));
+        patches.push((
+            key,
+            build_container as enshwick_core::abi::ResourcePatchFn,
+            user,
+        ));
     }
     let _first = sealed.templates.set(placed_by);
     patches
@@ -131,7 +139,7 @@ unsafe extern "system" fn build_container(
     let mut bytes = vec![0; base_len];
     // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at `base`,
     // unchanged for the call.
-    unsafe { enshwick::raw::read_bytes_at(base, 0, &mut bytes) };
+    unsafe { enshwick_core::raw::read_bytes_at(base, 0, &mut bytes) };
     let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| resized(patch, &bytes)));
     let Ok(Some(built)) = built else {
         return Status::REFUSED;

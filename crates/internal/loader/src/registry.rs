@@ -20,7 +20,7 @@ use crate::locks::Relock;
 #[error("the registry is sealed")]
 pub struct Sealed;
 
-impl From<Sealed> for enshwick::abi::Status {
+impl From<Sealed> for enshwick_core::abi::Status {
     fn from(_: Sealed) -> Self {
         Self::TOO_LATE
     }

@@ -599,8 +599,8 @@ impl Catalogue {
     #[cfg(any(test, feature = "test"))]
     #[doc(hidden)]
     #[must_use]
-    pub fn registry(&self) -> enshwick::resources::Registry<'_> {
-        use enshwick::resources::{Constant, Field as CodecField, Registry, Type};
+    pub fn registry(&self) -> enshwick_core::resources::Registry<'_> {
+        use enshwick_core::resources::{Constant, Field as CodecField, Registry, Type};
 
         Registry::new(self.types.values().map(|ty| {
             let mut out = Type::new(&ty.name, ty.kind, ty.size, ty.align);

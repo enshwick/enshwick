@@ -9,7 +9,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use enshwick::abi::Level;
+use enshwick_core::abi::Level;
 use enshwick_loader::chains::{Counter, Next};
 use enshwick_loader::fuse::Fuse;
 

@@ -18,10 +18,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use rustc_hash::FxHashMap;
 
-use enshwick::abi::RecipeRuleKind;
-use enshwick::content::recipes::RecipeLayout;
-use enshwick::content::{Blob, Guid};
-use enshwick::mods::GAME_ID;
+use enshwick_core::abi::RecipeRuleKind;
+use enshwick_core::content::recipes::RecipeLayout;
+use enshwick_core::content::{Blob, Guid};
+use enshwick_core::mods::GAME_ID;
 
 /// A world's recipe file, in its folder of the loader's settings.
 pub const WORLD_FILE: &str = "recipes.toml";
@@ -743,7 +743,7 @@ mod tests {
             .unwrap()
             .0;
         let (owner, name) = example.split_once(':').unwrap();
-        assert!(enshwick::abi::is_valid_id(owner), "{example}");
+        assert!(enshwick_core::abi::is_valid_id(owner), "{example}");
         assert!(!name.is_empty());
     }
 
@@ -959,7 +959,7 @@ mod tests {
 
     #[test]
     fn an_index_reads_a_registry() {
-        use enshwick::content::Blob;
+        use enshwick_core::content::Blob;
         let layout = layout();
         let mut base = vec![0u8; 16];
         base[8..12].copy_from_slice(&(-8i32).to_le_bytes());

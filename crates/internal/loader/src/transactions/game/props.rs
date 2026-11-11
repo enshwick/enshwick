@@ -1,7 +1,7 @@
 //! Props in the game: resolving a placement, reading what a prop holds, spawning, finding and removing it.
 
-use enshwick::Entity;
-use enshwick::abi::{Header, PropPlace, SpawnRequest, Status};
+use enshwick_core::Entity;
+use enshwick_core::abi::{Header, PropPlace, SpawnRequest, Status};
 use enshwick_gamedata::catalogue;
 
 use crate::host::Loader;
@@ -46,7 +46,7 @@ fn item_prop(loader: &Loader, access: &ServerAccess<'_>, item: u32) -> Result<It
     let flags_at = offset(loader, catalogue::ids::ITEM_INFO_FLAGS)?;
     // SAFETY: `info` is the item's live `ItemInfo`, with its `u32` flags at
     // the reflected offset.
-    let flags: u32 = unsafe { enshwick::raw::read_at(info, flags_at) };
+    let flags: u32 = unsafe { enshwick_core::raw::read_at(info, flags_at) };
     let bit = |id: &str| {
         catalogue::constant(id, &loader.reflection)
             .filter(|&bit| bit < 32)
@@ -58,14 +58,14 @@ fn item_prop(loader: &Loader, access: &ServerAccess<'_>, item: u32) -> Result<It
     let altar_at = offset(loader, catalogue::ids::ITEM_INFO_REQUIRES_ALTAR_SLOT)?;
     // SAFETY: `info` is the item's live `ItemInfo`, with its equipment's
     // `requiresAltarSlot` bool at the reflected path.
-    let altar: u8 = unsafe { enshwick::raw::read_at(info, altar_at) };
+    let altar: u8 = unsafe { enshwick_core::raw::read_at(info, altar_at) };
     if flags & creature != 0 || altar != 0 {
         return Err(Status::NOT_A_PROP);
     }
     let template_at = offset(loader, catalogue::ids::ITEM_INFO_PLACED_ENTITY)?;
     // SAFETY: `info` is the item's live `ItemInfo` from the game's lookup,
     // with its placed template's 16-byte GUID at the reflected path.
-    let template: [u8; 16] = unsafe { enshwick::raw::read_at(info, template_at) };
+    let template: [u8; 16] = unsafe { enshwick_core::raw::read_at(info, template_at) };
     if template == [0; 16] {
         return Err(Status::BAD_ARGS);
     }
@@ -75,11 +75,11 @@ fn item_prop(loader: &Loader, access: &ServerAccess<'_>, item: u32) -> Result<It
             // SAFETY: `info` is the item's live `ItemInfo`, with its
             // placement box's lowest corner, three `f32`, at the reflected
             // path.
-            let min: [f32; 3] = unsafe { enshwick::raw::read_at(info, min_at) };
+            let min: [f32; 3] = unsafe { enshwick_core::raw::read_at(info, min_at) };
             // SAFETY: `info` is the item's live `ItemInfo`, with its
             // placement box's highest corner, three `f32`, at the reflected
             // path.
-            let max: [f32; 3] = unsafe { enshwick::raw::read_at(info, max_at) };
+            let max: [f32; 3] = unsafe { enshwick_core::raw::read_at(info, max_at) };
             let finite = min.iter().chain(&max).all(|v| v.is_finite());
             (finite && (0..3).any(|axis| max[axis] > min[axis])).then_some((min, max))
         }
@@ -97,7 +97,7 @@ fn item_prop(loader: &Loader, access: &ServerAccess<'_>, item: u32) -> Result<It
 /// item registry, through a pin on the server off its game thread.
 pub(crate) fn resolve(loader: &Loader, request: &PropPlace) -> Result<Prop, Status> {
     let position_ok = request.position.iter().all(|axis| {
-        axis.is_finite() && *axis >= 0.0 && *axis < f64::from(enshwick::abi::Voxel::END)
+        axis.is_finite() && *axis >= 0.0 && *axis < f64::from(enshwick_core::abi::Voxel::END)
     });
     let norm: f32 = request.orientation.iter().map(|v| v * v).sum();
     if !position_ok || !norm.is_finite() || norm < 1e-6 || request.reserved != 0 {
@@ -108,7 +108,7 @@ pub(crate) fn resolve(loader: &Loader, request: &PropPlace) -> Result<Prop, Stat
     Ok(Prop {
         template,
         item: request.item.get(),
-        position: enshwick::ecs::fixed(request.position),
+        position: enshwick_core::ecs::fixed(request.position),
         orientation: request.orientation,
         local_box,
         logic,
@@ -264,7 +264,7 @@ fn inline(loader: &Loader, entity: u32, hash: u32) -> Result<Option<*const u8>, 
 /// `FuelSetup`, the set-up data its template holds, as the loader's
 /// component read chooses by the hash; `None` when it has none. On the
 /// game thread.
-fn field<T: enshwick::raw::AnyBitPattern>(
+fn field<T: enshwick_core::raw::AnyBitPattern>(
     loader: &Loader,
     entity: u32,
     hash: u32,
@@ -277,7 +277,7 @@ fn field<T: enshwick::raw::AnyBitPattern>(
     // template's set-up data for a static half, and the caller passes the
     // reflected offset of a `T` field of that type, from `Facts`; read on
     // the game thread, which alone writes it.
-    Ok(Some(unsafe { enshwick::raw::read_at(data, at) }))
+    Ok(Some(unsafe { enshwick_core::raw::read_at(data, at) }))
 }
 
 /// The prop `entity` is and the state it holds, as `HOLDS_` bits;
@@ -459,11 +459,11 @@ pub(crate) fn set_deposit(loader: &Loader, entity: u32, Stash([set, on]): Stash)
         // offset; `world::server` checked the game thread at a quiet moment,
         // outside any step's systems, so neither the game's own writer, the
         // player's switch action, nor a reader runs.
-        unsafe { enshwick::raw::write_at(data.cast_mut(), set_at, set) };
+        unsafe { enshwick_core::raw::write_at(data.cast_mut(), set_at, set) };
         // SAFETY: as just checked, the entity's own live switch, with its
         // bool value at the reflected offset, written on the game thread at
         // a quiet moment.
-        unsafe { enshwick::raw::write_at(data.cast_mut(), on_at, on) };
+        unsafe { enshwick_core::raw::write_at(data.cast_mut(), on_at, on) };
     }
 }
 
@@ -524,10 +524,12 @@ fn state(loader: &Loader, facts: &Facts, entity: u32) -> Result<StateReads, Stat
             // SAFETY: `found` is the live `InventorySetup`, whose `LINKS`
             // `u32` linked entities start at the reflected offset, and
             // `i < LINKS`.
-            let link: u32 = unsafe { enshwick::raw::read_at(found, facts.setup_links + 4 * i) };
+            let link: u32 =
+                unsafe { enshwick_core::raw::read_at(found, facts.setup_links + 4 * i) };
             // SAFETY: `found` is the live `InventorySetup`, whose `LINKS`
             // category bytes start at the reflected offset, and `i < LINKS`.
-            let category: u8 = unsafe { enshwick::raw::read_at(found, facts.setup_categories + i) };
+            let category: u8 =
+                unsafe { enshwick_core::raw::read_at(found, facts.setup_categories + i) };
             *slot = (link, category);
         }
         Some(Setup { initialized, links })
@@ -546,7 +548,7 @@ fn state(loader: &Loader, facts: &Facts, entity: u32) -> Result<StateReads, Stat
             // row (checked by `inline`), which holds `SLOTS` stacks of the
             // reflected `ItemStack` size, each starting with its `u32` item,
             // and `slot < SLOTS`.
-            *item = unsafe { enshwick::raw::read_at(found, slot * facts.stack) };
+            *item = unsafe { enshwick_core::raw::read_at(found, slot * facts.stack) };
         }
         Some(items)
     };

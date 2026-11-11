@@ -11,8 +11,8 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use enshwick::__private::rules::{patch_fits, spans_overlap as overlaps};
-use enshwick::abi::{HookFlags, Status};
+use enshwick_core::__private::rules::{patch_fits, spans_overlap as overlaps};
+use enshwick_core::abi::{HookFlags, Status};
 use rustc_hash::FxHashMap;
 
 use crate::chains::Next;
@@ -21,7 +21,7 @@ use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
 
-use enshwick::content::recipes::WORKSHOP_RECIPES;
+use enshwick_core::content::recipes::WORKSHOP_RECIPES;
 
 /// The build table ids the workshop limit's lift names: the check before a
 /// recipe joins its workshop's list, `movzx eax, word [rdx+0x1000]; mov
@@ -922,13 +922,13 @@ unsafe extern "system" fn lookup_detour(
     }
     // SAFETY: the game passes the lookup a pointer to the `u32` workshop id,
     // non-null by the earlier check and readable for the call.
-    let id: u32 = unsafe { enshwick::raw::read_at(workshop.cast(), 0) };
+    let id: u32 = unsafe { enshwick_core::raw::read_at(workshop.cast(), 0) };
     if let Some(list) = WORKSHOPS.get().and_then(|lists| lists.get(&id)) {
         // SAFETY: `out` is the lookup's non-null out span (checked earlier),
         // writable for a `[u64; 2]` for the call; the list it now names lives
         // in `WORKSHOPS` for the process.
         unsafe {
-            enshwick::raw::write_at(
+            enshwick_core::raw::write_at(
                 out.cast(),
                 0,
                 [list.as_ptr().expose_provenance() as u64, list.len() as u64],

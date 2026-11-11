@@ -4,8 +4,8 @@ use crate::locks::Relock;
 use std::sync::Mutex;
 use std::time::Instant;
 
-use enshwick::abi::PlayerInfo;
-use enshwick::config::Schema;
+use enshwick_core::abi::PlayerInfo;
+use enshwick_core::config::Schema;
 
 use super::{AdmitEditError, Gate, Message, Queries, admit, redacted, texts};
 use crate::host::Loader;
@@ -131,7 +131,7 @@ fn player(loader: &Loader, key: u64) -> Option<PlayerInfo> {
     crate::world::players(loader)
         .ok()?
         .into_iter()
-        .find(|p| p.key == enshwick::PlayerKey::new(key))
+        .find(|p| p.key == enshwick_core::PlayerKey::new(key))
 }
 
 fn name(player: &PlayerInfo) -> String {

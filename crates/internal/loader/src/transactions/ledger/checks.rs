@@ -1,6 +1,6 @@
 //! The checks before a transaction or its undo writes: extent, rights, columns, bricks and props.
 
-use enshwick::abi::{Status, TransactionInfo};
+use enshwick_core::abi::{Status, TransactionInfo};
 use rustc_hash::FxHashSet;
 
 use super::{Brick, Bricks, Change, Done, Outcome, Pass, Prop, Settings, Voxels, Work, hash};

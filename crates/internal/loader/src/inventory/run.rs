@@ -1,4 +1,4 @@
-use enshwick::abi::{InventoryOp, InventoryOpResult, InventoryRequest, InventoryResult};
+use enshwick_core::abi::{InventoryOp, InventoryOpResult, InventoryRequest, InventoryResult};
 
 use crate::memory::{read, read_ptr, write};
 
@@ -40,7 +40,7 @@ pub(super) unsafe fn run(
         } else {
             // SAFETY: `ecs.row_entity` returned a non-null (checked earlier)
             // pointer to the row's `u32` entity id, live for the row.
-            unsafe { enshwick::raw::read_at(found.cast(), 0) }
+            unsafe { enshwick_core::raw::read_at(found.cast(), 0) }
         }
     } else {
         request.actor

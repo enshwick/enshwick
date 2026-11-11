@@ -10,7 +10,7 @@
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use enshwick::abi::{
+use enshwick_core::abi::{
     ActionCall, ActionFn, ActionReply, ActionTarget, Header, PlayerInfo, Status, Str,
 };
 
@@ -299,8 +299,8 @@ pub(crate) fn window_closed(loader: &Loader, key: u64, closed: Option<(ModIndex,
     let who = PlayerInfo {
         header: Header::of::<PlayerInfo>(),
         slot: u32::MAX,
-        entity: enshwick::Entity(0),
-        key: enshwick::PlayerKey::new(key),
+        entity: enshwick_core::Entity(0),
+        key: enshwick_core::PlayerKey::new(key),
         permissions: 0,
         name_len: 0,
         name: [0; 64],
@@ -349,7 +349,7 @@ pub(crate) fn allowed(
 
 /// The action ids a mod's sheet lists.
 fn sheet_ids(sheet: &str) -> Vec<String> {
-    enshwick::actions::sheet::decode(sheet)
+    enshwick_core::actions::sheet::decode(sheet)
         .into_iter()
         .map(|entry| entry.id)
         .collect()
@@ -360,7 +360,7 @@ pub(crate) fn player(loader: &Loader, key: u64) -> Option<PlayerInfo> {
     crate::world::players(loader)
         .ok()?
         .into_iter()
-        .find(|p| p.key == enshwick::PlayerKey::new(key))
+        .find(|p| p.key == enshwick_core::PlayerKey::new(key))
 }
 
 /// A client names the language its player reads replies in, on the
@@ -401,7 +401,7 @@ pub(crate) fn run(
         Some(named) => {
             let position = |entity| crate::world::fixed_position(loader, entity);
             let Some(target) = reached(named, player.entity, |e| {
-                position(e).map(enshwick::ecs::metres)
+                position(e).map(enshwick_core::ecs::metres)
             }) else {
                 crate::log!(
                     DEBUG,
@@ -456,8 +456,8 @@ const REACH: f64 = 12.0;
 /// object must stand within [`REACH`] of the player; `None` refuses the run.
 fn reached(
     named: ActionTarget,
-    player: enshwick::Entity,
-    position: impl Fn(enshwick::Entity) -> Option<[f64; 3]>,
+    player: enshwick_core::Entity,
+    position: impl Fn(enshwick_core::Entity) -> Option<[f64; 3]>,
 ) -> Option<ActionTarget> {
     let mut target = named;
     if target.flags & ActionTarget::ENTITY != 0 {
@@ -518,7 +518,7 @@ mod tests {
 
     #[test]
     fn the_actions_a_sheet_lists_are_the_ones_carried() {
-        use enshwick::actions::sheet::{Entry, encode};
+        use enshwick_core::actions::sheet::{Entry, encode};
 
         let entry = |id: &str| Entry {
             id: id.into(),
@@ -555,7 +555,7 @@ mod tests {
         assert!(!args_in_bounds("tbell\u{7}"));
     }
 
-    fn places(entity: enshwick::Entity) -> Option<[f64; 3]> {
+    fn places(entity: enshwick_core::Entity) -> Option<[f64; 3]> {
         match entity.0 {
             2 => Some([100.0, 5.0, 100.0]),
             40 => Some([104.0, 5.0, 103.0]),
@@ -567,7 +567,7 @@ mod tests {
     fn named(flags: u32, entity: u32, position: [f64; 3]) -> ActionTarget {
         ActionTarget {
             flags,
-            entity: enshwick::Entity(entity),
+            entity: enshwick_core::Entity(entity),
             position,
             ..ActionTarget::NONE
         }
@@ -576,24 +576,24 @@ mod tests {
     #[test]
     fn a_named_position_counts_only_within_reach_of_the_player() {
         let near = named(ActionTarget::POSITION, 0, [108.0, 5.0, 100.0]);
-        assert_eq!(reached(near, enshwick::Entity(2), places), Some(near));
+        assert_eq!(reached(near, enshwick_core::Entity(2), places), Some(near));
         let far = named(ActionTarget::POSITION, 0, [113.0, 5.0, 100.0]);
-        assert_eq!(reached(far, enshwick::Entity(2), places), None);
-        assert_eq!(reached(near, enshwick::Entity(9), places), None);
+        assert_eq!(reached(far, enshwick_core::Entity(2), places), None);
+        assert_eq!(reached(near, enshwick_core::Entity(9), places), None);
     }
 
     #[test]
     fn a_named_entity_counts_where_the_server_sees_it_not_where_the_client_says() {
         let both = ActionTarget::ENTITY | ActionTarget::POSITION;
         let lied = named(both, 41, [100.0, 5.0, 100.0]);
-        assert_eq!(reached(lied, enshwick::Entity(2), places), None);
+        assert_eq!(reached(lied, enshwick_core::Entity(2), places), None);
         let chest = reached(
             named(ActionTarget::ENTITY, 40, [0.0; 3]),
-            enshwick::Entity(2),
+            enshwick_core::Entity(2),
             places,
         );
         assert_eq!(chest, Some(named(both, 40, [104.0, 5.0, 103.0])));
         let gone = named(ActionTarget::ENTITY, 77, [100.0, 5.0, 100.0]);
-        assert_eq!(reached(gone, enshwick::Entity(2), places), None);
+        assert_eq!(reached(gone, enshwick_core::Entity(2), places), None);
     }
 }

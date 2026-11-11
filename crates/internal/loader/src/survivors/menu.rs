@@ -1,4 +1,4 @@
-use enshwick::raw::{read_at, read_ptr_at, write_at};
+use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
 use super::{
     ItemMap, LOADED, MENU_NEXT, Menu, REGISTRY_NEXT, SEALED, STATUS_ROWS, SURVIVORS_FUSE,
@@ -169,7 +169,7 @@ pub(super) unsafe fn merge_statuses(ctx: *mut u64) {
             if guid.iter().all(|&b| b == 0) {
                 continue;
             }
-            let id = enshwick::content::Guid(guid).fnv1a();
+            let id = enshwick_core::content::Guid(guid).fnv1a();
             let order = u32::try_from(rows.len()).unwrap_or(u32::MAX);
             rows.push((id, order, status));
         }
@@ -190,13 +190,13 @@ pub(super) unsafe fn merge_statuses(ctx: *mut u64) {
             let answer =
                 crate::profile::call(merge.owner, crate::profile::Feature::Survivors, || unsafe {
                     (merge.callback)(
-                        enshwick::abi::NpcId::new(id),
+                        enshwick_core::abi::NpcId::new(id),
                         bits.as_ptr(),
                         bits.len(),
                         user,
                     )
                 });
-            if answer & enshwick::abi::SURVIVOR_STATUS_SET == 0 {
+            if answer & enshwick_core::abi::SURVIVOR_STATUS_SET == 0 {
                 continue;
             }
             // SAFETY: `play_data` is the client's non-zero (checked earlier)

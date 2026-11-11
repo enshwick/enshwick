@@ -15,7 +15,7 @@
 //! noting what a client holds is pure logic here; the run module keeps
 //! them and carries them on the game thread.
 
-use enshwick::abi::{WINDOW_CLOSE, WINDOW_SHOW, WINDOW_UPDATE};
+use enshwick_core::abi::{WINDOW_CLOSE, WINDOW_SHOW, WINDOW_UPDATE};
 
 use crate::mod_index::ModIndex;
 use crate::remote::Message;
@@ -25,10 +25,10 @@ mod run;
 #[cfg(windows)]
 pub(crate) use run::{after_step, closed, forget, left, ran, show};
 
-pub use enshwick::actions::window::MAX_CALL_PLAYERS as MAX_PLAYERS;
-use enshwick::actions::window::MAX_WAITING;
+pub use enshwick_core::actions::window::MAX_CALL_PLAYERS as MAX_PLAYERS;
+use enshwick_core::actions::window::MAX_WAITING;
 
-pub use enshwick::actions::window::MAX_HELD;
+pub use enshwick_core::actions::window::MAX_HELD;
 
 /// What happens to a window on one client.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -206,7 +206,7 @@ pub fn note(held: &mut Held, key: u64, owner: ModIndex, message: &Message) -> Op
 /// the bound.
 #[must_use]
 pub fn message(id: &str, window: String, open: bool, text: String) -> Message {
-    if text.is_empty() || text.len() > enshwick::actions::window::MAX_BYTES {
+    if text.is_empty() || text.len() > enshwick_core::actions::window::MAX_BYTES {
         return Message::WindowClose {
             id: id.to_owned(),
             window,
@@ -260,7 +260,7 @@ mod tests {
         );
         let empty = message("you.admin", "panel".into(), false, String::new());
         assert!(matches!(empty, Message::WindowClose { .. }));
-        let huge = "x".repeat(enshwick::actions::window::MAX_BYTES + 1);
+        let huge = "x".repeat(enshwick_core::actions::window::MAX_BYTES + 1);
         assert!(matches!(
             message("you.admin", "panel".into(), true, huge),
             Message::WindowClose { .. }
@@ -325,7 +325,7 @@ mod tests {
 
     #[test]
     fn a_window_of_exactly_the_bound_is_carried() {
-        let most = "x".repeat(enshwick::actions::window::MAX_BYTES);
+        let most = "x".repeat(enshwick_core::actions::window::MAX_BYTES);
         assert!(matches!(
             message("you.admin", "panel".into(), true, most),
             Message::Window { .. }

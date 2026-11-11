@@ -1,4 +1,4 @@
-use enshwick::abi::{Header, Status, TerrainEdit, TransactionInfo};
+use enshwick_core::abi::{Header, Status, TerrainEdit, TransactionInfo};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::{BRICK_VOXELS, Brick, Change, Image, Ledger, Limits, Voxels};

@@ -35,8 +35,8 @@ mod world_file;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use enshwick::abi::{HookFlags, Status};
-use enshwick::{Entity, ItemId};
+use enshwick_core::abi::{HookFlags, Status};
+use enshwick_core::{Entity, ItemId};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use self::attach::find_pending;
@@ -195,7 +195,7 @@ fn is_part(part: &str) -> bool {
 /// mod's.
 fn full_id(mod_id: &str, id: &str) -> Option<String> {
     let (namespace, name) = id.split_once(':').unwrap_or((mod_id, id));
-    (enshwick::abi::is_valid_old_form_id(namespace) && is_part(name))
+    (enshwick_core::abi::is_valid_old_form_id(namespace) && is_part(name))
         .then(|| format!("{namespace}:{name}"))
 }
 
@@ -230,7 +230,7 @@ fn open_kind(
             let kind = &mut pending[index];
             if kind.scope != scope {
                 crate::log::write(
-                    enshwick::abi::Level::ERROR,
+                    enshwick_core::abi::Level::ERROR,
                     &record.id,
                     &format!("data kind {full} is opened for items and for entities"),
                 );
@@ -273,13 +273,13 @@ pub(crate) fn get_platform_kind(id: &str, pide: u32, item: u32) -> Option<Box<[u
 /// Sets the item stats of the item `pide` holding `item`, as a mod's set
 /// would.
 pub(crate) fn set_platform(pide: u32, item: u32, value: &[u8]) -> Result<(), Status> {
-    let kind = kind_of(enshwick::stats::ITEM_KIND).ok_or(Status::MISSING)?;
+    let kind = kind_of(enshwick_core::stats::ITEM_KIND).ok_or(Status::MISSING)?;
     set(kind.0, pide, item, value)
 }
 
 /// The item stats of the item `pide` holding `item`.
 pub(crate) fn get_platform(pide: u32, item: u32) -> Option<Box<[u8]>> {
-    get_platform_kind(enshwick::stats::ITEM_KIND, pide, item)
+    get_platform_kind(enshwick_core::stats::ITEM_KIND, pide, item)
 }
 
 /// Seals the kinds; the store runs only when a mod opened one.
@@ -501,7 +501,7 @@ fn kind_of(id: &str) -> Option<KindIndex> {
 fn template_id(entity: Entity) -> Option<u32> {
     let loader = crate::host::loader()?;
     let template = crate::world::template(loader, entity).ok()?;
-    Some(enshwick::content::Guid(template).fnv1a())
+    Some(enshwick_core::content::Guid(template).fnv1a())
 }
 
 /// Whether this process runs the world the values belong to: the dedicated
@@ -613,7 +613,7 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
         }
         server.changed = true;
     }
-    if id == enshwick::stats::ITEM_KIND {
+    if id == enshwick_core::stats::ITEM_KIND {
         crate::stats::items_changed();
     }
     if !spec.sent {

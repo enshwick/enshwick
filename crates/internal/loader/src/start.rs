@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
-use enshwick::abi::Side;
+use enshwick_core::abi::Side;
 use windows_sys::Win32::Foundation::HMODULE;
 use windows_sys::Win32::System::LibraryLoader::{
     GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -181,7 +181,7 @@ pub(crate) fn start(
     // SAFETY: `host::API` is the loader's process-wide table, a static that
     // lives for the process.
     unsafe {
-        enshwick::__private::install_host(&raw const host::API, host::LOADER_HANDLE);
+        enshwick_core::__private::install_host(&raw const host::API, host::LOADER_HANDLE);
     }
     attribute_crashes(loader, &order);
     initialise(loader, &order, watching.as_mut());
@@ -376,7 +376,7 @@ fn initialise(loader: &Loader, order: &[&Library], mut watching: Option<&mut Wat
             continue;
         }
         // SAFETY: `library.init` is the mod's `INIT` export, typed `InitFn`
-        // as `enshwick::abi::exports` documents, called with the static host
+        // as `enshwick_core::abi::exports` documents, called with the static host
         // table and the mod's own handle.
         let status = host::initialising(index, || unsafe {
             (library.init)(&raw const host::API, host::handle(ModIndex::new(index)))
@@ -398,7 +398,7 @@ fn ready(loader: &Loader, order: &[&Library], mut watching: Option<&mut Watching
     for (index, library) in order.iter().enumerate() {
         if !loader.mods[index].off.load(Ordering::Acquire) {
             // SAFETY: `library.ready` is the mod's `READY` export, typed
-            // `ReadyFn` as `enshwick::abi::exports` documents, called with the
+            // `ReadyFn` as `enshwick_core::abi::exports` documents, called with the
             // static host table after the mod's init succeeded.
             unsafe { (library.ready)(&raw const host::API, host::handle(ModIndex::new(index))) };
             if let Some(w) = watching.as_deref_mut() {
@@ -422,7 +422,7 @@ fn ready(loader: &Loader, order: &[&Library], mut watching: Option<&mut Watching
 }
 
 /// The caller frame the frame slot holds now.
-fn read_frame() -> enshwick::abi::CallerFrame {
+fn read_frame() -> enshwick_core::abi::CallerFrame {
     FRAME
         .get()
         .copied()

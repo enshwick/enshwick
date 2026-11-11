@@ -4,9 +4,9 @@
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Weak};
 
-use enshwick::Relock as _;
-use enshwick::points::DescribedVerdict;
-use enshwick::script::EventKind;
+use enshwick_core::Relock as _;
+use enshwick_core::points::DescribedVerdict;
+use enshwick_core::script::EventKind;
 use mlua::{Function, Lua, Value as LuaValue};
 
 use super::{Inner, Scope};

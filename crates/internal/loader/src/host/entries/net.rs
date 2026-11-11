@@ -1,7 +1,7 @@
 //! Host functions for mod messages between server and client.
 
-use enshwick::abi as api_frame;
-use enshwick::abi::{ModHandle, Status, Str};
+use enshwick_core::abi as api_frame;
+use enshwick_core::abi::{ModHandle, Status, Str};
 
 use crate::host::memory::put;
 use crate::host::{caller, caller_index, entry};
@@ -35,7 +35,7 @@ pub(crate) extern "system" fn net_channel(
 pub(crate) extern "system" fn net_send(
     me: ModHandle,
     channel: u32,
-    peer: enshwick::PlayerKey,
+    peer: enshwick_core::PlayerKey,
     data: *const u8,
     size: u32,
 ) -> Status {
@@ -63,7 +63,7 @@ pub(crate) extern "system" fn net_send(
     })
 }
 
-pub(crate) extern "system" fn net_ready(me: ModHandle, peer: enshwick::PlayerKey) -> Status {
+pub(crate) extern "system" fn net_ready(me: ModHandle, peer: enshwick_core::PlayerKey) -> Status {
     entry("net_ready", || match caller(me) {
         Ok(_) if crate::net::ready(peer.get()) => Status::OK,
         Ok(_) => Status::MISSING,

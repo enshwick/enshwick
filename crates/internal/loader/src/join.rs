@@ -10,7 +10,7 @@
 //! lacks, the server's version and where to get it ([`refusal`]), and tells
 //! its mods which they are, with the versions and homepages the server
 //! advertises
-//! ([`Event::JOIN_REFUSED`](enshwick::abi::Event::JOIN_REFUSED)).
+//! ([`Event::JOIN_REFUSED`](enshwick_core::abi::Event::JOIN_REFUSED)).
 //!
 //! Every join from the game's menus hands its online provider a target with
 //! the server's address and query port. The hook asks the server, over the

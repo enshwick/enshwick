@@ -86,7 +86,7 @@ fn kinds() {
         sent: false,
     });
     let _stats = KINDS.add(Kind {
-        id: enshwick::stats::ITEM_KIND.into(),
+        id: enshwick_core::stats::ITEM_KIND.into(),
         scope: Scope::Item,
         sent: true,
     });
@@ -562,7 +562,7 @@ fn records_batch_into_messages_no_longer_than_the_limit_in_their_order() {
 #[test]
 fn a_taken_back_item_stats_value_makes_the_wearers_look_again() {
     kinds();
-    let stats = kind_of(enshwick::stats::ITEM_KIND).unwrap();
+    let stats = kind_of(enshwick_core::stats::ITEM_KIND).unwrap();
     assert!(touches_item_stats(&[key(0, 3001), (stats, Entity(3002))]));
     assert!(!touches_item_stats(&[key(0, 3001)]));
 }

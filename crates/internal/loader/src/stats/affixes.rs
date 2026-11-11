@@ -1,10 +1,12 @@
 //! Affixes: definitions mods give during init, the pool items roll from,
 //! and the lines an item's rolled affixes give.
 
-use enshwick::Entity;
-use enshwick::abi::{AffixDefData, AffixRoll, ItemLine, StatRef, Status, Str};
-use enshwick::affixes::{AffixDef, AffixKey, Candidate, ItemRarity, RollRules, lines_of, reroll};
-use enshwick::stats::{ItemStats, Stat, key_of};
+use enshwick_core::Entity;
+use enshwick_core::abi::{AffixDefData, AffixRoll, ItemLine, StatRef, Status, Str};
+use enshwick_core::affixes::{
+    AffixDef, AffixKey, Candidate, ItemRarity, RollRules, lines_of, reroll,
+};
+use enshwick_core::stats::{ItemStats, Stat, key_of};
 
 use super::{Asked, SEALED, Sealed, declare, full_id, pending, wanted};
 use crate::host::Loader;
@@ -16,7 +18,7 @@ use crate::mod_index::ModIndex;
 pub(super) struct Affix {
     /// The full id.
     id: Box<str>,
-    /// The text key that names it, see [`name_key`](enshwick::stats::name_key).
+    /// The text key that names it, see [`name_key`](enshwick_core::stats::name_key).
     text: Box<str>,
     def: AffixDef,
 }
@@ -78,7 +80,7 @@ pub(super) fn pool(sealed: &Sealed) -> Vec<Candidate<'_>> {
 pub(crate) fn roll(loader: &Loader, roll: &AffixRoll) -> Result<u32, Status> {
     let sealed = SEALED.get().filter(|_| wanted()).ok_or(Status::MISSING)?;
     crate::world::server()?;
-    if roll.pide == Entity(0) || roll.item == enshwick::ItemId::new(0) {
+    if roll.pide == Entity(0) || roll.item == enshwick_core::ItemId::new(0) {
         return Err(Status::BAD_ARGS);
     }
     let category = crate::inventory::item_info(loader, roll.item.get())?.category;

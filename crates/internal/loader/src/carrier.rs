@@ -23,7 +23,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use enshwick::abi::{HookFlags, Status};
+use enshwick_core::abi::{HookFlags, Side, Status};
 use rustc_hash::FxHashMap;
 
 use crate::chains::Next;
@@ -61,7 +61,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 ];
 
 /// The key a client keeps its server under.
-const SERVER: u64 = enshwick::abi::NetMessage::SERVER.get();
+const SERVER: u64 = enshwick_core::abi::NetMessage::SERVER.get();
 /// Messages taken from one socket at most per step.
 const RECEIVES_PER_STEP: usize = 256;
 /// Packets sent on one socket at most per step.
@@ -243,7 +243,7 @@ pub(crate) fn link(loader: &Loader) {
     }
     // Linked even without the channel: the lobby a client hosts is published
     // from here too.
-    let linked = loader.side != enshwick::abi::Side::CLIENT
+    let linked = loader.side != Side::CLIENT
         || loader.link_feature(
             "the client's frame step",
             Target::Pinned(pinned::chat::CLIENT_SEND),
@@ -374,7 +374,7 @@ fn client_hosts() -> bool {
         return true;
     }
     crate::world::hosting()
-        && crate::host::loader().is_some_and(|loader| loader.side == enshwick::abi::Side::CLIENT)
+        && crate::host::loader().is_some_and(|loader| loader.side == Side::CLIENT)
 }
 
 /// Makes this test process a client that hosts, its own player `key`.

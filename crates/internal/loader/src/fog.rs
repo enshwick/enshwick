@@ -21,7 +21,7 @@
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use enshwick::abi::{FogInfo, Header, HookFlags, Side, Status};
+use enshwick_core::abi::{FogInfo, Header, HookFlags, Side, Status};
 
 use crate::chains::Next;
 use crate::fog_image::{FogImage, FogShape, Plan, ReadError, TileRect, plan};
@@ -208,7 +208,7 @@ unsafe extern "system" fn reveal(fog: *mut u8, xz: *const [f32; 2], range: f32) 
         // SAFETY: the game passes the reveal a non-null (checked earlier)
         // pointer to the two f32 of the place it uncovers, valid for the
         // call.
-        Some(unsafe { enshwick::raw::read_at::<[f32; 2]>(xz.cast(), 0) })
+        Some(unsafe { enshwick_core::raw::read_at::<[f32; 2]>(xz.cast(), 0) })
     };
     // SAFETY: the game's own arguments, passed on unchanged to the rest of
     // the chain, which has the reveal's signature.

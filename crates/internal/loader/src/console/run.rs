@@ -2,8 +2,8 @@
 
 use std::sync::atomic::Ordering;
 
-use enshwick::Entity;
-use enshwick::abi::{Header, PlayerInfo, Status};
+use enshwick_core::Entity;
+use enshwick_core::abi::{Header, PlayerInfo, Status};
 
 use crate::host::Loader;
 use crate::locks::Relock;
@@ -75,7 +75,7 @@ pub(crate) fn the_console() -> PlayerInfo {
         header: Header::of::<PlayerInfo>(),
         slot: u32::MAX,
         entity: Entity(0),
-        key: enshwick::PlayerKey::new(0),
+        key: enshwick_core::PlayerKey::new(0),
         permissions: crate::commands::ALL_PERMISSIONS,
         name_len: 7,
         name,

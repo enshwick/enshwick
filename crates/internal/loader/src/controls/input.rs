@@ -5,7 +5,7 @@
 
 use core::cell::RefCell;
 
-use enshwick::controls::{Key, chords};
+use enshwick_core::controls::{Key, chords};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, GetKeyNameTextW, GetKeyboardLayout, MAPVK_VSC_TO_VK_EX, MapVirtualKeyExW,
     VK_CONTROL, VK_DECIMAL, VK_ESCAPE, VK_LBUTTON, VK_MBUTTON, VK_MENU, VK_NUMPAD0, VK_NUMPAD1,

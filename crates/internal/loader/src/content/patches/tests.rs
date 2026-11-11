@@ -155,7 +155,7 @@ fn unarchived(_key: &ResourceKey) -> Result<Vec<u8>, Status> {
     Err(Status::MISSING)
 }
 
-fn by_loader(apply: enshwick::abi::ResourcePatchFn) -> Patch {
+fn by_loader(apply: enshwick_core::abi::ResourcePatchFn) -> Patch {
     Patch {
         owner: ModIndex::LOADER,
         apply,

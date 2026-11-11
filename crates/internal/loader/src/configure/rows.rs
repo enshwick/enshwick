@@ -4,8 +4,8 @@
 //! Which game widget shows each setting, its value, whether the player may
 //! change it, and the TOML a change writes.
 
-use enshwick::config::{Field, Kind, Schema, value_at};
-use enshwick::i18n::{Language, Texts};
+use enshwick_core::config::{Field, Kind, Schema, value_at};
+use enshwick_core::i18n::{Language, Texts};
 
 /// The most stops a slider row gets; longer whole-number ranges slide
 /// freely and round.
@@ -550,7 +550,7 @@ mod tests {
             "config",
             vec![Field::new("comfort.multiplier", &1.0).with_range(Some(0.0), Some(10.0))],
         )
-        .with_groups(vec![enshwick::config::Group::new("comfort", "")]);
+        .with_groups(vec![enshwick_core::config::Group::new("comfort", "")]);
         let rows = rows(&schema, "[comfort]\nmultiplier = 2.5\n", None);
         assert_eq!(rows[0].label, "Comfort: Multiplier");
         assert_eq!(rows[0].group.as_deref(), Some("comfort"));

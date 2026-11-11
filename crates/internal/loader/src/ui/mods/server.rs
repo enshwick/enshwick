@@ -1,6 +1,6 @@
 //! The joined server's pages: its mods with settings, and a mod's settings it sends.
 
-use enshwick::abi::UiWidget;
+use enshwick_core::abi::UiWidget;
 
 use super::list::{listing, pages};
 use super::settings::draw_row;
@@ -54,7 +54,7 @@ pub(super) fn server_settings(
     id: &str,
     first: &mut usize,
     rows: &mut Vec<Row>,
-    schema: &mut Option<enshwick::config::Schema>,
+    schema: &mut Option<enshwick_core::config::Schema>,
     news: &mut u64,
     entries: &mut Entries,
 ) -> Option<(String, bool)> {

@@ -1,9 +1,9 @@
 use std::cell::Cell;
 use std::sync::atomic::Ordering;
 
-use enshwick::Entity;
-use enshwick::abi::{BedCheck, Header};
-use enshwick::raw::{read_at, read_ptr_at};
+use enshwick_core::Entity;
+use enshwick_core::abi::{BedCheck, Header};
+use enshwick_core::raw::{read_at, read_ptr_at};
 
 use crate::locks::Relock;
 
@@ -171,7 +171,7 @@ pub(super) unsafe fn bed_kept(ctx: *const u8) -> bool {
     let entity = unsafe { engine.entity(ecs) };
     let check = BedCheck {
         header: Header::of::<BedCheck>(),
-        npc_id: enshwick::abi::NpcId::new(survivor),
+        npc_id: enshwick_core::abi::NpcId::new(survivor),
         entity: Entity(entity),
         bed_id: Entity(bed),
         // SAFETY: `saved` and `transform` are null or the survivor's live

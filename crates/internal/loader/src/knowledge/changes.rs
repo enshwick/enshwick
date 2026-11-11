@@ -20,8 +20,8 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use enshwick::Entity;
-use enshwick::abi::{Event, Header, KnowledgeData, KnowledgeInfo, Status};
+use enshwick_core::Entity;
+use enshwick_core::abi::{Event, Header, KnowledgeData, KnowledgeInfo, Status};
 
 use crate::host::Loader;
 use crate::locks::Relock;
@@ -254,7 +254,7 @@ pub(crate) fn revoke(
     RAISED.relock().push(KnowledgeData {
         header: Header::of::<KnowledgeData>(),
         entity: if player { Entity(entity) } else { Entity(0) },
-        id: enshwick::abi::KnowledgeId::new(id),
+        id: enshwick_core::abi::KnowledgeId::new(id),
         value: new,
     });
     Ok(())
@@ -300,7 +300,7 @@ fn file(key: &str) -> PathBuf {
 /// one that does not read, which then stays as it is.
 fn read_queue(key: &str) -> Option<Vec<Waiting>> {
     let path = file(key);
-    let read = enshwick::files::read_to_string_if_present(&path)
+    let read = enshwick_core::files::read_to_string_if_present(&path)
         .map_err(|e| e.to_string())
         .and_then(|text| {
             text.map(|text| toml::from_str::<WaitingFile>(&text))
@@ -336,7 +336,7 @@ fn write_queue(key: &str, waiting: &[Waiting]) {
             })
             .unwrap_or_default()
         );
-        enshwick::files::write_atomically(&path, text)
+        enshwick_core::files::write_atomically(&path, text)
     };
     if let Err(error) = written {
         crate::log!(WARN, "knowledge: {} not written: {error}", path.display());
@@ -369,7 +369,7 @@ fn character_of(loader: &Loader, key: u64) -> Option<Entity> {
     let players = crate::world::players(loader).ok()?;
     players
         .iter()
-        .find(|p| p.key == enshwick::PlayerKey::new(key))
+        .find(|p| p.key == enshwick_core::PlayerKey::new(key))
         .map(|p| p.entity)
         .filter(|&entity| character_loaded(loader, entity))
 }
@@ -474,7 +474,7 @@ fn settle(loader: &Loader) {
         };
         let Some(player) = players
             .iter()
-            .find(|p| p.key == enshwick::PlayerKey::new(key))
+            .find(|p| p.key == enshwick_core::PlayerKey::new(key))
         else {
             return true;
         };

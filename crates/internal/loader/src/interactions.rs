@@ -9,8 +9,8 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use arc_swap::ArcSwapOption;
-use enshwick::abi::{Header, HookFlags, Interaction, InteractionFn, Side, Status};
-use enshwick::raw::{read_at, read_ptr_at, write_at};
+use enshwick_core::abi::{Header, HookFlags, Interaction, InteractionFn, Side, Status};
+use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
 use crate::chains::Next;
 use crate::ecs::{Components, Engine};
@@ -346,9 +346,9 @@ unsafe fn interaction(kind: u32, player: u32, target: u32, ctx: *mut u64) -> Int
     let mut call = Interaction {
         header: Header::of::<Interaction>(),
         kind,
-        player: enshwick::Entity(player),
-        target: enshwick::Entity(target),
-        item: enshwick::ItemId::new(0),
+        player: enshwick_core::Entity(player),
+        target: enshwick_core::Entity(target),
+        item: enshwick_core::ItemId::new(0),
         known: 0,
         reserved: [0; 3],
         position: [0.0; 3],
@@ -369,7 +369,7 @@ unsafe fn interaction(kind: u32, player: u32, target: u32, ctx: *mut u64) -> Int
             // SAFETY: `transform` is the target's live `CurrentTransform`
             // component, which starts with its 32.32 position, three i64.
             let fixed: [i64; 3] = unsafe { read_at(transform, 0) };
-            call.position = enshwick::ecs::metres(fixed);
+            call.position = enshwick_core::ecs::metres(fixed);
             call.known = 1;
         }
     }
@@ -878,7 +878,7 @@ unsafe fn player_inputs(ctx: *mut u64) {
     }
     let players = PLAYERS.load();
     let players = players.as_deref().map_or(&[][..], Vec::as_slice);
-    let input = |player: enshwick::Entity| {
+    let input = |player: enshwick_core::Entity| {
         // SAFETY: the caller guarantees the system's live context, at its
         // entry on its thread.
         unsafe { components.component(ctx, player.0, layout.player_input) }

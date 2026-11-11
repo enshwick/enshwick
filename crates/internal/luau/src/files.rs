@@ -6,7 +6,7 @@ use std::sync::Arc;
 use mlua::Lua;
 use mlua::luau::{NavigateError, Require};
 
-use enshwick::packs::SCRIPT_MAIN as MAIN;
+use enshwick_core::packs::SCRIPT_MAIN as MAIN;
 
 /// The script files of one mod, by path relative to its folder with `/`
 /// between folders.
@@ -97,7 +97,7 @@ impl Scripts {
     /// # Ok::<(), String>(())
     /// ```
     #[must_use]
-    pub fn with_items(mut self, bindings: &[enshwick::packs::ItemBinding]) -> Self {
+    pub fn with_items(mut self, bindings: &[enshwick_core::packs::ItemBinding]) -> Self {
         use core::fmt::Write as _;
 
         for b in bindings {

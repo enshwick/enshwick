@@ -1,7 +1,7 @@
 //! The client's logic entity sets: each base's set of logic graph entities
 //! in its zones, rebuilt when the zone list changes.
 
-use enshwick::raw::{read_at, read_ptr_at, write_at};
+use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
 use super::{CODE, Code, Game, GrowFn, Layout, ObjWorldFn, RecordFields, point, rec, windowed};
 use crate::base_groups::lookup::{self, Bases};

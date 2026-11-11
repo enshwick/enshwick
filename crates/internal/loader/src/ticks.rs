@@ -7,7 +7,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
 use arc_swap::ArcSwapOption;
-use enshwick::abi::{EventFn, Status, TickData, TickHandle};
+use enshwick_core::abi::{EventFn, Status, TickData, TickHandle};
 
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -267,7 +267,7 @@ impl Ticks {
 mod tests {
     use core::ffi::c_void;
 
-    use enshwick::abi::Event;
+    use enshwick_core::abi::Event;
 
     use super::*;
 

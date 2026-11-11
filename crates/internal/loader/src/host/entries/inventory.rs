@@ -1,7 +1,7 @@
 //! Host functions for inventory requests.
 
-use enshwick::abi as api_frame;
-use enshwick::abi::{ModHandle, Status};
+use enshwick_core::abi as api_frame;
+use enshwick_core::abi::{ModHandle, Status};
 
 use crate::host::memory::put_headed;
 use crate::host::{caller, caller_index, entry};
@@ -15,7 +15,7 @@ pub(crate) extern "system" fn inventory_open(me: ModHandle) -> Status {
 
 pub(crate) extern "system" fn item_info(
     me: ModHandle,
-    item: enshwick::ItemId,
+    item: enshwick_core::ItemId,
     out: *mut api_frame::ItemData,
 ) -> Status {
     entry("item_info", || {
@@ -43,7 +43,7 @@ pub(crate) extern "system" fn inventory_submit(
         let required = core::mem::offset_of!(api_frame::InventoryRequest, op_count) + 4;
         // SAFETY: a non-null request from a mod points at a valid request for the
         // call; an all-zero request is valid.
-        let Some(request) = (unsafe { enshwick::abi::read_headed(request, required) }) else {
+        let Some(request) = (unsafe { enshwick_core::abi::read_headed(request, required) }) else {
             return Status::BAD_ARGS;
         };
         crate::inventory::submit(loader, index, &request, done, user)

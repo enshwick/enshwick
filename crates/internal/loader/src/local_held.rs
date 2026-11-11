@@ -11,8 +11,8 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering, fence};
 use std::time::Instant;
 
-use enshwick::Entity;
-use enshwick::abi::{HookFlags, Side, Status};
+use enshwick_core::Entity;
+use enshwick_core::abi::{HookFlags, Side, Status};
 use enshwick_gamedata::catalogue;
 
 use crate::chains::Next;
@@ -254,7 +254,7 @@ unsafe fn read(ctx: *mut u64, layout: &Layout) {
     }
     // SAFETY: `ecs.row_entity` returned a non-null pointer to the row's u32
     // entity id, live for the call.
-    let player: u32 = unsafe { enshwick::raw::read_at(found.cast(), 0) };
+    let player: u32 = unsafe { enshwick_core::raw::read_at(found.cast(), 0) };
     // SAFETY: the caller's live context at the system's entry on its thread.
     let Some(input) = (unsafe { layout.components.component(ctx, player, layout.input) }) else {
         return;
@@ -262,7 +262,7 @@ unsafe fn read(ctx: *mut u64, layout: &Layout) {
     // SAFETY: `input` is the player's live `ClientPlayerInput`, unwritten
     // until the system runs; `layout` checked that the u64 at `digital` lies
     // inside the type.
-    let bits: u64 = unsafe { enshwick::raw::read_at(input, layout.digital) };
+    let bits: u64 = unsafe { enshwick_core::raw::read_at(input, layout.digital) };
     STATE.bits.store(bits, Ordering::Relaxed);
     STATE.read_ms.store(now_ms(), Ordering::Release);
 }
@@ -286,7 +286,7 @@ unsafe fn read_host(ctx: *mut u64, at: &HostLayout, host: u32) {
     // position, three fixed-point `i64`, sits at the reflected offset
     // `at.position`.
     let position =
-        transform.map(|data| unsafe { enshwick::raw::read_at::<[i64; 3]>(data, at.position) });
+        transform.map(|data| unsafe { enshwick_core::raw::read_at::<[i64; 3]>(data, at.position) });
     // A template without a position would name the world's origin.
     let (template, position) = template.zip(position).unwrap_or_default();
     STATE.host.write(host, template, position);

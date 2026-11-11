@@ -1,4 +1,4 @@
-use enshwick::raw::{read_at, write_at};
+use enshwick_core::raw::{read_at, write_at};
 
 use crate::ecs::{Engine, Query};
 use crate::live;

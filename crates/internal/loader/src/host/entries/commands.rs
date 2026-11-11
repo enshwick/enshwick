@@ -1,6 +1,6 @@
 //! Host functions for mods' commands.
 
-use enshwick::abi::{ActionReply, CommandInfo, Header, Level, ModHandle, Status, Str};
+use enshwick_core::abi::{ActionReply, CommandInfo, Header, Level, ModHandle, Status, Str};
 
 use crate::host::memory::{put_headed, text};
 use crate::host::{caller, calling, entry};
@@ -110,7 +110,7 @@ pub(crate) extern "system" fn actions_changed(me: ModHandle) -> Status {
 pub(crate) extern "system" fn action_window(
     me: ModHandle,
     id: Str,
-    players: *const enshwick::PlayerKey,
+    players: *const enshwick_core::PlayerKey,
     count: u32,
     close: u32,
 ) -> Status {

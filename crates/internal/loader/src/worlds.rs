@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick::config::{Group, Schema};
+use enshwick_core::config::{Group, Schema};
 use toml_edit::{DocumentMut, Item, Table};
 
 use crate::locks::Relock;

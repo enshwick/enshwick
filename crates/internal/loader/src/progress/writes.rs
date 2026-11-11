@@ -4,7 +4,7 @@
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick::abi::{
+use enshwick_core::abi::{
     PROGRESS_ADD_EXPERIENCE, PROGRESS_OPEN, PROGRESS_SET_EXPERIENCE, PROGRESS_SET_LEVEL, Status,
 };
 
@@ -273,7 +273,7 @@ pub(super) unsafe fn apply_writes(loader: &Loader, engine: &Engine, ctx: *mut u6
 mod tests {
     use core::ffi::c_void;
 
-    use enshwick::abi::ExperiencePass;
+    use enshwick_core::abi::ExperiencePass;
 
     use super::*;
     use crate::host::Registered;

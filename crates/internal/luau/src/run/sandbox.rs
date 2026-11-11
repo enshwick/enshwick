@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use enshwick::Load;
-use enshwick::packs::SCRIPT_MAIN as MAIN;
+use enshwick_core::Load;
+use enshwick_core::packs::SCRIPT_MAIN as MAIN;
 use mlua::chunk::ChunkMode;
 use mlua::{Lua, LuaOptions, StdLib, VmState};
 
@@ -115,7 +115,7 @@ impl Inner {
                 }
                 vm.lua
                     .load(bindings.as_str())
-                    .set_name(format!("@{}", enshwick::packs::ITEMS_FILE))
+                    .set_name(format!("@{}", enshwick_core::packs::ITEMS_FILE))
                     .set_mode(ChunkMode::Text)
                     .exec()
             });

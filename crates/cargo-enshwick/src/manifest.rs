@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use enshwick::abi::{Manifest, Relation, Side, Str};
+use enshwick_core::abi::{Manifest, Relation, Side, Str};
 
 /// Describes the mod in `dll`; an error when its version is not `expected`.
 pub(crate) fn show(dll: &Path, expected: Option<&str>) -> Result<String, String> {
@@ -124,13 +124,14 @@ unsafe fn describe(manifest: &Manifest) -> String {
 /// - Its strings and lists stay readable for the rest of the process.
 #[cfg(any(windows, test))]
 unsafe fn copy(raw: *const Manifest) -> Result<Manifest, String> {
-    const REQUIRED: usize = <Manifest as enshwick::abi::Headed>::BORN;
+    const REQUIRED: usize = <Manifest as enshwick_core::abi::Headed>::BORN;
     // SAFETY: the caller's contract is the one `read_headed` needs: null or
     // readable for the size its header states, no concurrent writer.
-    let manifest = unsafe { enshwick::abi::read_headed(raw, REQUIRED) }
+    let manifest = unsafe { enshwick_core::abi::read_headed(raw, REQUIRED) }
         .ok_or("the mod returned no manifest, or a truncated one")?;
     let header = manifest.header;
-    enshwick::abi::check_abi(header.abi_major, header.abi_minor).map_err(|why| why.to_string())?;
+    enshwick_core::abi::check_abi(header.abi_major, header.abi_minor)
+        .map_err(|why| why.to_string())?;
     Ok(manifest)
 }
 
@@ -175,11 +176,11 @@ fn query(dll: &Path) -> Result<Manifest, String> {
     // SAFETY: the ABI gives `exports::ABI` the signature
     // `extern "system" fn() -> u32`.
     let abi: unsafe extern "system" fn() -> u32 =
-        unsafe { core::mem::transmute(export(enshwick::abi::exports::ABI)?) };
+        unsafe { core::mem::transmute(export(enshwick_core::abi::exports::ABI)?) };
     // SAFETY: `abi` is the mod's `exports::ABI`, which takes no arguments and
     // returns a constant, the major that decides how the manifest reads.
-    enshwick::abi::check_major(unsafe { abi() }).map_err(|why| why.to_string())?;
-    let query = export(enshwick::abi::exports::QUERY)?;
+    enshwick_core::abi::check_major(unsafe { abi() }).map_err(|why| why.to_string())?;
+    let query = export(enshwick_core::abi::exports::QUERY)?;
     // SAFETY: the ABI gives `exports::QUERY` the signature
     // `extern "system" fn() -> *const Manifest`.
     let query: unsafe extern "system" fn() -> *const Manifest =

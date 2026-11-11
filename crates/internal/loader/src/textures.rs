@@ -20,8 +20,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use arc_swap::ArcSwapOption;
-use enshwick::abi::{HookFlags, Side, Status};
-use enshwick::raw::{read_at, read_bytes_at, read_ptr_at, write_at, write_bytes_at, write_ptr_at};
+use enshwick_core::abi::{HookFlags, Side, Status};
+use enshwick_core::raw::{
+    read_at, read_bytes_at, read_ptr_at, write_at, write_bytes_at, write_ptr_at,
+};
 use rustc_hash::FxHashMap;
 
 use crate::catalogue::types::{TEMPLATE, UI_IMAGE};
@@ -662,7 +664,7 @@ unsafe fn append(out: *mut KeysOut, type_hash: u32) {
 
 /// `keys`, the game's listing, with each of `served` after them as the
 /// listing lays a key out (GUID, type hash, part), once each.
-fn with_served(keys: &mut Vec<[u8; KEY]>, served: &[enshwick::abi::ResourceKey]) {
+fn with_served(keys: &mut Vec<[u8; KEY]>, served: &[enshwick_core::abi::ResourceKey]) {
     for key in served {
         let mut entry = [0u8; KEY];
         entry[..16].copy_from_slice(&key.guid);
@@ -761,7 +763,7 @@ mod tests {
 
     #[test]
     fn served_keys_follow_the_game_s_listing_once_each_as_it_lays_keys_out() {
-        let key = |guid: u8| enshwick::abi::ResourceKey {
+        let key = |guid: u8| enshwick_core::abi::ResourceKey {
             guid: [guid; 16],
             type_hash: TEMPLATE,
             part: 2,

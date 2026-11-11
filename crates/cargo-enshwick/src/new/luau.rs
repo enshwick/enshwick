@@ -7,7 +7,7 @@ use anyhow::{Context as _, bail};
 use cargo_enshwick::luau::{
     DEFINITIONS_FILE, TYPED_DEFINITIONS_FILE, definitions, typed_definitions,
 };
-use enshwick::packs::{MANIFEST_FILE, SCRIPT_MAIN as MAIN_FILE};
+use enshwick_core::packs::{MANIFEST_FILE, SCRIPT_MAIN as MAIN_FILE};
 
 use crate::Side;
 
@@ -37,7 +37,7 @@ pub(crate) fn create(
     side: Side,
     game: Option<&Path>,
 ) -> anyhow::Result<String> {
-    if !enshwick::abi::is_valid_id(id) {
+    if !enshwick_core::abi::is_valid_id(id) {
         bail!("{id:?} is not <author>.<name>, each part of [a-z0-9-]");
     }
     let root = std::path::absolute(dir.join(id)).with_context(|| dir.display().to_string())?;

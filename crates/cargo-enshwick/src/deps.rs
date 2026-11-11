@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, anyhow, bail};
 use cargo_enshwick::points::{Schema, from_dll, luau_deps, rust_deps};
-use enshwick::abi::Relation;
-use enshwick::packs::{MANIFEST_FILE, PackDependency, PackManifest};
+use enshwick_core::abi::Relation;
+use enshwick_core::packs::{MANIFEST_FILE, PackDependency, PackManifest};
 
 /// The schema texts `from` holds: of a schema file, of a pack's
 /// `pack.toml`, of a DLL, or of every DLL and pack in a folder and in its

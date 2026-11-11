@@ -1,4 +1,4 @@
-use enshwick::abi::UiExtension;
+use enshwick_core::abi::UiExtension;
 
 use super::{
     Buf, EXTENSION_WIDTH, Engine, HUD_MARGIN, NAV_CONFIG, PANEL_CONFIG, UiText, WINDOW_WIDTH,

@@ -30,9 +30,10 @@ safe API.
 ```text
 stub ──starts──▶ loader ──C ABI──▶ mods (enshwick ▸ enshwick-macros)
                    │
-                   ├──▶ enshwick-gamedata (tables, reflect, archive)
-                   └──▶ enshwick-luau ──▶ enshwick (script descriptions)
-cargo-enshwick ──▶ enshwick, enshwick-gamedata
+                   ├──▶ enshwick-core, enshwick-abi
+                   ├──▶ enshwick-gamedata (tables, reflect, archive) ──▶ enshwick-core
+                   └──▶ enshwick-luau ──▶ enshwick-core (script descriptions)
+cargo-enshwick ──▶ enshwick-core, enshwick-abi, enshwick-gamedata
 enshwick ──▶ enshwick-core ──▶ enshwick-typed ──▶ enshwick-values ──▶ enshwick-macros
                  enshwick-core ──▶ enshwick-abi ────▶ enshwick-values
 enshwick ──test──▶ enshwick-fake ──▶ enshwick-core (its `fake` feature)
@@ -57,8 +58,14 @@ enshwick ──test──▶ enshwick-fake ──▶ enshwick-core (its `fake` f
   `# extern crate <crate> as enshwick;` line. One that names items above its
   crate sits in a hidden wrapper, and `crates/enshwick/src/lower_examples.rs`
   compiles its copy; `cargo xtask check` holds both.
-- The loader depends on `enshwick` for the ABI types and on `enshwick-gamedata`.
-  Nothing depends on the loader except xtask's `compat` feature; cargo-deny
+- Only mods depend on `enshwick`. The loader, `enshwick-luau`,
+  `enshwick-gamedata` and `cargo-enshwick` name the internal parts they need,
+  `enshwick-core` and, for the API's version, `enshwick-abi`; they take
+  `enshwick` only for their tests, which build mods and reach the fake, and
+  `cargo xtask check` refuses a crate in `crates/` or `tools/` that takes it
+  for more. The loader names `enshwick-core` `enshwick` at its root, as the
+  settings macros write the API crate's paths.
+- Nothing depends on the loader except xtask's `compat` feature; cargo-deny
   refuses it anywhere else.
 - `enshwick` never depends on the loader or on `enshwick-gamedata`: a mod links
   the API alone.

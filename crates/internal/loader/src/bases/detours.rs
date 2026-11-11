@@ -4,8 +4,8 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use enshwick::abi::AltarLimit;
-use enshwick::raw::read_at;
+use enshwick_core::abi::AltarLimit;
+use enshwick_core::raw::read_at;
 
 use super::members::{Game, Side, side_of};
 use super::{
@@ -39,7 +39,7 @@ pub(super) fn chain_limit<'a>(
     filters: impl Iterator<Item = &'a LimitFilter>,
 ) -> u8 {
     let vanilla_limit = AltarLimit {
-        header: enshwick::abi::Header::of::<AltarLimit>(),
+        header: enshwick_core::abi::Header::of::<AltarLimit>(),
         flame_level,
         vanilla,
         allowed: vanilla,

@@ -1,8 +1,8 @@
 //! Host functions for altars, survivors, stats, affixes, buffs, knowledge, game rates and the game's checks.
 
-use enshwick::Entity;
-use enshwick::abi as api_frame;
-use enshwick::abi::{Level, ModHandle, RateId, Status, Str};
+use enshwick_core::Entity;
+use enshwick_core::abi as api_frame;
+use enshwick_core::abi::{Level, ModHandle, RateId, Status, Str};
 
 use crate::base_groups::limit::Limits;
 use crate::host::entries::mods::list;
@@ -160,14 +160,17 @@ pub(crate) extern "system" fn stat_open(
             // SAFETY: a mod passes its version of the definition, and all of it
             // is required.
             let Some(data) = (unsafe {
-                get_headed(def, <api_frame::StatDefData as enshwick::abi::Headed>::BORN)
+                get_headed(
+                    def,
+                    <api_frame::StatDefData as enshwick_core::abi::Headed>::BORN,
+                )
             }) else {
                 return Status::BAD_ARGS;
             };
             Some(data)
         };
         let def = match def {
-            Some(data) => match enshwick::stats::StatDef::from_data(&data) {
+            Some(data) => match enshwick_core::stats::StatDef::from_data(&data) {
                 Some(def) => Some(def),
                 None => return Status::BAD_ARGS,
             },
@@ -254,7 +257,7 @@ pub(crate) extern "system" fn stat_modify(
         let Some(request) = (unsafe {
             get_headed(
                 request,
-                <api_frame::StatModify as enshwick::abi::Headed>::BORN,
+                <api_frame::StatModify as enshwick_core::abi::Headed>::BORN,
             )
         }) else {
             return Status::BAD_ARGS;
@@ -358,7 +361,7 @@ pub(crate) extern "system" fn affix_open(
         let Some(def) = (unsafe {
             get_headed(
                 def,
-                <api_frame::AffixDefData as enshwick::abi::Headed>::BORN,
+                <api_frame::AffixDefData as enshwick_core::abi::Headed>::BORN,
             )
         }) else {
             return Status::BAD_ARGS;
@@ -387,9 +390,12 @@ pub(crate) extern "system" fn affix_roll(
         };
         // SAFETY: a mod passes null or its version of the request, and all of
         // it is required.
-        let Some(roll) =
-            (unsafe { get_headed(roll, <api_frame::AffixRoll as enshwick::abi::Headed>::BORN) })
-        else {
+        let Some(roll) = (unsafe {
+            get_headed(
+                roll,
+                <api_frame::AffixRoll as enshwick_core::abi::Headed>::BORN,
+            )
+        }) else {
             return Status::BAD_ARGS;
         };
         match crate::stats::roll(loader, &roll) {
@@ -405,7 +411,7 @@ pub(crate) extern "system" fn affix_roll(
 pub(crate) extern "system" fn item_lines(
     me: ModHandle,
     pide: Entity,
-    item: enshwick::ItemId,
+    item: enshwick_core::ItemId,
     out: *mut api_frame::ItemLine,
     capacity: u32,
     count: *mut u32,
@@ -457,8 +463,8 @@ pub(crate) extern "system" fn affix_info(
 
 pub(crate) extern "system" fn summon_item(
     me: ModHandle,
-    item: enshwick::ItemId,
-    survivor: enshwick::abi::NpcId,
+    item: enshwick_core::ItemId,
+    survivor: enshwick_core::abi::NpcId,
 ) -> Status {
     entry("summon_item", || match caller_index(me) {
         Ok((loader, _)) => crate::survivors::register_item(loader, item.get(), survivor.get()),
@@ -500,7 +506,7 @@ pub(crate) extern "system" fn interaction_filter(
 
 pub(crate) extern "system" fn skill_override(
     me: ModHandle,
-    node: enshwick::abi::SkillNode,
+    node: enshwick_core::abi::SkillNode,
     callback: api_frame::SkillCheckFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
@@ -675,7 +681,7 @@ pub(crate) extern "system" fn build_filter(
 
 pub(crate) extern "system" fn damage_filter(
     me: ModHandle,
-    callback: enshwick::abi::DamageFilterFn,
+    callback: enshwick_core::abi::DamageFilterFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("damage_filter", || match caller_index(me) {
@@ -691,7 +697,7 @@ pub(crate) extern "system" fn damage_filter(
 
 pub(crate) extern "system" fn knowledge_input_filter(
     me: ModHandle,
-    callback: enshwick::abi::KnowledgeInputFn,
+    callback: enshwick_core::abi::KnowledgeInputFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("knowledge_input_filter", || match caller_index(me) {
@@ -707,7 +713,7 @@ pub(crate) extern "system" fn knowledge_input_filter(
 
 pub(crate) extern "system" fn buff_types(
     me: ModHandle,
-    out: *mut enshwick::abi::BuffTypeInfo,
+    out: *mut enshwick_core::abi::BuffTypeInfo,
     capacity: u32,
     count: *mut u32,
 ) -> Status {
@@ -727,7 +733,7 @@ pub(crate) extern "system" fn buff_types(
 pub(crate) extern "system" fn buffs(
     me: ModHandle,
     entity: Entity,
-    out: *mut enshwick::abi::ActiveBuff,
+    out: *mut enshwick_core::abi::ActiveBuff,
     capacity: u32,
     count: *mut u32,
 ) -> Status {
@@ -746,15 +752,15 @@ pub(crate) extern "system" fn buffs(
 
 pub(crate) extern "system" fn apply_buff(
     me: ModHandle,
-    request: *const enshwick::abi::BuffRequest,
+    request: *const enshwick_core::abi::BuffRequest,
 ) -> Status {
     entry("apply_buff", || {
         // SAFETY: the caller passes null or a request with its header; an
         // all-zero request is valid.
         let Some(request) = (unsafe {
-            enshwick::abi::read_headed(
+            enshwick_core::abi::read_headed(
                 request,
-                <enshwick::abi::BuffRequest as enshwick::abi::Headed>::BORN,
+                <enshwick_core::abi::BuffRequest as enshwick_core::abi::Headed>::BORN,
             )
         }) else {
             return Status::BAD_ARGS;
@@ -769,7 +775,7 @@ pub(crate) extern "system" fn apply_buff(
 pub(crate) extern "system" fn remove_buff(
     me: ModHandle,
     entity: Entity,
-    id: enshwick::abi::BuffTypeId,
+    id: enshwick_core::abi::BuffTypeId,
     removed: *mut u8,
 ) -> Status {
     entry("remove_buff", || {
@@ -786,8 +792,8 @@ pub(crate) extern "system" fn remove_buff(
 pub(crate) extern "system" fn knowledge(
     me: ModHandle,
     entity: Entity,
-    id: enshwick::abi::KnowledgeId,
-    out: *mut enshwick::abi::KnowledgeInfo,
+    id: enshwick_core::abi::KnowledgeId,
+    out: *mut enshwick_core::abi::KnowledgeInfo,
 ) -> Status {
     entry("knowledge", || {
         match caller(me).and_then(|loader| crate::knowledge::value(loader, entity, id.get())) {
@@ -826,7 +832,7 @@ pub(crate) extern "system" fn game_query(
 pub(crate) extern "system" fn revoke_knowledge(
     me: ModHandle,
     entity: Entity,
-    id: enshwick::abi::KnowledgeId,
+    id: enshwick_core::abi::KnowledgeId,
     kind: u32,
     value: u32,
 ) -> Status {
@@ -842,8 +848,8 @@ pub(crate) extern "system" fn revoke_knowledge(
 
 pub(crate) extern "system" fn account_knowledge(
     me: ModHandle,
-    key: enshwick::PlayerKey,
-    id: enshwick::abi::KnowledgeId,
+    key: enshwick_core::PlayerKey,
+    id: enshwick_core::abi::KnowledgeId,
     kind: u32,
     value: u32,
     revoke: u32,
@@ -868,7 +874,7 @@ pub(crate) extern "system" fn account_knowledge(
 pub(crate) extern "system" fn grant_knowledge(
     me: ModHandle,
     entity: Entity,
-    id: enshwick::abi::KnowledgeId,
+    id: enshwick_core::abi::KnowledgeId,
     kind: u32,
     value: u32,
 ) -> Status {
@@ -884,7 +890,7 @@ pub(crate) extern "system" fn grant_knowledge(
 
 pub(crate) extern "system" fn quests(
     me: ModHandle,
-    out: *mut enshwick::abi::KnowledgeId,
+    out: *mut enshwick_core::abi::KnowledgeId,
     capacity: u32,
     count: *mut u32,
 ) -> Status {
@@ -899,7 +905,7 @@ pub(crate) extern "system" fn quests(
                         let slot = unsafe { out.add(i) };
                         // SAFETY: `slot` is inside the `capacity` writable,
                         // aligned ids the ABI has the mod pass at `out`.
-                        unsafe { slot.write(enshwick::abi::KnowledgeId::new(*id)) };
+                        unsafe { slot.write(enshwick_core::abi::KnowledgeId::new(*id)) };
                     }
                 }
                 // SAFETY: `HostApi::quests` has the mod pass `count` null or

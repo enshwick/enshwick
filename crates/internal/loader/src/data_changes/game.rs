@@ -12,12 +12,12 @@ use core::ffi::c_void;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use arc_swap::ArcSwap;
-use enshwick::abi::{Level, ResourceKey, Status};
-use enshwick::content::Guid;
-use enshwick::content::changes::{Change, Entry, Field};
-use enshwick::content::containers::{ContainerLayout, container_slots};
-use enshwick::content::loot_tables::LootLayout;
-use enshwick::content::recipes::{RECIPE_REGISTRY, RecipeLayout};
+use enshwick_core::abi::{Level, ResourceKey, Status};
+use enshwick_core::content::Guid;
+use enshwick_core::content::changes::{Change, Entry, Field};
+use enshwick_core::content::containers::{ContainerLayout, container_slots};
+use enshwick_core::content::loot_tables::LootLayout;
+use enshwick_core::content::recipes::{RECIPE_REGISTRY, RecipeLayout};
 use enshwick_gamedata::catalogue;
 use enshwick_gamedata::reflect::Reflection;
 use rustc_hash::FxHashMap;
@@ -35,8 +35,8 @@ use super::{
     Conflict, Declared, ItemOffsets, Kept, Merged, Pending, Picked, Raised, Selectable,
     TraitOffsets, UNSET, expand, grouped, merge, traits_of,
 };
-use enshwick::abi::ChangeId;
-use enshwick::content::changes::{ItemTraits, ItemsChange, RecipesChange, Value};
+use enshwick_core::abi::ChangeId;
+use enshwick_core::content::changes::{ItemTraits, ItemsChange, RecipesChange, Value};
 
 /// The domain's state: changes as mods declare them, what the end of init
 /// sealed, and the stack sizes raised so far.
@@ -165,7 +165,7 @@ pub(crate) enum LiveTarget {
     /// One entry.
     Entry(Guid, String),
     /// Every vanilla item a selection picks.
-    Items(enshwick::content::changes::Items, String),
+    Items(enshwick_core::content::changes::Items, String),
 }
 
 /// Puts `value` in force for mod `owner`'s change `id`, or takes the
@@ -283,7 +283,7 @@ pub(crate) fn wanted(loader: &Loader) -> bool {
     );
     declared
         || kept
-        || enshwick::state::holds(&loader.mods_dir)
+        || enshwick_core::state::holds(&loader.mods_dir)
             .iter()
             .any(|(id, _)| loader.mods.iter().any(|m| m.pack && &m.id == id))
 }
@@ -350,7 +350,11 @@ fn edited(merged: &Merged) -> Vec<Guid> {
 /// its pointer. Called once, when the served resources are sealed.
 pub(crate) fn serve(
     loader: &'static Loader,
-) -> Vec<(ResourceKey, enshwick::abi::ResourcePatchFn, *mut c_void)> {
+) -> Vec<(
+    ResourceKey,
+    enshwick_core::abi::ResourcePatchFn,
+    *mut c_void,
+)> {
     let mut open = CHANGES.declared.relock();
     let pending = std::mem::take(&mut *open);
     let (declared, picked) = expand_from_game(loader, pending);
@@ -426,7 +430,7 @@ pub(crate) fn serve(
         let patch: &'static ItemPatch = Box::leak(Box::new(ItemPatch { item, offsets }));
         let key = item.key_by_hash(crate::catalogue::types::ITEM_INFO);
         let user = core::ptr::from_ref(patch).cast_mut().cast::<c_void>();
-        patches.push((key, build_item as enshwick::abi::ResourcePatchFn, user));
+        patches.push((key, build_item as enshwick_core::abi::ResourcePatchFn, user));
     }
     if let Some(patch) = recipe_patch(loader) {
         patches.push(patch);
@@ -637,7 +641,7 @@ mod tests {
     /// kind pick vanilla items.
     #[test]
     fn each_kind_of_selection_picks_vanilla_items_on_each_executable() {
-        use enshwick::content::changes::Items;
+        use enshwick_core::content::changes::Items;
         use enshwick_gamedata::reflect::{Image, Layout};
         for var in ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"] {
             let Ok(path) = std::env::var(var) else {

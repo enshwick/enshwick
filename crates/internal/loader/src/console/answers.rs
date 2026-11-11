@@ -3,8 +3,8 @@
 
 use std::fmt::Write as _;
 
-use enshwick::abi::Side;
-use enshwick::content::Guid;
+use enshwick_core::abi::Side;
+use enshwick_core::content::Guid;
 
 /// Placed pieces [`Placed`] keeps, newest last.
 pub const REMEMBERED: usize = 32;

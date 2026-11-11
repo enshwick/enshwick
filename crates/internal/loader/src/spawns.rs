@@ -9,8 +9,8 @@
 
 use std::sync::{Mutex, OnceLock};
 
-use enshwick::Entity;
-use enshwick::abi::{SpawnRequest, Status};
+use enshwick_core::Entity;
+use enshwick_core::abi::{SpawnRequest, Status};
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use crate::host::Loader;

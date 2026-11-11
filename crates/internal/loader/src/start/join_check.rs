@@ -52,7 +52,7 @@ pub(super) fn link_join(loader: &Loader) {
                 Target::Found(pinned::net::JOIN_GAME.id(), Some(join)),
                 &crate::join::NEXT,
                 crate::join::detour,
-                enshwick::abi::HookFlags::NONE,
+                enshwick_core::abi::HookFlags::NONE,
             );
             if linked {
                 link_join_hold(loader, code);
@@ -114,7 +114,7 @@ fn link_join_hold(loader: &Loader, code: core::ops::Range<u64>) {
         Target::Found(pinned::user::START_INTERACTION.id(), Some(start)),
         &interaction::NEXT,
         interaction::detour,
-        enshwick::abi::HookFlags::NONE,
+        enshwick_core::abi::HookFlags::NONE,
     );
 }
 

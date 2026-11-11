@@ -14,13 +14,13 @@ autotests = false
 
 [dependencies]
 arc-swap.workspace = true
-enshwick = { workspace = true, features = ["typed"] }
+enshwick-core = { workspace = true, features = ["typed"] }
 thiserror.workspace = true
 toml.workspace = true
 mlua.workspace = true
 
 [dev-dependencies]
-enshwick = { workspace = true, features = ["test"] }
+enshwick = { workspace = true, features = ["test", "typed"] }
 criterion.workspace = true
 proptest.workspace = true
 enshwick-gamedata.workspace = true

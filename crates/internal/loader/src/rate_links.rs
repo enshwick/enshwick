@@ -6,8 +6,8 @@
 
 use std::sync::OnceLock;
 
-use enshwick::abi::{Event, HookFlags, RateId, Status};
-use enshwick::content::recipes::RecipeLayout;
+use enshwick_core::abi::{Event, HookFlags, RateId, Status};
+use enshwick_core::content::recipes::RecipeLayout;
 
 use crate::chains::Next;
 use crate::fuse::Fuse;
@@ -326,7 +326,7 @@ static RECIPE_RATES: RecipeRates = RecipeRates {
 
 /// The loader's patch of the recipe registry for the recipe output rates,
 /// when a mod declared one and the build reflects the recipe layout.
-pub(crate) fn recipe_patch(loader: &Loader) -> Option<enshwick::abi::ResourcePatchFn> {
+pub(crate) fn recipe_patch(loader: &Loader) -> Option<enshwick_core::abi::ResourcePatchFn> {
     if !recipes_rated() {
         return None;
     }
@@ -337,7 +337,7 @@ pub(crate) fn recipe_patch(loader: &Loader) -> Option<enshwick::abi::ResourcePat
     });
     layout
         .is_some()
-        .then_some(scale_recipes as enshwick::abi::ResourcePatchFn)
+        .then_some(scale_recipes as enshwick_core::abi::ResourcePatchFn)
 }
 
 /// Builds the recipe registry again with the factors in force, once every
@@ -376,7 +376,7 @@ pub(crate) fn world_event(event: Event) {
 /// # Safety
 ///
 /// - `base` is valid for `len` bytes for the call, and `out` and `out_len`
-///   are writable, as [`enshwick::abi::ResourcePatchFn`] says.
+///   are writable, as [`enshwick_core::abi::ResourcePatchFn`] says.
 unsafe extern "system" fn scale_recipes(
     base: *const u8,
     len: usize,

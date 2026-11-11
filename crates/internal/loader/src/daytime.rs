@@ -23,7 +23,7 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use enshwick::abi::{DaytimeInfo, Event, Header, HookFlags, Status};
+use enshwick_core::abi::{DaytimeInfo, Event, Header, HookFlags, Status};
 
 use crate::chains::Next;
 use crate::host::{Loader, Target, is_off, take};
@@ -372,7 +372,7 @@ unsafe extern "system" fn speed(daytime: *mut u8, game: f32, now: i64) {
             // live `Daytime` the game passed to `daytime.set_speed`; the
             // table's `daytime.speed` offset holds its `f32` speed, which the
             // setter writes only after this read.
-            let current: f32 = unsafe { enshwick::raw::read_at(daytime, at) };
+            let current: f32 = unsafe { enshwick_core::raw::read_at(daytime, at) };
             if same(current, wanted) {
                 return;
             }

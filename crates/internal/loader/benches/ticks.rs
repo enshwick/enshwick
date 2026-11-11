@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use enshwick::abi::Event;
+use enshwick_core::abi::Event;
 use enshwick_loader::mod_index::ModIndex;
 use enshwick_loader::ticks::{StepTime, Ticks};
 

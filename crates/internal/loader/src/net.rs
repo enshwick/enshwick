@@ -20,9 +20,9 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use enshwick::Entity;
-use enshwick::abi::{Header, NetMessage, NetMessageFn, Status};
-use enshwick::i18n::Language;
+use enshwick_core::Entity;
+use enshwick_core::abi::{Header, NetMessage, NetMessageFn, Status};
+use enshwick_core::i18n::Language;
 use rustc_hash::FxHashMap;
 
 use crate::host::{Loader, Registered};
@@ -215,7 +215,7 @@ fn deliver(channel: u32, peer: u64, data: &[u8]) {
         header: Header::of::<NetMessage>(),
         channel,
         reserved: 0,
-        peer: enshwick::PlayerKey::new(peer),
+        peer: enshwick_core::PlayerKey::new(peer),
         data: data.as_ptr(),
         size: u32::try_from(data.len()).unwrap_or(0),
         reserved_tail: 0,
@@ -480,7 +480,7 @@ pub(crate) fn send(
     if peer == NetMessage::SERVER.get() {
         return send_to_server(channel, data);
     }
-    let serving = crate::world::hosting() || loader.side == enshwick::abi::Side::SERVER;
+    let serving = crate::world::hosting() || loader.side == enshwick_core::abi::Side::SERVER;
     if !serving {
         return Err(Status::WRONG_THREAD);
     }

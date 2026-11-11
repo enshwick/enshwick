@@ -28,7 +28,7 @@ use core::cell::{Cell, RefCell};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
-use enshwick::abi::{
+use enshwick_core::abi::{
     HookFlags, Side, Status, Str, UiAnswerFn, UiDialog, UiFrame, UiFrameFn, UiWidget,
 };
 

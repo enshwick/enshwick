@@ -12,13 +12,13 @@ use core::cell::RefCell;
 use std::sync::Arc;
 
 use arc_swap::ArcSwapOption;
-use enshwick::PlayerKey;
-use enshwick::abi::UiWidget;
-use enshwick::actions::Value;
-use enshwick::actions::sheet::{ArgView, Entry, encode_args};
-use enshwick::actions::window::{ButtonView, ItemView, View, decode};
-use enshwick::content::Guid;
-use enshwick::ui::MAX_OPTIONS;
+use enshwick_core::PlayerKey;
+use enshwick_core::abi::UiWidget;
+use enshwick_core::actions::Value;
+use enshwick_core::actions::sheet::{ArgView, Entry, encode_args};
+use enshwick_core::actions::window::{ButtonView, ItemView, View, decode};
+use enshwick_core::content::Guid;
+use enshwick_core::ui::MAX_OPTIONS;
 
 use super::engine::{Engine, Scroll, TextBuffer, Window};
 use super::{Painter, copy};

@@ -1,8 +1,8 @@
 //! Host functions for the world: players, entities, chat, time, settings, weather, terrain, voxels and build rights.
 
-use enshwick::Entity;
-use enshwick::abi as api_frame;
-use enshwick::abi::{AccountActionType, Level, ModHandle, Side, Status, Str};
+use enshwick_core::Entity;
+use enshwick_core::abi as api_frame;
+use enshwick_core::abi::{AccountActionType, Level, ModHandle, Side, Status, Str};
 
 use crate::console::accounts::Act;
 use crate::host::memory::{put, put_headed, put_headed_list, text};
@@ -98,7 +98,11 @@ pub(crate) extern "system" fn server_world() -> u64 {
     entry("server_world", crate::world::server_world)
 }
 
-pub(crate) extern "system" fn chat(me: ModHandle, to: enshwick::PlayerKey, message: Str) -> Status {
+pub(crate) extern "system" fn chat(
+    me: ModHandle,
+    to: enshwick_core::PlayerKey,
+    message: Str,
+) -> Status {
     entry("chat", || {
         let Some(message) = text(message) else {
             return Status::BAD_ARGS;
@@ -286,7 +290,7 @@ pub(crate) extern "system" fn run_action_at(
     me: ModHandle,
     action: Str,
     args: Str,
-    target: *const enshwick::abi::ActionTarget,
+    target: *const enshwick_core::abi::ActionTarget,
 ) -> Status {
     entry("run_action_at", || {
         let (loader, _, record) = match calling(me) {
@@ -302,7 +306,7 @@ pub(crate) extern "system" fn run_action_at(
         // SAFETY: `HostApi::run_action_at` has the mod pass `target` null or
         // a live `ActionTarget` readable for the size its header states, for
         // the call.
-        let target = match unsafe { enshwick::abi::ActionTarget::read(target) } {
+        let target = match unsafe { enshwick_core::abi::ActionTarget::read(target) } {
             Ok(target) => target,
             Err(status) => return status,
         };
@@ -438,7 +442,7 @@ pub(crate) extern "system" fn world_quiet(me: ModHandle) -> Status {
 
 pub(crate) extern "system" fn map_markers(
     me: ModHandle,
-    out: *mut enshwick::abi::MapMarkerInfo,
+    out: *mut enshwick_core::abi::MapMarkerInfo,
     entry_size: u32,
     capacity: u32,
     count: *mut u32,
@@ -457,7 +461,7 @@ pub(crate) extern "system" fn map_markers(
 
 pub(crate) extern "system" fn map_frame(
     me: ModHandle,
-    out: *mut enshwick::abi::MapFrameInfo,
+    out: *mut enshwick_core::abi::MapFrameInfo,
 ) -> Status {
     entry("map_frame", || {
         match caller(me).and_then(crate::scene::frame_info) {
@@ -516,15 +520,15 @@ pub(crate) extern "system" fn emit(
 
 pub(crate) extern "system" fn teleport(
     me: ModHandle,
-    request: *const enshwick::abi::TeleportRequest,
+    request: *const enshwick_core::abi::TeleportRequest,
 ) -> Status {
     entry("teleport", || {
         // SAFETY: the caller passes null or a request with its header; an
         // all-zero request is valid.
         let Some(request) = (unsafe {
-            enshwick::abi::read_headed(
+            enshwick_core::abi::read_headed(
                 request,
-                <enshwick::abi::TeleportRequest as enshwick::abi::Headed>::BORN,
+                <enshwick_core::abi::TeleportRequest as enshwick_core::abi::Headed>::BORN,
             )
         }) else {
             return Status::BAD_ARGS;
@@ -538,16 +542,16 @@ pub(crate) extern "system" fn teleport(
 
 pub(crate) extern "system" fn spawn(
     me: ModHandle,
-    request: *const enshwick::abi::SpawnRequest,
+    request: *const enshwick_core::abi::SpawnRequest,
     out: *mut Entity,
 ) -> Status {
     entry("spawn", || {
         // SAFETY: the caller passes null or a request with its header; an
         // all-zero request is valid.
         let Some(request) = (unsafe {
-            enshwick::abi::read_headed(
+            enshwick_core::abi::read_headed(
                 request,
-                <enshwick::abi::SpawnRequest as enshwick::abi::Headed>::BORN,
+                <enshwick_core::abi::SpawnRequest as enshwick_core::abi::Headed>::BORN,
             )
         }) else {
             return Status::BAD_ARGS;
@@ -562,7 +566,11 @@ pub(crate) extern "system" fn spawn(
     })
 }
 
-pub(crate) extern "system" fn notify(me: ModHandle, key: enshwick::PlayerKey, text: Str) -> Status {
+pub(crate) extern "system" fn notify(
+    me: ModHandle,
+    key: enshwick_core::PlayerKey,
+    text: Str,
+) -> Status {
     entry("notify", || {
         // SAFETY: the text is borrowed for the call.
         let Some(text) = (unsafe { text.as_str() }) else {
@@ -577,7 +585,7 @@ pub(crate) extern "system" fn notify(me: ModHandle, key: enshwick::PlayerKey, te
 
 pub(crate) extern "system" fn time_of_day(
     me: ModHandle,
-    out: *mut enshwick::abi::DaytimeInfo,
+    out: *mut enshwick_core::abi::DaytimeInfo,
 ) -> Status {
     entry("time_of_day", || {
         match caller(me).and_then(crate::daytime::info) {
@@ -725,7 +733,7 @@ pub(crate) extern "system" fn weather_at(
 
 pub(crate) extern "system" fn weather_fronts(
     me: ModHandle,
-    out: *mut enshwick::abi::WeatherFront,
+    out: *mut enshwick_core::abi::WeatherFront,
     capacity: u32,
     count: *mut u32,
 ) -> Status {
@@ -753,7 +761,7 @@ pub(crate) extern "system" fn set_weather(me: ModHandle, effect: u32, duration: 
 
 pub(crate) extern "system" fn terrain_materials(
     me: ModHandle,
-    out: *mut enshwick::abi::TerrainMaterialInfo,
+    out: *mut enshwick_core::abi::TerrainMaterialInfo,
     capacity: u32,
     count: *mut u32,
 ) -> Status {
@@ -773,16 +781,16 @@ pub(crate) extern "system" fn terrain_materials(
 
 pub(crate) extern "system" fn terrain_edit(
     me: ModHandle,
-    edit: *const enshwick::abi::TerrainEdit,
+    edit: *const enshwick_core::abi::TerrainEdit,
     amount: *mut f32,
 ) -> Status {
     entry("terrain_edit", || {
         // SAFETY: the caller passes null or an edit with its header; an
         // all-zero edit is valid.
         let Some(edit) = (unsafe {
-            enshwick::abi::read_headed(
+            enshwick_core::abi::read_headed(
                 edit,
-                <enshwick::abi::TerrainEdit as enshwick::abi::Headed>::BORN,
+                <enshwick_core::abi::TerrainEdit as enshwick_core::abi::Headed>::BORN,
             )
         }) else {
             return Status::BAD_ARGS;
@@ -804,7 +812,7 @@ pub(crate) extern "system" fn voxel_read(
     me: ModHandle,
     min: *const [u32; 3],
     size: *const [u32; 3],
-    out: *mut enshwick::abi::Voxel,
+    out: *mut enshwick_core::abi::Voxel,
     capacity: u64,
 ) -> Status {
     entry("voxel_read", || {
@@ -848,15 +856,18 @@ pub(crate) extern "system" fn voxel_read(
 
 pub(crate) extern "system" fn build_rights(
     me: ModHandle,
-    check: *mut enshwick::abi::BuildRights,
+    check: *mut enshwick_core::abi::BuildRights,
 ) -> Status {
-    use enshwick::abi::BuildRights;
+    use enshwick_core::abi::BuildRights;
     entry("build_rights", || {
         // SAFETY: `HostApi::build_rights` has the mod pass `check` null or
         // pointing at a `BuildRights` readable for the size its header
         // states, borrowed for the call.
         let Some(mut request) = (unsafe {
-            enshwick::abi::read_headed(check, <BuildRights as enshwick::abi::Headed>::BORN)
+            enshwick_core::abi::read_headed(
+                check,
+                <BuildRights as enshwick_core::abi::Headed>::BORN,
+            )
         }) else {
             return Status::BAD_ARGS;
         };
@@ -868,7 +879,7 @@ pub(crate) extern "system" fn build_rights(
         // SAFETY: `check` is non-null (read above) and `HostApi::build_rights`
         // has the mod pass it writable for the size its header states,
         // untouched by other threads during the call.
-        if unsafe { enshwick::abi::write_headed(check, request) } {
+        if unsafe { enshwick_core::abi::write_headed(check, request) } {
             Status::OK
         } else {
             Status::BAD_ARGS
@@ -918,7 +929,7 @@ pub(crate) extern "system" fn world_persists(
 pub(crate) extern "system" fn account_action(
     me: ModHandle,
     action: AccountActionType,
-    account: enshwick::PlayerKey,
+    account: enshwick_core::PlayerKey,
 ) -> Status {
     entry("account_action", || {
         let act = match action {
@@ -939,11 +950,11 @@ pub(crate) extern "system" fn account_action(
 /// `HostApi::chat_mute_set`: mutes `account` in chat or lifts its mute.
 pub(crate) extern "system" fn chat_mute_set(
     me: ModHandle,
-    account: enshwick::PlayerKey,
+    account: enshwick_core::PlayerKey,
     muted: u8,
 ) -> Status {
     entry("chat_mute_set", || {
-        if account == enshwick::PlayerKey::new(0) || muted > 1 {
+        if account == enshwick_core::PlayerKey::new(0) || muted > 1 {
             return Status::BAD_ARGS;
         }
         let (loader, record) = match calling(me) {
@@ -967,11 +978,11 @@ pub(crate) extern "system" fn chat_mute_set(
 /// `HostApi::chat_mute_has`: whether `account` is muted in chat.
 pub(crate) extern "system" fn chat_mute_has(
     me: ModHandle,
-    account: enshwick::PlayerKey,
+    account: enshwick_core::PlayerKey,
     muted: *mut u8,
 ) -> Status {
     entry("chat_mute_has", || {
-        if account == enshwick::PlayerKey::new(0) || muted.is_null() {
+        if account == enshwick_core::PlayerKey::new(0) || muted.is_null() {
             return Status::BAD_ARGS;
         }
         let loader = match caller(me) {

@@ -1,7 +1,7 @@
 //! Host functions for hooks and code patches.
 
-use enshwick::abi as api_frame;
-use enshwick::abi::{HookSpec, MidHookSpec, ModHandle, Status};
+use enshwick_core::abi as api_frame;
+use enshwick_core::abi::{HookSpec, MidHookSpec, ModHandle, Status};
 
 use crate::chains::Link;
 use crate::host::memory::{put, slice};

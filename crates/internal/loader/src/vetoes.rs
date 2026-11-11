@@ -18,10 +18,10 @@
 use core::ffi::c_void;
 use std::sync::OnceLock;
 
-use enshwick::abi::{
+use enshwick_core::abi::{
     BuildCheck, BuildCheckFn, CraftCheck, CraftCheckFn, Header, HookFlags, Status, Str,
 };
-use enshwick::raw::{read_at, read_ptr_at, write_at};
+use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
 use crate::chains::Next;
 use crate::host::{Loader, Registered, Target};
@@ -219,13 +219,13 @@ pub(crate) unsafe fn screen(type_hash: u32, payload: *mut u8, size: usize) {
     let amount: u16 = unsafe { read_at(payload, layout.amount) };
     let call = CraftCheck {
         header: Header::of::<CraftCheck>(),
-        crafting_operator_id: enshwick::Entity(player),
-        crafting_station_id: enshwick::Entity(station),
-        recipe_id: enshwick::RecipeId::new(recipe),
+        crafting_operator_id: enshwick_core::Entity(player),
+        crafting_station_id: enshwick_core::Entity(station),
+        recipe_id: enshwick_core::RecipeId::new(recipe),
         recipe_amount: amount,
         reserved: 0,
     };
-    if call.crafting_operator_id == enshwick::Entity(0) {
+    if call.crafting_operator_id == enshwick_core::Entity(0) {
         return;
     }
     let disabled = crate::recipes::is_disabled(call.recipe_id.get());
@@ -332,8 +332,8 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
     let mut reason = Str::new("");
     let call = BuildCheck {
         header: Header::of::<BuildCheck>(),
-        player: enshwick::Entity(player),
-        item: enshwick::ItemId::new(item),
+        player: enshwick_core::Entity(player),
+        item: enshwick_core::ItemId::new(item),
         // SAFETY: `transform` is non-null (the null checks return first) and
         // the check's live cursor transform (the caller's contract), which
         // starts with its 32.32 position, three `i64`.
@@ -358,7 +358,7 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
         // until its next call on this thread, which comes after this read.
         if let Some(text) = unsafe { reason.as_str() } {
             let server = crate::host::loader()
-                .is_some_and(|loader| loader.side == enshwick::abi::Side::SERVER)
+                .is_some_and(|loader| loader.side == enshwick_core::abi::Side::SERVER)
                 // SAFETY: `system` is the cursor's system context, null or
                 // live, on the thread running that system (the caller's
                 // contract), all `is_world` asks for.

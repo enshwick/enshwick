@@ -16,7 +16,7 @@ pub(crate) enum Skip {
     /// It exports the interface's version but not all four functions.
     NotAMod,
     /// It was built for another ABI major, as its `enshwick_mod_abi` says.
-    OtherAbi(enshwick::abi::CheckAbiError),
+    OtherAbi(enshwick_core::abi::CheckAbiError),
     /// Its manifest does not read or parse.
     Manifest(ManifestError),
     /// Another file in `mods/` holds the same mod and runs instead.
@@ -91,7 +91,7 @@ mod tests {
 
     #[test]
     fn a_mod_of_another_abi_names_what_to_do_with_its_code() {
-        let why = enshwick::abi::check_abi(1, 0).unwrap_err();
+        let why = enshwick_core::abi::check_abi(1, 0).unwrap_err();
         let line = Skip::OtherAbi(why).line("old.dll");
         assert_eq!(
             line,

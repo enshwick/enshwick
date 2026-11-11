@@ -9,7 +9,7 @@ use core::ffi::c_void;
 use std::sync::OnceLock;
 use std::sync::atomic::Ordering;
 
-use enshwick::abi::{Header, Side, Status, Str, UiExtension, UiFrame, UiFrameFn};
+use enshwick_core::abi::{Header, Side, Status, Str, UiExtension, UiFrame, UiFrameFn};
 use enshwick_gamedata::catalogue;
 
 use crate::host::{Loader, Registered};
@@ -91,7 +91,7 @@ pub(super) struct FrameReads {
     pub(super) hud_screen: Str,
     pub(super) prompt_title: Str,
     pub(super) prompt_verb: u32,
-    pub(super) screen_host: enshwick::Entity,
+    pub(super) screen_host: enshwick_core::Entity,
     /// The host's template, all zero before a step read it.
     pub(super) screen_host_template: [u8; 16],
     /// The host's fixed-point position, from the same step.
@@ -106,7 +106,7 @@ impl FrameReads {
         hud_screen: Str::EMPTY,
         prompt_title: Str::EMPTY,
         prompt_verb: 0,
-        screen_host: enshwick::Entity(0),
+        screen_host: enshwick_core::Entity(0),
         screen_host_template: [0; 16],
         screen_host_position: [0; 3],
     };
@@ -387,7 +387,7 @@ pub(super) unsafe fn frame_reads(engine: &Engine, context: usize, hosts_asked: b
         hud_screen: screen_name(linked, Some(screen)),
         prompt_title,
         prompt_verb,
-        screen_host: enshwick::Entity(host),
+        screen_host: enshwick_core::Entity(host),
         screen_host_template: template,
         screen_host_position: position,
     }

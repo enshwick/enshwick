@@ -2,8 +2,8 @@
 //! 1 until set, so the loader patches what it reaches from the first read
 //! and a later set rebuilds in place.
 
-use enshwick::abi::ChangeId;
-use enshwick::content::changes::Value;
+use enshwick_core::abi::ChangeId;
+use enshwick_core::content::changes::Value;
 
 use super::{Declared, Pending};
 use crate::mod_index::ModIndex;
@@ -54,8 +54,8 @@ pub fn set_pending(pending: &mut [Pending], owner: ModIndex, id: ChangeId, value
 
 #[cfg(test)]
 mod tests {
-    use enshwick::content::Guid;
-    use enshwick::content::changes::{Change, Field};
+    use enshwick_core::content::Guid;
+    use enshwick_core::content::changes::{Change, Field};
 
     use super::*;
     use crate::data_changes::{Key, merge};
@@ -112,7 +112,7 @@ mod tests {
 
     #[test]
     fn a_set_before_the_seal_reaches_its_change_alone() {
-        use enshwick::content::changes::{Items, ItemsChange};
+        use enshwick_core::content::changes::{Items, ItemsChange};
         let mut pending = vec![
             Pending::One(change(1, 1, UNSET, Some(1))),
             Pending::Each {

@@ -12,7 +12,7 @@ use core::ops::Range;
 use core::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
-use enshwick::abi::{HookFlags, Side};
+use enshwick_core::abi::{HookFlags, Side};
 use enshwick_gamedata::Resolved;
 
 use super::Fields;

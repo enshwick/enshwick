@@ -5,7 +5,7 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use enshwick::abi::RecipeKind;
+use enshwick_core::abi::RecipeKind;
 use enshwick_loader::item_kinds::{CAPACITY, Classes, ItemKindLayout, ItemKinds, TagLayout};
 
 /// Items the vanilla game and a few mods load, about.

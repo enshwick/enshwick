@@ -2,7 +2,7 @@
 
 use std::collections::VecDeque;
 
-use enshwick::abi::{Header, Status, TransactionInfo};
+use enshwick_core::abi::{Header, Status, TransactionInfo};
 
 use super::{Bricks, Change, Ledger, Limits, Mode, Op, Outcome, Pass, Record, Task, Voxels, Work};
 use crate::mod_index::ModIndex;

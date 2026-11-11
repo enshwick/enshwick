@@ -4,8 +4,8 @@
 
 use std::sync::OnceLock;
 
-use enshwick::Entity;
-use enshwick::raw::{read_at, read_ptr_at, write_at};
+use enshwick_core::Entity;
+use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
 use crate::host::Loader;
 use crate::pinned;

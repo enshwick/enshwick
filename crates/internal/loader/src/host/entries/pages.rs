@@ -1,6 +1,6 @@
 //! Host functions for the game's memory pages: how far a read-only run reaches.
 
-use enshwick::abi::{ModHandle, Status};
+use enshwick_core::abi::{ModHandle, Status};
 
 use crate::host::entry;
 use crate::host::memory::put;

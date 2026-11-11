@@ -3,14 +3,16 @@
 //! code forbids it at its root, the `test` feature is never on by default or
 //! through a normal or build dependency, only where a target asks for it,
 //! only the API crate's `test` feature reaches the fake loader, whose crate
-//! alone turns on the core's `fake`,
-//! a package that builds a DLL, such as a mod, names its version, features
+//! alone turns on the core's `fake`, a platform crate depends on the API
+//! crate only for its tests, a package that builds a DLL, such as a mod, names its version, features
 //! name what they add, `anyhow` stays in binaries, `rust-version` is the
 //! pinned toolchain's, and a published crate's path dependencies carry
 //! versions.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+use crate::affected::Package;
 
 /// The test-only feature of the API and of any crate that has one.
 const TEST: &str = "test";
@@ -26,12 +28,13 @@ const CRATE_KINDS: [&str; 7] = [
     "bin",
 ];
 
-/// The problems of the workspace's crates, one line each.
+/// The problems of the workspace's crates, one line each; `packages` says
+/// where each one lies.
 ///
 /// # Errors
 ///
 /// When `cargo metadata` does not run or its output does not read.
-pub(crate) fn check() -> Result<Vec<String>, String> {
+pub(crate) fn check(packages: &[Package]) -> Result<Vec<String>, String> {
     let output = Command::new(crate::cargo())
         .args(["metadata", "--format-version", "1", "--no-deps"])
         .output()
@@ -49,6 +52,12 @@ pub(crate) fn check() -> Result<Vec<String>, String> {
         let dir = manifest.parent().unwrap_or(Path::new("."));
         problems.extend(test_feature(name, package));
         problems.extend(fake_reach(name, package));
+        if packages
+            .iter()
+            .any(|p| p.name == name && in_platform_dir(&p.dir))
+        {
+            problems.extend(facade_use(name, package));
+        }
         problems.extend(manifest_facts(name, package, &toolchain));
         let builds_a_dll = package["targets"]
             .as_array()
@@ -186,6 +195,36 @@ fn fake_reach(name: &str, package: &serde_json::Value) -> Vec<String> {
         }
     }
     problems
+}
+
+/// The workspace folders of the platform's own crates, which name the
+/// internal crate they need; the mods in `examples/` depend on [`FACADE`].
+const PLATFORM_DIRS: [&str; 2] = ["crates", "tools"];
+
+/// Whether the package folder `dir` (relative to the workspace, with `/`)
+/// lies in one of the [`PLATFORM_DIRS`].
+fn in_platform_dir(dir: &str) -> bool {
+    dir.split('/')
+        .next()
+        .is_some_and(|first| PLATFORM_DIRS.contains(&first))
+}
+
+/// The problems of `package`, a platform crate, depending on [`FACADE`]
+/// other than for its tests: it names the layer it needs, so the facade
+/// stays what only mods build on.
+fn facade_use(name: &str, package: &serde_json::Value) -> Vec<String> {
+    package["dependencies"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|dependency| dependency["name"] == FACADE && dependency["kind"] != "dev")
+        .map(|dependency| {
+            format!(
+                "{name}: its {} dependency {FACADE} is the mods' crate; name the internal crate it needs, such as {CORE}, and keep {FACADE} for tests",
+                dependency["kind"].as_str().unwrap_or("normal")
+            )
+        })
+        .collect()
 }
 
 /// The feature prefixes that say how a feature adds instead of what it adds.
@@ -600,6 +639,41 @@ mod tests {
                 "a: its feature `extra` turns on enshwick-core/fake; only enshwick-fake may",
                 "a: it depends on enshwick-fake; a test reaches the fake through enshwick's `test`",
                 "a: its dev dependency enshwick-core turns on `fake`; only enshwick-fake may",
+            ]
+        );
+    }
+
+    #[test]
+    fn the_crates_and_tools_folders_hold_the_platform_and_examples_do_not() {
+        assert!(in_platform_dir("crates/internal/loader"));
+        assert!(in_platform_dir("tools/xtask"));
+        assert!(!in_platform_dir("examples/horn"));
+        assert!(!in_platform_dir(""));
+        assert!(!in_platform_dir("crates-old/a"));
+    }
+
+    #[test]
+    fn a_platform_crate_depends_on_the_facade_only_for_its_tests() {
+        let loader = serde_json::json!({
+            "dependencies": [
+                { "name": "enshwick", "kind": null },
+                { "name": "enshwick", "kind": "build" },
+                { "name": "enshwick", "kind": "dev", "features": ["test"] },
+                { "name": "enshwick-core", "kind": null },
+                { "name": "enshwick", "kind": null, "rename": "api" },
+                { "name": "enshwick", "kind": null, "target": "cfg(windows)" },
+                { "name": "enshwick", "kind": null, "optional": true },
+            ],
+        });
+        let normal = "loader: its normal dependency enshwick is the mods' crate; name the internal crate it needs, such as enshwick-core, and keep enshwick for tests";
+        assert_eq!(
+            facade_use("loader", &loader),
+            [
+                normal,
+                "loader: its build dependency enshwick is the mods' crate; name the internal crate it needs, such as enshwick-core, and keep enshwick for tests",
+                normal,
+                normal,
+                normal,
             ]
         );
     }

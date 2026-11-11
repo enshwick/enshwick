@@ -13,7 +13,7 @@ use std::collections::VecDeque;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick::abi::{BuildingData, Level};
+use enshwick_core::abi::{BuildingData, Level};
 
 use crate::locks::Relock;
 use crate::settings::LOADER_ID;
@@ -334,18 +334,18 @@ mod tests {
     #[test]
     fn only_the_latest_placed_pieces_are_kept_newest_first() {
         let piece = |entity, kind| BuildingData {
-            header: enshwick::abi::Header::of::<BuildingData>(),
+            header: enshwick_core::abi::Header::of::<BuildingData>(),
             entity,
-            player: enshwick::Entity(7),
-            item: enshwick::ItemId::new(1),
+            player: enshwick_core::Entity(7),
+            item: enshwick_core::ItemId::new(1),
             kind,
             replay: 0,
             template: [0; 16],
             position: [0.0; 3],
         };
         let built: Vec<BuildingData> = (0..40)
-            .map(|entity| piece(enshwick::Entity(entity), BuildingData::PLACED))
-            .chain([piece(enshwick::Entity(99), BuildingData::TORN_DOWN)])
+            .map(|entity| piece(enshwick_core::Entity(entity), BuildingData::PLACED))
+            .chain([piece(enshwick_core::Entity(99), BuildingData::TORN_DOWN)])
             .collect();
         remember(&built);
         let newest: Vec<u32> = newest(usize::MAX).iter().map(|p| p.entity).collect();

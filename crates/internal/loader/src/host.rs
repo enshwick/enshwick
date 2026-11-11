@@ -4,8 +4,10 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use enshwick::abi as api_frame;
-use enshwick::abi::{Event, EventFn, HookFlags, Level, Manifest, ModHandle, Side, Status, Str};
+use enshwick_core::abi as api_frame;
+use enshwick_core::abi::{
+    Event, EventFn, HookFlags, Level, Manifest, ModHandle, Side, Status, Str,
+};
 use enshwick_gamedata::reflect::{Fingerprint, Reflection};
 
 use crate::builds::KnownBuild;
@@ -60,7 +62,7 @@ pub(crate) struct ModRecord {
     /// The mod's checks of new settings texts, by file: callback and pointer.
     pub(crate) checks: Mutex<Vec<(String, api_frame::ConfigCheckFn, usize)>>,
     /// The texts the mod handed the loader, for its settings' labels.
-    pub(crate) texts: Mutex<Option<enshwick::i18n::Texts>>,
+    pub(crate) texts: Mutex<Option<enshwick_core::i18n::Texts>>,
     /// Whether it is a data pack, a folder of data the loader runs.
     pub(crate) pack: bool,
     /// The features it reported on or off, in the order it named them.
@@ -70,7 +72,7 @@ pub(crate) struct ModRecord {
 impl ModRecord {
     /// Its settings files seen as one, as the console and the Mods screen
     /// show them; `None` for a mod without settings.
-    pub(crate) fn settings_schema(&self) -> Option<enshwick::config::Schema> {
+    pub(crate) fn settings_schema(&self) -> Option<enshwick_core::config::Schema> {
         crate::worlds::view_schema(&self.settings_files.relock())
     }
 
@@ -121,7 +123,7 @@ impl ModRecord {
 
     /// The name players read, or the id when nothing names the mod.
     pub(crate) fn label(&self) -> String {
-        enshwick::mods::label(&self.name(), &self.id)
+        enshwick_core::mods::label(&self.name(), &self.id)
     }
 
     /// What the mod does, from its texts in the player's language, else
@@ -631,9 +633,9 @@ impl Loader {
     fn own_rows(
         &self,
         index: usize,
-    ) -> impl Iterator<Item = &'static enshwick::abi::BuildRow> + '_ {
+    ) -> impl Iterator<Item = &'static enshwick_core::abi::BuildRow> + '_ {
         let manifest = self.mods.get(index).map(|record| record.manifest);
-        let rows: &'static [enshwick::abi::BuildRow] = match manifest {
+        let rows: &'static [enshwick_core::abi::BuildRow] = match manifest {
             Some(m) if !m.builds.is_null() => {
                 // SAFETY: `manifest::read` refused every manifest shorter
                 // than `Manifest`, so `builds` and `build_count` were read

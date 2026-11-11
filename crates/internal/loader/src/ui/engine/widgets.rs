@@ -1,4 +1,4 @@
-use enshwick::abi::UiWidget;
+use enshwick_core::abi::UiWidget;
 
 use super::{
     BAR_HEIGHT, BUTTON_CONFIG, Buf, DROPDOWN_CONFIG, Engine, FRAME_SIZE, Icon, LABEL_SIZE,

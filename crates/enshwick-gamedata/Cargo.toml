@@ -17,7 +17,7 @@ publish = true
 test = []
 
 [dependencies]
-enshwick.workspace = true
+enshwick-core.workspace = true
 iced-x86.workspace = true
 memchr.workspace = true
 ruzstd.workspace = true

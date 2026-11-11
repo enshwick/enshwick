@@ -3,8 +3,8 @@
 
 use core::ffi::c_void;
 
-use enshwick::abi::Status;
-use enshwick::content::changes::Field;
+use enshwick_core::abi::Status;
+use enshwick_core::content::changes::Field;
 use enshwick_gamedata::catalogue;
 use rustc_hash::FxHashMap;
 
@@ -84,7 +84,7 @@ pub(super) unsafe extern "system" fn build_item(
     let mut bytes = vec![0; base_len];
     // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at `base`,
     // unchanged for the call.
-    unsafe { enshwick::raw::read_bytes_at(base, 0, &mut bytes) };
+    unsafe { enshwick_core::raw::read_bytes_at(base, 0, &mut bytes) };
     let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         changed_item(patch, &mut bytes);
     }));

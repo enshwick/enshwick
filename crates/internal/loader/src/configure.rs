@@ -5,7 +5,7 @@
 //! The answer and the file edit are pure logic here; the console runs the
 //! line, writes the file and raises the mod's settings event.
 
-use enshwick::config::{Field, Kind, Schema};
+use enshwick_core::config::{Field, Kind, Schema};
 use toml_edit::DocumentMut;
 
 use crate::texts;
@@ -51,7 +51,9 @@ fn current(text: &str, field: &Field) -> String {
     }
     text.parse::<toml::Table>()
         .ok()
-        .and_then(|table| enshwick::config::value_at(&table, &field.key).map(ToString::to_string))
+        .and_then(|table| {
+            enshwick_core::config::value_at(&table, &field.key).map(ToString::to_string)
+        })
         .unwrap_or_else(|| field.default.clone())
 }
 
@@ -99,7 +101,7 @@ pub fn refused(why: &str) -> String {
 /// schema section that does not read; a reason no text has shows as the
 /// mod gave it.
 #[must_use]
-pub fn mod_reason(texts: Option<&enshwick::i18n::Texts>, why: &str) -> String {
+pub fn mod_reason(texts: Option<&enshwick_core::i18n::Texts>, why: &str) -> String {
     texts
         .and_then(|texts| texts.reason(why, texts::language()))
         .or_else(|| from_api(why).then(|| texts::reason(why)).flatten())
@@ -107,7 +109,7 @@ pub fn mod_reason(texts: Option<&enshwick::i18n::Texts>, why: &str) -> String {
 }
 
 /// The reasons the API gives in the loader's texts, each key with the
-/// arguments `enshwick::__private` encodes for a section that does not read.
+/// arguments `enshwick_core::__private` encodes for a section that does not read.
 const API_REASONS: [(&str, &[&str]); 3] = [
     ("mods.off.section.newer", &["format", "reads"]),
     ("mods.off.section.older", &["format", "reads"]),
@@ -480,11 +482,11 @@ mod tests {
 
     #[test]
     fn a_mod_s_reason_that_names_a_text_reads_in_the_reader_s_language() {
-        let texts = enshwick::i18n::Texts::parse(
+        let texts = enshwick_core::i18n::Texts::parse(
             "[en]\n\"stalls.too-few\" = \"Too few stalls.\"\n[uk]\n\"stalls.too-few\" = \"Замало ятків.\"\n",
         )
         .unwrap();
-        let uk = Some(enshwick::i18n::Language::UK_UA);
+        let uk = Some(enshwick_core::i18n::Language::UK_UA);
         assert_eq!(
             mod_reason(Some(&texts), "stalls.too-few"),
             "Too few stalls."
@@ -498,11 +500,11 @@ mod tests {
             "limit is 1 to 16"
         );
         assert_eq!(mod_reason(None, "stalls.too-few"), "stalls.too-few");
-        let filled = enshwick::i18n::Texts::parse(
+        let filled = enshwick_core::i18n::Texts::parse(
             "[en]\n\"stalls.min\" = \"At least {min} stalls.\"\n[uk]\n\"stalls.min\" = \"Щонайменше {min} ятки.\"\n",
         )
         .unwrap();
-        let why = enshwick::config::ConfigError::text("stalls.min", &[("min", "2")]);
+        let why = enshwick_core::config::ConfigError::text("stalls.min", &[("min", "2")]);
         let sent = "stalls.min\tmin=2";
         assert_eq!(why.to_string(), "stalls.min (min = 2)");
         assert_eq!(mod_reason(Some(&filled), sent), "At least 2 stalls.");
@@ -515,7 +517,7 @@ mod tests {
 
     #[test]
     fn a_section_that_does_not_read_is_told_in_the_loader_s_texts() {
-        let uk = Some(enshwick::i18n::Language::UK_UA);
+        let uk = Some(enshwick_core::i18n::Language::UK_UA);
         let newer = "mods.off.section.newer\tformat=99\treads=3";
         assert_eq!(
             mod_reason(None, newer),

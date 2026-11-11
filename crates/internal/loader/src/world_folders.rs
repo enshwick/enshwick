@@ -213,7 +213,7 @@ fn record_path(key: &str) -> PathBuf {
 /// The recorded GUID; `None` without a record, or with one that does not
 /// read, which the next check replaces.
 fn recorded(key: &str) -> io::Result<Option<Guid>> {
-    let Some(text) = enshwick::files::read_to_string_if_present(&record_path(key))? else {
+    let Some(text) = enshwick_core::files::read_to_string_if_present(&record_path(key))? else {
         return Ok(None);
     };
     Ok(toml::from_str::<Record>(&text)
@@ -227,7 +227,7 @@ fn write_record(key: &str, guid: Guid) -> io::Result<()> {
         hex
     });
     let text = toml::to_string(&Record { guid }).map_err(io::Error::other)?;
-    enshwick::files::write_atomically(&record_path(key), text)
+    enshwick_core::files::write_atomically(&record_path(key), text)
 }
 
 fn parse_hex(text: &str) -> Option<Guid> {

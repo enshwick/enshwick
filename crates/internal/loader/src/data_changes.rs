@@ -8,9 +8,9 @@ use std::collections::BTreeSet;
 
 use rustc_hash::FxHashMap;
 
-use enshwick::abi::ChangeId;
-use enshwick::content::Guid;
-use enshwick::content::changes::{Change, Entry, Field, Value};
+use enshwick_core::abi::ChangeId;
+use enshwick_core::content::Guid;
+use enshwick_core::content::changes::{Change, Entry, Field, Value};
 
 use crate::mod_index::ModIndex;
 
@@ -499,7 +499,10 @@ pub fn hold_step(is_pack: bool, raised: Option<&Raised>) -> HoldStep {
 /// It goes first on a vanilla resource, so mods patch the changed value, and
 /// last on a mod's new resource, after the mod built it.
 #[must_use]
-pub fn goes_first(key: &enshwick::abi::ResourceKey, base: &enshwick::abi::ResourceKey) -> bool {
+pub fn goes_first(
+    key: &enshwick_core::abi::ResourceKey,
+    base: &enshwick_core::abi::ResourceKey,
+) -> bool {
     key == base
 }
 
@@ -710,7 +713,7 @@ mod tests {
 
     #[test]
     fn the_loader_s_patch_goes_first_on_a_vanilla_key_and_last_on_a_new_one() {
-        let key = |b: u8| enshwick::abi::ResourceKey {
+        let key = |b: u8| enshwick_core::abi::ResourceKey {
             guid: [b; 16],
             type_hash: 1,
             part: 0,
@@ -830,7 +833,7 @@ mod tests {
 
     #[test]
     fn a_pack_the_game_s_drop_factor_and_both_rates_each_apply_once_in_order() {
-        use enshwick::content::loot_tables::scaled_ceiling;
+        use enshwick_core::content::loot_tables::scaled_ceiling;
 
         // A vanilla scalable item rolling 1 to 2, scaled up to 20.
         let (min, max, ceiling) = (1u16, 2u16, 20u16);

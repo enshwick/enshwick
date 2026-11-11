@@ -11,8 +11,8 @@
 
 use std::time::{Duration, Instant};
 
-use enshwick::abi::ActionTarget;
-use enshwick::config::Schema;
+use enshwick_core::abi::ActionTarget;
+use enshwick_core::config::Schema;
 
 use crate::texts;
 use crate::wire::Peer;
@@ -158,7 +158,7 @@ pub enum Message {
         /// Whether it opens: the mod showed it. Otherwise it only updates a
         /// window the client still holds, as after the player's run.
         open: bool,
-        /// Its text, at most [`enshwick::actions::window::MAX_BYTES`].
+        /// Its text, at most [`enshwick_core::actions::window::MAX_BYTES`].
         text: String,
     },
     /// The server closes the window `window` of its mod `id`.
@@ -193,7 +193,7 @@ impl Carried {
     /// [`MAX_CARRIED_TEXT`] bytes, keys that bind, phases that fire.
     #[must_use]
     pub fn is_valid(&self) -> bool {
-        use enshwick::controls::{Key, is_valid_name, valid_phases};
+        use enshwick_core::controls::{Key, is_valid_name, valid_phases};
         is_valid_name(&self.name)
             && is_valid_name(&self.action)
             && self.label.len() <= MAX_CARRIED_TEXT
@@ -298,7 +298,7 @@ fn take_target(bytes: &[u8]) -> Option<ActionTarget> {
     let flags = word(0);
     let target = ActionTarget {
         flags,
-        entity: enshwick::Entity(word(4)),
+        entity: enshwick_core::Entity(word(4)),
         // Bytes the flags leave unset read as zero, so the message writes back the same.
         position: if flags & ActionTarget::POSITION == 0 {
             [0.0; 3]
@@ -313,7 +313,7 @@ fn take_target(bytes: &[u8]) -> Option<ActionTarget> {
 /// Whether a window message names a mod `id` and a window `window` as ids
 /// read.
 fn window_named(id: &str, window: &str) -> bool {
-    enshwick::abi::is_valid_id(id) && enshwick::actions::is_valid_id(window)
+    enshwick_core::abi::is_valid_id(id) && enshwick_core::actions::is_valid_id(window)
 }
 
 fn put(out: &mut Vec<u8>, text: &str) {
@@ -465,7 +465,7 @@ impl Message {
         let (&open, rest) = bytes.split_first()?;
         *bytes = rest;
         let text = take(bytes)?;
-        if open > 1 || text.len() > enshwick::actions::window::MAX_BYTES {
+        if open > 1 || text.len() > enshwick_core::actions::window::MAX_BYTES {
             return None;
         }
         Some(Self::Window {
@@ -538,7 +538,7 @@ impl Message {
                 let name = take(bytes)?.to_owned();
                 let (&count, rest) = bytes.split_first()?;
                 *bytes = rest;
-                if !enshwick::abi::is_valid_id(&id)
+                if !enshwick_core::abi::is_valid_id(&id)
                     || name.len() > MAX_CARRIED_TEXT
                     || usize::from(count) > MAX_CARRIED
                 {

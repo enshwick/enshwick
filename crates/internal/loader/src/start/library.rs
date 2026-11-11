@@ -4,7 +4,7 @@
 use std::os::windows::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 
-use enshwick::abi::{HostApi, Manifest, ModHandle, Status, check_major, exports};
+use enshwick_core::abi::{HostApi, Manifest, ModHandle, Status, check_major, exports};
 use windows_sys::Win32::Foundation::{FreeLibrary, HMODULE};
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 
@@ -137,7 +137,7 @@ fn note_old_layout(mods_dir: &Path) {
 
 /// Writes the line of `skip` for the DLL `file` to the loader's log.
 fn log_skip(skip: &Skip, file: &str) {
-    let level = enshwick::abi::Level::WARN;
+    let level = enshwick_core::abi::Level::WARN;
     if crate::log::enabled(level, crate::settings::LOADER_ID) {
         crate::log::write(level, crate::settings::LOADER_ID, &skip.line(file));
     }
@@ -360,16 +360,16 @@ fn exports_of(
         log_skip(&Skip::NotAMod, file);
         return None;
     };
-    // SAFETY: a mod's `ABI` export has the signature `enshwick::abi::exports`
+    // SAFETY: a mod's `ABI` export has the signature `enshwick_core::abi::exports`
     // documents for it.
     let abi = unsafe { core::mem::transmute::<Export, AbiFn>(abi) };
-    // SAFETY: a mod's `QUERY` export has the signature `enshwick::abi::exports`
+    // SAFETY: a mod's `QUERY` export has the signature `enshwick_core::abi::exports`
     // documents for it.
     let query = unsafe { core::mem::transmute::<Export, QueryFn>(query) };
-    // SAFETY: a mod's `INIT` export has the signature `enshwick::abi::exports`
+    // SAFETY: a mod's `INIT` export has the signature `enshwick_core::abi::exports`
     // documents for it.
     let init = unsafe { core::mem::transmute::<Export, InitFn>(init) };
-    // SAFETY: a mod's `READY` export has the signature `enshwick::abi::exports`
+    // SAFETY: a mod's `READY` export has the signature `enshwick_core::abi::exports`
     // documents for it.
     let ready = unsafe { core::mem::transmute::<Export, ReadyFn>(ready) };
     // The export states only the major; the manifest's header holds the

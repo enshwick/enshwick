@@ -122,10 +122,10 @@ pub(super) unsafe fn reach_of(
     // SAFETY: the caller's contract makes `entry` a readable function entry:
     // its first `u32` the function's start, offset from `image`, and the
     // union at `Anonymous` the `u32` RVA of its unwind data.
-    let begin: u32 = unsafe { enshwick::raw::read_at(entry.cast(), 0) };
+    let begin: u32 = unsafe { enshwick_core::raw::read_at(entry.cast(), 0) };
     // SAFETY: the same readable function entry, whose `Anonymous` union is
     // the `u32` RVA of its unwind data.
-    let mut rva: u32 = unsafe { enshwick::raw::read_at(entry.cast(), unwind_data) };
+    let mut rva: u32 = unsafe { enshwick_core::raw::read_at(entry.cast(), unwind_data) };
     let mut at_offset = rip.saturating_sub(image + begin as usize);
     let mut total: Option<Reach> = None;
     for _ in 0..CHAIN {

@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 
-use enshwick::abi::Event;
+use enshwick_core::abi::Event;
 use rustc_hash::FxHashSet;
 
 use super::carried::{set_aside_cleared, set_aside_older};
@@ -88,7 +88,7 @@ pub(super) fn write_file(server: &Server) -> Vec<u8> {
 /// Why a file that is there does not read: the system refused it, it is cut
 /// short, or it is of a version this loader does not know.
 pub(super) fn read_world(path: &Path) -> Result<(Vec<Pending>, Vec<String>), ReadWorldDataError> {
-    match enshwick::files::read_if_present(path) {
+    match enshwick_core::files::read_if_present(path) {
         Ok(None) => Ok(Default::default()),
         Ok(Some(bytes)) => read_file(&bytes).ok_or_else(|| ReadWorldDataError::Unknown {
             path: path.to_owned(),
@@ -348,7 +348,7 @@ fn save(loader: &Loader, after_game_save: bool) {
         );
     }
     let path = file(&key);
-    if let Err(error) = enshwick::files::write_atomically(&path, &bytes) {
+    if let Err(error) = enshwick_core::files::write_atomically(&path, &bytes) {
         unwritten(&mut SERVER.relock(), &key);
         crate::log!(
             WARN,

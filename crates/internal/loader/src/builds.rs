@@ -11,7 +11,7 @@ use std::path::Path;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick::abi::Side;
+use enshwick_core::abi::Side;
 use enshwick_gamedata::reflect::Fingerprint;
 use enshwick_gamedata::{self as tables, Part, PartState, Resolved, Routing, SteamBuild};
 
@@ -58,7 +58,7 @@ impl KnownBuild {
     /// The pattern of symbol `id` and how many bytes before the symbol it
     /// starts; see [`Resolved::head`].
     #[must_use]
-    pub fn head(&self, id: &str) -> Option<(&enshwick::code::Pattern, u64)> {
+    pub fn head(&self, id: &str) -> Option<(&enshwick_core::code::Pattern, u64)> {
         self.table.head(id)
     }
 
@@ -270,7 +270,7 @@ impl KnownBuild {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::abi::{Level, Side};
+    /// use enshwick_core::abi::{Level, Side};
     ///
     /// use enshwick_loader::builds::by_patterns;
     ///
@@ -282,8 +282,8 @@ impl KnownBuild {
     /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
-    pub fn start_line(&self) -> (enshwick::abi::Level, String) {
-        use enshwick::abi::Level;
+    pub fn start_line(&self) -> (enshwick_core::abi::Level, String) {
+        use enshwick_core::abi::Level;
         if self.complete() {
             return (
                 Level::INFO,

@@ -3,7 +3,7 @@
 
 use std::sync::OnceLock;
 
-use enshwick::abi::{ContentRename, Status};
+use enshwick_core::abi::{ContentRename, Status};
 use rustc_hash::FxHashMap;
 
 use crate::mod_index::ModIndex;

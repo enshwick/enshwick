@@ -15,7 +15,7 @@
 
 use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
-use enshwick::raw::{read_at, read_ptr_at, write_at};
+use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
 use super::{Answer, Container, Fields};
 use crate::base_groups::grouping::{self, Grouped, MAX_LISTED, ZoneSet};

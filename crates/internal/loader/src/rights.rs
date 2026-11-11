@@ -12,7 +12,7 @@
 //! own functions on its building-zone object, which the server keeps for
 //! the world's life (server 399, client 426).
 
-use enshwick::abi::{BuildRights, Status};
+use enshwick_core::abi::{BuildRights, Status};
 
 use crate::pinned;
 
@@ -108,8 +108,8 @@ impl EditBox {
     /// test takes a point.
     pub(crate) fn corners(self) -> [[i64; 3]; 2] {
         [
-            enshwick::ecs::fixed(self.min),
-            enshwick::ecs::fixed(self.max),
+            enshwick_core::ecs::fixed(self.min),
+            enshwick_core::ecs::fixed(self.max),
         ]
     }
 }
@@ -156,8 +156,8 @@ pub(crate) use game::{check, kept_by_save};
 
 #[cfg(windows)]
 mod game {
-    use enshwick::abi::{BuildRights, Status};
-    use enshwick::altars::MAX_ZONES;
+    use enshwick_core::abi::{BuildRights, Status};
+    use enshwick_core::altars::MAX_ZONES;
 
     use super::{EditBox, Permissions, Zones, refusal};
     use crate::host::Loader;
@@ -357,7 +357,7 @@ mod game {
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::Header;
+    use enshwick_core::abi::Header;
 
     use super::*;
 
@@ -428,7 +428,7 @@ mod tests {
 
     /// Metres as 32.32 fixed point.
     fn fixed(corner: [f64; 3]) -> [i64; 3] {
-        enshwick::ecs::fixed(corner)
+        enshwick_core::ecs::fixed(corner)
     }
 
     #[test]
@@ -491,7 +491,7 @@ mod tests {
     fn check(min: [f64; 3], max: [f64; 3]) -> BuildRights {
         BuildRights {
             header: Header::of::<BuildRights>(),
-            player: enshwick::Entity(2),
+            player: enshwick_core::Entity(2),
             refusal: 0,
             min,
             max,

@@ -1,6 +1,6 @@
 //! Building blocks in the game: resolving a block, writing it and announcing it.
 
-use enshwick::abi::{BlockPlace, Status};
+use enshwick_core::abi::{BlockPlace, Status};
 use enshwick_gamedata::catalogue;
 
 use crate::host::Loader;
@@ -81,7 +81,7 @@ fn function(loader: &Loader, id: pinned::Symbol) -> Result<usize, Status> {
 /// two frees what it points into.
 pub(crate) fn resolve(loader: &Loader, request: &BlockPlace) -> Result<Block, Status> {
     let position_ok = request.position.iter().all(|axis| {
-        axis.is_finite() && *axis >= 0.0 && *axis < f64::from(enshwick::abi::Voxel::END)
+        axis.is_finite() && *axis >= 0.0 && *axis < f64::from(enshwick_core::abi::Voxel::END)
     });
     let norm: f32 = request.rotation.iter().map(|v| v * v).sum();
     if !position_ok || !norm.is_finite() || norm < 1e-6 {
@@ -182,7 +182,7 @@ fn game_box(
         return Err(Status::BAD_ARGS);
     }
     let at = PosRot {
-        position: enshwick::ecs::fixed(position),
+        position: enshwick_core::ecs::fixed(position),
         rotation,
     };
     let mut game = GameBox([0; GameBox::SIZE]);
@@ -244,11 +244,11 @@ fn building_material(loader: &Loader, access: &ServerAccess<'_>, item: u32) -> R
     // SAFETY: `info` is the item's `ItemInfo` from the game's lookup, live
     // while `access` is held, with its `isBuildingVoxel` byte at the reflected
     // path's offset.
-    let building: u8 = unsafe { enshwick::raw::read_at(info, flag_at) };
+    let building: u8 = unsafe { enshwick_core::raw::read_at(info, flag_at) };
     // SAFETY: `info` is the item's `ItemInfo` from the game's lookup, live
     // while `access` is held, with its `placeVoxelMaterialId` byte at the
     // reflected path's offset.
-    let material: u8 = unsafe { enshwick::raw::read_at(info, id_at) };
+    let material: u8 = unsafe { enshwick_core::raw::read_at(info, id_at) };
     if building == 0 || material < BUILDING_FIRST {
         return Err(Status::BAD_ARGS);
     }

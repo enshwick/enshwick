@@ -15,8 +15,8 @@ use std::sync::Mutex;
 use std::sync::OnceLock;
 
 #[cfg(windows)]
-use enshwick::abi::{Event, Header, VoxelEditData};
-use enshwick::abi::{ModHandle, VoxelChange};
+use enshwick_core::abi::{Event, Header, VoxelEditData};
+use enshwick_core::abi::{ModHandle, VoxelChange};
 
 #[cfg(windows)]
 use crate::chains::Next;
@@ -69,13 +69,13 @@ const MAX_BOX: u64 = 1 << 21;
 
 /// The voxels of a commit's box of `size` from `min` whose buffer holds
 /// `held` words; `None` for an empty box, one past
-/// [`Voxel::END`](enshwick::abi::Voxel::END), one over [`MAX_BOX`] or a
+/// [`Voxel::END`](enshwick_core::abi::Voxel::END), one over [`MAX_BOX`] or a
 /// buffer that does not hold it.
 fn box_count(min: [u32; 3], size: [u32; 3], held: u64) -> Option<usize> {
     let mut count = 1u64;
     for axis in 0..3 {
         let end = min[axis].checked_add(size[axis])?;
-        if size[axis] == 0 || end > enshwick::abi::Voxel::END {
+        if size[axis] == 0 || end > enshwick_core::abi::Voxel::END {
             return None;
         }
         count = count.checked_mul(u64::from(size[axis]))?;
@@ -293,7 +293,7 @@ pub(crate) fn link(loader: &'static Loader) {
         target,
         &EDITS.next,
         commit,
-        enshwick::abi::HookFlags::NONE,
+        enshwick_core::abi::HookFlags::NONE,
     ) && EDITS
         .layout
         .set(Layout {
@@ -355,7 +355,7 @@ unsafe fn note(
     size: *const [u32; 3],
     min: *const [u32; 3],
 ) {
-    use enshwick::raw::{read_at, read_ptr_at};
+    use enshwick_core::raw::{read_at, read_ptr_at};
 
     if editor.is_null() || words.is_null() || size.is_null() || min.is_null() {
         return;
@@ -458,7 +458,7 @@ mod tests {
     #[test]
     fn a_box_past_the_api_read_limit_is_read_up_to_its_own_limit() {
         let big = [72, 72, 72];
-        assert!(enshwick::abi::Voxel::read_count([0; 3], big).is_none());
+        assert!(enshwick_core::abi::Voxel::read_count([0; 3], big).is_none());
         assert_eq!(box_count([8, 0, 8], big, u64::MAX), Some(72 * 72 * 72));
         assert_eq!(box_count([0; 3], [128; 3], MAX_BOX), Some(1 << 21));
     }
@@ -473,7 +473,7 @@ mod tests {
         assert_eq!(box_count([0; 3], [8; 3], 511), None, "the buffer is short");
         assert_eq!(box_count([0; 3], [0, 8, 8], u64::MAX), None, "an empty box");
         assert_eq!(
-            box_count([enshwick::abi::Voxel::END - 4, 0, 0], [8; 3], u64::MAX),
+            box_count([enshwick_core::abi::Voxel::END - 4, 0, 0], [8; 3], u64::MAX),
             None,
             "past the end"
         );

@@ -4,8 +4,8 @@
 
 use std::sync::OnceLock;
 
-use enshwick::raw::read_at;
-use enshwick::{Entity, ItemId};
+use enshwick_core::raw::read_at;
+use enshwick_core::{Entity, ItemId};
 use enshwick_gamedata::catalogue as names;
 
 use super::anchor::{Anchor, CharacterId, Placed};

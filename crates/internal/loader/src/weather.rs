@@ -23,8 +23,8 @@ mod check;
 
 use std::sync::{Mutex, OnceLock};
 
-use enshwick::abi::{ChunkData, Event, Header, HookFlags, Status, WeatherFront};
-use enshwick::raw::read_at;
+use enshwick_core::abi::{ChunkData, Event, Header, HookFlags, Status, WeatherFront};
+use enshwick_core::raw::read_at;
 
 use crate::chains::Next;
 use crate::host::{Loader, Target};
@@ -605,10 +605,10 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
             };
             let text = served.iter().fold(String::new(), |mut text, guid| {
                 use core::fmt::Write as _;
-                let _infallible = writeln!(text, "{}", enshwick::content::Guid(*guid));
+                let _infallible = writeln!(text, "{}", enshwick_core::content::Guid(*guid));
                 text
             });
-            if let Err(why) = enshwick::files::write_atomically(&path, text) {
+            if let Err(why) = enshwick_core::files::write_atomically(&path, text) {
                 crate::log!(WARN, "weather: {} not written: {why}", path.display());
             }
         }
@@ -644,12 +644,12 @@ fn remap(loader: &Loader, path: &std::path::Path) -> Result<(), RemapError> {
     let (system, _) = system(layout).map_err(RemapError::Unloaded)?;
     let resource = Resource::lock(layout, system).ok_or(RemapError::Unloaded(Status::MISSING))?;
     let served = phenomena(layout, &resource).ok_or(RemapError::Unloaded(Status::MISSING))?;
-    let text = enshwick::files::read_to_string_if_present(path)
+    let text = enshwick_core::files::read_to_string_if_present(path)
         .map_err(|why| RemapError::Unread(path.to_owned(), why.to_string()))?;
     let saved = text
         .map(|text| {
             text.lines()
-                .map(|line| enshwick::content::Guid::try_parse(line.trim()).map(|guid| guid.0))
+                .map(|line| enshwick_core::content::Guid::try_parse(line.trim()).map(|guid| guid.0))
                 .collect::<Option<Vec<_>>>()
                 .ok_or_else(|| RemapError::Unread(path.to_owned(), "a line is no GUID".to_owned()))
         })

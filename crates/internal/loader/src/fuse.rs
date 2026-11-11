@@ -89,11 +89,11 @@ impl Fuse {
     /// The status a write [`Fuse::verify`] refused answers: unavailable once
     /// the feature is off, missing while its live object is not made yet.
     #[cold]
-    pub fn refused(&self) -> enshwick::abi::Status {
+    pub fn refused(&self) -> enshwick_core::abi::Status {
         if self.is_off() {
-            enshwick::abi::Status::UNAVAILABLE
+            enshwick_core::abi::Status::UNAVAILABLE
         } else {
-            enshwick::abi::Status::MISSING
+            enshwick_core::abi::Status::MISSING
         }
     }
 

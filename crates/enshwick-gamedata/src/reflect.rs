@@ -26,7 +26,7 @@ mod reader;
 use reader::Reader;
 use rustc_hash::FxHashMap;
 
-pub use enshwick::resources::Attribute;
+pub use enshwick_core::resources::Attribute;
 pub use pe::{Fingerprint, Image, ImageError, Layout, Section};
 
 /// A reflected type: its layout as the engine describes it.
@@ -67,7 +67,7 @@ pub struct TypeInfo<'a> {
 
 impl<'a> TypeInfo<'a> {
     /// The type as the API's type registry holds it, for
-    /// [`Registry`](enshwick::resources::Registry).
+    /// [`Registry`](enshwick_core::resources::Registry).
     ///
     /// # Examples
     ///
@@ -84,8 +84,8 @@ impl<'a> TypeInfo<'a> {
     /// # }
     /// ```
     #[must_use]
-    pub fn to_type(&self) -> enshwick::resources::Type<'a> {
-        use enshwick::resources::{Constant, Type};
+    pub fn to_type(&self) -> enshwick_core::resources::Type<'a> {
+        use enshwick_core::resources::{Constant, Type};
 
         let mut ty = Type::new(self.name, self.kind, self.size, self.align)
             .with_names(self.short_name, self.impact_name)
@@ -102,9 +102,11 @@ impl<'a> TypeInfo<'a> {
                         let offset = u32::try_from(f.offset).ok()?;
                         let field = match f.type_name {
                             Some(type_name) => {
-                                enshwick::resources::Field::new(f.name, offset, type_name)
+                                enshwick_core::resources::Field::new(f.name, offset, type_name)
                             }
-                            None => enshwick::resources::Field::new(f.name, offset, "").untyped(),
+                            None => {
+                                enshwick_core::resources::Field::new(f.name, offset, "").untyped()
+                            }
                         };
                         Some(field.with_attributes(f.attributes.clone()))
                     })
@@ -557,7 +559,7 @@ const KIND_ENUM: u8 = Kind::Enum.byte();
 
 /// What a reflected type is; the API's own, so values and types read the
 /// same in the loader, tools and mods.
-pub use enshwick::resources::Kind;
+pub use enshwick_core::resources::Kind;
 
 /// Bases deeper than this are taken for a loop in bad data.
 const MAX_BASES: usize = 32;
@@ -842,8 +844,8 @@ impl<'a> Reflection<'a> {
     /// # }
     /// ```
     #[must_use]
-    pub fn registry(&self) -> enshwick::resources::Registry<'a> {
-        enshwick::resources::Registry::new(self.types.values().filter_map(|found| {
+    pub fn registry(&self) -> enshwick_core::resources::Registry<'a> {
+        enshwick_core::resources::Registry::new(self.types.values().filter_map(|found| {
             match found.as_slice() {
                 [one] => Some(one.to_type()),
                 _ => None,

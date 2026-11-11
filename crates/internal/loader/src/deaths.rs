@@ -12,8 +12,8 @@
 
 use std::sync::{Mutex, OnceLock};
 
-use enshwick::Entity;
-use enshwick::abi::{Event, Header, HookFlags, PlayerDeathData};
+use enshwick_core::Entity;
+use enshwick_core::abi::{Event, Header, HookFlags, PlayerDeathData};
 
 use crate::chains::Next;
 use crate::host::{Loader, Target};
@@ -182,7 +182,7 @@ unsafe extern "system" fn sink(out: *mut u8, tracker: *mut u8, death: *const u8)
                 // SAFETY: the game hands the sink a non-null record (checked
                 // earlier) of the reflected `PlayerDeath` size, valid for the
                 // call, and `at` is below that size.
-                *byte = unsafe { enshwick::raw::read_at(death, at) };
+                *byte = unsafe { enshwick_core::raw::read_at(death, at) };
             }
             let mut seen = SEEN.relock();
             if seen.len() < MOST {
@@ -219,7 +219,7 @@ fn data(layout: &Record, bytes: &[u8; 64], entity_of: impl Fn(u64) -> u32) -> Pl
         header: Header::of::<PlayerDeathData>(),
         entity: Entity(entity_of(key)),
         cause: u32::from(field::<1>(bytes, layout.cause)[0]),
-        key: enshwick::PlayerKey::new(key),
+        key: enshwick_core::PlayerKey::new(key),
         position: [coordinate(0), coordinate(1), coordinate(2)],
         cause_guid: field(bytes, layout.cause_guid),
         was_deadly_fog: field::<1>(bytes, layout.was_deadly_fog)[0],
@@ -245,7 +245,7 @@ pub(crate) fn after_step(loader: &Loader) {
         let mut death = data(layout, bytes, |key| {
             players
                 .iter()
-                .find(|p| p.key == enshwick::PlayerKey::new(key))
+                .find(|p| p.key == enshwick_core::PlayerKey::new(key))
                 .map_or(0, |p| p.entity.0)
         });
         if death.cause == PlayerDeathData::IMPACT
@@ -281,7 +281,7 @@ mod tests {
         bytes[45] = 1;
         let death = data(&layout, &bytes, |key| if key == 7 { 2 } else { 0 });
         assert_eq!(death.entity, Entity(2));
-        assert_eq!(death.key, enshwick::PlayerKey::new(7));
+        assert_eq!(death.key, enshwick_core::PlayerKey::new(7));
         assert_eq!(death.cause, PlayerDeathData::SUFFOCATED);
         assert!((death.position[0] - 1.5).abs() < f32::EPSILON);
         assert_eq!(death.cause_guid[0], 0xab);
