@@ -57,6 +57,7 @@ pub(crate) fn refused(api: *const HostApi, manifest: &Manifest) -> Option<String
 /// `handler`, as [`Load::serve_call`](crate::Load::serve_call) registers
 /// them; the pointer stays valid for the process.
 #[cfg(feature = "unstable")]
+#[must_use = "the handler stays leaked unless the fake registers it"]
 pub fn served_call<C, F>(handler: F) -> (CallFn, *mut c_void)
 where
     C: Call,
