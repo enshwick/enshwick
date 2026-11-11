@@ -31,13 +31,13 @@ use enshwick_core::abi::{
 use run::run;
 
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::memory::read_ptr;
 use crate::mid::MidLink;
 use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::pinned::{Constant, Symbol};
 use crate::world::ServerAccess;
+use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

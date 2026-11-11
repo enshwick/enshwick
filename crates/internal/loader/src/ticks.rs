@@ -9,8 +9,8 @@ use std::time::Instant;
 use arc_swap::ArcSwapOption;
 use enshwick_core::abi::{EventFn, Status, TickData, TickHandle};
 
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
+use enshwick_base::Relock;
 
 /// The loader's periodic tick handlers and step times.
 pub static TICKS: Ticks = Ticks::new();

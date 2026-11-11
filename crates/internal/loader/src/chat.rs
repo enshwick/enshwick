@@ -22,10 +22,10 @@ use enshwick_core::abi::{ChatLine, HookFlags, Status};
 
 use crate::chains::Next;
 use crate::host::{Loader, Target};
-use crate::locks::Relock;
 use crate::pinned;
 use crate::pinned::{Constant, Symbol};
 use crate::wire::{Drops, Outbox, strays};
+use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

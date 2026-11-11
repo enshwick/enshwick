@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use crate::locks::Relock;
+use enshwick_base::Relock;
 
 /// Steps an answer outlives its retirement: the caller that got it returned
 /// within the step it asked in, and one more step covers a caller on another

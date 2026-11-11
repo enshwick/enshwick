@@ -10,8 +10,8 @@ use enshwick_core::mods::LOADER_FILE;
 
 use crate::host::memory::{put, slice, text};
 use crate::host::{LOADER_HANDLE, ModRecord, calling, entry, loader};
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
+use enshwick_base::Relock;
 
 pub(crate) extern "system" fn fault(me: ModHandle, reason: Str) {
     entry("fault", || {

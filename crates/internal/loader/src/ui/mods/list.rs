@@ -7,11 +7,11 @@ use enshwick_core::abi::UiWidget;
 use super::MODS_PER_PAGE;
 use crate::host::Loader;
 use crate::listing::Listing;
-use crate::locks::Relock;
 use crate::mods_screen;
 use crate::texts;
 use crate::ui::Painter;
 use crate::ui::engine::Icon;
+use enshwick_base::Relock;
 
 /// What the player did on the mod list.
 pub(super) enum Listed {

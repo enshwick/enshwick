@@ -15,8 +15,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick_core::abi::{BuildingData, Level};
 
-use crate::locks::Relock;
 use crate::settings::LOADER_ID;
+use enshwick_base::Relock;
 
 pub mod accounts;
 #[cfg(windows)]

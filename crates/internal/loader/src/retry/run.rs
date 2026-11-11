@@ -8,7 +8,7 @@ use super::Schedule;
 use crate::code::{CodePatch, Verdict};
 use crate::detour::{Bytes, Commit};
 use crate::host::{self, Loader};
-use crate::locks::Relock;
+use enshwick_base::Relock;
 
 /// [`Retry::due`] with nothing held.
 const IDLE: u64 = u64::MAX;

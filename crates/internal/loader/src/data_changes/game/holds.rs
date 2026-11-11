@@ -7,8 +7,8 @@ use enshwick_core::state::Hold;
 use super::{CHANGES, loader_dir, on};
 use crate::data_changes::{HoldStep, Kept, hold_reason, hold_step};
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
+use enshwick_base::Relock;
 
 /// On the side that keeps the world, when it loads or saves: keeps every
 /// stack size in force above the game's, and holds the game while any is

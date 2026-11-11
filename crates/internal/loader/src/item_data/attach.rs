@@ -8,7 +8,7 @@ use rustc_hash::FxHashSet;
 use super::{FINDING, KEPT, SERVER, Server, UNREAD, game, insert_found, messages_for, send};
 use crate::host::Loader;
 use crate::item_records::anchor::{self, Anchor, Index, KindIndex, Pending};
-use crate::locks::Relock;
+use enshwick_base::Relock;
 
 /// The placed things whose templates the `pending` records name, by key;
 /// `None` when any part of the walk does not read, since a thing missing

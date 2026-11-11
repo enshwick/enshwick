@@ -1,4 +1,4 @@
-use crate::locks::Relock;
+use enshwick_base::Relock;
 
 use super::patches::{Build, run_patches, write_differences};
 use super::*;

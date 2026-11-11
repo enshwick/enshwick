@@ -21,8 +21,8 @@ pub(crate) use summary::clock;
 pub(crate) use summary::{GAME_CRASHED, crash_heading};
 pub use summary::{HookStat, ModStatus, Served, Summary, duration, messages_line, part_line};
 
-use crate::locks::Relock;
 use crate::settings::Settings;
+use enshwick_base::Relock;
 
 /// With diagnostics timing on, one call in this many of each hooked
 /// function is timed. A power of two: the thunk tests the counter's low byte.

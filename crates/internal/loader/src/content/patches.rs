@@ -22,8 +22,8 @@ use super::{
     LOADED, OPEN_NEXT, PENDING, RESOLVE_NEXT, RESOURCES_FUSE, SERVED_LIST, Served, State, hex,
     key_name, mod_on, route,
 };
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
+use enshwick_base::Relock;
 
 /// For mod `owner`, which serves `key`: during init, keeps its base when it
 /// is first built; afterwards, builds it again from that base and writes the

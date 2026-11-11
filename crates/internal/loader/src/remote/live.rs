@@ -1,6 +1,6 @@
 //! The messages in the running game: what a client heard, and how its server answers.
 
-use crate::locks::Relock;
+use enshwick_base::Relock;
 use std::sync::Mutex;
 use std::time::Instant;
 

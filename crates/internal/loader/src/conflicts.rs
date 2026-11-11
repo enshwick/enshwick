@@ -15,9 +15,9 @@ use enshwick_core::abi::Status;
 use rustc_hash::FxHashSet;
 
 use crate::code_watch::CodeChange;
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::texts;
+use enshwick_base::Relock;
 
 /// How the mods on one feature share it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

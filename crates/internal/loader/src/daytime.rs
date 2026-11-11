@@ -27,10 +27,10 @@ use enshwick_core::abi::{DaytimeInfo, Event, Header, HookFlags, Status};
 
 use crate::chains::Next;
 use crate::host::{Loader, Target, is_off, take};
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::pinned::Symbol;
+use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

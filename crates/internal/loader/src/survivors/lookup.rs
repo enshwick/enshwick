@@ -9,7 +9,7 @@ use enshwick_core::raw::read_at;
 
 use crate::ecs::Engine;
 use crate::host::Loader;
-use crate::locks::Relock;
+use enshwick_base::Relock;
 
 use super::{
     CURSOR_NEXT, LOADED, LOOKUP_NEXT, Layout, LookupFn, MOVE_ACTIVE, MOVING, NPC_COMMON_TYPE,

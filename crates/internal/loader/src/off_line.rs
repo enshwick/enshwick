@@ -117,7 +117,7 @@ pub(crate) fn skipped_off(
 pub(crate) fn names(loader: &crate::host::Loader) -> Vec<String> {
     use std::sync::atomic::Ordering;
 
-    use crate::locks::Relock;
+    use enshwick_base::Relock;
 
     let mut names = mods_off(loader);
     for record in &loader.mods {

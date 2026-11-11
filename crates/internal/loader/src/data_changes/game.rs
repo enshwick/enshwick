@@ -23,8 +23,8 @@ use enshwick_gamedata::reflect::Reflection;
 use rustc_hash::FxHashMap;
 
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
+use enshwick_base::Relock;
 
 use self::containers::container_patches;
 pub(crate) use self::holds::world_event;

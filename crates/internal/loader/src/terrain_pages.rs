@@ -27,11 +27,11 @@ use crate::fuse::Fuse;
 #[cfg(windows)]
 use crate::host::Loader;
 #[cfg(windows)]
-use crate::locks::Relock;
-#[cfg(windows)]
 use crate::pinned;
 #[cfg(windows)]
 use crate::wire::Drops;
+#[cfg(windows)]
+use enshwick_base::Relock;
 
 /// The turns one step keeps at most, 64 KiB of them; more are dropped and
 /// counted. The cache turns about 80 pages a second at most across every

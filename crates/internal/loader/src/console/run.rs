@@ -6,8 +6,8 @@ use enshwick_core::Entity;
 use enshwick_core::abi::{Header, PlayerInfo, Status};
 
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::texts;
+use enshwick_base::Relock;
 
 use super::input::{self, End};
 use super::{Line, Tool, log_query, parse, submit, take};

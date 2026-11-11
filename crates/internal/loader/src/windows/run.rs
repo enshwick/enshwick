@@ -12,8 +12,8 @@ use super::{
     note, queue,
 };
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
+use enshwick_base::Relock;
 
 /// The windows' state on the server.
 struct Windows {

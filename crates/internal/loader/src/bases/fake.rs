@@ -10,7 +10,7 @@ use super::loops::{Layout, MapFields, ObjectFields, RecordFields, SortFields, St
 use super::{Answer, Container, Fields};
 use crate::base_groups::limit::Aabb;
 use crate::base_groups::window;
-use crate::locks::Relock;
+use enshwick_base::Relock;
 
 /// Held by every test that makes a [`Fake`] or touches the window entries,
 /// the side tables or a test file's call log: the process keeps one window

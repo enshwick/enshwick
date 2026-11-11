@@ -17,11 +17,11 @@ use enshwick_core::Entity;
 use enshwick_core::abi::Status;
 
 use crate::host::Loader;
-use crate::locks::Relock;
 pub(crate) use crate::notice_queue::MAX_TEXT;
 use crate::notice_queue::{MAX_WAITING, Pushed, SLOTS, Waiting, cut, push, step_batch};
 use crate::pinned;
 use crate::pinned::Symbol;
+use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

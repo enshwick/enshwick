@@ -28,11 +28,11 @@ use crate::bindings;
 use crate::fuse::Fuse;
 use crate::host::Loader;
 use crate::linked_controls::{Follow, Players};
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::registry::Registry;
 use crate::remote::{Carried, Heard, MAX_CARRIED};
+use enshwick_base::Relock;
 
 /// A control a mod declared.
 #[derive(Debug)]

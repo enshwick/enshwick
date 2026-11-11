@@ -16,9 +16,9 @@
 use combat::{combat, expire, follow};
 use enshwick_core::Entity;
 
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
+use enshwick_base::Relock;
 
 mod affixes;
 mod equipment;

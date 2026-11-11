@@ -7,7 +7,7 @@ use enshwick_core::abi::{AccountActionType, Level, ModHandle, Side, Status, Str}
 use crate::console::accounts::Act;
 use crate::host::memory::{put, put_headed, put_headed_list, text};
 use crate::host::{caller, caller_index, calling, entry, loader};
-use crate::locks::Relock;
+use enshwick_base::Relock;
 
 pub(crate) extern "system" fn component(
     me: ModHandle,

@@ -18,7 +18,7 @@ use std::sync::{Arc, Mutex};
 use enshwick_core::abi::{Status, UiAnswerFn, UiDialog};
 
 use crate::host::Registered;
-use crate::locks::Relock;
+use enshwick_base::Relock;
 
 use super::engine::{self, Buf, DialogLayout, Engine, PopupFn};
 

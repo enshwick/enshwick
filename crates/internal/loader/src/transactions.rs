@@ -26,9 +26,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use enshwick_core::abi::{Status, TransactionInfo};
 
 use crate::fuse::Fuse;
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
+use enshwick_base::Relock;
 #[cfg(windows)]
 pub(crate) use game::{resolve, resolve_prop, saving};
 #[cfg(any(windows, test))]

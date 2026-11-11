@@ -21,7 +21,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use enshwick_core::config::{Group, Schema};
 use toml_edit::{DocumentMut, Item, Table};
 
-use crate::locks::Relock;
+use enshwick_base::Relock;
 
 /// The file of a settings type that names none.
 pub const DEFAULT_FILE: &str = "settings";

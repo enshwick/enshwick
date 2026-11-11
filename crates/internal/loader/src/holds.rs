@@ -145,7 +145,7 @@ pub(crate) fn enforce_world(loader: &crate::host::Loader, key: &str) {
 /// nothing when `held` is empty.
 #[cfg(windows)]
 fn stop(held: &[Held], why: &str, loader: Option<&crate::host::Loader>) {
-    use crate::locks::Relock;
+    use enshwick_base::Relock;
     if held.is_empty() {
         return;
     }

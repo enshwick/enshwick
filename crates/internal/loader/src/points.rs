@@ -13,9 +13,9 @@ use enshwick_core::abi::{Level, PointFn, PointMode, PointVerdict, Status};
 use enshwick_core::points::{LinkPlace, order};
 use enshwick_core::services::{LayoutError, compare};
 
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::services::{Fields, Names};
+use enshwick_base::Relock;
 
 /// A point as one side declares it.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -8,8 +8,8 @@ use std::sync::{Mutex, OnceLock};
 use enshwick_core::abi::{ModEventFn, Status};
 use enshwick_core::services::{LayoutError, compare};
 
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
+use enshwick_base::Relock;
 
 /// A layout as `(field name, hash)` per field.
 pub(crate) type Fields = Vec<(String, u64)>;

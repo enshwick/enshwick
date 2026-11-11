@@ -10,8 +10,8 @@ use std::time::Instant;
 use enshwick_core::abi::Event;
 
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::texts;
+use enshwick_base::Relock;
 
 use super::{FILE, SetMuteError, changed, parse, protected, tell};
 

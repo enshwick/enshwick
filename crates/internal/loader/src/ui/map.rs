@@ -26,10 +26,10 @@ use enshwick_gamedata::catalogue;
 
 use crate::chains::Next;
 use crate::host::{Loader, Target};
-use crate::locks::Relock;
 use crate::map_marker_types::RunningTypes;
 use crate::mod_index::ModIndex;
 use crate::pinned::{self, Constant};
+use enshwick_base::Relock;
 
 use super::engine::{Buf, UiText};
 

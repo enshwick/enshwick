@@ -17,9 +17,9 @@ use rustc_hash::FxHashMap;
 
 use crate::chains::Next;
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
+use enshwick_base::Relock;
 
 use enshwick_core::content::recipes::WORKSHOP_RECIPES;
 

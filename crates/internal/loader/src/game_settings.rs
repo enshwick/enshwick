@@ -28,8 +28,8 @@ use enshwick_core::abi::{Event, Status};
 
 use crate::host::Loader;
 use crate::live;
-use crate::locks::Relock;
 use crate::pinned;
+use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

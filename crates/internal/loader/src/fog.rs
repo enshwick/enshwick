@@ -26,9 +26,9 @@ use enshwick_core::abi::{FogInfo, Header, HookFlags, Side, Status};
 use crate::chains::Next;
 use crate::fog_image::{FogImage, FogShape, Plan, ReadError, TileRect, plan};
 use crate::host::{Loader, Target};
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
+use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

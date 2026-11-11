@@ -45,11 +45,11 @@ use crate::fuse::Fuse;
 use crate::host::Loader;
 use crate::interface_parts::Part;
 use crate::listing;
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::mods_screen::{self, BACK_PRESSED, Back, Heard, Kind};
 use crate::pinned;
 use crate::texts;
+use enshwick_base::Relock;
 
 use super::engine::{Engine, Scroll, TextBuffer, Window};
 use super::{ENGINE, Painter, copy};

@@ -8,7 +8,7 @@ use enshwick_core::abi::ItemAction;
 use enshwick_core::raw::read_at;
 
 use super::Layout;
-use crate::locks::Relock;
+use enshwick_base::Relock;
 
 /// How long a use every filter allowed waits for the game to take its item
 /// before the loader takes it as refused.

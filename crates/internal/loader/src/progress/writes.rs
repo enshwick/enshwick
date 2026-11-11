@@ -14,9 +14,9 @@ use super::{
 };
 use crate::ecs::Engine;
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::registry::Registry;
+use enshwick_base::Relock;
 
 /// Level and experience writes that wait for the level step at most.
 const MOST_WRITES: usize = 256;

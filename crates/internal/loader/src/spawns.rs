@@ -14,10 +14,10 @@ use enshwick_core::abi::{SpawnRequest, Status};
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::pinned;
 use crate::pinned::Symbol;
 use crate::spawn_request::{RequestLayout, Start};
+use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

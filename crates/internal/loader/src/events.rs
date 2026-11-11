@@ -25,10 +25,10 @@ use enshwick_core::raw::read_at;
 use crate::chains::Next;
 use crate::fuse::Fuse;
 use crate::host::{Loader, Target};
-use crate::locks::Relock;
 use crate::pinned;
 use crate::pinned::{Constant, Symbol};
 use crate::ticks::{StepTime, TICKS};
+use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use arc_swap::ArcSwapOption;
 use enshwick_core::abi::Status;
 
-use crate::locks::Relock;
+use enshwick_base::Relock;
 
 /// Steps after its request by which a destroy has landed: the request
 /// plays back at the end of the next step.

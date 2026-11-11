@@ -10,9 +10,9 @@ use crate::host::loader;
 use crate::join::missing::{ADVERTISED_BYTES, Missing, Wanted, listed};
 use crate::join::{Difference, Row};
 use crate::kept_text::KeptText;
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::wire::Drops;
+use enshwick_base::Relock;
 
 /// Why a mod is off while the client plays in a world that does not run it.
 const OFF_FOR_WORLD: &str = "off for this world: it does not run this mod";

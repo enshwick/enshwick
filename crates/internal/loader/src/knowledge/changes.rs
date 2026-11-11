@@ -24,10 +24,10 @@ use enshwick_core::Entity;
 use enshwick_core::abi::{Event, Header, KnowledgeData, KnowledgeInfo, Status};
 
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::memory::write;
 use crate::pinned;
 use crate::pinned::{Constant, Symbol};
+use enshwick_base::Relock;
 
 use super::{definition, layout, read, store};
 

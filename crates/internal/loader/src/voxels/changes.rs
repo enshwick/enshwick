@@ -23,10 +23,10 @@ use crate::chains::Next;
 use crate::fuse::Fuse;
 #[cfg(windows)]
 use crate::host::Loader;
-use crate::locks::Relock;
 #[cfg(windows)]
 use crate::pinned;
 use crate::wire::Drops;
+use enshwick_base::Relock;
 
 /// Changed voxels waiting for the end of the step at most, about 5 MB;
 /// writes past it are dropped and counted.

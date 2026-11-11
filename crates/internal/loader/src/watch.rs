@@ -10,9 +10,9 @@ use std::time::{Duration, SystemTime};
 use enshwick_core::abi::Event;
 
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::settings::{FILE, Settings};
+use enshwick_base::Relock;
 
 /// How often the files are looked at; a few stat calls each time.
 const PERIOD: Duration = Duration::from_secs(1);

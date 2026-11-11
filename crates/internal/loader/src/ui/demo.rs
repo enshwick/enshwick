@@ -10,8 +10,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick_core::abi::{UiDialog, UiWidget};
 
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
+use enshwick_base::Relock;
 
 use super::Painter;
 use super::engine::{Engine, Window};

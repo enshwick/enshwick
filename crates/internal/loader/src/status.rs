@@ -12,9 +12,9 @@ use enshwick_core::abi::{Side, Status, StatusFn, Str};
 
 use crate::diag::{HookStat, ModStatus, Summary};
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::settings::LOADER_ID;
+use enshwick_base::Relock;
 
 /// How often the housekeeping thread looks.
 const POLL: Duration = Duration::from_secs(1);

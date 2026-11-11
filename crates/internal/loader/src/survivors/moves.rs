@@ -5,7 +5,7 @@ use enshwick_core::Entity;
 use enshwick_core::abi::{BedCheck, Header};
 use enshwick_core::raw::{read_at, read_ptr_at};
 
-use crate::locks::Relock;
+use enshwick_base::Relock;
 
 use super::lookup::{home, position_of};
 use super::{

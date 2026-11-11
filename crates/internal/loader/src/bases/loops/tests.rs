@@ -10,7 +10,7 @@ use super::*;
 use crate::bases::Container;
 use crate::bases::fake::{self, Fake, record as at, twenty_bases};
 use crate::bases::fake::{FIELDS, GEOMETRY, LAYOUT};
-use crate::locks::Relock;
+use enshwick_base::Relock;
 
 /// Where a test element's position sits, three i64 after its u32 id.
 const ELEMENT_POSITION: usize = 8; // bound, not a game offset: a test's memory

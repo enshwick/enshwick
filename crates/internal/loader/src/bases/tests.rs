@@ -4,7 +4,7 @@ use enshwick_core::abi::AltarLimit;
 
 use super::detours::chain_limit;
 use super::*;
-use crate::locks::Relock;
+use enshwick_base::Relock;
 
 /// The level each run of `plus_vanilla` saw, in order.
 static SEEN: Mutex<Vec<u32>> = Mutex::new(Vec::new());

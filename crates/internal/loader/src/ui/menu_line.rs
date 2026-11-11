@@ -8,9 +8,9 @@ use enshwick_core::abi::Registers;
 use crate::diag::KeptLine;
 use crate::fuse::Fuse;
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
+use enshwick_base::Relock;
 
 use super::engine::Engine;
 use super::{ENGINE, copy};

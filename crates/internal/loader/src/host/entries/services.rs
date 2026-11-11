@@ -8,7 +8,7 @@ use enshwick_core::abi::{Event, EventFn, Header, Level, ModHandle, Status, Str, 
 use crate::host::join::keep;
 use crate::host::memory::{get_headed, put, put_headed, text};
 use crate::host::{Loader, ModRecord, Subscription, caller, caller_index, calling, entry};
-use crate::locks::Relock;
+use enshwick_base::Relock;
 
 impl crate::points::Mods for Loader {
     fn find(&self, id: &str) -> Option<usize> {

@@ -12,9 +12,9 @@ use enshwick_core::content::recipes::{RecipeKind, RecipeLayout, RecipeView};
 pub(crate) use enshwick_core::rates::scale_whole;
 use enshwick_core::rates::{ExperienceGroup, Rate, combine, is_valid_factor};
 
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned::{Symbol, comfort, experience, item, loot, resource, settings, skill};
+use enshwick_base::Relock;
 
 /// For each rate, the build table symbols of the game functions whose
 /// answer the loader scales; the rate works where every one resolves.

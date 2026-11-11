@@ -14,7 +14,7 @@ use super::{
 use crate::host::Loader;
 use crate::item_records::anchor::{Anchor, KindIndex, Pending};
 use crate::item_records::file::{self, Saved};
-use crate::locks::Relock;
+use enshwick_base::Relock;
 
 /// The file of world `key`'s values.
 fn file(key: &str) -> PathBuf {

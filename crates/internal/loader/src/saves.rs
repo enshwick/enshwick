@@ -25,10 +25,10 @@ use enshwick_core::abi::{Event, HookFlags, Side, Status};
 
 use crate::chains::Next;
 use crate::host::{Loader, Target};
-use crate::locks::Relock;
 use crate::module::Export;
 use crate::pinned;
 use crate::pinned::Constant;
+use enshwick_base::Relock;
 
 mod holds;
 

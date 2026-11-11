@@ -11,8 +11,8 @@ use rustc_hash::FxHashMap;
 use super::{CHANGES, ItemPatch, on};
 use crate::data_changes::{ItemOffsets, Key, Raised, credited, edit_item, served};
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
+use enshwick_base::Relock;
 
 /// Each stat with the catalogue ids of its value and of the flag that says
 /// an item has it.

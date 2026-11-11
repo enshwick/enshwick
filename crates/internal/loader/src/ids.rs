@@ -8,7 +8,7 @@ use std::sync::Mutex;
 use enshwick_core::content::Guid;
 use rustc_hash::FxHashMap;
 
-use crate::locks::Relock;
+use enshwick_base::Relock;
 
 /// What an id names; each kind has keys of its own.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

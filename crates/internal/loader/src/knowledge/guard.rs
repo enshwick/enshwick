@@ -26,11 +26,11 @@ use enshwick_core::abi::{
 };
 
 use crate::host::{Loader, Registered};
-use crate::locks::Relock;
 use crate::mid::MidLink;
 use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::registry::Registry;
+use enshwick_base::Relock;
 
 use super::{Layout, definition, layout, quest_set, read};
 

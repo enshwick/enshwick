@@ -12,10 +12,10 @@ use enshwick_gamedata::reflect::{Fingerprint, Reflection};
 
 use crate::builds::KnownBuild;
 use crate::chains::{Chains, Link, Next};
-use crate::locks::Relock;
 use crate::mid::Mids;
 use crate::mod_index::ModIndex;
 use crate::pinned::{Constant, Symbol};
+use enshwick_base::Relock;
 
 mod api;
 mod entries;

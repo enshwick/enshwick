@@ -15,10 +15,10 @@ use crate::chains::Next;
 use crate::ecs::Engine;
 use crate::host::{Loader, Target};
 use crate::host::{Registered, take};
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::pinned::{Constant, Symbol};
+use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

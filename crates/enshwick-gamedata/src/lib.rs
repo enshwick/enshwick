@@ -24,7 +24,6 @@ mod classes;
 mod entries;
 #[cfg(test)]
 mod game_names;
-mod locks;
 mod parts;
 pub mod reflect;
 pub mod releases;

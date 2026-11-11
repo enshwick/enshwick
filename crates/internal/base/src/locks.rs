@@ -3,7 +3,7 @@
 
 use std::panic::Location;
 use std::sync::{
-    Condvar, Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard,
+    Condvar, Mutex, MutexGuard, OnceLock, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard,
     TryLockError, WaitTimeoutResult,
 };
 use std::time::Duration;
@@ -220,9 +220,23 @@ fn woke_poisoned<G>(poisoned: PoisonError<G>, at: &Location<'_>) -> G {
     poisoned.into_inner()
 }
 
-/// Logs that the lock taken at `at` was poisoned.
+/// Where a poisoned lock's place goes instead of a mod's log, named once by
+/// a crate with a log of its own, the loader.
+static SINK: OnceLock<fn(&Location<'_>)> = OnceLock::new();
+
+/// Sends the place of each poisoned lock to `sink` instead of a mod's log;
+/// the first call wins.
+pub(crate) fn report_to(sink: fn(&Location<'_>)) {
+    let _first = SINK.set(sink);
+}
+
+/// Reports that the lock taken at `at` was poisoned.
 #[cold]
 fn poisoned_at(at: &Location<'_>) {
+    if let Some(sink) = SINK.get() {
+        sink(at);
+        return;
+    }
     crate::__private::log(
         crate::abi::Level::WARN,
         format_args!(
@@ -253,6 +267,20 @@ mod tests {
         poisoned(&lock, vec![1, 2]);
         assert_eq!(*lock.relock(), [1, 2]);
         assert!(!lock.is_poisoned());
+    }
+
+    #[test]
+    fn a_named_sink_hears_where_a_poisoned_lock_was_taken() {
+        static HEARD: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        report_to(|at| {
+            assert!(at.file().ends_with("locks.rs"), "{at}");
+            HEARD.store(at.line(), std::sync::atomic::Ordering::Relaxed);
+        });
+        let lock = Mutex::new(0);
+        poisoned(&lock, 1);
+        let line = line!() + 1;
+        assert_eq!(*lock.relock(), 1);
+        assert_eq!(HEARD.load(std::sync::atomic::Ordering::Relaxed), line);
     }
 
     #[test]

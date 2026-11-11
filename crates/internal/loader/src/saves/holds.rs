@@ -10,8 +10,8 @@ use enshwick_core::abi::Status;
 
 use super::{Layout, layout};
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
+use enshwick_base::Relock;
 
 /// How long saves stay held before the loader warns, and how often the
 /// warning repeats while they stay held.

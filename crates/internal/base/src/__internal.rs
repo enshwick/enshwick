@@ -33,6 +33,13 @@ pub fn run_due(scheduler: Scheduler, game: u64) {
     scheduler.run_due(game);
 }
 
+/// Sends the place of each poisoned lock that [`crate::Relock`] and its kin
+/// take to `sink` instead of a mod's log, for a crate with a log of its own;
+/// the first call wins.
+pub fn report_poison_to(sink: fn(&std::panic::Location<'_>)) {
+    crate::locks::report_to(sink);
+}
+
 /// A pointer to `entity`'s component of type `ty` on the server's game
 /// thread, valid until the game thread returns to the game; `None` when the
 /// entity has none.

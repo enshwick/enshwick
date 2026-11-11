@@ -6,10 +6,10 @@ use super::list::{listing, pages};
 use super::settings::draw_row;
 use super::{Entries, MODS_PER_PAGE, ROWS_PER_PAGE};
 use crate::configure::rows::{self, Row};
-use crate::locks::Relock;
 use crate::mods_screen;
 use crate::texts;
 use crate::ui::Painter;
+use enshwick_base::Relock;
 
 /// Draws a page of the server's mods; the mod whose settings the player
 /// opened.

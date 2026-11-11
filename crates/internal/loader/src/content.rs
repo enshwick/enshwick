@@ -34,9 +34,9 @@ use texts::{TEXTS, seal_texts};
 
 use crate::chains::Next;
 use crate::host::{Loader, Target};
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
+use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

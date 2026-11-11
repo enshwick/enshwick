@@ -18,7 +18,7 @@ use enshwick_core::packs::{MANIFEST_FILE, Pack, PackFiles, PackManifest, PackSid
 use rustc_hash::FxHashMap;
 
 use crate::host::Loader;
-use crate::locks::Relock;
+use enshwick_base::Relock;
 
 /// A pack folder found in `mods/`.
 pub(crate) struct Found {

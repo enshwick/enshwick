@@ -13,7 +13,7 @@ use super::{
 use crate::fuse::Fuse;
 use crate::host::Loader;
 use crate::item_records::anchor::{self, Anchor, CharacterId, KindIndex, Pending};
-use crate::locks::Relock;
+use enshwick_base::Relock;
 
 /// Server steps between two looks of a joined character for its carried
 /// items.

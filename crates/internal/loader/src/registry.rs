@@ -3,7 +3,7 @@
 
 use std::sync::{Mutex, OnceLock};
 
-use crate::locks::Relock;
+use enshwick_base::Relock;
 
 /// A registry is sealed: what mods ask for after init is refused.
 ///

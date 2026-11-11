@@ -7,10 +7,10 @@ use std::sync::{Mutex, OnceLock};
 
 use enshwick_core::abi::{CallFn, Level, Status};
 
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::points::Mods;
 use crate::services::{Fields, Names};
+use enshwick_base::Relock;
 
 /// A call as one side declares it.
 #[derive(Debug, Clone, PartialEq, Eq)]

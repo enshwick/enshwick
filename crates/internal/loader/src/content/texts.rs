@@ -6,8 +6,8 @@ use enshwick_core::raw::{read_at, write_at};
 
 use crate::chains::Next;
 use crate::host::{Loader, Target};
-use crate::locks::Relock;
 use crate::pinned;
+use enshwick_base::Relock;
 
 /// Mod texts while mods initialise: tag id, language, text.
 pub(super) static PENDING_TEXTS: Mutex<Vec<(u32, u32, String)>> = Mutex::new(Vec::new());

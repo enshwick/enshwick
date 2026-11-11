@@ -9,9 +9,9 @@ use rustc_hash::FxHashMap;
 
 use super::{DECLARED, Declared, STATE, label_of};
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::remote::{Carried, MAX_CARRIED, MAX_CARRIED_TEXT, Message, cut};
+use enshwick_base::Relock;
 
 /// Sends the client of `key`, which just said hello, the controls of every
 /// running mod of side server that run an action its player may run, in its

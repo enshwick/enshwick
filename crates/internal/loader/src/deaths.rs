@@ -17,8 +17,8 @@ use enshwick_core::abi::{Event, Header, HookFlags, PlayerDeathData};
 
 use crate::chains::Next;
 use crate::host::{Loader, Target};
-use crate::locks::Relock;
 use crate::pinned;
+use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[pinned::player::DEATH_SINK.id()];

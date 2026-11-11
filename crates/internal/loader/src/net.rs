@@ -26,7 +26,6 @@ use enshwick_core::i18n::Language;
 use rustc_hash::FxHashMap;
 
 use crate::host::{Loader, Registered};
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::registry::Registry;
 use crate::wire::{
@@ -34,6 +33,7 @@ use crate::wire::{
     remote_message,
 };
 pub(crate) use crate::wire::{MAX_CONTROL, MAX_MESSAGE};
+use enshwick_base::Relock;
 
 mod server;
 #[cfg(test)]

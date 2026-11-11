@@ -15,9 +15,9 @@ use enshwick_core::abi::{
 };
 
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::remote::Message;
+use enshwick_base::Relock;
 
 /// The least time between two runs one player sends.
 const RUN_GAP: Duration = Duration::from_millis(200);

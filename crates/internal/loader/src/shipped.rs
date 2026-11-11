@@ -10,7 +10,7 @@
 use std::sync::{Arc, Mutex};
 
 use crate::code_watch::lands;
-use crate::locks::Relock;
+use enshwick_base::Relock;
 
 /// Who holds a target whose code no longer reads as shipped.
 #[derive(Clone, Debug, PartialEq, Eq)]

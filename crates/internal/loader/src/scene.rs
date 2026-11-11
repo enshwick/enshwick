@@ -27,13 +27,13 @@ use enshwick_gamedata::catalogue as names;
 
 use crate::catalogue::types;
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::map_frame::{FrameLayout, ReadFrameError, frame, has_biome_map};
 use crate::map_marker_types::{ReadTypesError, TypesLayout, types};
 use crate::pinned;
 use crate::scene_markers::{
     Lookup, ReadSceneError, SceneCache, SceneKey, SceneLayout, collect, placements,
 };
+use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

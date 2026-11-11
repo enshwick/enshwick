@@ -69,9 +69,9 @@ use windows_sys::Win32::System::Threading::{
     THREAD_SET_CONTEXT, THREAD_SUSPEND_RESUME,
 };
 
-use crate::locks::Relock;
 use crate::pages;
 use crate::settings::LOADER_ID;
+use enshwick_base::Relock;
 
 /// The jump written over a target: `jmp rel32`.
 pub(crate) const PATCH: usize = 5;

@@ -13,10 +13,10 @@ use enshwick_core::abi::{
 };
 
 use crate::host::{Loader, Registered};
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::registry::Registry;
 use crate::wire::Drops;
+use enshwick_base::Relock;
 
 /// Lines waiting for the end of the step at most; more are dropped.
 const MAX_WAITING: usize = 256;

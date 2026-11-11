@@ -28,9 +28,9 @@ use rustc_hash::FxHashMap;
 
 use crate::chains::Next;
 use crate::host::{Loader, Target};
-use crate::locks::Relock;
 use crate::pinned;
 use crate::wire::{CONTROL, Link, MAX_SEALED, PROBES, open, probe, read_probe, seal, sealable};
+use enshwick_base::Relock;
 
 mod game;
 #[cfg(test)]

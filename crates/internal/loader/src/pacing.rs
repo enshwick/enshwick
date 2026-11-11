@@ -12,10 +12,10 @@ use enshwick_core::abi::{
 };
 
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::mid::MidLink;
 use crate::mod_index::ModIndex;
 use crate::pinned::{self, Symbol};
+use enshwick_base::Relock;
 
 /// The table ids this part names.
 pub(crate) const TABLE_IDS: &[&str] = &[

@@ -6,7 +6,7 @@ use enshwick_core::abi::{Event, Level, Side};
 
 use super::{DEFAULT_FILE, SettingsFile, current, set_current, world_file};
 use crate::host::{Loader, ModRecord};
-use crate::locks::Relock;
+use enshwick_base::Relock;
 
 fn files(record: &ModRecord) -> Vec<SettingsFile> {
     record.settings_files.relock().clone()

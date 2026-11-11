@@ -8,10 +8,10 @@ use super::list::{listing, pages};
 use super::{Entries, ROWS_PER_PAGE};
 use crate::configure::rows::{self, Lock, Row, Widget};
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::mods_screen;
 use crate::texts;
 use crate::ui::Painter;
+use enshwick_base::Relock;
 
 /// The rows of mod `index`'s settings page at `place`: in another's world,
 /// the values its server sent, read-only, and none before it sent them; in

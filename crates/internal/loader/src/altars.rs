@@ -11,11 +11,11 @@
 
 use levels::{observe, read_levels, write_ranges};
 
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::pinned::Constant;
 use crate::registry::Registry;
+use enshwick_base::Relock;
 
 mod geometry;
 mod levels;

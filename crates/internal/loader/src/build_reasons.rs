@@ -16,8 +16,8 @@ use enshwick_core::Entity;
 use enshwick_core::abi::Side;
 
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
+use enshwick_base::Relock;
 
 /// The longest reason kept, in bytes; a longer one is cut on a character
 /// boundary.

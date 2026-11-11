@@ -62,8 +62,8 @@ use crate::builds::Unhooked;
 use crate::chains::Next;
 use crate::code::{CodePatch, Verdict};
 use crate::host::{Loader, Registered, Target};
-use crate::locks::Relock as _;
 use crate::registry::Registry;
+use enshwick_base::Relock as _;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

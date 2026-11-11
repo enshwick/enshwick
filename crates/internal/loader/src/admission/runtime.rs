@@ -10,8 +10,8 @@ use enshwick_core::abi::Side;
 use crate::fuse::Fuse;
 use crate::host::Loader;
 use crate::join::Names;
-use crate::locks::Relock;
 use crate::pinned;
+use enshwick_base::Relock;
 
 use super::{Gate, Hello, Rules, Step};
 

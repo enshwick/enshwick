@@ -7,8 +7,8 @@
 //! administrators all change settings through here.
 
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::texts;
+use enshwick_base::Relock;
 
 use super::{Change, ChangeSettingError, refused};
 

@@ -10,9 +10,9 @@ use enshwick_core::command_names::{alias_asked, check};
 
 use super::{MAX_LINE, Named, Refusal, Reply, Typed, parse, remote_caller, reply_by, typed, word};
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::registry::Registry;
+use enshwick_base::Relock;
 
 /// Chat commands waiting for the end of the step at most; more are dropped.
 const MAX_PENDING: usize = 64;

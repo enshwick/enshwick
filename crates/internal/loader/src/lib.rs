@@ -158,7 +158,6 @@ mod live;
 mod lobby;
 #[cfg(windows)]
 mod local_held;
-mod locks;
 pub mod log;
 #[cfg_attr(
     all(not(windows), not(test)),

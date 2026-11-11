@@ -1,9 +1,9 @@
 //! Arming the hook chains, mid-function hooks and code patches.
 
 use crate::host::{self, Loader};
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::patch::{self, FrameSlot};
+use enshwick_base::Relock;
 
 /// Arms every chain and mid-function hook past the mods that are off; an
 /// address that fails turns off the mods hooked on it.

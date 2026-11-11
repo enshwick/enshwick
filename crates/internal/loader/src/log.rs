@@ -23,8 +23,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use arc_swap::ArcSwapOption;
 use enshwick_core::abi::Level;
 
-use crate::locks::Relock;
 use crate::settings::{LOADER_ID, Settings};
+use enshwick_base::Relock;
 
 /// The folder beside the game's executable that holds every log.
 pub const LOGS: &str = "logs";
@@ -149,6 +149,7 @@ pub fn loader_file() -> Option<&'static Path> {
 /// its file, and the lines of [`START_FILE`] open the loader's file. When
 /// it cannot start, [`crate::early`] says why.
 pub fn open(dir: &Path) {
+    enshwick_base::__internal::report_poison_to(poisoned_at);
     if let Err(e) = std::fs::create_dir_all(dir) {
         crate::early::note(&format!("no log: {} could not be made: {e}", dir.display()));
         return;
@@ -200,6 +201,19 @@ pub fn open(dir: &Path) {
         }
         Err(e) => crate::early::note(&format!("no log: its thread did not start: {e}")),
     }
+}
+
+/// Writes to the loader's log that the lock taken at `at` was poisoned, for
+/// the lock policy of `enshwick-base`, which reports there once the log
+/// opens.
+#[cold]
+fn poisoned_at(at: &std::panic::Location<'_>) {
+    crate::log!(
+        WARN,
+        "{}:{}: a thread panicked holding this lock; its state is kept",
+        at.file(),
+        at.line()
+    );
 }
 
 /// Moves the lines of [`START_FILE`] in `dir` to the top of `file`.

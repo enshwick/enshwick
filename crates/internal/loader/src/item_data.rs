@@ -47,10 +47,10 @@ use crate::chains::Next;
 use crate::host::{Loader, Target};
 use crate::item_records::anchor::{self, Anchor, KindIndex, Pending};
 use crate::item_records::{decode, encode};
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::registry::Registry;
+use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[pinned::ecs::DESTROY_REQUEST.id()];

@@ -272,7 +272,7 @@ mod tests {
 
     use super::*;
     use crate::bases::fake::{CONSTRUCTED_GROWER, FIELDS, GEOMETRY, LAYOUT, ctor};
-    use crate::locks::Relock;
+    use enshwick_base::Relock;
 
     /// What the fake game code was called with, in order.
     static CALLS: Mutex<Vec<(&'static str, usize)>> = Mutex::new(Vec::new());

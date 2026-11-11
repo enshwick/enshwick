@@ -6,9 +6,9 @@ use enshwick_core::abi::{HookSpec, MidHookSpec, ModHandle, Status};
 use crate::chains::Link;
 use crate::host::memory::{put, slice};
 use crate::host::{caller_index, calling, entry, loader};
-use crate::locks::Relock;
 use crate::mid::MidLink;
 use crate::mod_index::ModIndex;
+use enshwick_base::Relock;
 
 pub(crate) extern "system" fn hook(me: ModHandle, spec: *const HookSpec) -> Status {
     entry("hook", || {

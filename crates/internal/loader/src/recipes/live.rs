@@ -16,10 +16,10 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::catalogue::{Reflected, types};
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::settings::LOADER_ID;
 use crate::texts;
+use enshwick_base::Relock;
 
 use super::{
     Index, Kind, Names, Rule, RuleFile, Source, TEMPLATE, WORLD_FILE, compose, describe, edit_file,
