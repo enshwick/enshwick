@@ -234,6 +234,12 @@ mod tests {
             Some("inventory")
         );
         assert_eq!(target("test::FakeHost").as_deref(), Some("FakeHost"));
+        let renamed = imports("use self::table as joined;", &module("test"))?;
+        assert_eq!(
+            super::target(&module("test::joined::world::x"), &renamed).as_deref(),
+            Some("world"),
+            "the path past an imported name follows it"
+        );
         assert_eq!(target("other::ui"), None);
         Ok(())
     }

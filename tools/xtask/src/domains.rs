@@ -666,6 +666,16 @@ mod tests {
     }
 
     #[test]
+    fn a_self_path_resolves_in_its_module_and_a_super_chain_past_the_root_is_dropped()
+    -> Result<(), String> {
+        let (found, _) = paths("use self::part::P;", &module("world"), &[])?;
+        assert_eq!(found, [module("world::part::P")].into());
+        let (found, _) = paths("use super::super::x;", &module("world"), &[])?;
+        assert!(found.is_empty(), "{found:?}");
+        Ok(())
+    }
+
+    #[test]
     fn paths_keeps_a_named_crate_s_paths_apart_and_drops_other_crates() -> Result<(), String> {
         let code = "use enshwick_core::ui::Frame;\nuse std::fmt;\nfn f() { other::x(); enshwick_core::chat::send(); }";
         let (found, external) = paths(code, &module("test::world"), &[fake::CORE_CRATE])?;
