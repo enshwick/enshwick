@@ -45,8 +45,7 @@ enshwick ──test──▶ enshwick-fake ──▶ enshwick-core (its `fake` f
   typed API; `enshwick-abi`, the ABI; `enshwick-values`, the value types the
   layers share. None depends on `enshwick` or on a part above it, so the
   compiler refuses ABI code that names the safe API and core code that names
-  the fake; `enshwick-values` asks the running build for a resource type's
-  hash through one function `enshwick-core` registers.
+  the fake.
 - The fake reaches inside `enshwick-core` only through its hidden `__fake`
   module, which only core's `fake` feature builds and only `enshwick-fake`
   turns on, so a mod's release build holds no test support. Core asks the
@@ -63,8 +62,9 @@ enshwick ──test──▶ enshwick-fake ──▶ enshwick-core (its `fake` f
   `enshwick-core` and, for the API's version, `enshwick-abi`; they take
   `enshwick` only for their tests, which build mods and reach the fake, and
   `cargo xtask check` refuses a crate in `crates/` or `tools/` that takes it
-  for more. The loader names `enshwick-core` `enshwick` at its root, as the
-  settings macros write the API crate's paths.
+  for more. A crate that uses the macros without the facade names the crate
+  their expansion reaches with the hidden argument `crate = "path"`, as the
+  loader's settings do with `crate = "::enshwick_core"`.
 - Nothing depends on the loader except xtask's `compat` feature; cargo-deny
   refuses it anywhere else.
 - `enshwick` never depends on the loader or on `enshwick-gamedata`: a mod links
@@ -76,6 +76,30 @@ enshwick ──test──▶ enshwick-fake ──▶ enshwick-core (its `fake` f
   the event tables. `enshwick-luau` binds those descriptions to Luau and
   `cargo-enshwick` writes the Luau definitions from them; neither keeps a
   list of its own. Only `enshwick-luau` links Luau.
+
+## Domains inside the core
+
+`crates/internal/core/domains.toml` puts each top-level module of
+`enshwick-core` in one domain and orders the domains, lowest first: base,
+content, world, inventory, knowledge, actions, ui, packs.
+
+- A module names only base, its own domain and the domains before its own.
+  Something two domains share moves down into base or the lower domain.
+- `cargo xtask check` reads the code's `crate::` paths without compiling and
+  refuses an edge up the order. The edges up the order the code still has
+  are listed in `domains.toml`; a new one fails, and so does a listed one
+  that is gone, so the list only shrinks.
+- Registration lists are one per domain, joined in the domain order: the
+  script namespaces in `script/namespaces/<domain>.rs`, which the check also
+  holds to the map. The loader's `TABLE_IDS` are one list per module, joined
+  in `table_ids.rs`.
+- Each domain turns its own errors into `Off`, and keeps the state it needs
+  while a mod initialises in `Load`'s typed slots, keyed by a type of its
+  own, so `Load` names no domain.
+- `Load` and `World` stay in `enshwick-core`, the top layer. Domains leave
+  the core downward, lowest first, each into a crate below it that depends
+  on base and lower domains only; the core keeps the domain's `Load` and
+  `World` methods as one-line forwarders with their docs and `#[script]`.
 
 ## The ABI contract
 
