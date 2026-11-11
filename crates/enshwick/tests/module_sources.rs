@@ -62,11 +62,13 @@ mod tests {
         let macros =
             std::fs::read_to_string(crate_dir.join("../internal/macros/src/lib.rs")).unwrap();
         let lines: Vec<&str> = lib.lines().collect();
-        // The internal crates whose modules this crate re-exports by name.
-        let from = ["enshwick_base", "enshwick_core"];
+        let from: Vec<String> = crate::internal_crates::internal_crates()
+            .into_iter()
+            .map(|(name, _)| format!("enshwick_{name}"))
+            .collect();
         let shared: Vec<(&str, &str)> = attribute_macros(&macros)
             .into_iter()
-            .flat_map(|name| from.iter().map(move |krate| (*krate, name)))
+            .flat_map(|name| from.iter().map(move |krate| (krate.as_str(), name)))
             .filter(|(krate, name)| {
                 let path = format!("pub use {krate}::{name}");
                 lines.iter().any(|line| {

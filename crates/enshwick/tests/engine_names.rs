@@ -78,28 +78,34 @@ mod tests {
             .to_owned()
     }
 
-    /// The source folders of this crate and of the internal crates whose
-    /// modules it re-exports, each with the prefix its files take in
-    /// [`ALLOWED`]. `enshwick-typed` is generated from the reflection, whose
-    /// names it carries on purpose.
-    fn roots() -> [(&'static str, PathBuf); 6] {
+    /// The source folders of this crate and of every internal crate, each with
+    /// the prefix its files take in [`ALLOWED`]: none for this crate and
+    /// core, else the crate's folder name. `enshwick-typed` is generated from
+    /// the reflection, whose names it carries on purpose.
+    fn roots() -> Vec<(String, PathBuf)> {
         let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let internal = |name: &str| crate_dir.join("../internal").join(name).join("src");
-        [
-            ("", crate_dir.join("src")),
-            ("", internal("core")),
-            ("abi:", internal("abi")),
-            ("base:", internal("base")),
-            ("fake:", internal("fake")),
-            ("values:", internal("values")),
-        ]
+        std::iter::once((String::new(), crate_dir.join("src")))
+            .chain(
+                crate::internal_crates::internal_crates()
+                    .into_iter()
+                    .filter(|(name, _)| name != "typed")
+                    .map(|(name, src)| {
+                        let prefix = if name == "core" {
+                            String::new()
+                        } else {
+                            format!("{name}:")
+                        };
+                        (prefix, src)
+                    }),
+            )
+            .collect()
     }
 
     #[test]
     fn no_engine_name_is_spelled_outside_the_low_level_examples() {
         let mut found = Vec::new();
         for (prefix, src) in roots() {
-            scan(prefix, &src, &mut found);
+            scan(&prefix, &src, &mut found);
         }
         check(found);
     }
