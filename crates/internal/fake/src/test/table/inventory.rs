@@ -24,6 +24,43 @@ pub(crate) extern "system" fn item_filter(
     })
 }
 
+pub(crate) extern "system" fn drop_items(
+    _me: ModHandle,
+    request: *const enshwick_core::abi::DropRequest,
+    out: *mut enshwick_core::Entity,
+) -> Status {
+    let Some(request) = crate::test::table::get_headed(request) else {
+        return Status::BAD_ARGS;
+    };
+    if out.is_null() {
+        return Status::BAD_ARGS;
+    }
+    let rarity = u8::try_from(request.rarity).ok();
+    if !(1..=u32::from(u16::MAX)).contains(&request.count)
+        || rarity
+            .and_then(enshwick_core::affixes::ItemRarity::from_raw)
+            .is_none()
+    {
+        return Status::BAD_ARGS;
+    }
+    let entity = with(None, |s| {
+        if !s.host.items.contains_key(&request.item.get()) {
+            return Some(Err(Status::REFUSED));
+        }
+        // Above every spawn's id, so the two never share one.
+        let entity = crate::test::table::world::FIRST_SPAWNED
+            + 0x1_0000
+            + u32::try_from(s.drops.len()).unwrap_or(0);
+        s.drops.push((enshwick_core::Entity(entity), request));
+        Some(Ok(entity))
+    });
+    match entity {
+        Some(Ok(entity)) => crate::test::table::put(out, enshwick_core::Entity(entity)),
+        Some(Err(status)) => status,
+        None => Status::MISSING,
+    }
+}
+
 pub(crate) extern "system" fn damage_filter(
     me: ModHandle,
     callback: DamageFilterFn,

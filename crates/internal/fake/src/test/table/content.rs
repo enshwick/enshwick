@@ -40,6 +40,99 @@ pub(crate) extern "system" fn read_only(
     put(out, len)
 }
 
+pub(crate) extern "system" fn declare_content(
+    _me: ModHandle,
+    id: Str,
+    out: *mut [u8; 16],
+) -> Status {
+    let id = text(id);
+    let Some(guid) = enshwick_core::content::Guid::try_named(&id) else {
+        return Status::BAD_ARGS;
+    };
+    with(Status::MISSING, |s| {
+        let clash = s.content_ids.iter().any(|known| {
+            *known != id
+                && enshwick_core::content::Guid::try_named(known)
+                    .is_some_and(|g| g.fnv1a() == guid.fnv1a())
+        });
+        if clash {
+            return Status::REFUSED;
+        }
+        if !s.content_ids.contains(&id) {
+            s.content_ids.push(id);
+        }
+        put(out, guid.0)
+    })
+}
+
+pub(crate) extern "system" fn crafting_prop(
+    _me: ModHandle,
+    prop: *const [u8; 16],
+    first: u8,
+    width: u8,
+    out: *mut u8,
+) -> Status {
+    // SAFETY: the safe layer passes the prop's GUID, alive for the call.
+    let Some(&prop) = (unsafe { prop.as_ref() }) else {
+        return Status::BAD_ARGS;
+    };
+    if out.is_null() {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        if s.registration == Registration::Closed {
+            return Status::TOO_LATE;
+        }
+        if !s.manifest.as_ref().is_none_or(|manifest| manifest.joins) {
+            return Status::REFUSED;
+        }
+        let (bounds, added) = &mut s.crafting_props;
+        if *bounds.get_or_insert((first, width)) != (first, width) {
+            return Status::BAD_ARGS;
+        }
+        let at = added
+            .iter()
+            .position(|known| *known == prop)
+            .unwrap_or(added.len());
+        let Some(index) = u8::try_from(at)
+            .ok()
+            .and_then(|at| first.checked_add(at))
+            .filter(|index| *index < width)
+        else {
+            return Status::REFUSED;
+        };
+        if at == added.len() {
+            added.push(prop);
+        }
+        put(out, index)
+    })
+}
+
+pub(crate) extern "system" fn use_content(_me: ModHandle, id: Str) -> Status {
+    let id = text(id);
+    if enshwick_core::content::Guid::try_named(&id).is_none() {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        let refused = s.manifest.as_ref().is_some_and(|manifest| {
+            manifest.unexported(
+                enshwick_core::schema_section::Kind::Content,
+                &id,
+                &s.host.exports,
+            )
+        });
+        if !refused {
+            return Status::OK;
+        }
+        crate::test::table::base::mods::warn_unexported(
+            s,
+            enshwick_core::schema_section::Kind::Content,
+            &id,
+        );
+        Status::REFUSED
+    })
+}
+
 pub(crate) extern "system" fn rate(_me: ModHandle, rate: RateId) -> Status {
     with(Status::MISSING, |s| {
         if enshwick_core::__fake::Rate::from_id(rate).is_none() {

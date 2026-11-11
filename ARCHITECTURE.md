@@ -104,6 +104,11 @@ the crate of each domain that has left it.
   script namespaces in `script/namespaces/<domain>.rs`, which the check also
   holds to the map. The loader's `TABLE_IDS` are one list per module, joined
   in `table_ids.rs`.
+- The fake loader follows the same map: each file under
+  `crates/internal/fake/src/test/` and `test/table/` sits in the folder of
+  its domain, `test.rs` and `test/table.rs` join them, and the check holds
+  its edges, to the fake's domains and to core's, by the same rule with
+  their own `upward` list under `[fake]`.
 - Each domain turns its own errors into `Off`, and keeps the state it needs
   while a mod initialises in the base handle's typed slots, keyed by a type
   of its own, so `Load` names no domain.
