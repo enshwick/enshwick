@@ -56,7 +56,7 @@ use std::time::Instant;
 
 use affected::{Package, Scope};
 
-const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|windows-lint|windows-tests|fuzz]... [--list-windows-tests] (--all fuzzes only with --part fuzz) | dist [--out <dir>] | notes [--out <file>] [--known-issues <text>] | tag-lines | header | alias-examples | host-args | compat <exe> [--mods <path>...] [--report <file>] [--patterns] [--data <file>] | compat refresh (ENSH_EXES lists the executables)";
+const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|docs|windows-lint|windows-tests|fuzz]... [--list-windows-tests] (--all fuzzes only with --part fuzz) | dist [--out <dir>] | notes [--out <file>] [--known-issues <text>] | tag-lines | header | alias-examples | host-args | compat <exe> [--mods <path>...] [--report <file>] [--patterns] [--data <file>] | compat refresh (ENSH_EXES lists the executables)";
 const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// Turned on by name: most of the API crate's test targets need its fake
 /// loader, and without the feature cargo skips them without a word; the
@@ -275,9 +275,12 @@ fn fuzz_part(base: &str, all: bool) -> bool {
 /// A part of the check, so CI can run the parts as parallel jobs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Part {
-    /// fmt with `--all`, clippy, nextest, doctests, rustdoc and cargo-deny
-    /// for the host, and the repository's own checks.
+    /// fmt with `--all`, clippy, nextest and cargo-deny for the host, and the
+    /// repository's own checks.
     Host,
+    /// The doctests, the API crate's stable-surface checks and the workspace
+    /// rustdoc, for the host.
+    Docs,
     /// clippy for the Windows target through cargo-xwin, off Windows.
     WindowsLint,
     /// The tests of the changed packages that run only on Windows, under
@@ -289,10 +292,10 @@ enum Part {
 }
 
 impl Part {
-    /// The parts that run when none is named: the host check and the
-    /// Windows lint, and the Windows tests with `--all` or `--windows`.
+    /// The parts that run when none is named: the host check, the docs and
+    /// the Windows lint, and the Windows tests with `--all` or `--windows`.
     fn every(windows_tests: bool) -> Vec<Self> {
-        let mut every = vec![Self::Host, Self::WindowsLint];
+        let mut every = vec![Self::Host, Self::Docs, Self::WindowsLint];
         if windows_tests {
             every.push(Self::WindowsTests);
         }
@@ -302,6 +305,7 @@ impl Part {
     fn parse(name: &str) -> Result<Self, String> {
         match name {
             "host" => Ok(Self::Host),
+            "docs" => Ok(Self::Docs),
             "windows-lint" => Ok(Self::WindowsLint),
             "windows-tests" => Ok(Self::WindowsTests),
             "fuzz" => Ok(Self::Fuzz),
@@ -587,11 +591,6 @@ fn source_checks() -> bool {
         && Step::tool("cargo-machete", &[]).run(false)
 }
 
-/// Runs the checks of `scope`. Every build selects the whole workspace, so
-/// features unify the same way on every run and nothing builds twice; only
-/// the tests run are narrowed to the changed packages. Host steps run one
-/// after another (they share the build lock); the Windows lint runs beside
-/// them.
 /// The cargo arguments every host build and test of the workspace takes.
 fn host_args(packages: &[Package], on_windows: bool) -> Vec<String> {
     let mut args = vec![
@@ -608,6 +607,60 @@ fn host_args(packages: &[Package], on_windows: bool) -> Vec<String> {
     args
 }
 
+/// The host steps of `parts`, one after another, in the order a check of
+/// every part runs them: `code` and `docs` say what changed, and `tests` is
+/// the nextest filter of the changed packages (`None`: every test).
+fn host_steps(
+    scope: &Scope,
+    workspace: &[String],
+    (code, docs): (bool, bool),
+    tests: Option<&str>,
+    full: bool,
+    parts: &[Part],
+) -> Vec<Step> {
+    let host = |words: &[&str]| Step::new(words).then_owned(workspace);
+    let mut steps = Vec::new();
+    let run_host = parts.contains(&Part::Host);
+    let run_docs = parts.contains(&Part::Docs);
+    if full && run_host {
+        steps.push(Step::new(&["fmt", "--all", "--check"]));
+    }
+    if code && run_host {
+        steps.push(host(&["clippy", "--all-targets"]).then(&["--", "-D", "warnings"]));
+        match tests {
+            Some("") => {}
+            Some(filter) => {
+                steps.push(host(&["nextest", "run", "--no-tests=pass"]).then(&["-E", filter]));
+            }
+            None => steps.push(host(&["nextest", "run", "--no-tests=pass"])),
+        }
+    }
+    if docs && run_docs {
+        steps.push(host(&["test", "--doc"]));
+    }
+    // The API crate's examples, the book's among them, change with its
+    // documents as well as with its code.
+    let api_docs = match scope {
+        Scope::All => true,
+        Scope::Some { docs, .. } => docs.iter().any(|name| name == "enshwick"),
+    };
+    if run_docs && (touches(scope, "enshwick") || api_docs) {
+        steps.extend(stable_api_steps(touches(scope, "enshwick")));
+    }
+    if run_docs && workspace_rustdoc(code, full) {
+        steps.push(host(&["doc", "--no-deps"]).env("RUSTDOCFLAGS", "-D warnings"));
+    }
+    if full && run_host {
+        steps.push(Step::new(&["deny", "check"]));
+    }
+    steps
+}
+
+/// Runs the checks of `scope`. Every build selects the whole workspace, so
+/// features unify the same way on every run and nothing builds twice; only
+/// the tests run are narrowed to the changed packages. Host steps run one
+/// after another (they share the build lock); the Windows lint runs beside
+/// them.
 fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> bool {
     // The source checks read every file in about a second without compiling,
     // so they run whatever changed: a change to a rule alone touches no package.
@@ -643,40 +696,14 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
         say("checking the whole workspace");
     }
     let workspace = host_args(packages, on_windows);
-    let host = |words: &[&str]| Step::new(words).then_owned(&workspace);
-
-    let mut host_steps = Vec::new();
-    let run_host = parts.contains(&Part::Host);
-    if full && run_host {
-        host_steps.push(Step::new(&["fmt", "--all", "--check"]));
-    }
-    if code && run_host {
-        host_steps.push(host(&["clippy", "--all-targets"]).then(&["--", "-D", "warnings"]));
-        match &tests {
-            Some(filter) if filter.is_empty() => {}
-            Some(filter) => host_steps
-                .push(host(&["nextest", "run", "--no-tests=pass"]).then(&["-E", filter.as_str()])),
-            None => host_steps.push(host(&["nextest", "run", "--no-tests=pass"])),
-        }
-    }
-    if docs && run_host {
-        host_steps.push(host(&["test", "--doc"]));
-    }
-    // The API crate's examples, the book's among them, change with its
-    // documents as well as with its code.
-    let api_docs = match scope {
-        Scope::All => true,
-        Scope::Some { docs, .. } => docs.iter().any(|name| name == "enshwick"),
-    };
-    if run_host && (touches(scope, "enshwick") || api_docs) {
-        host_steps.extend(stable_api_steps(touches(scope, "enshwick")));
-    }
-    if run_host && workspace_rustdoc(code, full) {
-        host_steps.push(host(&["doc", "--no-deps"]).env("RUSTDOCFLAGS", "-D warnings"));
-    }
-    if full && run_host {
-        host_steps.push(Step::new(&["deny", "check"]));
-    }
+    let host_steps = host_steps(
+        scope,
+        &workspace,
+        (code, docs),
+        tests.as_deref(),
+        full,
+        parts,
+    );
     // Off Windows the whole workspace is also linted for Windows, where the
     // `cfg(windows)` code builds.
     let windows = (!on_windows && code && parts.contains(&Part::WindowsLint)).then(|| {
@@ -710,6 +737,40 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_docs_part_parses_and_runs_when_no_part_is_named() {
+        assert_eq!(Part::parse("docs"), Ok(Part::Docs));
+        assert!(Part::every(false).contains(&Part::Docs));
+        assert!(Part::every(true).contains(&Part::Docs));
+        assert!(Part::parse("doc").is_err());
+    }
+
+    fn planned(parts: &[Part]) -> Vec<String> {
+        host_steps(&Scope::All, &[], (true, true), None, true, parts)
+            .iter()
+            .map(Step::line)
+            .collect()
+    }
+
+    #[test]
+    fn the_host_and_docs_parts_split_the_steps_a_check_of_every_part_runs_in_order() {
+        let (host, docs) = (planned(&[Part::Host]), planned(&[Part::Docs]));
+        let starts = |steps: &[String], with: &str| steps.iter().any(|s| s.starts_with(with));
+        assert!(starts(&host, "cargo nextest") && starts(&host, "cargo deny"));
+        assert!(!starts(&host, "cargo test --doc") && !starts(&host, "cargo doc"));
+        assert!(starts(&docs, "cargo test --doc") && starts(&docs, "cargo doc"));
+        assert!(!starts(&docs, "cargo nextest") && !starts(&docs, "cargo fmt"));
+        let every = planned(&Part::every(false));
+        let order = |steps: &[String]| -> Vec<usize> {
+            steps
+                .iter()
+                .map(|step| every.iter().position(|s| s == step).unwrap())
+                .collect()
+        };
+        assert_eq!(every.len(), host.len() + docs.len());
+        assert!(order(&host).is_sorted() && order(&docs).is_sorted());
+    }
 
     fn runs_stable_rustdoc(steps: &[Step]) -> bool {
         steps.iter().any(|step| {
