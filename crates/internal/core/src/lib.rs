@@ -31,8 +31,8 @@ pub use enshwick_abi::abi;
 #[cfg(feature = "unstable")]
 pub mod actions;
 pub mod affixes;
-pub mod altars;
-pub mod buffs;
+#[doc(inline)]
+pub use enshwick_world::{altars, buffs, daytime, game_settings, terrain, voxels, weather};
 pub mod chat;
 #[cfg(feature = "unstable")]
 pub mod commands;
@@ -43,12 +43,10 @@ pub use enshwick_content::content;
 #[cfg(feature = "unstable")]
 pub mod controls;
 pub mod damage;
-pub mod daytime;
 mod declare;
 pub mod effects;
 #[cfg(feature = "unstable")]
 pub mod entity_data;
-pub mod game_settings;
 #[cfg(feature = "unstable")]
 pub mod input;
 pub mod interactions;
@@ -69,7 +67,8 @@ pub mod knowledge;
 mod load;
 pub mod loot;
 #[cfg(feature = "unstable")]
-pub mod map;
+#[doc(inline)]
+pub use enshwick_world::map;
 pub mod packs;
 pub mod progress;
 #[cfg(feature = "typed")]
@@ -102,16 +101,14 @@ pub use enshwick_values::shape;
 pub mod sound;
 pub mod stats;
 pub mod survivors;
-pub mod terrain;
 #[cfg(feature = "typed")]
-pub mod typed;
+#[doc(inline)]
+pub use enshwick_world::typed;
 pub mod ui;
 pub mod vetoes;
-pub mod voxels;
-pub mod weather;
 #[cfg(feature = "unstable")]
-pub mod world;
-mod world_error;
+#[doc(inline)]
+pub use enshwick_world::world;
 
 #[doc(no_inline)]
 pub use abi::{Entity, ItemId, PlayerKey, RecipeId};
@@ -124,10 +121,10 @@ pub use enshwick_macros::{
 pub use enshwick_macros::{Script, call, script};
 #[cfg(not(feature = "unstable"))]
 pub(crate) use enshwick_macros::{Script, script};
+pub use enshwick_world::WorldError;
 pub use load::{Load, Mod, Off};
 #[doc(no_inline)]
 pub use shape::Shape;
-pub use world_error::WorldError;
 
 #[cfg(feature = "fake")]
 #[doc(hidden)]

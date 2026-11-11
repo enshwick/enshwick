@@ -49,6 +49,10 @@ name = "enshwick-content"
 version_group = "api"
 
 [[package]]
+name = "enshwick-world"
+version_group = "api"
+
+[[package]]
 name = "enshwick-typed"
 version_group = "api"
 

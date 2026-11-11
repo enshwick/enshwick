@@ -518,6 +518,7 @@ dependencies = [
  "enshwick-macros",
  "enshwick-typed",
  "enshwick-values",
+ "enshwick-world",
  "fastrand",
  "hound",
  "insta",
@@ -695,6 +696,28 @@ dependencies = [
  "rustc-hash",
  "serde",
  "thiserror",
+]
+
+[[package]]
+name = "enshwick-world"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "bytemuck",
+ "enshwick",
+ "enshwick-abi",
+ "enshwick-base",
+ "enshwick-content",
+ "enshwick-macros",
+ "enshwick-typed",
+ "enshwick-values",
+ "fastrand",
+ "insta",
+ "postcard",
+ "proptest",
+ "rustc-hash",
+ "serde",
+ "thiserror",
+ "toml 1.2.1+spec-1.1.0",
 ]
 
 [[package]]

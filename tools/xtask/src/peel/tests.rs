@@ -424,3 +424,22 @@ fn a_peel_above_base_drops_core_s_load_from_the_imports() {
         "a longer name holding the word stays"
     );
 }
+
+#[test]
+fn a_forwarder_s_links_relative_to_its_module_become_paths_from_the_crate_root() {
+    let block = "    /// See the [module](self), [`Altar`](super::Altar) and [`x`](self::x).\n\
+                 \x20   /// [`base_limit`]: super::base_limit\n\
+                 \x20   /// [here]: self\n\
+                 \x20   pub fn altars(&mut self) -> Result<(), Off>; // (self)\n";
+    assert_eq!(
+        rebase_links(block, "altars::kinds"),
+        "    /// See the [module](crate::altars::kinds), [`Altar`](crate::altars::Altar) and [`x`](crate::altars::kinds::x).\n\
+         \x20   /// [`base_limit`]: crate::altars::base_limit\n\
+         \x20   /// [here]: crate::altars::kinds\n\
+         \x20   pub fn altars(&mut self) -> Result<(), Off>; // (self)\n"
+    );
+    assert_eq!(
+        rebase_links("/// [`Voxels`](super::Voxels)\n", "voxels"),
+        "/// [`Voxels`](crate::Voxels)\n"
+    );
+}
