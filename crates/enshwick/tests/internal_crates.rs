@@ -1,5 +1,6 @@
 //! The internal crates this crate is built from, every folder of
 //! `crates/internal`, so a guard over their sources follows each new crate.
+#![cfg(test)]
 
 use std::path::{Path, PathBuf};
 
