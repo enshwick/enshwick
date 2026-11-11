@@ -67,12 +67,8 @@ impl StoreError {
     }
 }
 
-/// A store's error at init turns the mod off with its text.
-impl From<StoreError> for Off {
-    fn from(error: StoreError) -> Self {
-        Self::new(error.to_string())
-    }
-}
+// A store's error at init turns the mod off with its text.
+crate::load::off_from!(StoreError);
 
 /// A value kept in a TOML file, written atomically so a crash never leaves
 /// half a file: one world's file of a [`WorldStore`].

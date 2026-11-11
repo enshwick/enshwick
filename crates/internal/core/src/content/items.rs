@@ -509,7 +509,7 @@ pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem, guid: Guid) 
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let layout = ItemLayout::resolve(load)?;
 ///     let staff = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
-///     let registry = ITEM_REGISTRY.key(types::ITEM_REGISTRY_RESOURCE)?;
+///     let registry = types::ITEM_REGISTRY_RESOURCE.key(ITEM_REGISTRY)?;
 ///     load.serve(registry, registry, move |base| list_item(&layout, base, staff, "Staff"))
 /// }
 /// ```
@@ -634,11 +634,11 @@ impl Load<'_> {
             self.add_icon(icon)?;
         }
         self.serve(
-            guid.key(types::ITEM_INFO)?,
-            like.key(types::ITEM_INFO)?,
+            types::ITEM_INFO.key(guid)?,
+            types::ITEM_INFO.key(like)?,
             move |base| served_clone(&layout, base, &item, guid),
         )?;
-        let registry = ITEM_REGISTRY.key(types::ITEM_REGISTRY_RESOURCE)?;
+        let registry = types::ITEM_REGISTRY_RESOURCE.key(ITEM_REGISTRY)?;
         self.serve(registry, registry, move |base| {
             list_item(&layout, base, guid, &debug_name)
         })?;

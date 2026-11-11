@@ -1,0 +1,4 @@
+# A proc-macro entry point runs only inside a compiler expansion, so the
+# macro crate's own tests cannot call it; an empty expansion fails every crate
+# that uses the macro (enshwick-core first), which is where it is caught.
+exclude_re = ['enshwick-macros/src/lib\.rs:\d+:\d+: replace \w+ -> TokenStream with Default::default\(\)']

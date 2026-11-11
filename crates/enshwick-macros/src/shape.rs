@@ -43,7 +43,11 @@ pub(super) fn shape_attributes(attrs: &[Attribute]) -> syn::Result<ShapeAttribut
             })?;
         } else if attr.path().is_ident("shape") {
             attr.parse_nested_meta(|meta| {
-                if meta.path.is_ident("values") {
+                if meta.path.is_ident(crate::krate::KEY) {
+                    // Read by the derive's entry point, which writes the paths.
+                    let _path = crate::krate::value(&meta)?;
+                    Ok(())
+                } else if meta.path.is_ident("values") {
                     meta.parse_nested_meta(|value| {
                         values.push(value.path.require_ident()?.clone());
                         Ok(())

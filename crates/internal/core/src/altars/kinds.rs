@@ -188,7 +188,7 @@ impl Load<'_> {
     #[cfg(feature = "unstable")]
     #[script]
     pub fn limit_altar_level(&mut self, kind: PropId, max_level: u8) -> Result<(), Off> {
-        let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY_RESOURCE)?;
+        let registry = types::RECIPE_REGISTRY_RESOURCE.key(RECIPE_REGISTRY)?;
         let refused = upgrades_from(&self.host().game_value(registry)?, max_level)?;
         let (host, kind) = (self.host(), kind.template.guid());
         self.on_craft(move |craft| {

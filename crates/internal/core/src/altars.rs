@@ -518,6 +518,8 @@ pub enum ResizeError {
     Refused(u32),
 }
 
+crate::load::off_from!(ResizeError);
+
 /// The most zones a [`BuildingZoneCheck`] carries; the engine keeps at most 255.
 pub const MAX_ZONES: usize = 256;
 

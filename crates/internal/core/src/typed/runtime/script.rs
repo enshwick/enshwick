@@ -7,10 +7,10 @@
 use super::{RawComponent, RawEvent, RawResource, Role, Row};
 use crate::content::Guid;
 use crate::resources::{Registry, Resources, Value as Data};
-use crate::script::convert::Fields;
 use crate::script::{Class, Error, Value};
 use crate::world::World;
 use crate::{Entity, Host, Load, Off};
+use enshwick_typed::typed::runtime::rows::Fields;
 
 /// A generated component type on the running build, as a script holds it.
 #[derive(Clone)]

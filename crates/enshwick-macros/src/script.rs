@@ -60,8 +60,10 @@ fn type_name(input: &DeriveInput) -> String {
         let _read = attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("name") {
                 name = meta.value()?.parse::<syn::LitStr>()?.value();
+                Ok(())
+            } else {
+                crate::krate::skip(&meta)
             }
-            Ok(())
         });
     }
     name
@@ -94,10 +96,7 @@ fn derive_record(input: &DeriveInput, named: &FieldsNamed) -> TokenStream {
     });
     // `#[script(context)]`: a hook's `&mut` argument a handler gets as a
     // value and changes by returning the changed value.
-    let context = input.attrs.iter().any(|attr| {
-        attr.path().is_ident("script")
-            && attr.parse_args::<Ident>().is_ok_and(|arg| arg == "context")
-    });
+    let context = has_word(&input.attrs, "context");
     let context = context.then(|| {
         quote! {
             impl #script::Context for #ident {
@@ -159,10 +158,20 @@ fn derive_record(input: &DeriveInput, named: &FieldsNamed) -> TokenStream {
 
 /// Whether `#[script(default)]` marks `field`: a script may leave it out.
 fn defaulted(field: &syn::Field) -> bool {
-    field.attrs.iter().any(|attr| {
-        attr.path().is_ident("script")
-            && attr.parse_args::<Ident>().is_ok_and(|arg| arg == "default")
-    })
+    has_word(&field.attrs, "default")
+}
+
+/// Whether a `#[script(..)]` of `attrs` holds the bare `word`, beside any
+/// other arguments.
+fn has_word(attrs: &[syn::Attribute], word: &str) -> bool {
+    let mut found = false;
+    for attr in attrs.iter().filter(|a| a.path().is_ident("script")) {
+        let _read = attr.parse_nested_meta(|meta| {
+            found |= meta.path.is_ident(word);
+            crate::krate::skip(&meta)
+        });
+    }
+    found
 }
 
 fn derive_newtype(ident: &Ident, inner: &Type) -> TokenStream {
@@ -785,4 +794,28 @@ pub(crate) fn expand_impl(part: &Ident, mut item: ItemImpl) -> syn::Result<Token
             pub const #constant: &'static [#ty] = &[#(#functions),*];
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use syn::parse_quote;
+
+    use super::*;
+
+    #[test]
+    fn the_crate_argument_keeps_name_context_and_default_beside_it() -> syn::Result<()> {
+        let input: DeriveInput = parse_quote! {
+            #[script(crate = "::enshwick_core", name = "Renamed")]
+            #[script(context, crate = "::enshwick_core")]
+            struct Kept {
+                #[script(default, crate = "::enshwick_core")]
+                pub level: u32,
+            }
+        };
+        assert_eq!(type_name(&input), "Renamed");
+        let out = expand_derive(&input)?.to_string();
+        assert!(out.contains("Context for Kept"), "{out}");
+        assert!(out.contains("argument_or_default"), "{out}");
+        Ok(())
+    }
 }

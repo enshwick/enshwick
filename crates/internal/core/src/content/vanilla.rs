@@ -130,6 +130,8 @@ pub enum VanillaError {
     NotAnEnemy(Guid),
 }
 
+crate::load::off_from!(VanillaError);
+
 fn near_list(near: &[String]) -> String {
     if near.is_empty() {
         String::new()

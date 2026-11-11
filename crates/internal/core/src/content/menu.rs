@@ -132,7 +132,7 @@ pub struct MenuEntry {
 ///         after: Some(Guid::parse("45390726-8a83-4538-91a2-db2a633c8eac")),
 ///         workshop: None,
 ///     };
-///     let bundle = UI_BUNDLE.key(types::FB_UI_BUNDLE)?;
+///     let bundle = types::FB_UI_BUNDLE.key(UI_BUNDLE)?;
 ///     load.serve(bundle, bundle, move |base| list_recipes(&layout, base, &[entry]))
 /// }
 /// ```
@@ -198,7 +198,7 @@ pub fn list_recipes(layout: &MenuLayout, bundle: &[u8], entries: &[MenuEntry]) -
 ///     let layout = MenuLayout::resolve(load)?;
 ///     let planks = Guid::parse("45390726-8a83-4538-91a2-db2a633c8eac");
 ///     let kiln = WorkshopId::new(Guid::parse("5b828914-9b48-40f8-b541-72e9b942cee6"));
-///     let bundle = UI_BUNDLE.key(types::FB_UI_BUNDLE)?;
+///     let bundle = types::FB_UI_BUNDLE.key(UI_BUNDLE)?;
 ///     load.serve(bundle, bundle, move |base| move_recipes(&layout, base, &[(planks, kiln)]))
 /// }
 /// ```
@@ -377,7 +377,7 @@ fn group_entries(layout: &MenuLayout, blob: &Blob, group: usize) -> Option<usize
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let layout = MenuLayout::resolve(load)?;
 ///     let bench = WorkshopId::new(id!("bench.workshop").guid());
-///     let bundle = UI_BUNDLE.key(types::FB_UI_BUNDLE)?;
+///     let bundle = types::FB_UI_BUNDLE.key(UI_BUNDLE)?;
 ///     load.serve(bundle, bundle, move |base| list_workshop(&layout, base, bench))
 /// }
 /// ```
@@ -438,7 +438,7 @@ pub(crate) fn serve(
         return Ok(());
     }
     let resolved = MenuLayout::resolve(load)
-        .and_then(|layout| Ok((layout, UI_BUNDLE.key(types::FB_UI_BUNDLE)?)));
+        .and_then(|layout| Ok((layout, types::FB_UI_BUNDLE.key(UI_BUNDLE)?)));
     let (layout, bundle) = match resolved {
         Ok(resolved) => resolved,
         Err(off) => {

@@ -38,6 +38,7 @@ mod engine_ids;
 #[cfg(feature = "unstable")]
 pub mod entity_data;
 pub mod events;
+mod facts;
 pub mod files;
 pub(crate) mod fresh;
 pub mod game_events;

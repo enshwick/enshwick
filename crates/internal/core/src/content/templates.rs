@@ -662,7 +662,7 @@ impl Load<'_> {
 
     /// Lists `template` in the game's template collection after the others.
     fn list_template(&self, template: Guid) -> Result<(), Off> {
-        let key = TEMPLATE_COLLECTION.key(types::TEMPLATE_COLLECTION_RESOURCE)?;
+        let key = types::TEMPLATE_COLLECTION_RESOURCE.key(TEMPLATE_COLLECTION)?;
         crate::resources::serve_value(self.host(), key, key, move |mut value| {
             match value.field_mut(TEMPLATES) {
                 Some(Value::List(templates)) => {

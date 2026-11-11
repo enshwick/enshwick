@@ -55,7 +55,7 @@ pub const LOOT_FILE: &str = "loot.toml";
 /// The rewards file, rewards for players' actions.
 pub const REWARDS_FILE: &str = "rewards.toml";
 /// The texts file, in the form of a mod's [texts](crate::i18n).
-pub const TEXTS_FILE: &str = "texts.toml";
+pub const TEXTS_FILE: &str = crate::i18n::TEXTS_FILE;
 /// The sounds file, the pack's own sounds from WAV files in its folder.
 pub const SOUNDS_FILE: &str = "sounds.toml";
 /// Every file a pack folder may hold besides its icons and sounds, in the

@@ -77,7 +77,7 @@ impl Load<'_> {
     pub(crate) fn push_recipe(&mut self, recipe: NewRecipe) -> Result<(), Off> {
         self.declare(recipe.id)?;
         let layout = RecipeLayout::resolve(self)?;
-        let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY_RESOURCE)?;
+        let registry = types::RECIPE_REGISTRY_RESOURCE.key(RECIPE_REGISTRY)?;
         self.serve(registry, registry, move |base| {
             add_recipe_to(&layout, base, &recipe, workshop_limit())
         })?;
@@ -128,7 +128,7 @@ impl Load<'_> {
         let id = recipe().id;
         self.declare(id)?;
         let layout = RecipeLayout::resolve(self)?;
-        let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY_RESOURCE)?;
+        let registry = types::RECIPE_REGISTRY_RESOURCE.key(RECIPE_REGISTRY)?;
         let recipe = Arc::new(recipe);
         let built = Arc::clone(&recipe);
         self.serve(registry, registry, move |base| {
@@ -179,7 +179,7 @@ impl Load<'_> {
     ) -> Result<(), Off> {
         let layout = RecipeLayout::resolve(self)?;
         let salt = fnv1a(salt.as_bytes());
-        let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY_RESOURCE)?;
+        let registry = types::RECIPE_REGISTRY_RESOURCE.key(RECIPE_REGISTRY)?;
         let choose = Arc::new(choose);
         let chosen = Arc::clone(&choose);
         self.serve(registry, registry, move |base| {
@@ -238,7 +238,7 @@ impl Load<'_> {
 /// }
 /// ```
 pub fn rebuild_recipes() -> Result<(), Off> {
-    crate::content::rebuild(RECIPE_REGISTRY.key(types::RECIPE_REGISTRY_RESOURCE)?)
+    crate::content::rebuild(types::RECIPE_REGISTRY_RESOURCE.key(RECIPE_REGISTRY)?)
 }
 
 #[cfg(test)]

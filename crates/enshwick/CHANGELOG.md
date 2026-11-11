@@ -139,6 +139,13 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- `content`: **breaking.** A resource key comes from its type:
+  `types::ITEM_INFO.key(guid)` (`ResourceType::key`) replaces
+  `guid.key(types::ITEM_INFO)` and `id.key(..)`, which are gone; a content
+  id passes `id.guid()` (#1044).
+- `script`: **breaking.** `Result<T, script::Error>` answers a callback for
+  every `T` a script can pass (`FromScript`), not only game data; a return
+  that is not a `T` is the error. `Namespace` is `Copy` (#1044).
 - `actions`: **breaking.** `sheet::Entry` has the field `group` and
   `sheet::ArgView` the field `default`, so a struct literal of either names
   them or ends in `..Default::default()`. An optional item, like an

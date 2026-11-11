@@ -179,6 +179,8 @@ pub enum LayoutError {
     },
 }
 
+crate::load::off_from!(LayoutError);
+
 /// Checks that the `offered` layout starts with the `wanted` one, each as
 /// `(name, hash)` per field.
 ///

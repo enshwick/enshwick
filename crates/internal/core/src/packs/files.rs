@@ -34,6 +34,8 @@ pub struct PackError {
     pub message: String,
 }
 
+crate::load::off_from!(PackError);
+
 /// Every problem [`Pack::parse`](super::Pack::parse) found, in file order.
 ///
 /// # Examples
@@ -107,6 +109,8 @@ pub enum ReadPackError {
     #[error("more than {MAX_SCRIPTS} scripts")]
     TooManyScripts,
 }
+
+crate::load::off_from!(ReadPackError);
 
 /// The files of a pack: their names, such as `items.toml` or
 /// `icons/lantern.png`, and their bytes.

@@ -238,6 +238,8 @@ pub enum BatchError {
     TooLarge,
 }
 
+crate::load::off_from!(BatchError);
+
 /// Operations to run as one transaction: every one succeeds, or nothing
 /// changes.
 ///

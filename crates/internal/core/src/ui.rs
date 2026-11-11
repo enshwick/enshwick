@@ -140,6 +140,8 @@ pub enum UiError {
     Refused,
 }
 
+crate::load::off_from!(UiError);
+
 impl Ui {
     /// Queues `dialog` and runs `on_answer` with the player's answer, or
     /// `None` when it closed without one, as when the game quits. Dialogs

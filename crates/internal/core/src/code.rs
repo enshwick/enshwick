@@ -52,6 +52,8 @@ pub enum PatternError {
     Token(String),
 }
 
+crate::load::off_from!(PatternError);
+
 /// Why a search did not find exactly one match.
 ///
 /// # Examples
@@ -75,6 +77,8 @@ pub enum FindError {
     #[error("more than one match")]
     Many,
 }
+
+crate::load::off_from!(FindError);
 
 impl Pattern {
     /// Parses hex bytes separated by spaces, `??` or `?` for any byte.

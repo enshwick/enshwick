@@ -16,10 +16,10 @@ mod tests {
 
     impl Mod for Failing {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let spare = SPARE_ITEM.key(types::ITEM_INFO)?;
+            let spare = types::ITEM_INFO.key(SPARE_ITEM)?;
             load.serve(spare, spare, |_| None)?;
-            load.serve(NEW_ITEM.key(types::ITEM_INFO)?, spare, |_| None)?;
-            let other = OTHER_ITEM.key(types::ITEM_INFO)?;
+            load.serve(types::ITEM_INFO.key(NEW_ITEM)?, spare, |_| None)?;
+            let other = types::ITEM_INFO.key(OTHER_ITEM)?;
             load.serve(other, other, |item| Some(item.to_vec()))?;
             Ok(Self)
         }
@@ -46,7 +46,7 @@ mod tests {
     fn a_changed_item_whose_every_patch_fails_reads_as_archived() {
         let _loader = start();
         let host = enshwick::host().unwrap();
-        let spare = SPARE_ITEM.key(types::ITEM_INFO).unwrap();
+        let spare = types::ITEM_INFO.key(SPARE_ITEM).unwrap();
         assert_eq!(host.served_resource(spare).ok(), host.game_resource(spare));
     }
 
@@ -54,7 +54,7 @@ mod tests {
     fn served_reads_keep_no_output_of_a_patch_the_api_built() {
         let loader = start();
         let host = enshwick::host().unwrap();
-        let other = OTHER_ITEM.key(types::ITEM_INFO).unwrap();
+        let other = types::ITEM_INFO.key(OTHER_ITEM).unwrap();
         for _ in 0..10 {
             assert_eq!(host.served_resource(other).ok(), host.game_resource(other));
         }
@@ -65,7 +65,7 @@ mod tests {
     fn a_new_item_whose_every_patch_fails_reads_as_missing() {
         let _loader = start();
         let host = enshwick::host().unwrap();
-        let new = NEW_ITEM.key(types::ITEM_INFO).unwrap();
+        let new = types::ITEM_INFO.key(NEW_ITEM).unwrap();
         assert!(host.served_resource(new).is_err());
     }
 }

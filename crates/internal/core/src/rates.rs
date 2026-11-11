@@ -308,6 +308,9 @@ pub enum RateError {
     Refused,
 }
 
+#[cfg(feature = "unstable")]
+crate::load::off_from!(RateError);
+
 /// A rate the mod declared; sets the mod's factor for it.
 ///
 /// # Examples

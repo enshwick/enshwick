@@ -109,6 +109,8 @@ pub enum SetError {
     Refused(u32),
 }
 
+crate::load::off_from!(SetError);
+
 /// A kind of item data with values of type `T`; get it from
 /// [`Load::item_data`]. Copy it anywhere.
 ///

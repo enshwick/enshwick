@@ -126,7 +126,11 @@ pub(super) fn struct_config(attrs: &[Attribute]) -> syn::Result<StructConfig> {
     let mut group = false;
     for attr in attrs.iter().filter(|a| a.path().is_ident("config")) {
         attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("group") {
+            if meta.path.is_ident(crate::krate::KEY) {
+                // Read by the derive's entry point, which writes the paths.
+                let _path = crate::krate::value(&meta)?;
+                Ok(())
+            } else if meta.path.is_ident("group") {
                 group = true;
                 Ok(())
             } else if meta.path.is_ident("file") {
@@ -251,17 +255,41 @@ pub(super) fn expand_attribute(
         .parse2(args)?
         .into_iter()
         .collect();
+    let mut krate = None;
+    for meta in &forwarded {
+        if let Meta::NameValue(pair) = meta
+            && pair.path.is_ident(crate::krate::KEY)
+        {
+            let Expr::Lit(syn::ExprLit {
+                lit: Lit::Str(path),
+                ..
+            }) = &pair.value
+            else {
+                return Err(syn::Error::new_spanned(pair, "`crate` takes a string"));
+            };
+            krate = Some(path.parse::<syn::Path>()?);
+        }
+    }
+    let serde = format!(
+        "{}::__private::serde",
+        krate
+            .as_ref()
+            .map_or_else(|| "::enshwick".to_owned(), crate::krate::text)
+    );
     let forwarded = (!forwarded.is_empty()).then(|| quote!(#[config(#(#forwarded),*)]));
-    Ok(quote! {
-        #[derive(
-            ::enshwick::__private::serde::Deserialize,
-            ::enshwick::__private::serde::Serialize,
-            ::enshwick::Config,
-        )]
-        #[serde(crate = "::enshwick::__private::serde", default, deny_unknown_fields)]
-        #forwarded
-        #input
-    })
+    Ok(crate::krate::rename(
+        quote! {
+            #[derive(
+                ::enshwick::__private::serde::Deserialize,
+                ::enshwick::__private::serde::Serialize,
+                ::enshwick::Config,
+            )]
+            #[serde(crate = #serde, default, deny_unknown_fields)]
+            #forwarded
+            #input
+        },
+        krate.as_ref(),
+    ))
 }
 
 /// Refuses a settings struct that would read past an unknown key: serde

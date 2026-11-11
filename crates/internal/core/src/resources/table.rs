@@ -486,7 +486,7 @@ impl Host {
     ///
     /// if let Some(host) = enshwick::host() {
     ///     let wood = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-    ///     if let Ok(key) = wood.key(types::ITEM_INFO) {
+    ///     if let Ok(key) = types::ITEM_INFO.key(wood) {
     ///         let _value = host.served_value(key);
     ///     }
     /// }

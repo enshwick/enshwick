@@ -15,8 +15,8 @@ archive. Use it where the high-level calls fall short.
 A resource is named by a
 [`ResourceKey`](https://github.com/enshwick/enshwick/blob/main/crates/internal/abi/src/abi.rs):
 a GUID, a type hash and a part.
-[`Guid::key(ty)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content.rs)
-makes the key of part 0. Its hash is the one the loader gives the type on the
+[`ResourceType::key(guid)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content.rs)
+makes the key of part 0, such as `types::ITEM_INFO.key(guid)`. Its hash is the one the loader gives the type on the
 running build.
 [`content::types`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/content.rs)
 names the resource types mods commonly serve. Two of them are `ITEM_INFO` and
@@ -39,7 +39,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     const LOCKER: Guid = LOCKER_ID.guid();
     let storage_box = vanilla::item("Prop_Storage_24_T1_Box")?;
     load.declare(LOCKER_ID)?;
-    load.serve(LOCKER.key(types::ITEM_INFO)?, storage_box.key(types::ITEM_INFO)?, |base| {
+    load.serve(types::ITEM_INFO.key(LOCKER)?, types::ITEM_INFO.key(storage_box)?, |base| {
         let mut item = Blob::new(base);
         // Offsets for illustration: a real mod reads them from reflection.
         let written = item.write(0, &enshwick::ItemId::from_guid(LOCKER).get().to_le_bytes()) && item.write(4, &LOCKER.0);
@@ -195,7 +195,7 @@ needs more than once.
 use enshwick::content::{Blob, game_resource, types};
 use enshwick::content::workshops::stations;
 
-let key = stations::WORKBENCH.item.key(types::ITEM_INFO);
+let key = types::ITEM_INFO.key(stations::WORKBENCH.item);
 if let Some(item) = key.ok().and_then(game_resource) {
     let item = Blob::new(&item);
     let _id = item.read_u32(0);

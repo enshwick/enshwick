@@ -162,6 +162,8 @@ pub enum SendError {
     Refused,
 }
 
+crate::load::off_from!(SendError);
+
 /// A channel of messages of type `M`, from [`Load::channel`]; `Copy`, for
 /// handlers and tasks.
 ///

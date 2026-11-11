@@ -14,6 +14,7 @@ use syn::{
 };
 
 mod declare;
+mod krate;
 mod schema;
 mod texts;
 
@@ -88,7 +89,10 @@ pub fn declare_test_mod(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(Config, attributes(config))]
 pub fn derive_config(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    expand_config(&input).unwrap_or_else(|e| e.to_compile_error().into())
+    renamed(
+        krate::in_attrs(&input.attrs, "config"),
+        expand_config(&input).map(Into::into),
+    )
 }
 
 /// Declares a settings struct: derives serde's `Deserialize` and
@@ -118,8 +122,12 @@ pub fn config(args: TokenStream, item: TokenStream) -> TokenStream {
 pub fn hook(args: TokenStream, item: TokenStream) -> TokenStream {
     let mut priority: Option<Expr> = None;
     let mut flags: Option<Expr> = None;
+    let mut krate = None;
     let settings = syn::meta::parser(|meta| {
-        if meta.path.is_ident("priority") {
+        if meta.path.is_ident(krate::KEY) {
+            krate = Some(krate::value(&meta)?);
+            Ok(())
+        } else if meta.path.is_ident("priority") {
             priority = Some(meta.value()?.parse()?);
             Ok(())
         } else if meta.path.is_ident("flags") {
@@ -131,8 +139,10 @@ pub fn hook(args: TokenStream, item: TokenStream) -> TokenStream {
     });
     parse_macro_input!(args with settings);
     let function = parse_macro_input!(item as ItemFn);
-    expand_hook(&function, priority.as_ref(), flags.as_ref())
-        .unwrap_or_else(|e| e.to_compile_error().into())
+    renamed(
+        Ok(krate),
+        expand_hook(&function, priority.as_ref(), flags.as_ref()).map(Into::into),
+    )
 }
 
 fn expand_hook(
@@ -254,8 +264,12 @@ pub fn service(args: TokenStream, item: TokenStream) -> TokenStream {
     let mut of: Option<Ident> = None;
     let mut version: Option<syn::LitInt> = None;
     let mut export: Option<Ident> = None;
+    let mut krate = None;
     let settings = syn::meta::parser(|meta| {
-        if meta.path.is_ident("name") {
+        if meta.path.is_ident(krate::KEY) {
+            krate = Some(krate::value(&meta)?);
+            Ok(())
+        } else if meta.path.is_ident("name") {
             name = Some(meta.value()?.parse()?);
             Ok(())
         } else if meta.path.is_ident("of") {
@@ -302,7 +316,7 @@ pub fn service(args: TokenStream, item: TokenStream) -> TokenStream {
         )
         .unwrap_or_else(|e| e.to_compile_error().into()),
     );
-    quote!(#declared #tracked #entry).into()
+    krate::rename(quote!(#declared #tracked #entry), krate.as_ref()).into()
 }
 
 /// Declares a mod event: makes the struct `repr(C)` and implements
@@ -316,8 +330,12 @@ pub fn event(args: TokenStream, item: TokenStream) -> TokenStream {
     let mut name: Option<syn::LitStr> = None;
     let mut of: Option<Ident> = None;
     let mut export: Option<Ident> = None;
+    let mut krate = None;
     let settings = syn::meta::parser(|meta| {
-        if meta.path.is_ident("name") {
+        if meta.path.is_ident(krate::KEY) {
+            krate = Some(krate::value(&meta)?);
+            Ok(())
+        } else if meta.path.is_ident("name") {
             name = Some(meta.value()?.parse()?);
             Ok(())
         } else if meta.path.is_ident("of") {
@@ -353,7 +371,7 @@ pub fn event(args: TokenStream, item: TokenStream) -> TokenStream {
     match expand_declaration(&item, name, &schema, &quote!(services::ModEvent)) {
         Ok(declared) => {
             let declared = proc_macro2::TokenStream::from(declared);
-            quote!(#declared #padding #tracked #entry).into()
+            krate::rename(quote!(#declared #padding #tracked #entry), krate.as_ref()).into()
         }
         Err(e) => e.to_compile_error().into(),
     }
@@ -432,8 +450,11 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
     let mut output: Option<Type> = None;
     let mut refusable = false;
     let mut export: Option<Ident> = None;
+    let mut krate = None;
     let settings = syn::meta::parser(|meta| {
-        if meta.path.is_ident("name") {
+        if meta.path.is_ident(krate::KEY) {
+            krate = Some(krate::value(&meta)?);
+        } else if meta.path.is_ident("name") {
             name = Some(meta.value()?.parse()?);
         } else if meta.path.is_ident("of") {
             of = Some(meta.value()?.parse()?);
@@ -455,7 +476,7 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
     parse_macro_input!(args with settings);
     let item = parse_macro_input!(item as syn::ItemStruct);
     let ident = item.ident.clone();
-    let expanded = (|| {
+    let expanded = (|| -> syn::Result<TokenStream> {
         let (name, tracked, owner) = resolve(name, of.as_ref())?;
         let entry = schema_entry(
             name.as_ref(),
@@ -517,7 +538,7 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
         }
         .into())
     })();
-    expanded.unwrap_or_else(|e| e.to_compile_error().into())
+    renamed(Ok(krate), expanded.map(Into::into))
 }
 
 /// Asserts at build time that `item`, the struct a macro declares, has no
@@ -553,8 +574,11 @@ pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
     let mut output: Option<Type> = None;
     let mut version: Option<syn::LitInt> = None;
     let mut export: Option<Ident> = None;
+    let mut krate = None;
     let settings = syn::meta::parser(|meta| {
-        if meta.path.is_ident("name") {
+        if meta.path.is_ident(krate::KEY) {
+            krate = Some(krate::value(&meta)?);
+        } else if meta.path.is_ident("name") {
             name = Some(meta.value()?.parse()?);
         } else if meta.path.is_ident("of") {
             of = Some(meta.value()?.parse()?);
@@ -631,7 +655,7 @@ pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
         }
         .into())
     })();
-    expanded.unwrap_or_else(|e| e.to_compile_error().into())
+    renamed(Ok(krate), expanded.map(Into::into))
 }
 
 /// Implements `enshwick::Shape`: the structural hash the layout
@@ -646,9 +670,7 @@ pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_derive(Shape, attributes(shape))]
 pub fn derive_shape(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    expand_shape(&input)
-        .unwrap_or_else(syn::Error::into_compile_error)
-        .into()
+    renamed(krate::in_attrs(&input.attrs, "shape"), expand_shape(&input))
 }
 
 /// Describes a type for script languages; examples are on `enshwick::Script`.
@@ -659,9 +681,10 @@ pub fn derive_shape(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(Script, attributes(script))]
 pub fn derive_script(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    script::expand_derive(&input)
-        .unwrap_or_else(syn::Error::into_compile_error)
-        .into()
+    renamed(
+        krate::in_attrs(&input.attrs, "script"),
+        script::expand_derive(&input),
+    )
 }
 
 /// Exports the methods of an `impl` block marked `#[script]` to scripts.
@@ -670,9 +693,36 @@ pub fn derive_script(input: TokenStream) -> TokenStream {
 /// Examples are on `enshwick::script`.
 #[proc_macro_attribute]
 pub fn script(args: TokenStream, item: TokenStream) -> TokenStream {
-    let part = parse_macro_input!(args as Ident);
+    let mut part: Option<Ident> = None;
+    let mut krate = None;
+    let settings = syn::meta::parser(|meta| {
+        if meta.path.is_ident(krate::KEY) {
+            krate = Some(krate::value(&meta)?);
+        } else if part.is_none() {
+            part = Some(meta.path.require_ident()?.clone());
+        } else {
+            return Err(meta.error("expected one part's name"));
+        }
+        Ok(())
+    });
+    parse_macro_input!(args with settings);
+    let Some(part) = part else {
+        return syn::Error::new(Span::call_site(), "name the part: `#[script(<part>)]`")
+            .to_compile_error()
+            .into();
+    };
     let item = parse_macro_input!(item as syn::ItemImpl);
-    script::expand_impl(&part, item)
+    renamed(Ok(krate), script::expand_impl(&part, item))
+}
+
+/// The expansion `out` with its `::enshwick` paths written as the crate a
+/// `crate = "path"` names, or the error of either.
+fn renamed(
+    krate: syn::Result<Option<syn::Path>>,
+    out: syn::Result<proc_macro2::TokenStream>,
+) -> TokenStream {
+    krate
+        .and_then(|krate| Ok(krate::rename(out?, krate.as_ref())))
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
 }

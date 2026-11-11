@@ -266,8 +266,8 @@ impl Load<'_> {
     #[script]
     pub fn rekey_item(&mut self, old: Guid, new: Guid) -> Result<(), Off> {
         let host = self.host();
-        let key = old.key(types::ITEM_INFO)?;
-        let new_key = new.key(types::ITEM_INFO)?;
+        let key = types::ITEM_INFO.key(old)?;
+        let new_key = types::ITEM_INFO.key(new)?;
         // At init nothing is served yet: the check reads `new` as the game
         // archives it, or as this mod clones it.
         let data = match items::added(new) {
@@ -275,7 +275,7 @@ impl Load<'_> {
             Some(item) => {
                 let layout = ItemLayout::resolve(self)?;
                 let like = host
-                    .game_resource(item.like.key(types::ITEM_INFO)?)
+                    .game_resource(types::ITEM_INFO.key(item.like)?)
                     .ok_or_else(|| {
                         Off::new(format!("its base item {}: not in the game", item.like))
                     })?;

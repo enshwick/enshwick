@@ -6,6 +6,12 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- Every attribute and derive macro takes the hidden argument
+  `crate = "path"`, which names the crate its expansion reaches in place of
+  `::enshwick`, for the API's internal crates (#1044).
+
 ## [1.0.0-alpha.14] - 2026-11-09
 
 ### Changed

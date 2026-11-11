@@ -152,7 +152,7 @@ fn placed_by(load: &Load<'_>, item: Guid) -> Result<Guid, Off> {
     let at = load.offset(ids::ITEM_INFO_PLACED_ENTITY)?;
     let info = load
         .host()
-        .game_resource(item.key(types::ITEM_INFO)?)
+        .game_resource(types::ITEM_INFO.key(item)?)
         .ok_or_else(|| Off::new(format!("prop: {item} is no vanilla item")))?;
     info.get(at..at + 16)
         .and_then(|bytes| <[u8; 16]>::try_from(bytes).ok())
@@ -248,7 +248,7 @@ impl Load<'_> {
             .ok_or_else(|| Off::new("crafting props: the mask is not reflected"))?;
         let vanilla = self
             .host()
-            .game_value(WORKSHOP_REGISTRY.key(types::WORKSHOP_REGISTRY_RESOURCE)?)?;
+            .game_value(types::WORKSHOP_REGISTRY_RESOURCE.key(WORKSHOP_REGISTRY)?)?;
         let Some(Value::List(props)) = vanilla.field(PROPS) else {
             return Err(Off::new("workshop registry: no list of crafting props"));
         };
@@ -293,12 +293,12 @@ impl Load<'_> {
             ("itemRef".into(), Value::Guid(item)),
         ]);
         let host = self.host();
-        let registry = WORKSHOP_REGISTRY.key(types::WORKSHOP_REGISTRY_RESOURCE)?;
+        let registry = types::WORKSHOP_REGISTRY_RESOURCE.key(WORKSHOP_REGISTRY)?;
         crate::resources::serve_value(host, registry, registry, move |value| {
             list_prop(value, &entry)
         })?;
         if !setup.recipes.is_empty() {
-            let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY_RESOURCE)?;
+            let registry = types::RECIPE_REGISTRY_RESOURCE.key(RECIPE_REGISTRY)?;
             crate::resources::serve_value(host, registry, registry, move |value| {
                 require_prop(value, &setup.recipes, guid.fnv1a(), index)
             })?;
@@ -378,13 +378,13 @@ impl Load<'_> {
             self.add_crafting_prop(prop, item.guid(), name, setup)?;
         }
         let at = self.offset(ids::ITEM_INFO_PLACED_ENTITY)?;
-        let (placed, base) = (template.guid(), vanilla.key(types::ITEM_INFO)?);
+        let (placed, base) = (template.guid(), types::ITEM_INFO.key(vanilla)?);
         for guid in super::renames::old_guids(item.guid())
             .into_iter()
             .chain([item.guid()])
         {
             // A second link on the item, after `add_item`'s on the same base.
-            self.serve(guid.key(types::ITEM_INFO)?, base, move |info| {
+            self.serve(types::ITEM_INFO.key(guid)?, base, move |info| {
                 place(info, at, placed)
             })?;
         }

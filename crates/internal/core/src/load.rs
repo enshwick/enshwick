@@ -3,7 +3,6 @@
 use core::ffi::c_void;
 
 use crate::abi::{HostApi, Status, Str};
-use crate::config::ConfigError;
 use crate::host::Host;
 use crate::services::{ModEvent, Service};
 
@@ -32,46 +31,18 @@ pub(crate) fn off_status(what: &str, status: Status) -> Off {
     Off::new(format!("{what}: {why}"))
 }
 
-/// `From<E> for Off` with `E`'s message as the reason.
+/// `From<E> for Off` with `E`'s message as the reason, called beside each
+/// domain's error type.
 macro_rules! off_from {
     ($($error:ty),* $(,)?) => {$(
-        impl From<$error> for Off {
+        impl From<$error> for $crate::Off {
             fn from(error: $error) -> Self {
                 Self::new(error.to_string())
             }
         }
     )*};
 }
-
-off_from!(
-    crate::affixes::RollError,
-    crate::altars::ResizeError,
-    crate::code::FindError,
-    crate::code::PatternError,
-    crate::content::vanilla::VanillaError,
-    crate::inventory::BatchError,
-    crate::item_data::SetError,
-    crate::net::SendError,
-    crate::packs::PackError,
-    crate::packs::ReadPackError,
-    crate::resources::CodecError,
-    crate::services::LayoutError,
-    crate::stats::ModifyError,
-    crate::ui::UiError,
-    crate::WorldError,
-);
-
-#[cfg(feature = "unstable")]
-off_from!(crate::console::RunError, crate::rates::RateError);
-
-impl From<ConfigError> for Off {
-    /// `error`'s message as the reason; a [`ConfigError::Text`] stays a text
-    /// of the mod's texts, as from [`Off::text`].
-    fn from(error: ConfigError) -> Self {
-        let text = matches!(error, ConfigError::Text { .. }).then(|| error.to_reason());
-        Self::with_text(error.to_string(), text)
-    }
-}
+pub(crate) use off_from;
 
 /// A mod: what the loader initialises when it loads the DLL.
 ///
@@ -118,25 +89,12 @@ pub struct Load<'a> {
     joins: bool,
     /// The mod's `src/texts.toml`, as `declare_mod!` embedded it.
     embedded_texts: Option<&'static str>,
-    /// The bytes of the sound files the mod added so far.
-    #[cfg(feature = "unstable")]
-    pub(crate) sound_bytes: u64,
-    /// The game's streamed uncompressed sound the mod's sounds build from,
-    /// once one was found.
-    #[cfg(feature = "unstable")]
-    pub(crate) sound_base: Option<crate::abi::ResourceKey>,
-    /// The experience values the mod added, once it added one.
-    #[cfg(feature = "typed")]
-    pub(crate) experience: Option<crate::content::knowledge::AddedExperience>,
-    /// The knowledge entries the mod added, once it added one.
-    #[cfg(feature = "typed")]
-    pub(crate) knowledge: Option<crate::content::knowledge::AddedKnowledge>,
-    /// The quests, pages and quest changes the mod made, once it made one.
-    #[cfg(feature = "typed")]
-    pub(crate) journal: Option<crate::content::journal::AddedJournal>,
-    /// The mod's journal reads, once it asked for them.
-    #[cfg(feature = "typed")]
-    pub(crate) quests: Option<crate::quests::Quests>,
+    /// What each domain keeps while the mod initialises.
+    #[cfg_attr(
+        not(any(feature = "unstable", feature = "typed")),
+        expect(dead_code, reason = "only unstable and typed domains keep state")
+    )]
+    slots: slots::Slots,
     _init: core::marker::PhantomData<&'a ()>,
 }
 
@@ -153,18 +111,7 @@ impl Load<'_> {
             host,
             joins,
             embedded_texts,
-            #[cfg(feature = "unstable")]
-            sound_bytes: 0,
-            #[cfg(feature = "unstable")]
-            sound_base: None,
-            #[cfg(feature = "typed")]
-            experience: None,
-            #[cfg(feature = "typed")]
-            knowledge: None,
-            #[cfg(feature = "typed")]
-            journal: None,
-            #[cfg(feature = "typed")]
-            quests: None,
+            slots: slots::Slots::default(),
             _init: core::marker::PhantomData,
         }
     }
@@ -172,6 +119,16 @@ impl Load<'_> {
     /// The mod's `src/texts.toml`, as `declare_mod!` embedded it.
     pub(crate) fn embedded_texts(&self) -> Option<&'static str> {
         self.embedded_texts
+    }
+
+    /// The state of type `T` a domain keeps while the mod initialises, empty
+    /// until the domain fills it.
+    #[cfg_attr(
+        not(any(feature = "unstable", feature = "typed")),
+        expect(dead_code, reason = "only unstable and typed domains keep state")
+    )]
+    pub(crate) fn slot<T: slots::Slot>(&mut self) -> &mut Option<T> {
+        self.slots.of()
     }
 
     /// Whether the mod runs on both sides, so it takes part in the join
@@ -199,71 +156,6 @@ impl Load<'_> {
 
     fn api(&self) -> &'static HostApi {
         self.host.api()
-    }
-
-    /// The server's [`World`](crate::world::World): reads, queries and
-    /// requests; on a client, the built-in server's while it hosts a game.
-    ///
-    /// Unstable: needs the `unstable` feature and may change in any release.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] when the game build lacks a type the reads need.
-    ///
-    /// # Examples
-    ///
-    /// See [`World`](crate::world::World).
-    #[cfg(feature = "unstable")]
-    pub fn world(&mut self) -> Result<crate::world::World, Off> {
-        crate::world::World::resolve(self)
-    }
-
-    /// The map's markers and the players' waypoints in the game server,
-    /// dedicated or hosted by the client.
-    ///
-    /// Unstable: needs the `unstable` feature and may change in any release.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] when the game build lacks the marker reads.
-    ///
-    /// # Examples
-    ///
-    /// See [`Map`](crate::map::Map).
-    #[cfg(feature = "unstable")]
-    pub fn map(&mut self) -> Result<crate::map::Map, Off> {
-        crate::map::Map::resolve(self)
-    }
-
-    /// The client's fog of war, which the loader copies for the mod from
-    /// now on; a mod asks for it during `init`.
-    ///
-    /// Unstable: needs the `unstable` feature and may change in any release.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] on a dedicated server, which has no fog, or after `init`.
-    ///
-    /// # Examples
-    ///
-    /// See [`FogOfWar`](crate::map::FogOfWar).
-    #[cfg(feature = "unstable")]
-    pub fn fog_of_war(&mut self) -> Result<crate::map::FogOfWar, Off> {
-        crate::map::FogOfWar::open(self)
-    }
-
-    /// Inventory reads and transactions in the game server, dedicated or
-    /// hosted by the client; a mod asks for them during `init`.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] when this game build lacks a piece of them.
-    ///
-    /// # Examples
-    ///
-    /// See [`Inventories`](crate::inventory::Inventories).
-    pub fn inventories(&mut self) -> Result<crate::inventory::Inventories, Off> {
-        crate::inventory::Inventories::resolve(self)
     }
 
     /// The mod's [`Scheduler`](crate::schedule::Scheduler), which runs work on
@@ -510,6 +402,11 @@ mod code;
 mod events;
 mod services;
 mod settings;
+#[cfg_attr(
+    not(any(test, feature = "unstable", feature = "typed")),
+    expect(dead_code, reason = "only unstable and typed domains keep state")
+)]
+mod slots;
 #[cfg(test)]
 mod tests;
 

@@ -16,12 +16,15 @@ use std::collections::BTreeMap;
 
 use rustc_hash::FxHashMap;
 
-use crate::content::Id;
 use crate::locks::Relock;
 use crate::{Host, Load, Off};
+use enshwick_values::content::Id;
 
 pub(crate) use enshwick_values::reason;
 mod script;
+
+/// The texts file of a mod's folder or a pack's.
+pub(crate) const TEXTS_FILE: &str = "texts.toml";
 #[doc(hidden)]
 pub use script::I18nFns;
 

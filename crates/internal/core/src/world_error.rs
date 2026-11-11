@@ -74,6 +74,8 @@ pub enum WorldError {
     NotAProp,
 }
 
+crate::load::off_from!(WorldError);
+
 impl WorldError {
     /// The error the loader's `status` stands for, with `missing` for
     /// [`Status::MISSING`]: [`Self::Gone`] where the call names an entity,

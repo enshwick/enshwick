@@ -270,6 +270,8 @@ pub enum ModifyError {
     Refused(u32),
 }
 
+crate::load::off_from!(ModifyError);
+
 /// Where a modifier that counts toward a stat comes from, from
 /// [`Stats::sources`](crate::stats::Stats::sources).
 ///

@@ -543,33 +543,13 @@ impl FromScript for &'static [u8] {
     }
 }
 
-/// A generated type's value in a script: a table by the generated item's
-/// field names, shaped by its record.
-#[doc(hidden)]
-#[derive(Clone, Debug)]
-pub struct Fields(pub Value);
-
-impl Typed for Fields {
-    const TY: &'static Ty = &Ty::Data;
-}
-
-impl IntoScript for Fields {
-    fn into_value(self) -> Value {
-        self.0
-    }
-}
-
-impl FromScript for Fields {
-    fn from_value(value: Value) -> Result<Self, Error> {
-        Ok(Self(value))
-    }
-}
-
-impl Answer for Result<Fields, Error> {
-    const TY: &'static Ty = &Ty::Data;
+/// The script's value as a `T`, or why there is none: an error the runtime
+/// reported, or a return that is not a `T`.
+impl<T: FromScript> Answer for Result<T, Error> {
+    const TY: &'static Ty = T::TY;
 
     fn from_answer(answer: Result<Value, Error>) -> Self {
-        answer.map(Fields)
+        answer.and_then(T::from_value)
     }
 }
 
@@ -674,5 +654,18 @@ mod tests {
         assert!(bool::from_answer(Ok(Value::Bool(true))));
         assert!(bool::from_answer(Ok(Value::Nil)));
         assert!(bool::from_answer(Err(Error::new("boom"))));
+    }
+
+    #[test]
+    fn a_result_answer_is_the_value_as_its_type_or_why_it_is_not() {
+        assert!(core::ptr::eq(<Result<u8, Error>>::TY, u8::TY));
+        assert_eq!(
+            <Result<u8, Error>>::from_answer(Ok(Value::Number(7.0))).ok(),
+            Some(7)
+        );
+        assert!(<Result<u8, Error>>::from_answer(Ok(Value::Number(300.0))).is_err());
+        assert!(<Result<u8, Error>>::from_answer(Ok(Value::Bool(true))).is_err());
+        let reported = <Result<String, Error>>::from_answer(Err(Error::new("boom")));
+        assert_eq!(reported.map_err(|e| e.to_string()), Err("boom".to_owned()));
     }
 }

@@ -220,7 +220,7 @@ impl Load<'_> {
         if self.host().build().side != Side::CLIENT {
             return Ok(());
         }
-        let key = sound.guid().key(types::SOUND_CONTAINER_RESOURCE)?;
+        let key = types::SOUND_CONTAINER_RESOURCE.key(sound.guid())?;
         crate::resources::serve_value(self.host(), key, key, move |_| {
             Ok(Value::Struct(fields.clone()))
         })

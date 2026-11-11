@@ -12,9 +12,9 @@
 
 use super::{Registry, Type, Value as Data};
 use crate::abi::ResourceKey;
-use crate::content::Guid;
 use crate::script::{Error, FromScript, IntoScript, Ty, Typed, Value};
 use crate::{Host, Off};
+use enshwick_values::content::Guid;
 
 /// Raw bytes a script passes and gets as a Luau `buffer`: a content's bytes,
 /// a resource's bytes before or after the codec.

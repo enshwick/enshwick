@@ -42,6 +42,8 @@ pub enum RunError {
     Refused(u32),
 }
 
+crate::load::off_from!(RunError);
+
 /// Runs the console line `line`, such as `enshwick status` or
 /// `you.my-mod world`, as the server's console, and returns its answer.
 ///

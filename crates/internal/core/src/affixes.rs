@@ -85,6 +85,8 @@ pub enum RollError {
     Refused(u32),
 }
 
+crate::load::off_from!(RollError);
+
 /// The affix pool and rolls; get it from [`Load::affixes`]. Copy it
 /// anywhere.
 ///
