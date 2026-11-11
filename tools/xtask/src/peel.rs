@@ -53,7 +53,7 @@ impl Form {
                 if let Some(last) = module.last_mut() {
                     *last = last.strip_suffix(".rs").unwrap_or(last);
                 }
-                if module.last() == Some(&"mod") {
+                if module.last() == Some(&"mod") || module.as_slice() == ["lib"] {
                     module.pop();
                 }
                 Self::Trait {
@@ -161,7 +161,12 @@ fn reexport(file: &Path, module: &str, name: &str) -> Result<(), String> {
         Err(e) => return Err(format!("{}: {e}", file.display())),
     };
     let vis = if name == HELPERS { "pub(crate)" } else { "pub" };
-    let line = format!("{vis} use crate::{module}::{name} as _;\n");
+    let path = if module.is_empty() {
+        format!("crate::{name}")
+    } else {
+        format!("crate::{module}::{name}")
+    };
+    let line = format!("{vis} use {path} as _;\n");
     if !out.contains(&line) {
         out.push_str(&line);
     }

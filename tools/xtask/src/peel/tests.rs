@@ -263,6 +263,10 @@ fn a_module_above_base_gets_one_method_trait_for_all_its_blocks() -> Result<(), 
     );
     assert_eq!(Form::of("crates/internal/base/src/load/a.rs"), Form::Base);
     assert!(
+        matches!(Form::of("crates/internal/content/src/lib.rs"), Form::Trait { module, .. } if module.is_empty()),
+        "a crate's root is no module `lib`"
+    );
+    assert!(
         peel("impl Load<'_> {\n    const A: u8 = 1;\n}\n", &form)
             .is_err_and(|e| e.contains("move it by hand"))
     );
@@ -286,13 +290,17 @@ fn a_forwarder_file_gains_the_trait_glob_once_and_the_crate_re_exports_each_trai
     let first = reexport(&file, "content::items", "LoadMethods");
     let again = reexport(&file, "content::items", "LoadMethods");
     let second = reexport(&file, "rates", "LoadHelpers");
+    let root = reexport(&file, "", "LoadMethods");
     let text = std::fs::read_to_string(&file).unwrap();
     std::fs::remove_file(&file).unwrap();
-    assert_eq!((first, again, second), (Ok(()), Ok(()), Ok(())));
+    assert_eq!(
+        (first, again, second, root),
+        (Ok(()), Ok(()), Ok(()), Ok(()))
+    );
     assert!(text.starts_with("//! The traits"), "{text}");
     assert!(
             text.ends_with(
-                "\n\npub use crate::content::items::LoadMethods as _;\npub(crate) use crate::rates::LoadHelpers as _;\n"
+                "\n\npub use crate::content::items::LoadMethods as _;\npub(crate) use crate::rates::LoadHelpers as _;\npub use crate::LoadMethods as _;\n"
             ),
             "{text}"
         );
