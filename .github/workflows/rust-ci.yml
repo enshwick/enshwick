@@ -167,11 +167,12 @@ jobs:
         with:
           path: ${{ runner.tool_cache }}/xwin
           key: xwin-${{ runner.os }}-0.23.1-v1
-      # clang of the toolchain's LLVM.
+      # clang of the toolchain's LLVM; the trybuild and semver parts install
+      # the host part's packages.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.tool_cache }}/apt-archives
-          key: apt-${{ runner.os }}-${{ matrix.part }}-v2
+          key: apt-${{ runner.os }}-${{ (matrix.part == 'trybuild' || matrix.part == 'semver') && 'host' || matrix.part }}-v2
 
       - uses: ./.github/actions/setup-rust
         with:
