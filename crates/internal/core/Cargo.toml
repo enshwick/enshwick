@@ -18,15 +18,12 @@ enshwick-abi.workspace = true
 enshwick-base.workspace = true
 enshwick-typed = { workspace = true, optional = true }
 enshwick-values.workspace = true
-aho-corasick.workspace = true
 bcdec_rs.workspace = true
 bytemuck.workspace = true
-const_format.workspace = true
 zune-core.workspace = true
 zune-png.workspace = true
 hound = { workspace = true, optional = true }
 fastrand.workspace = true
-memchr.workspace = true
 postcard.workspace = true
 rustc-hash.workspace = true
 schemars = { workspace = true, optional = true }

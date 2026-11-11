@@ -24,7 +24,6 @@ memchr.workspace = true
 postcard.workspace = true
 rustc-hash.workspace = true
 schemars = { workspace = true, optional = true }
-serde_json = { workspace = true, optional = true }
 serde.workspace = true
 strsim.workspace = true
 thiserror.workspace = true
@@ -38,7 +37,7 @@ serde = { workspace = true, features = ["derive"] }
 # The features of `enshwick-core`, which turns each of them on here.
 [features]
 fake = []
-schema = ["dep:schemars", "dep:serde_json"]
+schema = ["dep:schemars"]
 unstable = []
 
 [lints]
