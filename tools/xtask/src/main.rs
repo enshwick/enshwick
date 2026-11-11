@@ -20,7 +20,9 @@
 //! dependency lines of the Markdown to the workspace version's tag, which the
 //! check holds ([`tag_lines`]). `cargo xtask header` rewrites the ABI's
 //! C header, which the check holds to the ABI module and its golden layout
-//! ([`header`]). `cargo xtask alias-examples` writes the hidden line that
+//! ([`header`]). `cargo xtask doc-links` checks the links rustdoc leaves
+//! unchecked in the API crate's rendered pages, which the docs part runs
+//! after each rustdoc build ([`doc_links`]). `cargo xtask alias-examples` writes the hidden line that
 //! names an internal crate `enshwick` into its doc examples, which the
 //! check holds with their copies in the facade ([`lower_examples`]).
 //!
@@ -38,6 +40,7 @@ mod book_links;
 mod book_prose;
 mod crate_rules;
 mod dist;
+mod doc_links;
 mod domains;
 mod fuzz;
 mod header;
@@ -58,7 +61,7 @@ use std::time::Instant;
 
 use affected::{Package, Scope};
 
-const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|docs|windows-lint|windows-tests|fuzz]... [--list-windows-tests] (--all fuzzes only with --part fuzz) | dist [--out <dir>] | notes [--out <file>] [--known-issues <text>] | tag-lines | header | alias-examples | peel-load <from>=<into>... | wrap-examples <doctest log> [--cfg <feature>] | host-args | compat <exe> [--mods <path>...] [--report <file>] [--patterns] [--data <file>] | compat refresh (ENSH_EXES lists the executables)";
+const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|docs|windows-lint|windows-tests|fuzz]... [--list-windows-tests] (--all fuzzes only with --part fuzz) | dist [--out <dir>] | notes [--out <file>] [--known-issues <text>] | tag-lines | header | doc-links | alias-examples | peel-load <from>=<into>... | wrap-examples <doctest log> [--cfg <feature>] | host-args | compat <exe> [--mods <path>...] [--report <file>] [--patterns] [--data <file>] | compat refresh (ENSH_EXES lists the executables)";
 const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// Turned on by name: most of the API crate's test targets need its fake
 /// loader, and without the feature cargo skips them without a word; the
@@ -107,6 +110,7 @@ fn run(args: &[String]) -> Result<bool, String> {
         "notes" => return notes::run(rest),
         "tag-lines" => return tag_lines::run(rest),
         "header" if rest.is_empty() => return header::run(&workspace_root()),
+        "doc-links" if rest.is_empty() => return doc_links::run(&workspace_root()),
         "peel-load" => return peel::run(&workspace_root(), rest),
         "wrap-examples" => return lower_examples::wrap(&workspace_root(), &packages()?, rest),
         "alias-examples" if rest.is_empty() => {
@@ -586,7 +590,14 @@ fn stable_api_steps(code: bool) -> Vec<Step> {
             .then(&STABLE_API)
             .env("RUSTDOCFLAGS", "-D warnings"),
     );
+    steps.push(doc_links_step());
     steps
+}
+
+/// The check of the links rustdoc does not check in the facade's pages it
+/// just wrote ([`doc_links`]).
+fn doc_links_step() -> Step {
+    Step::new(&["xtask", "doc-links"])
 }
 
 /// Whether the workspace's rustdoc runs: whenever code changed, since a
@@ -662,6 +673,7 @@ fn host_steps(
     }
     if run_docs && workspace_rustdoc(code, full) {
         steps.push(host(&["doc", "--no-deps"]).env("RUSTDOCFLAGS", "-D warnings"));
+        steps.push(doc_links_step());
     }
     if full && run_host {
         steps.push(Step::new(&["deny", "check"]));

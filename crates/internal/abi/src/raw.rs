@@ -1,6 +1,8 @@
 //! Reads and writes of game memory at byte offsets, for structs the API does
-//! not wrap: a field at an offset from [`Load::field_offset`] or
-//! [`Load::constant`], inside a context or component a hook was given.
+//! not wrap: a field at an offset the loader found, inside a context or
+//! component a hook was given.
+//!
+//! [`Load::field_offset`] and [`Load::constant`] give the offsets.
 //!
 //! Every read of game memory goes through [`read_at`], [`read_ptr_at`] or
 //! [`read_bytes_at`]. A

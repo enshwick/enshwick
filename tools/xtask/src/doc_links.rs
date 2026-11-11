@@ -1,0 +1,247 @@
+//! The links of the API crate's rendered docs, checked after rustdoc wrote
+//! them: rustdoc checks an intra-doc link, but not a link written as a
+//! relative URL, which a domain crate below `Load` must use to reach it. Each
+//! `href` of a page under `target/doc/enshwick` that stays inside
+//! `target/doc` must reach a page that exists and, when it names one, an
+//! anchor that page has. No network is used.
+
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::path::{Component, Path, PathBuf};
+
+/// The crate whose rendered pages are checked: the facade, which re-exports
+/// every internal crate's items as its own pages.
+const FACADE: &str = "enshwick";
+
+/// Checks the facade's rendered docs under `root`'s `target/doc` and says
+/// each broken link.
+///
+/// # Errors
+///
+/// When the docs are not built or a page does not read.
+pub(crate) fn run(root: &Path) -> Result<bool, String> {
+    let doc = root.join("target").join("doc");
+    if !doc.join(FACADE).is_dir() {
+        return Err(format!(
+            "{} holds no docs; cargo doc writes them",
+            doc.join(FACADE).display()
+        ));
+    }
+    // Without `..` in it, a link's path resolves by plain pops.
+    let doc = std::fs::canonicalize(&doc)
+        .map_err(|error| format!("reading {}: {error}", doc.display()))?;
+    let problems = check(&doc, FACADE)?;
+    for problem in &problems {
+        crate::say(&format!("doc link: {problem}"));
+    }
+    Ok(problems.is_empty())
+}
+
+/// The broken links of the pages under `doc`'s folder `krate`, one line each
+/// naming the page, relative to `doc`, and the link.
+///
+/// # Errors
+///
+/// When a page does not read.
+pub(crate) fn check(doc: &Path, krate: &str) -> Result<Vec<String>, String> {
+    let mut pages = Vec::new();
+    html_files(&doc.join(krate), &mut pages)?;
+    pages.sort();
+    let mut anchors: HashMap<PathBuf, Option<HashSet<String>>> = HashMap::new();
+    let mut problems = Vec::new();
+    for page in &pages {
+        let text = read(page)?;
+        let mut seen = HashSet::new();
+        for href in attribute_values(&text, "href") {
+            if !seen.insert(href.clone()) {
+                continue;
+            }
+            let Some((target, fragment)) = resolve(doc, page, &href) else {
+                continue;
+            };
+            if !anchors.contains_key(&target) {
+                let ids = if !target.is_file() {
+                    None
+                } else if target.extension().is_some_and(|e| e == "html") {
+                    Some(
+                        attribute_values(&read(&target)?, "id")
+                            .into_iter()
+                            .collect(),
+                    )
+                } else {
+                    Some(HashSet::new())
+                };
+                anchors.insert(target.clone(), ids);
+            }
+            let ids = &anchors[&target];
+            let shown = page.strip_prefix(doc).unwrap_or(page).display();
+            match ids {
+                None => problems.push(format!("{shown}: {href} reaches no page")),
+                Some(ids) => {
+                    if let Some(fragment) = fragment
+                        && !ids.contains(&fragment)
+                        && !line_anchor(doc, &target, &fragment)
+                    {
+                        problems.push(format!("{shown}: {href} names an anchor its page lacks"));
+                    }
+                }
+            }
+        }
+    }
+    Ok(problems)
+}
+
+/// The page and anchor `href` on `page` reaches, or `None` for a link this
+/// check leaves alone: one with a scheme, a query, or a path out of `doc`.
+fn resolve(doc: &Path, page: &Path, href: &str) -> Option<(PathBuf, Option<String>)> {
+    let (path, fragment) = match href.split_once('#') {
+        Some((path, fragment)) => (path, Some(fragment)),
+        None => (href, None),
+    };
+    let scheme = path
+        .find(':')
+        .is_some_and(|colon| !path[..colon].contains('/'));
+    if scheme || path.starts_with("//") || path.contains('?') {
+        return None;
+    }
+    let mut target = if path.is_empty() {
+        page.to_path_buf()
+    } else {
+        let mut target = page.parent()?.to_path_buf();
+        for part in Path::new(path).components() {
+            match part {
+                Component::ParentDir => {
+                    if !target.pop() {
+                        return None;
+                    }
+                }
+                Component::Normal(part) => target.push(part),
+                Component::CurDir => {}
+                Component::RootDir | Component::Prefix(_) => return None,
+            }
+        }
+        target
+    };
+    if !target.starts_with(doc) {
+        return None;
+    }
+    if path.ends_with('/') {
+        target.push("index.html");
+    }
+    Some((
+        target,
+        fragment.filter(|f| !f.is_empty()).map(str::to_owned),
+    ))
+}
+
+/// Whether `fragment` names lines of a source page, `12` or `12-20`, which
+/// the page's script resolves rather than an `id`.
+fn line_anchor(doc: &Path, target: &Path, fragment: &str) -> bool {
+    target.starts_with(doc.join("src"))
+        && fragment
+            .split('-')
+            .all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// The values of every `name="..."` attribute in `html`, with the entities
+/// rustdoc writes in attributes decoded.
+fn attribute_values(html: &str, name: &str) -> Vec<String> {
+    let opening = format!(" {name}=\"");
+    html.match_indices(&opening)
+        .filter_map(|(at, _)| {
+            let start = at + opening.len();
+            html[start..]
+                .find('"')
+                .map(|end| unescape(&html[start..start + end]))
+        })
+        .collect()
+}
+
+fn unescape(value: &str) -> String {
+    value
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&amp;", "&")
+}
+
+fn html_files(dir: &Path, into: &mut Vec<PathBuf>) -> Result<(), String> {
+    let entries =
+        std::fs::read_dir(dir).map_err(|error| format!("reading {}: {error}", dir.display()))?;
+    for entry in entries {
+        let path = entry
+            .map_err(|error| format!("reading {}: {error}", dir.display()))?
+            .path();
+        if path.is_dir() {
+            html_files(&path, into)?;
+        } else if path.extension().is_some_and(|e| e == "html") {
+            into.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn read(path: &Path) -> Result<String, String> {
+    std::fs::read_to_string(path).map_err(|error| format!("reading {}: {error}", path.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn write(path: &Path, text: &str) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+
+    #[test]
+    fn a_link_to_a_missing_page_or_anchor_is_named_and_good_links_pass() {
+        let doc = std::env::temp_dir().join(format!("xtask-doc-links-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&doc);
+        write(
+            &doc.join("enshwick/struct.Load.html"),
+            r##"<h4 id="method.add_item">add_item</h4><a href="#method.add_item">self</a>"##,
+        );
+        write(
+            &doc.join("src/enshwick/lib.rs.html"),
+            r##"<a id="1">1</a>"##,
+        );
+        write(
+            &doc.join("enshwick/content/index.html"),
+            concat!(
+                r##"<a href="../struct.Load.html#method.add_item">good</a>"##,
+                r##"<a href="../../src/enshwick/lib.rs.html#1-4">lines</a>"##,
+                r##"<a href="https://docs.rs/serde">away</a>"##,
+                r##"<a href="../../../outside.html">out of the docs</a>"##,
+                r##"<a href="../struct.Load.html#method.add_itemx">bad anchor</a>"##,
+                r##"<a href="../struct.World.html">bad page</a>"##,
+            ),
+        );
+        let problems = check(&doc, "enshwick").unwrap();
+        std::fs::remove_dir_all(&doc).unwrap();
+        let page = Path::new("enshwick").join("content").join("index.html");
+        assert_eq!(
+            problems,
+            [
+                format!(
+                    "{}: ../struct.Load.html#method.add_itemx names an anchor its page lacks",
+                    page.display()
+                ),
+                format!("{}: ../struct.World.html reaches no page", page.display()),
+            ]
+        );
+    }
+
+    #[test]
+    fn entities_in_attributes_are_decoded() {
+        assert_eq!(
+            attribute_values(r##"<a href="a.html#x&amp;y" id="i&lt;T&gt;">"##, "href"),
+            ["a.html#x&y"]
+        );
+        assert_eq!(
+            attribute_values(r##"<a href="a.html" id="i&lt;T&gt;">"##, "id"),
+            ["i<T>"]
+        );
+    }
+}

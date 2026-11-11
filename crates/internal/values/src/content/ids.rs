@@ -125,7 +125,7 @@ impl Guid {
     }
 
     /// FNV-1a 32 over the memory bytes, the number the game gives the
-    /// resource with this GUID; [`ItemId::from_guid`](../struct.ItemId.html#method.from_guid)
+    /// resource with this GUID; [`ItemId::from_guid`](../abi/struct.ItemId.html#method.from_guid)
     /// and its siblings type it.
     ///
     /// # Examples
