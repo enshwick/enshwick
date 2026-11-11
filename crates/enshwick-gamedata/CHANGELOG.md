@@ -15,6 +15,8 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- The crate depends on `enshwick-base` and `enshwick-content` instead of
+  `enshwick-core`, so it no longer builds every domain of the API (#1049).
 - Depends on the internal crate `enshwick-core` instead of `enshwick`; its
   types are the same ones `enshwick` re-exports (#1043).
 
