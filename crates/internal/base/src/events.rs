@@ -1,4 +1,4 @@
-//! Typed loader events, and the [`Kind`] that [`Load::on`](crate::Load::on)
+//! Typed loader events, and the [`Kind`] that [`Load::on`](../struct.Load.html#method.on)
 //! takes for them and for the typed [game events](crate::game_events).
 //!
 //! Events from the server are raised on its game thread: keep handlers short,
@@ -27,7 +27,7 @@ pub(crate) mod sealed {
     pub trait Sealed {}
 }
 
-/// An event [`Load::on`](crate::Load::on) subscribes to: a loader event of
+/// An event [`Load::on`](../struct.Load.html#method.on) subscribes to: a loader event of
 /// this module or a typed game event of [`game_events`](crate::game_events);
 /// implemented by those types only.
 ///
@@ -110,7 +110,7 @@ macro_rules! without_data {
         ///
         /// # Examples
         ///
-        /// See [`Load::on`](crate::Load::on).
+        /// See [`Load::on`](../struct.Load.html#method.on).
         #[derive(Debug, Clone, Copy)]
         pub struct $name;
 
@@ -181,7 +181,7 @@ macro_rules! with_data {
         ///
         /// # Examples
         ///
-        /// See [`Load::on`](crate::Load::on).
+        /// See [`Load::on`](../struct.Load.html#method.on).
         $(#[cfg($cfg)])?
         #[derive(Debug, Clone, Copy)]
         pub struct $name;
@@ -218,7 +218,7 @@ macro_rules! with_data {
 
 without_data! {
     /// [`Event::SETTINGS_CHANGED`], on no fixed thread;
-    /// [`Load::on_settings_change`](crate::Load::on_settings_change) re-reads
+    /// [`Load::on_settings_change`](../struct.Load.html#method.on_settings_change) re-reads
     /// the settings for you.
     SettingsChanged = SETTINGS_CHANGED;
     /// [`Event::LOADER_SETTINGS_CHANGED`].
@@ -237,13 +237,13 @@ without_data! {
     ShutdownStarted = SHUTDOWN_STARTED;
     /// [`Event::JOIN_REFUSED`]; [`crate::mods::join_missing`] lists the mods.
     JoinRefused = JOIN_REFUSED;
-    /// [`Event::ALTARS_CHANGED`]; [`crate::altars::Altars::list`] lists them.
+    /// [`Event::ALTARS_CHANGED`]; [`altars::Altars::list`](../altars/struct.Altars.html#method.list) lists them.
     AltarsChanged = ALTARS_CHANGED;
-    /// [`Event::DAY_STARTED`]; [`crate::daytime::Clock::now`] reads the clock.
+    /// [`Event::DAY_STARTED`]; [`daytime::Clock::now`](../daytime/struct.Clock.html#method.now) reads the clock.
     DayStarted = DAY_STARTED;
     /// [`Event::NIGHT_STARTED`].
     NightStarted = NIGHT_STARTED;
-    /// [`Event::SETTINGS_REPLACED`]; [`Load::on_settings`](crate::Load::on_settings)
+    /// [`Event::SETTINGS_REPLACED`]; [`Load::on_settings`](../struct.Load.html#method.on_settings)
     /// re-reads the settings for you.
     SettingsReplaced = SETTINGS_REPLACED;
 }
@@ -252,8 +252,8 @@ without_data! {
 // added the event, the part every loader that runs the mod writes.
 with_data! {
     /// [`Event::TICKED`], every [`Ticked::DEFAULT_EVERY`] through
-    /// [`Load::on`](crate::Load::on); [`Load::on_tick`](crate::Load::on_tick)
-    /// picks the period and [`Load::on_every_step`](crate::Load::on_every_step)
+    /// [`Load::on`](../struct.Load.html#method.on); [`Load::on_tick`](../struct.Load.html#method.on_tick)
+    /// picks the period and [`Load::on_every_step`](../struct.Load.html#method.on_every_step)
     /// runs on every server step.
     Ticked = TICKED: TickData, core::mem::offset_of!(TickData, elapsed_steps), subscribe_ticked;
     /// [`Event::PLAYER_JOINED`].
@@ -262,7 +262,7 @@ with_data! {
     PlayerLeft = PLAYER_LEFT: PlayerData, size_of::<PlayerData>();
     /// [`Event::BUILDING_PLACED`].
     BuildingPlaced = BUILDING_PLACED: BuildingData, size_of::<BuildingData>();
-    /// [`Event::KNOWLEDGE_CHANGED`]; [`crate::knowledge::Knowledge`] reads and grants.
+    /// [`Event::KNOWLEDGE_CHANGED`]; [`knowledge::Knowledge`](../knowledge/struct.Knowledge.html) reads and grants.
     KnowledgeChanged = KNOWLEDGE_CHANGED: KnowledgeData, size_of::<KnowledgeData>();
     /// [`Event::QUEST_COMPLETED`].
     QuestCompleted = QUEST_COMPLETED: QuestData, size_of::<QuestData>();
@@ -284,7 +284,7 @@ with_data! {
     ///
     /// Unstable: needs the `unstable` feature and may change in any release.
     PlayerDied = PLAYER_DIED: PlayerDeathData, core::mem::offset_of!(PlayerDeathData, killer_entity);
-    /// [`Event::TERRAIN_PAGE_LOADED`]; [`crate::voxels::Voxels`] reads the page.
+    /// [`Event::TERRAIN_PAGE_LOADED`]; [`voxels::Voxels`](../voxels/struct.Voxels.html) reads the page.
     TerrainPageLoaded = TERRAIN_PAGE_LOADED: TerrainPageData, size_of::<TerrainPageData>();
     /// [`Event::TERRAIN_PAGE_UNLOADED`].
     TerrainPageUnloaded = TERRAIN_PAGE_UNLOADED: TerrainPageData, size_of::<TerrainPageData>();
@@ -312,7 +312,7 @@ impl Ticked {
     pub const DEFAULT_EVERY: Duration = Duration::from_millis(100);
 }
 
-/// [`Ticked`] through [`Load::on`](crate::Load::on): on the default period.
+/// [`Ticked`] through [`Load::on`](../struct.Load.html#method.on): on the default period.
 fn subscribe_ticked<F>(load: &mut crate::BaseLoad, handler: F) -> Result<(), crate::Off>
 where
     F: Fn(&TickData) + Send + Sync + 'static,
@@ -320,7 +320,7 @@ where
     load.on_tick(Ticked::DEFAULT_EVERY, handler).map(|_| ())
 }
 
-/// A tick handler's period, from [`Load::on_tick`](crate::Load::on_tick);
+/// A tick handler's period, from [`Load::on_tick`](../struct.Load.html#method.on_tick);
 /// copy it anywhere, the handler itself included, to change the period
 /// while the game runs.
 ///

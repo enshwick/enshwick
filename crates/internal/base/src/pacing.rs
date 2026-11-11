@@ -1,13 +1,13 @@
 //! How the engine paces its loops and sizes its thread pools: the places a
 //! mod changes to make the game use less CPU.
 //!
-//! - [`Load::on_loop_wait`]: the engine's event loop, about to wait on its handles.
+//! - [`Load::on_loop_wait`](../struct.Load.html#method.on_loop_wait): the engine's event loop, about to wait on its handles.
 //!   It turns the time left before its deadline into whole milliseconds,
 //!   truncating, so with less than a millisecond left it waits 0 ms, again
 //!   and again, until the deadline passes.
-//! - [`Load::on_server_wait`]: the server's game loop picking how long it waits
+//! - [`Load::on_server_wait`](../struct.Load.html#method.on_server_wait): the server's game loop picking how long it waits
 //!   between its passes.
-//! - [`Load::cap_task_workers`]: the most worker threads each task group starts
+//! - [`Load::cap_task_workers`](../struct.Load.html#method.cap_task_workers): the most worker threads each task group starts
 //!   with, which the engine sizes from the logical CPUs it sees.
 //!
 //! The loader finds each place on the running build and owns its hook; a
@@ -47,7 +47,7 @@ pub const SERVER_SLOW_WAIT_NS: u64 = 100_000;
 ///
 /// # Examples
 ///
-/// See [`Load::on_loop_wait`], whose handler gets one.
+/// See [`Load::on_loop_wait`](../struct.Load.html#method.on_loop_wait), whose handler gets one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct LoopWait {
@@ -58,7 +58,7 @@ pub struct LoopWait {
     pub left_ns: i64,
 }
 
-/// Which of the event loop's waits [`Load::on_loop_wait`] found and hooked.
+/// Which of the event loop's waits [`Load::on_loop_wait`](../struct.Load.html#method.on_loop_wait) found and hooked.
 ///
 /// # Examples
 ///

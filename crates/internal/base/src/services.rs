@@ -280,7 +280,7 @@ pub(crate) fn name(name: &'static str) -> Str {
 
 /// Sends the mod event `E` that this mod defined, from any thread.
 ///
-/// From [`Load::define_event`](crate::Load::define_event). Sending is a
+/// From [`Load::define_event`](../struct.Load.html#method.define_event). Sending is a
 /// direct call of every subscriber's handler on the sending thread, with no
 /// queue and no allocation; before every mod is initialised it reaches no
 /// one.

@@ -4,17 +4,17 @@
 //! The mod that owns a rule declares it once with
 //! [`#[point]`](macro@crate::point): a `repr(C)` input, the type of the
 //! answer, a local name the macro makes `<owner id>:<point>` and a
-//! [`Mode`]. The owner defines it with [`Load::define_point`] and asks it
+//! [`Mode`]. The owner defines it with [`Load::define_point`](../struct.Load.html#method.define_point) and asks it
 //! with [`OwnedPoint::decide`],
 //! passing its own answer; other mods attach links with
-//! [`Load::extend_point`] or [`Load::observe_point`], ordered by
+//! [`Load::extend_point`](../struct.Load.html#method.extend_point) or [`Load::observe_point`](../struct.Load.html#method.observe_point), ordered by
 //! [`Order`]. The loader checks every link's declaration against the
 //! owner's, field by field, once every mod is initialised, orders the links
 //! the same way at every start, turns a panicking link off and lets
 //! `mods/enshwick/mods.toml` switch one off. With no live link, asking a
 //! point is one atomic load.
 //!
-//! The owner lists its points in [`declare_mod!`](crate::declare_mod), which puts
+//! The owner lists its points in [`declare_mod!`](../macro.declare_mod.html), which puts
 //! their schemas into the manifest; another mod writes its definitions of
 //! the owner's points from there with `cargo enshwick deps <alias>`.
 
@@ -362,7 +362,7 @@ impl crate::script::FromScript for Order {
     }
 }
 
-/// A point this mod defined, from [`Load::define_point`]: asks the links
+/// A point this mod defined, from [`Load::define_point`](../struct.Load.html#method.define_point): asks the links
 /// from any thread.
 ///
 /// # Examples

@@ -4,10 +4,10 @@
 //!
 //! The loader fills the summary with what it knows of every mod: version,
 //! whether it runs, why it was turned off, its hooks and their calls. A mod
-//! adds its own counters with [`Load::add_status`]: a closure returning a few
+//! adds its own counters with [`Load::add_status`](../struct.Load.html#method.add_status): a closure returning a few
 //! lines, called only when the summary is written, so keeping the numbers
 //! (atomics, say) is the only cost while the game runs. A mod made of parts
-//! that can fail apart wraps each in [`Load::feature`], so a game build that
+//! that can fail apart wraps each in [`Load::feature`](../struct.Load.html#method.feature), so a game build that
 //! lacks one part turns off only that part, and players see which.
 
 use core::ffi::c_void;

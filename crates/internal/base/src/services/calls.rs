@@ -114,7 +114,7 @@ fn spec<C: Call>() -> CallSpec {
     }
 }
 
-/// Another mod's call `C`, from [`Load::caller`]: runs the server's handler
+/// Another mod's call `C`, from [`Load::caller`](../struct.Load.html#method.caller): runs the server's handler
 /// on this thread.
 ///
 /// Unstable: needs the `unstable` feature and may change in any release.
@@ -271,7 +271,7 @@ impl DescribedCall {
     }
 }
 
-/// Another mod's described call, from [`Load::described_caller`].
+/// Another mod's described call, from [`Load::described_caller`](../struct.Load.html#method.described_caller).
 ///
 /// Unstable: needs the `unstable` feature and may change in any release.
 ///
@@ -468,7 +468,7 @@ impl<F> Served<F> {
 }
 
 /// Runs a typed server; `user` is the [`Served`] boxed by
-/// [`Load::serve_call`], alive for the process. The first panic turns the
+/// [`Load::serve_call`](../struct.Load.html#method.serve_call), alive for the process. The first panic turns the
 /// handler off and leaves the mod on.
 pub(crate) unsafe extern "system" fn run_typed<C: Call, F: Fn(&C) -> C::Output>(
     input: *const c_void,
@@ -507,7 +507,7 @@ pub(crate) unsafe extern "system" fn run_typed<C: Call, F: Fn(&C) -> C::Output>(
 }
 
 /// Runs a described server; `user` is the [`Served`] boxed by
-/// [`Load::serve_described_call`], alive for the process, its sizes beside
+/// [`Load::serve_described_call`](../struct.Load.html#method.serve_described_call), alive for the process, its sizes beside
 /// the handler.
 unsafe extern "system" fn run_described<F: Fn(&[u8], &mut [u8]) -> bool>(
     input: *const c_void,

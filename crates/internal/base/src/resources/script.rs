@@ -153,7 +153,7 @@ fn hash_of(data: &Data) -> Result<[u32; 4], Off> {
 ///
 /// The Rust API offers the same through [`Registry::game`],
 /// [`Host::resource_keys`], [`Host::game_value`], [`Host::served_value`]
-/// and [`Load::serve`](crate::Load::serve).
+/// and [`Load::serve`](../struct.Load.html#method.serve).
 ///
 /// # Examples
 ///

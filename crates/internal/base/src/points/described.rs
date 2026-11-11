@@ -1,5 +1,5 @@
 //! Extension points described at run time, such as by the schema a script
-//! carries: the same link as [`Load::extend_point`](crate::Load::extend_point),
+//! carries: the same link as [`Load::extend_point`](../struct.Load.html#method.extend_point),
 //! with the input and the answer as bytes in the owner's layout.
 
 use core::ffi::c_void;
@@ -298,7 +298,7 @@ impl DescribedPoint {
 }
 
 /// A described point this mod defined, from
-/// [`Load::define_described_point`]: asks the links with the input and the
+/// [`Load::define_described_point`](../struct.Load.html#method.define_described_point): asks the links with the input and the
 /// answer as bytes, from any thread.
 ///
 /// Unstable: needs the `unstable` feature and may change in any release.
@@ -437,7 +437,7 @@ fn aligned_copy(bytes: &[u8]) -> Vec<u128> {
 }
 
 /// Runs a described link; `user` is the [`Link`] boxed by
-/// [`Load::extend_described_point`], alive for the process.
+/// [`Load::extend_described_point`](../struct.Load.html#method.extend_described_point), alive for the process.
 unsafe extern "system" fn run_described<F>(
     input: *const c_void,
     value: *mut c_void,

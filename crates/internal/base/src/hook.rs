@@ -70,7 +70,7 @@ const _: () = assert!(size_of::<extern "system" fn()>() == size_of::<usize>());
 ///
 /// Declared with [`detour!`](crate::detour) or [`#[hook]`](macro@crate::hook),
 /// registered with
-/// [`Load::hook`](crate::Load::hook).
+/// [`Load::hook`](../struct.Load.html#method.hook).
 ///
 /// # Examples
 ///

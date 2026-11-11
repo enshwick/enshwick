@@ -1,6 +1,6 @@
 //! Game events: the ECS events the server's systems raise, such as a hit,
 //! a death or a level gained, observed typed through
-//! [`Load::on`](crate::Load::on) or by reflected type.
+//! [`Load::on`](../struct.Load.html#method.on) or by reflected type.
 //!
 //! Every game event passes the event streams the engine moves at the
 //! start of each simulation step. The loader copies the ones a mod asked for

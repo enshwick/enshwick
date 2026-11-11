@@ -12,7 +12,7 @@ use crate::{Host, Off};
 ///
 /// The Rust API offers the same through [`is_running`](super::is_running),
 /// [`Host::hosting`], [`Host::build`] and
-/// [`Load::mod_dir`](crate::Load::mod_dir).
+/// [`Load::mod_dir`](../struct.Load.html#method.mod_dir).
 ///
 /// # Examples
 ///

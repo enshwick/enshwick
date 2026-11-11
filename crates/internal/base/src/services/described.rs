@@ -181,7 +181,7 @@ impl BaseLoad {
 }
 
 /// Runs a described handler; `user` is the [`Handler`] boxed by
-/// [`Load::on_described_mod_event`], alive for the process.
+/// [`Load::on_described_mod_event`](../struct.Load.html#method.on_described_mod_event), alive for the process.
 unsafe extern "system" fn deliver_described<F: Fn(&[u8])>(data: *const c_void, user: *mut c_void) {
     // SAFETY: `user` is the leaked `Box<Handler<F>>` this function was
     // subscribed with.

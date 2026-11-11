@@ -2,7 +2,7 @@
 //!
 //! The [`Registry`] holds the build's types; its codec reads a resource's
 //! bytes into a [`Value`] tree and writes the tree back for
-//! [`Load::serve`](crate::Load::serve). Type names are the game's own
+//! [`Load::serve`](../struct.Load.html#method.serve). Type names are the game's own
 //! reflected names, given as data.
 //!
 //! # Examples

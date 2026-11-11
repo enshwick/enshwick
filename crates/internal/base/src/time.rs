@@ -7,7 +7,7 @@
 //! first step after counts [`StepClock::MAX_STEP`] at most: a hold of ten
 //! seconds is about ten seconds of the world running, not of the wall
 //! clock.
-//! [`Load::step_clock`] hands out the mod's clock, which the loader's
+//! [`Load::step_clock`](../struct.Load.html#method.step_clock) hands out the mod's clock, which the loader's
 //! [`Ticked`](crate::events::Ticked) event moves on.
 //!
 //! # Examples
@@ -79,7 +79,7 @@ impl StepClock {
 
     /// Counts `steps` server steps that took `elapsed` together, up to
     /// [`MAX_STEP`](Self::MAX_STEP) for each: what a
-    /// [`TickData`](crate::abi::TickData) says passed. [`Load::step_clock`]
+    /// [`TickData`](crate::abi::TickData) says passed. [`Load::step_clock`](../struct.Load.html#method.step_clock)
     /// calls it for the mod's clock.
     ///
     /// # Examples

@@ -84,7 +84,7 @@ static QUEUES: crate::fresh::Fresh<Mutex<Vec<(ModHandle, &'static Queue)>>> =
     crate::fresh::Fresh::new();
 
 /// Puts work on the server's game thread; get it from
-/// [`Load::scheduler`](crate::Load::scheduler). Copy it anywhere, including
+/// [`Load::scheduler`](../struct.Load.html#method.scheduler). Copy it anywhere, including
 /// other threads.
 ///
 /// # Examples

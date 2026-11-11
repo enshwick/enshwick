@@ -1,5 +1,5 @@
 //! Typed game events: a struct per event with its fields read for the
-//! running build, for [`Load::on`](crate::Load::on).
+//! running build, for [`Load::on`](../struct.Load.html#method.on).
 
 #[cfg(feature = "unstable")]
 use crate::Host;

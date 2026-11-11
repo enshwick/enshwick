@@ -176,7 +176,7 @@ pub const HOLD_FILE: &str = "hold.txt";
 /// [`Hold::set_text`], the same reason as a text of the mod's texts on the
 /// second; a player who accepts the risk deletes it.
 ///
-/// A hold in the mod's folder, [`Load::mod_dir`](crate::Load::mod_dir),
+/// A hold in the mod's folder, [`Load::mod_dir`](../struct.Load.html#method.mod_dir),
 /// holds every world and counts as the loader starts, on every build. A
 /// hold in the mod's data folder of one world,
 /// `World::data_dir`, stops the game only
@@ -208,7 +208,7 @@ pub struct Hold {
 #[crate::script(hold)]
 impl Hold {
     /// The hold kept in `dir`: the mod's folder from
-    /// [`Load::mod_dir`](crate::Load::mod_dir) for every world, or its data
+    /// [`Load::mod_dir`](../struct.Load.html#method.mod_dir) for every world, or its data
     /// folder of one world from
     /// `World::data_dir`.
     ///
@@ -390,7 +390,7 @@ pub fn world_key(host: crate::Host) -> Option<String> {
 /// A field the type gains in an update reads from `Default` while a world's
 /// file lacks it, in nested tables too.
 ///
-/// Get it from [`Load::world_store`](crate::Load::world_store). It reads the
+/// Get it from [`Load::world_store`](../struct.Load.html#method.world_store). It reads the
 /// running world's file when the world has loaded and writes it, when
 /// changed, as the world saves and at shutdown, so the mod's state and the
 /// world's save move together. A hosted game switching worlds switches

@@ -2,7 +2,7 @@
 //!
 //! A pattern is hex bytes separated by spaces, with `??` for a byte that may
 //! be anything, such as the parts of an instruction that change between game
-//! builds. [`Load::find_code`](crate::Load::find_code) searches the game's
+//! builds. [`Load::find_code`](../struct.Load.html#method.find_code) searches the game's
 //! code for one and asks for exactly one match, so a patch never lands on the
 //! wrong place. [`find_each_unique`] searches for many at once.
 

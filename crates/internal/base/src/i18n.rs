@@ -267,7 +267,7 @@ impl Language {
 
     /// The languages every key of a mod's texts needs a text in:
     /// [`Language::FALLBACK`] and Ukrainian. [`texts!`](crate::texts) and
-    /// [`declare_mod!`](crate::declare_mod) refuse to build a mod whose
+    /// [`declare_mod!`](../macro.declare_mod.html) refuse to build a mod whose
     /// texts lack one.
     ///
     /// # Examples

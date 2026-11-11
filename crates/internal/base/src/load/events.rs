@@ -120,7 +120,7 @@ impl BaseLoad {
     }
 }
 
-/// [`Load::on_raw_game_event`] for a runtime that holds the mod's host
+/// [`Load::on_raw_game_event`](../struct.Load.html#method.on_raw_game_event) for a runtime that holds the mod's host
 /// during its init, such as a script's: `handler` on every game event of the
 /// type hashed `type_hash`, `what` naming it in a refusal.
 pub fn game_events_of<F>(host: Host, type_hash: u32, what: &str, handler: F) -> Result<(), Off>
@@ -207,7 +207,7 @@ pub(super) unsafe extern "system" fn deliver_mod_event<E: ModEvent, F: Fn(&E)>(
 }
 
 /// Runs a subscribed handler; `user` is the handler boxed by
-/// [`Load::on_raw_event`], alive for the process.
+/// [`Load::on_raw_event`](../struct.Load.html#method.on_raw_event), alive for the process.
 pub(super) unsafe extern "system" fn deliver<F: Fn(*const c_void)>(
     _event: Event,
     data: *const c_void,

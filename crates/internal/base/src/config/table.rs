@@ -14,7 +14,7 @@ use crate::{BaseLoad, Off};
 const FILE: &str = "settings";
 
 /// One mod's settings described by a [`Schema`] rather than a type: declared
-/// with [`Load::table_config`], followed with [`TableConfig::on_change`].
+/// with [`Load::table_config`](../struct.Load.html#method.table_config), followed with [`TableConfig::on_change`].
 ///
 /// The world's file, its reading and the Mods screen work as they do for a
 /// [`Config`](crate::config::Config) type; its values follow the file while
@@ -174,7 +174,7 @@ impl TableConfig {
     }
 }
 
-/// Refuses what [`Load::table_config`] does not take: groups and dotted
+/// Refuses what [`Load::table_config`](../struct.Load.html#method.table_config) does not take: groups and dotted
 /// or empty keys.
 fn refuse_unsupported(schema: &Schema) -> Result<(), Off> {
     if !schema.groups.is_empty() {

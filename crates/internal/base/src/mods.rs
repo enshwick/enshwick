@@ -110,7 +110,7 @@ pub const LOADER_FILE: &str = "mods/enshwick/enshwick.dll";
 pub const LOADER_FILES: [&str; 2] = [STUB_FILE, LOADER_FILE];
 
 /// A loaded mod's place in load order, counted from 0 after the loader, as
-/// [`stats::Origin::Mod`](crate::stats::Origin::Mod) names a mod.
+/// [`stats::Origin::Mod`](../stats/enum.Origin.html#variant.Mod) names a mod.
 ///
 /// # Examples
 ///
@@ -268,7 +268,7 @@ pub fn all() -> Vec<ModEntry> {
 }
 
 /// Whether the mod `id` is loaded and runs: what an optional dependency's
-/// [`deps!`](crate::deps) module asks before it names the mod's content.
+/// [`deps!`](../macro.deps.html) module asks before it names the mod's content.
 ///
 /// `false` before the loader initialises this mod. Each call reads the
 /// loader's listing into a new list, as [`all`] does: ask once, at init, and

@@ -6,7 +6,7 @@
 //! translation of it uses. As a world loads, the loader writes the file from
 //! the type's [`template`](Config::template), or brings it in line with the
 //! type, and the mod gets the values through
-//! [`Load::on_settings`](crate::Load::on_settings).
+//! [`Load::on_settings`](../struct.Load.html#method.on_settings).
 
 mod read;
 mod reason;

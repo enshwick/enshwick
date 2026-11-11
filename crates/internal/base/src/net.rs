@@ -165,7 +165,7 @@ pub enum SendError {
 
 crate::load::off_from!(SendError);
 
-/// A channel of messages of type `M`, from [`Load::channel`]; `Copy`, for
+/// A channel of messages of type `M`, from [`Load::channel`](../struct.Load.html#method.channel); `Copy`, for
 /// handlers and tasks.
 ///
 /// # Examples

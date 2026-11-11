@@ -184,7 +184,7 @@ impl GameEventKind {
     }
 
     /// Calls `handler` with each event's data, as
-    /// [`Load::on`](crate::Load::on) does for the Rust type.
+    /// [`Load::on`](../struct.Load.html#method.on) does for the Rust type.
     ///
     /// # Errors
     ///
