@@ -86,9 +86,6 @@ mod tests {
         takes: bool,
         /// Whether it takes `self`.
         receiver: bool,
-        /// Whether it sits in a hidden module, which reaches the API only
-        /// as the root re-exports its items.
-        hidden: bool,
     }
 
     impl RustFn {
@@ -166,6 +163,18 @@ mod tests {
     /// Core's module of `Load`'s forwarders into the base, a file per base
     /// module, or per file of the base's own `load`.
     const FORWARDERS: &str = "load";
+
+    /// Whether the walk enters the module `m` inside the top-level module
+    /// `top`: never a test module, and a hidden one only at a crate root
+    /// when the facade does not keep it hidden too.
+    fn walked(top: &str, m: &syn::ItemMod) -> bool {
+        let test = m.attrs.iter().any(|a| {
+            list(a, "cfg").is_some_and(|cfg| cfg == "test" || cfg.starts_with("all(test,"))
+        });
+        let hidden = left_out(&m.attrs);
+        let kept_hidden = FACADE_HIDDEN.contains(&m.ident.to_string().as_str());
+        !test && (!hidden || (top.is_empty() && !kept_hidden))
+    }
 
     /// Whether `name` is a file of the base's own `load`, whose methods are
     /// `Load`'s at the root, not a module's.
@@ -291,15 +300,7 @@ mod tests {
                 match item {
                     // A hidden module is walked as a private one: its items
                     // reach the API only as the root re-exports them.
-                    Item::Mod(m)
-                        if !m.attrs.iter().any(|a| {
-                            list(a, "cfg")
-                                .is_some_and(|cfg| cfg == "test" || cfg.starts_with("all(test,"))
-                        }) && (top.is_empty() || !left_out(&m.attrs))
-                            && !(top.is_empty()
-                                && left_out(&m.attrs)
-                                && FACADE_HIDDEN.contains(&m.ident.to_string().as_str())) =>
-                    {
+                    Item::Mod(m) if walked(top, m) => {
                         let name = m.ident.to_string();
                         // A hidden module a public one of the same name joins
                         // by a glob is that module's.
@@ -340,7 +341,6 @@ mod tests {
                             returns: returned(&f.sig.output),
                             takes: !f.sig.inputs.is_empty(),
                             receiver: false,
-                            hidden: top.starts_with(HIDDEN),
                         });
                     }
                     Item::Impl(i) if !left_out(&i.attrs) => {
@@ -382,7 +382,6 @@ mod tests {
                                     returns: returned(&sig.output),
                                     takes: sig.inputs.len() > usize::from(receiver),
                                     receiver,
-                                    hidden: top.starts_with(HIDDEN),
                                 });
                             }
                         }
