@@ -664,7 +664,7 @@ impl Thing {
 
     #[test]
     fn a_failed_doctest_is_read_once_from_its_log_line() {
-        let log = "failures:\n    crates\\internal\\base\\src\\ecs.rs - ecs::Ecs (line 27)\n    crates\\internal\\base\\src\\ecs.rs - ecs::Ecs (line 27)\n    crates/internal/base/src/a.rs - a::B<T>::c (line 3)\ntest result: FAILED.";
+        let log = "failures:\n    crates\\internal\\base\\src\\ecs.rs - ecs::Ecs (line 27)\n    crates\\internal\\base\\src\\ecs.rs - ecs::Ecs (line 27)\n    crates/internal/base/src/a.rs - a::B<T>::c (line 3)\n    crates/internal/base/src/a.rs - a::D (line 9)\ntest result: FAILED.";
         assert_eq!(
             failed(log),
             [
@@ -672,6 +672,11 @@ impl Thing {
                     file: "crates/internal/base/src/a.rs".to_owned(),
                     item: "a::B<T>::c".to_owned(),
                     fence: 3,
+                },
+                Failed {
+                    file: "crates/internal/base/src/a.rs".to_owned(),
+                    item: "a::D".to_owned(),
+                    fence: 9,
                 },
                 Failed {
                     file: "crates/internal/base/src/ecs.rs".to_owned(),

@@ -402,6 +402,22 @@ impl Load<'_> {
     }
 
     #[test]
+    fn other_impls_stay_and_a_load_block_keeps_its_consts_and_types() -> Result<(), String> {
+        let source = "impl Other {\n    pub fn f(&self) {}\n}\n\nimpl Clone for Load<'_> {\n    fn clone(&self) -> Self {\n        todo!()\n    }\n}\n\nimpl Load<'_> {\n    /// A part.\n    pub const PART: u32 = 1;\n\n    fn inner(&self) {}\n}\n";
+        let peeled = peel(source)?;
+        assert!(peeled.forwarders.is_empty());
+        assert!(
+            peeled.base.starts_with(
+                "impl Other {\n    pub fn f(&self) {}\n}\n\nimpl Clone for Load<'_> {"
+            )
+        );
+        assert!(peeled.base.ends_with(
+            "impl BaseLoad {\n    /// A part.\n    pub const PART: u32 = 1;\n\n    fn inner(&self) {}\n}\n"
+        ));
+        Ok(())
+    }
+
+    #[test]
     fn a_script_adapter_moves_public_and_keeps_its_visibility_on_load() -> Result<(), String> {
         let source = "#[crate::script(texts)]\nimpl Load<'_> {\n    /// Texts for a script.\n    #[script(name = \"texts\")]\n    pub(crate) fn texts_script(&mut self) -> u32 {\n        1\n    }\n}\n";
         let peeled = peel(source)?;
