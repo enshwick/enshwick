@@ -1,9 +1,14 @@
 //! `cargo xtask peel-load <from>=<into>...`: the step of a peel that moves
 //! `Load`'s methods off `enshwick-core`. Each `impl Load` block of the
-//! module file `from`, already moved into the crate below, becomes an
-//! `impl BaseLoad` block whose public methods carry one doc line; their
-//! docs, examples and `#[script]` go to a forwarder block on `Load`
-//! appended to `into` in core, whose bodies `#[forward(base)]` writes.
+//! module file `from`, already moved into the crate below, goes onto the
+//! base handle, and its public methods' docs, examples and `#[script]` go
+//! to a forwarder block on `Load` appended to `into` in core, whose bodies
+//! `#[forward(base)]` writes. In `enshwick-base`, the crate of `BaseLoad`,
+//! a block becomes an `impl BaseLoad` block whose public methods carry one
+//! doc line. Above it Rust allows no inherent method on `BaseLoad` (E0116),
+//! so a module's blocks become one hidden trait, `LoadMethods`, and its
+//! `impl` for `BaseLoad`; the crate's `src/__load.rs` re-exports each such
+//! trait as `_`, and the forwarder file imports them all with a glob.
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -15,6 +20,50 @@ use syn::{Attribute, ImplItem, ImplItemFn, Item, ItemImpl, Type, Visibility};
 const BASE: &str = "BaseLoad";
 /// The field of `Load` that holds the base handle.
 const FIELD: &str = "base";
+/// The hidden trait that holds a module's methods above `enshwick-base`.
+const TRAIT: &str = "LoadMethods";
+/// The module of a domain crate that re-exports its modules' traits.
+const REEXPORTS: &str = "__load";
+
+/// How a module's blocks land on the base handle.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Form {
+    /// Inherent `impl BaseLoad` blocks, in `enshwick-base`.
+    Base,
+    /// One `LoadMethods` trait per module, in the crate `krate` (its Rust
+    /// name), whose root reaches the module at `module` and re-exports its
+    /// trait in the file `reexports`, a path from the workspace root.
+    Trait {
+        krate: String,
+        module: String,
+        reexports: String,
+    },
+}
+
+impl Form {
+    /// The form for a module file at `from`, a path from the workspace
+    /// root: the trait form in a crate of `crates/internal` other than base.
+    fn of(from: &str) -> Self {
+        let parts: Vec<&str> = from.split(['/', '\\']).collect();
+        match parts.as_slice() {
+            ["crates", "internal", dir, "src", rest @ ..] if *dir != "base" && !rest.is_empty() => {
+                let mut module: Vec<&str> = rest.to_vec();
+                if let Some(last) = module.last_mut() {
+                    *last = last.strip_suffix(".rs").unwrap_or(last);
+                }
+                if module.last() == Some(&"mod") {
+                    module.pop();
+                }
+                Self::Trait {
+                    krate: format!("enshwick_{}", dir.replace('-', "_")),
+                    module: module.join("::"),
+                    reexports: format!("crates/internal/{dir}/src/{REEXPORTS}.rs"),
+                }
+            }
+            _ => Self::Base,
+        }
+    }
+}
 
 /// Peels each `from=into` pair of `args`, paths from the workspace root.
 ///
@@ -29,10 +78,18 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<bool, String> {
         let (from, into) = arg
             .split_once('=')
             .ok_or_else(|| format!("{arg}: not <from>=<into>"))?;
+        let form = Form::of(from);
         let (from, into) = (root.join(from), root.join(into));
         let text =
             std::fs::read_to_string(&from).map_err(|e| format!("{}: {e}", from.display()))?;
-        let peeled = peel(&text).map_err(|e| format!("{}: {e}", from.display()))?;
+        let peeled = peel(&text, &form).map_err(|e| format!("{}: {e}", from.display()))?;
+        if let Form::Trait {
+            module, reexports, ..
+        } = &form
+            && peeled.has_trait
+        {
+            reexport(&root.join(reexports), module)?;
+        }
         // The forwarders, which keep the docs, are written before `from`
         // loses them.
         if !peeled.forwarders.is_empty() {
@@ -54,8 +111,10 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<bool, String> {
 fn write_forwarders(into: &Path, peeled: &Peeled) -> Result<(), String> {
     {
         let mut out = match std::fs::read_to_string(into) {
-            Ok(kept) => kept,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => header(&peeled.uses),
+            Ok(kept) => with_glob(kept, peeled.krate.as_deref()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                header(&peeled.uses, peeled.krate.as_deref())
+            }
             Err(e) => return Err(format!("{}: {e}", into.display())),
         };
         for block in &peeled.forwarders {
@@ -71,13 +130,52 @@ fn write_forwarders(into: &Path, peeled: &Peeled) -> Result<(), String> {
     Ok(())
 }
 
-fn header(uses: &[String]) -> String {
+/// `kept`, a forwarder file, with the glob of `krate`'s method traits
+/// after its doc lines when it lacks it.
+fn with_glob(kept: String, krate: Option<&str>) -> String {
+    let Some(krate) = krate else {
+        return kept;
+    };
+    let line = format!("use {krate}::{REEXPORTS}::*;\n");
+    if kept.contains(&line) {
+        return kept;
+    }
+    let at = kept.find("\n\n").map_or(0, |at| at + 2);
+    let mut out = kept;
+    out.insert_str(at, &line);
+    out
+}
+
+/// Appends the re-export of `module`'s method trait to `file`, the crate's
+/// `__load.rs`, made when missing.
+fn reexport(file: &Path, module: &str) -> Result<(), String> {
+    let mut out = match std::fs::read_to_string(file) {
+        Ok(kept) => kept,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::from(
+            "//! The traits that hold `Load`'s methods of each module on the base\n//! handle; core's forwarders import them all.\n\n",
+        ),
+        Err(e) => return Err(format!("{}: {e}", file.display())),
+    };
+    let line = format!("pub use crate::{module}::{TRAIT} as _;\n");
+    if !out.contains(&line) {
+        out.push_str(&line);
+    }
+    std::fs::write(file, out).map_err(|e| format!("{}: {e}", file.display()))
+}
+
+/// The opening of a new forwarder file: its doc line, `uses`, the glob of
+/// `krate`'s method traits when the module is in a domain crate, and `Load`
+/// and `Off`.
+fn header(uses: &[String], krate: Option<&str>) -> String {
     let mut out = String::from(
         "//! `Load`'s methods of a module below core, forwarded to the base handle.\n\n",
     );
     for line in uses {
         out.push_str(line);
         out.push('\n');
+    }
+    if let Some(krate) = krate {
+        let _written = writeln!(out, "use {krate}::{REEXPORTS}::*;");
     }
     // `Load` and `Off`, each unless a copied import names it already.
     let named = |name: &str| {
@@ -101,16 +199,130 @@ struct Peeled {
     forwarders: Vec<String>,
     /// The file's `use` items, but those of `super`, for a new forwarder file.
     uses: Vec<String>,
+    /// Whether the file now holds a `LoadMethods` trait to re-export.
+    has_trait: bool,
+    /// The domain crate's Rust name in the trait form, whose method traits
+    /// the forwarder file imports.
+    krate: Option<String>,
 }
 
-/// Peels `text`, a module file.
-fn peel(text: &str) -> Result<Peeled, String> {
+/// The trait form of a module's `impl Load` blocks: one trait signature
+/// and one implementing method per moved method, in order.
+#[derive(Debug, Default)]
+struct Methods {
+    signatures: Vec<String>,
+    bodies: Vec<String>,
+}
+
+impl Methods {
+    /// Adds the methods of `item` and returns its forwarder block, if it has
+    /// a public method.
+    fn add(
+        &mut self,
+        item: &ItemImpl,
+        text: &str,
+        at: &Offsets<'_>,
+    ) -> Result<Option<String>, String> {
+        // A `cfg` of the block holds for each of its methods, on both sides.
+        let block_cfgs: Vec<&str> = item
+            .attrs
+            .iter()
+            .filter(|a| is_cfg(a))
+            .map(|a| attr_text(a, text, at))
+            .collect();
+        let mut bodiless = Vec::new();
+        for entry in &item.items {
+            let ImplItem::Fn(method) = entry else {
+                return Err(
+                    "a constant or type in an `impl Load` block above enshwick-base; move it by hand"
+                        .to_owned(),
+                );
+            };
+            let start = item_start(method, at);
+            let sig_end = at.byte(method.block.brace_token.span.open().start());
+            let end = at.byte(method.block.brace_token.span.close().end());
+            let after_vis = after_visibility(method, at);
+            let mut signature = format!("    /// As `Load::{}`.\n", method.sig.ident);
+            if matches!(method.sig.safety, syn::Safety::Unsafe(_)) {
+                for line in safety_section(&method.attrs, text, at) {
+                    let _written = writeln!(signature, "    {line}");
+                }
+            }
+            signature.push_str("    #[doc(hidden)]\n");
+            let mut body = String::new();
+            for cfg in &block_cfgs {
+                let _written = writeln!(signature, "    {cfg}");
+                let _written = writeln!(body, "    {cfg}");
+            }
+            for attr in method.attrs.iter().filter(|a| !a.path().is_ident("doc")) {
+                let written = attr_text(attr, text, at);
+                if is_cfg(attr) {
+                    let _written = writeln!(signature, "    {written}");
+                    let _written = writeln!(body, "    {written}");
+                } else if on_signature(attr) {
+                    let _written = writeln!(signature, "    {written}");
+                } else if !attr.path().is_ident("script") {
+                    let _written = writeln!(body, "    {written}");
+                }
+            }
+            let sig = text[after_vis..sig_end].trim_end();
+            let _written = write!(signature, "    {};", sig.strip_suffix(',').unwrap_or(sig));
+            body.push_str("    ");
+            body.push_str(&text[after_vis..end]);
+            self.signatures.push(signature);
+            self.bodies.push(body);
+            let public = matches!(method.vis, Visibility::Public(_));
+            let scripted = method.attrs.iter().any(|a| a.path().is_ident("script"));
+            if public || scripted {
+                let sig = text[start..sig_end].trim_end();
+                bodiless.push(format!("    {};", sig.strip_suffix(',').unwrap_or(sig)));
+            }
+        }
+        Ok(forwarder(item, &bodiless, text, at))
+    }
+
+    /// The trait and its implementation for the base handle.
+    fn render(&self) -> String {
+        format!(
+            "/// `Load`'s methods of this module on the base handle, which core's\n/// forwarders call.\n#[doc(hidden)]\npub trait {TRAIT} {{\n{}\n}}\n\nimpl {TRAIT} for {BASE} {{\n{}\n}}",
+            self.signatures.join("\n\n"),
+            self.bodies.join("\n\n")
+        )
+    }
+}
+
+/// Whether `attr` is a `cfg` or `cfg_attr`, which holds for a method's
+/// signature and its body alike.
+fn is_cfg(attr: &Attribute) -> bool {
+    attr.path().is_ident("cfg") || attr.path().is_ident("cfg_attr")
+}
+
+/// Whether `attr` belongs on a trait method's signature rather than its
+/// implementation, where it would have no effect.
+fn on_signature(attr: &Attribute) -> bool {
+    attr.path().is_ident("must_use") || attr.path().is_ident("deprecated")
+}
+
+/// Where a method's text after its visibility starts.
+fn after_visibility(method: &ImplItemFn, at: &Offsets<'_>) -> usize {
+    let start = match &method.vis {
+        Visibility::Public(token) => at.byte(token.span.end()),
+        Visibility::Restricted(r) => at.byte(r.paren_token.span.close().end()),
+        Visibility::Inherited => return sig_start(method, at),
+    };
+    let rest = &at.text[start..];
+    start + (rest.len() - rest.trim_start().len())
+}
+
+/// Peels `text`, a module file, into `form`.
+fn peel(text: &str, form: &Form) -> Result<Peeled, String> {
     let file = syn::parse_file(text).map_err(|e| e.to_string())?;
     let at = Offsets::new(text);
     let mut base = text.to_owned();
     let mut forwarders = Vec::new();
     let mut uses = Vec::new();
     let mut cuts = Vec::new();
+    let mut methods = Methods::default();
     let children: Vec<String> = file
         .items
         .iter()
@@ -127,6 +339,7 @@ fn peel(text: &str) -> Result<Peeled, String> {
                 uses.push(text[attrs_start(&item.attrs, &at).unwrap_or(start)..end].to_owned());
             }
             Item::Impl(item) if is_load(item) => {
+                let line = item.impl_token.span.start().line;
                 if item.items.iter().any(|entry| {
                     !matches!(
                         entry,
@@ -134,27 +347,50 @@ fn peel(text: &str) -> Result<Peeled, String> {
                     )
                 }) {
                     return Err(format!(
-                        "line {}: an `impl Load` block with an item other than a method, constant or type; move it by hand",
-                        item.impl_token.span.start().line
+                        "line {line}: an `impl Load` block with an item other than a method, constant or type; move it by hand"
                     ));
                 }
                 let start =
                     attrs_start(&item.attrs, &at).unwrap_or(at.byte(item.impl_token.span.start()));
                 let end = at.byte(item.brace_token.span.close().end());
-                let (moved, forwarder) = block(item, text, &at);
-                cuts.push((start, end, moved));
+                let forwarder = match form {
+                    Form::Base => {
+                        let (moved, forwarder) = block(item, text, &at);
+                        cuts.push((start, end, moved));
+                        forwarder
+                    }
+                    Form::Trait { .. } => {
+                        cuts.push((start, end, String::new()));
+                        methods
+                            .add(item, text, &at)
+                            .map_err(|e| format!("line {line}: {e}"))?
+                    }
+                };
                 forwarders.extend(forwarder);
             }
             _ => {}
         }
     }
+    // In the trait form the first block's place takes the trait and its
+    // impl, and the others are cut.
+    if let Some(first) = cuts.first_mut()
+        && !methods.bodies.is_empty()
+    {
+        first.2 = methods.render();
+    }
     for (start, end, moved) in cuts.into_iter().rev() {
         base.replace_range(start..end, &moved);
     }
+    let krate = match form {
+        Form::Trait { krate, .. } => Some(krate.clone()),
+        Form::Base => None,
+    };
     Ok(Peeled {
         base,
         forwarders,
         uses,
+        has_trait: !methods.bodies.is_empty(),
+        krate,
     })
 }
 
@@ -235,30 +471,52 @@ fn block(item: &ItemImpl, text: &str, at: &Offsets<'_>) -> (String, Option<Strin
         let sig = text[start..sig_end].trim_end();
         bodiless.push(format!("    {};", sig.strip_suffix(',').unwrap_or(sig)));
     }
-    // The block's own attributes, such as a `cfg`, hold for both blocks;
-    // `#[script]` names `Load`'s functions and goes with the forwarders.
-    let is_script = |a: &&Attribute| {
-        a.path()
-            .segments
-            .last()
-            .is_some_and(|s| s.ident == "script")
-    };
+    let moved = format!(
+        "{}impl {BASE} {{\n{}\n}}",
+        block_attrs(item, text, at),
+        moved.join("\n\n")
+    );
+    (moved, forwarder(item, &bodiless, text, at))
+}
+
+/// Whether `attr` is the block's `#[script]`, which names `Load`'s
+/// functions and goes with the forwarders.
+fn is_script(attr: &Attribute) -> bool {
+    attr.path()
+        .segments
+        .last()
+        .is_some_and(|s| s.ident == "script")
+}
+
+/// The block's own attributes but its `#[script]`, such as a `cfg`, which
+/// hold for the moved block and the forwarders alike.
+fn block_attrs(item: &ItemImpl, text: &str, at: &Offsets<'_>) -> String {
     let mut kept = String::new();
     for attr in item.attrs.iter().filter(|a| !is_script(a)) {
         kept.push_str(attr_text(attr, text, at));
         kept.push('\n');
     }
-    let moved = format!("{kept}impl {BASE} {{\n{}\n}}", moved.join("\n\n"));
+    kept
+}
+
+/// The forwarder block of `item` on `Load`, from its `bodiless` public
+/// methods, if it has any.
+fn forwarder(item: &ItemImpl, bodiless: &[String], text: &str, at: &Offsets<'_>) -> Option<String> {
     if bodiless.is_empty() {
-        return (moved, None);
+        return None;
     }
-    let mut head = format!("{kept}#[enshwick_macros::forward({FIELD})]\n");
-    for attr in item.attrs.iter().filter(is_script) {
+    let mut head = format!(
+        "{}#[enshwick_macros::forward({FIELD})]\n",
+        block_attrs(item, text, at)
+    );
+    for attr in item.attrs.iter().filter(|a| is_script(a)) {
         head.push_str(attr_text(attr, text, at));
         head.push('\n');
     }
-    let forwarder = format!("{head}impl Load<'_> {{\n{}\n}}", bodiless.join("\n\n"));
-    (moved, Some(forwarder))
+    Some(format!(
+        "{head}impl Load<'_> {{\n{}\n}}",
+        bodiless.join("\n\n")
+    ))
 }
 
 /// The `# Safety` section of a method's doc comment, a blank doc line
@@ -423,7 +681,7 @@ impl Load<'_> {
     #[test]
     fn a_public_method_moves_with_one_doc_line_and_leaves_a_forwarder_with_its_docs()
     -> Result<(), String> {
-        let peeled = peel(SOURCE)?;
+        let peeled = peel(SOURCE, &Form::Base)?;
         assert_eq!(
             peeled.base,
             "\
@@ -540,16 +798,16 @@ impl Load<'_> {
 
     #[test]
     fn a_new_forwarder_file_names_load_and_its_source_s_imports() {
-        let text = header(&["use core::time::Duration;".to_owned()]);
+        let text = header(&["use core::time::Duration;".to_owned()], None);
         assert!(text.ends_with("use core::time::Duration;\nuse crate::Load;\nuse crate::Off;\n"));
-        let text = header(&["use crate::{Host, Off};".to_owned()]);
+        let text = header(&["use crate::{Host, Off};".to_owned()], None);
         assert!(text.ends_with("use crate::{Host, Off};\nuse crate::Load;\n"));
     }
 
     #[test]
     fn other_impls_stay_and_a_load_block_keeps_its_consts_and_types() -> Result<(), String> {
         let source = "impl Other {\n    pub fn f(&self) {}\n}\n\nimpl Clone for Load<'_> {\n    fn clone(&self) -> Self {\n        todo!()\n    }\n}\n\nimpl Load<'_> {\n    /// A part.\n    pub const PART: u32 = 1;\n\n    type Kind = u8;\n\n    fn inner(&self) {}\n}\n";
-        let peeled = peel(source)?;
+        let peeled = peel(source, &Form::Base)?;
         assert!(peeled.forwarders.is_empty());
         assert!(
             peeled.base.starts_with(
@@ -567,7 +825,7 @@ impl Load<'_> {
     -> Result<(), String> {
         let source = "mod script;\n\n#[doc(hidden)]\npub use script::Fns;\nuse script::Inner;\nuse self::x::Y;\nuse super::Z;\n#[cfg(test)]\nuse crate::Host;\nuse serde::Deserialize as _;\nuse toml;\nuse bytemuck as bm;\nuse script;\n";
         assert_eq!(
-            peel(source)?.uses,
+            peel(source, &Form::Base)?.uses,
             [
                 "#[cfg(test)]\nuse crate::Host;",
                 "use serde::Deserialize as _;",
@@ -582,7 +840,7 @@ impl Load<'_> {
     fn a_moved_unsafe_method_keeps_its_safety_section() -> Result<(), String> {
         let source = "impl Load<'_> {\n    /// Hooks.\n    ///\n    /// # Safety\n    ///\n    /// - `at` starts a function.\n    ///\n    /// # Errors\n    ///\n    /// When refused.\n    pub unsafe fn hook(&mut self, at: u64) {}\n}\n";
         assert_eq!(
-            peel(source)?.base,
+            peel(source, &Form::Base)?.base,
             "impl BaseLoad {\n    /// As `Load::hook`.\n    ///\n    /// # Safety\n    ///\n    /// - `at` starts a function.\n    #[doc(hidden)]\n    pub unsafe fn hook(&mut self, at: u64) {}\n}\n"
         );
         Ok(())
@@ -592,7 +850,7 @@ impl Load<'_> {
     fn a_macro_call_in_a_load_block_is_refused_rather_than_dropped() {
         let source = "impl Other {\n    m!();\n}\n\nimpl Load<'_> {\n    pub fn f(&self) {}\n\n    m!();\n}\n";
         assert_eq!(
-            peel(source),
+            peel(source, &Form::Base),
             Err("line 5: an `impl Load` block with an item other than a method, constant or type; move it by hand".to_owned())
         );
     }
@@ -600,7 +858,7 @@ impl Load<'_> {
     #[test]
     fn a_script_adapter_moves_public_and_keeps_its_visibility_on_load() -> Result<(), String> {
         let source = "#[cfg(feature = \"unstable\")]\n#[crate::script(texts)]\nimpl Load<'_> {\n    /// Texts for a script.\n    #[script(name = \"texts\")]\n    pub(crate) fn texts_script(&mut self) -> u32 {\n        1\n    }\n}\n";
-        let peeled = peel(source)?;
+        let peeled = peel(source, &Form::Base)?;
         assert_eq!(
             peeled.base,
             "#[cfg(feature = \"unstable\")]\nimpl BaseLoad {\n    /// As `Load::texts_script`.\n    #[doc(hidden)]\n    pub fn texts_script(&mut self) -> u32 {\n        1\n    }\n}\n"
@@ -612,5 +870,70 @@ impl Load<'_> {
             ]
         );
         Ok(())
+    }
+
+    #[test]
+    fn a_module_above_base_gets_one_method_trait_for_all_its_blocks() -> Result<(), String> {
+        let source = "use crate::Off;\n\n#[cfg(feature = \"unstable\")]\n#[crate::script(items)]\nimpl Load<'_> {\n    /// Adds an item.\n    #[must_use]\n    #[expect(clippy::x, reason = \"y\")]\n    pub fn add(&mut self, id: u32) -> Result<(), Off> {\n        self.helper(id)\n    }\n\n    pub(crate) fn helper(&mut self, id: u32) -> Result<(), Off> {\n        Ok(())\n    }\n}\n\nimpl Load<'_> {\n    fn quiet(&self) {}\n}\n";
+        let form = Form::of("crates/internal/content/src/content/changes/items.rs");
+        assert_eq!(
+            form,
+            Form::Trait {
+                krate: "enshwick_content".to_owned(),
+                module: "content::changes::items".to_owned(),
+                reexports: "crates/internal/content/src/__load.rs".to_owned(),
+            }
+        );
+        let peeled = peel(source, &form)?;
+        assert_eq!(
+            peeled.base,
+            "use crate::Off;\n\n/// `Load`'s methods of this module on the base handle, which core's\n/// forwarders call.\n#[doc(hidden)]\npub trait LoadMethods {\n    /// As `Load::add`.\n    #[doc(hidden)]\n    #[cfg(feature = \"unstable\")]\n    #[must_use]\n    fn add(&mut self, id: u32) -> Result<(), Off>;\n\n    /// As `Load::helper`.\n    #[doc(hidden)]\n    #[cfg(feature = \"unstable\")]\n    fn helper(&mut self, id: u32) -> Result<(), Off>;\n\n    /// As `Load::quiet`.\n    #[doc(hidden)]\n    fn quiet(&self);\n}\n\nimpl LoadMethods for BaseLoad {\n    #[cfg(feature = \"unstable\")]\n    #[expect(clippy::x, reason = \"y\")]\n    fn add(&mut self, id: u32) -> Result<(), Off> {\n        self.helper(id)\n    }\n\n    #[cfg(feature = \"unstable\")]\n    fn helper(&mut self, id: u32) -> Result<(), Off> {\n        Ok(())\n    }\n\n    fn quiet(&self) {}\n}\n\n\n"
+        );
+        assert_eq!(
+            peeled.forwarders,
+            [
+                "#[cfg(feature = \"unstable\")]\n#[enshwick_macros::forward(base)]\n#[crate::script(items)]\nimpl Load<'_> {\n    /// Adds an item.\n    #[must_use]\n    #[expect(clippy::x, reason = \"y\")]\n    pub fn add(&mut self, id: u32) -> Result<(), Off>;\n}"
+            ]
+        );
+        assert!(peeled.has_trait);
+        assert_eq!(
+            header(&[], peeled.krate.as_deref()),
+            "//! `Load`'s methods of a module below core, forwarded to the base handle.\n\nuse enshwick_content::__load::*;\nuse crate::Load;\nuse crate::Off;\n"
+        );
+        assert_eq!(Form::of("crates/internal/base/src/load/a.rs"), Form::Base);
+        assert!(
+            peel("impl Load<'_> {\n    const A: u8 = 1;\n}\n", &form)
+                .is_err_and(|e| e.contains("move it by hand"))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_forwarder_file_gains_the_trait_glob_once_and_the_crate_re_exports_each_trait_once() {
+        let kept = "//! Doc.\n\nuse crate::Load;\n".to_owned();
+        let globbed = with_glob(kept.clone(), Some("enshwick_content"));
+        assert_eq!(
+            globbed,
+            "//! Doc.\n\nuse enshwick_content::__load::*;\nuse crate::Load;\n"
+        );
+        assert_eq!(
+            with_glob(globbed.clone(), Some("enshwick_content")),
+            globbed
+        );
+        assert_eq!(with_glob(kept.clone(), None), kept);
+        let file = std::env::temp_dir().join(format!("xtask-reexport-{}.rs", std::process::id()));
+        let first = reexport(&file, "content::items");
+        let again = reexport(&file, "content::items");
+        let second = reexport(&file, "rates");
+        let text = std::fs::read_to_string(&file).unwrap();
+        std::fs::remove_file(&file).unwrap();
+        assert_eq!((first, again, second), (Ok(()), Ok(()), Ok(())));
+        assert!(text.starts_with("//! The traits"), "{text}");
+        assert!(
+            text.ends_with(
+                "\n\npub use crate::content::items::LoadMethods as _;\npub use crate::rates::LoadMethods as _;\n"
+            ),
+            "{text}"
+        );
     }
 }
