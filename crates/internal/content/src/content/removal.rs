@@ -20,13 +20,14 @@
 //! }
 //! ```
 
+use crate::__load::*;
+use crate::Off;
 use crate::abi::Status;
 use crate::content::changes::{self, Change, Field};
 use crate::content::recipes::{self, RecipeRule};
 use crate::engine_ids as ids;
 use crate::resources::{Registry, Value};
 use crate::typed::{ItemFlag, Reflected as _};
-use crate::{Load, Off};
 
 use super::items::{self, ItemLayout};
 use super::{EngineFacts, Guid, types};
@@ -157,7 +158,7 @@ pub trait LoadMethods {
     fn rekey_item(&mut self, old: Guid, new: Guid) -> Result<(), Off>;
 }
 
-impl LoadMethods for BaseLoad {
+impl LoadMethods for crate::BaseLoad {
     fn remove_item(&mut self, item: Guid) -> Result<(), Off> {
         let host = self.host();
         let hash = host.hash(ids::LOOTABLE_ITEMS)?;

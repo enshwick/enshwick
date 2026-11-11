@@ -22,6 +22,8 @@ const BASE: &str = "BaseLoad";
 const FIELD: &str = "base";
 /// The hidden trait that holds a module's methods above `enshwick-base`.
 const TRAIT: &str = "LoadMethods";
+/// The crate-private trait that holds a module's other moved methods.
+const HELPERS: &str = "LoadHelpers";
 /// The module of a domain crate that re-exports its modules' traits.
 const REEXPORTS: &str = "__load";
 
@@ -86,9 +88,10 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<bool, String> {
         if let Form::Trait {
             module, reexports, ..
         } = &form
-            && peeled.has_trait
         {
-            reexport(&root.join(reexports), module)?;
+            for name in &peeled.traits {
+                reexport(&root.join(reexports), module, name)?;
+            }
         }
         // The forwarders, which keep the docs, are written before `from`
         // loses them.
@@ -146,9 +149,10 @@ fn with_glob(kept: String, krate: Option<&str>) -> String {
     out
 }
 
-/// Appends the re-export of `module`'s method trait to `file`, the crate's
-/// `__load.rs`, made when missing.
-fn reexport(file: &Path, module: &str) -> Result<(), String> {
+/// Appends the re-export of `module`'s method trait `name` to `file`, the
+/// crate's `__load.rs`, made when missing: public for `LoadMethods`, which
+/// core imports, and for the crate alone for `LoadHelpers`.
+fn reexport(file: &Path, module: &str, name: &str) -> Result<(), String> {
     let mut out = match std::fs::read_to_string(file) {
         Ok(kept) => kept,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::from(
@@ -156,7 +160,8 @@ fn reexport(file: &Path, module: &str) -> Result<(), String> {
         ),
         Err(e) => return Err(format!("{}: {e}", file.display())),
     };
-    let line = format!("pub use crate::{module}::{TRAIT} as _;\n");
+    let vis = if name == HELPERS { "pub(crate)" } else { "pub" };
+    let line = format!("{vis} use crate::{module}::{name} as _;\n");
     if !out.contains(&line) {
         out.push_str(&line);
     }
@@ -199,19 +204,42 @@ struct Peeled {
     forwarders: Vec<String>,
     /// The file's `use` items, but those of `super`, for a new forwarder file.
     uses: Vec<String>,
-    /// Whether the file now holds a `LoadMethods` trait to re-export.
-    has_trait: bool,
+    /// The method traits the file now holds, to re-export.
+    traits: Vec<&'static str>,
     /// The domain crate's Rust name in the trait form, whose method traits
     /// the forwarder file imports.
     krate: Option<String>,
 }
 
-/// The trait form of a module's `impl Load` blocks: one trait signature
-/// and one implementing method per moved method, in order.
+/// The trait form of a module's `impl Load` blocks: the public and
+/// scripted methods on `LoadMethods`, which core's forwarders call, and the
+/// rest on the crate's own `LoadHelpers`, whose signatures may name the
+/// crate's private types.
 #[derive(Debug, Default)]
 struct Methods {
+    public: Part,
+    helpers: Part,
+}
+
+/// One trait's signatures and the implementing methods, in order.
+#[derive(Debug, Default)]
+struct Part {
     signatures: Vec<String>,
     bodies: Vec<String>,
+}
+
+impl Part {
+    /// The trait `name`, declared with `head`, and its implementation for
+    /// the base handle; nothing when it holds no method.
+    fn render(&self, head: &str, name: &str) -> Option<String> {
+        (!self.bodies.is_empty()).then(|| {
+            format!(
+                "{head}{name} {{\n{}\n}}\n\nimpl {name} for crate::{BASE} {{\n{}\n}}",
+                self.signatures.join("\n\n"),
+                self.bodies.join("\n\n")
+            )
+        })
+    }
 }
 
 impl Methods {
@@ -242,13 +270,20 @@ impl Methods {
             let sig_end = at.byte(method.block.brace_token.span.open().start());
             let end = at.byte(method.block.brace_token.span.close().end());
             let after_vis = after_visibility(method, at);
-            let mut signature = format!("    /// As `Load::{}`.\n", method.sig.ident);
-            if matches!(method.sig.safety, syn::Safety::Unsafe(_)) {
-                for line in safety_section(&method.attrs, text, at) {
-                    let _written = writeln!(signature, "    {line}");
+            // A script adapter names the scripts' function on `Load`,
+            // whatever its visibility.
+            let forwarded = matches!(method.vis, Visibility::Public(_))
+                || method.attrs.iter().any(|a| a.path().is_ident("script"));
+            let mut signature = String::new();
+            if forwarded {
+                let _written = writeln!(signature, "    /// As `Load::{}`.", method.sig.ident);
+                if matches!(method.sig.safety, syn::Safety::Unsafe(_)) {
+                    for line in safety_section(&method.attrs, text, at) {
+                        let _written = writeln!(signature, "    {line}");
+                    }
                 }
+                signature.push_str("    #[doc(hidden)]\n");
             }
-            signature.push_str("    #[doc(hidden)]\n");
             let mut body = String::new();
             for cfg in &block_cfgs {
                 let _written = writeln!(signature, "    {cfg}");
@@ -265,15 +300,19 @@ impl Methods {
                     let _written = writeln!(body, "    {written}");
                 }
             }
-            let sig = text[after_vis..sig_end].trim_end();
+            let sig = unbound(method, text, at, after_vis..sig_end);
+            let sig = sig.trim_end();
             let _written = write!(signature, "    {};", sig.strip_suffix(',').unwrap_or(sig));
             body.push_str("    ");
             body.push_str(&text[after_vis..end]);
-            self.signatures.push(signature);
-            self.bodies.push(body);
-            let public = matches!(method.vis, Visibility::Public(_));
-            let scripted = method.attrs.iter().any(|a| a.path().is_ident("script"));
-            if public || scripted {
+            let part = if forwarded {
+                &mut self.public
+            } else {
+                &mut self.helpers
+            };
+            part.signatures.push(signature);
+            part.bodies.push(body);
+            if forwarded {
                 let sig = text[start..sig_end].trim_end();
                 bodiless.push(format!("    {};", sig.strip_suffix(',').unwrap_or(sig)));
             }
@@ -281,13 +320,26 @@ impl Methods {
         Ok(forwarder(item, &bodiless, text, at))
     }
 
-    /// The trait and its implementation for the base handle.
+    /// The traits and their implementations for the base handle.
     fn render(&self) -> String {
-        format!(
-            "/// `Load`'s methods of this module on the base handle, which core's\n/// forwarders call.\n#[doc(hidden)]\npub trait {TRAIT} {{\n{}\n}}\n\nimpl {TRAIT} for {BASE} {{\n{}\n}}",
-            self.signatures.join("\n\n"),
-            self.bodies.join("\n\n")
-        )
+        let public = self.public.render(
+            "/// `Load`'s methods of this module on the base handle, which core's\n/// forwarders call.\n#[doc(hidden)]\npub trait ",
+            TRAIT,
+        );
+        let helpers = self.helpers.render(
+            "/// The base handle's helpers of this module for the crate's own code.\npub(crate) trait ",
+            HELPERS,
+        );
+        public
+            .into_iter()
+            .chain(helpers)
+            .collect::<Vec<_>>()
+            .join("\n\n")
+    }
+
+    /// Whether the module holds no moved method.
+    fn is_empty(&self) -> bool {
+        self.public.bodies.is_empty() && self.helpers.bodies.is_empty()
     }
 }
 
@@ -312,6 +364,40 @@ fn after_visibility(method: &ImplItemFn, at: &Offsets<'_>) -> usize {
     };
     let rest = &at.text[start..];
     start + (rest.len() - rest.trim_start().len())
+}
+
+/// The text of `method`'s signature in `range` without the `mut` of its
+/// arguments, which a trait's bodiless signature may not bind.
+fn unbound(
+    method: &ImplItemFn,
+    text: &str,
+    at: &Offsets<'_>,
+    range: std::ops::Range<usize>,
+) -> String {
+    let mut cuts: Vec<usize> = method
+        .sig
+        .inputs
+        .iter()
+        .filter_map(|input| match input {
+            syn::FnArg::Typed(arg) => match &*arg.pat {
+                syn::Pat::Ident(ident) => {
+                    ident.mutability.as_ref().map(|m| at.byte(m.span.start()))
+                }
+                _ => None,
+            },
+            syn::FnArg::Receiver(_) => None,
+        })
+        .collect();
+    cuts.sort_unstable();
+    let mut out = String::new();
+    let mut from = range.start;
+    for cut in cuts {
+        out.push_str(&text[from..cut]);
+        from = cut + "mut".len();
+        from += text[from..].len() - text[from..].trim_start().len();
+    }
+    out.push_str(&text[from..range.end]);
+    out
 }
 
 /// Peels `text`, a module file, into `form`.
@@ -374,7 +460,7 @@ fn peel(text: &str, form: &Form) -> Result<Peeled, String> {
     // In the trait form the first block's place takes the trait and its
     // impl, and the others are cut.
     if let Some(first) = cuts.first_mut()
-        && !methods.bodies.is_empty()
+        && !methods.is_empty()
     {
         first.2 = methods.render();
     }
@@ -389,7 +475,13 @@ fn peel(text: &str, form: &Form) -> Result<Peeled, String> {
         base,
         forwarders,
         uses,
-        has_trait: !methods.bodies.is_empty(),
+        traits: [
+            (TRAIT, !methods.public.bodies.is_empty()),
+            (HELPERS, !methods.helpers.bodies.is_empty()),
+        ]
+        .into_iter()
+        .filter_map(|(name, held)| held.then_some(name))
+        .collect(),
         krate,
     })
 }
@@ -636,304 +728,4 @@ impl<'t> Offsets<'t> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    const SOURCE: &str = "\
-use core::time::Duration;
-
-use super::{Load, Off, ok};
-
-/// Not moved.
-pub struct Kept;
-
-#[crate::script(ticks)]
-impl Load<'_> {
-    /// Calls `handler` every `every`, for the mod's clock — «тік».
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let a = 1;
-    /// ```
-    #[script]
-    #[must_use]
-    pub fn on_tick<E: Copy, const N: usize>(
-        &mut self,
-        every: Duration,
-    ) -> Result<(), Off>
-    where
-        E: Send,
-    {
-        ok(every)
-    }
-
-    pub(crate) fn inner(&self) -> u32 {
-        1
-    }
-}
-
-impl Load<'_> {
-    fn hidden(&self) {}
-}
-";
-
-    #[test]
-    fn a_public_method_moves_with_one_doc_line_and_leaves_a_forwarder_with_its_docs()
-    -> Result<(), String> {
-        let peeled = peel(SOURCE, &Form::Base)?;
-        assert_eq!(
-            peeled.base,
-            "\
-use core::time::Duration;
-
-use super::{Load, Off, ok};
-
-/// Not moved.
-pub struct Kept;
-
-impl BaseLoad {
-    /// As `Load::on_tick`.
-    #[doc(hidden)]
-    #[must_use]
-    pub fn on_tick<E: Copy, const N: usize>(
-        &mut self,
-        every: Duration,
-    ) -> Result<(), Off>
-    where
-        E: Send,
-    {
-        ok(every)
-    }
-
-    pub(crate) fn inner(&self) -> u32 {
-        1
-    }
-}
-
-impl BaseLoad {
-    fn hidden(&self) {}
-}
-"
-        );
-        assert_eq!(
-            peeled.forwarders,
-            ["\
-#[enshwick_macros::forward(base)]
-#[crate::script(ticks)]
-impl Load<'_> {
-    /// Calls `handler` every `every`, for the mod's clock — «тік».
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let a = 1;
-    /// ```
-    #[script]
-    #[must_use]
-    pub fn on_tick<E: Copy, const N: usize>(
-        &mut self,
-        every: Duration,
-    ) -> Result<(), Off>
-    where
-        E: Send;
-}"]
-        );
-        assert_eq!(peeled.uses, ["use core::time::Duration;"]);
-        Ok(())
-    }
-
-    #[test]
-    fn peel_load_writes_each_module_and_starts_or_extends_its_forwarder_file() {
-        let root = std::env::temp_dir().join(format!("xtask-peel-{}", std::process::id()));
-        std::fs::create_dir_all(root.join("base")).unwrap();
-        let module =
-            "use crate::Host;\n\nimpl Load<'_> {\n    /// Docs.\n    pub fn f(&self) {}\n}\n";
-        std::fs::write(root.join("base/a.rs"), module).unwrap();
-        std::fs::write(root.join("base/b.rs"), module.replace("fn f", "fn g")).unwrap();
-        std::fs::write(
-            root.join("base/c.rs"),
-            "impl Load<'_> {\n    fn h(&self) {}\n}\n",
-        )
-        .unwrap();
-        let ran = run(
-            &root,
-            &[
-                "base/a.rs=core/load/a.rs".to_owned(),
-                "base/b.rs=core/load/a.rs".to_owned(),
-                "base/c.rs=core/load/c.rs".to_owned(),
-            ],
-        );
-        let unpaired = run(&root, &["base/a.rs".to_owned()]);
-        std::fs::create_dir_all(root.join("core/load")).unwrap();
-        std::fs::write(root.join("core/load/odd.rs"), [0xff, 0xfe]).unwrap();
-        std::fs::write(root.join("base/d.rs"), module).unwrap();
-        let unreadable = run(&root, &["base/d.rs=core/load/odd.rs".to_owned()]);
-        let forwarders = std::fs::read_to_string(root.join("core/load/a.rs")).unwrap();
-        let peeled = std::fs::read_to_string(root.join("base/a.rs")).unwrap();
-        let private_only = root.join("core/load/c.rs").exists();
-        let odd = std::fs::read(root.join("core/load/odd.rs")).unwrap();
-        std::fs::remove_dir_all(&root).unwrap();
-        assert_eq!(ran, Ok(true));
-        assert_eq!(unpaired, Err("base/a.rs: not <from>=<into>".to_owned()));
-        assert!(
-            unreadable.as_ref().is_err_and(|e| e.contains("odd.rs")),
-            "a forwarder file that does not read is no new file: {unreadable:?}"
-        );
-        assert_eq!(odd, [0xff, 0xfe], "and stays as it was");
-        assert!(peeled.contains("impl BaseLoad {"), "{peeled}");
-        assert!(
-            forwarders.starts_with("//! `Load`'s methods")
-                && forwarders.contains("use crate::Host;\nuse crate::Load;\nuse crate::Off;\n")
-                && forwarders.contains("pub fn f(&self);")
-                && forwarders.ends_with("    /// Docs.\n    pub fn g(&self);\n}\n"),
-            "{forwarders}"
-        );
-        assert_eq!(forwarders.matches("//! `Load`'s").count(), 1, "one header");
-        assert!(
-            !private_only,
-            "a block without a public method forwards nothing"
-        );
-    }
-
-    #[test]
-    fn a_new_forwarder_file_names_load_and_its_source_s_imports() {
-        let text = header(&["use core::time::Duration;".to_owned()], None);
-        assert!(text.ends_with("use core::time::Duration;\nuse crate::Load;\nuse crate::Off;\n"));
-        let text = header(&["use crate::{Host, Off};".to_owned()], None);
-        assert!(text.ends_with("use crate::{Host, Off};\nuse crate::Load;\n"));
-    }
-
-    #[test]
-    fn other_impls_stay_and_a_load_block_keeps_its_consts_and_types() -> Result<(), String> {
-        let source = "impl Other {\n    pub fn f(&self) {}\n}\n\nimpl Clone for Load<'_> {\n    fn clone(&self) -> Self {\n        todo!()\n    }\n}\n\nimpl Load<'_> {\n    /// A part.\n    pub const PART: u32 = 1;\n\n    type Kind = u8;\n\n    fn inner(&self) {}\n}\n";
-        let peeled = peel(source, &Form::Base)?;
-        assert!(peeled.forwarders.is_empty());
-        assert!(
-            peeled.base.starts_with(
-                "impl Other {\n    pub fn f(&self) {}\n}\n\nimpl Clone for Load<'_> {"
-            )
-        );
-        assert!(peeled.base.ends_with(
-            "impl BaseLoad {\n    /// A part.\n    pub const PART: u32 = 1;\n\n    type Kind = u8;\n\n    fn inner(&self) {}\n}\n"
-        ));
-        Ok(())
-    }
-
-    #[test]
-    fn a_forwarder_file_takes_no_re_export_nor_an_import_of_the_module_s_own_children()
-    -> Result<(), String> {
-        let source = "mod script;\n\n#[doc(hidden)]\npub use script::Fns;\nuse script::Inner;\nuse self::x::Y;\nuse super::Z;\n#[cfg(test)]\nuse crate::Host;\nuse serde::Deserialize as _;\nuse toml;\nuse bytemuck as bm;\nuse script;\n";
-        assert_eq!(
-            peel(source, &Form::Base)?.uses,
-            [
-                "#[cfg(test)]\nuse crate::Host;",
-                "use serde::Deserialize as _;",
-                "use toml;",
-                "use bytemuck as bm;"
-            ]
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn a_moved_unsafe_method_keeps_its_safety_section() -> Result<(), String> {
-        let source = "impl Load<'_> {\n    /// Hooks.\n    ///\n    /// # Safety\n    ///\n    /// - `at` starts a function.\n    ///\n    /// # Errors\n    ///\n    /// When refused.\n    pub unsafe fn hook(&mut self, at: u64) {}\n}\n";
-        assert_eq!(
-            peel(source, &Form::Base)?.base,
-            "impl BaseLoad {\n    /// As `Load::hook`.\n    ///\n    /// # Safety\n    ///\n    /// - `at` starts a function.\n    #[doc(hidden)]\n    pub unsafe fn hook(&mut self, at: u64) {}\n}\n"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn a_macro_call_in_a_load_block_is_refused_rather_than_dropped() {
-        let source = "impl Other {\n    m!();\n}\n\nimpl Load<'_> {\n    pub fn f(&self) {}\n\n    m!();\n}\n";
-        assert_eq!(
-            peel(source, &Form::Base),
-            Err("line 5: an `impl Load` block with an item other than a method, constant or type; move it by hand".to_owned())
-        );
-    }
-
-    #[test]
-    fn a_script_adapter_moves_public_and_keeps_its_visibility_on_load() -> Result<(), String> {
-        let source = "#[cfg(feature = \"unstable\")]\n#[crate::script(texts)]\nimpl Load<'_> {\n    /// Texts for a script.\n    #[script(name = \"texts\")]\n    pub(crate) fn texts_script(&mut self) -> u32 {\n        1\n    }\n}\n";
-        let peeled = peel(source, &Form::Base)?;
-        assert_eq!(
-            peeled.base,
-            "#[cfg(feature = \"unstable\")]\nimpl BaseLoad {\n    /// As `Load::texts_script`.\n    #[doc(hidden)]\n    pub fn texts_script(&mut self) -> u32 {\n        1\n    }\n}\n"
-        );
-        assert_eq!(
-            peeled.forwarders,
-            [
-                "#[cfg(feature = \"unstable\")]\n#[enshwick_macros::forward(base)]\n#[crate::script(texts)]\nimpl Load<'_> {\n    /// Texts for a script.\n    #[script(name = \"texts\")]\n    pub(crate) fn texts_script(&mut self) -> u32;\n}"
-            ]
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn a_module_above_base_gets_one_method_trait_for_all_its_blocks() -> Result<(), String> {
-        let source = "use crate::Off;\n\n#[cfg(feature = \"unstable\")]\n#[crate::script(items)]\nimpl Load<'_> {\n    /// Adds an item.\n    #[must_use]\n    #[expect(clippy::x, reason = \"y\")]\n    pub fn add(&mut self, id: u32) -> Result<(), Off> {\n        self.helper(id)\n    }\n\n    pub(crate) fn helper(&mut self, id: u32) -> Result<(), Off> {\n        Ok(())\n    }\n}\n\nimpl Load<'_> {\n    fn quiet(&self) {}\n}\n";
-        let form = Form::of("crates/internal/content/src/content/changes/items.rs");
-        assert_eq!(
-            form,
-            Form::Trait {
-                krate: "enshwick_content".to_owned(),
-                module: "content::changes::items".to_owned(),
-                reexports: "crates/internal/content/src/__load.rs".to_owned(),
-            }
-        );
-        let peeled = peel(source, &form)?;
-        assert_eq!(
-            peeled.base,
-            "use crate::Off;\n\n/// `Load`'s methods of this module on the base handle, which core's\n/// forwarders call.\n#[doc(hidden)]\npub trait LoadMethods {\n    /// As `Load::add`.\n    #[doc(hidden)]\n    #[cfg(feature = \"unstable\")]\n    #[must_use]\n    fn add(&mut self, id: u32) -> Result<(), Off>;\n\n    /// As `Load::helper`.\n    #[doc(hidden)]\n    #[cfg(feature = \"unstable\")]\n    fn helper(&mut self, id: u32) -> Result<(), Off>;\n\n    /// As `Load::quiet`.\n    #[doc(hidden)]\n    fn quiet(&self);\n}\n\nimpl LoadMethods for BaseLoad {\n    #[cfg(feature = \"unstable\")]\n    #[expect(clippy::x, reason = \"y\")]\n    fn add(&mut self, id: u32) -> Result<(), Off> {\n        self.helper(id)\n    }\n\n    #[cfg(feature = \"unstable\")]\n    fn helper(&mut self, id: u32) -> Result<(), Off> {\n        Ok(())\n    }\n\n    fn quiet(&self) {}\n}\n\n\n"
-        );
-        assert_eq!(
-            peeled.forwarders,
-            [
-                "#[cfg(feature = \"unstable\")]\n#[enshwick_macros::forward(base)]\n#[crate::script(items)]\nimpl Load<'_> {\n    /// Adds an item.\n    #[must_use]\n    #[expect(clippy::x, reason = \"y\")]\n    pub fn add(&mut self, id: u32) -> Result<(), Off>;\n}"
-            ]
-        );
-        assert!(peeled.has_trait);
-        assert_eq!(
-            header(&[], peeled.krate.as_deref()),
-            "//! `Load`'s methods of a module below core, forwarded to the base handle.\n\nuse enshwick_content::__load::*;\nuse crate::Load;\nuse crate::Off;\n"
-        );
-        assert_eq!(Form::of("crates/internal/base/src/load/a.rs"), Form::Base);
-        assert!(
-            peel("impl Load<'_> {\n    const A: u8 = 1;\n}\n", &form)
-                .is_err_and(|e| e.contains("move it by hand"))
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn a_forwarder_file_gains_the_trait_glob_once_and_the_crate_re_exports_each_trait_once() {
-        let kept = "//! Doc.\n\nuse crate::Load;\n".to_owned();
-        let globbed = with_glob(kept.clone(), Some("enshwick_content"));
-        assert_eq!(
-            globbed,
-            "//! Doc.\n\nuse enshwick_content::__load::*;\nuse crate::Load;\n"
-        );
-        assert_eq!(
-            with_glob(globbed.clone(), Some("enshwick_content")),
-            globbed
-        );
-        assert_eq!(with_glob(kept.clone(), None), kept);
-        let file = std::env::temp_dir().join(format!("xtask-reexport-{}.rs", std::process::id()));
-        let first = reexport(&file, "content::items");
-        let again = reexport(&file, "content::items");
-        let second = reexport(&file, "rates");
-        let text = std::fs::read_to_string(&file).unwrap();
-        std::fs::remove_file(&file).unwrap();
-        assert_eq!((first, again, second), (Ok(()), Ok(()), Ok(())));
-        assert!(text.starts_with("//! The traits"), "{text}");
-        assert!(
-            text.ends_with(
-                "\n\npub use crate::content::items::LoadMethods as _;\npub use crate::rates::LoadMethods as _;\n"
-            ),
-            "{text}"
-        );
-    }
-}
+mod tests;

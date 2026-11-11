@@ -6,8 +6,9 @@
 //! client's side of its menu) carry the id, and recipes name it.
 //! The workshop registry maps the id to a name and the station item.
 
+use crate::__load::*;
+use crate::Off;
 use crate::engine_ids as ids;
-use crate::{Load, Off};
 
 use super::items::{self, ItemLayout, NewItem};
 use super::recipes::NewRecipe;
@@ -508,7 +509,7 @@ pub trait LoadMethods {
     fn add_workshop(&mut self, new: NewWorkshop) -> Result<WorkshopId, Off>;
 }
 
-impl LoadMethods for BaseLoad {
+impl LoadMethods for crate::BaseLoad {
     fn add_workshop(&mut self, new: NewWorkshop) -> Result<WorkshopId, Off> {
         new.check()?;
         let (template, recipe) = (new.template(), new.recipe());

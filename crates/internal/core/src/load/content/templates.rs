@@ -1,10 +1,10 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
+use std::sync::Arc;
+use rustc_hash::{FxHashMap, FxHashSet};
 use crate::resources::{Registry, Type, Value, Variant};
 use crate::{Load, Off};
 use enshwick_content::__load::*;
-use rustc_hash::{FxHashMap, FxHashSet};
-use std::sync::Arc;
 
 #[enshwick_macros::forward(base)]
 #[crate::script(content_templates)]

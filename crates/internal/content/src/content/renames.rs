@@ -5,7 +5,7 @@
 
 use crate::abi::ContentRename;
 use crate::content::Guid;
-use crate::{ItemId, Load, Off};
+use crate::{ItemId, Off};
 
 /// Every content rename a mod ever made, oldest first.
 ///
@@ -138,7 +138,7 @@ pub trait LoadMethods {
     fn rename_content(&mut self, renames: Renames) -> Result<(), Off>;
 }
 
-impl LoadMethods for BaseLoad {
+impl LoadMethods for crate::BaseLoad {
     fn rename_content(&mut self, renames: Renames) -> Result<(), Off> {
         if let Some((from, _)) = renames.list.iter().find(|(from, to)| from == to) {
             return Err(Off::new(format!(

@@ -29,13 +29,14 @@
 //! }
 //! ```
 
+use crate::__load::*;
+use crate::Off;
 use crate::content::knowledge::{hash_key, key_of as id_of};
 use crate::resources::{Registry, Value};
 use crate::typed::ecs::UnlockedSkillNodes;
 use crate::typed::{
     Named as _, PerkCollectionResource, Reflected as _, SkillNodeType, SkillTreeResource,
 };
-use crate::{Load, Off};
 
 use super::{EngineFacts, Guid, Id};
 
@@ -392,21 +393,6 @@ fn add_node_to(mut tree: Value, new: &NewSkillNode, room: usize, near: f64) -> R
 /// forwarders call.
 #[doc(hidden)]
 pub trait LoadMethods {
-    /// As `Load::skill_tree`.
-    #[doc(hidden)]
-    fn skill_tree(&self) -> Result<crate::abi::ResourceKey, Off>;
-
-    /// As `Load::skill_room`.
-    #[doc(hidden)]
-    fn skill_room(&self) -> Result<usize, Off>;
-
-    /// As `Load::check_skill_node`.
-    #[doc(hidden)]
-    fn check_skill_node(
-        &mut self,
-        new: &NewSkillNode,
-    ) -> Result<(usize, f64, crate::abi::ResourceKey), Off>;
-
     /// As `Load::skill_nodes`.
     #[doc(hidden)]
     fn skill_nodes(&self) -> Result<Vec<SkillNode>, Off>;
@@ -420,7 +406,68 @@ pub trait LoadMethods {
     fn add_perk(&mut self, new: NewPerk) -> Result<Guid, Off>;
 }
 
-impl LoadMethods for BaseLoad {
+impl LoadMethods for crate::BaseLoad {
+    fn skill_nodes(&self) -> Result<Vec<SkillNode>, Off> {
+        Ok(nodes_of(&self.host().game_value(self.skill_tree()?)?))
+    }
+
+    fn add_skill_node(&mut self, new: NewSkillNode) -> Result<SkillNodeId, Off> {
+        let host = self.host();
+        let feature = format!("skill node {}", new.id);
+        let checked = self.check_skill_node(&new);
+        let (room, near, key) = report(host, &feature, checked)?;
+        let node = new.node();
+        crate::resources::serve_value(host, key, key, move |tree| {
+            report(host, &feature, add_node_to(tree, &new, room, near))
+        })?;
+        Ok(node)
+    }
+
+    fn add_perk(&mut self, new: NewPerk) -> Result<Guid, Off> {
+        let perk = self.hash(PERK)?;
+        let collection = PERK_COLLECTION.key_by_hash(self.hash(PerkCollectionResource::ID)?);
+        let like = new.like.key_by_hash(perk);
+        if !list(&self.host().game_value(collection)?, "perks").contains(&Value::Guid(new.like)) {
+            return Err(Off::new(format!(
+                "perk {}: {} is no vanilla perk",
+                new.id, new.like
+            )));
+        }
+        let guid = self.declare(new.id)?;
+        crate::resources::serve_value(
+            self.host(),
+            guid.key_by_hash(perk),
+            like,
+            move |mut value| {
+                for (field, tag) in [("name", new.name), ("description", new.description)] {
+                    if let Some(held) = value.field_mut(field) {
+                        *held = Value::Guid(tag);
+                    }
+                }
+                Ok(value)
+            },
+        )?;
+        crate::resources::serve_value(self.host(), collection, collection, move |mut value| {
+            list_mut(&mut value, "perks")?.push(Value::Guid(guid));
+            Ok(value)
+        })?;
+        Ok(guid)
+    }
+}
+
+/// The base handle's helpers of this module for the crate's own code.
+pub(crate) trait LoadHelpers {
+    fn skill_tree(&self) -> Result<crate::abi::ResourceKey, Off>;
+
+    fn skill_room(&self) -> Result<usize, Off>;
+
+    fn check_skill_node(
+        &mut self,
+        new: &NewSkillNode,
+    ) -> Result<(usize, f64, crate::abi::ResourceKey), Off>;
+}
+
+impl LoadHelpers for crate::BaseLoad {
     fn skill_tree(&self) -> Result<crate::abi::ResourceKey, Off> {
         Ok(SKILL_TREE.key_by_hash(self.hash(SkillTreeResource::ID)?))
     }
@@ -470,53 +517,6 @@ impl LoadMethods for BaseLoad {
         add_node_to(vanilla, &checked, room, near)?;
         self.declare(new.id)?;
         Ok((room, near, key))
-    }
-
-    fn skill_nodes(&self) -> Result<Vec<SkillNode>, Off> {
-        Ok(nodes_of(&self.host().game_value(self.skill_tree()?)?))
-    }
-
-    fn add_skill_node(&mut self, new: NewSkillNode) -> Result<SkillNodeId, Off> {
-        let host = self.host();
-        let feature = format!("skill node {}", new.id);
-        let checked = self.check_skill_node(&new);
-        let (room, near, key) = report(host, &feature, checked)?;
-        let node = new.node();
-        crate::resources::serve_value(host, key, key, move |tree| {
-            report(host, &feature, add_node_to(tree, &new, room, near))
-        })?;
-        Ok(node)
-    }
-
-    fn add_perk(&mut self, new: NewPerk) -> Result<Guid, Off> {
-        let perk = self.hash(PERK)?;
-        let collection = PERK_COLLECTION.key_by_hash(self.hash(PerkCollectionResource::ID)?);
-        let like = new.like.key_by_hash(perk);
-        if !list(&self.host().game_value(collection)?, "perks").contains(&Value::Guid(new.like)) {
-            return Err(Off::new(format!(
-                "perk {}: {} is no vanilla perk",
-                new.id, new.like
-            )));
-        }
-        let guid = self.declare(new.id)?;
-        crate::resources::serve_value(
-            self.host(),
-            guid.key_by_hash(perk),
-            like,
-            move |mut value| {
-                for (field, tag) in [("name", new.name), ("description", new.description)] {
-                    if let Some(held) = value.field_mut(field) {
-                        *held = Value::Guid(tag);
-                    }
-                }
-                Ok(value)
-            },
-        )?;
-        crate::resources::serve_value(self.host(), collection, collection, move |mut value| {
-            list_mut(&mut value, "perks")?.push(Value::Guid(guid));
-            Ok(value)
-        })?;
-        Ok(guid)
     }
 }
 

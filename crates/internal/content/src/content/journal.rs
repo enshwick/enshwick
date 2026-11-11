@@ -34,6 +34,7 @@
 //! }
 //! ```
 
+use crate::__load::*;
 use std::sync::{Arc, Mutex};
 
 use crate::abi::Level;
@@ -46,7 +47,7 @@ use crate::resources::Value;
 use crate::typed::{
     JournalRegistryResource, Named as _, QuestSourceType, QuestType, Reflected as _,
 };
-use crate::{Host, ItemId, Load, Off};
+use crate::{Host, ItemId, Off};
 
 use super::{EngineFacts, Guid, Id};
 
@@ -549,7 +550,7 @@ fn change_quest_in(
 
 /// One change a mod makes to the journal.
 #[derive(Debug)]
-enum Edit {
+pub(crate) enum Edit {
     /// A quest of its own.
     Quest(NewQuest),
     /// A lore page of its own.
@@ -596,14 +597,6 @@ impl AddedJournal {
 /// forwarders call.
 #[doc(hidden)]
 pub trait LoadMethods {
-    /// As `Load::journal_key`.
-    #[doc(hidden)]
-    fn journal_key(&self) -> Result<crate::abi::ResourceKey, Off>;
-
-    /// As `Load::edit_journal`.
-    #[doc(hidden)]
-    fn edit_journal(&mut self, key: crate::abi::ResourceKey, edit: Edit) -> Result<(), Off>;
-
     /// As `Load::add_quest`.
     #[doc(hidden)]
     fn add_quest(&mut self, new: NewQuest) -> Result<KnowledgeId, Off>;
@@ -618,21 +611,7 @@ pub trait LoadMethods {
     fn change_quest(&mut self, quest: KnowledgeId, change: QuestChange) -> Result<(), Off>;
 }
 
-impl LoadMethods for BaseLoad {
-    fn journal_key(&self) -> Result<crate::abi::ResourceKey, Off> {
-        Ok(JOURNAL_REGISTRY.key_by_hash(self.hash(JournalRegistryResource::ID)?))
-    }
-
-    fn edit_journal(&mut self, key: crate::abi::ResourceKey, edit: Edit) -> Result<(), Off> {
-        let host = self.host();
-        let journal = match self.slot::<AddedJournal>() {
-            Some(journal) => journal,
-            empty => empty.insert(AddedJournal::serve(host, key)?),
-        };
-        journal.0.relock().push(edit);
-        Ok(())
-    }
-
+impl LoadMethods for crate::BaseLoad {
     fn add_quest(&mut self, new: NewQuest) -> Result<KnowledgeId, Off> {
         if new.steps.is_empty() {
             return Err(Off::new(format!("quest {}: no steps", new.id)));
@@ -670,6 +649,29 @@ impl LoadMethods for BaseLoad {
         let key = self.journal_key()?;
         change_quest_in(&mut self.host().game_value(key)?, quest, &change)?;
         self.edit_journal(key, Edit::Change(quest, change))
+    }
+}
+
+/// The base handle's helpers of this module for the crate's own code.
+pub(crate) trait LoadHelpers {
+    fn journal_key(&self) -> Result<crate::abi::ResourceKey, Off>;
+
+    fn edit_journal(&mut self, key: crate::abi::ResourceKey, edit: Edit) -> Result<(), Off>;
+}
+
+impl LoadHelpers for crate::BaseLoad {
+    fn journal_key(&self) -> Result<crate::abi::ResourceKey, Off> {
+        Ok(JOURNAL_REGISTRY.key_by_hash(self.hash(JournalRegistryResource::ID)?))
+    }
+
+    fn edit_journal(&mut self, key: crate::abi::ResourceKey, edit: Edit) -> Result<(), Off> {
+        let host = self.host();
+        let journal = match self.slot::<AddedJournal>() {
+            Some(journal) => journal,
+            empty => empty.insert(AddedJournal::serve(host, key)?),
+        };
+        journal.0.relock().push(edit);
+        Ok(())
     }
 }
 

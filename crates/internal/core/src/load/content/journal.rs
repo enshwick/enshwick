@@ -1,5 +1,6 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
+use std::sync::{Arc, Mutex};
 use crate::abi::Level;
 use crate::content::knowledge::{
     ExperienceValue, KnowledgeQuery, NewKnowledge, hash_key, key_of_hash, serve_list,
@@ -12,7 +13,6 @@ use crate::typed::{
 };
 use crate::{Host, ItemId, Load, Off};
 use enshwick_content::__load::*;
-use std::sync::{Arc, Mutex};
 
 #[enshwick_macros::forward(base)]
 #[crate::script(content_journal)]

@@ -13,8 +13,11 @@ pub use crate::content::items::LoadMethods as _;
 #[cfg(feature = "typed")]
 pub use crate::content::journal::LoadMethods as _;
 #[cfg(feature = "typed")]
+pub(crate) use crate::content::knowledge::LoadHelpers as _;
+#[cfg(feature = "typed")]
 pub use crate::content::knowledge::LoadMethods as _;
 pub use crate::content::props::LoadMethods as _;
+pub(crate) use crate::content::recipes::LoadHelpers as _;
 pub use crate::content::recipes::LoadMethods as _;
 #[cfg(feature = "typed")]
 pub use crate::content::removal::LoadMethods as _;

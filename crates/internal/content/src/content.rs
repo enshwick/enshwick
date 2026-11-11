@@ -6,8 +6,8 @@
 //! the field that holds them. [`Blob`] edits them safely: it grows arrays by
 //! moving them to the end and keeps every offset right.
 
+use crate::Off;
 use crate::abi::{ResourceKey, Str};
-use crate::{Load, Off};
 
 pub mod categories;
 pub mod changes;
@@ -410,7 +410,7 @@ pub trait LoadMethods {
     fn allow_rebuild(&mut self, key: ResourceKey) -> Result<(), Off>;
 }
 
-impl LoadMethods for BaseLoad {
+impl LoadMethods for crate::BaseLoad {
     fn declare(&mut self, id: Id) -> Result<Guid, Off> {
         crate::resources::declare(self.host(), &id.to_string())
     }

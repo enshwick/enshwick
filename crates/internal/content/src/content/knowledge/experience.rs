@@ -3,12 +3,13 @@
 
 use std::sync::{Arc, Mutex};
 
+use crate::__load::*;
 use crate::abi::ResourceKey;
 use crate::engine_enum::Values;
 use crate::game_events::ExperienceSourceType;
 use crate::locks::Relock as _;
 use crate::resources::{Registry, Type, Value};
-use crate::{Host, Load, Off};
+use crate::{Host, Off};
 
 use super::super::{EngineFacts as _, Id};
 use super::{ExperienceValue, hash_key, key_of_hash, serve_list};
@@ -132,7 +133,7 @@ impl AddedExperience {
 }
 
 /// Adds `new` to the experience values the mod `load` serves.
-pub(super) fn add(load: &mut Load<'_>, new: NewExperience) -> Result<ExperienceValue, Off> {
+pub(super) fn add(load: &mut crate::BaseLoad, new: NewExperience) -> Result<ExperienceValue, Off> {
     let host = load.host();
     let experience = match load.slot::<AddedExperience>() {
         Some(experience) => experience,

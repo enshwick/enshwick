@@ -28,9 +28,10 @@
 //! }
 //! ```
 
+use crate::__load::*;
 use crate::engine_ids as ids;
 use crate::resources::{Registry, Value};
-use crate::{ItemId, Load, Off};
+use crate::{ItemId, Off};
 
 use super::items::NewItem;
 use super::recipes::{NewRecipe, RECIPE_REGISTRY};
@@ -145,7 +146,7 @@ pub struct PropId {
 }
 
 /// The template the vanilla item `item` places.
-fn placed_by(load: &Load<'_>, item: Guid) -> Result<Guid, Off> {
+fn placed_by(load: &crate::BaseLoad, item: Guid) -> Result<Guid, Off> {
     let at = load.offset(ids::ITEM_INFO_PLACED_ENTITY)?;
     let info = load
         .host()
@@ -231,16 +232,78 @@ fn require_prop(mut registry: Value, recipes: &[Guid], id: u32, index: u8) -> Re
 /// forwarders call.
 #[doc(hidden)]
 pub trait LoadMethods {
-    /// As `Load::crafting_prop_bounds`.
+    /// As `Load::add_prop`.
     #[doc(hidden)]
+    fn add_prop(&mut self, new: NewProp) -> Result<PropId, Off>;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn add_prop(&mut self, new: NewProp) -> Result<PropId, Off> {
+        let item = new.item.id;
+        let part = |part| {
+            item.try_part(part)
+                .ok_or_else(|| Off::new(format!("prop {item}: the id takes no part {part}")))
+        };
+        let (template, recipe) = (part(TEMPLATE)?, part(RECIPE)?);
+        let like = placed_by(self, new.item.like)?;
+        let mut changes = new.template;
+        let crafting = match new.crafting_prop {
+            Some(setup) => {
+                let prop = part(CRAFTING_PROP)?;
+                changes.push(crafting_mark(prop.guid()));
+                Some((prop, setup))
+            }
+            None => None,
+        };
+        let template = self.add_template(NewTemplate {
+            changes,
+            ..NewTemplate::new(template, like)
+        })?;
+        let vanilla = new.item.like;
+        let name = new
+            .item
+            .name
+            .or_else(|| super::items::vanilla_name_tag(vanilla));
+        self.add_item(new.item)?;
+        let crafting_prop = crafting.as_ref().map(|(prop, _)| prop.guid());
+        if let Some((prop, setup)) = crafting {
+            self.add_crafting_prop(prop, item.guid(), name, setup)?;
+        }
+        let at = self.offset(ids::ITEM_INFO_PLACED_ENTITY)?;
+        let (placed, base) = (template.guid(), types::ITEM_INFO.key(vanilla)?);
+        for guid in super::renames::old_guids(item.guid())
+            .into_iter()
+            .chain([item.guid()])
+        {
+            // A second link on the item, after `add_item`'s on the same base.
+            self.serve(types::ITEM_INFO.key(guid)?, base, move |info| {
+                place(info, at, placed)
+            })?;
+        }
+        if let Some(cost) = new.recipe_cost {
+            self.push_recipe(NewRecipe {
+                id: recipe,
+                like: vanilla,
+                output: item.guid(),
+                output_count: 1,
+                cost,
+                workshop: None,
+            })?;
+        }
+        Ok(PropId {
+            item: ItemId::from_guid(item.guid()),
+            template,
+            crafting_prop,
+        })
+    }
+}
+
+/// The base handle's helpers of this module for the crate's own code.
+pub(crate) trait LoadHelpers {
     fn crafting_prop_bounds(&self) -> Result<(u8, u8), Off>;
 
-    /// As `Load::crafting_prop_index`.
-    #[doc(hidden)]
     fn crafting_prop_index(&self, prop: Guid) -> Result<u8, Off>;
 
-    /// As `Load::add_crafting_prop`.
-    #[doc(hidden)]
     fn add_crafting_prop(
         &mut self,
         prop: Id,
@@ -248,13 +311,9 @@ pub trait LoadMethods {
         name: Option<Guid>,
         setup: CraftingPropSetup,
     ) -> Result<(), Off>;
-
-    /// As `Load::add_prop`.
-    #[doc(hidden)]
-    fn add_prop(&mut self, new: NewProp) -> Result<PropId, Off>;
 }
 
-impl LoadMethods for BaseLoad {
+impl LoadHelpers for crate::BaseLoad {
     fn crafting_prop_bounds(&self) -> Result<(u8, u8), Off> {
         let registry = Registry::game()?;
         let menu = registry
@@ -321,65 +380,6 @@ impl LoadMethods for BaseLoad {
             })?;
         }
         Ok(())
-    }
-
-    fn add_prop(&mut self, new: NewProp) -> Result<PropId, Off> {
-        let item = new.item.id;
-        let part = |part| {
-            item.try_part(part)
-                .ok_or_else(|| Off::new(format!("prop {item}: the id takes no part {part}")))
-        };
-        let (template, recipe) = (part(TEMPLATE)?, part(RECIPE)?);
-        let like = placed_by(self, new.item.like)?;
-        let mut changes = new.template;
-        let crafting = match new.crafting_prop {
-            Some(setup) => {
-                let prop = part(CRAFTING_PROP)?;
-                changes.push(crafting_mark(prop.guid()));
-                Some((prop, setup))
-            }
-            None => None,
-        };
-        let template = self.add_template(NewTemplate {
-            changes,
-            ..NewTemplate::new(template, like)
-        })?;
-        let vanilla = new.item.like;
-        let name = new
-            .item
-            .name
-            .or_else(|| super::items::vanilla_name_tag(vanilla));
-        self.add_item(new.item)?;
-        let crafting_prop = crafting.as_ref().map(|(prop, _)| prop.guid());
-        if let Some((prop, setup)) = crafting {
-            self.add_crafting_prop(prop, item.guid(), name, setup)?;
-        }
-        let at = self.offset(ids::ITEM_INFO_PLACED_ENTITY)?;
-        let (placed, base) = (template.guid(), types::ITEM_INFO.key(vanilla)?);
-        for guid in super::renames::old_guids(item.guid())
-            .into_iter()
-            .chain([item.guid()])
-        {
-            // A second link on the item, after `add_item`'s on the same base.
-            self.serve(types::ITEM_INFO.key(guid)?, base, move |info| {
-                place(info, at, placed)
-            })?;
-        }
-        if let Some(cost) = new.recipe_cost {
-            self.push_recipe(NewRecipe {
-                id: recipe,
-                like: vanilla,
-                output: item.guid(),
-                output_count: 1,
-                cost,
-                workshop: None,
-            })?;
-        }
-        Ok(PropId {
-            item: ItemId::from_guid(item.guid()),
-            template,
-            crafting_prop,
-        })
     }
 }
 

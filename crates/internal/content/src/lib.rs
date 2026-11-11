@@ -22,12 +22,18 @@ pub use enshwick_base::{
 };
 pub(crate) use enshwick_base::{engine_enum, engine_ids, facts, fresh, locks, near};
 // The macros the base exports, which the code here calls by `crate::`.
+pub(crate) use enshwick_base::load::BaseLoad;
 #[doc(hidden)]
 pub use enshwick_base::{
     __every, __log, __off_from, __once, __require_unwind, __schema_entry, debug, detour, error,
     error_every, error_once, info, info_every, info_once, warn, warn_every, warn_once,
 };
-pub(crate) use enshwick_base::{load, load::BaseLoad};
+
+/// The base handle's helpers at the path the code here names them by.
+pub(crate) mod load {
+    pub(crate) use enshwick_base::__off_from as off_from;
+    pub(crate) use enshwick_base::load::{game_events_of, off_status, ok};
+}
 
 #[doc(inline)]
 pub use enshwick_abi::abi;
@@ -49,11 +55,14 @@ pub use abi::{Entity, ItemId, PlayerKey, RecipeId};
 pub use enshwick_base::{
     FnPtr, Hook, Host, Loading, Next, Off, Relock, RelockRw, RelockWait, host,
 };
-pub use enshwick_macros::{
-    Config, Script, Shape, call, config, event, hook, point, script, service, texts,
-};
+// The macros the code here uses; `Script`, `call` and `script` come with the
+// base's `script` module of the same name.
+pub use enshwick_base::{Script, call};
+pub use enshwick_macros::{Config, Shape, config, event, hook, point, service, texts};
 #[doc(no_inline)]
 pub use shape::Shape;
 
 #[doc(hidden)]
 pub mod __load;
+#[doc(hidden)]
+pub use enshwick_base::__private;

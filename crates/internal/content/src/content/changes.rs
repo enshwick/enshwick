@@ -17,9 +17,9 @@
 //! }
 //! ```
 
+use crate::Off;
 use crate::abi::{ChangeOp, DataChange, DataField, DataSelect, Header, Str};
 use crate::content::Guid;
-use crate::{Load, Off};
 
 pub(crate) mod items;
 pub(crate) mod live;
@@ -779,7 +779,7 @@ pub trait LoadMethods {
     fn change(&mut self, change: &Change, source: &str) -> Result<(), Off>;
 }
 
-impl LoadMethods for BaseLoad {
+impl LoadMethods for crate::BaseLoad {
     fn change(&mut self, change: &Change, source: &str) -> Result<(), Off> {
         change.field.unstable_gate()?;
         change

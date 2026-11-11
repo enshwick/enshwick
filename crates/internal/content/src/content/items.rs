@@ -1,12 +1,13 @@
 //! New items: an item cloned from a vanilla one, listed in the item registry,
 //! with its own name, tooltip lines and a meter each item keeps.
 
+use crate::__load::*;
 use std::sync::Mutex;
 
+use crate::Off;
 use crate::abi::ItemData;
 use crate::engine_ids as ids;
 use crate::locks::Relock;
-use crate::{Load, Off};
 
 use super::templates::{ComponentChange, NewTemplate};
 use super::{Blob, EngineFacts, Guid, Id, types};
@@ -555,14 +556,10 @@ pub fn list_item(
 pub trait LoadMethods {
     /// As `Load::add_item`.
     #[doc(hidden)]
-    fn add_item(&mut self, mut item: NewItem) -> Result<(), Off>;
-
-    /// As `Load::add_one_item`.
-    #[doc(hidden)]
-    fn add_one_item(&mut self, item: NewItem, guid: Guid, debug_name: String) -> Result<(), Off>;
+    fn add_item(&mut self, item: NewItem) -> Result<(), Off>;
 }
 
-impl LoadMethods for BaseLoad {
+impl LoadMethods for crate::BaseLoad {
     fn add_item(&mut self, mut item: NewItem) -> Result<(), Off> {
         if item.debug_name.is_empty() {
             item.debug_name = item.id.to_string();
@@ -589,7 +586,14 @@ impl LoadMethods for BaseLoad {
         #[cfg(not(feature = "typed"))]
         self.add_one_item(item, guid, debug_name)
     }
+}
 
+/// The base handle's helpers of this module for the crate's own code.
+pub(crate) trait LoadHelpers {
+    fn add_one_item(&mut self, item: NewItem, guid: Guid, debug_name: String) -> Result<(), Off>;
+}
+
+impl LoadHelpers for crate::BaseLoad {
     fn add_one_item(&mut self, item: NewItem, guid: Guid, debug_name: String) -> Result<(), Off> {
         let layout = ItemLayout::resolve(self)?;
         let meter = item.meter;

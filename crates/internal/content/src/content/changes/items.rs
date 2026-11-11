@@ -1,10 +1,10 @@
 //! Changes of one field of every vanilla item a selection picks, which the
 //! loader turns into one change per item from the game's data.
 
+use crate::Off;
 use crate::abi::{ChangeOp, DataChange, DataSelect, Header, ItemData, Str};
 use crate::content::Guid;
 use crate::content::categories::ItemCategoryMask;
-use crate::{Load, Off};
 
 use super::{Change, Field, Value, ValueError, field_and_value};
 
@@ -275,7 +275,7 @@ pub trait LoadMethods {
     fn change_items(&mut self, change: &ItemsChange, source: &str) -> Result<(), Off>;
 }
 
-impl LoadMethods for BaseLoad {
+impl LoadMethods for crate::BaseLoad {
     fn change_items(&mut self, change: &ItemsChange, source: &str) -> Result<(), Off> {
         change.field.unstable_gate()?;
         change

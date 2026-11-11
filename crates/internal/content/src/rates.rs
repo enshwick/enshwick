@@ -17,9 +17,9 @@
 //! ```
 
 use crate::Host;
+use crate::Off;
 use crate::abi::{RateId, Status};
 use crate::content::recipes::RecipeKind;
-use crate::{Load, Off};
 
 /// The largest factor a mod sets and the largest product in force.
 pub const MAX_FACTOR: f32 = 100.0;
@@ -419,7 +419,7 @@ pub trait LoadMethods {
     fn rate(&mut self, rate: Rate) -> Result<RateHandle, Off>;
 }
 
-impl LoadMethods for BaseLoad {
+impl LoadMethods for crate::BaseLoad {
     #[cfg(feature = "unstable")]
     fn rate(&mut self, rate: Rate) -> Result<RateHandle, Off> {
         if !may_declare_rate(rate.id(), self.joins()) {

@@ -22,10 +22,11 @@
 //! }
 //! ```
 
+use crate::__load::*;
+use crate::Off;
 use crate::resources::Value;
 use crate::typed::ecs::{RandomSpawner, SpawnConditionFlags};
 use crate::typed::{Flags, Named as _};
-use crate::{Load, Off};
 
 use super::templates::ComponentChange;
 use super::{Blob, EngineFacts, Guid, types};
@@ -194,10 +195,6 @@ const MAX_TIMEOUT: &str = "maxSpawnTimeout";
 /// forwarders call.
 #[doc(hidden)]
 pub trait LoadMethods {
-    /// As `Load::spawners`.
-    #[doc(hidden)]
-    fn spawners(&self, pick: SpawnerPick) -> Result<Vec<Guid>, Off>;
-
     /// As `Load::add_spawn_entry`.
     #[doc(hidden)]
     fn add_spawn_entry(&mut self, entry: SpawnEntry) -> Result<(), Off>;
@@ -207,7 +204,52 @@ pub trait LoadMethods {
     fn change_spawner(&mut self, spawner: SpawnerPick, change: SpawnerChange) -> Result<(), Off>;
 }
 
-impl LoadMethods for BaseLoad {
+impl LoadMethods for crate::BaseLoad {
+    fn add_spawn_entry(&mut self, entry: SpawnEntry) -> Result<(), Off> {
+        let added = crate::typed::runtime::made::spawner_entry(
+            vec![entry.template],
+            entry.group.unwrap_or(Guid([0; 16])),
+            entry.conditions.unwrap_or(Flags(Vec::new())),
+            entry.weight,
+        );
+        let added = crate::typed::Reflected::to_value(&added);
+        for spawner in self.spawners(entry.spawner)? {
+            let added = added.clone();
+            self.change_template(
+                spawner,
+                vec![ComponentChange::edit_value(
+                    RandomSpawner::ID,
+                    move |held| {
+                        add_entry(held, &added);
+                    },
+                )],
+            )?;
+        }
+        Ok(())
+    }
+
+    fn change_spawner(&mut self, spawner: SpawnerPick, change: SpawnerChange) -> Result<(), Off> {
+        for spawner in self.spawners(spawner)? {
+            self.change_template(
+                spawner,
+                vec![ComponentChange::edit_value(
+                    RandomSpawner::ID,
+                    move |held| {
+                        change.apply(held);
+                    },
+                )],
+            )?;
+        }
+        Ok(())
+    }
+}
+
+/// The base handle's helpers of this module for the crate's own code.
+pub(crate) trait LoadHelpers {
+    fn spawners(&self, pick: SpawnerPick) -> Result<Vec<Guid>, Off>;
+}
+
+impl LoadHelpers for crate::BaseLoad {
     fn spawners(&self, pick: SpawnerPick) -> Result<Vec<Guid>, Off> {
         let listed = match pick {
             SpawnerPick::Spawner(spawner) => return Ok(vec![spawner]),
@@ -249,43 +291,5 @@ impl LoadMethods for BaseLoad {
             )));
         }
         Ok(found)
-    }
-
-    fn add_spawn_entry(&mut self, entry: SpawnEntry) -> Result<(), Off> {
-        let added = crate::typed::runtime::made::spawner_entry(
-            vec![entry.template],
-            entry.group.unwrap_or(Guid([0; 16])),
-            entry.conditions.unwrap_or(Flags(Vec::new())),
-            entry.weight,
-        );
-        let added = crate::typed::Reflected::to_value(&added);
-        for spawner in self.spawners(entry.spawner)? {
-            let added = added.clone();
-            self.change_template(
-                spawner,
-                vec![ComponentChange::edit_value(
-                    RandomSpawner::ID,
-                    move |held| {
-                        add_entry(held, &added);
-                    },
-                )],
-            )?;
-        }
-        Ok(())
-    }
-
-    fn change_spawner(&mut self, spawner: SpawnerPick, change: SpawnerChange) -> Result<(), Off> {
-        for spawner in self.spawners(spawner)? {
-            self.change_template(
-                spawner,
-                vec![ComponentChange::edit_value(
-                    RandomSpawner::ID,
-                    move |held| {
-                        change.apply(held);
-                    },
-                )],
-            )?;
-        }
-        Ok(())
     }
 }

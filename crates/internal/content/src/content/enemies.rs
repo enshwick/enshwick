@@ -27,18 +27,19 @@
 //! }
 //! ```
 
+use crate::__load::*;
+use crate::Off;
 use crate::resources::Value;
 use crate::typed::ecs::{Boss, DamageMod, EnemyArsenalReference, EnemyScaling, Faction, Level};
 use crate::typed::enemy::EnemyArsenalRegistryResource;
 use crate::typed::{FactionType, Named as _, Reflected as _};
-use crate::{Load, Off};
 
 use super::templates::{ComponentChange, NewTemplate, TemplateId};
 use super::{EngineFacts, Guid, Id};
 
 /// Whether the vanilla template `template` holds a [`Boss`]; `true` when
 /// it does not read, so the template's own refusal names why.
-fn holds_boss(load: &Load<'_>, template: Guid) -> bool {
+fn holds_boss(load: &crate::BaseLoad, template: Guid) -> bool {
     let host = load.host();
     let read = || {
         let registry = crate::resources::Registry::game().ok()?;
@@ -425,18 +426,9 @@ fn serve_arsenal(
 /// forwarders call.
 #[doc(hidden)]
 pub trait LoadMethods {
-    /// As `Load::serve_arsenal`.
-    #[doc(hidden)]
-    fn serve_arsenal(
-        &self,
-        target: Guid,
-        like: Option<Guid>,
-        change: ArsenalChange,
-    ) -> Result<(), Off>;
-
     /// As `Load::add_enemy`.
     #[doc(hidden)]
-    fn add_enemy(&mut self, mut new: NewEnemy) -> Result<TemplateId, Off>;
+    fn add_enemy(&mut self, new: NewEnemy) -> Result<TemplateId, Off>;
 
     /// As `Load::add_arsenal`.
     #[doc(hidden)]
@@ -447,7 +439,42 @@ pub trait LoadMethods {
     fn change_arsenal(&mut self, arsenal: Guid, change: ArsenalChange) -> Result<(), Off>;
 }
 
-impl LoadMethods for BaseLoad {
+impl LoadMethods for crate::BaseLoad {
+    fn add_enemy(&mut self, mut new: NewEnemy) -> Result<TemplateId, Off> {
+        let (id, like) = (new.id, new.like);
+        if new.boss == Some(false) && !holds_boss(self, like) {
+            new.boss = None;
+        }
+        let changes = new.into_changes()?;
+        self.add_template(NewTemplate {
+            changes,
+            ..NewTemplate::new(id, like)
+        })
+    }
+
+    fn add_arsenal(&mut self, new: NewArsenal) -> Result<ArsenalId, Off> {
+        self.declare(new.id)?;
+        let guid = new.id.guid();
+        self.serve_arsenal(guid, Some(new.like), new.change)?;
+        Ok(ArsenalId::new(guid))
+    }
+
+    fn change_arsenal(&mut self, arsenal: Guid, change: ArsenalChange) -> Result<(), Off> {
+        self.serve_arsenal(arsenal, None, change)
+    }
+}
+
+/// The base handle's helpers of this module for the crate's own code.
+pub(crate) trait LoadHelpers {
+    fn serve_arsenal(
+        &self,
+        target: Guid,
+        like: Option<Guid>,
+        change: ArsenalChange,
+    ) -> Result<(), Off>;
+}
+
+impl LoadHelpers for crate::BaseLoad {
     fn serve_arsenal(
         &self,
         target: Guid,
@@ -479,29 +506,6 @@ impl LoadMethods for BaseLoad {
         crate::resources::serve_value(host, key, key, move |value| {
             serve_arsenal(value, target, like, &change)
         })
-    }
-
-    fn add_enemy(&mut self, mut new: NewEnemy) -> Result<TemplateId, Off> {
-        let (id, like) = (new.id, new.like);
-        if new.boss == Some(false) && !holds_boss(self, like) {
-            new.boss = None;
-        }
-        let changes = new.into_changes()?;
-        self.add_template(NewTemplate {
-            changes,
-            ..NewTemplate::new(id, like)
-        })
-    }
-
-    fn add_arsenal(&mut self, new: NewArsenal) -> Result<ArsenalId, Off> {
-        self.declare(new.id)?;
-        let guid = new.id.guid();
-        self.serve_arsenal(guid, Some(new.like), new.change)?;
-        Ok(ArsenalId::new(guid))
-    }
-
-    fn change_arsenal(&mut self, arsenal: Guid, change: ArsenalChange) -> Result<(), Off> {
-        self.serve_arsenal(arsenal, None, change)
     }
 }
 

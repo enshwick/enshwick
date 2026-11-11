@@ -1,10 +1,11 @@
 //! Recipes: a vanilla recipe copied for a new output, with its ingredients
 //! scaled, or the recipes in the registry changed in place.
 
+use crate::__load::*;
 #[cfg(feature = "unstable")]
 use std::sync::Arc;
 
-use crate::{Load, Off};
+use crate::Off;
 
 use super::menu;
 use super::types;
@@ -40,10 +41,6 @@ pub trait LoadMethods {
     #[cfg(feature = "unstable")]
     fn add_recipe(&mut self, recipe: NewRecipe) -> Result<(), Off>;
 
-    /// As `Load::push_recipe`.
-    #[doc(hidden)]
-    fn push_recipe(&mut self, recipe: NewRecipe) -> Result<(), Off>;
-
     /// As `Load::add_recipe_with`.
     #[doc(hidden)]
     #[cfg(feature = "unstable")]
@@ -62,22 +59,10 @@ pub trait LoadMethods {
     ) -> Result<(), Off>;
 }
 
-impl LoadMethods for BaseLoad {
+impl LoadMethods for crate::BaseLoad {
     #[cfg(feature = "unstable")]
     fn add_recipe(&mut self, recipe: NewRecipe) -> Result<(), Off> {
         self.push_recipe(recipe)
-    }
-
-    fn push_recipe(&mut self, recipe: NewRecipe) -> Result<(), Off> {
-        self.declare(recipe.id)?;
-        let layout = RecipeLayout::resolve(self)?;
-        let registry = types::RECIPE_REGISTRY_RESOURCE.key(RECIPE_REGISTRY)?;
-        self.serve(registry, registry, move |base| {
-            add_recipe_to(&layout, base, &recipe, workshop_limit())
-        })?;
-        menu::serve(self, move |menu, bundle| {
-            menu::list_recipes(menu, bundle, &[menu_entry(&layout, &recipe)])
-        })
     }
 
     #[cfg(feature = "unstable")]
@@ -138,6 +123,25 @@ impl LoadMethods for BaseLoad {
                 return Some(bundle.to_vec());
             };
             menu::list_recipes(menu, bundle, &entries)
+        })
+    }
+}
+
+/// The base handle's helpers of this module for the crate's own code.
+pub(crate) trait LoadHelpers {
+    fn push_recipe(&mut self, recipe: NewRecipe) -> Result<(), Off>;
+}
+
+impl LoadHelpers for crate::BaseLoad {
+    fn push_recipe(&mut self, recipe: NewRecipe) -> Result<(), Off> {
+        self.declare(recipe.id)?;
+        let layout = RecipeLayout::resolve(self)?;
+        let registry = types::RECIPE_REGISTRY_RESOURCE.key(RECIPE_REGISTRY)?;
+        self.serve(registry, registry, move |base| {
+            add_recipe_to(&layout, base, &recipe, workshop_limit())
+        })?;
+        menu::serve(self, move |menu, bundle| {
+            menu::list_recipes(menu, bundle, &[menu_entry(&layout, &recipe)])
         })
     }
 }

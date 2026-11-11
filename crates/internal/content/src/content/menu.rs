@@ -7,9 +7,10 @@
 //! `Load::derive_recipes` and [`Load::add_workshop`] list what they add
 //! here on the client; the dedicated server has no UI bundle.
 
+use crate::__load::*;
+use crate::Off;
 use crate::abi::Side;
 use crate::engine_ids as ids;
-use crate::{Load, Off};
 
 use super::workshops::WorkshopId;
 use super::{Blob, EngineFacts, Guid, types};
@@ -427,7 +428,7 @@ pub fn list_workshop(layout: &MenuLayout, bundle: &[u8], workshop: WorkshopId) -
 /// that does not resolve, or a bundle that does not read, leaves the menu
 /// as it is with a warning: the recipes themselves still work.
 pub(crate) fn serve(
-    load: &mut Load<'_>,
+    load: &mut crate::BaseLoad,
     edit: impl Fn(&MenuLayout, &[u8]) -> Option<Vec<u8>> + Send + Sync + 'static,
 ) -> Result<(), Off> {
     if load.host().build().side != Side::CLIENT {

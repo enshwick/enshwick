@@ -1,9 +1,9 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::{Load, Off};
-use enshwick_content::__load::*;
 #[cfg(feature = "unstable")]
 use std::sync::Arc;
+use crate::{Load, Off};
+use enshwick_content::__load::*;
 
 #[enshwick_macros::forward(base)]
 #[crate::script(content_recipes)]

@@ -23,6 +23,7 @@
 //! }
 //! ```
 
+use crate::__load::*;
 use std::sync::{Arc, Mutex};
 
 use crate::abi::Level;
@@ -32,7 +33,7 @@ use crate::resources::Value;
 use crate::typed::{
     CompareOperator, GameKnowledgeResource, KnowledgeQueryData, KnowledgeQueryDataType, Named as _,
 };
-use crate::{Host, Load, Off};
+use crate::{Host, Off};
 
 use super::{EngineFacts, Guid, Id};
 
@@ -691,21 +692,9 @@ pub trait LoadMethods {
     /// As `Load::add_experience`.
     #[doc(hidden)]
     fn add_experience(&mut self, new: NewExperience) -> Result<ExperienceValue, Off>;
-
-    /// As `Load::added_knowledge`.
-    #[doc(hidden)]
-    fn added_knowledge(&mut self) -> Result<&AddedKnowledge, Off>;
-
-    /// As `Load::knowledge_without`.
-    #[doc(hidden)]
-    fn knowledge_without(&mut self, id: Id) -> Result<(), Off>;
-
-    /// As `Load::serve_knowledge`.
-    #[doc(hidden)]
-    fn serve_knowledge(&mut self, new: NewKnowledge) -> Result<KnowledgeId, Off>;
 }
 
-impl LoadMethods for BaseLoad {
+impl LoadMethods for crate::BaseLoad {
     fn add_knowledge(&mut self, new: NewKnowledge) -> Result<KnowledgeId, Off> {
         new.to_value(KnowledgeId::from_guid(new.id.guid()).get())?;
         self.knowledge_without(new.id)?;
@@ -716,7 +705,18 @@ impl LoadMethods for BaseLoad {
     fn add_experience(&mut self, new: NewExperience) -> Result<ExperienceValue, Off> {
         experience::add(self, new)
     }
+}
 
+/// The base handle's helpers of this module for the crate's own code.
+pub(crate) trait LoadHelpers {
+    fn added_knowledge(&mut self) -> Result<&AddedKnowledge, Off>;
+
+    fn knowledge_without(&mut self, id: Id) -> Result<(), Off>;
+
+    fn serve_knowledge(&mut self, new: NewKnowledge) -> Result<KnowledgeId, Off>;
+}
+
+impl LoadHelpers for crate::BaseLoad {
     fn added_knowledge(&mut self) -> Result<&AddedKnowledge, Off> {
         if self.slot::<AddedKnowledge>().is_none() {
             let resource = GAME_KNOWLEDGE.key_by_hash(self.hash(GameKnowledgeResource::ID)?);

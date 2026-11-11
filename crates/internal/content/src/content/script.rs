@@ -11,6 +11,7 @@ use super::templates::ComponentChange;
 use super::vanilla::{self, LootTable, Vanilla};
 use super::workshops::{Station, WorkshopId};
 use super::{Guid, Id, is_id};
+use crate::__load::*;
 use crate::resources::{Bytes, Value as Data};
 use crate::script::{
     Class, Error, Field, FromScript, Function, IntoScript, Object, Record, Ty, Typed, Value,
@@ -548,7 +549,7 @@ pub trait LoadMethods {
     ) -> Result<(), Off>;
 }
 
-impl LoadMethods for BaseLoad {
+impl LoadMethods for crate::BaseLoad {
     #[cfg(feature = "unstable")]
     fn add_recipe_with_script(
         &mut self,

@@ -1,11 +1,11 @@
 //! Changes of one field of every vanilla recipe a selection picks, which the
 //! loader turns into one change per recipe from the game's data.
 
+use crate::Off;
 use crate::abi::{ChangeOp, DataChange, DataSelect, Header, Str};
 use crate::content::Guid;
 use crate::content::recipes::RecipeKind;
 use crate::content::workshops::WorkshopId;
-use crate::{Load, Off};
 
 use super::{Entry, Field, Value, ValueError, field_and_value};
 
@@ -233,7 +233,7 @@ pub trait LoadMethods {
     fn change_recipes(&mut self, change: &RecipesChange, source: &str) -> Result<(), Off>;
 }
 
-impl LoadMethods for BaseLoad {
+impl LoadMethods for crate::BaseLoad {
     fn change_recipes(&mut self, change: &RecipesChange, source: &str) -> Result<(), Off> {
         change.field.unstable_gate()?;
         change

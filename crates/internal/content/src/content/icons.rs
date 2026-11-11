@@ -11,8 +11,9 @@
 //! item keeps its vanilla icon anywhere else, the dedicated server
 //! included, where no icon shows anyway.
 
+use crate::__load::*;
+use crate::Off;
 use crate::abi::HostApi;
-use crate::{Load, Off};
 
 use super::{Blob, EngineFacts, Guid, Id, types};
 
@@ -440,7 +441,7 @@ pub trait LoadMethods {
     fn add_icon(&mut self, icon: Icon) -> Result<(), Off>;
 }
 
-impl LoadMethods for BaseLoad {
+impl LoadMethods for crate::BaseLoad {
     fn add_icon(&mut self, icon: Icon) -> Result<(), Off> {
         self.declare(icon.id)?;
         // A build without the layout, such as the dedicated server, shows

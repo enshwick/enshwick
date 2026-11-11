@@ -519,6 +519,7 @@ dependencies = [
  "enshwick",
  "enshwick-abi",
  "enshwick-base",
+ "enshwick-content",
  "enshwick-macros",
  "enshwick-typed",
  "enshwick-values",

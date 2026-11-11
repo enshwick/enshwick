@@ -33,12 +33,13 @@
 //! # }
 //! ```
 
+use crate::__load::*;
 use std::sync::Arc;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use crate::Off;
 use crate::resources::{Registry, Type, Value, Variant};
-use crate::{Load, Off};
 
 use super::{Blob, Guid, Id, types};
 
@@ -397,7 +398,7 @@ impl NewTemplate {
 /// A [`ComponentChange`] resolved on the running build: its component's
 /// qualified name, as the codec names it.
 #[derive(Clone)]
-struct Resolved {
+pub(crate) struct Resolved {
     name: &'static str,
     op: Op,
 }
@@ -555,7 +556,7 @@ fn template_type() -> Result<&'static Type<'static>, Off> {
 
 /// The running build's type enshwick's id `id` names.
 fn reflected(
-    load: &Load<'_>,
+    load: &crate::BaseLoad,
     registry: &'static Registry<'static>,
     id: &str,
 ) -> Result<&'static Type<'static>, Off> {
@@ -569,30 +570,6 @@ fn reflected(
 /// forwarders call.
 #[doc(hidden)]
 pub trait LoadMethods {
-    /// As `Load::resolve_changes`.
-    #[doc(hidden)]
-    fn resolve_changes(
-        &self,
-        template: &'static Type<'static>,
-        vanilla: Guid,
-        changes: Vec<ComponentChange>,
-        what: &str,
-    ) -> Result<Vec<Resolved>, Off>;
-
-    /// As `Load::serve_template`.
-    #[doc(hidden)]
-    fn serve_template(
-        &self,
-        template: &'static Type<'static>,
-        key: Guid,
-        base: Guid,
-        changes: Vec<Resolved>,
-    ) -> Result<(), Off>;
-
-    /// As `Load::list_template`.
-    #[doc(hidden)]
-    fn list_template(&self, template: Guid) -> Result<(), Off>;
-
     /// As `Load::add_template`.
     #[doc(hidden)]
     fn add_template(&mut self, new: NewTemplate) -> Result<TemplateId, Off>;
@@ -603,7 +580,52 @@ pub trait LoadMethods {
     -> Result<(), Off>;
 }
 
-impl LoadMethods for BaseLoad {
+impl LoadMethods for crate::BaseLoad {
+    fn add_template(&mut self, new: NewTemplate) -> Result<TemplateId, Off> {
+        self.declare(new.id)?;
+        let template = template_type()?;
+        let what = format!("template {}", new.id);
+        let changes = self.resolve_changes(template, new.like, new.changes, &what)?;
+        let guid = new.id.guid();
+        self.serve_template(template, guid, new.like, changes)?;
+        self.list_template(guid)?;
+        Ok(TemplateId::new(guid))
+    }
+
+    fn change_template(
+        &mut self,
+        template: Guid,
+        changes: Vec<ComponentChange>,
+    ) -> Result<(), Off> {
+        let ty = template_type()?;
+        let what = format!("template {template}");
+        let changes = self.resolve_changes(ty, template, changes, &what)?;
+        self.serve_template(ty, template, template, changes)
+    }
+}
+
+/// The base handle's helpers of this module for the crate's own code.
+pub(crate) trait LoadHelpers {
+    fn resolve_changes(
+        &self,
+        template: &'static Type<'static>,
+        vanilla: Guid,
+        changes: Vec<ComponentChange>,
+        what: &str,
+    ) -> Result<Vec<Resolved>, Off>;
+
+    fn serve_template(
+        &self,
+        template: &'static Type<'static>,
+        key: Guid,
+        base: Guid,
+        changes: Vec<Resolved>,
+    ) -> Result<(), Off>;
+
+    fn list_template(&self, template: Guid) -> Result<(), Off>;
+}
+
+impl LoadHelpers for crate::BaseLoad {
     fn resolve_changes(
         &self,
         template: &'static Type<'static>,
@@ -696,28 +718,6 @@ impl LoadMethods for BaseLoad {
                 _ => Err(Off::new("template collection: no list of templates")),
             }
         })
-    }
-
-    fn add_template(&mut self, new: NewTemplate) -> Result<TemplateId, Off> {
-        self.declare(new.id)?;
-        let template = template_type()?;
-        let what = format!("template {}", new.id);
-        let changes = self.resolve_changes(template, new.like, new.changes, &what)?;
-        let guid = new.id.guid();
-        self.serve_template(template, guid, new.like, changes)?;
-        self.list_template(guid)?;
-        Ok(TemplateId::new(guid))
-    }
-
-    fn change_template(
-        &mut self,
-        template: Guid,
-        changes: Vec<ComponentChange>,
-    ) -> Result<(), Off> {
-        let ty = template_type()?;
-        let what = format!("template {template}");
-        let changes = self.resolve_changes(ty, template, changes, &what)?;
-        self.serve_template(ty, template, template, changes)
     }
 }
 

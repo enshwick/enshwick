@@ -3,7 +3,7 @@
 
 use crate::abi::{ChangeId, ChangeOp, DataChange, DataSelect, Header, Status, Str};
 use crate::content::Guid;
-use crate::{Host, Load, Off};
+use crate::{Host, Off};
 
 use super::{Field, Items, Value, ValueError};
 
@@ -195,7 +195,7 @@ pub trait LoadMethods {
     ) -> Result<ChangeHandle, Off>;
 }
 
-impl LoadMethods for BaseLoad {
+impl LoadMethods for crate::BaseLoad {
     fn declare_change(
         &mut self,
         target: Target,

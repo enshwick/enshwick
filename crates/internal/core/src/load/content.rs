@@ -4,31 +4,6 @@ use crate::abi::{ResourceKey, Str};
 use crate::{Load, Off};
 use enshwick_content::__load::*;
 
-mod changes;
-mod changes_items;
-mod changes_live;
-mod changes_recipes;
-#[cfg(feature = "typed")]
-mod enemies;
-mod icons;
-mod items;
-#[cfg(feature = "typed")]
-mod journal;
-#[cfg(feature = "typed")]
-mod knowledge;
-mod props;
-mod recipes;
-#[cfg(feature = "typed")]
-mod removal;
-mod renames;
-mod script;
-#[cfg(feature = "typed")]
-mod skills;
-#[cfg(feature = "typed")]
-mod spawns;
-mod templates;
-mod workshops;
-
 #[enshwick_macros::forward(base)]
 #[crate::script(content_ids)]
 impl Load<'_> {
