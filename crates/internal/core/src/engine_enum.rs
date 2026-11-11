@@ -3,7 +3,7 @@
 //! compiled into a mod.
 
 use crate::Load;
-use crate::content::EngineFacts;
+use crate::facts::EngineFacts;
 
 /// The engine value of each variant of `T`; a variant whose constant the
 /// build lacks has none and is never decoded.

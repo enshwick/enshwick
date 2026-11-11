@@ -12,7 +12,7 @@ mod rebase;
 use std::borrow::Cow;
 
 use super::{Field, Kind, Registry, Type, Value, Variant};
-use crate::content::Guid;
+use enshwick_values::content::Guid;
 
 /// Nesting deeper than this is taken for a loop in bad data.
 const MAX_DEPTH: usize = 64;

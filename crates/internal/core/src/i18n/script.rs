@@ -3,9 +3,9 @@
 //! language and a key or text as the list `{ code, text }`.
 
 use super::{Language, Texts};
-use crate::content::Id;
 use crate::script::{Bound, Class, FromScript as _, Function, Object, Value};
 use crate::{Load, Off};
+use enshwick_values::content::Id;
 
 /// Each of `pairs` with its language as its code.
 fn coded<'a>(pairs: impl IntoIterator<Item = (Language, &'a str)>) -> Vec<(String, String)> {
@@ -168,7 +168,7 @@ impl Load<'_> {
     /// [`Off`] when the folder has no `texts.toml` or it is malformed.
     #[script(name = "texts")]
     pub(crate) fn texts_script(&mut self) -> Result<Texts, Off> {
-        let path = self.mod_dir()?.join(crate::packs::TEXTS_FILE);
+        let path = self.mod_dir()?.join(super::TEXTS_FILE);
         let toml = std::fs::read_to_string(&path)
             .map_err(|e| Off::new(format!("texts: {}: {e}", path.display())))?;
         self.texts_from(&toml)

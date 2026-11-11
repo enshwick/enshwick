@@ -38,6 +38,7 @@ mod book_links;
 mod book_prose;
 mod crate_rules;
 mod dist;
+mod domains;
 mod fuzz;
 mod header;
 mod lower_examples;
@@ -235,6 +236,11 @@ fn tree_problems(root: &std::path::Path, packages: &[Package]) -> Result<Vec<Str
         crate_rules::check(packages)?
             .into_iter()
             .map(|problem| format!("crate rule: {problem}")),
+    );
+    problems.extend(
+        domains::check(root)
+            .into_iter()
+            .map(|problem| format!("domain rule: {problem}")),
     );
     problems.extend(
         lower_examples::check(root, packages)

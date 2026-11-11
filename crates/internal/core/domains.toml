@@ -1,0 +1,76 @@
+# The domains of enshwick-core and the modules of each. A module names
+# only base, its own domain and the domains before its own in `order`;
+# shared things move down into base. `cargo xtask check` holds it.
+
+# Lowest first: each domain is peeled out of core in the reverse order.
+order = ["base", "content", "world", "inventory", "knowledge", "actions", "ui", "packs"]
+
+# Files and folders under `src` that join every domain's list.
+joins = ["lib.rs", "__private.rs", "__private/", "__fake.rs", "__fake/", "script/namespaces.rs"]
+
+# The edges up the order still in the code, as `from -> to`; a peel removes
+# its own. A new one fails, and so does one that is gone.
+upward = []
+
+[modules]
+base = [
+    "code",
+    "command_names",
+    "config",
+    "declare",
+    "ecs",
+    "engine_enum",
+    "engine_ids",
+    "events",
+    "files",
+    "fresh",
+    "game_events",
+    "hook",
+    "host",
+    "i18n",
+    "load",
+    "locks",
+    "mods",
+    "near",
+    "net",
+    "pacing",
+    "points",
+    "resources",
+    "rules",
+    "schedule",
+    "schema_section",
+    "script",
+    "services",
+    "state",
+    "status",
+    "time",
+]
+content = ["content", "rates", "typed"]
+world = [
+    "altars",
+    "buffs",
+    "daytime",
+    "game_settings",
+    "map",
+    "terrain",
+    "voxels",
+    "weather",
+    "world",
+    "world_error",
+]
+inventory = [
+    "affixes",
+    "damage",
+    "effects",
+    "entity_data",
+    "inventory",
+    "item_data",
+    "items",
+    "loot",
+    "stats",
+    "survivors",
+]
+knowledge = ["knowledge", "progress", "quests", "rewards"]
+actions = ["actions", "chat", "commands", "console", "controls", "input", "interactions", "vetoes"]
+ui = ["sound", "ui"]
+packs = ["packs"]
