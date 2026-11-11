@@ -1,4 +1,3 @@
-use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
 use syn::ext::IdentExt as _;
@@ -270,15 +269,10 @@ pub(super) fn expand_attribute(
             krate = Some(path.parse::<syn::Path>()?);
         }
     }
-    let serde = format!(
-        "{}::__private::serde",
-        krate
-            .as_ref()
-            .map_or_else(|| "::enshwick".to_owned(), crate::krate::text)
-    );
+    let krate = crate::krate::path(krate.as_ref());
+    let serde = format!("{}::__private::serde", crate::krate::text(&krate));
     let forwarded = (!forwarded.is_empty()).then(|| quote!(#[config(#(#forwarded),*)]));
-    Ok(crate::krate::rename(
-        quote! {
+    Ok(quote! {
             #[derive(
                 #krate::__private::serde::Deserialize,
                 #krate::__private::serde::Serialize,
@@ -287,9 +281,7 @@ pub(super) fn expand_attribute(
             #[serde(crate = #serde, default, deny_unknown_fields)]
             #forwarded
             #input
-        },
-        krate.as_ref(),
-    ))
+    })
 }
 
 /// Refuses a settings struct that would read past an unknown key: serde
@@ -342,7 +334,10 @@ pub(super) fn settings_fields(input: &DeriveInput) -> syn::Result<&syn::FieldsNa
     Ok(fields)
 }
 
-pub(super) fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
+pub(super) fn expand_config(
+    input: &DeriveInput,
+    krate: &proc_macro2::TokenStream,
+) -> syn::Result<proc_macro2::TokenStream> {
     let name = &input.ident;
     let fields = settings_fields(input)?;
     let (defaults, text, schema) = (local("defaults"), local("text"), local("schema"));
@@ -382,7 +377,9 @@ pub(super) fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
         checks.push(quote! {
             #krate::config::__check_field(&#schema, #key, &self.#ident)?;
         });
-        described.push(described_field(&key, ident, config, field, &defaults));
+        described.push(described_field(
+            &key, ident, config, field, &defaults, krate,
+        ));
     }
     let header = comment(&input.attrs);
     let header_text = doc_text(&input.attrs);
@@ -392,7 +389,7 @@ pub(super) fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
         tables: group_tables,
         schemas: group_schemas,
         checks: group_checks,
-    } = group_tokens(&groups, &text, &path, &fields_of, &groups_of);
+    } = group_tokens(&groups, &text, &path, &fields_of, &groups_of, krate);
     Ok(quote! {
         impl #krate::config::Config for #name {
             const FILE: &'static str = #file;
@@ -440,8 +437,7 @@ pub(super) fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
         }
 
         #claim
-    }
-    .into())
+    })
 }
 
 /// A macro named after the settings file `file`, exported at the crate's
@@ -480,6 +476,7 @@ pub(super) fn described_field(
     config: FieldConfig,
     field: &syn::Field,
     defaults: &Ident,
+    krate: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
     let bound = |e: &Option<Expr>| {
         e.as_ref().map_or_else(
@@ -521,6 +518,7 @@ pub(super) fn group_tokens(
     path: &Ident,
     fields_of: &Ident,
     groups_of: &Ident,
+    krate: &proc_macro2::TokenStream,
 ) -> GroupTokens {
     let config = quote!(#krate::config::Config);
     let tables = groups

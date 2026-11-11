@@ -481,6 +481,7 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
     parse_macro_input!(args with settings);
     let item = parse_macro_input!(item as syn::ItemStruct);
     let ident = item.ident.clone();
+    let krate = krate::path(krate.as_ref());
     let expanded = (|| -> syn::Result<TokenStream> {
         let (name, tracked, owner) = resolve(name, of.as_ref())?;
         let entry = schema_entry(
@@ -490,6 +491,7 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
             export.as_ref(),
             &quote!(<#ident as #krate::points::Point>),
             Kind::Point,
+            &krate,
         )?;
         let mode = mode.ok_or_else(|| {
             syn::Error::new_spanned(
@@ -505,7 +507,7 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
         }
         let output = output
             .ok_or_else(|| syn::Error::new_spanned(&ident, "name the answer: `output = <type>`"))?;
-        let schema = point_schema(&item, name.as_ref(), &mode, &output, refusable);
+        let schema = point_schema(&item, name.as_ref(), &mode, &output, refusable, &krate);
         let extra = quote! {
             const MODE: #krate::points::Mode =
                 #krate::points::Mode::#mode;
@@ -529,8 +531,9 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
             name,
             &extra,
             &quote!(points::Point),
+            &krate,
         )?);
-        let padding = padding_free_assert(&item, "a point's input");
+        let padding = padding_free_assert(&item, "a point's input", &krate);
         Ok(quote! {
             #declared
             #padding
@@ -543,14 +546,18 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
         }
         .into())
     })();
-    renamed(Ok(krate), expanded.map(Into::into))
+    expanded.unwrap_or_else(|e| e.to_compile_error().into())
 }
 
 /// Asserts at build time that `item`, the struct a macro declares, has no
 /// padding: each field's type is padding-free and the fields fill the
 /// struct. A described side, a script or a mod that knows the type from its
 /// schema, reads every byte of it.
-fn padding_free_assert(item: &syn::ItemStruct, what: &str) -> proc_macro2::TokenStream {
+fn padding_free_assert(
+    item: &syn::ItemStruct,
+    what: &str,
+    krate: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
     let ident = &item.ident;
     let types: Vec<&Type> = item.fields.iter().map(|f| &f.ty).collect();
     let shape = quote!(#krate::Shape);
@@ -603,6 +610,7 @@ pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
     parse_macro_input!(args with settings);
     let item = parse_macro_input!(item as syn::ItemStruct);
     let ident = item.ident.clone();
+    let krate = krate::path(krate.as_ref());
     let expanded = (|| -> syn::Result<TokenStream> {
         let (name, tracked, owner) = resolve(name, of.as_ref())?;
         let entry = schema_entry(
@@ -612,11 +620,12 @@ pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
             export.as_ref(),
             &quote!(<#ident as #krate::services::Call>),
             Kind::Call,
+            &krate,
         )?;
         let output = output
             .ok_or_else(|| syn::Error::new_spanned(&ident, "name the answer: `output = <type>`"))?;
         let major = version.map_or_else(|| quote!(1), |v| quote!(#v));
-        let schema = call_schema(&item, name.as_ref(), &output);
+        let schema = call_schema(&item, name.as_ref(), &output, &krate);
         let extra = quote! {
             const MAJOR: u32 = #major;
             const OUTPUT: &'static [#krate::abi::LayoutField] =
@@ -638,6 +647,7 @@ pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
             name,
             &extra,
             &quote!(services::Call),
+            &krate,
         )?);
         let types: Vec<&Type> = item.fields.iter().map(|f| &f.ty).collect();
         let shape = quote!(#krate::Shape);
@@ -660,7 +670,7 @@ pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
         }
         .into())
     })();
-    renamed(Ok(krate), expanded.map(Into::into))
+    expanded.unwrap_or_else(|e| e.to_compile_error().into())
 }
 
 /// Implements `enshwick::Shape`: the structural hash the layout
@@ -675,7 +685,9 @@ pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_derive(Shape, attributes(shape))]
 pub fn derive_shape(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    renamed(krate::in_attrs(&input.attrs, "shape"), expand_shape(&input))
+    with_crate(krate::in_attrs(&input.attrs, "shape"), |krate| {
+        expand_shape(&input, krate)
+    })
 }
 
 /// Describes a type for script languages; examples are on `enshwick::Script`.
@@ -686,10 +698,9 @@ pub fn derive_shape(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(Script, attributes(script))]
 pub fn derive_script(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    renamed(
-        krate::in_attrs(&input.attrs, "script"),
-        script::expand_derive(&input),
-    )
+    with_crate(krate::in_attrs(&input.attrs, "script"), |krate| {
+        script::expand_derive(&input, krate)
+    })
 }
 
 /// Exports the methods of an `impl` block marked `#[script]` to scripts.
@@ -717,7 +728,9 @@ pub fn script(args: TokenStream, item: TokenStream) -> TokenStream {
             .into();
     };
     let item = parse_macro_input!(item as syn::ItemImpl);
-    renamed(Ok(krate), script::expand_impl(&part, item))
+    script::expand_impl(&part, item, &krate::path(krate.as_ref()))
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
 }
 
 /// Writes the bodies of an `impl` block's methods declared without one:
@@ -734,14 +747,14 @@ pub fn forward(args: TokenStream, item: TokenStream) -> TokenStream {
         .into()
 }
 
-/// The expansion `out` with its `::enshwick` paths written as the crate a
-/// `crate = "path"` names, or the error of either.
-fn renamed(
+/// The expansion `expand` writes with the API crate's path, which a
+/// `crate = "path"` may name, or the error of either.
+fn with_crate(
     krate: syn::Result<Option<syn::Path>>,
-    out: syn::Result<proc_macro2::TokenStream>,
+    expand: impl FnOnce(&proc_macro2::TokenStream) -> syn::Result<proc_macro2::TokenStream>,
 ) -> TokenStream {
     krate
-        .and_then(|krate| Ok(krate::rename(out?, krate.as_ref())))
+        .and_then(|krate| expand(&krate::path(krate.as_ref())))
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
 }
@@ -771,6 +784,7 @@ fn expand_declaration(
     name: Option<syn::LitStr>,
     extra: &proc_macro2::TokenStream,
     trait_path: &proc_macro2::TokenStream,
+    krate: &proc_macro2::TokenStream,
 ) -> syn::Result<TokenStream> {
     let ident = &item.ident;
     let name = name.ok_or_else(|| {
