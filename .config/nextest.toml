@@ -1,6 +1,8 @@
 # CI's host part (profile `ci`) leaves the trybuild test to a part of its own
 # (profile `trybuild`), where it runs beside the other parts instead of
-# setting the length of the host tests. A renamed test binary fails both.
+# setting the length of the host tests. A renamed test binary or module
+# fails the part `trybuild`, which finds no test, and puts the test back
+# into the host run; keep both filters equal.
 
 [profile.ci]
 default-filter = "not (binary_id(enshwick::main) & test(/^config_files::/))"
