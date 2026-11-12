@@ -41,12 +41,12 @@
 use core::ffi::c_void;
 use core::time::Duration;
 
+use crate::Off;
 use crate::abi::{ControlEvent, ControlSpec, Str, read_headed};
 use crate::world::Player;
-use crate::{Load, Off};
 
 mod key;
-mod script;
+pub(crate) mod script;
 
 pub use key::{Key, ParseKeyError};
 #[doc(hidden)]
@@ -459,25 +459,23 @@ unsafe extern "system" fn fire(event: *const ControlEvent, user: *mut c_void) {
     crate::host::guard("panic in a control", || (), || handler(&fired));
 }
 
-impl Load<'_> {
-    /// Declares `control` with its handler, which runs on the client's
-    /// interface thread for a key, and on the server's game thread for a
-    /// [linked](Control::link) game action; a client hosting a game may run
-    /// both at once.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] for a malformed name, a name declared before, or when the
-    /// loader refuses the control.
-    ///
-    /// # Examples
-    ///
-    /// See the [module](self).
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::control`.
+    #[doc(hidden)]
+    fn control<F>(&mut self, control: Control, on: F) -> Result<(), Off>
+    where
+        F: Fn(&Fired<'_>) + Send + Sync + 'static;
+}
+
+impl LoadMethods for crate::BaseLoad {
     #[expect(
         clippy::needless_pass_by_value,
         reason = "a declaration hands its builder over, as `Actions::add` does"
     )]
-    pub fn control<F>(&mut self, control: Control, on: F) -> Result<(), Off>
+    fn control<F>(&mut self, control: Control, on: F) -> Result<(), Off>
     where
         F: Fn(&Fired<'_>) + Send + Sync + 'static,
     {

@@ -31,7 +31,12 @@ pub use enshwick_base::{
 #[doc(inline)]
 pub use enshwick_abi::abi;
 #[cfg(feature = "unstable")]
-pub mod actions;
+#[doc(inline)]
+pub use enshwick_actions::{actions, commands, console, controls, input};
+#[doc(inline)]
+pub use enshwick_actions::{chat, interactions, vetoes};
+#[doc(inline)]
+pub use enshwick_content::content;
 #[doc(inline)]
 pub use enshwick_inventory::{affixes, damage, effects, inventory, loot, stats, survivors};
 #[cfg(feature = "unstable")]
@@ -39,19 +44,7 @@ pub use enshwick_inventory::{affixes, damage, effects, inventory, loot, stats, s
 pub use enshwick_inventory::{entity_data, item_data, items};
 #[doc(inline)]
 pub use enshwick_world::{altars, buffs, daytime, game_settings, terrain, voxels, weather};
-pub mod chat;
-#[cfg(feature = "unstable")]
-pub mod commands;
-#[cfg(feature = "unstable")]
-pub mod console;
-#[doc(inline)]
-pub use enshwick_content::content;
-#[cfg(feature = "unstable")]
-pub mod controls;
 mod declare;
-#[cfg(feature = "unstable")]
-pub mod input;
-pub mod interactions;
 #[doc(inline)]
 pub use enshwick_knowledge::{knowledge, progress};
 mod load;
@@ -93,7 +86,6 @@ pub mod sound;
 #[doc(inline)]
 pub use enshwick_world::typed;
 pub mod ui;
-pub mod vetoes;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_world::world;

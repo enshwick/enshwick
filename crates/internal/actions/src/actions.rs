@@ -57,12 +57,12 @@ pub use window::{Row, Window};
 
 use std::sync::{Arc, RwLock};
 
+use crate::Off;
 use crate::PlayerKey;
 use crate::abi::Str;
 use crate::controls::{Control, Key};
 use crate::i18n::Texts;
 use crate::world::{Player, PlayerPermissions};
-use crate::{Load, Off};
 
 /// The platform's own texts for the console's answers; a mod's texts
 /// override them by key.
@@ -864,24 +864,17 @@ impl Actions {
     }
 }
 
-impl Load<'_> {
-    /// The mod's player actions: declare each with [`Actions::add`]. `texts`
-    /// holds the labels' texts, as [`Load::texts`] reads them; the
-    /// platform's own replies are in it under `actions.*` too, so a mod may
-    /// change them. The loader keeps these texts beneath the ones the mod
-    /// hands itself (see [`Load::texts`]), before or after: a key of both
-    /// reads as the mod handed it, and an action's control
-    /// ([`Actions::control`]) reads its label from them in each player's
-    /// language, a missing variety falling back as any text does.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] for a second call, or when the loader refuses the actions.
-    ///
-    /// # Examples
-    ///
-    /// See the [module](self).
-    pub fn actions(&mut self, texts: Texts) -> Result<Actions, Off> {
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::actions`.
+    #[doc(hidden)]
+    fn actions(&mut self, texts: Texts) -> Result<Actions, Off>;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn actions(&mut self, texts: Texts) -> Result<Actions, Off> {
         let mut all = Texts::parse(PLATFORM_TEXTS)?;
         all.merge(texts);
         let host = self.host();
@@ -953,7 +946,7 @@ mod tests {
 mod answer;
 mod registry;
 mod request;
-mod script;
+pub(crate) mod script;
 
 use registry::Registry;
 pub use request::*;

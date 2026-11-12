@@ -5,9 +5,10 @@
 use core::time::Duration;
 
 use super::{Control, Fired, GameAction, Key, Phase};
+use crate::__load::*;
+use crate::Off;
 use crate::script::{Bound, Error, FromScript, Function, IntoScript, Ty, Typed, Value};
 use crate::world::Player;
-use crate::{Load, Off};
 
 impl Typed for Key {
     const TY: &'static Ty = &Ty::String;
@@ -49,7 +50,7 @@ impl FromScript for GameAction {
 /// A control as a script declares it: the fields of [`Control`]'s builder.
 #[derive(Clone, Debug, crate::Script)]
 #[script(name = "Control")]
-pub(crate) struct ScriptControl {
+pub struct ScriptControl {
     /// The control's name, 1 to 32 of `[a-z0-9-]`, as [`Control::new`] takes it.
     pub name: String,
     /// What the mod's key bindings show, a text key.
@@ -89,7 +90,7 @@ impl From<ScriptControl> for Control {
 /// A control that fired, as a script's handler gets it: [`Fired`]'s fields.
 #[derive(Clone, Debug, crate::Script)]
 #[script(name = "Fired")]
-pub(crate) struct ScriptFired {
+pub struct ScriptFired {
     /// The control's name.
     pub control: String,
     /// What happened to it.
@@ -178,15 +179,21 @@ impl Bound for ControlFns {
     }
 }
 
-#[crate::script(controls)]
-impl Load<'_> {
-    /// Declares `control` with its handler `on`, as [`Load::control`] does.
-    ///
-    /// # Errors
-    ///
-    /// As [`Load::control`].
-    #[script(name = "control")]
-    pub(crate) fn control_script(
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::control_script`.
+    #[doc(hidden)]
+    fn control_script(
+        &mut self,
+        control: ScriptControl,
+        on: impl Fn(ScriptFired) + Send + Sync + 'static,
+    ) -> Result<(), Off>;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn control_script(
         &mut self,
         control: ScriptControl,
         on: impl Fn(ScriptFired) + Send + Sync + 'static,

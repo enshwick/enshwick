@@ -20,6 +20,7 @@ enshwick-content.workspace = true
 enshwick-world.workspace = true
 enshwick-inventory.workspace = true
 enshwick-knowledge.workspace = true
+enshwick-actions.workspace = true
 enshwick-values.workspace = true
 bytemuck.workspace = true
 hound = { workspace = true, optional = true }
@@ -49,6 +50,7 @@ fake = [
     "enshwick-content/fake",
     "enshwick-world/fake",
     "enshwick-knowledge/fake",
+    "enshwick-actions/fake",
 ]
 schema = ["dep:schemars", "dep:serde_json", "enshwick-base/schema"]
 unstable = [
@@ -58,6 +60,7 @@ unstable = [
     "enshwick-world/unstable",
     "enshwick-inventory/unstable",
     "enshwick-knowledge/unstable",
+    "enshwick-actions/unstable",
 ]
 typed = [
     "unstable",

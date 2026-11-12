@@ -35,11 +35,11 @@ use core::cell::RefCell;
 use core::ffi::c_void;
 use std::borrow::Cow;
 
+use crate::Off;
 use crate::abi::{BuildCheck, CraftCheck, Str};
 use crate::game_events::CraftRecipeEvent;
 use crate::script::{Answer, Error, Ty, Value};
 use crate::{Entity, ItemId};
-use crate::{Load, Off};
 
 /// A placement the game allows, from [`Load::on_build`]. The name is
 /// enshwick's: the game's cursor check has none, and a refusal sets the
@@ -184,23 +184,32 @@ where
     0
 }
 
-#[crate::script(vetoes)]
-impl Load<'_> {
-    /// Runs `filter` on each player's craft request in the server's world,
-    /// before the crafting system reads it; returning `false` refuses it,
-    /// and nothing is made or taken. It runs on the game thread, where
-    /// `World` reads work, in the dedicated server or
-    /// a hosting client.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] after init or on a build without the craft event.
-    ///
-    /// # Examples
-    ///
-    /// See the [module](self).
-    #[script]
-    pub fn on_craft<F>(&mut self, filter: F) -> Result<(), Off>
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::on_craft`.
+    #[doc(hidden)]
+    fn on_craft<F>(&mut self, filter: F) -> Result<(), Off>
+    where
+        F: Fn(&CraftRecipeEvent) -> bool + Send + Sync + 'static;
+
+    /// As `Load::on_build`.
+    #[doc(hidden)]
+    fn on_build<F, V>(&mut self, filter: F) -> Result<(), Off>
+    where
+        F: Fn(&Placement) -> V + Send + Sync + 'static,
+        V: Into<BuildVerdict>;
+
+    /// As `Load::build_filter`.
+    #[doc(hidden)]
+    fn build_filter<F>(&mut self, filter: F) -> Result<(), Off>
+    where
+        F: Fn(&Placement) -> BuildVerdict + Send + Sync + 'static;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn on_craft<F>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&CraftRecipeEvent) -> bool + Send + Sync + 'static,
     {
@@ -212,27 +221,7 @@ impl Load<'_> {
         )
     }
 
-    /// Runs `filter` after the game's cursor check allows a placement; a
-    /// refusal refuses it as the game refuses a placement without building
-    /// permission, and [`BuildVerdict::RefuseBecause`] tells the builder why:
-    /// a client running the mod shows the reason under the build cursor,
-    /// and the server sends it as one notice, at most once a second per
-    /// player and again only after that player's refusals stopped for a
-    /// second. It runs on both sides, on the cursor systems'
-    /// worker threads: the server's answer decides, and a client running the
-    /// mod shows the cursor as not allowed. The cursor check runs on every
-    /// frame a player aims to build, so `filter` must not allocate, lock or
-    /// log, and gives the same answer on both sides. A `bool` answer allows
-    /// or refuses without a reason.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] after init or on a build without the cursor check.
-    ///
-    /// # Examples
-    ///
-    /// See the [module](self).
-    pub fn on_build<F, V>(&mut self, filter: F) -> Result<(), Off>
+    fn on_build<F, V>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&Placement) -> V + Send + Sync + 'static,
         V: Into<BuildVerdict>,
@@ -240,20 +229,7 @@ impl Load<'_> {
         self.build_filter(move |placement| filter(placement).into())
     }
 
-    /// Runs `filter` after the game's cursor check allows a placement, as
-    /// [`Load::on_build`] does. The filter returns nil or `true` to allow,
-    /// `false` to refuse as the game refuses a placement without building
-    /// permission, or a string to refuse and tell the builder why: a key of
-    /// the mod's texts or plain words; any other value refuses. It runs on
-    /// both sides, on every frame a player aims to build: the server's
-    /// answer decides, so `filter` gives the same answer on both sides and
-    /// stays quick.
-    ///
-    /// # Errors
-    ///
-    /// As [`Load::on_build`].
-    #[script(name = "on_build")]
-    pub(crate) fn build_filter<F>(&mut self, filter: F) -> Result<(), Off>
+    fn build_filter<F>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&Placement) -> BuildVerdict + Send + Sync + 'static,
     {
