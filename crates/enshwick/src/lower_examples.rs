@@ -228,7 +228,7 @@ mod abi {}
 ///     const DOC: &'static str = "Dice.";
 ///     const PARTS: &'static [&'static [enshwick::script::Function<Self>]] = &[Self::SCRIPT_ROLLS];
 ///
-///     fn resolve(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
+///     fn resolve(_load: &mut impl enshwick::Loading) -> Result<Self, enshwick::Off> {
 ///         Ok(Self)
 ///     }
 /// }
