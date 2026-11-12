@@ -42,7 +42,8 @@ game, and the rows come from different setups, so do not compare them.
 | --- | --- | --- |
 | A mid-function hook, per pass, with an empty handler | about 5 to 22 ns, by the code path the processor takes; one handler adds about 4 ns | a release test on an AMD Ryzen 9 9950X3D that runs every path ([Mid-function hooks](../mid-function-hooks.md)) |
 | One event handler call | about 1 µs, mostly the processor fetching the mod's code and data | a server copy of game build 399 with 11 mods ([Events and the scheduler](../events.md)) |
-| One Luau damage filter call | about 1.15 µs, 0 allocations in 10,000 warm calls | `cargo bench -p enshwick-luau --bench damage_filter` on the fake host, release build, AMD Ryzen 9 9950X3D, 2026-11-10 |
+| One Luau damage filter call | about 1.15 µs, 0 allocations in 10,000 warm calls | `cargo bench -p enshwick-luau --bench calls` on the fake host, release build, AMD Ryzen 9 9950X3D, 2026-11-10 |
+| One call from Luau into the API, by its argument | about 0.13 µs and no allocation with numbers; 0.24 µs and 1 allocation with a string; 0.2 µs and 1 with a buffer; 0.4 µs and 2 with a list; 0.6 µs and 1 with a function; 1.1 µs and 3 with a record of two numbers and a content id | the same bench, 2026-11-13, while other builds ran on the machine |
 | A log line above the mod's level | one atomic load | [Logging and diagnostics](../logging.md) |
 | Timing a callback, with `diagnostics = true` | about 14 ns | [Logging and diagnostics](../logging.md#per-mod-costs) |
 
