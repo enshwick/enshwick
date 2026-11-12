@@ -792,7 +792,6 @@ dependencies = [
 name = "enshwick-world"
 version = "1.0.0-alpha.14"
 dependencies = [
- "bytemuck",
  "enshwick",
  "enshwick-abi",
  "enshwick-base",

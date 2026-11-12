@@ -33,8 +33,6 @@ pub(super) struct Layout {
     skip: usize,
 }
 
-pub(crate) use enshwick_content::__internal::item_data;
-
 /// Inventory reads and transactions on the server; get it from
 /// [`Load::inventories`](../struct.Load.html#method.inventories). Copy it anywhere.
 ///
@@ -183,7 +181,7 @@ impl Inventories {
     #[must_use]
     #[script]
     pub fn item_info(&self, item: ItemId) -> Option<ItemInfo> {
-        let out = item_data(&self.host, item)?;
+        let out = enshwick_content::__internal::item_data(&self.host, item)?;
         Some(ItemInfo {
             id: out.id,
             max_stack_size: out.max_stack,

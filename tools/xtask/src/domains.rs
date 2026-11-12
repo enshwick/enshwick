@@ -150,7 +150,7 @@ fn problems(root: &Path) -> Result<Vec<String>, String> {
     files.sort();
     let mut problems = namespace_lists(&map, &files);
     problems.extend(crate_problems(root, &map));
-    problems.extend(deps::problems(root, &map)?);
+    problems.extend(deps::problems(root, &map));
     let joined = |path: &str| map.joins.iter().any(|join| path.starts_with(join.as_str()));
     let modules: BTreeSet<String> = files
         .iter()
@@ -518,6 +518,7 @@ fn ungated_paths(file: &syn::File, module: &[String], externs: &[&str]) -> Named
     walk.visit_file(file);
     walk.named
 }
+
 /// The walk of [`paths`] over one file.
 struct Walk<'a> {
     /// The module the walk stands in, inline modules counted.
@@ -539,9 +540,10 @@ impl<'a> Walk<'a> {
         }
     }
 
-    /// Whether the walk leaves out what `attrs` put under a `cfg(feature)`.
-    fn gated_out(&self, attrs: &[Attribute]) -> bool {
-        self.ungated && feature_only(attrs)
+    /// Whether the walk leaves out what `attrs` put under `cfg(test)`, or,
+    /// when it reads only ungated code, under a `cfg(feature)`.
+    fn left_out(&self, attrs: &[Attribute]) -> bool {
+        test_attrs(attrs) || (self.ungated && feature_only(attrs))
     }
 
     /// Whether `segments` start at one of the external crates.
@@ -621,7 +623,7 @@ impl<'a> Walk<'a> {
 
 impl<'ast> Visit<'ast> for Walk<'_> {
     fn visit_item(&mut self, item: &'ast Item) {
-        if !test_only(item) && !self.gated_out(item_attrs(item)) {
+        if !self.left_out(item_attrs(item)) {
             visit::visit_item(self, item);
         }
     }
@@ -634,7 +636,7 @@ impl<'ast> Visit<'ast> for Walk<'_> {
             ImplItem::Macro(item) => &item.attrs,
             _ => &[],
         };
-        if !self.gated_out(attrs) {
+        if !self.left_out(attrs) {
             visit::visit_impl_item(self, item);
         }
     }
@@ -647,7 +649,7 @@ impl<'ast> Visit<'ast> for Walk<'_> {
             TraitItem::Macro(item) => &item.attrs,
             _ => &[],
         };
-        if !self.gated_out(attrs) {
+        if !self.left_out(attrs) {
             visit::visit_trait_item(self, item);
         }
     }
@@ -659,25 +661,25 @@ impl<'ast> Visit<'ast> for Walk<'_> {
             Stmt::Expr(expr, _) => expr_attrs(expr),
             Stmt::Item(_) => &[],
         };
-        if !self.gated_out(attrs) {
+        if !self.left_out(attrs) {
             visit::visit_stmt(self, stmt);
         }
     }
 
     fn visit_field(&mut self, field: &'ast Field) {
-        if !self.gated_out(&field.attrs) {
+        if !self.left_out(&field.attrs) {
             visit::visit_field(self, field);
         }
     }
 
     fn visit_variant(&mut self, variant: &'ast Variant) {
-        if !self.gated_out(&variant.attrs) {
+        if !self.left_out(&variant.attrs) {
             visit::visit_variant(self, variant);
         }
     }
 
     fn visit_arm(&mut self, arm: &'ast Arm) {
-        if !self.gated_out(&arm.attrs) {
+        if !self.left_out(&arm.attrs) {
             visit::visit_arm(self, arm);
         }
     }
@@ -707,14 +709,30 @@ impl<'ast> Visit<'ast> for Walk<'_> {
         self.tree(tree);
     }
 
+    /// Records the external paths in an attribute's arguments, such as a
+    /// derive's; its other words are not paths of the crate.
+    fn visit_meta_list(&mut self, list: &'ast syn::MetaList) {
+        let mut inner = Walk::new(&self.module, self.externs);
+        inner.tokens(list.tokens.clone());
+        self.named.external.extend(inner.named.external);
+        visit::visit_meta_list(self, list);
+    }
+
     fn visit_macro(&mut self, mac: &'ast syn::Macro) {
         self.tokens(mac.tokens.clone());
         visit::visit_macro(self, mac);
     }
 }
 
+/// Whether `item` exists only in tests, under a plain `#[cfg(test)]`.
 fn test_only(item: &Item) -> bool {
-    item_attrs(item).iter().any(|attr| {
+    test_attrs(item_attrs(item))
+}
+
+/// Whether `attrs` hold a plain `#[cfg(test)]`; a compound `cfg` with
+/// `test` in it counts as none.
+fn test_attrs(attrs: &[Attribute]) -> bool {
+    attrs.iter().any(|attr| {
         attr.path().is_ident("cfg") && attr.parse_args::<Ident>().is_ok_and(|arg| arg == "test")
     })
 }

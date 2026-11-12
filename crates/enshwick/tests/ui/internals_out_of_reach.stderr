@@ -1,3 +1,9 @@
+error[E0425]: cannot find function `item_data` in module `enshwick::inventory`
+  --> tests/ui/internals_out_of_reach.rs:26:34
+   |
+26 |     let _ = enshwick::inventory::item_data(&host, enshwick::ItemId::new(1));
+   |                                  ^^^^^^^^^ not found in `enshwick::inventory`
+
 error[E0425]: cannot find function `as_loader` in module `enshwick::__private`
    --> tests/ui/internals_out_of_reach.rs:103:26
     |
@@ -132,23 +138,6 @@ note: the trait `LoadHelpers` is defined here
    |
    | pub(crate) trait LoadHelpers {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-error[E0603]: function `item_data` is private
-  --> tests/ui/internals_out_of_reach.rs:26:34
-   |
-26 |     let _ = enshwick::inventory::item_data(&host, enshwick::ItemId::new(1));
-   |                                  ^^^^^^^^^ private function
-   |
-note: the function `item_data` is defined here
-  --> $WORKSPACE/crates/internal/inventory/src/inventory.rs
-   |
-   | pub use read::*;
-   |         ^^^^
-help: import `item_data` directly
-   |
-26 -     let _ = enshwick::inventory::item_data(&host, enshwick::ItemId::new(1));
-26 +     let _ = enshwick_content::__internal::item_data(&host, enshwick::ItemId::new(1));
-   |
 
 error[E0603]: function `replace_group` is private
   --> tests/ui/internals_out_of_reach.rs:27:29
