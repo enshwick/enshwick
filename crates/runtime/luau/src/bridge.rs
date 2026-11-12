@@ -1,5 +1,6 @@
 //! Values between Luau and the API, shaped by the script [`Ty`] of each.
 
+use std::cell::RefCell;
 use std::fmt::Display;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -140,11 +141,10 @@ pub(crate) fn from_lua(
         },
         Ty::Choice(choice) => choice_from_lua(lua, value, choice),
         Ty::String => match value {
-            LuaValue::String(s) => Ok(Value::String(
-                s.to_str()
-                    .map_err(|_| Error::new("expected text in UTF-8"))?
-                    .to_owned(),
-            )),
+            LuaValue::String(s) => Ok(Value::String(spare_text(
+                &s.to_str()
+                    .map_err(|_| Error::new("expected text in UTF-8"))?,
+            ))),
             other => Err(expected("a string", &other)),
         },
         Ty::Vector => match value {
@@ -628,8 +628,9 @@ pub(crate) fn call(
     run: impl FnOnce(&mut [Value]) -> Result<Value, Error>,
 ) -> mlua::Result<LuaValue> {
     let mut values = arguments(lua, scope, args, signature, what)?;
-    let answer = run(values.slots()).map_err(|e| failed(what, e))?;
-    to_lua(lua, scope, answer, signature.ret())
+    let answer = run(values.slots()).map_err(|e| failed(what, e));
+    values.give_back_text();
+    to_lua(lua, scope, answer?, signature.ret())
 }
 
 /// The Luau error of the API function or method `what` that failed with
@@ -702,6 +703,53 @@ impl Args {
         } else {
             &mut self.near[..self.len]
         }
+    }
+
+    /// Keeps the text the API lent from the slots, a `&str` parameter's,
+    /// for the next call's text.
+    fn give_back_text(&mut self) {
+        for slot in self.slots() {
+            if let Value::String(text) = core::mem::replace(slot, Value::Nil) {
+                keep_text(text);
+            }
+        }
+    }
+}
+
+/// The text buffers a thread keeps at most: a call that passes text copies
+/// it into a kept buffer instead of allocating one.
+const KEPT_TEXTS: usize = 8;
+
+/// The largest text buffer a thread keeps.
+const KEPT_TEXT_BYTES: usize = 4096;
+
+thread_local! {
+    /// The text buffers the API's `&str` parameters left, for the next call.
+    static KEPT_TEXT: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+}
+
+/// `text` in a buffer the thread kept, or a new one when it kept none.
+fn spare_text(text: &str) -> String {
+    let mut buffer = KEPT_TEXT
+        .try_with(|kept| kept.borrow_mut().pop())
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+    buffer.clear();
+    buffer.push_str(text);
+    buffer
+}
+
+/// Keeps `text`'s buffer for [`spare_text`], unless the thread keeps enough
+/// or it is large.
+fn keep_text(text: String) {
+    if text.capacity() <= KEPT_TEXT_BYTES {
+        let _ended = KEPT_TEXT.try_with(|kept| {
+            let mut kept = kept.borrow_mut();
+            if kept.len() < KEPT_TEXTS {
+                kept.push(text);
+            }
+        });
     }
 }
 

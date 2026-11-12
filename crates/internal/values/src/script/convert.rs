@@ -598,6 +598,40 @@ pub fn argument_or_default<T: FromScript + Default>(
     }
 }
 
+#[doc(hidden)]
+/// [`argument`] for a method's arguments, each taken out of its slot, for
+/// [`#[script]`](macro@crate::script).
+///
+/// # Errors
+///
+/// As [`argument`].
+pub fn taken<T: FromScript>(
+    args: &mut core::slice::IterMut<'_, Value>,
+    name: &str,
+) -> Result<T, Error> {
+    let value = args
+        .next()
+        .map_or(Value::Nil, |slot| core::mem::replace(slot, Value::Nil));
+    T::from_value(value).map_err(|e| e.within(name))
+}
+
+#[doc(hidden)]
+/// A method's `&str` argument, lent from its slot for the call, for
+/// [`#[script]`](macro@crate::script): the runtime keeps the text's buffer
+/// for its next call.
+///
+/// # Errors
+///
+/// As [`argument`] for a [`String`].
+pub fn text<'a>(args: &mut core::slice::IterMut<'a, Value>, name: &str) -> Result<&'a str, Error> {
+    match args.next() {
+        Some(Value::String(text)) => Ok(text),
+        Some(Value::Name(text)) => Ok(text),
+        Some(other) => Err(expected("a string", other).within(name)),
+        None => Err(expected("a string", &Value::Nil).within(name)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

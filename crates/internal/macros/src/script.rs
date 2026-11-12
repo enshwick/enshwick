@@ -482,10 +482,16 @@ fn parameter(
     if let Some((inputs, output)) = closure_bound(ty).or_else(|| generic_closure(ty, generics)) {
         return closure(&param, &local, &inputs, &output, krate);
     }
+    // Lent from its slot, so the runtime keeps the text's buffer.
+    if matches!(ty, Type::Reference(r) if matches!(&*r.elem, Type::Path(p) if p.path.is_ident("str")))
+    {
+        return Ok(Parameter {
+            describe: quote!(#script::Param::new(#param, <::std::string::String as #script::Typed>::TY)),
+            read: quote!(let #local: &str = #krate::__private::text(&mut args, #param)?;),
+            pass: quote!(#local),
+        });
+    }
     let (owned, pass): (Type, TokenStream) = match ty {
-        Type::Reference(r) if matches!(&*r.elem, Type::Path(p) if p.path.is_ident("str")) => {
-            (syn::parse_quote!(::std::string::String), quote!(&#local))
-        }
         Type::Reference(r) if matches!(&*r.elem, Type::Slice(_)) => {
             let Type::Slice(slice) = &*r.elem else {
                 unreachable!("matched as a slice")
@@ -498,7 +504,7 @@ fn parameter(
     };
     Ok(Parameter {
         describe: quote!(#script::Param::new(#param, <#owned as #script::Typed>::TY)),
-        read: quote!(let #local: #owned = #krate::__private::argument(&mut args, #param)?;),
+        read: quote!(let #local: #owned = #krate::__private::taken(&mut args, #param)?;),
         pass,
     })
 }
@@ -617,7 +623,7 @@ fn closure(
         },
         read: quote! {
             let #local = {
-                let callback: #script::Callback = #krate::__private::argument(&mut args, #param)?;
+                let callback: #script::Callback = #krate::__private::taken(&mut args, #param)?;
                 move |#(#names: #inputs),*| -> #output { #body }
             };
         },
@@ -734,7 +740,7 @@ fn function(
     let take = if parameters.is_empty() {
         quote!(let _no_arguments = args;)
     } else {
-        quote!(let mut args = args.iter_mut().map(|value| ::core::mem::replace(value, #script::Value::Nil));)
+        quote!(let mut args = args.iter_mut();)
     };
     let (kind, this) = if starting {
         (quote!(InitFunction), quote!(&mut #krate::Load<'_>))
