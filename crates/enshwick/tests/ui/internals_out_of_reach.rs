@@ -44,12 +44,14 @@ fn reach_inventory_scripts(load: &mut enshwick::Load<'_>) {
 fn reach_knowledge(load: &mut enshwick::Load<'_>, reward: enshwick::rewards::Reward) {
     use enshwick::Loading as _;
     use enshwick::knowledge::LoadMethods as _;
+    use enshwick::knowledge::script::LoadMethods as _;
     use enshwick::progress::LoadMethods as _;
     enshwick::rewards::replace(ModHandle(1), reward);
     let _: Option<enshwick::progress::script::ScriptLevels> = None;
     let base = load.base_mut();
     let _ = base.on_knowledge_input_script(|_| None);
     let _ = base.on_comfort_script(|_| None);
+    let _ = base.on_experience_script(|_, _| None);
 }
 
 fn reach(host: Host, scheduler: Scheduler, ty: ComponentType) {

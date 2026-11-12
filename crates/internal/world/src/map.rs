@@ -308,7 +308,7 @@ impl crate::script::Bound for Map {
 }
 
 impl crate::script::Bound for FogOfWar {
-    const NAME: &'static str = "map";
+    const NAME: &'static str = <Map as crate::script::Bound>::NAME;
     const DOC: &'static str = <Map as crate::script::Bound>::DOC;
     // One list with the object class the type has.
     const PARTS: &'static [&'static [crate::script::Function<Self>]] =

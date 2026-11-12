@@ -22,8 +22,8 @@ impl Load<'_> {
     ) -> Result<(), Off>;
 
     /// Runs `filter` on each tick's experience with the level table, as
-    /// `Load::on_experience` does: it returns the changed list, or nil to
-    /// keep it.
+    /// `Load::on_experience` does: it returns the rows it changes, each
+    /// written over the row of the same character, or nil to keep them all.
     ///
     /// # Errors
     ///

@@ -74,7 +74,7 @@ impl crate::script::Bound for Targets {
     const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_TARGET];
 
     fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
-        Targets::resolve(load)
+        Targets::open(load)
     }
 }
 
@@ -139,7 +139,7 @@ impl TargetsAt {
 #[cfg(feature = "unstable")]
 #[crate::script(target)]
 impl Targets {
-    pub(crate) fn resolve(load: &impl crate::Loading) -> Result<Self, Off> {
+    pub(crate) fn open(load: &impl crate::Loading) -> Result<Self, Off> {
         if let Some(at) = TARGETS.get() {
             return Ok(Self(at));
         }
@@ -197,7 +197,7 @@ impl Load<'_> {
     ///
     /// See [`Targets`].
     pub fn interaction_targets(&mut self) -> Result<Targets, Off> {
-        Targets::resolve(self)
+        Targets::open(self)
     }
 }
 

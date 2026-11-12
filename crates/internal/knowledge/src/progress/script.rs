@@ -47,7 +47,8 @@ impl ScriptLevels {
     }
 
     /// What `level` needs, 0 for level 0 or past the cap, as
-    /// [`Levels::need`] answers.
+    /// [`Levels::need`] answers; 0 too past level 1024, which the table is
+    /// not read beyond.
     #[script(name = "need")]
     pub(crate) fn need_script(&self, level: u32) -> u32 {
         level
@@ -96,19 +97,55 @@ impl LoadMethods for crate::BaseLoad {
         + 'static,
     ) -> Result<(), Off> {
         self.on_experience(move |all, levels| {
+            // An empty pass gives the script nothing to change: spare it the
+            // copies and the level table's reads.
+            if all.is_empty() {
+                return;
+            }
             if let Some(changed) = filter(all.to_vec(), ScriptLevels::read(levels)) {
-                for (slot, new) in all.iter_mut().zip(changed) {
-                    *slot = new;
-                }
+                write_back(all, changed);
             }
         })
     }
 }
 
+/// Writes each row a script returned over the pass's row of the same
+/// character, so a list it filtered or reordered changes only those
+/// characters; a row of a character not in the pass is dropped.
+fn write_back(all: &mut [Experience], changed: Vec<Experience>) {
+    for new in changed {
+        if let Some(slot) = all.iter_mut().find(|slot| slot.entity == new.entity) {
+            *slot = new;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::ScriptLevels;
-    use crate::progress::Levels;
+    use super::{ScriptLevels, write_back};
+    use crate::Entity;
+    use crate::progress::{Experience, Levels};
+
+    fn row(entity: u32, gained: u32) -> Experience {
+        Experience {
+            entity: Entity(entity),
+            level: 1,
+            progress: 0,
+            need: 100,
+            gained,
+        }
+    }
+
+    #[test]
+    fn a_script_s_rows_go_back_to_their_own_characters_whatever_their_order() {
+        let mut all = [row(1, 5), row(2, 6), row(3, 7)];
+        write_back(&mut all, vec![row(3, 70), row(9, 90), row(1, 50)]);
+        assert_eq!(
+            all.map(|r| (r.entity, r.gained)),
+            [(Entity(1), 50), (Entity(2), 6), (Entity(3), 70)],
+            "character 2 keeps its row and character 9, not in the pass, is dropped"
+        );
+    }
 
     unsafe extern "system" fn hundred_per_level(_token: *mut core::ffi::c_void, level: u32) -> u32 {
         level * 100

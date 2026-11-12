@@ -390,36 +390,57 @@ impl Pending {
 /// Each mod's rewards state by its handle: a mod DLL holds one, the
 /// loader's own copy of this crate one per data pack or script it runs.
 #[derive(Default)]
-struct ByMod(Vec<(ModHandle, &'static Shared)>);
+struct ByMod(Vec<(ModHandle, Result<&'static Shared, Off>)>);
 
 static SHARED: crate::fresh::Fresh<Mutex<ByMod>> = crate::fresh::Fresh::new();
 
-/// The rewards state of mod `me`, `None` before its first reward.
+/// The rewards state of mod `me`, `None` before its first reward or when
+/// making it failed.
 fn find(me: ModHandle) -> Option<&'static Shared> {
+    tried(me).and_then(Result::ok)
+}
+
+/// What the mod's first try to make its rewards state answered, `None`
+/// before it.
+fn tried(me: ModHandle) -> Option<Result<&'static Shared, Off>> {
     SHARED
         .get_or_init(Mutex::default)
         .relock()
         .0
         .iter()
         .find(|(handle, _)| *handle == me)
-        .map(|&(_, shared)| shared)
+        .map(|(_, shared)| shared.clone())
 }
 
-/// The mod's rewards state, made on the first call during init.
+/// The mod's rewards state, made on the first call during init. A first
+/// try that failed answers the same on every later call, since what it
+/// registered before failing cannot be taken back and must not be
+/// registered twice.
 fn shared(load: &mut crate::BaseLoad) -> Result<&'static Shared, Off> {
     let me = load.host().handle();
-    if let Some(shared) = find(me) {
-        return Ok(shared);
+    if let Some(tried) = tried(me) {
+        return tried;
     }
+    let made = make_shared(load);
+    SHARED
+        .get_or_init(Mutex::default)
+        .relock()
+        .0
+        .push((me, made.clone()));
+    made
+}
+
+/// Makes the mod's rewards state and registers what keeps it.
+fn make_shared(load: &mut crate::BaseLoad) -> Result<&'static Shared, Off> {
     let made = Shared {
         rewards: Mutex::new(Vec::new()),
         filters: Mutex::new(Vec::new()),
-        store: load.world_store("rewards")?,
         world: load.world()?,
+        scheduler: load.scheduler()?,
         inventories: load.inventories().ok(),
         buffs: load.buffs(),
         knowledge: load.knowledge(),
-        scheduler: load.scheduler()?,
+        store: load.world_store("rewards")?,
         experience: Pending::new(),
         step: AtomicU64::new(0),
         stepping: AtomicBool::new(false),
@@ -438,11 +459,6 @@ fn shared(load: &mut crate::BaseLoad) -> Result<&'static Shared, Off> {
     })?;
     load.on::<crate::events::PlayerLeft>(move |left| shared.experience.forget(left.entity))?;
     load.on::<crate::events::WorldLoaded>(move |()| shared.experience.clear())?;
-    SHARED
-        .get_or_init(Mutex::default)
-        .relock()
-        .0
-        .push((me, shared));
     Ok(shared)
 }
 
@@ -712,15 +728,18 @@ impl LoadMethods for crate::BaseLoad {
             return Err(Off::new(problem));
         }
         let shared = shared(self)?;
+        if shared
+            .rewards
+            .relock()
+            .iter()
+            .any(|r| r.name == reward.name)
         {
-            let mut rewards = shared.rewards.relock();
-            if rewards.iter().any(|r| r.name == reward.name) {
-                return Err(Off::new(format!("reward {}: declared twice", reward.name)));
-            }
-            rewards.push(reward.clone());
+            return Err(Off::new(format!("reward {}: declared twice", reward.name)));
         }
-        let name = reward.name;
-        match reward.on {
+        // Declared only once its action's hook holds, so a refused reward
+        // stays undeclared and a retry names the real reason.
+        let name = reward.name.clone();
+        let registered = match reward.on {
             Action::Craft(recipe) => {
                 if !shared.stepping.load(Ordering::Relaxed) {
                     self.on_every_step(move |tick| {
@@ -777,7 +796,10 @@ impl LoadMethods for crate::BaseLoad {
                 grant_later(shared, &name, picked.player);
                 true
             }),
-        }
+        };
+        registered?;
+        shared.rewards.relock().push(reward);
+        Ok(())
     }
 
     fn on_reward<F>(&mut self, filter: F) -> Result<(), Off>

@@ -66,7 +66,7 @@ impl crate::script::Bound for Input {
     const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_HELD];
 
     fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
-        Input::resolve(load)
+        Input::open(load)
     }
 }
 
@@ -123,7 +123,7 @@ impl Resolved {
 
 #[crate::script(held)]
 impl Input {
-    pub(crate) fn resolve(load: &impl crate::Loading) -> Result<Self, Off> {
+    pub(crate) fn open(load: &impl crate::Loading) -> Result<Self, Off> {
         if let Some(resolved) = RESOLVED.get() {
             return Ok(Self(resolved));
         }
@@ -289,7 +289,7 @@ impl Load<'_> {
     ///
     /// See [`Input`].
     pub fn input(&mut self) -> Result<Input, Off> {
-        Input::resolve(self)
+        Input::open(self)
     }
 }
 

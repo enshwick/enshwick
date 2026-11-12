@@ -398,9 +398,7 @@ impl Bound for Ui {
     ];
 
     fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
-        let host = load.base().host();
-        super::client_only(host, "the interface")?;
-        Ok(Ui { host })
+        Ui::open(load)
     }
 }
 
