@@ -1,0 +1,306 @@
+//! Answers console lines on the server's game thread.
+
+use std::sync::atomic::Ordering;
+
+use enshwick_core::Entity;
+use enshwick_core::abi::{Header, PlayerInfo, Status};
+
+use crate::engine::texts;
+use crate::host::Loader;
+use enshwick_base::Relock;
+
+use super::input::{self, End};
+use super::{Line, Tool, log_query, parse, submit, take};
+
+/// Starts reading the console input of a dedicated server.
+pub(crate) fn start() {
+    let started = std::thread::Builder::new()
+        .name("enshwick-console-input".into())
+        .spawn(|| match input::read(std::io::stdin().lock(), submit) {
+            End::Closed => crate::log!(DEBUG, "the console has no more input"),
+            End::Failed(why) => crate::log!(WARN, "the console input stopped: {why}"),
+        });
+    if let Err(e) = started {
+        crate::log!(WARN, "the console input is not read: {e}");
+    }
+}
+
+/// Runs the console lines queued since the last step, logs each answer and
+/// shows it in the console; on the game thread, after the step.
+pub(crate) fn after_step(loader: &Loader) {
+    for line in take() {
+        let answer = match run(loader, &line) {
+            Ok(answer) if answer.is_empty() => {
+                crate::log!(INFO, "console: {line}: no answer");
+                texts::fill("console.no-answer", &[])
+            }
+            Ok(answer) => {
+                crate::log!(INFO, "console: {line}:\n{answer}");
+                answer
+            }
+            Err(status) => {
+                let why = refusal(&line, status);
+                crate::log!(WARN, "console: {line}: {why}");
+                why
+            }
+        };
+        show(&answer);
+    }
+}
+
+/// Writes `answer` to the server's console window or terminal, where the
+/// line was typed; the server's own output shares it.
+fn show(answer: &str) {
+    use std::io::Write as _;
+    let mut out = std::io::stdout().lock();
+    let _shown = writeln!(out, "{answer}").and_then(|()| out.flush());
+}
+
+/// Why the console did not answer `line`.
+fn refusal(line: &str, status: Status) -> String {
+    let word = line.split_whitespace().next().unwrap_or_default();
+    if status == Status::MISSING {
+        texts::fill("enshwick.unknown", &[("id", word)])
+    } else {
+        texts::fill("console.not-run", &[("status", &format!("{status:?}"))])
+    }
+}
+
+/// The server's console as a player: every permission the game gives, and
+/// no character.
+pub(crate) fn the_console() -> PlayerInfo {
+    let mut name = [0u8; 64];
+    name[..7].copy_from_slice(b"console");
+    PlayerInfo {
+        header: Header::of::<PlayerInfo>(),
+        slot: u32::MAX,
+        entity: Entity(0),
+        key: enshwick_core::PlayerKey::new(0),
+        permissions: crate::actions::commands::ALL_PERMISSIONS,
+        name_len: 7,
+        name,
+    }
+}
+
+/// Runs `line` as the server's console, on the game thread; the answer.
+/// [`Status::MISSING`] when no running mod with actions has the line's
+/// first word as its id, command name or alias (a leading `/` allowed).
+pub(crate) fn run(loader: &Loader, line: &str) -> Result<String, Status> {
+    crate::engine::world::server().map_err(|_| Status::WRONG_THREAD)?;
+    match parse(line) {
+        Line::Empty => Err(Status::BAD_ARGS),
+        Line::Mod { id, rest } => {
+            let index = loader
+                .find_mod(&id.to_ascii_lowercase())
+                .map(|(index, _)| index)
+                .or_else(|| {
+                    crate::actions::commands::find(id).map(crate::engine::mod_index::ModIndex::get)
+                })
+                .ok_or(Status::MISSING)?;
+            crate::log!(DEBUG, "the console runs {id} {rest}");
+            crate::actions::player_actions::console(
+                loader,
+                index,
+                &crate::actions::commands::word(id),
+                rest,
+            )
+            .ok_or(Status::MISSING)
+        }
+        Line::Loader(tool) => {
+            crate::log!(DEBUG, "the console runs {line}");
+            Ok(answer(loader, tool))
+        }
+    }
+}
+
+/// What the loader's tool `tool` answers.
+fn answer(loader: &Loader, tool: Tool<'_>) -> String {
+    match tool {
+        Tool::Overview => mods(loader),
+        Tool::Help => help(loader),
+        Tool::Mods => super::tools::mods(loader),
+        Tool::World => super::tools::world(loader),
+        Tool::Entity(args) => super::tools::entity(loader, args),
+        Tool::Placed(args) => super::tools::placed(loader, args),
+        Tool::About(id) => loader
+            .mods
+            .iter()
+            .find(|m| m.id.eq_ignore_ascii_case(id))
+            .map_or_else(|| texts::fill("enshwick.unknown", &[("id", id)]), about),
+        Tool::Status => {
+            let summary = crate::base::status::summary(loader);
+            crate::log!(INFO, "status summary:\n{}", summary.render());
+            summary.short()
+        }
+        Tool::Profile { reset: true } => {
+            crate::base::status::reset_profile(loader);
+            texts::fill("enshwick.profile.reset", &[])
+        }
+        Tool::Profile { reset: false } => {
+            let mut lines = crate::base::status::cost_lines(loader, 5, 2);
+            lines.push(texts::fill("enshwick.profile.full", &[]));
+            lines.join("\n")
+        }
+        Tool::Conflicts => {
+            let lines = crate::base::status::conflicts(loader);
+            if lines.is_empty() {
+                texts::fill("enshwick.conflicts.none", &[])
+            } else {
+                lines.join("\n")
+            }
+        }
+        Tool::Log(args) => log_lines(loader, args),
+        Tool::Recipes(args) => crate::content::recipes::command(loader, args),
+        Tool::Config(args) => config(loader, args),
+        Tool::UiDemo(name) => ui_demo(loader, name),
+    }
+}
+
+/// `enshwick`: the loader's version and the mods running.
+fn mods(loader: &Loader) -> String {
+    let mods: Vec<String> = loader.mods.iter().map(name).collect();
+    let version = env!("CARGO_PKG_VERSION");
+    let mut sentences = vec![if mods.is_empty() {
+        texts::fill("enshwick.mods.none", &[("version", version)])
+    } else {
+        texts::fill(
+            "enshwick.mods",
+            &[("version", version), ("mods", &mods.join(", "))],
+        )
+    }];
+    sentences.push(texts::fill("enshwick.more", &[]));
+    sentences.join(" ")
+}
+
+/// A mod's name and version, marked when it is off.
+fn name(record: &crate::host::ModRecord) -> String {
+    let label = record.label();
+    if record.off.load(Ordering::Acquire) {
+        texts::fill(
+            "mods.off",
+            &[("name", &label), ("version", &record.version)],
+        )
+    } else {
+        format!("{label} {}", record.version)
+    }
+}
+
+/// What `record` is, for `enshwick <mod id>`.
+fn about(record: &crate::host::ModRecord) -> String {
+    let mut lines = vec![name(record)];
+    let description = record.description();
+    if !description.is_empty() {
+        lines.push(description);
+    }
+    let credits = record.meta.credits();
+    if !credits.is_empty() {
+        lines.push(credits);
+    }
+    lines.join("\n")
+}
+
+/// `enshwick help`: the loader's tools and the mods whose actions the
+/// console runs.
+fn help(loader: &Loader) -> String {
+    let mut lines = vec![texts::fill("enshwick.help", &[])];
+    let with: Vec<&str> = crate::actions::player_actions::declaring(loader)
+        .into_iter()
+        .filter_map(|index| loader.mods.get(index.get()).map(|m| m.id.as_str()))
+        .collect();
+    lines.push(if with.is_empty() {
+        texts::fill("enshwick.actions.none", &[])
+    } else {
+        texts::fill("enshwick.actions", &[("mods", &with.join(", "))])
+    });
+    lines.extend(
+        crate::actions::commands::running(loader)
+            .into_iter()
+            .map(|(n, id)| format!("{}: {id}", n.words())),
+    );
+    lines.join("\n")
+}
+
+/// `enshwick log [mod] [level] [n]`: the latest `n` lines the loader kept,
+/// from one mod or the loader or all, at `level` or more severe.
+fn log_lines(loader: &Loader, args: &str) -> String {
+    match log_query(args, |id| loader.mods.iter().any(|m| m.id == id)) {
+        Ok((source, level, count)) => {
+            let lines = crate::engine::log::recent(source.as_deref(), level, count);
+            if lines.is_empty() {
+                texts::fill("enshwick.log.none", &[])
+            } else {
+                lines.join("\n")
+            }
+        }
+        Err(why) => texts::fill("enshwick.log.usage", &[("word", &why.word)]),
+    }
+}
+
+/// `enshwick config`: read and change mods' settings.
+fn config(loader: &Loader, args: &str) -> String {
+    use crate::base::configure::{self, Request};
+
+    let request = configure::parse(args);
+    let id = match request {
+        Request::Mods => {
+            let with: Vec<&str> = loader
+                .mods
+                .iter()
+                .filter(|m| !m.settings_files.relock().is_empty())
+                .map(|m| m.id.as_str())
+                .collect();
+            return if with.is_empty() {
+                texts::fill("config.none", &[])
+            } else {
+                texts::fill("config.mods", &[("mods", &with.join(", "))])
+            };
+        }
+        Request::List(id) | Request::Get(id, _) | Request::Set(id, _, _) => id,
+    };
+    let Some((index, record)) = loader.find_mod(id) else {
+        return texts::fill("config.unknown", &[("id", id)]);
+    };
+    let id = record.id.as_str();
+    let Some(schema) = record.settings_schema() else {
+        return texts::fill("remote.no-schema", &[("id", id)]);
+    };
+    let text = crate::base::worlds::show_text(record);
+    match request {
+        Request::Set(_, key, value) => match configure::apply(loader, index, key, value, "console")
+        {
+            Ok(change) => configure::changed(id, key, &change),
+            Err(why) => why.reply(),
+        },
+        Request::Get(_, key) => {
+            configure::get(id, &schema, &text, key).unwrap_or_else(|why| why.reply())
+        }
+        _ => configure::list(id, &schema, &text),
+    }
+}
+
+/// `enshwick ui-demo <player>`: opens the interface demo on the client of
+/// the player online with that name, while developer tools are on.
+fn ui_demo(loader: &Loader, name: &str) -> String {
+    if !loader.developer_tools {
+        return texts::text("ui-demo.off").to_owned();
+    }
+    let wanted = name.to_lowercase();
+    let player = crate::engine::world::players(loader)
+        .ok()
+        .and_then(|players| {
+            players.into_iter().find(|p| {
+                let named = &p.name[..usize::from(p.name_len).min(p.name.len())];
+                String::from_utf8_lossy(named).to_lowercase() == wanted
+            })
+        });
+    let Some(player) = player.filter(|_| !wanted.is_empty()) else {
+        return texts::fill("ui-demo.player", &[("name", name)]);
+    };
+    match crate::base::net::ui_demo(
+        player.key.get(),
+        crate::engine::world::fixed_position(loader, player.entity),
+    ) {
+        Ok(()) => texts::fill("ui-demo.opening", &[("name", name)]),
+        Err(_) => texts::fill("ui-demo.no-client", &[("name", name)]),
+    }
+}

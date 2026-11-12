@@ -5,52 +5,52 @@
 
 /// Each part of the loader with the build table ids it names.
 pub static TABLE_IDS: &[(&str, &[&str])] = &[
-    ("admission", crate::admission::TABLE_IDS),
-    ("altars", crate::altars::TABLE_IDS),
-    ("bases", crate::bases::TABLE_IDS),
-    ("buffs", crate::buffs::TABLE_IDS),
-    ("carrier", crate::carrier::TABLE_IDS),
-    ("chat", crate::chat::TABLE_IDS),
-    ("code", crate::code::TABLE_IDS),
-    ("console", crate::console::TABLE_IDS),
-    ("content", crate::content::TABLE_IDS),
-    ("damage", crate::damage::TABLE_IDS),
-    ("daytime", crate::daytime::TABLE_IDS),
-    ("deaths", crate::deaths::TABLE_IDS),
-    ("ecs", crate::ecs::TABLE_IDS),
-    ("emits", crate::emits::TABLE_IDS),
-    ("entities", crate::entities::TABLE_IDS),
-    ("events", crate::events::TABLE_IDS),
-    ("fog", crate::fog::TABLE_IDS),
-    ("game_events", crate::game_events::TABLE_IDS),
-    ("game_settings", crate::game_settings::TABLE_IDS),
-    ("interactions", crate::interactions::TABLE_IDS),
-    ("item_data", crate::item_data::TABLE_IDS),
-    ("inventory", crate::inventory::TABLE_IDS),
-    ("knowledge", crate::knowledge::TABLE_IDS),
-    ("label", crate::label::TABLE_IDS),
-    ("local_held", crate::local_held::TABLE_IDS),
-    ("notices", crate::notices::TABLE_IDS),
-    ("pacing", crate::pacing::TABLE_IDS),
-    ("progress", crate::progress::TABLE_IDS),
-    ("rate_links", crate::rate_links::TABLE_IDS),
-    ("rights", crate::rights::TABLE_IDS),
-    ("saves", crate::saves::TABLE_IDS),
-    ("scene", crate::scene::TABLE_IDS),
-    ("spawns", crate::spawns::TABLE_IDS),
+    ("admission", crate::base::admission::TABLE_IDS),
+    ("altars", crate::world::altars::TABLE_IDS),
+    ("bases", crate::world::bases::TABLE_IDS),
+    ("buffs", crate::world::buffs::TABLE_IDS),
+    ("carrier", crate::base::carrier::TABLE_IDS),
+    ("chat", crate::actions::chat::TABLE_IDS),
+    ("code", crate::engine::code::TABLE_IDS),
+    ("console", crate::actions::console::TABLE_IDS),
+    ("content", crate::content::served::TABLE_IDS),
+    ("damage", crate::inventory::damage::TABLE_IDS),
+    ("daytime", crate::world::daytime::TABLE_IDS),
+    ("deaths", crate::inventory::deaths::TABLE_IDS),
+    ("ecs", crate::engine::ecs::TABLE_IDS),
+    ("emits", crate::base::emits::TABLE_IDS),
+    ("entities", crate::world::entities::TABLE_IDS),
+    ("events", crate::base::events::TABLE_IDS),
+    ("fog", crate::world::fog::TABLE_IDS),
+    ("game_events", crate::base::game_events::TABLE_IDS),
+    ("game_settings", crate::world::game_settings::TABLE_IDS),
+    ("interactions", crate::actions::interactions::TABLE_IDS),
+    ("item_data", crate::inventory::item_data::TABLE_IDS),
+    ("inventory", crate::inventory::transactions::TABLE_IDS),
+    ("knowledge", crate::knowledge::store::TABLE_IDS),
+    ("label", crate::world::label::TABLE_IDS),
+    ("local_held", crate::actions::local_held::TABLE_IDS),
+    ("notices", crate::ui::notices::TABLE_IDS),
+    ("pacing", crate::engine::pacing::TABLE_IDS),
+    ("progress", crate::knowledge::progress::TABLE_IDS),
+    ("rate_links", crate::content::rate_links::TABLE_IDS),
+    ("rights", crate::world::rights::TABLE_IDS),
+    ("saves", crate::base::saves::TABLE_IDS),
+    ("scene", crate::world::scene::TABLE_IDS),
+    ("spawns", crate::inventory::spawns::TABLE_IDS),
     ("start", crate::start::TABLE_IDS),
-    ("static_halves", crate::static_halves::TABLE_IDS),
-    ("stats", crate::stats::TABLE_IDS),
-    ("survivors", crate::survivors::TABLE_IDS),
-    ("terrain", crate::terrain::TABLE_IDS),
-    ("textures", crate::textures::TABLE_IDS),
-    ("transactions", crate::transactions::TABLE_IDS),
-    ("ui", crate::ui::TABLE_IDS),
-    ("vetoes", crate::vetoes::TABLE_IDS),
-    ("voxels", crate::voxels::TABLE_IDS),
-    ("weather", crate::weather::TABLE_IDS),
-    ("world", crate::world::TABLE_IDS),
-    ("writes", crate::writes::TABLE_IDS),
+    ("static_halves", crate::engine::static_halves::TABLE_IDS),
+    ("stats", crate::inventory::stats::TABLE_IDS),
+    ("survivors", crate::inventory::survivors::TABLE_IDS),
+    ("terrain", crate::world::terrain::TABLE_IDS),
+    ("textures", crate::content::textures::TABLE_IDS),
+    ("transactions", crate::world::transactions::TABLE_IDS),
+    ("ui", crate::ui::interface::TABLE_IDS),
+    ("vetoes", crate::actions::vetoes::TABLE_IDS),
+    ("voxels", crate::world::voxels::TABLE_IDS),
+    ("weather", crate::world::weather::TABLE_IDS),
+    ("world", crate::engine::world::TABLE_IDS),
+    ("writes", crate::world::writes::TABLE_IDS),
 ];
 
 #[cfg(test)]
@@ -132,11 +132,23 @@ mod tests {
             .collect()
     }
 
-    /// The code of module `name` and its submodules, without test modules.
+    /// The module the row `name` of [`TABLE_IDS`] lists, as its path under
+    /// `src`, read from the row: the name is the feature compat reports, not
+    /// always its module's.
+    fn module_of(name: &str) -> String {
+        let row = format!("(\"{name}\", crate::");
+        let this = include_str!("table_ids.rs");
+        let rest = &this[this.find(&row).unwrap() + row.len()..];
+        rest[..rest.find("::TABLE_IDS").unwrap()].replace("::", "/")
+    }
+
+    /// The code of the module of row `name` and its submodules, without test
+    /// modules.
     fn sources(name: &str) -> String {
         let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-        let mut files = vec![src.join(format!("{name}.rs"))];
-        let mut dirs = vec![src.join(name)];
+        let module = module_of(name);
+        let mut files = vec![src.join(format!("{module}.rs"))];
+        let mut dirs = vec![src.join(module)];
         while let Some(dir) = dirs.pop() {
             let Ok(entries) = std::fs::read_dir(&dir) else {
                 continue;
@@ -196,10 +208,10 @@ mod tests {
         assert!(named.is_empty(), "listed, so no longer unnamed: {named:?}");
     }
 
-    /// Every typed id of `crate::pinned`, by its path below it, such as
+    /// Every typed id of `crate::engine::pinned`, by its path below it, such as
     /// `world::TIME`, read from the catalogue's sources.
     fn catalogue() -> BTreeMap<String, String> {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/pinned");
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/engine/pinned");
         let mut ids = BTreeMap::new();
         for entry in std::fs::read_dir(dir).unwrap() {
             let path = entry.unwrap().path();

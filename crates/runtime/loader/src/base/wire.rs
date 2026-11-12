@@ -1,0 +1,520 @@
+//! The wire format of the own channel between server and clients.
+//!
+//! The envelope of each message, the reliable link that carries it, and the
+//! protocol's own control messages.
+//!
+//! Everything here reads what another player's game sent, so it never
+//! trusts a size or a count.
+
+mod delivery;
+mod envelope;
+mod link;
+mod peer;
+
+pub use delivery::{Drops, Outbox, strays};
+pub use envelope::{
+    ENVELOPE, MAX_HEADER, MAX_PAYLOAD, MAX_SEALED, ReadMessageError, is_executable, open, seal,
+    sealable, sealed_size,
+};
+pub use link::{
+    BACKLOG, FIRST_TIMEOUT, LAST_TIMEOUT, LINK, Link, MAX_LINK_HEADER, QueueMessageError,
+    ReadPacketError, SILENCE, WINDOW,
+};
+pub use peer::{DATA_AGAIN, Peer};
+
+use enshwick_core::i18n::Language;
+
+use crate::base::admission::Hello;
+use crate::base::remote::Message;
+
+/// The version of the control messages, their second byte.
+pub const PROTOCOL: u8 = 3;
+pub use enshwick_core::net::MAX_MESSAGE;
+/// The longest control message, in bytes, with its kind and version.
+pub const MAX_CONTROL: usize = MAX_PAYLOAD;
+/// The channel of the protocol's own messages.
+pub const CONTROL: u32 = 0;
+/// A control message from a client: its hello.
+pub const HELLO: u8 = 1;
+/// A control message from the server: the answer to a hello.
+pub const WELCOME: u8 = 2;
+/// A control message from the server: a notice for the client to show.
+pub const NOTICE: u8 = 3;
+/// A control message from the server: item data records.
+pub const ITEM_DATA: u8 = 4;
+/// A control message from the server: open the interface demo.
+pub const UI_DEMO: u8 = 5;
+/// A control message of the developer tools' channel check: a numbered
+/// payload with its hash, sent [`PROBES`] times each way.
+pub const PROBE: u8 = 6;
+/// Probes each side sends.
+pub const PROBES: u8 = 100;
+/// The bytes of one probe message, more than one chat line ever held.
+pub const PROBE_SIZE: usize = 6000;
+/// A probe's kind, version, number and hash, before its filler.
+const PROBE_HEAD: usize = 2 + 1 + 8;
+/// A control message from the server: the mods of side both its world
+/// runs, to a client whose hello named others, before the kick.
+pub const MODS: u8 = 7;
+/// Messages each peer may send per second.
+pub const RATE: f64 = 20.0;
+/// Messages each peer may send in one burst.
+pub const BURST: f64 = 40.0;
+
+/// Bit of a hello's flags: the mod list is whole.
+const HELLO_COMPLETE: u8 = 1;
+/// A hello's flags, host number and language, after its kind and version.
+const HELLO_HEAD: usize = 1 + 8 + 4;
+
+/// A control message's start: its kind and the protocol version.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::wire::{PROTOCOL, WELCOME, control};
+///
+/// assert_eq!(control(WELCOME), [WELCOME, PROTOCOL]);
+/// ```
+#[must_use]
+pub fn control(kind: u8) -> Vec<u8> {
+    vec![kind, PROTOCOL]
+}
+
+/// A client's hello, which names the join mods it runs and the language its
+/// player reads the game in.
+///
+/// The control kind and version, flags, the host number `nonce` (0 unless
+/// the client hosts the game), the language, then the mods,
+/// `id@version,...`, cut after the last whole entry that fits.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_core::i18n::Language;
+/// use enshwick_loader::wire::{hello, read_hello};
+///
+/// let said = read_hello(&hello("you.zones@1.0.0", 9, Language::DE_DE)).ok_or("no hello")?;
+/// assert_eq!((said.mods.as_str(), said.complete, said.nonce), ("you.zones@1.0.0", true, 9));
+/// assert_eq!(said.language, Some(Language::DE_DE));
+/// # Ok::<(), &str>(())
+/// ```
+#[must_use]
+pub fn hello(mods: &str, nonce: u64, language: Language) -> Vec<u8> {
+    let mut data = control(HELLO);
+    let kept = whole_entries(mods, MAX_CONTROL - data.len() - HELLO_HEAD);
+    data.push(if kept.len() == mods.len() {
+        HELLO_COMPLETE
+    } else {
+        0
+    });
+    data.extend_from_slice(&nonce.to_le_bytes());
+    data.extend_from_slice(&language.0.to_le_bytes());
+    data.extend_from_slice(kept.as_bytes());
+    data
+}
+
+/// `mods`, an `id@version,...` list, cut after the last whole entry within
+/// `room` bytes.
+fn whole_entries(mods: &str, room: usize) -> &str {
+    if mods.len() <= room {
+        return mods;
+    }
+    let cut = mods.as_bytes()[..=room]
+        .iter()
+        .rposition(|&b| b == b',')
+        .unwrap_or(0);
+    &mods[..cut]
+}
+
+/// The server's list of the mods of side both its world runs, for a client
+/// it refuses: the control kind and version, flags, then the mods,
+/// `id@version,...`, cut after the last whole entry that fits.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::wire::{mods, read_mods};
+///
+/// let read = read_mods(&mods("you.zones@1.0.0")).ok_or("no list")?;
+/// assert_eq!(read, ("you.zones@1.0.0".to_owned(), true));
+/// # Ok::<(), &str>(())
+/// ```
+#[must_use]
+pub fn mods(list: &str) -> Vec<u8> {
+    let mut data = control(MODS);
+    let kept = whole_entries(list, MAX_CONTROL - data.len() - 1);
+    data.push(if kept.len() == list.len() {
+        HELLO_COMPLETE
+    } else {
+        0
+    });
+    data.extend_from_slice(kept.as_bytes());
+    data
+}
+
+/// The list and whether it is whole, from the server's [`mods`] message;
+/// `None` for another message. An unreadable list reads as empty and not
+/// whole, so it turns nothing off.
+#[must_use]
+pub fn read_mods(data: &[u8]) -> Option<(String, bool)> {
+    let rest = data.strip_prefix(control(MODS).as_slice())?;
+    let (&flags, list) = rest.split_first()?;
+    Some(match core::str::from_utf8(list) {
+        Ok(list) => (list.to_owned(), flags & HELLO_COMPLETE != 0),
+        Err(_) => (String::new(), false),
+    })
+}
+
+/// What a hello says; `None` when `data` is no hello. A hello without its
+/// head reads as a whole empty list, an unreadable list as empty.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::wire::{HELLO, WELCOME, control, read_hello};
+///
+/// let bare = read_hello(&control(HELLO)).ok_or("no hello")?;
+/// assert_eq!((bare.mods.as_str(), bare.complete), ("", true));
+/// assert_eq!(read_hello(&control(WELCOME)), None);
+/// # Ok::<(), &str>(())
+/// ```
+#[must_use]
+pub fn read_hello(data: &[u8]) -> Option<Hello> {
+    let rest = data.strip_prefix(control(HELLO).as_slice())?;
+    let Some((&flags, rest)) = rest.split_first() else {
+        return Some(Hello {
+            complete: true,
+            ..Hello::default()
+        });
+    };
+    let (nonce, rest) = rest.split_first_chunk::<8>().unwrap_or((&[0; 8], &[]));
+    let (language, mods) = match rest.split_first_chunk::<4>() {
+        Some((language, mods)) => {
+            let language = Language(u32::from_le_bytes(*language));
+            (Language::ALL.contains(&language).then_some(language), mods)
+        }
+        None => (None, rest),
+    };
+    Some(Hello {
+        mods: core::str::from_utf8(mods).unwrap_or_default().to_owned(),
+        complete: flags & HELLO_COMPLETE != 0,
+        nonce: u64::from_le_bytes(*nonce),
+        language,
+    })
+}
+
+/// A control message's settings or actions message; `None` for any other
+/// control message or another protocol version.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::remote::Message;
+/// use enshwick_loader::wire::{PROTOCOL, remote_message};
+///
+/// let query = Message::Query { id: "you.zones".into() };
+/// let mut data = vec![query.kind(), PROTOCOL];
+/// data.extend(query.body());
+/// assert_eq!(remote_message(&data), Some(query));
+/// ```
+#[must_use]
+pub fn remote_message(data: &[u8]) -> Option<Message> {
+    let (&kind, rest) = data.split_first()?;
+    let (&version, body) = rest.split_first()?;
+    if version != PROTOCOL {
+        return None;
+    }
+    Message::read(kind, body)
+}
+
+/// A notice message for the player of entity `entity`: the control kind,
+/// the entity's id and the text.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::wire::{NOTICE, control, notice, read_notice};
+///
+/// let data = notice(42, "Low fuel");
+/// let rest = data.strip_prefix(control(NOTICE).as_slice()).unwrap();
+/// assert_eq!(read_notice(rest), Some((42, "Low fuel")));
+/// ```
+#[must_use]
+pub fn notice(entity: u32, text: &str) -> Vec<u8> {
+    let mut data = control(NOTICE);
+    data.extend_from_slice(&entity.to_le_bytes());
+    data.extend_from_slice(text.as_bytes());
+    data
+}
+
+/// The entity and text of a notice message, after its control kind; `None`
+/// when the text is not UTF-8 or the entity is cut short.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::wire::read_notice;
+///
+/// assert_eq!(read_notice(b"\x07\0\0\0hi"), Some((7, "hi")));
+/// assert_eq!(read_notice(b"\x07\0\0"), None);
+/// assert_eq!(read_notice(b"\x07\0\0\0\xff"), None);
+/// ```
+#[must_use]
+pub fn read_notice(bytes: &[u8]) -> Option<(u32, &str)> {
+    let (entity, text) = bytes.split_first_chunk::<4>()?;
+    Some((
+        u32::from_le_bytes(*entity),
+        core::str::from_utf8(text).ok()?,
+    ))
+}
+
+/// The position a demo message carries: three little-endian `i64`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::wire::demo_position;
+///
+/// let bytes: Vec<u8> = [1i64, -5, 7].iter().flat_map(|a| a.to_le_bytes()).collect();
+/// assert_eq!(demo_position(&bytes), Some([1, -5, 7]));
+/// assert_eq!(demo_position(&bytes[..16]), None);
+/// ```
+#[must_use]
+pub fn demo_position(bytes: &[u8]) -> Option<[i64; 3]> {
+    let (axes, _) = bytes.as_chunks::<8>();
+    match axes {
+        [x, y, z, ..] => Some([x, y, z].map(|a| i64::from_le_bytes(*a))),
+        _ => None,
+    }
+}
+
+/// A list the server sends a client in parts, gathered up to `CAP` items.
+///
+/// A list that goes past the bound is dropped, and parts are ignored until
+/// the next first part, so a server cannot grow a client's memory without
+/// end.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::wire::Gathered;
+///
+/// let mut ids = Gathered::<u32, 3>::default();
+/// assert_eq!(ids.add(true, false, [1, 2]), None);
+/// assert_eq!(ids.add(false, true, [3]), Some(vec![1, 2, 3]));
+/// assert_eq!(ids.add(true, true, [1, 2, 3, 4]), None, "over the bound");
+/// ```
+#[derive(Debug)]
+pub struct Gathered<T, const CAP: usize> {
+    items: Vec<T>,
+    spoiled: bool,
+}
+
+impl<T, const CAP: usize> Default for Gathered<T, CAP> {
+    fn default() -> Self {
+        Self {
+            items: Vec::new(),
+            spoiled: false,
+        }
+    }
+}
+
+impl<T, const CAP: usize> Gathered<T, CAP> {
+    /// Adds a part; the whole list once its last part came within the
+    /// bound, `None` before or for a list past it.
+    ///
+    /// # Examples
+    ///
+    /// See [`Gathered`].
+    pub fn add(
+        &mut self,
+        first: bool,
+        last: bool,
+        part: impl IntoIterator<Item = T>,
+    ) -> Option<Vec<T>> {
+        if first {
+            self.clear();
+        }
+        if !self.spoiled {
+            for item in part {
+                if self.items.len() == CAP {
+                    self.items = Vec::new();
+                    self.spoiled = true;
+                    break;
+                }
+                self.items.push(item);
+            }
+        }
+        if !last {
+            return None;
+        }
+        let spoiled = core::mem::take(&mut self.spoiled);
+        let items = core::mem::take(&mut self.items);
+        (!spoiled).then_some(items)
+    }
+
+    /// Drops what came so far.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader::wire::Gathered;
+    ///
+    /// let mut ids = Gathered::<u32, 3>::default();
+    /// ids.add(true, false, [1]);
+    /// ids.clear();
+    /// assert_eq!(ids.add(false, true, [2]), Some(vec![2]));
+    /// ```
+    pub fn clear(&mut self) {
+        self.items.clear();
+        self.spoiled = false;
+    }
+}
+
+/// Probe number `id`: [`PROBE_SIZE`] bytes of filler that depends on the
+/// number, after the hash of that filler.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::wire::{PROBE_SIZE, probe, read_probe};
+///
+/// let message = probe(7);
+/// assert_eq!(message.len(), PROBE_SIZE);
+/// assert_eq!(read_probe(&message), Some((7, true)));
+/// ```
+#[must_use]
+pub fn probe(id: u8) -> Vec<u8> {
+    let filler: Vec<u8> = (0..PROBE_SIZE - PROBE_HEAD)
+        .map(|i| u8::try_from((i * 31 + usize::from(id)) % 251).unwrap_or(0))
+        .collect();
+    let mut data = control(PROBE);
+    data.push(id);
+    data.extend_from_slice(&probe_hash(&filler).to_le_bytes());
+    data.extend_from_slice(&filler);
+    data
+}
+
+/// The number of a probe message and whether its filler matches its hash;
+/// `None` for any other message.
+///
+/// # Examples
+///
+/// See [`probe`].
+#[must_use]
+pub fn read_probe(data: &[u8]) -> Option<(u8, bool)> {
+    let rest = data.strip_prefix(&[PROBE, PROTOCOL])?;
+    let (&id, rest) = rest.split_first()?;
+    let (hash, filler) = rest.split_first_chunk::<8>()?;
+    Some((id, u64::from_le_bytes(*hash) == probe_hash(filler)))
+}
+
+/// FNV-1a over `bytes`: enough to tell a damaged probe.
+fn probe_hash(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &b| {
+        (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
+    })
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_hello_names_the_join_mods_within_a_control_message() {
+        let said = read_hello(&hello(
+            "you.trading-post@0.3.0,zones@0.1.0",
+            9,
+            Language::UK_UA,
+        ))
+        .unwrap();
+        assert_eq!(said.mods, "you.trading-post@0.3.0,zones@0.1.0");
+        assert!(said.complete);
+        assert_eq!(said.nonce, 9);
+        assert_eq!(said.language, Some(Language::UK_UA));
+        let unknown = read_hello(&hello("", 0, Language(99))).unwrap();
+        assert_eq!((unknown.language, unknown.mods.as_str()), (None, ""));
+        let bare = read_hello(&control(HELLO)).unwrap();
+        assert_eq!((bare.mods.as_str(), bare.complete), ("", true));
+        assert_eq!(bare.language, None);
+        assert_eq!(read_hello(&control(WELCOME)), None);
+        let many: Vec<String> = (0..1000).map(|i| format!("mod-{i:04}@1.0.0")).collect();
+        let long = hello(&many.join(","), 0, Language::DE_DE);
+        assert_eq!(read_hello(&long).unwrap().language, Some(Language::DE_DE));
+        assert!(long.len() <= MAX_CONTROL);
+        let cut = read_hello(&long).unwrap();
+        assert!(!cut.complete, "a cut list says so");
+        assert!(
+            cut.mods.split(',').all(|entry| entry.ends_with("@1.0.0")),
+            "cut at an entry"
+        );
+    }
+
+    #[test]
+    fn the_server_s_mod_list_fits_a_control_message_and_says_when_it_is_cut() {
+        assert_eq!(
+            read_mods(&mods("a.b@1.0.0,c.d@2.0.0")),
+            Some(("a.b@1.0.0,c.d@2.0.0".to_owned(), true))
+        );
+        assert_eq!(read_mods(&mods("")), Some((String::new(), true)));
+        let many: Vec<String> = (0..1000).map(|i| format!("you.mod-{i:04}@1.0.0")).collect();
+        let long = mods(&many.join(","));
+        assert!(long.len() <= MAX_CONTROL);
+        let (list, complete) = read_mods(&long).unwrap();
+        assert!(!complete);
+        assert!(list.split(',').all(|entry| entry.ends_with("@1.0.0")));
+        assert_eq!(read_mods(&control(MODS)), None, "no flags byte");
+        let mut broken = control(MODS);
+        broken.extend([1, 0xff, 0xfe]);
+        assert_eq!(read_mods(&broken), Some((String::new(), false)));
+        assert_eq!(read_mods(&control(WELCOME)), None);
+    }
+
+    #[test]
+    fn a_list_past_its_bound_is_dropped_until_the_next_first_part() {
+        let mut ids = Gathered::<u32, 4>::default();
+        assert_eq!(ids.add(true, false, [1, 2, 3]), None);
+        assert_eq!(ids.add(false, false, [4, 5]), None);
+        assert_eq!(ids.add(false, false, [6; 1000]), None);
+        assert!(ids.items.capacity() <= 4, "nothing kept past the bound");
+        assert_eq!(
+            ids.add(false, true, [7]),
+            None,
+            "a spoiled list never lands"
+        );
+        assert_eq!(ids.add(true, true, [1, 2, 3, 4]), Some(vec![1, 2, 3, 4]));
+    }
+
+    #[test]
+    fn a_damaged_probe_reads_as_a_mismatch_and_another_message_as_none() {
+        let mut message = probe(3);
+        assert_eq!(read_probe(&message), Some((3, true)));
+        message[PROBE_SIZE - 1] ^= 1;
+        assert_eq!(read_probe(&message), Some((3, false)));
+        assert_eq!(read_probe(&control(WELCOME)), None);
+        assert_eq!(read_probe(&message[..PROBE_HEAD - 1]), None);
+        let sealed = sealed_size(CONTROL, PROBE_SIZE);
+        assert!(sealed <= MAX_SEALED && !is_executable(&probe(0)));
+    }
+
+    #[test]
+    fn a_demo_frame_carries_a_position_or_none() {
+        let mut data = Vec::new();
+        for axis in [1i64 << 32, -5, 7] {
+            data.extend_from_slice(&axis.to_le_bytes());
+        }
+        assert_eq!(demo_position(&data), Some([1 << 32, -5, 7]));
+        assert_eq!(demo_position(&data[..16]), None);
+        assert_eq!(demo_position(&[]), None);
+    }
+
+    #[test]
+    fn a_settings_message_needs_this_protocol_version() {
+        let query = Message::Query {
+            id: "you.zones".into(),
+        };
+        let mut data = vec![query.kind(), PROTOCOL + 1];
+        data.extend(query.body());
+        assert_eq!(remote_message(&data), None);
+        assert_eq!(remote_message(&[query.kind()]), None);
+    }
+}

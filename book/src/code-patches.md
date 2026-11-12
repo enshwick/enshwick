@@ -79,7 +79,7 @@ patches is written, since a change made of several patches may be unsafe in
 part. A mod that returns `Off` from `init` after asking for patches gets none
 of them.
 
-[The loader's base limit](https://github.com/enshwick/enshwick/blob/main/crates/runtime/loader/src/bases.rs)
+[The loader's base limit](https://github.com/enshwick/enshwick/blob/main/crates/runtime/loader/src/world/bases.rs)
 widens the game's base grouping from 16 to 32 zones with six patches
 and three hooks. All of them are found by patterns before any is registered. A
 miss there logs a warning and leaves the game at 16 altar zones.

@@ -6,7 +6,7 @@
 
 #![no_main]
 
-use enshwick_loader::wire::{
+use enshwick_loader::base::wire::{
     MAX_PAYLOAD, MAX_SEALED, is_executable, open, read_hello, remote_message, seal, sealed_size,
 };
 use libfuzzer_sys::fuzz_target;

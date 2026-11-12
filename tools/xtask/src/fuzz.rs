@@ -32,33 +32,39 @@ pub(crate) const TARGETS: &[(&str, &[&str])] = &[
     (
         "channel_messages",
         &[
-            "crates/runtime/loader/src/remote",
-            "crates/runtime/loader/src/wire",
+            "crates/runtime/loader/src/base/remote",
+            "crates/runtime/loader/src/base/wire",
         ],
     ),
-    ("item_records", &["crates/runtime/loader/src/item_records"]),
-    ("item_save", &["crates/runtime/loader/src/item_records"]),
+    (
+        "item_records",
+        &["crates/runtime/loader/src/inventory/item_records"],
+    ),
+    (
+        "item_save",
+        &["crates/runtime/loader/src/inventory/item_records"],
+    ),
     (
         "join_lists",
         &[
-            "crates/runtime/loader/src/admission",
-            "crates/runtime/loader/src/join",
+            "crates/runtime/loader/src/base/admission",
+            "crates/runtime/loader/src/base/join",
         ],
     ),
-    ("link_packets", &["crates/runtime/loader/src/wire"]),
+    ("link_packets", &["crates/runtime/loader/src/base/wire"]),
     (
         "mod_manifests",
         &[
             "crates/internal/abi/src/abi",
-            "crates/runtime/loader/src/manifest",
-            "crates/runtime/loader/src/resolve",
+            "crates/runtime/loader/src/base/manifest",
+            "crates/runtime/loader/src/base/resolve",
         ],
     ),
     (
         "notices",
         &[
-            "crates/runtime/loader/src/notice_queue",
-            "crates/runtime/loader/src/wire",
+            "crates/runtime/loader/src/ui/notice_queue",
+            "crates/runtime/loader/src/base/wire",
         ],
     ),
     ("pattern", &["crates/internal/base/src/code"]),
@@ -71,15 +77,15 @@ pub(crate) const TARGETS: &[(&str, &[&str])] = &[
     ),
     ("reflection", &["crates/enshwick-gamedata/src/reflect"]),
     ("remote_edit", &["crates/internal/base/src/config"]),
-    ("remote_message", &["crates/runtime/loader/src/remote"]),
-    ("server_rules", &["crates/runtime/loader/src/join"]),
+    ("remote_message", &["crates/runtime/loader/src/base/remote"]),
+    ("server_rules", &["crates/runtime/loader/src/base/join"]),
     (
         "settings_files",
         &[
             "crates/internal/base/src/config",
             "crates/internal/base/src/i18n",
             "crates/internal/packs/src/packs",
-            "crates/runtime/loader/src/record",
+            "crates/runtime/loader/src/base/record",
             "crates/internal/values/src/off",
             "crates/internal/values/src/reason",
         ],
@@ -195,11 +201,11 @@ mod tests {
     #[test]
     fn a_module_reaches_the_targets_that_read_it() {
         assert_eq!(
-            reached(&files(&["crates/runtime/loader/src/wire/frames.rs"])),
+            reached(&files(&["crates/runtime/loader/src/base/wire/frames.rs"])),
             ["channel_messages", "link_packets", "notices"]
         );
         assert_eq!(
-            reached(&files(&["crates/runtime/loader/src/join.rs"])),
+            reached(&files(&["crates/runtime/loader/src/base/join.rs"])),
             ["join_lists", "server_rules"]
         );
     }

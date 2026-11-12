@@ -11,13 +11,13 @@ use windows_sys::Win32::System::LibraryLoader::{
     GetModuleHandleExW,
 };
 
-use crate::chains::Chains;
-use crate::code::Watching;
-use crate::code_watch::Stage;
+use crate::base::resolve::{self, Candidate};
+use crate::engine::chains::Chains;
+use crate::engine::code::Watching;
+use crate::engine::code_watch::Stage;
+use crate::engine::mod_index::ModIndex;
+use crate::engine::patch::FrameSlot;
 use crate::host::{self, Loader, ModRecord};
-use crate::mod_index::ModIndex;
-use crate::patch::FrameSlot;
-use crate::resolve::{self, Candidate};
 
 mod arm;
 mod dry_run;
@@ -45,59 +45,59 @@ static STARTED: AtomicBool = AtomicBool::new(false);
 
 /// Stops the game when a mod that holds a world is not running.
 fn enforce_holds(loader: &Loader) {
-    let running = crate::holds::running(loader);
-    crate::holds::enforce(&loader.mods_dir, &running, false, Some(loader));
+    let running = crate::base::holds::running(loader);
+    crate::base::holds::enforce(&loader.mods_dir, &running, false, Some(loader));
 }
 
 /// Seals the registries mods filled during init, in the order they depend
 /// on each other.
 fn seal(loader: &'static Loader) {
-    crate::stats::seal();
-    crate::item_data::seal();
+    crate::inventory::stats::seal();
+    crate::inventory::item_data::seal();
     loader.seal_subscriptions();
-    crate::services::seal(loader);
-    crate::points::seal(loader);
-    crate::calls::seal(loader);
-    crate::content::seal_and_link(loader);
+    crate::base::services::seal(loader);
+    crate::base::points::seal(loader);
+    crate::base::calls::seal(loader);
+    crate::content::served::seal_and_link(loader);
 }
 
 /// Runs once, on the stub's thread.
 /// Links the loader's own features; the
 /// client links the server's too, for the games it hosts.
 fn link_features(loader: &'static Loader) {
-    crate::crash::link(loader);
-    crate::events::link(loader);
-    crate::world::link(loader);
-    crate::vetoes::link(loader);
-    crate::recipes::init(loader);
-    crate::daytime::link(loader);
-    crate::damage::link(loader);
-    crate::deaths::link(loader);
-    crate::knowledge::guard::link(loader);
-    crate::weather::link(loader);
-    crate::item_actions::link(loader);
-    crate::game_events::link(loader);
-    crate::saves::link(loader);
-    crate::inventory::link(loader);
-    crate::item_data::link(loader);
-    crate::net::link();
-    crate::chat::link(loader);
-    crate::commands::seal();
-    crate::carrier::link(loader);
-    crate::label::link(loader);
-    crate::altars::link(loader);
-    crate::survivors::link(loader);
-    crate::textures::link(loader);
-    crate::interactions::link(loader);
-    crate::local_held::link(loader);
-    crate::controls::link(loader);
-    crate::rate_links::link(loader);
-    crate::progress::link(loader);
-    crate::bases::link(loader);
-    crate::ui::link(loader);
-    crate::fog::link(loader);
-    crate::voxels::changes::link(loader);
-    crate::terrain_pages::link(loader);
+    crate::engine::crash::link(loader);
+    crate::base::events::link(loader);
+    crate::engine::world::link(loader);
+    crate::actions::vetoes::link(loader);
+    crate::content::recipes::init(loader);
+    crate::world::daytime::link(loader);
+    crate::inventory::damage::link(loader);
+    crate::inventory::deaths::link(loader);
+    crate::knowledge::store::guard::link(loader);
+    crate::world::weather::link(loader);
+    crate::inventory::item_actions::link(loader);
+    crate::base::game_events::link(loader);
+    crate::base::saves::link(loader);
+    crate::inventory::transactions::link(loader);
+    crate::inventory::item_data::link(loader);
+    crate::base::net::link();
+    crate::actions::chat::link(loader);
+    crate::actions::commands::seal();
+    crate::base::carrier::link(loader);
+    crate::world::label::link(loader);
+    crate::world::altars::link(loader);
+    crate::inventory::survivors::link(loader);
+    crate::content::textures::link(loader);
+    crate::actions::interactions::link(loader);
+    crate::actions::local_held::link(loader);
+    crate::actions::controls::link(loader);
+    crate::content::rate_links::link(loader);
+    crate::knowledge::progress::link(loader);
+    crate::world::bases::link(loader);
+    crate::ui::interface::link(loader);
+    crate::world::fog::link(loader);
+    crate::world::voxels::changes::link(loader);
+    crate::world::terrain_pages::link(loader);
 }
 
 pub(crate) fn start(
@@ -164,18 +164,18 @@ pub(crate) fn start(
         delivery: OnceLock::new(),
         settings_problems,
         newer_release: OnceLock::new(),
-        retry: crate::retry::Retry::default(),
+        retry: crate::engine::retry::Retry::default(),
         skipped: skipped(&libraries, &candidates, &plan),
     };
     let Some(loader) = host::install(loader) else {
-        crate::shipped::release();
+        crate::engine::shipped::release();
         return;
     };
     if release_check {
-        crate::releases::start(loader);
+        crate::base::releases::start(loader);
     }
-    if crate::diag::counting() {
-        crate::profile::start(loader.mods.len());
+    if crate::engine::diag::counting() {
+        crate::engine::profile::start(loader.mods.len());
     }
     let order: Vec<&Library> = plan.order.iter().map(|&i| &libraries[i]).collect();
     // SAFETY: `host::API` is the loader's process-wide table, a static that
@@ -198,7 +198,7 @@ pub(crate) fn start(
     }
     arm_watched(loader, frame, watching.as_mut());
     release_server(release, began);
-    crate::ui::armed(loader);
+    crate::ui::interface::armed(loader);
     enforce_holds(loader);
     ready(loader, &order, watching.as_mut());
     if let Some(w) = watching {
@@ -211,21 +211,21 @@ pub(crate) fn start(
 /// Starts what runs once every mod is ready: the file watch, the status
 /// summary, the server's own services and the join's guards.
 fn start_services(loader: &'static Loader) {
-    crate::watch::start(loader);
-    crate::status::start();
+    crate::base::watch::start(loader);
+    crate::base::status::start();
     if loader.side == Side::SERVER {
         serve(loader);
     }
-    crate::admission::start(loader, names(loader).into_iter().collect());
+    crate::base::admission::start(loader, names(loader).into_iter().collect());
 }
 
 /// Starts what only a dedicated server runs: the advertised join mods and
 /// the console.
 fn serve(loader: &'static Loader) {
     if let Some(game_dir) = loader.mods_dir.parent() {
-        crate::advertise::start(game_dir, host::join_mods);
+        crate::base::advertise::start(game_dir, host::join_mods);
     }
-    crate::console::start();
+    crate::actions::console::start();
 }
 
 /// Lets the dedicated server's own code run once the hooks are armed, and
@@ -253,7 +253,7 @@ fn skip(libraries: &[Library], plan: &resolve::Plan) {
             WARN,
             "{} skipped: {reason} ({})",
             libraries[*index].file,
-            crate::errors::UNMET_RELATIONS
+            crate::engine::errors::UNMET_RELATIONS
         );
     }
 }
@@ -273,7 +273,7 @@ fn skipped(
             // process or a pack's manifest built for the process, its strings
             // and lists readable and never written; a skipped mod's DLL stays
             // loaded through start, and `meta` copies what it reads.
-            label: unsafe { crate::manifest::meta(libraries[*i].manifest) }
+            label: unsafe { crate::base::manifest::meta(libraries[*i].manifest) }
                 .label(&candidates[*i].id),
             file: libraries[*i].file.clone(),
             reason: reason.clone(),
@@ -298,7 +298,7 @@ fn records(
             // process or a pack's manifest built for the process, its
             // strings and lists readable and never written; a string `read`
             // left in the DLL is read while the planned mod's DLL is loaded.
-            meta: unsafe { crate::manifest::meta(libraries[i].manifest) },
+            meta: unsafe { crate::base::manifest::meta(libraries[i].manifest) },
             off: AtomicBool::new(false),
             off_reason: Mutex::new(None),
             waiting: AtomicBool::new(false),
@@ -335,17 +335,21 @@ fn attribute_crashes(loader: &Loader, order: &[&Library]) {
         )
     };
     if found != 0
-        && let Some((start, end)) = crate::crash::range_of(own)
+        && let Some((start, end)) = crate::engine::crash::range_of(own)
     {
         modules.push((
             (ModIndex::LOADER).get(),
-            crate::settings::LOADER_ID.to_owned(),
+            crate::engine::settings::LOADER_ID.to_owned(),
             start,
             end,
         ));
     }
     if let Some(game_dir) = loader.mods_dir.parent() {
-        crate::crash::install(&modules, &game_dir.join(crate::log::LOGS), &loader.mods_dir);
+        crate::engine::crash::install(
+            &modules,
+            &game_dir.join(crate::engine::log::LOGS),
+            &loader.mods_dir,
+        );
     }
 }
 
@@ -370,9 +374,13 @@ fn initialise(loader: &Loader, order: &[&Library], mut watching: Option<&mut Wat
         if record.off.load(Ordering::Acquire) {
             continue;
         }
-        if crate::developer_tools::refused(loader.developer_tools, record.manifest.flags).is_some()
+        if crate::base::developer_tools::refused(loader.developer_tools, record.manifest.flags)
+            .is_some()
         {
-            loader.turn_off(ModIndex::new(index), crate::developer_tools::off_reason());
+            loader.turn_off(
+                ModIndex::new(index),
+                crate::base::developer_tools::off_reason(),
+            );
             continue;
         }
         // SAFETY: `library.init` is the mod's `INIT` export, typed `InitFn`
@@ -418,7 +426,7 @@ fn ready(loader: &Loader, order: &[&Library], mut watching: Option<&mut Watching
     );
     // Mods read vanilla resources at init; the chunks unpacked for them
     // are not needed after.
-    crate::archive::trim_game();
+    crate::engine::archive::trim_game();
 }
 
 /// The caller frame the frame slot holds now.

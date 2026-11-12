@@ -6,12 +6,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick_core::abi::{Event, Level};
 
+use crate::base::join::missing::{ADVERTISED_BYTES, Missing, Wanted, listed};
+use crate::base::join::{Difference, Row};
+use crate::base::wire::Drops;
+use crate::engine::kept_text::KeptText;
+use crate::engine::mod_index::ModIndex;
 use crate::host::loader;
-use crate::join::missing::{ADVERTISED_BYTES, Missing, Wanted, listed};
-use crate::join::{Difference, Row};
-use crate::kept_text::KeptText;
-use crate::mod_index::ModIndex;
-use crate::wire::Drops;
 use enshwick_base::Relock;
 
 /// Why a mod is off while the client plays in a world that does not run it.
@@ -144,9 +144,9 @@ pub(crate) fn admitted() {
 /// side both, `complete` when whole. The difference to the client's mods
 /// waits for the menu.
 pub(crate) fn kicked_for_mods(list: &str, complete: bool) {
-    let ours = crate::advertise::mod_list(&join_mods());
-    let off = crate::advertise::mod_list(&join_mods_off());
-    let difference = crate::join::difference(list, &ours, &off, complete);
+    let ours = crate::base::advertise::mod_list(&join_mods());
+    let off = crate::base::advertise::mod_list(&join_mods_off());
+    let difference = crate::base::join::difference(list, &ours, &off, complete);
     // A server may send the list with every hello it refuses: the first and
     // every 100th are logged.
     if JOINS.kicks.add(1).is_some() {
@@ -155,7 +155,7 @@ pub(crate) fn kicked_for_mods(list: &str, complete: bool) {
             "the server does not let this game play: {} of its mods missing, {} in another version; the menu lists them ({})",
             difference.missing.len(),
             difference.mismatch.len(),
-            crate::errors::JOIN_MISSING
+            crate::engine::errors::JOIN_MISSING
         );
     }
     if difference.refuses() {
@@ -168,7 +168,7 @@ pub(crate) fn kicked_for_mods(list: &str, complete: bool) {
 /// world's the first time, and as a change after.
 pub(crate) fn apply_server_value(id: &str, values: &str) {
     // A hosting client's own server: its file's values are the server's.
-    let Some(loader) = loader().filter(|_| !crate::world::hosting()) else {
+    let Some(loader) = loader().filter(|_| !crate::engine::world::hosting()) else {
         return;
     };
     let Some((index, record)) = loader
@@ -191,7 +191,7 @@ pub(crate) fn apply_server_value(id: &str, values: &str) {
     } else {
         ("the server changed its settings", Event::SETTINGS_CHANGED)
     };
-    crate::log::write(
+    crate::engine::log::write(
         Level::INFO,
         &record.id,
         &format!("{line}: {}", shown(values)),
@@ -207,7 +207,7 @@ pub(crate) fn forget_server_values() {
     };
     for (index, record) in loader.mods.iter().enumerate() {
         if record.server_values.relock().take().is_some() {
-            crate::log::write(
+            crate::engine::log::write(
                 Level::INFO,
                 &record.id,
                 "the server's settings no longer apply",

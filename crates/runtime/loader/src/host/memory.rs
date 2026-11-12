@@ -236,3 +236,48 @@ pub(crate) unsafe fn put_list<T: Copy>(
     // touches during the call, by this function's `# Safety`.
     unsafe { put(count, total) }
 }
+
+/// Copies up to `capacity` of `infos` to `out`, `entry_size` bytes apart, and
+/// writes how many there are.
+///
+/// # Safety
+///
+/// - A non-null `out` is writable for `capacity` entries of `entry_size`
+///   bytes each; no alignment is needed.
+/// - A non-null `count` points at a writable, aligned `u32`.
+/// - Nothing else reads or writes those entries during the call.
+pub(crate) unsafe fn list<T: Copy>(
+    infos: &[T],
+    out: *mut T,
+    entry_size: u32,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    if !out.is_null() {
+        let stride = entry_size as usize;
+        if stride < size_of::<Header>() {
+            return Status::BAD_ARGS;
+        }
+        let copied = stride.min(size_of::<T>());
+        let size = u32::try_from(copied).unwrap_or(u32::MAX);
+        for (index, info) in infos.iter().take(capacity as usize).enumerate() {
+            // SAFETY: `index` is below `capacity`, and the caller guarantees
+            // `capacity` entries of `stride` bytes at the non-null `out`, so
+            // entry `index` starts inside that list.
+            let entry = unsafe { out.cast::<u8>().add(index * stride) };
+            // SAFETY: the caller guarantees `entry` writable for `stride` bytes,
+            // `info` is readable for `size_of::<T>()`, `copied` is at most
+            // both, and the loader's `infos` do not overlap the mod's list.
+            unsafe {
+                core::ptr::copy_nonoverlapping((&raw const *info).cast::<u8>(), entry, copied);
+            };
+            // The header says what the entry holds, never more than it has.
+            // SAFETY: the header's `size` is the entry's first field, inside the
+            // `stride` bytes, at least a `Header` as checked before the loop.
+            unsafe { entry.cast::<u32>().write_unaligned(size) };
+        }
+    }
+    // SAFETY: the caller guarantees a non-null `count` points at
+    // a writable, aligned `u32` that no other thread touches during the call.
+    unsafe { put(count, u32::try_from(infos.len()).unwrap_or(u32::MAX)) }
+}

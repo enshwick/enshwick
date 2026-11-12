@@ -1,7 +1,7 @@
 //! Linking the loader's join check and its dialog hold on the client.
 
+use crate::engine::pinned;
 use crate::host::{Loader, Target};
-use crate::pinned;
 
 use super::game::identify;
 
@@ -32,10 +32,10 @@ pub(super) fn link_join(loader: &Loader) {
         .map(|m| (m.id.clone(), m.name()))
         .filter(|(_, name)| !name.is_empty())
         .collect();
-    crate::join::set_names(names);
-    crate::lobby::register();
-    match crate::join::Layout::from_table(|id| loader.build.constant(id)) {
-        Ok(layout) => crate::join::set_layout(layout),
+    crate::base::join::set_names(names);
+    crate::base::lobby::register();
+    match crate::base::join::Layout::from_table(|id| loader.build.constant(id)) {
+        Ok(layout) => crate::base::join::set_layout(layout),
         Err(error) => {
             crate::log!(
                 WARN,
@@ -50,8 +50,8 @@ pub(super) fn link_join(loader: &Loader) {
             let linked = loader.link_feature(
                 "join check",
                 Target::Found(pinned::net::JOIN_GAME.id(), Some(join)),
-                &crate::join::NEXT,
-                crate::join::detour,
+                &crate::base::join::NEXT,
+                crate::base::join::detour,
                 enshwick_core::abi::HookFlags::NONE,
             );
             if linked {
@@ -71,12 +71,12 @@ pub(super) fn link_join(loader: &Loader) {
 /// with the pinned bytes. Without it a refused join shows the game's dialog
 /// before the loader's.
 fn link_join_hold(loader: &Loader, code: core::ops::Range<u64>) {
-    use crate::join::interaction::{self, BYTES_ID};
+    use crate::base::join::interaction::{self, BYTES_ID};
     let read = |va: u64| {
         let address = usize::try_from(va).ok()?;
         // SAFETY: `verify` reads only eight bytes inside the game's code
         // section, which stays mapped for the life of the process.
-        Some(unsafe { crate::memory::read::<u64>(address, 0) })
+        Some(unsafe { crate::engine::memory::read::<u64>(address, 0) })
     };
     let start = interaction::verify(
         loader.address(pinned::user::START_INTERACTION),
@@ -123,8 +123,8 @@ fn link_join_hold(loader: &Loader, code: core::ops::Range<u64>) {
 /// game's code section.
 fn verified_join(
     loader: &Loader,
-) -> Result<(u64, core::ops::Range<u64>), crate::join::provider::Error> {
-    use crate::join::provider::{Error, Pins, verify_mapped};
+) -> Result<(u64, core::ops::Range<u64>), crate::base::join::provider::Error> {
+    use crate::base::join::provider::{Error, Pins, verify_mapped};
     let pins = Pins {
         routed: loader.build.routed(pinned::net::JOIN_GAME.id()),
         ..Pins::from_table(
@@ -136,7 +136,7 @@ fn verified_join(
     let range = |start: u64, len: usize| Some(start..start.checked_add(u64::try_from(len).ok()?)?);
     let (_, base, image_len) = identify().ok_or(Error::NoImage)?;
     let image = range(base, image_len).ok_or(Error::NoImage)?;
-    let code = crate::code::text(base)
+    let code = crate::engine::code::text(base)
         .and_then(|(start, len)| range(u64::try_from(start).ok()?, len))
         .ok_or(Error::NoCode)?;
     // SAFETY: `image` is the game's executable image, mapped by Windows at

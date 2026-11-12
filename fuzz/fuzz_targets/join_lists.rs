@@ -7,8 +7,8 @@
 #![no_main]
 
 use enshwick_fuzz::text_fields;
-use enshwick_loader::admission::{Hello, needs};
-use enshwick_loader::join::{Names, difference, differences, plan, wanted};
+use enshwick_loader::base::admission::{Hello, needs};
+use enshwick_loader::base::join::{Names, difference, differences, plan, wanted};
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {

@@ -5,7 +5,7 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use enshwick_loader::prop_holds::PropHolds;
+use enshwick_loader::world::prop_holds::PropHolds;
 
 fn quiet(c: &mut Criterion) {
     let idle = PropHolds::new();

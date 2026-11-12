@@ -5,7 +5,7 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use enshwick_loader::wire::{MAX_SEALED, open, seal};
+use enshwick_loader::base::wire::{MAX_SEALED, open, seal};
 
 fn envelope(c: &mut Criterion) {
     let mut group = c.benchmark_group("envelope");

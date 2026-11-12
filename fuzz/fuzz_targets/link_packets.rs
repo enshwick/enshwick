@@ -9,7 +9,7 @@
 
 use std::time::{Duration, Instant};
 
-use enshwick_loader::wire::{Link, MAX_SEALED};
+use enshwick_loader::base::wire::{Link, MAX_SEALED};
 use libfuzzer_sys::fuzz_target;
 
 const PACKET: usize = 1200;

@@ -1,42 +1,47 @@
-//! Host functions for the world: players, entities, chat, time, settings, weather, terrain, voxels and build rights.
+//! Host functions for the world domain: players, entities, chat, labels,
+//! notices, the world's key, map markers and build rights.
 
-use enshwick_core::Entity;
-use enshwick_core::abi as api_frame;
-use enshwick_core::abi::{AccountActionType, Level, ModHandle, Side, Status, Str};
-
-use crate::console::accounts::Act;
+use crate::actions::console::accounts::Act;
 use crate::host::memory::{put, put_headed, put_headed_list, text};
-use crate::host::{caller, caller_index, calling, entry, loader};
-use enshwick_base::Relock;
+use crate::host::{caller, caller_index, calling, entry};
+use enshwick_core::abi::{AccountActionType, ModHandle, Status, Str};
+use enshwick_core::{Entity, abi as api_frame};
 
-pub(crate) extern "system" fn component(
+pub(crate) mod altars;
+pub(crate) mod buffs;
+pub(crate) mod environment;
+pub(crate) mod saves;
+pub(crate) mod transactions;
+
+pub(crate) extern "system" fn progress_write(
     me: ModHandle,
     entity: Entity,
-    type_hash: u32,
-    out: *mut *const core::ffi::c_void,
+    what: u32,
+    value: u32,
 ) -> Status {
-    entry("component", || {
-        match caller(me).and_then(|loader| crate::world::component(loader, entity, type_hash)) {
-            // SAFETY: `HostApi::component` has the mod pass `out` null or
-            // pointing at a writable, aligned `c_void` that no other thread
-            // touches during the call.
-            Ok(data) => unsafe { put(out, data) },
+    entry("progress_write", || {
+        match caller_index(me).and_then(|(loader, index)| {
+            crate::knowledge::progress::write(loader, index, entity.0, what, value)
+        }) {
+            Ok(()) => Status::OK,
             Err(status) => status,
         }
     })
 }
 
-pub(crate) extern "system" fn entity_template(
+pub(crate) extern "system" fn item_info(
     me: ModHandle,
-    entity: Entity,
-    out: *mut [u8; 16],
+    item: enshwick_core::ItemId,
+    out: *mut api_frame::ItemData,
 ) -> Status {
-    entry("entity_template", || {
-        match caller(me).and_then(|loader| crate::world::template(loader, entity)) {
-            // SAFETY: `HostApi::entity_template` has the mod pass `out` null or
-            // pointing at a writable, aligned `[u8; 16]` that no other thread
-            // touches during the call.
-            Ok(guid) => unsafe { put(out, guid) },
+    entry("item_info", || {
+        match caller(me)
+            .and_then(|loader| crate::inventory::transactions::item_info(loader, item.get()))
+        {
+            // SAFETY: `HostApi::item_info` has the mod pass `out` null or
+            // pointing at its version of `ItemData`, writable for the size its
+            // header states, that no other thread touches during the call.
+            Ok(data) => unsafe { put_headed(out, data) },
             Err(status) => status,
         }
     })
@@ -49,7 +54,7 @@ pub(crate) extern "system" fn player(
 ) -> Status {
     entry("player", || {
         let found = caller(me)
-            .and_then(crate::world::players)
+            .and_then(crate::engine::world::players)
             .and_then(|players| {
                 players
                     .into_iter()
@@ -73,7 +78,7 @@ pub(crate) extern "system" fn players(
     count: *mut u32,
 ) -> Status {
     entry("players", || {
-        let players = match caller(me).and_then(crate::world::players) {
+        let players = match caller(me).and_then(crate::engine::world::players) {
             Ok(players) => players,
             Err(status) => return status,
         };
@@ -86,18 +91,6 @@ pub(crate) extern "system" fn players(
     })
 }
 
-pub(crate) extern "system" fn hosting() -> u8 {
-    entry("hosting", || {
-        loader().map_or(0, |loader| {
-            u8::from(loader.side == Side::SERVER || crate::world::hosting())
-        })
-    })
-}
-
-pub(crate) extern "system" fn server_world() -> u64 {
-    entry("server_world", crate::world::server_world)
-}
-
 pub(crate) extern "system" fn chat(
     me: ModHandle,
     to: enshwick_core::PlayerKey,
@@ -108,7 +101,7 @@ pub(crate) extern "system" fn chat(
             return Status::BAD_ARGS;
         };
         match caller(me) {
-            Ok(_) => crate::chat::send(to.get(), message),
+            Ok(_) => crate::actions::chat::send(to.get(), message),
             Err(status) => status,
         }
     })
@@ -120,7 +113,7 @@ pub(crate) extern "system" fn set_label(me: ModHandle, entity: Entity, label: St
             return Status::BAD_ARGS;
         };
         match caller(me) {
-            Ok(loader) => crate::label::set(loader, entity, label),
+            Ok(loader) => crate::world::label::set(loader, entity, label),
             Err(status) => status,
         }
     })
@@ -136,228 +129,12 @@ pub(crate) extern "system" fn rename_filter(
             Ok(found) => found,
             Err(status) => return status,
         };
-        crate::conflicts::note(
+        crate::engine::conflicts::note(
             "rename filter",
             index,
-            crate::conflicts::Mode::Chained,
-            crate::label::register(index, callback, user),
+            crate::engine::conflicts::Mode::Chained,
+            crate::world::label::register(index, callback, user),
         )
-    })
-}
-
-pub(crate) extern "system" fn feature(me: ModHandle, name: Str, off: Str) -> Status {
-    entry("feature", || {
-        let (Some(name), Some(off)) = (text(name), text(off)) else {
-            return Status::BAD_ARGS;
-        };
-        if name.is_empty() {
-            return Status::BAD_ARGS;
-        }
-        let record = match calling(me) {
-            Ok((_, _, record)) => record,
-            Err(status) => return status,
-        };
-        let texts = record.texts.relock();
-        let changed = crate::features::report(
-            &mut record.features.relock(),
-            name,
-            Some(off).filter(|off| !off.is_empty()),
-            texts.as_ref(),
-        );
-        drop(texts);
-        if let Some(line) = changed {
-            let level = if off.is_empty() {
-                Level::INFO
-            } else {
-                Level::WARN
-            };
-            crate::log::write(level, &record.id, &line);
-        }
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn status(
-    me: ModHandle,
-    callback: api_frame::StatusFn,
-    user: *mut core::ffi::c_void,
-) -> Status {
-    entry("status", || {
-        let (_, index, _) = match calling(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        if !crate::host::in_init(index.get()) {
-            return Status::TOO_LATE;
-        }
-        crate::status::register(index, callback, user)
-    })
-}
-
-pub(crate) extern "system" fn actions(
-    me: ModHandle,
-    callback: api_frame::ActionFn,
-    user: *mut core::ffi::c_void,
-) -> Status {
-    entry("actions", || {
-        let (_, index, record) = match calling(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        if !crate::host::in_init(index.get()) {
-            return Status::TOO_LATE;
-        }
-        let status = crate::actions::register(index, callback, user);
-        if status.is_ok() {
-            crate::log::write(Level::DEBUG, &record.id, "player actions");
-        }
-        status
-    })
-}
-
-pub(crate) extern "system" fn control(
-    me: ModHandle,
-    spec: *const api_frame::ControlSpec,
-    callback: api_frame::ControlFn,
-    user: *mut core::ffi::c_void,
-) -> Status {
-    entry("control", || {
-        let (_, index, record) = match calling(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        if !crate::host::in_init(index.get()) {
-            return Status::TOO_LATE;
-        }
-        // SAFETY: `HostApi::control` has the mod pass `spec` null or
-        // readable for the size its header gives, with no other writer
-        // during the call.
-        let Some(spec) = (unsafe {
-            crate::host::memory::get_headed(
-                spec,
-                <api_frame::ControlSpec as api_frame::Headed>::BORN,
-            )
-        }) else {
-            return Status::BAD_ARGS;
-        };
-        // A mod before ABI 11.11 has no action, which the copy leaves zero: empty.
-        let (Some(name), Some(label), Some(link), Some(action)) = (
-            text(spec.name),
-            text(spec.label),
-            text(spec.link),
-            text(spec.action),
-        ) else {
-            return Status::BAD_ARGS;
-        };
-        let read = crate::controls::Spec {
-            name,
-            label,
-            link,
-            action,
-            keys: [spec.key, spec.second],
-            fires: spec.fires,
-            hold_ms: spec.hold_ms,
-        };
-        let status = crate::controls::register(index, &record.id, &read, callback, user);
-        if status.is_ok() {
-            crate::log::write(Level::DEBUG, &record.id, "a control");
-        }
-        status
-    })
-}
-
-pub(crate) extern "system" fn run_action(me: ModHandle, action: Str, args: Str) -> Status {
-    entry("run_action", || {
-        let (loader, _, record) = match calling(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        if loader.side != Side::CLIENT {
-            return Status::MISSING;
-        }
-        let (Some(action), Some(args)) = (text(action), text(args)) else {
-            return Status::BAD_ARGS;
-        };
-        if crate::actions::run_on_server(&record.id, action, args, None) {
-            Status::OK
-        } else {
-            Status::MISSING
-        }
-    })
-}
-
-pub(crate) extern "system" fn run_action_at(
-    me: ModHandle,
-    action: Str,
-    args: Str,
-    target: *const enshwick_core::abi::ActionTarget,
-) -> Status {
-    entry("run_action_at", || {
-        let (loader, _, record) = match calling(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        if loader.side != Side::CLIENT {
-            return Status::MISSING;
-        }
-        let (Some(action), Some(args)) = (text(action), text(args)) else {
-            return Status::BAD_ARGS;
-        };
-        // SAFETY: `HostApi::run_action_at` has the mod pass `target` null or
-        // a live `ActionTarget` readable for the size its header states, for
-        // the call.
-        let target = match unsafe { enshwick_core::abi::ActionTarget::read(target) } {
-            Ok(target) => target,
-            Err(status) => return status,
-        };
-        if crate::actions::run_on_server(&record.id, action, args, target) {
-            Status::OK
-        } else {
-            Status::MISSING
-        }
-    })
-}
-
-thread_local! {
-    /// The answer `run_console` last handed out on this thread.
-    static CONSOLE_REPLY: core::cell::RefCell<String> = const { core::cell::RefCell::new(String::new()) };
-}
-
-pub(crate) extern "system" fn run_console(me: ModHandle, line: Str, out: *mut Str) -> Status {
-    entry("run_console", || {
-        let Some(line) = text(line) else {
-            return Status::BAD_ARGS;
-        };
-        let loader = match caller(me) {
-            Ok(loader) => loader,
-            Err(status) => return status,
-        };
-        match crate::console::run(loader, line) {
-            Ok(reply) => CONSOLE_REPLY.with_borrow_mut(|kept| {
-                *kept = reply;
-                // The text stays in this thread's buffer until its next call.
-                // SAFETY: `HostApi::run_console` has the mod pass `out` null or
-                // pointing at a writable, aligned `Str` that no other thread
-                // touches during the call.
-                unsafe { put(out, Str::new(kept)) }
-            }),
-            Err(status) => status,
-        }
-    })
-}
-
-pub(crate) extern "system" fn game_event(
-    me: ModHandle,
-    type_hash: u32,
-    callback: api_frame::GameEventFn,
-    user: *mut core::ffi::c_void,
-) -> Status {
-    entry("game_event", || {
-        let (_, index, _) = match calling(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        crate::game_events::register(index, type_hash, callback, user)
     })
 }
 
@@ -370,7 +147,7 @@ pub(crate) extern "system" fn entities(
 ) -> Status {
     entry("entities", || {
         let found = match caller(me)
-            .and_then(|loader| crate::entities::with_component(loader, type_hash))
+            .and_then(|loader| crate::world::entities::with_component(loader, type_hash))
         {
             Ok(found) => found,
             Err(status) => return status,
@@ -392,16 +169,7 @@ pub(crate) extern "system" fn entities(
 
 pub(crate) extern "system" fn destroy(me: ModHandle, entity: Entity) -> Status {
     entry("destroy", || {
-        match caller(me).and_then(|loader| crate::entities::destroy(loader, entity)) {
-            Ok(()) => Status::OK,
-            Err(status) => status,
-        }
-    })
-}
-
-pub(crate) extern "system" fn set_saved(me: ModHandle, entity: Entity, saved: u8) -> Status {
-    entry("set_saved", || {
-        match caller(me).and_then(|loader| crate::entities::set_saved(loader, entity, saved != 0)) {
+        match caller(me).and_then(|loader| crate::world::entities::destroy(loader, entity)) {
             Ok(()) => Status::OK,
             Err(status) => status,
         }
@@ -410,7 +178,7 @@ pub(crate) extern "system" fn set_saved(me: ModHandle, entity: Entity, saved: u8
 
 pub(crate) extern "system" fn save_world(me: ModHandle) -> Status {
     entry("save_world", || {
-        match caller(me).and_then(crate::saves::request) {
+        match caller(me).and_then(crate::base::saves::request) {
             Ok(()) => Status::OK,
             Err(status) => status,
         }
@@ -423,8 +191,8 @@ pub(crate) extern "system" fn world_key(me: ModHandle, out: *mut Str) -> Status 
             // SAFETY: `HostApi::world_key` has the mod pass `out` null or
             // pointing at a writable, aligned `Str` that no other thread
             // touches during the call.
-            crate::saves::world_key(loader).map_or(Status::MISSING, |key| unsafe {
-                put(out, Str::new(crate::saves::stem(key)))
+            crate::base::saves::world_key(loader).map_or(Status::MISSING, |key| unsafe {
+                put(out, Str::new(crate::base::saves::stem(key)))
             })
         }
         Err(status) => status,
@@ -433,7 +201,7 @@ pub(crate) extern "system" fn world_key(me: ModHandle, out: *mut Str) -> Status 
 
 pub(crate) extern "system" fn world_quiet(me: ModHandle) -> Status {
     entry("world_quiet", || {
-        match caller(me).and_then(crate::world::quiet_world) {
+        match caller(me).and_then(crate::engine::world::quiet_world) {
             Ok(()) => Status::OK,
             Err(status) => status,
         }
@@ -448,14 +216,14 @@ pub(crate) extern "system" fn map_markers(
     count: *mut u32,
 ) -> Status {
     entry("map_markers", || {
-        let markers = match caller(me).and_then(crate::scene::markers) {
+        let markers = match caller(me).and_then(crate::world::scene::markers) {
             Ok(markers) => markers,
             Err(status) => return status,
         };
         // SAFETY: the ABI has the mod pass `out` null or writable for
         // `capacity` entries of `entry_size` bytes and `count` null or a
         // writable `u32`, untouched by the mod during the call.
-        unsafe { crate::host::entries::mods::list(&markers, out, entry_size, capacity, count) }
+        unsafe { crate::host::memory::list(&markers, out, entry_size, capacity, count) }
     })
 }
 
@@ -464,7 +232,7 @@ pub(crate) extern "system" fn map_frame(
     out: *mut enshwick_core::abi::MapFrameInfo,
 ) -> Status {
     entry("map_frame", || {
-        match caller(me).and_then(crate::scene::frame_info) {
+        match caller(me).and_then(crate::world::scene::frame_info) {
             // SAFETY: `HostApi::map_frame` has the mod pass `out` null or
             // pointing at its version of `MapFrameInfo`, writable for the
             // size its header states, that no other thread touches during
@@ -483,84 +251,14 @@ pub(crate) extern "system" fn component_write(
 ) -> Status {
     entry("component_write", || {
         match caller_index(me).and_then(|(loader, index)| {
-            let data = crate::writes::component_mut(loader, entity.0, type_hash)?;
-            crate::conflicts::note_write(type_hash, index);
+            let data = crate::world::writes::component_mut(loader, entity.0, type_hash)?;
+            crate::engine::conflicts::note_write(type_hash, index);
             Ok(data)
         }) {
             // SAFETY: `HostApi::component_write` has the mod pass `out` null or
             // pointing at a writable, aligned `c_void` that no other thread
             // touches during the call.
             Ok(data) => unsafe { put(out, data) },
-            Err(status) => status,
-        }
-    })
-}
-
-pub(crate) extern "system" fn emit(
-    me: ModHandle,
-    type_hash: u32,
-    data: *const u8,
-    size: u32,
-) -> Status {
-    entry("emit", || {
-        if data.is_null() {
-            return Status::BAD_ARGS;
-        }
-        let Ok(len) = usize::try_from(size) else {
-            return Status::BAD_ARGS;
-        };
-        // SAFETY: the caller passes `size` bytes at `data`, valid for the call.
-        let bytes = unsafe { core::slice::from_raw_parts(data, len) };
-        match caller(me).and_then(|loader| crate::emits::emit(loader, type_hash, bytes)) {
-            Ok(()) => Status::OK,
-            Err(status) => status,
-        }
-    })
-}
-
-pub(crate) extern "system" fn teleport(
-    me: ModHandle,
-    request: *const enshwick_core::abi::TeleportRequest,
-) -> Status {
-    entry("teleport", || {
-        // SAFETY: the caller passes null or a request with its header; an
-        // all-zero request is valid.
-        let Some(request) = (unsafe {
-            enshwick_core::abi::read_headed(
-                request,
-                <enshwick_core::abi::TeleportRequest as enshwick_core::abi::Headed>::BORN,
-            )
-        }) else {
-            return Status::BAD_ARGS;
-        };
-        match caller(me).and_then(|loader| crate::emits::teleport(loader, &request)) {
-            Ok(()) => Status::OK,
-            Err(status) => status,
-        }
-    })
-}
-
-pub(crate) extern "system" fn spawn(
-    me: ModHandle,
-    request: *const enshwick_core::abi::SpawnRequest,
-    out: *mut Entity,
-) -> Status {
-    entry("spawn", || {
-        // SAFETY: the caller passes null or a request with its header; an
-        // all-zero request is valid.
-        let Some(request) = (unsafe {
-            enshwick_core::abi::read_headed(
-                request,
-                <enshwick_core::abi::SpawnRequest as enshwick_core::abi::Headed>::BORN,
-            )
-        }) else {
-            return Status::BAD_ARGS;
-        };
-        match caller(me).and_then(|loader| crate::spawns::spawn(loader, &request)) {
-            // SAFETY: `HostApi::spawn` has the mod pass `out` null or pointing
-            // at a writable, aligned `Entity` that no other thread touches during
-            // the call.
-            Ok(entity) => unsafe { put(out, Entity(entity)) },
             Err(status) => status,
         }
     })
@@ -576,281 +274,10 @@ pub(crate) extern "system" fn notify(
         let Some(text) = (unsafe { text.as_str() }) else {
             return Status::BAD_ARGS;
         };
-        match caller(me).and_then(|loader| crate::notices::send(loader, key.get(), text)) {
+        match caller(me).and_then(|loader| crate::ui::notices::send(loader, key.get(), text)) {
             Ok(()) => Status::OK,
             Err(status) => status,
         }
-    })
-}
-
-pub(crate) extern "system" fn time_of_day(
-    me: ModHandle,
-    out: *mut enshwick_core::abi::DaytimeInfo,
-) -> Status {
-    entry("time_of_day", || {
-        match caller(me).and_then(crate::daytime::info) {
-            // SAFETY: `HostApi::time_of_day` has the mod pass `out` null or
-            // pointing at its version of `DaytimeInfo`, writable for the size
-            // its header states, that no other thread touches during the call.
-            Ok(info) => unsafe { put_headed(out, info) },
-            Err(status) => status,
-        }
-    })
-}
-
-pub(crate) extern "system" fn set_time_of_day(me: ModHandle, time: i64) -> Status {
-    entry("set_time_of_day", || {
-        match caller(me).and_then(|loader| crate::daytime::set_time(loader, time)) {
-            Ok(()) => Status::OK,
-            Err(status) => status,
-        }
-    })
-}
-
-pub(crate) extern "system" fn time_speed_control(me: ModHandle) -> Status {
-    entry("time_speed_control", || match caller_index(me) {
-        Ok((loader, index)) => crate::conflicts::note(
-            "time speed",
-            index,
-            crate::conflicts::Mode::Exclusive,
-            crate::daytime::register_speed(loader, index),
-        ),
-        Err(status) => status,
-    })
-}
-
-pub(crate) extern "system" fn set_time_speed(me: ModHandle, factor: f32) -> Status {
-    entry("set_time_speed", || {
-        match caller_index(me)
-            .and_then(|(loader, index)| crate::daytime::set_speed(loader, index, factor))
-        {
-            Ok(()) => Status::OK,
-            Err(status) => status,
-        }
-    })
-}
-
-pub(crate) extern "system" fn game_settings(
-    me: ModHandle,
-    out: *mut u8,
-    size: u32,
-    preset: *mut u32,
-) -> Status {
-    entry("game_settings", || {
-        let Ok(len) = usize::try_from(size) else {
-            return Status::BAD_ARGS;
-        };
-        if out.is_null() {
-            return Status::BAD_ARGS;
-        }
-        // SAFETY: the caller passes `size` writable bytes at `out` for the call.
-        let out = unsafe { core::slice::from_raw_parts_mut(out, len) };
-        match caller(me).and_then(|loader| crate::game_settings::read(loader, out)) {
-            // SAFETY: `HostApi::game_settings` has the mod pass `preset` null
-            // or pointing at a writable, aligned `u32` that no other thread
-            // touches during the call.
-            Ok(value) => unsafe { put(preset, u32::from(value)) },
-            Err(status) => status,
-        }
-    })
-}
-
-pub(crate) extern "system" fn set_game_settings(
-    me: ModHandle,
-    data: *const u8,
-    size: u32,
-) -> Status {
-    entry("set_game_settings", || {
-        let Ok(len) = usize::try_from(size) else {
-            return Status::BAD_ARGS;
-        };
-        if data.is_null() {
-            return Status::BAD_ARGS;
-        }
-        // SAFETY: the caller passes `size` bytes at `data`, valid for the call.
-        let bytes = unsafe { core::slice::from_raw_parts(data, len) };
-        match caller(me).and_then(|loader| crate::game_settings::write(loader, bytes)) {
-            Ok(()) => Status::OK,
-            Err(status) => status,
-        }
-    })
-}
-
-pub(crate) extern "system" fn keep_game_settings(
-    me: ModHandle,
-    data: *const u8,
-    mask: *const u8,
-    size: u32,
-) -> Status {
-    entry("keep_game_settings", || {
-        if data.is_null() || mask.is_null() {
-            return Status::BAD_ARGS;
-        }
-        let Ok(len) = usize::try_from(size) else {
-            return Status::BAD_ARGS;
-        };
-        // SAFETY: `data` is non-null, checked at the top; the ABI has the mod
-        // pass `size` readable bytes there, unchanged for the call.
-        let bytes = unsafe { core::slice::from_raw_parts(data, len) };
-        // SAFETY: `mask` is non-null, checked at the top; the ABI has the mod
-        // pass `size` readable bytes there, unchanged for the call.
-        let mask = unsafe { core::slice::from_raw_parts(mask, len) };
-        match caller(me).and_then(|loader| crate::game_settings::keep(loader, bytes, mask)) {
-            Ok(()) => Status::OK,
-            Err(status) => status,
-        }
-    })
-}
-
-pub(crate) extern "system" fn forget_game_settings(me: ModHandle) -> Status {
-    entry("forget_game_settings", || {
-        match caller(me).and_then(crate::game_settings::forget) {
-            Ok(()) => Status::OK,
-            Err(status) => status,
-        }
-    })
-}
-
-pub(crate) extern "system" fn weather_at(
-    me: ModHandle,
-    position: *const [i64; 3],
-    out: *mut [f32; 4],
-) -> Status {
-    entry("weather_at", || {
-        // SAFETY: the caller passes null or a position valid for the call.
-        let Some(position) = (unsafe { position.as_ref() }).copied() else {
-            return Status::BAD_ARGS;
-        };
-        match caller(me).and_then(|loader| crate::weather::sample(loader, position)) {
-            // SAFETY: `HostApi::weather_at` has the mod pass `out` null or
-            // pointing at a writable, aligned `[f32; 4]` that no other thread
-            // touches during the call.
-            Ok(weights) => unsafe { put(out, weights) },
-            Err(status) => status,
-        }
-    })
-}
-
-pub(crate) extern "system" fn weather_fronts(
-    me: ModHandle,
-    out: *mut enshwick_core::abi::WeatherFront,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    entry("weather_fronts", || {
-        match caller(me).and_then(crate::weather::fronts) {
-            // SAFETY: `HostApi::weather_fronts` has the mod pass `out` null or
-            // pointing at `capacity` entries of its version of `WeatherFront`,
-            // each writable for the size the first entry's header states, and
-            // `count` null or pointing at a writable, aligned `u32`, neither
-            // touched by another thread during the call.
-            Ok(fronts) => unsafe { put_headed_list(&fronts, out, capacity, count) },
-            Err(status) => status,
-        }
-    })
-}
-
-pub(crate) extern "system" fn set_weather(me: ModHandle, effect: u32, duration: i64) -> Status {
-    entry("set_weather", || {
-        match caller(me).and_then(|loader| crate::weather::set(loader, effect, duration)) {
-            Ok(()) => Status::OK,
-            Err(status) => status,
-        }
-    })
-}
-
-pub(crate) extern "system" fn terrain_materials(
-    me: ModHandle,
-    out: *mut enshwick_core::abi::TerrainMaterialInfo,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    entry("terrain_materials", || {
-        match caller(me).and_then(crate::terrain::materials) {
-            // SAFETY: `HostApi::terrain_materials` has the mod pass `out` null
-            // or pointing at `capacity` entries of its version of
-            // `TerrainMaterialInfo`, each writable for the size the first
-            // entry's header states, and `count` null or pointing at a
-            // writable, aligned `u32`, neither touched by another thread during
-            // the call.
-            Ok(materials) => unsafe { put_headed_list(&materials, out, capacity, count) },
-            Err(status) => status,
-        }
-    })
-}
-
-pub(crate) extern "system" fn terrain_edit(
-    me: ModHandle,
-    edit: *const enshwick_core::abi::TerrainEdit,
-    amount: *mut f32,
-) -> Status {
-    entry("terrain_edit", || {
-        // SAFETY: the caller passes null or an edit with its header; an
-        // all-zero edit is valid.
-        let Some(edit) = (unsafe {
-            enshwick_core::abi::read_headed(
-                edit,
-                <enshwick_core::abi::TerrainEdit as enshwick_core::abi::Headed>::BORN,
-            )
-        }) else {
-            return Status::BAD_ARGS;
-        };
-        let edited = caller(me).and_then(|loader| {
-            crate::voxels::changes::by(me, || crate::terrain::edit(loader, &edit))
-        });
-        match edited {
-            // SAFETY: `HostApi::terrain_edit` has the mod pass `amount` null or
-            // pointing at a writable, aligned `f32` that no other thread
-            // touches during the call.
-            Ok(changed) => unsafe { put(amount, changed) },
-            Err(status) => status,
-        }
-    })
-}
-
-pub(crate) extern "system" fn voxel_read(
-    me: ModHandle,
-    min: *const [u32; 3],
-    size: *const [u32; 3],
-    out: *mut enshwick_core::abi::Voxel,
-    capacity: u64,
-) -> Status {
-    entry("voxel_read", || {
-        if min.is_null() || size.is_null() || out.is_null() {
-            return Status::BAD_ARGS;
-        }
-        // SAFETY: `min` is non-null, checked above; `HostApi::voxel_read` has
-        // the mod pass it pointing at three `u32`s borrowed for the call, and
-        // an unaligned read needs no alignment.
-        // The mod's buffer, not game memory.
-        // ast-grep-ignore: game-memory-through-raw
-        let min = unsafe { min.read_unaligned() };
-        // SAFETY: `size` is non-null, checked above; `HostApi::voxel_read`
-        // has the mod pass it pointing at three `u32`s borrowed for the call,
-        // and an unaligned read needs no alignment.
-        // The mod's buffer, not game memory.
-        // ast-grep-ignore: game-memory-through-raw
-        let size = unsafe { size.read_unaligned() };
-        let request = match crate::voxels::ReadBox::new(min, size, capacity) {
-            Ok(request) => request,
-            Err(status) => return status,
-        };
-        let words = match caller(me).and_then(|loader| crate::voxels::read(loader, &request)) {
-            Ok(words) => words,
-            Err(status) => return status,
-        };
-        for (i, &word) in words.iter().enumerate() {
-            // SAFETY: `out` is non-null, checked above, and `i` is below
-            // `request.count`, which `ReadBox::new` keeps within `capacity`;
-            // `HostApi::voxel_read` has the mod pass `capacity` entries at
-            // `out`, so the offset stays inside that array.
-            let slot = unsafe { out.add(i) };
-            // SAFETY: `slot` is inside the `capacity` writable entries at
-            // `out` that `HostApi::voxel_read` has the mod pass, untouched by
-            // other threads during the call; `Voxel` has alignment 1.
-            unsafe { slot.write(crate::voxels::decode(word)) };
-        }
-        Status::OK
     })
 }
 
@@ -871,11 +298,11 @@ pub(crate) extern "system" fn build_rights(
         }) else {
             return Status::BAD_ARGS;
         };
-        request.refusal = match caller(me).and_then(|loader| crate::rights::check(loader, &request))
-        {
-            Ok(refusal) => refusal,
-            Err(status) => return status,
-        };
+        request.refusal =
+            match caller(me).and_then(|loader| crate::world::rights::check(loader, &request)) {
+                Ok(refusal) => refusal,
+                Err(status) => return status,
+            };
         // SAFETY: `check` is non-null (read above) and `HostApi::build_rights`
         // has the mod pass it writable for the size its header states,
         // untouched by other threads during the call.
@@ -909,11 +336,11 @@ pub(crate) extern "system" fn world_persists(
         // The mod's buffer, not game memory.
         // ast-grep-ignore: game-memory-through-raw
         let high = unsafe { max.read_unaligned() };
-        let edit = match crate::rights::EditBox::between(low, high) {
+        let edit = match crate::world::rights::EditBox::between(low, high) {
             Ok(edit) => edit,
             Err(status) => return status,
         };
-        match caller(me).and_then(|loader| crate::rights::kept_by_save(loader, edit)) {
+        match caller(me).and_then(|loader| crate::world::rights::kept_by_save(loader, edit)) {
             Ok(saved) => {
                 // SAFETY: `HostApi::world_persists` has the mod pass `kept`
                 // writable for one byte, untouched by other threads during the
@@ -939,7 +366,7 @@ pub(crate) extern "system" fn account_action(
             _ => return Status::BAD_ARGS,
         };
         match caller(me)
-            .and_then(|loader| crate::console::account_action(loader, act, account.get()))
+            .and_then(|loader| crate::actions::console::account_action(loader, act, account.get()))
         {
             Ok(()) => Status::OK,
             Err(status) => status,
@@ -958,15 +385,17 @@ pub(crate) extern "system" fn chat_mute_set(
             return Status::BAD_ARGS;
         }
         let (loader, record) = match calling(me) {
-            Ok((loader, _, record)) if crate::chat_mute::serving(loader) => (loader, record),
+            Ok((loader, _, record)) if crate::actions::chat_mute::serving(loader) => {
+                (loader, record)
+            }
             Ok(_) => return Status::MISSING,
             Err(status) => return status,
         };
         let who = format!("the mod {}", record.id);
-        match crate::chat_mute::set(loader, account.get(), muted == 1, &who) {
+        match crate::actions::chat_mute::set(loader, account.get(), muted == 1, &who) {
             Ok(()) => Status::OK,
-            Err(crate::chat_mute::SetMuteError::Protected) => Status::REFUSED,
-            Err(crate::chat_mute::SetMuteError::NoWorld) => Status::MISSING,
+            Err(crate::actions::chat_mute::SetMuteError::Protected) => Status::REFUSED,
+            Err(crate::actions::chat_mute::SetMuteError::NoWorld) => Status::MISSING,
             Err(e) => {
                 crate::log!(WARN, "chat mutes: {who} changed nothing: {e}");
                 Status::REFUSED
@@ -986,11 +415,11 @@ pub(crate) extern "system" fn chat_mute_has(
             return Status::BAD_ARGS;
         }
         let loader = match caller(me) {
-            Ok(loader) if crate::chat_mute::serving(loader) => loader,
+            Ok(loader) if crate::actions::chat_mute::serving(loader) => loader,
             Ok(_) => return Status::MISSING,
             Err(status) => return status,
         };
-        let has = crate::chat_mute::has(loader, account.get());
+        let has = crate::actions::chat_mute::has(loader, account.get());
         // SAFETY: the caller passes `muted` writable for one byte for the
         // call, as `HostApi::chat_mute_has` states; `put` refuses null.
         unsafe { put(muted, u8::from(has)) }

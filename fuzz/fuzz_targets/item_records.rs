@@ -3,7 +3,7 @@
 
 #![no_main]
 
-use enshwick_loader::item_records::{decode, encode};
+use enshwick_loader::inventory::item_records::{decode, encode};
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {

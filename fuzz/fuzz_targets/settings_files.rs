@@ -7,7 +7,7 @@
 use enshwick::config::Schema;
 use enshwick::i18n::Texts;
 use enshwick::packs::PackManifest;
-use enshwick_loader::record::Record;
+use enshwick_loader::base::record::Record;
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|text: &str| {

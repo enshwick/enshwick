@@ -3,7 +3,7 @@
 
 #![no_main]
 
-use enshwick_loader::join::{difference, mod_rules_value, mods_complete, plan, rule};
+use enshwick_loader::base::join::{difference, mod_rules_value, mods_complete, plan, rule};
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|reply: &[u8]| {
@@ -15,6 +15,6 @@ fuzz_target!(|reply: &[u8]| {
     let found = difference(&mods, "you.mod@1.0.0", "you.off@1.0.0", complete);
     assert!(
         found.missing.len() + found.mismatch.len() + found.extra.len()
-            <= enshwick_loader::join::MAX_LINES
+            <= enshwick_loader::base::join::MAX_LINES
     );
 });

@@ -8,7 +8,7 @@
 
 use enshwick::config::{Field, Schema, value_at};
 use enshwick_fuzz::text_fields;
-use enshwick_loader::{configure, remote, worlds};
+use enshwick_loader::{base::configure, base::remote, base::worlds};
 use libfuzzer_sys::fuzz_target;
 
 fn schema() -> Schema {

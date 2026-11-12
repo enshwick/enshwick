@@ -149,7 +149,7 @@ changed does not.
   turns off; the others load.
 
 Find every address before registering anything, as
-[the loader's base limit](https://github.com/enshwick/enshwick/blob/main/crates/runtime/loader/src/bases.rs)
+[the loader's base limit](https://github.com/enshwick/enshwick/blob/main/crates/runtime/loader/src/world/bases.rs)
 does, so a miss leaves the game untouched rather than half changed.
 
 ## Code patterns

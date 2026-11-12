@@ -90,7 +90,7 @@ fn loader(mods: &[TestMod], developer_tools: bool) -> (Loader, Vec<Library>) {
         .iter()
         // SAFETY: each manifest is one `TestMod::manifest` leaked, its
         // strings `'static` literals and its lists null.
-        .map(|library| unsafe { crate::manifest::parse(library.manifest) }.unwrap())
+        .map(|library| unsafe { crate::base::manifest::parse(library.manifest) }.unwrap())
         .collect();
     let plan = resolve::resolve(&candidates);
     let mods = records(&libraries, &candidates, &plan);
@@ -105,7 +105,7 @@ fn loader(mods: &[TestMod], developer_tools: bool) -> (Loader, Vec<Library>) {
         side: Side::SERVER,
         base: 0,
         fingerprint: Fingerprint::new([0; 16], 0),
-        build: Box::leak(Box::new(crate::builds::empty())),
+        build: Box::leak(Box::new(crate::engine::builds::empty())),
         reflection: Reflection::default(),
         mods_dir: PathBuf::new(),
         developer_tools,
@@ -118,7 +118,7 @@ fn loader(mods: &[TestMod], developer_tools: bool) -> (Loader, Vec<Library>) {
         delivery: OnceLock::new(),
         settings_problems: Vec::new(),
         newer_release: OnceLock::new(),
-        retry: crate::retry::Retry::default(),
+        retry: crate::engine::retry::Retry::default(),
         skipped,
     };
     (loader, order)
@@ -161,12 +161,12 @@ fn a_second_copy_skipped_at_start_is_kept_with_its_reason_but_its_running_mod_is
     );
     assert_eq!(skipped.file, "you.safes/you.safes.dll");
     assert!(
-        crate::off_line::mods_off(&loader).is_empty(),
+        crate::base::off_line::mods_off(&loader).is_empty(),
         "you.safes runs"
     );
-    assert_eq!(crate::off_line::mods_off_count(&loader), 0);
+    assert_eq!(crate::base::off_line::mods_off_count(&loader), 0);
     assert_eq!(
-        crate::off_line::mods_counted(&loader),
+        crate::base::off_line::mods_counted(&loader),
         1,
         "one mod, two files"
     );
@@ -178,13 +178,13 @@ fn the_off_names_and_count_follow_a_mod_that_turns_off() {
         &[TestMod::plain("you.safes"), TestMod::plain("you.altars")],
         false,
     );
-    assert!(crate::off_line::mods_off(&loader).is_empty());
+    assert!(crate::base::off_line::mods_off(&loader).is_empty());
     let altars = loader.mods.iter().find(|m| m.id == "you.altars").unwrap();
     altars.off.store(true, Ordering::Release);
-    assert_eq!(crate::off_line::mods_off(&loader), ["you.altars"]);
-    assert_eq!(crate::off_line::mods_off_count(&loader), 1);
-    assert_eq!(crate::off_line::mods_counted(&loader), 2);
-    let names = crate::off_line::names(&loader);
+    assert_eq!(crate::base::off_line::mods_off(&loader), ["you.altars"]);
+    assert_eq!(crate::base::off_line::mods_off_count(&loader), 1);
+    assert_eq!(crate::base::off_line::mods_counted(&loader), 2);
+    let names = crate::base::off_line::names(&loader);
     assert_eq!(names.first().map(String::as_str), Some("you.altars"));
     let mut loader = loader;
     loader.skipped.push(resolve::Skipped {
@@ -194,9 +194,12 @@ fn the_off_names_and_count_follow_a_mod_that_turns_off() {
         file: "you.map/you.map.dll".into(),
         reason: resolve::Skip::Missing { id: "you.x".into() },
     });
-    assert_eq!(crate::off_line::mods_off(&loader), ["you.altars", "Map"]);
-    assert_eq!(crate::off_line::mods_off_count(&loader), 2);
-    assert_eq!(crate::off_line::mods_counted(&loader), 3);
+    assert_eq!(
+        crate::base::off_line::mods_off(&loader),
+        ["you.altars", "Map"]
+    );
+    assert_eq!(crate::base::off_line::mods_off_count(&loader), 2);
+    assert_eq!(crate::base::off_line::mods_counted(&loader), 3);
 }
 
 /// The handle of the mod `id` in `loader`'s load order.
@@ -231,17 +234,17 @@ fn a_pack_s_callback_runs_as_the_pack_and_a_dll_s_as_the_loader() {
     let (dll, pack) = (at("you.lanterns"), at("you.pack"));
     loader.mods[pack.get()].pack = true;
     assert_eq!(
-        crate::profile::pack_handle(&loader.mods, pack),
+        crate::engine::profile::pack_handle(&loader.mods, pack),
         Some(host::handle(pack)),
         "a pack runs in the loader's copy as itself"
     );
     assert_eq!(
-        crate::profile::pack_handle(&loader.mods, dll),
+        crate::engine::profile::pack_handle(&loader.mods, dll),
         None,
         "a DLL has its own copy; the loader's runs as the loader"
     );
     assert_eq!(
-        crate::profile::pack_handle(&loader.mods, ModIndex::new(loader.mods.len())),
+        crate::engine::profile::pack_handle(&loader.mods, ModIndex::new(loader.mods.len())),
         None,
         "an owner past the loaded mods"
     );
@@ -257,7 +260,7 @@ fn a_developer_mod_is_off_before_its_init_without_developer_tools() {
     let probe = loader.mods.iter().find(|m| m.id == "you.probe").unwrap();
     assert_eq!(
         probe.off_reason.relock().as_deref(),
-        Some(crate::developer_tools::off_reason())
+        Some(crate::base::developer_tools::off_reason())
     );
 }
 

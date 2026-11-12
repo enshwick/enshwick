@@ -6,11 +6,11 @@ use std::sync::{Mutex, OnceLock};
 
 use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 
-use crate::chains::Chains;
+use crate::base::resolve::{self, Candidate};
+use crate::engine::chains::Chains;
+use crate::engine::pe;
 use crate::host::{self, Loader};
-use crate::pe;
-use crate::resolve::{self, Candidate};
-use crate::{builds, log};
+use crate::{engine::builds, engine::log};
 
 use super::game::GAME_DIRS;
 use super::library::{Library, Run, libraries};
@@ -127,8 +127,8 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         side,
         exe_dir.and_then(|dir| builds::steam_build(dir, side)),
         exe_dir
-            .and_then(|dir| crate::archive::open_game(dir, side))
-            .and_then(crate::archive::Archive::version),
+            .and_then(|dir| crate::engine::archive::open_game(dir, side))
+            .and_then(crate::engine::archive::Archive::version),
         fingerprint,
     );
     let mut build = if patterns {
@@ -138,7 +138,7 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
     }
     .ok_or(DryRunError::NoTable)?;
     if let Some(exe_dir) = exe_dir {
-        crate::attribute_slots::supply(&mut build, &reflection, exe_dir, side);
+        crate::engine::attribute_slots::supply(&mut build, &reflection, exe_dir, side);
     }
     match enshwick_gamedata::Routes::embedded() {
         Ok(routes) if patterns => build.unrouted(&routes, side),
@@ -160,7 +160,7 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         fingerprint,
         build,
         reflection,
-        developer_tools: crate::developer_tools::marked(game_dir),
+        developer_tools: crate::base::developer_tools::marked(game_dir),
         mods_dir,
         mods: records(&libraries, &candidates, &plan),
         others,
@@ -171,7 +171,7 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         delivery: OnceLock::new(),
         settings_problems: Vec::new(),
         newer_release: OnceLock::new(),
-        retry: crate::retry::Retry::default(),
+        retry: crate::engine::retry::Retry::default(),
         skipped: skipped(&libraries, &candidates, &plan),
     };
     let loader = host::install(loader).ok_or(DryRunError::AlreadyRan)?;
@@ -241,7 +241,7 @@ fn outcomes(
 fn map_image(bytes: &[u8]) -> Result<(u64, &'static [u8]), DryRunError> {
     let headers = pe::Headers::read(bytes).map_err(DryRunError::MissingHeader)?;
     let at = usize::try_from(headers.base).map_err(|_| DryRunError::Unmapped(headers.base))?;
-    let memory = crate::pages::allocate(Some(at), headers.size)
+    let memory = crate::engine::pages::allocate(Some(at), headers.size)
         .filter(|memory| memory.as_ptr().addr() == at)
         .ok_or(DryRunError::Unmapped(headers.base))?;
     // SAFETY: `allocate` committed `headers.size` bytes at `memory`, which

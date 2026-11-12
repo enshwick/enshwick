@@ -126,7 +126,7 @@ has two flags, combined with `HookFlags(a.0 | b.0)`:
 
 - `EXCLUSIVE`: no other mod may link on this function. Use it for a link that
   replaces the function and cannot share it. The loader
-  [links](https://github.com/enshwick/enshwick/blob/main/crates/runtime/loader/src/altars.rs)
+  [links](https://github.com/enshwick/enshwick/blob/main/crates/runtime/loader/src/world/altars.rs)
   `upgrade_building_range` so while a mod controls altar zones.
 - `CALLER_FRAME`: the loader records the game caller's stack pointer and
   callee-saved registers at entry of the chain. The link reads them with

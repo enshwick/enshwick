@@ -10,11 +10,11 @@ use enshwick_core::abi::{
 };
 use enshwick_gamedata::reflect::{Fingerprint, Reflection};
 
-use crate::builds::KnownBuild;
-use crate::chains::{Chains, Link, Next};
-use crate::mid::Mids;
-use crate::mod_index::ModIndex;
-use crate::pinned::{Constant, Symbol};
+use crate::engine::builds::KnownBuild;
+use crate::engine::chains::{Chains, Link, Next};
+use crate::engine::mid::Mids;
+use crate::engine::mod_index::ModIndex;
+use crate::engine::pinned::{Constant, Symbol};
 use enshwick_base::Relock;
 
 mod api;
@@ -23,7 +23,7 @@ mod join;
 mod memory;
 
 pub(crate) use api::API;
-pub(crate) use entries::mods::{CheckSettingsError, check_settings};
+pub(crate) use entries::base::mods::{CheckSettingsError, check_settings};
 pub(crate) use join::{
     admitted, apply_server_value, back_on, difference_waits, forget_server_values, join_missing,
     join_mods, join_mods_off, kicked_for_mods, report_join_missing, show_difference,
@@ -43,7 +43,7 @@ pub(crate) struct ModRecord {
     /// Its manifest, copied out of its DLL.
     pub(crate) manifest: &'static Manifest,
     /// What its manifest tells players about it.
-    pub(crate) meta: crate::manifest::Meta,
+    pub(crate) meta: crate::base::manifest::Meta,
     /// Set when the mod is off: refused at init or faulted later.
     pub(crate) off: AtomicBool,
     /// Why it is off, as the mod or the loader gave it: a text of the mod's
@@ -58,7 +58,7 @@ pub(crate) struct ModRecord {
     /// mod, every file seen as one.
     pub(crate) server_values: Mutex<Option<String>>,
     /// The settings files the mod declared, in the order it declared them.
-    pub(crate) settings_files: Mutex<Vec<crate::worlds::SettingsFile>>,
+    pub(crate) settings_files: Mutex<Vec<crate::base::worlds::SettingsFile>>,
     /// The mod's checks of new settings texts, by file: callback and pointer.
     pub(crate) checks: Mutex<Vec<(String, api_frame::ConfigCheckFn, usize)>>,
     /// The texts the mod handed the loader, for its settings' labels.
@@ -66,14 +66,14 @@ pub(crate) struct ModRecord {
     /// Whether it is a data pack, a folder of data the loader runs.
     pub(crate) pack: bool,
     /// The features it reported on or off, in the order it named them.
-    pub(crate) features: Mutex<Vec<crate::features::Feature>>,
+    pub(crate) features: Mutex<Vec<crate::engine::features::Feature>>,
 }
 
 impl ModRecord {
     /// Its settings files seen as one, as the console and the Mods screen
     /// show them; `None` for a mod without settings.
     pub(crate) fn settings_schema(&self) -> Option<enshwick_core::config::Schema> {
-        crate::worlds::view_schema(&self.settings_files.relock())
+        crate::base::worlds::view_schema(&self.settings_files.relock())
     }
 
     /// Its folder in `mods/`, which holds its installation hold.
@@ -88,7 +88,7 @@ impl ModRecord {
     pub(crate) fn requires(&self, id: &str) -> bool {
         // SAFETY: a record's manifest is the loader's copy, kept for the
         // process with every string and slice in it.
-        unsafe { crate::manifest::parse(self.manifest) }.is_ok_and(|candidate| {
+        unsafe { crate::base::manifest::parse(self.manifest) }.is_ok_and(|candidate| {
             candidate
                 .dependencies
                 .iter()
@@ -101,14 +101,14 @@ impl ModRecord {
     pub(crate) fn exports(&self) -> Vec<&str> {
         // SAFETY: a record's manifest is the loader's copy, kept for the
         // process with every string and slice in it.
-        unsafe { crate::manifest::exports(self.manifest) }
+        unsafe { crate::base::manifest::exports(self.manifest) }
     }
 
     /// Why it is off, in the reader's language where its texts have the
     /// reason's text; `None` while it runs.
     pub(crate) fn off_reason_shown(&self) -> Option<String> {
         let reason = self.off_reason.relock().clone()?;
-        Some(crate::configure::mod_reason(
+        Some(crate::base::configure::mod_reason(
             self.texts.relock().as_ref(),
             &reason,
         ))
@@ -117,8 +117,10 @@ impl ModRecord {
     /// The name players read, from the mod's texts in their language, else
     /// from its manifest; empty when neither names it.
     pub(crate) fn name(&self) -> String {
-        self.meta
-            .name_in(self.texts.relock().as_ref(), crate::texts::language())
+        self.meta.name_in(
+            self.texts.relock().as_ref(),
+            crate::engine::texts::language(),
+        )
     }
 
     /// The name players read, or the id when nothing names the mod.
@@ -129,8 +131,10 @@ impl ModRecord {
     /// What the mod does, from its texts in the player's language, else
     /// from its manifest.
     pub(crate) fn description(&self) -> String {
-        self.meta
-            .description_in(self.texts.relock().as_ref(), crate::texts::language())
+        self.meta.description_in(
+            self.texts.relock().as_ref(),
+            crate::engine::texts::language(),
+        )
     }
 
     /// Whether it runs on both sides, so it takes part in the join check
@@ -147,7 +151,11 @@ impl ModRecord {
     /// The version the join check compares: a pack's carries the hash of its
     /// files, so other files of one version differ.
     pub(crate) fn join_version(&self) -> String {
-        match self.pack.then(|| crate::packs::hash_of(&self.id)).flatten() {
+        match self
+            .pack
+            .then(|| crate::packs::data_packs::hash_of(&self.id))
+            .flatten()
+        {
             Some(hash) => format!("{}+{hash}", self.version),
             None => self.version.clone(),
         }
@@ -212,7 +220,7 @@ pub(crate) struct Loader {
     /// Loaded mods, in load order; handle `n` is index `n - 1`.
     pub(crate) mods: Vec<ModRecord>,
     /// The DLLs that run beside the mods without the API.
-    pub(crate) others: Vec<crate::others::OtherDll>,
+    pub(crate) others: Vec<crate::engine::others::OtherDll>,
     /// Every hook chain.
     pub(crate) chains: Mutex<Chains>,
     /// Every mid-function hook.
@@ -226,11 +234,11 @@ pub(crate) struct Loader {
     /// What was wrong in the loader settings file at start, a line each.
     pub(crate) settings_problems: Vec<String>,
     /// A newer Enshwick release, once the release check found one.
-    pub(crate) newer_release: OnceLock<crate::releases::Release>,
+    pub(crate) newer_release: OnceLock<crate::base::releases::Release>,
     /// The code patches a thread kept out at arming, tried again later.
-    pub(crate) retry: crate::retry::Retry,
+    pub(crate) retry: crate::engine::retry::Retry,
     /// The mods that did not load, shown as off with their reason.
-    pub(crate) skipped: Vec<crate::resolve::Skipped>,
+    pub(crate) skipped: Vec<crate::base::resolve::Skipped>,
 }
 
 /// The warning line and the status entry of `feature` turned off on `build`
@@ -244,7 +252,7 @@ pub(crate) fn off_report(
 ) -> (String, String) {
     let reason = build.reason(id, reason);
     (
-        crate::builds::off_line(feature, &build.name, id, reason),
+        crate::engine::builds::off_line(feature, &build.name, id, reason),
         format!("{id} {reason}"),
     )
 }
@@ -254,7 +262,7 @@ pub(crate) fn off_report(
 /// status summary. Always false, for the caller to return.
 pub(crate) fn report_off(feature: &str, (line, entry): (String, String)) -> bool {
     crate::log!(WARN, "{line}");
-    crate::diag::part_off(feature, &entry);
+    crate::engine::diag::part_off(feature, &entry);
     false
 }
 
@@ -407,7 +415,7 @@ impl Loader {
 
     /// Whether the code at symbol `id` is what the table expects, checked
     /// before a hook patches it or a detour relies on it, by
-    /// [`crate::builds::code_holds`]: the anchors made every check of a
+    /// [`crate::engine::builds::code_holds`]: the anchors made every check of a
     /// symbol while they found it (its pattern where its code starts, its
     /// `<id>.bytes`, its whole function's body), so the presence of a check
     /// counts; so does an engine route that found the symbol, whose own
@@ -417,7 +425,7 @@ impl Loader {
             return false;
         }
         let checked = |present: bool| present.then_some(true);
-        crate::builds::code_holds(&[
+        crate::engine::builds::code_holds(&[
             checked(self.build.head(id.id()).is_some()),
             checked(self.build.constant(&format!("{id}.bytes")).is_some()),
             checked(self.build.body(id.id()).is_some()),
@@ -440,9 +448,13 @@ impl Loader {
         let (id, address) = match target {
             Target::Pinned(symbol) => (
                 symbol.id(),
-                crate::builds::hook_target(self.address(symbol), || self.code_holds(symbol)),
+                crate::engine::builds::hook_target(self.address(symbol), || {
+                    self.code_holds(symbol)
+                }),
             ),
-            Target::Found(id, address) => (id, crate::builds::hook_target(address, || true)),
+            Target::Found(id, address) => {
+                (id, crate::engine::builds::hook_target(address, || true))
+            }
         };
         let address = match address {
             Ok(address) => address,
@@ -452,7 +464,7 @@ impl Loader {
         if !status.is_ok() {
             return self.feature_off(feature, id, &format!("refused the link ({})", status.0));
         }
-        crate::diag::name(address, id);
+        crate::engine::diag::name(address, id);
         true
     }
 
@@ -492,15 +504,15 @@ impl Loader {
         }
         *record.off_reason.relock() = Some(reason.to_owned());
         let shown = record.off_reason_shown().unwrap_or_default();
-        crate::log::write(
+        crate::engine::log::write(
             Level::ERROR,
             &record.id,
-            &format!("off: {shown} ({})", crate::errors::MOD_OFF),
+            &format!("off: {shown} ({})", crate::engine::errors::MOD_OFF),
         );
         if record.pack {
-            crate::packs::forget(&record.id);
+            crate::packs::data_packs::forget(&record.id);
         }
-        crate::diag::turned_off(&record.id, &shown);
+        crate::engine::diag::turned_off(&record.id, &shown);
         // A poisoned lock still holds the chains: the mod must be wired past.
         let chains = self.chains.relock();
         let faulted = |owner: ModIndex| {
@@ -519,9 +531,9 @@ impl Loader {
                     .is_some_and(|m| m.waiting.load(Ordering::Acquire))
         });
         drop(chains);
-        crate::points::rearm(faulted);
+        crate::base::points::rearm(faulted);
         if record.joins_when_on() {
-            crate::advertise::wake();
+            crate::base::advertise::wake();
         }
     }
 
@@ -536,7 +548,7 @@ impl Loader {
             return;
         }
         *record.off_reason.relock() = None;
-        crate::log::write(Level::INFO, &record.id, "back on");
+        crate::engine::log::write(Level::INFO, &record.id, "back on");
         let chains = self.chains.relock();
         let off = |owner: ModIndex| {
             owner != ModIndex::LOADER
@@ -553,7 +565,7 @@ impl Loader {
                     .is_some_and(|m| m.waiting.load(Ordering::Acquire))
         });
         drop(chains);
-        crate::points::rearm(off);
+        crate::base::points::rearm(off);
     }
 
     /// Ends subscribing: from now on events go to the subscriptions made so
@@ -572,11 +584,11 @@ impl Loader {
         let item_data = matches!(
             event,
             Event::WORLD_LOADED | Event::WORLD_SAVED | Event::SHUTDOWN_STARTED
-        ) && (crate::item_data::wanted()
-            || crate::weather::follows(self)
-            || crate::stats::wanted()
-            || crate::data_changes::wanted(self)
-            || crate::rate_links::recipes_rated());
+        ) && (crate::inventory::item_data::wanted()
+            || crate::world::weather::follows(self)
+            || crate::inventory::stats::wanted()
+            || crate::content::data_changes::wanted(self)
+            || crate::content::rate_links::recipes_rated());
         item_data
             || self
                 .delivery
@@ -593,14 +605,14 @@ impl Loader {
                 Event::WORLD_LOADED | Event::WORLD_SAVED | Event::SHUTDOWN_STARTED
             )
         {
-            crate::game_settings::world_event(self, event);
-            crate::knowledge::changes::world_event(self, event);
-            crate::item_data::world_event(self, event);
-            crate::stats::world_event(self, event);
-            crate::data_changes::world_event(self, event);
-            crate::rate_links::world_event(event);
-            crate::chat_mute::world_event(self, event);
-            crate::weather::world_event(self, event);
+            crate::world::game_settings::world_event(self, event);
+            crate::knowledge::store::changes::world_event(self, event);
+            crate::inventory::item_data::world_event(self, event);
+            crate::inventory::stats::world_event(self, event);
+            crate::content::data_changes::world_event(self, event);
+            crate::content::rate_links::world_event(event);
+            crate::actions::chat_mute::world_event(self, event);
+            crate::world::weather::world_event(self, event);
         }
         let Some(delivery) = self.delivery.get() else {
             return;
@@ -615,9 +627,9 @@ impl Loader {
         }) {
             // SAFETY: the handler lives in the mod's DLL, which stays loaded;
             // the safe layer catches its panics.
-            crate::profile::call(
+            crate::engine::profile::call(
                 subscription.owner,
-                crate::profile::Feature::Events,
+                crate::engine::profile::Feature::Events,
                 || unsafe {
                     (subscription.callback)(
                         event,
@@ -672,7 +684,7 @@ impl Loader {
             find(constants, name)
         });
         own.or_else(|| self.build.constant(name))
-            .or_else(|| crate::catalogue::constant(name, &self.reflection))
+            .or_else(|| crate::engine::catalogue::constant(name, &self.reflection))
     }
 }
 

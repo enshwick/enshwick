@@ -1,20 +1,10 @@
-//! The functions of the host table, by domain.
+//! The functions of the host table, one file per domain as the fake loader's
+//! table cuts them, lowest first.
 
-pub(crate) mod build;
-pub(crate) mod calls;
-pub(crate) mod chat;
-pub(crate) mod commands;
+pub(crate) mod actions;
+pub(crate) mod base;
 pub(crate) mod content;
-pub(crate) mod effects;
-pub(crate) mod gameplay;
-pub(crate) mod hooks;
 pub(crate) mod inventory;
-pub(crate) mod items;
-pub(crate) mod mods;
-pub(crate) mod net;
-pub(crate) mod pages;
-pub(crate) mod saves;
-pub(crate) mod services;
-pub(crate) mod transactions;
+pub(crate) mod knowledge;
 pub(crate) mod ui;
 pub(crate) mod world;

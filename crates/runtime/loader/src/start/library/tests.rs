@@ -7,7 +7,7 @@ use std::process::Command;
 use enshwick_core::abi::Level;
 
 use super::{Run, libraries};
-use crate::errors;
+use crate::engine::errors;
 
 /// The fixture crate's manifest; `{api}` is the API crate's folder.
 const CARGO_TOML: &str = r#"[package]
@@ -254,9 +254,9 @@ fn the_fixtures_build_with_the_compiler_beside_the_tests_cargo() {
 
 /// The loader's lines: level and message.
 fn loader_lines() -> Vec<(Level, String)> {
-    crate::log::captured()
+    crate::engine::log::captured()
         .into_iter()
-        .filter(|(_, source, _)| source == crate::settings::LOADER_ID)
+        .filter(|(_, source, _)| source == crate::engine::settings::LOADER_ID)
         .map(|(level, _, text)| (level, text))
         .collect()
 }
@@ -304,17 +304,17 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
     fill_mods(&built, &mods);
 
     // Tests sharing the process may have raised the level past news.
-    crate::log::set_levels(crate::settings::Settings {
+    crate::engine::log::set_levels(crate::engine::settings::Settings {
         log_level: Level::INFO,
-        ..crate::settings::Settings::default()
+        ..crate::engine::settings::Settings::default()
     });
-    crate::log::capture();
+    crate::engine::log::capture();
     let mut mapped = Vec::new();
     let (found, candidates, others) = libraries(&mods, Run::Dry, &mut |file, range| {
         mapped.push((file.to_owned(), range));
     });
     let lines = loader_lines();
-    crate::log::end_capture();
+    crate::engine::log::end_capture();
 
     // A DLL freed for its exports or ABI still ran while it loaded, so the
     // code watch needs where it was mapped; only a file that never mapped
@@ -400,14 +400,14 @@ fn each_file_of_the_layout_before_mod_folders_gets_one_line() {
     let _old = std::fs::remove_dir_all(&dir);
     let mods = dir.join("mods");
     std::fs::create_dir_all(mods.join("chain")).unwrap();
-    std::fs::create_dir_all(mods.join(crate::settings::LOADER_ID)).unwrap();
+    std::fs::create_dir_all(mods.join(crate::engine::settings::LOADER_ID)).unwrap();
     std::fs::write(mods.join("lanterns.dll"), "").unwrap();
     std::fs::write(mods.join("enshwick/mods.toml"), "").unwrap();
     std::fs::create_dir_all(dir.join("mod-configs")).unwrap();
-    crate::log::capture();
+    crate::engine::log::capture();
     super::note_old_layout(&mods);
     let lines = loader_lines();
-    crate::log::end_capture();
+    crate::engine::log::end_capture();
     let old: Vec<&str> = lines
         .iter()
         .filter(|(level, _)| *level == Level::WARN)
@@ -451,7 +451,7 @@ fn a_mods_import_never_resolves_from_the_current_directory() {
     let imports = folder.join("imports.dll");
     std::fs::copy(built.join("imports.dll"), &imports).unwrap();
     let dependency = format!("{DEPENDENCY}.dll");
-    let system = crate::module::system_dir().unwrap();
+    let system = crate::engine::module::system_dir().unwrap();
     std::fs::copy(system.join("version.dll"), current.join(&dependency)).unwrap();
 
     // The current directory is the process's, so the load runs in a child.

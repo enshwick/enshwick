@@ -10,8 +10,8 @@ use std::time::{Duration, Instant};
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use enshwick_core::abi::Level;
-use enshwick_loader::chains::{Counter, Next};
-use enshwick_loader::fuse::Fuse;
+use enshwick_loader::engine::chains::{Counter, Next};
+use enshwick_loader::engine::fuse::Fuse;
 
 type Reward = extern "system" fn(u32) -> u32;
 
@@ -122,8 +122,8 @@ fn fuse(c: &mut Criterion) {
 
 #[cfg(target_arch = "x86_64")]
 fn profile(c: &mut Criterion) {
-    use enshwick_loader::mod_index::ModIndex;
-    use enshwick_loader::profile::{self, Feature};
+    use enshwick_loader::engine::mod_index::ModIndex;
+    use enshwick_loader::engine::profile::{self, Feature};
 
     let mut group = c.benchmark_group("profile_call");
     group.bench_function("untimed", |b| {
@@ -154,11 +154,11 @@ fn profile(_: &mut Criterion) {}
 
 fn log_line(c: &mut Criterion) {
     let dir = std::env::temp_dir().join(format!("enshwick-bench-log-{}", std::process::id()));
-    enshwick_loader::log::open(&dir);
+    enshwick_loader::engine::log::open(&dir);
     let mut group = c.benchmark_group("log_line");
     group.bench_function("mod_line", |b| {
         b.iter(|| {
-            enshwick_loader::log::write(
+            enshwick_loader::engine::log::write(
                 Level::INFO,
                 black_box("enshwick.bench"),
                 black_box("the altar at 1024, 2048 grew to level 3"),
