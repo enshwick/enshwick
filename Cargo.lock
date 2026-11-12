@@ -638,6 +638,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "enshwick-knowledge"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "enshwick",
+ "enshwick-abi",
+ "enshwick-base",
+ "enshwick-content",
+ "enshwick-inventory",
+ "enshwick-macros",
+ "enshwick-typed",
+ "enshwick-values",
+ "enshwick-world",
+ "fastrand",
+ "serde",
+]
+
+[[package]]
 name = "enshwick-loader"
 version = "1.0.0-alpha.14"
 dependencies = [

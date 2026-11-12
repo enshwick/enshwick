@@ -14,11 +14,13 @@
 
 use core::ffi::c_void;
 
+pub(crate) mod script;
+
 use crate::Entity;
+use crate::Off;
 use crate::abi::{
     Comfort as RawComfort, ExperiencePass, ExperienceRow, SkillCheck as RawSkillCheck,
 };
-use crate::{Load, Off};
 
 /// One character's experience before the server applies it, from
 /// [`Load::on_experience`]: a filter may change `gained`.
@@ -139,58 +141,6 @@ pub struct Levels {
     token: *mut c_void,
 }
 
-/// The [`Levels`] a script's filter gets: the table read whole during the
-/// pass, since the loader's token lasts only that long.
-#[derive(Clone, Debug)]
-pub(crate) struct ScriptLevels {
-    cap: u32,
-    /// What each level from 1 up needs.
-    needs: Vec<u32>,
-}
-
-impl ScriptLevels {
-    /// Levels read past this are not copied: a real cap is far below it.
-    const MAX_READ: u32 = 1024;
-
-    /// Reads `levels` whole, while its pass lasts.
-    fn read(levels: &Levels) -> Self {
-        Self {
-            cap: levels.cap(),
-            needs: (1..=levels.cap().min(Self::MAX_READ))
-                .map(|level| levels.need(level))
-                .collect(),
-        }
-    }
-}
-
-impl crate::script::Object for ScriptLevels {
-    const CLASS: &'static crate::script::Class = &crate::script::Class::of::<Self>(
-        "Levels",
-        "The game's level table, during an experience pass.",
-    );
-    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_LEVELS];
-}
-
-#[crate::script(levels)]
-impl ScriptLevels {
-    /// The highest level, as [`Levels::cap`] answers.
-    #[script(name = "cap")]
-    pub(crate) const fn cap_script(&self) -> u32 {
-        self.cap
-    }
-
-    /// What `level` needs, 0 for level 0 or past the cap, as
-    /// [`Levels::need`] answers.
-    #[script(name = "need")]
-    pub(crate) fn need_script(&self, level: u32) -> u32 {
-        level
-            .checked_sub(1)
-            .and_then(|at| self.needs.get(usize::try_from(at).ok()?))
-            .copied()
-            .unwrap_or(0)
-    }
-}
-
 impl Levels {
     /// The highest level.
     ///
@@ -296,64 +246,31 @@ where
     );
 }
 
-#[crate::script(progress_hooks)]
-impl Load<'_> {
-    /// Runs `filter` on each comfort a provider registers, as
-    /// `Load::on_comfort` does: the comfort it answers registers; nil keeps
-    /// the comfort as it was.
-    ///
-    /// # Errors
-    ///
-    /// As [`Load::on_comfort`].
-    #[script(name = "on_comfort")]
-    pub(crate) fn on_comfort_script(
-        &mut self,
-        filter: impl Fn(Comfort) -> Option<i32> + Send + Sync + 'static,
-    ) -> Result<(), Off> {
-        self.on_comfort(move |comfort| filter(*comfort).unwrap_or(comfort.value))
-    }
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::on_skill`.
+    #[doc(hidden)]
+    fn on_skill<F>(&mut self, skill: Skill, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&SkillCheck) -> Option<bool> + Send + Sync + 'static;
 
-    /// Runs `filter` on each tick's experience with the level table, as
-    /// `Load::on_experience` does: it returns the changed list, or nil to
-    /// keep it.
-    ///
-    /// # Errors
-    ///
-    /// As [`Load::on_experience`].
-    #[script(name = "on_experience")]
-    pub(crate) fn on_experience_script(
-        &mut self,
-        filter: impl Fn(Vec<Experience>, ScriptLevels) -> Option<Vec<Experience>>
-        + Send
-        + Sync
-        + 'static,
-    ) -> Result<(), Off> {
-        self.on_experience(move |all, levels| {
-            if let Some(changed) = filter(all.to_vec(), ScriptLevels::read(levels)) {
-                for (slot, new) in all.iter_mut().zip(changed) {
-                    *slot = new;
-                }
-            }
-        })
-    }
+    /// As `Load::on_comfort`.
+    #[doc(hidden)]
+    fn on_comfort<F>(&mut self, filter: F) -> Result<(), Off>
+    where
+        F: Fn(&Comfort) -> i32 + Send + Sync + 'static;
+
+    /// As `Load::on_experience`.
+    #[doc(hidden)]
+    fn on_experience<F>(&mut self, filter: F) -> Result<(), Off>
+    where
+        F: Fn(&mut [Experience], &Levels) + Send + Sync + 'static;
 }
 
-#[crate::script(progress)]
-impl Load<'_> {
-    /// Answers the game's checks of `skill`: `Some(true)` unlocks it for
-    /// that check, `Some(false)` locks it, `None` keeps the game's answer. It
-    /// runs on both sides, on the checking thread, and only for `skill`.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] after init, on a build whose table lacks the skill's node, or
-    /// on a build that lacks the check.
-    ///
-    /// # Examples
-    ///
-    /// See the [module](self).
-    #[script]
-    pub fn on_skill<F>(&mut self, skill: Skill, handler: F) -> Result<(), Off>
+impl LoadMethods for crate::BaseLoad {
+    fn on_skill<F>(&mut self, skill: Skill, handler: F) -> Result<(), Off>
     where
         F: Fn(&SkillCheck) -> Option<bool> + Send + Sync + 'static,
     {
@@ -369,22 +286,7 @@ impl Load<'_> {
         )
     }
 
-    /// Changes the comfort each provider registers in a base: `filter`
-    /// returns the value to register. Server's worker threads, on the hot
-    /// path of every base: keep it to arithmetic.
-    ///
-    /// # Errors
-    ///
-    /// As for [`Load::on_skill`].
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.on_comfort(|comfort| comfort.value.saturating_mul(2))
-    /// }
-    /// ```
-    pub fn on_comfort<F>(&mut self, filter: F) -> Result<(), Off>
+    fn on_comfort<F>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&Comfort) -> i32 + Send + Sync + 'static,
     {
@@ -396,33 +298,7 @@ impl Load<'_> {
         )
     }
 
-    /// Runs `filter` on every spawned character's experience before the
-    /// server applies it; changes to `gained` are written back and sent to
-    /// the players. Server's worker threads, once per batch.
-    ///
-    /// The engine runs its experience system several times a tick, one batch
-    /// of characters each, so `filter` runs on every tick, most often with
-    /// nothing gained: return early when no row gained anything, and never
-    /// allocate or lock on the way.
-    ///
-    /// # Errors
-    ///
-    /// As for [`Load::on_skill`].
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     // Double every gain, never past the end of the level.
-    ///     load.on_experience(|rows, _levels| {
-    ///         for row in rows {
-    ///             let room = row.need.saturating_sub(row.progress);
-    ///             row.gained = row.gained.saturating_mul(2).min(room.max(row.gained));
-    ///         }
-    ///     })
-    /// }
-    /// ```
-    pub fn on_experience<F>(&mut self, filter: F) -> Result<(), Off>
+    fn on_experience<F>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&mut [Experience], &Levels) + Send + Sync + 'static,
     {

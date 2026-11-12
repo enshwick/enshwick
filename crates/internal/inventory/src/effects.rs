@@ -875,7 +875,7 @@ impl crate::script::Bound for Effects {
     const PARTS: &'static [&'static [crate::script::Function<Self>]] =
         &[Self::SCRIPT_EVENTS, Self::SCRIPT_SPAWNS];
 
-    fn resolve(load: &mut impl crate::Loading) -> Result<Self, crate::Off> {
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
         Ok(load.base_mut().effects())
     }
 }

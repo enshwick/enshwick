@@ -746,7 +746,7 @@ impl crate::script::Bound for EcsFns {
     const DOC: &'static str = "The world's fixed-point coordinates and metres.";
     const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_ECS_FNS];
 
-    fn resolve(_load: &mut impl crate::Loading) -> Result<Self, crate::Off> {
+    fn resolve(_load: &mut impl crate::Loading) -> Result<Self, Off> {
         Ok(Self)
     }
 }

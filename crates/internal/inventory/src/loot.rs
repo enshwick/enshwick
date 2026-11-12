@@ -529,7 +529,7 @@ impl crate::script::Bound for LootFns {
     const DOC: &'static str = "Mod items in random loot, and the game's loot passes.";
     const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_LOOT_FNS];
 
-    fn resolve(_load: &mut impl crate::Loading) -> Result<Self, crate::Off> {
+    fn resolve(_load: &mut impl Loading) -> Result<Self, Off> {
         Ok(Self)
     }
 }

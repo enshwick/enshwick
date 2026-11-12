@@ -236,7 +236,7 @@ impl crate::script::Bound for Resources {
         "The game's types, its resources by type and as values, and resources served from an edit.";
     const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_LOOKUPS];
 
-    fn resolve(load: &mut impl crate::Loading) -> Result<Self, crate::Off> {
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
         Ok(Self::open(load.base().host()))
     }
 }

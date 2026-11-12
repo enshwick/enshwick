@@ -109,9 +109,9 @@ pub struct I18nFns;
 impl crate::script::Bound for I18nFns {
     const NAME: &'static str = "i18n";
     const DOC: &'static str = "The game's languages and texts, and a mod's own translations.";
-    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_I18N_FNS];
+    const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_I18N_FNS];
 
-    fn resolve(_load: &mut impl crate::Loading) -> Result<Self, crate::Off> {
+    fn resolve(_load: &mut impl crate::Loading) -> Result<Self, Off> {
         Ok(Self)
     }
 }

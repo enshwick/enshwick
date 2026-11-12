@@ -240,7 +240,7 @@ impl crate::script::Bound for Clock {
         "The clock of the server's world: the time of day and how fast it runs.";
     const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_CLOCK];
 
-    fn resolve(load: &mut impl crate::Loading) -> Result<Self, crate::Off> {
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
         Ok(load.base_mut().clock())
     }
 }

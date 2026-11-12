@@ -32,8 +32,9 @@ use crate::typed::{
     JournalCollectionResource, JournalEntryResource, JournalQuestResource, JournalRegistryResource,
     Named as _, QuestSourceType, QuestType, Reflected,
 };
-use crate::{Entity, ItemId, Load, Off};
+use crate::{Entity, ItemId, Off};
 
+use crate::__load::*;
 use crate::knowledge::{Knowledge, KnowledgeId, Scope};
 
 /// The key of a text the journal names, the FNV-1a of its text tag's GUID.
@@ -385,8 +386,8 @@ impl crate::script::Bound for Quests {
     const DOC: &'static str = "The journal's quests and lore pages, mods' included, and where each player stands in them.";
     const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_QUESTS];
 
-    fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
-        Ok(load.quests())
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
+        Ok(load.base_mut().quests())
     }
 }
 
@@ -557,19 +558,18 @@ impl Quests {
     }
 }
 
-impl Load<'_> {
-    /// The [`Quests`] of the running game; every call of one mod gives the
-    /// same, which reads the journal once.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// fn init(load: &mut enshwick::Load<'_>) -> enshwick::quests::Quests {
-    ///     load.quests()
-    /// }
-    /// ```
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::quests`.
+    #[doc(hidden)]
     #[must_use]
-    pub fn quests(&mut self) -> Quests {
+    fn quests(&mut self) -> Quests;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn quests(&mut self) -> Quests {
         if let Some(quests) = *self.slot::<Quests>() {
             return quests;
         }

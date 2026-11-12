@@ -40,7 +40,7 @@ impl crate::script::Bound for Mods {
         "The loaded mods, the side the mod runs on, and its own folder, read-only.";
     const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_FOLDER];
 
-    fn resolve(load: &mut impl crate::Loading) -> Result<Self, crate::Off> {
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
         Self::open(load.base_mut())
     }
 }

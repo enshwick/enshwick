@@ -27,12 +27,15 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+use crate::__load::*;
 use crate::abi::{BuffTypeId, KnowledgeId, ModHandle, RecipeId};
 use crate::game_events::{
     CraftRecipeEvent, CraftRecipeSuccessEvent, LevelUpEvent, LootInteractionEvent,
 };
 use crate::locks::Relock as _;
-use crate::{Entity, ItemId, Load, Off};
+use crate::{Entity, ItemId, Off};
+use enshwick_inventory::__load::*;
+use enshwick_world::__load::*;
 
 /// What a player does that a reward follows.
 ///
@@ -403,7 +406,7 @@ fn find(me: ModHandle) -> Option<&'static Shared> {
 }
 
 /// The mod's rewards state, made on the first call during init.
-fn shared(load: &mut Load<'_>) -> Result<&'static Shared, Off> {
+fn shared(load: &mut crate::BaseLoad) -> Result<&'static Shared, Off> {
     let me = load.host().handle();
     if let Some(shared) = find(me) {
         return Ok(shared);
@@ -684,23 +687,27 @@ impl Rewards {
     }
 }
 
-#[crate::script(rewards)]
-impl Load<'_> {
-    /// Declares `reward`: the server gives it in the server's world when a
-    /// player does its action, within its limit and chance, if the mod's
-    /// filters allow.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] after init, for a malformed name, a name declared before, a
-    /// reward that gives nothing, a chance outside 0 to 1, or a build
-    /// without what its action or the world's data need.
-    ///
-    /// # Examples
-    ///
-    /// See the [module](self).
-    #[script]
-    pub fn add_reward(&mut self, reward: Reward) -> Result<(), Off> {
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::add_reward`.
+    #[doc(hidden)]
+    fn add_reward(&mut self, reward: Reward) -> Result<(), Off>;
+
+    /// As `Load::on_reward`.
+    #[doc(hidden)]
+    fn on_reward<F>(&mut self, filter: F) -> Result<(), Off>
+    where
+        F: Fn(&RewardGrant) -> bool + Send + Sync + 'static;
+
+    /// As `Load::rewards`.
+    #[doc(hidden)]
+    fn rewards(&mut self) -> Result<Rewards, Off>;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn add_reward(&mut self, reward: Reward) -> Result<(), Off> {
         if let Some(problem) = reward.problem() {
             return Err(Off::new(problem));
         }
@@ -773,25 +780,7 @@ impl Load<'_> {
         }
     }
 
-    /// Runs `filter` before the mod gives any of its rewards, on the game
-    /// thread; returning `false` holds the grant back, and the limit stays
-    /// unused. To give something else instead, give it with
-    /// [`Rewards::give`] and return `false`.
-    ///
-    /// # Errors
-    ///
-    /// As [`Load::add_reward`].
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     // No rewards for the first player, entity 1.
-    ///     load.on_reward(|grant| grant.player != enshwick::Entity(1))
-    /// }
-    /// ```
-    #[script]
-    pub fn on_reward<F>(&mut self, filter: F) -> Result<(), Off>
+    fn on_reward<F>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&RewardGrant) -> bool + Send + Sync + 'static,
     {
@@ -799,16 +788,7 @@ impl Load<'_> {
         Ok(())
     }
 
-    /// The handle that gives the mod's declared rewards from code.
-    ///
-    /// # Errors
-    ///
-    /// As [`Load::add_reward`].
-    ///
-    /// # Examples
-    ///
-    /// See [`Rewards`].
-    pub fn rewards(&mut self) -> Result<Rewards, Off> {
+    fn rewards(&mut self) -> Result<Rewards, Off> {
         shared(self).map(|_| Rewards(self.host().handle()))
     }
 }

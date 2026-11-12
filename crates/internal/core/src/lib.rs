@@ -52,26 +52,28 @@ mod declare;
 #[cfg(feature = "unstable")]
 pub mod input;
 pub mod interactions;
-pub mod knowledge;
+#[doc(inline)]
+pub use enshwick_knowledge::{knowledge, progress};
 mod load;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_world::map;
 pub mod packs;
-pub mod progress;
-#[cfg(feature = "typed")]
-pub mod quests;
 #[doc(inline)]
 pub use enshwick_abi::raw;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_content::rates;
+#[cfg(feature = "typed")]
+#[doc(inline)]
+pub use enshwick_knowledge::quests;
 // Without `unstable` the rates stay inside, for the recipe and comfort
 // scaling the stable parts and the fake host share.
 #[cfg(not(feature = "unstable"))]
 pub(crate) use enshwick_content::rates;
 #[cfg(feature = "unstable")]
-pub mod rewards;
+#[doc(inline)]
+pub use enshwick_knowledge::rewards;
 #[cfg(feature = "unstable")]
 pub mod script;
 // Without `unstable` the binding stays inside, so the crate's own types keep

@@ -208,10 +208,9 @@ impl crate::script::Bound for Content {
     const NAME: &'static str = "content";
     const DOC: &'static str =
         "Game content from mods: new items, recipes and workshops, and changes to vanilla ones.";
-    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
-        &[Self::SCRIPT_CONTENT_LOOKUPS];
+    const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_CONTENT_LOOKUPS];
 
-    fn resolve(_load: &mut impl crate::Loading) -> Result<Self, crate::Off> {
+    fn resolve(_load: &mut impl crate::Loading) -> Result<Self, Off> {
         Ok(Self)
     }
 }

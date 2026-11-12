@@ -396,7 +396,7 @@ impl crate::script::Bound for NetFns {
     const DOC: &'static str = "Messages between a mod's server part and its client part.";
     const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_NET_FNS];
 
-    fn resolve(_load: &mut impl crate::Loading) -> Result<Self, crate::Off> {
+    fn resolve(_load: &mut impl crate::Loading) -> Result<Self, Off> {
         Ok(Self)
     }
 }

@@ -152,7 +152,7 @@ pub struct StateFns;
 impl crate::script::Bound for StateFns {
     const NAME: &'static str = "state";
     const DOC: &'static str = "The data a mod keeps for a world, and holds on its saves.";
-    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_STATE_FNS];
+    const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_STATE_FNS];
 
     fn resolve(_load: &mut impl crate::Loading) -> Result<Self, crate::Off> {
         Ok(Self)
