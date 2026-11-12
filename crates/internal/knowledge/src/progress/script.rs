@@ -104,3 +104,28 @@ impl LoadMethods for crate::BaseLoad {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::ScriptLevels;
+    use crate::progress::Levels;
+
+    unsafe extern "system" fn hundred_per_level(_token: *mut core::ffi::c_void, level: u32) -> u32 {
+        level * 100
+    }
+
+    #[test]
+    fn a_script_reads_the_level_table_as_the_pass_answered_it() {
+        let levels = Levels {
+            cap: 3,
+            need_for: Some(hundred_per_level),
+            token: core::ptr::null_mut(),
+        };
+        let read = ScriptLevels::read(&levels);
+        assert_eq!(read.cap_script(), 3);
+        assert_eq!(read.need_script(0), 0, "level 0 needs nothing");
+        assert_eq!(read.need_script(2), 200);
+        assert_eq!(read.need_script(3), 300);
+        assert_eq!(read.need_script(4), 0, "past the cap needs nothing");
+    }
+}
