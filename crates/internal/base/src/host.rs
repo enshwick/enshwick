@@ -433,6 +433,15 @@ mod tests {
     }
 
     #[test]
+    fn a_caught_panic_answers_err_with_the_first_line_of_its_message() {
+        assert_eq!(caught(|| 7).ok(), Some(7));
+        let panicked = caught(|| -> u32 { panic!("no oil\nleft: 0") }).unwrap_err();
+        assert_eq!(panicked.text(), "no oil");
+        let silent = caught(|| std::panic::panic_any(7_u8)).unwrap_err();
+        assert_eq!(silent.text(), NO_MESSAGE);
+    }
+
+    #[test]
     fn a_table_serves_mods_of_its_major_up_to_its_minor() {
         assert!(serves(table(ABI_MAJOR, 1), 0));
         assert!(serves(table(ABI_MAJOR, 1), 1));
