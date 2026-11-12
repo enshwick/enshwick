@@ -1,6 +1,8 @@
 //! The domain rule of the API: each top-level module of `enshwick-core`
 //! belongs to one domain of `crates/internal/core/domains.toml`, and a
-//! module names only its own domain and those listed before it. The edges
+//! module names only its own domain and those listed before it, by a path
+//! or by a call on `self` in its `Load` methods to one another module adds to
+//! `Load`. The edges
 //! up that order still in the code are listed there too; a new one, or a
 //! listed one that is gone, fails, so the list only shrinks as domains are
 //! peeled out. A domain peeled into a crate of its own depends on no
@@ -16,6 +18,7 @@ use proc_macro2::{Ident, Spacing, TokenStream, TokenTree};
 use syn::visit::{self, Visit};
 use syn::{Item, ItemMod, UseTree, Visibility};
 
+mod calls;
 mod fake;
 
 /// The map, from the workspace root.
@@ -153,8 +156,17 @@ fn problems(root: &Path) -> Result<Vec<String>, String> {
     roots.retain(|name, _| !modules.contains(name));
     let lists = module_path(LISTS.trim_end_matches('/'));
     let mut edges = BTreeSet::new();
+    // Each method a module adds to `Load`, and the methods each module's
+    // `Load` methods call on `self`.
+    let mut owner = BTreeMap::new();
+    let mut calls = Vec::new();
     for (path, text) in &files {
         let file = syn::parse_file(text).map_err(|e| format!("{SOURCES}/{path}: {e}"))?;
+        if !joined(path) && !path.starts_with(LISTS) {
+            let (defined, called) = calls::load_methods(&file);
+            owner.extend(defined.into_iter().map(|name| (name, top(path))));
+            calls.push((top(path), called));
+        }
         let found = paths(&file, &module_path(path), &[]).found;
         if let Some(list) = path.strip_prefix(LISTS).and_then(|p| p.strip_suffix(".rs")) {
             // A list's paths into its own folder, `self::` ones among them,
@@ -172,6 +184,13 @@ fn problems(root: &Path) -> Result<Vec<String>, String> {
                 .filter(|to| *to != from && modules.contains(to))
             {
                 edges.insert((from.clone(), to));
+            }
+        }
+    }
+    for (from, called) in calls {
+        for to in called.iter().filter_map(|name| owner.get(name)) {
+            if *to != from {
+                edges.insert((from.clone(), to.clone()));
             }
         }
     }
@@ -466,7 +485,6 @@ fn paths(file: &syn::File, module: &[String], externs: &[&str]) -> Named {
     walk.visit_file(file);
     walk.named
 }
-
 /// The walk of [`paths`] over one file.
 struct Walk<'a> {
     /// The module the walk stands in, inline modules counted.
@@ -940,6 +958,36 @@ mod tests {
             "{problems:?}"
         );
         assert_eq!(problems.len(), 4, "{problems:?}");
+    }
+
+    #[test]
+    fn a_load_method_calling_on_self_one_of_a_domain_above_is_an_edge_up() {
+        let root = std::env::temp_dir().join(format!("xtask-domains-calls-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&root);
+        let tree = Tree(root.clone());
+        let write = |path: &str, text: &str| tree.write(&format!("{SOURCES}/{path}"), text);
+        tree.write(
+            MAP,
+            "order = [\"base\", \"ui\"]\njoins = [\"lib.rs\"]\nupward = []\n[modules]\nbase = [\"altars\", \"map\"]\nui = [\"ui\"]\n",
+        );
+        write("lib.rs", "mod altars; mod map; mod ui;");
+        write("ui.rs", "impl Load<'_> { pub fn on_frame(&mut self) {} }");
+        write(
+            "altars.rs",
+            "impl Load<'_> { pub fn limit(&mut self) { let _ = || self.on_frame(); } }",
+        );
+        // Another type's `self`, and a `Load` block only tests build.
+        write(
+            "map.rs",
+            "impl Other { fn f(&self) { self.on_frame(); } }\n#[cfg(test)]\nimpl Load<'_> { fn t(&mut self) { self.on_frame(); } }",
+        );
+        tree.write(&format!("{}/{}.rs", fake::SOURCES, fake::ROOT), "");
+        let problems = check(&root);
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(
+            problems[0].starts_with("altars -> ui goes up"),
+            "{problems:?}"
+        );
     }
 
     #[test]
