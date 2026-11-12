@@ -78,9 +78,6 @@ pub use enshwick_macros::{Config, Shape, config, deps, event, hook, point, servi
 #[doc(no_inline)]
 pub use shape::Shape;
 
-#[cfg(feature = "fake")]
-#[doc(hidden)]
-pub mod __fake;
 #[doc(hidden)]
 pub mod __internal;
 #[doc(hidden)]

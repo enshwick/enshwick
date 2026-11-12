@@ -11,4 +11,4 @@ see is in the changelog of `enshwick`.
 
 - The crate: the inventory domain, cut out of `enshwick-core`.
 - `__load`, the method traits of each module that core's `Load` forwards
-  to, and `__fake`, what the fake loader and core's tests read here.
+  to, and `__internal`, what core calls here and a mod must not.
