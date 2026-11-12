@@ -36,16 +36,16 @@ const MAX_LEN: usize = enshwick_gamedata::MAX_PATTERN;
 
 /// A symbol's pattern and where the symbol lies from its match.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct SymbolPattern {
+pub struct SymbolPattern {
     /// The pattern, as `code::Pattern` parses it.
-    pub(crate) text: String,
+    pub text: String,
     /// Where the symbol lies from the match's start.
-    pub(crate) locate: Locate,
+    pub locate: Locate,
 }
 
 /// Which operand of an instruction carries a constant.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Carrier {
+pub enum Carrier {
     /// The displacement off a register; `negative` when the code reaches the
     /// value as `[reg - value]`.
     Displacement {
@@ -60,21 +60,22 @@ pub(crate) enum Carrier {
 
 /// A constant's pattern and where its value lies in the match.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct ConstantPattern {
+pub struct ConstantPattern {
     /// The pattern, as `code::Pattern` parses it.
-    pub(crate) text: String,
+    pub text: String,
     /// The operand, `(offset in the match, size)`; `None` when the pattern
     /// only confirms the value.
-    pub(crate) operand: Option<(u64, u8)>,
+    pub operand: Option<(u64, u8)>,
     /// Whether the operand is the value negated.
-    pub(crate) negative: bool,
+    pub negative: bool,
     /// Whether the operand is a shift count.
-    pub(crate) shift: bool,
+    pub shift: bool,
 }
 
 /// The pattern of the symbol at `rva` from its own code, when the code
 /// around it has a unique window.
-pub(crate) fn symbol(exe: &Exe<'_>, rva: u64) -> Option<SymbolPattern> {
+#[must_use]
+pub fn symbol(exe: &Exe<'_>, rva: u64) -> Option<SymbolPattern> {
     let (bounds, masked) = decode(exe, rva)?;
     let offset = usize::try_from(rva - bounds.start).ok()?;
     let target = masked.insn_at(offset)?;
@@ -92,7 +93,7 @@ pub(crate) fn symbol(exe: &Exe<'_>, rva: u64) -> Option<SymbolPattern> {
 /// # Errors
 ///
 /// Why no such pattern can be made.
-pub(crate) fn symbol_through(exe: &Exe<'_>, site: u64) -> anyhow::Result<(SymbolPattern, u64)> {
+pub fn symbol_through(exe: &Exe<'_>, site: u64) -> anyhow::Result<(SymbolPattern, u64)> {
     let (masked, _, index) = instruction(exe, site)?;
     let insn = masked.insns[index];
     let (Some(reference), Some(rel)) = (insn.reference, insn.reference_at) else {
@@ -121,7 +122,7 @@ pub(crate) fn symbol_through(exe: &Exe<'_>, site: u64) -> anyhow::Result<(Symbol
 /// # Errors
 ///
 /// Why no such pattern can be made.
-pub(crate) fn constant_from(
+pub fn constant_from(
     exe: &Exe<'_>,
     site: u64,
     carrier: Carrier,
@@ -151,10 +152,11 @@ pub(crate) fn constant_from(
 
 /// An operand as [`operand_sites`] keys it: whether it is a displacement
 /// (else an immediate), and its raw value.
-pub(crate) type OperandKey = (bool, u64);
+pub type OperandKey = (bool, u64);
 
 /// The key of the operand `carrier` names in the instruction at `site`.
-pub(crate) fn operand_key(exe: &Exe<'_>, site: u64, carrier: Carrier) -> Option<OperandKey> {
+#[must_use]
+pub fn operand_key(exe: &Exe<'_>, site: u64, carrier: Carrier) -> Option<OperandKey> {
     let (masked, _, index) = instruction(exe, site).ok()?;
     let insn = &masked.insns[index];
     match carrier {
@@ -165,7 +167,12 @@ pub(crate) fn operand_key(exe: &Exe<'_>, site: u64, carrier: Carrier) -> Option<
 
 /// Every instruction in `exe`'s functions whose displacement or immediate is
 /// one of `wanted`, by that operand: where a constant's second use may sit.
-pub(crate) fn operand_sites(
+#[must_use]
+#[expect(
+    clippy::implicit_hasher,
+    reason = "FxHash is the one hasher for these integer keys (clippy.toml disallows the std one)"
+)]
+pub fn operand_sites(
     exe: &Exe<'_>,
     wanted: &FxHashSet<OperandKey>,
 ) -> FxHashMap<OperandKey, Vec<u64>> {
@@ -198,10 +205,12 @@ pub(crate) fn operand_sites(
 const WITNESS_TRIES: usize = 32;
 
 /// The pattern of a second use of the constant the instruction at `site`
-/// reads through `carrier`, among `sites` that hold the same operand: the
-/// nearest one in another function with a unique window, else one in the
+/// reads through `carrier`, among `sites` that hold the same operand.
+///
+/// It takes the nearest one in another function with a unique window, else one in the
 /// same function, so a changed value shows as a disagreement.
-pub(crate) fn witness(
+#[must_use]
+pub fn witness(
     exe: &Exe<'_>,
     site: u64,
     carrier: Carrier,
@@ -223,7 +232,7 @@ pub(crate) fn witness(
 /// # Errors
 ///
 /// Why no such pattern can be made.
-pub(crate) fn constant_confirmed(exe: &Exe<'_>, site: u64) -> anyhow::Result<ConstantPattern> {
+pub fn constant_confirmed(exe: &Exe<'_>, site: u64) -> anyhow::Result<ConstantPattern> {
     let (masked, _, index) = instruction(exe, site)?;
     let window = unique_window(
         exe.text().0,
@@ -244,7 +253,8 @@ pub(crate) fn constant_confirmed(exe: &Exe<'_>, site: u64) -> anyhow::Result<Con
 
 /// The operand of `insn` that `carrier` names: its offset in the
 /// instruction and size.
-pub(crate) fn carried(insn: &Insn, carrier: Carrier) -> Option<(usize, usize)> {
+#[must_use]
+pub fn carried(insn: &Insn, carrier: Carrier) -> Option<(usize, usize)> {
     match carrier {
         Carrier::Displacement { .. } => insn.displacement_at,
         Carrier::Immediate | Carrier::Shift => insn.immediate_at,
@@ -252,7 +262,8 @@ pub(crate) fn carried(insn: &Insn, carrier: Carrier) -> Option<(usize, usize)> {
 }
 
 /// The operand of `insn` that carries `value`, if any.
-pub(crate) fn carrier_of(insn: &Insn, value: u64) -> Option<Carrier> {
+#[must_use]
+pub fn carrier_of(insn: &Insn, value: u64) -> Option<Carrier> {
     [
         Carrier::Displacement { negative: false },
         Carrier::Immediate,
@@ -264,7 +275,7 @@ pub(crate) fn carrier_of(insn: &Insn, value: u64) -> Option<Carrier> {
 
 /// The value the operand `carrier` of `insn` holds, as the loader reads it:
 /// the operand's bytes zero-extended, or the displacement negated.
-pub(crate) fn value_of(insn: &Insn, carrier: Carrier) -> Option<u64> {
+pub fn value_of(insn: &Insn, carrier: Carrier) -> Option<u64> {
     let raw = |value: Option<u64>, at: Option<(usize, usize)>| {
         let (_, size) = at?;
         let bits = u32::try_from(size * 8).ok()?;
@@ -285,7 +296,7 @@ pub(crate) fn value_of(insn: &Insn, carrier: Carrier) -> Option<u64> {
 /// # Errors
 ///
 /// When no instruction starts at `site`.
-pub(crate) fn instruction(exe: &Exe<'_>, site: u64) -> anyhow::Result<(Masked, u64, usize)> {
+pub fn instruction(exe: &Exe<'_>, site: u64) -> anyhow::Result<(Masked, u64, usize)> {
     let (bounds, masked) = decode(exe, site).with_context(|| format!("no code at {site:#x}"))?;
     let index = usize::try_from(site - bounds.start)
         .ok()
@@ -297,11 +308,8 @@ pub(crate) fn instruction(exe: &Exe<'_>, site: u64) -> anyhow::Result<(Masked, u
 /// The instruction whose bytes hold `rva`, in the code decoded around
 /// `start`, an instruction at or before it such as a pattern's match: the
 /// decoded code, where it starts, and the instruction's index.
-pub(crate) fn instruction_holding(
-    exe: &Exe<'_>,
-    start: u64,
-    rva: u64,
-) -> Option<(Masked, u64, usize)> {
+#[must_use]
+pub fn instruction_holding(exe: &Exe<'_>, start: u64, rva: u64) -> Option<(Masked, u64, usize)> {
     let (bounds, masked) = decode(exe, start)?;
     let offset = usize::try_from(rva.checked_sub(bounds.start)?).ok()?;
     let index = masked
@@ -376,16 +384,17 @@ fn grow(
 /// A symbol pinned by its whole function: the window that finds it, and
 /// the function's body, which a table checks by its hash.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct BodyPattern {
+pub struct BodyPattern {
     /// The window from the function's first byte that finds it.
-    pub(crate) window: SymbolPattern,
+    pub window: SymbolPattern,
     /// The whole function, its moving parts open.
-    pub(crate) body: Body,
+    pub body: Body,
 }
 
-/// The window that finds the function at `rva` and its body, so that any
-/// change to its code, other than where it and what it reaches moved, fails
-/// the body: for a symbol whose code the loader replaces or relies on as a
+/// The window that finds the function at `rva` and its body.
+///
+/// Any change to its code, other than where it and what it reaches moved,
+/// fails the body: for a symbol whose code the loader replaces or relies on as a
 /// whole. The window starts at the function, or with `site` is the window
 /// around the instruction there that calls, jumps to or addresses it, for a
 /// function whose start has a twin.
@@ -394,7 +403,7 @@ pub(crate) struct BodyPattern {
 ///
 /// When the function does not decode to its end, no window is unique, or
 /// `site` reaches another address.
-pub(crate) fn body(exe: &Exe<'_>, rva: u64, site: Option<u64>) -> anyhow::Result<BodyPattern> {
+pub fn body(exe: &Exe<'_>, rva: u64, site: Option<u64>) -> anyhow::Result<BodyPattern> {
     let (text, text_rva) = exe.text();
     let end = text_rva + text.len() as u64;
     let len = end.saturating_sub(rva).min(u64::from(Body::MAX_LEN));

@@ -1968,6 +1968,8 @@ dependencies = [
 name = "xtask"
 version = "0.0.0"
 dependencies = [
+ "anyhow",
+ "cargo-enshwick",
  "cbindgen",
  "clap",
  "enshwick-abi",
@@ -1975,12 +1977,14 @@ dependencies = [
  "enshwick-loader",
  "memchr",
  "proc-macro2",
+ "rustc-hash",
  "semver",
  "serde",
  "serde_json",
  "sha2",
  "syn 3.0.10",
  "toml 1.2.1+spec-1.1.0",
+ "toml_edit",
  "zip",
 ]
 

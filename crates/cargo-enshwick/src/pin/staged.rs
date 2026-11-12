@@ -1,5 +1,7 @@
 //! Files `pin` writes, held back until every one is ready, then written all
-//! or none: each goes to a temporary file beside its place first, and only
+//! or none.
+//!
+//! Each goes to a temporary file beside its place first, and only
 //! when all of them are there do they move into place. A move that fails
 //! puts back what the earlier ones replaced.
 
@@ -18,12 +20,12 @@ struct File {
 
 /// The files of one run, written by [`Staged::commit`].
 #[derive(Debug, Default)]
-pub(crate) struct Staged(Vec<File>);
+pub struct Staged(Vec<File>);
 
 impl Staged {
     /// Adds a file that must not exist yet.
     #[cfg(test)]
-    pub(crate) fn create(&mut self, path: PathBuf, text: String) {
+    pub fn create(&mut self, path: PathBuf, text: String) {
         self.0.push(File {
             path,
             text,
@@ -32,7 +34,7 @@ impl Staged {
     }
 
     /// Adds a new text for the file at `path`, which held `before`.
-    pub(crate) fn replace(&mut self, path: PathBuf, text: String, before: String) {
+    pub fn replace(&mut self, path: PathBuf, text: String, before: String) {
         self.0.push(File {
             path,
             text,
@@ -41,7 +43,7 @@ impl Staged {
     }
 
     /// Writes every file, or none of them.
-    pub(crate) fn commit(self) -> anyhow::Result<()> {
+    pub fn commit(self) -> anyhow::Result<()> {
         let mut temps = Vec::with_capacity(self.0.len());
         for file in &self.0 {
             let temp = temp_of(&file.path);

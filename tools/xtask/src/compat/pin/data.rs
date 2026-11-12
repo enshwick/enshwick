@@ -39,10 +39,10 @@ pub(super) fn old_side(
         return Ok(gamedata_side(side));
     }
     let tables = match data {
-        Some(data) => crate::generate::tables_of(data)?,
+        Some(data) => cargo_enshwick::generate::tables_of(data)?,
         None => Vec::new(),
     };
-    crate::generate::side_of(&tables, fingerprint)
+    cargo_enshwick::generate::side_of(&tables, fingerprint)
         .with_context(|| format!("no table is for the old build {}", spell(fingerprint)))
 }
 
@@ -101,19 +101,11 @@ mod tests {
     /// `--write`, no folder is needed.
     #[test]
     fn a_write_without_a_data_folder_is_refused_before_anything_is_written() {
-        let enshwick = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let enshwick = super::super::tests::repo();
         let args = |repo: PathBuf, write, data: Option<PathBuf>| Args {
-            old: None,
-            new: None,
-            patterns: None,
-            repo,
             data,
-            steam_build: None,
-            game_version: None,
             write,
-            report: None,
-            from: Vec::new(),
-            from_file: None,
+            ..super::super::tests::args(PathBuf::new(), PathBuf::new(), repo)
         };
         let refused = args(enshwick.clone(), true, None);
         let error = snapshot_dir(&refused).unwrap_err().to_string();

@@ -18,6 +18,8 @@ use std::process::ExitCode;
 use enshwick_gamedata::reflect::{Fingerprint, Image, Layout, Reflection};
 use enshwick_gamedata::{self as tables, PartState, Resolved, Table};
 
+#[path = "compat/pin.rs"]
+mod pin;
 #[path = "compat/report.rs"]
 mod report;
 #[path = "reports.rs"]
@@ -110,6 +112,13 @@ enum Step {
     /// names into the compatibility reports, keeping the Steam build and
     /// game version a report states where no file beside the executable does.
     Refresh,
+    /// Ports the loader's entries, the routes' check shapes and the typed
+    /// API to a new game build, with a report. Exits with 2 when an entry
+    /// needs a human.
+    Pin(pin::Args),
+    /// Writes the code patterns of a kept build's table from its own
+    /// executable. Exits with 2 when an entry has none.
+    Patterns(pin::PatternsArgs),
 }
 
 /// The repository root.
@@ -145,6 +154,8 @@ fn compat(args: &[String]) -> Result<bool, String> {
         (Some(Step::Refresh), _) => {
             refresh(Path::new(ROOT), std::env::var_os("ENSH_EXES")).map(|()| true)
         }
+        (Some(Step::Pin(args)), _) => pin::run(&args).map_err(|e| format!("{e:#}")),
+        (Some(Step::Patterns(args)), _) => pin::patterns(&args).map_err(|e| format!("{e:#}")),
         (None, Some(args)) => run(&args),
         (None, None) => Err("name a game executable; --help lists the options".to_owned()),
     }

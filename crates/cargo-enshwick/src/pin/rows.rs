@@ -13,7 +13,7 @@ use anyhow::{Context as _, anyhow, bail};
 
 /// The game side a row is for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Side {
+pub enum Side {
     /// The dedicated server.
     Server,
     /// The game client.
@@ -22,7 +22,7 @@ pub(crate) enum Side {
 
 /// Which table a row belongs to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Table {
+pub enum Table {
     /// A loader build table.
     Loader,
     /// A mod's `[[package.metadata.enshwick.builds]]`.
@@ -31,50 +31,50 @@ pub(crate) enum Table {
 
 /// One `"id" => value` or `("id", value)` entry.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Entry {
+pub struct Entry {
     /// The symbolic id.
-    pub(crate) id: String,
+    pub id: String,
     /// The value.
-    pub(crate) value: u64,
+    pub value: u64,
     /// Where the value's expression is in the source.
-    pub(crate) value_span: Range<usize>,
+    pub value_span: Range<usize>,
     /// The entry, from its first token to the end of its value (a tuple's
     /// closing parenthesis included).
-    pub(crate) span: Range<usize>,
+    pub span: Range<usize>,
     /// The entry's whole line, indentation included.
-    pub(crate) line: Range<usize>,
+    pub line: Range<usize>,
 }
 
 /// One build row.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Row {
+pub struct Row {
     /// Which table.
-    pub(crate) table: Table,
+    pub table: Table,
     /// The side.
-    pub(crate) side: Side,
+    pub side: Side,
     /// The fingerprint GUID as lowercase hex.
-    pub(crate) guid: String,
+    pub guid: String,
     /// The fingerprint age.
-    pub(crate) age: u32,
+    pub age: u32,
     /// The loader row's name.
-    pub(crate) name: Option<String>,
+    pub name: Option<String>,
     /// The row, from its first token to its closing brace.
-    pub(crate) span: Range<usize>,
+    pub span: Range<usize>,
     side_span: Range<usize>,
     guid_span: Range<usize>,
     age_span: Range<usize>,
     name_span: Option<Range<usize>>,
     /// Systems whose entry must match (loader rows).
-    pub(crate) checks: Vec<Entry>,
+    pub checks: Vec<Entry>,
     /// Pinned addresses, relative to the image base.
-    pub(crate) symbols: Vec<Entry>,
+    pub symbols: Vec<Entry>,
     /// Pinned constants.
-    pub(crate) constants: Vec<Entry>,
+    pub constants: Vec<Entry>,
 }
 
 /// What becomes of one entry in the new row.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Edit {
+pub enum Edit {
     /// The value stays as written.
     Keep,
     /// The value becomes this.
@@ -106,7 +106,7 @@ enum Part {
 /// `[[package.metadata.enshwick.builds]]` table with its `side`, `guid` and
 /// `age`, then its `.symbols` and `.constants` tables of `"id" = value`
 /// lines.
-pub(crate) fn parse(src: &str) -> anyhow::Result<Vec<Row>> {
+pub fn parse(src: &str) -> anyhow::Result<Vec<Row>> {
     let _toml: toml::Table = toml::from_str(src).context("not TOML")?;
     let mut rows: Vec<Row> = Vec::new();
     let mut open: Option<(Row, Part)> = None;
@@ -278,7 +278,8 @@ fn code_of(line: &str) -> &str {
 
 impl Row {
     /// A loader table's row; its text is a table file, not a span.
-    pub(crate) fn loader(
+    #[must_use]
+    pub fn loader(
         side: Side,
         guid: String,
         age: u32,
@@ -306,7 +307,8 @@ impl Row {
 
     /// The row's text for a new build: `guid`/`age`, `name` for a loader row,
     /// and each entry edited as `edits` says (by id; missing ids are kept).
-    pub(crate) fn render(
+    #[must_use]
+    pub fn render(
         &self,
         src: &str,
         guid: &str,
@@ -354,7 +356,8 @@ impl Row {
     /// Where a row placed after this one goes in the file, and what goes
     /// before it there: a blank line and the indentation of the line this
     /// row starts on.
-    pub(crate) fn insertion(&self, src: &str) -> (usize, String) {
+    #[must_use]
+    pub fn insertion(&self, src: &str) -> (usize, String) {
         let line_start = src[..self.span.start].rfind('\n').map_or(0, |i| i + 1);
         let indent = &src[line_start..self.span.start];
         (self.span.end, format!("\n\n{indent}"))
@@ -362,7 +365,8 @@ impl Row {
 }
 
 /// `value` as the sources spell addresses: hex, `_` every four digits.
-pub(crate) fn hex(value: u64) -> String {
+#[must_use]
+pub fn hex(value: u64) -> String {
     let digits = format!("{value:x}");
     let mut out = String::from("0x");
     for (i, c) in digits.chars().enumerate() {
@@ -375,7 +379,8 @@ pub(crate) fn hex(value: u64) -> String {
 }
 
 /// Formats a fingerprint GUID the way the rows spell it.
-pub(crate) fn guid_hex(guid: [u8; 16]) -> String {
+#[must_use]
+pub fn guid_hex(guid: [u8; 16]) -> String {
     guid.iter().fold(String::new(), |mut out, b| {
         let _infallible = write!(out, "{b:02x}");
         out

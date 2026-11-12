@@ -7,23 +7,23 @@ use super::rows::hex;
 
 /// One ported row in the report.
 #[derive(Debug)]
-pub(crate) struct Section {
+pub struct Section {
     /// The source file, relative to the repository.
-    pub(crate) file: String,
+    pub file: String,
     /// The row's title: its name or side.
-    pub(crate) title: String,
+    pub title: String,
     /// Where the old build's values came from, when not from `file`.
-    pub(crate) source: Option<String>,
+    pub source: Option<String>,
     /// One line per entry.
-    pub(crate) lines: Vec<Line>,
+    pub lines: Vec<Line>,
     /// The new row's text, when it is not written into the file.
-    pub(crate) text: Option<(String, &'static str)>,
+    pub text: Option<(String, &'static str)>,
     /// Entries whose anchor gave no pattern on the new build, and why.
-    pub(crate) unpatterned: Vec<String>,
+    pub unpatterned: Vec<String>,
 }
 
 /// The report for every section.
-pub(crate) fn render(old: &str, new: &str, sections: &[Section]) -> String {
+pub fn render(old: &str, new: &str, sections: &[Section]) -> String {
     let mut out = String::new();
     let all: Vec<&Line> = sections.iter().flat_map(|s| &s.lines).collect();
     let count = |status: Status| all.iter().filter(|l| l.status == status).count();

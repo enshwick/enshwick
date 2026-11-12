@@ -9,7 +9,7 @@ use memchr::memmem;
 
 /// What an instruction points at, as an RVA.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Reference {
+pub enum Reference {
     /// A rel32 branch or call target.
     Code(u64),
     /// A RIP-relative memory operand.
@@ -18,32 +18,32 @@ pub(crate) enum Reference {
 
 /// One decoded instruction.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Insn {
+pub struct Insn {
     /// Offset from the start of the code.
-    pub(crate) offset: usize,
+    pub offset: usize,
     /// Length in bytes.
-    pub(crate) len: usize,
+    pub len: usize,
     /// A memory displacement that is not RIP-relative, sign extended.
-    pub(crate) displacement: Option<u64>,
+    pub displacement: Option<u64>,
     /// An immediate that is not a branch target or a pointer.
-    pub(crate) immediate: Option<u64>,
+    pub immediate: Option<u64>,
     /// Where the instruction points, when it does.
-    pub(crate) reference: Option<Reference>,
+    pub reference: Option<Reference>,
     /// The offset and size in the instruction of `displacement`.
-    pub(crate) displacement_at: Option<(usize, usize)>,
+    pub displacement_at: Option<(usize, usize)>,
     /// The offset and size in the instruction of `immediate`.
-    pub(crate) immediate_at: Option<(usize, usize)>,
+    pub immediate_at: Option<(usize, usize)>,
     /// The offset in the instruction of the rel32 behind `reference`.
-    pub(crate) reference_at: Option<usize>,
+    pub reference_at: Option<usize>,
     /// Where a direct jump, conditional or not, goes.
-    pub(crate) jump: Option<u64>,
+    pub jump: Option<u64>,
     /// How the instruction leaves the code after it.
-    pub(crate) flow: Flow,
+    pub flow: Flow,
 }
 
 /// How an instruction hands on to the code after it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Flow {
+pub enum Flow {
     /// The next instruction may run.
     On,
     /// A return or a direct unconditional jump: the next instruction runs
@@ -56,7 +56,8 @@ pub(crate) enum Flow {
 impl Insn {
     /// Whether the instruction carries `value` as a displacement (either
     /// sign) or an immediate.
-    pub(crate) fn uses(&self, value: u64) -> bool {
+    #[must_use]
+    pub fn uses(&self, value: u64) -> bool {
         self.displacement
             .is_some_and(|d| d == value || d.wrapping_neg() == value)
             || self.immediate == Some(value)
@@ -65,21 +66,22 @@ impl Insn {
 
 /// Code with its signature: `mask[i]` is true when byte `i` must match.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Masked {
+pub struct Masked {
     /// The code bytes, cut at the first byte that does not decode.
-    pub(crate) bytes: Vec<u8>,
+    pub bytes: Vec<u8>,
     /// Which bytes are significant.
-    pub(crate) mask: Vec<bool>,
+    pub mask: Vec<bool>,
     /// The instructions, in order.
-    pub(crate) insns: Vec<Insn>,
+    pub insns: Vec<Insn>,
     /// Where the code starts.
-    pub(crate) rva: u64,
+    pub rva: u64,
 }
 
 impl Masked {
     /// Decodes `code`, which starts at `rva`. Immediates inside `absolute`
     /// are pointers into the image and are masked.
-    pub(crate) fn decode(code: &[u8], rva: u64, absolute: &Range<u64>) -> Self {
+    #[must_use]
+    pub fn decode(code: &[u8], rva: u64, absolute: &Range<u64>) -> Self {
         let mut decoder = Decoder::with_ip(64, code, rva, DecoderOptions::NONE);
         let mut instruction = Instruction::default();
         let mut mask = Vec::with_capacity(code.len());
@@ -165,7 +167,8 @@ impl Masked {
     /// the first return or direct jump past every jump inside it, or up to
     /// the padding after it. `None` when the code starts with padding or
     /// runs out first.
-    pub(crate) fn body_len(&self) -> Option<usize> {
+    #[must_use]
+    pub fn body_len(&self) -> Option<usize> {
         let mut reach = self.rva;
         for (i, insn) in self.insns.iter().enumerate() {
             let end = self.rva + (insn.offset + insn.len) as u64;
@@ -184,7 +187,8 @@ impl Masked {
     }
 
     /// The signature of the instructions `insns`.
-    pub(crate) fn window(&self, insns: Range<usize>) -> Option<Pattern<'_>> {
+    #[must_use]
+    pub fn window(&self, insns: Range<usize>) -> Option<Pattern<'_>> {
         let first = self.insns.get(insns.start)?;
         let last = self.insns.get(insns.end.checked_sub(1)?)?;
         let bytes = first.offset..last.offset + last.len;
@@ -198,7 +202,8 @@ impl Masked {
     /// `hide` (offsets into the code) masked too; `loose` also masks every
     /// displacement off a register, the field and frame offsets a change of
     /// layout moves, except in the instructions `keep`.
-    pub(crate) fn window_hiding(
+    #[must_use]
+    pub fn window_hiding(
         &self,
         insns: Range<usize>,
         hide: &[Range<usize>],
@@ -236,7 +241,8 @@ impl Masked {
     }
 
     /// The signature of all the code.
-    pub(crate) fn pattern(&self) -> Pattern<'_> {
+    #[must_use]
+    pub fn pattern(&self) -> Pattern<'_> {
         Pattern {
             bytes: &self.bytes,
             mask: &self.mask,
@@ -245,7 +251,7 @@ impl Masked {
 
     /// Drops everything from the first `int3`, the padding between
     /// functions.
-    pub(crate) fn cut_at_padding(&mut self) {
+    pub fn cut_at_padding(&mut self) {
         if let Some(at) = self
             .insns
             .iter()
@@ -259,7 +265,8 @@ impl Masked {
     }
 
     /// The index of the instruction that starts at `offset`.
-    pub(crate) fn insn_at(&self, offset: usize) -> Option<usize> {
+    #[must_use]
+    pub fn insn_at(&self, offset: usize) -> Option<usize> {
         self.insns.iter().position(|i| i.offset == offset)
     }
 }
@@ -294,18 +301,19 @@ fn immediate(instruction: &Instruction) -> u64 {
 
 /// A byte signature that owns its mask, and where it starts in its code.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Owned {
+pub struct Owned {
     /// The bytes.
-    pub(crate) bytes: Vec<u8>,
+    pub bytes: Vec<u8>,
     /// Which bytes must match.
-    pub(crate) mask: Vec<bool>,
+    pub mask: Vec<bool>,
     /// The offset of the first byte in the code it was taken from.
-    pub(crate) start: usize,
+    pub start: usize,
 }
 
 impl Owned {
     /// The signature as a borrowed [`Pattern`].
-    pub(crate) fn pattern(&self) -> Pattern<'_> {
+    #[must_use]
+    pub fn pattern(&self) -> Pattern<'_> {
         Pattern {
             bytes: &self.bytes,
             mask: &self.mask,
@@ -315,21 +323,23 @@ impl Owned {
 
 /// A byte signature: bytes and which of them must match.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Pattern<'a> {
+pub struct Pattern<'a> {
     /// The bytes.
-    pub(crate) bytes: &'a [u8],
+    pub bytes: &'a [u8],
     /// Which bytes must match.
-    pub(crate) mask: &'a [bool],
+    pub mask: &'a [bool],
 }
 
 impl Pattern<'_> {
     /// How many bytes must match.
-    pub(crate) fn significant(&self) -> usize {
+    #[must_use]
+    pub fn significant(&self) -> usize {
         self.mask.iter().filter(|&&m| m).count()
     }
 
     /// Whether the pattern matches `code` in full.
-    pub(crate) fn matches(&self, code: &[u8]) -> bool {
+    #[must_use]
+    pub fn matches(&self, code: &[u8]) -> bool {
         code.len() == self.bytes.len()
             && self
                 .bytes
@@ -340,7 +350,8 @@ impl Pattern<'_> {
     }
 
     /// Up to `limit` offsets in `hay` where the pattern matches.
-    pub(crate) fn find(&self, hay: &[u8], limit: usize) -> Vec<usize> {
+    #[must_use]
+    pub fn find(&self, hay: &[u8], limit: usize) -> Vec<usize> {
         let Some(anchor) = self.anchor() else {
             return Vec::new();
         };
