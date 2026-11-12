@@ -159,7 +159,7 @@ pub(crate) fn from_lua(
             let LuaValue::Table(table) = value else {
                 return Err(expected("a list", &value));
             };
-            let mut items = Vec::new();
+            let mut items = Vec::with_capacity(table.raw_len());
             for (i, item) in table.sequence_values::<LuaValue>().enumerate() {
                 let item = item.map_err(|e| Error::new(e.to_string()))?;
                 items.push(
