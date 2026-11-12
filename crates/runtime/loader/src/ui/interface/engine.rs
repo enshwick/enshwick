@@ -123,7 +123,7 @@ impl UiText {
     };
 }
 
-pub(crate) use crate::content::served::text_hash as hash;
+pub(crate) use crate::base::handed::hash;
 
 type Ptr = *mut u8;
 pub(super) type PopupFn = unsafe extern "system" fn(state: Ptr);

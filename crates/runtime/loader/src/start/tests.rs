@@ -120,6 +120,7 @@ fn loader(mods: &[TestMod], developer_tools: bool) -> (Loader, Vec<Library>) {
         newer_release: OnceLock::new(),
         retry: crate::engine::retry::Retry::default(),
         skipped,
+        parts: Parts::new(crate::parts::LAYERS),
     };
     (loader, order)
 }

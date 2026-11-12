@@ -7,10 +7,10 @@
 
 #![no_main]
 
-use enshwick_loader::base::wire::{NOTICE, control, notice, read_notice};
-use enshwick_loader::ui::notice_queue::{
+use enshwick_loader::base::notice_queue::{
     MAX_TEXT, MAX_WAITING, SLOTS, Waiting, cut, push, step_batch,
 };
+use enshwick_loader::base::wire::{NOTICE, control, notice, read_notice};
 use libfuzzer_sys::fuzz_target;
 
 /// Notices queued between two steps.

@@ -65,7 +65,7 @@ fn line(loader: &Loader) -> super::engine::UiText {
             use crate::engine::diag::MenuNote;
             let notes = [
                 (
-                    !loader.build.lacking(crate::TABLE_IDS).is_empty(),
+                    !loader.build.lacking(loader.parts.table_ids()).is_empty(),
                     MenuNote::Lacking,
                 ),
                 (!loader.settings_problems.is_empty(), MenuNote::BadSettings),

@@ -577,10 +577,10 @@ fn on_no_code() -> KnownBuild {
 #[test]
 fn a_build_names_the_loader_features_it_lacks_once() {
     if let Some(build) = kept(Side::SERVER) {
-        assert_eq!(build.lacking(crate::TABLE_IDS), "");
+        assert_eq!(build.lacking(&crate::parts::table_ids()), "");
     }
     let carried = on_no_code();
-    let lacking = carried.lacking(crate::TABLE_IDS);
+    let lacking = carried.lacking(&crate::parts::table_ids());
     assert!(lacking.split(", ").any(|name| name == "bases"), "{lacking}");
     assert_eq!(
         carried.lacking(&[]),

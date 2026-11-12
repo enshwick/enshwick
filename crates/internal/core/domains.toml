@@ -66,23 +66,19 @@ upward = []
 # access and the loader's own state.
 below = ["engine"]
 # The top-level modules that join every layer: the server step's pump, the
-# host table, the start and the build table ids.
-joins = ["events", "host", "start", "table_ids"]
+# host table, the layers' part lists and the start.
+joins = ["events", "host", "parts", "start"]
 # The folder under `src` whose files are cut by the domains as well.
 entries = "host/entries"
 # The edges up the layers still in the code, as `from -> to` between
 # modules; a new one fails, and so does one that is gone.
 upward = [
-    "actions::build_reasons -> ui::notices",
-    "actions::chat_mute -> ui::notices",
     "actions::controls -> ui::interface",
-    "actions::player_actions -> ui::notices",
     "actions::player_actions -> ui::windows",
     "base::admission -> actions::chat",
     "base::game_events -> actions::vetoes",
     "base::game_events -> inventory::item_actions",
     "base::game_events -> inventory::stats",
-    "base::game_events -> ui::notices",
     "base::greeting -> actions::chat",
     "base::join -> ui::interface",
     "base::lobby -> ui::interface",
@@ -93,8 +89,6 @@ upward = [
     "base::net -> content::served",
     "base::net -> inventory::item_data",
     "base::net -> ui::interface",
-    "base::net -> ui::notices",
-    "base::off_line -> table_ids",
     "base::remote -> actions::controls",
     "base::remote -> actions::player_actions",
     "base::remote -> content::recipes",
@@ -104,34 +98,23 @@ upward = [
     "base::saves -> actions::player_actions",
     "base::status -> content::served",
     "base::status -> knowledge::store",
-    "base::status -> table_ids",
     "base::watch -> content::recipes",
     "base::worlds -> content::recipes",
     "content::rate_links -> inventory::loot_slot",
     "content::rate_links -> inventory::transactions",
     "content::served -> ui::interface",
-    "content::served -> ui::notices",
     "engine::code -> content::recipes",
     "engine::code -> world::bases",
-    "engine::loader -> actions::chat_mute",
     "engine::loader -> base::advertise",
     "engine::loader -> base::manifest",
     "engine::loader -> base::points",
     "engine::loader -> base::releases",
     "engine::loader -> base::resolve",
     "engine::loader -> base::worlds",
-    "engine::loader -> content::data_changes",
-    "engine::loader -> content::rate_links",
-    "engine::loader -> inventory::item_data",
-    "engine::loader -> inventory::stats",
-    "engine::loader -> knowledge::store",
     "engine::loader -> packs::data_packs",
-    "engine::loader -> world::game_settings",
-    "engine::loader -> world::weather",
     "engine::profile -> host",
     "engine::texts -> base::net",
     "engine::texts -> content::served",
-    "engine::world -> inventory::stats",
     "entries::actions -> ui::windows",
     "entries::base -> content::content_renames",
     "entries::base -> content::served",
@@ -142,9 +125,7 @@ upward = [
     "entries::world -> actions::console",
     "entries::world -> inventory::transactions",
     "entries::world -> knowledge::progress",
-    "entries::world -> ui::notices",
     "inventory::item_actions -> actions::interactions",
-    "ui::interface -> table_ids",
     "world::entities -> inventory::spawns",
     "world::transactions -> actions::interactions",
     "world::transactions -> inventory::spawns",

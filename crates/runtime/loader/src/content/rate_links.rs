@@ -425,7 +425,7 @@ mod tests {
         for (rate, symbols) in LINKS {
             for symbol in *symbols {
                 assert!(
-                    crate::table_ids::TABLE_IDS
+                    crate::parts::table_ids()
                         .iter()
                         .any(|(_, ids)| ids.contains(&symbol.id())),
                     "{rate:?}: {symbol}"

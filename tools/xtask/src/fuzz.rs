@@ -63,7 +63,7 @@ pub(crate) const TARGETS: &[(&str, &[&str])] = &[
     (
         "notices",
         &[
-            "crates/runtime/loader/src/ui/notice_queue",
+            "crates/runtime/loader/src/base/notice_queue",
             "crates/runtime/loader/src/base/wire",
         ],
     ),

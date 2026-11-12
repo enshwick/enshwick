@@ -97,6 +97,12 @@ impl Fuse {
         }
     }
 
+    /// The feature the log names.
+    #[must_use]
+    pub const fn feature(&self) -> &'static str {
+        self.feature
+    }
+
     /// Whether a panic or a failed live check turned the feature off.
     #[inline]
     pub fn is_off(&self) -> bool {
@@ -116,6 +122,40 @@ impl Fuse {
                 self.panicked(site, payload.as_ref());
                 None
             }
+        }
+    }
+
+    /// Runs `work` on each of `items` whose fuse is on, in order, as `site`,
+    /// under one unwind guard for the whole walk: a panic turns off the fuse
+    /// of the item it came from, and the walk goes on after that item. A
+    /// guard per item costs about 1.6 ns each around a call through a
+    /// pointer (`benches/step_parts.rs`).
+    #[inline]
+    pub fn run_each<'fuse, T>(
+        items: &[T],
+        site: &str,
+        fuse: impl Fn(&T) -> &'fuse Fuse,
+        mut work: impl FnMut(&T),
+    ) {
+        let mut from = 0;
+        while from < items.len() {
+            let running = core::cell::Cell::new(from);
+            let walked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                for (at, item) in items.iter().enumerate().skip(from) {
+                    if !fuse(item).is_off() {
+                        running.set(at);
+                        work(item);
+                    }
+                }
+            }));
+            let Err(payload) = walked else {
+                return;
+            };
+            let at = running.get();
+            if let Some(item) = items.get(at) {
+                fuse(item).panicked(site, payload.as_ref());
+            }
+            from = at + 1;
         }
     }
 
@@ -165,6 +205,34 @@ mod tests {
         let mut ran = false;
         assert_eq!(fuse.run("the third call", || ran = true), None);
         assert!(!ran);
+    }
+
+    #[test]
+    fn a_walk_turns_off_only_the_item_that_panicked_and_goes_on_after_it() {
+        let fuses = [
+            Fuse::new("walk first"),
+            Fuse::new("walk second"),
+            Fuse::new("walk third"),
+            Fuse::new("walk fourth"),
+        ];
+        let mut ran = Vec::new();
+        let walk = |ran: &mut Vec<usize>| {
+            Fuse::run_each(
+                &[0, 1, 2, 3],
+                "a walk",
+                |&i| &fuses[i],
+                |&i| {
+                    assert!(i != 1 && i != 2, "broken {i}");
+                    ran.push(i);
+                },
+            );
+        };
+        walk(&mut ran);
+        assert_eq!(ran, [0, 3]);
+        let off: Vec<_> = fuses.iter().map(Fuse::is_off).collect();
+        assert_eq!(off, [false, true, true, false]);
+        walk(&mut ran);
+        assert_eq!(ran, [0, 3, 0, 3], "a blown item is skipped from then on");
     }
 
     #[test]

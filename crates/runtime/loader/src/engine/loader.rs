@@ -221,6 +221,8 @@ pub(crate) struct Loader {
     pub(crate) retry: crate::engine::retry::Retry,
     /// The mods that did not load, shown as off with their reason.
     pub(crate) skipped: Vec<crate::base::resolve::Skipped>,
+    /// Every part of the loader's layers, which the start hands down.
+    pub(crate) parts: crate::engine::parts::Parts,
 }
 
 /// The warning line and the status entry of `feature` turned off on `build`
@@ -551,15 +553,13 @@ impl Loader {
 
     /// Whether a mod subscribed to `event`.
     pub(crate) fn subscribed(&self, event: Event) -> bool {
-        let item_data = matches!(
-            event,
-            Event::WORLD_LOADED | Event::WORLD_SAVED | Event::SHUTDOWN_STARTED
-        ) && (crate::inventory::item_data::wanted()
-            || crate::world::weather::follows(self)
-            || crate::inventory::stats::wanted()
-            || crate::content::data_changes::wanted(self)
-            || crate::content::rate_links::recipes_rated());
-        item_data
+        let followed = is_world_event(event)
+            && self
+                .parts
+                .iter()
+                .filter_map(|part| part.follows)
+                .any(|follows| follows(self));
+        followed
             || self
                 .delivery
                 .get()
@@ -568,21 +568,8 @@ impl Loader {
 
     /// Raises `event` with `data` for every mod still on, or for mod `only`.
     pub(crate) fn emit(&self, event: Event, only: Option<usize>, data: *const core::ffi::c_void) {
-        // The world followers act on these three events alone.
-        if only.is_none()
-            && matches!(
-                event,
-                Event::WORLD_LOADED | Event::WORLD_SAVED | Event::SHUTDOWN_STARTED
-            )
-        {
-            crate::world::game_settings::world_event(self, event);
-            crate::knowledge::store::changes::world_event(self, event);
-            crate::inventory::item_data::world_event(self, event);
-            crate::inventory::stats::world_event(self, event);
-            crate::content::data_changes::world_event(self, event);
-            crate::content::rate_links::world_event(event);
-            crate::actions::chat_mute::world_event(self, event);
-            crate::world::weather::world_event(self, event);
+        if only.is_none() && is_world_event(event) {
+            self.parts.world_event(self, event);
         }
         let Some(delivery) = self.delivery.get() else {
             return;
@@ -610,6 +597,15 @@ impl Loader {
             );
         }
     }
+}
+
+/// Whether `event` is one of the three the parts that follow the world act
+/// on: loaded, saved and shutdown.
+fn is_world_event(event: Event) -> bool {
+    matches!(
+        event,
+        Event::WORLD_LOADED | Event::WORLD_SAVED | Event::SHUTDOWN_STARTED
+    )
 }
 
 /// The index of the mod whose `init` runs now, `usize::MAX` for none.

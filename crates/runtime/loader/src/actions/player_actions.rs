@@ -441,7 +441,7 @@ pub(crate) fn run(
 /// Tells player `key` `text` as a notice, or in chat to a client that
 /// cannot show one.
 pub(crate) fn tell(loader: &Loader, key: u64, text: &str) {
-    if crate::ui::notices::send(loader, key, text).is_err() {
+    if crate::base::notices::send(loader, key, text).is_err() {
         let _queued = crate::actions::chat::send(key, text);
     }
 }

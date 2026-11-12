@@ -1,57 +1,33 @@
-//! Which build table ids each part of the loader names, declared beside the
-//! code that names them, so `enshwick-compat` can tell which features
-//! a build lacks. Ids built at run time, such as `survivors.{name}`, only
-//! reach compat through these lists.
+//! Every part of the loader, layer by layer, joined: the start seals and
+//! links them, the server step and the players' joins and leaves call them,
+//! and their build table ids make the loader's feature table, so
+//! `enshwick-compat` can tell which features a build lacks. Ids built at run
+//! time, such as `survivors.{name}`, only reach compat through these lists.
 
-/// Each part of the loader with the build table ids it names.
-pub static TABLE_IDS: &[(&str, &[&str])] = &[
-    ("admission", crate::base::admission::TABLE_IDS),
-    ("altars", crate::world::altars::TABLE_IDS),
-    ("bases", crate::world::bases::TABLE_IDS),
-    ("buffs", crate::world::buffs::TABLE_IDS),
-    ("carrier", crate::base::carrier::TABLE_IDS),
-    ("chat", crate::actions::chat::TABLE_IDS),
-    ("code", crate::engine::code::TABLE_IDS),
-    ("console", crate::actions::console::TABLE_IDS),
-    ("content", crate::content::served::TABLE_IDS),
-    ("damage", crate::inventory::damage::TABLE_IDS),
-    ("daytime", crate::world::daytime::TABLE_IDS),
-    ("deaths", crate::inventory::deaths::TABLE_IDS),
-    ("ecs", crate::engine::ecs::TABLE_IDS),
-    ("emits", crate::base::emits::TABLE_IDS),
-    ("entities", crate::world::entities::TABLE_IDS),
-    ("events", crate::events::TABLE_IDS),
-    ("fog", crate::world::fog::TABLE_IDS),
-    ("game_events", crate::base::game_events::TABLE_IDS),
-    ("game_settings", crate::world::game_settings::TABLE_IDS),
-    ("interactions", crate::actions::interactions::TABLE_IDS),
-    ("item_data", crate::inventory::item_data::TABLE_IDS),
-    ("inventory", crate::inventory::transactions::TABLE_IDS),
-    ("knowledge", crate::knowledge::store::TABLE_IDS),
-    ("label", crate::world::label::TABLE_IDS),
-    ("local_held", crate::actions::local_held::TABLE_IDS),
-    ("notices", crate::ui::notices::TABLE_IDS),
-    ("pacing", crate::engine::pacing::TABLE_IDS),
-    ("progress", crate::knowledge::progress::TABLE_IDS),
-    ("rate_links", crate::content::rate_links::TABLE_IDS),
-    ("rights", crate::world::rights::TABLE_IDS),
-    ("saves", crate::base::saves::TABLE_IDS),
-    ("scene", crate::world::scene::TABLE_IDS),
-    ("spawns", crate::inventory::spawns::TABLE_IDS),
-    ("start", crate::start::TABLE_IDS),
-    ("static_halves", crate::engine::static_halves::TABLE_IDS),
-    ("stats", crate::inventory::stats::TABLE_IDS),
-    ("survivors", crate::inventory::survivors::TABLE_IDS),
-    ("terrain", crate::world::terrain::TABLE_IDS),
-    ("textures", crate::content::textures::TABLE_IDS),
-    ("transactions", crate::world::transactions::TABLE_IDS),
-    ("ui", crate::ui::interface::TABLE_IDS),
-    ("vetoes", crate::actions::vetoes::TABLE_IDS),
-    ("voxels", crate::world::voxels::TABLE_IDS),
-    ("weather", crate::world::weather::TABLE_IDS),
-    ("world", crate::engine::world::TABLE_IDS),
-    ("writes", crate::world::writes::TABLE_IDS),
+use crate::engine::parts::{Part, Parts};
+
+/// The layers, lowest first: the engine, then the joins' own links, which
+/// the domains' links rely on (the server step's), then the domains in the
+/// order of `domains.toml`.
+pub(crate) static LAYERS: &[(&str, &[&Part])] = &[
+    ("engine", crate::engine::PARTS),
+    ("joins", &[&crate::events::PART, &crate::start::PART]),
+    ("base", crate::base::PARTS),
+    ("content", crate::content::PARTS),
+    ("world", crate::world::PARTS),
+    ("inventory", crate::inventory::PARTS),
+    ("knowledge", crate::knowledge::PARTS),
+    ("actions", crate::actions::PARTS),
+    ("ui", crate::ui::PARTS),
+    ("packs", crate::packs::PARTS),
 ];
+
+/// Each part of the loader that names build table ids, with them, by name:
+/// the loader's feature table.
+#[must_use]
+pub fn table_ids() -> Vec<(&'static str, &'static [&'static str])> {
+    Parts::new(LAYERS).table_ids().to_vec()
+}
 
 #[cfg(test)]
 mod tests {
@@ -60,7 +36,8 @@ mod tests {
 
     use enshwick_gamedata::{self as tables, Table};
 
-    use super::TABLE_IDS;
+    use super::{LAYERS, table_ids};
+    use crate::engine::parts::{Parts, Stage};
 
     /// Entries the tables pin that no part of the loader names yet.
     const UNNAMED: &[&str] = &[
@@ -126,25 +103,23 @@ mod tests {
     }
 
     fn listed() -> BTreeSet<&'static str> {
-        TABLE_IDS
-            .iter()
+        table_ids()
+            .into_iter()
             .flat_map(|(_, ids)| ids.iter().copied())
             .collect()
     }
 
+    /// The path below `src` of the module of the part named `name`.
     fn module_of(name: &str) -> String {
-        // Without whitespace, so a row rustfmt wraps reads the same.
-        let this: String = include_str!("table_ids.rs")
-            .chars()
-            .filter(|c| !c.is_whitespace())
-            .collect();
-        let row = format!("(\"{name}\",crate::");
-        let start = this.find(&row).unwrap_or_else(|| panic!("no row {name}")) + row.len();
-        let rest = &this[start..];
-        let end = rest
-            .find("::TABLE_IDS")
-            .unwrap_or_else(|| panic!("row {name} names no TABLE_IDS"));
-        rest[..end].replace("::", "/")
+        let part = Parts::new(LAYERS)
+            .iter()
+            .find(|part| part.name == name)
+            .unwrap_or_else(|| panic!("no part {name}"));
+        let module = part
+            .module
+            .strip_prefix(concat!(env!("CARGO_CRATE_NAME"), "::"))
+            .unwrap_or_else(|| panic!("{name} is outside the crate: {}", part.module));
+        module.replace("::", "/")
     }
 
     /// The code of the module of row `name` and its submodules, without test
@@ -247,7 +222,7 @@ mod tests {
     #[test]
     fn every_id_a_module_names_is_in_its_list() {
         let catalogue = catalogue();
-        for (name, ids) in TABLE_IDS {
+        for (name, ids) in table_ids() {
             let text = sources(name);
             let missing: Vec<_> = text
                 .split("pinned::")
@@ -267,7 +242,7 @@ mod tests {
     #[test]
     fn no_module_spells_a_pinned_id_as_text() {
         let pinned = pinned();
-        for (name, _) in TABLE_IDS {
+        for (name, _) in table_ids() {
             let text = sources(name);
             let spelled: Vec<_> = text
                 .split('"')
@@ -280,5 +255,149 @@ mod tests {
                 "{name} spells {spelled:?}; name them through crate::pinned"
             );
         }
+    }
+
+    #[test]
+    fn the_layers_follow_the_order_of_domains_toml() {
+        let toml = include_str!("../../../internal/core/domains.toml");
+        let list = |key: &str, after: &str| -> Vec<String> {
+            let from = toml.find(after).unwrap_or_else(|| panic!("no {after}"));
+            let line = toml[from..]
+                .lines()
+                .find(|l| l.starts_with(key))
+                .unwrap_or_else(|| panic!("no {key} after {after}"));
+            line.split('"')
+                .skip(1)
+                .step_by(2)
+                .map(str::to_owned)
+                .collect()
+        };
+        let mut wanted = list("below = ", "[loader]");
+        wanted.extend(list("order = ", "order = "));
+        let layers: Vec<_> = LAYERS
+            .iter()
+            .map(|(name, _)| (*name).to_owned())
+            .filter(|name| name != "joins")
+            .collect();
+        assert_eq!(layers, wanted);
+    }
+
+    #[test]
+    fn each_part_lives_in_its_layer_and_has_a_name_of_its_own() {
+        let mut names = BTreeSet::new();
+        for (layer, parts) in LAYERS {
+            for part in *parts {
+                let path = part.module.split("::").nth(1).unwrap_or_default();
+                if *layer == "joins" {
+                    assert!(["events", "start"].contains(&path), "{}", part.module);
+                } else {
+                    assert_eq!(path, *layer, "{}", part.name);
+                }
+                assert!(names.insert(part.name), "{} twice", part.name);
+            }
+        }
+    }
+
+    /// Each phase of the joins, with what it calls in order: a fused call
+    /// by its fuse's name, another by its part's.
+    fn phases() -> String {
+        let parts = Parts::new(LAYERS);
+        let named = |pick: fn(&crate::engine::parts::Part) -> bool| -> String {
+            parts
+                .iter()
+                .filter(|part| pick(part))
+                .map(|part| part.name)
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let fused = |pick: fn(&crate::engine::parts::Part) -> Option<&'static str>| -> String {
+            parts.iter().filter_map(pick).collect::<Vec<_>>().join(", ")
+        };
+        let stage = |stage: Stage| -> String {
+            parts
+                .steps(stage)
+                .iter()
+                .map(|step| step.work.fuse.feature())
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        [
+            ("seal", named(|p| p.seal.is_some())),
+            ("link", named(|p| p.link.is_some())),
+            ("step, follow", stage(Stage::Follow)),
+            ("step, input", stage(Stage::Input)),
+            ("step, output", stage(Stage::Output)),
+            (
+                "joined",
+                fused(|p| p.joined.as_ref().map(|j| j.fuse.feature())),
+            ),
+            ("left", fused(|p| p.left.as_ref().map(|l| l.fuse.feature()))),
+            ("hosting", named(|p| p.hosting.is_some())),
+            (
+                "end",
+                parts
+                    .iter()
+                    .rev()
+                    .filter_map(|p| p.end.as_ref().map(|e| e.fuse.feature()))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            ),
+            ("forget", named(|p| p.forget.is_some())),
+            (
+                "world event",
+                fused(|p| p.world_event.as_ref().map(|w| w.fuse.feature())),
+            ),
+            ("follows", named(|p| p.follows.is_some())),
+        ]
+        .map(|(phase, calls)| format!("{phase}: {calls}"))
+        .join("\n")
+    }
+
+    /// The parts whose end runs mods' handlers, in the order a hosted game
+    /// ends them: windows tell their close handlers, which may queue an
+    /// inventory request, and then the inventory answers what is queued.
+    /// Every forget runs after them and drops what the handlers queued.
+    #[test]
+    fn a_hosted_game_tells_mods_top_layer_first_before_any_part_forgets() {
+        let ending: Vec<_> = Parts::new(LAYERS)
+            .iter()
+            .rev()
+            .filter(|part| part.end.is_some())
+            .map(|part| part.name)
+            .collect();
+        assert_eq!(ending, ["windows", "inventory"]);
+        let both = Parts::new(LAYERS)
+            .iter()
+            .find(|part| part.end.is_some() && part.forget.is_some());
+        assert!(both.is_none(), "{both:?} both tells and forgets");
+    }
+
+    /// A step's work that reads what another's writes in the same step
+    /// runs after it.
+    #[test]
+    fn a_step_reads_what_the_work_before_it_wrote() {
+        let parts = Parts::new(LAYERS);
+        let at = |stage: Stage, feature: &str| {
+            parts
+                .steps(stage)
+                .iter()
+                .position(|step| step.work.fuse.feature() == feature)
+                .unwrap_or_else(|| panic!("no {feature}"))
+        };
+        assert!(
+            at(Stage::Follow, "item data steps") < at(Stage::Follow, "stat steps"),
+            "stats work out the item stats item data attaches"
+        );
+        assert!(
+            at(Stage::Input, "chat commands") < at(Stage::Input, "chat sending"),
+            "the chat posts the commands' replies"
+        );
+    }
+
+    /// The order each phase calls its parts in; a change to it shows here
+    /// and is made with its reason.
+    #[test]
+    fn each_phase_calls_its_parts_in_layer_order() {
+        insta::assert_snapshot!(phases());
     }
 }

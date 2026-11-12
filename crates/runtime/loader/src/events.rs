@@ -25,11 +25,20 @@ use enshwick_core::raw::read_at;
 use crate::engine::chains::Next;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
+use crate::engine::parts::{Part, PlayerCall, Stage, Stepping};
 use crate::engine::pinned;
 use crate::engine::pinned::{Constant, Symbol};
 use crate::engine::ticks::{StepTime, TICKS};
-use crate::{actions, inventory, knowledge, ui, world};
+use crate::{actions, world};
 use enshwick_base::Relock;
+
+/// The step's own part: its build table ids and its links, which the
+/// domains' links rely on.
+pub(crate) static PART: Part = Part {
+    table_ids: TABLE_IDS,
+    link: Some(link),
+    ..Part::new("events", module_path!())
+};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -215,9 +224,13 @@ fn guarded(fuse: &Fuse, link: &str, work: impl FnOnce()) {
 
 /// Whether the loader's own work needs the link to `symbol` with no mod
 /// subscribed to its events: the step tells the world reads the game's
-/// thread, and the state change loads each world's settings and record.
-fn own_link(symbol: Symbol) -> bool {
-    symbol == pinned::server::POST_STEP || symbol == pinned::server::SET_STATE
+/// thread, the state change loads each world's settings and record, and the
+/// removal calls the parts that hear a player leave (`leaves`), such as item
+/// data setting aside what the character carries.
+fn own_link(symbol: Symbol, leaves: bool) -> bool {
+    symbol == pinned::server::POST_STEP
+        || symbol == pinned::server::SET_STATE
+        || (leaves && symbol == pinned::server::PLAYER_REMOVE)
 }
 
 /// Runs one part of the post-step work under a fuse of its own, so a panic
@@ -278,8 +291,9 @@ pub(crate) fn link(loader: &'static Loader) {
     if LOADED.set((loader, offsets)).is_err() {
         return;
     }
+    let leaves = loader.parts.iter().any(|part| part.left.is_some());
     let link = |events: &[Event], symbol: Symbol| -> Option<Target<'static>> {
-        (wants(events) || own_link(symbol)).then_some(Target::Pinned(symbol))
+        (wants(events) || own_link(symbol, leaves)).then_some(Target::Pinned(symbol))
     };
     let none = HookFlags::NONE;
     let feature = "server events";
@@ -402,64 +416,43 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
             }
         });
     }
-    part!(
-        "inventory deliveries",
-        inventory::transactions::deliver(now)
-    );
-    part!("altar steps", world::altars::after_step(loader, now));
-    part!("day steps", world::daytime::after_step(loader));
-    part!("knowledge steps", knowledge::store::after_step(loader));
-    part!("death steps", inventory::deaths::after_step(loader));
-    part!("level writes", knowledge::progress::after_step());
-    part!("survivor steps", inventory::survivors::after_step(loader));
-    part!("item data steps", inventory::item_data::after_step(loader));
-    part!(
-        "game settings steps",
-        world::game_settings::after_step(loader)
-    );
-    part!("weather steps", world::weather::after_step(loader));
-    let step = crate::engine::ticks::count_step();
-    part!(
-        "interaction steps",
-        actions::interactions::after_step(loader, step)
-    );
-    part!("control firings", actions::controls::after_step(loader));
-    part!(
-        "carried controls",
-        actions::controls::resend_on_rights(loader)
-    );
-    part!("carried windows", ui::windows::after_step(loader));
-    part!("build refusals", actions::build_reasons::after_step(loader));
-    part!(
-        "stat steps",
-        inventory::stats::after_step(loader, step, now)
-    );
-    part!(
-        "knowledge change steps",
-        knowledge::store::changes::after_step(loader, step)
-    );
+    let stepping = Stepping {
+        loader,
+        now,
+        step: crate::engine::ticks::count_step(),
+    };
+    loader.parts.run(Stage::Follow, &stepping);
     if crate::engine::loader::handles(Event::TICKED) || TICKS.listed() {
         let nanos = TICKS.nanos(now);
         let time = TICKS.advance(nanos);
-        let tick = tick_data(step, time, game);
+        let tick = tick_data(stepping.step, time, game);
         part!(
             "tick events",
             loader.emit(Event::TICKED, None, (&raw const tick).cast::<c_void>())
         );
-        part!("periodic ticks", periodic_ticks(step, nanos, time, game));
+        part!(
+            "periodic ticks",
+            periodic_ticks(stepping.step, nanos, time, game)
+        );
     }
-    part!("join admission", crate::base::admission::after_step(loader));
-    part!("console lines", actions::console::after_step(loader));
-    part!("chat commands", actions::commands::after_step(loader));
-    part!("chat sending", actions::chat::drain());
-    part!("world saving", crate::base::saves::after_step(loader));
-    part!("own channel", crate::base::carrier::after_step(loader, now));
-    world::transactions::after_step(loader);
-    part!("voxel edits", world::voxels::changes::after_step(loader));
-    part!("terrain pages", world::terrain_pages::after_step(loader));
+    loader.parts.run(Stage::Input, &stepping);
+    loader.parts.run(Stage::Output, &stepping);
     // SAFETY: `server` is null or the game's live server, and this runs on
     // the game thread after its step, both by this function's `# Safety`.
     unsafe { joins(loader, offsets, server) };
+}
+
+/// Calls `call` of every part that has one, each under its own fuse, as
+/// `site`.
+fn run_fused(
+    loader: &'static Loader,
+    site: &str,
+    call: impl Fn(&'static Part) -> Option<&'static PlayerCall>,
+    player: &PlayerData,
+) {
+    for fused in loader.parts.iter().filter_map(call) {
+        let _ran = fused.fuse.run(site, || (fused.run)(loader, player));
+    }
 }
 
 /// Emits a join for each player slot that reached the game since the last
@@ -494,20 +487,16 @@ unsafe fn joins(loader: &'static Loader, offsets: &Offsets, server: *mut u8) {
             // SAFETY: `slot` is a live player slot of the server, read on the
             // game thread after its step, as the caller guarantees.
             let data = unsafe { player(index, slot, offsets) };
-            crate::base::admission::joined(data.key.get());
-            part!(
-                "the players' screens at join",
-                actions::interactions::player_joined(loader)
+            run_fused(
+                loader,
+                "a player's join",
+                |part| part.joined.as_ref(),
+                &data,
             );
             part!(
-                "the greeting at join",
-                crate::base::greeting::joined(loader, data.key.get())
+                "player joined events",
+                loader.emit(Event::PLAYER_JOINED, None, (&raw const data).cast())
             );
-            part!("player joined events", {
-                inventory::stats::player_joined(loader, &data);
-                inventory::item_data::player_joined(loader, data.entity);
-                loader.emit(Event::PLAYER_JOINED, None, (&raw const data).cast());
-            });
         }
     }
 }
@@ -555,33 +544,14 @@ fn forget_joined() {
     }
 }
 
-/// Ends a hosted game on the client: its server goes away with it.
-fn end_session() {
-    if let Some(loader) = crate::engine::loader::loader() {
-        crate::base::worlds::unload(loader);
-    }
+/// Ends a hosted game on the client: its server goes away with it. The
+/// world's settings unload first, while their mods' handlers still read the
+/// server; each part forgets its server after it is gone.
+fn end_session(loader: &'static Loader) {
+    crate::base::worlds::unload(loader);
     SESSION.relock().stop();
     crate::engine::world::release();
-    world::transactions::forget();
-    world::voxels::changes::forget();
-    world::terrain_pages::forget();
-    world::altars::forget();
-    inventory::survivors::forget();
-    actions::interactions::forget();
-    inventory::item_actions::forget();
-    actions::player_actions::forget();
-    ui::windows::forget(crate::engine::loader::loader());
-    actions::commands::forget();
-    actions::controls::forget();
-    world::bases::forget();
-    crate::base::saves::forget();
-    inventory::spawns::forget();
-    world::daytime::forget();
-    knowledge::store::forget();
-    world::weather::forget();
-    inventory::transactions::forget();
-    crate::content::recipes::left();
-    crate::base::admission::forget();
+    loader.parts.end(loader);
     forget_joined();
     BUILDING.relock().clear();
     crate::log!(
@@ -628,10 +598,9 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
     };
     guarded(&STATE_FUSE, "the server state link", || match state {
         STATE_INITIALIZE if old != STATE_INITIALIZE && loader.side == Side::CLIENT => {
-            crate::base::saves::hosting_begins();
-            // The client's own world runs every mod of its own.
-            crate::base::join::client::back_on();
-            actions::controls::forget_carried();
+            for hosting in loader.parts.iter().filter_map(|part| part.hosting) {
+                hosting(loader);
+            }
         }
         STATE_RUN if old != STATE_RUN => {
             if loader.side == Side::CLIENT {
@@ -649,9 +618,7 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
                 loader.emit(Event::SHUTDOWN_STARTED, None, core::ptr::null());
             });
             if loader.side == Side::CLIENT {
-                end_session();
-                actions::chat::forget();
-                crate::base::net::forget();
+                end_session(loader);
             }
         }
         _ => {}
@@ -706,14 +673,14 @@ unsafe extern "system" fn remove(server: *mut u8, slot: *mut u8) {
             // the slot count by the check before it and intact on entry, on the
             // thread the game removes it on.
             let data = unsafe { player(index, slot, offsets) };
-            crate::base::net::forget_peer(data.key.get());
-            crate::base::remote::forget_player(data.key.get());
-            crate::base::admission::left(data.key.get());
-            actions::controls::left(data.key.get());
-            ui::windows::left(data.key.get());
+            // Before the game removes the character: its items still read.
+            run_fused(
+                loader,
+                "the player removal link",
+                |part| part.left.as_ref(),
+                &data,
+            );
             guarded(&REMOVE_FUSE, "the player removal link", || {
-                // Before the game removes the character: its items still read.
-                inventory::item_data::player_left(loader, data.entity);
                 loader.emit(Event::PLAYER_LEFT, None, (&raw const data).cast());
             });
         }
@@ -896,9 +863,17 @@ mod tests {
 
     #[test]
     fn a_world_loads_its_settings_on_a_server_whose_mods_subscribe_to_nothing() {
-        assert!(own_link(pinned::server::SET_STATE));
-        assert!(own_link(pinned::server::POST_STEP));
-        assert!(!own_link(pinned::server::SAVE_STEP));
+        assert!(own_link(pinned::server::SET_STATE, false));
+        assert!(own_link(pinned::server::POST_STEP, false));
+        assert!(!own_link(pinned::server::SAVE_STEP, true));
+    }
+
+    #[test]
+    fn a_player_leaving_reaches_the_parts_that_hear_it_with_no_mod_subscribed() {
+        assert!(own_link(pinned::server::PLAYER_REMOVE, true));
+        assert!(!own_link(pinned::server::PLAYER_REMOVE, false));
+        let parts = crate::engine::parts::Parts::new(crate::parts::LAYERS);
+        assert!(parts.iter().any(|part| part.left.is_some()));
     }
 
     #[test]

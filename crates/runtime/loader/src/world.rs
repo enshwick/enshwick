@@ -51,3 +51,118 @@ pub(crate) mod voxels;
 pub(crate) mod weather;
 #[cfg(windows)]
 pub(crate) mod writes;
+
+#[cfg(windows)]
+use crate::engine::parts::{Part, fused, part, step};
+
+/// The world domain's parts, in the order the joins call each of their
+/// phases.
+#[cfg(windows)]
+pub(crate) static PARTS: &[&Part] = &[
+    &Part {
+        table_ids: altars::TABLE_IDS,
+        link: Some(altars::link),
+        steps: &[step!(Follow, "altar steps", |s| altars::after_step(
+            s.loader, s.now
+        ))],
+        forget: Some(|_| altars::forget()),
+        ..part!("altars", altars)
+    },
+    &Part {
+        table_ids: daytime::TABLE_IDS,
+        link: Some(daytime::link),
+        steps: &[step!(Follow, "day steps", |s| daytime::after_step(
+            s.loader
+        ))],
+        forget: Some(|_| daytime::forget()),
+        ..part!("daytime", daytime)
+    },
+    &Part {
+        table_ids: game_settings::TABLE_IDS,
+        steps: &[step!(Follow, "game settings steps", |s| {
+            game_settings::after_step(s.loader);
+        })],
+        world_event: Some(fused!("game settings at world events", |loader, event| {
+            game_settings::world_event(loader, event);
+        })),
+        ..part!("game_settings", game_settings)
+    },
+    &Part {
+        table_ids: weather::TABLE_IDS,
+        link: Some(weather::link),
+        steps: &[step!(Follow, "weather steps", |s| weather::after_step(
+            s.loader
+        ))],
+        world_event: Some(fused!("weather at world events", |loader, event| {
+            weather::world_event(loader, event);
+        })),
+        follows: Some(weather::follows),
+        forget: Some(|_| weather::forget()),
+        ..part!("weather", weather)
+    },
+    &Part {
+        table_ids: label::TABLE_IDS,
+        link: Some(label::link),
+        ..part!("label", label)
+    },
+    &Part {
+        table_ids: bases::TABLE_IDS,
+        link: Some(bases::link),
+        forget: Some(|_| bases::forget()),
+        ..part!("bases", bases)
+    },
+    &Part {
+        table_ids: fog::TABLE_IDS,
+        link: Some(fog::link),
+        ..part!("fog", fog)
+    },
+    &Part {
+        table_ids: transactions::TABLE_IDS,
+        steps: &[step!(Output, "world edits", |s| transactions::after_step(
+            s.loader
+        ))],
+        forget: Some(|_| transactions::forget()),
+        ..part!("transactions", transactions)
+    },
+    &Part {
+        table_ids: voxels::TABLE_IDS,
+        link: Some(voxels::changes::link),
+        steps: &[step!(Output, "voxel edits", |s| {
+            voxels::changes::after_step(s.loader);
+        })],
+        forget: Some(|_| voxels::changes::forget()),
+        ..part!("voxels", voxels)
+    },
+    &Part {
+        link: Some(terrain_pages::link),
+        steps: &[step!(Output, "terrain pages", |s| {
+            terrain_pages::after_step(s.loader);
+        })],
+        forget: Some(|_| terrain_pages::forget()),
+        ..part!("terrain_pages", terrain_pages)
+    },
+    &Part {
+        table_ids: buffs::TABLE_IDS,
+        ..part!("buffs", buffs)
+    },
+    &Part {
+        table_ids: entities::TABLE_IDS,
+        ..part!("entities", entities)
+    },
+    &Part {
+        table_ids: rights::TABLE_IDS,
+        ..part!("rights", rights)
+    },
+    &Part {
+        table_ids: scene::TABLE_IDS,
+        ..part!("scene", scene)
+    },
+    &Part {
+        table_ids: terrain::TABLE_IDS,
+        ..part!("terrain", terrain)
+    },
+    &Part {
+        table_ids: writes::TABLE_IDS,
+        ..part!("writes", writes)
+    },
+];

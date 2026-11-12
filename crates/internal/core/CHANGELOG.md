@@ -9,6 +9,10 @@ see is in the changelog of `enshwick`.
 
 ### Changed
 
+- Each loader layer registers its modules in one list, which the start,
+  the server step, a player's join and leave and the feature table walk in
+  the order of `domains.toml`; the `[loader]` joins name `parts` in place
+  of `table_ids`, and 19 edges up the layers are gone (#1058).
 - `domains.toml` cuts the loader by the same domains: its `[loader]` table
   puts each loader module in a layer, the engine below the domains, and
   `cargo xtask check` refuses a new edge up the layers (#1057).

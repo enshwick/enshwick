@@ -137,7 +137,7 @@ pub(crate) fn names(loader: &crate::engine::loader::Loader) -> Vec<String> {
         );
     }
     names.extend(crate::engine::diag::parts_off().into_iter().map(|p| p.part));
-    let lacking = loader.build.lacking(crate::TABLE_IDS);
+    let lacking = loader.build.lacking(loader.parts.table_ids());
     if !lacking.is_empty() {
         names.push(lacking.to_owned());
     }

@@ -185,7 +185,7 @@ fn dropped(loader: &Loader, key: u64) -> bool {
     };
     if due {
         let line = texts::for_player(key, || texts::text("muted.notice"));
-        if crate::ui::notices::send(loader, key, line).is_err() {
+        if crate::base::notices::send(loader, key, line).is_err() {
             let _queued = crate::actions::chat::send(key, line);
         }
     }

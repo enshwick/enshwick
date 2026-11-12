@@ -107,6 +107,10 @@ name = "ticks"
 harness = false
 
 [[bench]]
+name = "step_parts"
+harness = false
+
+[[bench]]
 name = "linked_controls"
 harness = false
 

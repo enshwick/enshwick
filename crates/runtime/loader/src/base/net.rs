@@ -364,7 +364,7 @@ pub(crate) fn client_carried(channel: u32, data: &[u8]) {
     } else if let Some(rest) = data.strip_prefix(control(NOTICE).as_slice())
         && let Some((entity, text)) = read_notice(rest)
     {
-        crate::ui::notices::queue(Entity(entity), text);
+        crate::base::notices::queue(Entity(entity), text);
     } else if let Some(rest) = data.strip_prefix(control(UI_DEMO).as_slice()) {
         if crate::engine::loader::loader().is_some_and(|loader| loader.developer_tools) {
             crate::ui::interface::open_demo(demo_position(rest));
