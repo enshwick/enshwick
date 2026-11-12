@@ -37,11 +37,16 @@ pub(crate) struct Part {
     pub(crate) left: Option<PlayerCall>,
     /// A client starts hosting a game.
     pub(crate) hosting: Option<fn(&'static Loader)>,
-    /// A client's hosted game ended: the part forgets its server.
+    /// A client's hosted game ended: the part tells mods what goes with it
+    /// (closed windows, unanswered requests), top layer first, before any
+    /// part forgets, so what their handlers queue is forgotten too.
+    pub(crate) end: Option<Fused<fn(&'static Loader)>>,
+    /// A client's hosted game ended: the part forgets its server, after
+    /// every part's `end`.
     pub(crate) forget: Option<fn(&'static Loader)>,
     /// Follows the server's world through its loaded, saved and shutdown
     /// events, which [`Loader::emit`] hands it before the mods.
-    pub(crate) world_event: Option<fn(&Loader, Event)>,
+    pub(crate) world_event: Option<WorldCall>,
     /// Whether the part follows the world with no mod subscribed to those
     /// events, so their links are made.
     pub(crate) follows: Option<fn(&Loader) -> bool>,
@@ -60,6 +65,7 @@ impl Part {
             joined: None,
             left: None,
             hosting: None,
+            end: None,
             forget: None,
             world_event: None,
             follows: None,
@@ -69,7 +75,7 @@ impl Part {
 
 /// A call the game's threads make into a part, under a fuse of its own: a
 /// panic in it turns off that call alone, and the game keeps running.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct Fused<F> {
     pub(crate) fuse: &'static Fuse,
     pub(crate) run: F,
@@ -78,15 +84,19 @@ pub(crate) struct Fused<F> {
 /// A call at a player's join or leave.
 pub(crate) type PlayerCall = Fused<fn(&'static Loader, &PlayerData)>;
 
+/// A call at the world's loaded, saved and shutdown events.
+pub(crate) type WorldCall = Fused<fn(&Loader, Event)>;
+
 /// When in the server step a part's work runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Stage {
     /// Following the game: the parts' own state after the game's step,
     /// before the tick events.
     Follow,
-    /// Taking what players and admins asked for, after the tick events.
+    /// Taking what players and admins asked for, after the tick events,
+    /// and posting the chat lines it answers with.
     Input,
-    /// Writing out what the step made: chat, saves, messages and world edits.
+    /// Writing out what the step made: saves, messages and world edits.
     Output,
 }
 
@@ -96,7 +106,7 @@ impl Stage {
 }
 
 /// A part's work after each server step.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct Step {
     pub(crate) stage: Stage,
     pub(crate) work: Fused<fn(&Stepping)>,
@@ -167,8 +177,10 @@ pub(crate) use part;
 pub(crate) struct Parts {
     layers: &'static [(&'static str, &'static [&'static Part])],
     rows: Box<[(&'static str, &'static [&'static str])]>,
-    /// The steps of each [`Stage`], by its index in [`Stage::ALL`].
-    stages: [Box<[&'static Step]>; Stage::ALL.len()],
+    /// The steps of each [`Stage`], by its index in [`Stage::ALL`], copied
+    /// side by side: a step reads its fuse and work without a hop through
+    /// its layer's list (61 to 44 ns for 26 parts, `benches/step_parts.rs`).
+    stages: [Box<[Step]>; Stage::ALL.len()],
 }
 
 impl Parts {
@@ -184,6 +196,7 @@ impl Parts {
             parts()
                 .flat_map(|part| part.steps)
                 .filter(|step| step.stage == stage)
+                .copied()
                 .collect()
         });
         Self {
@@ -194,10 +207,46 @@ impl Parts {
     }
 
     /// Every part, lowest layer first, each layer in its own order.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &'static Part> + use<> {
+    pub(crate) fn iter(&self) -> impl DoubleEndedIterator<Item = &'static Part> + use<> {
         self.layers
             .iter()
             .flat_map(|(_, parts)| parts.iter().copied())
+    }
+
+    /// Runs every part's work at `stage` of a step, in order, each turned
+    /// off alone by a panic.
+    pub(crate) fn run(&self, stage: Stage, stepping: &Stepping) {
+        Fuse::run_each(
+            self.steps(stage),
+            "the post-step link",
+            |step| step.work.fuse,
+            |step| (step.work.run)(stepping),
+        );
+    }
+
+    /// Hands the world's `event` to every part that follows the world, each
+    /// under its own fuse.
+    pub(crate) fn world_event(&self, loader: &Loader, event: Event) {
+        for fused in self.iter().filter_map(|part| part.world_event.as_ref()) {
+            let _ran = fused
+                .fuse
+                .run("a world event", || (fused.run)(loader, event));
+        }
+    }
+
+    /// Ends a client's hosted game in the parts: every `end`, top layer
+    /// first, so a window's close handler may still queue a request the
+    /// inventory then answers; then every `forget`, which drops what the
+    /// handlers queued with the rest.
+    pub(crate) fn end(&self, loader: &'static Loader) {
+        for fused in self.iter().rev().filter_map(|part| part.end.as_ref()) {
+            let _ran = fused
+                .fuse
+                .run("a hosted game's end", || (fused.run)(loader));
+        }
+        for forget in self.iter().filter_map(|part| part.forget) {
+            forget(loader);
+        }
     }
 
     /// Each part that names build table ids, with them, by name: the
@@ -207,7 +256,7 @@ impl Parts {
     }
 
     /// The work of every part at `stage` of a step, in order.
-    pub(crate) fn steps(&self, stage: Stage) -> &[&'static Step] {
+    pub(crate) fn steps(&self, stage: Stage) -> &[Step] {
         &self.stages[stage as usize]
     }
 }

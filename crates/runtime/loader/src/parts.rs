@@ -333,12 +333,65 @@ mod tests {
             ),
             ("left", fused(|p| p.left.as_ref().map(|l| l.fuse.feature()))),
             ("hosting", named(|p| p.hosting.is_some())),
+            (
+                "end",
+                parts
+                    .iter()
+                    .rev()
+                    .filter_map(|p| p.end.as_ref().map(|e| e.fuse.feature()))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            ),
             ("forget", named(|p| p.forget.is_some())),
-            ("world event", named(|p| p.world_event.is_some())),
+            (
+                "world event",
+                fused(|p| p.world_event.as_ref().map(|w| w.fuse.feature())),
+            ),
             ("follows", named(|p| p.follows.is_some())),
         ]
         .map(|(phase, calls)| format!("{phase}: {calls}"))
         .join("\n")
+    }
+
+    /// The parts whose end runs mods' handlers, in the order a hosted game
+    /// ends them: windows tell their close handlers, which may queue an
+    /// inventory request, and then the inventory answers what is queued.
+    /// Every forget runs after them and drops what the handlers queued.
+    #[test]
+    fn a_hosted_game_tells_mods_top_layer_first_before_any_part_forgets() {
+        let ending: Vec<_> = Parts::new(LAYERS)
+            .iter()
+            .rev()
+            .filter(|part| part.end.is_some())
+            .map(|part| part.name)
+            .collect();
+        assert_eq!(ending, ["windows", "inventory"]);
+        let both = Parts::new(LAYERS)
+            .iter()
+            .find(|part| part.end.is_some() && part.forget.is_some());
+        assert!(both.is_none(), "{both:?} both tells and forgets");
+    }
+
+    /// A step's work that reads what another's writes in the same step
+    /// runs after it.
+    #[test]
+    fn a_step_reads_what_the_work_before_it_wrote() {
+        let parts = Parts::new(LAYERS);
+        let at = |stage: Stage, feature: &str| {
+            parts
+                .steps(stage)
+                .iter()
+                .position(|step| step.work.fuse.feature() == feature)
+                .unwrap_or_else(|| panic!("no {feature}"))
+        };
+        assert!(
+            at(Stage::Follow, "item data steps") < at(Stage::Follow, "stat steps"),
+            "stats work out the item stats item data attaches"
+        );
+        assert!(
+            at(Stage::Input, "chat commands") < at(Stage::Input, "chat sending"),
+            "the chat posts the commands' replies"
+        );
     }
 
     /// The order each phase calls its parts in; a change to it shows here

@@ -569,9 +569,7 @@ impl Loader {
     /// Raises `event` with `data` for every mod still on, or for mod `only`.
     pub(crate) fn emit(&self, event: Event, only: Option<usize>, data: *const core::ffi::c_void) {
         if only.is_none() && is_world_event(event) {
-            for world_event in self.parts.iter().filter_map(|part| part.world_event) {
-                world_event(self, event);
-            }
+            self.parts.world_event(self, event);
         }
         let Some(delivery) = self.delivery.get() else {
             return;

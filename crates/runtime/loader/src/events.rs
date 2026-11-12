@@ -224,9 +224,13 @@ fn guarded(fuse: &Fuse, link: &str, work: impl FnOnce()) {
 
 /// Whether the loader's own work needs the link to `symbol` with no mod
 /// subscribed to its events: the step tells the world reads the game's
-/// thread, and the state change loads each world's settings and record.
-fn own_link(symbol: Symbol) -> bool {
-    symbol == pinned::server::POST_STEP || symbol == pinned::server::SET_STATE
+/// thread, the state change loads each world's settings and record, and the
+/// removal calls the parts that hear a player leave (`leaves`), such as item
+/// data setting aside what the character carries.
+fn own_link(symbol: Symbol, leaves: bool) -> bool {
+    symbol == pinned::server::POST_STEP
+        || symbol == pinned::server::SET_STATE
+        || (leaves && symbol == pinned::server::PLAYER_REMOVE)
 }
 
 /// Runs one part of the post-step work under a fuse of its own, so a panic
@@ -287,8 +291,9 @@ pub(crate) fn link(loader: &'static Loader) {
     if LOADED.set((loader, offsets)).is_err() {
         return;
     }
+    let leaves = loader.parts.iter().any(|part| part.left.is_some());
     let link = |events: &[Event], symbol: Symbol| -> Option<Target<'static>> {
-        (wants(events) || own_link(symbol)).then_some(Target::Pinned(symbol))
+        (wants(events) || own_link(symbol, leaves)).then_some(Target::Pinned(symbol))
     };
     let none = HookFlags::NONE;
     let feature = "server events";
@@ -416,7 +421,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         now,
         step: crate::engine::ticks::count_step(),
     };
-    run_steps(loader, Stage::Follow, &stepping);
+    loader.parts.run(Stage::Follow, &stepping);
     if crate::engine::loader::handles(Event::TICKED) || TICKS.listed() {
         let nanos = TICKS.nanos(now);
         let time = TICKS.advance(nanos);
@@ -430,21 +435,11 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
             periodic_ticks(stepping.step, nanos, time, game)
         );
     }
-    run_steps(loader, Stage::Input, &stepping);
-    run_steps(loader, Stage::Output, &stepping);
+    loader.parts.run(Stage::Input, &stepping);
+    loader.parts.run(Stage::Output, &stepping);
     // SAFETY: `server` is null or the game's live server, and this runs on
     // the game thread after its step, both by this function's `# Safety`.
     unsafe { joins(loader, offsets, server) };
-}
-
-/// Runs every part's work at `stage` of the step, each under its own fuse.
-fn run_steps(loader: &Loader, stage: Stage, stepping: &Stepping) {
-    for step in loader.parts.steps(stage) {
-        let _ran = step
-            .work
-            .fuse
-            .run("the post-step link", || (step.work.run)(stepping));
-    }
 }
 
 /// Calls `call` of every part that has one, each under its own fuse, as
@@ -556,9 +551,7 @@ fn end_session(loader: &'static Loader) {
     crate::base::worlds::unload(loader);
     SESSION.relock().stop();
     crate::engine::world::release();
-    for forget in loader.parts.iter().filter_map(|part| part.forget) {
-        forget(loader);
-    }
+    loader.parts.end(loader);
     forget_joined();
     BUILDING.relock().clear();
     crate::log!(
@@ -870,9 +863,17 @@ mod tests {
 
     #[test]
     fn a_world_loads_its_settings_on_a_server_whose_mods_subscribe_to_nothing() {
-        assert!(own_link(pinned::server::SET_STATE));
-        assert!(own_link(pinned::server::POST_STEP));
-        assert!(!own_link(pinned::server::SAVE_STEP));
+        assert!(own_link(pinned::server::SET_STATE, false));
+        assert!(own_link(pinned::server::POST_STEP, false));
+        assert!(!own_link(pinned::server::SAVE_STEP, true));
+    }
+
+    #[test]
+    fn a_player_leaving_reaches_the_parts_that_hear_it_with_no_mod_subscribed() {
+        assert!(own_link(pinned::server::PLAYER_REMOVE, true));
+        assert!(!own_link(pinned::server::PLAYER_REMOVE, false));
+        let parts = crate::engine::parts::Parts::new(crate::parts::LAYERS);
+        assert!(parts.iter().any(|part| part.left.is_some()));
     }
 
     #[test]

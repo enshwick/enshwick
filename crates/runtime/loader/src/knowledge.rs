@@ -6,7 +6,7 @@ pub(crate) mod progress;
 pub(crate) mod store;
 
 #[cfg(windows)]
-use crate::engine::parts::{Part, part, step};
+use crate::engine::parts::{Part, fused, part, step};
 
 /// The knowledge domain's parts, in the order the joins call each of their
 /// phases.
@@ -31,7 +31,12 @@ pub(crate) static PARTS: &[&Part] = &[
         steps: &[step!(Follow, "knowledge change steps", |s| {
             store::changes::after_step(s.loader, s.step);
         })],
-        world_event: Some(store::changes::world_event),
+        world_event: Some(fused!(
+            "knowledge changes at world events",
+            |loader, event| {
+                store::changes::world_event(loader, event);
+            }
+        )),
         ..part!("knowledge changes", store::changes)
     },
 ];

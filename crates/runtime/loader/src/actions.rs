@@ -35,13 +35,6 @@ pub(crate) static PARTS: &[&Part] = &[
         ..part!("vetoes", vetoes)
     },
     &Part {
-        table_ids: chat::TABLE_IDS,
-        link: Some(chat::link),
-        steps: &[step!(Output, "chat sending", |_| chat::drain())],
-        forget: Some(|_| chat::forget()),
-        ..part!("chat", chat)
-    },
-    &Part {
         table_ids: console::TABLE_IDS,
         steps: &[step!(Input, "console lines", |s| console::after_step(
             s.loader
@@ -49,12 +42,21 @@ pub(crate) static PARTS: &[&Part] = &[
         ..part!("console", console)
     },
     &Part {
-        link: Some(|_| commands::seal()),
+        seal: Some(|_| commands::seal()),
         steps: &[step!(Input, "chat commands", |s| commands::after_step(
             s.loader
         ))],
         forget: Some(|_| commands::forget()),
         ..part!("commands", commands)
+    },
+    // After the commands: the lines it raises and posts take their replies
+    // in the same step, before the step's output.
+    &Part {
+        table_ids: chat::TABLE_IDS,
+        link: Some(chat::link),
+        steps: &[step!(Input, "chat sending", |_| chat::drain())],
+        forget: Some(|_| chat::forget()),
+        ..part!("chat", chat)
     },
     &Part {
         table_ids: interactions::TABLE_IDS,
@@ -101,7 +103,9 @@ pub(crate) static PARTS: &[&Part] = &[
         ..part!("build_reasons", build_reasons)
     },
     &Part {
-        world_event: Some(chat_mute::world_event),
+        world_event: Some(fused!("chat mutes at world events", |loader, event| {
+            chat_mute::world_event(loader, event);
+        })),
         ..part!("chat_mute", chat_mute)
     },
 ];

@@ -105,11 +105,23 @@ fn heard(_: &Loader, event: Event) {
     HEARD.fetch_or(1 << event.0, Ordering::Relaxed);
 }
 
-static FOLLOWING: &[&crate::engine::parts::Part] = &[&crate::engine::parts::Part {
-    world_event: Some(heard),
-    follows: Some(|_| FOLLOWS.load(Ordering::Relaxed)),
-    ..crate::engine::parts::part!("following")
-}];
+static FOLLOWING: &[&crate::engine::parts::Part] = &[
+    &crate::engine::parts::Part {
+        world_event: Some(crate::engine::parts::fused!(
+            "test world panics",
+            |_, event| assert!(event != Event::WORLD_LOADED, "a corrupt file")
+        )),
+        ..crate::engine::parts::part!("panicking")
+    },
+    &crate::engine::parts::Part {
+        world_event: Some(crate::engine::parts::fused!(
+            "test world follower",
+            |loader, event| heard(loader, event)
+        )),
+        follows: Some(|_| FOLLOWS.load(Ordering::Relaxed)),
+        ..crate::engine::parts::part!("following")
+    },
+];
 static LAYERS: &[(&str, &[&crate::engine::parts::Part])] = &[("test", FOLLOWING)];
 
 fn following_loader() -> Loader {
@@ -119,7 +131,7 @@ fn following_loader() -> Loader {
 }
 
 #[test]
-fn the_parts_that_follow_the_world_hear_its_three_events_raised_for_every_mod() {
+fn the_parts_that_follow_the_world_hear_its_three_events_though_one_before_them_panics() {
     let loader = following_loader();
     for event in [
         Event::WORLD_LOADED,

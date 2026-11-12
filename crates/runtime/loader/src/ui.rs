@@ -25,7 +25,9 @@ pub(crate) static PARTS: &[&Part] = &[
         left: Some(fused!("windows at leave", |_, player| windows::left(
             player.key.get()
         ))),
-        forget: Some(|loader| windows::forget(Some(loader))),
+        end: Some(fused!("windows at a game's end", |loader| windows::forget(
+            Some(loader)
+        ))),
         ..part!("windows", windows)
     },
 ];

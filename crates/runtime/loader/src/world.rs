@@ -53,7 +53,7 @@ pub(crate) mod weather;
 pub(crate) mod writes;
 
 #[cfg(windows)]
-use crate::engine::parts::{Part, part, step};
+use crate::engine::parts::{Part, fused, part, step};
 
 /// The world domain's parts, in the order the joins call each of their
 /// phases.
@@ -82,7 +82,9 @@ pub(crate) static PARTS: &[&Part] = &[
         steps: &[step!(Follow, "game settings steps", |s| {
             game_settings::after_step(s.loader);
         })],
-        world_event: Some(game_settings::world_event),
+        world_event: Some(fused!("game settings at world events", |loader, event| {
+            game_settings::world_event(loader, event);
+        })),
         ..part!("game_settings", game_settings)
     },
     &Part {
@@ -91,7 +93,9 @@ pub(crate) static PARTS: &[&Part] = &[
         steps: &[step!(Follow, "weather steps", |s| weather::after_step(
             s.loader
         ))],
-        world_event: Some(weather::world_event),
+        world_event: Some(fused!("weather at world events", |loader, event| {
+            weather::world_event(loader, event);
+        })),
         follows: Some(weather::follows),
         forget: Some(|_| weather::forget()),
         ..part!("weather", weather)

@@ -26,7 +26,7 @@ pub(crate) mod standins;
 pub(crate) mod textures;
 
 #[cfg(windows)]
-use crate::engine::parts::{Part, part};
+use crate::engine::parts::{Part, fused, part};
 
 /// The content domain's parts, in the order the joins call each of their
 /// phases.
@@ -48,14 +48,18 @@ pub(crate) static PARTS: &[&Part] = &[
         ..part!("textures", textures)
     },
     &Part {
-        world_event: Some(data_changes::world_event),
+        world_event: Some(fused!("data changes at world events", |loader, event| {
+            data_changes::world_event(loader, event);
+        })),
         follows: Some(data_changes::wanted),
         ..part!("data_changes", data_changes)
     },
     &Part {
         table_ids: rate_links::TABLE_IDS,
         link: Some(rate_links::link),
-        world_event: Some(|_, event| rate_links::world_event(event)),
+        world_event: Some(fused!("recipe rates at world events", |_, event| {
+            rate_links::world_event(event);
+        })),
         follows: Some(|_| rate_links::recipes_rated()),
         ..part!("rate_links", rate_links)
     },

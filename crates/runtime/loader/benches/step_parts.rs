@@ -1,6 +1,9 @@
-//! What the post-step pays to reach its parts: 26 parts with no work, each
-//! called directly under its own fuse, against the same parts called
-//! through a list of fused function pointers, as the layers register them.
+//! What the post-step pays to reach its parts: 26 parts whose work does
+//! nothing but may panic, each turned off alone by a panic. `direct` calls
+//! them one by one, each under its own guard; `guarded` calls them through
+//! references into each layer's list, each under its own guard; `walked`
+//! is the loader's walk, through a stage's steps held side by side under
+//! one guard ([`Fuse::run_each`]).
 
 use std::hint::black_box;
 use std::time::Instant;
@@ -17,8 +20,11 @@ struct Stepping {
     step: u64,
 }
 
-/// A part's work: nothing but reading what it is given.
+/// A part's work: out of line and able to panic, as the loader's parts
+/// are, so each guard stays around its call.
+#[inline(never)]
 fn work(stepping: &Stepping) {
+    assert!(black_box(stepping.step) != 0, "never");
     black_box((stepping.now, stepping.step));
 }
 
@@ -30,7 +36,7 @@ struct Step {
 
 static FUSES: [Fuse; PARTS] = [const { Fuse::new("bench part") }; PARTS];
 
-static LISTED: [Step; PARTS] = {
+static STEPS: [Step; PARTS] = {
     let mut steps = [const {
         Step {
             fuse: &FUSES[0],
@@ -45,7 +51,6 @@ static LISTED: [Step; PARTS] = {
     steps
 };
 
-/// The parts called one by one, each under its own fuse.
 fn direct(stepping: &Stepping) {
     macro_rules! parts {
         ($($i:literal)*) => {
@@ -55,11 +60,19 @@ fn direct(stepping: &Stepping) {
     parts!(0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25);
 }
 
-/// The parts called through the list, as the step walks a stage.
-fn listed(steps: &[Step], stepping: &Stepping) {
+fn guarded(steps: &[&Step], stepping: &Stepping) {
     for step in steps {
         let _ran = step.fuse.run("the post-step link", || (step.run)(stepping));
     }
+}
+
+fn walked(steps: &[Step], stepping: &Stepping) {
+    Fuse::run_each(
+        steps,
+        "the post-step link",
+        |step| step.fuse,
+        |step| (step.run)(stepping),
+    );
 }
 
 fn step_parts(c: &mut Criterion) {
@@ -69,8 +82,12 @@ fn step_parts(c: &mut Criterion) {
         step: 1,
     };
     group.bench_function("direct", |b| b.iter(|| direct(black_box(&stepping))));
-    group.bench_function("listed", |b| {
-        b.iter(|| listed(black_box(&LISTED), black_box(&stepping)));
+    let references: Vec<&Step> = STEPS.iter().collect();
+    group.bench_function("guarded", |b| {
+        b.iter(|| guarded(black_box(&references), black_box(&stepping)));
+    });
+    group.bench_function("walked", |b| {
+        b.iter(|| walked(black_box(&STEPS), black_box(&stepping)));
     });
     group.finish();
 }
