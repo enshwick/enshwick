@@ -105,7 +105,7 @@ pub fn name_key(id: &str) -> Option<String> {
 /// The platform's built-in stat kinds, which it applies to the game on the
 /// server.
 ///
-/// Open one with [`Load::open_stat`](../struct.Load.html#method.open_stat). The maximum kinds add points to the
+/// Open one with [`Load::open_stat`](../../struct.Load.html#method.open_stat). The maximum kinds add points to the
 /// entity's maximum health, stamina and mana, as gear does. Damage kinds are factors on the hits
 /// an entity deals, 1 without modifiers; resistances are the part of a
 /// hit's damage the entity takes less, 0 without modifiers and 1 for none

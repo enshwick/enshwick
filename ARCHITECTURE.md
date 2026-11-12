@@ -189,7 +189,11 @@ world and inventory; each later peel follows the same steps.
    facade re-exports, and the method behind it stays `pub(crate)`: a method
    on a type the facade shows is in a mod's reach, hidden or not.
    `crates/enshwick/tests/ui/internals_out_of_reach.rs` holds that a mod
-   names none of them. The fake's part goes into the crate's own hidden
+   names none of them. A type only a script's handler gets, which a
+   forwarder's signature names, such as `ScriptDamage`, is public inside a
+   module private to the crate, its `script` module, and core names it
+   through `__internal`; a crate-private helper core calls takes
+   `&mut impl Loading` there. The fake's part goes into the crate's own hidden
    `__fake`, behind a `fake` feature that core's turns on, which core's
    `__fake` re-exports; so do the fixtures core's tests build on, each in a
    `fixtures` module beside the tests it comes from. Core re-exports
@@ -197,7 +201,8 @@ world and inventory; each later peel follows the same steps.
    facade re-exports them at today's paths.
    A doc link from the crate to `Load` or a domain above is a relative
    URL to the facade's page, such as
-   `[`Load::add_item`](../struct.Load.html#method.add_item)`, never in a
+   `[`Load::add_item`](../struct.Load.html#method.add_item)`, one `../`
+   deeper on a nested public module's own docs, never in a
    module's first paragraph, which the crate's index shows one folder up;
    `cargo xtask doc-links` checks each one in the facade's rendered docs.
 6. Give each doc example the alias line with `cargo xtask alias-examples`,
