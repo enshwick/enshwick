@@ -21,8 +21,8 @@ impl Load<'_> {
     /// # Errors
     ///
     /// [`Off`] for a mod not of side both, a path outside the mod's folder,
-    /// a file past [`MAX_FILE_BYTES`] or past the mod's [`MAX_MOD_BYTES`],
-    /// one that is not 16-bit PCM WAV at [`SAMPLE_RATE`], a container value
+    /// a file past [`MAX_FILE_BYTES`](crate::sound::MAX_FILE_BYTES) or past the mod's [`MAX_MOD_BYTES`](crate::sound::MAX_MOD_BYTES),
+    /// one that is not 16-bit PCM WAV at [`SAMPLE_RATE`](crate::sound::SAMPLE_RATE), a container value
     /// outside its bound, an id another
     /// content id holds, after init, and on a client whose game holds no
     /// streamed uncompressed sound to build from.
