@@ -242,6 +242,21 @@ fn a_script_adapter_moves_public_and_keeps_its_visibility_on_load() -> Result<()
 }
 
 #[test]
+fn a_script_only_method_above_base_peels_only_from_its_module_s_script_file() -> Result<(), String>
+{
+    let source = "#[crate::script(vetoes)]\nimpl Load<'_> {\n    /// A filter for a script.\n    #[script(name = \"on_build\")]\n    pub(crate) fn build_filter(&mut self) -> u32 {\n        1\n    }\n}\n";
+    let root = Path::new("D:/w");
+    let open = Form::of(root, "crates/internal/actions/src/vetoes.rs")?;
+    assert_eq!(
+        peel(source, &open).map(|_| ()),
+        Err("`Load::build_filter` is script-only: put its block in the module's `script.rs`, whose trait mods cannot reach, and peel that file".to_owned())
+    );
+    let private = Form::of(root, "crates/internal/actions/src/vetoes/script.rs")?;
+    assert_eq!(peel(source, &private)?.traits, ["LoadMethods"]);
+    Ok(())
+}
+
+#[test]
 fn a_module_above_base_gets_one_method_trait_for_all_its_blocks() -> Result<(), String> {
     let source = "use crate::{Load, Off};\n\n#[cfg(feature = \"unstable\")]\n#[crate::script(items)]\nimpl Load<'_> {\n    /// Adds an item.\n    #[must_use]\n    #[expect(clippy::x, reason = \"y\")]\n    pub fn add(&mut self, mut id: u32) -> Result<(), Off> {\n        self.helper(id)\n    }\n\n    /// Runs once the id is declared.\n    pub(crate) fn helper(&mut self, id: u32) -> Result<(), Off> {\n        Ok(())\n    }\n}\n\nimpl Load<'_> {\n    fn quiet(&self) {}\n}\n";
     let root = Path::new("D:/w");

@@ -65,6 +65,14 @@ fn reach_actions(load: &mut enshwick::Load<'_>, texts: enshwick::i18n::Texts) {
     let _ = base.control_script((), |_| ());
 }
 
+fn reach_vetoes(load: &mut enshwick::Load<'_>) {
+    use enshwick::Loading as _;
+    use enshwick::vetoes::LoadMethods as _;
+    use enshwick::vetoes::script::LoadMethods as _;
+    let base = load.base_mut();
+    let _ = base.build_filter(|_| enshwick::vetoes::BuildVerdict::Allow);
+}
+
 fn reach(host: Host, scheduler: Scheduler, ty: ComponentType) {
     let _ = host.install();
     host.scope(|| ());

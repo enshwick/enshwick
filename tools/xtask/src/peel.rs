@@ -387,6 +387,9 @@ struct Peeled {
 struct Methods {
     public: Part,
     helpers: Part,
+    /// The forwarded methods that are not `pub` on `Load`, which only
+    /// scripts call.
+    script_only: Vec<String>,
 }
 
 /// One trait's signatures and the implementing methods, in order.
@@ -411,6 +414,21 @@ impl Part {
 }
 
 impl Methods {
+    /// Refuses a script-only method on a module's public trait, which a mod
+    /// imports; it belongs on the trait of the module's private `script`.
+    fn refuse_script_only(&self, form: &Form) -> Result<(), String> {
+        match (form, self.script_only.first()) {
+            (Form::Trait { module, .. }, Some(name))
+                if module.rsplit("::").next() != Some("script") =>
+            {
+                Err(format!(
+                    "`Load::{name}` is script-only: put its block in the module's `script.rs`, whose trait mods cannot reach, and peel that file"
+                ))
+            }
+            _ => Ok(()),
+        }
+    }
+
     /// Adds the methods of `item` and returns its forwarder block, if it has
     /// a public method.
     fn add(
@@ -487,6 +505,9 @@ impl Methods {
             part.bodies.push(body);
             if forwarded {
                 bodiless.push(bodiless_forwarder(method, text, at));
+                if !matches!(method.vis, Visibility::Public(_)) {
+                    self.script_only.push(method.sig.ident.to_string());
+                }
             }
         }
         Ok(forwarder(item, &bodiless, text, at))
@@ -643,6 +664,7 @@ fn peel(text: &str, form: &Form) -> Result<Peeled, String> {
             _ => {}
         }
     }
+    methods.refuse_script_only(form)?;
     // In the trait form the first block's place takes the trait and its
     // impl, and the others are cut.
     if let Some(first) = cuts.first_mut()

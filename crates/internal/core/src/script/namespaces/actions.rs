@@ -15,7 +15,11 @@ pub(super) const NAMESPACES: &[Namespace] = &[
     Namespace::of::<crate::console::ConsoleFns>(),
     #[cfg(feature = "unstable")]
     Namespace::of::<crate::commands::CommandFns>(),
-    Namespace::starting("vetoes", "", &[crate::Load::SCRIPT_VETOES]),
+    Namespace::starting(
+        "vetoes",
+        "",
+        &[crate::Load::SCRIPT_VETOES, crate::Load::SCRIPT_VETOES_BUILD],
+    ),
     Namespace::starting("chat", "", &[crate::Load::SCRIPT_CHAT]),
     #[cfg(feature = "unstable")]
     Namespace::of::<crate::interactions::Targets>(),

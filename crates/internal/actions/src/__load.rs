@@ -14,3 +14,4 @@ pub use crate::controls::script::LoadMethods as _;
 pub use crate::input::LoadMethods as _;
 pub use crate::interactions::LoadMethods as _;
 pub use crate::vetoes::LoadMethods as _;
+pub use crate::vetoes::script::LoadMethods as _;

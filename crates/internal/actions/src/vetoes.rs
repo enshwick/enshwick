@@ -41,6 +41,8 @@ use crate::game_events::CraftRecipeEvent;
 use crate::script::{Answer, Error, Ty, Value};
 use crate::{Entity, ItemId};
 
+pub(crate) mod script;
+
 /// A placement the game allows, from [`Load::on_build`](../struct.Load.html#method.on_build). The name is
 /// enshwick's: the game's cursor check has none, and a refusal sets the
 /// game's `NoPermission` cursor flag.
@@ -200,12 +202,6 @@ pub trait LoadMethods {
     where
         F: Fn(&Placement) -> V + Send + Sync + 'static,
         V: Into<BuildVerdict>;
-
-    /// As `Load::build_filter`.
-    #[doc(hidden)]
-    fn build_filter<F>(&mut self, filter: F) -> Result<(), Off>
-    where
-        F: Fn(&Placement) -> BuildVerdict + Send + Sync + 'static;
 }
 
 impl LoadMethods for crate::BaseLoad {
@@ -226,20 +222,22 @@ impl LoadMethods for crate::BaseLoad {
         F: Fn(&Placement) -> V + Send + Sync + 'static,
         V: Into<BuildVerdict>,
     {
-        self.build_filter(move |placement| filter(placement).into())
+        build_filter(self, move |placement| filter(placement).into())
     }
+}
 
-    fn build_filter<F>(&mut self, filter: F) -> Result<(), Off>
-    where
-        F: Fn(&Placement) -> BuildVerdict + Send + Sync + 'static,
-    {
-        let host = self.host();
-        crate::load::hand_over(
-            filter,
-            |user| (host.api().build_filter)(host.handle(), run_build::<F>, user),
-            "build filter",
-        )
-    }
+/// Hands `filter` to the loader's build check, for `Load::on_build` and its
+/// script form.
+pub(crate) fn build_filter<F>(load: &crate::BaseLoad, filter: F) -> Result<(), Off>
+where
+    F: Fn(&Placement) -> BuildVerdict + Send + Sync + 'static,
+{
+    let host = load.host();
+    crate::load::hand_over(
+        filter,
+        |user| (host.api().build_filter)(host.handle(), run_build::<F>, user),
+        "build filter",
+    )
 }
 
 #[cfg(test)]

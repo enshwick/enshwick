@@ -43,8 +43,9 @@ stub ──starts──▶ loader ──C ABI──▶ mods (enshwick ▸ enshwi
                    ├──▶ enshwick-gamedata (tables, reflect, archive) ──▶ enshwick-content, enshwick-base
                    └──▶ enshwick-luau ──▶ enshwick-core (script descriptions)
 cargo-enshwick ──▶ enshwick-core, enshwick-abi, enshwick-gamedata
-enshwick ──▶ enshwick-core ──▶ enshwick-actions ──▶ enshwick-knowledge ──▶ enshwick-inventory ──▶ enshwick-world ──▶ enshwick-content ──▶ enshwick-base ──▶ enshwick-abi ──▶ enshwick-values
-                                                                                                                     enshwick-content ──▶ enshwick-typed ──▶ enshwick-values ──▶ enshwick-macros
+enshwick ──▶ enshwick-core ──▶ enshwick-actions ──▶ enshwick-inventory ──▶ enshwick-world ──▶ enshwick-content ──▶ enshwick-base ──▶ enshwick-abi ──▶ enshwick-values
+                                                                                              enshwick-content ──▶ enshwick-typed ──▶ enshwick-values ──▶ enshwick-macros
+             enshwick-core ──▶ enshwick-knowledge ──▶ enshwick-inventory
 enshwick ──test──▶ enshwick-fake ──▶ enshwick-core (its `fake` feature)
 ```
 
@@ -192,7 +193,8 @@ steps.
    A method only a script calls, such as `on_comfort_script`, goes to a
    `#[script(<part>)]` block of its own in core's
    `load/<module>/script.rs`, and its body to a `LoadMethods` trait in the
-   module's private `script` module, never to the module's public trait.
+   module's private `script` module, never to the module's public trait;
+   `peel-load` refuses one anywhere else.
 5. What core calls inside the crate and a mod must not becomes a function
    of the crate's hidden `__internal` module, which neither core nor the
    facade re-exports, and the method behind it stays `pub(crate)`: a method
