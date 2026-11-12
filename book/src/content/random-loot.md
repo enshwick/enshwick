@@ -13,7 +13,7 @@ roll, on top of the vanilla loot.
 The item is a vanilla one or one from
 [`add_item`](items.md); the game skips an item its registry does not hold.
 The API is in
-[`loot/drops.rs`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/loot/drops.rs).
+[`loot/drops.rs`](https://github.com/enshwick/enshwick/blob/main/crates/internal/inventory/src/loot/drops.rs).
 
 ```rust
 use enshwick::content::{Id, id};
@@ -68,7 +68,7 @@ In Luau, a drop's `chance` may come from the mod's
 
 ## A drop
 
-A [`Drop`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/loot/drops.rs)
+A [`Drop`](https://github.com/enshwick/enshwick/blob/main/crates/internal/inventory/src/loot/drops.rs)
 holds the items, the chance, the count and the source:
 
 - `Drop::new(item, chance, from)` gives one item. `item` is the game id
@@ -126,7 +126,7 @@ once.
 
 Label ids and node ids are `LootContainerId`s, as the game names them. A
 label id is the FNV-1a hash of an enemy or chest type's label collection GUID. `Source::matches` tells whether a
-[`Roll`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/loot/drops.rs)
+[`Roll`](https://github.com/enshwick/enshwick/blob/main/crates/internal/inventory/src/loot/drops.rs)
 comes from a source, which a unit test can check without the game:
 
 ```rust

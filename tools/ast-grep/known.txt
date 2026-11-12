@@ -7,10 +7,6 @@
 # The texts each mod or data pack handed the loader; they move into the
 # texts domain's state struct.
 static-is-registry-fuse-or-state crates/internal/base/src/i18n.rs static HANDED: crate::fresh::Fresh<std::sync::Mutex<Vec<(crate::abi::ModHandle, Texts)>>> =
-# A mod's drops and the queues of its roll watchers, runtime state of the
-# drops domain; they move into one state struct with `ENGINE` and `DICE`.
-static-is-registry-fuse-or-state crates/internal/core/src/loot/drops.rs static DROPS: Fresh<Mutex<Vec<(u64, Drop)>>> = Fresh::new();
-static-is-registry-fuse-or-state crates/internal/core/src/loot/drops.rs static WATCHERS: Fresh<Mutex<Vec<Watcher>>> = Fresh::new();
 # Each mod's task queue, kept for the process; it moves into a
 # `Registry<T>` by mod handle.
 static-is-registry-fuse-or-state crates/internal/base/src/schedule.rs static QUEUES: crate::fresh::Fresh<Mutex<Vec<(ModHandle, &'static Queue)>>> =

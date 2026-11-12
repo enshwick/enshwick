@@ -5,7 +5,7 @@ description: Read the containers a dead enemy leaves, corpses and loot bags, and
 
 # Loot containers
 
-[`enshwick::loot`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/loot.rs)
+[`enshwick::loot`](https://github.com/enshwick/enshwick/blob/main/crates/internal/inventory/src/loot.rs)
 reads the containers a dead enemy leaves, corpses and loot bags, and other
 containers that dissolve once emptied. It reads only; empty a container
 through [Inventories](../inventories.md). To put items into the loot a
@@ -14,9 +14,9 @@ container rolls, see [Random loot](random-loot.md).
 ## Each check of the containers
 
 The game checks every such container each step in one ECS system,
-[`loot::SYSTEM`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/loot.rs)
+[`loot::SYSTEM`](https://github.com/enshwick/enshwick/blob/main/crates/internal/inventory/src/loot.rs)
 (`destroy_inventory_on_loot`), on a worker thread.
-[`load.on_loot_pass`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/loot.rs)
+[`load.on_loot_pass`](https://github.com/enshwick/enshwick/blob/main/crates/internal/inventory/src/loot.rs)
 runs a handler after each run of it in the server's world. The handler gets a
 `LootPass` that walks that run's containers and reads any entity as one:
 
@@ -66,7 +66,7 @@ system's own hook; see [ECS inside systems](../ecs.md).
 
 ## Reading one container
 
-[`Container`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/loot.rs)
+[`Container`](https://github.com/enshwick/enshwick/blob/main/crates/internal/inventory/src/loot.rs)
 holds what one container is and holds, read in one go:
 
 | Field | Meaning |
@@ -76,7 +76,7 @@ holds what one container is and holds, read in one go:
 | `is_empty` | Whether it holds nothing, as the game last recorded. |
 | `expires` | Whether it despawns on its own after a while (`LifeTime`). |
 | `area_loot` | Its `AreaLootOverride`, or `None` without one. `Some(true)` means area loot may take it. `Some(false)` means it is excluded, as items a player dropped are. |
-| `offer` | Its interaction offer, an [`InteractionOfferRuntime`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/loot.rs); `None` without one. |
+| `offer` | Its interaction offer, an [`InteractionOfferRuntime`](https://github.com/enshwick/enshwick/blob/main/crates/internal/inventory/src/loot.rs); `None` without one. |
 
 An `InteractionOfferRuntime` has three fields:
 

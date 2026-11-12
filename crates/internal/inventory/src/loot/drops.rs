@@ -459,14 +459,24 @@ struct Engine {
     slot: Option<Slot>,
 }
 
+/// What the rolls read and mods change: the drops and who watches the rolls.
+#[derive(Debug, Default)]
+struct Rolls {
+    /// Every drop, with the group it belongs to: 0 for a mod's own, a content
+    /// pack's hash for the pack's, which goes whole when the pack turns off.
+    drops: Vec<(u64, Drop)>,
+    /// The queues of the rolls watchers asked to hear of.
+    watchers: Vec<Watcher>,
+}
+
 static ENGINE: Fresh<Engine> = Fresh::new();
-/// Every drop, with the group it belongs to: 0 for a mod's own, a content
-/// pack's hash for the pack's, which goes whole when the pack turns off.
-static DROPS: Fresh<Mutex<Vec<(u64, Drop)>>> = Fresh::new();
+static ROLLS: Fresh<Mutex<Rolls>> = Fresh::new();
 /// Whether the single-item roll is linked.
 static ONE_LINKED: Fresh<std::sync::atomic::AtomicBool> = Fresh::new();
-/// The queues of the rolls watchers asked to hear of.
-static WATCHERS: Fresh<Mutex<Vec<Watcher>>> = Fresh::new();
+
+fn rolls() -> std::sync::MutexGuard<'static, Rolls> {
+    ROLLS.get_or_init(Mutex::default).relock()
+}
 
 /// The rolls one watcher collects.
 type Watcher = Arc<Mutex<Vec<Roll>>>;
@@ -618,15 +628,16 @@ unsafe fn add_drops(res: *mut u8, txn: *mut u8, request: *const u8) {
     // and the caller guarantees they are the roll's live arguments on its
     // thread.
     let (roll, _) = unsafe { engine.roll(txn, request) };
-    for watcher in WATCHERS.get_or_init(Mutex::default).relock().iter() {
+    let rolls = rolls();
+    for watcher in &rolls.watchers {
         watcher.relock().push(roll);
     }
     let Some(container) = roll.entity else {
         return;
     };
-    let drops = DROPS.get_or_init(Mutex::default).relock();
     let absent = [0u8; 16];
-    for drop in drops
+    for drop in rolls
+        .drops
         .iter()
         .map(|(_, d)| d)
         .filter(|d| d.from.matches(&roll))
@@ -763,8 +774,9 @@ unsafe fn add_one(res: *mut u8, out: *mut u8) {
         boss: false,
         locked: false,
     };
-    let drops = DROPS.get_or_init(Mutex::default).relock();
-    let Some((item, count, _)) = drops
+    let rolls = rolls();
+    let Some((item, count, _)) = rolls
+        .drops
         .iter()
         .map(|(_, d)| d)
         .filter(|d| d.from.matches(&roll))
@@ -806,10 +818,7 @@ fn link_roll(load: &mut BaseLoad) -> Result<(), Off> {
 pub(crate) fn watch_rolls(load: &mut BaseLoad) -> Result<Arc<Mutex<Vec<Roll>>>, Off> {
     link_roll(load)?;
     let queue = Arc::new(Mutex::new(Vec::new()));
-    WATCHERS
-        .get_or_init(Mutex::default)
-        .relock()
-        .push(Arc::clone(&queue));
+    rolls().watchers.push(Arc::clone(&queue));
     Ok(queue)
 }
 
@@ -857,10 +866,7 @@ impl LoadHelpers for BaseLoad {
                 .get_or_init(Default::default)
                 .store(true, Ordering::Release);
         }
-        DROPS
-            .get_or_init(Mutex::default)
-            .relock()
-            .push((group, drop));
+        rolls().drops.push((group, drop));
         Ok(())
     }
 }
@@ -944,9 +950,11 @@ pub(crate) fn replace_group(group: u64, drops: Vec<Drop>) -> Result<(), ReplaceD
             return Err(ReplaceDropsError::SingleNotLinked);
         }
     }
-    let mut all = DROPS.get_or_init(Mutex::default).relock();
-    all.retain(|(g, _)| *g != group);
-    all.extend(drops.into_iter().map(|drop| (group, drop)));
+    let mut rolls = rolls();
+    rolls.drops.retain(|(g, _)| *g != group);
+    rolls
+        .drops
+        .extend(drops.into_iter().map(|drop| (group, drop)));
     Ok(())
 }
 
