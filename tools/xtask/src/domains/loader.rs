@@ -205,7 +205,10 @@ fn root_exports(lib: &syn::File) -> BTreeMap<String, Vec<String>> {
         if let Item::Use(used) = item {
             for (name, full) in use_leaves(&used.tree) {
                 if let Some(name) = name {
-                    roots.insert(name, full);
+                    // `crate::` and `self::` at the root name the root itself.
+                    let start =
+                        usize::from(full.first().is_some_and(|s| s == "crate" || s == "self"));
+                    roots.insert(name, full[start..].to_vec());
                 }
             }
         }
@@ -231,7 +234,7 @@ mod tests {
         let tree = Tree(root);
         tree.write(
             &format!("{SOURCES}/lib.rs"),
-            "pub mod engine;\npub mod base;\npub mod world;\nmod host;\npub use world::map::Map;",
+            "pub mod engine;\npub mod base;\npub mod world;\nmod host;\npub use world::map::Map;\npub use crate::world::map::open as open_map;",
         );
         tree.write(&format!("{SOURCES}/engine/log.rs"), "");
         tree.write(
@@ -266,6 +269,7 @@ mod tests {
                 "base::net -> world::map",
             ),
             ("fn f() { crate::Map::new(); }", "base::net -> world::map"),
+            ("fn f() { crate::open_map(); }", "base::net -> world::map"),
             ("fn f() { crate::host::handle(); }", "base::net -> host"),
             (
                 "fn f() { crate::host::entries::world::spawn(); }",
