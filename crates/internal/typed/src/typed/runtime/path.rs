@@ -34,6 +34,13 @@ mod tests {
     }
 
     #[test]
+    fn only_a_double_colon_ends_the_crate_s_name() {
+        assert_eq!(after_crate("a:b::c"), "::c");
+        assert_eq!(after_crate("ab:"), "ab:");
+        assert_eq!(after_crate(":"), ":");
+    }
+
+    #[test]
     fn the_item_path_names_the_facade_s_crate() {
         const PATH: &str = crate::typed::runtime::item_path!(Health);
         assert_eq!(PATH, "enshwick::typed::runtime::path::tests::Health");
