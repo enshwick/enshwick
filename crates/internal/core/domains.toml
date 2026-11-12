@@ -28,7 +28,10 @@ upward = []
 
 # The crate each domain that left core lives in, by its folder under
 # `crates/internal`. Its `[dependencies]` name of the internal crates only
-# those of `below` and the crates of the domains before its own.
+# those of `below` and the crates of the domains before its own, and of
+# those, as core's do, only the ones its code outside tests names: one named
+# only under a `cfg(feature)` is optional and turned on by that feature.
+# The order allows an edge; the code makes it, so the domains form a graph.
 [crates]
 base = "base"
 content = "content"

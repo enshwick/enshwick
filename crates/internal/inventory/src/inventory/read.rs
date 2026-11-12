@@ -1,6 +1,6 @@
 use core::ffi::c_void;
 
-use crate::abi::{Header, InventoryOp, InventoryRequest, ItemData};
+use crate::abi::{Header, InventoryOp, InventoryRequest};
 use crate::ecs::{ComponentType, Components};
 use crate::engine_ids as ids;
 use crate::raw::read_at;
@@ -31,22 +31,6 @@ pub(super) struct Layout {
     fuel_max: usize,
     /// The game's entity that inventory walks skip.
     skip: usize,
-}
-
-/// The static data of `item` as the loader answers it; none for an unknown
-/// item, or while no world runs. Any thread.
-pub(crate) fn item_data(host: &Host, item: ItemId) -> Option<ItemData> {
-    let mut out = ItemData {
-        header: Header::of::<ItemData>(),
-        id: ItemId::new(0),
-        max_stack: 0,
-        category: 0,
-        rarity: 0,
-        flags: 0,
-        placed_entity: [0; 16],
-    };
-    let status = (host.api().item_info)(host.handle(), item, &raw mut out);
-    status.is_ok().then_some(out)
 }
 
 /// Inventory reads and transactions on the server; get it from
@@ -197,7 +181,7 @@ impl Inventories {
     #[must_use]
     #[script]
     pub fn item_info(&self, item: ItemId) -> Option<ItemInfo> {
-        let out = item_data(&self.host, item)?;
+        let out = enshwick_content::__internal::item_data(&self.host, item)?;
         Some(ItemInfo {
             id: out.id,
             max_stack_size: out.max_stack,

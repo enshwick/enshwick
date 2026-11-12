@@ -19,7 +19,6 @@ enshwick-base.workspace = true
 enshwick-content.workspace = true
 enshwick-typed = { workspace = true, optional = true }
 enshwick-values.workspace = true
-bytemuck.workspace = true
 postcard.workspace = true
 rustc-hash.workspace = true
 serde.workspace = true

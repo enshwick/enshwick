@@ -4,8 +4,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use proc_macro2::{Ident, Spacing, TokenStream, TokenTree};
+use syn::punctuated::Punctuated;
 use syn::visit::{self, Visit};
-use syn::{Item, ItemMod, UseTree};
+use syn::{
+    Arm, Attribute, Expr, Field, ImplItem, Item, ItemMod, Meta, Stmt, Token, TraitItem, UseTree,
+    Variant,
+};
 
 use super::use_leaves;
 
@@ -26,6 +30,16 @@ pub(super) struct Named {
 /// read as tokens.
 pub(super) fn paths(file: &syn::File, module: &[String], externs: &[&str]) -> Named {
     let mut walk = Walk::new(module, externs);
+    walk.visit_file(file);
+    walk.named
+}
+
+/// The paths of [`paths`] that no item under a `#[cfg(feature = "...")]`
+/// holds, read through items, impl and trait items, statements, fields,
+/// variants and match arms.
+pub(super) fn ungated_paths(file: &syn::File, module: &[String], externs: &[&str]) -> Named {
+    let mut walk = Walk::new(module, externs);
+    walk.ungated = true;
     walk.visit_file(file);
     walk.named
 }
@@ -120,6 +134,8 @@ pub(super) struct Walk<'a> {
     module: Vec<String>,
     /// The crates whose paths count as external.
     externs: &'a [&'a str],
+    /// Whether the walk leaves out items under a `cfg(feature)`.
+    ungated: bool,
     pub(super) named: Named,
 }
 
@@ -128,8 +144,15 @@ impl<'a> Walk<'a> {
         Self {
             module: module.to_vec(),
             externs,
+            ungated: false,
             named: Named::default(),
         }
+    }
+
+    /// Whether the walk leaves out what `attrs` put under `cfg(test)`, or,
+    /// when it reads only ungated code, under a `cfg(feature)`.
+    fn left_out(&self, attrs: &[Attribute]) -> bool {
+        test_attrs(attrs) || (self.ungated && feature_only(attrs))
     }
 
     /// Whether `segments` start at one of the external crates.
@@ -209,8 +232,64 @@ impl<'a> Walk<'a> {
 
 impl<'ast> Visit<'ast> for Walk<'_> {
     fn visit_item(&mut self, item: &'ast Item) {
-        if !test_only(item) {
+        if !self.left_out(item_attrs(item)) {
             visit::visit_item(self, item);
+        }
+    }
+
+    fn visit_impl_item(&mut self, item: &'ast ImplItem) {
+        let attrs: &[Attribute] = match item {
+            ImplItem::Const(item) => &item.attrs,
+            ImplItem::Fn(item) => &item.attrs,
+            ImplItem::Type(item) => &item.attrs,
+            ImplItem::Macro(item) => &item.attrs,
+            _ => &[],
+        };
+        if !self.left_out(attrs) {
+            visit::visit_impl_item(self, item);
+        }
+    }
+
+    fn visit_trait_item(&mut self, item: &'ast TraitItem) {
+        let attrs: &[Attribute] = match item {
+            TraitItem::Const(item) => &item.attrs,
+            TraitItem::Fn(item) => &item.attrs,
+            TraitItem::Type(item) => &item.attrs,
+            TraitItem::Macro(item) => &item.attrs,
+            _ => &[],
+        };
+        if !self.left_out(attrs) {
+            visit::visit_trait_item(self, item);
+        }
+    }
+
+    fn visit_stmt(&mut self, stmt: &'ast Stmt) {
+        let attrs = match stmt {
+            Stmt::Local(local) => &local.attrs[..],
+            Stmt::Macro(mac) => &mac.attrs,
+            Stmt::Expr(expr, _) => expr_attrs(expr),
+            Stmt::Item(_) => &[],
+        };
+        if !self.left_out(attrs) {
+            visit::visit_stmt(self, stmt);
+        }
+    }
+
+    fn visit_field(&mut self, field: &'ast Field) {
+        if !self.left_out(&field.attrs) {
+            visit::visit_field(self, field);
+        }
+    }
+
+    fn visit_variant(&mut self, variant: &'ast Variant) {
+        if !self.left_out(&variant.attrs) {
+            visit::visit_variant(self, variant);
+        }
+    }
+
+    fn visit_arm(&mut self, arm: &'ast Arm) {
+        if !self.left_out(&arm.attrs) {
+            visit::visit_arm(self, arm);
         }
     }
 
@@ -239,6 +318,15 @@ impl<'ast> Visit<'ast> for Walk<'_> {
         self.tree(tree);
     }
 
+    /// Records the external paths in an attribute's arguments, such as a
+    /// derive's; its other words are not paths of the crate.
+    fn visit_meta_list(&mut self, list: &'ast syn::MetaList) {
+        let mut inner = Walk::new(&self.module, self.externs);
+        inner.tokens(list.tokens.clone());
+        self.named.external.extend(inner.named.external);
+        visit::visit_meta_list(self, list);
+    }
+
     fn visit_macro(&mut self, mac: &'ast syn::Macro) {
         self.tokens(mac.tokens.clone());
         visit::visit_macro(self, mac);
@@ -247,7 +335,21 @@ impl<'ast> Visit<'ast> for Walk<'_> {
 
 /// Whether `item` exists only in tests, under a plain `#[cfg(test)]`.
 pub(super) fn test_only(item: &Item) -> bool {
-    let attrs = match item {
+    test_attrs(item_attrs(item))
+}
+
+/// Whether `attrs` hold a plain `#[cfg(test)]`; a compound `cfg` with
+/// `test` in it counts as none.
+fn test_attrs(attrs: &[Attribute]) -> bool {
+    attrs.iter().any(|attr| {
+        attr.path().is_ident("cfg") && attr.parse_args::<Ident>().is_ok_and(|arg| arg == "test")
+    })
+}
+
+/// The attributes of `item`; none for a kind that never carries a `cfg`
+/// here.
+pub(super) fn item_attrs(item: &Item) -> &[Attribute] {
+    match item {
         Item::Const(item) => &item.attrs,
         Item::Enum(item) => &item.attrs,
         Item::Fn(item) => &item.attrs,
@@ -259,9 +361,53 @@ pub(super) fn test_only(item: &Item) -> bool {
         Item::Trait(item) => &item.attrs,
         Item::Type(item) => &item.attrs,
         Item::Use(item) => &item.attrs,
-        _ => return false,
-    };
+        _ => &[],
+    }
+}
+
+/// Whether `attrs` hold a `cfg` only a cargo feature turns on: a
+/// `feature = "..."`, an `all` with one among its parts or an `any` of such
+/// parts only. `test`, `not` and the other options count as on, so a reader
+/// of them errs towards ungated.
+pub(super) fn feature_only(attrs: &[Attribute]) -> bool {
+    fn needs_feature(meta: &Meta) -> bool {
+        match meta {
+            Meta::NameValue(pair) => pair.path.is_ident("feature"),
+            Meta::List(list) => {
+                let Ok(parts) =
+                    list.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
+                else {
+                    return false;
+                };
+                if list.path.is_ident("all") {
+                    parts.iter().any(needs_feature)
+                } else {
+                    list.path.is_ident("any")
+                        && !parts.is_empty()
+                        && parts.iter().all(needs_feature)
+                }
+            }
+            Meta::Path(_) => false,
+        }
+    }
     attrs.iter().any(|attr| {
-        attr.path().is_ident("cfg") && attr.parse_args::<Ident>().is_ok_and(|arg| arg == "test")
+        attr.path().is_ident("cfg")
+            && attr
+                .parse_args::<Meta>()
+                .is_ok_and(|meta| needs_feature(&meta))
     })
+}
+
+/// The attributes of an expression statement of the forms that carry a
+/// `cfg` in practice.
+// shortcut: reads blocks, calls, method calls, macros and assignments only, so a cfg on another expression statement counts as ungated; add its form if one appears.
+fn expr_attrs(expr: &Expr) -> &[Attribute] {
+    match expr {
+        Expr::Assign(expr) => &expr.attrs,
+        Expr::Block(expr) => &expr.attrs,
+        Expr::Call(expr) => &expr.attrs,
+        Expr::Macro(expr) => &expr.attrs,
+        Expr::MethodCall(expr) => &expr.attrs,
+        _ => &[],
+    }
 }
