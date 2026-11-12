@@ -9,6 +9,16 @@ see is in the changelog of `enshwick`.
 
 ### Changed
 
+- The ui domain left for `enshwick-ui` (`ui`, `sound`) and the packs
+  domain for `enshwick-packs`, so the crate holds only `Load` with its
+  forwarders, `declare_mod!`'s support and the script binding's namespace
+  lists. `Load` forwards their methods there, their script-only methods
+  from `load/<module>/script.rs`; the fake's marker limit and screen names
+  come from `enshwick-ui`'s hidden `__fake`; `hound`, `rustc-hash`,
+  `schemars`, `serde_json` and `thiserror` are no longer dependencies
+  (#1055).
+- **Breaking:** the hidden `packs::declared_settings` takes
+  `&impl Loading` (#1055).
 - The actions domain left for `enshwick-actions`: `actions`, `chat`,
   `commands`, `console`, `controls`, `input`, `interactions` and `vetoes`.
   `Load` forwards their methods there, their script-only methods from

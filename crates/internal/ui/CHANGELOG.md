@@ -10,7 +10,7 @@ see is in the changelog of `enshwick`.
 ### Added
 
 - The crate: the ui domain, the interface and sound, cut out of
-  `enshwick-core`, with its `Bound` implementations.
+  `enshwick-core`, with its `Bound` implementations (#1055).
 - `__load`, the method traits of each module that core's `Load` forwards
   to, `__internal`, what core calls here and a mod must not, and
-  `__fake`, what the fake loader reads here.
+  `__fake`, what the fake loader reads here (#1055).

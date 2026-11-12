@@ -482,10 +482,6 @@ impl LoadMethods for crate::BaseLoad {
     }
 
     #[cfg(feature = "unstable")]
-    #[expect(
-        clippy::needless_pass_by_value,
-        reason = "a script method takes its arguments owned from Luau"
-    )]
     fn extend_screen_for_script(
         &mut self,
         screen: crate::ui::HudScreenType,
