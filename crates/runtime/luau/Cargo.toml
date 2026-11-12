@@ -35,5 +35,5 @@ workspace = true
 name = "main"
 
 [[bench]]
-name = "damage_filter"
+name = "calls"
 harness = false
