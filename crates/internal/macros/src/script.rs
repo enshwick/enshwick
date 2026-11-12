@@ -487,7 +487,7 @@ fn parameter(
     {
         return Ok(Parameter {
             describe: quote!(#script::Param::new(#param, <::std::string::String as #script::Typed>::TY)),
-            read: quote!(let #local: &str = #krate::__private::text(&mut args, #param)?;),
+            read: quote!(let #local: &str = #script::convert::text(&mut args, #param)?;),
             pass: quote!(#local),
         });
     }
@@ -504,7 +504,7 @@ fn parameter(
     };
     Ok(Parameter {
         describe: quote!(#script::Param::new(#param, <#owned as #script::Typed>::TY)),
-        read: quote!(let #local: #owned = #krate::__private::taken(&mut args, #param)?;),
+        read: quote!(let #local: #owned = #script::convert::taken(&mut args, #param)?;),
         pass,
     })
 }
@@ -623,7 +623,7 @@ fn closure(
         },
         read: quote! {
             let #local = {
-                let callback: #script::Callback = #krate::__private::taken(&mut args, #param)?;
+                let callback: #script::Callback = #script::convert::taken(&mut args, #param)?;
                 move |#(#names: #inputs),*| -> #output { #body }
             };
         },

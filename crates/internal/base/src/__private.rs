@@ -1,9 +1,7 @@
 pub use const_format::concatcp;
 pub use serde;
 
-pub use enshwick_values::__private::{
-    argument, argument_or_default, owned, record_fields, taken, text,
-};
+pub use enshwick_values::__private::{argument, argument_or_default, owned, record_fields};
 
 pub use crate::hook::Frame;
 pub use crate::host::caught;

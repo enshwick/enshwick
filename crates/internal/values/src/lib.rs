@@ -29,7 +29,7 @@ pub use shape::Shape;
 pub mod __private {
     pub use const_format::{concatcp, str_replace};
 
-    pub use crate::script::convert::{argument, argument_or_default, record_fields, taken, text};
+    pub use crate::script::convert::{argument, argument_or_default, record_fields};
 
     /// A copy of `this`, for a `#[script]` method that takes `self` by value.
     #[must_use]
