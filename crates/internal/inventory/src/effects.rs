@@ -42,7 +42,7 @@ use crate::abi::{Header, PlayerInfo, SpawnRequest, TeleportRequest};
 use crate::ecs::ComponentType;
 use crate::engine_ids as ids;
 use crate::game_events::{EventType, Field, Scalar};
-use crate::{Host, Off};
+use crate::{BaseLoad, Host, Off};
 use enshwick_world::__internal::{world_check, world_status};
 
 /// How an entity arrives, for [`Effects::teleport`].
@@ -349,20 +349,9 @@ pub struct Effects {
     ping: Option<Ping>,
 }
 
-impl crate::script::Bound for Effects {
-    const NAME: &'static str = "effects";
-    const DOC: &'static str = "Effects a mod has on the server's world: survivor orders, toggles, threat, pings, teleports and spawns.";
-    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
-        &[Self::SCRIPT_EVENTS, Self::SCRIPT_SPAWNS];
-
-    fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
-        Ok(load.effects())
-    }
-}
-
 #[crate::script(events)]
 impl Effects {
-    pub(crate) fn resolve(load: &Load<'_>) -> Self {
+    pub(crate) fn resolve(load: &BaseLoad) -> Self {
         let host = load.host();
         let transform = |base: u64| -> Result<TransformAt, Off> {
             Ok(TransformAt {

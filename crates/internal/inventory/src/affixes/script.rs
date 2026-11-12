@@ -2,10 +2,8 @@
 //! lines and rolls and the pure [`roll`](super::roll) and
 //! [`reroll`](super::reroll).
 
-use super::{AffixDef, AffixKey, Affixes, RollRules, Rolled};
-use crate::script::{Bound, Function};
+use super::{AffixDef, AffixKey, RollRules, Rolled};
 use crate::stats::ItemStats;
-use crate::{Load, Off};
 
 mod record {
     /// One affix of the pool a roll draws from.
@@ -26,21 +24,6 @@ fn borrowed(pool: &[record::Candidate]) -> Vec<super::Candidate<'_>> {
             def: &c.def,
         })
         .collect()
-}
-
-impl Bound for Affixes {
-    const NAME: &'static str = "affixes";
-    const DOC: &'static str =
-        "Affixes: bundles of stat modifiers rolled onto single items, their lines and rolls.";
-    const PARTS: &'static [&'static [Function<Self>]] = &[
-        Self::SCRIPT_AFFIXES,
-        #[cfg(feature = "unstable")]
-        Self::SCRIPT_ROLLING,
-    ];
-
-    fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
-        Ok(load.affixes())
-    }
 }
 
 /// The free functions of [`affixes`](super) as a script's namespace
@@ -87,16 +70,5 @@ impl AffixFns {
         once: bool,
     ) -> Option<ItemStats> {
         super::reroll(&stats, &borrowed(&pool), category, rules, seed, once)
-    }
-}
-
-impl Bound for AffixFns {
-    const NAME: &'static str = "affixes";
-    const DOC: &'static str =
-        "Affixes: bundles of stat modifiers rolled onto single items, their lines and rolls.";
-    const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_AFFIX_FNS];
-
-    fn resolve(_load: &mut Load<'_>) -> Result<Self, Off> {
-        Ok(Self)
     }
 }

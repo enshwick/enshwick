@@ -5,8 +5,8 @@ use crate::ecs::{ComponentType, Components};
 use crate::engine_ids as ids;
 use crate::raw::read_at;
 use crate::schedule::Scheduler;
+use crate::{BaseLoad, Host, Off};
 use crate::{Entity, ItemId};
-use crate::{Host, Load, Off};
 
 use super::ops::{Batch, Op};
 use super::results::{Done, OpError, OpErrors, Outcome, Pending, Ticket, deliver};
@@ -79,18 +79,6 @@ pub struct Inventories {
     errors: OpErrors,
 }
 
-impl crate::script::Bound for Inventories {
-    const NAME: &'static str = "inventory";
-    const DOC: &'static str =
-        "Inventories on the server: their slots and counts, and items given, taken and moved.";
-    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
-        &[Self::SCRIPT_STOCK, Self::SCRIPT_READS];
-
-    fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
-        load.inventories()
-    }
-}
-
 #[crate::script(reads)]
 impl Inventories {
     /// The stack in `slot`, as `Reader::slot` reads it.
@@ -120,7 +108,7 @@ impl Inventories {
 
 #[crate::script(stock)]
 impl Inventories {
-    pub(crate) fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
+    pub(crate) fn resolve(load: &mut BaseLoad) -> Result<Self, Off> {
         let host = load.host();
         let scheduler = load.scheduler()?;
         let status = (host.api().inventory_open)(host.handle());

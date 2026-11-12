@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use super::{Answer, Lookup, NpcId, Purpose, WorkshopSurvivor};
 use crate::__load::*;
 use crate::content::Guid;
-use crate::script::{Bound, Class, Function, Object};
+use crate::script::{Class, Function, Object};
 use crate::{Entity, ItemId, Off};
 
 /// The script's answer to a lookup; nil or an error keeps the game's.
@@ -174,16 +174,6 @@ impl SurvivorFns {
     #[must_use]
     pub fn workshop_survivors(self) -> Vec<WorkshopSurvivor> {
         super::WORKSHOP_SURVIVORS.to_vec()
-    }
-}
-
-impl Bound for SurvivorFns {
-    const NAME: &'static str = "survivors";
-    const DOC: &'static str = "Survivors: the game's lookups of them, their beds, summoning staffs and the workshop survivors.";
-    const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_SURVIVOR_FNS];
-
-    fn resolve(_load: &mut Load<'_>) -> Result<Self, Off> {
-        Ok(Self)
     }
 }
 

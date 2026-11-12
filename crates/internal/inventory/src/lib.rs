@@ -24,7 +24,7 @@ pub(crate) use enshwick_base::{engine_enum, engine_ids, fresh, locks};
 #[doc(hidden)]
 pub use enshwick_content::{content, rates};
 #[doc(hidden)]
-pub use enshwick_world::{altars, buffs};
+pub use enshwick_world::{WorldError, altars, buffs};
 // The macros the base exports, which the code here calls by `crate::`.
 #[doc(hidden)]
 pub use enshwick_base::{

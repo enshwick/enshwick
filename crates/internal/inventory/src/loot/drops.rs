@@ -17,8 +17,8 @@ use crate::fresh::Fresh;
 use crate::inventory::Fill;
 use crate::locks::Relock;
 use crate::raw::{read_at, read_ptr_at, write_at, write_bytes_at};
+use crate::{BaseLoad, Next, Off};
 use crate::{Entity, ItemId};
-use crate::{Next, Off};
 
 /// What a container is, for [`Source::kinds`].
 ///
@@ -497,7 +497,7 @@ unsafe fn function<F: crate::FnPtr>(address: u64) -> F {
 }
 
 impl Engine {
-    fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
+    fn resolve(load: &mut BaseLoad) -> Result<Self, Off> {
         let ty = |id: &str| ComponentType::resolve(load, id);
         let size = |name: &str| {
             load.constant(name)
@@ -692,7 +692,7 @@ impl Slot {
             .then_some(Self { item, count, size })
     }
 
-    fn resolve(load: &Load<'_>) -> Result<Self, Off> {
+    fn resolve(load: &BaseLoad) -> Result<Self, Off> {
         let at = |id: &str| {
             load.constant(id)
                 .and_then(|v| usize::try_from(v).map_err(|_| Off::new(format!("offset {id}"))))
@@ -788,7 +788,7 @@ unsafe fn add_one(res: *mut u8, out: *mut u8) {
 }
 
 /// Links the roll of containers' loot once.
-fn link_roll(load: &mut Load<'_>) -> Result<(), Off> {
+fn link_roll(load: &mut BaseLoad) -> Result<(), Off> {
     if ENGINE.get().is_none() {
         let engine = Engine::resolve(load)?;
         let roll = load.symbol("loot.roll")?;
@@ -803,7 +803,7 @@ fn link_roll(load: &mut Load<'_>) -> Result<(), Off> {
 /// the roll's worker thread; the caller drains it on the game thread, where
 /// the rolled items have their entities.
 #[cfg(feature = "unstable")]
-pub(crate) fn watch_rolls(load: &mut Load<'_>) -> Result<Arc<Mutex<Vec<Roll>>>, Off> {
+pub(crate) fn watch_rolls(load: &mut BaseLoad) -> Result<Arc<Mutex<Vec<Roll>>>, Off> {
     link_roll(load)?;
     let queue = Arc::new(Mutex::new(Vec::new()));
     WATCHERS

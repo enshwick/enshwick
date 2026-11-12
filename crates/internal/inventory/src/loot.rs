@@ -26,10 +26,10 @@ pub(crate) use drops::watch_rolls;
 pub use drops::{Drop, Kinds, LootContainerId, MeterRoll, Roll, Source, replace_drops};
 
 use crate::Entity;
-use crate::Off;
 use crate::ecs::{ComponentType, Components, Ecs};
 use crate::engine_ids as ids;
 use crate::raw::read_at;
+use crate::{Loading, Off};
 
 /// The system that checks every loot container each step, for
 /// [`Load::system`].
@@ -193,7 +193,8 @@ impl Containers {
     /// # Examples
     ///
     /// See [`Containers`].
-    pub fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
+    pub fn resolve(load: &mut impl Loading) -> Result<Self, Off> {
+        let load = load.base_mut();
         let ty = |id: &str| ComponentType::resolve(load, id);
         let offset = |id: &str| {
             load.constant(id)
@@ -556,16 +557,6 @@ impl LootFns {
     #[script]
     pub fn replace_drops(self, drops: Vec<Drop>) -> Result<(), Off> {
         replace_drops(drops)
-    }
-}
-
-impl crate::script::Bound for LootFns {
-    const NAME: &'static str = "loot";
-    const DOC: &'static str = "Mod items in random loot, and the game's loot passes.";
-    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_LOOT_FNS];
-
-    fn resolve(_load: &mut Load<'_>) -> Result<Self, Off> {
-        Ok(Self)
     }
 }
 
