@@ -583,8 +583,47 @@ pub enum Value {
     Object(Handle),
 }
 
-/// The function behind a [`Callback`].
-type CallbackFn = dyn Fn(&mut [Value]) -> Result<Value, Error> + Send + Sync;
+/// What a [`Callback`] runs, and what its runtime does with an answer the
+/// API cannot use; one allocation holds both.
+trait Run: Send + Sync {
+    fn call(&self, args: &mut [Value]) -> Result<Value, Error>;
+
+    fn fault(&self, error: &Error);
+}
+
+/// A function without a runtime to tell of a fault.
+struct Plain<F>(F);
+
+impl<F> Run for Plain<F>
+where
+    F: Fn(&mut [Value]) -> Result<Value, Error> + Send + Sync,
+{
+    fn call(&self, args: &mut [Value]) -> Result<Value, Error> {
+        (self.0)(args)
+    }
+
+    fn fault(&self, _error: &Error) {}
+}
+
+/// A function and what its runtime does with a fault.
+struct Faulting<F, G> {
+    function: F,
+    fault: G,
+}
+
+impl<F, G> Run for Faulting<F, G>
+where
+    F: Fn(&mut [Value]) -> Result<Value, Error> + Send + Sync,
+    G: Fn(&Error) + Send + Sync,
+{
+    fn call(&self, args: &mut [Value]) -> Result<Value, Error> {
+        (self.function)(args)
+    }
+
+    fn fault(&self, error: &Error) {
+        (self.fault)(error);
+    }
+}
 
 /// A function a script passed in, callable from Rust on any thread the
 /// runtime allows; the runtime reports the script's own errors.
@@ -602,13 +641,7 @@ type CallbackFn = dyn Fn(&mut [Value]) -> Result<Value, Error> + Send + Sync;
 /// assert!(matches!(double.call(&mut [Value::Number(2.0)]), Ok(Value::Number(4.0))));
 /// ```
 #[derive(Clone)]
-pub struct Callback {
-    function: Arc<CallbackFn>,
-    fault: Option<Arc<FaultFn>>,
-}
-
-/// What a [`Callback`]'s runtime does with an answer the API cannot use.
-type FaultFn = dyn Fn(&Error) + Send + Sync;
+pub struct Callback(Arc<dyn Run>);
 
 impl core::fmt::Debug for Callback {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -625,10 +658,18 @@ impl Callback {
     pub fn new(
         function: impl Fn(&mut [Value]) -> Result<Value, Error> + Send + Sync + 'static,
     ) -> Self {
-        Self {
-            function: Arc::new(function),
-            fault: None,
-        }
+        Self(Arc::new(Plain(function)))
+    }
+
+    /// Wraps `function` with `fault`, as [`Callback::with_fault`] does, in
+    /// one allocation: a runtime makes one for each function a script
+    /// passes.
+    #[doc(hidden)]
+    pub fn with_runtime(
+        function: impl Fn(&mut [Value]) -> Result<Value, Error> + Send + Sync + 'static,
+        fault: impl Fn(&Error) + Send + Sync + 'static,
+    ) -> Self {
+        Self(Arc::new(Faulting { function, fault }))
     }
 
     /// The same function, with `fault` told of an answer the API cannot
@@ -649,10 +690,7 @@ impl Callback {
     /// ```
     #[must_use]
     pub fn with_fault(self, fault: impl Fn(&Error) + Send + Sync + 'static) -> Self {
-        Self {
-            fault: Some(Arc::new(fault)),
-            ..self
-        }
+        Self::with_runtime(move |args| self.call(args), fault)
     }
 
     /// Calls the function with `args`, which it may take out of the slice:
@@ -666,7 +704,7 @@ impl Callback {
     ///
     /// See [`Callback`].
     pub fn call(&self, args: &mut [Value]) -> Result<Value, Error> {
-        (self.function)(args)
+        self.0.call(args)
     }
 
     /// Tells the runtime that the function's answer did not fit, with
@@ -676,9 +714,7 @@ impl Callback {
     ///
     /// See [`Callback::with_fault`].
     pub fn fault(&self, error: &Error) {
-        if let Some(fault) = &self.fault {
-            fault(error);
-        }
+        self.0.fault(error);
     }
 }
 

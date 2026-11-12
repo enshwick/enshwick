@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick_core::script::{Callback, Choice, Class, Error, Handle, Signature, Ty, Union, Value};
 use mlua::{Lua, MultiValue, Value as LuaValue};
+use rustc_hash::FxHashMap;
 
 use crate::run::Scope;
 
@@ -204,10 +205,10 @@ pub(crate) fn from_lua(
             } else {
                 Box::default()
             };
-            Ok(Value::Function(
-                Callback::new(move |args| scope.call_function(&function, args, signature, &lent))
-                    .with_fault(move |error| faulted.fault(error)),
-            ))
+            Ok(Value::Function(Callback::with_runtime(
+                move |args| scope.call_function(&function, args, signature, &lent),
+                move |error| faulted.fault(error),
+            )))
         }
         Ty::Bytes => match value {
             LuaValue::Buffer(buffer) => Ok(Value::Bytes(buffer.to_vec())),
@@ -372,8 +373,9 @@ impl Lent {
 /// leaves a closure behind on every push.
 #[derive(Default)]
 struct Interned {
-    /// The script string of each name a choice or a variant crossed as.
-    names: Vec<(&'static str, mlua::LuaString)>,
+    /// The script string of each name a variant or a record's field crossed
+    /// as, by text: a record reads one per field on every call.
+    names: FxHashMap<&'static str, mlua::LuaString>,
     /// Each class's table of method functions, by method name, filled as
     /// `__index` makes them.
     methods: Vec<(&'static str, mlua::Table)>,
@@ -408,7 +410,19 @@ impl Interned {
 
     /// The script string of the API's name `name`.
     fn name(lua: &Lua, name: &'static str) -> mlua::Result<mlua::LuaString> {
-        Self::get(lua, name, |i| &mut i.names, || lua.create_string(name))
+        if let Some(interned) = lua.app_data_ref::<Self>()
+            && let Some(kept) = interned.names.get(name)
+        {
+            return Ok(kept.clone());
+        }
+        let made = lua.create_string(name)?;
+        if lua.app_data_ref::<Self>().is_none() {
+            let _none = lua.set_app_data(Self::default());
+        }
+        if let Some(mut interned) = lua.app_data_mut::<Self>() {
+            interned.names.insert(name, made.clone());
+        }
+        Ok(made)
     }
 
     /// The table of method functions of the class `class`.
