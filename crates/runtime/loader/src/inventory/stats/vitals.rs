@@ -9,9 +9,9 @@ use std::sync::OnceLock;
 use enshwick_core::Entity;
 use enshwick_core::raw::{read_at, write_at};
 
+use crate::engine::loader::Loader;
 use crate::engine::pinned;
 use crate::engine::pinned::Constant;
-use crate::host::Loader;
 
 /// The pools with a maximum the loader raises.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

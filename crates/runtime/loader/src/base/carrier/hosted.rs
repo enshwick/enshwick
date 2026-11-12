@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use enshwick_core::abi::{Side, Status};
 
 use super::{CARRIER, MAX_LOOPED, MEMBERS_EVERY};
-use crate::host::Loader;
+use crate::engine::loader::Loader;
 use enshwick_base::Relock;
 
 /// A message between a hosting client's two halves.
@@ -29,7 +29,7 @@ pub(super) fn client_hosts() -> bool {
         return true;
     }
     crate::engine::world::hosting()
-        && crate::host::loader().is_some_and(|loader| loader.side == Side::CLIENT)
+        && crate::engine::loader::loader().is_some_and(|loader| loader.side == Side::CLIENT)
 }
 
 /// Makes this test process a client that hosts, its own player `key`.

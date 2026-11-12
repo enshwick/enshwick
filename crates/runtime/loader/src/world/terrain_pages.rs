@@ -27,9 +27,9 @@ use crate::base::wire::Drops;
 #[cfg(windows)]
 use crate::engine::fuse::Fuse;
 #[cfg(windows)]
-use crate::engine::pinned;
+use crate::engine::loader::Loader;
 #[cfg(windows)]
-use crate::host::Loader;
+use crate::engine::pinned;
 #[cfg(windows)]
 use enshwick_base::Relock;
 

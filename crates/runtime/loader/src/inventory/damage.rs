@@ -21,11 +21,11 @@ use std::sync::OnceLock;
 
 use enshwick_core::abi::{DamageCheck, DamageFilterFn, Header, HookFlags, Registers, Status};
 
+use crate::engine::loader::{Loader, Registered};
 use crate::engine::mid::MidLink;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned::{self, Symbol};
 use crate::engine::registry::Registry;
-use crate::host::{Loader, Registered};
 use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.

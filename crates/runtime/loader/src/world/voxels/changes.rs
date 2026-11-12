@@ -23,9 +23,9 @@ use crate::base::wire::Drops;
 use crate::engine::chains::Next;
 use crate::engine::fuse::Fuse;
 #[cfg(windows)]
-use crate::engine::pinned;
+use crate::engine::loader::Loader;
 #[cfg(windows)]
-use crate::host::Loader;
+use crate::engine::pinned;
 use enshwick_base::Relock;
 
 /// Changed voxels waiting for the end of the step at most, about 5 MB;
@@ -285,7 +285,7 @@ pub(crate) fn link(loader: &'static Loader) {
     // function with the `ReadBoxFn` signature on this build, in the image,
     // which stays mapped.
     let read_box = unsafe { core::mem::transmute::<usize, super::ReadBoxFn>(read_box) };
-    let target = crate::host::Target::Pinned(pinned::voxel::COMMIT);
+    let target = crate::engine::loader::Target::Pinned(pinned::voxel::COMMIT);
     // The link passes every write through until the layout is set, so
     // `after_step` reads no editor while the link is refused.
     if loader.link_feature(

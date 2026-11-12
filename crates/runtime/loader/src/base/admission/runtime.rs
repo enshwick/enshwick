@@ -9,8 +9,8 @@ use enshwick_core::abi::Side;
 
 use crate::base::join::Names;
 use crate::engine::fuse::Fuse;
+use crate::engine::loader::Loader;
 use crate::engine::pinned;
-use crate::host::Loader;
 use enshwick_base::Relock;
 
 use super::{Gate, Hello, Rules, Step};
@@ -217,7 +217,7 @@ pub(crate) fn joined(key: u64) {
             gate.joined(key, &server, Instant::now(), RULES)
         });
         for step in steps {
-            run(crate::host::loader(), serving, step);
+            run(crate::engine::loader::loader(), serving, step);
         }
     });
 }
@@ -263,7 +263,7 @@ pub(crate) fn hello(key: u64, hello: &Hello) -> bool {
                 gate.hello(key, &server, hello, Instant::now(), RULES)
             });
             if let Some(step) = step {
-                run(crate::host::loader(), serving, step);
+                run(crate::engine::loader::loader(), serving, step);
             }
             stays
         })

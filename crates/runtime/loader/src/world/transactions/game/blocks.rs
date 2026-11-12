@@ -3,10 +3,10 @@
 use enshwick_core::abi::{BlockPlace, Status};
 use enshwick_gamedata::catalogue;
 
+use crate::engine::loader::Loader;
 use crate::engine::memory::read;
 use crate::engine::pinned;
 use crate::engine::world::ServerAccess;
-use crate::host::Loader;
 use crate::world::transactions::block::{Block, BoxLayout, EventLayout, GameBox, replace_table};
 use crate::world::transactions::paste::Region;
 use crate::world::transactions::props::Prop;

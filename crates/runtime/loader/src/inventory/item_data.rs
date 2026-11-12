@@ -44,10 +44,10 @@ use self::carried::{JOIN_LOOK_EVERY, Joining, forget_carried, look_for_carried};
 pub(crate) use self::carried::{player_joined, player_left};
 pub(crate) use self::world_file::world_event;
 use crate::engine::chains::Next;
+use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::registry::Registry;
-use crate::host::{Loader, Target};
 use crate::inventory::item_records::anchor::{self, Anchor, KindIndex, Pending};
 use crate::inventory::item_records::{decode, encode};
 use enshwick_base::Relock;
@@ -499,7 +499,7 @@ fn kind_of(id: &str) -> Option<KindIndex> {
 /// The game id of `entity`'s template, on the server's game thread; `None`
 /// for an entity that is gone or off that thread.
 fn template_id(entity: Entity) -> Option<u32> {
-    let loader = crate::host::loader()?;
+    let loader = crate::engine::loader::loader()?;
     let template = crate::engine::world::template(loader, entity).ok()?;
     Some(enshwick_core::content::Guid(template).fnv1a())
 }
@@ -564,7 +564,7 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
     if !value.is_empty() && UNREAD.load(Ordering::Relaxed) {
         return Err(Status::NOT_KEPT);
     }
-    let loader = crate::host::loader();
+    let loader = crate::engine::loader::loader();
     let (item, anchor) = match spec.scope {
         Scope::Item if item == 0 => return Err(Status::BAD_ARGS),
         // No layout, no anchor: the value would be aside at the next load.

@@ -22,8 +22,8 @@ use enshwick_gamedata::catalogue;
 use enshwick_gamedata::reflect::Reflection;
 use rustc_hash::FxHashMap;
 
+use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
-use crate::host::Loader;
 use enshwick_base::Relock;
 
 use self::containers::container_patches;

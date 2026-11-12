@@ -26,10 +26,10 @@ use enshwick_core::abi::{Event, Header, KnowledgeData, KnowledgeInfo, QuestData,
 use rustc_hash::FxHashSet;
 
 use crate::engine::live::{self, Broken};
+use crate::engine::loader::Loader;
 use crate::engine::memory::{BlobArray, read};
 use crate::engine::pinned;
 use crate::engine::pinned::{Constant, Symbol};
-use crate::host::Loader;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -564,8 +564,8 @@ fn quest_set(layout: &Layout, game: usize) -> Option<&'static FxHashSet<u32>> {
 /// Raises the knowledge changes and completed quests of the last step, on
 /// the game thread after it.
 pub(crate) fn after_step(loader: &Loader) {
-    if !crate::host::handles(Event::KNOWLEDGE_CHANGED)
-        && !crate::host::handles(Event::QUEST_COMPLETED)
+    if !crate::engine::loader::handles(Event::KNOWLEDGE_CHANGED)
+        && !crate::engine::loader::handles(Event::QUEST_COMPLETED)
     {
         // A handler that arrives later hears the updates after its first look.
         if !UNSEEN.load(Ordering::Relaxed) {

@@ -25,9 +25,9 @@ use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 use enshwick_gamedata::catalogue;
 
 use crate::engine::chains::Next;
+use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned::{self, Constant};
-use crate::host::{Loader, Target};
 use crate::world::map_marker_types::RunningTypes;
 use enshwick_base::Relock;
 
@@ -410,7 +410,7 @@ fn append() {
     let capacity: u64 = unsafe { crate::engine::memory::read(list, layout.list_capacity) };
     let mut left_out = 0usize;
     for marker in sets.iter().flat_map(|set| set.iter()) {
-        if crate::host::is_off(marker.owner) {
+        if crate::engine::loader::is_off(marker.owner) {
             continue;
         }
         if entries.is_null() || count >= capacity {
@@ -441,7 +441,7 @@ fn append() {
         count += 1;
     }
     if left_out > 0
-        && crate::host::loader().is_some_and(|loader| loader.developer_tools)
+        && crate::engine::loader::loader().is_some_and(|loader| loader.developer_tools)
         && !MARKERS.told_full.swap(true, Ordering::Relaxed)
     {
         crate::log!(

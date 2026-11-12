@@ -6,8 +6,8 @@ use enshwick_core::state::Hold;
 
 use super::{CHANGES, loader_dir, on};
 use crate::content::data_changes::{HoldStep, Kept, hold_reason, hold_step};
+use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
-use crate::host::Loader;
 use enshwick_base::Relock;
 
 /// On the side that keeps the world, when it loads or saves: keeps every

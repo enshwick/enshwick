@@ -1,11 +1,12 @@
 //! Host functions for the inventory domain: inventory requests, items,
 //! survivors, stats, affixes, damage, drops, spawns and teleports.
 
+use enshwick_core::abi::{DropRequest, Headed, ItemActionFn, Level, ModHandle, Status, Str};
+use enshwick_core::{Entity, abi as api_frame};
+
 use crate::host::entries::base::services::unexported;
 use crate::host::memory::{get_headed, put, put_headed, put_list, text};
 use crate::host::{caller, caller_index, calling, entry};
-use enshwick_core::abi::{DropRequest, Headed, ItemActionFn, Level, ModHandle, Status, Str};
-use enshwick_core::{Entity, abi as api_frame};
 
 pub(crate) extern "system" fn drop_items(
     me: ModHandle,

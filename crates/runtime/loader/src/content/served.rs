@@ -33,9 +33,9 @@ pub(crate) use patches::{builds_begun, hand_out, lend, rebuild, scratch, served_
 use texts::{TEXTS, seal_texts};
 
 use crate::engine::chains::Next;
+use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
-use crate::host::{Loader, Target};
 use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.

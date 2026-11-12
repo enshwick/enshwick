@@ -30,13 +30,13 @@ use enshwick_core::abi::{
 };
 use run::run;
 
+use crate::engine::loader::Loader;
 use crate::engine::memory::read_ptr;
 use crate::engine::mid::MidLink;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::pinned::{Constant, Symbol};
 use crate::engine::world::ServerAccess;
-use crate::host::Loader;
 use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
@@ -795,7 +795,7 @@ pub(crate) fn deliver(now: Instant) {
         std::mem::take(&mut *finished)
     };
     for result in finished {
-        if crate::host::is_off(result.owner) {
+        if crate::engine::loader::is_off(result.owner) {
             continue;
         }
         let data = InventoryResult {
@@ -853,7 +853,7 @@ unsafe extern "system" fn row(registers: *mut Registers, _user: *mut c_void) {
     let view = usize::try_from(registers.rbp)
         .unwrap_or(0)
         .wrapping_sub(executor.view_frame);
-    let build = crate::host::loader().map_or("", |loader| loader.build.name.as_str());
+    let build = crate::engine::loader::loader().map_or("", |loader| loader.build.name.as_str());
     if !INVENTORY_FUSE.verify(build, || run::view_holds(executor, view)) {
         if INVENTORY_FUSE.is_off() && QUEUE.pending.load(Ordering::Acquire) {
             let gone = QUEUE.drain(|_| true);
@@ -873,7 +873,7 @@ unsafe extern "system" fn row(registers: *mut Registers, _user: *mut c_void) {
         && REGISTRY.swap(registry, Ordering::AcqRel) != registry
         && pick_registry(
             registry,
-            crate::host::loader()
+            crate::engine::loader::loader()
                 .zip(crate::engine::world::access(&"inventory registry check"))
                 .and_then(|(loader, access)| held(loader, &access))
                 .unwrap_or(0),
@@ -893,7 +893,7 @@ unsafe extern "system" fn row(registers: *mut Registers, _user: *mut c_void) {
     };
     let _outcome = INVENTORY_FUSE.run("the row", || {
         while let Some(request) = QUEUE.claim() {
-            if crate::host::is_off(request.owner) {
+            if crate::engine::loader::is_off(request.owner) {
                 continue;
             }
             // SAFETY: this runs in the row hook on the inventory system's

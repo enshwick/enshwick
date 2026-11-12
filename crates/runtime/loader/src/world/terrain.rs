@@ -17,10 +17,10 @@ use std::sync::OnceLock;
 use enshwick_core::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo};
 use enshwick_core::terrain::MAX_RADIUS;
 
+use crate::engine::loader::Loader;
 use crate::engine::memory::{BlobArray, read};
 use crate::engine::pinned;
 use crate::engine::pinned::Symbol;
-use crate::host::Loader;
 use crate::world::voxels::{BUILDING_FIRST, MATERIALS, TERRAIN};
 
 /// The build table ids this part of the loader names.

@@ -10,8 +10,8 @@ use crate::base::join::missing::{ADVERTISED_BYTES, Missing, Wanted, listed};
 use crate::base::join::{Difference, Row};
 use crate::base::wire::Drops;
 use crate::engine::kept_text::KeptText;
+use crate::engine::loader::loader;
 use crate::engine::mod_index::ModIndex;
-use crate::host::loader;
 use enshwick_base::Relock;
 
 /// Why a mod is off while the client plays in a world that does not run it.

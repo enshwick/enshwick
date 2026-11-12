@@ -13,9 +13,9 @@ use enshwick_core::abi::{
 };
 
 use crate::base::wire::Drops;
+use crate::engine::loader::{Loader, Registered};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::registry::Registry;
-use crate::host::{Loader, Registered};
 use enshwick_base::Relock;
 
 /// Lines waiting for the end of the step at most; more are dropped.
@@ -159,7 +159,7 @@ fn rewritten(buffer: &[u8], len: u32) -> Option<&str> {
 
 /// The character of the connected player with account key `player`.
 fn character(player: u64) -> Entity {
-    crate::host::loader()
+    crate::engine::loader::loader()
         .and_then(|loader| crate::engine::world::players(loader).ok())
         .and_then(|players| players.into_iter().find(|p| p.key.0 == player))
         .map_or(Entity(0), |p| p.entity)

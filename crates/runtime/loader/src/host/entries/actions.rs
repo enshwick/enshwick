@@ -1,10 +1,11 @@
 //! Host functions for the actions domain: players' actions and controls, the
 //! console, chat filters, and the interaction, crafting and build filters.
 
-use crate::host::memory::{put, text};
-use crate::host::{caller, caller_index, calling, entry};
 use enshwick_core::abi as api_frame;
 use enshwick_core::abi::{ChatFilterFn, Level, ModHandle, Side, Status, Str};
+
+use crate::host::memory::{put, text};
+use crate::host::{caller, caller_index, calling, entry};
 
 pub(crate) mod commands;
 
@@ -82,7 +83,7 @@ pub(crate) extern "system" fn actions(
             Ok(found) => found,
             Err(status) => return status,
         };
-        if !crate::host::in_init(index.get()) {
+        if !crate::engine::loader::in_init(index.get()) {
             return Status::TOO_LATE;
         }
         let status = crate::actions::player_actions::register(index, callback, user);
@@ -104,7 +105,7 @@ pub(crate) extern "system" fn control(
             Ok(found) => found,
             Err(status) => return status,
         };
-        if !crate::host::in_init(index.get()) {
+        if !crate::engine::loader::in_init(index.get()) {
             return Status::TOO_LATE;
         }
         // SAFETY: `HostApi::control` has the mod pass `spec` null or

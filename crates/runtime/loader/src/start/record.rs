@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::atomic::Ordering;
 
 use crate::base::record::{self, Ran, Record};
-use crate::host::Loader;
+use crate::engine::loader::Loader;
 
 /// Takes the record on a thread of its own, reading each DLL's hash: the
 /// loader and the mods that run, `folders` naming each mod's folder in

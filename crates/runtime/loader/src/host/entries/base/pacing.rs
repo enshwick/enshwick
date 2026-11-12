@@ -1,10 +1,11 @@
 //! Host functions for the engine's pacing places: the loop and server waits
 //! and the task workers.
 
-use crate::host::memory::put;
-use crate::host::{calling, entry};
 use enshwick_core::abi as api_frame;
 use enshwick_core::abi::{ModHandle, Status};
+
+use crate::host::memory::put;
+use crate::host::{calling, entry};
 
 pub(crate) extern "system" fn loop_wait(
     me: ModHandle,

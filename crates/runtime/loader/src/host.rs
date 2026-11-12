@@ -1,21 +1,12 @@
-//! The loader's side of the API: its state and the `HostApi` table.
+//! The loader's side of the API: the `HostApi` table and what every entry
+//! of it shares, from the calling mod's record to a panic's answer.
 
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::Ordering;
 
-use enshwick_core::abi as api_frame;
-use enshwick_core::abi::{
-    Event, EventFn, HookFlags, Level, Manifest, ModHandle, Side, Status, Str,
-};
-use enshwick_gamedata::reflect::{Fingerprint, Reflection};
+use enshwick_core::abi::{Level, ModHandle, Status};
 
-use crate::engine::builds::KnownBuild;
-use crate::engine::chains::{Chains, Link, Next};
-use crate::engine::mid::Mids;
+use crate::engine::loader::{Loader, ModRecord, loader};
 use crate::engine::mod_index::ModIndex;
-use crate::engine::pinned::{Constant, Symbol};
-use enshwick_base::Relock;
 
 mod api;
 mod entries;
@@ -23,464 +14,99 @@ mod join;
 mod memory;
 
 pub(crate) use api::API;
+
 pub(crate) use entries::base::mods::{CheckSettingsError, check_settings};
+
 pub(crate) use join::{
     admitted, apply_server_value, back_on, difference_waits, forget_server_values, join_missing,
     join_mods, join_mods_off, kicked_for_mods, report_join_missing, show_difference,
     take_difference, turn_off_for_world,
 };
+
 pub(crate) use memory::{find, slice};
-
-/// A loaded mod.
-#[derive(Debug)]
-pub(crate) struct ModRecord {
-    /// The mod id.
-    pub(crate) id: String,
-    /// Its version.
-    pub(crate) version: String,
-    /// Its DLL relative to the game's folder, with `/` separators.
-    pub(crate) file: String,
-    /// Its manifest, copied out of its DLL.
-    pub(crate) manifest: &'static Manifest,
-    /// What its manifest tells players about it.
-    pub(crate) meta: crate::base::manifest::Meta,
-    /// Set when the mod is off: refused at init or faulted later.
-    pub(crate) off: AtomicBool,
-    /// Why it is off, as the mod or the loader gave it: a text of the mod's
-    /// texts as its key and values, or words.
-    pub(crate) off_reason: Mutex<Option<String>>,
-    /// Set while one of its code patches waits for a thread to leave it: its
-    /// detours and mid-function hooks are bypassed, the rest of it runs.
-    pub(crate) waiting: AtomicBool,
-    /// The settings texts handed to the mod.
-    pub(crate) settings: Kept,
-    /// On a client in another's world, the settings its server sent for the
-    /// mod, every file seen as one.
-    pub(crate) server_values: Mutex<Option<String>>,
-    /// The settings files the mod declared, in the order it declared them.
-    pub(crate) settings_files: Mutex<Vec<crate::base::worlds::SettingsFile>>,
-    /// The mod's checks of new settings texts, by file: callback and pointer.
-    pub(crate) checks: Mutex<Vec<(String, api_frame::ConfigCheckFn, usize)>>,
-    /// The texts the mod handed the loader, for its settings' labels.
-    pub(crate) texts: Mutex<Option<enshwick_core::i18n::Texts>>,
-    /// Whether it is a data pack, a folder of data the loader runs.
-    pub(crate) pack: bool,
-    /// The features it reported on or off, in the order it named them.
-    pub(crate) features: Mutex<Vec<crate::engine::features::Feature>>,
-}
-
-impl ModRecord {
-    /// Its settings files seen as one, as the console and the Mods screen
-    /// show them; `None` for a mod without settings.
-    pub(crate) fn settings_schema(&self) -> Option<enshwick_core::config::Schema> {
-        crate::base::worlds::view_schema(&self.settings_files.relock())
-    }
-
-    /// Its folder in `mods/`, which holds its installation hold.
-    pub(crate) fn folder(&self) -> &str {
-        let file = self.file.strip_prefix("mods/").unwrap_or(&self.file);
-        file.split('/').next().unwrap_or(file)
-    }
-}
-
-impl ModRecord {
-    /// Whether its manifest requires the mod `id`.
-    pub(crate) fn requires(&self, id: &str) -> bool {
-        // SAFETY: a record's manifest is the loader's copy, kept for the
-        // process with every string and slice in it.
-        unsafe { crate::base::manifest::parse(self.manifest) }.is_ok_and(|candidate| {
-            candidate
-                .dependencies
-                .iter()
-                .any(|d| d.relation == api_frame::Relation::REQUIRES && d.id == id)
-        })
-    }
-
-    /// What its manifest exports for other mods to use, each
-    /// `<kind>:<local name>`.
-    pub(crate) fn exports(&self) -> Vec<&str> {
-        // SAFETY: a record's manifest is the loader's copy, kept for the
-        // process with every string and slice in it.
-        unsafe { crate::base::manifest::exports(self.manifest) }
-    }
-
-    /// Why it is off, in the reader's language where its texts have the
-    /// reason's text; `None` while it runs.
-    pub(crate) fn off_reason_shown(&self) -> Option<String> {
-        let reason = self.off_reason.relock().clone()?;
-        Some(crate::base::configure::mod_reason(
-            self.texts.relock().as_ref(),
-            &reason,
-        ))
-    }
-
-    /// The name players read, from the mod's texts in their language, else
-    /// from its manifest; empty when neither names it.
-    pub(crate) fn name(&self) -> String {
-        self.meta.name_in(
-            self.texts.relock().as_ref(),
-            crate::engine::texts::language(),
-        )
-    }
-
-    /// The name players read, or the id when nothing names the mod.
-    pub(crate) fn label(&self) -> String {
-        enshwick_core::mods::label(&self.name(), &self.id)
-    }
-
-    /// What the mod does, from its texts in the player's language, else
-    /// from its manifest.
-    pub(crate) fn description(&self) -> String {
-        self.meta.description_in(
-            self.texts.relock().as_ref(),
-            crate::engine::texts::language(),
-        )
-    }
-
-    /// Whether it runs on both sides, so it takes part in the join check
-    /// while it runs.
-    pub(crate) fn joins_when_on(&self) -> bool {
-        self.manifest.side == Side::BOTH
-    }
-
-    /// Whether the mod runs and counts in the join check.
-    pub(crate) fn joins(&self) -> bool {
-        !self.off.load(Ordering::Acquire) && self.joins_when_on()
-    }
-
-    /// The version the join check compares: a pack's carries the hash of its
-    /// files, so other files of one version differ.
-    pub(crate) fn join_version(&self) -> String {
-        match self
-            .pack
-            .then(|| crate::packs::data_packs::hash_of(&self.id))
-            .flatten()
-        {
-            Some(hash) => format!("{}+{hash}", self.version),
-            None => self.version.clone(),
-        }
-    }
-}
-
-/// Texts handed to a mod, kept for the life of the process: the mod may still
-/// read one on a thread of its own while another thread asks for a newer one.
-/// An equal text handed out before is handed out again, so a file read over
-/// and over keeps one copy.
-#[derive(Debug, Default)]
-pub(crate) struct Kept(Mutex<Vec<Box<str>>>);
-
-impl Kept {
-    /// `text`, kept for good.
-    pub(crate) fn keep(&self, text: &str) -> Str {
-        let mut kept = self.0.relock();
-        let at = kept.iter().position(|k| **k == *text).unwrap_or_else(|| {
-            kept.push(text.into());
-            kept.len() - 1
-        });
-        // The box's heap text never moves or drops while the store lives,
-        // whatever the vector does with the boxes.
-        Str::new(&kept[at])
-    }
-}
 
 /// The handle of the loader itself, which its own copy of the API uses to
 /// log and read while it runs data packs.
 pub(crate) const LOADER_HANDLE: ModHandle = ModHandle(0);
 
-/// A mod's handler for one event.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct Subscription {
-    /// The subscribing mod's index.
-    pub(crate) owner: ModIndex,
-    /// The event.
-    pub(crate) event: Event,
-    /// The handler, inside the mod's DLL.
-    pub(crate) callback: EventFn,
-    /// The mod's pointer for the handler, as an address.
-    pub(crate) user: usize,
+/// What an entry point answers when the loader's own code in it panicked.
+trait Fallback {
+    const FALLBACK: Self;
 }
 
-/// Everything the loader knows once mods are resolved.
-#[derive(Debug)]
-pub(crate) struct Loader {
-    /// Server or client.
-    pub(crate) side: Side,
-    /// The game's image base.
-    pub(crate) base: u64,
-    /// The game build.
-    pub(crate) fingerprint: Fingerprint,
-    /// The build table row.
-    pub(crate) build: &'static KnownBuild,
-    /// The game's reflection.
-    pub(crate) reflection: Reflection<'static>,
-    /// The `mods` folder.
-    pub(crate) mods_dir: PathBuf,
-    /// Whether developer tools are on, by the marker file read at start.
-    pub(crate) developer_tools: bool,
-    /// Loaded mods, in load order; handle `n` is index `n - 1`.
-    pub(crate) mods: Vec<ModRecord>,
-    /// The DLLs that run beside the mods without the API.
-    pub(crate) others: Vec<crate::engine::others::OtherDll>,
-    /// Every hook chain.
-    pub(crate) chains: Mutex<Chains>,
-    /// Every mid-function hook.
-    pub(crate) mids: Mutex<Mids>,
-    /// Reads the caller frame of the running chain.
-    pub(crate) caller_frame: fn() -> api_frame::CallerFrame,
-    /// Subscriptions while mods initialise.
-    pub(crate) subscriptions: Mutex<Vec<Subscription>>,
-    /// The subscriptions once every mod is initialised, read without a lock.
-    pub(crate) delivery: OnceLock<Box<[Subscription]>>,
-    /// What was wrong in the loader settings file at start, a line each.
-    pub(crate) settings_problems: Vec<String>,
-    /// A newer Enshwick release, once the release check found one.
-    pub(crate) newer_release: OnceLock<crate::base::releases::Release>,
-    /// The code patches a thread kept out at arming, tried again later.
-    pub(crate) retry: crate::engine::retry::Retry,
-    /// The mods that did not load, shown as off with their reason.
-    pub(crate) skipped: Vec<crate::base::resolve::Skipped>,
+impl Fallback for Status {
+    const FALLBACK: Self = Self::REFUSED;
 }
 
-/// The warning line and the status entry of `feature` turned off on `build`
-/// because its entry `id` failed for `reason`, as [`Loader::feature_off`]
-/// reports them.
-pub(crate) fn off_report(
-    build: &KnownBuild,
-    feature: &str,
-    id: &str,
-    reason: &str,
-) -> (String, String) {
-    let reason = build.reason(id, reason);
-    (
-        crate::engine::builds::off_line(feature, &build.name, id, reason),
-        format!("{id} {reason}"),
-    )
+impl Fallback for () {
+    const FALLBACK: Self = ();
 }
 
-/// Logs the warning line of an [`off_report`] and lists `feature` with its
-/// status entry among the loader parts off, on the Mods screen and in the
-/// status summary. Always false, for the caller to return.
-pub(crate) fn report_off(feature: &str, (line, entry): (String, String)) -> bool {
-    crate::log!(WARN, "{line}");
-    crate::engine::diag::part_off(feature, &entry);
-    false
+impl Fallback for Level {
+    const FALLBACK: Self = Self::INFO;
 }
 
-static LOADER: OnceLock<Loader> = OnceLock::new();
-/// The events some mod handles, a bit per event id.
-static HANDLED: AtomicU64 = AtomicU64::new(0);
-
-/// Whether a mod's handler takes `event`, so work that only raises it may
-/// be skipped otherwise. One load, for the game's hot paths.
-pub(crate) fn handles(event: Event) -> bool {
-    1u64.checked_shl(event.0)
-        .is_none_or(|bit| HANDLED.load(Ordering::Relaxed) & bit != 0)
+impl Fallback for u8 {
+    const FALLBACK: Self = 0;
 }
 
-fn mark_handled(event: Event) {
-    if let Some(bit) = 1u64.checked_shl(event.0) {
-        HANDLED.fetch_or(bit, Ordering::Relaxed);
+impl Fallback for u32 {
+    const FALLBACK: Self = 0;
+}
+
+impl Fallback for u64 {
+    const FALLBACK: Self = 0;
+}
+
+/// Runs the body of the entry point `name`, so a panic in the loader's own
+/// code never unwinds into the mod that called it: the call is refused and
+/// the fault logged.
+fn entry<R: Fallback>(name: &'static str, body: impl FnOnce() -> R) -> R {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(body))
+        .unwrap_or_else(|_| entry_fault(name))
+}
+
+#[cold]
+fn entry_fault<R: Fallback>(name: &str) -> R {
+    crate::log!(ERROR, "{name}: the loader panicked; the call is refused");
+    R::FALLBACK
+}
+
+/// The calling mod of an entry point, with its index and record: refused
+/// with [`Status::BAD_ARGS`] for a handle the loader never gave out and with
+/// [`Status::FAULTED`] for a mod that is off, the one answer every entry
+/// point gives a mod that is off.
+fn calling(me: ModHandle) -> Result<(&'static Loader, ModIndex, &'static ModRecord), Status> {
+    let loader = loader().ok_or(Status::BAD_ARGS)?;
+    let (index, record) = loader.record(me).ok_or(Status::BAD_ARGS)?;
+    if record.off.load(Ordering::Acquire) {
+        return Err(Status::FAULTED);
     }
+    Ok((loader, index, record))
 }
 
-/// Makes `loader` the one the API table answers for.
-pub(crate) fn install(loader: Loader) -> Option<&'static Loader> {
-    LOADER.set(loader).ok()?;
-    LOADER.get()
-}
-
-pub(crate) fn loader() -> Option<&'static Loader> {
-    LOADER.get()
-}
-
-/// Where one of the loader's detours goes, and how the code there is
-/// checked before [`Loader::link_feature`] links it.
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum Target<'a> {
-    /// A build table symbol, whose code [`Loader::code_holds`] checks.
-    Pinned(Symbol),
-    /// An address the caller found and checked by name, named for the log:
-    /// a reflected system's entry, a function the caller's own code
-    /// pattern found, an export of a system library.
-    Found(&'a str, Option<u64>),
-}
-
-/// A mod's callback with the pointer it registered beside it.
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct Registered<F> {
-    /// The owning mod's index.
-    pub(crate) owner: ModIndex,
-    /// The callback, inside the mod's DLL, which stays loaded.
-    pub(crate) callback: F,
-    /// The pointer the callback takes, as an address.
-    pub(crate) user: usize,
-}
-
-impl<F> Registered<F> {
-    pub(crate) fn new(owner: ModIndex, callback: F, user: *mut core::ffi::c_void) -> Self {
-        Self {
-            owner,
-            callback,
-            user: user.expose_provenance(),
-        }
+/// [`calling`], for an entry point that needs only the loader; the
+/// loader's own handle passes too.
+fn caller(me: ModHandle) -> Result<&'static Loader, Status> {
+    if me == LOADER_HANDLE {
+        return loader().ok_or(Status::BAD_ARGS);
     }
-
-    /// The pointer the mod registered with the callback.
-    pub(crate) fn user(&self) -> *mut core::ffi::c_void {
-        core::ptr::with_exposed_provenance_mut(self.user)
-    }
-
-    /// Whether its mod still runs.
-    pub(crate) fn live(&self) -> bool {
-        !is_off(self.owner)
-    }
+    calling(me).map(|(loader, _, _)| loader)
 }
 
-/// Takes what mods registered during init, for sealing.
-pub(crate) fn take<T>(list: &Mutex<Vec<T>>) -> Vec<T> {
-    std::mem::take(&mut *list.relock())
+/// [`calling`], for an entry point that needs the loader and the index.
+fn caller_index(me: ModHandle) -> Result<(&'static Loader, ModIndex), Status> {
+    calling(me).map(|(loader, index, _)| (loader, index))
 }
 
-/// Whether the mod at index `owner` is off; the loader's own links never are.
-pub(crate) fn is_off(owner: ModIndex) -> bool {
-    owner != ModIndex::LOADER
-        && loader().is_none_or(|loader| {
-            loader
-                .mods
-                .get(owner.get())
-                .is_none_or(|m| m.off.load(Ordering::Acquire))
-        })
+/// The handle of the mod at `index`.
+#[must_use]
+pub(crate) fn handle(index: ModIndex) -> ModHandle {
+    index.handle()
 }
 
-/// Whether the detours and mid-function hooks of `owner` are passed by: it
-/// is off, or waiting for a code patch. Only atomic loads, for hook calls.
-pub(crate) fn bypassed(owner: ModIndex) -> bool {
-    is_off(owner)
-        || loader()
-            .and_then(|l| l.mods.get(owner.get()))
-            .is_some_and(|m| m.waiting.load(Ordering::Acquire))
-}
-
-/// Marks `owner` waiting for a code patch; the loader never waits. A plain
-/// store, so the settle may call it while it holds the chains.
-pub(crate) fn wait(owner: ModIndex) {
-    if let Some(record) = loader().and_then(|l| l.mods.get(owner.get())) {
-        record.waiting.store(true, Ordering::Release);
-    }
-}
-
+/// What the table answers a mod about itself and the build rows it reads.
 impl Loader {
-    /// The address of the build table's symbol `id` in the running game.
-    pub(crate) fn address(&self, id: Symbol) -> Option<u64> {
-        self.address_by_name(id.id())
-    }
-
-    /// The build table's constant `id` as an offset or a size.
-    pub(crate) fn offset(&self, id: Constant) -> Option<usize> {
-        self.offset_by_name(id.id())
-    }
-
-    /// The address of the symbol `name`, an id put together at run time.
-    pub(crate) fn address_by_name(&self, name: &str) -> Option<u64> {
-        self.build.symbol(name).map(|rva| self.base + rva)
-    }
-
-    /// The constant `name`, an id put together at run time, as an offset or
-    /// a size.
-    pub(crate) fn offset_by_name(&self, name: &str) -> Option<usize> {
-        self.build
-            .constant(name)
-            .and_then(|value| usize::try_from(value).ok())
-    }
-
-    /// Links one of the loader's own detours on `target`, ahead of every
-    /// mod's link there.
-    pub(crate) fn link<F: Copy>(
-        &self,
-        target: u64,
-        next: &'static Next<F>,
-        detour: F,
-        flags: HookFlags,
-    ) -> Status {
-        let link = Link {
-            owner: ModIndex::LOADER,
-            detour: Next::<F>::address_of(detour),
-            next: next.slot(),
-            priority: i32::MIN,
-            flags,
-            hop: None,
-        };
-        self.chains.relock().add(target, link)
-    }
-
-    /// Whether the code at symbol `id` is what the table expects, checked
-    /// before a hook patches it or a detour relies on it, by
-    /// [`crate::engine::builds::code_holds`]: the anchors made every check of a
-    /// symbol while they found it (its pattern where its code starts, its
-    /// `<id>.bytes`, its whole function's body), so the presence of a check
-    /// counts; so does an engine route that found the symbol, whose own
-    /// match checks its code. False for a symbol the build lacks.
-    pub(crate) fn code_holds(&self, id: Symbol) -> bool {
-        if self.address(id).is_none() {
-            return false;
-        }
-        let checked = |present: bool| present.then_some(true);
-        crate::engine::builds::code_holds(&[
-            checked(self.build.head(id.id()).is_some()),
-            checked(self.build.constant(&format!("{id}.bytes")).is_some()),
-            checked(self.build.body(id.id()).is_some()),
-            checked(self.build.routed(id.id())),
-        ])
-    }
-
-    /// [`Loader::link`] for a feature, after checking its target: a table
-    /// symbol's code must hold by [`Loader::code_holds`]. A target this
-    /// build lacks, code that does not hold or a refused link turns only
-    /// `feature` off, named by [`Loader::feature_off`]. True when linked.
-    pub(crate) fn link_feature<F: Copy>(
-        &self,
-        feature: &str,
-        target: Target<'_>,
-        next: &'static Next<F>,
-        detour: F,
-        flags: HookFlags,
-    ) -> bool {
-        let (id, address) = match target {
-            Target::Pinned(symbol) => (
-                symbol.id(),
-                crate::engine::builds::hook_target(self.address(symbol), || {
-                    self.code_holds(symbol)
-                }),
-            ),
-            Target::Found(id, address) => {
-                (id, crate::engine::builds::hook_target(address, || true))
-            }
-        };
-        let address = match address {
-            Ok(address) => address,
-            Err(why) => return self.feature_off(feature, id, &why.to_string()),
-        };
-        let status = self.link(address, next, detour, flags);
-        if !status.is_ok() {
-            return self.feature_off(feature, id, &format!("refused the link ({})", status.0));
-        }
-        crate::engine::diag::name(address, id);
-        true
-    }
-
-    /// Turns `feature` off on this build because its entry `id` failed for
-    /// `reason`: one warning that names the build, and the part off on the
-    /// Mods screen and in the status summary. Always false, for the caller
-    /// to return.
-    pub(crate) fn feature_off(&self, feature: &str, id: &str, reason: &str) -> bool {
-        report_off(feature, off_report(self.build, feature, id, reason))
-    }
-
-    /// The mod named `id`, as a player or an administrator names it.
-    pub(crate) fn find_mod(&self, id: &str) -> Option<(usize, &ModRecord)> {
-        self.mods.iter().enumerate().find(|(_, m)| m.id == id)
-    }
-
     /// The mod of handle `me`.
     fn record(&self, me: ModHandle) -> Option<(ModIndex, &ModRecord)> {
         let index = ModIndex::from_handle(me)?;
@@ -492,153 +118,6 @@ impl Loader {
     /// loader's.
     fn rows_of(&self, me: ModHandle) -> Option<ModIndex> {
         ModIndex::looking_up(me, self.mods.len())
-    }
-
-    /// Turns a mod off: unlinks its hooks and logs why.
-    pub(crate) fn turn_off(&self, index: ModIndex, reason: &str) {
-        let Some(record) = self.mods.get(index.get()) else {
-            return;
-        };
-        if record.off.swap(true, Ordering::AcqRel) {
-            return;
-        }
-        *record.off_reason.relock() = Some(reason.to_owned());
-        let shown = record.off_reason_shown().unwrap_or_default();
-        crate::engine::log::write(
-            Level::ERROR,
-            &record.id,
-            &format!("off: {shown} ({})", crate::engine::errors::MOD_OFF),
-        );
-        if record.pack {
-            crate::packs::data_packs::forget(&record.id);
-        }
-        crate::engine::diag::turned_off(&record.id, &shown);
-        // A poisoned lock still holds the chains: the mod must be wired past.
-        let chains = self.chains.relock();
-        let faulted = |owner: ModIndex| {
-            owner != ModIndex::LOADER
-                && self
-                    .mods
-                    .get(owner.get())
-                    .is_none_or(|m| m.off.load(Ordering::Acquire))
-        };
-        // A mod still waiting for a code patch stays wired past as well.
-        chains.rewire(|owner| {
-            faulted(owner)
-                || self
-                    .mods
-                    .get(owner.get())
-                    .is_some_and(|m| m.waiting.load(Ordering::Acquire))
-        });
-        drop(chains);
-        crate::base::points::rearm(faulted);
-        if record.joins_when_on() {
-            crate::base::advertise::wake();
-        }
-    }
-
-    /// Turns a mod the loader turned off for a world back on: relinks its
-    /// hooks and points and logs it. Only for a mod whose code never ran
-    /// while it was off, so nothing of it changed.
-    pub(crate) fn turn_back_on(&self, index: ModIndex) {
-        let Some(record) = self.mods.get(index.get()) else {
-            return;
-        };
-        if !record.off.swap(false, Ordering::AcqRel) {
-            return;
-        }
-        *record.off_reason.relock() = None;
-        crate::engine::log::write(Level::INFO, &record.id, "back on");
-        let chains = self.chains.relock();
-        let off = |owner: ModIndex| {
-            owner != ModIndex::LOADER
-                && self
-                    .mods
-                    .get(owner.get())
-                    .is_none_or(|m| m.off.load(Ordering::Acquire))
-        };
-        chains.rewire(|owner| {
-            off(owner)
-                || self
-                    .mods
-                    .get(owner.get())
-                    .is_some_and(|m| m.waiting.load(Ordering::Acquire))
-        });
-        drop(chains);
-        crate::base::points::rearm(off);
-    }
-
-    /// Ends subscribing: from now on events go to the subscriptions made so
-    /// far, grouped by event in subscription order, so a raise walks its own.
-    pub(crate) fn seal_subscriptions(&self) {
-        let mut made = std::mem::take(&mut *self.subscriptions.relock());
-        made.sort_by_key(|s| s.event.0);
-        for subscription in &made {
-            mark_handled(subscription.event);
-        }
-        let _first = self.delivery.set(made.into_boxed_slice());
-    }
-
-    /// Whether a mod subscribed to `event`.
-    pub(crate) fn subscribed(&self, event: Event) -> bool {
-        let item_data = matches!(
-            event,
-            Event::WORLD_LOADED | Event::WORLD_SAVED | Event::SHUTDOWN_STARTED
-        ) && (crate::inventory::item_data::wanted()
-            || crate::world::weather::follows(self)
-            || crate::inventory::stats::wanted()
-            || crate::content::data_changes::wanted(self)
-            || crate::content::rate_links::recipes_rated());
-        item_data
-            || self
-                .delivery
-                .get()
-                .is_some_and(|d| d.iter().any(|s| s.event == event))
-    }
-
-    /// Raises `event` with `data` for every mod still on, or for mod `only`.
-    pub(crate) fn emit(&self, event: Event, only: Option<usize>, data: *const core::ffi::c_void) {
-        // The world followers act on these three events alone.
-        if only.is_none()
-            && matches!(
-                event,
-                Event::WORLD_LOADED | Event::WORLD_SAVED | Event::SHUTDOWN_STARTED
-            )
-        {
-            crate::world::game_settings::world_event(self, event);
-            crate::knowledge::store::changes::world_event(self, event);
-            crate::inventory::item_data::world_event(self, event);
-            crate::inventory::stats::world_event(self, event);
-            crate::content::data_changes::world_event(self, event);
-            crate::content::rate_links::world_event(event);
-            crate::actions::chat_mute::world_event(self, event);
-            crate::world::weather::world_event(self, event);
-        }
-        let Some(delivery) = self.delivery.get() else {
-            return;
-        };
-        for subscription in of_event(delivery, event).iter().filter(|s| {
-            s.event == event
-                && only.is_none_or(|only| only == s.owner.get())
-                && self
-                    .mods
-                    .get(s.owner.get())
-                    .is_some_and(|m| !m.off.load(Ordering::Acquire))
-        }) {
-            // SAFETY: the handler lives in the mod's DLL, which stays loaded;
-            // the safe layer catches its panics.
-            crate::engine::profile::call(
-                subscription.owner,
-                crate::engine::profile::Feature::Events,
-                || unsafe {
-                    (subscription.callback)(
-                        event,
-                        data,
-                        core::ptr::with_exposed_provenance_mut(subscription.user),
-                    );
-                },
-            );
-        }
     }
 
     /// The mod's own build rows that match the running build.
@@ -688,124 +167,8 @@ impl Loader {
     }
 }
 
-/// The loader and the calling mod, when the mod is on.
-/// What an entry point answers when the loader's own code in it panicked.
-trait Fallback {
-    const FALLBACK: Self;
-}
-
-impl Fallback for Status {
-    const FALLBACK: Self = Self::REFUSED;
-}
-
-impl Fallback for () {
-    const FALLBACK: Self = ();
-}
-
-impl Fallback for Level {
-    const FALLBACK: Self = Self::INFO;
-}
-
-impl Fallback for u8 {
-    const FALLBACK: Self = 0;
-}
-
-impl Fallback for u32 {
-    const FALLBACK: Self = 0;
-}
-
-impl Fallback for u64 {
-    const FALLBACK: Self = 0;
-}
-
-/// Runs the body of the entry point `name`, so a panic in the loader's own
-/// code never unwinds into the mod that called it: the call is refused and
-/// the fault logged.
-fn entry<R: Fallback>(name: &'static str, body: impl FnOnce() -> R) -> R {
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(body))
-        .unwrap_or_else(|_| entry_fault(name))
-}
-
-/// The index of the mod whose `init` runs now, `usize::MAX` for none.
-static INITIALISING: AtomicUsize = AtomicUsize::new(usize::MAX);
-
-/// Runs `init` of mod `index`, which [`in_init`] then answers for.
-pub(crate) fn initialising<R>(index: usize, init: impl FnOnce() -> R) -> R {
-    INITIALISING.store(index, Ordering::Release);
-    let outcome = init();
-    INITIALISING.store(usize::MAX, Ordering::Release);
-    outcome
-}
-
-/// Whether mod `index` is running its `init` now.
-pub(crate) fn in_init(index: usize) -> bool {
-    INITIALISING.load(Ordering::Acquire) == index
-}
-
-#[cold]
-fn entry_fault<R: Fallback>(name: &str) -> R {
-    crate::log!(ERROR, "{name}: the loader panicked; the call is refused");
-    R::FALLBACK
-}
-
-/// The calling mod of an entry point, with its index and record: refused
-/// with [`Status::BAD_ARGS`] for a handle the loader never gave out and with
-/// [`Status::FAULTED`] for a mod that is off, the one answer every entry
-/// point gives a mod that is off.
-fn calling(me: ModHandle) -> Result<(&'static Loader, ModIndex, &'static ModRecord), Status> {
-    let loader = loader().ok_or(Status::BAD_ARGS)?;
-    let (index, record) = loader.record(me).ok_or(Status::BAD_ARGS)?;
-    if record.off.load(Ordering::Acquire) {
-        return Err(Status::FAULTED);
-    }
-    Ok((loader, index, record))
-}
-
-/// [`calling`], for an entry point that needs only the loader; the
-/// loader's own handle passes too.
-fn caller(me: ModHandle) -> Result<&'static Loader, Status> {
-    if me == LOADER_HANDLE {
-        return loader().ok_or(Status::BAD_ARGS);
-    }
-    calling(me).map(|(loader, _, _)| loader)
-}
-
-/// [`calling`], for an entry point that needs the loader and the index.
-fn caller_index(me: ModHandle) -> Result<(&'static Loader, ModIndex), Status> {
-    calling(me).map(|(loader, index, _)| (loader, index))
-}
-
-/// The handle of the mod at `index`.
-#[must_use]
-pub(crate) fn handle(index: ModIndex) -> ModHandle {
-    index.handle()
-}
-
-impl core::ops::Index<ModIndex> for [ModRecord] {
-    type Output = ModRecord;
-
-    fn index(&self, index: ModIndex) -> &ModRecord {
-        &self[index.get()]
-    }
-}
-
-impl core::ops::Index<ModIndex> for Vec<ModRecord> {
-    type Output = ModRecord;
-
-    fn index(&self, index: ModIndex) -> &ModRecord {
-        &self[index.get()]
-    }
-}
-
 #[cfg(test)]
 mod headed_tests;
-
-/// The subscriptions to `event` among `sealed`, which are sorted by event.
-fn of_event(sealed: &[Subscription], event: Event) -> &[Subscription] {
-    let first = sealed.partition_point(|s| s.event.0 < event.0);
-    let end = sealed.partition_point(|s| s.event.0 <= event.0);
-    sealed.get(first..end).unwrap_or_default()
-}
 
 #[cfg(test)]
 mod tests;

@@ -13,9 +13,9 @@ use super::{
     TRACKER, WORDS, levels,
 };
 use crate::engine::ecs::Engine;
+use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::registry::Registry;
-use crate::host::Loader;
 use enshwick_base::Relock;
 
 /// Level and experience writes that wait for the level step at most.
@@ -277,7 +277,7 @@ mod tests {
     use enshwick_core::abi::ExperiencePass;
 
     use super::*;
-    use crate::host::Registered;
+    use crate::engine::loader::Registered;
 
     fn queued(what: u32, value: u32) -> Write {
         Write {

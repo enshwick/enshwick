@@ -15,8 +15,8 @@ use enshwick_core::abi::{
 };
 
 use crate::base::remote::Message;
+use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
-use crate::host::Loader;
 use enshwick_base::Relock;
 
 /// The least time between two runs one player sends.

@@ -15,10 +15,10 @@ use enshwick_core::content::{Blob, Guid};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::engine::catalogue::{Reflected, types};
+use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::settings::LOADER_ID;
 use crate::engine::texts;
-use crate::host::Loader;
 use enshwick_base::Relock;
 
 use super::{

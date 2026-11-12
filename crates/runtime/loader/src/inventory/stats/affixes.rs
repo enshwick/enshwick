@@ -10,8 +10,8 @@ use enshwick_core::stats::{ItemStats, Stat, key_of};
 
 use super::{Asked, SEALED, Sealed, declare, full_id, pending, wanted};
 use crate::base::ids::Space;
+use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
-use crate::host::Loader;
 
 /// One affix.
 #[derive(Debug)]

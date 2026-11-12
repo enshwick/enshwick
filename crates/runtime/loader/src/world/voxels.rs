@@ -198,7 +198,7 @@ struct Finest {
 }
 
 #[cfg(windows)]
-fn finest(loader: &crate::host::Loader) -> Result<Finest, Status> {
+fn finest(loader: &crate::engine::loader::Loader) -> Result<Finest, Status> {
     let constant = |id| loader.offset(id).ok_or(Status::MISSING);
     let level = constant(pinned::voxel::FINEST_LEVEL)?;
     let grids = constant(pinned::voxel::GRIDS)?;
@@ -223,7 +223,7 @@ fn finest(loader: &crate::host::Loader) -> Result<Finest, Status> {
 
 /// The server's voxel editor, on the game thread at a quiet moment.
 #[cfg(windows)]
-fn editor(loader: &crate::host::Loader) -> Result<usize, Status> {
+fn editor(loader: &crate::engine::loader::Loader) -> Result<usize, Status> {
     use crate::engine::memory::read;
 
     let server = crate::engine::world::server()?;
@@ -243,7 +243,7 @@ fn editor(loader: &crate::host::Loader) -> Result<usize, Status> {
 /// The world's extent from the editor's finest column grid, the bounds the
 /// game's own column lookup takes; on the game thread at a quiet moment.
 #[cfg(windows)]
-pub(crate) fn extent(loader: &crate::host::Loader) -> Result<WorldExtent, Status> {
+pub(crate) fn extent(loader: &crate::engine::loader::Loader) -> Result<WorldExtent, Status> {
     use crate::engine::memory::read;
 
     let finest = finest(loader)?;
@@ -321,7 +321,7 @@ impl Slots {
 /// `Ok` when the build table places the finest column grid's slots, else
 /// the first entry it lacks for them.
 #[cfg(windows)]
-pub(crate) fn finest_slots(loader: &crate::host::Loader) -> Result<(), pinned::Constant> {
+pub(crate) fn finest_slots(loader: &crate::engine::loader::Loader) -> Result<(), pinned::Constant> {
     let needed = [
         pinned::voxel::FINEST_LEVEL,
         pinned::voxel::GRIDS,
@@ -345,7 +345,7 @@ pub(crate) fn finest_slots(loader: &crate::host::Loader) -> Result<(), pinned::C
 /// on a build without the slots, or for a grid of pages that are not
 /// square, not whole metres or more than [`MAX_PAGES`].
 #[cfg(windows)]
-pub(crate) fn slots(loader: &crate::host::Loader) -> Result<Slots, Status> {
+pub(crate) fn slots(loader: &crate::engine::loader::Loader) -> Result<Slots, Status> {
     use crate::engine::memory::read;
 
     let finest = finest(loader)?;
@@ -378,7 +378,10 @@ pub(crate) fn slots(loader: &crate::host::Loader) -> Result<Slots, Status> {
 /// that leaves the world, [`Status::MISSING`] before a world runs or on a
 /// build without the read.
 #[cfg(windows)]
-pub(crate) fn read(loader: &crate::host::Loader, request: &ReadBox) -> Result<Vec<u16>, Status> {
+pub(crate) fn read(
+    loader: &crate::engine::loader::Loader,
+    request: &ReadBox,
+) -> Result<Vec<u16>, Status> {
     use crate::engine::memory::read;
 
     let function = loader
@@ -450,7 +453,10 @@ pub(crate) fn read(loader: &crate::host::Loader, request: &ReadBox) -> Result<Ve
 /// and merges it onto the real ground when that arrives (server 399,
 /// server copy).
 #[cfg(windows)]
-pub(crate) fn column_loaded(loader: &crate::host::Loader, at: [u32; 3]) -> Result<(), Status> {
+pub(crate) fn column_loaded(
+    loader: &crate::engine::loader::Loader,
+    at: [u32; 3],
+) -> Result<(), Status> {
     read(loader, &ReadBox::new(at, [1; 3], 1)?).map(drop)
 }
 

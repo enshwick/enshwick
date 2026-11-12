@@ -1,8 +1,8 @@
 //! Arming the hook chains, mid-function hooks and code patches.
 
+use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::patch::{self, FrameSlot};
-use crate::host::{self, Loader};
 use enshwick_base::Relock;
 
 /// Arms every chain and mid-function hook past the mods that are off; an
@@ -20,8 +20,8 @@ pub(super) fn arm(loader: &Loader, frame: Option<FrameSlot>) {
         &mut chains,
         &mids,
         frame,
-        host::bypassed,
-        host::wait,
+        crate::engine::loader::bypassed,
+        crate::engine::loader::wait,
         &patches,
         patch::Count::from_settings(),
     );

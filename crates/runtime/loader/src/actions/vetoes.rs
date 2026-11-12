@@ -24,10 +24,10 @@ use enshwick_core::abi::{
 use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
 use crate::engine::chains::Next;
+use crate::engine::loader::{Loader, Registered, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::registry::Registry;
-use crate::host::{Loader, Registered, Target};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -364,7 +364,7 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
         // SAFETY: only the refusing filter wrote `reason`, a text it keeps
         // until its next call on this thread, which comes after this read.
         if let Some(text) = unsafe { reason.as_str() } {
-            let server = crate::host::loader()
+            let server = crate::engine::loader::loader()
                 .is_some_and(|loader| loader.side == enshwick_core::abi::Side::SERVER)
                 // SAFETY: `system` is the cursor's system context, null or
                 // live, on the thread running that system (the caller's

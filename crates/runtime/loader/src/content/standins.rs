@@ -12,7 +12,7 @@ use enshwick_core::content::items::{ItemLayout, NewItem, clone_item, list_item};
 use enshwick_core::content::{Guid, Id};
 
 use crate::engine::catalogue::{Reflected, types};
-use crate::host::Loader;
+use crate::engine::loader::Loader;
 
 /// The tag of a stand-in's name.
 const NAME: Id = Id::new("enshwick:stand-in.name");

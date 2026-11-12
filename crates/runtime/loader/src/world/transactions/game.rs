@@ -11,8 +11,8 @@ use super::ledger::{Image, Voxels};
 use super::paste::Erase;
 use super::props::Prop;
 use super::record::UndoRecord;
+use crate::engine::loader::Loader;
 use crate::engine::pinned;
-use crate::host::Loader;
 use crate::world::voxels::ReadBox;
 pub(crate) use blocks::resolve;
 pub(crate) use props::resolve as resolve_prop;
@@ -205,7 +205,7 @@ impl Voxels for Game<'_> {
 /// Puts back the Quick Stash `deposits` of props no longer held,
 /// by entity. On the game thread.
 pub(crate) fn restore_deposits(deposits: &[(u32, crate::world::prop_holds::Stash)]) {
-    let Some(loader) = crate::host::loader() else {
+    let Some(loader) = crate::engine::loader::loader() else {
         return;
     };
     for &(entity, before) in deposits {
@@ -221,7 +221,7 @@ pub(crate) fn restore_deposits(deposits: &[(u32, crate::world::prop_holds::Stash
 /// post-step, with none running (server 399, client 426), a quiet moment
 /// `props::set_deposit` checks before every write.
 pub(crate) fn saving(saving: bool) {
-    let Some(loader) = crate::host::loader() else {
+    let Some(loader) = crate::engine::loader::loader() else {
         return;
     };
     for (entity, before) in super::holds().deposits() {

@@ -21,10 +21,10 @@ use rustc_hash::FxHashSet;
 
 use crate::engine::chains::Next;
 use crate::engine::fuse::Fuse;
+use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::pinned::Constant;
-use crate::host::{Loader, Target};
 use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.

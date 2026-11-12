@@ -4,7 +4,7 @@ use enshwick_core::Entity;
 use enshwick_core::abi::PlayerInfo;
 use rustc_hash::FxHashSet;
 
-use crate::host::Loader;
+use crate::engine::loader::Loader;
 
 use super::{Combat, HEALING, SNAPSHOT, Sealed, State, TYPES};
 

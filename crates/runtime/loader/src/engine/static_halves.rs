@@ -12,9 +12,9 @@ use std::sync::OnceLock;
 
 use enshwick_core::abi::Status;
 
+use crate::engine::loader::Loader;
 use crate::engine::memory::read;
 use crate::engine::pinned;
-use crate::host::Loader;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

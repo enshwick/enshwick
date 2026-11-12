@@ -30,9 +30,9 @@ use crate::base::wire::{
     remote_message,
 };
 pub(crate) use crate::base::wire::{MAX_CONTROL, MAX_MESSAGE};
+use crate::engine::loader::{Loader, Registered};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::registry::Registry;
-use crate::host::{Loader, Registered};
 use enshwick_base::Relock;
 
 mod server;
@@ -366,7 +366,7 @@ pub(crate) fn client_carried(channel: u32, data: &[u8]) {
     {
         crate::ui::notices::queue(Entity(entity), text);
     } else if let Some(rest) = data.strip_prefix(control(UI_DEMO).as_slice()) {
-        if crate::host::loader().is_some_and(|loader| loader.developer_tools) {
+        if crate::engine::loader::loader().is_some_and(|loader| loader.developer_tools) {
             crate::ui::interface::open_demo(demo_position(rest));
         } else {
             crate::log!(

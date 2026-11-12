@@ -21,9 +21,9 @@ use super::loops;
 use crate::engine::builds::Unhooked;
 use crate::engine::chains::Next;
 use crate::engine::code::{CodePatch, Verdict};
+use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned::{Constant, Symbol, bases};
-use crate::host::{Loader, Target};
 use crate::world::base_groups::window;
 
 /// Bases past 16, as the log and the Mods screen name them when a build

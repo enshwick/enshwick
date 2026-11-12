@@ -182,7 +182,7 @@ pub(super) unsafe fn bed_kept(ctx: *const u8) -> bool {
     sealed
         .bed_checks
         .iter()
-        .filter(|r| !crate::host::is_off(r.owner))
+        .filter(|r| !crate::engine::loader::is_off(r.owner))
         .all(|r| {
             let user = core::ptr::with_exposed_provenance_mut(r.user);
             // SAFETY: the registered `BedCheckFn` lives in the mod's DLL,

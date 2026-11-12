@@ -1,9 +1,10 @@
 //! Host functions for mod messages between server and client.
 
-use crate::host::memory::put;
-use crate::host::{caller, caller_index, entry};
 use enshwick_core::abi as api_frame;
 use enshwick_core::abi::{ModHandle, Status, Str};
+
+use crate::host::memory::put;
+use crate::host::{caller, caller_index, entry};
 
 pub(crate) extern "system" fn net_channel(
     me: ModHandle,

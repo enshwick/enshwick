@@ -11,8 +11,8 @@ use super::{
     Change, Held, MAX_PLAYERS, Told, Waiting, close_told, heard, holds, leaving, merged, message,
     note, queue,
 };
+use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
-use crate::host::Loader;
 use enshwick_base::Relock;
 
 /// The windows' state on the server.

@@ -28,10 +28,10 @@ use crate::actions::bindings;
 use crate::actions::linked_controls::{Follow, Players};
 use crate::base::remote::{Carried, Heard, MAX_CARRIED};
 use crate::engine::fuse::Fuse;
+use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::registry::Registry;
-use crate::host::Loader;
 use enshwick_base::Relock;
 
 /// A control a mod declared.
@@ -548,7 +548,7 @@ fn press(id: &str, action: &str) {
 /// side server only while this client hosts the world, since in another's
 /// its server's own copy carries the control.
 fn fires_here(control: &Declared, hosting: bool) -> bool {
-    crate::host::loader()
+    crate::engine::loader::loader()
         .and_then(|loader| loader.mods.get(control.owner.get()))
         .is_some_and(|m| {
             !m.off.load(core::sync::atomic::Ordering::Acquire)
@@ -558,7 +558,7 @@ fn fires_here(control: &Declared, hosting: bool) -> bool {
 
 /// Whether `control`'s mod is off.
 fn control_off(control: &Declared) -> bool {
-    crate::host::loader()
+    crate::engine::loader::loader()
         .and_then(|loader| loader.mods.get(control.owner.get()))
         .is_none_or(|m| m.off.load(core::sync::atomic::Ordering::Acquire))
 }
@@ -683,7 +683,7 @@ pub(crate) fn rows() -> Vec<Row> {
     let (Some(declared), Some(bound), Some(loader)) = (
         DECLARED.sealed(),
         STATE.keys.load_full(),
-        crate::host::loader(),
+        crate::engine::loader::loader(),
     ) else {
         return Vec::new();
     };
@@ -699,7 +699,7 @@ pub(crate) fn rows() -> Vec<Row> {
                 index,
                 mod_id: d.mod_id().to_owned(),
                 mod_name: record
-                    .map(crate::host::ModRecord::label)
+                    .map(crate::engine::loader::ModRecord::label)
                     .unwrap_or_default(),
                 label: record.map_or_else(|| d.label.clone(), |r| label_of(r, &d.label)),
                 keys: *k,
@@ -728,7 +728,8 @@ pub(crate) fn carry(id: &str, name: &str, controls: &[Carried]) {
     if crate::engine::world::hosting() {
         return;
     }
-    let (Some(declared), Some(loader)) = (DECLARED.sealed(), crate::host::loader()) else {
+    let (Some(declared), Some(loader)) = (DECLARED.sealed(), crate::engine::loader::loader())
+    else {
         return;
     };
     if loader
@@ -802,7 +803,7 @@ pub(crate) fn forget_carried() {
 
 /// A control's `label` in the reader's language: a key of its mod's texts,
 /// else as written.
-fn label_of(record: &crate::host::ModRecord, label: &str) -> String {
+fn label_of(record: &crate::engine::loader::ModRecord, label: &str) -> String {
     record
         .texts
         .relock()

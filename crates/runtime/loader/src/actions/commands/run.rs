@@ -9,9 +9,9 @@ use enshwick_core::abi::{ActionCall, CommandInfo, Header, Status, Str};
 use enshwick_core::command_names::{alias_asked, check};
 
 use super::{MAX_LINE, Named, Refusal, Reply, Typed, parse, remote_caller, reply_by, typed, word};
+use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::registry::Registry;
-use crate::host::Loader;
 use enshwick_base::Relock;
 
 /// Chat commands waiting for the end of the step at most; more are dropped.
@@ -85,7 +85,7 @@ pub(crate) fn register(loader: &Loader, owner: ModIndex, alias: &str) -> Status 
             if asked.is_none() {
                 let mine = id(owner);
                 let feature = format!("alias /{alias} of {mine}");
-                crate::host::report_off(
+                crate::engine::loader::report_off(
                     &feature,
                     (
                         format!(
@@ -98,7 +98,7 @@ pub(crate) fn register(loader: &Loader, owner: ModIndex, alias: &str) -> Status 
             if let Some(holder) = holder {
                 let (mine, theirs) = (id(owner), id(holder));
                 let feature = format!("alias /{alias} of {mine}");
-                crate::host::report_off(
+                crate::engine::loader::report_off(
                     &feature,
                     (
                         format!(
@@ -116,7 +116,7 @@ pub(crate) fn register(loader: &Loader, owner: ModIndex, alias: &str) -> Status 
             let (mine, theirs) = (id(owner), id(other));
             let name = enshwick_core::commands::name_of(mine);
             let feature = format!("commands of {mine}");
-            crate::host::report_off(
+            crate::engine::loader::report_off(
                 &feature,
                 (
                     format!("{feature} off: /{name} is taken by {theirs}"),

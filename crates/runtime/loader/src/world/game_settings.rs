@@ -27,8 +27,8 @@ use std::sync::{Mutex, OnceLock};
 use enshwick_core::abi::{Event, Status};
 
 use crate::engine::live;
+use crate::engine::loader::Loader;
 use crate::engine::pinned;
-use crate::host::Loader;
 use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.

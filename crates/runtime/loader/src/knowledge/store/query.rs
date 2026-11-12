@@ -11,9 +11,9 @@ use enshwick_core::Entity;
 use enshwick_core::abi::Status;
 
 use super::{Layout, layout, record, store_of};
+use crate::engine::loader::Loader;
 use crate::engine::memory::read;
 use crate::engine::pinned;
-use crate::host::Loader;
 
 /// What a wrapper writes: whether it answered (0) and whether the query
 /// holds (server 26430253); any other status (no database, a query not

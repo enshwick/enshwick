@@ -15,8 +15,8 @@ use std::time::Instant;
 use enshwick_core::Entity;
 use enshwick_core::abi::Side;
 
+use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
-use crate::host::Loader;
 use enshwick_base::Relock;
 
 /// The longest reason kept, in bytes; a longer one is cut on a character
@@ -243,7 +243,7 @@ pub(crate) fn hud_line(show: impl FnOnce(&str)) {
     if now_ms().saturating_sub(seen.at_ms) > SHOWN_MS {
         return;
     }
-    let Some(loader) = crate::host::loader() else {
+    let Some(loader) = crate::engine::loader::loader() else {
         return;
     };
     SHOWN.with_borrow_mut(|kept| {

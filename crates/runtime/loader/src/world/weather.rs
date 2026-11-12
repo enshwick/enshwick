@@ -27,9 +27,9 @@ use enshwick_core::abi::{ChunkData, Event, Header, HookFlags, Status, WeatherFro
 use enshwick_core::raw::read_at;
 
 use crate::engine::chains::Next;
+use crate::engine::loader::{Loader, Target};
 use crate::engine::memory::{BlobArray, read, write};
 use crate::engine::pinned::{self, Symbol};
-use crate::host::{Loader, Target};
 use check::writable;
 use enshwick_base::Relock;
 

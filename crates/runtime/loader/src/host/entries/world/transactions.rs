@@ -1,12 +1,13 @@
 //! Host functions for transactions of the world: commits, statuses and undos.
 
-use crate::host::memory::{put, put_headed, put_list};
-use crate::host::{caller_index, entry};
-use crate::world::transactions::{Change, Erase, Paste};
 use enshwick_core::abi::{
     BlockPlace, ModHandle, PropPlace, PropRemove, Status, TerrainEdit, TransactionInfo,
     TransactionOp, VoxelRegion, VoxelWrite,
 };
+
+use crate::host::memory::{put, put_headed, put_list};
+use crate::host::{caller_index, entry};
+use crate::world::transactions::{Change, Erase, Paste};
 
 pub(crate) extern "system" fn transaction_commit(
     me: ModHandle,
@@ -89,7 +90,10 @@ fn commit(
 ///   the size its header states, borrowed for the call.
 /// - A [`VoxelWrite`]'s `voxels` is null or points at `count` voxels,
 ///   borrowed for the call.
-unsafe fn change(loader: &crate::host::Loader, op: &TransactionOp) -> Result<Change, Status> {
+unsafe fn change(
+    loader: &crate::engine::loader::Loader,
+    op: &TransactionOp,
+) -> Result<Change, Status> {
     match op.kind {
         TransactionOp::TERRAIN => {
             // SAFETY: the caller guarantees `op.data` for a terrain op.

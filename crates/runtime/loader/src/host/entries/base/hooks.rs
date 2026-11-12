@@ -1,12 +1,14 @@
 //! Host functions for hooks and code patches.
 
+use enshwick_base::Relock;
+use enshwick_core::abi::{HookSpec, MidHookSpec, ModHandle, Status};
+
 use crate::engine::chains::Link;
+use crate::engine::loader::loader;
 use crate::engine::mid::MidLink;
 use crate::engine::mod_index::ModIndex;
 use crate::host::memory::{put, slice};
-use crate::host::{caller_index, calling, entry, loader};
-use enshwick_base::Relock;
-use enshwick_core::abi::{HookSpec, MidHookSpec, ModHandle, Status};
+use crate::host::{caller_index, calling, entry};
 
 pub(crate) extern "system" fn hook(me: ModHandle, spec: *const HookSpec) -> Status {
     entry("hook", || {

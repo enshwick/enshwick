@@ -11,7 +11,7 @@ pub(crate) fn lines(developer: Option<String>, off: Option<String>) -> Vec<Strin
 /// What the loaded game greets a player with.
 #[cfg(windows)]
 #[must_use]
-pub(crate) fn of(loader: &crate::host::Loader) -> Vec<String> {
+pub(crate) fn of(loader: &crate::engine::loader::Loader) -> Vec<String> {
     let developer = loader
         .developer_tools
         .then(|| crate::base::developer_tools::warning().to_owned());
@@ -24,7 +24,7 @@ pub(crate) fn of(loader: &crate::host::Loader) -> Vec<String> {
 
 /// Greets the player with account key `key`, who just joined this server.
 #[cfg(windows)]
-pub(crate) fn joined(loader: &crate::host::Loader, key: u64) {
+pub(crate) fn joined(loader: &crate::engine::loader::Loader, key: u64) {
     for line in of(loader) {
         let _sent = crate::actions::chat::send(key, &line);
     }

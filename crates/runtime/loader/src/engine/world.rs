@@ -19,12 +19,12 @@ use enshwick_core::Entity;
 use enshwick_core::abi::{Header, HookFlags, PlayerInfo, Status};
 
 use crate::engine::chains::Next;
+use crate::engine::loader::{Loader, Target};
 use crate::engine::memory::read;
 use crate::engine::pinned;
 use crate::engine::pinned::{Constant, Symbol};
 pub(crate) use crate::engine::server_pin::ServerAccess;
 use crate::engine::server_pin::{Place, ServerCell};
-use crate::host::{Loader, Target};
 use crate::inventory::item_records::anchor::CharacterId;
 
 /// The build table ids this part of the loader names.
@@ -797,7 +797,7 @@ pub(crate) fn machines(loader: &Loader) -> Result<Vec<(u64, u32)>, Status> {
 /// The account keys of the live player slots, as [`machines`] reads them;
 /// `None` off the game thread or when the slots do not read.
 pub(crate) fn live_keys() -> Option<Vec<u64>> {
-    let machines = machines(crate::host::loader()?).ok()?;
+    let machines = machines(crate::engine::loader::loader()?).ok()?;
     Some(machines.iter().map(|&(key, _)| key).collect())
 }
 

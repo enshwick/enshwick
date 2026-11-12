@@ -1,7 +1,7 @@
 //! Linking the loader's join check and its dialog hold on the client.
 
+use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
-use crate::host::{Loader, Target};
 
 use super::game::identify;
 

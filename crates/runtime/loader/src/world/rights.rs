@@ -160,9 +160,9 @@ mod game {
     use enshwick_core::altars::MAX_ZONES;
 
     use super::{EditBox, Permissions, Zones, refusal};
+    use crate::engine::loader::Loader;
     use crate::engine::memory::read;
     use crate::engine::pinned;
-    use crate::host::Loader;
 
     /// `zone_touches(zones, box) -> u8`: 1 when the box overlaps a building
     /// zone with some thickness on every axis, ignored entries skipped

@@ -13,10 +13,10 @@ use enshwick_core::Entity;
 use enshwick_core::abi::{SpawnRequest, Status};
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
+use crate::engine::loader::Loader;
 use crate::engine::pinned;
 use crate::engine::pinned::Symbol;
 use crate::engine::spawn_request::{RequestLayout, Start};
-use crate::host::Loader;
 use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.

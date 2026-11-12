@@ -43,8 +43,8 @@ use enshwick_core::stats::{ItemStats, Op, StatDef, aggregate, builtin, key_of, n
 use rustc_hash::FxHashMap;
 
 use crate::base::ids::Space;
+use crate::engine::loader::{Loader, Registered};
 use crate::engine::settings::LOADER_ID;
-use crate::host::{Loader, Registered};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

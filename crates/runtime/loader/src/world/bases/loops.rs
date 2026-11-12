@@ -24,9 +24,9 @@ use super::Container;
 use super::members::Game;
 use super::past16::{Pins, SiteError};
 use crate::engine::code::CodePatch;
+use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned::{Constant, bases};
-use crate::host::{Loader, Target};
 use crate::world::base_groups::lookup::Bases;
 use crate::world::base_groups::window;
 

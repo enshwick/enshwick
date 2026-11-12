@@ -7,8 +7,8 @@ use enshwick_core::abi::UiWidget;
 use super::list::{listing, pages};
 use super::{Entries, ROWS_PER_PAGE};
 use crate::base::configure::rows::{self, Lock, Row, Widget};
+use crate::engine::loader::Loader;
 use crate::engine::texts;
-use crate::host::Loader;
 use crate::ui::interface::Painter;
 use crate::ui::mods_screen;
 use enshwick_base::Relock;
@@ -114,7 +114,7 @@ pub(super) fn draw_row(
 ) -> Option<String> {
     let label = mods_screen::row_label(row);
     let read_only = row.lock != Lock::Open;
-    let file = crate::host::loader()
+    let file = crate::engine::loader::loader()
         .and_then(|loader| loader.find_mod(id))
         .map_or_else(
             || format!("{id}/settings.toml"),

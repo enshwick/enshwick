@@ -24,10 +24,10 @@ use enshwick_core::raw::read_at;
 
 use crate::engine::chains::Next;
 use crate::engine::fuse::Fuse;
+use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
 use crate::engine::pinned::{Constant, Symbol};
 use crate::engine::ticks::{StepTime, TICKS};
-use crate::host::{Loader, Target};
 use crate::{actions, inventory, knowledge, ui, world};
 use enshwick_base::Relock;
 
@@ -453,7 +453,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         "knowledge change steps",
         knowledge::store::changes::after_step(loader, step)
     );
-    if crate::host::handles(Event::TICKED) || TICKS.listed() {
+    if crate::engine::loader::handles(Event::TICKED) || TICKS.listed() {
         let nanos = TICKS.nanos(now);
         let time = TICKS.advance(nanos);
         let tick = tick_data(step, time, game);
@@ -534,7 +534,7 @@ fn periodic_ticks(step: u64, now: u64, time: StepTime, game: u64) -> usize {
         step,
         now,
         time,
-        |tick| !crate::host::is_off(tick.owner()),
+        |tick| !crate::engine::loader::is_off(tick.owner()),
         |tick, mut data| {
             data.game = game;
             data.cost_nanos = crate::engine::profile::events_reading(tick.owner())
@@ -572,7 +572,7 @@ fn forget_joined() {
 
 /// Ends a hosted game on the client: its server goes away with it.
 fn end_session() {
-    if let Some(loader) = crate::host::loader() {
+    if let Some(loader) = crate::engine::loader::loader() {
         crate::base::worlds::unload(loader);
     }
     SESSION.relock().stop();
@@ -585,7 +585,7 @@ fn end_session() {
     actions::interactions::forget();
     inventory::item_actions::forget();
     actions::player_actions::forget();
-    ui::windows::forget(crate::host::loader());
+    ui::windows::forget(crate::engine::loader::loader());
     actions::commands::forget();
     actions::controls::forget();
     world::bases::forget();

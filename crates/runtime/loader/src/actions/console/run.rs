@@ -5,8 +5,8 @@ use std::sync::atomic::Ordering;
 use enshwick_core::Entity;
 use enshwick_core::abi::{Header, PlayerInfo, Status};
 
+use crate::engine::loader::Loader;
 use crate::engine::texts;
-use crate::host::Loader;
 use enshwick_base::Relock;
 
 use super::input::{self, End};
@@ -173,7 +173,7 @@ fn mods(loader: &Loader) -> String {
 }
 
 /// A mod's name and version, marked when it is off.
-fn name(record: &crate::host::ModRecord) -> String {
+fn name(record: &crate::engine::loader::ModRecord) -> String {
     let label = record.label();
     if record.off.load(Ordering::Acquire) {
         texts::fill(
@@ -186,7 +186,7 @@ fn name(record: &crate::host::ModRecord) -> String {
 }
 
 /// What `record` is, for `enshwick <mod id>`.
-fn about(record: &crate::host::ModRecord) -> String {
+fn about(record: &crate::engine::loader::ModRecord) -> String {
     let mut lines = vec![name(record)];
     let description = record.description();
     if !description.is_empty() {

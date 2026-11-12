@@ -25,7 +25,7 @@ pub fn running() -> Version {
 /// in `loader` for the Mods screen; the answer, or why there is none, is
 /// logged once.
 #[cfg(windows)]
-pub(crate) fn start(loader: &'static crate::host::Loader) {
+pub(crate) fn start(loader: &'static crate::engine::loader::Loader) {
     let spawned = std::thread::Builder::new()
         .name("enshwick-releases".into())
         .spawn(move || {

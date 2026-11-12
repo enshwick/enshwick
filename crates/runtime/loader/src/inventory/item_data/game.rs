@@ -9,7 +9,7 @@ use enshwick_core::{Entity, ItemId};
 use enshwick_gamedata::catalogue as names;
 
 use super::anchor::{Anchor, CharacterId, Placed};
-use crate::host::Loader;
+use crate::engine::loader::Loader;
 
 /// `link` of an item in its root's own inventory rather than a linked one.
 const OWN: u8 = u8::MAX;

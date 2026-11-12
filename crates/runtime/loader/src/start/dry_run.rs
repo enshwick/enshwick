@@ -8,8 +8,8 @@ use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 
 use crate::base::resolve::{self, Candidate};
 use crate::engine::chains::Chains;
+use crate::engine::loader::Loader;
 use crate::engine::pe;
-use crate::host::{self, Loader};
 use crate::{engine::builds, engine::log};
 
 use super::game::GAME_DIRS;
@@ -174,7 +174,7 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         retry: crate::engine::retry::Retry::default(),
         skipped: skipped(&libraries, &candidates, &plan),
     };
-    let loader = host::install(loader).ok_or(DryRunError::AlreadyRan)?;
+    let loader = crate::engine::loader::install(loader).ok_or(DryRunError::AlreadyRan)?;
     let order: Vec<&Library> = plan.order.iter().map(|&i| &libraries[i]).collect();
     initialise(loader, &order, None);
     let lines = log::captured();

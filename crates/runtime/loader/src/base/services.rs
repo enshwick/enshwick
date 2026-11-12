@@ -482,7 +482,7 @@ pub(crate) fn send(sender: usize, id: u32, data: *const core::ffi::c_void) -> St
         return Status::REFUSED;
     }
     for subscriber in &slot.subscribers {
-        if crate::host::is_off(subscriber.owner) {
+        if crate::engine::loader::is_off(subscriber.owner) {
             continue;
         }
         // SAFETY: the handler lives in the mod's DLL, which stays loaded; the

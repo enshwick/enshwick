@@ -181,7 +181,7 @@ fn vanilla() -> Option<&'static Vanilla> {
     STATE
         .vanilla
         .get_or_init(|| {
-            let loader = crate::host::loader()?;
+            let loader = crate::engine::loader::loader()?;
             Vanilla::new(
                 &crate::engine::catalogue::Reflected(&loader.reflection),
                 |key| crate::engine::archive::game()?.resource(&key),

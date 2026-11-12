@@ -1,9 +1,10 @@
 //! Host functions for the mod's interface.
 
-use crate::host::memory::{get_headed, get_headed_list, put, put_headed};
-use crate::host::{caller, caller_index, entry};
 use enshwick_core::abi as api_frame;
 use enshwick_core::abi::{ModHandle, Side, Status};
+
+use crate::host::memory::{get_headed, get_headed_list, put, put_headed};
+use crate::host::{caller, caller_index, entry};
 
 pub(crate) extern "system" fn local_held(me: ModHandle, out: *mut u64) -> Status {
     entry("local_held", || {

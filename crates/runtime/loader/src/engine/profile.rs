@@ -210,7 +210,7 @@ fn as_owner<R>(owner: ModIndex, f: impl FnOnce() -> R) -> R {
 #[cfg(windows)]
 #[inline]
 pub(crate) fn pack_of(owner: ModIndex) -> Option<enshwick_core::abi::ModHandle> {
-    crate::host::loader().and_then(|loader| pack_handle(&loader.mods, owner))
+    crate::engine::loader::loader().and_then(|loader| pack_handle(&loader.mods, owner))
 }
 
 /// The handle of `owner` when it is a data pack among `mods`, whose code
@@ -218,7 +218,7 @@ pub(crate) fn pack_of(owner: ModIndex) -> Option<enshwick_core::abi::ModHandle> 
 #[cfg(windows)]
 #[inline]
 pub(crate) fn pack_handle(
-    mods: &[crate::host::ModRecord],
+    mods: &[crate::engine::loader::ModRecord],
     owner: ModIndex,
 ) -> Option<enshwick_core::abi::ModHandle> {
     mods.get(owner.get())

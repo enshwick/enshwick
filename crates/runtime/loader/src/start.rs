@@ -15,9 +15,10 @@ use crate::base::resolve::{self, Candidate};
 use crate::engine::chains::Chains;
 use crate::engine::code::Watching;
 use crate::engine::code_watch::Stage;
+use crate::engine::loader::{Loader, ModRecord};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::patch::FrameSlot;
-use crate::host::{self, Loader, ModRecord};
+use crate::host;
 
 mod arm;
 mod dry_run;
@@ -167,7 +168,7 @@ pub(crate) fn start(
         retry: crate::engine::retry::Retry::default(),
         skipped: skipped(&libraries, &candidates, &plan),
     };
-    let Some(loader) = host::install(loader) else {
+    let Some(loader) = crate::engine::loader::install(loader) else {
         crate::engine::shipped::release();
         return;
     };
@@ -302,7 +303,7 @@ fn records(
             off: AtomicBool::new(false),
             off_reason: Mutex::new(None),
             waiting: AtomicBool::new(false),
-            settings: host::Kept::default(),
+            settings: crate::engine::loader::Kept::default(),
             server_values: Mutex::new(None),
             settings_files: Mutex::new(Vec::new()),
             checks: Mutex::new(Vec::new()),
@@ -386,7 +387,7 @@ fn initialise(loader: &Loader, order: &[&Library], mut watching: Option<&mut Wat
         // SAFETY: `library.init` is the mod's `INIT` export, typed `InitFn`
         // as `enshwick_core::abi::exports` documents, called with the static host
         // table and the mod's own handle.
-        let status = host::initialising(index, || unsafe {
+        let status = crate::engine::loader::initialising(index, || unsafe {
             (library.init)(&raw const host::API, host::handle(ModIndex::new(index)))
         });
         if let Some(w) = watching.as_deref_mut() {

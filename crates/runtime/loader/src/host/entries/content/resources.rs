@@ -1,10 +1,11 @@
 //! Host functions for served resources: serving, rebuilding and reading game
 //! resources, and the archive's keys, hashes and types.
 
-use crate::host::memory::{put, put_list};
-use crate::host::{caller, calling, entry};
 use enshwick_core::abi as api_frame;
 use enshwick_core::abi::{ModHandle, Status};
+
+use crate::host::memory::{put, put_list};
+use crate::host::{caller, calling, entry};
 
 pub(crate) extern "system" fn serve_resource(
     me: ModHandle,
@@ -220,7 +221,7 @@ pub(crate) extern "system" fn resource_buffer(
         // A mod that is off still gets one: a rebuild runs the patches of
         // the mods that built what the game holds.
         let known = me == crate::host::LOADER_HANDLE
-            || crate::host::loader().is_some_and(|loader| loader.record(me).is_some());
+            || crate::engine::loader::loader().is_some_and(|loader| loader.record(me).is_some());
         if !known {
             return Status::BAD_ARGS;
         }

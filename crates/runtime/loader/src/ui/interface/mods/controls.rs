@@ -9,8 +9,8 @@ use enshwick_core::abi::UiWidget;
 use super::list::{listing, pages};
 use crate::actions::bindings::{self, Capture, Captured, clashes};
 use crate::actions::controls::{self, Row, SetKeyError, capture_keys, key_name};
+use crate::engine::loader::Loader;
 use crate::engine::texts;
-use crate::host::Loader;
 use crate::ui::interface::Painter;
 
 /// Controls a page shows on a build without the scroll area, under the

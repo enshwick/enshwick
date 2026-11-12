@@ -26,8 +26,8 @@ use enshwick_core::abi::{
 use enshwick_gamedata::catalogue as names;
 
 use crate::engine::catalogue::types;
+use crate::engine::loader::Loader;
 use crate::engine::pinned;
-use crate::host::Loader;
 use crate::world::map_frame::{FrameLayout, ReadFrameError, frame, has_biome_map};
 use crate::world::map_marker_types::{ReadTypesError, TypesLayout, types};
 use crate::world::scene_markers::{

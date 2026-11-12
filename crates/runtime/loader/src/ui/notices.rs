@@ -16,9 +16,9 @@ use std::sync::{Mutex, OnceLock};
 use enshwick_core::Entity;
 use enshwick_core::abi::Status;
 
+use crate::engine::loader::Loader;
 use crate::engine::pinned;
 use crate::engine::pinned::Symbol;
-use crate::host::Loader;
 pub(crate) use crate::ui::notice_queue::MAX_TEXT;
 use crate::ui::notice_queue::{MAX_WAITING, Pushed, SLOTS, Waiting, cut, push, step_batch};
 use enshwick_base::Relock;

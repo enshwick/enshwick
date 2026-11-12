@@ -24,10 +24,10 @@ use std::sync::{Mutex, OnceLock};
 use enshwick_core::abi::{Event, HookFlags, Side, Status};
 
 use crate::engine::chains::Next;
+use crate::engine::loader::{Loader, Target};
 use crate::engine::module::Export;
 use crate::engine::pinned;
 use crate::engine::pinned::Constant;
-use crate::host::{Loader, Target};
 use enshwick_base::Relock;
 
 mod holds;
@@ -282,7 +282,7 @@ fn remember(path: &str, side: Side, steam: impl FnOnce() -> Option<&'static Path
         let now = keys.pick(side);
         now.is_some() && now != before
     };
-    if changed && let Some(loader) = crate::host::loader() {
+    if changed && let Some(loader) = crate::engine::loader::loader() {
         arrive(key);
         crate::base::holds::enforce_world(loader, key);
     }

@@ -14,8 +14,8 @@ use crate::content::rates::{
 };
 use crate::engine::chains::Next;
 use crate::engine::fuse::Fuse;
+use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned::{self, Symbol};
-use crate::host::{Loader, Target};
 use crate::inventory::loot_slot::SlotFields;
 
 /// The build table ids this part of the loader names; the comfort rate
@@ -101,8 +101,10 @@ static FUSE: Fuse = Fuse::new("game rates");
 
 /// The factor in force for `rate`, 1 once the rates' fuse is off.
 pub(crate) fn factor(rate: RateId) -> f32 {
-    FUSE.run("a game rate", || RATES.factor(rate, crate::host::is_off))
-        .unwrap_or(1.0)
+    FUSE.run("a game rate", || {
+        RATES.factor(rate, crate::engine::loader::is_off)
+    })
+    .unwrap_or(1.0)
 }
 
 /// Whether a rate some mod declared links `symbol`.

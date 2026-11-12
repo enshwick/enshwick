@@ -18,8 +18,8 @@ use rustc_hash::FxHashMap;
 use super::{CHANGES, on};
 use crate::content::data_changes::{Key, Merged};
 use crate::content::item_kinds::ItemKindLayout;
+use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
-use crate::host::Loader;
 
 /// Every vanilla recipe with the kind of what it makes and its workshop,
 /// from the game's archive; none when the build does not reflect the

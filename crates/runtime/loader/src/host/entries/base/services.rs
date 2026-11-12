@@ -1,12 +1,15 @@
 //! Host functions for services, mod events and extension points.
 
-use crate::host::join::keep;
-use crate::host::memory::{get_headed, put, put_headed, text};
-use crate::host::{Loader, ModRecord, Subscription, caller, caller_index, calling, entry};
+use std::sync::atomic::Ordering;
+
 use enshwick_base::Relock;
 use enshwick_core::abi as api_frame;
 use enshwick_core::abi::{Event, EventFn, Header, Level, ModHandle, Status, Str, TickHandle};
-use std::sync::atomic::Ordering;
+
+use crate::engine::loader::{Loader, ModRecord, Subscription};
+use crate::host::join::keep;
+use crate::host::memory::{get_headed, put, put_headed, text};
+use crate::host::{caller, caller_index, calling, entry};
 
 impl crate::base::points::Mods for Loader {
     fn find(&self, id: &str) -> Option<usize> {

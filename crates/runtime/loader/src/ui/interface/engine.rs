@@ -13,8 +13,8 @@
 
 pub(crate) use crate::engine::interface_parts::Missing;
 use crate::engine::interface_parts::{Part, check_functions};
+use crate::engine::loader::Loader;
 use crate::engine::pinned::{self, Symbol};
-use crate::host::Loader;
 
 /// A buffer the game fills or reads, aligned as the game keeps its own on
 /// the stack.

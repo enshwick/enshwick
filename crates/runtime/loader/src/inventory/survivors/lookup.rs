@@ -8,7 +8,7 @@ use enshwick_core::altars::cell_of_fixed;
 use enshwick_core::raw::read_at;
 
 use crate::engine::ecs::Engine;
-use crate::host::Loader;
+use crate::engine::loader::Loader;
 use enshwick_base::Relock;
 
 use super::{
@@ -19,7 +19,7 @@ use super::{
 /// Asks the registered lookup; `None` for the game's own answer.
 pub(super) fn ask(call: &SurvivorLookup) -> Option<u32> {
     let registered = SEALED.get()?.lookup?;
-    if crate::host::is_off(registered.owner) {
+    if crate::engine::loader::is_off(registered.owner) {
         return None;
     }
     let mut out = Entity(0);

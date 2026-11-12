@@ -15,7 +15,7 @@ pub(crate) fn game() -> Option<&'static Archive> {
     if let Some(archive) = GAME.get() {
         return archive.as_ref();
     }
-    let loader = crate::host::loader()?;
+    let loader = crate::engine::loader::loader()?;
     open_game(loader.mods_dir.parent()?, loader.side)
 }
 

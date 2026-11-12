@@ -1,11 +1,12 @@
 //! Host functions for the content domain: recipes, data changes, texts, item
 //! data, content ids, rates and the game's memory pages.
 
+use enshwick_core::abi as api_frame;
+use enshwick_core::abi::{Level, ModHandle, RateId, Status, Str};
+
 use crate::host::entries::base::services::unexported;
 use crate::host::memory::{put, text};
 use crate::host::{caller, caller_index, calling, entry};
-use enshwick_core::abi as api_frame;
-use enshwick_core::abi::{Level, ModHandle, RateId, Status, Str};
 
 pub(crate) mod resources;
 

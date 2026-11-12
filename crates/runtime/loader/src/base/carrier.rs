@@ -30,8 +30,8 @@ use crate::base::wire::{
     CONTROL, Link, MAX_SEALED, PROBES, open, probe, read_probe, seal, sealable,
 };
 use crate::engine::chains::Next;
+use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
-use crate::host::{Loader, Target};
 use enshwick_base::Relock;
 
 mod game;
@@ -530,7 +530,7 @@ unsafe fn client_frame(client: *mut u8, now: Instant) {
     if !modded && !CARRIER.client_open.load(Ordering::Acquire) {
         return;
     }
-    let (Some(game), Some(loader)) = (CARRIER.game.get(), crate::host::loader()) else {
+    let (Some(game), Some(loader)) = (CARRIER.game.get(), crate::engine::loader::loader()) else {
         return;
     };
     if client.is_null() {

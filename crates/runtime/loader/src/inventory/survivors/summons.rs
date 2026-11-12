@@ -5,7 +5,7 @@ use enshwick_core::abi::{Header, Summon};
 use enshwick_core::altars::cell_of_fixed;
 use enshwick_core::raw::{read_at, write_at};
 
-use crate::host::Loader;
+use crate::engine::loader::Loader;
 
 use super::{LOADED, SEALED, SPAWN_NEXT, SURVIVORS_FUSE, layout};
 
@@ -124,7 +124,7 @@ pub(super) unsafe fn summon(request: *mut u8) -> Option<Asked> {
     for r in sealed
         .summons
         .iter()
-        .filter(|r| !crate::host::is_off(r.owner))
+        .filter(|r| !crate::engine::loader::is_off(r.owner))
     {
         let user = core::ptr::with_exposed_provenance_mut(r.user);
         match crate::engine::profile::call(
@@ -161,7 +161,7 @@ pub(super) fn summoned(call: Summon) {
     for r in sealed
         .summoned
         .iter()
-        .filter(|r| !crate::host::is_off(r.owner))
+        .filter(|r| !crate::engine::loader::is_off(r.owner))
     {
         let user = core::ptr::with_exposed_provenance_mut(r.user);
         // SAFETY: the registered `SummonFn` lives in the mod's DLL, which

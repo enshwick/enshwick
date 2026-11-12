@@ -125,7 +125,7 @@ fn guarded(state: &Transactions, work: impl FnOnce()) {
 /// write; otherwise as [`Ledger::commit`].
 #[cfg(windows)]
 pub(crate) fn commit(
-    loader: &crate::host::Loader,
+    loader: &crate::engine::loader::Loader,
     owner: ModIndex,
     actor: Option<u32>,
     changes: Vec<Change>,
@@ -175,7 +175,7 @@ fn try_ledger() -> Option<std::sync::MutexGuard<'static, Ledger>> {
 /// Writes the queued work of a step, on the game thread after the step,
 /// behind the feature's fuse.
 #[cfg(windows)]
-pub(crate) fn after_step(loader: &crate::host::Loader) {
+pub(crate) fn after_step(loader: &crate::engine::loader::Loader) {
     if !STATE.busy.load(Ordering::Acquire) {
         return;
     }
@@ -187,7 +187,7 @@ pub(crate) fn after_step(loader: &crate::host::Loader) {
 /// commit, undo and ask meanwhile; a step that finds the ledger taken skips
 /// its work until the next.
 #[cfg(windows)]
-fn pass(loader: &crate::host::Loader) {
+fn pass(loader: &crate::engine::loader::Loader) {
     use ledger::Voxels;
 
     let Ok(mut world) = game::Game::new(loader) else {

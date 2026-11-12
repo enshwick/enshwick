@@ -14,8 +14,8 @@ use std::sync::OnceLock;
 use enshwick_core::abi::Status;
 use rustc_hash::FxHashSet;
 
+use crate::engine::loader::Loader;
 use crate::engine::pinned;
-use crate::host::Loader;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

@@ -9,9 +9,9 @@ use std::time::{Duration, SystemTime};
 
 use enshwick_core::abi::Event;
 
+use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::settings::{FILE, Settings};
-use crate::host::Loader;
 use enshwick_base::Relock;
 
 /// How often the files are looked at; a few stat calls each time.

@@ -1,9 +1,10 @@
 //! Host functions for the world's time, game settings, weather, terrain and
 //! voxels.
 
+use enshwick_core::abi::{ModHandle, Status};
+
 use crate::host::memory::{put, put_headed, put_headed_list};
 use crate::host::{caller, caller_index, entry};
-use enshwick_core::abi::{ModHandle, Status};
 
 pub(crate) extern "system" fn time_of_day(
     me: ModHandle,

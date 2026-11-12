@@ -17,7 +17,7 @@ use enshwick_core::abi::{
 use enshwick_core::packs::{MANIFEST_FILE, Pack, PackFiles, PackManifest, PackSide};
 use rustc_hash::FxHashMap;
 
-use crate::host::Loader;
+use crate::engine::loader::Loader;
 use enshwick_base::Relock;
 
 /// A pack folder found in `mods/`.
@@ -225,7 +225,7 @@ fn report_skipped(id: &str, pack: &Pack) {
 
 /// The record of the calling pack and its folder.
 fn calling(me: ModHandle) -> Option<(&'static Loader, usize, String, PathBuf)> {
-    let loader = crate::host::loader()?;
+    let loader = crate::engine::loader::loader()?;
     let index = me.0.checked_sub(1)?;
     let record = loader.mods.get(index)?;
     let dir = with(|packs| packs.get(&record.id).map(|p| p.dir.clone()))?;

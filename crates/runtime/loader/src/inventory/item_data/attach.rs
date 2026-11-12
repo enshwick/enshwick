@@ -6,7 +6,7 @@ use enshwick_core::{Entity, ItemId};
 use rustc_hash::FxHashSet;
 
 use super::{FINDING, KEPT, SERVER, Server, UNREAD, game, insert_found, messages_for, send};
-use crate::host::Loader;
+use crate::engine::loader::Loader;
 use crate::inventory::item_records::anchor::{self, Anchor, Index, KindIndex, Pending};
 use enshwick_base::Relock;
 

@@ -1,10 +1,11 @@
 //! Host functions for described services, calls.
 
+use enshwick_core::abi as api_frame;
+use enshwick_core::abi::{Level, ModHandle, Status};
+
 use crate::host::entries::base::services::{required_owner, spec_parts, unexported};
 use crate::host::memory::{get_headed, put};
 use crate::host::{caller_index, calling, entry};
-use enshwick_core::abi as api_frame;
-use enshwick_core::abi::{Level, ModHandle, Status};
 
 /// The declaration of a call spec read through its header.
 ///

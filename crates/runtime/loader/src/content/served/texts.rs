@@ -5,8 +5,8 @@ use enshwick_core::abi::{HookFlags, Side, Status};
 use enshwick_core::raw::{read_at, write_at};
 
 use crate::engine::chains::Next;
+use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
-use crate::host::{Loader, Target};
 use enshwick_base::Relock;
 
 /// Mod texts while mods initialise: tag id, language, text.

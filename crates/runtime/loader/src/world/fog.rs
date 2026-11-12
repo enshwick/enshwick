@@ -24,9 +24,9 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use enshwick_core::abi::{FogInfo, Header, HookFlags, Side, Status};
 
 use crate::engine::chains::Next;
+use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
-use crate::host::{Loader, Target};
 use crate::world::fog_image::{FogImage, FogShape, Plan, ReadError, TileRect, plan};
 use enshwick_base::Relock;
 

@@ -103,7 +103,7 @@ pub(crate) fn enforce(
     mods_dir: &Path,
     running: &[&str],
     unknown_build: bool,
-    loader: Option<&crate::host::Loader>,
+    loader: Option<&crate::engine::loader::Loader>,
 ) {
     let why = if unknown_build {
         "the game build is unknown, so it would run vanilla"
@@ -119,7 +119,7 @@ pub(crate) fn enforce(
 
 /// The ids and folders of the mods `loader` runs, and its own id.
 #[cfg(windows)]
-pub(crate) fn running(loader: &crate::host::Loader) -> Vec<&str> {
+pub(crate) fn running(loader: &crate::engine::loader::Loader) -> Vec<&str> {
     loader
         .mods
         .iter()
@@ -132,7 +132,7 @@ pub(crate) fn running(loader: &crate::host::Loader) -> Vec<&str> {
 /// Stops the game when a hold on the world `key` is unmet, as its key
 /// appears, before its save is read.
 #[cfg(windows)]
-pub(crate) fn enforce_world(loader: &crate::host::Loader, key: &str) {
+pub(crate) fn enforce_world(loader: &crate::engine::loader::Loader, key: &str) {
     stop(
         &unmet(of_world(key), &running(loader), false),
         "the mod does not run",
@@ -144,7 +144,7 @@ pub(crate) fn enforce_world(loader: &crate::host::Loader, key: &str) {
 /// texts of its mod if `loader` loaded them, and stops the game; does
 /// nothing when `held` is empty.
 #[cfg(windows)]
-fn stop(held: &[Held], why: &str, loader: Option<&crate::host::Loader>) {
+fn stop(held: &[Held], why: &str, loader: Option<&crate::engine::loader::Loader>) {
     use enshwick_base::Relock;
     if held.is_empty() {
         return;

@@ -19,7 +19,7 @@ use rustc_hash::FxHashMap;
 
 use super::{CHANGES, on};
 use crate::content::data_changes::{Key, grown_slots, template_slots};
-use crate::host::Loader;
+use crate::engine::loader::Loader;
 
 /// The loader's patches of the templates the items with changed container
 /// slots place: one per template, for every item that places it.

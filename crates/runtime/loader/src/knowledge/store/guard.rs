@@ -25,11 +25,11 @@ use enshwick_core::abi::{
     Header, HookFlags, KnowledgeInfo, KnowledgeInput, KnowledgeInputFn, Registers, Status,
 };
 
+use crate::engine::loader::{Loader, Registered};
 use crate::engine::mid::MidLink;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::registry::Registry;
-use crate::host::{Loader, Registered};
 use enshwick_base::Relock;
 
 use super::{Layout, definition, layout, quest_set, read};
@@ -264,7 +264,7 @@ unsafe extern "system" fn check(registers: *mut Registers, _user: *mut c_void) {
         if registers.rax.trailing_zeros() >= 8 {
             return;
         }
-        let (Some(&site), Some(loader)) = (SITE.get(), crate::host::loader()) else {
+        let (Some(&site), Some(loader)) = (SITE.get(), crate::engine::loader::loader()) else {
             return;
         };
         let Some(layout) = layout(loader) else {

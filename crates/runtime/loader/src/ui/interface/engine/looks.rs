@@ -1,7 +1,7 @@
 //! Where the looks the loader draws with sit in the game's look bundle, read
 //! by reflection name: label styles, sounds, setting texts and icons.
 
-use crate::host::Loader;
+use crate::engine::loader::Loader;
 
 /// Where the looks the loader uses sit in the look bundle, from reflection.
 #[derive(Debug, Clone, Copy)]

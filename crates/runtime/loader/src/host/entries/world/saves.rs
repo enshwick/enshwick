@@ -1,9 +1,10 @@
 //! Host functions for the world's saves.
 
-use crate::host::memory::put_headed;
-use crate::host::{caller, caller_index, entry};
 use enshwick_core::Entity;
 use enshwick_core::abi::{Header, ModHandle, SaveInfo, Status};
+
+use crate::host::memory::put_headed;
+use crate::host::{caller, caller_index, entry};
 
 pub(crate) extern "system" fn save_info(me: ModHandle, out: *mut SaveInfo) -> Status {
     entry("save_info", || {

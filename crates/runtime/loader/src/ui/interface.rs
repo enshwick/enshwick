@@ -42,7 +42,7 @@ pub(crate) use mods::mismatch_screen_on;
 
 use crate::engine::chains::Next;
 use crate::engine::fuse::Fuse;
-use crate::host::{Loader, Registered, Target};
+use crate::engine::loader::{Loader, Registered, Target};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -544,7 +544,7 @@ unsafe extern "system" fn detour(state: *mut u8) {
     ARENA.with_borrow_mut(Arena::next_frame);
     // A client that never hosts never steps, so its waiting patches are also
     // tried here; one atomic compare until a check is due.
-    if let Some(loader) = crate::host::loader() {
+    if let Some(loader) = crate::engine::loader::loader() {
         let _tried = RETRY_FUSE.run("the interface frame", || {
             crate::engine::retry::after_step(loader, std::time::Instant::now());
         });
@@ -599,7 +599,7 @@ unsafe extern "system" fn detour(state: *mut u8) {
             carried::draw(engine, context);
         })
         && drew(&MODS_SCREEN_FUSE, "the Mods screen's draw", || {
-            if let Some(loader) = crate::host::loader() {
+            if let Some(loader) = crate::engine::loader::loader() {
                 // SAFETY: the game draws its popup inside the frame on the
                 // interface thread, `context` is non-zero (checked by the
                 // guard before it), `carried::draw` ends its window before it

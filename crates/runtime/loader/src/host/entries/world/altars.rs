@@ -1,11 +1,12 @@
 //! Host functions for altars, their zones and the base limit.
 
+use enshwick_core::abi as api_frame;
+use enshwick_core::abi::{ModHandle, Status};
+
 use crate::host::memory::list;
 use crate::host::memory::{put, put_headed};
 use crate::host::{caller, caller_index, entry};
 use crate::world::base_groups::limit::Limits;
-use enshwick_core::abi as api_frame;
-use enshwick_core::abi::{ModHandle, Status};
 
 pub(crate) extern "system" fn altars_open(me: ModHandle) -> Status {
     entry("altars_open", || {

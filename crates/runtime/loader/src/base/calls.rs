@@ -398,7 +398,7 @@ pub(crate) fn run(
     let Ok(server) = &route.server else {
         return Status::MISSING;
     };
-    if crate::host::is_off(server.owner) {
+    if crate::engine::loader::is_off(server.owner) {
         return Status::REFUSED;
     }
     // SAFETY: the handler lives in the server's DLL, which stays loaded; the

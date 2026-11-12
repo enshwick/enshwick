@@ -11,10 +11,10 @@ use std::time::Instant;
 
 use crate::base::wire::Link;
 use crate::engine::catalogue;
+use crate::engine::loader::Loader;
 use crate::engine::memory;
 use crate::engine::pinned;
 use crate::engine::pinned::{Constant, Symbol};
-use crate::host::Loader;
 
 use super::{LARGEST_PACKET, PACKET_BURST, Peer, Probe};
 

@@ -40,6 +40,8 @@ pub(crate) mod interface_parts;
 pub(crate) mod kept_text;
 #[cfg(windows)]
 pub(crate) mod live;
+#[cfg(windows)]
+pub(crate) mod loader;
 pub mod log;
 #[cfg_attr(
     all(not(windows), not(test)),

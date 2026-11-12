@@ -9,8 +9,8 @@ use std::time::{Duration, Instant};
 use enshwick_core::abi::Status;
 
 use super::{Layout, layout};
+use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
-use crate::host::Loader;
 use enshwick_base::Relock;
 
 /// How long saves stay held before the loader warns, and how often the
@@ -208,11 +208,13 @@ fn blocked_holds(server: usize, blocked: usize) -> Result<(), crate::engine::liv
 unsafe fn enforce(layout: &Layout, server: usize) -> Option<Vec<(ModIndex, Duration)>> {
     let now = Instant::now();
     let mut saving = SAVING.relock();
-    saving.holds.retain(|h| !crate::host::is_off(h.owner));
+    saving
+        .holds
+        .retain(|h| !crate::engine::loader::is_off(h.owner));
     if saving.holds.is_empty() {
         saving.warn_at = None;
     }
-    let build = crate::host::loader().map_or("", |loader| loader.build.name.as_str());
+    let build = crate::engine::loader::loader().map_or("", |loader| loader.build.name.as_str());
     if !HOLDS_FUSE.verify(build, || blocked_holds(server, layout.blocked)) {
         return None;
     }
@@ -270,7 +272,7 @@ fn warn_long(loader: &Loader, held: &[(ModIndex, Duration)]) {
     let names = held
         .iter()
         .filter_map(|&(owner, _)| loader.mods.get(owner.get()))
-        .map(crate::host::ModRecord::label)
+        .map(crate::engine::loader::ModRecord::label)
         .collect::<Vec<_>>()
         .join(", ");
     tell_admins(loader, &names);

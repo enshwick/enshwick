@@ -7,9 +7,9 @@ use enshwick_core::abi::Registers;
 
 use crate::engine::diag::KeptLine;
 use crate::engine::fuse::Fuse;
+use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
-use crate::host::Loader;
 use enshwick_base::Relock;
 
 use super::engine::Engine;
@@ -91,7 +91,7 @@ fn line(loader: &Loader) -> super::engine::UiText {
 ///   the registers it saved, valid and unaliased for the call.
 unsafe extern "system" fn version_line(_registers: *mut Registers, _user: *mut core::ffi::c_void) {
     let _drawn = FUSE.run("the main menu's frame", || {
-        let (Some(engine), Some(loader)) = (ENGINE.get(), crate::host::loader()) else {
+        let (Some(engine), Some(loader)) = (ENGINE.get(), crate::engine::loader::loader()) else {
             return;
         };
         let context = engine.context();

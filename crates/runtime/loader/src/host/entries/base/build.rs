@@ -1,10 +1,12 @@
 //! Host functions for the game build: symbols, systems, layouts and constants.
 
-use crate::host::join::keep;
-use crate::host::memory::{put, put_headed, text};
-use crate::host::{entry, loader};
 use enshwick_core::abi as api_frame;
 use enshwick_core::abi::{BuildInfo, Header, Level, ModHandle, Status, Str};
+
+use crate::engine::loader::loader;
+use crate::host::entry;
+use crate::host::join::keep;
+use crate::host::memory::{put, put_headed, text};
 
 pub(crate) extern "system" fn build(out: *mut BuildInfo) {
     entry("build", || {

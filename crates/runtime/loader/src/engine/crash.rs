@@ -45,8 +45,8 @@ use windows_sys::Win32::System::Threading::{
 };
 
 use crate::engine::chains::Next;
+use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
-use crate::host::{Loader, Target};
 
 /// Keeps looking for another handler: the default ends the process.
 const CONTINUE_SEARCH: i32 = 0;

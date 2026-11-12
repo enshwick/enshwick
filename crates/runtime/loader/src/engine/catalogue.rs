@@ -5,7 +5,7 @@
 use enshwick_core::content::ResourceType;
 pub(crate) use enshwick_gamedata::catalogue::{Reflected, constant, event_types, ids, type_name};
 
-use crate::host::Loader;
+use crate::engine::loader::Loader;
 
 /// The running game's hash of the type the catalogue id `id` names, as its
 /// entities' components carry it; `None` on a build without the type.

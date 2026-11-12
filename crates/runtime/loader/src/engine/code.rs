@@ -16,9 +16,9 @@ use enshwick_core::abi::{HookFlags, Status};
 use rustc_hash::FxHashMap;
 
 use crate::engine::chains::Next;
+use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
-use crate::host::Loader;
 use enshwick_base::Relock;
 
 use enshwick_core::content::recipes::WORKSHOP_RECIPES;
@@ -777,7 +777,10 @@ fn lookup_address(loader: &'static Loader) -> Option<u64> {
         let lookup = match checked(loader, pinned::recipe::LIST_LOOKUP) {
             Ok(at) => at as u64,
             Err(off) => {
-                let _off = crate::host::report_off(LOOKUP_FEATURE, lookup_off(loader.build, &off));
+                let _off = crate::engine::loader::report_off(
+                    LOOKUP_FEATURE,
+                    lookup_off(loader.build, &off),
+                );
                 return None;
             }
         };
@@ -798,7 +801,7 @@ fn lookup_address(loader: &'static Loader) -> Option<u64> {
 /// The warning line and status entry of the lookup turned off on `build`
 /// because its entry failed for `off`.
 fn lookup_off(build: &crate::engine::builds::KnownBuild, off: &LiftLimitError) -> (String, String) {
-    crate::host::off_report(build, LOOKUP_FEATURE, off.entry(), &off.to_string())
+    crate::engine::loader::off_report(build, LOOKUP_FEATURE, off.entry(), &off.to_string())
 }
 
 /// Links the per-workshop list lookup for disabled recipes; whether it is.

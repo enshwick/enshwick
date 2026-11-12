@@ -1,8 +1,9 @@
 //! Host functions for mods' commands and action windows.
 
+use enshwick_core::abi::{ActionReply, CommandInfo, Header, Level, ModHandle, Status, Str};
+
 use crate::host::memory::{put_headed, text};
 use crate::host::{caller, calling, entry};
-use enshwick_core::abi::{ActionReply, CommandInfo, Header, Level, ModHandle, Status, Str};
 
 thread_local! {
     /// The text `run_command` last handed out on this thread.
@@ -28,7 +29,7 @@ pub(crate) extern "system" fn commands(me: ModHandle, _name: Str, alias: Str) ->
             Ok(found) => found,
             Err(status) => return status,
         };
-        if !crate::host::in_init(index.get()) {
+        if !crate::engine::loader::in_init(index.get()) {
             return Status::TOO_LATE;
         }
         let Some(alias) = text(alias) else {

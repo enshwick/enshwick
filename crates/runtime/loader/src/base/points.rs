@@ -565,7 +565,7 @@ pub(crate) fn run(
     Ok(point.run(
         input,
         value,
-        crate::host::is_off,
+        crate::engine::loader::is_off,
         |owner, link| {
             crate::engine::profile::call(
                 ModIndex::new(owner),
@@ -574,7 +574,7 @@ pub(crate) fn run(
             )
         },
         |point, link| {
-            if let Some(loader) = crate::host::loader() {
+            if let Some(loader) = crate::engine::loader::loader() {
                 let (id, _) = Names::name(loader, link.owner.get());
                 crate::engine::log::write(
                     Level::WARN,

@@ -59,8 +59,8 @@ use self::detours::{
 use crate::engine::builds::Unhooked;
 use crate::engine::chains::Next;
 use crate::engine::code::{CodePatch, Verdict};
+use crate::engine::loader::{Loader, Registered, Target};
 use crate::engine::registry::Registry;
-use crate::host::{Loader, Registered, Target};
 use crate::world::base_groups::limit::{Limits, MAX_BASES, VANILLA_ZONES, Zones};
 use crate::world::base_groups::window::{self, Kind};
 use enshwick_base::Relock as _;

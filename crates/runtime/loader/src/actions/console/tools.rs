@@ -6,8 +6,8 @@ use std::sync::atomic::Ordering;
 use enshwick_core::Entity;
 use enshwick_core::abi::{PlayerInfo, Status};
 
+use crate::engine::loader::Loader;
 use crate::engine::texts;
-use crate::host::Loader;
 
 use super::accounts;
 use super::answers::{self, Loaded, Online, Seen};

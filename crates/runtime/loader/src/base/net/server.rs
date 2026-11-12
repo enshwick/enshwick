@@ -198,7 +198,7 @@ pub(crate) fn server_carried(key: u64, channel: u32, data: &[u8], looped: bool) 
         return;
     }
     if known
-        && let Some(loader) = crate::host::loader()
+        && let Some(loader) = crate::engine::loader::loader()
         && let Some(message) = remote_message(data)
     {
         crate::base::remote::server(loader, key, message);

@@ -130,7 +130,7 @@ pub(super) unsafe fn merge_statuses(ctx: *mut u64) {
     let (Some(menu), Some(merge)) = (menu(loader), sealed.status) else {
         return;
     };
-    if crate::host::is_off(merge.owner) {
+    if crate::engine::loader::is_off(merge.owner) {
         return;
     }
     STATUS_ROWS.with_borrow_mut(|(rows, bits)| {

@@ -2,8 +2,8 @@ use core::cell::Cell;
 
 use enshwick_core::abi::{Status, Str, UiWidget};
 
+use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
-use crate::host::Loader;
 use crate::ui::widget_checks;
 
 use super::engine::{Engine, Icon, Row, Takes, TextBuffer, Typed, UiText};

@@ -22,9 +22,9 @@ use std::sync::OnceLock;
 use enshwick_core::Entity;
 use enshwick_core::abi::{ActiveBuff, BuffRequest, BuffTypeInfo, Header, Status};
 
+use crate::engine::loader::Loader;
 use crate::engine::memory::{BlobArray, read, write};
 use crate::engine::pinned::{self, Symbol};
-use crate::host::Loader;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

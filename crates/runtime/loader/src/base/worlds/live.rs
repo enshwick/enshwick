@@ -5,7 +5,7 @@ use std::path::Path;
 use enshwick_core::abi::{Event, Level, Side};
 
 use super::{DEFAULT_FILE, SettingsFile, current, set_current, world_file};
-use crate::host::{Loader, ModRecord};
+use crate::engine::loader::{Loader, ModRecord};
 use enshwick_base::Relock;
 
 fn files(record: &ModRecord) -> Vec<SettingsFile> {

@@ -13,10 +13,10 @@ use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
 use crate::engine::chains::Next;
 use crate::engine::ecs::{Components, Engine};
+use crate::engine::loader::{Loader, Registered, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::registry::Registry;
-use crate::host::{Loader, Registered, Target};
 
 mod stock;
 

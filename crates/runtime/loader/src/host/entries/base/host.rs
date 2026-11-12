@@ -1,11 +1,13 @@
 //! Host functions for the running game: components, templates, hosting, the
 //! server's world, features, the status report and game events.
 
-use crate::host::memory::{put, put_headed_list, text};
-use crate::host::{caller, calling, entry, loader};
 use enshwick_base::Relock;
 use enshwick_core::abi::{EventTypeInfo, Header, Level, ModHandle, Side, Status, Str};
 use enshwick_core::{Entity, abi as api_frame};
+
+use crate::engine::loader::loader;
+use crate::host::memory::{put, put_headed_list, text};
+use crate::host::{caller, calling, entry};
 
 pub(crate) extern "system" fn event_types(
     me: ModHandle,
@@ -126,7 +128,7 @@ pub(crate) extern "system" fn status(
             Ok(found) => found,
             Err(status) => return status,
         };
-        if !crate::host::in_init(index.get()) {
+        if !crate::engine::loader::in_init(index.get()) {
             return Status::TOO_LATE;
         }
         crate::base::status::register(index, callback, user)

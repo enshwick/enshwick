@@ -12,7 +12,7 @@ use std::sync::OnceLock;
 use enshwick_core::abi::{DropRequest, Header, SpawnRequest, Status};
 use enshwick_core::affixes::ItemRarity;
 
-use crate::host::Loader;
+use crate::engine::loader::Loader;
 
 /// The template the game spills loose loot with.
 const TEMPLATE: &str = "Base_LootPickup_Generic_Gravity";

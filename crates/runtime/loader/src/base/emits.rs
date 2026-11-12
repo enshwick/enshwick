@@ -22,9 +22,9 @@ use enshwick_core::abi::{Status, TeleportRequest};
 use rustc_hash::FxHashMap;
 
 use crate::engine::catalogue::{ids, type_name};
+use crate::engine::loader::Loader;
 use crate::engine::pinned;
 use crate::engine::pinned::Symbol;
-use crate::host::Loader;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

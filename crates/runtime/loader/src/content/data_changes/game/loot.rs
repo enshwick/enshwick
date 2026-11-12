@@ -14,7 +14,7 @@ use rustc_hash::FxHashMap;
 
 use super::{CHANGES, on};
 use crate::content::data_changes::Key;
-use crate::host::Loader;
+use crate::engine::loader::Loader;
 
 /// The loader's patches of the loot tables the changes reach: the random
 /// loot table, and each container fill table that names a changed item.

@@ -5,8 +5,8 @@ use std::sync::atomic::Ordering;
 use enshwick_core::abi::UiWidget;
 
 use super::MODS_PER_PAGE;
+use crate::engine::loader::Loader;
 use crate::engine::texts;
-use crate::host::Loader;
 use crate::ui::interface::Painter;
 use crate::ui::interface::engine::Icon;
 use crate::ui::listing::Listing;
@@ -47,7 +47,7 @@ const fn clicked(details: bool, gear: bool, index: usize) -> Option<Listed> {
 
 /// Paints a mod's plain name, its version and authors dimmed below it, that
 /// it is off or waiting in words and why, and its description.
-fn about(paint: &Painter<'_>, record: &crate::host::ModRecord) {
+fn about(paint: &Painter<'_>, record: &crate::engine::loader::ModRecord) {
     let off = record.off.load(Ordering::Acquire);
     let waiting = !off && record.waiting.load(Ordering::Acquire);
     let name = record.label();
@@ -119,7 +119,7 @@ const fn state_text(off: bool, waiting: bool) -> Option<(&'static str, u32)> {
 
 /// Paints the left cell of a mod's row: what it is, then each of its
 /// features that is off in red.
-fn state(paint: &Painter<'_>, record: &crate::host::ModRecord) {
+fn state(paint: &Painter<'_>, record: &crate::engine::loader::ModRecord) {
     about(paint, record);
     let features = record.features.relock().clone();
     let features = crate::engine::features::shown(&features, record.texts.relock().as_ref());
@@ -139,7 +139,11 @@ fn state(paint: &Painter<'_>, record: &crate::host::ModRecord) {
 /// Mod `index`'s technical details, dimmed lines for the top of its page:
 /// its licence, its homepage and the extension points it defines and
 /// extends.
-fn detail_lines(loader: &Loader, index: usize, record: &crate::host::ModRecord) -> Vec<String> {
+fn detail_lines(
+    loader: &Loader,
+    index: usize,
+    record: &crate::engine::loader::ModRecord,
+) -> Vec<String> {
     let meta = &record.meta;
     let (defines, extends) = crate::base::points::screen(index, loader);
     [

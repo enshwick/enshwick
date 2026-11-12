@@ -1,15 +1,18 @@
 //! Host functions about the mods: logs, faults, settings and what is loaded.
 
-use crate::engine::mod_index::ModIndex;
-use crate::host::memory::{put, slice, text};
-use crate::host::{LOADER_HANDLE, ModRecord, calling, entry, loader};
+use std::sync::atomic::Ordering;
+
 use enshwick_base::Relock;
 use enshwick_core::abi as api_frame;
 use enshwick_core::abi::{
     ContentRename, Header, Level, ManifestFlags, ModHandle, ModInfo, Side, Status, Str,
 };
 use enshwick_core::mods::LOADER_FILE;
-use std::sync::atomic::Ordering;
+
+use crate::engine::loader::{ModRecord, loader};
+use crate::engine::mod_index::ModIndex;
+use crate::host::memory::{put, slice, text};
+use crate::host::{LOADER_HANDLE, calling, entry};
 
 pub(crate) extern "system" fn fault(me: ModHandle, reason: Str) {
     entry("fault", || {
@@ -231,7 +234,7 @@ pub(crate) extern "system" fn config_check(
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("config_check", || match (calling(me), text(file)) {
-        (Ok((_, index, _)), _) if !crate::host::in_init(index.get()) => Status::TOO_LATE,
+        (Ok((_, index, _)), _) if !crate::engine::loader::in_init(index.get()) => Status::TOO_LATE,
         (Ok((_, _, record)), Some(file)) => {
             let mut checks = record.checks.relock();
             if checks.iter().any(|(known, _, _)| known == file) {

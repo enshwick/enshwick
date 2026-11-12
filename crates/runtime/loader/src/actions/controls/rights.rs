@@ -9,15 +9,16 @@ use rustc_hash::FxHashMap;
 
 use super::{DECLARED, Declared, STATE, label_of};
 use crate::base::remote::{Carried, MAX_CARRIED, MAX_CARRIED_TEXT, Message, cut};
+use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
-use crate::host::Loader;
 use enshwick_base::Relock;
 
 /// Sends the client of `key`, which just said hello, the controls of every
 /// running mod of side server that run an action its player may run, in its
 /// player's language; false when its link had no room.
 pub(crate) fn hello(key: u64) -> bool {
-    let (Some(loader), Some(declared)) = (crate::host::loader(), DECLARED.sealed()) else {
+    let (Some(loader), Some(declared)) = (crate::engine::loader::loader(), DECLARED.sealed())
+    else {
         return true;
     };
     if declared.iter().all(|d| d.action.is_empty()) {

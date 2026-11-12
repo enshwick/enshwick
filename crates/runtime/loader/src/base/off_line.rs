@@ -66,9 +66,9 @@ pub(crate) fn takers() -> Vec<String> {
 /// set the main menu line and the chat line at world load share.
 #[cfg(windows)]
 #[must_use]
-pub(crate) fn mods_off(loader: &crate::host::Loader) -> Vec<String> {
+pub(crate) fn mods_off(loader: &crate::engine::loader::Loader) -> Vec<String> {
     off_records(loader)
-        .map(crate::host::ModRecord::label)
+        .map(crate::engine::loader::ModRecord::label)
         .chain(skipped_off(loader).map(|skipped| skipped.label.clone()))
         .collect()
 }
@@ -77,7 +77,7 @@ pub(crate) fn mods_off(loader: &crate::host::Loader) -> Vec<String> {
 /// drawn every frame.
 #[cfg(windows)]
 #[must_use]
-pub(crate) fn mods_off_count(loader: &crate::host::Loader) -> usize {
+pub(crate) fn mods_off_count(loader: &crate::engine::loader::Loader) -> usize {
     off_records(loader).count() + skipped_off(loader).count()
 }
 
@@ -85,12 +85,14 @@ pub(crate) fn mods_off_count(loader: &crate::host::Loader) -> usize {
 /// skipped at start that count as off.
 #[cfg(windows)]
 #[must_use]
-pub(crate) fn mods_counted(loader: &crate::host::Loader) -> usize {
+pub(crate) fn mods_counted(loader: &crate::engine::loader::Loader) -> usize {
     loader.mods.len() + skipped_off(loader).count()
 }
 
 #[cfg(windows)]
-fn off_records(loader: &crate::host::Loader) -> impl Iterator<Item = &crate::host::ModRecord> + '_ {
+fn off_records(
+    loader: &crate::engine::loader::Loader,
+) -> impl Iterator<Item = &crate::engine::loader::ModRecord> + '_ {
     use std::sync::atomic::Ordering;
 
     loader
@@ -103,7 +105,7 @@ fn off_records(loader: &crate::host::Loader) -> impl Iterator<Item = &crate::hos
 /// mod that runs.
 #[cfg(windows)]
 pub(crate) fn skipped_off(
-    loader: &crate::host::Loader,
+    loader: &crate::engine::loader::Loader,
 ) -> impl Iterator<Item = &crate::base::resolve::Skipped> + '_ {
     loader
         .skipped
@@ -116,7 +118,7 @@ pub(crate) fn skipped_off(
 /// build lacks.
 #[cfg(windows)]
 #[must_use]
-pub(crate) fn names(loader: &crate::host::Loader) -> Vec<String> {
+pub(crate) fn names(loader: &crate::engine::loader::Loader) -> Vec<String> {
     use std::sync::atomic::Ordering;
 
     use enshwick_base::Relock;

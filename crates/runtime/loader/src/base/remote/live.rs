@@ -8,7 +8,7 @@ use enshwick_core::abi::PlayerInfo;
 use enshwick_core::config::Schema;
 
 use super::{AdmitEditError, Gate, Message, Queries, admit, redacted, texts};
-use crate::host::Loader;
+use crate::engine::loader::Loader;
 
 /// When each player last changed a setting.
 static LAST_EDIT: Mutex<Option<rustc_hash::FxHashMap<u64, Instant>>> = Mutex::new(None);
@@ -68,7 +68,7 @@ pub(crate) fn push_sync(id: &str, values: &str) {
 /// running join mod, without a secret: the client plays this world with
 /// them.
 pub(crate) fn sync_to(key: u64) -> bool {
-    let Some(loader) = crate::host::loader() else {
+    let Some(loader) = crate::engine::loader::loader() else {
         return true;
     };
     let values = loader

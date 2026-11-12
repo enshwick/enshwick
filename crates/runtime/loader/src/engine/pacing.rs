@@ -11,10 +11,10 @@ use enshwick_core::abi::{
     HookFlags, LoopWaitData, LoopWaitFn, LoopWaitSites, Registers, ServerWaitFn, Side,
 };
 
+use crate::engine::loader::Loader;
 use crate::engine::mid::MidLink;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned::{self, Symbol};
-use crate::host::Loader;
 use enshwick_base::Relock;
 
 /// The table ids this part names.

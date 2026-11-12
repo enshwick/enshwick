@@ -4,8 +4,8 @@
 use enshwick_gamedata::catalogue;
 
 use crate::engine::interface_parts::Missing;
+use crate::engine::loader::Loader;
 use crate::engine::pinned;
-use crate::host::Loader;
 
 use super::UiText;
 

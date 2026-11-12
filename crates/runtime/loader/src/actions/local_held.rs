@@ -18,9 +18,9 @@ use enshwick_gamedata::catalogue;
 use crate::engine::chains::Next;
 use crate::engine::ecs::Components;
 use crate::engine::fuse::Fuse;
+use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
 use crate::engine::world::TemplateWalk;
-use crate::host::{Loader, Target};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

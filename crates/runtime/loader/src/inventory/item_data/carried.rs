@@ -11,7 +11,7 @@ use super::{
     send, serves, wanted,
 };
 use crate::engine::fuse::Fuse;
-use crate::host::Loader;
+use crate::engine::loader::Loader;
 use crate::inventory::item_records::anchor::{self, Anchor, CharacterId, KindIndex, Pending};
 use enshwick_base::Relock;
 

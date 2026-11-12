@@ -11,7 +11,7 @@ use super::{
     FILE, FINDING, KEPT, KINDS, Kind, SERVER, Scope, Server, UNREAD, Values, game, kind_of, scope,
     serves, take_destroyed, template_id, wanted,
 };
-use crate::host::Loader;
+use crate::engine::loader::Loader;
 use crate::inventory::item_records::anchor::{Anchor, KindIndex, Pending};
 use crate::inventory::item_records::file::{self, Saved};
 use enshwick_base::Relock;

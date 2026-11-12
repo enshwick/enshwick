@@ -5,8 +5,8 @@ use enshwick_core::abi::Status;
 
 use super::Layout;
 use crate::engine::live::{self, Broken};
+use crate::engine::loader::Loader;
 use crate::engine::pinned;
-use crate::host::Loader;
 
 /// More layers than phenomena a `u8` index can name: a count past it is a
 /// misread.

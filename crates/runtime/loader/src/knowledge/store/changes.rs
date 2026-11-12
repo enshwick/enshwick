@@ -23,10 +23,10 @@ use std::sync::{Mutex, OnceLock};
 use enshwick_core::Entity;
 use enshwick_core::abi::{Event, Header, KnowledgeData, KnowledgeInfo, Status};
 
+use crate::engine::loader::Loader;
 use crate::engine::memory::write;
 use crate::engine::pinned;
 use crate::engine::pinned::{Constant, Symbol};
-use crate::host::Loader;
 use enshwick_base::Relock;
 
 use super::{definition, layout, read, store};

@@ -1,10 +1,11 @@
 //! Host functions for the knowledge domain: knowledge values, quests, game
 //! queries, skills, comfort and experience.
 
-use crate::host::memory::{put, put_headed};
-use crate::host::{caller, caller_index, entry};
 use enshwick_core::abi::{ModHandle, Status};
 use enshwick_core::{Entity, abi as api_frame};
+
+use crate::host::memory::{put, put_headed};
+use crate::host::{caller, caller_index, entry};
 
 pub(crate) extern "system" fn skill_override(
     me: ModHandle,

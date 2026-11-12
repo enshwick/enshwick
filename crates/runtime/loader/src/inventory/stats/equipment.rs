@@ -9,7 +9,7 @@ use enshwick_core::inventory::InventoryCategory;
 use enshwick_core::raw::read_at;
 
 use crate::engine::catalogue::{self, ids};
-use crate::host::Loader;
+use crate::engine::loader::Loader;
 
 use crate::world::transactions::props::{LINKS, SLOTS};
 

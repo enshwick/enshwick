@@ -21,9 +21,9 @@ use moves::{bed_check_link, move_link, update_link};
 use summons::spawn_link;
 
 use crate::engine::chains::Next;
+use crate::engine::loader::{Loader, Registered, Target, take};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned::{self, Symbol};
-use crate::host::{Loader, Registered, Target, take};
 use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.

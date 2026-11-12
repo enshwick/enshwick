@@ -193,7 +193,7 @@ fn texts() -> Option<&'static Texts> {
     static TEXTS: OnceLock<Option<Texts>> = OnceLock::new();
     TEXTS
         .get_or_init(|| {
-            let loader = crate::host::loader()?;
+            let loader = crate::engine::loader::loader()?;
             let field = |ty: &str, name: &str| {
                 let offset = loader.reflection.field_offset(ty, name).ok()?;
                 usize::try_from(offset).ok()

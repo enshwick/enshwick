@@ -322,7 +322,7 @@ fn hud_page(paint: &Painter<'_>, demo: &mut Demo) {
             color: enshwick_core::abi::UiMarker::GREEN,
             marker_type: 0,
         };
-        let fast_travel = crate::host::loader()
+        let fast_travel = crate::engine::loader::loader()
             .and_then(|loader| crate::world::scene::marker_types(loader).ok())
             .and_then(|types| {
                 types

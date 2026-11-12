@@ -67,7 +67,7 @@ pub(super) fn server_settings(
         if let Some((heard_id, admin, heard_schema, text)) = settings
             && heard_id == id
         {
-            let texts = crate::host::loader()
+            let texts = crate::engine::loader::loader()
                 .and_then(|loader| loader.mods.iter().find(|m| m.id == id))
                 .and_then(|m| m.texts.relock().clone());
             let words = texts.as_ref().map(|texts| rows::Words {

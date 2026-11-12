@@ -6,8 +6,8 @@
 //! The console's `enshwick config`, the Mods screen and a server's
 //! administrators all change settings through here.
 
+use crate::engine::loader::Loader;
 use crate::engine::texts;
-use crate::host::Loader;
 use enshwick_base::Relock;
 
 use super::{Change, ChangeSettingError, refused};

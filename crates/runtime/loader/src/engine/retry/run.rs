@@ -7,7 +7,7 @@ use std::time::Instant;
 use super::Schedule;
 use crate::engine::code::{CodePatch, Verdict};
 use crate::engine::detour::{Bytes, Commit};
-use crate::host::{self, Loader};
+use crate::engine::loader::Loader;
 use enshwick_base::Relock;
 
 /// [`Retry::due`] with nothing held.
@@ -103,7 +103,10 @@ fn check(loader: &Loader, now: Instant) {
     }
     // A mod turned off while it waited gets none of its patches.
     for (patch, verdict) in held.patches.iter().zip(&mut held.verdicts) {
-        if *verdict == Verdict::Wait && !patch.owner.is_loader() && host::is_off(patch.owner) {
+        if *verdict == Verdict::Wait
+            && !patch.owner.is_loader()
+            && crate::engine::loader::is_off(patch.owner)
+        {
             *verdict = Verdict::Off;
             if let Some(record) = loader.mods.get(patch.owner.get()) {
                 record.waiting.store(false, Ordering::Release);
@@ -162,7 +165,7 @@ fn check(loader: &Loader, now: Instant) {
                     patch.replacement.len()
                 );
             }
-            chains.rewire(host::bypassed);
+            chains.rewire(crate::engine::loader::bypassed);
             drop(chains);
             crate::engine::code::arming(&held.patches, &held.verdicts, &held.hooked);
             crate::engine::diag::record_patches(crate::engine::code::tally(&held.verdicts));

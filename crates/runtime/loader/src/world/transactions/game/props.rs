@@ -5,8 +5,8 @@ use enshwick_core::abi::{Header, PropPlace, SpawnRequest, Status};
 use enshwick_gamedata::catalogue;
 
 use crate::engine::live;
+use crate::engine::loader::Loader;
 use crate::engine::world::ServerAccess;
-use crate::host::Loader;
 use crate::world::prop_holds::Stash;
 use crate::world::transactions::props::{
     FactoryRead, LINKS, Prop, SLOTS, Setup, StateReads, fuel_held, holds_items, wired,

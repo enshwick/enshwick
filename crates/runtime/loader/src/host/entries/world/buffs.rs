@@ -1,9 +1,10 @@
 //! Host functions for buffs.
 
-use crate::host::memory::{put, put_headed_list};
-use crate::host::{caller, entry};
 use enshwick_core::Entity;
 use enshwick_core::abi::{ModHandle, Status};
+
+use crate::host::memory::{put, put_headed_list};
+use crate::host::{caller, entry};
 
 pub(crate) extern "system" fn buff_types(
     me: ModHandle,

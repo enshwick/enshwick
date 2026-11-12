@@ -25,7 +25,9 @@ pub(super) unsafe extern "system" fn max_altars(balancing: u64, flame_level: u32
     let Some(limits) = LIMITS.sealed() else {
         return vanilla;
     };
-    let running = limits.iter().filter(|f| !crate::host::is_off(f.owner));
+    let running = limits
+        .iter()
+        .filter(|f| !crate::engine::loader::is_off(f.owner));
     chain_limit(flame_level, vanilla, base_limit().zones, running)
 }
 
@@ -76,7 +78,7 @@ pub(super) unsafe extern "system" fn group(bases: *mut u8, world: *mut u8) {
         PLANNED[kind_index(kind)].store(window::VANILLA, Ordering::Relaxed);
     }
     if let Some(sites) = SITES.get().filter(|_| raised() && !bases.is_null())
-        && let Some(loader) = crate::host::loader()
+        && let Some(loader) = crate::engine::loader::loader()
         && BASES_FUSE.verify(&loader.build.name, || {
             let image = usize::try_from(loader.base)
                 .ok()

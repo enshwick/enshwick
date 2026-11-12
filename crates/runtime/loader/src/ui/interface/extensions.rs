@@ -12,10 +12,10 @@ use std::sync::atomic::Ordering;
 use enshwick_core::abi::{Header, Side, Status, Str, UiExtension, UiFrame, UiFrameFn};
 use enshwick_gamedata::catalogue;
 
+use crate::engine::loader::{Loader, Registered};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::registry::Registry;
-use crate::host::{Loader, Registered};
 
 use super::engine::{Engine, UiText, Window};
 use super::{DRAWING, Drawing, NEXT_TOKEN, copy};

@@ -13,11 +13,11 @@ use enshwick_core::abi::{
 
 use crate::engine::chains::Next;
 use crate::engine::ecs::Engine;
+use crate::engine::loader::{Loader, Target};
+use crate::engine::loader::{Registered, take};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::pinned::{Constant, Symbol};
-use crate::host::{Loader, Target};
-use crate::host::{Registered, take};
 use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
@@ -359,7 +359,7 @@ unsafe fn override_skill(node: u32, bits: *const u64, tree: *const u8) -> u8 {
     for (_, r) in sealed
         .skills
         .iter()
-        .filter(|(n, r)| *n == node && !crate::host::is_off(r.owner))
+        .filter(|(n, r)| *n == node && !crate::engine::loader::is_off(r.owner))
     {
         let user = core::ptr::with_exposed_provenance_mut(r.user);
         match crate::engine::profile::call(
@@ -398,7 +398,7 @@ unsafe extern "system" fn register(
         sealed
             .comfort
             .iter()
-            .filter(|r| !crate::host::is_off(r.owner))
+            .filter(|r| !crate::engine::loader::is_off(r.owner))
             .fold(comfort, |value, r| {
                 let call = Comfort {
                     header: Header::of::<Comfort>(),
@@ -546,7 +546,7 @@ unsafe fn experience(loader: &Loader, engine: &Engine, ctx: *mut u64) {
             for r in sealed
                 .experience
                 .iter()
-                .filter(|r| !crate::host::is_off(r.owner))
+                .filter(|r| !crate::engine::loader::is_off(r.owner))
             {
                 let mut pass = ExperiencePass {
                     header: Header::of::<ExperiencePass>(),

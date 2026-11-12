@@ -39,7 +39,7 @@ use enshwick_core::raw::{read_at, read_ptr_at};
 use self::geometry::Placed;
 use crate::engine::chains::Next;
 use crate::engine::ecs::Engine;
-use crate::host::{Loader, Registered, Target};
+use crate::engine::loader::{Loader, Registered, Target};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -354,7 +354,7 @@ fn running_sizers() -> impl Iterator<Item = &'static Sizer> {
         .sealed()
         .unwrap_or_default()
         .iter()
-        .filter(|s| !crate::host::is_off(s.owner))
+        .filter(|s| !crate::engine::loader::is_off(s.owner))
 }
 
 /// One altar's vanilla zone, taken from the state before the filters run.
@@ -667,8 +667,10 @@ unsafe extern "system" fn add_zones(ctx: *mut u64) {
     if OFF.load(Ordering::Acquire) {
         return;
     }
-    let (Some(loader), Some(engine)) = (crate::host::loader(), crate::engine::ecs::resolved())
-    else {
+    let (Some(loader), Some(engine)) = (
+        crate::engine::loader::loader(),
+        crate::engine::ecs::resolved(),
+    ) else {
         return;
     };
     let run = || {
@@ -687,7 +689,7 @@ unsafe extern "system" fn add_zones(ctx: *mut u64) {
 
 unsafe extern "system" fn upgrade(ctx: *mut u64) {
     let ready = (!OFF.load(Ordering::Acquire))
-        .then(|| crate::host::loader().zip(crate::engine::ecs::resolved()))
+        .then(|| crate::engine::loader::loader().zip(crate::engine::ecs::resolved()))
         .flatten()
         // SAFETY: `ctx` is the hooked system's own live context, on its
         // thread.

@@ -11,9 +11,9 @@ use std::time::{Duration, Instant};
 use enshwick_core::abi::{Side, Status, StatusFn, Str};
 
 use crate::engine::diag::{HookStat, ModStatus, Summary};
+use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::settings::LOADER_ID;
-use crate::host::Loader;
 use enshwick_base::Relock;
 
 /// How often the housekeeping thread looks.
@@ -238,7 +238,7 @@ fn chain_readings(
                 .filter_map(|link| {
                     Some(LinkReading {
                         owner: link.owner,
-                        live: !crate::host::is_off(link.owner),
+                        live: !crate::engine::loader::is_off(link.owner),
                         reading: read(link.hop.as_ref()?),
                     })
                 })
