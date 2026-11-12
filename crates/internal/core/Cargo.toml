@@ -24,7 +24,6 @@ enshwick-values.workspace = true
 bytemuck.workspace = true
 hound = { workspace = true, optional = true }
 fastrand.workspace = true
-postcard.workspace = true
 rustc-hash.workspace = true
 schemars = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }

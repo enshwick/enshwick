@@ -22,6 +22,12 @@ fn reach_world(status: Status) {
     let _ = WorldError::check(status, WorldError::Missing);
 }
 
+fn reach_inventory(host: Host) {
+    let _ = enshwick::inventory::item_data(&host, enshwick::ItemId::new(1));
+    let _ = enshwick::loot::replace_group(0, Vec::new());
+    let _: Option<enshwick::survivors::script::ScriptLookup> = None;
+}
+
 fn reach(host: Host, scheduler: Scheduler, ty: ComponentType) {
     let _ = host.install();
     host.scope(|| ());

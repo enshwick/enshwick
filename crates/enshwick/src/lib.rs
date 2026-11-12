@@ -134,7 +134,7 @@ pub use enshwick_abi::abi;
 #[doc(inline)]
 pub use enshwick_core::actions;
 #[doc(inline)]
-pub use enshwick_core::affixes;
+pub use enshwick_inventory::affixes;
 #[doc(inline)]
 pub use enshwick_world::altars;
 #[cfg(doctest)]
@@ -168,30 +168,30 @@ pub use enshwick_core::console;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_core::controls;
-#[doc(inline)]
-pub use enshwick_core::damage;
-#[doc(inline)]
-pub use enshwick_core::effects;
-#[cfg(feature = "unstable")]
-#[doc(inline)]
-pub use enshwick_core::entity_data;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_core::input;
 #[doc(inline)]
 pub use enshwick_core::interactions;
 #[doc(inline)]
-pub use enshwick_core::inventory;
-#[cfg(feature = "unstable")]
-#[doc(inline)]
-pub use enshwick_core::item_data;
-#[cfg(feature = "unstable")]
-#[doc(inline)]
-pub use enshwick_core::items;
-#[doc(inline)]
 pub use enshwick_core::knowledge;
 #[doc(inline)]
-pub use enshwick_core::loot;
+pub use enshwick_inventory::damage;
+#[doc(inline)]
+pub use enshwick_inventory::effects;
+#[cfg(feature = "unstable")]
+#[doc(inline)]
+pub use enshwick_inventory::entity_data;
+#[doc(inline)]
+pub use enshwick_inventory::inventory;
+#[cfg(feature = "unstable")]
+#[doc(inline)]
+pub use enshwick_inventory::item_data;
+#[cfg(feature = "unstable")]
+#[doc(inline)]
+pub use enshwick_inventory::items;
+#[doc(inline)]
+pub use enshwick_inventory::loot;
 #[doc(inline)]
 pub use enshwick_world::buffs;
 #[doc(inline)]
@@ -246,16 +246,16 @@ pub use enshwick_core::script::{self};
 #[doc(inline)]
 pub use enshwick_core::sound;
 #[doc(inline)]
-pub use enshwick_core::stats;
-#[doc(inline)]
-pub use enshwick_core::survivors;
-#[doc(inline)]
 pub use enshwick_core::ui;
 #[doc(inline)]
 pub use enshwick_core::vetoes;
 #[cfg(feature = "test")]
 #[doc(inline)]
 pub use enshwick_fake::test;
+#[doc(inline)]
+pub use enshwick_inventory::stats;
+#[doc(inline)]
+pub use enshwick_inventory::survivors;
 #[doc(inline)]
 pub use enshwick_values::shape;
 #[doc(inline)]

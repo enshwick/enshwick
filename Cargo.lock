@@ -525,7 +525,6 @@ dependencies = [
  "fastrand",
  "hound",
  "insta",
- "postcard",
  "proptest",
  "rustc-hash",
  "schemars",
