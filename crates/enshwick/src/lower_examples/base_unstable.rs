@@ -12,6 +12,14 @@
 //! }
 //! ```
 //!
+//! `script::Bound::functions`:
+//!
+//! ```
+//! use enshwick::script::Bound;
+//!
+//! assert!(enshwick::world::World::functions().any(|f| f.name() == "broadcast"));
+//! ```
+//!
 //! `points::described::DescribedPoint`:
 //!
 //! ```
