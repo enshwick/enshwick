@@ -177,6 +177,10 @@ Each entry names the pull request that made the change.
   `enshwick-core`; every path stays (#1052).
 - **Breaking:** `loot::Containers::resolve` takes `&mut impl Loading`, so a
   mod passes its `Load` as before (#1052).
+- The actions domain (`actions`, `chat`, `commands`, `console`,
+  `controls`, `input`, `interactions` and `vetoes`) is the internal crate
+  `enshwick-actions`, between `enshwick-knowledge` and `enshwick-core`;
+  every path stays (#1054).
 - The knowledge domain (`knowledge`, `progress`, `quests` and `rewards`) is
   the internal crate `enshwick-knowledge`, between `enshwick-inventory` and
   `enshwick-core`; every path stays (#1053).

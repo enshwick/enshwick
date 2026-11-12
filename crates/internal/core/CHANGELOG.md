@@ -9,6 +9,12 @@ see is in the changelog of `enshwick`.
 
 ### Changed
 
+- The actions domain left for `enshwick-actions`: `actions`, `chat`,
+  `commands`, `console`, `controls`, `input`, `interactions` and `vetoes`.
+  `Load` forwards their methods there, their script-only methods from
+  `load/<module>/script.rs`, and the fake's action target conversions come
+  from the crate's own hidden `__fake`; `bytemuck` is no longer a
+  dependency (#1054).
 - The knowledge domain left for `enshwick-knowledge`: `knowledge`,
   `progress`, `quests` and `rewards`. `Load` forwards their methods there,
   their script-only methods from `load/<module>/script.rs`, and `packs`
