@@ -59,6 +59,9 @@ use crate::abi::KnowledgeInput;
 use crate::abi::{Header, KnowledgeInfo, Status};
 use crate::{Entity, Host, PlayerKey};
 use enshwick_world::__internal::world_status;
+
+#[cfg(feature = "unstable")]
+pub(crate) mod script;
 #[cfg(feature = "typed")]
 use enshwick_world::__load::*;
 
@@ -695,13 +698,6 @@ pub trait LoadMethods {
     where
         F: Fn(&KnowledgeRequest) -> bool + Send + Sync + 'static;
 
-    /// As `Load::on_knowledge_input_script`.
-    #[doc(hidden)]
-    #[cfg(feature = "unstable")]
-    fn on_knowledge_input_script<F>(&mut self, filter: F) -> Result<(), Off>
-    where
-        F: Fn(&KnowledgeRequest) -> Option<bool> + Send + Sync + 'static;
-
     /// As `Load::knowledge`.
     #[doc(hidden)]
     #[must_use]
@@ -720,14 +716,6 @@ impl LoadMethods for crate::BaseLoad {
             |user| (host.api().knowledge_input_filter)(host.handle(), run_input::<F>, user),
             "knowledge input filter",
         )
-    }
-
-    #[cfg(feature = "unstable")]
-    fn on_knowledge_input_script<F>(&mut self, filter: F) -> Result<(), Off>
-    where
-        F: Fn(&KnowledgeRequest) -> Option<bool> + Send + Sync + 'static,
-    {
-        self.on_knowledge_input(move |request| filter(request).unwrap_or(request.allowed))
     }
 
     fn knowledge(&mut self) -> Knowledge {

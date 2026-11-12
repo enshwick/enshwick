@@ -1,6 +1,7 @@
 //! What only a script's filters get of progress: the level table read
 //! whole, and the filters that take it.
 
+use super::LoadMethods as _;
 use super::{Comfort, Experience, Levels};
 use crate::Off;
 use crate::script::{Class, Function, Object};

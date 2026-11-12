@@ -2,6 +2,8 @@
 //! handle; core's forwarders import them all.
 
 pub use crate::knowledge::LoadMethods as _;
+#[cfg(feature = "unstable")]
+pub use crate::knowledge::script::LoadMethods as _;
 pub use crate::progress::LoadMethods as _;
 pub use crate::progress::script::LoadMethods as _;
 #[cfg(feature = "typed")]

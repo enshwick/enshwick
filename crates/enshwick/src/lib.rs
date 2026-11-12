@@ -174,8 +174,6 @@ pub use enshwick_core::input;
 #[doc(inline)]
 pub use enshwick_core::interactions;
 #[doc(inline)]
-pub use enshwick_core::knowledge;
-#[doc(inline)]
 pub use enshwick_inventory::damage;
 #[doc(inline)]
 pub use enshwick_inventory::effects;
@@ -192,6 +190,8 @@ pub use enshwick_inventory::item_data;
 pub use enshwick_inventory::items;
 #[doc(inline)]
 pub use enshwick_inventory::loot;
+#[doc(inline)]
+pub use enshwick_knowledge::knowledge;
 #[doc(inline)]
 pub use enshwick_world::buffs;
 #[doc(inline)]
@@ -216,10 +216,10 @@ pub use enshwick_content::rates;
 #[doc(inline)]
 pub use enshwick_core::packs;
 #[doc(inline)]
-pub use enshwick_core::progress;
+pub use enshwick_knowledge::progress;
 #[cfg(feature = "typed")]
 #[doc(inline)]
-pub use enshwick_core::quests;
+pub use enshwick_knowledge::quests;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_world::map;
@@ -239,9 +239,6 @@ pub use enshwick_base::status;
 pub use enshwick_base::time;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
-pub use enshwick_core::rewards;
-#[cfg(feature = "unstable")]
-#[doc(inline)]
 pub use enshwick_core::script::{self};
 #[doc(inline)]
 pub use enshwick_core::sound;
@@ -256,6 +253,9 @@ pub use enshwick_fake::test;
 pub use enshwick_inventory::stats;
 #[doc(inline)]
 pub use enshwick_inventory::survivors;
+#[cfg(feature = "unstable")]
+#[doc(inline)]
+pub use enshwick_knowledge::rewards;
 #[doc(inline)]
 pub use enshwick_values::shape;
 #[doc(inline)]

@@ -1,19 +1,16 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
+use crate::Load;
+#[cfg(feature = "unstable")]
 use crate::Off;
-use crate::WorldError;
+use crate::knowledge::Knowledge;
 #[cfg(feature = "unstable")]
-use crate::abi::KnowledgeInput;
-use crate::abi::{Header, KnowledgeInfo, Status};
-use crate::{Entity, PlayerKey};
-use crate::{Host, Load};
-#[cfg(feature = "unstable")]
-use core::ffi::c_void;
+use crate::knowledge::KnowledgeRequest;
 use enshwick_knowledge::__load::*;
-use enshwick_world::__internal::world_status;
+
+mod script;
 
 #[enshwick_macros::forward(base)]
-#[crate::script(knowledge)]
 impl Load<'_> {
     /// Runs `filter` on the knowledge each client asks the server for in
     /// its input, after the loader's guard; its answer, `true` to let the
@@ -48,19 +45,6 @@ impl Load<'_> {
     pub fn on_knowledge_input<F>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&KnowledgeRequest) -> bool + Send + Sync + 'static;
-
-    /// Runs `filter` on each player's knowledge input, as
-    /// [`Load::on_knowledge_input`] does; its answer replaces the verdict so
-    /// far, and nil or an error keeps it.
-    ///
-    /// # Errors
-    ///
-    /// As [`Load::on_knowledge_input`].
-    #[cfg(feature = "unstable")]
-    #[script(name = "on_knowledge_input")]
-    pub(crate) fn on_knowledge_input_script<F>(&mut self, filter: F) -> Result<(), Off>
-    where
-        F: Fn(&KnowledgeRequest) -> Option<bool> + Send + Sync + 'static;
 
     /// The [`Knowledge`] of the server's world; on a client, the built-in
     /// server's while it hosts a game.

@@ -1,18 +1,8 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::content::EngineFacts as _;
-use crate::content::journal::{JOURNAL_REGISTRY, QuestReward};
-use crate::content::knowledge::{ExperienceValue, KnowledgeQuery, KnowledgeTest};
-use crate::knowledge::{Knowledge, KnowledgeId, Scope};
-use crate::locks::Relock as _;
-use crate::resources::Value;
-use crate::typed::{
-    JournalCollectionResource, JournalEntryResource, JournalQuestResource, JournalRegistryResource,
-    Named as _, QuestSourceType, QuestType, Reflected,
-};
-use crate::{Entity, ItemId, Load, Off};
+use crate::Load;
+use crate::quests::Quests;
 use enshwick_knowledge::__load::*;
-use std::sync::{Arc, Mutex};
 
 #[enshwick_macros::forward(base)]
 impl Load<'_> {
