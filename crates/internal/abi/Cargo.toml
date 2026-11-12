@@ -21,7 +21,7 @@ thiserror.workspace = true
 [dev-dependencies]
 postcard.workspace = true
 proptest.workspace = true
-syn = { version = "=3.0.9", default-features = false, features = ["full", "parsing"] }
+syn = { version = "=3.0.10", default-features = false, features = ["full", "parsing"] }
 
 [lints]
 workspace = true
