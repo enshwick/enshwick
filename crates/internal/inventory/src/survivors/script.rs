@@ -41,7 +41,7 @@ impl crate::script::Answer for super::SummonVerdict {
 /// A [`Lookup`] a script's handler gets: its fields, and `bed_of` while the
 /// call lasts, since the loader's answer reaches only that far.
 #[derive(Clone, Debug)]
-pub(crate) struct ScriptLookup {
+pub struct ScriptLookup {
     survivor: NpcId,
     vanilla: Option<Entity>,
     purpose: Purpose,

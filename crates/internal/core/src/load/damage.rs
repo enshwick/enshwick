@@ -5,9 +5,13 @@ use crate::Entity;
 #[cfg(feature = "unstable")]
 use crate::abi::DamageCheck;
 #[cfg(feature = "unstable")]
+use crate::damage::Damage;
+#[cfg(feature = "unstable")]
 use crate::{Load, Off};
 #[cfg(feature = "unstable")]
 use core::ffi::c_void;
+#[cfg(feature = "unstable")]
+use enshwick_inventory::__internal::ScriptDamage;
 use enshwick_inventory::__load::*;
 
 #[cfg(feature = "unstable")]

@@ -822,7 +822,7 @@ pub trait LoadMethods {
     fn add_loot(&mut self, drop: Drop) -> Result<(), Off>;
 }
 
-impl LoadMethods for crate::BaseLoad {
+impl LoadMethods for BaseLoad {
     fn add_loot(&mut self, drop: Drop) -> Result<(), Off> {
         self.add_loot_in(0, drop)
     }
@@ -834,7 +834,7 @@ pub(crate) trait LoadHelpers {
     fn add_loot_in(&mut self, group: u64, drop: Drop) -> Result<(), Off>;
 }
 
-impl LoadHelpers for crate::BaseLoad {
+impl LoadHelpers for BaseLoad {
     fn add_loot_in(&mut self, group: u64, drop: Drop) -> Result<(), Off> {
         drop.check()?;
         link_roll(self)?;

@@ -839,5 +839,5 @@ pub(crate) fn group(namespace: &str) -> u64 {
 /// Why they stay until a restart.
 #[doc(hidden)]
 pub fn forget_loot(namespace: &str) -> Result<(), crate::loot::ReplaceDropsError> {
-    crate::loot::replace_group(group(namespace), Vec::new())
+    enshwick_inventory::__internal::replace_loot_group(group(namespace), Vec::new())
 }

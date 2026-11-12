@@ -9,6 +9,7 @@ use crate::content::Id;
 use crate::content::items::StatFormat;
 use crate::inventory::ItemInstance;
 use crate::item_data::ItemData;
+use crate::stats::{Modifier, Stat, StatChange, StatDef, Stats};
 use crate::{Entity, ItemId};
 use crate::{Host, Load, Off};
 use core::ffi::c_void;

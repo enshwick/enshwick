@@ -5,6 +5,7 @@ use crate::PlayerKey;
 use crate::WorldError;
 use crate::abi::{Header, PlayerInfo, SpawnRequest, TeleportRequest};
 use crate::ecs::ComponentType;
+use crate::effects::Effects;
 use crate::engine_ids as ids;
 use crate::game_events::{EventType, Field, Scalar};
 use crate::{Host, Load, Off};

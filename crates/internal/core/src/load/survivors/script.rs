@@ -2,8 +2,10 @@
 
 use crate::content::Guid;
 use crate::script::{Bound, Class, Function, Object};
+use crate::survivors::{Answer, NpcId};
 use crate::{Entity, ItemId, Load, Off};
 use core::ffi::c_void;
+use enshwick_inventory::__internal::ScriptLookup;
 use enshwick_inventory::__load::*;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};

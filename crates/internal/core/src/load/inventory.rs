@@ -4,6 +4,7 @@ use crate::__private::{INVENTORY_LINKS as LINKS, INVENTORY_SLOTS as SLOTS};
 use crate::Entity;
 use crate::Load;
 use crate::Off;
+use crate::inventory::Inventories;
 use enshwick_inventory::__load::*;
 
 #[enshwick_macros::forward(base)]

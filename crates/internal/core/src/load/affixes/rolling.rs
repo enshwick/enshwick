@@ -2,6 +2,7 @@
 
 use crate::Entity;
 use crate::abi::{AffixRoll, Header, Status};
+use crate::affixes::{AffixCraft, AffixLoot};
 use crate::game_events::CraftRecipeEvent;
 use crate::inventory::{ItemInstance, Slot};
 use crate::locks::Relock;

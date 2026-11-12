@@ -869,7 +869,7 @@ pub trait LoadMethods {
     fn effects(&mut self) -> Effects;
 }
 
-impl LoadMethods for crate::BaseLoad {
+impl LoadMethods for BaseLoad {
     fn effects(&mut self) -> Effects {
         Effects::resolve(self)
     }

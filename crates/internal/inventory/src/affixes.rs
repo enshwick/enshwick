@@ -226,7 +226,6 @@ pub use script::AffixFns;
 #[cfg(test)]
 mod tests;
 
-use crate::__load::*;
 pub use defs::*;
 pub use roll::*;
 #[cfg(feature = "unstable")]

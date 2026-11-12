@@ -5,6 +5,7 @@ use crate::abi::{
 };
 use crate::content::Guid;
 use crate::inventory::{Bar, SlotRef};
+use crate::survivors::{Answer, BedCheck, Lookup, NpcId, Summon, SummonVerdict};
 use crate::{Entity, ItemId};
 use crate::{Load, Off};
 use core::ffi::c_void;

@@ -309,7 +309,9 @@ impl Load<'_> {
                         drop
                     })
                     .collect();
-                if let Err(error) = crate::loot::replace_group(group, resolved) {
+                if let Err(error) =
+                    enshwick_inventory::__internal::replace_loot_group(group, resolved)
+                {
                     crate::warn!(
                         "{LOOT_FILE}: the world's chances apply at the next start: {error}"
                     );

@@ -2,6 +2,7 @@
 
 use crate::abi::ItemAction as RawItemAction;
 use crate::inventory::SlotRef;
+use crate::items::{ItemAction, Kind};
 use crate::{Entity, ItemId};
 use crate::{Load, Off};
 use core::ffi::c_void;

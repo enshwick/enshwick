@@ -1,6 +1,7 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
 use crate::abi::{ItemLine, StatRef, Str};
+use crate::affixes::{AffixDef, AffixId, Affixes};
 use crate::content::Id;
 use crate::inventory::ItemInstance;
 use crate::stats::Op;

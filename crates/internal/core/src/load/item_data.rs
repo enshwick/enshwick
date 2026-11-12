@@ -2,6 +2,7 @@
 
 use crate::abi::{Status, Str};
 use crate::inventory::ItemInstance;
+use crate::item_data::ItemData;
 use crate::resources::Value as Data;
 use crate::{Host, Load, Off};
 use core::marker::PhantomData;
