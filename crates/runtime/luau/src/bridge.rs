@@ -1,5 +1,6 @@
 //! Values between Luau and the API, shaped by the script [`Ty`] of each.
 
+use std::fmt::Display;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -102,11 +103,9 @@ pub(crate) fn to_lua(
         (Value::Function(callback), Ty::Function(signature)) => {
             let scope = scope.clone();
             LuaValue::Function(lua.create_function(move |lua, args: LuaArgs| {
-                let mut values = arguments(&scope, args, signature, "function")?;
-                let answer = callback
-                    .call(values.slots())
-                    .map_err(mlua::Error::runtime)?;
-                to_lua(lua, &scope, answer, signature.ret())
+                call(lua, &scope, args, signature, "function", |slots| {
+                    callback.call(slots)
+                })
             })?)
         }
         _ => LuaValue::Nil,
@@ -457,26 +456,21 @@ impl mlua::UserData for Object {
                     move |lua, (object, args): (mlua::AnyUserData, LuaArgs)| {
                         let this = object.borrow::<Self>()?;
                         if this.ended {
-                            return Err(mlua::Error::runtime(format!(
-                                "{what}: the object was lent to a call that ended"
-                            )));
+                            return Err(failed(&what, "the object was lent to a call that ended"));
                         }
                         let handle = this.handle.clone();
                         drop(this);
                         // A method indexes its own class's list: `a.m(b)` must not
                         // run b's method at m's place.
                         if handle.class().name() != class.name() {
-                            return Err(mlua::Error::runtime(format!(
-                                "{what}: called on a {}",
-                                handle.class().name()
-                            )));
+                            return Err(failed(
+                                &what,
+                                format_args!("called on a {}", handle.class().name()),
+                            ));
                         }
-                        let signature = method.signature();
-                        let mut values = arguments(&scope, args, signature, &what)?;
-                        let answer = handle
-                            .call(&method, values.slots())
-                            .map_err(|e| mlua::Error::runtime(format!("{what}: {e}")))?;
-                        to_lua(lua, &scope, answer, signature.ret())
+                        call(lua, &scope, args, method.signature(), &what, |slots| {
+                            handle.call(&method, slots)
+                        })
                     },
                 )?;
                 cached.raw_set(key, &function)?;
@@ -588,10 +582,32 @@ pub(crate) fn arguments(
             } else {
                 param.name()
             };
-            mlua::Error::runtime(format!("{what}: {name}: {e}"))
+            failed(what, format_args!("{name}: {e}"))
         })?;
     }
     Ok(out)
+}
+
+/// Runs one call from Luau into the API, the one path every function and
+/// method takes: reads `args` as `signature` has them, runs `run` on them and
+/// gives its answer back as a Luau value; each error names `what`.
+pub(crate) fn call(
+    lua: &Lua,
+    scope: &Scope,
+    args: impl Spread,
+    signature: &'static Signature,
+    what: &str,
+    run: impl FnOnce(&mut [Value]) -> Result<Value, Error>,
+) -> mlua::Result<LuaValue> {
+    let mut values = arguments(scope, args, signature, what)?;
+    let answer = run(values.slots()).map_err(|e| failed(what, e))?;
+    to_lua(lua, scope, answer, signature.ret())
+}
+
+/// The Luau error of the API function or method `what` that failed with
+/// `error`.
+pub(crate) fn failed(what: &str, error: impl Display) -> mlua::Error {
+    mlua::Error::runtime(format!("{what}: {error}"))
 }
 
 /// The arguments of a call into the API as mlua hands them over: the first
