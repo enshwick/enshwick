@@ -364,7 +364,7 @@ impl Spawned {
 /// Keeps `entity`, which a mod spawned or placed from `template`, as one a
 /// mod may keep out of the save.
 pub(crate) fn note(loader: &Loader, entity: u32, template: [u8; 16]) {
-    let now = crate::base::events::steps();
+    let now = crate::engine::ticks::steps();
     SPAWNED.relock().note(entity, template, now, |kept, was| {
         crate::engine::world::template(loader, Entity(kept)) == Ok(was)
     });
@@ -385,12 +385,12 @@ pub(crate) fn spawned(entity: Entity) -> Option<[u8; 16]> {
 pub(crate) fn needs_saved(entity: Entity, saved: bool, live: bool) -> bool {
     SPAWNED
         .relock()
-        .needs(entity.0, saved, live, crate::base::events::steps())
+        .needs(entity.0, saved, live, crate::engine::ticks::steps())
 }
 
 /// Notes that a command to make `entity` `saved` went to the world now.
 pub(crate) fn asked_saved(entity: Entity, saved: bool) {
-    let now = crate::base::events::steps();
+    let now = crate::engine::ticks::steps();
     if let Some(kept) = SPAWNED.relock().kept.get_mut(&entity.0) {
         kept.asked = Some((saved, now));
     }

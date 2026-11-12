@@ -1,7 +1,7 @@
 //! The walk over a file's paths that every part of the domain rule reads:
 //! each path the file names, by where it starts, tests left out.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use proc_macro2::{Ident, Spacing, TokenStream, TokenTree};
 use syn::visit::{self, Visit};
@@ -28,6 +28,90 @@ pub(super) fn paths(file: &syn::File, module: &[String], externs: &[&str]) -> Na
     let mut walk = Walk::new(module, externs);
     walk.visit_file(file);
     walk.named
+}
+
+/// The name an item defines, for those a path can name.
+pub(super) fn ident(item: &Item) -> Option<String> {
+    let ident = match item {
+        Item::Const(item) => &item.ident,
+        Item::Enum(item) => &item.ident,
+        Item::Fn(item) => &item.sig.ident,
+        Item::Mod(item) => &item.ident,
+        Item::Static(item) => &item.ident,
+        Item::Struct(item) => &item.ident,
+        Item::Trait(item) => &item.ident,
+        Item::Type(item) => &item.ident,
+        Item::Union(item) => &item.ident,
+        Item::Macro(item) => item.ident.as_ref()?,
+        _ => return None,
+    };
+    Some(ident.to_string())
+}
+
+/// The names the items of `file` define, tests left out.
+pub(super) fn defined(file: &syn::File) -> BTreeSet<String> {
+    file.items
+        .iter()
+        .filter(|item| !test_only(item))
+        .filter_map(ident)
+        .collect()
+}
+
+/// What the `use` items of `file`, of module `module`, bring in, at any
+/// depth (a function's own `use` too): each name with the path it stands
+/// for, under the crate's root as `crate::…`, at another crate as written,
+/// and the modules its globs take whole.
+///
+/// shortcut: a `use` inside a function, impl or inline module counts as the
+/// file's; one that imports a name the file uses otherwise would be misread,
+/// so split it into a file of its own.
+pub(super) fn imports(
+    file: &syn::File,
+    module: &[String],
+) -> (BTreeMap<String, Vec<String>>, Vec<Vec<String>>) {
+    /// Every `use` item of a file outside its tests.
+    struct Uses<'ast>(Vec<&'ast syn::ItemUse>);
+    impl<'ast> Visit<'ast> for Uses<'ast> {
+        fn visit_item(&mut self, item: &'ast Item) {
+            if !test_only(item) {
+                visit::visit_item(self, item);
+            }
+        }
+
+        fn visit_item_use(&mut self, item: &'ast syn::ItemUse) {
+            self.0.push(item);
+        }
+    }
+
+    let local = defined(file);
+    let walk = Walk::new(module, &[]);
+    let mut uses = Uses(Vec::new());
+    uses.visit_file(file);
+    let mut names = BTreeMap::new();
+    let mut globs = Vec::new();
+    for used in uses.0 {
+        for (name, full) in use_leaves(&used.tree) {
+            let absolute = match walk.resolve(&full) {
+                Some(abs) => std::iter::once("crate".to_owned()).chain(abs).collect(),
+                // A plain path starts at an item of the module, else at a
+                // crate.
+                None if full.first().is_some_and(|first| local.contains(first)) => {
+                    std::iter::once("crate".to_owned())
+                        .chain(module.iter().cloned())
+                        .chain(full)
+                        .collect()
+                }
+                None => full,
+            };
+            match name {
+                Some(name) => {
+                    names.insert(name, absolute);
+                }
+                None => globs.push(absolute),
+            }
+        }
+    }
+    (names, globs)
 }
 
 /// The walk of [`paths`] over one file.

@@ -20,7 +20,7 @@ pub static TABLE_IDS: &[(&str, &[&str])] = &[
     ("ecs", crate::engine::ecs::TABLE_IDS),
     ("emits", crate::base::emits::TABLE_IDS),
     ("entities", crate::world::entities::TABLE_IDS),
-    ("events", crate::base::events::TABLE_IDS),
+    ("events", crate::events::TABLE_IDS),
     ("fog", crate::world::fog::TABLE_IDS),
     ("game_events", crate::base::game_events::TABLE_IDS),
     ("game_settings", crate::world::game_settings::TABLE_IDS),
@@ -132,14 +132,19 @@ mod tests {
             .collect()
     }
 
-    /// The module the row `name` of [`TABLE_IDS`] lists, as its path under
-    /// `src`, read from the row: the name is the feature compat reports, not
-    /// always its module's.
     fn module_of(name: &str) -> String {
-        let row = format!("(\"{name}\", crate::");
-        let this = include_str!("table_ids.rs");
-        let rest = &this[this.find(&row).unwrap() + row.len()..];
-        rest[..rest.find("::TABLE_IDS").unwrap()].replace("::", "/")
+        // Without whitespace, so a row rustfmt wraps reads the same.
+        let this: String = include_str!("table_ids.rs")
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect();
+        let row = format!("(\"{name}\",crate::");
+        let start = this.find(&row).unwrap_or_else(|| panic!("no row {name}")) + row.len();
+        let rest = &this[start..];
+        let end = rest
+            .find("::TABLE_IDS")
+            .unwrap_or_else(|| panic!("row {name} names no TABLE_IDS"));
+        rest[..end].replace("::", "/")
     }
 
     /// The code of the module of row `name` and its submodules, without test

@@ -40,7 +40,7 @@ static-is-registry-fuse-or-state crates/runtime/loader/src/engine/diag.rs static
 static-is-registry-fuse-or-state crates/runtime/loader/src/engine/diag.rs static TURNED_OFF: Mutex<Vec<TurnedOff>> = Mutex::new(Vec::new());
 # Building events from worker threads, raised after the step; they move
 # into the events' `Session`.
-static-is-registry-fuse-or-state crates/runtime/loader/src/base/events.rs static BUILDING: Mutex<Vec<BuildingData>> = Mutex::new(Vec::new());
+static-is-registry-fuse-or-state crates/runtime/loader/src/events.rs static BUILDING: Mutex<Vec<BuildingData>> = Mutex::new(Vec::new());
 # The mods that opened the fog, a mod registration; it moves into a
 # `Registry<T>` or one fog state struct with `MIRROR`.
 static-is-registry-fuse-or-state crates/runtime/loader/src/world/fog.rs static OPENERS: Mutex<Vec<ModIndex>> = Mutex::new(Vec::new());

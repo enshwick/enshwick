@@ -303,11 +303,13 @@ its own; these steps hold for one that grows inside core first.
 - `start` identifies the game and its table, loads the mods in `mods/`, calls
   their `init`, arms the hooks and calls `ready`. `host` answers the ABI
   table, its entries cut by domain as the fake loader's table is
-  (`host/entries/<domain>.rs`) and joined in `host/api.rs`. `table_ids`
-  joins the parts' build table ids. These three join every layer.
+  (`host/entries/<domain>.rs`) and joined in `host/api.rs`. `events` links
+  the server's step and runs each domain's part after it. `table_ids` joins
+  the parts' build table ids. These four join every layer.
 - The `[loader]` table of `domains.toml` holds the layers to the domain
   order: a module names only its own layer and those below it, and no join;
-  `cargo xtask check` reads the paths and refuses a new edge up. The edges
+  `cargo xtask check` reads the paths, globs, exported macros and the
+  methods a module adds to another's type, and refuses a new edge up. The edges
   up still in the code are listed there, module by module, and only go.
 - `engine::loader` holds the one `Loader`, installed once at start: the
   build, the mods' records, the hook chains and the subscriptions.

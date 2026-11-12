@@ -15,7 +15,7 @@
 //! queue what happened; the post-step link raises it on the game thread.
 
 use core::ffi::c_void;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
@@ -192,12 +192,6 @@ static PLACE_NEXT: Next<PlaceFn> = unsafe { Next::new() };
 static PICKUP_NEXT: Next<PickupFn> = unsafe { Next::new() };
 /// Building events from worker threads, raised after the step.
 static BUILDING: Mutex<Vec<BuildingData>> = Mutex::new(Vec::new());
-static STEPS: AtomicU64 = AtomicU64::new(0);
-
-/// The server steps run so far, for parts that act every few steps.
-pub(crate) fn steps() -> u64 {
-    STEPS.load(Ordering::Relaxed)
-}
 /// The handle of the player seen joining in each slot, 0 for none.
 static JOINED: [AtomicU32; MAX_SLOTS] = [const { AtomicU32::new(0) }; MAX_SLOTS];
 /// One fuse per link: a panic in the loader's own work of a link turns off
@@ -250,15 +244,6 @@ type PlaceFn = unsafe extern "system" fn(
 ) -> u32;
 type PickupFn = unsafe extern "system" fn(context: *mut u8, target: *const u8, tool: u32) -> u8;
 
-/// Whether the link after the server's step is made.
-static STEPPED: AtomicBool = AtomicBool::new(false);
-
-/// Whether the loader's work after the server's step runs, as the controls
-/// that follow game actions need.
-pub(crate) fn stepped() -> bool {
-    STEPPED.load(Ordering::Acquire)
-}
-
 /// Links what the subscriptions need; a missing symbol leaves its events
 /// silent and says so.
 pub(crate) fn link(loader: &'static Loader) {
@@ -300,7 +285,7 @@ pub(crate) fn link(loader: &'static Loader) {
     let feature = "server events";
     let stepped = link(&[], pinned::server::POST_STEP)
         .is_some_and(|target| loader.link_feature(feature, target, &STEP_NEXT, step, none));
-    STEPPED.store(stepped, Ordering::Release);
+    crate::engine::ticks::set_stepped(stepped);
     if let Some(target) = link(
         &[Event::WORLD_LOADED, Event::SHUTDOWN_STARTED],
         pinned::server::SET_STATE,
@@ -433,7 +418,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         world::game_settings::after_step(loader)
     );
     part!("weather steps", world::weather::after_step(loader));
-    let step = STEPS.fetch_add(1, Ordering::Relaxed) + 1;
+    let step = crate::engine::ticks::count_step();
     part!(
         "interaction steps",
         actions::interactions::after_step(loader, step)

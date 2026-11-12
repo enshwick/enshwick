@@ -67,7 +67,7 @@ fn seal(loader: &'static Loader) {
 /// client links the server's too, for the games it hosts.
 fn link_features(loader: &'static Loader) {
     crate::engine::crash::link(loader);
-    crate::base::events::link(loader);
+    crate::events::link(loader);
     crate::engine::world::link(loader);
     crate::actions::vetoes::link(loader);
     crate::content::recipes::init(loader);

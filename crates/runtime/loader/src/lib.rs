@@ -24,6 +24,8 @@ pub mod ui;
 pub mod world;
 
 #[cfg(windows)]
+mod events;
+#[cfg(windows)]
 mod host;
 #[cfg(windows)]
 mod start;

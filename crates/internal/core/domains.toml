@@ -62,9 +62,9 @@ upward = []
 # The layers below every domain, lowest first: the hooking engine, raw game
 # access and the loader's own state.
 below = ["engine"]
-# The top-level modules that join every layer: the host table, the start
-# and the build table ids.
-joins = ["host", "start", "table_ids"]
+# The top-level modules that join every layer: the server step's pump, the
+# host table, the start and the build table ids.
+joins = ["events", "host", "start", "table_ids"]
 # The folder under `src` whose files are cut by the domains as well.
 entries = "host/entries"
 # The edges up the layers still in the code, as `from -> to` between
@@ -76,33 +76,6 @@ upward = [
     "actions::player_actions -> ui::notices",
     "actions::player_actions -> ui::windows",
     "base::admission -> actions::chat",
-    "base::events -> actions::build_reasons",
-    "base::events -> actions::chat",
-    "base::events -> actions::commands",
-    "base::events -> actions::console",
-    "base::events -> actions::controls",
-    "base::events -> actions::interactions",
-    "base::events -> actions::player_actions",
-    "base::events -> content::recipes",
-    "base::events -> inventory::deaths",
-    "base::events -> inventory::item_actions",
-    "base::events -> inventory::item_data",
-    "base::events -> inventory::spawns",
-    "base::events -> inventory::stats",
-    "base::events -> inventory::survivors",
-    "base::events -> inventory::transactions",
-    "base::events -> knowledge::progress",
-    "base::events -> knowledge::store",
-    "base::events -> start",
-    "base::events -> ui::windows",
-    "base::events -> world::altars",
-    "base::events -> world::bases",
-    "base::events -> world::daytime",
-    "base::events -> world::game_settings",
-    "base::events -> world::terrain_pages",
-    "base::events -> world::transactions",
-    "base::events -> world::voxels",
-    "base::events -> world::weather",
     "base::game_events -> actions::vetoes",
     "base::game_events -> inventory::item_actions",
     "base::game_events -> inventory::stats",

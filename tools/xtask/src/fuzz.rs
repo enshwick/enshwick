@@ -76,7 +76,15 @@ pub(crate) const TARGETS: &[(&str, &[&str])] = &[
         ],
     ),
     ("reflection", &["crates/enshwick-gamedata/src/reflect"]),
-    ("remote_edit", &["crates/internal/base/src/config"]),
+    (
+        "remote_edit",
+        &[
+            "crates/internal/base/src/config",
+            "crates/runtime/loader/src/base/configure",
+            "crates/runtime/loader/src/base/remote",
+            "crates/runtime/loader/src/base/worlds",
+        ],
+    ),
     ("remote_message", &["crates/runtime/loader/src/base/remote"]),
     ("server_rules", &["crates/runtime/loader/src/base/join"]),
     (
@@ -207,6 +215,14 @@ mod tests {
         assert_eq!(
             reached(&files(&["crates/runtime/loader/src/base/join.rs"])),
             ["join_lists", "server_rules"]
+        );
+        assert_eq!(
+            reached(&files(&["crates/runtime/loader/src/base/configure.rs"])),
+            ["remote_edit"]
+        );
+        assert_eq!(
+            reached(&files(&["crates/runtime/loader/src/base/worlds.rs"])),
+            ["remote_edit"]
         );
     }
 

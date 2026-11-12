@@ -40,6 +40,38 @@ pub const fn due(now: u64, last: Option<u64>, every: u64) -> bool {
     }
 }
 
+/// The server steps run so far.
+#[cfg(windows)]
+static STEPS: AtomicU64 = AtomicU64::new(0);
+/// Whether the link after the server's step is made.
+#[cfg(windows)]
+static STEPPED: AtomicBool = AtomicBool::new(false);
+
+/// The server steps run so far, for parts that act every few steps.
+#[cfg(windows)]
+pub(crate) fn steps() -> u64 {
+    STEPS.load(Ordering::Relaxed)
+}
+
+/// Counts one more server step and gives its number, from 1.
+#[cfg(windows)]
+pub(crate) fn count_step() -> u64 {
+    STEPS.fetch_add(1, Ordering::Relaxed) + 1
+}
+
+/// Whether the loader's work after the server's step runs, as the controls
+/// that follow game actions need.
+#[cfg(windows)]
+pub(crate) fn stepped() -> bool {
+    STEPPED.load(Ordering::Acquire)
+}
+
+/// Records whether the link after the server's step is made.
+#[cfg(windows)]
+pub(crate) fn set_stepped(stepped: bool) {
+    STEPPED.store(stepped, Ordering::Release);
+}
+
 /// One periodic tick handler, leaked once and never freed, alone on its
 /// cache lines: the game thread writes its last call while any thread may
 /// set its period.

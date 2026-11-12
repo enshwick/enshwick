@@ -2,12 +2,12 @@
 //! site that says what went wrong and how to fix it.
 //!
 //! The codes, their texts and the steps of "the game won't start" live in
-//! `errors.toml` beside this file; the site builds its pages from it.
+//! `src/errors.toml` at the crate's source root; the site builds its pages
+//! from it.
 
 use core::fmt;
 
 /// Every code with its texts, and the steps of the decision tree.
-// The docs site builds its error pages from `src/errors.toml`, so it stays there.
 pub const SOURCE: &str = include_str!("../errors.toml");
 
 /// Where the page of a code lives, before the code in lower case.

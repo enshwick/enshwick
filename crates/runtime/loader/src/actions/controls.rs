@@ -374,7 +374,7 @@ fn link_actions(loader: &Loader, declared: &[Declared]) {
         );
         return;
     }
-    if !crate::base::events::stepped() {
+    if !crate::engine::ticks::stepped() {
         loader.feature_off(
             FEATURE,
             pinned::server::POST_STEP.id(),

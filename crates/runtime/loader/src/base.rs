@@ -21,8 +21,6 @@ pub(crate) mod discovery;
 #[cfg(windows)]
 pub(crate) mod emits;
 #[cfg(windows)]
-pub(crate) mod events;
-#[cfg(windows)]
 pub(crate) mod game_events;
 #[cfg_attr(
     all(not(windows), not(test)),

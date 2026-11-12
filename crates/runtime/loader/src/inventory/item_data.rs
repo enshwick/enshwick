@@ -388,7 +388,7 @@ pub(crate) fn after_step(loader: &Loader) {
     if FINDING.load(Ordering::Relaxed) {
         find_pending(loader);
     }
-    if crate::base::events::steps().is_multiple_of(JOIN_LOOK_EVERY) && wanted() {
+    if crate::engine::ticks::steps().is_multiple_of(JOIN_LOOK_EVERY) && wanted() {
         look_for_carried(loader);
     }
     if !KEPT.load(Ordering::Relaxed) || !any_destroyed() {
