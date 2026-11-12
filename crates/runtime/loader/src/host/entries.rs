@@ -1,5 +1,5 @@
 //! The functions of the host table, one file per domain as the fake loader's
-//! table cuts them, lowest first.
+//! table cuts them.
 
 pub(crate) mod actions;
 pub(crate) mod base;

@@ -10,8 +10,9 @@
 // compiler, to leave the walks over other threads' stacks unchecked.
 #![cfg_attr(enshwick_asan, feature(sanitize))]
 
-// The layers, lowest first: the engine, then the domains in the order of
-// `crates/internal/core/domains.toml`, which its `[loader]` table holds.
+// The layers: the engine below the domains of
+// `crates/internal/core/domains.toml`, whose `[loader]` table holds the
+// edges between them.
 pub mod actions;
 pub mod base;
 pub mod content;

@@ -432,7 +432,7 @@ fn exported(file: &syn::File) -> BTreeSet<String> {
 /// shortcut: inline modules' own `use` items count as the file's; an
 /// inline module that imports a name its file uses otherwise would be
 /// misread, so split it into a file of its own.
-fn imports(
+pub(super) fn imports(
     file: &syn::File,
     module: &[String],
 ) -> (BTreeMap<String, Vec<String>>, Vec<Vec<String>>) {
