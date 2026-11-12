@@ -8,7 +8,7 @@ use std::path::Path;
 
 use enshwick_gamedata as tables;
 
-use super::{Args, Build, MODULE_IDS, build, build_name, reports};
+use super::{Args, Build, build, build_name, module_ids, reports};
 
 /// The report data of `build` as TOML, sealed for `inputs`: names, counts
 /// and ids only. An entry is missing when a route or an anchor of the side
@@ -16,7 +16,7 @@ use super::{Args, Build, MODULE_IDS, build, build_name, reports};
 /// attribute slot and no game archive beside the executable reads; each
 /// loader feature that names a missing entry is listed with them.
 pub(super) fn data(build: &Build, inputs: &reports::Inputs) -> Result<String, String> {
-    if MODULE_IDS.is_empty() {
+    if module_ids().is_empty() {
         return Err("only a Windows build of this tool knows the loader's features".to_owned());
     }
     let table = &build.table;
@@ -85,7 +85,7 @@ pub(super) fn known<'a>(
 /// `missing` entry of those it names among the `known` ones.
 pub(super) fn features(known: &BTreeSet<&str>, missing: &[&str]) -> String {
     let mut out = String::new();
-    for &(name, ids) in MODULE_IDS {
+    for (name, ids) in module_ids() {
         let named = ids.iter().filter(|id| known.contains(**id)).count();
         let lacks: Vec<&str> = ids
             .iter()

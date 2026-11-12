@@ -29,9 +29,13 @@ use report::{data, refresh};
 /// Each part of the loader with the build table ids it names; only a
 /// Windows build carries the loader.
 #[cfg(windows)]
-const MODULE_IDS: &[(&str, &[&str])] = enshwick_loader::TABLE_IDS;
+fn module_ids() -> Vec<(&'static str, &'static [&'static str])> {
+    enshwick_loader::table_ids()
+}
 #[cfg(not(windows))]
-const MODULE_IDS: &[(&str, &[&str])] = &[];
+fn module_ids() -> Vec<(&'static str, &'static [&'static str])> {
+    Vec::new()
+}
 
 /// What the tool is given.
 #[derive(Debug, clap::Args)]
@@ -482,7 +486,8 @@ fn write_build(out: &mut String, args: &Args, build: &Build) -> bool {
 /// The loader features table.
 fn write_features(out: &mut String, table: &Resolved) {
     let _w = writeln!(*out, "## Loader features\n");
-    if MODULE_IDS.is_empty() {
+    let ids = module_ids();
+    if ids.is_empty() {
         let _w = writeln!(
             *out,
             "Only a Windows build of this tool knows the loader's features.\n"
@@ -490,7 +495,7 @@ fn write_features(out: &mut String, table: &Resolved) {
         return;
     }
     let _w = writeln!(*out, "| Feature | Status | Missing |\n| --- | --- | --- |");
-    for part in table.parts(MODULE_IDS) {
+    for part in table.parts(&ids) {
         let status = match part.state() {
             PartState::Works => "works".to_owned(),
             PartState::Off => "off".to_owned(),
@@ -774,7 +779,7 @@ mod tests {
         for side in [tables::Side::Server, tables::Side::Client] {
             let anchors = tables::anchors(side).unwrap();
             let nothing = anchors.fall_back(&[0; 64], 0x1000, |_| None);
-            let parts = nothing.parts(MODULE_IDS);
+            let parts = nothing.parts(&module_ids());
             assert!(parts.iter().all(|f| f.missing.len() == f.named), "{side:?}");
         }
     }

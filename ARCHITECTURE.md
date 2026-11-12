@@ -132,8 +132,8 @@ manifest rows, sits in `enshwick-base` and `enshwick-abi`.
   and siblings compile side by side.
 - Registration lists are one per domain, joined in the domain order: the
   script namespaces in `script/namespaces/<domain>.rs`, which the check also
-  holds to the map. The loader's `TABLE_IDS` are one list per module, joined
-  in `table_ids.rs`.
+  holds to the map. The loader's parts are one list per layer, joined in
+  `parts.rs` (see "Inside the loader").
 - The fake loader follows the same map: each file under
   `crates/internal/fake/src/test/` and `test/table/` sits in the folder of
   its domain, `test.rs` and `test/table.rs` join them, and the check holds
@@ -313,8 +313,8 @@ its own; these steps hold for one that grows inside core first.
 - In the loader, each symbol and constant it finds is declared once in
   `pinned/<part>.rs` as a typed `Symbol` or `Constant`, and code names it by
   path, such as `pinned::world::TIME`. Each part lists the ids it needs in its
-  `TABLE_IDS`, which `cargo xtask compat` reads; a test refuses an id spelled as
-  a string.
+  `TABLE_IDS`, which its layer's part list names and `cargo xtask compat`
+  reads; a test refuses an id spelled as a string.
 - A mod asks for a game feature through the API. The loader owns the hook on
   that feature and hands mods typed callbacks.
 
@@ -329,8 +329,17 @@ its own; these steps hold for one that grows inside core first.
   their `init`, arms the hooks and calls `ready`. `host` answers the ABI
   table, its entries cut by domain as the fake loader's table is
   (`host/entries/<domain>.rs`) and joined in `host/api.rs`. `events` links
-  the server's step and runs each domain's part after it. `table_ids` joins
-  the parts' build table ids. These four join every layer.
+  the server's step, its state changes and a player's join and leave.
+  `parts` joins the layers' part lists. These four join every layer.
+- Each layer registers its modules in one list, `PARTS` in `<layer>.rs`: a
+  `Part` per module with its build table ids and what the joins call in it
+  (seal, link, its work at a stage of the server step, a player's join and
+  leave, a hosted game's start and end, the world's loaded, saved and
+  shutdown events). The joins walk the layers in the order of `domains.toml`
+  and each list in its own order, so a domain's change touches its own list
+  only. Each call the game's threads make runs under a fuse of its own. A
+  snapshot test pins each phase's order; a change to it is made with its
+  reason.
 - The `[loader]` table of `domains.toml` holds the layers to the domain
   order: a module names only its own layer and those below it, and no join;
   `cargo xtask check` reads the paths, globs, exported macros and the
