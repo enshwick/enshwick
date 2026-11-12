@@ -1305,7 +1305,7 @@ export type LevelUpEvent = {
 export type Levels = {
 	--- The highest level, as `Levels.cap` answers.
 	cap: (self: Levels) -> number,
-	--- What `level` needs, 0 for level 0 or past the cap, as `Levels.need` answers.
+	--- What `level` needs, 0 for level 0 or past the cap, as `Levels.need` answers; 0 too past level 1024, which the table is not read beyond.
 	need: (self: Levels, level: number) -> number,
 }
 
@@ -4043,7 +4043,7 @@ declare enshwick: {
 		--- Runs `filter` on each comfort a provider registers, as `Load.on_comfort` does: the comfort it answers registers; nil keeps the comfort as it was.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_comfort: (filter: (arg1: Comfort) -> number?) -> (),
-		--- Runs `filter` on each tick's experience with the level table, as `Load.on_experience` does: it returns the changed list, or nil to keep it.
+		--- Runs `filter` on each tick's experience with the level table, as `Load.on_experience` does: it returns the rows it changes, each written over the row of the same character, or nil to keep them all.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_experience: (filter: (arg1: {Experience}, arg2: Levels) -> {Experience}?) -> (),
 	},
