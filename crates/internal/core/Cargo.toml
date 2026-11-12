@@ -22,7 +22,6 @@ enshwick-inventory.workspace = true
 enshwick-knowledge.workspace = true
 enshwick-actions.workspace = true
 enshwick-values.workspace = true
-bytemuck.workspace = true
 hound = { workspace = true, optional = true }
 rustc-hash.workspace = true
 schemars = { workspace = true, optional = true }
