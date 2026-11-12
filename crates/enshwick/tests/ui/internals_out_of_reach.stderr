@@ -144,6 +144,11 @@ note: the function `item_data` is defined here
    |
    | pub use read::*;
    |         ^^^^
+help: import `item_data` directly
+   |
+26 -     let _ = enshwick::inventory::item_data(&host, enshwick::ItemId::new(1));
+26 +     let _ = enshwick_content::__internal::item_data(&host, enshwick::ItemId::new(1));
+   |
 
 error[E0603]: function `replace_group` is private
   --> tests/ui/internals_out_of_reach.rs:27:29
