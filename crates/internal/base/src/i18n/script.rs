@@ -106,6 +106,16 @@ impl Texts {
 #[derive(Clone, Copy, Debug)]
 pub struct I18nFns;
 
+impl crate::script::Bound for I18nFns {
+    const NAME: &'static str = "i18n";
+    const DOC: &'static str = "The game's languages and texts, and a mod's own translations.";
+    const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_I18N_FNS];
+
+    fn resolve(_load: &mut impl crate::Loading) -> Result<Self, Off> {
+        Ok(Self)
+    }
+}
+
 #[crate::script(i18n_fns)]
 #[expect(
     clippy::unused_self,

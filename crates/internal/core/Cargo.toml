@@ -17,13 +17,12 @@ enshwick-macros = { path = "../macros", version = "=1.0.0-alpha.14" }
 enshwick-abi.workspace = true
 enshwick-base.workspace = true
 enshwick-content.workspace = true
-enshwick-typed = { workspace = true, optional = true }
 enshwick-world.workspace = true
 enshwick-inventory.workspace = true
+enshwick-knowledge.workspace = true
 enshwick-values.workspace = true
 bytemuck.workspace = true
 hound = { workspace = true, optional = true }
-fastrand.workspace = true
 rustc-hash.workspace = true
 schemars = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
@@ -45,10 +44,27 @@ serde = { workspace = true, features = ["derive"] }
 # what the fake loader reads inside this crate and a mod life per install,
 # which only `enshwick-fake` turns on.
 [features]
-fake = ["enshwick-base/fake", "enshwick-content/fake", "enshwick-world/fake", "enshwick-typed?/test"]
+fake = [
+    "enshwick-base/fake",
+    "enshwick-content/fake",
+    "enshwick-world/fake",
+    "enshwick-knowledge/fake",
+]
 schema = ["dep:schemars", "dep:serde_json", "enshwick-base/schema"]
-unstable = ["dep:hound", "enshwick-base/unstable", "enshwick-content/unstable", "enshwick-world/unstable", "enshwick-inventory/unstable"]
-typed = ["unstable", "dep:enshwick-typed", "enshwick-content/typed", "enshwick-world/typed"]
+unstable = [
+    "dep:hound",
+    "enshwick-base/unstable",
+    "enshwick-content/unstable",
+    "enshwick-world/unstable",
+    "enshwick-inventory/unstable",
+    "enshwick-knowledge/unstable",
+]
+typed = [
+    "unstable",
+    "enshwick-content/typed",
+    "enshwick-world/typed",
+    "enshwick-knowledge/typed",
+]
 
 [lints]
 workspace = true

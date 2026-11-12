@@ -191,6 +191,8 @@ mod resource_values;
 #[cfg(feature = "unstable")]
 mod reward_actions;
 #[cfg(feature = "unstable")]
+mod reward_refusals;
+#[cfg(feature = "unstable")]
 mod rewards;
 #[cfg(feature = "unstable")]
 mod saves;

@@ -777,7 +777,7 @@ impl Bound for ActionFns {
     const DOC: &'static str = "Player actions: what a player asks a mod to do, declared once and run from its controls, panels or the console.";
     const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_ACTION_FNS];
 
-    fn resolve(_load: &mut Load<'_>) -> Result<Self, Off> {
+    fn resolve(_load: &mut impl crate::Loading) -> Result<Self, Off> {
         Ok(Self)
     }
 }

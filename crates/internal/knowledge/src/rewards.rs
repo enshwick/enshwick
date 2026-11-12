@@ -4,7 +4,7 @@
 //! A reward names an [`Action`], what it [gives](Give), a [`Limit`] and a
 //! chance. The server gives it in the server's world, on the game thread,
 //! and keeps who got a limited reward in the mod's data beside the world's
-//! save, so a limit holds across restarts. [`Load::on_reward`] refuses a
+//! save, so a limit holds across restarts. [`Load::on_reward`](../struct.Load.html#method.on_reward) refuses a
 //! grant; [`Rewards::grant`] gives a declared reward from code.
 //!
 //! # Examples
@@ -27,12 +27,15 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+use crate::__load::*;
 use crate::abi::{BuffTypeId, KnowledgeId, ModHandle, RecipeId};
 use crate::game_events::{
     CraftRecipeEvent, CraftRecipeSuccessEvent, LevelUpEvent, LootInteractionEvent,
 };
 use crate::locks::Relock as _;
-use crate::{Entity, ItemId, Load, Off};
+use crate::{Entity, ItemId, Off};
+use enshwick_inventory::__load::*;
+use enshwick_world::__load::*;
 
 /// What a player does that a reward follows.
 ///
@@ -208,11 +211,11 @@ impl Reward {
     }
 }
 
-/// A reward about to be given, from [`Load::on_reward`].
+/// A reward about to be given, from [`Load::on_reward`](../struct.Load.html#method.on_reward).
 ///
 /// # Examples
 ///
-/// See [`Load::on_reward`].
+/// See [`Load::on_reward`](../struct.Load.html#method.on_reward).
 #[derive(Clone, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct RewardGrant {
@@ -387,36 +390,57 @@ impl Pending {
 /// Each mod's rewards state by its handle: a mod DLL holds one, the
 /// loader's own copy of this crate one per data pack or script it runs.
 #[derive(Default)]
-struct ByMod(Vec<(ModHandle, &'static Shared)>);
+struct ByMod(Vec<(ModHandle, Result<&'static Shared, Off>)>);
 
 static SHARED: crate::fresh::Fresh<Mutex<ByMod>> = crate::fresh::Fresh::new();
 
-/// The rewards state of mod `me`, `None` before its first reward.
+/// The rewards state of mod `me`, `None` before its first reward or when
+/// making it failed.
 fn find(me: ModHandle) -> Option<&'static Shared> {
+    tried(me).and_then(Result::ok)
+}
+
+/// What the mod's first try to make its rewards state answered, `None`
+/// before it.
+fn tried(me: ModHandle) -> Option<Result<&'static Shared, Off>> {
     SHARED
         .get_or_init(Mutex::default)
         .relock()
         .0
         .iter()
         .find(|(handle, _)| *handle == me)
-        .map(|&(_, shared)| shared)
+        .map(|(_, shared)| shared.clone())
 }
 
-/// The mod's rewards state, made on the first call during init.
-fn shared(load: &mut Load<'_>) -> Result<&'static Shared, Off> {
+/// The mod's rewards state, made on the first call during init. A first
+/// try that failed answers the same on every later call, since what it
+/// registered before failing cannot be taken back and must not be
+/// registered twice.
+fn shared(load: &mut crate::BaseLoad) -> Result<&'static Shared, Off> {
     let me = load.host().handle();
-    if let Some(shared) = find(me) {
-        return Ok(shared);
+    if let Some(tried) = tried(me) {
+        return tried;
     }
+    let made = make_shared(load);
+    SHARED
+        .get_or_init(Mutex::default)
+        .relock()
+        .0
+        .push((me, made.clone()));
+    made
+}
+
+/// Makes the mod's rewards state and registers what keeps it.
+fn make_shared(load: &mut crate::BaseLoad) -> Result<&'static Shared, Off> {
     let made = Shared {
         rewards: Mutex::new(Vec::new()),
         filters: Mutex::new(Vec::new()),
-        store: load.world_store("rewards")?,
         world: load.world()?,
+        scheduler: load.scheduler()?,
         inventories: load.inventories().ok(),
         buffs: load.buffs(),
         knowledge: load.knowledge(),
-        scheduler: load.scheduler()?,
+        store: load.world_store("rewards")?,
         experience: Pending::new(),
         step: AtomicU64::new(0),
         stepping: AtomicBool::new(false),
@@ -435,11 +459,6 @@ fn shared(load: &mut Load<'_>) -> Result<&'static Shared, Off> {
     })?;
     load.on::<crate::events::PlayerLeft>(move |left| shared.experience.forget(left.entity))?;
     load.on::<crate::events::WorldLoaded>(move |()| shared.experience.clear())?;
-    SHARED
-        .get_or_init(Mutex::default)
-        .relock()
-        .0
-        .push((me, shared));
     Ok(shared)
 }
 
@@ -598,7 +617,7 @@ fn grant_later(shared: &'static Shared, name: &str, player: Entity) {
 
 /// Gives the mod's declared rewards from code, on the server.
 ///
-/// Get it from [`Load::rewards`]. Copy it anywhere, and call it on the game
+/// Get it from [`Load::rewards`](../struct.Load.html#method.rewards). Copy it anywhere, and call it on the game
 /// thread: in an event handler or a [`Scheduler`](crate::schedule::Scheduler)
 /// task. An item handler runs on the thread of the game's system, so it
 /// schedules the grant.
@@ -632,8 +651,8 @@ impl crate::script::Bound for Rewards {
 
     /// Opened for every script, so it makes no state: a script that
     /// declares no reward pays nothing.
-    fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
-        Ok(Self(load.host().handle()))
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
+        Ok(Self(load.base().host().handle()))
     }
 }
 
@@ -684,36 +703,43 @@ impl Rewards {
     }
 }
 
-#[crate::script(rewards)]
-impl Load<'_> {
-    /// Declares `reward`: the server gives it in the server's world when a
-    /// player does its action, within its limit and chance, if the mod's
-    /// filters allow.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] after init, for a malformed name, a name declared before, a
-    /// reward that gives nothing, a chance outside 0 to 1, or a build
-    /// without what its action or the world's data need.
-    ///
-    /// # Examples
-    ///
-    /// See the [module](self).
-    #[script]
-    pub fn add_reward(&mut self, reward: Reward) -> Result<(), Off> {
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::add_reward`.
+    #[doc(hidden)]
+    fn add_reward(&mut self, reward: Reward) -> Result<(), Off>;
+
+    /// As `Load::on_reward`.
+    #[doc(hidden)]
+    fn on_reward<F>(&mut self, filter: F) -> Result<(), Off>
+    where
+        F: Fn(&RewardGrant) -> bool + Send + Sync + 'static;
+
+    /// As `Load::rewards`.
+    #[doc(hidden)]
+    fn rewards(&mut self) -> Result<Rewards, Off>;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn add_reward(&mut self, reward: Reward) -> Result<(), Off> {
         if let Some(problem) = reward.problem() {
             return Err(Off::new(problem));
         }
         let shared = shared(self)?;
+        if shared
+            .rewards
+            .relock()
+            .iter()
+            .any(|r| r.name == reward.name)
         {
-            let mut rewards = shared.rewards.relock();
-            if rewards.iter().any(|r| r.name == reward.name) {
-                return Err(Off::new(format!("reward {}: declared twice", reward.name)));
-            }
-            rewards.push(reward.clone());
+            return Err(Off::new(format!("reward {}: declared twice", reward.name)));
         }
-        let name = reward.name;
-        match reward.on {
+        // Declared only once its action's hook holds, so a refused reward
+        // stays undeclared and a retry names the real reason.
+        let name = reward.name.clone();
+        let registered = match reward.on {
             Action::Craft(recipe) => {
                 if !shared.stepping.load(Ordering::Relaxed) {
                     self.on_every_step(move |tick| {
@@ -770,28 +796,13 @@ impl Load<'_> {
                 grant_later(shared, &name, picked.player);
                 true
             }),
-        }
+        };
+        registered?;
+        shared.rewards.relock().push(reward);
+        Ok(())
     }
 
-    /// Runs `filter` before the mod gives any of its rewards, on the game
-    /// thread; returning `false` holds the grant back, and the limit stays
-    /// unused. To give something else instead, give it with
-    /// [`Rewards::give`] and return `false`.
-    ///
-    /// # Errors
-    ///
-    /// As [`Load::add_reward`].
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     // No rewards for the first player, entity 1.
-    ///     load.on_reward(|grant| grant.player != enshwick::Entity(1))
-    /// }
-    /// ```
-    #[script]
-    pub fn on_reward<F>(&mut self, filter: F) -> Result<(), Off>
+    fn on_reward<F>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&RewardGrant) -> bool + Send + Sync + 'static,
     {
@@ -799,16 +810,7 @@ impl Load<'_> {
         Ok(())
     }
 
-    /// The handle that gives the mod's declared rewards from code.
-    ///
-    /// # Errors
-    ///
-    /// As [`Load::add_reward`].
-    ///
-    /// # Examples
-    ///
-    /// See [`Rewards`].
-    pub fn rewards(&mut self) -> Result<Rewards, Off> {
+    fn rewards(&mut self) -> Result<Rewards, Off> {
         shared(self).map(|_| Rewards(self.host().handle()))
     }
 }

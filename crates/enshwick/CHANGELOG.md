@@ -177,6 +177,12 @@ Each entry names the pull request that made the change.
   `enshwick-core`; every path stays (#1052).
 - **Breaking:** `loot::Containers::resolve` takes `&mut impl Loading`, so a
   mod passes its `Load` as before (#1052).
+- The knowledge domain (`knowledge`, `progress`, `quests` and `rewards`) is
+  the internal crate `enshwick-knowledge`, between `enshwick-inventory` and
+  `enshwick-core`; every path stays (#1053).
+- **Breaking:** `script::Bound::resolve` takes `&mut impl Loading` instead
+  of `&mut Load`, so each domain's crate implements `Bound` beside its own
+  types (#1053).
 - The content domain (`content`, `rates`, and the shape samples of the
   generated `typed` items) is the internal crate
   `enshwick-content`, between `enshwick-base` and `enshwick-core`; every

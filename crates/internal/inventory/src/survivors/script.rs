@@ -146,6 +146,16 @@ impl WorkshopSurvivor {
 #[derive(Clone, Copy, Debug)]
 pub struct SurvivorFns;
 
+impl crate::script::Bound for SurvivorFns {
+    const NAME: &'static str = "survivors";
+    const DOC: &'static str = "Survivors: the game's lookups of them, their beds, summoning staffs and the workshop survivors.";
+    const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_SURVIVOR_FNS];
+
+    fn resolve(_load: &mut impl crate::Loading) -> Result<Self, Off> {
+        Ok(Self)
+    }
+}
+
 #[crate::script(survivor_fns)]
 #[expect(
     clippy::unused_self,

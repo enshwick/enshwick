@@ -234,6 +234,17 @@ pub trait LoadMethods {
     fn clock_speed(&mut self) -> Result<ClockSpeed, Off>;
 }
 
+impl crate::script::Bound for Clock {
+    const NAME: &'static str = "daytime";
+    const DOC: &'static str =
+        "The clock of the server's world: the time of day and how fast it runs.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_CLOCK];
+
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
+        Ok(load.base_mut().clock())
+    }
+}
+
 impl LoadMethods for crate::BaseLoad {
     fn clock(&mut self) -> Clock {
         Clock { host: self.host() }

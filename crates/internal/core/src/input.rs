@@ -65,8 +65,8 @@ impl crate::script::Bound for Input {
     const DOC: &'static str = "The game's controls each player holds, read in the server's world, and the local player's on a client.";
     const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_HELD];
 
-    fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
-        load.input()
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
+        Input::open(load)
     }
 }
 
@@ -84,7 +84,8 @@ struct Resolved {
 static RESOLVED: crate::state::ModLocal<Resolved> = crate::state::ModLocal::new();
 
 impl Resolved {
-    fn resolve(load: &Load<'_>) -> Result<Self, Off> {
+    fn resolve(load: &impl crate::Loading) -> Result<Self, Off> {
+        let load = load.base();
         let ty = ComponentType::resolve(load, ids::PLAYER_INPUT)?;
         let digital_at = load.offset(ids::PLAYER_INPUT_DIGITAL)?;
         let size = load.size(ids::PLAYER_INPUT)?;
@@ -122,7 +123,7 @@ impl Resolved {
 
 #[crate::script(held)]
 impl Input {
-    pub(crate) fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
+    pub(crate) fn open(load: &impl crate::Loading) -> Result<Self, Off> {
         if let Some(resolved) = RESOLVED.get() {
             return Ok(Self(resolved));
         }
@@ -288,7 +289,7 @@ impl Load<'_> {
     ///
     /// See [`Input`].
     pub fn input(&mut self) -> Result<Input, Off> {
-        Input::resolve(self)
+        Input::open(self)
     }
 }
 

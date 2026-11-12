@@ -333,7 +333,7 @@ impl crate::script::Bound for CommandFns {
         "Commands: a second way to run mods' actions, from chat, the console or a remote console.";
     const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_COMMAND_FNS];
 
-    fn resolve(_load: &mut crate::Load<'_>) -> Result<Self, crate::Off> {
+    fn resolve(_load: &mut impl crate::Loading) -> Result<Self, crate::Off> {
         Ok(Self)
     }
 }

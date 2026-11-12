@@ -319,7 +319,7 @@ impl Load<'_> {
             }
             #[cfg(feature = "unstable")]
             for reward in &rewards {
-                crate::rewards::replace(me, reward.reward(&values));
+                enshwick_knowledge::__internal::replace_reward(me, reward.reward(&values));
             }
         })
     }

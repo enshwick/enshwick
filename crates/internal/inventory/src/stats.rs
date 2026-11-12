@@ -569,6 +569,19 @@ pub trait LoadMethods {
         F: Fn(&StatChange) + Send + Sync + 'static;
 }
 
+impl crate::script::Bound for Stats {
+    const NAME: &'static str = "stats";
+    const DOC: &'static str =
+        "Stats of entities and items: values, modifiers, sources and definitions.";
+    // One list with the object class the type has.
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
+        <Self as crate::script::Object>::PARTS;
+
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
+        load.base_mut().stats()
+    }
+}
+
 impl LoadMethods for crate::BaseLoad {
     fn define_stat(&mut self, id: Id, def: &StatDef) -> Result<Stat, Off> {
         def.check()

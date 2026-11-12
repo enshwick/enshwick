@@ -140,6 +140,14 @@ pub enum UiError {
 crate::load::off_from!(UiError);
 
 impl Ui {
+    /// The interface of the mod `load` initialises, refused in the server's
+    /// game build, which draws none.
+    pub(crate) fn open(load: &impl crate::Loading) -> Result<Self, Off> {
+        let host = load.base().host();
+        client_only(host, "the interface")?;
+        Ok(Self { host })
+    }
+
     /// Queues `dialog` and runs `on_answer` with the player's answer, or
     /// `None` when it closed without one, as when the game quits. Dialogs
     /// show one at a time, in order. Any thread; `on_answer` runs on the
@@ -232,9 +240,7 @@ impl Load<'_> {
     ///
     /// See [`Ui`].
     pub fn ui(&mut self) -> Result<Ui, Off> {
-        let host = self.host();
-        client_only(host, "the interface")?;
-        Ok(Ui { host })
+        Ui::open(self)
     }
 
     /// Runs `draw` once per frame of the interface, on the thread that draws

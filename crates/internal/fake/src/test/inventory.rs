@@ -219,6 +219,22 @@ impl FakeHost {
         self.no_inventories = true;
         self
     }
+
+    /// Plays a game build without the item-use site: `item_filter`, behind
+    /// `Load::on_item_action` and `Load::on_item`, answers
+    /// [`Status::MISSING`](enshwick_core::abi::Status::MISSING).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().without_item_filters().install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn without_item_filters(mut self) -> Self {
+        self.no_item_filters = true;
+        self
+    }
 }
 
 #[expect(

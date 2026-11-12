@@ -32,6 +32,16 @@ fn borrowed(pool: &[record::Candidate]) -> Vec<super::Candidate<'_>> {
 #[derive(Clone, Copy, Debug)]
 pub struct AffixFns;
 
+impl crate::script::Bound for AffixFns {
+    const NAME: &'static str = "affixes";
+    const DOC: &'static str = <super::Affixes as crate::script::Bound>::DOC;
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_AFFIX_FNS];
+
+    fn resolve(_load: &mut impl crate::Loading) -> Result<Self, crate::Off> {
+        Ok(Self)
+    }
+}
+
 #[crate::script(affix_fns)]
 #[expect(
     clippy::unused_self,

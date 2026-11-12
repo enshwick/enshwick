@@ -1,13 +1,40 @@
-//! `enshwick.progress`: the experience filter a script links at start, with
-//! the level table of the pass.
+//! `enshwick.progress`: the comfort and experience filters a script links at
+//! start, the latter with the level table of the pass.
 
 #[cfg(test)]
 mod tests {
     use enshwick::Entity;
+    use enshwick::abi::{Comfort, Header};
     use enshwick::progress::Experience;
     use enshwick::test::FakeHost;
 
     use crate::harness::{logged, run};
+
+    fn comfort(category: u32, value: i32) -> Comfort {
+        Comfort {
+            header: Header::of::<Comfort>(),
+            category,
+            value,
+            position: [0.0; 3],
+        }
+    }
+
+    #[test]
+    fn a_comfort_filter_replaces_the_comfort_and_nil_keeps_it() {
+        let loader = run(
+            FakeHost::new(),
+            r"
+            enshwick.progress.on_comfort(function(comfort)
+                if comfort.category == 1 then
+                    return comfort.value * 10
+                end
+                return nil
+            end)
+            ",
+        );
+        assert_eq!(loader.comfort(&comfort(1, 2)), 20);
+        assert_eq!(loader.comfort(&comfort(2, 3)), 3, "nil keeps the comfort");
+    }
 
     #[test]
     fn an_experience_filter_reads_the_level_table_and_changes_the_gain() {

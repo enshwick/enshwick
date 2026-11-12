@@ -18,6 +18,7 @@ re-exports; `crates/runtime/` holds what `enshwick.zip` ships into the game.
 | `enshwick-content` | `crates/internal/content` | the content domain: content, rates, and the shape samples of the generated typed items, which it re-exports from `enshwick-typed` | yes |
 | `enshwick-world` | `crates/internal/world` | the world domain: `World` and the live world's map, voxels, terrain, weather, time of day, altars, buffs and game settings, and the typed handles that read a live world | yes |
 | `enshwick-inventory` | `crates/internal/inventory` | the inventory domain: inventories and items, item and entity data, affixes, stats, damage, effects, survivors and loot | yes |
+| `enshwick-knowledge` | `crates/internal/knowledge` | the knowledge domain: knowledge, quests and the journal, progress (skills, comfort, experience) and rewards | yes |
 | `enshwick-typed` | `crates/internal/typed` | the generated typed API, re-exported as `enshwick::typed` | yes |
 | `enshwick-values` | `crates/internal/values` | the value types the layers share: shape, content ids, resource values, the script value model | yes |
 | `enshwick-abi` | `crates/internal/abi` | the `repr(C)` types that cross between the loader and a mod, the ABI version and its golden layout file, and the reads and writes of game memory, re-exported as `enshwick::abi` and `enshwick::raw` | yes |
@@ -41,15 +42,15 @@ stub ──starts──▶ loader ──C ABI──▶ mods (enshwick ▸ enshwi
                    ├──▶ enshwick-gamedata (tables, reflect, archive) ──▶ enshwick-content, enshwick-base
                    └──▶ enshwick-luau ──▶ enshwick-core (script descriptions)
 cargo-enshwick ──▶ enshwick-core, enshwick-abi, enshwick-gamedata
-enshwick ──▶ enshwick-core ──▶ enshwick-inventory ──▶ enshwick-world ──▶ enshwick-content ──▶ enshwick-base ──▶ enshwick-abi ──▶ enshwick-values
-                                                                          enshwick-content ──▶ enshwick-typed ──▶ enshwick-values ──▶ enshwick-macros
+enshwick ──▶ enshwick-core ──▶ enshwick-knowledge ──▶ enshwick-inventory ──▶ enshwick-world ──▶ enshwick-content ──▶ enshwick-base ──▶ enshwick-abi ──▶ enshwick-values
+                                                                                                enshwick-content ──▶ enshwick-typed ──▶ enshwick-values ──▶ enshwick-macros
 enshwick ──test──▶ enshwick-fake ──▶ enshwick-core (its `fake` feature)
 ```
 
 - `enshwick` is the one crate a mod names, a facade over its internal parts,
   each re-exported under its paths: `enshwick-core`, `Load` and the domains
-  still in it; `enshwick-inventory`, `enshwick-world` and `enshwick-content`,
-  the domains that left it; `enshwick-base`, what every domain shares; `enshwick-fake`,
+  still in it; `enshwick-knowledge`, `enshwick-inventory`, `enshwick-world`
+  and `enshwick-content`, the domains that left it; `enshwick-base`, what every domain shares; `enshwick-fake`,
   the fake loader; `enshwick-typed`, the generated
   typed API; `enshwick-abi`, the ABI; `enshwick-values`, the value types the
   layers share. None depends on `enshwick` or on a part above it, so the
@@ -133,7 +134,7 @@ the crate of each domain that has left it.
 
 Domains leave the core downward, lowest first, each in one pull request
 that keeps `enshwick`'s public API equal. Base went first, then content,
-world and inventory; each later peel follows the same steps.
+world, inventory and knowledge; each later peel follows the same steps.
 
 1. Make the crate `crates/internal/<domain>` (`enshwick-<domain>`): exact
    pins, the description "Internal part of enshwick; depend on enshwick",
@@ -180,10 +181,16 @@ world and inventory; each later peel follows the same steps.
    its body in core's forwarder file, as `limit_altar_level` (with
    crafting vetoes) and `on_fog_uncovered` (with the interface's frames)
    do, and reaches the crate's private parts through `__internal`.
-4. The domain's `Bound` implementations and its namespace list stay in
-   `core/src/script/namespaces/<domain>.rs`: a namespace opens its handle
-   through `Load` and lists `Load`'s start functions, which `#[script]` on
-   the forwarders makes.
+4. Each `Bound` implementation moves with its type, beside the `LoadMethods`
+   block or `#[script]` block it opens with: `Bound` lives in base's
+   `script`, and its `resolve` takes `&mut impl Loading`, so it opens the
+   handle through the base handle as a forwarder does. Only the domain's
+   namespace list stays in `core/src/script/namespaces/<domain>.rs`, since it
+   lists `Load`'s start functions, which `#[script]` on the forwarders makes.
+   A method only a script calls, such as `on_comfort_script`, goes to a
+   `#[script(<part>)]` block of its own in core's
+   `load/<module>/script.rs`, and its body to a `LoadMethods` trait in the
+   module's private `script` module, never to the module's public trait.
 5. What core calls inside the crate and a mod must not becomes a function
    of the crate's hidden `__internal` module, which neither core nor the
    facade re-exports, and the method behind it stays `pub(crate)`: a method

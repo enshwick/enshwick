@@ -25,6 +25,9 @@ pub(crate) extern "system" fn item_filter(
         if s.registration == Registration::Closed {
             return Status::TOO_LATE;
         }
+        if s.host.no_item_filters {
+            return Status::MISSING;
+        }
         s.item_filters.push(Registered::new(callback, user, me));
         Status::OK
     })

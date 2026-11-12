@@ -204,6 +204,17 @@ fn guid_of(id: &str) -> Result<Guid, Off> {
 #[derive(Clone, Copy, Debug)]
 pub struct Content;
 
+impl crate::script::Bound for Content {
+    const NAME: &'static str = "content";
+    const DOC: &'static str =
+        "Game content from mods: new items, recipes and workshops, and changes to vanilla ones.";
+    const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_CONTENT_LOOKUPS];
+
+    fn resolve(_load: &mut impl crate::Loading) -> Result<Self, Off> {
+        Ok(Self)
+    }
+}
+
 #[crate::script(content_lookups)]
 #[expect(
     clippy::unused_self,

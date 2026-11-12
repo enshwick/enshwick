@@ -438,6 +438,7 @@ dependencies = [
  "enshwick-core",
  "enshwick-fake",
  "enshwick-inventory",
+ "enshwick-knowledge",
  "enshwick-macros",
  "enshwick-values",
  "enshwick-world",
@@ -518,11 +519,10 @@ dependencies = [
  "enshwick-base",
  "enshwick-content",
  "enshwick-inventory",
+ "enshwick-knowledge",
  "enshwick-macros",
- "enshwick-typed",
  "enshwick-values",
  "enshwick-world",
- "fastrand",
  "hound",
  "insta",
  "proptest",
@@ -635,6 +635,23 @@ dependencies = [
  "rustc-hash",
  "serde",
  "thiserror",
+]
+
+[[package]]
+name = "enshwick-knowledge"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "enshwick",
+ "enshwick-abi",
+ "enshwick-base",
+ "enshwick-content",
+ "enshwick-inventory",
+ "enshwick-macros",
+ "enshwick-typed",
+ "enshwick-values",
+ "enshwick-world",
+ "fastrand",
+ "serde",
 ]
 
 [[package]]

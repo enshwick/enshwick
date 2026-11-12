@@ -869,6 +869,17 @@ pub trait LoadMethods {
     fn effects(&mut self) -> Effects;
 }
 
+impl crate::script::Bound for Effects {
+    const NAME: &'static str = "effects";
+    const DOC: &'static str = "Effects a mod has on the server's world: survivor orders, toggles, threat, pings, teleports and spawns.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
+        &[Self::SCRIPT_EVENTS, Self::SCRIPT_SPAWNS];
+
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
+        Ok(load.base_mut().effects())
+    }
+}
+
 impl LoadMethods for BaseLoad {
     fn effects(&mut self) -> Effects {
         Effects::resolve(self)

@@ -17,7 +17,6 @@
 //! ```
 
 use crate::Host;
-#[cfg(feature = "unstable")]
 use crate::Off;
 use crate::abi::{RateId, Status};
 use crate::content::recipes::RecipeKind;
@@ -324,6 +323,17 @@ impl crate::script::Object for RateHandle {
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug)]
 pub struct RateFns;
+
+impl crate::script::Bound for RateFns {
+    const NAME: &'static str = "rates";
+    const DOC: &'static str =
+        "The game's rates, such as experience and drops, each mod's factor on them combined.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_RATE_FNS];
+
+    fn resolve(_load: &mut impl crate::Loading) -> Result<Self, Off> {
+        Ok(Self)
+    }
+}
 
 #[crate::script(rate_fns)]
 #[expect(

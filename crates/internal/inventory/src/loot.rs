@@ -524,6 +524,16 @@ impl LoadMethods for crate::BaseLoad {
 #[derive(Clone, Copy, Debug)]
 pub struct LootFns;
 
+impl crate::script::Bound for LootFns {
+    const NAME: &'static str = "loot";
+    const DOC: &'static str = "Mod items in random loot, and the game's loot passes.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_LOOT_FNS];
+
+    fn resolve(_load: &mut impl Loading) -> Result<Self, Off> {
+        Ok(Self)
+    }
+}
+
 #[crate::script(loot_fns)]
 #[expect(
     clippy::unused_self,

@@ -9,6 +9,7 @@ see is in the changelog of `enshwick`.
 
 ### Added
 
+- The content domain's `Bound` implementations, beside their types (#1053).
 - The crate: the content domain, cut out of `enshwick-core` (#1049).
 - `__load`, the method traits of each module that core's `Load` forwards
   to, and `__fake`, what the fake loader and core's tests read here

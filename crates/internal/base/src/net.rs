@@ -391,6 +391,16 @@ impl Channel<Data> {
 #[derive(Clone, Copy, Debug)]
 pub struct NetFns;
 
+impl crate::script::Bound for NetFns {
+    const NAME: &'static str = "net";
+    const DOC: &'static str = "Messages between a mod's server part and its client part.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_NET_FNS];
+
+    fn resolve(_load: &mut impl crate::Loading) -> Result<Self, Off> {
+        Ok(Self)
+    }
+}
+
 #[crate::script(net_fns)]
 #[expect(
     clippy::unused_self,

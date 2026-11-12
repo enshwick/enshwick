@@ -230,6 +230,17 @@ impl Resources {
     }
 }
 
+impl crate::script::Bound for Resources {
+    const NAME: &'static str = "resources";
+    const DOC: &'static str =
+        "The game's types, its resources by type and as values, and resources served from an edit.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_LOOKUPS];
+
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
+        Ok(Self::open(load.base().host()))
+    }
+}
+
 #[crate::script(lookups)]
 #[expect(
     clippy::unused_self,

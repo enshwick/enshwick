@@ -216,15 +216,21 @@ mod inventory;
 mod item_data;
 #[cfg(feature = "unstable")]
 mod items;
+mod knowledge;
 mod loot;
 #[cfg(feature = "unstable")]
 mod map;
 mod net;
 mod pacing;
 mod points;
+mod progress;
+#[cfg(feature = "typed")]
+mod quests;
 #[cfg(feature = "unstable")]
 mod rates;
 mod resources;
+#[cfg(feature = "unstable")]
+mod rewards;
 mod services;
 mod settings;
 mod state;

@@ -1,10 +1,9 @@
-//! The content domain's namespaces, and how `Load` opens each of its
-//! handles.
+//! The content domain's namespaces.
 
-use super::{Bound, Function, Namespace};
+use super::Namespace;
+use crate::Load;
 use crate::content::Content;
 use crate::rates::RateFns;
-use crate::{Load, Off};
 
 pub(super) const NAMESPACES: &[Namespace] = &[
     Namespace::of::<RateFns>(),
@@ -44,25 +43,3 @@ pub(super) const NAMESPACES: &[Namespace] = &[
         ],
     ),
 ];
-
-impl Bound for RateFns {
-    const NAME: &'static str = "rates";
-    const DOC: &'static str =
-        "The game's rates, such as experience and drops, each mod's factor on them combined.";
-    const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_RATE_FNS];
-
-    fn resolve(_load: &mut Load<'_>) -> Result<Self, Off> {
-        Ok(Self)
-    }
-}
-
-impl Bound for Content {
-    const NAME: &'static str = "content";
-    const DOC: &'static str =
-        "Game content from mods: new items, recipes and workshops, and changes to vanilla ones.";
-    const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_CONTENT_LOOKUPS];
-
-    fn resolve(_load: &mut Load<'_>) -> Result<Self, Off> {
-        Ok(Self)
-    }
-}

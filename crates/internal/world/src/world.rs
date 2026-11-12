@@ -344,6 +344,29 @@ pub trait LoadMethods {
     fn world(&mut self) -> Result<World, Off>;
 }
 
+impl crate::script::Bound for World {
+    const NAME: &'static str = "world";
+    const DOC: &'static str = "The server's world: players, accounts, entities, props, vitals and edits in transactions. Unstable: may change in any release.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[
+        Self::SCRIPT_PLAYERS,
+        Self::SCRIPT_THINGS,
+        Self::SCRIPT_ACCOUNTS,
+        Self::SCRIPT_BUILD,
+        Self::SCRIPT_ENTITIES,
+        Self::SCRIPT_PROPS,
+        Self::SCRIPT_TRANSACTIONS,
+        Self::SCRIPT_VITALS,
+        Self::SCRIPT_METERS,
+        Self::SCRIPT_FIELDS,
+        Self::SCRIPT_CAPTURE,
+        Self::SCRIPT_SAVES,
+    ];
+
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
+        load.base_mut().world()
+    }
+}
+
 impl LoadMethods for BaseLoad {
     fn world(&mut self) -> Result<World, Off> {
         World::resolve(self)

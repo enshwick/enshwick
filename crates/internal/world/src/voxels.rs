@@ -700,6 +700,16 @@ pub trait LoadMethods {
     fn voxels(&mut self) -> Voxels;
 }
 
+impl crate::script::Bound for Voxels {
+    const NAME: &'static str = "voxels";
+    const DOC: &'static str = "The world's voxels, read a box or one at a time.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_READS];
+
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, crate::Off> {
+        Ok(load.base_mut().voxels())
+    }
+}
+
 impl LoadMethods for crate::BaseLoad {
     fn voxels(&mut self) -> Voxels {
         Voxels { host: self.host() }

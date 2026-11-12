@@ -173,7 +173,7 @@ impl Bound for ControlFns {
         "Keys the mod declares for its players, and game actions they follow.";
     const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_CONTROL_FNS];
 
-    fn resolve(_load: &mut Load<'_>) -> Result<Self, Off> {
+    fn resolve(_load: &mut impl crate::Loading) -> Result<Self, Off> {
         Ok(Self)
     }
 }

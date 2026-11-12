@@ -21,15 +21,17 @@ The platform's crates carry versions of their own:
 - the loader, `enshwick-loader`
 - the `powrprof.dll` stub, `enshwick-loader-stub`
 - `enshwick` and `enshwick-macros`
-- `enshwick-core`, the mod's loader and the domains, and `enshwick-fake`, the
-  test fake,
-  internal parts of the API crate released at its version
-- `enshwick-base`, what the API's domains share, an internal part of the
-  API crate released at its version
-- `enshwick-values` and `enshwick-typed`, internal parts of the API crate
-  released at its version
-- `enshwick-abi`, the ABI types, an internal part of the API crate released
-  at its version
+- the internal parts of the API crate, released at its version:
+  - `enshwick-core`, the mod's loader and the domains still in it
+  - `enshwick-knowledge`, the knowledge domain
+  - `enshwick-inventory`, the inventory domain
+  - `enshwick-world`, the world domain
+  - `enshwick-content`, the content domain
+  - `enshwick-base`, what the domains share
+  - `enshwick-values` and `enshwick-typed`, the value types and the
+    generated typed API
+  - `enshwick-abi`, the ABI types
+  - `enshwick-fake`, the test fake
 - the engine routes and anchors with the reflection reader,
   `enshwick-gamedata`
 - `cargo-enshwick`
