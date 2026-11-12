@@ -11,7 +11,7 @@ use enshwick_inventory::__load::*;
 impl Load<'_> {
     /// Defines the mod's stat kind `id`, named with
     /// [`id!`](crate::content::id). Its text is `<name>.name` in the mod's
-    /// texts ([`name_key`]). Call it during `init`, on both sides.
+    /// texts ([`name_key`](crate::stats::name_key)). Call it during `init`, on both sides.
     ///
     /// # Errors
     ///
@@ -24,7 +24,7 @@ impl Load<'_> {
     #[script]
     pub fn define_stat(&mut self, id: Id, def: &StatDef) -> Result<Stat, Off>;
 
-    /// Opens stat kind `id`: a built-in one from [`builtin`], or another
+    /// Opens stat kind `id`: a built-in one from [`builtin`](crate::stats::builtin), or another
     /// mod's through [`deps!`](crate::deps). A kind no mod defines keeps 0
     /// and reads nothing. Call it during `init`, on both sides.
     ///

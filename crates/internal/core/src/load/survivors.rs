@@ -12,7 +12,7 @@ mod script;
 impl Load<'_> {
     /// Makes `handler` the answer to the game's survivor lookups; one mod at
     /// a time. It runs on the server's worker threads, in the dedicated
-    /// server or a hosting client, and for [`Purpose::Cursor`] on a client
+    /// server or a hosting client, and for [`Purpose::Cursor`](crate::survivors::Purpose::Cursor) on a client
     /// alone too: keep it quick and never block.
     ///
     /// Several engine systems look survivors up for every survivor on every

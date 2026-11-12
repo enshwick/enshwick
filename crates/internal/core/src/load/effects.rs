@@ -9,7 +9,7 @@ impl Load<'_> {
     /// The mod's [`Effects`] in the server's world: game events it raises
     /// and spawns; on a client, the built-in server's while it hosts a
     /// game. An action whose event this build lacks answers
-    /// [`WorldError::Missing`].
+    /// [`WorldError::Missing`](crate::WorldError::Missing).
     ///
     /// # Examples
     ///
