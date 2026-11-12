@@ -1,7 +1,7 @@
 //! The client's interface, drawn with the game's own widgets.
 //!
 //! The game redraws its interface every frame from code, so a mod draws its
-//! own the same way: a callback registered with [`Load::on_frame`] runs once
+//! own the same way: a callback registered with [`Load::on_frame`](../struct.Load.html#method.on_frame) runs once
 //! per frame on the thread that draws the interface and calls the widgets of
 //! [`Frame`] in order. Windows look like the game's own panels, labels take
 //! the game's named text styles, and the rows are the game's settings rows.
@@ -11,14 +11,14 @@
 //! [`Ui::dialog`] queues a dialog in the game's own style, from any thread;
 //! [`Ui::ask`] waits for the answer on a thread of the mod's own.
 //!
-//! [`Load::on_hud`] draws lines and bars on the HUD each frame, at an
+//! [`Load::on_hud`](../struct.Load.html#method.on_hud) draws lines and bars on the HUD each frame, at an
 //! [`Anchor`], hidden with the game's HUD; `Ui::set_markers`, with the
 //! `unstable` feature, shows the mod's markers on the map until it sets
 //! others. `Load::extend_screen`, with the `unstable` feature, adds a panel
 //! at an edge of one of the game's screens, such as a storage chest's, shown
 //! and hidden with it.
 //!
-//! Everything here is client only: [`Load::ui`] and [`Load::on_frame`] turn
+//! Everything here is client only: [`Load::ui`](../struct.Load.html#method.ui) and [`Load::on_frame`](../struct.Load.html#method.on_frame) turn
 //! a mod's server part away with [`Off`].
 //!
 //! # Examples
@@ -87,7 +87,7 @@ pub(crate) const MARKER_LIMIT: usize = 256;
 /// The most options a [`Dropdown`] shows.
 pub const MAX_OPTIONS: usize = 64;
 
-/// The interface services for a mod's client part, from [`Load::ui`]; `Copy`,
+/// The interface services for a mod's client part, from [`Load::ui`](../struct.Load.html#method.ui); `Copy`,
 /// for any thread.
 ///
 /// # Examples

@@ -70,7 +70,7 @@ impl SoundContainerScene {
     }
 }
 
-/// A sound for [`Load::add_sound`]: a WAV file in the mod's folder and the
+/// A sound for [`Load::add_sound`](../struct.Load.html#method.add_sound): a WAV file in the mod's folder and the
 /// values of the sound container that plays it.
 ///
 /// # Examples

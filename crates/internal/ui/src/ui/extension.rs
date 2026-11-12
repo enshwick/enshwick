@@ -43,7 +43,7 @@ impl HudScreenType {
 ///
 /// # Examples
 ///
-/// See [`Load::extend_screen`].
+/// See [`Load::extend_screen`](../struct.Load.html#method.extend_screen).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Edge {
@@ -173,11 +173,11 @@ impl LoadMethods for crate::BaseLoad {
 }
 
 /// The game's screen the player has open changing, from
-/// [`Load::on_screen_changed`]. The name is enshwick's.
+/// [`Load::on_screen_changed`](../struct.Load.html#method.on_screen_changed). The name is enshwick's.
 ///
 /// # Examples
 ///
-/// See [`Load::on_screen_changed`].
+/// See [`Load::on_screen_changed`](../struct.Load.html#method.on_screen_changed).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct ScreenChanged {

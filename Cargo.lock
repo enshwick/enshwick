@@ -756,6 +756,7 @@ dependencies = [
  "enshwick-values",
  "enshwick-world",
  "hound",
+ "proptest",
  "thiserror",
 ]
 

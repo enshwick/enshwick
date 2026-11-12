@@ -19,7 +19,7 @@ ignore:
   - "**/tests.rs"
   - crates/internal/world/src/typed.rs
   - crates/internal/world/src/typed/**
-  - crates/internal/core/src/ui/screens.rs
+  - crates/internal/ui/src/ui/screens.rs
   - crates/enshwick-gamedata/src/typed/ids.rs
   - examples/**
   - fuzz/**

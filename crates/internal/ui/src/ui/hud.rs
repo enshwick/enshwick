@@ -47,7 +47,7 @@ impl Anchor {
     }
 }
 
-/// The HUD of one frame, handed to a callback of [`Load::on_hud`]: what it
+/// The HUD of one frame, handed to a callback of [`Load::on_hud`](../struct.Load.html#method.on_hud): what it
 /// draws shows this frame only, so an item goes away when the mod stops
 /// drawing it. Valid for the callback only, on its thread.
 ///

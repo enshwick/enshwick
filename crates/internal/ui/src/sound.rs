@@ -98,7 +98,7 @@ impl SoundContainerId {
 ///
 /// # Examples
 ///
-/// See [`Load::change_sound`].
+/// See [`Load::change_sound`](../struct.Load.html#method.change_sound).
 #[derive(Clone, Copy, Debug, Default, PartialEq, crate::Script)]
 pub struct SoundChange {
     /// The game's volume factor, from 0 (silent) to [`MAX_VOLUME`].
