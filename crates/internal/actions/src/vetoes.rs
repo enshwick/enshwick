@@ -41,7 +41,7 @@ use crate::game_events::CraftRecipeEvent;
 use crate::script::{Answer, Error, Ty, Value};
 use crate::{Entity, ItemId};
 
-/// A placement the game allows, from [`Load::on_build`]. The name is
+/// A placement the game allows, from [`Load::on_build`](../struct.Load.html#method.on_build). The name is
 /// enshwick's: the game's cursor check has none, and a refusal sets the
 /// game's `NoPermission` cursor flag.
 ///
@@ -82,7 +82,7 @@ where
     ))
 }
 
-/// What a build filter answers for a placement, from [`Load::on_build`].
+/// What a build filter answers for a placement, from [`Load::on_build`](../struct.Load.html#method.on_build).
 ///
 /// From Luau a filter answers `false` to refuse, a string to refuse with
 /// that reason, and nil or `true` to allow; any other value refuses, and a

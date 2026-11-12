@@ -400,7 +400,7 @@ impl Action {
     }
 }
 
-/// A mod's player actions, from [`Load::actions`]; `Clone`, so handlers and
+/// A mod's player actions, from [`Load::actions`](../struct.Load.html#method.actions); `Clone`, so handlers and
 /// settings callbacks may keep it.
 ///
 /// # Examples

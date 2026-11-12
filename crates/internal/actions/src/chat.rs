@@ -1,9 +1,9 @@
 //! Chat on the server: hear every line that reached it, and drop or rewrite
 //! what players type before anyone reads it.
 //!
-//! [`Load::on_chat_said`] hears each line after the step: a player's line as
+//! [`Load::on_chat_said`](../struct.Load.html#method.on_chat_said) hears each line after the step: a player's line as
 //! the filters left it, an emote, or a notice the server posted. A filter
-//! from [`Load::on_chat`] runs on a player's line inside the game's chat
+//! from [`Load::on_chat`](../struct.Load.html#method.on_chat) runs on a player's line inside the game's chat
 //! post, after the chat mute, in load order. Chat is for reading: no feature
 //! may depend on a typed command. Lines a mod sends raise nothing.
 //!
@@ -47,8 +47,8 @@ pub enum ChatKind {
     Notice,
 }
 
-/// A chat line on the server, for [`Load::on_chat_said`] and
-/// [`Load::on_chat`].
+/// A chat line on the server, for [`Load::on_chat_said`](../struct.Load.html#method.on_chat_said) and
+/// [`Load::on_chat`](../struct.Load.html#method.on_chat).
 ///
 /// # Examples
 ///

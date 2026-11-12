@@ -39,7 +39,7 @@ use enshwick_world::__internal::world_status;
 const INTERACTION_TARGET: &str = "Interaction";
 
 /// The players' prompt targets in the server's world, from
-/// [`Load::interaction_targets`]; `Copy`, for any thread, read on the game
+/// [`Load::interaction_targets`](../struct.Load.html#method.interaction_targets); `Copy`, for any thread, read on the game
 /// thread.
 ///
 /// Unstable: needs the `unstable` feature and may change in any release.
@@ -243,7 +243,7 @@ pub enum Kind {
     Upgrade,
 }
 
-/// An interaction the game is about to allow, from [`Load::on_interaction`].
+/// An interaction the game is about to allow, from [`Load::on_interaction`](../struct.Load.html#method.on_interaction).
 ///
 /// The name is enshwick's: the loader hooks the game functions behind it.
 ///

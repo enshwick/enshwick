@@ -259,7 +259,7 @@ game_actions! {
     Sneak = "Sneak",
 }
 
-/// A control as a mod declares it: hand it to [`Load::control`] with its
+/// A control as a mod declares it: hand it to [`Load::control`](../struct.Load.html#method.control) with its
 /// handler.
 ///
 /// # Examples

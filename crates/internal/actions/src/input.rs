@@ -51,7 +51,7 @@ use enshwick_world::__internal::world_status;
 /// The bits of the game's `PlayerDigitalInput`, a `Bitmask64`.
 const BITS: usize = 64;
 
-/// The players' input in the server's world, from [`Load::input`]; `Copy`,
+/// The players' input in the server's world, from [`Load::input`](../struct.Load.html#method.input); `Copy`,
 /// for any thread, read on the game thread.
 ///
 /// # Examples
