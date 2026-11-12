@@ -5,6 +5,7 @@
 //! Mods depend on `enshwick`, which re-exports every module here at the
 //! same path; this crate's own paths carry no promise.
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![forbid(unsafe_code)]
 
 // The lower crates' modules at the paths the code here names them by.
 pub(crate) use enshwick_base::load::BaseLoad;
