@@ -45,6 +45,8 @@ jobs:
       contents: read
     outputs:
       skip: ${{ steps.scope.outputs.skip }}
+      deny: ${{ steps.scope.outputs.deny }}
+      branch: ${{ steps.scope.outputs.branch }}
       parts: ${{ steps.parts.outputs.parts }}
     steps:
       # One runner per part. A part with `xtask` runs `cargo xtask check
@@ -95,8 +97,10 @@ jobs:
           if [ "$EVENT" = merge_group ]; then
             number=$(sed -nE 's|.*/pr-([0-9]+)-[0-9a-f]+$|\1|p' <<< "$HEAD_REF")
             if [ -n "$number" ]; then
-              head=$(curl --proto '=https' -sSf --retry 6 -H "Authorization: Bearer $GH_TOKEN" \
-                "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$number" | jq -r .head.sha)
+              pr=$(curl --proto '=https' -sSf --retry 6 -H "Authorization: Bearer $GH_TOKEN" \
+                "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$number")
+              head=$(jq -r .head.sha <<< "$pr")
+              echo "branch=$(jq -r .head.ref <<< "$pr")" >> "$GITHUB_OUTPUT"
               git fetch -q origin "$head"
               if [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse "$head^{tree}")" ]; then
                 reason="the group's tree is pull request #$number's head, whose check passed"
@@ -116,6 +120,14 @@ jobs:
             echo "nothing to check: $reason" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
           echo "skip=$reason" >> "$GITHUB_OUTPUT"
+          # The full suite runs cargo-deny itself; fuzz/ is a workspace of its
+          # own, which `cargo deny check` at the root does not read.
+          deny=false
+          if [ -z "$reason" ] && [ "$FULL" != true ] &&
+            git diff --name-only "$BASE...HEAD" | grep -E '(^|/)Cargo\.(toml|lock)$|^deny\.toml$' | grep -qv '^fuzz/'; then
+            deny=true
+          fi
+          echo "deny=$deny" >> "$GITHUB_OUTPUT"
 
   part:
     name: part (${{ matrix.part }})
@@ -203,6 +215,13 @@ jobs:
         with:
           path: ~/.cache/enshwick
           key: luau-lsp-${{ runner.os }}-${{ hashFiles('crates/cargo-enshwick/luau-lsp.toml') }}
+
+      # A change to a manifest, the lock file or the policy can bring in a
+      # dependency the policy refuses; it needs no build, so it goes first.
+      # Advisories change without any commit: the full suite checks them.
+      - name: cargo deny
+        if: needs.scope.outputs.deny == 'true' && (matrix.part == 'host' || matrix.part == 'all')
+        run: cargo deny check bans licenses sources
 
       - name: cargo xtask check
         if: matrix.xtask
@@ -333,19 +352,58 @@ jobs:
         run: sccache --show-stats
 
   # The required check: every part passed, or there was nothing to prove.
+  # In the merge queue main must be green too, judged when the entry is
+  # done: only a fix or a revert merges onto a red main, so it goes first.
   check:
     needs: [scope, part, windows]
     if: always()
     runs-on: ubuntu-26.04
-    timeout-minutes: 2
-    permissions: {}
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
     steps:
       - name: Result
+        # pipefail: a failed read of main's runs fails the entry, never
+        # passes it.
+        shell: bash
         env:
           SCOPE: ${{ needs.scope.result }}
           PART: ${{ needs.part.result }}
           WINDOWS: ${{ needs.windows.result }}
+          EVENT: ${{ github.event_name }}
+          BRANCH: ${{ needs.scope.outputs.branch }}
+          GH_TOKEN: ${{ github.token }}
+          MAIN: ${{ github.event.repository.default_branch }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
         run: |
           echo "scope: $SCOPE, parts: $PART, Windows tests: $WINDOWS"
           ok() { [ "$1" = success ] || [ "$1" = skipped ]; }
-          [ "$SCOPE" = success ] && ok "$PART" && ok "$WINDOWS"
+          if ! { [ "$SCOPE" = success ] && ok "$PART" && ok "$WINDOWS"; }; then exit 1; fi
+          [ "$EVENT" = merge_group ] || exit 0
+          # The caller's workflow file: a called workflow's context is its caller's.
+          workflow=${WORKFLOW_REF%%@*}
+          workflow=${workflow##*/}
+          # The newest run on main that says something: a cancelled, stale or
+          # skipped run says nothing, a neutral one passed, a first attempt still running is not known yet,
+          # and a re-run still running stays as red as the run it repeats.
+          red=$(curl --proto '=https' -sSf --retry 6 -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?branch=$MAIN&per_page=30" |
+            jq -r '[.workflow_runs[] | select(.event == "push" or .event == "workflow_dispatch")
+                | select(.status == "completed" or .run_attempt > 1)
+                | select(.conclusion | IN("cancelled", "stale", "skipped") | not)][0]
+              | select(. != null and (.conclusion | IN("success", "neutral") | not)) | .html_url')
+          if [ -z "$red" ]; then
+            echo "$MAIN is green"
+            exit 0
+          fi
+          case "$BRANCH" in
+            fix/* | revert/* | revert-*)
+              echo "$MAIN is red ($red); $BRANCH fixes it and goes first" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+              ;;
+          esac
+          message="$MAIN is red: $red. Only a fix/ or revert branch merges until it is green; re-run that run if it failed by chance, or queue again once main is green"
+          echo "::error::$message"
+          echo "$message" >> "$GITHUB_STEP_SUMMARY"
+          exit 1

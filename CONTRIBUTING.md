@@ -53,7 +53,9 @@ rules the hooks enforce, and the ones they cannot, are in this file:
 - branch from `main` as `<type>/<slug>`, `<type>` a conventional commit
   type such as `feat`, `fix` or `chore`, and open a pull request into
   `main`; its title is a conventional commit, `<type>(<scope>): <subject>`,
-  and becomes the squashed commit; the merge queue merges it once CI passes;
+  and becomes the squashed commit; the merge queue merges it once CI passes
+  and `main`'s last run passed; while `main` is red only a `fix/` or revert
+  branch merges, so the fix goes first;
 - code follows the style of the code around it, unsafe code included;
 - what mod authors need to know goes into [the modding book](book/src/SUMMARY.md)
   with the change; `cargo xtask check` checks its structure, and its Rust
