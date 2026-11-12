@@ -45,13 +45,13 @@ use crate::controls::GameAction;
 use crate::ecs::ComponentType;
 use crate::engine_ids as ids;
 use crate::resources::Registry;
-use crate::{Entity, Host, Load, Off, WorldError};
+use crate::{Entity, Host, Off, WorldError};
 use enshwick_world::__internal::world_status;
 
 /// The bits of the game's `PlayerDigitalInput`, a `Bitmask64`.
 const BITS: usize = 64;
 
-/// The players' input in the server's world, from [`Load::input`]; `Copy`,
+/// The players' input in the server's world, from [`Load::input`](../struct.Load.html#method.input); `Copy`,
 /// for any thread, read on the game thread.
 ///
 /// # Examples
@@ -275,20 +275,17 @@ impl crate::script::IntoScript for InputMask {
     }
 }
 
-impl Load<'_> {
-    /// The players' held game controls in the game server, dedicated or
-    /// hosted by the client.
-    ///
-    /// Unstable: needs the `unstable` feature and may change in any release.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] when the game build lacks the input reads.
-    ///
-    /// # Examples
-    ///
-    /// See [`Input`].
-    pub fn input(&mut self) -> Result<Input, Off> {
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::input`.
+    #[doc(hidden)]
+    fn input(&mut self) -> Result<Input, Off>;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn input(&mut self) -> Result<Input, Off> {
         Input::open(self)
     }
 }

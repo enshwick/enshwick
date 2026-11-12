@@ -22,6 +22,7 @@
 
 use core::ffi::c_void;
 
+use crate::Off;
 use crate::abi::Interaction as RawInteraction;
 #[cfg(feature = "unstable")]
 use crate::abi::Status;
@@ -30,7 +31,6 @@ use crate::content::EngineFacts as _;
 use crate::{Entity, ItemId};
 #[cfg(feature = "unstable")]
 use crate::{Host, WorldError, ecs::ComponentType, engine_ids as ids, resources::Registry};
-use crate::{Load, Off};
 #[cfg(feature = "unstable")]
 use enshwick_world::__internal::world_status;
 
@@ -39,7 +39,7 @@ use enshwick_world::__internal::world_status;
 const INTERACTION_TARGET: &str = "Interaction";
 
 /// The players' prompt targets in the server's world, from
-/// [`Load::interaction_targets`]; `Copy`, for any thread, read on the game
+/// [`Load::interaction_targets`](../struct.Load.html#method.interaction_targets); `Copy`, for any thread, read on the game
 /// thread.
 ///
 /// Unstable: needs the `unstable` feature and may change in any release.
@@ -182,22 +182,38 @@ impl Targets {
     }
 }
 
-#[cfg(feature = "unstable")]
-impl Load<'_> {
-    /// The players' prompt targets in the game server, dedicated or hosted
-    /// by the client.
-    ///
-    /// Unstable: needs the `unstable` feature and may change in any release.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] when the game build lacks the target's read.
-    ///
-    /// # Examples
-    ///
-    /// See [`Targets`].
-    pub fn interaction_targets(&mut self) -> Result<Targets, Off> {
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::interaction_targets`.
+    #[doc(hidden)]
+    #[cfg(feature = "unstable")]
+    fn interaction_targets(&mut self) -> Result<Targets, Off>;
+
+    /// As `Load::on_interaction`.
+    #[doc(hidden)]
+    fn on_interaction<F>(&mut self, filter: F) -> Result<(), Off>
+    where
+        F: Fn(&Interaction) -> bool + Send + Sync + 'static;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    #[cfg(feature = "unstable")]
+    fn interaction_targets(&mut self) -> Result<Targets, Off> {
         Targets::open(self)
+    }
+
+    fn on_interaction<F>(&mut self, filter: F) -> Result<(), Off>
+    where
+        F: Fn(&Interaction) -> bool + Send + Sync + 'static,
+    {
+        let host = self.host();
+        crate::load::hand_over(
+            filter,
+            |user| (host.api().interaction_filter)(host.handle(), run_filter::<F>, user),
+            "interaction filter",
+        )
     }
 }
 
@@ -227,7 +243,7 @@ pub enum Kind {
     Upgrade,
 }
 
-/// An interaction the game is about to allow, from [`Load::on_interaction`].
+/// An interaction the game is about to allow, from [`Load::on_interaction`](../struct.Load.html#method.on_interaction).
 ///
 /// The name is enshwick's: the loader hooks the game functions behind it.
 ///
@@ -284,39 +300,4 @@ where
         || true,
         || filter(&interaction),
     ))
-}
-
-#[crate::script(interactions)]
-impl Load<'_> {
-    /// Runs `filter` before the game allows a player's interaction with an
-    /// entity; returning `false` refuses it the game's own way. It runs in
-    /// the server's world only, in the dedicated server or a hosting client,
-    /// on the thread of the system that checks the interaction: keep it quick
-    /// and never block.
-    ///
-    /// The game asks whether to offer an interaction for every entity in
-    /// each player's reach on every frame, so `filter` runs many times a
-    /// frame: it must not allocate, lock or log. Moves, sorts, stock draws,
-    /// dismantling and upgrades ask once per action. An interaction without
-    /// a player's character or without a target is allowed unasked.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] after init or on a build that lacks a piece.
-    ///
-    /// # Examples
-    ///
-    /// See the [module](self).
-    #[script]
-    pub fn on_interaction<F>(&mut self, filter: F) -> Result<(), Off>
-    where
-        F: Fn(&Interaction) -> bool + Send + Sync + 'static,
-    {
-        let host = self.host();
-        crate::load::hand_over(
-            filter,
-            |user| (host.api().interaction_filter)(host.handle(), run_filter::<F>, user),
-            "interaction filter",
-        )
-    }
 }

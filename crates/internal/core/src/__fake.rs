@@ -4,14 +4,14 @@
 
 use std::sync::OnceLock;
 
+#[cfg(feature = "unstable")]
+pub use enshwick_actions::__fake::*;
 pub use enshwick_base::__fake::*;
 pub use enshwick_content::__fake::*;
 pub use enshwick_world::__fake::*;
 
 pub use crate::__private::rules;
 use crate::abi::{HostApi, Manifest};
-#[cfg(feature = "unstable")]
-use crate::actions::ActionTarget;
 
 /// The most markers one mod places on the map.
 pub const MARKER_LIMIT: usize = crate::ui::MARKER_LIMIT;
@@ -38,19 +38,4 @@ pub fn check_manifests(check: ManifestCheck) {
 /// it or no fake installed one.
 pub(crate) fn refused(api: *const HostApi, manifest: &Manifest) -> Option<String> {
     MANIFEST_CHECK.get().and_then(|check| check(api, manifest))
-}
-
-/// The action target `raw` names, as the safe layer reads it from the
-/// loader; `None` for none.
-#[cfg(feature = "unstable")]
-#[must_use]
-pub fn action_target(raw: &crate::abi::ActionTarget) -> Option<ActionTarget> {
-    ActionTarget::from_raw(raw)
-}
-
-/// `target` as the safe layer hands it to the loader.
-#[cfg(feature = "unstable")]
-#[must_use]
-pub fn raw_action_target(target: ActionTarget) -> crate::abi::ActionTarget {
-    target.to_raw()
 }

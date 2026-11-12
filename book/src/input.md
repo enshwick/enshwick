@@ -5,9 +5,9 @@ description: A server mod reads which of the game's controls each player holds t
 
 # The controls a player holds
 
-[`load.input()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/input.rs)
+[`load.input()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/actions/src/input.rs)
 returns the
-[`Input`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/input.rs)
+[`Input`](https://github.com/enshwick/enshwick/blob/main/crates/internal/actions/src/input.rs)
 of the server's world: which of the game's controls each player holds this
 step. It is unstable: it needs the `unstable` feature (see
 [Stability](stability.md)).

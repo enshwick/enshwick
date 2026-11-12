@@ -132,13 +132,29 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub use enshwick_abi::abi;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
-pub use enshwick_core::actions;
+pub use enshwick_actions::actions;
 #[doc(inline)]
 pub use enshwick_inventory::affixes;
 #[doc(inline)]
 pub use enshwick_world::altars;
 #[cfg(doctest)]
 mod book;
+#[doc(inline)]
+pub use enshwick_actions::chat;
+#[cfg(feature = "unstable")]
+#[doc(inline)]
+pub use enshwick_actions::commands;
+#[cfg(feature = "unstable")]
+#[doc(inline)]
+pub use enshwick_actions::console;
+#[cfg(feature = "unstable")]
+#[doc(inline)]
+pub use enshwick_actions::controls;
+#[cfg(feature = "unstable")]
+#[doc(inline)]
+pub use enshwick_actions::input;
+#[doc(inline)]
+pub use enshwick_actions::interactions;
 #[doc(inline)]
 pub use enshwick_base::code;
 #[doc(hidden)]
@@ -157,22 +173,6 @@ pub use enshwick_base::game_events;
 pub use enshwick_base::i18n;
 #[doc(inline)]
 pub use enshwick_content::content;
-#[doc(inline)]
-pub use enshwick_core::chat;
-#[cfg(feature = "unstable")]
-#[doc(inline)]
-pub use enshwick_core::commands;
-#[cfg(feature = "unstable")]
-#[doc(inline)]
-pub use enshwick_core::console;
-#[cfg(feature = "unstable")]
-#[doc(inline)]
-pub use enshwick_core::controls;
-#[cfg(feature = "unstable")]
-#[doc(inline)]
-pub use enshwick_core::input;
-#[doc(inline)]
-pub use enshwick_core::interactions;
 #[doc(inline)]
 pub use enshwick_inventory::damage;
 #[doc(inline)]
@@ -226,6 +226,8 @@ pub use enshwick_world::map;
 #[cfg(doctest)]
 mod refused;
 #[doc(inline)]
+pub use enshwick_actions::vetoes;
+#[doc(inline)]
 pub use enshwick_base::resources;
 #[doc(inline)]
 pub use enshwick_base::schedule;
@@ -244,8 +246,6 @@ pub use enshwick_core::script::{self};
 pub use enshwick_core::sound;
 #[doc(inline)]
 pub use enshwick_core::ui;
-#[doc(inline)]
-pub use enshwick_core::vetoes;
 #[cfg(feature = "test")]
 #[doc(inline)]
 pub use enshwick_fake::test;

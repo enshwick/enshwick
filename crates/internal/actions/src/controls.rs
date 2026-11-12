@@ -41,12 +41,12 @@
 use core::ffi::c_void;
 use core::time::Duration;
 
+use crate::Off;
 use crate::abi::{ControlEvent, ControlSpec, Str, read_headed};
 use crate::world::Player;
-use crate::{Load, Off};
 
 mod key;
-mod script;
+pub(crate) mod script;
 
 pub use key::{Key, ParseKeyError};
 #[doc(hidden)]
@@ -259,7 +259,7 @@ game_actions! {
     Sneak = "Sneak",
 }
 
-/// A control as a mod declares it: hand it to [`Load::control`] with its
+/// A control as a mod declares it: hand it to [`Load::control`](../struct.Load.html#method.control) with its
 /// handler.
 ///
 /// # Examples
@@ -433,7 +433,7 @@ type Handler = Box<dyn Fn(&Fired<'_>) + Send + Sync>;
 /// - `event` is null or points at a [`ControlEvent`] readable for the size
 ///   its header states, with no other writer during the call; its `name`
 ///   is null or points at its `len` bytes, alive for the call.
-/// - `user` is the `Box<Handler>` that [`Load::control`] handed over, which
+/// - `user` is the `Box<Handler>` that `Load::control` handed over, which
 ///   the loader keeps for the process.
 unsafe extern "system" fn fire(event: *const ControlEvent, user: *mut c_void) {
     // SAFETY: the caller guarantees `event` is null or a `ControlEvent`
@@ -459,25 +459,19 @@ unsafe extern "system" fn fire(event: *const ControlEvent, user: *mut c_void) {
     crate::host::guard("panic in a control", || (), || handler(&fired));
 }
 
-impl Load<'_> {
-    /// Declares `control` with its handler, which runs on the client's
-    /// interface thread for a key, and on the server's game thread for a
-    /// [linked](Control::link) game action; a client hosting a game may run
-    /// both at once.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] for a malformed name, a name declared before, or when the
-    /// loader refuses the control.
-    ///
-    /// # Examples
-    ///
-    /// See the [module](self).
-    #[expect(
-        clippy::needless_pass_by_value,
-        reason = "a declaration hands its builder over, as `Actions::add` does"
-    )]
-    pub fn control<F>(&mut self, control: Control, on: F) -> Result<(), Off>
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::control`.
+    #[doc(hidden)]
+    fn control<F>(&mut self, control: Control, on: F) -> Result<(), Off>
+    where
+        F: Fn(&Fired<'_>) + Send + Sync + 'static;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn control<F>(&mut self, control: Control, on: F) -> Result<(), Off>
     where
         F: Fn(&Fired<'_>) + Send + Sync + 'static,
     {

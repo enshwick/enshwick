@@ -12,13 +12,14 @@ use super::{
     Action, ActionTarget, Actions, Arg, Ask, FindSubjectError, Outcome, Request, Row, Subject,
     Value, Via, Window,
 };
+use crate::__load::*;
 use crate::i18n::{Language, Texts};
 use crate::script::{
     self, Answer, Bound, Callback, Class, Error, FromScript, Function, IntoScript, Object, Param,
     Signature, Ty, Typed,
 };
 use crate::world::{Player, PlayerPermissions};
-use crate::{Load, Off, PlayerKey};
+use crate::{Off, PlayerKey};
 
 /// An action as a script declares it: the fields of [`Action`]'s builder.
 #[derive(Clone, Debug, crate::Script)]
@@ -782,16 +783,17 @@ impl Bound for ActionFns {
     }
 }
 
-#[crate::script(actions)]
-impl Load<'_> {
-    /// The mod's player actions, with the labels' texts `texts`, as
-    /// [`Load::actions`] gives them.
-    ///
-    /// # Errors
-    ///
-    /// As [`Load::actions`].
-    #[script(name = "actions")]
-    pub(crate) fn actions_script(&mut self, texts: Texts) -> Result<Actions, Off> {
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::actions_script`.
+    #[doc(hidden)]
+    fn actions_script(&mut self, texts: Texts) -> Result<Actions, Off>;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn actions_script(&mut self, texts: Texts) -> Result<Actions, Off> {
         self.actions(texts)
     }
 }

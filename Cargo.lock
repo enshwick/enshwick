@@ -433,6 +433,7 @@ dependencies = [
  "criterion",
  "document-features",
  "enshwick-abi",
+ "enshwick-actions",
  "enshwick-base",
  "enshwick-content",
  "enshwick-core",
@@ -463,6 +464,22 @@ dependencies = [
  "proptest",
  "serde",
  "syn 3.0.10",
+ "thiserror",
+]
+
+[[package]]
+name = "enshwick-actions"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "bytemuck",
+ "enshwick",
+ "enshwick-abi",
+ "enshwick-base",
+ "enshwick-content",
+ "enshwick-inventory",
+ "enshwick-macros",
+ "enshwick-values",
+ "enshwick-world",
  "thiserror",
 ]
 
@@ -513,9 +530,9 @@ dependencies = [
 name = "enshwick-core"
 version = "1.0.0-alpha.14"
 dependencies = [
- "bytemuck",
  "enshwick",
  "enshwick-abi",
+ "enshwick-actions",
  "enshwick-base",
  "enshwick-content",
  "enshwick-inventory",

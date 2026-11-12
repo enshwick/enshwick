@@ -23,6 +23,7 @@ The platform's crates carry versions of their own:
 - `enshwick` and `enshwick-macros`
 - the internal parts of the API crate, released at its version:
   - `enshwick-core`, the mod's loader and the domains still in it
+  - `enshwick-actions`, the actions domain
   - `enshwick-knowledge`, the knowledge domain
   - `enshwick-inventory`, the inventory domain
   - `enshwick-world`, the world domain

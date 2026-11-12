@@ -54,6 +54,25 @@ fn reach_knowledge(load: &mut enshwick::Load<'_>, reward: enshwick::rewards::Rew
     let _ = base.on_experience_script(|_, _| None);
 }
 
+fn reach_actions(load: &mut enshwick::Load<'_>, texts: enshwick::i18n::Texts) {
+    use enshwick::Loading as _;
+    use enshwick::actions::script::LoadMethods as _;
+    use enshwick::controls::script::LoadMethods as _;
+    let _: Option<enshwick::controls::script::ScriptControl> = None;
+    let _: Option<enshwick::actions::script::ScriptOutcome> = None;
+    let base = load.base_mut();
+    let _ = base.actions_script(texts);
+    let _ = base.control_script((), |_| ());
+}
+
+fn reach_vetoes(load: &mut enshwick::Load<'_>) {
+    use enshwick::Loading as _;
+    use enshwick::vetoes::LoadMethods as _;
+    use enshwick::vetoes::script::LoadMethods as _;
+    let base = load.base_mut();
+    let _ = base.build_filter(|_| enshwick::vetoes::BuildVerdict::Allow);
+}
+
 fn reach(host: Host, scheduler: Scheduler, ty: ComponentType) {
     let _ = host.install();
     host.scope(|| ());

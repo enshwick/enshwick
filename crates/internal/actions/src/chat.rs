@@ -1,9 +1,9 @@
 //! Chat on the server: hear every line that reached it, and drop or rewrite
 //! what players type before anyone reads it.
 //!
-//! [`Load::on_chat_said`] hears each line after the step: a player's line as
+//! [`Load::on_chat_said`](../struct.Load.html#method.on_chat_said) hears each line after the step: a player's line as
 //! the filters left it, an emote, or a notice the server posted. A filter
-//! from [`Load::on_chat`] runs on a player's line inside the game's chat
+//! from [`Load::on_chat`](../struct.Load.html#method.on_chat) runs on a player's line inside the game's chat
 //! post, after the chat mute, in load order. Chat is for reading: no feature
 //! may depend on a typed command. Lines a mod sends raise nothing.
 //!
@@ -29,7 +29,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::abi::{self, ChatRewrite, Event, Level};
 use crate::script::{Answer, Error, Ty, Value};
-use crate::{Entity, Host, Load, Off, PlayerKey};
+use crate::{Entity, Host, Off, PlayerKey};
 
 /// What a chat line is.
 ///
@@ -47,8 +47,8 @@ pub enum ChatKind {
     Notice,
 }
 
-/// A chat line on the server, for [`Load::on_chat_said`] and
-/// [`Load::on_chat`].
+/// A chat line on the server, for [`Load::on_chat_said`](../struct.Load.html#method.on_chat_said) and
+/// [`Load::on_chat`](../struct.Load.html#method.on_chat).
 ///
 /// # Examples
 ///
@@ -187,23 +187,25 @@ fn cut(text: &str, max: usize) -> &str {
     &text[..end]
 }
 
-#[crate::script(chat)]
-impl Load<'_> {
-    /// Runs `filter` on every line a player types, inside the game's chat
-    /// post on the server's game thread, after the chat mute and in load
-    /// order with other mods' filters; it keeps, drops or rewrites the
-    /// line. A panic turns this filter off alone, and lines pass it. On a
-    /// client it runs while it hosts a game.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] after init or on a build without the game's chat post.
-    ///
-    /// # Examples
-    ///
-    /// See the [module](self).
-    #[script]
-    pub fn on_chat<F>(&mut self, filter: F) -> Result<(), Off>
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::on_chat`.
+    #[doc(hidden)]
+    fn on_chat<F>(&mut self, filter: F) -> Result<(), Off>
+    where
+        F: Fn(&ChatLine) -> ChatVerdict + Send + Sync + 'static;
+
+    /// As `Load::on_chat_said`.
+    #[doc(hidden)]
+    fn on_chat_said<F>(&mut self, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&ChatLine) + Send + Sync + 'static;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn on_chat<F>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&ChatLine) -> ChatVerdict + Send + Sync + 'static,
     {
@@ -220,21 +222,7 @@ impl Load<'_> {
         )
     }
 
-    /// Calls `handler` for every line that reached the server's chat, on
-    /// the game thread after the step: a player's line as the filters left
-    /// it, an emote or a notice. A player's lines reach it at most eight a
-    /// second; lines a mod sends never do. A panic in `handler` turns the
-    /// mod off.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] after init.
-    ///
-    /// # Examples
-    ///
-    /// See the [module](self).
-    #[script]
-    pub fn on_chat_said<F>(&mut self, handler: F) -> Result<(), Off>
+    fn on_chat_said<F>(&mut self, handler: F) -> Result<(), Off>
     where
         F: Fn(&ChatLine) + Send + Sync + 'static,
     {

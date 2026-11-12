@@ -34,12 +34,12 @@ content = "content"
 world = "world"
 inventory = "inventory"
 knowledge = "knowledge"
+actions = "actions"
 
 # Each domain's top-level modules still in core.
 [modules]
 # The script binding's runtime, which stays in core beside `Load`.
 base = ["script"]
-actions = ["actions", "chat", "commands", "console", "controls", "input", "interactions", "vetoes"]
 ui = ["sound", "ui"]
 packs = ["packs"]
 
