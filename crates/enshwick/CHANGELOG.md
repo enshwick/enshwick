@@ -171,6 +171,12 @@ Each entry names the pull request that made the change.
   its `Load` as before: `world::WritableType::resolve` and `field`, and
   `resolve`, `on` and `serve` of `typed::ComponentType`, `EventType` and
   `ResourceType` (#1050).
+- The inventory domain (`inventory`, `items`, `item_data`, `entity_data`,
+  `affixes`, `stats`, `damage`, `effects`, `survivors` and `loot`) is the
+  internal crate `enshwick-inventory`, between `enshwick-world` and
+  `enshwick-core`; every path stays (#1052).
+- **Breaking:** `loot::Containers::resolve` takes `&mut impl Loading`, so a
+  mod passes its `Load` as before (#1052).
 - The content domain (`content`, `rates`, and the shape samples of the
   generated `typed` items) is the internal crate
   `enshwick-content`, between `enshwick-base` and `enshwick-core`; every

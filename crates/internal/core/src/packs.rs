@@ -230,7 +230,7 @@ impl Load<'_> {
         }
         let group = group(&pack.namespace);
         for drop in &pack.drops {
-            self.add_loot_in(group, drop.clone())?;
+            enshwick_inventory::__internal::add_loot_in(self, group, drop.clone())?;
         }
         #[cfg(feature = "unstable")]
         for reward in &pack.rewards {
@@ -309,7 +309,9 @@ impl Load<'_> {
                         drop
                     })
                     .collect();
-                if let Err(error) = crate::loot::replace_group(group, resolved) {
+                if let Err(error) =
+                    enshwick_inventory::__internal::replace_loot_group(group, resolved)
+                {
                     crate::warn!(
                         "{LOOT_FILE}: the world's chances apply at the next start: {error}"
                     );

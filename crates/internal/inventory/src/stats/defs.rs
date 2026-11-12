@@ -1,0 +1,317 @@
+use crate::abi::{Header, StatDefData, StatRef, Str};
+use crate::content::items::StatFormat;
+
+/// What a stat's number is.
+///
+/// The name is enshwick's, not the game's.
+///
+/// # Examples
+///
+/// See [`StatDef`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[non_exhaustive]
+pub enum StatType {
+    /// A sum of points, 0 by default, such as extra health.
+    Additive,
+    /// A factor, 1 by default, such as a damage multiplier.
+    Multiplicative,
+    /// On or off, off by default: any value but 0 is on.
+    Flag,
+}
+
+/// A stat kind's definition, for [`Load::define_stat`](../struct.Load.html#method.define_stat).
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::content::items::StatFormat;
+/// use enshwick::stats::{StatDef, StatType};
+///
+/// let crit = StatDef::additive().range(0.0, 1.0).format(StatFormat::Percent);
+/// assert_eq!(crit.ty, StatType::Additive);
+/// assert_eq!((crit.default, crit.min, crit.max), (0.0, 0.0, 1.0));
+/// let haste = StatDef::multiplicative();
+/// assert_eq!(haste.default, 1.0);
+/// ```
+#[derive(Clone, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
+pub struct StatDef {
+    /// What the number is.
+    pub ty: StatType,
+    /// The value without modifiers.
+    pub default: f32,
+    /// The least value.
+    pub min: f32,
+    /// The greatest value.
+    pub max: f32,
+    /// How the value reads.
+    pub format: StatFormat,
+}
+
+impl StatDef {
+    const fn of(ty: StatType, default: f32, format: StatFormat) -> Self {
+        Self {
+            ty,
+            default,
+            min: f32::MIN,
+            max: f32::MAX,
+            format,
+        }
+    }
+
+    /// A sum of points, 0 by default.
+    ///
+    /// # Examples
+    ///
+    /// See [`StatDef`].
+    #[must_use]
+    pub const fn additive() -> Self {
+        Self::of(StatType::Additive, 0.0, StatFormat::Signed)
+    }
+
+    /// A factor, 1 by default.
+    ///
+    /// # Examples
+    ///
+    /// See [`StatDef`].
+    #[must_use]
+    pub const fn multiplicative() -> Self {
+        Self::of(StatType::Multiplicative, 1.0, StatFormat::Percent)
+    }
+
+    /// On or off, off by default.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::stats::{Op, StatDef, aggregate};
+    ///
+    /// let glows = StatDef::flag();
+    /// assert_eq!(aggregate(&glows, [(Op::Add, 3.0)]), 1.0);
+    /// ```
+    #[must_use]
+    pub const fn flag() -> Self {
+        let mut def = Self::of(StatType::Flag, 0.0, StatFormat::Number);
+        def.min = 0.0;
+        def.max = 1.0;
+        def
+    }
+
+    /// The same, kept between `min` and `max`.
+    ///
+    /// # Examples
+    ///
+    /// See [`StatDef`].
+    #[must_use]
+    pub const fn range(mut self, min: f32, max: f32) -> Self {
+        self.min = min;
+        self.max = max;
+        self
+    }
+
+    /// The same with `value` without modifiers.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::stats::StatDef;
+    ///
+    /// assert_eq!(StatDef::additive().starting_at(5.0).default, 5.0);
+    /// ```
+    #[must_use]
+    pub const fn starting_at(mut self, value: f32) -> Self {
+        self.default = value;
+        self
+    }
+
+    /// The same, read as `format`.
+    ///
+    /// # Examples
+    ///
+    /// See [`StatDef`].
+    #[must_use]
+    pub const fn format(mut self, format: StatFormat) -> Self {
+        self.format = format;
+        self
+    }
+
+    /// Why the loader would refuse it, if it would.
+    pub(super) fn check(&self) -> Result<(), DefineStatError> {
+        let finite = self.default.is_finite() && self.min.is_finite() && self.max.is_finite();
+        if !finite || self.min > self.max || !(self.min..=self.max).contains(&self.default) {
+            return Err(DefineStatError {
+                default: self.default,
+                min: self.min,
+                max: self.max,
+            });
+        }
+        Ok(())
+    }
+
+    /// The definition as the loader takes it; the loader names the kind
+    /// itself (see [`name_key`](crate::stats::name_key)).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::StatDefData;
+    /// use enshwick::stats::StatDef;
+    ///
+    /// let data = StatDef::multiplicative().to_data();
+    /// assert_eq!(data.ty, StatDefData::MULTIPLICATIVE);
+    /// ```
+    #[must_use]
+    pub fn to_data(&self) -> StatDefData {
+        StatDefData {
+            header: Header::of::<StatDefData>(),
+            ty: match self.ty {
+                StatType::Additive => StatDefData::ADDITIVE,
+                StatType::Multiplicative => StatDefData::MULTIPLICATIVE,
+                StatType::Flag => StatDefData::FLAG,
+            },
+            format: enshwick_content::__internal::stat_format(self.format),
+            reserved: 0,
+            default: self.default,
+            min: self.min,
+            max: self.max,
+            text: Str::EMPTY,
+        }
+    }
+
+    /// The definition the loader handed out, without its text; `None` for
+    /// one that does not read.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::stats::StatDef;
+    ///
+    /// let haste = StatDef::multiplicative();
+    /// assert_eq!(StatDef::from_data(&haste.to_data()), Some(haste));
+    /// ```
+    #[must_use]
+    pub fn from_data(data: &StatDefData) -> Option<Self> {
+        let ty = match data.ty {
+            StatDefData::ADDITIVE => StatType::Additive,
+            StatDefData::MULTIPLICATIVE => StatType::Multiplicative,
+            StatDefData::FLAG => StatType::Flag,
+            _ => return None,
+        };
+        let format = match data.format {
+            StatDefData::SIGNED => StatFormat::Signed,
+            StatDefData::PERCENT => StatFormat::Percent,
+            _ => StatFormat::Number,
+        };
+        let def = Self {
+            ty,
+            default: data.default,
+            min: data.min,
+            max: data.max,
+            format,
+        };
+        def.check().is_ok().then_some(def)
+    }
+}
+
+/// Why the loader refuses a [`StatDef`]: its default lies outside its range,
+/// or a bound is not finite.
+#[derive(Clone, Copy, Debug, PartialEq, thiserror::Error)]
+#[error("default {default} is not within {min}..{max}")]
+pub(crate) struct DefineStatError {
+    default: f32,
+    min: f32,
+    max: f32,
+}
+
+/// The stored name of a stat kind: [`key_of`](crate::stats::key_of) its full id.
+///
+/// # Examples
+///
+/// See [`key_of`](crate::stats::key_of).
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    serde::Serialize,
+    serde::Deserialize,
+    crate::Script,
+)]
+pub struct StatKey(pub u32);
+
+/// A stat kind, from [`Load::define_stat`](../struct.Load.html#method.define_stat) or [`Load::open_stat`](../struct.Load.html#method.open_stat). Copy it
+/// anywhere.
+///
+/// # Examples
+///
+/// See the [module](crate::stats).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Stat {
+    pub(super) index: u32,
+    pub(super) key: StatKey,
+}
+
+impl crate::script::Object for Stat {
+    const CLASS: &'static crate::script::Class = &crate::script::Class::of::<Self>(
+        "Stat",
+        "A stat kind from `define_stat` or `open_stat`, valid in this game process.",
+    );
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_KIND];
+}
+
+#[crate::script(kind)]
+impl Stat {
+    /// The kind's stored name.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn same(a: enshwick::stats::Stat, b: enshwick::stats::Stat) -> bool {
+    ///     a.key() == b.key()
+    /// }
+    /// ```
+    #[must_use]
+    #[script]
+    pub const fn key(self) -> StatKey {
+        self.key
+    }
+
+    /// The kind's index in this process, as the loader's calls name it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn index(stat: enshwick::stats::Stat) -> u32 {
+    ///     stat.index()
+    /// }
+    /// ```
+    #[must_use]
+    #[script]
+    pub const fn index(self) -> u32 {
+        self.index
+    }
+
+    /// The kind the loader handed out as `stat`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::StatRef;
+    /// use enshwick::stats::{Stat, StatKey};
+    ///
+    /// let stat = Stat::from_ref(StatRef { index: 3, key: 0x1234 });
+    /// assert_eq!((stat.index(), stat.key()), (3, StatKey(0x1234)));
+    /// ```
+    #[must_use]
+    pub const fn from_ref(stat: StatRef) -> Self {
+        Self {
+            index: stat.index,
+            key: StatKey(stat.key),
+        }
+    }
+}

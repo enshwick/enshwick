@@ -11,6 +11,8 @@
 extern crate self as enshwick;
 
 // The base's modules at the paths the domains here name them by.
+#[cfg(feature = "unstable")]
+pub(crate) use enshwick_base::engine_ids;
 #[doc(hidden)]
 pub use enshwick_base::{
     code, command_names,
@@ -18,7 +20,7 @@ pub use enshwick_base::{
     ecs, events, files, game_events, i18n, mods, net, pacing, points, resources, schedule,
     services, state, status, time,
 };
-pub(crate) use enshwick_base::{engine_enum, engine_ids, facts, fresh, locks, near};
+pub(crate) use enshwick_base::{facts, fresh, locks, near};
 // The macros the base exports, which the code here calls by `crate::`.
 #[doc(hidden)]
 pub use enshwick_base::{
@@ -30,7 +32,11 @@ pub use enshwick_base::{
 pub use enshwick_abi::abi;
 #[cfg(feature = "unstable")]
 pub mod actions;
-pub mod affixes;
+#[doc(inline)]
+pub use enshwick_inventory::{affixes, damage, effects, inventory, loot, stats, survivors};
+#[cfg(feature = "unstable")]
+#[doc(inline)]
+pub use enshwick_inventory::{entity_data, item_data, items};
 #[doc(inline)]
 pub use enshwick_world::{altars, buffs, daytime, game_settings, terrain, voxels, weather};
 pub mod chat;
@@ -42,30 +48,12 @@ pub mod console;
 pub use enshwick_content::content;
 #[cfg(feature = "unstable")]
 pub mod controls;
-pub mod damage;
 mod declare;
-pub mod effects;
-#[cfg(feature = "unstable")]
-pub mod entity_data;
 #[cfg(feature = "unstable")]
 pub mod input;
 pub mod interactions;
-pub mod inventory;
-#[cfg(feature = "unstable")]
-pub mod item_data;
-#[cfg(feature = "unstable")]
-pub mod items;
-// Without `unstable` item data stays inside, for the stats of single items.
-#[cfg(not(feature = "unstable"))]
-#[expect(
-    unreachable_pub,
-    dead_code,
-    reason = "item data is public only with `unstable`"
-)]
-mod item_data;
 pub mod knowledge;
 mod load;
-pub mod loot;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_world::map;
@@ -99,8 +87,6 @@ mod script;
 #[doc(inline)]
 pub use enshwick_values::shape;
 pub mod sound;
-pub mod stats;
-pub mod survivors;
 #[cfg(feature = "typed")]
 #[doc(inline)]
 pub use enshwick_world::typed;

@@ -1,7 +1,7 @@
 [package]
 name = "enshwick-core"
 version = "1.0.0-alpha.14"
-description = "Internal part of enshwick; depend on enshwick: the safe layer and every domain of the API"
+description = "Internal part of enshwick; depend on enshwick: Load and the domains built on the other parts"
 keywords = ["enshrouded", "modding", "game", "ffi", "hooks"]
 categories = ["game-development", "api-bindings"]
 readme = "README.md"
@@ -19,11 +19,11 @@ enshwick-base.workspace = true
 enshwick-content.workspace = true
 enshwick-typed = { workspace = true, optional = true }
 enshwick-world.workspace = true
+enshwick-inventory.workspace = true
 enshwick-values.workspace = true
 bytemuck.workspace = true
 hound = { workspace = true, optional = true }
 fastrand.workspace = true
-postcard.workspace = true
 rustc-hash.workspace = true
 schemars = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
@@ -47,7 +47,7 @@ serde = { workspace = true, features = ["derive"] }
 [features]
 fake = ["enshwick-base/fake", "enshwick-content/fake", "enshwick-world/fake", "enshwick-typed?/test"]
 schema = ["dep:schemars", "dep:serde_json", "enshwick-base/schema"]
-unstable = ["dep:hound", "enshwick-base/unstable", "enshwick-content/unstable", "enshwick-world/unstable"]
+unstable = ["dep:hound", "enshwick-base/unstable", "enshwick-content/unstable", "enshwick-world/unstable", "enshwick-inventory/unstable"]
 typed = ["unstable", "dep:enshwick-typed", "enshwick-content/typed", "enshwick-world/typed"]
 
 [lints]

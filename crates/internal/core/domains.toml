@@ -32,23 +32,12 @@ upward = []
 base = "base"
 content = "content"
 world = "world"
+inventory = "inventory"
 
 # Each domain's top-level modules still in core.
 [modules]
 # The script binding's runtime, which stays in core beside `Load`.
 base = ["script"]
-inventory = [
-    "affixes",
-    "damage",
-    "effects",
-    "entity_data",
-    "inventory",
-    "item_data",
-    "items",
-    "loot",
-    "stats",
-    "survivors",
-]
 knowledge = ["knowledge", "progress", "quests", "rewards"]
 actions = ["actions", "chat", "commands", "console", "controls", "input", "interactions", "vetoes"]
 ui = ["sound", "ui"]

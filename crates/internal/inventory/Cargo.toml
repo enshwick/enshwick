@@ -1,0 +1,61 @@
+[package]
+name = "enshwick-inventory"
+version = "1.0.0-alpha.14"
+description = "Internal part of enshwick; depend on enshwick: inventories, items and what they carry"
+keywords = ["enshrouded", "modding", "game", "ffi", "hooks"]
+categories = ["game-development", "api-bindings"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = true
+
+[dependencies]
+enshwick-macros = { path = "../macros", version = "=1.0.0-alpha.14" }
+enshwick-abi.workspace = true
+enshwick-base.workspace = true
+enshwick-content.workspace = true
+enshwick-world.workspace = true
+enshwick-values.workspace = true
+bytemuck.workspace = true
+fastrand.workspace = true
+postcard.workspace = true
+rustc-hash.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+# The examples name the API as a mod does, through the facade, so they build
+# as one binary; cargo drops a dev-dependency without a version when it
+# publishes. `unstable` comes from the command line.
+enshwick = { path = "../../enshwick", features = ["test"] }
+proptest.workspace = true
+insta.workspace = true
+serde = { workspace = true, features = ["derive"] }
+
+# The features of `enshwick-core`, which turns each of them on here.
+[features]
+unstable = ["enshwick-base/unstable", "enshwick-content/unstable", "enshwick-world/unstable"]
+
+[lints]
+workspace = true
+
+# The mod this crate's documentation examples declare with `declare_mod!`.
+[package.metadata.enshwick]
+id = "you.hello"
+side = "both"
+exports = ["content:locker"]
+
+[package.metadata.enshwick.requires]
+lockers = { id = "you.lockers", version = ">=0.1, <1.0" }
+
+[package.metadata.enshwick.after]
+lanterns = "you.lanterns"
+trading_post = "you.trading-post"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-pc-windows-msvc"]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

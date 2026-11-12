@@ -7,7 +7,7 @@ description: An affix is a named bundle of stat modifiers whose values roll with
 
 An affix is a named bundle of [stat](stats.md) modifiers whose values roll
 within ranges, such as "Sturdy" giving 10 to 30 extra health. The
-[`affixes`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/affixes.rs)
+[`affixes`](https://github.com/enshwick/enshwick/blob/main/crates/internal/inventory/src/affixes.rs)
 module holds the API.
 
 ## Affixes on items

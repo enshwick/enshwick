@@ -22,6 +22,25 @@ fn reach_world(status: Status) {
     let _ = WorldError::check(status, WorldError::Missing);
 }
 
+fn reach_inventory(host: Host) {
+    let _ = enshwick::inventory::item_data(&host, enshwick::ItemId::new(1));
+    let _ = enshwick::loot::replace_group(0, Vec::new());
+    let _: Option<enshwick::survivors::script::ScriptLookup> = None;
+}
+
+fn reach_inventory_scripts(load: &mut enshwick::Load<'_>) {
+    use enshwick::Loading as _;
+    use enshwick::damage::LoadMethods as _;
+    use enshwick::entity_data::LoadMethods as _;
+    use enshwick::item_data::LoadMethods as _;
+    use enshwick::loot::LoadMethods as _;
+    let base = load.base_mut();
+    let _ = base.on_damage_script(|_| ());
+    let _ = base.on_loot_pass_script(|_| ());
+    let _ = base.item_data_script("kind");
+    let _ = base.entity_data_script("kind", enshwick::entity_data::Replication::Server);
+}
+
 fn reach(host: Host, scheduler: Scheduler, ty: ComponentType) {
     let _ = host.install();
     host.scope(|| ());

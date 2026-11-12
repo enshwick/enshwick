@@ -8,14 +8,14 @@ description: A damage filter runs on damage about to reach an entity's health in
 Unstable: everything in this chapter needs the `unstable` feature and may
 change in any release ([Stability](stability.md)).
 
-[`load.on_damage(filter)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/damage.rs)
+[`load.on_damage(filter)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/inventory/src/damage.rs)
 runs a filter on damage about to reach an entity's health in the server's
 world, before the game applies it.
 
 ## Filtering damage
 
 The filter gets a
-[`Damage`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/damage.rs)
+[`Damage`](https://github.com/enshwick/enshwick/blob/main/crates/internal/inventory/src/damage.rs)
 to read and change; what it leaves is what the game applies.
 
 ```rust

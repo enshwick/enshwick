@@ -437,6 +437,7 @@ dependencies = [
  "enshwick-content",
  "enshwick-core",
  "enshwick-fake",
+ "enshwick-inventory",
  "enshwick-macros",
  "enshwick-values",
  "enshwick-world",
@@ -516,6 +517,7 @@ dependencies = [
  "enshwick-abi",
  "enshwick-base",
  "enshwick-content",
+ "enshwick-inventory",
  "enshwick-macros",
  "enshwick-typed",
  "enshwick-values",
@@ -523,7 +525,6 @@ dependencies = [
  "fastrand",
  "hound",
  "insta",
- "postcard",
  "proptest",
  "rustc-hash",
  "schemars",
@@ -613,6 +614,27 @@ dependencies = [
  "thiserror",
  "toml 1.2.1+spec-1.1.0",
  "twox-hash",
+]
+
+[[package]]
+name = "enshwick-inventory"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "bytemuck",
+ "enshwick",
+ "enshwick-abi",
+ "enshwick-base",
+ "enshwick-content",
+ "enshwick-macros",
+ "enshwick-values",
+ "enshwick-world",
+ "fastrand",
+ "insta",
+ "postcard",
+ "proptest",
+ "rustc-hash",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]

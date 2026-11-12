@@ -7,7 +7,7 @@ description: Stats are named numbers on entities, such as extra health or a chan
 
 Stats are named numbers on entities: extra health, a chance to crit, a
 damage factor, whether a character glows. The
-[`stats`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/stats.rs)
+[`stats`](https://github.com/enshwick/enshwick/blob/main/crates/internal/inventory/src/stats.rs)
 module holds the API.
 
 ## A mod's first stats

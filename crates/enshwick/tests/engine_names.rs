@@ -13,7 +13,7 @@ mod tests {
         ("base:ecs.rs", "ComponentType", COMPONENT),
         ("base:ecs.rs", "hash", COMPONENT),
         ("base:load.rs", "Loading", COMPONENT),
-        ("effects.rs", "emit_raw", EVENT),
+        ("inventory:effects.rs", "emit_raw", EVENT),
         ("base:game_events.rs", "EventType", EVENT),
         ("base:game_events.rs", "field", EVENT),
         ("base:game_events.rs", "hash", EVENT),

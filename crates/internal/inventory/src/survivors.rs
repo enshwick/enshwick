@@ -1,0 +1,605 @@
+//! Survivors: who answers the game's question "which entity is this
+//! survivor", their beds, summoning staffs and the client's survivor menu.
+//!
+//! The game keeps one entity per survivor and asks for it from many systems.
+//! A mod that keeps several entities of a survivor answers each asker with
+//! the one that suits it; the platform tells the askers apart and reads what
+//! they work on. Cells are whole 0.5 m cells, as
+//! in [`altars`](crate::altars).
+//!
+//! # Examples
+//!
+//! ```
+//! use enshwick::survivors::{Answer, Purpose};
+//!
+//! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+//!     // Never move a survivor with its staff: always spawn a new one.
+//!     load.on_survivor_lookup(|lookup| match lookup.purpose {
+//!         Purpose::Spawn { .. } => Answer::Nobody,
+//!         _ => Answer::Vanilla,
+//!     })
+//! }
+//! ```
+
+use core::ffi::c_void;
+
+use crate::Off;
+use crate::abi::{
+    BedCheck as RawBedCheck, HostApi, Summon as RawSummon, SurvivorLookup as RawLookup,
+};
+use crate::content::Guid;
+use crate::inventory::{Bar, SlotRef};
+use crate::{Entity, ItemId};
+
+pub(crate) mod script;
+mod workshop;
+
+#[doc(hidden)]
+pub use script::SurvivorFns;
+
+pub use workshop::{WORKSHOP_SURVIVORS, WorkshopSurvivor};
+
+#[doc(no_inline)]
+pub use crate::abi::NpcId;
+
+/// Who asks for a survivor's entity, with what it works on.
+///
+/// The name is enshwick's, not the game's.
+///
+/// # Examples
+///
+/// See the [module](self).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
+pub enum Purpose {
+    /// The pass that keeps one entity per survivor looks at `entity`, whose
+    /// home is `home`. Answer `entity` to keep it, another entity to have the
+    /// game remove `entity`, or [`Answer::Nobody`] when there is no entity yet. After
+    /// an answer that keeps another entity than the game's, the survivor's
+    /// record stays on the game's own.
+    Uniqueness {
+        /// The entity looked at.
+        entity: Entity,
+        /// Its saved spawn cell, or where it stands.
+        home: [i64; 3],
+    },
+    /// A summoning staff used at `target`: answer the entity to move there,
+    /// or [`Answer::Nobody`] to spawn a new one. The move then reaches only
+    /// the answered entity.
+    Spawn {
+        /// The cell the staff aims at.
+        target: [i64; 3],
+    },
+    /// A bed at `bed_at` binding its sleeper: answer the entity that may
+    /// sleep there, or [`Answer::Nobody`].
+    BedOwner {
+        /// The bed's cell.
+        bed_at: [i64; 3],
+    },
+    /// A player gives `bed` at `bed_at` to the survivor with its staff:
+    /// answer the entity that gets it.
+    AssignBed {
+        /// The bed.
+        bed: Entity,
+        /// Its cell.
+        bed_at: [i64; 3],
+    },
+    /// The same assignment asks who slept in `bed` before: answer that
+    /// entity, or [`Answer::Nobody`]. [`Lookup::bed_of`] tells.
+    PreviousOccupant {
+        /// The bed.
+        bed: Entity,
+        /// Its cell.
+        bed_at: [i64; 3],
+    },
+    /// A survivor's idle behaviour: `entity` stands at `at`; answer the entity
+    /// whose base it keeps to.
+    Roaming {
+        /// The survivor's entity.
+        entity: Entity,
+        /// Where it stands.
+        at: [i64; 3],
+    },
+    /// The first binding of beds after a load, before beds bind their
+    /// sleepers.
+    BedBinding,
+    /// The cursor measuring how far a bed lies from the survivor before it
+    /// offers to assign it; [`Answer::Nobody`] skips the measure. A client
+    /// alone asks this too, about its own cursor.
+    Cursor,
+}
+
+/// A lookup the game makes, from [`Load::on_survivor_lookup`](../struct.Load.html#method.on_survivor_lookup).
+///
+/// # Examples
+///
+/// See the [module](self).
+#[derive(Debug)]
+pub struct Lookup {
+    /// The survivor.
+    pub survivor: NpcId,
+    /// The game's own answer, if any.
+    pub vanilla: Option<Entity>,
+    /// Who asks.
+    pub purpose: Purpose,
+    bed_of: Option<unsafe extern "system" fn(*mut c_void, Entity) -> Entity>,
+    token: *mut c_void,
+}
+
+impl Lookup {
+    /// The bed `entity` sleeps in, during a
+    /// [`Purpose::PreviousOccupant`] or another lookup that can tell.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::Entity;
+    /// use enshwick::survivors::{Answer, Lookup, Purpose};
+    ///
+    /// fn previous(lookup: &Lookup, entities: &[Entity]) -> Answer {
+    ///     match lookup.purpose {
+    ///         Purpose::PreviousOccupant { bed, .. } => entities
+    ///             .iter()
+    ///             .find(|&&entity| lookup.bed_of(entity) == Some(bed))
+    ///             .map_or(Answer::Nobody, |&entity| Answer::Entity(entity)),
+    ///         _ => Answer::Vanilla,
+    ///     }
+    /// }
+    /// ```
+    #[must_use]
+    pub fn bed_of(&self, entity: Entity) -> Option<Entity> {
+        let bed_of = self.bed_of?;
+        // SAFETY: the loader's function and token, valid for this call.
+        let bed = unsafe { bed_of(self.token, entity) };
+        (!bed.is_none()).then_some(bed)
+    }
+}
+
+/// The answer to a [`Lookup`].
+///
+/// The name is enshwick's, not the game's.
+///
+/// # Examples
+///
+/// See the [module](self).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
+pub enum Answer {
+    /// The game's own answer.
+    Vanilla,
+    /// This entity.
+    Entity(Entity),
+    /// No entity.
+    Nobody,
+}
+
+/// A survivor's bed the game kept, from [`Load::on_survivor_bed_check`](../struct.Load.html#method.on_survivor_bed_check).
+/// The name is enshwick's; the game's own bed check has none.
+///
+/// # Examples
+///
+/// See [`Load::on_survivor_bed_check`](../struct.Load.html#method.on_survivor_bed_check).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
+pub struct BedCheck {
+    /// The survivor, as the game's active NPC state names it.
+    pub npc_id: NpcId,
+    /// Its entity.
+    pub entity: Entity,
+    /// The bed, as the survivor's NPC record names it.
+    pub bed_id: Entity,
+    /// Where the survivor belongs: its saved spawn cell, or where it stands.
+    pub home: [i64; 3],
+    /// Where the bed stands.
+    pub bed_at: [i64; 3],
+}
+
+/// A summoning staff's use, from [`Load::on_summon`](../struct.Load.html#method.on_summon) and
+/// [`Load::on_summoned`](../struct.Load.html#method.on_summoned).
+///
+/// # Examples
+///
+/// See [`Load::on_summon`](../struct.Load.html#method.on_summon).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
+pub struct Summon {
+    /// The item used.
+    pub item: ItemId,
+    /// The ammunition used, if any.
+    pub ammo: Option<ItemId>,
+    /// The template it places.
+    pub template: Guid,
+    /// The target cell.
+    pub target: [i64; 3],
+    /// The slot the used item lies in.
+    pub slot: SlotRef,
+    /// The used item's own entity; `None` for an item without one.
+    pub pide: Option<Entity>,
+    /// The used item's meter (see [`FuelSetup`](crate::content::items::FuelSetup))
+    /// as clients see it; `None` for an item without one.
+    pub meter: Option<Bar>,
+    /// In [`Load::on_summoned`](../struct.Load.html#method.on_summoned): whether the use took the item.
+    pub consumed: bool,
+}
+
+impl Summon {
+    /// The use as the loader hands it on.
+    fn from_raw(raw: &RawSummon) -> Self {
+        let [current, max] = raw.meter;
+        Self {
+            item: raw.item,
+            ammo: (raw.ammo.get() != 0).then_some(raw.ammo),
+            template: Guid(raw.template),
+            target: raw.target,
+            slot: SlotRef(raw.slot),
+            pide: Entity::from_raw(raw.pide.0),
+            meter: (max != 0).then_some(Bar { current, max }),
+            consumed: raw.consumed != 0,
+        }
+    }
+}
+
+unsafe extern "system" fn run_lookup<F>(
+    call: *const RawLookup,
+    user: *mut c_void,
+    out: *mut Entity,
+) -> u8
+where
+    F: Fn(&Lookup) -> Answer,
+{
+    // SAFETY: the loader passes a valid call for the duration of this one.
+    let Some(call) = (unsafe { call.as_ref() }) else {
+        return 0;
+    };
+    let entity = call.entity;
+    let purpose = match call.purpose {
+        RawLookup::UNIQUENESS => Purpose::Uniqueness {
+            entity,
+            home: call.cell,
+        },
+        RawLookup::SPAWN => Purpose::Spawn { target: call.cell },
+        RawLookup::BED_OWNER => Purpose::BedOwner { bed_at: call.cell },
+        RawLookup::ASSIGN_BED => Purpose::AssignBed {
+            bed: entity,
+            bed_at: call.cell,
+        },
+        RawLookup::PREVIOUS_OCCUPANT => Purpose::PreviousOccupant {
+            bed: entity,
+            bed_at: call.cell,
+        },
+        RawLookup::ROAMING => Purpose::Roaming {
+            entity,
+            at: call.cell,
+        },
+        RawLookup::BED_BINDING => Purpose::BedBinding,
+        RawLookup::CURSOR => Purpose::Cursor,
+        _ => return 0,
+    };
+    let lookup = Lookup {
+        survivor: call.survivor,
+        vanilla: (!call.vanilla.is_none()).then_some(call.vanilla),
+        purpose,
+        bed_of: call.bed_of,
+        token: call.token,
+    };
+    // SAFETY: `user` is the leaked `F` this function was registered with.
+    let handler = unsafe { &*user.cast::<F>() };
+    let answer = crate::host::guard(
+        "panic in a survivor lookup",
+        || Answer::Vanilla,
+        || handler(&lookup),
+    );
+    let value = match answer {
+        Answer::Vanilla => return 0,
+        Answer::Entity(entity) => entity,
+        Answer::Nobody => Entity::NONE,
+    };
+    if !out.is_null() {
+        // SAFETY: the loader's out pointer.
+        unsafe { out.write(value) };
+    }
+    1
+}
+
+unsafe extern "system" fn run_bed_check<F>(check: *const RawBedCheck, user: *mut c_void) -> u8
+where
+    F: Fn(&BedCheck) -> bool,
+{
+    // SAFETY: the loader passes a valid check for the duration of the call.
+    let Some(check) = (unsafe { check.as_ref() }) else {
+        return 1;
+    };
+    let call = BedCheck {
+        npc_id: check.npc_id,
+        entity: check.entity,
+        bed_id: check.bed_id,
+        home: check.home,
+        bed_at: check.bed_at,
+    };
+    // SAFETY: `user` is the leaked `F` this function was registered with.
+    let handler = unsafe { &*user.cast::<F>() };
+    let keep = crate::host::guard("panic in a survivor bed check", || true, || handler(&call));
+    u8::from(keep)
+}
+
+/// The loader's summon, read as far as its header says it reaches.
+///
+/// # Safety
+///
+/// - `summon` is null, or points at a summon the loader wrote, readable for
+///   the size its header states.
+/// - No other thread writes that summon during the call.
+unsafe fn read_summon(summon: *const RawSummon) -> Option<Summon> {
+    // SAFETY: `read_headed` needs `summon` null or readable for its header's
+    // size with no concurrent writer, which this function's `# Safety`
+    // bullets guarantee; every loader writes the fields up to the slot.
+    let raw = unsafe { crate::abi::read_headed(summon, core::mem::offset_of!(RawSummon, slot)) }?;
+    Some(Summon::from_raw(&raw))
+}
+
+/// What a summon filter makes of a staff's use, from [`Load::on_summon`](../struct.Load.html#method.on_summon).
+///
+/// The name is enshwick's, not the game's.
+///
+/// # Examples
+///
+/// See [`Load::on_summon`](../struct.Load.html#method.on_summon).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[non_exhaustive]
+pub enum SummonVerdict {
+    /// The use goes on as the game decides.
+    Allow,
+    /// The use takes the staff, in the same transaction as the spawn or
+    /// move and only when that works.
+    Take,
+    /// The use is refused: nothing spawns, moves or is taken.
+    Refuse,
+}
+
+unsafe extern "system" fn run_summon<F>(summon: *const RawSummon, user: *mut c_void) -> u8
+where
+    F: Fn(&Summon) -> SummonVerdict,
+{
+    // SAFETY: the loader passes a valid summon for the duration of the call.
+    let Some(call) = (unsafe { read_summon(summon) }) else {
+        return 0;
+    };
+    // SAFETY: `user` is the leaked `F` this function was registered with.
+    let handler = unsafe { &*user.cast::<F>() };
+    let verdict = crate::host::guard(
+        "panic in a summon filter",
+        || SummonVerdict::Allow,
+        || handler(&call),
+    );
+    match verdict {
+        SummonVerdict::Allow => 0,
+        SummonVerdict::Take => RawSummon::TAKE,
+        SummonVerdict::Refuse => RawSummon::REFUSE,
+    }
+}
+
+unsafe extern "system" fn run_summoned<F>(summon: *const RawSummon, user: *mut c_void) -> u8
+where
+    F: Fn(&Summon),
+{
+    // SAFETY: the loader passes a valid summon for the duration of the call.
+    let Some(call) = (unsafe { read_summon(summon) }) else {
+        return 0;
+    };
+    // SAFETY: `user` is the leaked `F` this function was registered with.
+    let handler = unsafe { &*user.cast::<F>() };
+    crate::host::guard("panic in a summon handler", || (), || handler(&call));
+    0
+}
+
+unsafe extern "system" fn run_status<F>(
+    survivor: NpcId,
+    statuses: *const u8,
+    count: usize,
+    user: *mut c_void,
+) -> u32
+where
+    F: Fn(NpcId, &[u8]) -> Option<u8>,
+{
+    let statuses = if statuses.is_null() || count == 0 {
+        &[][..]
+    } else {
+        // SAFETY: `count` bytes at `statuses`, valid for the call.
+        unsafe { core::slice::from_raw_parts(statuses, count) }
+    };
+    // SAFETY: `user` is the leaked `F` this function was registered with.
+    let handler = unsafe { &*user.cast::<F>() };
+    let shown = crate::host::guard(
+        "panic in a survivor status merge",
+        || None,
+        || handler(survivor, statuses),
+    );
+    shown.map_or(0, |byte| crate::abi::SURVIVOR_STATUS_SET | u32::from(byte))
+}
+
+type Register<R> = extern "system" fn(crate::abi::ModHandle, R, *mut c_void) -> crate::abi::Status;
+
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::on_survivor_lookup`.
+    #[doc(hidden)]
+    fn on_survivor_lookup<F>(&mut self, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&Lookup) -> Answer + Send + Sync + 'static;
+
+    /// As `Load::on_survivor_bed_check`.
+    #[doc(hidden)]
+    fn on_survivor_bed_check<F>(&mut self, filter: F) -> Result<(), Off>
+    where
+        F: Fn(&BedCheck) -> bool + Send + Sync + 'static;
+
+    /// As `Load::on_summon`.
+    #[doc(hidden)]
+    fn on_summon<F>(&mut self, filter: F) -> Result<(), Off>
+    where
+        F: Fn(&Summon) -> SummonVerdict + Send + Sync + 'static;
+
+    /// As `Load::on_summoned`.
+    #[doc(hidden)]
+    fn on_summoned<F>(&mut self, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&Summon) + Send + Sync + 'static;
+
+    /// As `Load::add_summon_item`.
+    #[doc(hidden)]
+    fn add_summon_item(&mut self, item: ItemId, survivor: NpcId) -> Result<(), Off>;
+
+    /// As `Load::on_survivor_status`.
+    #[doc(hidden)]
+    fn on_survivor_status<F>(&mut self, merge: F) -> Result<(), Off>
+    where
+        F: Fn(NpcId, &[u8]) -> Option<u8> + Send + Sync + 'static;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn on_survivor_lookup<F>(&mut self, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&Lookup) -> Answer + Send + Sync + 'static,
+    {
+        self.register(
+            "the survivor lookup",
+            |api| api.survivor_lookup,
+            run_lookup::<F> as crate::abi::SurvivorLookupFn,
+            handler,
+        )
+    }
+
+    fn on_survivor_bed_check<F>(&mut self, filter: F) -> Result<(), Off>
+    where
+        F: Fn(&BedCheck) -> bool + Send + Sync + 'static,
+    {
+        self.register(
+            "the survivor bed check",
+            |api| api.survivor_bed_check,
+            run_bed_check::<F> as crate::abi::BedCheckFn,
+            filter,
+        )
+    }
+
+    fn on_summon<F>(&mut self, filter: F) -> Result<(), Off>
+    where
+        F: Fn(&Summon) -> SummonVerdict + Send + Sync + 'static,
+    {
+        self.register(
+            "the summon filter",
+            |api| api.summon_filter,
+            run_summon::<F> as crate::abi::SummonFn,
+            filter,
+        )
+    }
+
+    fn on_summoned<F>(&mut self, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&Summon) + Send + Sync + 'static,
+    {
+        self.register(
+            "the summon handler",
+            |api| api.summoned,
+            run_summoned::<F> as crate::abi::SummonFn,
+            handler,
+        )
+    }
+
+    fn add_summon_item(&mut self, item: ItemId, survivor: NpcId) -> Result<(), Off> {
+        let host = self.host();
+        let status = (host.api().summon_item)(host.handle(), item, survivor);
+        if status.is_ok() {
+            Ok(())
+        } else {
+            Err(Off::new(format!(
+                "summon item {:#x} refused by the loader (status {})",
+                item.get(),
+                status.0
+            )))
+        }
+    }
+
+    fn on_survivor_status<F>(&mut self, merge: F) -> Result<(), Off>
+    where
+        F: Fn(NpcId, &[u8]) -> Option<u8> + Send + Sync + 'static,
+    {
+        self.register(
+            "the survivor menu merge",
+            |api| api.survivor_status,
+            run_status::<F> as crate::abi::SurvivorStatusFn,
+            merge,
+        )
+    }
+}
+
+/// The base handle's helpers of this module for the crate's own code.
+pub(crate) trait LoadHelpers {
+    fn register<F, R>(
+        &mut self,
+        what: &str,
+        pick: fn(&HostApi) -> Register<R>,
+        run: R,
+        handler: F,
+    ) -> Result<(), Off>;
+}
+
+impl LoadHelpers for crate::BaseLoad {
+    fn register<F, R>(
+        &mut self,
+        what: &str,
+        pick: fn(&HostApi) -> Register<R>,
+        run: R,
+        handler: F,
+    ) -> Result<(), Off> {
+        let host = self.host();
+        let register = pick(host.api());
+        crate::load::hand_over(handler, |user| register(host.handle(), run, user), what)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::abi::Header;
+
+    fn raw(pide: u32, meter: [u16; 2]) -> RawSummon {
+        RawSummon {
+            header: Header::of::<RawSummon>(),
+            item: ItemId::new(7),
+            ammo: ItemId::new(0),
+            template: [1; 16],
+            target: [1, 2, 3],
+            slot: 0x3_0000_0041,
+            pide: Entity(pide),
+            meter,
+            consumed: 1,
+            reserved: [0; 3],
+        }
+    }
+
+    #[test]
+    fn a_use_names_its_item_and_meter() {
+        let use_ = Summon::from_raw(&raw(900, [2, 3]));
+        assert_eq!(
+            (use_.slot.inventory(), use_.slot.index()),
+            (Entity(0x41), 3)
+        );
+        assert_eq!(use_.pide, Some(Entity(900)));
+        assert_eq!(use_.meter, Some(Bar { current: 2, max: 3 }));
+        assert!(use_.consumed);
+        assert_eq!(Summon::from_raw(&raw(0, [0; 2])).meter, None);
+    }
+
+    #[test]
+    fn an_older_loader_s_use_reads_without_the_item() {
+        let mut old = raw(900, [2, 3]);
+        old.header.size = u32::try_from(core::mem::offset_of!(RawSummon, slot)).unwrap();
+        // SAFETY: a valid summon, its header naming the older size.
+        let use_ = unsafe { read_summon(&raw const old) }.unwrap();
+        assert_eq!(
+            (use_.item, use_.pide, use_.meter),
+            (ItemId::new(7), None, None)
+        );
+    }
+}

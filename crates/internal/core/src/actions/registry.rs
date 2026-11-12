@@ -449,7 +449,7 @@ impl Registry {
     // shortcut: a GUID crafted to share a mod item's key passes; an exact check needs the GUID of an item id from the loader.
     fn knows_item(&self, item: Guid) -> bool {
         let id = crate::ItemId::from_guid(item);
-        crate::inventory::item_data(&self.host, id).is_some()
+        enshwick_inventory::__internal::knows_item(&self.host, id)
             && crate::content::vanilla::Vanilla::game()
                 .and_then(|vanilla| enshwick_content::__internal::item_with_id(vanilla, id.get()))
                 .is_none_or(|vanilla_item| vanilla_item == item)
