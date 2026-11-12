@@ -64,7 +64,7 @@ impl Players {
     ///
     /// ```
     /// use enshwick_core::abi::ControlSpec;
-    /// use enshwick_loader::linked_controls::{Follow, Players};
+    /// use enshwick_loader::actions::linked_controls::{Follow, Players};
     ///
     /// let follow = Follow { index: 0, bit: 3, hold_ms: 500, fires: ControlSpec::PRESS };
     /// let mut players = Players::new();
@@ -114,7 +114,7 @@ impl Players {
     ///
     /// ```
     /// use enshwick_core::abi::ControlSpec;
-    /// use enshwick_loader::linked_controls::{Follow, Players};
+    /// use enshwick_loader::actions::linked_controls::{Follow, Players};
     ///
     /// let follow = Follow { index: 0, bit: 0, hold_ms: 500, fires: ControlSpec::PRESS };
     /// let mut players = Players::new();

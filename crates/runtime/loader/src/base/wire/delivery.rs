@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::wire::Outbox;
+/// use enshwick_loader::base::wire::Outbox;
 ///
 /// let mut outbox = Outbox::new(3);
 /// assert!(outbox.push_whole(["a", "b"]));
@@ -82,7 +82,7 @@ impl<T> Outbox<T> {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::wire::Outbox;
+    /// use enshwick_loader::base::wire::Outbox;
     ///
     /// let mut outbox = Outbox::new(1);
     /// assert!(outbox.is_empty());
@@ -111,7 +111,7 @@ impl<T> Outbox<T> {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::wire::Drops;
+/// use enshwick_loader::base::wire::Drops;
 ///
 /// let drops = Drops::new();
 /// assert_eq!(drops.add(1), Some(1), "the first is logged");
@@ -165,7 +165,7 @@ impl Drops {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::wire::strays;
+/// use enshwick_loader::base::wire::strays;
 ///
 /// let active = 0b1011;
 /// assert_eq!(strays(active, 0, Some(0b1010)), 0, "marked for every other slot");

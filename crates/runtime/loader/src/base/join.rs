@@ -47,7 +47,7 @@ pub use target::{Destination, Layout, LayoutError, TARGET_BYTES, Target};
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::join::Names;
+/// use enshwick_loader::base::join::Names;
 ///
 /// let mut names = Names::new();
 /// names.insert("you.trading-post".to_owned(), "Trading Post".to_owned());

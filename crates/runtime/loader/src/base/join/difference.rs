@@ -56,7 +56,7 @@ impl Difference {
     /// # Examples
     ///
     /// ```
-    /// assert!(enshwick_loader::join::Difference::default().is_empty());
+    /// assert!(enshwick_loader::base::join::Difference::default().is_empty());
     /// ```
     #[must_use]
     pub fn is_empty(&self) -> bool {
@@ -69,7 +69,7 @@ impl Difference {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::join::difference;
+    /// use enshwick_loader::base::join::difference;
     ///
     /// assert!(!difference("", "you.lanterns@1.0.0", "", true).refuses());
     /// assert!(difference("you.lanterns@1.0.0", "", "", true).refuses());
@@ -86,7 +86,7 @@ impl Difference {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::join::{Row, difference};
+    /// use enshwick_loader::base::join::{Row, difference};
     ///
     /// let rows = difference("you.lanterns@0.3.0", "", "", true).rows();
     /// assert_eq!(rows[0], Row::Heading("Missing: 1".into()));
@@ -172,7 +172,7 @@ pub enum Row {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::join::difference;
+/// use enshwick_loader::base::join::difference;
 ///
 /// let found = difference("you.lanterns@0.3.0,you.zones@1.0.0", "you.zones@0.9.0,you.camera@1.0.0", "", true);
 /// assert_eq!(found.missing[0].id, "you.lanterns");

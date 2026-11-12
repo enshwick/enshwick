@@ -29,7 +29,7 @@ struct Header {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::wire::{ReadMessageError, open};
+/// use enshwick_loader::base::wire::{ReadMessageError, open};
 ///
 /// assert_eq!(open(&[]), Err(ReadMessageError::Unreadable));
 /// ```
@@ -56,7 +56,7 @@ pub enum ReadMessageError {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::wire::is_executable;
+/// use enshwick_loader::base::wire::is_executable;
 ///
 /// assert!(is_executable(b"\x7fELF\x02"));
 /// assert!(!is_executable(b"\x02hello"));
@@ -72,7 +72,7 @@ pub fn is_executable(payload: &[u8]) -> bool {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::wire::{MAX_PAYLOAD, sealable};
+/// use enshwick_loader::base::wire::{MAX_PAYLOAD, sealable};
 ///
 /// assert!(sealable(b"\x02hello"));
 /// assert!(!sealable(b"\0asm\x01\0\0\0"));
@@ -94,7 +94,7 @@ pub fn sealable(payload: &[u8]) -> bool {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::wire::{MAX_SEALED, open, seal};
+/// use enshwick_loader::base::wire::{MAX_SEALED, open, seal};
 ///
 /// let mut out = [0; MAX_SEALED];
 /// let size = seal(&mut out, 7, b"data").ok_or("too long")?;
@@ -127,7 +127,7 @@ pub fn open(message: &[u8]) -> Result<(u32, &[u8]), ReadMessageError> {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::wire::sealed_size;
+/// use enshwick_loader::base::wire::sealed_size;
 ///
 /// assert_eq!(sealed_size(7, 4), 6);
 /// assert_eq!(sealed_size(u32::MAX, 0), 6);

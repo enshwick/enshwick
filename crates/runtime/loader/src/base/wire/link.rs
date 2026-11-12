@@ -67,7 +67,7 @@ struct Head {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::wire::{Link, ReadPacketError};
+/// use enshwick_loader::base::wire::{Link, ReadPacketError};
 ///
 /// let mut link = Link::new(1200, 1).ok_or("packet too small")?;
 /// assert_eq!(link.receive(&[], |_| {}), Err(ReadPacketError::Unreadable));
@@ -92,7 +92,7 @@ pub enum ReadPacketError {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::wire::{BACKLOG, Link};
+/// use enshwick_loader::base::wire::{BACKLOG, Link};
 ///
 /// let mut link = Link::new(64, 1).ok_or("packet too small")?;
 /// while link.send(&[7; 20]).is_ok() {}
@@ -127,7 +127,7 @@ struct Early {
 ///
 /// ```
 /// use std::time::Instant;
-/// use enshwick_loader::wire::Link;
+/// use enshwick_loader::base::wire::Link;
 ///
 /// let (mut a, mut b) = (Link::new(1200, 1).ok_or("small")?, Link::new(1200, 1).ok_or("small")?);
 /// a.send(&[1; 3000]).map_err(|_| "full")?;
@@ -180,7 +180,7 @@ impl Link {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::wire::{Link, MAX_LINK_HEADER};
+    /// use enshwick_loader::base::wire::{Link, MAX_LINK_HEADER};
     ///
     /// assert!(Link::new(MAX_LINK_HEADER, 1).is_none());
     /// assert!(Link::new(MAX_LINK_HEADER + 1, 0).is_none());
@@ -225,7 +225,7 @@ impl Link {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::wire::Link;
+    /// use enshwick_loader::base::wire::Link;
     ///
     /// assert!(Link::new(1200, 1).ok_or("small")?.is_idle());
     /// # Ok::<(), &str>(())
@@ -241,7 +241,7 @@ impl Link {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::wire::Link;
+    /// use enshwick_loader::base::wire::Link;
     ///
     /// assert_eq!(Link::new(1200, 1).ok_or("small")?.restarts(), 0);
     /// # Ok::<(), &str>(())
@@ -449,7 +449,7 @@ impl Link {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::wire::Link;
+    /// use enshwick_loader::base::wire::Link;
     ///
     /// let mut link = Link::new(1200, 1).ok_or("small")?;
     /// let mut sent = 0;

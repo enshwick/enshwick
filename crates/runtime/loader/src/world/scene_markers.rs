@@ -95,7 +95,7 @@ impl SceneLayout {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::scene_markers::SceneLayout;
+    /// use enshwick_loader::world::scene_markers::SceneLayout;
     ///
     /// let layout = SceneLayout {
     ///     templates: 0, entities: 8, entry_size: 20, entry_template: 0,
@@ -133,7 +133,7 @@ impl SceneLayout {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::scene_markers::{SceneLayout, placements};
+/// use enshwick_loader::world::scene_markers::{SceneLayout, placements};
 ///
 /// let layout = SceneLayout {
 ///     templates: 0, entities: 8, entry_size: 20, entry_template: 0,
@@ -183,7 +183,7 @@ pub struct ReadTemplateError;
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::scene_markers::{SceneLayout, marker};
+/// use enshwick_loader::world::scene_markers::{SceneLayout, marker};
 ///
 /// let layout = SceneLayout {
 ///     templates: 0, entities: 8, entry_size: 20, entry_template: 0,
@@ -245,7 +245,7 @@ impl SceneKey {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::scene_markers::SceneKey;
+    /// use enshwick_loader::world::scene_markers::SceneKey;
     ///
     /// assert_eq!(SceneKey::new([7; 16], 1601).map(|key| key.part), Some(1600));
     /// assert_eq!(SceneKey::new([0; 16], 1601), None);
@@ -306,7 +306,7 @@ pub struct Skipped {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::scene_markers::{SceneLayout, collect};
+/// use enshwick_loader::world::scene_markers::{SceneLayout, collect};
 ///
 /// let layout = SceneLayout {
 ///     templates: 0, entities: 8, entry_size: 20, entry_template: 0,
@@ -315,7 +315,7 @@ pub struct Skipped {
 /// };
 /// let (markers, skipped) = collect(&layout, &[], 0x8af0_70c5, |_| None)?;
 /// assert!(markers.is_empty() && skipped.missing == 0);
-/// # Ok::<(), enshwick_loader::scene_markers::ReadSceneError>(())
+/// # Ok::<(), enshwick_loader::world::scene_markers::ReadSceneError>(())
 /// ```
 pub fn collect(
     layout: &SceneLayout,
@@ -385,7 +385,7 @@ impl<V: Clone, E: Clone> SceneCache<V, E> {
     ///
     /// ```
     /// use std::sync::Arc;
-    /// use enshwick_loader::scene_markers::{Lookup, ReadSceneError, SceneCache, SceneKey};
+    /// use enshwick_loader::world::scene_markers::{Lookup, ReadSceneError, SceneCache, SceneKey};
     ///
     /// let mut cache: SceneCache<Arc<[u8]>, ReadSceneError> = SceneCache::new();
     /// let key = SceneKey::new([1; 16], 2).unwrap();

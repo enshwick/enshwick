@@ -106,7 +106,7 @@ impl CodeChange {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::code_watch::diff;
+/// use enshwick_loader::engine::code_watch::diff;
 ///
 /// assert_eq!(diff(b"abcdef", b"abXdeY"), [(2, 4)]);
 /// assert!(diff(b"same", b"same").is_empty());
@@ -145,7 +145,7 @@ pub fn diff(old: &[u8], new: &[u8]) -> Vec<(usize, usize)> {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::code_watch::shipped;
+/// use enshwick_loader::engine::code_watch::shipped;
 ///
 /// assert_eq!(shipped(&[0x90; 200], &[0x90; 200], &[]), Some(vec![]));
 /// assert_eq!(shipped(&[0x90; 200], &[0xCC; 200], &[]), None);
@@ -319,7 +319,7 @@ pub const BRANCH_BYTES: usize = 16;
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::code_watch::branch;
+/// use enshwick_loader::engine::code_watch::branch;
 ///
 /// assert_eq!(branch(&[0xE9, 0x10, 0, 0, 0], 0x1000, |_| None), Some(0x1015));
 /// assert_eq!(branch(&[0x90], 0x1000, |_| None), None);
@@ -408,7 +408,7 @@ fn pieces(old: &[u8], now: &[u8], start: usize, end: usize) -> Vec<(usize, usize
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::code_watch::reaches;
+/// use enshwick_loader::engine::code_watch::reaches;
 ///
 /// let mut now = vec![0x90; 32];
 /// now[8..13].copy_from_slice(&[0xE9, 0x00, 0x10, 0, 0]);
@@ -436,7 +436,7 @@ pub fn reaches(
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::code_watch::lands;
+/// use enshwick_loader::engine::code_watch::lands;
 ///
 /// let mut now = vec![0x90; 32];
 /// now[8..13].copy_from_slice(&[0xE9, 0x00, 0x10, 0, 0]);
@@ -481,7 +481,7 @@ pub fn lands(
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::code_watch::relocate;
+/// use enshwick_loader::engine::code_watch::relocate;
 ///
 /// let mut text = 0x1_4000_0010u64.to_le_bytes().to_vec();
 /// relocate(&mut text, 0x1000, [0x1000], 0x10_0000);
@@ -510,7 +510,7 @@ pub fn relocate(text: &mut [u8], text_rva: u64, fixups: impl IntoIterator<Item =
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::code_watch::{CodeChange, Stage, report};
+/// use enshwick_loader::engine::code_watch::{CodeChange, Stage, report};
 ///
 /// let changes = [CodeChange { offset: 0x10, len: 5, by: "speed.dll".into(), stage: Stage::Load }];
 /// assert_eq!(

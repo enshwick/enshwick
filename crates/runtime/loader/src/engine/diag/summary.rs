@@ -195,7 +195,7 @@ fn patches_line(p: Patches) -> String {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::diag::messages_line;
+/// use enshwick_loader::engine::diag::messages_line;
 ///
 /// assert_eq!(messages_line(0, 0, 0), None);
 /// assert!(messages_line(0, 1, 0).is_some_and(|line| line.starts_with("1 line for one player dropped")));

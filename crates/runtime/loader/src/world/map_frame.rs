@@ -30,7 +30,7 @@ impl FrameLayout {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::map_frame::FrameLayout;
+    /// use enshwick_loader::world::map_frame::FrameLayout;
     ///
     /// let layout = FrameLayout {
     ///     has_biome_map: 200, scene_size: 208,
@@ -68,7 +68,7 @@ impl FrameData {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::map_frame::FrameData;
+    /// use enshwick_loader::world::map_frame::FrameData;
     ///
     /// let data = FrameData { origin: [0, 0], cells: [1280, 1280], scale: 8 };
     /// assert_eq!(data.metres(), ([0.0, 0.0], [10240.0, 10240.0], 8.0));
@@ -126,7 +126,7 @@ pub enum ReadFrameError {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::map_frame::{FrameLayout, has_biome_map};
+/// use enshwick_loader::world::map_frame::{FrameLayout, has_biome_map};
 ///
 /// let layout = FrameLayout {
 ///     has_biome_map: 200, scene_size: 208,
@@ -136,7 +136,7 @@ pub enum ReadFrameError {
 /// assert_eq!(has_biome_map(&layout, &scene), Ok(false));
 /// scene[200] = 1;
 /// assert_eq!(has_biome_map(&layout, &scene), Ok(true));
-/// # Ok::<(), enshwick_loader::map_frame::ReadFrameError>(())
+/// # Ok::<(), enshwick_loader::world::map_frame::ReadFrameError>(())
 /// ```
 pub fn has_biome_map(layout: &FrameLayout, scene: &[u8]) -> Result<bool, ReadFrameError> {
     if !layout.is_sound() {
@@ -166,7 +166,7 @@ fn bytes<const N: usize>(data: &[u8], at: usize) -> Option<[u8; N]> {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::map_frame::{FrameData, FrameLayout, frame};
+/// use enshwick_loader::world::map_frame::{FrameData, FrameLayout, frame};
 ///
 /// let layout = FrameLayout {
 ///     has_biome_map: 200, scene_size: 208,
@@ -177,7 +177,7 @@ fn bytes<const N: usize>(data: &[u8], at: usize) -> Option<[u8; N]> {
 /// data[12..16].copy_from_slice(&1280u32.to_le_bytes());
 /// data[16..20].copy_from_slice(&8u32.to_le_bytes());
 /// assert_eq!(frame(&layout, &data)?, FrameData { origin: [0, 0], cells: [1280, 1280], scale: 8 });
-/// # Ok::<(), enshwick_loader::map_frame::ReadFrameError>(())
+/// # Ok::<(), enshwick_loader::world::map_frame::ReadFrameError>(())
 /// ```
 pub fn frame(layout: &FrameLayout, biome_map: &[u8]) -> Result<FrameData, ReadFrameError> {
     if !layout.is_sound() {

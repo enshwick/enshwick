@@ -24,7 +24,7 @@ const QUERY_TIMEOUT: Duration = Duration::from_secs(2);
 /// #     }
 /// #     reply
 /// # }
-/// use enshwick_loader::join::mod_rules_value;
+/// use enshwick_loader::base::join::mod_rules_value;
 ///
 /// let reply = reply(&[("enshwick.mods", "you.trading-post@1.0.0"), ("enshwick.mods.1", "camera@1.0.0")]);
 /// assert_eq!(mod_rules_value(&reply), "you.trading-post@1.0.0,camera@1.0.0");
@@ -55,7 +55,7 @@ pub fn mod_rules_value(reply: &[u8]) -> String {
 /// #     }
 /// #     reply
 /// # }
-/// use enshwick_loader::join::mods_complete;
+/// use enshwick_loader::base::join::mods_complete;
 ///
 /// let cut = reply(&[("enshwick.mods", "you.trading-post@1.0.0"), ("enshwick.mods.count", "2")]);
 /// assert!(!mods_complete(&cut));
@@ -82,7 +82,7 @@ pub fn mods_complete(reply: &[u8]) -> bool {
 /// #     }
 /// #     reply
 /// # }
-/// use enshwick_loader::join::rule;
+/// use enshwick_loader::base::join::rule;
 ///
 /// let reply = reply(&[("enshwick", "e5db5dca")]);
 /// assert_eq!(rule(&reply, "enshwick").as_deref(), Some("e5db5dca"));
@@ -163,7 +163,7 @@ impl Split {
 /// # Examples
 ///
 /// ```no_run
-/// use enshwick_loader::join::{query_rules, rule};
+/// use enshwick_loader::base::join::{query_rules, rule};
 ///
 /// let reply = query_rules("127.0.0.1:15647".parse()?)?;
 /// let fingerprint = rule(&reply, "enshwick");

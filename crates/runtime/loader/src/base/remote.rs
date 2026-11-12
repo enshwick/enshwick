@@ -237,7 +237,7 @@ impl Heard {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::remote::{Carried, carried_after};
+/// use enshwick_loader::base::remote::{Carried, carried_after};
 ///
 /// let horn = Carried { name: "horn".into(), label: "Horn".into(), action: "honk".into(), keys: [0x23, 0], fires: 1, hold_ms: 500 };
 /// let kept = carried_after(&[], "you.cars", "Cars", &[horn.clone()]);

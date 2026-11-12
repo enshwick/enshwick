@@ -272,7 +272,7 @@ impl KnownBuild {
     /// ```
     /// use enshwick_core::abi::{Level, Side};
     ///
-    /// use enshwick_loader::builds::by_patterns;
+    /// use enshwick_loader::engine::builds::by_patterns;
     ///
     /// let code = [0u8; 64];
     /// let build = by_patterns(Side::SERVER, "server".into(), (&code, 0x1000), |_| None)

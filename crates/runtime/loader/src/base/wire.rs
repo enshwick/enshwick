@@ -71,7 +71,7 @@ const HELLO_HEAD: usize = 1 + 8 + 4;
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::wire::{PROTOCOL, WELCOME, control};
+/// use enshwick_loader::base::wire::{PROTOCOL, WELCOME, control};
 ///
 /// assert_eq!(control(WELCOME), [WELCOME, PROTOCOL]);
 /// ```
@@ -91,7 +91,7 @@ pub fn control(kind: u8) -> Vec<u8> {
 ///
 /// ```
 /// use enshwick_core::i18n::Language;
-/// use enshwick_loader::wire::{hello, read_hello};
+/// use enshwick_loader::base::wire::{hello, read_hello};
 ///
 /// let said = read_hello(&hello("you.zones@1.0.0", 9, Language::DE_DE)).ok_or("no hello")?;
 /// assert_eq!((said.mods.as_str(), said.complete, said.nonce), ("you.zones@1.0.0", true, 9));
@@ -133,7 +133,7 @@ fn whole_entries(mods: &str, room: usize) -> &str {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::wire::{mods, read_mods};
+/// use enshwick_loader::base::wire::{mods, read_mods};
 ///
 /// let read = read_mods(&mods("you.zones@1.0.0")).ok_or("no list")?;
 /// assert_eq!(read, ("you.zones@1.0.0".to_owned(), true));
@@ -171,7 +171,7 @@ pub fn read_mods(data: &[u8]) -> Option<(String, bool)> {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::wire::{HELLO, WELCOME, control, read_hello};
+/// use enshwick_loader::base::wire::{HELLO, WELCOME, control, read_hello};
 ///
 /// let bare = read_hello(&control(HELLO)).ok_or("no hello")?;
 /// assert_eq!((bare.mods.as_str(), bare.complete), ("", true));
@@ -209,8 +209,8 @@ pub fn read_hello(data: &[u8]) -> Option<Hello> {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::remote::Message;
-/// use enshwick_loader::wire::{PROTOCOL, remote_message};
+/// use enshwick_loader::base::remote::Message;
+/// use enshwick_loader::base::wire::{PROTOCOL, remote_message};
 ///
 /// let query = Message::Query { id: "you.zones".into() };
 /// let mut data = vec![query.kind(), PROTOCOL];
@@ -233,7 +233,7 @@ pub fn remote_message(data: &[u8]) -> Option<Message> {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::wire::{NOTICE, control, notice, read_notice};
+/// use enshwick_loader::base::wire::{NOTICE, control, notice, read_notice};
 ///
 /// let data = notice(42, "Low fuel");
 /// let rest = data.strip_prefix(control(NOTICE).as_slice()).unwrap();
@@ -253,7 +253,7 @@ pub fn notice(entity: u32, text: &str) -> Vec<u8> {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::wire::read_notice;
+/// use enshwick_loader::base::wire::read_notice;
 ///
 /// assert_eq!(read_notice(b"\x07\0\0\0hi"), Some((7, "hi")));
 /// assert_eq!(read_notice(b"\x07\0\0"), None);
@@ -273,7 +273,7 @@ pub fn read_notice(bytes: &[u8]) -> Option<(u32, &str)> {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::wire::demo_position;
+/// use enshwick_loader::base::wire::demo_position;
 ///
 /// let bytes: Vec<u8> = [1i64, -5, 7].iter().flat_map(|a| a.to_le_bytes()).collect();
 /// assert_eq!(demo_position(&bytes), Some([1, -5, 7]));
@@ -297,7 +297,7 @@ pub fn demo_position(bytes: &[u8]) -> Option<[i64; 3]> {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::wire::Gathered;
+/// use enshwick_loader::base::wire::Gathered;
 ///
 /// let mut ids = Gathered::<u32, 3>::default();
 /// assert_eq!(ids.add(true, false, [1, 2]), None);
@@ -358,7 +358,7 @@ impl<T, const CAP: usize> Gathered<T, CAP> {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::wire::Gathered;
+    /// use enshwick_loader::base::wire::Gathered;
     ///
     /// let mut ids = Gathered::<u32, 3>::default();
     /// ids.add(true, false, [1]);
@@ -377,7 +377,7 @@ impl<T, const CAP: usize> Gathered<T, CAP> {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::wire::{PROBE_SIZE, probe, read_probe};
+/// use enshwick_loader::base::wire::{PROBE_SIZE, probe, read_probe};
 ///
 /// let message = probe(7);
 /// assert_eq!(message.len(), PROBE_SIZE);

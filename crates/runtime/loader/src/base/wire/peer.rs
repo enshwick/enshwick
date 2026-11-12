@@ -18,7 +18,7 @@ pub const DATA_AGAIN: Duration = Duration::from_secs(15);
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::wire::Peer;
+/// use enshwick_loader::base::wire::Peer;
 ///
 /// let mut peer = Peer::new();
 /// assert!(peer.admit());
@@ -61,7 +61,7 @@ impl Peer {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::wire::Peer;
+    /// use enshwick_loader::base::wire::Peer;
     ///
     /// assert!(!Peer::with_tokens(0.0).admit());
     /// ```
@@ -83,7 +83,7 @@ impl Peer {
     ///
     /// ```
     /// use std::time::Instant;
-    /// use enshwick_loader::wire::{DATA_AGAIN, Peer};
+    /// use enshwick_loader::base::wire::{DATA_AGAIN, Peer};
     ///
     /// let mut peer = Peer::new();
     /// let now = Instant::now();
@@ -122,7 +122,7 @@ impl Peer {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::wire::Peer;
+    /// use enshwick_loader::base::wire::Peer;
     ///
     /// let mut peer = Peer::with_tokens(1.0);
     /// assert!(peer.admit());
@@ -140,7 +140,7 @@ impl Peer {
     ///
     /// ```
     /// use std::time::{Duration, Instant};
-    /// use enshwick_loader::wire::Peer;
+    /// use enshwick_loader::base::wire::Peer;
     ///
     /// let mut peer = Peer::with_tokens(0.0);
     /// let later = Instant::now() + Duration::from_secs(1);

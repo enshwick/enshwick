@@ -25,7 +25,7 @@ const AVERAGE_SHIFT: u32 = 4;
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::ticks::due;
+/// use enshwick_loader::engine::ticks::due;
 ///
 /// assert!(due(5, None, 100));
 /// assert!(!due(150, Some(100), 100));

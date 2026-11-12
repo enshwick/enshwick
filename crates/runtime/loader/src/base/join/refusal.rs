@@ -20,8 +20,8 @@ const MAX_LINES: usize = 12;
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::admission::Need;
-/// use enshwick_loader::join::{Names, refusal};
+/// use enshwick_loader::base::admission::Need;
+/// use enshwick_loader::base::join::{Names, refusal};
 ///
 /// let need = Need { id: "you.trading-post".into(), version: "0.3.0".into(), yours: None };
 /// let dialog = refusal::dialog(&[need], &refusal::Off::default(), &Names::new());
@@ -60,8 +60,8 @@ enum Get {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::admission::Need;
-/// use enshwick_loader::join::{Names, refusal};
+/// use enshwick_loader::base::admission::Need;
+/// use enshwick_loader::base::join::{Names, refusal};
 ///
 /// let need = Need { id: "you.trading-post".into(), version: "0.3.0".into(), yours: Some("0.2.0".into()) };
 /// let dialog = refusal::dialog(&[need], &refusal::Off::default(), &Names::new());

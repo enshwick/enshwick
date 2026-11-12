@@ -23,7 +23,7 @@ pub type Override = [Option<u32>; 2];
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::bindings::parse;
+/// use enshwick_loader::actions::bindings::parse;
 ///
 /// let (overrides, problems) = parse("[\"you.cars:horn\"]\nkey = \"Shift+J\"\nsecond = 0\n");
 /// assert!(problems.is_empty());
@@ -80,7 +80,7 @@ pub fn parse(text: &str) -> (BTreeMap<String, Override>, Vec<String>) {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::bindings::{parse, render};
+/// use enshwick_loader::actions::bindings::{parse, render};
 ///
 /// let kept: toml::Table = "[\"you.boats:horn\"]\nkey = \"Hyper+X\"\n".parse()?;
 /// let text = render(&[("you.cars:horn".to_owned(), [Some(0x24), Some(0)])], &kept);
@@ -130,7 +130,7 @@ pub fn render(entries: &[(String, Override)], kept: &toml::Table) -> String {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::bindings::{parse, render, set_kept};
+/// use enshwick_loader::actions::bindings::{parse, render, set_kept};
 ///
 /// let mut kept = toml::Table::new();
 /// set_kept(&mut kept, "you.weather:day", [Some(0x42), None]);
@@ -157,7 +157,7 @@ pub fn set_kept(kept: &mut toml::Table, control: &str, set: Override) {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::bindings::clashes;
+/// use enshwick_loader::actions::bindings::clashes;
 ///
 /// assert_eq!(clashes(&[[0x23, 0], [0x24, 0x23], [0x25, 0]]), [vec![1], vec![0], vec![]]);
 /// ```
@@ -219,7 +219,7 @@ impl Capture {
     ///
     /// ```
     /// use enshwick_core::controls::Key;
-    /// use enshwick_loader::bindings::{Capture, Captured};
+    /// use enshwick_loader::actions::bindings::{Capture, Captured};
     ///
     /// let keys = [Key::parse("Mouse1")?, Key::parse("G")?];
     /// let mut capture = Capture::new(&[true, false], false);

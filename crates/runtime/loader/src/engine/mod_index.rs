@@ -9,7 +9,7 @@ use enshwick_core::abi::ModHandle;
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::mod_index::ModIndex;
+/// use enshwick_loader::engine::mod_index::ModIndex;
 ///
 /// let first = ModIndex::new(0);
 /// assert_eq!(ModIndex::from_handle(first.handle()), Some(first));
@@ -55,7 +55,7 @@ impl ModIndex {
     ///
     /// ```
     /// use enshwick_core::abi::ModHandle;
-    /// use enshwick_loader::mod_index::ModIndex;
+    /// use enshwick_loader::engine::mod_index::ModIndex;
     ///
     /// assert_eq!(ModIndex::looking_up(ModHandle(0), 3), Some(ModIndex::LOADER));
     /// assert_eq!(ModIndex::looking_up(ModHandle(3), 3), Some(ModIndex::new(2)));

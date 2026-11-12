@@ -9,7 +9,7 @@ use crate::engine::pinned;
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::join::{TARGET_BYTES, Target};
+/// use enshwick_loader::base::join::{TARGET_BYTES, Target};
 ///
 /// let target: Target = [0; TARGET_BYTES];
 /// assert!(target.iter().all(|&byte| byte == 0));
@@ -27,7 +27,7 @@ pub type Target = [u8; TARGET_BYTES];
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::join::Layout;
+/// use enshwick_loader::base::join::Layout;
 ///
 /// let rows = [
 ///     ("join.target_host", 0),
@@ -42,7 +42,7 @@ pub type Target = [u8; TARGET_BYTES];
 /// let constant = |id: &str| rows.iter().find(|row| row.0 == id).map(|row| row.1);
 /// let layout = Layout::from_table(constant)?;
 /// assert_eq!(layout.head_len(), 36);
-/// # Ok::<(), enshwick_loader::join::LayoutError>(())
+/// # Ok::<(), enshwick_loader::base::join::LayoutError>(())
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Layout {
@@ -60,7 +60,7 @@ pub struct Layout {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::join::{Layout, LayoutError};
+/// use enshwick_loader::base::join::{Layout, LayoutError};
 ///
 /// assert_eq!(
 ///     Layout::from_table(|_| None),
@@ -100,7 +100,7 @@ impl Layout {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::join::{Layout, LayoutError};
+    /// use enshwick_loader::base::join::{Layout, LayoutError};
     ///
     /// let into_password = |id: &str| Some(if id == "join.target_password" { 4 } else { 0 });
     /// assert_eq!(
@@ -182,7 +182,7 @@ impl Layout {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::join::{Destination, Layout, TARGET_BYTES};
+    /// use enshwick_loader::base::join::{Destination, Layout, TARGET_BYTES};
     ///
     /// # let rows = [
     /// #     ("join.target_host", 0),
@@ -197,7 +197,7 @@ impl Layout {
     /// # let layout = Layout::from_table(|id| rows.iter().find(|row| row.0 == id).map(|row| row.1))?;
     /// let lobby = [0; TARGET_BYTES];
     /// assert_eq!(layout.destination(&lobby), Destination::Lobby);
-    /// # Ok::<(), enshwick_loader::join::LayoutError>(())
+    /// # Ok::<(), enshwick_loader::base::join::LayoutError>(())
     /// ```
     #[must_use]
     pub fn destination(&self, target: &Target) -> Destination {
@@ -223,7 +223,7 @@ impl Layout {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::join::Destination;
+/// use enshwick_loader::base::join::Destination;
 ///
 /// let server = Destination::Server { query: "127.0.0.1:15647".parse()? };
 /// assert_ne!(server, Destination::Lobby);

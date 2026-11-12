@@ -39,7 +39,7 @@ impl FogShape {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::fog_image::FogShape;
+    /// use enshwick_loader::world::fog_image::FogShape;
     ///
     /// let shape = FogShape::new(40, 40, 32, 10_240.0).unwrap();
     /// assert_eq!(shape.size(), [1280, 1280]);
@@ -104,7 +104,7 @@ impl FogShape {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::fog_image::FogShape;
+    /// use enshwick_loader::world::fog_image::FogShape;
     ///
     /// let shape = FogShape::new(40, 40, 32, 10_240.0).unwrap();
     /// let rect = shape.revealed([300.0, 10_000.0], 200.0).unwrap();
@@ -197,7 +197,7 @@ impl FogImage {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::fog_image::{FogImage, FogShape};
+    /// use enshwick_loader::world::fog_image::{FogImage, FogShape};
     ///
     /// let shape = FogShape::new(2, 1, 4, 4.0).unwrap();
     /// let mut image = FogImage::new(shape);
@@ -228,7 +228,7 @@ impl FogImage {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::fog_image::{FogImage, FogShape};
+    /// use enshwick_loader::world::fog_image::{FogImage, FogShape};
     ///
     /// let mut image = FogImage::new(FogShape::new(2, 1, 4, 4.0).unwrap());
     /// assert!(image.put_tile(1, 0, &[255; 16]));
@@ -365,7 +365,7 @@ pub enum Plan {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::fog_image::{FogShape, Plan, TileRect, plan};
+/// use enshwick_loader::world::fog_image::{FogShape, Plan, TileRect, plan};
 ///
 /// let shape = FogShape::new(40, 40, 32, 10_240.0).unwrap();
 /// assert_eq!(plan(None, 0x1000, shape, None, None), Plan::Full);

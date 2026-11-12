@@ -37,7 +37,7 @@ pub(super) fn label(names: &Names, id: &str) -> String {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::join::plan;
+/// use enshwick_loader::base::join::plan;
 ///
 /// let plan = plan("e5db5dca", "you.trading-post@1.0.0", Some(("989b6a71", "you.trading-post@2.0.0")), true);
 /// assert!(!plan.joins());
@@ -60,7 +60,7 @@ impl Plan {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::join::Plan;
+    /// use enshwick_loader::base::join::Plan;
     ///
     /// assert!(Plan::default().joins());
     /// ```
@@ -75,7 +75,7 @@ impl Plan {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::join::Plan;
+    /// use enshwick_loader::base::join::Plan;
     ///
     /// let plan = Plan { turn_off: vec!["you.trading-post".to_owned()], ..Plan::default() };
     /// assert_eq!(plan.turned_off(), ["you.trading-post"]);
@@ -91,7 +91,7 @@ impl Plan {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::join::{Names, Plan};
+    /// use enshwick_loader::base::join::{Names, Plan};
     ///
     /// let plan = Plan { turn_off: vec!["you.trading-post".to_owned()], ..Plan::default() };
     /// assert!(plan.note(&Names::new()).is_some_and(|note| note.ends_with("you.trading-post")));
@@ -124,7 +124,7 @@ impl Plan {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::join::plan;
+/// use enshwick_loader::base::join::plan;
 ///
 /// let plan = plan("e5db5dca", "you.trading-post@1.0.0,camera@1.0.0", Some(("989b6a71", "you.trading-post@1.0.0")), true);
 /// assert!(plan.joins());
@@ -171,7 +171,7 @@ pub fn plan(ours: &str, ours_mods: &str, server: Option<(&str, &str)>, complete:
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::join::{Names, differences};
+/// use enshwick_loader::base::join::{Names, differences};
 ///
 /// let found = differences("you.trading-post@2.0.0", "you.trading-post@1.0.0", &Names::new());
 /// assert_eq!(found, [("you.trading-post".to_owned(), true, "you.trading-post: server 2.0.0, yours 1.0.0".to_owned())]);
@@ -209,7 +209,7 @@ pub fn differences(server: &str, ours: &str, names: &Names) -> Vec<(String, bool
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::join::wanted;
+/// use enshwick_loader::base::join::wanted;
 ///
 /// let wanted = wanted("you.trading-post@2.0.0,camera@1.0.0", "camera@1.0.0");
 /// assert_eq!(wanted, [("you.trading-post".to_owned(), "2.0.0".to_owned())]);

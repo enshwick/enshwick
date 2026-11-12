@@ -42,7 +42,7 @@ impl TypesLayout {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::map_marker_types::TypesLayout;
+    /// use enshwick_loader::world::map_marker_types::TypesLayout;
     ///
     /// let layout = TypesLayout {
     ///     types: 0x10, registry_size: 0x18, type_size: 0x50, type_name: 0, marker_id: 0x10,
@@ -106,7 +106,7 @@ pub enum ReadTypesError {
 ///
 /// ```
 /// use enshwick_core::abi::MarkerTypeSorting;
-/// use enshwick_loader::map_marker_types::{TypesLayout, types};
+/// use enshwick_loader::world::map_marker_types::{TypesLayout, types};
 ///
 /// let layout = TypesLayout {
 ///     types: 0x10, registry_size: 0x18, type_size: 0x50, type_name: 0, marker_id: 0x10,
@@ -121,7 +121,7 @@ pub enum ReadTypesError {
 /// let read = types(&layout, &[(2, MarkerTypeSorting::DUNGEONS)], &registry)?;
 /// assert_eq!(read[0].marker_id, 0xabcd);
 /// assert_eq!(read[0].sorting_category, MarkerTypeSorting::DUNGEONS);
-/// # Ok::<(), enshwick_loader::map_marker_types::ReadTypesError>(())
+/// # Ok::<(), enshwick_loader::world::map_marker_types::ReadTypesError>(())
 /// ```
 pub fn types(
     layout: &TypesLayout,
@@ -187,7 +187,7 @@ impl RunningTypes {
     ///
     /// ```
     /// use core::num::NonZeroU32;
-    /// use enshwick_loader::map_marker_types::RunningTypes;
+    /// use enshwick_loader::world::map_marker_types::RunningTypes;
     ///
     /// let running = RunningTypes { default: 7, ids: Box::new([7, 9]) };
     /// assert_eq!(running.choose(NonZeroU32::new(9)), 9);

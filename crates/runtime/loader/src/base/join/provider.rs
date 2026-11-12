@@ -22,7 +22,7 @@ pub const MAX_SLOTS: usize = 64;
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::join::provider::Error;
+/// use enshwick_loader::base::join::provider::Error;
 ///
 /// let error = Error::NotFound { join: 0x1_4108_9230 };
 /// assert!(error.to_string().contains("no slot"));
@@ -85,7 +85,7 @@ pub enum Error {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::join::provider::Pins;
+/// use enshwick_loader::base::join::provider::Pins;
 ///
 /// let pins = Pins { table: 0x1_41db_2f28, join: 0x1_4108_9230, bytes: None, routed: false };
 /// assert_eq!(pins.bytes, None);
@@ -115,7 +115,7 @@ impl Pins {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::join::provider::{Error, Pins};
+    /// use enshwick_loader::base::join::provider::{Error, Pins};
     ///
     /// let none = Pins::from_table(|_| None, |_| None, 0x1_4000_0000);
     /// assert_eq!(none, Err(Error::Missing("net.provider_vtable")));
@@ -165,7 +165,7 @@ fn slots(read: impl Fn(u64) -> Option<u64>, table: u64, code: &Range<u64>) -> Ve
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::join::provider::{Pins, verify};
+/// use enshwick_loader::base::join::provider::{Pins, verify};
 ///
 /// let (table, join, bytes) = (0x9000, 0x4000, 0x5340_u64);
 /// let read = |va| match va {

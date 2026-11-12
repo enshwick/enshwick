@@ -48,7 +48,7 @@ pub const MAX_RAISED: usize = 1 << 13;
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::terrain_pages::Turn;
+/// use enshwick_loader::world::terrain_pages::Turn;
 ///
 /// assert_ne!(Turn { loaded: true, handle: 9 }, Turn { loaded: false, handle: 9 });
 /// ```
@@ -73,7 +73,7 @@ impl Turn {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::terrain_pages::{Turn, Waiting};
+/// use enshwick_loader::world::terrain_pages::{Turn, Waiting};
 ///
 /// let mut waiting = Box::new(Waiting::new());
 /// assert!(waiting.push(Turn { loaded: true, handle: 9 }));
@@ -139,7 +139,7 @@ impl Waiting {
     /// # Examples
     ///
     /// ```
-    /// assert!(enshwick_loader::terrain_pages::Waiting::new().is_empty());
+    /// assert!(enshwick_loader::world::terrain_pages::Waiting::new().is_empty());
     /// ```
     #[must_use]
     pub const fn is_empty(&self) -> bool {
@@ -153,7 +153,7 @@ impl Waiting {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::terrain_pages::{Pairing, Turn, Waiting};
+/// use enshwick_loader::world::terrain_pages::{Pairing, Turn, Waiting};
 ///
 /// let mut waiting = Box::new(Waiting::new());
 /// waiting.push(Turn { loaded: true, handle: 9 });

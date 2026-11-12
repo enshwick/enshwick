@@ -10,7 +10,7 @@ use enshwick_base::Relock;
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::registry::{Registry, Sealed};
+/// use enshwick_loader::engine::registry::{Registry, Sealed};
 ///
 /// let registry: Registry<u32> = Registry::new();
 /// registry.seal();
@@ -32,13 +32,13 @@ impl From<Sealed> for enshwick_core::abi::Status {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader::registry::Registry;
+/// use enshwick_loader::engine::registry::Registry;
 ///
 /// static FILTERS: Registry<u32> = Registry::new();
 /// FILTERS.add(7)?;
 /// assert_eq!(FILTERS.seal(), [7]);
 /// assert_eq!(FILTERS.sealed(), Some(&[7][..]));
-/// # Ok::<(), enshwick_loader::registry::Sealed>(())
+/// # Ok::<(), enshwick_loader::engine::registry::Sealed>(())
 /// ```
 #[derive(Debug)]
 pub struct Registry<T> {
