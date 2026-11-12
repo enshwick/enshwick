@@ -225,29 +225,20 @@ pub(crate) struct Loader {
     pub(crate) parts: crate::engine::parts::Parts,
 }
 
-/// The warning line and the status entry of `feature` turned off on `build`
-/// because its entry `id` failed for `reason`, as [`Loader::feature_off`]
-/// reports them.
-pub(crate) fn off_report(
-    build: &KnownBuild,
-    feature: &str,
-    id: &str,
-    reason: &str,
-) -> (String, String) {
-    let reason = build.reason(id, reason);
-    (
-        crate::engine::builds::off_line(feature, &build.name, id, reason),
-        format!("{id} {reason}"),
-    )
+/// Turns `feature` off for the warning `line` and the status `entry` a
+/// caller wrote, through [`Fuse::turn_off`]. Always false, for the caller
+/// to return.
+pub(crate) fn report_off(feature: &str, (line, entry): (String, String)) -> bool {
+    Fuse::named(feature).turn_off(&Off::reported(line, entry));
+    false
 }
 
-/// Logs the warning line of an [`off_report`] and lists `feature` with its
-/// status entry among the loader parts off, on the Mods screen and in the
-/// status summary. Always false, for the caller to return.
-pub(crate) fn report_off(feature: &str, (line, entry): (String, String)) -> bool {
-    crate::log!(WARN, "{line}");
-    crate::engine::diag::part_off(feature, &entry);
-    false
+/// Wires every armed chain of the running loader past the mods that are off
+/// or waiting and the loader features that are off.
+pub(crate) fn rewire() {
+    if let Some(loader) = loader() {
+        loader.rewire();
+    }
 }
 
 static LOADER: OnceLock<Loader> = OnceLock::new();
@@ -419,9 +410,11 @@ impl Loader {
     }
 
     /// [`Loader::link`] for a feature, after checking its target: a table
-    /// symbol's code must hold by [`Loader::code_holds`]. A target this
-    /// build lacks, code that does not hold or a refused link turns only
-    /// `feature` off, named by [`Loader::feature_off`]. True when linked.
+    /// symbol's code must hold by [`Loader::code_holds`]. A feature arms all
+    /// its links or none: a target this build lacks, code that does not hold
+    /// or a refused link turns the whole `feature` off by
+    /// [`Loader::feature_off`], its links made before are dropped when the
+    /// hooks arm, and its later links are not made. True when linked.
     pub(crate) fn link_feature<F: Copy>(
         &self,
         feature: &str,
@@ -441,11 +434,23 @@ impl Loader {
                 (id, crate::engine::builds::hook_target(address, || true))
             }
         };
+        let named = Fuse::named(feature);
+        if named.is_off() {
+            return false;
+        }
         let address = match address {
             Ok(address) => address,
             Err(why) => return self.feature_off(feature, id, &why.to_string()),
         };
-        let status = self.link(address, next, detour, flags);
+        let link = Link {
+            owner: ModIndex::LOADER,
+            detour: Next::<F>::address_of(detour),
+            next: next.slot(),
+            priority: i32::MIN,
+            flags,
+            hop: None,
+        };
+        let status = self.chains.relock().add_feature(address, link, named);
         if !status.is_ok() {
             return self.feature_off(feature, id, &format!("refused the link ({})", status.0));
         }
@@ -454,11 +459,27 @@ impl Loader {
     }
 
     /// Turns `feature` off on this build because its entry `id` failed for
-    /// `reason`: one warning that names the build, and the part off on the
-    /// Mods screen and in the status summary. Always false, for the caller
-    /// to return.
+    /// `reason`, by [`Fuse::turn_off`]: one warning that names the build, the
+    /// feature off on the Mods screen and in the status summary, and its
+    /// links wired past. Always false, for the caller to return.
     pub(crate) fn feature_off(&self, feature: &str, id: &str, reason: &str) -> bool {
-        report_off(feature, off_report(self.build, feature, id, reason))
+        let reason = self.build.reason(id, reason);
+        Fuse::named(feature).turn_off(&Off::build(feature, &self.build.name, id, reason));
+        false
+    }
+
+    /// Wires every armed chain past the mods that are off or waiting for a
+    /// code patch and the loader features that are off.
+    pub(crate) fn rewire(&self) {
+        // A poisoned lock still holds the chains: they must be wired past.
+        let chains = self.chains.relock();
+        let off = |owner: ModIndex| {
+            owner != ModIndex::LOADER
+                && self.mods.get(owner.get()).is_none_or(|m| {
+                    m.off.load(Ordering::Acquire) || m.waiting.load(Ordering::Acquire)
+                })
+        };
+        chains.rewire(off);
     }
 
     /// The mod named `id`, as a player or an administrator names it.

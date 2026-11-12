@@ -46,6 +46,8 @@ pub const FEATURES_OFF: Code = Code("E1005");
 pub const NO_SYSTEM_POWRPROF: Code = Code("E1006");
 /// The loader's settings file does not read.
 pub const BAD_SETTINGS: Code = Code("E1007");
+/// A loader feature turned itself off while the game ran.
+pub const FEATURE_FAULT: Code = Code("E1010");
 /// A mod is built for another ABI.
 pub const OTHER_ABI: Code = Code("E2001");
 /// A mod's relations to other mods keep it from starting.
@@ -70,6 +72,7 @@ pub const ALL: &[Code] = &[
     FEATURES_OFF,
     NO_SYSTEM_POWRPROF,
     BAD_SETTINGS,
+    FEATURE_FAULT,
     OTHER_ABI,
     UNMET_RELATIONS,
     MOD_OFF,

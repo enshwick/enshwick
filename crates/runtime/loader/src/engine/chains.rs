@@ -8,6 +8,7 @@
 
 use core::marker::PhantomData;
 
+use crate::engine::fuse::Fuse;
 use crate::engine::mod_index::ModIndex;
 // The loom model in `model` swaps in loom's atomics, which
 // record every load and store for the model to permute.
@@ -180,6 +181,17 @@ pub struct Chain {
     /// Whether the chain captures the caller frame, as decided when the
     /// chains were sealed.
     pub frame: bool,
+    /// The feature of each of the loader's links, by the link's `next`
+    /// slot: once the feature is off, the chain runs past the link.
+    pub features: Vec<(&'static AtomicUsize, &'static Fuse)>,
+}
+
+/// Whether `link` belongs to a loader feature among `features` that is off.
+fn feature_off(features: &[(&'static AtomicUsize, &'static Fuse)], link: &Link) -> bool {
+    features
+        .iter()
+        .find(|(next, _)| core::ptr::eq(*next, link.next))
+        .is_some_and(|(_, feature)| feature.is_off())
 }
 
 impl Chain {
@@ -200,7 +212,7 @@ impl Chain {
     }
 
     /// Points the head and every `next` slot past links whose owner is
-    /// `faulted`, ending at the original.
+    /// `faulted` or whose loader feature is off, ending at the original.
     pub fn wire(&self, faulted: impl Fn(ModIndex) -> bool) {
         let links = self.running_order();
         let original = match self.original_hop {
@@ -213,7 +225,7 @@ impl Chain {
         let after = |from: usize| {
             links[from..]
                 .iter()
-                .find(|l| !faulted(l.owner))
+                .find(|l| !faulted(l.owner) && !feature_off(&self.features, l))
                 .map_or(original, |l| l.entry())
         };
         // From the end back to the head: a slot is pointed at a link only
@@ -260,6 +272,7 @@ impl Chains {
             original: 0,
             original_hop: None,
             frame: false,
+            features: Vec::new(),
         });
         let clash = chain
             .links
@@ -276,6 +289,19 @@ impl Chains {
         }
         chain.links.push(link);
         Status::OK
+    }
+
+    /// [`Chains::add`] for a link of the loader's `feature`, which the
+    /// chain passes once the feature is off.
+    pub fn add_feature(&mut self, target: u64, link: Link, feature: &'static Fuse) -> Status {
+        let next = link.next;
+        let status = self.add(target, link);
+        if let Some(chain) = self.by_target.get_mut(&target)
+            && status.is_ok()
+        {
+            chain.features.push((next, feature));
+        }
+        status
     }
 
     /// Whether `next` is already the slot of a link on any target.
@@ -296,12 +322,17 @@ impl Chains {
         self.by_target.values()
     }
 
-    /// Marks the chains armed: no more links.
+    /// Marks the chains armed: no more links. The links of loader features
+    /// already off go, and so does a chain left without links, so arming
+    /// never patches a target only an off feature wanted.
     pub fn seal(&mut self) {
         self.armed = true;
         for chain in self.by_target.values_mut() {
+            let features = &chain.features;
+            chain.links.retain(|l| !feature_off(features, l));
             chain.frame = chain.wants_caller_frame();
         }
+        self.by_target.retain(|_, chain| !chain.links.is_empty());
     }
 
     /// Rewires every chain past the links of faulted mods.
@@ -392,6 +423,47 @@ mod tests {
             chains.add(0x20, link(ModIndex::new(0), 0xa, 0, HookFlags::NONE)),
             Status::OK
         );
+    }
+
+    #[test]
+    fn a_link_of_a_feature_that_turns_off_is_wired_past_and_the_rest_still_runs() {
+        static GLOW: Fuse = Fuse::new("chains glow");
+        let mut chains = Chains::default();
+        let ours = link(ModIndex::LOADER, 0xa, i32::MIN, HookFlags::NONE);
+        assert_eq!(chains.add_feature(0x10, ours, &GLOW), Status::OK);
+        assert_eq!(
+            chains.add(0x10, link(ModIndex::new(0), 0xb, 0, HookFlags::NONE)),
+            Status::OK
+        );
+        chains.seal();
+        let head = slot();
+        for chain in chains.iter_mut() {
+            chain.head = Some(head);
+            chain.original = 0xff;
+            chain.wire(|_| false);
+        }
+        assert_eq!(value(head), 0xa);
+        GLOW.blow("a test");
+        chains.rewire(|_| false);
+        assert_eq!(value(head), 0xb, "the mod's link still runs");
+    }
+
+    #[test]
+    fn sealing_drops_the_links_of_features_already_off_and_chains_left_empty() {
+        static LAMP: Fuse = Fuse::new("chains lamp");
+        let mut chains = Chains::default();
+        let first = link(ModIndex::LOADER, 0xa, i32::MIN, HookFlags::NONE);
+        let second = link(ModIndex::LOADER, 0xb, i32::MIN, HookFlags::NONE);
+        assert_eq!(chains.add_feature(0x10, first, &LAMP), Status::OK);
+        assert_eq!(chains.add_feature(0x20, second, &LAMP), Status::OK);
+        assert_eq!(
+            chains.add(0x20, link(ModIndex::new(0), 0xc, 0, HookFlags::NONE)),
+            Status::OK
+        );
+        LAMP.blow("a test");
+        chains.seal();
+        assert_eq!(chains.len(), 1, "only the target a mod still wants stays");
+        assert_eq!(chains.owners(0x20), [ModIndex::new(0)]);
     }
 
     #[test]
