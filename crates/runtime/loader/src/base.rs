@@ -74,15 +74,15 @@ use crate::engine::parts::{Part, fused, part, step};
 #[cfg(windows)]
 pub(crate) static PARTS: &[&Part] = &[
     &Part {
-        seal: Some(|loader| services::seal(loader)),
+        seal: Some(services::seal),
         ..part!("services", services)
     },
     &Part {
-        seal: Some(|loader| points::seal(loader)),
+        seal: Some(points::seal),
         ..part!("points", points)
     },
     &Part {
-        seal: Some(|loader| calls::seal(loader)),
+        seal: Some(calls::seal),
         ..part!("calls", calls)
     },
     &Part {

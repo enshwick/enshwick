@@ -59,3 +59,29 @@ impl Handed {
         Self::new(text.as_ptr(), text.len(), hash(text.as_bytes()))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const BASIS: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x100_0000_01b3;
+
+    #[test]
+    fn the_hash_is_fnv1a_over_bytes_sign_extended_as_the_game_hashes() {
+        assert_eq!(hash(b""), BASIS, "the empty text's hash the game writes");
+        assert_eq!(hash(b"a"), 0xaf63_dc4c_8601_ec8c, "plain FNV-1a for ASCII");
+        assert_eq!(
+            hash(&[0x80]),
+            (BASIS ^ 0xffff_ffff_ffff_ff80).wrapping_mul(PRIME),
+            "a byte over 0x7f is sign-extended before the xor"
+        );
+        assert_ne!(hash("ж".as_bytes()), {
+            let mut plain = BASIS;
+            for &b in "ж".as_bytes() {
+                plain = (plain ^ u64::from(b)).wrapping_mul(PRIME);
+            }
+            plain
+        });
+    }
+}

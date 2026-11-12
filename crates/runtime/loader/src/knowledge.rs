@@ -14,7 +14,7 @@ use crate::engine::parts::{Part, part, step};
 pub(crate) static PARTS: &[&Part] = &[
     &Part {
         table_ids: store::TABLE_IDS,
-        link: Some(|loader| store::guard::link(loader)),
+        link: Some(store::guard::link),
         steps: &[step!(Follow, "knowledge steps", |s| store::after_step(
             s.loader
         ))],
@@ -29,7 +29,7 @@ pub(crate) static PARTS: &[&Part] = &[
     },
     &Part {
         steps: &[step!(Follow, "knowledge change steps", |s| {
-            store::changes::after_step(s.loader, s.step)
+            store::changes::after_step(s.loader, s.step);
         })],
         world_event: Some(store::changes::world_event),
         ..part!("knowledge changes", store::changes)

@@ -25,7 +25,7 @@ use enshwick_core::raw::read_at;
 use crate::engine::chains::Next;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
-use crate::engine::parts::{Fused, Part, Stage, Stepping};
+use crate::engine::parts::{Part, PlayerCall, Stage, Stepping};
 use crate::engine::pinned;
 use crate::engine::pinned::{Constant, Symbol};
 use crate::engine::ticks::{StepTime, TICKS};
@@ -452,7 +452,7 @@ fn run_steps(loader: &Loader, stage: Stage, stepping: &Stepping) {
 fn run_fused(
     loader: &'static Loader,
     site: &str,
-    call: impl Fn(&Part) -> Option<&Fused<fn(&'static Loader, &PlayerData)>>,
+    call: impl Fn(&'static Part) -> Option<&'static PlayerCall>,
     player: &PlayerData,
 ) {
     for fused in loader.parts.iter().filter_map(call) {

@@ -80,7 +80,7 @@ pub(crate) static PARTS: &[&Part] = &[
     &Part {
         table_ids: game_settings::TABLE_IDS,
         steps: &[step!(Follow, "game settings steps", |s| {
-            game_settings::after_step(s.loader)
+            game_settings::after_step(s.loader);
         })],
         world_event: Some(game_settings::world_event),
         ..part!("game_settings", game_settings)
@@ -124,7 +124,7 @@ pub(crate) static PARTS: &[&Part] = &[
         table_ids: voxels::TABLE_IDS,
         link: Some(voxels::changes::link),
         steps: &[step!(Output, "voxel edits", |s| {
-            voxels::changes::after_step(s.loader)
+            voxels::changes::after_step(s.loader);
         })],
         forget: Some(|_| voxels::changes::forget()),
         ..part!("voxels", voxels)
@@ -132,7 +132,7 @@ pub(crate) static PARTS: &[&Part] = &[
     &Part {
         link: Some(terrain_pages::link),
         steps: &[step!(Output, "terrain pages", |s| {
-            terrain_pages::after_step(s.loader)
+            terrain_pages::after_step(s.loader);
         })],
         forget: Some(|_| terrain_pages::forget()),
         ..part!("terrain_pages", terrain_pages)

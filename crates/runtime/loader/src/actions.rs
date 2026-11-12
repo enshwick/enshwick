@@ -59,7 +59,7 @@ pub(crate) static PARTS: &[&Part] = &[
         table_ids: interactions::TABLE_IDS,
         link: Some(interactions::link),
         steps: &[step!(Follow, "interaction steps", |s| {
-            interactions::after_step(s.loader, s.step)
+            interactions::after_step(s.loader, s.step);
         })],
         joined: Some(fused!("the players' screens at join", |loader, _| {
             interactions::player_joined(loader);
@@ -95,7 +95,7 @@ pub(crate) static PARTS: &[&Part] = &[
     },
     &Part {
         steps: &[step!(Follow, "build refusals", |s| {
-            build_reasons::after_step(s.loader)
+            build_reasons::after_step(s.loader);
         })],
         ..part!("build_reasons", build_reasons)
     },

@@ -17,6 +17,10 @@ pub(crate) struct Part {
     /// reports.
     pub(crate) name: &'static str,
     /// The module the part is, as `module_path!` spells it.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "the table id tests read each part's code by it")
+    )]
     pub(crate) module: &'static str,
     /// The build table ids the part names; a part with none has no row in
     /// the feature table.
@@ -28,9 +32,9 @@ pub(crate) struct Part {
     /// The part's work after each server step.
     pub(crate) steps: &'static [Step],
     /// A player reached the game.
-    pub(crate) joined: Option<Fused<fn(&'static Loader, &PlayerData)>>,
+    pub(crate) joined: Option<PlayerCall>,
     /// A player leaves, before the game removes the character.
-    pub(crate) left: Option<Fused<fn(&'static Loader, &PlayerData)>>,
+    pub(crate) left: Option<PlayerCall>,
     /// A client starts hosting a game.
     pub(crate) hosting: Option<fn(&'static Loader)>,
     /// A client's hosted game ended: the part forgets its server.
@@ -71,6 +75,9 @@ pub(crate) struct Fused<F> {
     pub(crate) run: F,
 }
 
+/// A call at a player's join or leave.
+pub(crate) type PlayerCall = Fused<fn(&'static Loader, &PlayerData)>;
+
 /// When in the server step a part's work runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Stage {
@@ -103,11 +110,20 @@ pub(crate) struct Stepping {
 /// A call with a fuse of its own, which the log and the Mods screen name
 /// `$feature` when it turns off.
 macro_rules! fused {
-    ($feature:literal, $run:expr) => {{
+    ($feature:literal, |$($arg:pat_param),*| $run:block) => {{
         static FUSE: $crate::engine::fuse::Fuse = $crate::engine::fuse::Fuse::new($feature);
         $crate::engine::parts::Fused {
             fuse: &FUSE,
-            run: $run,
+            run: |$($arg),*| $run,
+        }
+    }};
+    ($feature:literal, |$($arg:pat_param),*| $run:expr) => {{
+        static FUSE: $crate::engine::fuse::Fuse = $crate::engine::fuse::Fuse::new($feature);
+        $crate::engine::parts::Fused {
+            fuse: &FUSE,
+            run: |$($arg),*| {
+                $run;
+            },
         }
     }};
 }
@@ -116,10 +132,10 @@ pub(crate) use fused;
 /// A part's work at `$stage` of each server step, under a fuse named
 /// `$feature`.
 macro_rules! step {
-    ($stage:ident, $feature:literal, $run:expr) => {
+    ($stage:ident, $feature:literal, $($run:tt)+) => {
         $crate::engine::parts::Step {
             stage: $crate::engine::parts::Stage::$stage,
-            work: $crate::engine::parts::fused!($feature, $run),
+            work: $crate::engine::parts::fused!($feature, $($run)+),
         }
     };
 }
@@ -169,12 +185,6 @@ impl Parts {
         self.layers
             .iter()
             .flat_map(|(_, parts)| parts.iter().copied())
-    }
-
-    /// The layers, lowest first, by name.
-    #[cfg(test)]
-    pub(crate) fn layers(&self) -> &'static [(&'static str, &'static [&'static Part])] {
-        self.layers
     }
 
     /// Each part that names build table ids, with them, by name: the
