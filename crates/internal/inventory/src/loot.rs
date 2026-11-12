@@ -12,7 +12,7 @@
 //! world; [`Worlds::is_server`](crate::ecs::Worlds::is_server) tells the two
 //! apart.
 //!
-//! [`Load::add_loot`] puts a mod item into random loot with an exact chance,
+//! [`Load::add_loot`](../struct.Load.html#method.add_loot) puts a mod item into random loot with an exact chance,
 //! filtered by [`Source`]: corpses, bosses, chests, locked chests, loot labels.
 
 pub(crate) mod drops;
@@ -32,7 +32,7 @@ use crate::raw::read_at;
 use crate::{Loading, Off};
 
 /// The system that checks every loot container each step, for
-/// [`Load::system`].
+/// [`Load::system`](../struct.Load.html#method.system).
 pub const SYSTEM: &str = "destroy_inventory_on_loot";
 
 /// Iterator words of [`SYSTEM`]: context, `InventoryEmptyState`,
@@ -377,14 +377,14 @@ impl Containers {
     }
 }
 
-/// The loot containers of one run of [`SYSTEM`], for [`Load::on_loot_pass`];
+/// The loot containers of one run of [`SYSTEM`], for [`Load::on_loot_pass`](../struct.Load.html#method.on_loot_pass);
 /// valid only during the call.
 ///
 /// The name is enshwick's, not the game's.
 ///
 /// # Examples
 ///
-/// See [`Load::on_loot_pass`].
+/// See [`Load::on_loot_pass`](../struct.Load.html#method.on_loot_pass).
 #[derive(Debug)]
 pub struct LootPass<'a> {
     containers: &'a Containers,
@@ -396,7 +396,7 @@ impl LootPass<'_> {
     ///
     /// # Examples
     ///
-    /// See [`Load::on_loot_pass`].
+    /// See [`Load::on_loot_pass`](../struct.Load.html#method.on_loot_pass).
     pub fn each(&self, f: impl FnMut(&Container)) {
         // SAFETY: only `after_check` makes a `LootPass`, from the live context
         // of `SYSTEM` on its thread, and lends it to the handler for that call

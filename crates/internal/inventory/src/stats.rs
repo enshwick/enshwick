@@ -5,17 +5,17 @@
 //! A stat kind has a content [`Id`] and a [`StatDef`]: what it is
 //! ([`StatType`]), its default and its range. The text that names it is the
 //! derived part `<name>.name` in its owner's texts ([`name_key`]). A mod
-//! defines its own kinds with [`Load::define_stat`], named with
+//! defines its own kinds with [`Load::define_stat`](../struct.Load.html#method.define_stat), named with
 //! [`id!`](crate::content::id), and opens other kinds with
-//! [`Load::open_stat`]: the platform's built-in ones in [`builtin`], or a
+//! [`Load::open_stat`](../struct.Load.html#method.open_stat): the platform's built-in ones in [`builtin`], or a
 //! dependency's through [`deps!`](crate::deps), which its owner exports.
 //! Every mod that opens one id shares its values.
 //!
 //! [`Modifier`]s come from three sources: items an entity wears (their
-//! [`ItemStats`]), buffs it has ([`Load::add_buff_modifiers`]) and modifiers a
+//! [`ItemStats`]), buffs it has ([`Load::add_buff_modifiers`](../struct.Load.html#method.add_buff_modifiers)) and modifiers a
 //! mod keeps on it ([`Stats::set`]). The server sums them with [`aggregate`]
 //! after each step in which a source changed, keeps the values, and raises
-//! [`Load::on_stats_changed`] for each value that moved; [`Stats::value`]
+//! [`Load::on_stats_changed`](../struct.Load.html#method.on_stats_changed) for each value that moved; [`Stats::value`]
 //! reads a kept value without locks from any thread.
 //!
 //! The platform applies the built-in kinds to the game itself on the
@@ -105,7 +105,7 @@ pub fn name_key(id: &str) -> Option<String> {
 /// The platform's built-in stat kinds, which it applies to the game on the
 /// server.
 ///
-/// Open one with [`Load::open_stat`]. The maximum kinds add points to the
+/// Open one with [`Load::open_stat`](../struct.Load.html#method.open_stat). The maximum kinds add points to the
 /// entity's maximum health, stamina and mana, as gear does. Damage kinds are factors on the hits
 /// an entity deals, 1 without modifiers; resistances are the part of a
 /// hit's damage the entity takes less, 0 without modifiers and 1 for none
@@ -122,11 +122,11 @@ pub fn name_key(id: &str) -> Option<String> {
 /// ```
 pub mod builtin;
 
-/// A stat whose value changed, for [`Load::on_stats_changed`].
+/// A stat whose value changed, for [`Load::on_stats_changed`](../struct.Load.html#method.on_stats_changed).
 ///
 /// # Examples
 ///
-/// See [`Load::on_stats_changed`].
+/// See [`Load::on_stats_changed`](../struct.Load.html#method.on_stats_changed).
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct StatChange {
@@ -161,7 +161,7 @@ const fn key_hash(key: &str) -> u32 {
     key_of(key).0
 }
 
-/// Stat values and modifiers; get it from [`Load::stats`]. Copy it anywhere.
+/// Stat values and modifiers; get it from [`Load::stats`](../struct.Load.html#method.stats). Copy it anywhere.
 ///
 /// # Examples
 ///
@@ -517,7 +517,7 @@ impl Stats {
 /// - `change` is null or points at a change the loader wrote, readable for
 ///   the size its header states; no alignment is needed.
 /// - No other thread writes that change during the call.
-/// - `user` is the `Box<F>` that [`Load::on_stats_changed`] handed over,
+/// - `user` is the `Box<F>` that [`Load::on_stats_changed`](../struct.Load.html#method.on_stats_changed) handed over,
 ///   which the loader keeps for the process.
 unsafe extern "system" fn run_changed<F>(change: *const StatChangeData, user: *mut c_void)
 where

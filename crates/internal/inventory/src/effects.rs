@@ -334,7 +334,7 @@ pub enum NpcCommandType {
 }
 
 /// The effects a mod has on the server's world; get them from
-/// [`Load::effects`].
+/// [`Load::effects`](../struct.Load.html#method.effects).
 ///
 /// # Examples
 ///

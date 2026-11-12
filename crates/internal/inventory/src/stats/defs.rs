@@ -19,7 +19,7 @@ pub enum StatType {
     Flag,
 }
 
-/// A stat kind's definition, for [`Load::define_stat`](crate::Load::define_stat).
+/// A stat kind's definition, for [`Load::define_stat`](../struct.Load.html#method.define_stat).
 ///
 /// # Examples
 ///
@@ -244,7 +244,7 @@ pub(crate) struct DefineStatError {
 )]
 pub struct StatKey(pub u32);
 
-/// A stat kind, from [`Load::define_stat`](crate::Load::define_stat) or [`Load::open_stat`](crate::Load::open_stat). Copy it
+/// A stat kind, from [`Load::define_stat`](../struct.Load.html#method.define_stat) or [`Load::open_stat`](../struct.Load.html#method.open_stat). Copy it
 /// anywhere.
 ///
 /// # Examples

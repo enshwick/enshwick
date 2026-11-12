@@ -2,7 +2,7 @@
 //! "of the Bear" giving 10 to 30 extra health, rolled onto single items as
 //! they drop or are crafted and kept with the item.
 //!
-//! A mod defines its affixes with [`Load::define_affix`], each named by a
+//! A mod defines its affixes with [`Load::define_affix`](../struct.Load.html#method.define_affix), each named by a
 //! content id and by the text `<name>.name` in the mod's texts: the [`Modifier`](crate::stats::Modifier)s'
 //! ranges, a weight against the other affixes, a [`ItemRarity`], the item
 //! [`ItemCategoryMask`](crate::content::categories::ItemCategoryMask) it rolls on and an optional group whose affixes never roll
@@ -85,7 +85,7 @@ pub enum RollError {
 
 crate::load::off_from!(RollError);
 
-/// The affix pool and rolls; get it from [`Load::affixes`]. Copy it
+/// The affix pool and rolls; get it from [`Load::affixes`](../struct.Load.html#method.affixes). Copy it
 /// anywhere.
 ///
 /// # Examples

@@ -50,7 +50,7 @@ pub(crate) fn item_data(host: &Host, item: ItemId) -> Option<ItemData> {
 }
 
 /// Inventory reads and transactions on the server; get it from
-/// [`Load::inventories`]. Copy it anywhere.
+/// [`Load::inventories`](../struct.Load.html#method.inventories). Copy it anywhere.
 ///
 /// # Examples
 ///

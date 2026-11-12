@@ -223,7 +223,7 @@ impl Source {
     }
 }
 
-/// A mod item in random loot, for [`Load::add_loot`].
+/// A mod item in random loot, for [`Load::add_loot`](../struct.Load.html#method.add_loot).
 ///
 /// # Examples
 ///
@@ -839,7 +839,7 @@ impl LoadMethods for BaseLoad {
 
 /// The base handle's helpers of this module for the crate's own code.
 pub(crate) trait LoadHelpers {
-    /// [`Load::add_loot`] for the drops of group `group`.
+    /// [`Load::add_loot`](../struct.Load.html#method.add_loot) for the drops of group `group`.
     fn add_loot_in(&mut self, group: u64, drop: Drop) -> Result<(), Off>;
 }
 
@@ -871,7 +871,7 @@ impl LoadHelpers for BaseLoad {
     }
 }
 
-/// Replaces the drops the mod added with [`Load::add_loot`] with `drops`, from
+/// Replaces the drops the mod added with [`Load::add_loot`](../struct.Load.html#method.add_loot) with `drops`, from
 /// any thread, such as when a setting turns a drop off or changes its chance;
 /// no drops stops them all.
 ///

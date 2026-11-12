@@ -101,8 +101,8 @@ impl Kind {
     }
 }
 
-/// A player's action with an item, from [`Load::on_item_action`] and
-/// [`Load::on_item`].
+/// A player's action with an item, from [`Load::on_item_action`](../struct.Load.html#method.on_item_action) and
+/// [`Load::on_item`](../struct.Load.html#method.on_item).
 ///
 /// # Examples
 ///

@@ -192,7 +192,7 @@ impl DamageCause {
 }
 
 /// Damage about to reach an entity's health, for a filter registered with
-/// [`Load::on_damage`] to see and change.
+/// [`Load::on_damage`](../struct.Load.html#method.on_damage) to see and change.
 ///
 /// Unstable: needs the `unstable` feature and may change in any release.
 ///

@@ -76,7 +76,7 @@ impl Affixes {
     }
 }
 
-/// Rolls on random loot, for [`Load::add_loot_affixes`].
+/// Rolls on random loot, for [`Load::add_loot_affixes`](../struct.Load.html#method.add_loot_affixes).
 ///
 /// # Examples
 ///
@@ -137,7 +137,7 @@ impl AffixLoot {
     }
 }
 
-/// Rolls on crafted items, for [`Load::add_craft_affixes`].
+/// Rolls on crafted items, for [`Load::add_craft_affixes`](../struct.Load.html#method.add_craft_affixes).
 ///
 /// # Examples
 ///

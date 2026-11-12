@@ -109,7 +109,7 @@ pub enum Purpose {
     Cursor,
 }
 
-/// A lookup the game makes, from [`Load::on_survivor_lookup`].
+/// A lookup the game makes, from [`Load::on_survivor_lookup`](../struct.Load.html#method.on_survivor_lookup).
 ///
 /// # Examples
 ///
@@ -173,12 +173,12 @@ pub enum Answer {
     Nobody,
 }
 
-/// A survivor's bed the game kept, from [`Load::on_survivor_bed_check`].
+/// A survivor's bed the game kept, from [`Load::on_survivor_bed_check`](../struct.Load.html#method.on_survivor_bed_check).
 /// The name is enshwick's; the game's own bed check has none.
 ///
 /// # Examples
 ///
-/// See [`Load::on_survivor_bed_check`].
+/// See [`Load::on_survivor_bed_check`](../struct.Load.html#method.on_survivor_bed_check).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 pub struct BedCheck {
     /// The survivor, as the game's active NPC state names it.
@@ -193,12 +193,12 @@ pub struct BedCheck {
     pub bed_at: [i64; 3],
 }
 
-/// A summoning staff's use, from [`Load::on_summon`] and
-/// [`Load::on_summoned`].
+/// A summoning staff's use, from [`Load::on_summon`](../struct.Load.html#method.on_summon) and
+/// [`Load::on_summoned`](../struct.Load.html#method.on_summoned).
 ///
 /// # Examples
 ///
-/// See [`Load::on_summon`].
+/// See [`Load::on_summon`](../struct.Load.html#method.on_summon).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct Summon {
@@ -217,7 +217,7 @@ pub struct Summon {
     /// The used item's meter (see [`FuelSetup`](crate::content::items::FuelSetup))
     /// as clients see it; `None` for an item without one.
     pub meter: Option<Bar>,
-    /// In [`Load::on_summoned`]: whether the use took the item.
+    /// In [`Load::on_summoned`](../struct.Load.html#method.on_summoned): whether the use took the item.
     pub consumed: bool,
 }
 
@@ -336,13 +336,13 @@ unsafe fn read_summon(summon: *const RawSummon) -> Option<Summon> {
     Some(Summon::from_raw(&raw))
 }
 
-/// What a summon filter makes of a staff's use, from [`Load::on_summon`].
+/// What a summon filter makes of a staff's use, from [`Load::on_summon`](../struct.Load.html#method.on_summon).
 ///
 /// The name is enshwick's, not the game's.
 ///
 /// # Examples
 ///
-/// See [`Load::on_summon`].
+/// See [`Load::on_summon`](../struct.Load.html#method.on_summon).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum SummonVerdict {

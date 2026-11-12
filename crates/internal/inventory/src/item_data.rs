@@ -110,7 +110,7 @@ pub enum SetError {
 crate::load::off_from!(SetError);
 
 /// A kind of item data with values of type `T`; get it from
-/// [`Load::item_data`]. Copy it anywhere.
+/// [`Load::item_data`](../struct.Load.html#method.item_data). Copy it anywhere.
 ///
 /// # Examples
 ///
@@ -258,7 +258,7 @@ impl LoadMethods for crate::BaseLoad {
 
 /// The base handle's helpers of this module for the crate's own code.
 pub(crate) trait LoadHelpers {
-    /// [`Load::item_data`] for the stable parts built on item data, such as
+    /// [`Load::item_data`](../struct.Load.html#method.item_data) for the stable parts built on item data, such as
     /// the stats of single items.
     fn open_item_data<T>(&mut self, id: &str) -> Result<ItemData<T>, Off>
     where

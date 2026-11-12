@@ -124,7 +124,7 @@ impl Range {
     }
 }
 
-/// An affix's definition, for [`Load::define_affix`](crate::Load::define_affix).
+/// An affix's definition, for [`Load::define_affix`](../struct.Load.html#method.define_affix).
 ///
 /// # Examples
 ///
@@ -360,7 +360,7 @@ pub(crate) enum DefineAffixError {
     Range,
 }
 
-/// An affix as this process numbers it, from [`Load::define_affix`](crate::Load::define_affix)
+/// An affix as this process numbers it, from [`Load::define_affix`](../struct.Load.html#method.define_affix)
 /// or a [`Line`](super::Line), to ask [`Affixes::info`](super::Affixes::info) its text.
 ///
 /// The number differs between processes; save an [`AffixKey`] instead.

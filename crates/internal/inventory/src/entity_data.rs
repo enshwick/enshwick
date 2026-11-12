@@ -69,7 +69,7 @@ pub enum Replication {
 }
 
 /// A kind of entity data with values of type `T`; get it from
-/// [`Load::entity_data`]. Copy it anywhere.
+/// [`Load::entity_data`](../struct.Load.html#method.entity_data). Copy it anywhere.
 ///
 /// # Examples
 ///
