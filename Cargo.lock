@@ -478,7 +478,6 @@ dependencies = [
  "enshwick-abi",
  "enshwick-base",
  "enshwick-content",
- "enshwick-inventory",
  "enshwick-macros",
  "enshwick-values",
  "enshwick-world",
