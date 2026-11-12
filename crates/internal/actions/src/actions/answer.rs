@@ -39,12 +39,9 @@ fn run_command(
         return Outcome::refused(registry.say("actions.commands_off", language, &[]));
     }
     let run = || registry.run_from_console(player, language, typed);
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(run)).unwrap_or_else(|payload| {
+    crate::host::caught(run).unwrap_or_else(|panicked| {
         registry.commands_off.store(true, Ordering::Release);
-        crate::warn!(
-            "commands off: a handler panicked: {}",
-            crate::host::panic_text(payload.as_ref())
-        );
+        crate::warn!("commands off: a handler panicked: {}", panicked.text());
         Outcome::refused("")
     })
 }

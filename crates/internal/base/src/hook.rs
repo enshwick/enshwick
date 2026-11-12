@@ -378,10 +378,10 @@ macro_rules! detour {
             $($unsafe)? extern "system" fn __enshwick_entry($($arg: $ty),*) $(-> $ret)? {
                 let frame = $crate::__private::Frame::new();
                 let next = $name.next(&frame);
-                match ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| BODY(next, $($arg),*))) {
+                match $crate::host::caught(|| BODY(next, $($arg),*)) {
                     ::core::result::Result::Ok(value) => value,
                     ::core::result::Result::Err(panic) => {
-                        $crate::__private::fault_in(::core::stringify!($name), panic.as_ref());
+                        $crate::__private::fault_in(::core::stringify!($name), panic.payload());
                         match frame.take() {
                             ::core::option::Option::Some(returned) => returned,
                             ::core::option::Option::None => {

@@ -593,7 +593,7 @@ pub(crate) unsafe extern "system" fn run_link<
     let Some(value) = (unsafe { value.cast::<P::Output>().as_mut() }) else {
         return PointVerdict::PASS;
     };
-    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| link(input, value))) {
+    match crate::host::caught(|| link(input, value)) {
         Ok(Verdict::Set(new)) if P::MODE.changes() => {
             *value = new;
             PointVerdict::SET

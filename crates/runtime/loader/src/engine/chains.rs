@@ -530,6 +530,41 @@ mod tests {
     }
 
     #[test]
+    fn a_detour_reaches_the_game_once_whatever_its_work_does() {
+        static WICKS: Fuse = Fuse::new("chains wicks");
+        let calls = core::cell::Cell::new(0);
+        let game = || {
+            calls.set(calls.get() + 1);
+            7
+        };
+        let onward = Onward::new(game);
+        let twice = onward.run(&WICKS, "a double call", |o| o.call() + o.call());
+        assert_eq!(
+            (twice, calls.get()),
+            (14, 1),
+            "a second call keeps the answer"
+        );
+        let onward = Onward::new(game);
+        let after = onward.run(&WICKS, "a panic after the call", |o| {
+            let _answer = o.call();
+            panic!("broken wick")
+        });
+        assert_eq!(
+            (after, calls.get()),
+            (7, 2),
+            "the chain's answer, not a second call"
+        );
+        assert!(WICKS.is_off());
+        let onward = Onward::new(game);
+        let off = onward.run(&WICKS, "a call while off", |_| unreachable!("off"));
+        assert_eq!(
+            (off, calls.get()),
+            (7, 3),
+            "an off feature hands the call to the game"
+        );
+    }
+
+    #[test]
     fn a_link_of_a_feature_that_turns_off_is_wired_past_and_the_rest_still_runs() {
         static GLOW: Fuse = Fuse::new("chains glow");
         let mut chains = Chains::default();

@@ -473,7 +473,7 @@ where
     // described layout and exactly `output_size` bytes, alive and written by
     // nothing else for the call.
     let answer = unsafe { core::slice::from_raw_parts_mut(value.cast::<u8>(), link.output_size) };
-    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (link.run)(input, answer))) {
+    match crate::host::caught(|| (link.run)(input, answer)) {
         Ok(DescribedVerdict::Set(bytes)) if link.changes && bytes.len() == answer.len() => {
             answer.copy_from_slice(&bytes);
             PointVerdict::SET
