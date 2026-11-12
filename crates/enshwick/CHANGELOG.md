@@ -177,6 +177,11 @@ Each entry names the pull request that made the change.
   `enshwick-core`; every path stays (#1052).
 - **Breaking:** `loot::Containers::resolve` takes `&mut impl Loading`, so a
   mod passes its `Load` as before (#1052).
+- The ui domain (`ui` and `sound`) is the internal crate `enshwick-ui`,
+  between `enshwick-actions` and `enshwick-core`, and the packs domain
+  (`packs`) the internal crate `enshwick-packs` above it; `enshwick-core`
+  keeps only `Load` and the script binding's namespace lists, and every
+  path stays (#1055).
 - The actions domain (`actions`, `chat`, `commands`, `console`,
   `controls`, `input`, `interactions` and `vetoes`) is the internal crate
   `enshwick-actions`, between `enshwick-knowledge` and `enshwick-core`;

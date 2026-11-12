@@ -113,7 +113,8 @@ version = "1.0.0-alpha.14"
 dependencies = [
  "anyhow",
  "clap",
- "enshwick",
+ "enshwick-abi",
+ "enshwick-core",
  "enshwick-gamedata",
  "iced-x86",
  "memchr",
@@ -312,10 +313,18 @@ version = "1.0.0-alpha.14"
 dependencies = [
  "document-features",
  "enshwick-abi",
+ "enshwick-actions",
+ "enshwick-base",
+ "enshwick-content",
  "enshwick-core",
  "enshwick-fake",
+ "enshwick-inventory",
+ "enshwick-knowledge",
  "enshwick-macros",
+ "enshwick-packs",
+ "enshwick-ui",
  "enshwick-values",
+ "enshwick-world",
 ]
 
 [[package]]
@@ -329,30 +338,74 @@ dependencies = [
 ]
 
 [[package]]
-name = "enshwick-core"
+name = "enshwick-actions"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "bytemuck",
+ "enshwick-abi",
+ "enshwick-base",
+ "enshwick-content",
+ "enshwick-inventory",
+ "enshwick-macros",
+ "enshwick-values",
+ "enshwick-world",
+ "thiserror",
+]
+
+[[package]]
+name = "enshwick-base"
 version = "1.0.0-alpha.14"
 dependencies = [
  "aho-corasick",
- "bcdec_rs",
  "bytemuck",
  "const_format",
  "enshwick-abi",
  "enshwick-macros",
- "enshwick-typed",
  "enshwick-values",
  "fastrand",
- "hound",
  "memchr",
  "postcard",
  "rustc-hash",
  "schemars",
  "serde",
- "serde_json",
  "strsim",
  "thiserror",
  "toml",
+]
+
+[[package]]
+name = "enshwick-content"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "bcdec_rs",
+ "enshwick-abi",
+ "enshwick-base",
+ "enshwick-macros",
+ "enshwick-typed",
+ "enshwick-values",
+ "rustc-hash",
+ "thiserror",
  "zune-core",
  "zune-png",
+]
+
+[[package]]
+name = "enshwick-core"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "enshwick-abi",
+ "enshwick-actions",
+ "enshwick-base",
+ "enshwick-content",
+ "enshwick-inventory",
+ "enshwick-knowledge",
+ "enshwick-macros",
+ "enshwick-packs",
+ "enshwick-ui",
+ "enshwick-values",
+ "enshwick-world",
+ "serde",
+ "toml",
 ]
 
 [[package]]
@@ -385,7 +438,8 @@ dependencies = [
 name = "enshwick-gamedata"
 version = "1.0.0-alpha.14"
 dependencies = [
- "enshwick",
+ "enshwick-base",
+ "enshwick-content",
  "iced-x86",
  "memchr",
  "rustc-hash",
@@ -399,13 +453,49 @@ dependencies = [
 ]
 
 [[package]]
+name = "enshwick-inventory"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "bytemuck",
+ "enshwick-abi",
+ "enshwick-base",
+ "enshwick-content",
+ "enshwick-macros",
+ "enshwick-values",
+ "enshwick-world",
+ "fastrand",
+ "postcard",
+ "rustc-hash",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "enshwick-knowledge"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "enshwick-abi",
+ "enshwick-base",
+ "enshwick-content",
+ "enshwick-inventory",
+ "enshwick-macros",
+ "enshwick-typed",
+ "enshwick-values",
+ "enshwick-world",
+ "fastrand",
+ "serde",
+]
+
+[[package]]
 name = "enshwick-loader"
 version = "1.0.0-alpha.14"
 dependencies = [
  "arc-swap",
  "arrayvec",
  "bytemuck",
- "enshwick",
+ "enshwick-abi",
+ "enshwick-base",
+ "enshwick-core",
  "enshwick-gamedata",
  "enshwick-luau",
  "iced-x86",
@@ -416,7 +506,6 @@ dependencies = [
  "semver",
  "serde",
  "sha2",
- "strsim",
  "thiserror",
  "toml",
  "toml_edit",
@@ -428,7 +517,7 @@ name = "enshwick-luau"
 version = "1.0.0-alpha.14"
 dependencies = [
  "arc-swap",
- "enshwick",
+ "enshwick-core",
  "mlua",
  "thiserror",
  "toml",
@@ -445,10 +534,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "enshwick-packs"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "enshwick-abi",
+ "enshwick-base",
+ "enshwick-content",
+ "enshwick-inventory",
+ "enshwick-knowledge",
+ "enshwick-ui",
+ "enshwick-values",
+ "enshwick-world",
+ "rustc-hash",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "toml",
+]
+
+[[package]]
 name = "enshwick-typed"
 version = "1.0.0-alpha.14"
 dependencies = [
  "enshwick-values",
+ "thiserror",
+]
+
+[[package]]
+name = "enshwick-ui"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "enshwick-abi",
+ "enshwick-base",
+ "enshwick-content",
+ "enshwick-macros",
+ "enshwick-values",
+ "enshwick-world",
+ "hound",
  "thiserror",
 ]
 
@@ -459,6 +582,23 @@ dependencies = [
  "const-sha1",
  "const_format",
  "enshwick-macros",
+ "rustc-hash",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "enshwick-world"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "bytemuck",
+ "enshwick-abi",
+ "enshwick-base",
+ "enshwick-content",
+ "enshwick-macros",
+ "enshwick-typed",
+ "enshwick-values",
+ "postcard",
  "rustc-hash",
  "serde",
  "thiserror",

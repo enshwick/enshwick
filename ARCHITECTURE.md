@@ -13,13 +13,15 @@ re-exports; `crates/runtime/` holds what `enshwick.zip` ships into the game.
 | Crate | Where | Owns | Published |
 | --- | --- | --- | --- |
 | `enshwick` | `crates/enshwick` | the one crate mods use: the facade that re-exports every module of its internal parts at its own paths, the crate docs, the macros' docs and the features | yes |
-| `enshwick-core` | `crates/internal/core` | `Load`, the domains not yet in crates of their own, and the script binding | yes |
+| `enshwick-core` | `crates/internal/core` | `Load` with its forwarders into the domains' crates, `declare_mod!`'s support, and the script binding's namespace lists | yes |
 | `enshwick-base` | `crates/internal/base` | what every domain shares (the host handle, events, services, points, settings, texts, state, the resource codec, the ECS reads, the lock policy) and the base handle `Load` holds | yes |
 | `enshwick-content` | `crates/internal/content` | the content domain: content, rates, and the shape samples of the generated typed items, which it re-exports from `enshwick-typed` | yes |
 | `enshwick-world` | `crates/internal/world` | the world domain: `World` and the live world's map, voxels, terrain, weather, time of day, altars, buffs and game settings, and the typed handles that read a live world | yes |
 | `enshwick-inventory` | `crates/internal/inventory` | the inventory domain: inventories and items, item and entity data, affixes, stats, damage, effects, survivors and loot | yes |
 | `enshwick-knowledge` | `crates/internal/knowledge` | the knowledge domain: knowledge, quests and the journal, progress (skills, comfort, experience) and rewards | yes |
 | `enshwick-actions` | `crates/internal/actions` | the actions domain: player actions and their windows, console commands, controls and the players' input, chat, interactions and vetoes | yes |
+| `enshwick-ui` | `crates/internal/ui` | the ui domain: the client's interface drawn with the game's own widgets (frames, the HUD, dialogs, map markers, screen panels) and sound | yes |
+| `enshwick-packs` | `crates/internal/packs` | the packs domain: data packs, the content a mod describes in TOML files, read, checked and added through the domains below it but actions | yes |
 | `enshwick-typed` | `crates/internal/typed` | the generated typed API, re-exported as `enshwick::typed` | yes |
 | `enshwick-values` | `crates/internal/values` | the value types the layers share: shape, content ids, resource values, the script value model | yes |
 | `enshwick-abi` | `crates/internal/abi` | the `repr(C)` types that cross between the loader and a mod, the ABI version and its golden layout file, and the reads and writes of game memory, re-exported as `enshwick::abi` and `enshwick::raw` | yes |
@@ -46,13 +48,16 @@ cargo-enshwick ──▶ enshwick-core, enshwick-abi, enshwick-gamedata
 enshwick ──▶ enshwick-core ──▶ enshwick-actions ──▶ enshwick-inventory ──▶ enshwick-world ──▶ enshwick-content ──▶ enshwick-base ──▶ enshwick-abi ──▶ enshwick-values
                                                                                               enshwick-content ──▶ enshwick-typed ──▶ enshwick-values ──▶ enshwick-macros
              enshwick-core ──▶ enshwick-knowledge ──▶ enshwick-inventory
+             enshwick-core ──▶ enshwick-packs ──▶ enshwick-ui ──▶ enshwick-world
+                               enshwick-packs ──▶ enshwick-knowledge, enshwick-inventory
 enshwick ──test──▶ enshwick-fake ──▶ enshwick-core (its `fake` feature)
 ```
 
 - `enshwick` is the one crate a mod names, a facade over its internal parts,
-  each re-exported under its paths: `enshwick-core`, `Load` and the domains
-  still in it; `enshwick-actions`, `enshwick-knowledge`, `enshwick-inventory`,
-  `enshwick-world` and `enshwick-content`, the domains that left it; `enshwick-base`, what every domain shares; `enshwick-fake`,
+  each re-exported under its paths: `enshwick-core`, `Load`; `enshwick-packs`,
+  `enshwick-ui`, `enshwick-actions`, `enshwick-knowledge`,
+  `enshwick-inventory`, `enshwick-world` and `enshwick-content`, a crate per
+  domain; `enshwick-base`, what every domain shares; `enshwick-fake`,
   the fake loader; `enshwick-typed`, the generated
   typed API; `enshwick-abi`, the ABI; `enshwick-values`, the value types the
   layers share. None depends on `enshwick` or on a part above it, so the
@@ -94,17 +99,27 @@ enshwick ──test──▶ enshwick-fake ──▶ enshwick-core (its `fake` f
 ## Domains
 
 `crates/internal/core/domains.toml` orders the domains of the API, lowest
-first: base, content, world, inventory, knowledge, actions, ui, packs. It
-puts each top-level module still in `enshwick-core` in one domain, and names
-the crate of each domain that has left it.
+first: base, content, world, inventory, knowledge, actions, ui, packs, and
+names the crate of each. Every domain has a crate of its own; the one module
+`enshwick-core` keeps besides `Load` and `declare_mod!`'s support is
+`script`, the script binding's namespace lists, which open each domain's
+handles through `Load`, over the binding's runtime in base.
+
+`enshwick-core` is the top layer: `Load`, the handle a mod's `init` gets,
+whose typed methods are its way into the high level of the API, each
+forwarding into its domain's crate, where the high-level types such as
+`World`, items and windows live. `enshwick-base` holds what every domain
+shares, the high-level events, services, settings, texts, state and
+scheduler among it, and the supported mid level: the resource codec and the
+ECS reads, which reach any game data. The low level, hooks and the mod's own
+manifest rows, sits in `enshwick-base` and `enshwick-abi`.
 
 - A module names only its own domain and the domains before its own.
   Something two domains share moves down into base or the lower domain.
 - `cargo xtask check` reads the code's `crate::` paths, and the calls on
   `self` in each module's `Load` methods, without compiling and refuses an
-  edge up the order. The edges up the order the code still has
-  are listed in `domains.toml`; a new one fails, and so does a listed one
-  that is gone, so the list only shrinks.
+  edge up the order. The list of edges up the order in `domains.toml`,
+  `upward`, is empty and stays so: a new edge fails.
 - A domain's crate depends, among the internal crates, only on those below
   every domain (`below` in `domains.toml`) and on the crates of the domains
   before its own; the check holds its manifest, and the compiler holds its
@@ -134,10 +149,10 @@ the crate of each domain that has left it.
 
 ### Peeling a domain out of the core
 
-Domains leave the core downward, lowest first, each in one pull request
-that keeps `enshwick`'s public API equal. Base went first, then content,
-world, inventory, knowledge and actions; each later peel follows the same
-steps.
+Domains left the core downward, lowest first, each in one pull request
+that kept `enshwick`'s public API equal: base, content, world, inventory,
+knowledge, actions, then ui and packs. A new domain starts as a crate of
+its own; these steps hold for one that grows inside core first.
 
 1. Make the crate `crates/internal/<domain>` (`enshwick-<domain>`): exact
    pins, the description "Internal part of enshwick; depend on enshwick",
@@ -221,8 +236,11 @@ steps.
    each log to `cargo xtask wrap-examples <log> [--cfg <feature>]`, which
    wraps the examples that name items above the crate and writes their
    copies into `crates/enshwick/src/lower_examples/<crate>[_<feature>].rs`.
-7. A per-domain cargo feature, on by default, is an optional dependency on
-   the crate plus a `cfg` on core's forwarders and the facade's re-exports.
+7. A domain gets a cargo feature only when the API above works without it:
+   base, content, world and inventory, without which the domains above them
+   do not build, have none. A domain's feature, on by default, is an optional dependency on its
+   crate plus a `cfg` on core's forwarders and the facade's re-exports, and
+   turns on the features of the domains it rests on.
 
 ## The ABI contract
 

@@ -7,7 +7,7 @@ description: A mod plays the game's sound containers on a client, changes their 
 
 A sound container is what the game plays for one event: a set of sounds
 and how it plays them. A mod names one by its GUID, a
-[`SoundContainerId`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/sound.rs),
+[`SoundContainerId`](https://github.com/enshwick/enshwick/blob/main/crates/internal/ui/src/sound.rs),
 and plays it, changes it or adds its own.
 
 ## Play a container on a client
@@ -19,7 +19,7 @@ the world. The [interface chapter](interface.md) lists it with the widgets.
 ## Change a vanilla sound
 
 `load.change_sound(id, change)` sets the values a
-[`SoundChange`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/sound.rs)
+[`SoundChange`](https://github.com/enshwick/enshwick/blob/main/crates/internal/ui/src/sound.rs)
 gives and keeps the rest. The client applies every mod's changes in load
 order when it first reads the container. Nothing is written to the
 game's files or a save. A server checks the values and does nothing more,

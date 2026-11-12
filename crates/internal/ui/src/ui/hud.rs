@@ -6,7 +6,7 @@ use std::sync::Mutex;
 
 use crate::abi::{Str, UiFrame, UiWidget};
 use crate::locks::Relock;
-use crate::{Host, Load, Off};
+use crate::{Host, Off};
 
 use super::{Label, client_only};
 
@@ -47,7 +47,7 @@ impl Anchor {
     }
 }
 
-/// The HUD of one frame, handed to a callback of [`Load::on_hud`]: what it
+/// The HUD of one frame, handed to a callback of [`Load::on_hud`](../struct.Load.html#method.on_hud): what it
 /// draws shows this frame only, so an item goes away when the mod stops
 /// drawing it. Valid for the callback only, on its thread.
 ///
@@ -144,19 +144,19 @@ where
     );
 }
 
-impl Load<'_> {
-    /// Runs `draw` once per frame while the game draws its HUD, on the
-    /// thread that draws it; what it draws hides with the HUD, in menus and
-    /// in screenshot mode. Client only. A panic in `draw` turns the mod off.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] on a server or after `init`.
-    ///
-    /// # Examples
-    ///
-    /// See [`Hud`].
-    pub fn on_hud<F>(&mut self, draw: F) -> Result<(), Off>
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::on_hud`.
+    #[doc(hidden)]
+    fn on_hud<F>(&mut self, draw: F) -> Result<(), Off>
+    where
+        F: FnMut(&mut Hud<'_>) + Send + 'static;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn on_hud<F>(&mut self, draw: F) -> Result<(), Off>
     where
         F: FnMut(&mut Hud<'_>) + Send + 'static,
     {

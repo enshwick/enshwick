@@ -65,6 +65,14 @@ name = "enshwick-actions"
 version_group = "api"
 
 [[package]]
+name = "enshwick-ui"
+version_group = "api"
+
+[[package]]
+name = "enshwick-packs"
+version_group = "api"
+
+[[package]]
 name = "enshwick-typed"
 version_group = "api"
 

@@ -1,7 +1,7 @@
 //! The client's interface, drawn with the game's own widgets.
 //!
 //! The game redraws its interface every frame from code, so a mod draws its
-//! own the same way: a callback registered with [`Load::on_frame`] runs once
+//! own the same way: a callback registered with [`Load::on_frame`](../struct.Load.html#method.on_frame) runs once
 //! per frame on the thread that draws the interface and calls the widgets of
 //! [`Frame`] in order. Windows look like the game's own panels, labels take
 //! the game's named text styles, and the rows are the game's settings rows.
@@ -11,14 +11,14 @@
 //! [`Ui::dialog`] queues a dialog in the game's own style, from any thread;
 //! [`Ui::ask`] waits for the answer on a thread of the mod's own.
 //!
-//! [`Load::on_hud`] draws lines and bars on the HUD each frame, at an
+//! [`Load::on_hud`](../struct.Load.html#method.on_hud) draws lines and bars on the HUD each frame, at an
 //! [`Anchor`], hidden with the game's HUD; `Ui::set_markers`, with the
 //! `unstable` feature, shows the mod's markers on the map until it sets
 //! others. `Load::extend_screen`, with the `unstable` feature, adds a panel
 //! at an edge of one of the game's screens, such as a storage chest's, shown
 //! and hidden with it.
 //!
-//! Everything here is client only: [`Load::ui`] and [`Load::on_frame`] turn
+//! Everything here is client only: [`Load::ui`](../struct.Load.html#method.ui) and [`Load::on_frame`](../struct.Load.html#method.on_frame) turn
 //! a mod's server part away with [`Off`].
 //!
 //! # Examples
@@ -48,18 +48,18 @@
 use std::sync::Mutex;
 
 use crate::abi::{Status, UiDialog};
-use crate::{Host, Load, Off};
+use crate::{Host, Off};
 
 mod dialog;
 #[cfg(feature = "unstable")]
-mod extension;
+pub(crate) mod extension;
 mod frame;
-mod hud;
+pub(crate) mod hud;
 #[cfg(feature = "unstable")]
 mod map;
 #[cfg(any(feature = "unstable", feature = "fake"))]
 pub(crate) mod screens;
-mod script;
+pub(crate) mod script;
 mod widgets;
 
 pub use dialog::{Dialog, Response};
@@ -87,7 +87,7 @@ pub(crate) const MARKER_LIMIT: usize = 256;
 /// The most options a [`Dropdown`] shows.
 pub const MAX_OPTIONS: usize = 64;
 
-/// The interface services for a mod's client part, from [`Load::ui`]; `Copy`,
+/// The interface services for a mod's client part, from [`Load::ui`](../struct.Load.html#method.ui); `Copy`,
 /// for any thread.
 ///
 /// # Examples
@@ -229,33 +229,27 @@ fn client_only(host: Host, what: &str) -> Result<(), Off> {
     Ok(())
 }
 
-impl Load<'_> {
-    /// The interface services: dialogs from any thread. Client only.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] on a server.
-    ///
-    /// # Examples
-    ///
-    /// See [`Ui`].
-    pub fn ui(&mut self) -> Result<Ui, Off> {
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::ui`.
+    #[doc(hidden)]
+    fn ui(&mut self) -> Result<Ui, Off>;
+
+    /// As `Load::on_frame`.
+    #[doc(hidden)]
+    fn on_frame<F>(&mut self, draw: F) -> Result<(), Off>
+    where
+        F: FnMut(&mut Frame<'_>) + Send + 'static;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn ui(&mut self) -> Result<Ui, Off> {
         Ui::open(self)
     }
 
-    /// Runs `draw` once per frame of the interface, on the thread that draws
-    /// it, from the title screen on; it draws with the [`Frame`] it is
-    /// handed. Client only. A panic in `draw` turns the mod off.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] on a server or after `init`. When the loader could not link the interface on this game
-    /// build, `draw` never runs.
-    ///
-    /// # Examples
-    ///
-    /// See the [module](self).
-    pub fn on_frame<F>(&mut self, draw: F) -> Result<(), Off>
+    fn on_frame<F>(&mut self, draw: F) -> Result<(), Off>
     where
         F: FnMut(&mut Frame<'_>) + Send + 'static,
     {

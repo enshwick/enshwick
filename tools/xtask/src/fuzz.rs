@@ -78,7 +78,7 @@ pub(crate) const TARGETS: &[(&str, &[&str])] = &[
         &[
             "crates/internal/base/src/config",
             "crates/internal/base/src/i18n",
-            "crates/internal/core/src/packs",
+            "crates/internal/packs/src/packs",
             "crates/runtime/loader/src/record",
             "crates/internal/values/src/off",
             "crates/internal/values/src/reason",

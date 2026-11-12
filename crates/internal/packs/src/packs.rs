@@ -4,7 +4,7 @@
 //! A pack is a set of files: `items.toml`, `recipes.toml`, `workshops.toml`,
 //! `loot.toml` and `texts.toml`, each optional, and the PNG icons the items
 //! name. [`Pack::parse`] reads and checks them against the types below and
-//! reports every problem with its file, line and column; [`Load::add_pack`]
+//! reports every problem with its file, line and column; [`Load::add_pack`](../struct.Load.html#method.add_pack)
 //! adds what they describe through the same calls code uses, beside vanilla
 //! content, never in its place. A mod embeds a pack with
 //! [`PackFiles::with`]; a folder `mods/<id>/` with a `pack.toml`
@@ -33,13 +33,18 @@
 //! # Ok::<(), enshwick::packs::ParsePackError>(())
 //! ```
 
+use crate::Off;
 use crate::content::Guid;
 use crate::content::icons::{Icon, Pixels};
 use crate::content::items::{FuelSetup, ImpactUiValue, NewItem};
 use crate::content::recipes::NewRecipe;
 use crate::content::workshops::{NewWorkshop, WorkshopId};
 use crate::locks::Relock as _;
-use crate::{Load, Off};
+use enshwick_content::__load::*;
+#[cfg(feature = "unstable")]
+use enshwick_knowledge::__load::*;
+#[cfg(feature = "unstable")]
+use enshwick_ui::__load::*;
 
 /// The manifest file of a pack folder.
 pub const MANIFEST_FILE: &str = "pack.toml";
@@ -89,35 +94,17 @@ pub const MAX_ICONS: usize = 1024;
 /// The largest icon a pack may hold: 1 MiB.
 pub const MAX_ICON_FILE: u64 = 1 << 20;
 
-impl Load<'_> {
-    /// Adds what `pack` describes, on the server and the client alike:
-    /// its workshops, items, recipes, texts and loot, each through the call
-    /// code uses, beside vanilla content, and declares its changes of
-    /// vanilla values with [`Load::change`].
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] as the calls it makes return it, such as for a content id
-    /// the loader refuses, among them another mod's content id that mod
-    /// does not export.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::packs::{Pack, PackFiles};
-    ///
-    /// const ITEMS: &str = r#"
-    /// [[item]]
-    /// id = "lantern"
-    /// like = "6943053a-32c1-4718-ae22-e61427ddf54d"
-    /// "#;
-    ///
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let files = PackFiles::new().with("items.toml", ITEMS);
-    ///     load.add_pack(&Pack::parse("you.my-mod", &files)?)
-    /// }
-    /// ```
-    pub fn add_pack(&mut self, pack: &Pack) -> Result<(), Off> {
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::add_pack`.
+    #[doc(hidden)]
+    fn add_pack(&mut self, pack: &Pack) -> Result<(), Off>;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn add_pack(&mut self, pack: &Pack) -> Result<(), Off> {
         for name in &pack.named {
             enshwick_content::__internal::named(id(name)?)?;
         }
@@ -203,8 +190,20 @@ impl Load<'_> {
         }
         self.add_pack_rest(pack)
     }
+}
 
+/// The base handle's helpers of this module for the crate's own code.
+pub(crate) trait LoadHelpers {
     /// Adds `pack`'s recipes, changes of values and loot.
+    fn add_pack_rest(&mut self, pack: &Pack) -> Result<(), Off>;
+
+    /// Declares the settings of `pack.toml`, when it has some, as the mod's
+    /// settings, and sets the numbers of `loot.toml` and `rewards.toml`
+    /// that follow them as each world's settings arrive.
+    fn follow_pack_settings(&mut self, pack: &Pack) -> Result<(), Off>;
+}
+
+impl LoadHelpers for crate::BaseLoad {
     fn add_pack_rest(&mut self, pack: &Pack) -> Result<(), Off> {
         for recipe in &pack.recipes {
             enshwick_content::__internal::push_recipe(
@@ -269,9 +268,6 @@ impl Load<'_> {
         self.follow_pack_settings(pack)
     }
 
-    /// Declares the settings of `pack.toml`, when it has some, as the mod's
-    /// settings, and sets the numbers of `loot.toml` and `rewards.toml`
-    /// that follow them as each world's settings arrive.
     fn follow_pack_settings(&mut self, pack: &Pack) -> Result<(), Off> {
         let Some(schema) = pack.settings_schema.clone() else {
             return Ok(());
@@ -336,12 +332,14 @@ static DECLARED: crate::fresh::Fresh<std::sync::Mutex<DeclaredByMod>> = crate::f
 /// A pack's settings and their defaults, as `table_config` gives them.
 type Declared = (crate::config::TableConfig, toml::Table);
 
-/// The settings [`Load::add_pack`] declared for the pack `load` starts, and
+/// The settings [`Load::add_pack`](../struct.Load.html#method.add_pack) declared for the pack `load` starts, and
 /// their defaults; `None` when it declared none.
 #[doc(hidden)]
 #[must_use]
-pub fn declared_settings(load: &Load<'_>) -> Option<(crate::config::TableConfig, toml::Table)> {
-    let me = load.host().handle();
+pub fn declared_settings(
+    load: &impl crate::Loading,
+) -> Option<(crate::config::TableConfig, toml::Table)> {
+    let me = load.base().host().handle();
     DECLARED
         .get_or_init(std::sync::Mutex::default)
         .relock()

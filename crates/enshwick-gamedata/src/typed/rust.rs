@@ -13,7 +13,7 @@ const SCREEN_TYPE: &str = "keen::HudScreenType";
 /// The member of [`SCREEN_TYPE`] that names no screen.
 const NO_SCREEN: &str = "Invalid";
 /// Where the screens go, below the enshwick repository root.
-const SCREENS_FILE: &str = "crates/internal/core/src/ui/screens.rs";
+const SCREENS_FILE: &str = "crates/internal/ui/src/ui/screens.rs";
 
 /// Typedefs deeper than this are taken for a loop in bad data.
 const MAX_HOPS: usize = 32;
@@ -534,7 +534,7 @@ impl Catalogue {
         Ok(files)
     }
 
-    /// `ui/screens.rs` of the API crate: the game's screens, `HudScreenType`
+    /// `ui/screens.rs` of `enshwick-ui`: the game's screens, `HudScreenType`
     /// without its `Invalid`, as the Rust enum mods extend screens by and
     /// the names the fake host checks them against; `None` for a catalogue
     /// without the type.
@@ -559,7 +559,7 @@ impl Catalogue {
         out.push_str(&header(build));
         let _ = write!(
             out,
-            "\n/// One of the game's screens, which [`Load::extend_screen`](crate::Load::extend_screen) adds a panel to.\n\
+            "\n/// One of the game's screens, which [`Load::extend_screen`](../struct.Load.html#method.extend_screen) adds a panel to.\n\
              ///\n\
              /// The members and their names are the game's `HudScreenType`, from the\n\
              /// reflection of {build}; a screen the running build lacks is refused at\n\

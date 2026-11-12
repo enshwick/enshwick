@@ -13,7 +13,7 @@ use crate::{Host, Off};
 use super::widgets::read_only_flag;
 
 /// One frame of the interface, handed to a callback of
-/// [`Load::on_frame`](crate::Load::on_frame): draw widgets in order through it. Valid for the
+/// [`Load::on_frame`](../struct.Load.html#method.on_frame): draw widgets in order through it. Valid for the
 /// callback only, on its thread.
 ///
 /// # Examples
@@ -188,7 +188,7 @@ impl Frame<'_> {
     /// Where the open screen's host stands in the client's world, in metres
     /// with y up, as the client's last step read it, so a panel's action
     /// can name the object with
-    /// [`ActionTarget::at`](crate::actions::ActionTarget::at); `None`
+    /// [`ActionTarget::at`](../actions/struct.ActionTarget.html#method.at); `None`
     /// whenever [`Frame::screen_host_template`] is `None`.
     ///
     /// # Examples

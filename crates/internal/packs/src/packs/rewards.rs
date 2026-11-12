@@ -351,7 +351,7 @@ fn guid(reader: &mut Reader<'_>, file_text: &str, at: usize, text: &str) -> Opti
 
 #[cfg(feature = "unstable")]
 impl PackReward {
-    /// The reward to declare with [`Load::add_reward`](crate::Load::add_reward),
+    /// The reward to declare with [`Load::add_reward`](../struct.Load.html#method.add_reward),
     /// its numbers from the world's settings `values`; a chance outside 0
     /// to 1 is held to that range.
     pub(super) fn reward(&self, values: &toml::Table) -> crate::rewards::Reward {

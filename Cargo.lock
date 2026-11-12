@@ -441,6 +441,8 @@ dependencies = [
  "enshwick-inventory",
  "enshwick-knowledge",
  "enshwick-macros",
+ "enshwick-packs",
+ "enshwick-ui",
  "enshwick-values",
  "enshwick-world",
  "hound",
@@ -538,16 +540,11 @@ dependencies = [
  "enshwick-inventory",
  "enshwick-knowledge",
  "enshwick-macros",
+ "enshwick-packs",
+ "enshwick-ui",
  "enshwick-values",
  "enshwick-world",
- "hound",
- "insta",
- "proptest",
- "rustc-hash",
- "schemars",
  "serde",
- "serde_json",
- "thiserror",
  "toml 1.2.1+spec-1.1.0",
 ]
 
@@ -736,10 +733,47 @@ dependencies = [
 ]
 
 [[package]]
+name = "enshwick-packs"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "enshwick",
+ "enshwick-abi",
+ "enshwick-base",
+ "enshwick-content",
+ "enshwick-inventory",
+ "enshwick-knowledge",
+ "enshwick-ui",
+ "enshwick-values",
+ "enshwick-world",
+ "rustc-hash",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "toml 1.2.1+spec-1.1.0",
+]
+
+[[package]]
 name = "enshwick-typed"
 version = "1.0.0-alpha.14"
 dependencies = [
  "enshwick-values",
+ "thiserror",
+]
+
+[[package]]
+name = "enshwick-ui"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "enshwick",
+ "enshwick-abi",
+ "enshwick-base",
+ "enshwick-content",
+ "enshwick-macros",
+ "enshwick-values",
+ "enshwick-world",
+ "hound",
+ "proptest",
  "thiserror",
 ]
 

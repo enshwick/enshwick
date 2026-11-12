@@ -10,8 +10,9 @@ use super::hud::Hud;
 use super::{
     Anchor, Button, Dialog, Dropdown, Label, Response, Screen, Slider, Sound, Style, Toggle, Ui,
 };
+use crate::__load::*;
 use crate::script::{Bound, Class, Function, Object};
-use crate::{Host, Load, Off};
+use crate::{Host, Off};
 
 /// A line of text as a script draws it: the fields of [`Label`]'s builder.
 #[derive(Clone, Debug, crate::Script)]
@@ -119,7 +120,7 @@ pub(crate) struct ScriptDialog {
 /// One frame of the interface as a script draws it, lent to the callback
 /// of `on_frame` or `extend_screen`: [`Frame`]'s widgets as methods.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct ScriptFrame {
+pub struct ScriptFrame {
     host: Host,
     token: u64,
     screen: Screen,
@@ -326,7 +327,7 @@ impl ScriptFrame {
 /// The HUD of one frame as a script draws it, lent to the callback of
 /// `on_hud`: [`Hud`]'s lines and bars as methods.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct ScriptHud {
+pub struct ScriptHud {
     host: Host,
     token: u64,
 }
@@ -402,30 +403,63 @@ impl Bound for Ui {
     }
 }
 
-#[crate::script(ui)]
-impl Load<'_> {
-    /// Runs `draw` once per frame of the interface with the frame lent to
-    /// it, as [`Load::on_frame`] does.
-    ///
-    /// # Errors
-    ///
-    /// As [`Load::on_frame`].
-    #[script(name = "on_frame")]
-    pub(crate) fn on_frame_script(
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::on_frame_script`.
+    #[doc(hidden)]
+    fn on_frame_script(
+        &mut self,
+        draw: impl Fn(ScriptFrame) + Send + Sync + 'static,
+    ) -> Result<(), Off>;
+
+    /// As `Load::on_hud_script`.
+    #[doc(hidden)]
+    fn on_hud_script(
+        &mut self,
+        draw: impl Fn(ScriptHud) + Send + Sync + 'static,
+    ) -> Result<(), Off>;
+
+    /// As `Load::extend_screen_script`.
+    #[doc(hidden)]
+    #[cfg(feature = "unstable")]
+    fn extend_screen_script(
+        &mut self,
+        screen: crate::ui::HudScreenType,
+        edge: crate::ui::Edge,
+        draw: impl Fn(ScriptFrame) + Send + Sync + 'static,
+    ) -> Result<(), Off>;
+
+    /// As `Load::extend_screen_for_script`.
+    #[doc(hidden)]
+    #[cfg(feature = "unstable")]
+    fn extend_screen_for_script(
+        &mut self,
+        screen: crate::ui::HudScreenType,
+        edge: crate::ui::Edge,
+        hosts: Vec<crate::content::Guid>,
+        draw: impl Fn(ScriptFrame) + Send + Sync + 'static,
+    ) -> Result<(), Off>;
+
+    /// As `Load::on_screen_changed_script`.
+    #[doc(hidden)]
+    #[cfg(feature = "unstable")]
+    fn on_screen_changed_script(
+        &mut self,
+        handler: impl Fn(crate::ui::ScreenChanged) + Send + Sync + 'static,
+    ) -> Result<(), Off>;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn on_frame_script(
         &mut self,
         draw: impl Fn(ScriptFrame) + Send + Sync + 'static,
     ) -> Result<(), Off> {
         self.on_frame(move |frame| draw(ScriptFrame::of(frame)))
     }
 
-    /// Runs `draw` once per frame while the game draws its HUD, with the
-    /// HUD lent to it, as [`Load::on_hud`] does.
-    ///
-    /// # Errors
-    ///
-    /// As [`Load::on_hud`].
-    #[script(name = "on_hud")]
-    pub(crate) fn on_hud_script(
+    fn on_hud_script(
         &mut self,
         draw: impl Fn(ScriptHud) + Send + Sync + 'static,
     ) -> Result<(), Off> {
@@ -436,14 +470,45 @@ impl Load<'_> {
             });
         })
     }
+
+    #[cfg(feature = "unstable")]
+    fn extend_screen_script(
+        &mut self,
+        screen: crate::ui::HudScreenType,
+        edge: crate::ui::Edge,
+        draw: impl Fn(ScriptFrame) + Send + Sync + 'static,
+    ) -> Result<(), Off> {
+        self.extend_screen(screen, edge, move |frame| draw(ScriptFrame::of(frame)))
+    }
+
+    #[cfg(feature = "unstable")]
+    fn extend_screen_for_script(
+        &mut self,
+        screen: crate::ui::HudScreenType,
+        edge: crate::ui::Edge,
+        hosts: Vec<crate::content::Guid>,
+        draw: impl Fn(ScriptFrame) + Send + Sync + 'static,
+    ) -> Result<(), Off> {
+        self.extend_screen_for(screen, edge, &hosts, move |frame| {
+            draw(ScriptFrame::of(frame));
+        })
+    }
+
+    #[cfg(feature = "unstable")]
+    fn on_screen_changed_script(
+        &mut self,
+        handler: impl Fn(crate::ui::ScreenChanged) + Send + Sync + 'static,
+    ) -> Result<(), Off> {
+        self.on_screen_changed(move |change| handler(*change))
+    }
 }
 
 #[cfg(feature = "unstable")]
 mod unstable {
-    use super::{ScriptFrame, Ui};
+    use super::Ui;
+    use crate::Off;
     use crate::map::{MapMarkerType, MapMarkerTypeId};
-    use crate::ui::{Edge, HudScreenType, Marker, MarkerColor};
-    use crate::{Load, Off};
+    use crate::ui::{Marker, MarkerColor};
 
     /// A marker as a script shows it: the fields of [`Marker`]'s builder.
     #[derive(Clone, Debug, crate::Script)]
@@ -508,63 +573,6 @@ mod unstable {
         pub(crate) fn map_marker_types_script(&self) -> Result<Vec<MapMarkerType>, Off> {
             self.map_marker_types()
                 .map_err(|e| Off::new(format!("marker types: {e}")))
-        }
-    }
-
-    #[crate::script(ui_extension)]
-    impl Load<'_> {
-        /// Adds a panel at `edge` of the game's screen `screen` and runs
-        /// `draw` once per frame while it is open, with the frame lent to
-        /// it, as [`Load::extend_screen`] does.
-        ///
-        /// # Errors
-        ///
-        /// As [`Load::extend_screen`].
-        #[script(name = "extend_screen")]
-        pub(crate) fn extend_screen_script(
-            &mut self,
-            screen: HudScreenType,
-            edge: Edge,
-            draw: impl Fn(ScriptFrame) + Send + Sync + 'static,
-        ) -> Result<(), Off> {
-            self.extend_screen(screen, edge, move |frame| draw(ScriptFrame::of(frame)))
-        }
-
-        /// Adds a panel that shows only for the screen hosts made from
-        /// `hosts`, as [`Load::extend_screen_for`] does.
-        ///
-        /// # Errors
-        ///
-        /// As [`Load::extend_screen_for`].
-        #[script(name = "extend_screen_for")]
-        #[expect(
-            clippy::needless_pass_by_value,
-            reason = "a script method takes its arguments owned from Luau"
-        )]
-        pub(crate) fn extend_screen_for_script(
-            &mut self,
-            screen: HudScreenType,
-            edge: Edge,
-            hosts: Vec<crate::content::Guid>,
-            draw: impl Fn(ScriptFrame) + Send + Sync + 'static,
-        ) -> Result<(), Off> {
-            self.extend_screen_for(screen, edge, &hosts, move |frame| {
-                draw(ScriptFrame::of(frame));
-            })
-        }
-
-        /// Calls `handler` with each change of the game's screen the player
-        /// has open, as [`Load::on_screen_changed`] does.
-        ///
-        /// # Errors
-        ///
-        /// As [`Load::on_screen_changed`].
-        #[script(name = "on_screen_changed")]
-        pub(crate) fn on_screen_changed_script(
-            &mut self,
-            handler: impl Fn(crate::ui::ScreenChanged) + Send + Sync + 'static,
-        ) -> Result<(), Off> {
-            self.on_screen_changed(move |change| handler(*change))
         }
     }
 }
