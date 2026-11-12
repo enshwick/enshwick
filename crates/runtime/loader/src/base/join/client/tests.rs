@@ -1,4 +1,4 @@
-use super::join::{SHOWN_VALUES, shown};
+use super::{SHOWN_VALUES, shown};
 
 #[test]
 fn a_server_s_join_values_stay_on_one_log_line() {

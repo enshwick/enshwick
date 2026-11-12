@@ -77,6 +77,7 @@ pub(crate) mod pe;
     )
 )]
 pub(crate) mod pinned;
+pub(crate) mod players;
 #[cfg(target_arch = "x86_64")]
 pub mod profile;
 pub mod registry;

@@ -94,7 +94,7 @@ impl ModRecord {
     /// reason's text; `None` while it runs.
     pub(crate) fn off_reason_shown(&self) -> Option<String> {
         let reason = self.off_reason.relock().clone()?;
-        Some(crate::base::configure::mod_reason(
+        Some(crate::engine::texts::mod_reason(
             self.texts.relock().as_ref(),
             &reason,
         ))

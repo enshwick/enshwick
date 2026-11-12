@@ -3,7 +3,7 @@
 
 use enshwick_core::i18n::Texts;
 
-use crate::base::configure::mod_reason;
+use crate::engine::texts::mod_reason;
 
 /// A mod's feature as it last reported it.
 #[derive(Clone, Debug, PartialEq, Eq)]

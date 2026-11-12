@@ -59,6 +59,8 @@ pub type Names = BTreeMap<String, String>;
 pub(crate) use runtime::{NEXT, detour};
 
 #[cfg(windows)]
+pub(crate) mod client;
+#[cfg(windows)]
 mod runtime;
 
 #[cfg(windows)]

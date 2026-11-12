@@ -30,9 +30,7 @@ pub const TABLE_IDS: &[&str] = &[
     pinned::session::HOST_MACHINE.id(),
 ];
 
-/// Players the loader follows at most, in the gate and the player reads;
-/// the game has 16 slots.
-pub(crate) const MAX_PLAYERS: usize = 64;
+use crate::engine::players::MAX_PLAYERS;
 /// How long a kick that did not remove the player waits to be tried again.
 const KICK_AGAIN: Duration = Duration::from_secs(10);
 

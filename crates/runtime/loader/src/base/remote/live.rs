@@ -85,7 +85,7 @@ pub(crate) fn sync_to(key: u64) -> bool {
 /// Takes a message the server sent, on the client.
 pub(crate) fn client(message: Message) {
     match message {
-        Message::Sync { id, values } => crate::host::apply_server_value(&id, &values),
+        Message::Sync { id, values } => crate::base::join::client::apply_server_value(&id, &values),
         Message::Snapshot {
             id,
             admin,

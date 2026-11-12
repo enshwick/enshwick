@@ -6,10 +6,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick_core::abi::{Event, Level};
 
-use crate::base::join::missing::{ADVERTISED_BYTES, Missing, Wanted, listed};
-use crate::base::join::{Difference, Row};
+use super::missing::{ADVERTISED_BYTES, Missing, Wanted, listed};
+use super::{Difference, Row};
 use crate::base::wire::Drops;
-use crate::engine::kept_text::KeptText;
+use crate::engine::kept_text::{KeptText, keep};
 use crate::engine::loader::loader;
 use crate::engine::mod_index::ModIndex;
 use enshwick_base::Relock;
@@ -243,15 +243,8 @@ pub(crate) fn join_missing() -> Vec<Missing> {
     JOINS.missing.relock().clone()
 }
 
-/// The loader's own strings the host table has handed out.
-static KEPT: Mutex<KeptText> = Mutex::new(KeptText::new(usize::MAX));
 /// The server-advertised strings the host table has handed out.
 static ADVERTISED: Mutex<KeptText> = Mutex::new(KeptText::new(ADVERTISED_BYTES));
-
-/// `text` kept for the process; the same text is kept once.
-pub(crate) fn keep(text: &str) -> &'static str {
-    KEPT.relock().keep(text).unwrap_or_default()
-}
 
 /// On a client the join check kept out: records `missing`, the server's
 /// mods of side both this client lacks or runs in another version, and
@@ -279,3 +272,6 @@ pub(crate) fn report_join_missing(missing: &[Wanted]) {
     *JOINS.missing.relock() = entries;
     loader.emit(Event::JOIN_REFUSED, None, core::ptr::null());
 }
+
+#[cfg(test)]
+mod tests;

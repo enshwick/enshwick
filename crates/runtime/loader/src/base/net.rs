@@ -175,7 +175,7 @@ pub(crate) fn client_tick(opened: bool) {
     if !due {
         return;
     }
-    let mods = crate::base::advertise::mod_list(&crate::host::join_mods());
+    let mods = crate::base::advertise::mod_list(&crate::base::join::client::join_mods());
     let nonce = if crate::engine::world::hosting() {
         crate::base::admission::nonce()
     } else {
@@ -355,10 +355,10 @@ pub(crate) fn client_carried(channel: u32, data: &[u8]) {
         if fresh {
             crate::log!(INFO, "mod messages: the server answered");
             crate::actions::player_actions::joined();
-            crate::host::admitted();
+            crate::base::join::client::admitted();
         }
     } else if let Some((list, complete)) = crate::base::wire::read_mods(data) {
-        crate::host::kicked_for_mods(&list, complete);
+        crate::base::join::client::kicked_for_mods(&list, complete);
     } else if let Some(records) = data.strip_prefix(control(ITEM_DATA).as_slice()) {
         crate::inventory::item_data::received(records);
     } else if let Some(rest) = data.strip_prefix(control(NOTICE).as_slice())

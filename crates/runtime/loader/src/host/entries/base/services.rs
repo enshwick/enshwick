@@ -6,8 +6,8 @@ use enshwick_base::Relock;
 use enshwick_core::abi as api_frame;
 use enshwick_core::abi::{Event, EventFn, Header, Level, ModHandle, Status, Str, TickHandle};
 
+use crate::engine::kept_text::keep;
 use crate::engine::loader::{Loader, ModRecord, Subscription};
-use crate::host::join::keep;
 use crate::host::memory::{get_headed, put, put_headed, text};
 use crate::host::{caller, caller_index, calling, entry};
 

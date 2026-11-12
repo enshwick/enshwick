@@ -7,10 +7,7 @@
 use enshwick_core::{Entity, ItemId};
 use rustc_hash::FxHashMap;
 
-/// The GUID of a player's character, `keen::CharacterId` (server 399): one
-/// account may have several characters on a server.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub(crate) struct CharacterId(pub(crate) [u8; 16]);
+pub(crate) use crate::engine::players::CharacterId;
 
 /// A data kind by its index among the kinds of the session: the opened
 /// kinds in order, then the file's kinds no mod opened.

@@ -10,7 +10,6 @@ use enshwick_core::abi::{
 use enshwick_core::mods::LOADER_FILE;
 
 use crate::engine::loader::{ModRecord, loader};
-use crate::engine::mod_index::ModIndex;
 use crate::host::memory::{put, slice, text};
 use crate::host::{LOADER_HANDLE, calling, entry};
 
@@ -169,7 +168,7 @@ pub(crate) extern "system" fn join_missing(
         if loader.record(me).is_none() {
             return Status::BAD_ARGS;
         }
-        let held = crate::host::join_missing();
+        let held = crate::base::join::client::join_missing();
         let infos: Vec<ModInfo> = held
             .iter()
             .map(|missing| ModInfo {
@@ -246,75 +245,6 @@ pub(crate) extern "system" fn config_check(
         (Ok(_), None) => Status::BAD_ARGS,
         (Err(status), _) => status,
     })
-}
-
-/// Runs mod `index`'s check of `text`, a new text of its settings file
-/// `file`; `Ok` for a file without one.
-pub(crate) fn check_settings(
-    index: usize,
-    file: &str,
-    text: &str,
-) -> Result<(), CheckSettingsError> {
-    let Some(record) = loader()
-        .and_then(|loader| loader.mods.get(index))
-        .filter(|record| !record.off.load(Ordering::Acquire))
-    else {
-        return Ok(());
-    };
-    let found = record
-        .checks
-        .relock()
-        .iter()
-        .find(|(known, _, _)| known == file)
-        .map(|&(_, callback, user)| (callback, user));
-    let Some((callback, user)) = found else {
-        return Ok(());
-    };
-    let mut why = Str::EMPTY;
-    // SAFETY: the mod's check with its own pointer; the text lives for the
-    // call, and the safe layer catches its panics.
-    let status = crate::engine::profile::call(
-        ModIndex::new(index),
-        crate::engine::profile::Feature::Events,
-        || unsafe {
-            callback(
-                Str::new(text),
-                &raw mut why,
-                core::ptr::with_exposed_provenance_mut(user),
-            )
-        },
-    );
-    if status.is_ok() {
-        return Ok(());
-    }
-    // SAFETY: the reason stays valid until the mod's next check.
-    let why = unsafe { why.as_str() };
-    Err(why.map_or(CheckSettingsError::Unexplained, |why| {
-        CheckSettingsError::Refused {
-            reason: crate::base::configure::mod_reason(record.texts.relock().as_ref(), why),
-        }
-    }))
-}
-
-/// Why a mod refuses a new settings text.
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
-pub(crate) enum CheckSettingsError {
-    /// The mod gave no reason.
-    #[error("the mod refuses the settings")]
-    Unexplained,
-    /// The mod's reason, in the reader's language.
-    #[error("the mod refuses the settings: {reason}")]
-    Refused { reason: String },
-}
-
-impl CheckSettingsError {
-    /// The refusal as the reader reads it.
-    pub(crate) fn reply(&self) -> String {
-        match self {
-            Self::Unexplained => crate::engine::texts::fill("refused.by-mod", &[]),
-            Self::Refused { reason } => reason.clone(),
-        }
-    }
 }
 
 pub(crate) extern "system" fn texts(me: ModHandle, toml: Str) -> Status {

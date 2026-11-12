@@ -274,7 +274,7 @@ fn entry(from: u8, draw: impl FnOnce(&Engine, &super::engine::UiText) -> bool) {
     let text = copy(&[texts::text("mods.title").as_bytes()]);
     let clicked = draw(engine, &text);
     // A refusal or a kick for the mods opens the screen in the main menu.
-    let differs = from == FROM_MAIN && crate::host::difference_waits();
+    let differs = from == FROM_MAIN && crate::base::join::client::difference_waits();
     if (clicked || differs) && !showing {
         OPEN.store(from, Ordering::Relaxed);
     }
@@ -354,7 +354,7 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
                 OVER_PAUSE
             };
             let differs = (opened == FROM_MAIN)
-                .then(crate::host::take_difference)
+                .then(crate::base::join::client::take_difference)
                 .flatten();
             *slot = Some(Screen {
                 from: opened,

@@ -35,6 +35,17 @@ impl KeptText {
     }
 }
 
+/// The loader's own strings the host table has handed out.
+#[cfg(windows)]
+static KEPT: std::sync::Mutex<KeptText> = std::sync::Mutex::new(KeptText::new(usize::MAX));
+
+/// `text` kept for the process; the same text is kept once.
+#[cfg(windows)]
+pub(crate) fn keep(text: &str) -> &'static str {
+    use enshwick_base::Relock as _;
+    KEPT.relock().keep(text).unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

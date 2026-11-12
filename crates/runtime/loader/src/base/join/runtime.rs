@@ -97,8 +97,8 @@ pub(crate) unsafe extern "system" fn detour(provider: *mut u8, target: *mut u8) 
 /// on, as the world it joins may run them.
 fn unchecked() -> bool {
     crate::base::net::joining(false);
-    crate::host::forget_server_values();
-    crate::host::back_on();
+    crate::base::join::client::forget_server_values();
+    crate::base::join::client::back_on();
     true
 }
 
@@ -140,10 +140,10 @@ fn check(layout: &super::Layout, target: &super::Target) -> bool {
         return unchecked();
     };
     // The last world's choice goes: this one decides again.
-    crate::host::back_on();
+    crate::base::join::client::back_on();
     // Read now: a mod a failed hook turned off no longer counts as the
     // client's.
-    let mods = &crate::host::join_mods();
+    let mods = &crate::base::join::client::join_mods();
     let server = super::rule(&reply, crate::base::advertise::RULE)
         .map(|fingerprint| (fingerprint, super::mod_rules_value(&reply)));
     crate::base::net::joining(server.is_some());
@@ -164,10 +164,10 @@ fn check(layout: &super::Layout, target: &super::Target) -> bool {
         complete,
     );
     if plan.joins() {
-        crate::host::forget_server_values();
+        crate::base::join::client::forget_server_values();
     }
     for id in plan.turned_off() {
-        crate::host::turn_off_for_world(id);
+        crate::base::join::client::turn_off_for_world(id);
     }
     if plan.joins() {
         if let Some(note) = plan.note(names) {
@@ -202,7 +202,7 @@ fn refused(
         needed.join(", "),
         crate::engine::errors::JOIN_MISSING
     );
-    let off = crate::host::join_mods_off();
+    let off = crate::base::join::client::join_mods_off();
     let off_ids: Vec<String> = off.iter().map(|(id, _)| id.clone()).collect();
     // Mods that are off on the client are the player's to turn on.
     let wanted: Vec<crate::base::join::missing::Wanted> = missing
@@ -215,8 +215,13 @@ fn refused(
         .collect();
     if crate::ui::interface::mismatch_screen_on() {
         let off = crate::base::advertise::mod_list(&off);
-        crate::host::show_difference(&super::difference(server_mods, ours_mods, &off, complete));
-        crate::host::report_join_missing(&wanted);
+        crate::base::join::client::show_difference(&super::difference(
+            server_mods,
+            ours_mods,
+            &off,
+            complete,
+        ));
+        crate::base::join::client::report_join_missing(&wanted);
         return;
     }
     crate::log!(
@@ -232,6 +237,6 @@ fn refused(
         &dialog.message,
         &dialog.detail,
         1 << UiDialog::OK,
-        move |_| crate::host::report_join_missing(&wanted),
+        move |_| crate::base::join::client::report_join_missing(&wanted),
     );
 }

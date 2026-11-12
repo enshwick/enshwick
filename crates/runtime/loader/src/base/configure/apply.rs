@@ -6,7 +6,12 @@
 //! The console's `enshwick config`, the Mods screen and a server's
 //! administrators all change settings through here.
 
+use std::sync::atomic::Ordering;
+
+use enshwick_core::abi::Str;
+
 use crate::engine::loader::Loader;
+use crate::engine::mod_index::ModIndex;
 use crate::engine::texts;
 use enshwick_base::Relock;
 
@@ -47,7 +52,7 @@ pub(crate) fn apply(
         .unwrap_or_else(|| settings.template.clone());
     let shown = crate::base::worlds::shown_file(id, &files, key);
     let change = super::set(&shown, &settings.schema, &text, inner, value)?;
-    crate::host::check_settings(index, file, &change.text)?;
+    check_settings(index, file, &change.text)?;
     crate::base::watch::write_noted(&path, || {
         crate::base::worlds::write_target(&path, &change.text)
     })
@@ -86,7 +91,7 @@ pub(crate) enum ApplySettingError {
     Change(#[from] ChangeSettingError),
     /// The mod refuses the settings with the change.
     #[error(transparent)]
-    Check(#[from] crate::host::CheckSettingsError),
+    Check(#[from] CheckSettingsError),
 }
 
 impl ApplySettingError {
@@ -105,6 +110,75 @@ impl ApplySettingError {
             ),
             Self::Change(error) => error.reply(),
             Self::Check(error) => refused(&error.reply()),
+        }
+    }
+}
+
+/// Runs mod `index`'s check of `text`, a new text of its settings file
+/// `file`; `Ok` for a file without one.
+pub(crate) fn check_settings(
+    index: usize,
+    file: &str,
+    text: &str,
+) -> Result<(), CheckSettingsError> {
+    let Some(record) = crate::engine::loader::loader()
+        .and_then(|loader| loader.mods.get(index))
+        .filter(|record| !record.off.load(Ordering::Acquire))
+    else {
+        return Ok(());
+    };
+    let found = record
+        .checks
+        .relock()
+        .iter()
+        .find(|(known, _, _)| known == file)
+        .map(|&(_, callback, user)| (callback, user));
+    let Some((callback, user)) = found else {
+        return Ok(());
+    };
+    let mut why = Str::EMPTY;
+    // SAFETY: the mod's check with its own pointer; the text lives for the
+    // call, and the safe layer catches its panics.
+    let status = crate::engine::profile::call(
+        ModIndex::new(index),
+        crate::engine::profile::Feature::Events,
+        || unsafe {
+            callback(
+                Str::new(text),
+                &raw mut why,
+                core::ptr::with_exposed_provenance_mut(user),
+            )
+        },
+    );
+    if status.is_ok() {
+        return Ok(());
+    }
+    // SAFETY: the reason stays valid until the mod's next check.
+    let why = unsafe { why.as_str() };
+    Err(why.map_or(CheckSettingsError::Unexplained, |why| {
+        CheckSettingsError::Refused {
+            reason: texts::mod_reason(record.texts.relock().as_ref(), why),
+        }
+    }))
+}
+
+/// Why a mod refuses a new settings text.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum CheckSettingsError {
+    /// The mod gave no reason.
+    #[error("the mod refuses the settings")]
+    Unexplained,
+    /// The mod's reason, in the reader's language.
+    #[error("the mod refuses the settings: {reason}")]
+    Refused { reason: String },
+}
+
+impl CheckSettingsError {
+    /// The refusal as the reader reads it.
+    pub(crate) fn reply(&self) -> String {
+        match self {
+            Self::Unexplained => texts::fill("refused.by-mod", &[]),
+            Self::Refused { reason } => reason.clone(),
         }
     }
 }

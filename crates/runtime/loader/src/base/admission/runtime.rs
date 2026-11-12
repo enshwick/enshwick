@@ -161,7 +161,7 @@ pub(crate) fn nonce() -> u64 {
 
 /// The server's join mods now, `id@version,...`.
 fn server_mods() -> String {
-    crate::base::advertise::mod_list(&crate::host::join_mods())
+    crate::base::advertise::mod_list(&crate::base::join::client::join_mods())
 }
 
 /// Runs `f` on the gate, made for the serving game's side, and notes

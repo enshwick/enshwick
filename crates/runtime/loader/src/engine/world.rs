@@ -23,9 +23,9 @@ use crate::engine::loader::{Loader, Target};
 use crate::engine::memory::read;
 use crate::engine::pinned;
 use crate::engine::pinned::{Constant, Symbol};
+use crate::engine::players::{CharacterId, MAX_PLAYERS};
 pub(crate) use crate::engine::server_pin::ServerAccess;
 use crate::engine::server_pin::{Place, ServerCell};
-use crate::inventory::item_records::anchor::CharacterId;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -628,8 +628,6 @@ pub(crate) fn players(loader: &Loader) -> Result<Vec<PlayerInfo>, Status> {
         .map(|(index, slot, _, entity)| player_at(layout, slot, index, Entity(entity), infos))
         .collect())
 }
-
-use crate::base::admission::MAX_PLAYERS;
 
 /// The character entity of each player in game, as [`players`] lists them,
 /// without their names and permissions.

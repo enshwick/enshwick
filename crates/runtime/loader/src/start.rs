@@ -224,7 +224,7 @@ fn start_services(loader: &'static Loader) {
 /// the console.
 fn serve(loader: &'static Loader) {
     if let Some(game_dir) = loader.mods_dir.parent() {
-        crate::base::advertise::start(game_dir, host::join_mods);
+        crate::base::advertise::start(game_dir, crate::base::join::client::join_mods);
     }
     crate::actions::console::start();
 }

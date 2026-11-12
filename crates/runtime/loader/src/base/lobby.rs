@@ -321,7 +321,7 @@ mod runtime {
         let Some(api) = API.get() else {
             return;
         };
-        let mods = crate::base::advertise::mod_list(&crate::host::join_mods());
+        let mods = crate::base::advertise::mod_list(&crate::base::join::client::join_mods());
         if mods.len() >= super::MAX_VALUE {
             crate::log!(
                 WARN,
@@ -367,13 +367,13 @@ mod runtime {
             "joining a game hosted with Enshwick {version}: mods {host}"
         );
         crate::base::net::joining(false);
-        crate::host::forget_server_values();
-        crate::host::back_on();
-        let ours = crate::base::advertise::mod_list(&crate::host::join_mods());
+        crate::base::join::client::forget_server_values();
+        crate::base::join::client::back_on();
+        let ours = crate::base::advertise::mod_list(&crate::base::join::client::join_mods());
         let names = crate::base::join::names();
         let (turn_off, note) = super::plan(&host, &ours, &names);
         for id in &turn_off {
-            crate::host::turn_off_for_world(id);
+            crate::base::join::client::turn_off_for_world(id);
         }
         if let Some(text) = note {
             crate::ui::interface::show("Enshwick", &text, "", 1 << UiDialog::OK, |_| {});

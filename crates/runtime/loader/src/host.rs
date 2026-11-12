@@ -10,18 +10,9 @@ use crate::engine::mod_index::ModIndex;
 
 mod api;
 mod entries;
-mod join;
 mod memory;
 
 pub(crate) use api::API;
-
-pub(crate) use entries::base::mods::{CheckSettingsError, check_settings};
-
-pub(crate) use join::{
-    admitted, apply_server_value, back_on, difference_waits, forget_server_values, join_missing,
-    join_mods, join_mods_off, kicked_for_mods, report_join_missing, show_difference,
-    take_difference, turn_off_for_world,
-};
 
 pub(crate) use memory::{find, slice};
 
@@ -169,6 +160,3 @@ impl Loader {
 
 #[cfg(test)]
 mod headed_tests;
-
-#[cfg(test)]
-mod tests;
