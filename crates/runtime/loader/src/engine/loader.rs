@@ -474,13 +474,17 @@ impl Loader {
     pub(crate) fn rewire(&self) {
         // A poisoned lock still holds the chains: they must be wired past.
         let chains = self.chains.relock();
-        let off = |owner: ModIndex| {
-            owner != ModIndex::LOADER
-                && self.mods.get(owner.get()).is_none_or(|m| {
-                    m.off.load(Ordering::Acquire) || m.waiting.load(Ordering::Acquire)
-                })
-        };
-        chains.rewire(off);
+        chains.rewire(|owner| self.passed(owner, true));
+    }
+
+    /// Whether the hooks and points of `owner` are passed by: the mod is
+    /// off or unknown, or with `waiting`, it waits for a code patch. The
+    /// loader's own links never are.
+    fn passed(&self, owner: ModIndex, waiting: bool) -> bool {
+        owner != ModIndex::LOADER
+            && self.mods.get(owner.get()).is_none_or(|m| {
+                m.off.load(Ordering::Acquire) || (waiting && m.waiting.load(Ordering::Acquire))
+            })
     }
 
     /// The mod named `id`, as a player or an administrator names it.
@@ -508,13 +512,7 @@ impl Loader {
         }
         crate::engine::diag::turned_off(&record.id, &shown);
         self.rewire();
-        let faulted = |owner: ModIndex| {
-            owner != ModIndex::LOADER
-                && self
-                    .mods
-                    .get(owner.get())
-                    .is_none_or(|m| m.off.load(Ordering::Acquire))
-        };
+        let faulted = |owner: ModIndex| self.passed(owner, false);
         crate::base::points::rearm(faulted);
         if record.joins_when_on() {
             crate::base::advertise::wake();
@@ -534,13 +532,7 @@ impl Loader {
         *record.off_reason.relock() = None;
         crate::engine::log::write(Level::INFO, &record.id, "back on");
         self.rewire();
-        let off = |owner: ModIndex| {
-            owner != ModIndex::LOADER
-                && self
-                    .mods
-                    .get(owner.get())
-                    .is_none_or(|m| m.off.load(Ordering::Acquire))
-        };
+        let off = |owner: ModIndex| self.passed(owner, false);
         crate::base::points::rearm(off);
     }
 
