@@ -906,6 +906,15 @@ mod tests {
     }
 
     #[test]
+    fn a_tool_step_runs_its_program_and_an_xtask_step_this_binary() {
+        assert_eq!(Step::tool("typos", &[]).program.as_deref(), Some("typos"));
+        let exe = std::env::current_exe().unwrap().display().to_string();
+        let step = Step::xtask(&["doc-links"]);
+        assert_eq!(step.program.as_deref(), Some(exe.as_str()));
+        assert_eq!(step.args, ["doc-links"]);
+    }
+
+    #[test]
     fn host_args_leave_out_windows_only_crates_only_off_windows() {
         let package = |name: &str, windows_only| Package {
             name: name.to_owned(),

@@ -839,6 +839,14 @@ mod tests {
     }
 
     #[test]
+    fn the_rules_hold_for_this_workspace() {
+        assert_eq!(
+            check(&crate::packages().unwrap()).unwrap(),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
     fn an_api_crate_outside_the_api_version_group_is_a_problem() {
         let release_plz = "[[package]]\nname = \"enshwick\"\nversion_group = \"api\"\n\n\
                            [[package]]\nname = \"enshwick-world\"\nrelease = false\n";

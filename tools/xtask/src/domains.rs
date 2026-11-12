@@ -162,7 +162,7 @@ fn problems(root: &Path) -> Result<Vec<String>, String> {
     let mut calls = Vec::new();
     for (path, text) in &files {
         let file = syn::parse_file(text).map_err(|e| format!("{SOURCES}/{path}: {e}"))?;
-        if !joined(path) && !path.starts_with(LISTS) {
+        if !joined(path) {
             let (defined, called) = calls::load_methods(&file);
             owner.extend(defined.into_iter().map(|name| (name, top(path))));
             calls.push((top(path), called));
