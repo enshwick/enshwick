@@ -96,8 +96,9 @@ the crate of each domain that has left it.
 
 - A module names only its own domain and the domains before its own.
   Something two domains share moves down into base or the lower domain.
-- `cargo xtask check` reads the code's `crate::` paths without compiling and
-  refuses an edge up the order. The edges up the order the code still has
+- `cargo xtask check` reads the code's `crate::` paths, and the calls on
+  `self` in each module's `Load` methods, without compiling and refuses an
+  edge up the order. The edges up the order the code still has
   are listed in `domains.toml`; a new one fails, and so does a listed one
   that is gone, so the list only shrinks.
 - A domain's crate depends, among the internal crates, only on those below
@@ -172,8 +173,8 @@ and world; each later peel follows the same steps.
    `resources` and the host's resource reads, and what only an upper domain
    needs moves up, such as the rate rule into `rates`. An inherent method
    of a lower type, `Host` included, lives in that type's crate. A method
-   that calls a `Load` method of a domain above, which the check's scan of
-   `crate::` paths does not see and the crate's first build names, keeps
+   that calls a `Load` method of a domain above, an edge up the check
+   counts from a call on `self` in the domain's `Load` methods, keeps
    its body in core's forwarder file, as `limit_altar_level` (with
    crafting vetoes) and `on_fog_uncovered` (with the interface's frames)
    do, and reaches the crate's private parts through `__internal`.

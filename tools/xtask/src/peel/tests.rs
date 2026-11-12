@@ -442,4 +442,11 @@ fn a_forwarder_s_links_relative_to_its_module_become_paths_from_the_crate_root()
         rebase_links("/// [`Voxels`](super::Voxels)\n", "voxels"),
         "/// [`Voxels`](crate::Voxels)\n"
     );
+    assert_eq!(
+        rebase_links(
+            "/// [up](super), [the altars]\n/// [the altars]: super\n",
+            "altars::kinds"
+        ),
+        "/// [up](crate::altars), [the altars]\n/// [the altars]: crate::altars\n"
+    );
 }

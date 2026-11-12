@@ -159,6 +159,7 @@ fn rebase_links(block: &str, module: &str) -> String {
     // A link's target follows `](` inline, or `]: ` in a reference line.
     let swaps = [
         ("](self)".to_owned(), format!("]({own})")),
+        ("](super)".to_owned(), format!("]({parent})")),
         ("](self::".to_owned(), format!("]({own}::")),
         ("](super::".to_owned(), format!("]({parent}::")),
         ("]: self::".to_owned(), format!("]: {own}::")),
@@ -177,6 +178,8 @@ fn rebase_links(block: &str, module: &str) -> String {
         let body = rebased.trim_end_matches(['\r', '\n']);
         if let Some(head) = body.strip_suffix("]: self") {
             rebased = format!("{head}]: {own}{}", &rebased[body.len()..]);
+        } else if let Some(head) = body.strip_suffix("]: super") {
+            rebased = format!("{head}]: {parent}{}", &rebased[body.len()..]);
         }
         out.push_str(&rebased);
     }
