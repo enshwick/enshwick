@@ -10,7 +10,6 @@ use std::process::Command;
 
 use crate::{WINDOWS_TARGET, cargo, say};
 
-const USAGE: &str = "usage: cargo xtask dist [--out <dir>]";
 /// The archive that goes into the game folder.
 const ARCHIVE: &str = "enshwick.zip";
 /// The stub's package and where it goes: the game loads it as a system DLL.
@@ -19,15 +18,7 @@ const STUB: (&str, &str) = ("enshwick-loader-stub", "powrprof.dll");
 /// whatever its library is called.
 const LOADER: (&str, &str) = ("enshwick-loader", "mods/enshwick/enshwick.dll");
 
-pub(crate) fn run(args: &[String]) -> Result<bool, String> {
-    let mut out = PathBuf::from("target/dist");
-    let mut rest = args.iter();
-    while let Some(arg) = rest.next() {
-        match arg.as_str() {
-            "--out" => out = PathBuf::from(rest.next().ok_or(USAGE)?),
-            _ => return Err(USAGE.to_owned()),
-        }
-    }
+pub(crate) fn run(out: &Path) -> Result<bool, String> {
     let libraries = workspace_libraries()?;
     let release_dir = build()?;
     let built_as = |package: &str| {
@@ -41,7 +32,7 @@ pub(crate) fn run(args: &[String]) -> Result<bool, String> {
         read(&built_as(LOADER.0)?)?,
         read(Path::new("LICENSE"))?,
     );
-    std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+    std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
     let path = out.join(ARCHIVE);
     std::fs::write(&path, zip(&entries)?).map_err(|e| format!("{}: {e}", path.display()))?;
     say(&format!(

@@ -30,7 +30,7 @@ const ET_CETERA: &str = "etc.";
 pub(crate) fn check(root: &Path) -> Vec<String> {
     let source = root.join(SOURCE);
     let mut chapters = Vec::new();
-    if let Err(error) = crate::book::collect(&source, "", &mut chapters) {
+    if let Err(error) = super::collect(&source, "", &mut chapters) {
         return vec![format!("{SOURCE}: {error}")];
     }
     let mut found = Vec::new();

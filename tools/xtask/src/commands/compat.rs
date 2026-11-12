@@ -22,7 +22,7 @@ use enshwick_gamedata::{self as tables, PartState, Resolved, Table};
 mod pin;
 #[path = "compat/report.rs"]
 mod report;
-#[path = "reports.rs"]
+#[path = "../check/reports.rs"]
 mod reports;
 #[cfg(all(test, windows))]
 use report::report_data;

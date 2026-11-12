@@ -14,7 +14,6 @@ use std::path::Path;
 
 use crate::{Package, git, packages, say, workspace_root};
 
-const USAGE: &str = "usage: cargo xtask tag-lines";
 /// What comes before a release on an install or dependency line, and what
 /// comes before its version there: a tag, or a `cargo binstall --git` line's
 /// `<crate>@<version>`, as binstall takes no tag.
@@ -23,10 +22,7 @@ const CHANGELOG: &str = "CHANGELOG.md";
 /// What a line names when its tag is the platform's, as the site reads it.
 const REPOSITORY: &str = "github.com/enshwick/enshwick";
 
-pub(crate) fn run(args: &[String]) -> Result<bool, String> {
-    if !args.is_empty() {
-        return Err(USAGE.to_owned());
-    }
+pub(crate) fn run() -> Result<bool, String> {
     let root = workspace_root();
     let packages = packages()?;
     let tag = tag(&packages)?;
@@ -248,9 +244,9 @@ fn quoted(value: &str) -> Option<&str> {
 fn tag(packages: &[Package]) -> Result<String, String> {
     packages
         .iter()
-        .find(|p| p.name == crate::notes::LOADER)
+        .find(|p| p.name == crate::commands::notes::LOADER)
         .map(|p| format!("v{}", p.version))
-        .ok_or_else(|| format!("no package {}", crate::notes::LOADER))
+        .ok_or_else(|| format!("no package {}", crate::commands::notes::LOADER))
 }
 
 /// The tracked Markdown files but changelogs, relative to `root`.
@@ -338,7 +334,7 @@ mod tests {
 
     fn loader(version: &str) -> Vec<Package> {
         vec![Package {
-            name: crate::notes::LOADER.to_owned(),
+            name: crate::commands::notes::LOADER.to_owned(),
             version: version.to_owned(),
             dir: String::new(),
             deps: Vec::new(),
@@ -526,7 +522,7 @@ mod tests {
         packages[0].name = "other".to_owned();
         assert_eq!(
             tag(&packages),
-            Err(format!("no package {}", crate::notes::LOADER))
+            Err(format!("no package {}", crate::commands::notes::LOADER))
         );
     }
 

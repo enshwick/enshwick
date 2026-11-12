@@ -462,15 +462,15 @@ fn wrapped(text: &str, fence: usize, item: &str) -> Option<(String, String)> {
 ///
 /// When the log or a source does not read or write, or an example it names
 /// is not found unwrapped.
-pub(crate) fn wrap(root: &Path, packages: &[Package], args: &[String]) -> Result<bool, String> {
-    let (log, feature) = match args {
-        [log] => (log, None),
-        [log, flag, feature] if flag == "--cfg" => (log, Some(feature.as_str())),
-        _ => return Err("usage: cargo xtask wrap-examples <doctest log> [--cfg <feature>]".into()),
-    };
+pub(crate) fn wrap(
+    root: &Path,
+    packages: &[Package],
+    log: &Path,
+    feature: Option<&str>,
+) -> Result<bool, String> {
     let crates = crates(root, packages)?;
     let mut by_file: BTreeMap<String, Vec<Failed>> = BTreeMap::new();
-    for one in failed(&read(Path::new(log))?) {
+    for one in failed(&read(log)?) {
         by_file.entry(one.file.clone()).or_default().push(one);
     }
     // Each copies file by name, with its crate's short name and the copies to add.
