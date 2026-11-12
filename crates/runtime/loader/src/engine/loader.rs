@@ -390,12 +390,8 @@ impl Loader {
         ])
     }
 
-    /// [`Loader::link`] for a feature, after checking its target: a table
-    /// symbol's code must hold by [`Loader::code_holds`]. A feature arms all
-    /// its links or none: a target this build lacks, code that does not hold
-    /// or a refused link turns the whole `feature` off by
-    /// [`Loader::feature_off`], its links made before are dropped when the
-    /// hooks arm, and its later links are not made. True when linked.
+    /// [`Loader::link_fused`] for the feature named `feature`, the one
+    /// [`Fuse::named`] keeps for the name.
     pub(crate) fn link_feature<F: Copy>(
         &self,
         feature: &str,
@@ -404,6 +400,27 @@ impl Loader {
         detour: F,
         flags: HookFlags,
     ) -> bool {
+        self.link_fused(Fuse::named(feature), target, next, detour, flags)
+    }
+
+    /// Links one of the loader's own detours of `feature` on `target`, ahead
+    /// of every mod's link there, after checking the target: a table
+    /// symbol's code must hold by [`Loader::code_holds`]. A feature arms all
+    /// its links or none: a target this build lacks, code that does not hold
+    /// or a refused link turns the whole feature off by [`Fuse::turn_off`],
+    /// its links made before are dropped when the hooks arm, and its later
+    /// links are not made. True when linked.
+    pub(crate) fn link_fused<F: Copy>(
+        &self,
+        feature: &'static Fuse,
+        target: Target<'_>,
+        next: &'static Next<F>,
+        detour: F,
+        flags: HookFlags,
+    ) -> bool {
+        if feature.is_off() {
+            return false;
+        }
         let (id, address) = match target {
             Target::Pinned(symbol) => (
                 symbol.id(),
@@ -415,13 +432,9 @@ impl Loader {
                 (id, crate::engine::builds::hook_target(address, || true))
             }
         };
-        let named = Fuse::named(feature);
-        if named.is_off() {
-            return false;
-        }
         let address = match address {
             Ok(address) => address,
-            Err(why) => return self.feature_off(feature, id, &why.to_string()),
+            Err(why) => return self.fuse_off(feature, id, &why.to_string()),
         };
         let link = Link {
             owner: ModIndex::LOADER,
@@ -431,21 +444,28 @@ impl Loader {
             flags,
             hop: None,
         };
-        let status = self.chains.relock().add_feature(address, link, named);
+        let status = self.chains.relock().add_feature(address, link, feature);
         if !status.is_ok() {
-            return self.feature_off(feature, id, &format!("refused the link ({})", status.0));
+            return self.fuse_off(feature, id, &format!("refused the link ({})", status.0));
         }
         crate::engine::diag::name(address, id);
         true
     }
 
     /// Turns `feature` off on this build because its entry `id` failed for
+    /// `reason`, by [`Loader::fuse_off`]. Always false, for the caller to
+    /// return.
+    pub(crate) fn feature_off(&self, feature: &str, id: &str, reason: &str) -> bool {
+        self.fuse_off(Fuse::named(feature), id, reason)
+    }
+
+    /// Turns `feature` off on this build because its entry `id` failed for
     /// `reason`, by [`Fuse::turn_off`]: one warning that names the build, the
     /// feature off on the Mods screen and in the status summary, and its
     /// links wired past. Always false, for the caller to return.
-    pub(crate) fn feature_off(&self, feature: &str, id: &str, reason: &str) -> bool {
+    fn fuse_off(&self, feature: &'static Fuse, id: &str, reason: &str) -> bool {
         let reason = self.build.reason(id, reason);
-        Fuse::named(feature).turn_off(&Off::build(feature, &self.build.name, id, reason));
+        feature.turn_off(&Off::build(feature.feature(), &self.build.name, id, reason));
         false
     }
 
