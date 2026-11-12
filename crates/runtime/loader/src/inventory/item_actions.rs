@@ -266,6 +266,12 @@ pub(crate) fn wanted() -> bool {
     FILTERS.sealed().is_some_and(|filters| !filters.is_empty())
 }
 
+/// Seals the filters before any link: game events link the event move when
+/// a mod registered one.
+pub(crate) fn seal() {
+    let _sealed = FILTERS.seal();
+}
+
 /// Seals the filters and links the two systems' entries when a mod
 /// registered one.
 pub(crate) fn link(loader: &'static Loader) {
@@ -638,6 +644,24 @@ mod tests {
         equip: 0,
         unequip: 1,
     };
+
+    unsafe extern "system" fn filter(_: *const ItemAction, _: *mut c_void) -> u8 {
+        0
+    }
+
+    #[test]
+    fn a_registered_filter_is_wanted_once_sealed_before_any_link() {
+        FILTERS
+            .add(Registered::new(
+                ModIndex::new(0),
+                filter as ItemActionFn,
+                core::ptr::null_mut(),
+            ))
+            .unwrap();
+        assert!(!wanted(), "open filters answer nothing yet");
+        seal();
+        assert!(wanted(), "game events read it before this part links");
+    }
 
     #[test]
     fn only_uses_trashing_and_equipment_changes_reach_the_filters() {

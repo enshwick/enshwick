@@ -62,6 +62,7 @@ pub(crate) static PARTS: &[&Part] = &[
         ..part!("deaths", deaths)
     },
     &Part {
+        seal: Some(|_| item_actions::seal()),
         link: Some(item_actions::link),
         forget: Some(|_| item_actions::forget()),
         ..part!("item_actions", item_actions)

@@ -30,6 +30,7 @@ use crate::engine::parts::{Part, fused, part, step};
 pub(crate) static PARTS: &[&Part] = &[
     &Part {
         table_ids: vetoes::TABLE_IDS,
+        seal: Some(vetoes::seal),
         link: Some(vetoes::link),
         ..part!("vetoes", vetoes)
     },
