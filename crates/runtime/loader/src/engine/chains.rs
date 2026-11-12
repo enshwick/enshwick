@@ -353,14 +353,6 @@ impl Chains {
             .unwrap_or_default()
     }
 
-    /// The loader features linked on `target`.
-    pub fn features(&self, target: u64) -> impl Iterator<Item = &'static Fuse> + '_ {
-        self.by_target
-            .get(&target)
-            .into_iter()
-            .flat_map(|chain| chain.features.iter().map(|&(_, feature)| feature))
-    }
-
     /// The links targets refused, in order.
     #[must_use]
     pub fn refused(&self) -> &[Refusal] {
