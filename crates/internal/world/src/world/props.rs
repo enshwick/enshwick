@@ -1,12 +1,11 @@
 //! Props: the things players place from items, such as chests, beds and
 //! torches, with the item each came from and where it stands.
 
-use bytemuck::Zeroable;
 use rustc_hash::FxHashMap;
 
 use crate::Entity;
 use crate::ItemId;
-use crate::abi::{EntityPlace, Header, ItemData};
+use crate::abi::EntityPlace;
 
 use super::{World, WorldError};
 
@@ -223,12 +222,9 @@ impl Templates {
     /// GUID means the item places nothing.
     fn placed_by(&mut self, world: World, item: ItemId) -> Option<[u8; 16]> {
         *self.known.entry(item).or_insert_with(|| {
-            let mut out = ItemData::zeroed();
-            out.header = Header::of::<ItemData>();
-            let host = world.0.host;
-            if (host.api().item_info)(host.handle(), item, &raw mut out).is_ok() {
+            if let Some(data) = enshwick_content::__internal::item_data(&world.0.host, item) {
                 self.found += 1;
-                Some(out.placed_entity).filter(|guid| *guid != [0; 16])
+                Some(data.placed_entity).filter(|guid| *guid != [0; 16])
             } else {
                 self.unknown += 1;
                 None

@@ -6,11 +6,9 @@
 
 use std::path::Path;
 
-use syn::Item;
-
 use super::{
-    MAP, Map, Named, collect, dependencies, drop_test_modules, feature_only, item_attrs,
-    module_path, package, paths, ungated_paths,
+    MAP, Map, Named, collect, declared_modules, dependencies, drop_test_modules, feature_only,
+    item_attrs, module_path, package, paths, ungated_paths,
 };
 
 /// The crate above every domain, by its folder under `crates/internal`.
@@ -52,7 +50,7 @@ pub(super) fn problems(root: &Path, map: &Map) -> Result<Vec<String>, String> {
                 .map_err(|e| format!("crates/internal/{dir}/src/{path}: {e}"))?;
             parsed.push((path.clone(), file));
         }
-        let gated = gated_modules(&parsed);
+        let gated = declared_modules(&parsed, |item| feature_only(item_attrs(item)));
         for dep in &deps {
             let usage = usage(&parsed, &gated, &dep.replace('-', "_"));
             let at = format!("crates/internal/{dir}/Cargo.toml: {name}");
@@ -95,26 +93,6 @@ fn usage(files: &[(String, syn::File)], gated: &[Vec<String>], ident: &str) -> U
     found
 }
 
-/// The modules declared `#[cfg(feature = "...")] mod name;`, whose files
-/// the feature turns off whole.
-// shortcut: reads declarations at a file's top level only, so a gated `mod x;` inside an inline module counts as ungated and the check passes leniently; read inline modules if one appears.
-fn gated_modules(files: &[(String, syn::File)]) -> Vec<Vec<String>> {
-    let mut gated = Vec::new();
-    for (path, file) in files {
-        for item in &file.items {
-            if let Item::Mod(declared) = item
-                && declared.content.is_none()
-                && feature_only(item_attrs(item))
-            {
-                let mut module = module_path(path);
-                module.push(declared.ident.to_string());
-                gated.push(module);
-            }
-        }
-    }
-    gated
-}
-
 /// Whether the manifest's entry of `dep`, in `[dependencies]` or a
 /// `[target.*.dependencies]`, is optional.
 fn optional(manifest: &toml::Table, dep: &str) -> bool {
@@ -145,6 +123,115 @@ fn optional(manifest: &toml::Table, dep: &str) -> bool {
 mod tests {
     use super::super::tests::Tree;
     use super::*;
+
+    /// A map whose domains, in order, each live in the folder of their name.
+    fn map(dirs: &[&str]) -> Map {
+        Map {
+            order: dirs.iter().map(|dir| (*dir).to_owned()).collect(),
+            joins: Vec::new(),
+            modules: std::collections::BTreeMap::new(),
+            upward: Vec::new(),
+            below: Vec::new(),
+            crates: dirs
+                .iter()
+                .map(|dir| ((*dir).to_owned(), (*dir).to_owned()))
+                .collect(),
+            fake: super::super::fake::Fake::default(),
+        }
+    }
+
+    #[test]
+    fn a_compound_feature_cfg_a_gated_statement_field_or_arm_and_a_gated_module_in_an_inline_module_count_as_gated()
+     {
+        let root = std::env::temp_dir().join(format!("xtask-deps-gates-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&root);
+        let tree = Tree(root.clone());
+        let below = [
+            "base",
+            "content",
+            "world",
+            "inventory",
+            "knowledge",
+            "actions",
+        ];
+        for dir in below {
+            tree.write(
+                &format!("crates/internal/{dir}/Cargo.toml"),
+                &format!("[package]\nname = \"enshwick-{dir}\"\n"),
+            );
+            tree.write(&format!("crates/internal/{dir}/src/lib.rs"), "");
+        }
+        let deps = below
+            .map(|dir| format!("enshwick-{dir}.workspace = true\n"))
+            .concat();
+        tree.write(
+            "crates/internal/ui/Cargo.toml",
+            &format!("[package]\nname = \"enshwick-ui\"\n[dependencies]\n{deps}"),
+        );
+        tree.write(
+            "crates/internal/core/Cargo.toml",
+            "[package]\nname = \"enshwick-core\"\n",
+        );
+        tree.write("crates/internal/core/src/lib.rs", "");
+        // base under all(feature, ..), content in a gated statement, world
+        // in a gated field, inventory in a gated arm, knowledge in a gated
+        // module inside an inline one: each needs `optional`. actions under
+        // any(test, feature) builds in tests without the feature, so it is
+        // used always.
+        tree.write(
+            "crates/internal/ui/src/lib.rs",
+            "#[cfg(all(feature = \"unstable\", windows))]\n\
+             pub use enshwick_base::x;\n\
+             fn f(n: u8) {\n\
+                 #[cfg(feature = \"unstable\")]\n\
+                 enshwick_content::g();\n\
+                 match n {\n\
+                     #[cfg(feature = \"unstable\")]\n\
+                     0 => enshwick_inventory::h(),\n\
+                     _ => {}\n\
+                 }\n\
+             }\n\
+             struct S {\n\
+                 #[cfg(feature = \"unstable\")]\n\
+                 w: enshwick_world::W,\n\
+             }\n\
+             mod outer {\n\
+                 #[cfg(feature = \"unstable\")]\n\
+                 mod quests;\n\
+             }\n\
+             #[cfg(any(test, feature = \"fake\"))]\n\
+             pub use enshwick_actions::y;\n",
+        );
+        tree.write(
+            "crates/internal/ui/src/outer/quests.rs",
+            "use enshwick_knowledge::Q;",
+        );
+        let mut dirs = below.to_vec();
+        dirs.push("ui");
+        let problems = problems(&root, &map(&dirs)).unwrap();
+        let mut gated: Vec<&str> = problems
+            .iter()
+            .filter_map(|problem| {
+                problem
+                    .strip_prefix("crates/internal/ui/Cargo.toml: enshwick-ui names ")?
+                    .split_once(' ')
+                    .map(|(dep, _)| dep)
+            })
+            .collect();
+        gated.sort_unstable();
+        assert_eq!(
+            gated,
+            [
+                "enshwick-base",
+                "enshwick-content",
+                "enshwick-inventory",
+                "enshwick-knowledge",
+                "enshwick-world"
+            ],
+            "{problems:?}"
+        );
+        assert_eq!(problems.len(), 5, "{problems:?}");
+    }
 
     #[test]
     fn a_dependency_counts_as_optional_in_a_target_table_too() -> Result<(), toml::de::Error> {
@@ -194,27 +281,7 @@ mod tests {
             "crates/internal/core/src/lib.rs",
             "pub use enshwick_ui::ui;\n#[cfg(test)]\nmod tests { use enshwick_base::x; }",
         );
-        let map = Map {
-            order: vec![
-                "base".into(),
-                "world".into(),
-                "inventory".into(),
-                "ui".into(),
-            ],
-            joins: Vec::new(),
-            modules: std::collections::BTreeMap::new(),
-            upward: Vec::new(),
-            below: Vec::new(),
-            crates: [
-                ("base".to_owned(), "base".to_owned()),
-                ("world".to_owned(), "world".to_owned()),
-                ("inventory".to_owned(), "inventory".to_owned()),
-                ("ui".to_owned(), "ui".to_owned()),
-            ]
-            .into(),
-            fake: super::super::fake::Fake::default(),
-        };
-        let problems = problems(&root, &map).unwrap();
+        let problems = problems(&root, &map(&["base", "world", "inventory", "ui"])).unwrap();
         assert_eq!(problems.len(), 3, "{problems:?}");
         assert!(problems[0].contains("enshwick-ui names enshwick-base only under a cfg(feature)"));
         assert!(problems[1].contains("enshwick-ui names enshwick-world only under a cfg(feature)"));

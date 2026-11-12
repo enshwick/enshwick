@@ -16,8 +16,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use proc_macro2::{Ident, Spacing, TokenStream, TokenTree};
+use syn::punctuated::Punctuated;
 use syn::visit::{self, Visit};
-use syn::{Attribute, ImplItem, Item, ItemMod, MetaNameValue, TraitItem, UseTree, Visibility};
+use syn::{
+    Arm, Attribute, Expr, Field, ImplItem, Item, ItemMod, Meta, Stmt, Token, TraitItem, UseTree,
+    Variant, Visibility,
+};
 
 mod calls;
 mod deps;
@@ -430,27 +434,43 @@ fn use_leaves(tree: &UseTree) -> Vec<(Option<String>, Vec<String>)> {
 /// Leaves out the files of modules that exist only in tests, declared
 /// `#[cfg(test)] mod name;`, with the modules under them.
 fn drop_test_modules(files: &mut Vec<(String, String)>) {
-    let mut test_modules = Vec::new();
-    for (path, text) in files.iter() {
-        // A file that does not parse fails where it is read for its paths.
-        let Ok(file) = syn::parse_file(text) else {
-            continue;
-        };
-        for item in &file.items {
-            if let Item::Mod(declared) = item
-                && declared.content.is_none()
-                && test_only(item)
-            {
-                let mut module = module_path(path);
-                module.push(declared.ident.to_string());
-                test_modules.push(module);
-            }
-        }
-    }
+    // A file that does not parse fails where it is read for its paths.
+    let parsed: Vec<(String, syn::File)> = files
+        .iter()
+        .filter_map(|(path, text)| Some((path.clone(), syn::parse_file(text).ok()?)))
+        .collect();
+    let test_modules = declared_modules(&parsed, test_only);
     files.retain(|(path, _)| {
         let module = module_path(path);
         !test_modules.iter().any(|test| module.starts_with(test))
     });
+}
+
+/// The modules of `files` declared by an item `keep` accepts, inline modules
+/// on the way read too, so the files under each are that module's.
+fn declared_modules(files: &[(String, syn::File)], keep: fn(&Item) -> bool) -> Vec<Vec<String>> {
+    fn walk(
+        items: &[Item],
+        module: &mut Vec<String>,
+        keep: fn(&Item) -> bool,
+        out: &mut Vec<Vec<String>>,
+    ) {
+        for item in items {
+            let Item::Mod(declared) = item else { continue };
+            module.push(declared.ident.to_string());
+            if keep(item) {
+                out.push(module.clone());
+            } else if let Some((_, items)) = &declared.content {
+                walk(items, module, keep, out);
+            }
+            module.pop();
+        }
+    }
+    let mut out = Vec::new();
+    for (path, file) in files {
+        walk(&file.items, &mut module_path(path), keep, &mut out);
+    }
+    out
 }
 
 /// The top-level module each of `found`, absolute paths under core's root,
@@ -490,7 +510,8 @@ fn paths(file: &syn::File, module: &[String], externs: &[&str]) -> Named {
 }
 
 /// The paths of [`paths`] that no item under a `#[cfg(feature = "...")]`
-/// holds, read through items, impl items and trait items.
+/// holds, read through items, impl and trait items, statements, fields,
+/// variants and match arms.
 fn ungated_paths(file: &syn::File, module: &[String], externs: &[&str]) -> Named {
     let mut walk = Walk::new(module, externs);
     walk.ungated = true;
@@ -631,6 +652,36 @@ impl<'ast> Visit<'ast> for Walk<'_> {
         }
     }
 
+    fn visit_stmt(&mut self, stmt: &'ast Stmt) {
+        let attrs = match stmt {
+            Stmt::Local(local) => &local.attrs[..],
+            Stmt::Macro(mac) => &mac.attrs,
+            Stmt::Expr(expr, _) => expr_attrs(expr),
+            Stmt::Item(_) => &[],
+        };
+        if !self.gated_out(attrs) {
+            visit::visit_stmt(self, stmt);
+        }
+    }
+
+    fn visit_field(&mut self, field: &'ast Field) {
+        if !self.gated_out(&field.attrs) {
+            visit::visit_field(self, field);
+        }
+    }
+
+    fn visit_variant(&mut self, variant: &'ast Variant) {
+        if !self.gated_out(&variant.attrs) {
+            visit::visit_variant(self, variant);
+        }
+    }
+
+    fn visit_arm(&mut self, arm: &'ast Arm) {
+        if !self.gated_out(&arm.attrs) {
+            visit::visit_arm(self, arm);
+        }
+    }
+
     fn visit_item_mod(&mut self, item: &'ast ItemMod) {
         let inline = item.content.is_some();
         if inline {
@@ -687,15 +738,51 @@ fn item_attrs(item: &Item) -> &[Attribute] {
     }
 }
 
-/// Whether `attrs` hold a plain `#[cfg(feature = "...")]`; a compound
-/// `cfg` counts as none, so a reader of it errs towards ungated.
+/// Whether `attrs` hold a `cfg` only a cargo feature turns on: a
+/// `feature = "..."`, an `all` with one among its parts or an `any` of such
+/// parts only. `test`, `not` and the other options count as on, so a reader
+/// of them errs towards ungated.
 fn feature_only(attrs: &[Attribute]) -> bool {
+    fn needs_feature(meta: &Meta) -> bool {
+        match meta {
+            Meta::NameValue(pair) => pair.path.is_ident("feature"),
+            Meta::List(list) => {
+                let Ok(parts) =
+                    list.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
+                else {
+                    return false;
+                };
+                if list.path.is_ident("all") {
+                    parts.iter().any(needs_feature)
+                } else {
+                    list.path.is_ident("any")
+                        && !parts.is_empty()
+                        && parts.iter().all(needs_feature)
+                }
+            }
+            Meta::Path(_) => false,
+        }
+    }
     attrs.iter().any(|attr| {
         attr.path().is_ident("cfg")
             && attr
-                .parse_args::<MetaNameValue>()
-                .is_ok_and(|meta| meta.path.is_ident("feature"))
+                .parse_args::<Meta>()
+                .is_ok_and(|meta| needs_feature(&meta))
     })
+}
+
+/// The attributes of an expression statement of the forms that carry a
+/// `cfg` in practice.
+// shortcut: reads blocks, calls, method calls, macros and assignments only, so a cfg on another expression statement counts as ungated; add its form if one appears.
+fn expr_attrs(expr: &Expr) -> &[Attribute] {
+    match expr {
+        Expr::Assign(expr) => &expr.attrs,
+        Expr::Block(expr) => &expr.attrs,
+        Expr::Call(expr) => &expr.attrs,
+        Expr::Macro(expr) => &expr.attrs,
+        Expr::MethodCall(expr) => &expr.attrs,
+        _ => &[],
+    }
 }
 
 #[cfg(test)]
