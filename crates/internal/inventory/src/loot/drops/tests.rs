@@ -207,9 +207,10 @@ fn the_chance_holds_over_many_rolls() {
 fn replacing_a_group_keeps_the_drops_of_every_other_group() {
     let kept = Drop::new(ItemId::new(1), 0.5, Source::bosses());
     let gone = Drop::new(ItemId::new(2), 0.5, Source::bosses());
-    rolls().drops.extend([(0, kept.clone()), (7, gone)]);
-    replace_group(7, Vec::new()).unwrap();
-    assert_eq!(rolls().drops, [(0, kept)]);
+    let mut rolls = Rolls::default();
+    rolls.drops.extend([(0, kept.clone()), (7, gone)]);
+    rolls.replace(7, Vec::new());
+    assert_eq!(rolls.drops, [(0, kept)]);
 }
 
 #[test]

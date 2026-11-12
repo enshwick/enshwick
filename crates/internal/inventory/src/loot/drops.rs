@@ -9,13 +9,13 @@
 //! item's place at its chance.
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::ecs::{ComponentType, Components};
 use crate::engine_ids as ids;
 use crate::fresh::Fresh;
 use crate::inventory::Fill;
-use crate::locks::Relock;
+use crate::locks::{Relock, RelockRw};
 use crate::raw::{read_at, read_ptr_at, write_at, write_bytes_at};
 use crate::{BaseLoad, Next, Off};
 use crate::{Entity, ItemId};
@@ -469,13 +469,30 @@ struct Rolls {
     watchers: Vec<Watcher>,
 }
 
+impl Rolls {
+    /// Replaces every drop of group `group` with `drops`.
+    fn replace(&mut self, group: u64, drops: Vec<Drop>) {
+        self.drops.retain(|(g, _)| *g != group);
+        self.drops
+            .extend(drops.into_iter().map(|drop| (group, drop)));
+    }
+}
+
 static ENGINE: Fresh<Engine> = Fresh::new();
-static ROLLS: Fresh<Mutex<Rolls>> = Fresh::new();
+/// Read by every roll, which may run on several worker threads at once;
+/// written only when a mod adds or replaces drops or watches the rolls.
+/// `ENGINE`, `ONE_LINKED` and `DICE` stay outside it: set once or atomic,
+/// a roll reads them without taking a lock.
+static ROLLS: Fresh<RwLock<Rolls>> = Fresh::new();
 /// Whether the single-item roll is linked.
 static ONE_LINKED: Fresh<std::sync::atomic::AtomicBool> = Fresh::new();
 
-fn rolls() -> std::sync::MutexGuard<'static, Rolls> {
-    ROLLS.get_or_init(Mutex::default).relock()
+fn rolls() -> RwLockReadGuard<'static, Rolls> {
+    ROLLS.get_or_init(RwLock::default).relock_read()
+}
+
+fn rolls_mut() -> RwLockWriteGuard<'static, Rolls> {
+    ROLLS.get_or_init(RwLock::default).relock_write()
 }
 
 /// The rolls one watcher collects.
@@ -818,7 +835,7 @@ fn link_roll(load: &mut BaseLoad) -> Result<(), Off> {
 pub(crate) fn watch_rolls(load: &mut BaseLoad) -> Result<Arc<Mutex<Vec<Roll>>>, Off> {
     link_roll(load)?;
     let queue = Arc::new(Mutex::new(Vec::new()));
-    rolls().watchers.push(Arc::clone(&queue));
+    rolls_mut().watchers.push(Arc::clone(&queue));
     Ok(queue)
 }
 
@@ -866,7 +883,7 @@ impl LoadHelpers for BaseLoad {
                 .get_or_init(Default::default)
                 .store(true, Ordering::Release);
         }
-        rolls().drops.push((group, drop));
+        rolls_mut().drops.push((group, drop));
         Ok(())
     }
 }
@@ -950,11 +967,7 @@ pub(crate) fn replace_group(group: u64, drops: Vec<Drop>) -> Result<(), ReplaceD
             return Err(ReplaceDropsError::SingleNotLinked);
         }
     }
-    let mut rolls = rolls();
-    rolls.drops.retain(|(g, _)| *g != group);
-    rolls
-        .drops
-        .extend(drops.into_iter().map(|drop| (group, drop)));
+    rolls_mut().replace(group, drops);
     Ok(())
 }
 

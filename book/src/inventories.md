@@ -13,7 +13,7 @@ or a client while it hosts a game.
 ## Asking for it
 
 Ask for it during `init` with
-[`load.inventories()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load.rs).
+[`load.inventories()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/inventory/src/inventory.rs).
 The returned
 [`Inventories`](https://github.com/enshwick/enshwick/blob/main/crates/internal/inventory/src/inventory.rs)
 is `Copy`; keep it anywhere.

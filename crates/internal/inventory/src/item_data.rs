@@ -227,32 +227,45 @@ where
 /// `Load`'s methods of this module on the base handle, which core's
 /// forwarders call.
 #[doc(hidden)]
+#[cfg(feature = "unstable")]
 pub trait LoadMethods {
     /// As `Load::item_data`.
     #[doc(hidden)]
-    #[cfg(feature = "unstable")]
     fn item_data<T>(&mut self, id: &str) -> Result<ItemData<T>, Off>
     where
         T: serde::Serialize + serde::de::DeserializeOwned;
-
-    /// As `Load::item_data_script`.
-    #[doc(hidden)]
-    #[cfg(feature = "unstable")]
-    fn item_data_script(&mut self, id: &str) -> Result<ItemData<Data>, Off>;
 }
 
+#[cfg(feature = "unstable")]
 impl LoadMethods for crate::BaseLoad {
-    #[cfg(feature = "unstable")]
     fn item_data<T>(&mut self, id: &str) -> Result<ItemData<T>, Off>
     where
         T: serde::Serialize + serde::de::DeserializeOwned,
     {
         self.open_item_data(id)
     }
+}
 
-    #[cfg(feature = "unstable")]
-    fn item_data_script(&mut self, id: &str) -> Result<ItemData<Data>, Off> {
-        self.item_data(id)
+/// `Load`'s script-only method of this module, which a mod reaches only
+/// through the script.
+#[cfg(feature = "unstable")]
+pub(crate) mod script {
+    use super::{Data, ItemData, LoadMethods as _};
+    use crate::Off;
+
+    /// `Load`'s script-only method of this module on the base handle, which
+    /// core's forwarder calls.
+    #[doc(hidden)]
+    pub trait LoadMethods {
+        /// As `Load::item_data_script`.
+        #[doc(hidden)]
+        fn item_data_script(&mut self, id: &str) -> Result<ItemData<Data>, Off>;
+    }
+
+    impl LoadMethods for crate::BaseLoad {
+        fn item_data_script(&mut self, id: &str) -> Result<ItemData<Data>, Off> {
+            self.item_data(id)
+        }
     }
 }
 

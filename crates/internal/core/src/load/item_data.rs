@@ -20,13 +20,11 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See the [module](crate::item_data).
-    #[cfg(feature = "unstable")]
     pub fn item_data<T>(&mut self, id: &str) -> Result<ItemData<T>, Off>
     where
         T: serde::Serialize + serde::de::DeserializeOwned;
 }
 
-#[cfg(feature = "unstable")]
 #[enshwick_macros::forward(base)]
 #[crate::script(item_data)]
 impl Load<'_> {

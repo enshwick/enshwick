@@ -197,14 +197,6 @@ pub trait LoadMethods {
     fn entity_data<T>(&mut self, id: &str, replication: Replication) -> Result<EntityData<T>, Off>
     where
         T: serde::Serialize + serde::de::DeserializeOwned;
-
-    /// As `Load::entity_data_script`.
-    #[doc(hidden)]
-    fn entity_data_script(
-        &mut self,
-        id: &str,
-        replication: Replication,
-    ) -> Result<EntityData<Data>, Off>;
 }
 
 impl LoadMethods for crate::BaseLoad {
@@ -230,13 +222,35 @@ impl LoadMethods for crate::BaseLoad {
             || format!("entity data {id:?}"),
         )
     }
+}
 
-    fn entity_data_script(
-        &mut self,
-        id: &str,
-        replication: Replication,
-    ) -> Result<EntityData<Data>, Off> {
-        self.entity_data(id, replication)
+/// `Load`'s script-only method of this module, which a mod reaches only
+/// through the script.
+pub(crate) mod script {
+    use super::{Data, EntityData, LoadMethods as _, Replication};
+    use crate::Off;
+
+    /// `Load`'s script-only method of this module on the base handle, which
+    /// core's forwarder calls.
+    #[doc(hidden)]
+    pub trait LoadMethods {
+        /// As `Load::entity_data_script`.
+        #[doc(hidden)]
+        fn entity_data_script(
+            &mut self,
+            id: &str,
+            replication: Replication,
+        ) -> Result<EntityData<Data>, Off>;
+    }
+
+    impl LoadMethods for crate::BaseLoad {
+        fn entity_data_script(
+            &mut self,
+            id: &str,
+            replication: Replication,
+        ) -> Result<EntityData<Data>, Off> {
+            self.entity_data(id, replication)
+        }
     }
 }
 

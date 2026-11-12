@@ -16,7 +16,7 @@
 //! filtered by [`Source`]: corpses, bosses, chests, locked chests, loot labels.
 
 pub(crate) mod drops;
-mod script;
+pub(crate) mod script;
 
 #[doc(hidden)]
 pub use drops::ReplaceDropsError;
@@ -492,13 +492,6 @@ fn after_check(next: crate::Next<'_, unsafe extern "system" fn(*mut u64)>, ctx: 
 /// forwarders call.
 #[doc(hidden)]
 pub trait LoadMethods {
-    /// As `Load::on_loot_pass_script`.
-    #[doc(hidden)]
-    fn on_loot_pass_script(
-        &mut self,
-        handler: impl Fn(Vec<Container>) + Send + Sync + 'static,
-    ) -> Result<(), Off>;
-
     /// As `Load::on_loot_pass`.
     #[doc(hidden)]
     fn on_loot_pass<F>(&mut self, handler: F) -> Result<(), Off>
@@ -507,17 +500,6 @@ pub trait LoadMethods {
 }
 
 impl LoadMethods for crate::BaseLoad {
-    fn on_loot_pass_script(
-        &mut self,
-        handler: impl Fn(Vec<Container>) + Send + Sync + 'static,
-    ) -> Result<(), Off> {
-        self.on_loot_pass(move |pass| {
-            let mut containers = Vec::new();
-            pass.each(|container| containers.push(*container));
-            handler(containers);
-        })
-    }
-
     fn on_loot_pass<F>(&mut self, handler: F) -> Result<(), Off>
     where
         F: Fn(&LootPass<'_>) + Send + Sync + 'static,

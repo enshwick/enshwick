@@ -39,3 +39,29 @@ impl FromScript for Kinds {
         })
     }
 }
+
+/// `Load`'s script-only method of this module on the base handle, which
+/// core's forwarder calls; a mod reaches it only through the script.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::on_loot_pass_script`.
+    #[doc(hidden)]
+    fn on_loot_pass_script(
+        &mut self,
+        handler: impl Fn(Vec<super::Container>) + Send + Sync + 'static,
+    ) -> Result<(), crate::Off>;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn on_loot_pass_script(
+        &mut self,
+        handler: impl Fn(Vec<super::Container>) + Send + Sync + 'static,
+    ) -> Result<(), crate::Off> {
+        use super::LoadMethods as _;
+        self.on_loot_pass(move |pass| {
+            let mut containers = Vec::new();
+            pass.each(|container| containers.push(*container));
+            handler(containers);
+        })
+    }
+}
