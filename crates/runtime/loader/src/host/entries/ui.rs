@@ -18,7 +18,7 @@ pub(crate) extern "system" fn local_held(me: ModHandle, out: *mut u64) -> Status
         if loader.side != Side::CLIENT {
             return Status::MISSING;
         }
-        match crate::local_held::held() {
+        match crate::actions::local_held::held() {
             // SAFETY: `HostApi::local_held` has the mod pass `out` pointing at
             // a writable, aligned `u64` that no other thread touches during
             // the call, non-null by the check above.
@@ -34,7 +34,7 @@ pub(crate) extern "system" fn ui_frame(
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("ui_frame", || match caller_index(me) {
-        Ok((loader, index)) => crate::ui::register_frame(loader, index, callback, user),
+        Ok((loader, index)) => crate::ui::interface::register_frame(loader, index, callback, user),
         Err(status) => status,
     })
 }
@@ -59,7 +59,7 @@ pub(crate) extern "system" fn ui_widget(
         }) else {
             return Status::BAD_ARGS;
         };
-        let status = crate::ui::widget(loader, index, frame, &mut copy);
+        let status = crate::ui::interface::widget(loader, index, frame, &mut copy);
         // SAFETY: `HostApi::ui_widget` has the mod pass `widget` null or
         // pointing at its version of `UiWidget`, writable for the size its
         // header states, that no other thread touches during the call.
@@ -76,7 +76,7 @@ pub(crate) extern "system" fn ui_hud(
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("ui_hud", || match caller_index(me) {
-        Ok((loader, index)) => crate::ui::register_hud(loader, index, callback, user),
+        Ok((loader, index)) => crate::ui::interface::register_hud(loader, index, callback, user),
         Err(status) => status,
     })
 }
@@ -115,7 +115,9 @@ pub(crate) extern "system" fn ui_extension(
         let Some(hosts) = (unsafe { spec.host_list() }) else {
             return Status::BAD_ARGS;
         };
-        crate::ui::register_extension(loader, index, screen, spec.edge, hosts, callback, user)
+        crate::ui::interface::register_extension(
+            loader, index, screen, spec.edge, hosts, callback, user,
+        )
     })
 }
 
@@ -144,7 +146,7 @@ pub(crate) extern "system" fn ui_markers(
             return Status::BAD_ARGS;
         };
         if given.iter().any(|m| m.marker_type != 0) {
-            let types = match crate::scene::marker_types(loader) {
+            let types = match crate::world::scene::marker_types(loader) {
                 Ok(types) => types,
                 Err(status) => return status,
             };
@@ -156,7 +158,7 @@ pub(crate) extern "system" fn ui_markers(
                 return Status::BAD_ARGS;
             }
         }
-        crate::ui::set_markers(index, &given)
+        crate::ui::interface::set_markers(index, &given)
     })
 }
 
@@ -168,15 +170,16 @@ pub(crate) extern "system" fn map_marker_types(
     count: *mut u32,
 ) -> Status {
     entry("map_marker_types", || {
-        let types =
-            match caller_index(me).and_then(|(loader, _)| crate::scene::marker_types(loader)) {
-                Ok(types) => types,
-                Err(status) => return status,
-            };
+        let types = match caller_index(me)
+            .and_then(|(loader, _)| crate::world::scene::marker_types(loader))
+        {
+            Ok(types) => types,
+            Err(status) => return status,
+        };
         // SAFETY: the ABI has the mod pass `out` null or writable for
         // `capacity` entries of `entry_size` bytes and `count` null or a
         // writable `u32`, untouched by the mod during the call.
-        unsafe { crate::host::entries::mods::list(&types, out, entry_size, capacity, count) }
+        unsafe { crate::host::memory::list(&types, out, entry_size, capacity, count) }
     })
 }
 
@@ -201,13 +204,13 @@ pub(crate) extern "system" fn ui_dialog(
         }) else {
             return Status::BAD_ARGS;
         };
-        crate::ui::mod_dialog(loader, index, &dialog, callback, user)
+        crate::ui::interface::mod_dialog(loader, index, &dialog, callback, user)
     })
 }
 
 pub(crate) extern "system" fn fog_open(me: ModHandle) -> Status {
     entry("fog_open", || match caller_index(me) {
-        Ok((loader, index)) => crate::fog::open(loader, index),
+        Ok((loader, index)) => crate::world::fog::open(loader, index),
         Err(status) => status,
     })
 }
@@ -245,7 +248,7 @@ pub(crate) extern "system" fn fog_read(
             unsafe { core::slice::from_raw_parts_mut(out, len) }
         };
         let mut found = api_frame::FogInfo::EMPTY;
-        let status = crate::fog::read(index, &mut found, [x, y], [width, height], out);
+        let status = crate::world::fog::read(index, &mut found, [x, y], [width, height], out);
         if status == Status::REFUSED || status == Status::MISSING {
             return status;
         }

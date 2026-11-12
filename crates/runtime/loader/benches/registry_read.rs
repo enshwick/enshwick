@@ -6,7 +6,7 @@ use std::hint::black_box;
 use std::sync::OnceLock;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use enshwick_loader::registry::Registry;
+use enshwick_loader::engine::registry::Registry;
 
 /// How many hooks mods registered, about a full mod list's.
 const ITEMS: u32 = 16;

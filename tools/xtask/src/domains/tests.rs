@@ -1,3 +1,4 @@
+use super::walk::{Named, ungated_paths};
 use super::*;
 
 const CORE_MANIFEST: &str = "crates/internal/core/Cargo.toml";
@@ -16,6 +17,7 @@ fn map(upward: &[&str]) -> Map {
         below: Vec::new(),
         crates: BTreeMap::new(),
         fake: fake::Fake::default(),
+        loader: loader::Loader::default(),
     }
 }
 

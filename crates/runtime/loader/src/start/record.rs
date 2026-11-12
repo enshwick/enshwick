@@ -4,8 +4,8 @@
 use std::path::Path;
 use std::sync::atomic::Ordering;
 
-use crate::host::Loader;
-use crate::record::{self, Ran, Record};
+use crate::base::record::{self, Ran, Record};
+use crate::engine::loader::Loader;
 
 /// Takes the record on a thread of its own, reading each DLL's hash: the
 /// loader and the mods that run, `folders` naming each mod's folder in
@@ -26,7 +26,7 @@ pub(super) fn take(loader: &'static Loader, folders: Vec<(String, String, String
                 .filter_map(|m| {
                     let (_, folder, file) = folders.iter().find(|(id, _, _)| *id == m.id)?;
                     let sha256 = if m.pack {
-                        crate::packs::sha256_of(&m.id).unwrap_or_default()
+                        crate::packs::data_packs::sha256_of(&m.id).unwrap_or_default()
                     } else {
                         hash(&loader.mods_dir.join(file))
                     };
@@ -40,8 +40,8 @@ pub(super) fn take(loader: &'static Loader, folders: Vec<(String, String, String
                 .collect();
             let loader_dll = loader
                 .mods_dir
-                .join(crate::settings::LOADER_ID)
-                .join(format!("{}.dll", crate::settings::LOADER_ID));
+                .join(crate::engine::settings::LOADER_ID)
+                .join(format!("{}.dll", crate::engine::settings::LOADER_ID));
             record::set_taken(Record {
                 loader: env!("CARGO_PKG_VERSION").to_owned(),
                 loader_sha256: hash(&loader_dll),
@@ -57,10 +57,10 @@ pub(super) fn take(loader: &'static Loader, folders: Vec<(String, String, String
 /// Writes the record into the world that loaded, on a thread of its own,
 /// and logs what changed since that world last loaded.
 pub(crate) fn write_for_world() {
-    let (Some(taken), Some(key)) = (record::taken(), crate::worlds::current()) else {
+    let (Some(taken), Some(key)) = (record::taken(), crate::base::worlds::current()) else {
         return;
     };
-    let path = crate::world_folders::loader_data(&key, record::RECORD_FILE);
+    let path = crate::base::world_folders::loader_data(&key, record::RECORD_FILE);
     let spawned = std::thread::Builder::new()
         .name("enshwick-record".into())
         .spawn(move || {

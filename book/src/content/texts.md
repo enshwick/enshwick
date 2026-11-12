@@ -286,7 +286,7 @@ language goes into the mod, or into a data pack of its own that adds texts
 for the mod's content.
 
 The loader's own texts ship in
-[`texts/`](https://github.com/enshwick/enshwick/blob/main/crates/runtime/loader/src/texts),
+[`texts/`](https://github.com/enshwick/enshwick/blob/main/crates/runtime/loader/src/engine/texts),
 a file per language. They hold the words of the Mods screen and the answers
 of the [console](../chat.md#the-console)'s tools. They also hold the reasons a
 settings change is refused and the name of an item whose mod is gone.

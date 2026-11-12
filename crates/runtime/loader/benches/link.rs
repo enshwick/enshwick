@@ -5,7 +5,7 @@ use std::hint::black_box;
 use std::time::Instant;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use enshwick_loader::wire::Link;
+use enshwick_loader::base::wire::Link;
 
 /// A packet of the size a session's MTU leaves, about.
 const PACKET: usize = 1200;

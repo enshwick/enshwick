@@ -320,12 +320,27 @@ its own; these steps hold for one that grows inside core first.
 
 ## Inside the loader
 
+- The loader's modules sit in a folder per layer under `src/`: `engine`, the
+  hooking engine, raw game access and the loader's state, below the domains
+  of `domains.toml`, each in a folder of its name (`world/weather.rs`,
+  `inventory/survivors.rs`). A domain's module named like the domain takes
+  its own name there (`ui::interface`, `knowledge::store`).
 - `start` identifies the game and its table, loads the mods in `mods/`, calls
-  their `init`, arms the hooks and calls `ready`.
-- `host` answers the ABI table; each game feature has its own module
-  (`inventory`, `survivors`, `weather`, …) with its hooks and state.
-- `detour`, `mid` and `chains` are the hooking engine: one detour per target,
-  mods linked through atomic slots, mid-function hooks with the full CPU state.
+  their `init`, arms the hooks and calls `ready`. `host` answers the ABI
+  table, its entries cut by domain as the fake loader's table is
+  (`host/entries/<domain>.rs`) and joined in `host/api.rs`. `events` links
+  the server's step and runs each domain's part after it. `table_ids` joins
+  the parts' build table ids. These four join every layer.
+- The `[loader]` table of `domains.toml` holds the layers to the domain
+  order: a module names only its own layer and those below it, and no join;
+  `cargo xtask check` reads the paths, globs, exported macros and the
+  methods a module adds to another's type, and refuses a new edge up. The edges
+  up still in the code are listed there, module by module, and only go.
+- `engine::loader` holds the one `Loader`, installed once at start: the
+  build, the mods' records, the hook chains and the subscriptions.
+- `engine::detour`, `engine::mid` and `engine::chains` are the hooking
+  engine: one detour per target, mods linked through atomic slots,
+  mid-function hooks with the full CPU state.
 - What mods register during `init` goes into a `Registry`. The registry is
   sealed before the game runs, and hot paths read the sealed slice without a
   lock.

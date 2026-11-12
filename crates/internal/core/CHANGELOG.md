@@ -9,6 +9,9 @@ see is in the changelog of `enshwick`.
 
 ### Changed
 
+- `domains.toml` cuts the loader by the same domains: its `[loader]` table
+  puts each loader module in a layer, the engine below the domains, and
+  `cargo xtask check` refuses a new edge up the layers (#1057).
 - The ui domain left for `enshwick-ui` (`ui`, `sound`) and the packs
   domain for `enshwick-packs`, so the crate holds only `Load` with its
   forwarders, `declare_mod!`'s support and the script binding's namespace

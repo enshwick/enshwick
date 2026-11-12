@@ -7,9 +7,9 @@ use enshwick_core::abi::Side;
 use enshwick_gamedata::reflect::{Fingerprint, Image, Layout, Reflection};
 use windows_sys::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW};
 
-use crate::{builds, errors, log};
+use crate::{engine::builds, engine::errors, engine::log};
 
-use crate::pe;
+use crate::engine::pe;
 
 /// How often the client looks for its window.
 const WINDOW_POLL: Duration = Duration::from_millis(100);
@@ -103,16 +103,16 @@ pub(super) struct Begun {
 /// Creates `mods/`, reads the loader settings and opens the log; `None`
 /// when the folders cannot be made.
 pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
-    crate::early::log_panics();
+    crate::engine::early::log_panics();
     let Some(game_dir) = game_dir() else {
-        crate::early::note("the game's folder was not found; nothing loads");
+        crate::engine::early::note("the game's folder was not found; nothing loads");
         return None;
     };
     let mods_dir = game_dir.join("mods");
     for dir in GAME_DIRS {
         let dir = game_dir.join(dir);
         if let Err(e) = std::fs::create_dir_all(&dir) {
-            crate::early::note(&format!(
+            crate::engine::early::note(&format!(
                 "{} could not be made ({e}); nothing loads. Move the game to a folder \
                  Windows lets it write to, or run it with the rights to write there",
                 dir.display()
@@ -121,10 +121,10 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
         }
     }
     let (settings, settings_problems) =
-        crate::settings::Settings::read(&game_dir.join(crate::settings::FILE));
-    crate::status::mark_start();
-    crate::diag::configure(&settings);
-    let developer_tools = crate::developer_tools::marked(&game_dir);
+        crate::engine::settings::Settings::read(&game_dir.join(crate::engine::settings::FILE));
+    crate::base::status::mark_start();
+    crate::engine::diag::configure(&settings);
+    let developer_tools = crate::base::developer_tools::marked(&game_dir);
     let release_check = settings.release_check;
     builds::configure(settings.build_patterns);
     log::set_levels(settings);
@@ -247,7 +247,7 @@ pub(super) fn game(mods_dir: &Path) -> Option<Game> {
     if !reflection_read(&reflection, fingerprint, mods_dir) {
         return None;
     }
-    let shipped = crate::shipped::read(base);
+    let shipped = crate::engine::shipped::read(base);
     let shipped_image = shipped.as_deref().and_then(|text| image.with_text(text));
     let scanned = shipped_image.as_ref().unwrap_or(image);
     let code = scanned.section(".text").and_then(|text| {
@@ -262,8 +262,8 @@ pub(super) fn game(mods_dir: &Path) -> Option<Game> {
         side,
         game_dir.and_then(|dir| builds::steam_build(dir, side)),
         game_dir
-            .and_then(|dir| crate::archive::open_game(dir, side))
-            .and_then(crate::archive::Archive::version),
+            .and_then(|dir| crate::engine::archive::open_game(dir, side))
+            .and_then(crate::engine::archive::Archive::version),
         fingerprint,
     );
     let Some(mut build) = builds::select(side, fingerprint, name, code, cell) else {
@@ -273,18 +273,18 @@ pub(super) fn game(mods_dir: &Path) -> Option<Game> {
             builds::fingerprint_name(fingerprint),
             errors::UNKNOWN_BUILD
         );
-        crate::holds::enforce(mods_dir, &[], true, None);
-        crate::shipped::release();
+        crate::base::holds::enforce(mods_dir, &[], true, None);
+        crate::engine::shipped::release();
         return None;
     };
     if let Some(game_dir) = game_dir {
-        crate::attribute_slots::supply(&mut build, &reflection, game_dir, side);
+        crate::engine::attribute_slots::supply(&mut build, &reflection, game_dir, side);
     }
     route(&mut build, scanned, &reflection, side);
     let build: &'static builds::KnownBuild = Box::leak(Box::new(build));
     let (level, line) = build.start_line();
-    if log::enabled(level, crate::settings::LOADER_ID) {
-        log::write(level, crate::settings::LOADER_ID, &line);
+    if log::enabled(level, crate::engine::settings::LOADER_ID) {
+        log::write(level, crate::engine::settings::LOADER_ID, &line);
     }
     if !build.missing().is_empty() {
         crate::log!(
@@ -332,7 +332,7 @@ fn route(
 /// Warns about each loader feature `build` serves only partly or not at all.
 fn warn_lacking(build: &builds::KnownBuild) {
     for part in build.parts(crate::TABLE_IDS) {
-        if let Some(line) = crate::diag::part_line(&part) {
+        if let Some(line) = crate::engine::diag::part_line(&part) {
             crate::log!(
                 WARN,
                 "loader feature {line}; the game runs it vanilla ({})",
@@ -403,6 +403,6 @@ fn reflection_read(reflection: &Reflection<'_>, fingerprint: Fingerprint, mods_d
         builds::fingerprint_name(fingerprint),
         errors::UNKNOWN_BUILD
     );
-    crate::holds::enforce(mods_dir, &[], true, None);
+    crate::base::holds::enforce(mods_dir, &[], true, None);
     false
 }

@@ -1,5 +1,5 @@
-//! Embeds every file of `src/texts/`, one language each, so a new language
-//! is a new file there and no change to the code.
+//! Embeds every file of `src/engine/texts/`, one language each, so a new
+//! language is a new file there and no change to the code.
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -7,6 +7,7 @@ use std::path::Path;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("src")
+        .join("engine")
         .join("texts");
     println!("cargo::rerun-if-changed={}", dir.display());
     let mut files = Vec::new();

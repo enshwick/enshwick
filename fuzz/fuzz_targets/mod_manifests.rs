@@ -10,8 +10,8 @@
 
 use enshwick::abi::{Dependency, Header, Manifest, ManifestFlags, Relation, Side, Str};
 use enshwick_fuzz::text_fields;
-use enshwick_loader::manifest::{meta, parse};
-use enshwick_loader::resolve::{Candidate, resolve};
+use enshwick_loader::base::manifest::{meta, parse};
+use enshwick_loader::base::resolve::{Candidate, resolve};
 use libfuzzer_sys::fuzz_target;
 
 /// The byte between mods; like the field separator, no UTF-8 text holds it.

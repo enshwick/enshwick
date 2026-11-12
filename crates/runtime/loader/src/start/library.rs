@@ -8,10 +8,10 @@ use enshwick_core::abi::{HostApi, Manifest, ModHandle, Status, check_major, expo
 use windows_sys::Win32::Foundation::{FreeLibrary, HMODULE};
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 
-use crate::discovery::Skip;
-use crate::module::Export;
-use crate::others::OtherDll;
-use crate::resolve::{self, Candidate};
+use crate::base::discovery::Skip;
+use crate::base::resolve::{self, Candidate};
+use crate::engine::module::Export;
+use crate::engine::others::OtherDll;
 
 type AbiFn = extern "system" fn() -> u32;
 
@@ -55,23 +55,25 @@ pub(super) fn libraries(
     if run == Run::Game {
         note_old_layout(mods_dir);
     }
-    let packs = crate::packs::discover(mods_dir).into_iter().map(|found| {
-        let folder = found
-            .file
-            .split_once('/')
-            .map_or(found.file.as_str(), |(folder, _)| folder)
-            .to_owned();
-        Library {
-            folder,
-            file: found.file,
-            module: core::ptr::null_mut(),
-            pack: true,
-            range: None,
-            manifest: found.manifest,
-            init: crate::packs::init,
-            ready: crate::packs::ready,
-        }
-    });
+    let packs = crate::packs::data_packs::discover(mods_dir)
+        .into_iter()
+        .map(|found| {
+            let folder = found
+                .file
+                .split_once('/')
+                .map_or(found.file.as_str(), |(folder, _)| folder)
+                .to_owned();
+            Library {
+                folder,
+                file: found.file,
+                module: core::ptr::null_mut(),
+                pack: true,
+                range: None,
+                manifest: found.manifest,
+                init: crate::packs::data_packs::init,
+                ready: crate::packs::data_packs::ready,
+            }
+        });
     let found = discover(mods_dir, loaded);
     let others = if run == Run::Game {
         beside(mods_dir)
@@ -85,7 +87,7 @@ pub(super) fn libraries(
         // or a pack's manifest built for the process, their strings and lists
         // readable and never written; a string `read` left in the DLL is read
         // while `discover` keeps it loaded.
-        match unsafe { crate::manifest::parse(library.manifest) } {
+        match unsafe { crate::base::manifest::parse(library.manifest) } {
             Ok(candidate) => {
                 candidates.push(candidate);
                 libraries.push(library);
@@ -138,18 +140,18 @@ fn note_old_layout(mods_dir: &Path) {
 /// Writes the line of `skip` for the DLL `file` to the loader's log.
 fn log_skip(skip: &Skip, file: &str) {
     let level = enshwick_core::abi::Level::WARN;
-    if crate::log::enabled(level, crate::settings::LOADER_ID) {
-        crate::log::write(level, crate::settings::LOADER_ID, &skip.line(file));
+    if crate::engine::log::enabled(level, crate::engine::settings::LOADER_ID) {
+        crate::engine::log::write(level, crate::engine::settings::LOADER_ID, &skip.line(file));
     }
 }
 
 /// Other mods' proxies in the game's folder, as
-/// [`crate::others::beside_game`] finds them, and whether each is loaded.
+/// [`crate::engine::others::beside_game`] finds them, and whether each is loaded.
 fn beside(mods_dir: &Path) -> Vec<OtherDll> {
     let Some(game_dir) = mods_dir.parent() else {
         return Vec::new();
     };
-    crate::others::beside_game(game_dir)
+    crate::engine::others::beside_game(game_dir)
         .into_iter()
         .map(|name| {
             let loaded = is_loaded(&game_dir.join(&name));
@@ -258,7 +260,7 @@ fn discover(mods_dir: &Path, loaded: &mut Loaded<'_>) -> Vec<Library> {
             .unwrap_or_default();
         let mut first: Option<String> = None;
         for path in dlls(&folder) {
-            if crate::others::is_mod_file(&path) == Some(false) {
+            if crate::engine::others::is_mod_file(&path) == Some(false) {
                 continue;
             }
             let file = format!(
@@ -296,7 +298,7 @@ fn folders(mods_dir: &Path) -> Vec<PathBuf> {
         .filter(|p| {
             p.is_dir()
                 && p.file_name()
-                    .is_some_and(|f| !f.eq_ignore_ascii_case(crate::settings::LOADER_ID))
+                    .is_some_and(|f| !f.eq_ignore_ascii_case(crate::engine::settings::LOADER_ID))
         })
         .collect();
     folders.sort_by_cached_key(|path| path.file_name().map(std::ffi::OsStr::to_ascii_lowercase));
@@ -318,14 +320,18 @@ pub(super) enum Run {
 /// mod of this ABI. A DLL freed for that still ran while it loaded, so its
 /// range is taken before it is freed.
 fn load(path: &Path, folder: &str, file: &str) -> (Option<Library>, Option<(usize, usize)>) {
-    let module = match crate::module::load_library(path) {
+    let module = match crate::engine::module::load_library(path) {
         Ok(module) => module,
         Err(error) => {
-            crate::log!(WARN, "{}", crate::errors::load_failure(file, &error));
+            crate::log!(
+                WARN,
+                "{}",
+                crate::engine::errors::load_failure(file, &error)
+            );
             return (None, None);
         }
     };
-    let range = crate::crash::range_of(module);
+    let range = crate::engine::crash::range_of(module);
     let library = exports_of(module, folder, file, range);
     if library.is_none() {
         // SAFETY: `module` was loaded by `load_library` in this function;
@@ -349,7 +355,7 @@ fn exports_of(
     // SAFETY: `module` was loaded by `load`, which frees it only after
     // this returns; the `Module` does not leave this function, and the
     // exports it finds are called only while the library stays loaded.
-    let found = unsafe { crate::module::Module::from_handle(module) };
+    let found = unsafe { crate::engine::module::Module::from_handle(module) };
     let find = |name: &str| found.export(name);
     let (Some(abi), Some(query), Some(init), Some(ready)) = (
         find(exports::ABI),
@@ -381,7 +387,7 @@ fn exports_of(
     // SAFETY: `query` returns null or the mod's manifest, readable for the
     // size its header says, its strings and lists unwritten for the process
     // (`abi::exports::QUERY`).
-    let manifest = match unsafe { crate::manifest::read(query()) } {
+    let manifest = match unsafe { crate::base::manifest::read(query()) } {
         Ok(manifest) => manifest,
         Err(reason) => {
             log_skip(&Skip::Manifest(reason), file);

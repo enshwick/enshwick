@@ -10,324 +10,35 @@
 // compiler, to leave the walks over other threads' stacks unchecked.
 #![cfg_attr(enshwick_asan, feature(sanitize))]
 
-#[cfg(windows)]
-mod actions;
-pub mod admission;
-pub mod advertise;
-#[cfg(windows)]
-mod altars;
-pub mod archive;
-pub mod attribute_slots;
-#[cfg_attr(
-    not(windows),
-    expect(dead_code, reason = "only the running game groups altar zones")
-)]
-mod base_groups;
-#[cfg(windows)]
-mod bases;
-pub mod bindings;
-#[cfg(windows)]
-mod buffs;
-#[cfg(windows)]
-mod build_reasons;
-pub mod builds;
-#[cfg(windows)]
-mod calls;
-#[cfg(windows)]
-mod carrier;
-#[cfg(windows)]
-mod catalogue;
-pub mod chains;
-#[cfg(windows)]
-mod chat;
-pub mod chat_mute;
-#[cfg(windows)]
-mod clones;
-#[cfg(windows)]
-mod code;
-pub mod code_watch;
-pub mod commands;
-pub mod configure;
-pub mod conflicts;
-pub mod console;
-#[cfg(windows)]
-mod content;
-#[cfg_attr(
-    not(windows),
-    expect(dead_code, reason = "only the running game takes mods' renames")
-)]
-mod content_renames;
-#[cfg(windows)]
-mod controls;
-#[cfg(windows)]
-mod crash;
-#[cfg(windows)]
-mod damage;
-pub mod data_changes;
-#[cfg(windows)]
-mod daytime;
-#[cfg(windows)]
-mod deaths;
-#[cfg(windows)]
-mod detour;
-#[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "only the running game reads the marker")
-)]
-mod developer_tools;
-pub mod diag;
-#[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "only the running game discovers mods")
-)]
-mod discovery;
-#[cfg(windows)]
-mod drops;
-pub mod early;
-#[cfg(windows)]
-mod ecs;
-#[cfg(windows)]
-mod emits;
-#[cfg(windows)]
-mod entities;
-pub mod errors;
+// The layers: the engine below the domains of
+// `crates/internal/core/domains.toml`, whose `[loader]` table holds the
+// edges between them.
+pub mod actions;
+pub mod base;
+pub mod content;
+pub mod engine;
+pub mod inventory;
+mod knowledge;
+mod packs;
+pub mod ui;
+pub mod world;
+
 #[cfg(windows)]
 mod events;
-pub mod features;
-#[cfg(windows)]
-mod fog;
-pub mod fog_image;
-pub mod fuse;
-#[cfg(windows)]
-mod game_events;
-#[cfg(windows)]
-mod game_settings;
-#[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "only the running game's texts are read")
-)]
-mod game_texts;
-#[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "players read the greeting only in the game")
-)]
-mod greeting;
-pub mod holds;
 #[cfg(windows)]
 mod host;
 #[cfg(windows)]
-mod ids;
-#[cfg(windows)]
-mod interactions;
-#[cfg_attr(
-    not(windows),
-    expect(dead_code, reason = "only the Windows build draws the interface")
-)]
-mod interface_parts;
-#[cfg(windows)]
-mod inventory;
-#[cfg(windows)]
-mod item_actions;
-#[cfg(windows)]
-mod item_data;
-pub mod item_kinds;
-#[cfg_attr(
-    not(windows),
-    expect(dead_code, reason = "only the client's interface lists items")
-)]
-mod item_names;
-pub mod item_records;
-pub mod join;
-#[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "only the running game hands mods kept text")
-)]
-mod kept_text;
-#[cfg(windows)]
-mod knowledge;
-#[cfg(windows)]
-mod label;
-pub mod linked_controls;
-pub mod listing;
-#[cfg(windows)]
-mod live;
-#[cfg_attr(
-    not(windows),
-    expect(dead_code, reason = "only the client's join reads lobbies")
-)]
-mod lobby;
-#[cfg(windows)]
-mod local_held;
-pub mod log;
-#[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "only the Windows build links the loot rate")
-)]
-mod loot_slot;
-pub mod manifest;
-pub mod map_frame;
-pub mod map_marker_types;
-#[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "only the Windows build reads game memory")
-)]
-mod memory;
-#[cfg(windows)]
-mod mid;
-pub mod mod_index;
-pub mod mods_screen;
-#[cfg(windows)]
-mod module;
-#[cfg(windows)]
-mod net;
-pub mod notice_queue;
-#[cfg(windows)]
-mod notices;
-#[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "only the running server tells a joining player")
-)]
-mod off_line;
-#[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "used by the start, which runs on Windows")
-)]
-mod others;
-#[cfg(windows)]
-mod pacing;
-#[cfg(windows)]
-mod packs;
-#[cfg(windows)]
-mod pages;
-#[cfg(windows)]
-#[doc(hidden)]
-pub use pages::{forget as forget_read_only, read_only};
-#[cfg(windows)]
-mod patch;
-#[cfg_attr(
-    not(windows),
-    expect(dead_code, reason = "only the loader's start reads executables")
-)]
-mod pe;
-#[cfg_attr(
-    not(windows),
-    expect(
-        dead_code,
-        reason = "most ids name engine code only the Windows build reaches"
-    )
-)]
-mod pinned;
-#[cfg(windows)]
-mod points;
-#[cfg(target_arch = "x86_64")]
-pub mod profile;
-#[cfg(windows)]
-mod progress;
-pub mod prop_holds;
-#[cfg(windows)]
-mod rate_links;
-#[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "only the running game applies rates")
-)]
-mod rates;
-pub mod recipes;
-pub mod record;
-pub mod registry;
-pub mod releases;
-pub mod remote;
-pub mod resolve;
-#[cfg_attr(
-    not(windows),
-    expect(dead_code, reason = "only the Windows build hands the game memory")
-)]
-mod retire;
-#[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "only the running game tries code patches again")
-)]
-mod retry;
-#[cfg_attr(
-    not(windows),
-    expect(dead_code, reason = "only the Windows build asks the game's zones")
-)]
-mod rights;
-#[cfg(windows)]
-mod saves;
-#[cfg(windows)]
-mod scene;
-pub mod scene_markers;
-#[cfg_attr(
-    not(windows),
-    expect(dead_code, reason = "only the Windows build reads the game's server")
-)]
-mod server_pin;
-#[cfg(windows)]
-mod services;
-pub mod settings;
-#[cfg(windows)]
-mod shipped;
-#[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "only the Windows build spawns entities")
-)]
-mod spawn_request;
-#[cfg(windows)]
-mod spawns;
-#[cfg(windows)]
-mod standins;
-#[cfg(windows)]
 mod start;
 #[cfg(windows)]
-mod static_halves;
+mod table_ids;
+
+#[cfg(windows)]
+#[doc(hidden)]
+pub use engine::pages::{forget as forget_read_only, read_only};
 #[cfg(windows)]
 pub use start::{DryMod, DryRun, DryRunError, dry_run};
 #[cfg(windows)]
-mod stats;
-#[cfg(windows)]
-mod status;
-#[cfg(windows)]
-mod survivors;
-#[cfg(windows)]
-mod table_ids;
-#[cfg(windows)]
 pub use table_ids::TABLE_IDS;
-#[cfg(windows)]
-mod terrain;
-pub mod terrain_pages;
-mod texts;
-#[cfg(windows)]
-mod textures;
-pub mod ticks;
-#[cfg_attr(
-    not(windows),
-    expect(dead_code, reason = "only the Windows build writes the game's voxels")
-)]
-mod transactions;
-#[cfg(windows)]
-mod ui;
-#[cfg(any(windows, test))]
-mod unwind_info;
-#[cfg(windows)]
-mod vetoes;
-#[cfg_attr(
-    not(windows),
-    expect(dead_code, reason = "only the Windows build reads the game's voxels")
-)]
-mod voxels;
-#[cfg(windows)]
-mod watch;
-#[cfg(windows)]
-mod weather;
-pub mod widget_checks;
-pub mod windows;
-pub mod wire;
-#[cfg(windows)]
-mod world;
-pub mod world_folders;
-pub mod worlds;
-#[cfg(windows)]
-mod writes;
 
 /// Starts the loader; called once by the `powrprof.dll` stub, which holds
 /// the dedicated server's own code until `release` is called.
@@ -349,9 +60,9 @@ pub unsafe extern "system" fn enshwick_start(
     if let Err(payload) =
         std::panic::catch_unwind(|| start::start(stub_abi, missing_forwards, release))
     {
-        early::note(&format!(
+        engine::early::note(&format!(
             "the loader's start panicked: {}; mods that did not start stay off",
-            early::panic_text(payload.as_ref())
+            engine::early::panic_text(payload.as_ref())
         ));
     }
 }

@@ -3,7 +3,7 @@
 
 #![no_main]
 
-use enshwick_loader::remote::Message;
+use enshwick_loader::base::remote::Message;
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {

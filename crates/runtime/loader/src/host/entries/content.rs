@@ -1,47 +1,14 @@
-//! Host functions for served resources, recipes, texts and item data.
+//! Host functions for the content domain: recipes, data changes, texts, item
+//! data, content ids, rates and the game's memory pages.
 
 use enshwick_core::abi as api_frame;
-use enshwick_core::abi::{ModHandle, Status, Str};
+use enshwick_core::abi::{Level, ModHandle, RateId, Status, Str};
 
-use crate::host::memory::{put, put_list, text};
+use crate::host::entries::base::services::unexported;
+use crate::host::memory::{put, text};
 use crate::host::{caller, caller_index, calling, entry};
 
-pub(crate) extern "system" fn serve_resource(
-    me: ModHandle,
-    key: *const api_frame::ResourceKey,
-    base: *const api_frame::ResourceKey,
-    patch: api_frame::ResourcePatchFn,
-    user: *mut core::ffi::c_void,
-) -> Status {
-    entry("serve_resource", || {
-        let (_, index, _) = match calling(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        // SAFETY: non-null keys from a mod point at valid keys for the call.
-        let (Some(key), Some(base)) = (unsafe { key.as_ref() }, unsafe { base.as_ref() }) else {
-            return Status::BAD_ARGS;
-        };
-        crate::content::register(index, *key, *base, patch, user)
-    })
-}
-
-pub(crate) extern "system" fn rebuild_resource(
-    me: ModHandle,
-    key: *const api_frame::ResourceKey,
-) -> Status {
-    entry("rebuild_resource", || {
-        let (_, index, _) = match calling(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        // SAFETY: a non-null key from a mod points at a valid key for the call.
-        let Some(key) = (unsafe { key.as_ref() }) else {
-            return Status::BAD_ARGS;
-        };
-        crate::content::rebuild(index, *key)
-    })
-}
+pub(crate) mod resources;
 
 pub(crate) extern "system" fn recipe_rule(
     me: ModHandle,
@@ -57,7 +24,7 @@ pub(crate) extern "system" fn recipe_rule(
         let Some(name) = text(name) else {
             return Status::BAD_ARGS;
         };
-        crate::recipes::rule(index, kind, name, disable != 0)
+        crate::content::recipes::rule(index, kind, name, disable != 0)
     })
 }
 
@@ -75,7 +42,11 @@ pub(crate) extern "system" fn recipe_disabled(
         }
         // SAFETY: `out` is non-null, checked just before; the ABI has the mod
         // pass it pointing at a writable, aligned `u32`.
-        unsafe { out.write(u32::from(crate::recipes::is_disabled(recipe.get()))) };
+        unsafe {
+            out.write(u32::from(crate::content::recipes::is_disabled(
+                recipe.get(),
+            )));
+        };
         Status::OK
     })
 }
@@ -89,7 +60,7 @@ pub(crate) extern "system" fn recipe_kind(
         if let Err(status) = caller(me) {
             return status;
         }
-        match crate::item_kinds::ITEMS.kind(item.get()) {
+        match crate::content::item_kinds::ITEMS.kind(item.get()) {
             // SAFETY: `HostApi::recipe_kind` has the mod pass `out` null or
             // pointing at a writable, aligned `RecipeKind` for the call.
             Some(kind) => unsafe { put(out, kind) },
@@ -118,28 +89,28 @@ pub(crate) extern "system" fn change_data(
         };
         let source = text(raw.source).unwrap_or_default().to_owned();
         if let Ok(Some(change)) = enshwick_core::content::changes::RecipesChange::from_abi(&raw) {
-            if !crate::data_changes::reachable(loader, change.field) {
+            if !crate::content::data_changes::reachable(loader, change.field) {
                 return Status::MISSING;
             }
-            return crate::data_changes::declare_recipes(index, change, source);
+            return crate::content::data_changes::declare_recipes(index, change, source);
         }
         if raw.select != api_frame::DataSelect::ENTRY {
             let Ok(Some(change)) = enshwick_core::content::changes::ItemsChange::from_abi(&raw)
             else {
                 return Status::BAD_ARGS;
             };
-            if !crate::data_changes::reachable(loader, change.field) {
+            if !crate::content::data_changes::reachable(loader, change.field) {
                 return Status::MISSING;
             }
-            return crate::data_changes::declare_items(index, change, source);
+            return crate::content::data_changes::declare_items(index, change, source);
         }
         let Ok(Some(change)) = enshwick_core::content::changes::Change::from_abi(&raw) else {
             return Status::BAD_ARGS;
         };
-        if !crate::data_changes::reachable(loader, change.field) {
+        if !crate::content::data_changes::reachable(loader, change.field) {
             return Status::MISSING;
         }
-        crate::data_changes::declare(index, change, source)
+        crate::content::data_changes::declare(index, change, source)
     })
 }
 
@@ -173,7 +144,7 @@ pub(crate) extern "system" fn declare_change(
         let (target, field) = if raw.select == api_frame::DataSelect::ENTRY {
             match enshwick_core::content::changes::Change::from_abi(&raw) {
                 Ok(Some(change)) => (
-                    crate::data_changes::LiveTarget::Entry(change.entry, source),
+                    crate::content::data_changes::LiveTarget::Entry(change.entry, source),
                     change.field,
                 ),
                 _ => return Status::BAD_ARGS,
@@ -181,7 +152,7 @@ pub(crate) extern "system" fn declare_change(
         } else {
             match enshwick_core::content::changes::ItemsChange::from_abi(&raw) {
                 Ok(Some(change)) => (
-                    crate::data_changes::LiveTarget::Items(change.items, source),
+                    crate::content::data_changes::LiveTarget::Items(change.items, source),
                     change.field,
                 ),
                 _ => return Status::BAD_ARGS,
@@ -193,10 +164,10 @@ pub(crate) extern "system" fn declare_change(
         if field.seen_by_clients() && !record.joins_when_on() {
             return Status::REFUSED;
         }
-        if !crate::data_changes::reachable(loader, field) {
+        if !crate::content::data_changes::reachable(loader, field) {
             return Status::MISSING;
         }
-        match crate::data_changes::declare_change(index, target, field) {
+        match crate::content::data_changes::declare_change(index, target, field) {
             // SAFETY: `out` is non-null by the check above and, by
             // `HostApi::declare_change`, points at a writable `ChangeId` for
             // the call.
@@ -225,7 +196,7 @@ pub(crate) extern "system" fn set_change(
             api_frame::ChangeOp::RESET => None,
             _ => return Status::BAD_ARGS,
         };
-        crate::data_changes::set_change(index, id, value)
+        crate::content::data_changes::set_change(index, id, value)
     })
 }
 
@@ -235,7 +206,7 @@ pub(crate) extern "system" fn add_text(me: ModHandle, id: u32, language: u32, te
             return Status::BAD_ARGS;
         };
         match caller(me) {
-            Ok(_) => crate::content::add_text(id, language, text),
+            Ok(_) => crate::content::served::add_text(id, language, text),
             Err(status) => status,
         }
     })
@@ -246,7 +217,8 @@ pub(crate) extern "system" fn item_data_open(me: ModHandle, id: Str, out: *mut u
         let Some(id) = text(id) else {
             return Status::BAD_ARGS;
         };
-        match caller_index(me).and_then(|(loader, index)| crate::item_data::open(loader, index, id))
+        match caller_index(me)
+            .and_then(|(loader, index)| crate::inventory::item_data::open(loader, index, id))
         {
             // SAFETY: `HostApi::item_data_open` has the mod pass `out` null or
             // pointing at a writable, aligned `u32` that no other thread
@@ -268,9 +240,9 @@ pub(crate) extern "system" fn entity_data_open(
             return Status::BAD_ARGS;
         };
         let sent = flags.0 & api_frame::EntityDataFlags::SENT.0 != 0;
-        match caller_index(me)
-            .and_then(|(loader, index)| crate::item_data::open_entity(loader, index, id, sent))
-        {
+        match caller_index(me).and_then(|(loader, index)| {
+            crate::inventory::item_data::open_entity(loader, index, id, sent)
+        }) {
             // SAFETY: `HostApi::entity_data_open` has the mod pass `out` null
             // or pointing at a writable, aligned `u32` that no other thread
             // touches during the call.
@@ -293,7 +265,7 @@ pub(crate) extern "system" fn item_data_get(
         if let Err(status) = caller(me) {
             return status;
         }
-        let value = match crate::item_data::get(kind, pide.0, item.get()) {
+        let value = match crate::inventory::item_data::get(kind, pide.0, item.get()) {
             Ok(value) => value,
             Err(status) => return status,
         };
@@ -327,242 +299,11 @@ pub(crate) extern "system" fn item_data_set(
             // SAFETY: the caller passes `len` bytes at `data` for the call.
             unsafe { core::slice::from_raw_parts(data, len) }
         };
-        match crate::item_data::set(kind, pide.0, item.get(), value) {
+        match crate::inventory::item_data::set(kind, pide.0, item.get(), value) {
             Ok(()) => Status::OK,
             Err(status) => status,
         }
     })
-}
-
-pub(crate) extern "system" fn content_serve(
-    me: ModHandle,
-    data: *const u8,
-    len: u32,
-    out: *mut [u32; 4],
-) -> Status {
-    entry("content_serve", || {
-        if let Err(status) = caller(me) {
-            return status;
-        }
-        let Ok(len) = usize::try_from(len) else {
-            return Status::BAD_ARGS;
-        };
-        if data.is_null() || len == 0 {
-            return Status::BAD_ARGS;
-        }
-        // SAFETY: the caller passes `len` bytes at `data` for the call.
-        let bytes = unsafe { core::slice::from_raw_parts(data, len) };
-        match crate::textures::serve(bytes) {
-            // SAFETY: `HostApi::content_serve` has the mod pass `out` null or
-            // pointing at a writable, aligned `[u32; 4]` that no other thread
-            // touches during the call.
-            Ok(hash) => unsafe { put(out, hash) },
-            Err(status) => status,
-        }
-    })
-}
-
-pub(crate) extern "system" fn content_read(
-    me: ModHandle,
-    hash: *const [u32; 4],
-    out: *mut u8,
-    capacity: u32,
-    len: *mut u32,
-) -> Status {
-    entry("content_read", || {
-        if let Err(status) = caller(me) {
-            return status;
-        }
-        // SAFETY: the caller passes a hash for the call; `as_ref` turns away null.
-        let Some(hash) = (unsafe { hash.as_ref() }).copied() else {
-            return Status::BAD_ARGS;
-        };
-        let data = match crate::textures::content_of(&hash) {
-            Ok(data) => data,
-            Err(status) => return status,
-        };
-        // SAFETY: `HostApi::content_read` has the mod pass `len` null or a
-        // writable, aligned `u32`, and `out` null or `capacity` writable
-        // bytes apart from the loader's own buffer.
-        unsafe { enshwick_core::__private::copy_out(&data, out, capacity, len) }
-    })
-}
-
-pub(crate) extern "system" fn resource_read(
-    me: ModHandle,
-    key: *const enshwick_core::abi::ResourceKey,
-    out: *mut u8,
-    capacity: u32,
-    len: *mut u32,
-) -> Status {
-    entry("resource_read", || {
-        // SAFETY: the ABI's guarantees for these arguments are `copy_resource`'s.
-        unsafe {
-            copy_resource("resource_read", me, key, out, capacity, len, |key| {
-                crate::archive::game()
-                    .and_then(|archive| archive.resource(&key))
-                    .ok_or(Status::MISSING)
-            })
-        }
-    })
-}
-
-pub(crate) extern "system" fn resource_served(
-    me: ModHandle,
-    key: *const enshwick_core::abi::ResourceKey,
-    out: *mut u8,
-    capacity: u32,
-    len: *mut u32,
-) -> Status {
-    entry("resource_served", || {
-        // SAFETY: the ABI's guarantees for these arguments are `copy_resource`'s.
-        unsafe {
-            copy_resource(
-                "resource_served",
-                me,
-                key,
-                out,
-                capacity,
-                len,
-                crate::content::served_now,
-            )
-        }
-    })
-}
-
-/// Copies the bytes `read` gives for the key at `key` to `out`, writing
-/// their length to `len`, as [`copy_keeping`] does.
-///
-/// # Safety
-///
-/// - `key` is null or points at a `ResourceKey` readable for the call.
-/// - `len` is null or points at a writable, aligned `u32`.
-/// - `out` is null or writable for `capacity` bytes, apart from `read`'s.
-unsafe fn copy_resource(
-    call: &'static str,
-    me: ModHandle,
-    key: *const enshwick_core::abi::ResourceKey,
-    out: *mut u8,
-    capacity: u32,
-    len: *mut u32,
-    read: impl FnOnce(enshwick_core::abi::ResourceKey) -> Result<Vec<u8>, Status>,
-) -> Status {
-    if let Err(status) = caller(me) {
-        return status;
-    }
-    // SAFETY: the caller guarantees `key` null or readable; `as_ref` turns
-    // away null.
-    let Some(key) = (unsafe { key.as_ref() }).copied() else {
-        return Status::BAD_ARGS;
-    };
-    // SAFETY: the caller's guarantees for `out`, `capacity` and `len` are
-    // `copy_keeping`'s.
-    unsafe { copy_keeping(call, key, out, capacity, len, read) }
-}
-
-/// Copies `key`'s bytes for `call` to `out`, writing their length to
-/// `len`; [`Status::BAD_ARGS`] when `out` is null or `capacity` short. A
-/// short buffer keeps the bytes for this thread's retry of the same `call`
-/// and key; a call that only asks the length keeps nothing, since it may
-/// never come back.
-///
-/// # Safety
-///
-/// - `len` is null or points at a writable, aligned `u32`.
-/// - `out` is null or writable for `capacity` bytes, apart from `read`'s.
-unsafe fn copy_keeping(
-    call: &'static str,
-    key: enshwick_core::abi::ResourceKey,
-    out: *mut u8,
-    capacity: u32,
-    len: *mut u32,
-    read: impl FnOnce(enshwick_core::abi::ResourceKey) -> Result<Vec<u8>, Status>,
-) -> Status {
-    let data = match short_or(call, key, read) {
-        Ok(data) => data,
-        Err(status) => return status,
-    };
-    // SAFETY: the caller guarantees `len` null or writable and aligned, and
-    // `out` null or `capacity` writable bytes apart from `data`, which this
-    // function owns.
-    let status = unsafe { enshwick_core::__private::copy_out(&data, out, capacity, len) };
-    if status == Status::BAD_ARGS && !out.is_null() {
-        keep(call, key, data);
-    }
-    status
-}
-
-/// Keeps `data` for this thread's retry of `call` with `key`.
-fn keep(call: &'static str, key: enshwick_core::abi::ResourceKey, data: Vec<u8>) {
-    SHORT.set(Some(Kept {
-        call,
-        key,
-        begun: crate::content::builds_begun(),
-        data,
-    }));
-}
-
-pub(crate) extern "system" fn resource_buffer(
-    me: ModHandle,
-    len: u32,
-    out: *mut *mut u8,
-) -> Status {
-    entry("resource_buffer", || {
-        // A mod that is off still gets one: a rebuild runs the patches of
-        // the mods that built what the game holds.
-        let known = me == crate::host::LOADER_HANDLE
-            || crate::host::loader().is_some_and(|loader| loader.record(me).is_some());
-        if !known {
-            return Status::BAD_ARGS;
-        }
-        let Ok(len) = usize::try_from(len) else {
-            return Status::BAD_ARGS;
-        };
-        if out.is_null() {
-            return Status::BAD_ARGS;
-        }
-        match crate::content::lend(len) {
-            // SAFETY: `out` is non-null, checked above; `HostApi::resource_buffer`
-            // has the mod pass it writable and aligned for one pointer, untouched
-            // by other threads during the call.
-            Some(at) => unsafe { put(out, at) },
-            None => Status::REFUSED,
-        }
-    })
-}
-/// A read whose buffer was short, kept for its retry.
-struct Kept {
-    call: &'static str,
-    key: enshwick_core::abi::ResourceKey,
-    /// [`crate::content::builds_begun`] when it was kept.
-    begun: u64,
-    data: Vec<u8>,
-}
-
-thread_local! {
-    /// The last read on this thread whose buffer was short, kept for the
-    /// retry with a buffer that fits, so a served key builds once.
-    static SHORT: core::cell::RefCell<Option<Kept>> = const { core::cell::RefCell::new(None) };
-}
-
-/// `key`'s bytes for `call`: the short read this thread kept for the same
-/// call and key while no build of a served key began since, else `read`'s.
-/// Any kept read goes either way.
-fn short_or(
-    call: &'static str,
-    key: enshwick_core::abi::ResourceKey,
-    read: impl FnOnce(enshwick_core::abi::ResourceKey) -> Result<Vec<u8>, Status>,
-) -> Result<Vec<u8>, Status> {
-    match SHORT.take() {
-        Some(kept)
-            if kept.call == call
-                && kept.key == key
-                && kept.begun == crate::content::builds_begun() =>
-        {
-            Ok(kept.data)
-        }
-        _ => read(key),
-    }
 }
 
 pub(crate) extern "system" fn game_text(
@@ -575,7 +316,7 @@ pub(crate) extern "system" fn game_text(
         if let Err(status) = caller(me) {
             return status;
         }
-        match crate::game_texts::text(id, language) {
+        match crate::engine::game_texts::text(id, language) {
             // SAFETY: `HostApi::game_text` has the mod pass `out` null or
             // pointing at a writable, aligned `Str` that no other thread
             // touches during the call.
@@ -587,106 +328,9 @@ pub(crate) extern "system" fn game_text(
 
 pub(crate) extern "system" fn icons_ready(me: ModHandle) -> Status {
     entry("icons_ready", || match caller(me) {
-        Ok(_) if crate::textures::ready() => Status::OK,
+        Ok(_) if crate::content::textures::ready() => Status::OK,
         Ok(_) => Status::MISSING,
         Err(status) => status,
-    })
-}
-
-/// Every resource key of the game's archive, in archive order, read once.
-static RESOURCE_KEYS: std::sync::OnceLock<Option<Vec<api_frame::ResourceKey>>> =
-    std::sync::OnceLock::new();
-/// Every content hash of the game's archive, read once.
-static CONTENT_HASHES: std::sync::OnceLock<Option<Vec<[u32; 4]>>> = std::sync::OnceLock::new();
-/// Every reflected type as ABI entries, built once.
-static TYPES: std::sync::OnceLock<Option<enshwick_core::resources::TypeTable>> =
-    std::sync::OnceLock::new();
-
-pub(crate) extern "system" fn resource_keys(
-    me: ModHandle,
-    type_hash: u32,
-    out: *mut api_frame::ResourceKey,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    entry("resource_keys", || {
-        if let Err(status) = caller(me) {
-            return status;
-        }
-        let Some(keys) = RESOURCE_KEYS
-            .get_or_init(|| crate::archive::game().map(crate::archive::Archive::keys))
-            .as_ref()
-        else {
-            return Status::MISSING;
-        };
-        let of_type: Vec<api_frame::ResourceKey>;
-        let keys = if type_hash == 0 {
-            keys.as_slice()
-        } else {
-            of_type = keys
-                .iter()
-                .filter(|key| key.type_hash == type_hash)
-                .copied()
-                .collect();
-            of_type.as_slice()
-        };
-        // SAFETY: `HostApi::resource_keys` has the mod pass `out` null or
-        // writable for `capacity` keys and `count` null or a writable `u32`,
-        // untouched by the mod during the call.
-        unsafe { put_list(keys, out, capacity, count) }
-    })
-}
-
-pub(crate) extern "system" fn content_hashes(
-    me: ModHandle,
-    out: *mut [u32; 4],
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    entry("content_hashes", || {
-        if let Err(status) = caller(me) {
-            return status;
-        }
-        let Some(hashes) = CONTENT_HASHES
-            .get_or_init(|| crate::archive::game().map(crate::archive::Archive::contents))
-            .as_ref()
-        else {
-            return Status::MISSING;
-        };
-        // SAFETY: `HostApi::content_hashes` has the mod pass `out` null or
-        // writable for `capacity` hashes and `count` null or a writable `u32`,
-        // untouched by the mod during the call.
-        unsafe { put_list(hashes, out, capacity, count) }
-    })
-}
-
-pub(crate) extern "system" fn types(
-    me: ModHandle,
-    out: *mut api_frame::TypeEntry,
-    entry_size: u32,
-    capacity: u32,
-    count: *mut u32,
-) -> Status {
-    entry("types", || {
-        let loader = match caller(me) {
-            Ok(loader) => loader,
-            Err(status) => return status,
-        };
-        let Some(table) = TYPES
-            .get_or_init(|| {
-                let registry = loader.reflection.registry();
-                (!registry.is_empty())
-                    .then(|| enshwick_core::resources::TypeTable::new(registry.iter()))
-            })
-            .as_ref()
-        else {
-            return Status::MISSING;
-        };
-        let entries = table.entries();
-        // SAFETY: `HostApi::types` has the mod pass `out` null or writable
-        // for `capacity` entries of `entry_size` bytes and `count` null or a
-        // writable `u32`, untouched by the mod during the call.
-        unsafe { crate::host::entries::mods::list(entries, out, entry_size, capacity, count) }
     })
 }
 
@@ -695,7 +339,7 @@ pub(crate) extern "system" fn game_version(me: ModHandle, out: *mut Str) -> Stat
         if let Err(status) = caller(me) {
             return status;
         }
-        match crate::archive::game().and_then(crate::archive::Archive::version) {
+        match crate::engine::archive::game().and_then(crate::engine::archive::Archive::version) {
             // SAFETY: `HostApi::game_version` has the mod pass `out` null or
             // pointing at a writable, aligned `Str` that no other thread
             // touches during the call; the archive lives for the process.
@@ -705,87 +349,149 @@ pub(crate) extern "system" fn game_version(me: ModHandle, out: *mut Str) -> Stat
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use core::cell::Cell;
+pub(crate) extern "system" fn rate(me: ModHandle, rate: RateId) -> Status {
+    entry("rate", || match calling(me) {
+        Ok((loader, index, record)) => {
+            let links = crate::content::rates::links(rate);
+            let available = links.iter().all(|&symbol| loader.address(symbol).is_some())
+                // The loot rate reads stack sizes from the item registry,
+                // which the inventory link finds.
+                && (rate != RateId::LOOT || crate::inventory::transactions::open(loader).is_ok());
+            crate::content::rates::RATES.declare(index, rate, available, record.joins_when_on())
+        }
+        Err(status) => status,
+    })
+}
 
-    use enshwick_core::abi::ResourceKey;
+pub(crate) extern "system" fn set_rate(me: ModHandle, rate: RateId, factor: f32) -> Status {
+    entry("set_rate", || match caller_index(me) {
+        Ok((_, index)) => {
+            let recipes = crate::content::rates::is_recipe_output(rate);
+            let before = recipes.then(|| crate::content::rate_links::factor(rate).to_bits());
+            let status = crate::content::rates::RATES.set(index, rate, factor);
+            if status == Status::OK
+                && before.is_some_and(|before| {
+                    before != crate::content::rate_links::factor(rate).to_bits()
+                })
+            {
+                crate::content::rate_links::rebuild_recipes();
+            }
+            status
+        }
+        Err(status) => status,
+    })
+}
 
-    use super::*;
+pub(crate) extern "system" fn read_only(
+    _me: ModHandle,
+    address: usize,
+    max: usize,
+    out: *mut usize,
+) -> Status {
+    entry("read_only", || {
+        // SAFETY: `HostApi::read_only` has the mod pass `out` null or pointing
+        // at a writable, aligned `usize` that no other thread touches during
+        // the call.
+        unsafe { put(out, crate::engine::pages::read_only(address, max)) }
+    })
+}
 
-    const KEY: ResourceKey = ResourceKey {
-        guid: [4; 16],
-        type_hash: 2,
-        part: 0,
-    };
-
-    #[test]
-    fn a_retry_after_a_short_read_takes_the_kept_bytes_without_reading_again() {
-        let reads = Cell::new(0);
-        let read = |_| {
-            reads.set(reads.get() + 1);
-            Ok(vec![1, 2, 3])
+pub(crate) extern "system" fn declare_content(
+    me: ModHandle,
+    id: Str,
+    out: *mut [u8; 16],
+) -> Status {
+    entry("declare_content", || {
+        let (loader, index, record) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
         };
-        keep("resource_served", KEY, vec![9]);
-        assert_eq!(short_or("resource_served", KEY, read), Ok(vec![9]));
-        assert_eq!(reads.get(), 0, "the kept bytes answer the retry");
-        assert_eq!(short_or("resource_served", KEY, read), Ok(vec![1, 2, 3]));
-        assert_eq!(reads.get(), 1, "a kept read answers once");
-    }
-
-    #[test]
-    fn a_call_that_only_asks_the_length_keeps_no_bytes_and_a_short_buffer_does() {
-        let read = |_| Ok(vec![1, 2, 3]);
-        let mut len = 0u32;
-        // SAFETY: `out` is null and `len` a local `u32`.
-        let status = unsafe {
-            copy_keeping(
-                "resource_served",
-                KEY,
-                core::ptr::null_mut(),
-                0,
-                &raw mut len,
-                read,
-            )
+        if loader.delivery.get().is_some() {
+            return Status::TOO_LATE;
+        }
+        let Some(id) = text(id) else {
+            return Status::BAD_ARGS;
         };
-        assert_eq!((status, len), (Status::BAD_ARGS, 3));
-        assert!(SHORT.take().is_none(), "a length-only call keeps nothing");
-        let mut short = [0u8; 2];
-        // SAFETY: `short` is writable for its 2 bytes and `len` a local `u32`.
-        let status = unsafe {
-            copy_keeping(
-                "resource_served",
-                KEY,
-                short.as_mut_ptr(),
-                2,
-                &raw mut len,
-                read,
-            )
+        match crate::base::ids::declare_content(&record.id, id) {
+            // SAFETY: `HostApi::declare_content` has the mod pass `out` null or
+            // pointing at a writable, aligned `[u8; 16]` that no other thread
+            // touches during the call.
+            Ok(guid) => unsafe { put(out, guid.0) },
+            Err(why) => {
+                loader.turn_off(index, &why.to_string());
+                Status::REFUSED
+            }
+        }
+    })
+}
+
+pub(crate) extern "system" fn crafting_prop(
+    me: ModHandle,
+    prop: *const [u8; 16],
+    first: u8,
+    width: u8,
+    out: *mut u8,
+) -> Status {
+    entry("crafting_prop", || {
+        let (loader, index, record) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
         };
-        assert_eq!(status, Status::BAD_ARGS);
-        assert!(
-            SHORT.take().is_some(),
-            "a short buffer keeps them for its retry"
-        );
-    }
+        if loader.delivery.get().is_some() {
+            return Status::TOO_LATE;
+        }
+        // SAFETY: `HostApi::crafting_prop` has the mod pass `prop` null or
+        // pointing at a readable `[u8; 16]` for the call; `as_ref` turns
+        // away null.
+        let Some(&prop) = (unsafe { prop.as_ref() }) else {
+            return Status::BAD_ARGS;
+        };
+        if out.is_null() {
+            return Status::BAD_ARGS;
+        }
+        let prop = enshwick_core::content::Guid(prop);
+        // The server sends clients its bits in base and crafting components,
+        // so a prop clients lack would shift every bit after it.
+        if !record.joins_when_on() {
+            loader.turn_off(
+                index,
+                &format!("crafting prop {prop}: a crafting prop needs a mod of side both, as clients take its bit too"),
+            );
+            return Status::REFUSED;
+        }
+        match crate::base::ids::with(|ids| ids.crafting_prop(prop, first, width)) {
+            // SAFETY: `HostApi::crafting_prop` has the mod pass `out` null or
+            // pointing at a writable `u8` that no other thread touches
+            // during the call.
+            Ok(at) => unsafe { put(out, at) },
+            Err(why @ crate::base::ids::CraftingPropError::Bounds { .. }) => {
+                crate::log!(WARN, "{why}");
+                Status::BAD_ARGS
+            }
+            Err(why) => {
+                loader.turn_off(index, &why.to_string());
+                Status::REFUSED
+            }
+        }
+    })
+}
 
-    #[test]
-    fn a_kept_read_answers_neither_another_call_nor_another_key() {
-        let read = |_| Ok(vec![1]);
-        keep("resource_served", KEY, vec![9]);
-        assert_eq!(short_or("resource_read", KEY, read), Ok(vec![1]));
-        let other = ResourceKey { part: 1, ..KEY };
-        keep("resource_served", KEY, vec![9]);
-        assert_eq!(short_or("resource_served", other, read), Ok(vec![1]));
-        assert!(SHORT.take().is_none(), "a miss drops the kept read");
-    }
-
-    #[test]
-    fn a_kept_read_answers_no_retry_after_a_build_began_on_the_thread() {
-        let read = |_| Ok(vec![1]);
-        keep("resource_served", KEY, vec![9]);
-        drop(crate::content::enter_build(KEY));
-        assert_eq!(short_or("resource_served", KEY, read), Ok(vec![1]));
-        assert!(SHORT.take().is_none(), "a stale kept read goes");
-    }
+pub(crate) extern "system" fn use_content(me: ModHandle, id: Str) -> Status {
+    entry("use_content", || {
+        let (loader, _, record) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        let Some(id) = text(id).filter(|id| enshwick_core::content::Guid::try_named(id).is_some())
+        else {
+            return Status::BAD_ARGS;
+        };
+        match unexported(loader, record, crate::base::manifest::Kind::Content, id) {
+            Some(reason) => {
+                crate::engine::log::write(Level::WARN, &record.id, &reason);
+                Status::REFUSED
+            }
+            None => Status::OK,
+        }
+    })
 }

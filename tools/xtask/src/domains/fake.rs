@@ -9,6 +9,7 @@ use std::path::Path;
 use syn::visit::Visit;
 use syn::{Item, Visibility};
 
+use super::walk::{defined, ident, imports};
 use super::{
     MAP, Map, Walk, collect, drop_test_modules, listed_problem, module_path, package, paths,
     test_only, top, use_leaves,
@@ -380,33 +381,6 @@ impl<'a> Resolver<'a> {
     }
 }
 
-/// The name an item defines, for those a path can name.
-fn ident(item: &Item) -> Option<String> {
-    let ident = match item {
-        Item::Const(item) => &item.ident,
-        Item::Enum(item) => &item.ident,
-        Item::Fn(item) => &item.sig.ident,
-        Item::Mod(item) => &item.ident,
-        Item::Static(item) => &item.ident,
-        Item::Struct(item) => &item.ident,
-        Item::Trait(item) => &item.ident,
-        Item::Type(item) => &item.ident,
-        Item::Union(item) => &item.ident,
-        Item::Macro(item) => item.ident.as_ref()?,
-        _ => return None,
-    };
-    Some(ident.to_string())
-}
-
-/// The names the items of `file` define, tests left out.
-fn defined(file: &syn::File) -> BTreeSet<String> {
-    file.items
-        .iter()
-        .filter(|item| !test_only(item))
-        .filter_map(ident)
-        .collect()
-}
-
 /// The names a glob of `file`'s module takes: those it defines and those it
 /// re-exports.
 fn exported(file: &syn::File) -> BTreeSet<String> {
@@ -423,49 +397,6 @@ fn exported(file: &syn::File) -> BTreeSet<String> {
         }
     }
     names
-}
-
-/// What the `use` items of `file`, of module `module`, bring in: each name
-/// with the path it stands for, under the fake's root as `crate::…`, at
-/// another crate as written, and the modules its globs take whole.
-///
-/// shortcut: inline modules' own `use` items count as the file's; an
-/// inline module that imports a name its file uses otherwise would be
-/// misread, so split it into a file of its own.
-fn imports(
-    file: &syn::File,
-    module: &[String],
-) -> (BTreeMap<String, Vec<String>>, Vec<Vec<String>>) {
-    let local = defined(file);
-    let walk = Walk::new(module, &[]);
-    let mut names = BTreeMap::new();
-    let mut globs = Vec::new();
-    for item in file.items.iter().filter(|item| !test_only(item)) {
-        let Item::Use(used) = item else {
-            continue;
-        };
-        for (name, full) in use_leaves(&used.tree) {
-            let absolute = match walk.resolve(&full) {
-                Some(abs) => std::iter::once("crate".to_owned()).chain(abs).collect(),
-                // A plain path starts at an item of the module, else at a
-                // crate.
-                None if full.first().is_some_and(|first| local.contains(first)) => {
-                    std::iter::once("crate".to_owned())
-                        .chain(module.iter().cloned())
-                        .chain(full)
-                        .collect()
-                }
-                None => full,
-            };
-            match name {
-                Some(name) => {
-                    names.insert(name, absolute);
-                }
-                None => globs.push(absolute),
-            }
-        }
-    }
-    (names, globs)
 }
 
 #[cfg(test)]

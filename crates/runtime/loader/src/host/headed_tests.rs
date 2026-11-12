@@ -2,6 +2,10 @@
 //! as its header says, so a short or malformed struct is never read past its
 //! end.
 
+use std::path::PathBuf;
+use std::sync::OnceLock;
+
+use enshwick_core::abi as api_frame;
 use enshwick_core::abi::{Headed, Header};
 
 use super::memory::{get_headed, get_headed_list, put_headed, put_headed_list};

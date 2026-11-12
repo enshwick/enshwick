@@ -7,10 +7,8 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use super::{
-    MAP, Map, Named, collect, declared_modules, drop_test_modules, feature_only, item_attrs,
-    module_path, package, paths, ungated_paths,
-};
+use super::walk::{Named, feature_only, item_attrs, ungated_paths};
+use super::{MAP, Map, collect, declared_modules, drop_test_modules, module_path, package, paths};
 
 /// The crate above every domain, by its folder under `crates/internal`.
 const CORE: &str = "core";
@@ -272,6 +270,7 @@ mod tests {
                 .map(|dir| ((*dir).to_owned(), (*dir).to_owned()))
                 .collect(),
             fake: super::super::fake::Fake::default(),
+            loader: super::super::loader::Loader::default(),
         }
     }
 

@@ -1,67 +1,24 @@
 //! The `HostApi` table: every entry point a mod calls, in the ABI's field order.
+// Clippy leaves wildcard imports alone in a test build.
+#![cfg_attr(
+    not(test),
+    expect(
+        clippy::wildcard_imports,
+        reason = "the join takes each domain's entries whole, so a new entry touches only its domain"
+    )
+)]
 
 use enshwick_core::abi::{Header, HostApi, Str};
 
-use super::entries::build::{
-    build, caller_frame, constant, data_dir, event_types, field_offset, log_level, mod_dir, symbol,
-    system, type_hash, type_size,
+use super::entries::actions::{commands::*, *};
+use super::entries::base::{
+    build::*, calls::*, hooks::*, host::*, mods::*, net::*, pacing::*, services::*,
 };
-use super::entries::calls::{call, find_call, serve_call};
-use super::entries::chat::chat_filter;
-use super::entries::commands::{
-    action_window, actions_changed, command_list, commands, run_command,
-};
-use super::entries::content::{
-    add_text, change_data, content_hashes, content_read, content_serve, declare_change,
-    entity_data_open, game_text, game_version, icons_ready, item_data_get, item_data_open,
-    item_data_set, rebuild_resource, recipe_disabled, recipe_kind, recipe_rule, resource_buffer,
-    resource_keys, resource_read, resource_served, serve_resource, set_change, types,
-};
-use super::entries::gameplay::{
-    account_knowledge, affix_info, affix_open, affix_roll, altar_limit_filter, altar_zone_filter,
-    altar_zones_changed, altars, altars_open, apply_buff, base_limit, base_zones, buff_types,
-    buffs, build_filter, building_zone_check_filter, comfort_filter, craft_filter, damage_filter,
-    experience_filter, grant_knowledge, interaction_filter, item_lines, knowledge,
-    knowledge_input_filter, quests, raise_base_limit, rate, remove_buff, request_base_limits,
-    revoke_knowledge, set_rate, skill_override, stat_buff, stat_info, stat_modify, stat_open,
-    stat_sources, stat_value, stat_watch, stats_changed, summon_filter, summon_item, summoned,
-    survivor_bed_check, survivor_lookup, survivor_status,
-};
-use super::entries::hooks::{
-    code_range, hook, hook_at, loop_wait, patch_code, server_wait, task_workers, workshop_recipes,
-};
-use super::entries::inventory::{inventory_open, inventory_submit, item_info};
-use super::entries::items::item_filter;
-use super::entries::mods::{
-    config_check, config_schema, fault, join_missing, language, log, mods, rename_content,
-    settings, texts,
-};
-use super::entries::net::{net_channel, net_ready, net_send};
-use super::entries::pages::read_only;
-use super::entries::saves::{hold_saves, save_info};
-use super::entries::services::{
-    attach_point, crafting_prop, declare_content, define_event, define_point, publish, run_point,
-    send_event, service, set_tick_every, subscribe, subscribe_event, subscribe_tick, use_content,
-};
-use super::entries::transactions::{
-    transaction_commit, transaction_commit_for, transaction_entities, transaction_status,
-    transaction_undo,
-};
-use super::entries::ui::local_held;
-use super::entries::ui::{
-    fog_open, fog_read, map_marker_types, ui_dialog, ui_extension, ui_frame, ui_hud, ui_markers,
-    ui_widget,
-};
-use super::entries::world::{
-    account_action, actions, build_rights, chat, chat_mute_has, chat_mute_set, component,
-    component_write, destroy, emit, entities, entity_template, feature, forget_game_settings,
-    game_event, game_settings, hosting, keep_game_settings, map_frame, map_markers, notify, player,
-    players, rename_filter, run_console, save_world, server_world, set_game_settings, set_label,
-    set_time_of_day, set_time_speed, set_weather, spawn, status, teleport, terrain_edit,
-    terrain_materials, time_of_day, time_speed_control, voxel_read, weather_at, weather_fronts,
-    world_key, world_persists, world_quiet,
-};
-use super::entries::world::{control, run_action, run_action_at, set_saved};
+use super::entries::content::{resources::*, *};
+use super::entries::inventory::*;
+use super::entries::knowledge::*;
+use super::entries::ui::*;
+use super::entries::world::{altars::*, buffs::*, environment::*, saves::*, transactions::*, *};
 
 /// The table handed to every mod.
 pub(crate) static API: HostApi = HostApi {
@@ -242,7 +199,7 @@ pub(crate) static API: HostApi = HostApi {
     chat_mute_set,
     chat_mute_has,
     mod_dir,
-    set_base_cap: super::entries::gameplay::set_base_cap,
+    set_base_cap,
     resource_keys,
     content_hashes,
     types,
@@ -265,8 +222,8 @@ pub(crate) static API: HostApi = HostApi {
     command_list,
     actions_changed,
     resource_buffer,
-    game_query: super::entries::gameplay::game_query,
+    game_query,
     action_window,
-    progress_write: super::entries::effects::progress_write,
-    drop_items: super::entries::effects::drop_items,
+    progress_write,
+    drop_items,
 };

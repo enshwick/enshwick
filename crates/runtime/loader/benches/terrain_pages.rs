@@ -5,7 +5,7 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use enshwick_loader::terrain_pages::{Pairing, Turn, Waiting};
+use enshwick_loader::world::terrain_pages::{Pairing, Turn, Waiting};
 
 /// The finest grid's pages on server 26430253.
 const SLOTS: u32 = 80 * 80;

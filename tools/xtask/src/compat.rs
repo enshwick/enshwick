@@ -264,7 +264,8 @@ fn steam_build(dir: &Path, side: tables::Side) -> Option<u64> {
         tables::Side::Server => enshwick_abi::abi::Side::SERVER,
         tables::Side::Client => enshwick_abi::abi::Side::CLIENT,
     };
-    enshwick_loader::builds::steam_build(dir, running).map(enshwick_gamedata::SteamBuild::get)
+    enshwick_loader::engine::builds::steam_build(dir, running)
+        .map(enshwick_gamedata::SteamBuild::get)
 }
 
 #[cfg(not(windows))]
@@ -329,7 +330,7 @@ fn supply_slots(
     let archive = archive.ok_or_else(|| {
         format!("the game's archive {name}.kfc beside the executable does not read")
     })?;
-    let found = enshwick_loader::attribute_slots::read(archive, reflection)?;
+    let found = enshwick_loader::engine::attribute_slots::read(archive, reflection)?;
     for (id, attribute) in &wanted {
         let Some(slot) = found.get(attribute).and_then(|&s| u64::try_from(s).ok()) else {
             continue;

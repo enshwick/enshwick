@@ -9,8 +9,8 @@ use std::time::Instant;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use enshwick_core::abi::Event;
-use enshwick_loader::mod_index::ModIndex;
-use enshwick_loader::ticks::{StepTime, Ticks};
+use enshwick_loader::engine::mod_index::ModIndex;
+use enshwick_loader::engine::ticks::{StepTime, Ticks};
 
 /// A step's length on an empty dedicated server, about 20 steps a second.
 const STEP: u64 = 50_000_000;
