@@ -173,6 +173,29 @@ fn paths_keep_a_named_crate_s_paths_and_the_relative_ones_apart() -> Result<(), 
 }
 
 #[test]
+fn an_ungated_walk_leaves_out_only_items_impl_items_and_trait_items_under_a_feature()
+-> Result<(), String> {
+    let code = "#[cfg(feature = \"x\")]\nuse a::A;\n#[cfg(not(feature = \"x\"))]\nuse b::B;\nimpl T {\n    #[cfg(feature = \"x\")] const C: u8 = c::C;\n    #[cfg(feature = \"x\")] fn f() { d::g(); }\n    #[cfg(feature = \"x\")] type Y = e::Y;\n    #[cfg(feature = \"x\")] m!(f::x);\n    #[other(feature = \"x\")] fn o() { g::g(); }\n    fn h() { h::g(); }\n}\ntrait U {\n    #[cfg(feature = \"x\")] const K: u8 = i::K;\n    #[cfg(feature = \"x\")] fn m() { j::g(); }\n    #[cfg(feature = \"x\")] type Z = k::Z;\n    #[cfg(feature = \"x\")] n!(l::x);\n    fn p() { m::g(); }\n}";
+    let externs = [
+        "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
+    ];
+    let file = syn::parse_file(code).map_err(|e| e.to_string())?;
+    let firsts = |named: Named| -> BTreeSet<String> {
+        named
+            .external
+            .into_iter()
+            .filter_map(|path| path.into_iter().next())
+            .collect()
+    };
+    assert_eq!(
+        firsts(ungated_paths(&file, &[], &externs)),
+        set(&["b", "g", "h", "m"])
+    );
+    assert_eq!(firsts(paths(&file, &[], &externs)), set(&externs));
+    Ok(())
+}
+
+#[test]
 fn use_leaves_bind_self_and_renames_and_keep_globs_apart() -> Result<(), syn::Error> {
     let item: syn::ItemUse = syn::parse_str("use a::{self as b, c::{self}, d as e, f::*};")?;
     let leaves = use_leaves(&item.tree);
