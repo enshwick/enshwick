@@ -43,6 +43,7 @@ use crate::ecs::ComponentType;
 use crate::engine_ids as ids;
 use crate::game_events::{EventType, Field, Scalar};
 use crate::{Host, Load, Off};
+use enshwick_world::__internal::{world_check, world_status};
 
 /// How an entity arrives, for [`Effects::teleport`].
 ///
@@ -563,7 +564,7 @@ impl Effects {
     pub fn emit_raw(&self, ty: EventType, bytes: &[u8]) -> Result<(), WorldError> {
         let size = u32::try_from(bytes.len()).map_err(|_| WorldError::Refused)?;
         let status = (self.host.api().emit)(self.host.handle(), ty.hash(), bytes.as_ptr(), size);
-        enshwick_world::__internal::world_status(status)
+        world_status(status)
     }
 
     /// Asks the server to move `entity` to `position`, in metres, after the
@@ -608,7 +609,7 @@ impl Effects {
             position: crate::ecs::fixed(position),
             orientation: how.facing.unwrap_or([0.0, 0.0, 0.0, 1.0]),
         };
-        enshwick_world::__internal::world_check(
+        world_check(
             (self.host.api().teleport)(self.host.handle(), &raw const request),
             WorldError::Gone,
         )
@@ -694,7 +695,7 @@ impl Effects {
             u32::try_from(MAX).unwrap_or(0),
             &raw mut count,
         );
-        enshwick_world::__internal::world_check(status, WorldError::Missing)?;
+        world_check(status, WorldError::Missing)?;
         let count = usize::try_from(count).map_or(MAX, |count| count.min(MAX));
         infos[..count]
             .iter()
@@ -756,7 +757,7 @@ impl Effects {
             rarity: u32::from(how.rarity.to_raw()),
         };
         let mut entity = Entity::NONE;
-        enshwick_world::__internal::world_status((self.host.api().drop_items)(
+        world_status((self.host.api().drop_items)(
             self.host.handle(),
             &raw const request,
             &raw mut entity,
@@ -811,7 +812,7 @@ impl Effects {
             },
         };
         let mut entity = Entity::NONE;
-        enshwick_world::__internal::world_status((api.spawn)(
+        world_status((api.spawn)(
             self.host.handle(),
             &raw const request,
             &raw mut entity,

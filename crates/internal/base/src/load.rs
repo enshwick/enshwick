@@ -51,7 +51,8 @@ pub(crate) use __off_from as off_from;
 /// The mod's loader during `init` as the API's functions outside `Load`
 /// take it: pass the mod's `Load`.
 ///
-/// Sealed: only `Load` and the base handle it holds implement it.
+/// Sealed: only `Load`, the base handle it holds and a `&mut` to either
+/// implement it, so `&load` passes inside `init(load: &mut Load)`.
 ///
 /// # Examples
 ///
@@ -77,8 +78,21 @@ pub trait Loading: sealed::Sealed {
 /// Keeps [`Loading`] to `Load` and [`BaseLoad`].
 #[doc(hidden)]
 pub mod sealed {
-    /// Implemented by `Load` and [`BaseLoad`](super::BaseLoad) only.
+    /// Implemented by `Load`, [`BaseLoad`](super::BaseLoad) and a `&mut` to
+    /// either only.
     pub trait Sealed {}
+
+    impl<L: super::Loading + ?Sized> Sealed for &mut L {}
+}
+
+impl<L: Loading + ?Sized> Loading for &mut L {
+    fn base(&self) -> &BaseLoad {
+        (**self).base()
+    }
+
+    fn base_mut(&mut self) -> &mut BaseLoad {
+        (**self).base_mut()
+    }
 }
 
 /// What every domain shares of a mod's `Load`: its host, its join flag, its

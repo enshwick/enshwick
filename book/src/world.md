@@ -8,7 +8,7 @@ description: The World handle reads and writes entities and their components in 
 Unstable: everything in this chapter needs the `unstable` feature and may
 change in any release ([Stability](stability.md)).
 
-[`load.world()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load.rs)
+[`load.world()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/world/src/world.rs)
 returns a
 [`World`](https://github.com/enshwick/enshwick/blob/main/crates/internal/world/src/world.rs),
 the mod's way into the server's world.

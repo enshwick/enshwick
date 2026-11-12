@@ -14,6 +14,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::FACADE;
 use crate::affected::Package;
 
 /// The test-only feature of the API and of any crate that has one.
@@ -54,7 +55,7 @@ pub(crate) fn check(packages: &[Package]) -> Result<Vec<String>, String> {
         let name = package["name"].as_str().unwrap_or_default();
         let manifest = Path::new(package["manifest_path"].as_str().unwrap_or_default());
         let dir = manifest.parent().unwrap_or(Path::new("."));
-        if is_api_crate(name, dir, root) {
+        if is_api_crate(name, dir.strip_prefix(root).unwrap_or(dir)) {
             api_crates.push(name.to_owned());
         }
         problems.extend(test_feature(name, package));
@@ -146,8 +147,6 @@ fn test_feature(name: &str, package: &serde_json::Value) -> Vec<String> {
 /// The fake loader's crate, which only [`FACADE`] depends on, through its
 /// [`TEST`] feature alone, so the fake's features are always the facade's.
 const FAKE_CRATE: &str = "enshwick-fake";
-/// The API crate mods depend on.
-const FACADE: &str = "enshwick";
 /// The crate whose test-only feature [`FAKE_FEATURE`] only [`FAKE_CRATE`]
 /// turns on.
 const CORE: &str = "enshwick-core";
@@ -338,11 +337,11 @@ fn toolchain(text: &str) -> Result<String, String> {
 /// which pin each other exactly and so release at one version.
 const API_GROUP: &str = "api";
 
-/// Whether the package `name` in `dir` is a crate of the API, which
-/// release-plz versions as one group: the facade, or a crate in the
-/// workspace `root`'s `crates/internal`.
-fn is_api_crate(name: &str, dir: &Path, root: &Path) -> bool {
-    name == FACADE || dir.starts_with(root.join("crates").join("internal"))
+/// Whether the package `name` in `dir`, relative to the workspace root, is a
+/// crate of the API, which release-plz versions as one group and the stable
+/// API build takes: the facade, or a crate in `crates/internal`.
+pub(crate) fn is_api_crate(name: &str, dir: &Path) -> bool {
+    name == FACADE || dir.starts_with("crates/internal")
 }
 
 /// The problems of `release_plz`, the text of `release-plz.toml`: a crate of
@@ -856,23 +855,18 @@ mod tests {
 
     #[test]
     fn the_api_crates_are_the_facade_and_those_of_crates_internal() {
-        let root = Path::new("/w");
-        assert!(is_api_crate(
-            "enshwick",
-            Path::new("/w/crates/enshwick"),
-            root
-        ));
+        assert!(is_api_crate("enshwick", Path::new("crates/enshwick")));
         assert!(is_api_crate(
             "enshwick-world",
-            Path::new("/w/crates/internal/world"),
-            root
+            Path::new("crates/internal/world")
         ));
         assert!(!is_api_crate(
             "enshwick-luau",
-            Path::new("/w/crates/runtime/luau"),
-            root
+            Path::new("crates/runtime/luau")
         ));
-        assert!(!is_api_crate("xtask", Path::new("/w/tools/xtask"), root));
+        assert!(!is_api_crate("xtask", Path::new("tools/xtask")));
+        // A folder whose name only begins like the internal one.
+        assert!(!is_api_crate("other", Path::new("crates/internals/x")));
     }
 
     #[test]

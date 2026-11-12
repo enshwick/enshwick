@@ -59,7 +59,14 @@ jobs:
             esac
           }
           # Every member that may publish; cargo publishes the selection each
-          # after the ones it depends on.
+          # after the ones it depends on. Plain assignments, so -e stops the
+          # step when cargo or jq fails.
+          metadata=$(cargo metadata --locked --no-deps --format-version 1)
+          members=$(jq -r '.packages[] | select(.publish != []) | "\(.name) \(.version)"' <<< "$metadata")
+          if [ -z "$members" ]; then
+            echo "cargo metadata names no crate to publish" >&2
+            exit 1
+          fi
           selected=()
           while read -r package version; do
             if curl -fsS "https://index.crates.io/$(index_path "$package")" 2>/dev/null |
@@ -68,8 +75,7 @@ jobs:
               continue
             fi
             selected+=(-p "$package")
-          done < <(cargo metadata --locked --no-deps --format-version 1 |
-            jq -r '.packages[] | select(.publish != []) | "\(.name) \(.version)"')
+          done <<< "$members"
           if [ ${#selected[@]} -eq 0 ]; then
             echo "Every crate is on crates.io already"
             exit 0

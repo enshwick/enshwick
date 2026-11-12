@@ -7,6 +7,8 @@
 
 use std::path::Path;
 
+use crate::FACADE;
+
 /// The book's sources, relative to the workspace root.
 const SOURCE: &str = "book/src";
 /// The files that include chapters as doctests.
@@ -54,8 +56,6 @@ pub(crate) fn check(root: &Path) -> Vec<String> {
 
 /// The API crate's root, which declares its public modules.
 const API_ROOT: &str = "crates/enshwick/src/lib.rs";
-/// The API crate's name, as a chapter writes a path through it.
-const API_CRATE: &str = "enshwick";
 
 /// The public modules of `lib` that no chapter of `texts` names. The
 /// developer site builds a page per chapter and fails on a module none
@@ -66,7 +66,7 @@ fn unnamed_modules(lib: &str, texts: &[String]) -> Vec<String> {
         .filter(|name| !texts.iter().any(|text| names_module(text, name)))
         .map(|name| {
             format!(
-                "{API_ROOT}: no chapter names the public module `{name}`; name `{API_CRATE}::{name}` in the chapter that documents it"
+                "{API_ROOT}: no chapter names the public module `{name}`; name `{FACADE}::{name}` in the chapter that documents it"
             )
         })
         .collect()
@@ -120,7 +120,7 @@ fn names_module(text: &str, name: &str) -> bool {
     };
     text.contains(&format!("src/{name}.rs"))
         || text.contains(&format!("src/{name}/"))
-        || bounded(&format!("{API_CRATE}::{name}"), true)
+        || bounded(&format!("{FACADE}::{name}"), true)
         || bounded(&format!("{name}::"), false)
 }
 

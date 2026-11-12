@@ -9,9 +9,7 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
 
-/// The crate whose rendered pages are checked: the facade, which re-exports
-/// every internal crate's items as its own pages.
-const FACADE: &str = "enshwick";
+use crate::FACADE;
 
 /// Checks the facade's rendered docs under `root`'s `target/doc` and says
 /// each broken link.
@@ -60,8 +58,11 @@ pub(crate) fn check(doc: &Path, krate: &str) -> Result<Vec<String>, String> {
                 continue;
             };
             // Links into another crate's pages are rustdoc's own, and those
-            // pages exist only when the same run documented that crate.
-            if !target.starts_with(doc.join(krate)) {
+            // pages exist only when the same run documented that crate. A
+            // link straight into `doc` is a relative one gone a folder too
+            // far up, as from a module's first paragraph on the crate index,
+            // or one of rustdoc's shared pages, which exist.
+            if !target.starts_with(doc.join(krate)) && target.parent() != Some(doc) {
                 continue;
             }
             if !anchors.contains_key(&target) {
@@ -199,6 +200,15 @@ mod tests {
             r##"<h4 id="method.add_item">add_item</h4><a href="#method.add_item">self</a>"##,
         );
         write(&doc.join("src/enshwick/lib.rs.html"), r#"<a id="1">1</a>"#);
+        write(&doc.join("help.html"), "");
+        // A module's first paragraph on the crate index, one folder up.
+        write(
+            &doc.join("enshwick/index.html"),
+            concat!(
+                r##"<a href="../help.html">rustdoc's own</a>"##,
+                r##"<a href="../struct.Load.html#method.add_item">too far up</a>"##,
+            ),
+        );
         write(
             &doc.join("enshwick/content/index.html"),
             concat!(
@@ -217,6 +227,7 @@ mod tests {
         let problems = check(&doc, "enshwick").unwrap();
         std::fs::remove_dir_all(&doc).unwrap();
         let page = Path::new("enshwick").join("content").join("index.html");
+        let index = Path::new("enshwick").join("index.html");
         assert_eq!(
             problems,
             [
@@ -225,6 +236,10 @@ mod tests {
                     page.display()
                 ),
                 format!("{}: ../struct.World.html reaches no page", page.display()),
+                format!(
+                    "{}: ../struct.Load.html#method.add_item reaches no page",
+                    index.display()
+                ),
             ]
         );
     }

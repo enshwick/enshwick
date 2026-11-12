@@ -68,16 +68,20 @@ const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// API's unstable calls, its generated typed API and the compat task are
 /// linted and tested with the rest.
 const TEST_FEATURE: &str = "enshwick/test,enshwick/unstable,enshwick/typed,xtask/compat";
-/// The API crate, the one crate a mod names.
-const FACADE: &str = "enshwick";
-/// The crates of the API with an `unstable` feature, each a `--package`
-/// argument, with the API crate's `test` feature and without `unstable`:
+/// The API crate, the one crate a mod names: the facade over the internal
+/// crates, whose rendered docs hold every public item.
+pub(crate) const FACADE: &str = "enshwick";
+/// The crates of the API ([`crate_rules::is_api_crate`]) with an `unstable`
+/// feature, each a `--package` argument, with the API crate's `test` feature and without `unstable`:
 /// the workspace turns the feature on for the runtimes, so only a build of
 /// their own shows that the stable surface, its docs and its examples stand
 /// without the unstable one.
 fn stable_api(packages: &[Package]) -> Vec<String> {
     let mut args = Vec::new();
-    for package in packages.iter().filter(|p| p.unstable) {
+    for package in packages
+        .iter()
+        .filter(|p| p.unstable && crate_rules::is_api_crate(&p.name, std::path::Path::new(&p.dir)))
+    {
         args.extend(["--package".to_owned(), package.name.clone()]);
     }
     args.extend(["--features".to_owned(), format!("{FACADE}/test")]);
@@ -474,7 +478,7 @@ pub(crate) fn tool_path() -> std::ffi::OsString {
 /// One command line: cargo, or another tool of the checks.
 #[derive(Debug)]
 struct Step {
-    program: Option<&'static str>,
+    program: Option<String>,
     args: Vec<String>,
     env: Vec<(&'static str, String)>,
 }
@@ -491,8 +495,20 @@ impl Step {
     /// A step that runs `program` instead of cargo.
     fn tool(program: &'static str, words: &[&str]) -> Self {
         Self {
-            program: Some(program),
+            program: Some(program.to_owned()),
             ..Self::new(words)
+        }
+    }
+
+    /// A step that runs this xtask binary again, without a cargo start and
+    /// its rebuild check of the binary that runs.
+    fn xtask(words: &[&str]) -> Self {
+        match std::env::current_exe() {
+            Ok(exe) => Self {
+                program: Some(exe.display().to_string()),
+                ..Self::new(words)
+            },
+            Err(_) => Self::new(&["xtask"]).then(words),
         }
     }
 
@@ -514,7 +530,7 @@ impl Step {
     fn line(&self) -> String {
         format!(
             "{} {}",
-            self.program.unwrap_or("cargo"),
+            self.program.as_deref().unwrap_or("cargo"),
             self.args.join(" ")
         )
     }
@@ -523,7 +539,7 @@ impl Step {
     /// step running beside others) and shown only when it fails.
     fn run(&self, quiet: bool) -> bool {
         let started = Instant::now();
-        let mut command = Command::new(self.program.map_or_else(cargo, str::to_owned));
+        let mut command = Command::new(self.program.clone().unwrap_or_else(cargo));
         command
             .args(&self.args)
             .env("PATH", tool_path())
@@ -599,7 +615,7 @@ fn stable_api_steps(code: bool, stable: &[String]) -> Vec<Step> {
 /// The check of the links rustdoc does not check in the facade's pages it
 /// just wrote ([`doc_links`]).
 fn doc_links_step() -> Step {
-    Step::new(&["xtask", "doc-links"])
+    Step::xtask(&["doc-links"])
 }
 
 /// Whether the workspace's rustdoc runs: whenever code changed, since a
@@ -835,27 +851,28 @@ mod tests {
             code: BTreeSet::new(),
             docs: [name.to_owned()].into(),
         };
-        let stable = |scope: &Scope| {
+        let args = stable();
+        let plans_stable = |scope: &Scope| {
             host_steps(
                 scope,
-                (&[], &stable()),
+                (&[], &args),
                 (false, true),
                 Some(""),
                 false,
                 &[Part::Docs],
             )
             .iter()
-            .any(|step| step.args.ends_with(&stable()))
+            .any(|step| step.args.ends_with(&args))
         };
-        assert!(stable(&docs_of("enshwick")));
-        assert!(!stable(&docs_of("enshwick-luau")));
+        assert!(plans_stable(&docs_of("enshwick")));
+        assert!(!plans_stable(&docs_of("enshwick-luau")));
     }
 
-    fn runs_stable_rustdoc(steps: &[Step]) -> bool {
+    fn runs_stable_rustdoc(steps: &[Step], stable: &[String]) -> bool {
         steps.iter().any(|step| {
             step.args
                 .starts_with(&["doc".to_owned(), "--no-deps".to_owned()])
-                && step.args.ends_with(&stable())
+                && step.args.ends_with(stable)
                 && step
                     .env
                     .iter()
@@ -911,12 +928,14 @@ mod tests {
 
     #[test]
     fn a_change_to_the_api_code_builds_its_stable_rustdoc() {
-        assert!(runs_stable_rustdoc(&stable_api_steps(true, &stable())));
+        let args = stable();
+        assert!(runs_stable_rustdoc(&stable_api_steps(true, &args), &args));
     }
 
     #[test]
     fn a_change_to_the_book_alone_builds_the_stable_rustdoc() {
-        assert!(runs_stable_rustdoc(&stable_api_steps(false, &stable())));
+        let args = stable();
+        assert!(runs_stable_rustdoc(&stable_api_steps(false, &args), &args));
     }
 
     #[test]

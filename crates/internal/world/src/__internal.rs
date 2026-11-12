@@ -1,6 +1,8 @@
 //! What core calls inside this crate and a mod must not: the parts of
 //! `Load`'s methods that join this domain with one above it, whose bodies
-//! stay in core.
+//! stay in core, and the crate-private reads the domains above build on,
+//! such as a world call's status as its outcome and a player as the loader
+//! hands them over.
 
 #[cfg(feature = "unstable")]
 use crate::abi::RecipeId;

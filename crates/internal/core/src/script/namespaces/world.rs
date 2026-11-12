@@ -142,7 +142,8 @@ impl Bound for FogOfWar {
     const NAME: &'static str = "map";
     const DOC: &'static str =
         "The world's map on the server: its markers, its frame, waypoints and snapshots.";
-    const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_FOG];
+    // One list with the object class the world crate gives the type.
+    const PARTS: &'static [&'static [Function<Self>]] = <Self as crate::script::Object>::PARTS;
 
     fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
         load.fog_of_war()
@@ -184,7 +185,8 @@ impl Bound for Terrain {
     const NAME: &'static str = "terrain";
     const DOC: &'static str =
         "The world's terrain: add, dig and flatten ground, and its materials.";
-    const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_EDITS];
+    // One list with the object class the world crate gives the type.
+    const PARTS: &'static [&'static [Function<Self>]] = <Self as crate::script::Object>::PARTS;
 
     fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
         Ok(load.terrain())
