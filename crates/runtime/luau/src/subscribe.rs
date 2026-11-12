@@ -140,9 +140,9 @@ impl Subscription {
     }
 }
 
-/// Why the runtime cannot make the subscription to `what`: it has no
-/// `lacks`, such as a description or a script entry.
-pub(crate) fn unsubscribable(what: impl Display, lacks: &str) -> Off {
+/// Why the runtime cannot make a subscription: `what` has no `lacks`, such
+/// as a description, a script entry or a game event type.
+pub(crate) fn unsubscribable(what: impl Display, lacks: impl Display) -> Off {
     Off::new(format!("{what} has no {lacks}"))
 }
 
@@ -199,10 +199,10 @@ impl RawReader {
             .map(|(name, _)| *name)
             .find(|name| *name == spec.type_name)
             .ok_or_else(|| {
-                Off::new(format!(
-                    "enshwick.on_game_type: no game event type {} on this build",
-                    spec.type_name
-                ))
+                unsubscribable(
+                    "enshwick.on_game_type: this game build",
+                    format_args!("game event type {}", spec.type_name),
+                )
             })?;
         let ty = load.game_event_type(name)?;
         let mut fields = Vec::new();
