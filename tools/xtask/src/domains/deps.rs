@@ -183,7 +183,7 @@ mod tests {
                 "ui".into(),
             ],
             joins: Vec::new(),
-            modules: Default::default(),
+            modules: std::collections::BTreeMap::new(),
             upward: Vec::new(),
             below: Vec::new(),
             crates: [
@@ -193,7 +193,7 @@ mod tests {
                 ("ui".to_owned(), "ui".to_owned()),
             ]
             .into(),
-            fake: Default::default(),
+            fake: super::super::fake::Fake::default(),
         };
         let problems = problems(&root, &map).unwrap();
         assert_eq!(problems.len(), 3, "{problems:?}");

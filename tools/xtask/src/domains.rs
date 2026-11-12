@@ -518,6 +518,11 @@ impl<'a> Walk<'a> {
         }
     }
 
+    /// Whether the walk leaves out what `attrs` put under a `cfg(feature)`.
+    fn gated_out(&self, attrs: &[Attribute]) -> bool {
+        self.ungated && feature_only(attrs)
+    }
+
     /// Whether `segments` start at one of the external crates.
     fn external(&self, segments: &[String]) -> bool {
         segments
@@ -595,7 +600,7 @@ impl<'a> Walk<'a> {
 
 impl<'ast> Visit<'ast> for Walk<'_> {
     fn visit_item(&mut self, item: &'ast Item) {
-        if !test_only(item) && !(self.ungated && feature_only(item_attrs(item))) {
+        if !test_only(item) && !self.gated_out(item_attrs(item)) {
             visit::visit_item(self, item);
         }
     }
@@ -608,7 +613,7 @@ impl<'ast> Visit<'ast> for Walk<'_> {
             ImplItem::Macro(item) => &item.attrs,
             _ => &[],
         };
-        if !(self.ungated && feature_only(attrs)) {
+        if !self.gated_out(attrs) {
             visit::visit_impl_item(self, item);
         }
     }
@@ -621,7 +626,7 @@ impl<'ast> Visit<'ast> for Walk<'_> {
             TraitItem::Macro(item) => &item.attrs,
             _ => &[],
         };
-        if !(self.ungated && feature_only(attrs)) {
+        if !self.gated_out(attrs) {
             visit::visit_trait_item(self, item);
         }
     }
