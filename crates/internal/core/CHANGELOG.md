@@ -9,6 +9,15 @@ see is in the changelog of `enshwick`.
 
 ### Changed
 
+- The knowledge domain left for `enshwick-knowledge`: `knowledge`,
+  `progress`, `quests` and `rewards`. `Load` forwards their methods there,
+  their script-only methods from `load/<module>/script.rs`, and `packs`
+  replaces a pack's rewards through the domain's hidden `__internal`
+  (#1053).
+- `Bound` moved down to `enshwick-base`, and the base, content, world and
+  inventory domains keep their `Bound` implementations in their own crates;
+  `script/namespaces/` keeps only the namespace lists and core's own
+  implementations (#1053).
 - The inventory domain left for `enshwick-inventory`: `inventory`,
   `items`, `item_data`, `entity_data`, `affixes`, `stats`, `damage`,
   `effects`, `survivors` and `loot`. `Load` forwards their methods there;

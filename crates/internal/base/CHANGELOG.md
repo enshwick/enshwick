@@ -9,6 +9,8 @@ see is in the changelog of `enshwick`.
 
 ### Added
 
+- `script::Bound`, whose `resolve` takes `&mut impl Loading`, and the
+  base's own `Bound` implementations beside their types (#1053).
 - The crate: what every domain of the API shares, cut out of
   `enshwick-core` (#1046).
 - `BaseLoad`, the base handle `Load` holds, and `Loading`, which the

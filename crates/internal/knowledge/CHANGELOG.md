@@ -9,6 +9,7 @@ see is in the changelog of `enshwick`.
 
 ### Added
 
-- The crate: the knowledge domain, cut out of `enshwick-core`.
+- The crate: the knowledge domain, cut out of `enshwick-core`, with its
+  `Bound` implementations (#1053).
 - `__load`, the method traits of each module that core's `Load` forwards
-  to, and `__internal`, what core calls here and a mod must not.
+  to, and `__internal`, what core calls here and a mod must not (#1053).
