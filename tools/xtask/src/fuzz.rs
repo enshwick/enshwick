@@ -28,7 +28,7 @@ fn toolchain() -> String {
 /// Each target and the modules that read its input, as paths without `.rs`:
 /// a change to the module file or below its folder reaches the target.
 pub(crate) const TARGETS: &[(&str, &[&str])] = &[
-    ("action_sheet", &["crates/internal/core/src/actions"]),
+    ("action_sheet", &["crates/internal/actions/src/actions"]),
     (
         "channel_messages",
         &[
@@ -241,6 +241,19 @@ mod tests {
                 root.join(format!("fuzz/corpus/{target}")).is_dir(),
                 "{target}"
             );
+        }
+    }
+
+    #[test]
+    fn every_module_a_target_names_exists() {
+        let root = crate::workspace_root();
+        for (target, modules) in TARGETS {
+            for module in *modules {
+                assert!(
+                    root.join(format!("{module}.rs")).is_file() || root.join(module).is_dir(),
+                    "{target} names {module}, which is neither a file nor a folder"
+                );
+            }
         }
     }
 }
