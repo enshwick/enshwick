@@ -97,6 +97,12 @@ impl Fuse {
         }
     }
 
+    /// The feature the log names.
+    #[must_use]
+    pub const fn feature(&self) -> &'static str {
+        self.feature
+    }
+
     /// Whether a panic or a failed live check turned the feature off.
     #[inline]
     pub fn is_off(&self) -> bool {

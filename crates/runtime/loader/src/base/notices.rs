@@ -19,8 +19,8 @@ use enshwick_core::abi::Status;
 use crate::engine::loader::Loader;
 use crate::engine::pinned;
 use crate::engine::pinned::Symbol;
-pub(crate) use crate::ui::notice_queue::MAX_TEXT;
-use crate::ui::notice_queue::{MAX_WAITING, Pushed, SLOTS, Waiting, cut, push, step_batch};
+pub(crate) use crate::base::notice_queue::MAX_TEXT;
+use crate::base::notice_queue::{MAX_WAITING, Pushed, SLOTS, Waiting, cut, push, step_batch};
 use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
@@ -79,14 +79,14 @@ impl SlotText {
         }
         self.bytes[text.len()].store(0, Ordering::Relaxed);
         self.hash
-            .store(crate::content::served::text_hash(text), Ordering::Relaxed);
+            .store(crate::base::handed::hash(text), Ordering::Relaxed);
         self.len.store(text.len() + 1, Ordering::Release);
     }
 
     /// The slot's text as a view the game may keep; `None` while unset.
-    fn view(&self) -> Option<crate::content::served::Handed> {
+    fn view(&self) -> Option<crate::base::handed::Handed> {
         let len = self.len.load(Ordering::Acquire).checked_sub(1)?;
-        Some(crate::content::served::Handed::new(
+        Some(crate::base::handed::Handed::new(
             self.bytes.as_ptr().cast::<u8>(),
             len,
             self.hash.load(Ordering::Relaxed),
@@ -161,7 +161,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
 }
 
 /// The text of a notice text tag, by its id, while one is set.
-pub(crate) fn text(id: u32) -> Option<crate::content::served::Handed> {
+pub(crate) fn text(id: u32) -> Option<crate::base::handed::Handed> {
     let slot = TAGS
         .iter()
         .position(|tag| enshwick_gamedata::reflect::fnv1a32(tag) == id)?;

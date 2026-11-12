@@ -4,6 +4,7 @@ use std::sync::{Mutex, OnceLock};
 use enshwick_core::abi::{HookFlags, Side, Status};
 use enshwick_core::raw::{read_at, write_at};
 
+use crate::base::handed::{Handed, hash};
 use crate::engine::chains::Next;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
@@ -49,22 +50,6 @@ pub(super) type TextFn =
 /// address, length and [`hash`].
 pub(super) type FormatFn = unsafe extern "system" fn(out: *mut [u64; 3], id: u32) -> *mut [u64; 3];
 
-/// The game's hash of a text view: FNV-1a over 64 bits, each byte
-/// sign-extended, as the text format of client 26430625 computes it.
-pub(crate) const fn hash(bytes: &[u8]) -> u64 {
-    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
-    let mut i = 0;
-    while i < bytes.len() {
-        #[expect(clippy::cast_possible_wrap, reason = "the game sign-extends each byte")]
-        let byte = bytes[i] as i8;
-        #[expect(clippy::cast_sign_loss, reason = "the game sign-extends each byte")]
-        let wide = byte as i64 as u64;
-        hash = (hash ^ wide).wrapping_mul(0x100_0000_01b3);
-        i += 1;
-    }
-    hash
-}
-
 /// The language the game shows its texts in, as far as the loader saw.
 pub(crate) fn language() -> enshwick_core::i18n::Language {
     enshwick_core::i18n::Language(LANGUAGE.load(Ordering::Relaxed))
@@ -79,44 +64,10 @@ pub(crate) fn add_text(id: u32, language: u32, text: &str) -> Status {
     Status::OK
 }
 
-/// UTF-8 text the loader hands the game as a text lookup's answer: its
-/// address and length.
-///
-/// The bytes stay readable at that address for as long as the game may keep
-/// the view; their maker says how. A view may outlive its text: a notice
-/// slot is written over in place while the game may still hold an older
-/// view of it, which then reads the slot's newer text (or a mix of the two
-/// cut short at the older length) but never freed memory.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Handed {
-    at: *const u8,
-    len: usize,
-    /// The bytes' [`hash`].
-    hash: u64,
-}
-
-impl Handed {
-    /// The view of `len` bytes at `at`, whose [`hash`] is `hash`.
-    pub(crate) const fn new(at: *const u8, len: usize, hash: u64) -> Self {
-        Self { at, len, hash }
-    }
-
-    /// Where the text starts.
-    #[cfg(test)]
-    pub(crate) const fn at(self) -> *const u8 {
-        self.at
-    }
-
-    /// The view of a text that lives for the process.
-    pub(crate) const fn of(text: &'static str) -> Self {
-        Self::new(text.as_ptr(), text.len(), hash(text.as_bytes()))
-    }
-}
-
 /// The text of `id` for `language`: its own, else the next language of its
 /// lookup order's, else English.
 pub(super) fn text_for(id: u32, language: u32) -> Option<Handed> {
-    if let Some(text) = crate::ui::notices::text(id) {
+    if let Some(text) = crate::base::notices::text(id) {
         return Some(text);
     }
     if let Some(text) = crate::ui::interface::text(id) {
@@ -139,7 +90,7 @@ pub(super) fn text_for(id: u32, language: u32) -> Option<Handed> {
 ///   which nothing else touches during the call.
 pub(super) unsafe fn answer(out: *mut [u64; 3], text: Handed) -> *mut [u64; 3] {
     if !out.is_null() {
-        let record = [0, text.at.expose_provenance() as u64, text.len as u64];
+        let record = [0, text.at().expose_provenance() as u64, text.bytes() as u64];
         // SAFETY: `out` is non-null by the check before it, and the caller
         // guarantees the lookup's writable out record: error 0, the UTF-8
         // text and its length.
@@ -215,9 +166,9 @@ pub(super) unsafe extern "system" fn format(out: *mut [u64; 3], id: u32) -> *mut
             .flatten()
     {
         let view = [
-            text.at.expose_provenance() as u64,
-            text.len as u64,
-            text.hash,
+            text.at().expose_provenance() as u64,
+            text.bytes() as u64,
+            text.hash(),
         ];
         // SAFETY: `out` is non-null by the check before it and is the
         // format's own out record of three `u64`: the text's address,
@@ -239,7 +190,7 @@ fn ours(
     texts
         .keys()
         .copied()
-        .chain(crate::ui::notices::tag_ids())
+        .chain(crate::base::notices::tag_ids())
         .chain(crate::ui::interface::tag_ids())
         .collect()
 }
@@ -339,10 +290,10 @@ mod tests {
         texts.insert(7, vec![(ENGLISH, "Luau check")]);
         let answered = ours(&texts);
         assert!(
-            crate::ui::notices::tag_ids()
+            crate::base::notices::tag_ids()
                 .chain(crate::ui::interface::tag_ids())
                 .all(|id| answered.contains(&id))
-                && answered.len() > 1 + crate::ui::notices::tag_ids().count(),
+                && answered.len() > 1 + crate::base::notices::tag_ids().count(),
             "every notice and dialog tag is answered"
         );
         assert!(!answered.contains(&0) && !answered.contains(&1));

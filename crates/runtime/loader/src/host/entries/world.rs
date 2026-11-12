@@ -275,7 +275,7 @@ pub(crate) extern "system" fn notify(
         let Some(text) = (unsafe { text.as_str() }) else {
             return Status::BAD_ARGS;
         };
-        match caller(me).and_then(|loader| crate::ui::notices::send(loader, key.get(), text)) {
+        match caller(me).and_then(|loader| crate::base::notices::send(loader, key.get(), text)) {
             Ok(()) => Status::OK,
             Err(status) => status,
         }

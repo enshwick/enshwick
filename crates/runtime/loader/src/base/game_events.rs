@@ -249,7 +249,7 @@ unsafe extern "system" fn merge(entity_world: *mut u8) {
         // world, which the game passed to `ecs.event_merge` on its game thread
         // before moving its streams.
         let _raised = NOTICES_FUSE.run("the event link", || unsafe {
-            crate::ui::notices::raise(loader, entity_world.expose_provenance());
+            crate::base::notices::raise(loader, entity_world.expose_provenance());
         });
     }
     // SAFETY: `entity_world` is the game's argument to `ecs.event_merge`,

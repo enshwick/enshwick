@@ -63,6 +63,8 @@ pub(crate) mod pacing;
 #[cfg(windows)]
 pub(crate) mod pages;
 #[cfg(windows)]
+pub(crate) mod parts;
+#[cfg(windows)]
 pub(crate) mod patch;
 #[cfg_attr(
     not(windows),
@@ -112,3 +114,36 @@ pub mod ticks;
 pub(crate) mod unwind_info;
 #[cfg(windows)]
 pub(crate) mod world;
+
+#[cfg(windows)]
+use parts::{Part, part};
+
+/// The engine's parts, in the order the joins call each of their phases.
+#[cfg(windows)]
+pub(crate) static PARTS: &[&Part] = &[
+    &Part {
+        link: Some(crash::link),
+        ..part!("crash", crash)
+    },
+    &Part {
+        table_ids: world::TABLE_IDS,
+        link: Some(world::link),
+        ..part!("world", world)
+    },
+    &Part {
+        table_ids: code::TABLE_IDS,
+        ..part!("code", code)
+    },
+    &Part {
+        table_ids: ecs::TABLE_IDS,
+        ..part!("ecs", ecs)
+    },
+    &Part {
+        table_ids: pacing::TABLE_IDS,
+        ..part!("pacing", pacing)
+    },
+    &Part {
+        table_ids: static_halves::TABLE_IDS,
+        ..part!("static_halves", static_halves)
+    },
+];

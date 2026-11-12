@@ -30,7 +30,7 @@ pub static TABLE_IDS: &[(&str, &[&str])] = &[
     ("knowledge", crate::knowledge::store::TABLE_IDS),
     ("label", crate::world::label::TABLE_IDS),
     ("local_held", crate::actions::local_held::TABLE_IDS),
-    ("notices", crate::ui::notices::TABLE_IDS),
+    ("notices", crate::base::notices::TABLE_IDS),
     ("pacing", crate::engine::pacing::TABLE_IDS),
     ("progress", crate::knowledge::progress::TABLE_IDS),
     ("rate_links", crate::content::rate_links::TABLE_IDS),

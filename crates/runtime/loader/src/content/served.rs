@@ -822,4 +822,4 @@ mod patches;
 mod tests;
 mod texts;
 
-pub(crate) use texts::{Handed, add_text, hash as text_hash, language};
+pub(crate) use texts::{add_text, language};
