@@ -11,8 +11,38 @@ static SECOND_NEXT: Next<Lit> = unsafe { Next::new() };
 // SAFETY: as `FIRST_NEXT`'s, for the third link.
 static THIRD_NEXT: Next<Lit> = unsafe { Next::new() };
 
+// SAFETY: as `FIRST_NEXT`'s, for the link of the rewire test, which wires
+// the chain by hand and never calls the detour.
+static WICK_NEXT: Next<Lit> = unsafe { Next::new() };
+
 unsafe extern "system" fn lit(glow: u32) -> u32 {
     glow
+}
+
+#[test]
+fn a_feature_that_turns_off_after_arming_is_wired_past_by_the_loader() {
+    let loader = crate::start::tests::bare_loader();
+    let feature = "test wicks";
+    let target = Target::Found("wick.light", Some(0x4000));
+    assert!(loader.link_feature(feature, target, &WICK_NEXT, lit, HookFlags::NONE));
+    let head: &'static AtomicUsize = Box::leak(Box::new(AtomicUsize::new(0)));
+    {
+        let mut chains = loader.chains.relock();
+        chains.seal();
+        for chain in chains.iter_mut() {
+            chain.head = Some(head);
+            chain.original = 0xff;
+            chain.wire(|_| false);
+        }
+    }
+    assert_eq!(head.load(Ordering::Acquire), Next::<Lit>::address_of(lit));
+    Fuse::named(feature).blow("a test");
+    loader.rewire();
+    assert_eq!(
+        head.load(Ordering::Acquire),
+        0xff,
+        "the game runs it vanilla"
+    );
 }
 
 #[test]

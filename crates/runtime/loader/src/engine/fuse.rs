@@ -341,6 +341,20 @@ mod tests {
     }
 
     #[test]
+    fn a_feature_and_its_named_twin_report_off_once_between_them() {
+        static TWIN: Fuse = Fuse::new("twin lamps");
+        crate::engine::log::capture();
+        Fuse::named("twin lamps").turn_off(&Off::fault("twin lamps", "the first site"));
+        TWIN.blow("a later site");
+        assert!(TWIN.is_off());
+        let reported = crate::engine::log::captured()
+            .iter()
+            .filter(|(_, _, line)| line.starts_with("twin lamps off"))
+            .count();
+        assert_eq!(reported, 1);
+    }
+
+    #[test]
     fn a_blown_fuse_reports_its_feature_off_with_the_panic_message() {
         let fuse = Fuse::new("lantern glow");
         let _caught = fuse.run("the glow pass", || -> u32 { panic!("no oil\nleft: 0") });

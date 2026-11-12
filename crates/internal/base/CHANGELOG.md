@@ -9,6 +9,9 @@ see is in the changelog of `enshwick`.
 
 ### Added
 
+- `host::caught` and `Panicked`, for a mod's callback whose panic turns
+  off only the part that panicked; `host::guard`, points, served calls and
+  the hook macro catch through it (#1062).
 - `script::Bound`, whose `resolve` takes `&mut impl Loading`, and the
   base's own `Bound` implementations beside their types (#1053).
 - The crate: what every domain of the API shares, cut out of
