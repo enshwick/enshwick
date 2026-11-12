@@ -23,7 +23,7 @@ use crate::abi::{
 };
 
 /// One character's experience before the server applies it, from
-/// [`Load::on_experience`]: a filter may change `gained`.
+/// [`Load::on_experience`](../struct.Load.html#method.on_experience): a filter may change `gained`.
 ///
 /// # Examples
 ///
@@ -61,7 +61,7 @@ const _: () = {
     assert!(offset_of!(Experience, gained) == offset_of!(ExperienceRow, gained));
 };
 
-/// A skill the API names, for [`Load::on_skill`]; the loader knows each
+/// A skill the API names, for [`Load::on_skill`](../struct.Load.html#method.on_skill); the loader knows each
 /// one's node per game build.
 ///
 /// # Examples
@@ -118,7 +118,7 @@ pub struct SkillCheck {
 ///
 /// # Examples
 ///
-/// See [`Load::on_comfort`].
+/// See [`Load::on_comfort`](../struct.Load.html#method.on_comfort).
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 pub struct Comfort {
     /// The comfort category.
@@ -133,7 +133,7 @@ pub struct Comfort {
 ///
 /// # Examples
 ///
-/// See [`Load::on_experience`].
+/// See [`Load::on_experience`](../struct.Load.html#method.on_experience).
 #[derive(Debug)]
 pub struct Levels {
     cap: u32,
@@ -146,7 +146,7 @@ impl Levels {
     ///
     /// # Examples
     ///
-    /// See [`Load::on_experience`].
+    /// See [`Load::on_experience`](../struct.Load.html#method.on_experience).
     #[must_use]
     pub const fn cap(&self) -> u32 {
         self.cap
@@ -156,7 +156,7 @@ impl Levels {
     ///
     /// # Examples
     ///
-    /// See [`Load::on_experience`].
+    /// See [`Load::on_experience`](../struct.Load.html#method.on_experience).
     #[must_use]
     pub fn need(&self, level: u32) -> u32 {
         match self.need_for {

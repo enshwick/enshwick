@@ -192,7 +192,7 @@ impl Grant {
     }
 }
 
-/// The knowledge of the server's world; get it from [`Load::knowledge`].
+/// The knowledge of the server's world; get it from [`Load::knowledge`](../struct.Load.html#method.knowledge).
 ///
 /// # Examples
 ///

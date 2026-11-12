@@ -1,7 +1,7 @@
 //! The journal's quests and lore pages, mods' included, and where each
 //! player and the world stand in each quest.
 //!
-//! [`Load::quests`] gives the [`Quests`] of the running game. On first use
+//! [`Load::quests`](../struct.Load.html#method.quests) gives the [`Quests`] of the running game. On first use
 //! they read the journal as the game's first read builds it, every mod's
 //! quests and changes in, and keep it for the process, as the game keeps
 //! the journal it first built; they answer a quest's state from the
@@ -369,7 +369,7 @@ impl Read {
 }
 
 /// The quests and lore pages of the running game and where each player
-/// stands in them; get it from [`Load::quests`].
+/// stands in them; get it from [`Load::quests`](../struct.Load.html#method.quests).
 ///
 /// # Examples
 ///

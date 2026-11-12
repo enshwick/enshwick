@@ -4,7 +4,7 @@
 //! A reward names an [`Action`], what it [gives](Give), a [`Limit`] and a
 //! chance. The server gives it in the server's world, on the game thread,
 //! and keeps who got a limited reward in the mod's data beside the world's
-//! save, so a limit holds across restarts. [`Load::on_reward`] refuses a
+//! save, so a limit holds across restarts. [`Load::on_reward`](../struct.Load.html#method.on_reward) refuses a
 //! grant; [`Rewards::grant`] gives a declared reward from code.
 //!
 //! # Examples
@@ -211,11 +211,11 @@ impl Reward {
     }
 }
 
-/// A reward about to be given, from [`Load::on_reward`].
+/// A reward about to be given, from [`Load::on_reward`](../struct.Load.html#method.on_reward).
 ///
 /// # Examples
 ///
-/// See [`Load::on_reward`].
+/// See [`Load::on_reward`](../struct.Load.html#method.on_reward).
 #[derive(Clone, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct RewardGrant {
@@ -601,7 +601,7 @@ fn grant_later(shared: &'static Shared, name: &str, player: Entity) {
 
 /// Gives the mod's declared rewards from code, on the server.
 ///
-/// Get it from [`Load::rewards`]. Copy it anywhere, and call it on the game
+/// Get it from [`Load::rewards`](../struct.Load.html#method.rewards). Copy it anywhere, and call it on the game
 /// thread: in an event handler or a [`Scheduler`](crate::schedule::Scheduler)
 /// task. An item handler runs on the thread of the game's system, so it
 /// schedules the grant.
