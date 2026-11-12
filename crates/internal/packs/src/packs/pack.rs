@@ -94,7 +94,7 @@ pub(super) struct PackWorkshop {
     pub(super) debug_name: String,
 }
 
-/// A pack, read and checked: what [`Load::add_pack`](crate::Load::add_pack) adds.
+/// A pack, read and checked: what [`Load::add_pack`](../struct.Load.html#method.add_pack) adds.
 ///
 /// # Examples
 ///

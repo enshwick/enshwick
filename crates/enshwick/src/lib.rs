@@ -214,12 +214,12 @@ pub use enshwick_base::points;
 #[doc(inline)]
 pub use enshwick_content::rates;
 #[doc(inline)]
-pub use enshwick_core::packs;
-#[doc(inline)]
 pub use enshwick_knowledge::progress;
 #[cfg(feature = "typed")]
 #[doc(inline)]
 pub use enshwick_knowledge::quests;
+#[doc(inline)]
+pub use enshwick_packs::packs;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_world::map;

@@ -1,41 +1,41 @@
 error[E0425]: cannot find function `as_loader` in module `enshwick::__private`
-  --> tests/ui/internals_out_of_reach.rs:83:26
-   |
-83 |     enshwick::__private::as_loader(|| ());
-   |                          ^^^^^^^^^ not found in `enshwick::__private`
+   --> tests/ui/internals_out_of_reach.rs:103:26
+    |
+103 |     enshwick::__private::as_loader(|| ());
+    |                          ^^^^^^^^^ not found in `enshwick::__private`
 
 error[E0425]: cannot find function `refresh_levels` in module `enshwick::__private`
-  --> tests/ui/internals_out_of_reach.rs:84:26
-   |
-84 |       enshwick::__private::refresh_levels();
-   |                            ^^^^^^^^^^^^^^
-   |
-  ::: $WORKSPACE/crates/internal/base/src/__private.rs
-   |
-   | / pub unsafe extern "system" fn refresh_level(
-   | |     _event: crate::abi::Event,
-   | |     _data: *const core::ffi::c_void,
-   | |     _user: *mut core::ffi::c_void,
-   | | ) {
-   | |_- similarly named function `refresh_level` defined here
-   |
+   --> tests/ui/internals_out_of_reach.rs:104:26
+    |
+104 |       enshwick::__private::refresh_levels();
+    |                            ^^^^^^^^^^^^^^
+    |
+   ::: $WORKSPACE/crates/internal/base/src/__private.rs
+    |
+    | / pub unsafe extern "system" fn refresh_level(
+    | |     _event: crate::abi::Event,
+    | |     _data: *const core::ffi::c_void,
+    | |     _user: *mut core::ffi::c_void,
+    | | ) {
+    | |_- similarly named function `refresh_level` defined here
+    |
 help: a function with a similar name exists
-   |
-84 -     enshwick::__private::refresh_levels();
-84 +     enshwick::__private::refresh_level();
-   |
+    |
+104 -     enshwick::__private::refresh_levels();
+104 +     enshwick::__private::refresh_level();
+    |
 
 error[E0425]: cannot find value `install_host` in module `enshwick::__private`
-  --> tests/ui/internals_out_of_reach.rs:85:34
-   |
-85 |     let _ = enshwick::__private::install_host;
-   |                                  ^^^^^^^^^^^^ not found in `enshwick::__private`
+   --> tests/ui/internals_out_of_reach.rs:105:34
+    |
+105 |     let _ = enshwick::__private::install_host;
+    |                                  ^^^^^^^^^^^^ not found in `enshwick::__private`
 
 error[E0425]: cannot find value `as_pack` in module `enshwick::__private`
-  --> tests/ui/internals_out_of_reach.rs:86:34
-   |
-86 |     let _ = enshwick::__private::as_pack::<()>;
-   |                                  ^^^^^^^ not found in `enshwick::__private`
+   --> tests/ui/internals_out_of_reach.rs:106:34
+    |
+106 |     let _ = enshwick::__private::as_pack::<()>;
+    |                                  ^^^^^^^ not found in `enshwick::__private`
 
 error[E0603]: module `script` is private
   --> tests/ui/internals_out_of_reach.rs:47:30
@@ -92,6 +92,46 @@ note: the module `script` is defined here
    |
    | pub(crate) mod script;
    | ^^^^^^^^^^^^^^^^^^^^^
+
+error[E0603]: module `script` is private
+  --> tests/ui/internals_out_of_reach.rs:78:26
+   |
+78 |     use enshwick::sound::script::LoadMethods as _;
+   |                          ^^^^^^  ----------- trait `LoadMethods` is not publicly re-exported
+   |                          |
+   |                          private module
+   |
+note: the module `script` is defined here
+  --> $WORKSPACE/crates/internal/ui/src/sound.rs
+   |
+   | pub(crate) mod script;
+   | ^^^^^^^^^^^^^^^^^^^^^
+
+error[E0603]: module `script` is private
+  --> tests/ui/internals_out_of_reach.rs:79:23
+   |
+79 |     use enshwick::ui::script::LoadMethods as _;
+   |                       ^^^^^^  ----------- trait `LoadMethods` is not publicly re-exported
+   |                       |
+   |                       private module
+   |
+note: the module `script` is defined here
+  --> $WORKSPACE/crates/internal/ui/src/ui.rs
+   |
+   | pub(crate) mod script;
+   | ^^^^^^^^^^^^^^^^^^^^^
+
+error[E0603]: trait `LoadHelpers` is private
+  --> tests/ui/internals_out_of_reach.rs:90:26
+   |
+90 |     use enshwick::packs::LoadHelpers as _;
+   |                          ^^^^^^^^^^^ private trait
+   |
+note: the trait `LoadHelpers` is defined here
+  --> $WORKSPACE/crates/internal/packs/src/packs.rs
+   |
+   | pub(crate) trait LoadHelpers {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 error[E0603]: function `item_data` is private
   --> tests/ui/internals_out_of_reach.rs:26:34
@@ -185,6 +225,34 @@ note: the module `script` is defined here
    | pub(crate) mod script;
    | ^^^^^^^^^^^^^^^^^^^^^
 
+error[E0603]: module `script` is private
+  --> tests/ui/internals_out_of_reach.rs:80:33
+   |
+80 |     let _: Option<enshwick::ui::script::ScriptFrame> = None;
+   |                                 ^^^^^^  ----------- struct `ScriptFrame` is not publicly re-exported
+   |                                 |
+   |                                 private module
+   |
+note: the module `script` is defined here
+  --> $WORKSPACE/crates/internal/ui/src/ui.rs
+   |
+   | pub(crate) mod script;
+   | ^^^^^^^^^^^^^^^^^^^^^
+
+error[E0603]: module `script` is private
+  --> tests/ui/internals_out_of_reach.rs:81:33
+   |
+81 |     let _: Option<enshwick::ui::script::ScriptHud> = None;
+   |                                 ^^^^^^  --------- struct `ScriptHud` is not publicly re-exported
+   |                                 |
+   |                                 private module
+   |
+note: the module `script` is defined here
+  --> $WORKSPACE/crates/internal/ui/src/ui.rs
+   |
+   | pub(crate) mod script;
+   | ^^^^^^^^^^^^^^^^^^^^^
+
 warning: unused import: `enshwick::damage::LoadMethods as _`
   --> tests/ui/internals_out_of_reach.rs:33:9
    |
@@ -230,48 +298,48 @@ warning: unused import: `enshwick::vetoes::LoadMethods as _`
    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 error[E0046]: not all trait items implemented, missing: `base`, `base_mut`
-  --> tests/ui/internals_out_of_reach.rs:91:1
-   |
-91 | impl enshwick::Loading for Mine {}
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ missing `base`, `base_mut` in implementation
-   |
-   = help: implement the missing item: `fn base(&self) -> &enshwick_base::load::BaseLoad { todo!() }`
-   = help: implement the missing item: `fn base_mut(&mut self) -> &mut enshwick_base::load::BaseLoad { todo!() }`
+   --> tests/ui/internals_out_of_reach.rs:111:1
+    |
+111 | impl enshwick::Loading for Mine {}
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ missing `base`, `base_mut` in implementation
+    |
+    = help: implement the missing item: `fn base(&self) -> &enshwick_base::load::BaseLoad { todo!() }`
+    = help: implement the missing item: `fn base_mut(&mut self) -> &mut enshwick_base::load::BaseLoad { todo!() }`
 
 error[E0277]: the trait bound `Mine: enshwick_base::load::sealed::Sealed` is not satisfied
-  --> tests/ui/internals_out_of_reach.rs:91:28
-   |
-91 | impl enshwick::Loading for Mine {}
-   |                            ^^^^ unsatisfied trait bound
-   |
+   --> tests/ui/internals_out_of_reach.rs:111:28
+    |
+111 | impl enshwick::Loading for Mine {}
+    |                            ^^^^ unsatisfied trait bound
+    |
 help: the trait `enshwick_base::load::sealed::Sealed` is not implemented for `Mine`
-  --> tests/ui/internals_out_of_reach.rs:89:1
-   |
-89 | struct Mine;
-   | ^^^^^^^^^^^
+   --> tests/ui/internals_out_of_reach.rs:109:1
+    |
+109 | struct Mine;
+    | ^^^^^^^^^^^
 help: the following other types implement trait `enshwick_base::load::sealed::Sealed`
-  --> $WORKSPACE/crates/internal/base/src/load.rs
-   |
-   |     impl<L: super::Loading + ?Sized> Sealed for &mut L {}
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `&mut L`
+   --> $WORKSPACE/crates/internal/base/src/load.rs
+    |
+    |     impl<L: super::Loading + ?Sized> Sealed for &mut L {}
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `&mut L`
 ...
-   | impl sealed::Sealed for BaseLoad {}
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `enshwick_base::load::BaseLoad`
-   |
-  ::: $WORKSPACE/crates/internal/core/src/load.rs
-   |
-   | impl enshwick_base::load::sealed::Sealed for Load<'_> {}
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Load<'_>`
+    | impl sealed::Sealed for BaseLoad {}
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `enshwick_base::load::BaseLoad`
+    |
+   ::: $WORKSPACE/crates/internal/core/src/load.rs
+    |
+    | impl enshwick_base::load::sealed::Sealed for Load<'_> {}
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Load<'_>`
 note: required by a bound in `enshwick::Loading`
-  --> $WORKSPACE/crates/internal/base/src/load.rs
-   |
-   | pub trait Loading: sealed::Sealed {
-   |                    ^^^^^^^^^^^^^^ required by this bound in `Loading`
-   = note: `Loading` is a "sealed trait", because to implement it you also need to implement `enshwick_base::load::sealed::Sealed`, which is not accessible; this is usually done to force you to use one of the provided types that already implement it
-   = help: the following types implement the trait:
-             &mut L
-             enshwick_base::load::BaseLoad
-             enshwick::Load<'_>
+   --> $WORKSPACE/crates/internal/base/src/load.rs
+    |
+    | pub trait Loading: sealed::Sealed {
+    |                    ^^^^^^^^^^^^^^ required by this bound in `Loading`
+    = note: `Loading` is a "sealed trait", because to implement it you also need to implement `enshwick_base::load::sealed::Sealed`, which is not accessible; this is usually done to force you to use one of the provided types that already implement it
+    = help: the following types implement the trait:
+              &mut L
+              enshwick_base::load::BaseLoad
+              enshwick::Load<'_>
 
 error[E0624]: method `is_item` is private
   --> tests/ui/internals_out_of_reach.rs:15:21
@@ -493,10 +561,85 @@ help: trait `LoadMethods` which provides `build_filter` is implemented but not i
  4 + use enshwick::vetoes::script::LoadMethods;
    |
 
-error[E0624]: method `install` is private
-  --> tests/ui/internals_out_of_reach.rs:77:18
+error[E0599]: no method named `on_frame_script` found for mutable reference `&mut enshwick_base::load::BaseLoad` in the current scope
+  --> tests/ui/internals_out_of_reach.rs:83:18
    |
-77 |     let _ = host.install();
+83 |     let _ = base.on_frame_script(|_| ());
+   |                  ^^^^^^^^^^^^^^^
+   |
+   = help: items from traits can only be used if the trait is in scope
+help: trait `LoadMethods` which provides `on_frame_script` is implemented but not in scope; perhaps you want to import it
+   |
+ 4 + use enshwick::ui::script::LoadMethods;
+   |
+help: there is a method `on_frame` with a similar name
+   |
+83 -     let _ = base.on_frame_script(|_| ());
+83 +     let _ = base.on_frame(|_| ());
+   |
+
+error[E0599]: no method named `on_hud_script` found for mutable reference `&mut enshwick_base::load::BaseLoad` in the current scope
+  --> tests/ui/internals_out_of_reach.rs:84:18
+   |
+84 |     let _ = base.on_hud_script(|_| ());
+   |                  ^^^^^^^^^^^^^
+   |
+   = help: items from traits can only be used if the trait is in scope
+help: trait `LoadMethods` which provides `on_hud_script` is implemented but not in scope; perhaps you want to import it
+   |
+ 4 + use enshwick::ui::script::LoadMethods;
+   |
+help: there is a method `on_frame_script` with a similar name
+   |
+84 -     let _ = base.on_hud_script(|_| ());
+84 +     let _ = base.on_frame_script(|_| ());
+   |
+
+error[E0599]: no method named `change_sound_script` found for mutable reference `&mut enshwick_base::load::BaseLoad` in the current scope
+  --> tests/ui/internals_out_of_reach.rs:85:18
+   |
+85 |     let _ = base.change_sound_script(guid, enshwick::sound::SoundChange::default());
+   |                  ^^^^^^^^^^^^^^^^^^^
+   |
+   = help: items from traits can only be used if the trait is in scope
+help: trait `LoadMethods` which provides `change_sound_script` is implemented but not in scope; perhaps you want to import it
+   |
+ 4 + use enshwick::sound::script::LoadMethods;
+   |
+help: there is a method `change_sound` with a similar name
+   |
+85 -     let _ = base.change_sound_script(guid, enshwick::sound::SoundChange::default());
+85 +     let _ = base.change_sound(guid, enshwick::sound::SoundChange::default());
+   |
+
+error[E0599]: no method named `add_pack_rest` found for mutable reference `&mut enshwick_base::load::BaseLoad` in the current scope
+  --> tests/ui/internals_out_of_reach.rs:92:18
+   |
+92 |     let _ = base.add_pack_rest(pack);
+   |                  ^^^^^^^^^^^^^
+   |
+help: there is a method `add_pack` with a similar name
+   |
+92 -     let _ = base.add_pack_rest(pack);
+92 +     let _ = base.add_pack(pack);
+   |
+
+error[E0599]: no method named `follow_pack_settings` found for mutable reference `&mut enshwick_base::load::BaseLoad` in the current scope
+  --> tests/ui/internals_out_of_reach.rs:93:18
+   |
+93 |     let _ = base.follow_pack_settings(pack);
+   |                  ^^^^^^^^^^^^^^^^^^^^
+   |
+help: there is a method `on_settings` with a similar name
+   |
+93 -     let _ = base.follow_pack_settings(pack);
+93 +     let _ = base.on_settings(pack);
+   |
+
+error[E0624]: method `install` is private
+  --> tests/ui/internals_out_of_reach.rs:97:18
+   |
+97 |     let _ = host.install();
    |                  ^^^^^^^ private method
    |
   ::: $WORKSPACE/crates/internal/base/src/host.rs
@@ -505,9 +648,9 @@ error[E0624]: method `install` is private
    |     ----------------------------------- private method defined here
 
 error[E0624]: method `scope` is private
-  --> tests/ui/internals_out_of_reach.rs:78:10
+  --> tests/ui/internals_out_of_reach.rs:98:10
    |
-78 |     host.scope(|| ());
+98 |     host.scope(|| ());
    |          ^^^^^ private method
    |
   ::: $WORKSPACE/crates/internal/base/src/host.rs
@@ -516,9 +659,9 @@ error[E0624]: method `scope` is private
    |     ----------------------------------------------------------- private method defined here
 
 error[E0624]: associated function `get` is private
-  --> tests/ui/internals_out_of_reach.rs:79:24
+  --> tests/ui/internals_out_of_reach.rs:99:24
    |
-79 |     let _ = Scheduler::get(ModHandle(1));
+99 |     let _ = Scheduler::get(ModHandle(1));
    |                        ^^^ private associated function
    |
   ::: $WORKSPACE/crates/internal/base/src/schedule.rs
@@ -527,39 +670,39 @@ error[E0624]: associated function `get` is private
    |     ------------------------------------------------ private associated function defined here
 
 error[E0624]: method `run_due` is private
-  --> tests/ui/internals_out_of_reach.rs:80:15
-   |
-80 |     scheduler.run_due(0);
-   |               ^^^^^^^ private method
-   |
-  ::: $WORKSPACE/crates/internal/base/src/schedule.rs
-   |
-   |     pub(crate) fn run_due(self, game: u64) {
-   |     -------------------------------------- private method defined here
+   --> tests/ui/internals_out_of_reach.rs:100:15
+    |
+100 |     scheduler.run_due(0);
+    |               ^^^^^^^ private method
+    |
+   ::: $WORKSPACE/crates/internal/base/src/schedule.rs
+    |
+    |     pub(crate) fn run_due(self, game: u64) {
+    |     -------------------------------------- private method defined here
 
 error[E0624]: method `read` is private
-  --> tests/ui/internals_out_of_reach.rs:81:16
-   |
-81 |     let _ = ty.read(host, Entity(2));
-   |                ^^^^ private method
-   |
-  ::: $WORKSPACE/crates/internal/base/src/ecs.rs
-   |
-   |     pub(crate) fn read(self, host: Host, entity: Entity) -> Option<*const core::ffi::c_void> {
-   |     ---------------------------------------------------------------------------------------- private method defined here
+   --> tests/ui/internals_out_of_reach.rs:101:16
+    |
+101 |     let _ = ty.read(host, Entity(2));
+    |                ^^^^ private method
+    |
+   ::: $WORKSPACE/crates/internal/base/src/ecs.rs
+    |
+    |     pub(crate) fn read(self, host: Host, entity: Entity) -> Option<*const core::ffi::c_void> {
+    |     ---------------------------------------------------------------------------------------- private method defined here
 
 error[E0624]: associated function `new` is private
-  --> tests/ui/internals_out_of_reach.rs:82:31
-   |
-82 |       let _ = CraftRecipeEvent::new(Entity(2), None, RecipeId::new(1), 1);
-   |                                 ^^^ private associated function
-   |
-  ::: $WORKSPACE/crates/internal/base/src/game_events.rs
-   |
-   | /     pub(crate) const fn new(
-   | |         crafting_operator_id: Entity,
-   | |         crafting_station_id: Option<Entity>,
-   | |         recipe_id: RecipeId,
-   | |         recipe_amount: u16,
-   | |     ) -> Self {
-   | |_____________- private associated function defined here
+   --> tests/ui/internals_out_of_reach.rs:102:31
+    |
+102 |       let _ = CraftRecipeEvent::new(Entity(2), None, RecipeId::new(1), 1);
+    |                                 ^^^ private associated function
+    |
+   ::: $WORKSPACE/crates/internal/base/src/game_events.rs
+    |
+    | /     pub(crate) const fn new(
+    | |         crafting_operator_id: Entity,
+    | |         crafting_station_id: Option<Entity>,
+    | |         recipe_id: RecipeId,
+    | |         recipe_amount: u16,
+    | |     ) -> Self {
+    | |_____________- private associated function defined here

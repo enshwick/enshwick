@@ -1,7 +1,6 @@
 //! What a mod does while the loader initialises it: [`Load`], whose base
 //! methods forward to the base handle it holds.
 
-pub(crate) use enshwick_base::__off_from as off_from;
 use enshwick_base::load::BaseLoad;
 #[doc(inline)]
 pub use enshwick_values::Off;
@@ -212,6 +211,7 @@ mod loot;
 mod map;
 mod net;
 mod pacing;
+mod packs;
 mod points;
 mod progress;
 #[cfg(feature = "typed")]

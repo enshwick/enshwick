@@ -22,12 +22,9 @@ enshwick-inventory.workspace = true
 enshwick-knowledge.workspace = true
 enshwick-actions.workspace = true
 enshwick-ui.workspace = true
+enshwick-packs.workspace = true
 enshwick-values.workspace = true
-rustc-hash.workspace = true
-schemars = { workspace = true, optional = true }
-serde_json = { workspace = true, optional = true }
 serde.workspace = true
-thiserror.workspace = true
 toml.workspace = true
 
 [dev-dependencies]
@@ -36,8 +33,6 @@ toml.workspace = true
 # publishes. `unstable` and `typed` come from the command line, so the
 # stable API's own build stays without them.
 enshwick = { path = "../../enshwick", features = ["test"] }
-proptest.workspace = true
-insta.workspace = true
 serde = { workspace = true, features = ["derive"] }
 
 # The features of `enshwick`, which turns each of them on here, and `fake`:
@@ -52,7 +47,7 @@ fake = [
     "enshwick-actions/fake",
     "enshwick-ui/fake",
 ]
-schema = ["dep:schemars", "dep:serde_json", "enshwick-base/schema"]
+schema = ["enshwick-packs/schema"]
 unstable = [
     "enshwick-base/unstable",
     "enshwick-content/unstable",
@@ -61,6 +56,7 @@ unstable = [
     "enshwick-knowledge/unstable",
     "enshwick-actions/unstable",
     "enshwick-ui/unstable",
+    "enshwick-packs/unstable",
 ]
 typed = [
     "unstable",

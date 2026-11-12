@@ -73,6 +73,26 @@ fn reach_vetoes(load: &mut enshwick::Load<'_>) {
     let _ = base.build_filter(|_| enshwick::vetoes::BuildVerdict::Allow);
 }
 
+fn reach_ui(load: &mut enshwick::Load<'_>, guid: Guid) {
+    use enshwick::Loading as _;
+    use enshwick::sound::script::LoadMethods as _;
+    use enshwick::ui::script::LoadMethods as _;
+    let _: Option<enshwick::ui::script::ScriptFrame> = None;
+    let _: Option<enshwick::ui::script::ScriptHud> = None;
+    let base = load.base_mut();
+    let _ = base.on_frame_script(|_| ());
+    let _ = base.on_hud_script(|_| ());
+    let _ = base.change_sound_script(guid, enshwick::sound::SoundChange::default());
+}
+
+fn reach_packs(load: &mut enshwick::Load<'_>, pack: &enshwick::packs::Pack) {
+    use enshwick::Loading as _;
+    use enshwick::packs::LoadHelpers as _;
+    let base = load.base_mut();
+    let _ = base.add_pack_rest(pack);
+    let _ = base.follow_pack_settings(pack);
+}
+
 fn reach(host: Host, scheduler: Scheduler, ty: ComponentType) {
     let _ = host.install();
     host.scope(|| ());

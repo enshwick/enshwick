@@ -11,6 +11,7 @@
 extern crate self as enshwick;
 
 // The base's modules at the paths the domains here name them by.
+pub(crate) use enshwick_base::facts;
 #[doc(hidden)]
 pub use enshwick_base::{
     code, command_names,
@@ -18,7 +19,6 @@ pub use enshwick_base::{
     ecs, events, files, game_events, i18n, mods, net, pacing, points, resources, schedule,
     services, state, status, time,
 };
-pub(crate) use enshwick_base::{facts, fresh, locks, near};
 // The macros the base exports, which the code here calls by `crate::`.
 #[doc(hidden)]
 pub use enshwick_base::{
@@ -46,10 +46,6 @@ mod declare;
 #[doc(inline)]
 pub use enshwick_knowledge::{knowledge, progress};
 mod load;
-#[cfg(feature = "unstable")]
-#[doc(inline)]
-pub use enshwick_world::map;
-pub mod packs;
 #[doc(inline)]
 pub use enshwick_abi::raw;
 #[cfg(feature = "unstable")]
@@ -58,6 +54,11 @@ pub use enshwick_content::rates;
 #[cfg(feature = "typed")]
 #[doc(inline)]
 pub use enshwick_knowledge::quests;
+#[doc(inline)]
+pub use enshwick_packs::packs;
+#[cfg(feature = "unstable")]
+#[doc(inline)]
+pub use enshwick_world::map;
 // Without `unstable` the rates stay inside, for the recipe and comfort
 // scaling the stable parts and the fake host share.
 #[cfg(not(feature = "unstable"))]

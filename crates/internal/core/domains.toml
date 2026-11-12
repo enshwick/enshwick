@@ -36,12 +36,12 @@ inventory = "inventory"
 knowledge = "knowledge"
 actions = "actions"
 ui = "ui"
+packs = "packs"
 
 # Each domain's top-level modules still in core.
 [modules]
 # The script binding's runtime, which stays in core beside `Load`.
 base = ["script"]
-packs = ["packs"]
 
 # The fake loader, `crates/internal/fake/src/test`, cut by the same domains:
 # each file under `test/` and `test/table/` belongs to the domain its folder
