@@ -26,23 +26,27 @@ pub fn blank<T: Reflected + Shaped>() -> Result<T, ShapeError> {
 
 /// The Rust path of the item `$name` as the API crate shows it, for a
 /// generated type's name in a script and in a refusal: `enshwick::typed::...`,
-/// from this crate or `enshwick-core`, whose modules the API crate shows.
+/// from any internal crate, whose modules the API crate shows at the same
+/// paths.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! item_path {
     ($name:ident) => {
-        $crate::__private::str_replace!(
-            $crate::__private::str_replace!(
-                ::core::concat!(::core::module_path!(), "::", ::core::stringify!($name)),
-                "enshwick_typed::",
-                "enshwick::"
-            ),
-            "enshwick_core::",
-            "enshwick::"
+        $crate::__private::concatcp!(
+            "enshwick",
+            $crate::typed::runtime::after_crate(::core::concat!(
+                ::core::module_path!(),
+                "::",
+                ::core::stringify!($name)
+            ))
         )
     };
 }
 pub use item_path;
+
+mod path;
+#[doc(hidden)]
+pub use path::after_crate;
 
 /// Why a [`Value`] is not the shape a generated type expects: a field the
 /// build lacks, or a value of another kind.

@@ -59,6 +59,7 @@ use crate::abi::KnowledgeInput;
 use crate::abi::{Header, KnowledgeInfo, Status};
 use crate::{Entity, PlayerKey};
 use crate::{Host, Load};
+use enshwick_world::__internal::world_status;
 
 pub use enshwick_content::knowledge::{KnowledgeType, Scope};
 
@@ -278,7 +279,7 @@ impl Knowledge {
     #[script]
     pub fn grant(&self, player: Entity, id: KnowledgeId, grant: Grant) -> Result<(), WorldError> {
         let (kind, value) = grant.raw();
-        WorldError::from_status((self.host.api().grant_knowledge)(
+        world_status((self.host.api().grant_knowledge)(
             self.host.handle(),
             player,
             id,
@@ -344,7 +345,7 @@ impl Knowledge {
         revoke: Revoke,
     ) -> Result<(), WorldError> {
         let (kind, value) = revoke.raw();
-        WorldError::from_status((self.host.api().revoke_knowledge)(
+        world_status((self.host.api().revoke_knowledge)(
             self.host.handle(),
             player,
             id,
@@ -451,7 +452,7 @@ impl Knowledge {
         value: u32,
         revoke: bool,
     ) -> Result<(), WorldError> {
-        WorldError::from_status((self.host.api().account_knowledge)(
+        world_status((self.host.api().account_knowledge)(
             self.host.handle(),
             account,
             id,

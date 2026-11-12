@@ -8,9 +8,9 @@ description: The World handle reads and writes entities and their components in 
 Unstable: everything in this chapter needs the `unstable` feature and may
 change in any release ([Stability](stability.md)).
 
-[`load.world()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load.rs)
+[`load.world()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/world/src/world.rs)
 returns a
-[`World`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/world.rs),
+[`World`](https://github.com/enshwick/enshwick/blob/main/crates/internal/world/src/world.rs),
 the mod's way into the server's world.
 
 ## What it offers
@@ -420,7 +420,7 @@ live entity is left out with `enshwick.world.set_saved(entity, false)`.
 
 `player(entity)` returns the connected player whose character is `entity`.
 `players()` returns every connected player with a character in the world. A
-[`Player`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/world.rs)
+[`Player`](https://github.com/enshwick/enshwick/blob/main/crates/internal/world/src/world.rs)
 has:
 
 - `entity`, the character's entity;
@@ -513,7 +513,7 @@ have no owner. A player no longer in game has none. An item's other rules,
 such as one that needs a building zone, are not part of the check.
 
 `Err` carries a
-[`BuildRefusal`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/world/build.rs)
+[`BuildRefusal`](https://github.com/enshwick/enshwick/blob/main/crates/internal/world/src/world/build.rs)
 named after the game's own answer:
 
 - `NoPermission` with the missing `PlayerPermissions` bit
@@ -575,9 +575,9 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 The game checks no permission when a player renames something.
-[`load.on_rename(|rename| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/world/rename.rs)
+[`load.on_rename(|rename| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/world/src/world/rename.rs)
 runs before every rename on the server, on its game thread. It gets a
-[`Rename`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/world/rename.rs)
+[`Rename`](https://github.com/enshwick/enshwick/blob/main/crates/internal/world/src/world/rename.rs)
 with:
 
 - the `entity`

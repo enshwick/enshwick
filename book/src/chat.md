@@ -23,9 +23,9 @@ Unstable: needs the `unstable` feature and may change in any release
 Chat lines work on the dedicated server and on a client while it hosts a
 game.
 
-[`world.broadcast(text)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/world.rs)
+[`world.broadcast(text)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/world/src/world.rs)
 sends a line to every player and
-[`world.tell(&player, text)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/world.rs)
+[`world.tell(&player, text)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/world/src/world.rs)
 to one player. Call them from any thread: the line waits in a queue, and the
 server posts it after the next step. Each line of `text` becomes a message of
 its own, and a message keeps at most 16 lines. The queue holds at most 256
@@ -102,7 +102,7 @@ player page.
 Unstable: needs the `unstable` feature and may change in any release
 ([Stability](stability.md)).
 
-[`world.notify(&player, text)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/world.rs)
+[`world.notify(&player, text)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/world/src/world.rs)
 shows a line on the player's screen, as the game shows its own "can't do
 that" messages, and `world.notify_all(text)` on every player's. It returns
 how the line went: `Notice::OnScreen`, or `Notice::Chat` when the player's

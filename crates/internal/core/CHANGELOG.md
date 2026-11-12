@@ -9,6 +9,13 @@ see is in the changelog of `enshwick`.
 
 ### Changed
 
+- The world domain left for `enshwick-world`: `World` with its methods,
+  `world`, `map`, `altars`, `buffs`, `daytime`, `game_settings`, `terrain`,
+  `voxels`, `weather`, `WorldError` and the typed handles. `Load` forwards
+  their methods there; `limit_altar_level` and `on_fog_uncovered` keep
+  their bodies here, since they join the world with crafting vetoes and
+  the interface's frames, and the domains above reach the world's private
+  parts through its hidden `__internal` (#1050).
 - The content domain left for `enshwick-content`: `content`, `rates`, the
   shape samples of the generated typed items, and `KnowledgeType` and
   `Scope`, which `knowledge` re-exports. `Load` forwards its content

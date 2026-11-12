@@ -48,7 +48,7 @@ a save keeps its GUID, so a copied world keeps its folders.
 
 ## The data folder
 
-[`world.data_dir()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/world.rs)
+[`world.data_dir()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/world/src/world.rs)
 returns the mod's folder in the running world, `<stem>-mod-data/<id>`. It
 creates the folder when missing. It returns `None` while no world runs, as in the main menu or
 during `init`. [`load.data_dir()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/load.rs)

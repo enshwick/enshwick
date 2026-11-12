@@ -3,9 +3,7 @@
 
 pub(crate) use enshwick_base::__off_from as off_from;
 use enshwick_base::load::BaseLoad;
-#[cfg(feature = "typed")]
-pub(crate) use enshwick_base::load::game_events_of;
-pub(crate) use enshwick_base::load::{hand_over, off_status, ok};
+pub(crate) use enshwick_base::load::{hand_over, ok};
 #[doc(inline)]
 pub use enshwick_values::Off;
 
@@ -195,14 +193,20 @@ impl Load<'_> {
     }
 }
 
-// `Load`'s methods of the base, by the base module they forward to.
+// `Load`'s methods of the crates below, by the module they forward to.
+mod altars;
+mod buffs;
 mod build;
 mod code;
 mod config;
 mod content;
+mod daytime;
 mod events;
 mod game_events;
+mod game_settings;
 mod i18n;
+#[cfg(feature = "unstable")]
+mod map;
 mod net;
 mod pacing;
 mod points;
@@ -213,7 +217,14 @@ mod services;
 mod settings;
 mod state;
 mod status;
+mod terrain;
 mod time;
+#[cfg(feature = "typed")]
+mod typed;
+mod voxels;
+mod weather;
+#[cfg(feature = "unstable")]
+mod world;
 
 impl enshwick_base::load::sealed::Sealed for Load<'_> {}
 

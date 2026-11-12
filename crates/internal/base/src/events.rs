@@ -1,5 +1,7 @@
-//! Typed loader events, and the [`Kind`] that [`Load::on`](../struct.Load.html#method.on)
-//! takes for them and for the typed [game events](crate::game_events).
+//! Typed loader events, and the [`Kind`] a handler subscribes with to them
+//! and to the typed [game events](crate::game_events).
+//!
+//! [`Load::on`](../struct.Load.html#method.on) takes the [`Kind`].
 //!
 //! Events from the server are raised on its game thread: keep handlers short,
 //! and leave slow work to a thread of the mod's own. On a client they come

@@ -7,12 +7,14 @@
 //! it, a platform crate depends on the API
 //! crate only for its tests, a package that builds a DLL, such as a mod, names its version, features
 //! name what they add, `anyhow` stays in binaries, `rust-version` is the
-//! pinned toolchain's, and a published crate's path dependencies carry
-//! versions.
+//! pinned toolchain's, a published crate's path dependencies carry
+//! versions, and release-plz versions the API crate and every crate of
+//! `crates/internal` as one group.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::FACADE;
 use crate::affected::Package;
 
 /// The test-only feature of the API and of any crate that has one.
@@ -46,11 +48,16 @@ pub(crate) fn check(packages: &[Package]) -> Result<Vec<String>, String> {
     let metadata: serde_json::Value = serde_json::from_slice(&output.stdout)
         .map_err(|error| format!("reading cargo metadata: {error}"))?;
     let toolchain = toolchain(&read(&crate::workspace_root().join("rust-toolchain.toml"))?)?;
+    let root = Path::new(metadata["workspace_root"].as_str().unwrap_or_default());
+    let mut api_crates = Vec::new();
     let mut problems = Vec::new();
     for package in metadata["packages"].as_array().into_iter().flatten() {
         let name = package["name"].as_str().unwrap_or_default();
         let manifest = Path::new(package["manifest_path"].as_str().unwrap_or_default());
         let dir = manifest.parent().unwrap_or(Path::new("."));
+        if is_api_crate(name, dir.strip_prefix(root).unwrap_or(dir)) {
+            api_crates.push(name.to_owned());
+        }
         problems.extend(test_feature(name, package));
         problems.extend(fake_reach(name, package));
         if packages
@@ -88,6 +95,10 @@ pub(crate) fn check(packages: &[Package]) -> Result<Vec<String>, String> {
             );
         }
     }
+    problems.extend(release_group(
+        &api_crates,
+        &read(&root.join("release-plz.toml"))?,
+    )?);
     Ok(problems)
 }
 
@@ -136,8 +147,6 @@ fn test_feature(name: &str, package: &serde_json::Value) -> Vec<String> {
 /// The fake loader's crate, which only [`FACADE`] depends on, through its
 /// [`TEST`] feature alone, so the fake's features are always the facade's.
 const FAKE_CRATE: &str = "enshwick-fake";
-/// The API crate mods depend on.
-const FACADE: &str = "enshwick";
 /// The crate whose test-only feature [`FAKE_FEATURE`] only [`FAKE_CRATE`]
 /// turns on.
 const CORE: &str = "enshwick-core";
@@ -322,6 +331,47 @@ fn toolchain(text: &str) -> Result<String, String> {
         .and_then(toml::Value::as_str)
         .map(major_minor)
         .ok_or_else(|| "rust-toolchain.toml names no channel".to_owned())
+}
+
+/// The release-plz version group of the API crate and its internal parts,
+/// which pin each other exactly and so release at one version.
+const API_GROUP: &str = "api";
+
+/// Whether the package `name` in `dir`, relative to the workspace root, is a
+/// crate of the API, which release-plz versions as one group and the stable
+/// API build takes: the facade, or a crate in `crates/internal`.
+pub(crate) fn is_api_crate(name: &str, dir: &Path) -> bool {
+    name == FACADE || dir.starts_with("crates/internal")
+}
+
+/// The problems of `release_plz`, the text of `release-plz.toml`: a crate of
+/// `api_crates` that is not in the [`API_GROUP`] version group.
+///
+/// # Errors
+///
+/// When the text does not read as TOML.
+fn release_group(api_crates: &[String], release_plz: &str) -> Result<Vec<String>, String> {
+    let file: toml::Table =
+        toml::from_str(release_plz).map_err(|e| format!("release-plz.toml: {}", e.message()))?;
+    let grouped: Vec<&str> = file
+        .get("package")
+        .and_then(toml::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|package| {
+            package.get("version_group").and_then(toml::Value::as_str) == Some(API_GROUP)
+        })
+        .filter_map(|package| package.get("name").and_then(toml::Value::as_str))
+        .collect();
+    Ok(api_crates
+        .iter()
+        .filter(|name| !grouped.contains(&name.as_str()))
+        .map(|name| {
+            format!(
+                "{name}: release-plz.toml puts it in the `{API_GROUP}` version group, since the API's crates pin each other exactly"
+            )
+        })
+        .collect())
 }
 
 /// `version`'s major and minor: `1.99` of `1.99.1`.
@@ -786,6 +836,45 @@ mod tests {
             "1.99"
         );
         assert!(toolchain("[toolchain]\n").is_err());
+    }
+
+    #[test]
+    fn the_rules_hold_for_this_workspace() {
+        assert_eq!(
+            check(&crate::packages().unwrap()).unwrap(),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn an_api_crate_outside_the_api_version_group_is_a_problem() {
+        let release_plz = "[[package]]\nname = \"enshwick\"\nversion_group = \"api\"\n\n\
+                           [[package]]\nname = \"enshwick-world\"\nrelease = false\n";
+        let crates = ["enshwick".to_owned(), "enshwick-world".to_owned()];
+        assert_eq!(
+            release_group(&crates, release_plz).unwrap(),
+            [
+                "enshwick-world: release-plz.toml puts it in the `api` version group, since the API's crates pin each other exactly"
+            ]
+        );
+        assert!(release_group(&crates[..1], release_plz).unwrap().is_empty());
+        assert!(release_group(&crates, "[[package]\n").is_err());
+    }
+
+    #[test]
+    fn the_api_crates_are_the_facade_and_those_of_crates_internal() {
+        assert!(is_api_crate("enshwick", Path::new("crates/enshwick")));
+        assert!(is_api_crate(
+            "enshwick-world",
+            Path::new("crates/internal/world")
+        ));
+        assert!(!is_api_crate(
+            "enshwick-luau",
+            Path::new("crates/runtime/luau")
+        ));
+        assert!(!is_api_crate("xtask", Path::new("tools/xtask")));
+        // A folder whose name only begins like the internal one.
+        assert!(!is_api_crate("other", Path::new("crates/internals/x")));
     }
 
     #[test]

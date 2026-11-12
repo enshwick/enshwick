@@ -13,9 +13,10 @@ re-exports; `crates/runtime/` holds what `enshwick.zip` ships into the game.
 | Crate | Where | Owns | Published |
 | --- | --- | --- | --- |
 | `enshwick` | `crates/enshwick` | the one crate mods use: the facade that re-exports every module of its internal parts at its own paths, the crate docs, the macros' docs and the features | yes |
-| `enshwick-core` | `crates/internal/core` | `Load` and `World`, the domains not yet in crates of their own, and the script binding | yes |
+| `enshwick-core` | `crates/internal/core` | `Load`, the domains not yet in crates of their own, and the script binding | yes |
 | `enshwick-base` | `crates/internal/base` | what every domain shares (the host handle, events, services, points, settings, texts, state, the resource codec, the ECS reads, the lock policy) and the base handle `Load` holds | yes |
-| `enshwick-content` | `crates/internal/content` | the content domain: content, rates, and the shape samples of the generated typed items, which it re-exports from `enshwick-typed`; the typed handles that read a live world stay in core | yes |
+| `enshwick-content` | `crates/internal/content` | the content domain: content, rates, and the shape samples of the generated typed items, which it re-exports from `enshwick-typed` | yes |
+| `enshwick-world` | `crates/internal/world` | the world domain: `World` and the live world's map, voxels, terrain, weather, time of day, altars, buffs and game settings, and the typed handles that read a live world | yes |
 | `enshwick-typed` | `crates/internal/typed` | the generated typed API, re-exported as `enshwick::typed` | yes |
 | `enshwick-values` | `crates/internal/values` | the value types the layers share: shape, content ids, resource values, the script value model | yes |
 | `enshwick-abi` | `crates/internal/abi` | the `repr(C)` types that cross between the loader and a mod, the ABI version and its golden layout file, and the reads and writes of game memory, re-exported as `enshwick::abi` and `enshwick::raw` | yes |
@@ -39,14 +40,15 @@ stub ──starts──▶ loader ──C ABI──▶ mods (enshwick ▸ enshwi
                    ├──▶ enshwick-gamedata (tables, reflect, archive) ──▶ enshwick-content, enshwick-base
                    └──▶ enshwick-luau ──▶ enshwick-core (script descriptions)
 cargo-enshwick ──▶ enshwick-core, enshwick-abi, enshwick-gamedata
-enshwick ──▶ enshwick-core ──▶ enshwick-content ──▶ enshwick-base ──▶ enshwick-abi ──▶ enshwick-values
-                                  enshwick-content ──▶ enshwick-typed ──▶ enshwick-values ──▶ enshwick-macros
+enshwick ──▶ enshwick-core ──▶ enshwick-world ──▶ enshwick-content ──▶ enshwick-base ──▶ enshwick-abi ──▶ enshwick-values
+                                                    enshwick-content ──▶ enshwick-typed ──▶ enshwick-values ──▶ enshwick-macros
 enshwick ──test──▶ enshwick-fake ──▶ enshwick-core (its `fake` feature)
 ```
 
 - `enshwick` is the one crate a mod names, a facade over its internal parts,
   each re-exported under its paths: `enshwick-core`, `Load` and the domains
-  still in it; `enshwick-base`, what every domain shares; `enshwick-fake`,
+  still in it; `enshwick-world` and `enshwick-content`, the domains that left
+  it; `enshwick-base`, what every domain shares; `enshwick-fake`,
   the fake loader; `enshwick-typed`, the generated
   typed API; `enshwick-abi`, the ABI; `enshwick-values`, the value types the
   layers share. None depends on `enshwick` or on a part above it, so the
@@ -57,7 +59,7 @@ enshwick ──test──▶ enshwick-fake ──▶ enshwick-core (its `fake` f
   turns on, so a mod's release build holds no test support. Core asks the
   fake about a mod's manifest through one check the fake hands down at
   install. The fake's code names core as `enshwick_core`.
-- `enshwick-core`, `enshwick-content` and `enshwick-fake` take `enshwick` as a dev-dependency,
+- `enshwick-core`, the domains' crates and `enshwick-fake` take `enshwick` as a dev-dependency,
   so their doc examples name the real facade and build as one binary; cargo
   drops a dev-dependency without a version when it publishes. Another
   internal part's doc example names its own crate `enshwick` by a hidden
@@ -94,8 +96,9 @@ the crate of each domain that has left it.
 
 - A module names only its own domain and the domains before its own.
   Something two domains share moves down into base or the lower domain.
-- `cargo xtask check` reads the code's `crate::` paths without compiling and
-  refuses an edge up the order. The edges up the order the code still has
+- `cargo xtask check` reads the code's `crate::` paths, and the calls on
+  `self` in each module's `Load` methods, without compiling and refuses an
+  edge up the order. The edges up the order the code still has
   are listed in `domains.toml`; a new one fails, and so does a listed one
   that is gone, so the list only shrinks.
 - A domain's crate depends, among the internal crates, only on those below
@@ -117,7 +120,9 @@ the crate of each domain that has left it.
 - Each domain turns its own errors into `Off`, and keeps the state it needs
   while a mod initialises in the base handle's typed slots, keyed by a type
   of its own, so `Load` names no domain.
-- `Load` and `World` stay in `enshwick-core`, the top layer. `Load` holds the
+- `Load` stays in `enshwick-core`, the top layer; `World` left with the world
+  domain, its methods inherent there, since only that domain adds to it.
+  `Load` holds the
   base handle, `BaseLoad`, which every crate below takes for the mod's init;
   a public function below `Load` that takes the mod's loader takes
   `&impl Loading` or `&mut impl Loading`, so a mod passes its `Load` as
@@ -126,8 +131,8 @@ the crate of each domain that has left it.
 ### Peeling a domain out of the core
 
 Domains leave the core downward, lowest first, each in one pull request
-that keeps `enshwick`'s public API equal. Base went first, then content;
-each later peel follows the same steps.
+that keeps `enshwick`'s public API equal. Base went first, then content
+and world; each later peel follows the same steps.
 
 1. Make the crate `crates/internal/<domain>` (`enshwick-<domain>`): exact
    pins, the description "Internal part of enshwick; depend on enshwick",
@@ -153,7 +158,12 @@ each later peel follows the same steps.
    nameable, hidden, under the facade's modules: they offer nothing `Load`
    does not, and hiding them would take a nested module and a glob import of
    its parent in every peeled module. Peel the domain's
-   modules in one run, so each knows the others' methods. A module that is
+   modules in one run, so each knows the others' methods. `peel-load`
+   writes a forwarder's links relative to its module as paths from the
+   crate root, and rustdoc names one into a module private to the crate,
+   which takes by hand a path core re-exports. The forwarder file imports
+   by hand the module's own types its signatures name, and the compiler
+   then names the copied imports it does not use. A module that is
    private becomes `pub(crate)`, so `__load` reaches its trait. A module
    that `cfg` gates in its parent gives its blocks, its `__load` lines and
    its forwarder `mod` that `cfg` by hand. A method whose closure takes
@@ -163,7 +173,12 @@ each later peel follows the same steps.
    moves down with it, such as the served-resource builder into
    `resources` and the host's resource reads, and what only an upper domain
    needs moves up, such as the rate rule into `rates`. An inherent method
-   of a lower type, `Host` included, lives in that type's crate.
+   of a lower type, `Host` included, lives in that type's crate. A method
+   that calls a `Load` method of a domain above, an edge up the check
+   counts from a call on `self` in the domain's `Load` methods, keeps
+   its body in core's forwarder file, as `limit_altar_level` (with
+   crafting vetoes) and `on_fog_uncovered` (with the interface's frames)
+   do, and reaches the crate's private parts through `__internal`.
 4. The domain's `Bound` implementations and its namespace list stay in
    `core/src/script/namespaces/<domain>.rs`: a namespace opens its handle
    through `Load` and lists `Load`'s start functions, which `#[script]` on
@@ -179,6 +194,11 @@ each later peel follows the same steps.
    `fixtures` module beside the tests it comes from. Core re-exports
    the crate's modules at the paths its own code names them by, and the
    facade re-exports them at today's paths.
+   A doc link from the crate to `Load` or a domain above is a relative
+   URL to the facade's page, such as
+   `[`Load::add_item`](../struct.Load.html#method.add_item)`, never in a
+   module's first paragraph, which the crate's index shows one folder up;
+   `cargo xtask doc-links` checks each one in the facade's rendered docs.
 6. Give each doc example the alias line with `cargo xtask alias-examples`,
    run the crate's doctests without its features and with them, and feed
    each log to `cargo xtask wrap-examples <log> [--cfg <feature>]`, which

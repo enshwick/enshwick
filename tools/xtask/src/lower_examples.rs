@@ -14,6 +14,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
+use crate::FACADE;
 use crate::affected::Package;
 
 /// The folder of the internal crates, relative to the workspace root.
@@ -23,8 +24,6 @@ const INTERNAL: &str = "crates/internal";
 /// one per internal crate and feature its examples need, such as `base.rs`
 /// and `base_unstable.rs`.
 const COPIES: &str = "crates/enshwick/src/lower_examples";
-/// The facade's package name.
-const FACADE: &str = "enshwick";
 /// The first line of a wrapped example, as its doc comment holds it.
 const WRAPPER_OPEN: &str = "# #[cfg(any())] fn in_enshwick() {";
 /// The last line of a wrapped example.
@@ -785,6 +784,7 @@ impl Thing {
             lib: lib.map(str::to_owned),
             windows_only: false,
             windows_tests: false,
+            unstable: false,
         };
         let example = "/// ```\n/// let load = enshwick::Load::new();\n/// ```\npub struct Item;\n";
         write("crates/internal/core/src/deep/item.rs", example);
@@ -863,6 +863,7 @@ impl Thing {
             lib: Some("enshwick_base".to_owned()),
             windows_only: false,
             windows_tests: false,
+            unstable: false,
         }];
         let log = log.display().to_string();
         let usage = wrap(

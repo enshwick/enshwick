@@ -6,7 +6,7 @@ description: A mod reads the Flame Altars of a world through a handle it asks fo
 # Altars and bases
 
 Flame Altars are game data, so the platform reads them for every mod. A mod
-calls [`load.altars()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/altars.rs) in `init`.
+calls [`load.altars()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/world/src/altars.rs) in `init`.
 The call returns a `Copy` handle to keep in its state.
 
 ## Reading the altars
@@ -88,7 +88,7 @@ fn based(altars: &enshwick::altars::Altars, cell: [i64; 3]) -> bool {
 ## Sizing the zones
 
 Any mod may size the zones:
-[`load.on_altar_zone(|zone| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/altars.rs)
+[`load.on_altar_zone(|zone| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/world/src/altars.rs)
 adds its filter to a chain. When altars change, the loader asks the filters
 about every altar, in load order. Each filter sees the zone so far, the
 vanilla one first. It may grow the zone by `grow` cells on every horizontal
@@ -290,7 +290,7 @@ open.
 
 Vanilla accepts a placed object only when both corners of its box lie in one
 zone.
-[`load.on_building_zone_check`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/altars.rs)
+[`load.on_building_zone_check`](https://github.com/enshwick/enshwick/blob/main/crates/internal/world/src/altars.rs)
 runs a filter when the game refuses an object for that reason. The filter gets
 the zones, the object's box and the margin in 32.32 fixed-point metres.
 Returning `true` accepts the object after all.

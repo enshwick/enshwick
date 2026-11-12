@@ -41,6 +41,7 @@ enshwick-luau = { path = "crates/runtime/luau", version = "=1.0.0-alpha.14" }
 enshwick-abi = { path = "crates/internal/abi", version = "=1.0.0-alpha.14" }
 enshwick-base = { path = "crates/internal/base", version = "=1.0.0-alpha.14" }
 enshwick-content = { path = "crates/internal/content", version = "=1.0.0-alpha.14" }
+enshwick-world = { path = "crates/internal/world", version = "=1.0.0-alpha.14" }
 enshwick-core = { path = "crates/internal/core", version = "=1.0.0-alpha.14" }
 enshwick-fake = { path = "crates/internal/fake", version = "=1.0.0-alpha.14" }
 enshwick-values = { path = "crates/internal/values", version = "=1.0.0-alpha.14" }

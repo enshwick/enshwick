@@ -1,3 +1,11 @@
+/// A mod passing `&load` from `init(load: &mut Load)` hands over a
+/// `&&mut Load`, so the API's `&impl Loading` takes a `&mut` loader too.
+#[test]
+fn a_mutable_reference_to_a_loader_is_a_loader_too() {
+    fn loading<L: super::Loading + ?Sized>() {}
+    loading::<&mut super::BaseLoad>();
+}
+
 #[test]
 fn a_failed_call_names_what_failed_and_why() {
     use crate::abi::Status;

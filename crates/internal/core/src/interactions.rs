@@ -31,6 +31,8 @@ use crate::{Entity, ItemId};
 #[cfg(feature = "unstable")]
 use crate::{Host, WorldError, ecs::ComponentType, engine_ids as ids, resources::Registry};
 use crate::{Load, Off};
+#[cfg(feature = "unstable")]
+use enshwick_world::__internal::world_status;
 
 /// The game's name of the target its prompt offers, among its `TargetType`.
 #[cfg(feature = "unstable")]
@@ -160,13 +162,13 @@ impl Targets {
     #[script]
     pub fn target(self, player: Entity) -> Result<Option<Entity>, WorldError> {
         let host = self.0.host;
-        WorldError::from_status((host.api().world_quiet)(host.handle()))?;
+        world_status((host.api().world_quiet)(host.handle()))?;
         let mut out: *const c_void = core::ptr::null();
         let status = (host.api().component)(host.handle(), player, self.0.ty.hash(), &raw mut out);
         if status == Status::MISSING {
             return Ok(None);
         }
-        WorldError::from_status(status)?;
+        world_status(status)?;
         if out.is_null() {
             return Ok(None);
         }

@@ -439,6 +439,7 @@ dependencies = [
  "enshwick-fake",
  "enshwick-macros",
  "enshwick-values",
+ "enshwick-world",
  "hound",
  "insta",
  "postcard",
@@ -518,6 +519,7 @@ dependencies = [
  "enshwick-macros",
  "enshwick-typed",
  "enshwick-values",
+ "enshwick-world",
  "fastrand",
  "hound",
  "insta",
@@ -692,6 +694,26 @@ dependencies = [
  "const-sha1",
  "const_format",
  "enshwick-macros",
+ "rustc-hash",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "enshwick-world"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "bytemuck",
+ "enshwick",
+ "enshwick-abi",
+ "enshwick-base",
+ "enshwick-content",
+ "enshwick-macros",
+ "enshwick-typed",
+ "enshwick-values",
+ "insta",
+ "postcard",
+ "proptest",
  "rustc-hash",
  "serde",
  "thiserror",

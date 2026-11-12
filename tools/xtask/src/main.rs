@@ -20,7 +20,9 @@
 //! dependency lines of the Markdown to the workspace version's tag, which the
 //! check holds ([`tag_lines`]). `cargo xtask header` rewrites the ABI's
 //! C header, which the check holds to the ABI module and its golden layout
-//! ([`header`]). `cargo xtask alias-examples` writes the hidden line that
+//! ([`header`]). `cargo xtask doc-links` checks the links rustdoc leaves
+//! unchecked in the API crate's rendered pages, which the docs part runs
+//! after each rustdoc build ([`doc_links`]). `cargo xtask alias-examples` writes the hidden line that
 //! names an internal crate `enshwick` into its doc examples, which the
 //! check holds with their copies in the facade ([`lower_examples`]).
 //!
@@ -38,6 +40,7 @@ mod book_links;
 mod book_prose;
 mod crate_rules;
 mod dist;
+mod doc_links;
 mod domains;
 mod fuzz;
 mod header;
@@ -58,31 +61,32 @@ use std::time::Instant;
 
 use affected::{Package, Scope};
 
-const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|docs|windows-lint|windows-tests|fuzz]... [--list-windows-tests] (--all fuzzes only with --part fuzz) | dist [--out <dir>] | notes [--out <file>] [--known-issues <text>] | tag-lines | header | alias-examples | peel-load <from>=<into>... | wrap-examples <doctest log> [--cfg <feature>] | host-args | compat <exe> [--mods <path>...] [--report <file>] [--patterns] [--data <file>] | compat refresh (ENSH_EXES lists the executables)";
+const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|docs|windows-lint|windows-tests|fuzz]... [--list-windows-tests] (--all fuzzes only with --part fuzz) | dist [--out <dir>] | notes [--out <file>] [--known-issues <text>] | tag-lines | header | doc-links | alias-examples | peel-load <from>=<into>... | wrap-examples <doctest log> [--cfg <feature>] | host-args | compat <exe> [--mods <path>...] [--report <file>] [--patterns] [--data <file>] | compat refresh (ENSH_EXES lists the executables)";
 const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// Turned on by name: most of the API crate's test targets need its fake
 /// loader, and without the feature cargo skips them without a word; the
 /// API's unstable calls, its generated typed API and the compat task are
 /// linted and tested with the rest.
 const TEST_FEATURE: &str = "enshwick/test,enshwick/unstable,enshwick/typed,xtask/compat";
-/// The API crate, its core and its fake loader, whose modules and examples
-/// it re-exports, without `unstable`: the workspace turns the feature on for
-/// the runtimes, so only a build of their own shows that the stable surface,
-/// its docs and its examples stand without the unstable one.
-const STABLE_API: [&str; 12] = [
-    "--package",
-    "enshwick",
-    "--package",
-    "enshwick-base",
-    "--package",
-    "enshwick-content",
-    "--package",
-    "enshwick-core",
-    "--package",
-    "enshwick-fake",
-    "--features",
-    "enshwick/test",
-];
+/// The API crate, the one crate a mod names: the facade over the internal
+/// crates, whose rendered docs hold every public item.
+pub(crate) const FACADE: &str = "enshwick";
+/// The crates of the API ([`crate_rules::is_api_crate`]) with an `unstable`
+/// feature, each a `--package` argument, with the API crate's `test` feature and without `unstable`:
+/// the workspace turns the feature on for the runtimes, so only a build of
+/// their own shows that the stable surface, its docs and its examples stand
+/// without the unstable one.
+fn stable_api(packages: &[Package]) -> Vec<String> {
+    let mut args = Vec::new();
+    for package in packages
+        .iter()
+        .filter(|p| p.unstable && crate_rules::is_api_crate(&p.name, std::path::Path::new(&p.dir)))
+    {
+        args.extend(["--package".to_owned(), package.name.clone()]);
+    }
+    args.extend(["--features".to_owned(), format!("{FACADE}/test")]);
+    args
+}
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -101,25 +105,8 @@ fn main() -> ExitCode {
 
 fn run(args: &[String]) -> Result<bool, String> {
     let (task, rest) = args.split_first().ok_or(USAGE)?;
-    match task.as_str() {
-        "check" => {}
-        "dist" => return dist::run(rest),
-        "notes" => return notes::run(rest),
-        "tag-lines" => return tag_lines::run(rest),
-        "header" if rest.is_empty() => return header::run(&workspace_root()),
-        "peel-load" => return peel::run(&workspace_root(), rest),
-        "wrap-examples" => return lower_examples::wrap(&workspace_root(), &packages()?, rest),
-        "alias-examples" if rest.is_empty() => {
-            return lower_examples::run(&workspace_root(), &packages()?);
-        }
-        "host-args" if rest.is_empty() => {
-            // One argument a line, for CI runs that test the host as the check does.
-            for arg in host_args(&packages()?, cfg!(windows)) {
-                let _shown = writeln!(std::io::stdout(), "{arg}");
-            }
-            return Ok(true);
-        }
-        _ => return Err(USAGE.to_owned()),
+    if task != "check" {
+        return other_task(task, rest);
     }
     let mut all = false;
     let mut windows = false;
@@ -202,6 +189,28 @@ fn run(args: &[String]) -> Result<bool, String> {
         return Ok(true);
     }
     Ok(wine::run(&windows_tests, windows))
+}
+
+/// Runs `task`, any task but `check`, with its arguments `rest`.
+fn other_task(task: &str, rest: &[String]) -> Result<bool, String> {
+    match task {
+        "dist" => dist::run(rest),
+        "notes" => notes::run(rest),
+        "tag-lines" => tag_lines::run(rest),
+        "header" if rest.is_empty() => header::run(&workspace_root()),
+        "doc-links" if rest.is_empty() => doc_links::run(&workspace_root()),
+        "peel-load" => peel::run(&workspace_root(), rest),
+        "wrap-examples" => lower_examples::wrap(&workspace_root(), &packages()?, rest),
+        "alias-examples" if rest.is_empty() => lower_examples::run(&workspace_root(), &packages()?),
+        "host-args" if rest.is_empty() => {
+            // One argument a line, for CI runs that test the host as the check does.
+            for arg in host_args(&packages()?, cfg!(windows)) {
+                let _shown = writeln!(std::io::stdout(), "{arg}");
+            }
+            Ok(true)
+        }
+        _ => Err(USAGE.to_owned()),
+    }
 }
 
 /// The problems the checks that compile nothing find in the tree: manifest
@@ -392,6 +401,7 @@ fn packages() -> Result<Vec<Package>, String> {
                 windows_tests: ["windows-tests", "windows-only"]
                     .iter()
                     .any(|key| package["metadata"]["xtask"][key].as_bool() == Some(true)),
+                unstable: package["features"].get("unstable").is_some(),
             }
         })
         .collect())
@@ -468,7 +478,7 @@ pub(crate) fn tool_path() -> std::ffi::OsString {
 /// One command line: cargo, or another tool of the checks.
 #[derive(Debug)]
 struct Step {
-    program: Option<&'static str>,
+    program: Option<String>,
     args: Vec<String>,
     env: Vec<(&'static str, String)>,
 }
@@ -485,8 +495,20 @@ impl Step {
     /// A step that runs `program` instead of cargo.
     fn tool(program: &'static str, words: &[&str]) -> Self {
         Self {
-            program: Some(program),
+            program: Some(program.to_owned()),
             ..Self::new(words)
+        }
+    }
+
+    /// A step that runs this xtask binary again, without a cargo start and
+    /// its rebuild check of the binary that runs.
+    fn xtask(words: &[&str]) -> Self {
+        match std::env::current_exe() {
+            Ok(exe) => Self {
+                program: Some(exe.display().to_string()),
+                ..Self::new(words)
+            },
+            Err(_) => Self::new(&["xtask"]).then(words),
         }
     }
 
@@ -508,7 +530,7 @@ impl Step {
     fn line(&self) -> String {
         format!(
             "{} {}",
-            self.program.unwrap_or("cargo"),
+            self.program.as_deref().unwrap_or("cargo"),
             self.args.join(" ")
         )
     }
@@ -517,7 +539,7 @@ impl Step {
     /// step running beside others) and shown only when it fails.
     fn run(&self, quiet: bool) -> bool {
         let started = Instant::now();
-        let mut command = Command::new(self.program.map_or_else(cargo, str::to_owned));
+        let mut command = Command::new(self.program.clone().unwrap_or_else(cargo));
         command
             .args(&self.args)
             .env("PATH", tool_path())
@@ -554,13 +576,13 @@ fn say(text: &str) {
 
 /// The checks of the API crate's stable surface, built without `unstable`:
 /// its lints when its code changed, its examples and its rustdoc whenever
-/// it changed.
-fn stable_api_steps(code: bool) -> Vec<Step> {
+/// it changed. `stable` names the crates and features ([`stable_api`]).
+fn stable_api_steps(code: bool, stable: &[String]) -> Vec<Step> {
     let mut steps = Vec::new();
     if code {
         steps.push(
             Step::new(&["clippy", "--all-targets"])
-                .then(&STABLE_API)
+                .then_owned(stable)
                 .then(&["--", "-D", "warnings"]),
         );
     }
@@ -571,7 +593,7 @@ fn stable_api_steps(code: bool) -> Vec<Step> {
     // takes minutes; merged they share one binary and take seconds. The
     // test names carry the source path with the host's separator.
     let mut doctests = Step::new(&["test", "--doc"])
-        .then(&STABLE_API)
+        .then_owned(stable)
         .then(&["--"]);
     for module in ["src/script", "src/rates.rs", "src/item_data.rs"] {
         let windows = module.replace('/', "\\");
@@ -583,10 +605,17 @@ fn stable_api_steps(code: bool) -> Vec<Step> {
     // its dependencies.
     steps.push(
         Step::new(&["doc", "--no-deps"])
-            .then(&STABLE_API)
+            .then_owned(stable)
             .env("RUSTDOCFLAGS", "-D warnings"),
     );
+    steps.push(doc_links_step());
     steps
+}
+
+/// The check of the links rustdoc does not check in the facade's pages it
+/// just wrote ([`doc_links`]).
+fn doc_links_step() -> Step {
+    Step::xtask(&["doc-links"])
 }
 
 /// Whether the workspace's rustdoc runs: whenever code changed, since a
@@ -622,10 +651,12 @@ fn host_args(packages: &[Package], on_windows: bool) -> Vec<String> {
 
 /// The host steps of `parts`, one after another, in the order a check of
 /// every part runs them: `code` and `docs` say what changed, and `tests` is
-/// the nextest filter of the changed packages (`None`: every test).
+/// the nextest filter of the changed packages (`None`: every test);
+/// `workspace` and `stable` are the arguments of a workspace build and of
+/// the stable API's ([`host_args`], [`stable_api`]).
 fn host_steps(
     scope: &Scope,
-    workspace: &[String],
+    (workspace, stable): (&[String], &[String]),
     (code, docs): (bool, bool),
     tests: Option<&str>,
     full: bool,
@@ -655,13 +686,14 @@ fn host_steps(
     // documents as well as with its code.
     let api_docs = match scope {
         Scope::All => true,
-        Scope::Some { docs, .. } => docs.iter().any(|name| name == "enshwick"),
+        Scope::Some { docs, .. } => docs.iter().any(|name| name == FACADE),
     };
-    if run_docs && (touches(scope, "enshwick") || api_docs) {
-        steps.extend(stable_api_steps(touches(scope, "enshwick")));
+    if run_docs && (touches(scope, FACADE) || api_docs) {
+        steps.extend(stable_api_steps(touches(scope, FACADE), stable));
     }
     if run_docs && workspace_rustdoc(code, full) {
         steps.push(host(&["doc", "--no-deps"]).env("RUSTDOCFLAGS", "-D warnings"));
+        steps.push(doc_links_step());
     }
     if full && run_host {
         steps.push(Step::new(&["deny", "check"]));
@@ -709,9 +741,10 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
         say("checking the whole workspace");
     }
     let workspace = host_args(packages, on_windows);
+    let stable = stable_api(packages);
     let host_steps = host_steps(
         scope,
-        &workspace,
+        (&workspace, &stable),
         (code, docs),
         tests.as_deref(),
         full,
@@ -774,10 +807,17 @@ mod tests {
     }
 
     fn planned(parts: &[Part]) -> Vec<String> {
-        host_steps(&Scope::All, &[], (true, true), None, true, parts)
-            .iter()
-            .map(Step::line)
-            .collect()
+        host_steps(
+            &Scope::All,
+            (&[], &stable()),
+            (true, true),
+            None,
+            true,
+            parts,
+        )
+        .iter()
+        .map(Step::line)
+        .collect()
     }
 
     #[test]
@@ -789,11 +829,17 @@ mod tests {
         assert!(starts(&docs, "cargo test --doc") && starts(&docs, "cargo doc"));
         assert!(!starts(&docs, "cargo nextest") && !starts(&docs, "cargo fmt"));
         let every = planned(&Part::every(false));
+        // A step that runs twice, such as the link check after each docs
+        // build, takes its next place in the full run.
         let order = |steps: &[String]| -> Vec<usize> {
-            steps
-                .iter()
-                .map(|step| every.iter().position(|s| s == step).unwrap())
-                .collect()
+            let mut taken: Vec<usize> = Vec::new();
+            for step in steps {
+                let at = (0..every.len())
+                    .find(|at| every[*at] == *step && !taken.contains(at))
+                    .unwrap();
+                taken.push(at);
+            }
+            taken
         };
         assert_eq!(every.len(), host.len() + docs.len());
         assert!(order(&host).is_sorted() && order(&docs).is_sorted());
@@ -805,25 +851,67 @@ mod tests {
             code: BTreeSet::new(),
             docs: [name.to_owned()].into(),
         };
-        let stable = |scope: &Scope| {
-            host_steps(scope, &[], (false, true), Some(""), false, &[Part::Docs])
-                .iter()
-                .any(|step| step.args.ends_with(&STABLE_API.map(str::to_owned)))
+        let args = stable();
+        let plans_stable = |scope: &Scope| {
+            host_steps(
+                scope,
+                (&[], &args),
+                (false, true),
+                Some(""),
+                false,
+                &[Part::Docs],
+            )
+            .iter()
+            .any(|step| step.args.ends_with(&args))
         };
-        assert!(stable(&docs_of("enshwick")));
-        assert!(!stable(&docs_of("enshwick-luau")));
+        assert!(plans_stable(&docs_of("enshwick")));
+        assert!(!plans_stable(&docs_of("enshwick-luau")));
     }
 
-    fn runs_stable_rustdoc(steps: &[Step]) -> bool {
+    fn runs_stable_rustdoc(steps: &[Step], stable: &[String]) -> bool {
         steps.iter().any(|step| {
             step.args
                 .starts_with(&["doc".to_owned(), "--no-deps".to_owned()])
-                && step.args.ends_with(&STABLE_API.map(str::to_owned))
+                && step.args.ends_with(stable)
                 && step
                     .env
                     .iter()
                     .any(|(name, value)| *name == "RUSTDOCFLAGS" && value == "-D warnings")
         })
+    }
+
+    /// The stable API's arguments for this workspace.
+    fn stable() -> Vec<String> {
+        stable_api(&packages().unwrap())
+    }
+
+    #[test]
+    fn the_stable_api_is_the_facade_and_each_internal_crate_whose_examples_name_it() {
+        let stable = stable();
+        let named = |name: &str| stable.iter().any(|arg| arg == name);
+        for name in [
+            "enshwick",
+            "enshwick-core",
+            "enshwick-base",
+            "enshwick-content",
+            "enshwick-world",
+            "enshwick-fake",
+        ] {
+            assert!(named(name), "{name}");
+        }
+        for name in ["enshwick-values", "enshwick-abi", "enshwick-luau", "xtask"] {
+            assert!(!named(name), "{name}");
+        }
+        assert!(stable.ends_with(&["--features".to_owned(), "enshwick/test".to_owned()]));
+    }
+
+    #[test]
+    fn a_tool_step_runs_its_program_and_an_xtask_step_this_binary() {
+        assert_eq!(Step::tool("typos", &[]).program.as_deref(), Some("typos"));
+        let exe = std::env::current_exe().unwrap().display().to_string();
+        let step = Step::xtask(&["doc-links"]);
+        assert_eq!(step.program.as_deref(), Some(exe.as_str()));
+        assert_eq!(step.args, ["doc-links"]);
     }
 
     #[test]
@@ -836,6 +924,7 @@ mod tests {
             lib: None,
             windows_only,
             windows_tests: windows_only,
+            unstable: false,
         };
         let packages = [package("api", false), package("loader", true)];
         let base = ["--workspace", "--features", TEST_FEATURE];
@@ -848,12 +937,14 @@ mod tests {
 
     #[test]
     fn a_change_to_the_api_code_builds_its_stable_rustdoc() {
-        assert!(runs_stable_rustdoc(&stable_api_steps(true)));
+        let args = stable();
+        assert!(runs_stable_rustdoc(&stable_api_steps(true, &args), &args));
     }
 
     #[test]
     fn a_change_to_the_book_alone_builds_the_stable_rustdoc() {
-        assert!(runs_stable_rustdoc(&stable_api_steps(false)));
+        let args = stable();
+        assert!(runs_stable_rustdoc(&stable_api_steps(false, &args), &args));
     }
 
     #[test]
@@ -865,7 +956,7 @@ mod tests {
 
     #[test]
     fn the_stable_doctests_skip_unstable_modules_under_either_path_separator() {
-        let steps = stable_api_steps(false);
+        let steps = stable_api_steps(false, &stable());
         let skipped = |name: &str| {
             steps.iter().any(|step| {
                 step.args

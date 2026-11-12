@@ -1,13 +1,13 @@
 error[E0425]: cannot find function `as_loader` in module `enshwick::__private`
-  --> tests/ui/internals_out_of_reach.rs:26:26
+  --> tests/ui/internals_out_of_reach.rs:32:26
    |
-26 |     enshwick::__private::as_loader(|| ());
+32 |     enshwick::__private::as_loader(|| ());
    |                          ^^^^^^^^^ not found in `enshwick::__private`
 
 error[E0425]: cannot find function `refresh_levels` in module `enshwick::__private`
-  --> tests/ui/internals_out_of_reach.rs:27:26
+  --> tests/ui/internals_out_of_reach.rs:33:26
    |
-27 |       enshwick::__private::refresh_levels();
+33 |       enshwick::__private::refresh_levels();
    |                            ^^^^^^^^^^^^^^
    |
   ::: $WORKSPACE/crates/internal/base/src/__private.rs
@@ -21,41 +21,41 @@ error[E0425]: cannot find function `refresh_levels` in module `enshwick::__priva
    |
 help: a function with a similar name exists
    |
-27 -     enshwick::__private::refresh_levels();
-27 +     enshwick::__private::refresh_level();
+33 -     enshwick::__private::refresh_levels();
+33 +     enshwick::__private::refresh_level();
    |
 
 error[E0425]: cannot find value `install_host` in module `enshwick::__private`
-  --> tests/ui/internals_out_of_reach.rs:28:34
+  --> tests/ui/internals_out_of_reach.rs:34:34
    |
-28 |     let _ = enshwick::__private::install_host;
+34 |     let _ = enshwick::__private::install_host;
    |                                  ^^^^^^^^^^^^ not found in `enshwick::__private`
 
 error[E0425]: cannot find value `as_pack` in module `enshwick::__private`
-  --> tests/ui/internals_out_of_reach.rs:29:34
+  --> tests/ui/internals_out_of_reach.rs:35:34
    |
-29 |     let _ = enshwick::__private::as_pack::<()>;
+35 |     let _ = enshwick::__private::as_pack::<()>;
    |                                  ^^^^^^^ not found in `enshwick::__private`
 
 error[E0046]: not all trait items implemented, missing: `base`, `base_mut`
-  --> tests/ui/internals_out_of_reach.rs:34:1
+  --> tests/ui/internals_out_of_reach.rs:40:1
    |
-34 | impl enshwick::Loading for Mine {}
+40 | impl enshwick::Loading for Mine {}
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ missing `base`, `base_mut` in implementation
    |
    = help: implement the missing item: `fn base(&self) -> &enshwick_base::load::BaseLoad { todo!() }`
    = help: implement the missing item: `fn base_mut(&mut self) -> &mut enshwick_base::load::BaseLoad { todo!() }`
 
 error[E0277]: the trait bound `Mine: enshwick_base::load::sealed::Sealed` is not satisfied
-  --> tests/ui/internals_out_of_reach.rs:34:28
+  --> tests/ui/internals_out_of_reach.rs:40:28
    |
-34 | impl enshwick::Loading for Mine {}
+40 | impl enshwick::Loading for Mine {}
    |                            ^^^^ unsatisfied trait bound
    |
 help: the trait `enshwick_base::load::sealed::Sealed` is not implemented for `Mine`
-  --> tests/ui/internals_out_of_reach.rs:32:1
+  --> tests/ui/internals_out_of_reach.rs:38:1
    |
-32 | struct Mine;
+38 | struct Mine;
    | ^^^^^^^^^^^
 help: the following other types implement trait `enshwick_base::load::sealed::Sealed`
   --> $WORKSPACE/crates/internal/core/src/load.rs
@@ -65,6 +65,9 @@ help: the following other types implement trait `enshwick_base::load::sealed::Se
    |
   ::: $WORKSPACE/crates/internal/base/src/load.rs
    |
+   |     impl<L: super::Loading + ?Sized> Sealed for &mut L {}
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `&mut L`
+...
    | impl sealed::Sealed for BaseLoad {}
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `enshwick_base::load::BaseLoad`
 note: required by a bound in `enshwick::Loading`
@@ -75,12 +78,13 @@ note: required by a bound in `enshwick::Loading`
    = note: `Loading` is a "sealed trait", because to implement it you also need to implement `enshwick_base::load::sealed::Sealed`, which is not accessible; this is usually done to force you to use one of the provided types that already implement it
    = help: the following types implement the trait:
              enshwick::Load<'_>
+             &mut L
              enshwick_base::load::BaseLoad
 
 error[E0624]: method `is_item` is private
-  --> tests/ui/internals_out_of_reach.rs:14:21
+  --> tests/ui/internals_out_of_reach.rs:15:21
    |
-14 |     let _ = vanilla.is_item(guid);
+15 |     let _ = vanilla.is_item(guid);
    |                     ^^^^^^^ private method
    |
   ::: $WORKSPACE/crates/internal/content/src/content/vanilla.rs
@@ -89,9 +93,9 @@ error[E0624]: method `is_item` is private
    |     ------------------------------------------------ private method defined here
 
 error[E0624]: method `is_recipe` is private
-  --> tests/ui/internals_out_of_reach.rs:15:21
+  --> tests/ui/internals_out_of_reach.rs:16:21
    |
-15 |     let _ = vanilla.is_recipe(guid);
+16 |     let _ = vanilla.is_recipe(guid);
    |                     ^^^^^^^^^ private method
    |
   ::: $WORKSPACE/crates/internal/content/src/content/vanilla.rs
@@ -100,9 +104,9 @@ error[E0624]: method `is_recipe` is private
    |     -------------------------------------------------- private method defined here
 
 error[E0624]: method `check` is private
-  --> tests/ui/internals_out_of_reach.rs:16:22
+  --> tests/ui/internals_out_of_reach.rs:17:22
    |
-16 |     let _ = workshop.check();
+17 |     let _ = workshop.check();
    |                      ^^^^^ private method
    |
   ::: $WORKSPACE/crates/internal/content/src/content/workshops.rs
@@ -110,10 +114,32 @@ error[E0624]: method `check` is private
    |     pub(crate) fn check(&self) -> Result<(), Off> {
    |     --------------------------------------------- private method defined here
 
-error[E0624]: method `install` is private
-  --> tests/ui/internals_out_of_reach.rs:20:18
+error[E0624]: associated function `from_status` is private
+  --> tests/ui/internals_out_of_reach.rs:21:25
    |
-20 |     let _ = host.install();
+21 |     let _ = WorldError::from_status(status);
+   |                         ^^^^^^^^^^^ private associated function
+   |
+  ::: $WORKSPACE/crates/internal/world/src/world_error.rs
+   |
+   |     pub(crate) fn from_status(status: Status) -> Result<(), Self> {
+   |     ------------------------------------------------------------- private associated function defined here
+
+error[E0624]: associated function `check` is private
+  --> tests/ui/internals_out_of_reach.rs:22:25
+   |
+22 |     let _ = WorldError::check(status, WorldError::Missing);
+   |                         ^^^^^ private associated function
+   |
+  ::: $WORKSPACE/crates/internal/world/src/world_error.rs
+   |
+   |     pub(crate) fn check(status: Status, missing: Self) -> Result<(), Self> {
+   |     ---------------------------------------------------------------------- private associated function defined here
+
+error[E0624]: method `install` is private
+  --> tests/ui/internals_out_of_reach.rs:26:18
+   |
+26 |     let _ = host.install();
    |                  ^^^^^^^ private method
    |
   ::: $WORKSPACE/crates/internal/base/src/host.rs
@@ -122,9 +148,9 @@ error[E0624]: method `install` is private
    |     ----------------------------------- private method defined here
 
 error[E0624]: method `scope` is private
-  --> tests/ui/internals_out_of_reach.rs:21:10
+  --> tests/ui/internals_out_of_reach.rs:27:10
    |
-21 |     host.scope(|| ());
+27 |     host.scope(|| ());
    |          ^^^^^ private method
    |
   ::: $WORKSPACE/crates/internal/base/src/host.rs
@@ -133,9 +159,9 @@ error[E0624]: method `scope` is private
    |     ----------------------------------------------------------- private method defined here
 
 error[E0624]: associated function `get` is private
-  --> tests/ui/internals_out_of_reach.rs:22:24
+  --> tests/ui/internals_out_of_reach.rs:28:24
    |
-22 |     let _ = Scheduler::get(ModHandle(1));
+28 |     let _ = Scheduler::get(ModHandle(1));
    |                        ^^^ private associated function
    |
   ::: $WORKSPACE/crates/internal/base/src/schedule.rs
@@ -144,9 +170,9 @@ error[E0624]: associated function `get` is private
    |     ------------------------------------------------ private associated function defined here
 
 error[E0624]: method `run_due` is private
-  --> tests/ui/internals_out_of_reach.rs:23:15
+  --> tests/ui/internals_out_of_reach.rs:29:15
    |
-23 |     scheduler.run_due(0);
+29 |     scheduler.run_due(0);
    |               ^^^^^^^ private method
    |
   ::: $WORKSPACE/crates/internal/base/src/schedule.rs
@@ -155,9 +181,9 @@ error[E0624]: method `run_due` is private
    |     -------------------------------------- private method defined here
 
 error[E0624]: method `read` is private
-  --> tests/ui/internals_out_of_reach.rs:24:16
+  --> tests/ui/internals_out_of_reach.rs:30:16
    |
-24 |     let _ = ty.read(host, Entity(2));
+30 |     let _ = ty.read(host, Entity(2));
    |                ^^^^ private method
    |
   ::: $WORKSPACE/crates/internal/base/src/ecs.rs
@@ -166,9 +192,9 @@ error[E0624]: method `read` is private
    |     ---------------------------------------------------------------------------------------- private method defined here
 
 error[E0624]: associated function `new` is private
-  --> tests/ui/internals_out_of_reach.rs:25:31
+  --> tests/ui/internals_out_of_reach.rs:31:31
    |
-25 |       let _ = CraftRecipeEvent::new(Entity(2), None, RecipeId::new(1), 1);
+31 |       let _ = CraftRecipeEvent::new(Entity(2), None, RecipeId::new(1), 1);
    |                                 ^^^ private associated function
    |
   ::: $WORKSPACE/crates/internal/base/src/game_events.rs

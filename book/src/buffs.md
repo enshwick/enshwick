@@ -5,9 +5,9 @@ description: Read the buff and debuff types the game knows, list the buffs an en
 
 # Buffs
 
-[`load.buffs()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/buffs.rs)
+[`load.buffs()`](https://github.com/enshwick/enshwick/blob/main/crates/internal/world/src/buffs.rs)
 returns the
-[`Buffs`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/buffs.rs)
+[`Buffs`](https://github.com/enshwick/enshwick/blob/main/crates/internal/world/src/buffs.rs)
 of the server's world: the buff and debuff types the game knows, an entity's
 buffs, giving and removing one. It is `Copy`; get it during `init`
 and move it into handlers, tasks and actions.

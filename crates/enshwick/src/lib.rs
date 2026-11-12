@@ -136,7 +136,7 @@ pub use enshwick_core::actions;
 #[doc(inline)]
 pub use enshwick_core::affixes;
 #[doc(inline)]
-pub use enshwick_core::altars;
+pub use enshwick_world::altars;
 #[cfg(doctest)]
 mod book;
 #[doc(inline)]
@@ -158,8 +158,6 @@ pub use enshwick_base::i18n;
 #[doc(inline)]
 pub use enshwick_content::content;
 #[doc(inline)]
-pub use enshwick_core::buffs;
-#[doc(inline)]
 pub use enshwick_core::chat;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
@@ -173,14 +171,10 @@ pub use enshwick_core::controls;
 #[doc(inline)]
 pub use enshwick_core::damage;
 #[doc(inline)]
-pub use enshwick_core::daytime;
-#[doc(inline)]
 pub use enshwick_core::effects;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_core::entity_data;
-#[doc(inline)]
-pub use enshwick_core::game_settings;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_core::input;
@@ -198,6 +192,12 @@ pub use enshwick_core::items;
 pub use enshwick_core::knowledge;
 #[doc(inline)]
 pub use enshwick_core::loot;
+#[doc(inline)]
+pub use enshwick_world::buffs;
+#[doc(inline)]
+pub use enshwick_world::daytime;
+#[doc(inline)]
+pub use enshwick_world::game_settings;
 #[cfg(doctest)]
 mod lower_examples;
 #[doc(inline)]
@@ -213,9 +213,6 @@ pub use enshwick_base::points;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_content::rates;
-#[cfg(feature = "unstable")]
-#[doc(inline)]
-pub use enshwick_core::map;
 #[doc(inline)]
 pub use enshwick_core::packs;
 #[doc(inline)]
@@ -223,6 +220,9 @@ pub use enshwick_core::progress;
 #[cfg(feature = "typed")]
 #[doc(inline)]
 pub use enshwick_core::quests;
+#[cfg(feature = "unstable")]
+#[doc(inline)]
+pub use enshwick_world::map;
 #[cfg(doctest)]
 mod refused;
 #[doc(inline)]
@@ -250,26 +250,26 @@ pub use enshwick_core::stats;
 #[doc(inline)]
 pub use enshwick_core::survivors;
 #[doc(inline)]
-pub use enshwick_core::terrain;
-#[cfg(feature = "typed")]
-#[doc(inline)]
-pub use enshwick_core::typed;
-#[doc(inline)]
 pub use enshwick_core::ui;
 #[doc(inline)]
 pub use enshwick_core::vetoes;
-#[doc(inline)]
-pub use enshwick_core::voxels;
-#[doc(inline)]
-pub use enshwick_core::weather;
-#[cfg(feature = "unstable")]
-#[doc(inline)]
-pub use enshwick_core::world;
 #[cfg(feature = "test")]
 #[doc(inline)]
 pub use enshwick_fake::test;
 #[doc(inline)]
 pub use enshwick_values::shape;
+#[doc(inline)]
+pub use enshwick_world::terrain;
+#[cfg(feature = "typed")]
+#[doc(inline)]
+pub use enshwick_world::typed;
+#[doc(inline)]
+pub use enshwick_world::voxels;
+#[doc(inline)]
+pub use enshwick_world::weather;
+#[cfg(feature = "unstable")]
+#[doc(inline)]
+pub use enshwick_world::world;
 
 // Listed as re-exports, not as second pages beside their `abi` ones.
 #[doc(no_inline)]

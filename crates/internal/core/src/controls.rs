@@ -454,7 +454,7 @@ unsafe extern "system" fn fire(event: *const ControlEvent, user: *mut c_void) {
     let fired = Fired {
         control,
         phase,
-        player: (event.server == 1).then(|| Player::from_info(&event.player)),
+        player: (event.server == 1).then(|| enshwick_world::__internal::player(&event.player)),
     };
     crate::host::guard("panic in a control", || (), || handler(&fired));
 }

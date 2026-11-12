@@ -101,11 +101,14 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<bool, String> {
         let (from, into) = (root.join(from), root.join(into));
         let text =
             std::fs::read_to_string(&from).map_err(|e| format!("{}: {e}", from.display()))?;
-        let peeled = peel(&text, &form).map_err(|e| format!("{}: {e}", from.display()))?;
+        let mut peeled = peel(&text, &form).map_err(|e| format!("{}: {e}", from.display()))?;
         if let Form::Trait {
             module, reexports, ..
         } = &form
         {
+            for block in &mut peeled.forwarders {
+                *block = rebase_links(block, module);
+            }
             for name in &peeled.traits {
                 reexport(&root.join(reexports), module, name)?;
             }
@@ -137,6 +140,50 @@ pub(crate) fn run(root: &Path, args: &[String]) -> Result<bool, String> {
         }
     }
     Ok(true)
+}
+
+/// `block`, a forwarder block whose docs come from `module` of a domain
+/// crate, with its doc links relative to that module made paths from the
+/// crate root, which core re-exports at the same paths: `self` is the
+/// module, `super` its parent.
+fn rebase_links(block: &str, module: &str) -> String {
+    let path = |module: &str| {
+        if module.is_empty() {
+            "crate".to_owned()
+        } else {
+            format!("crate::{module}")
+        }
+    };
+    let parent = module.rsplit_once("::").map_or("", |(parent, _)| parent);
+    let (own, parent) = (path(module), path(parent));
+    // A link's target follows `](` inline, or `]: ` in a reference line.
+    let swaps = [
+        ("](self)".to_owned(), format!("]({own})")),
+        ("](super)".to_owned(), format!("]({parent})")),
+        ("](self::".to_owned(), format!("]({own}::")),
+        ("](super::".to_owned(), format!("]({parent}::")),
+        ("]: self::".to_owned(), format!("]: {own}::")),
+        ("]: super::".to_owned(), format!("]: {parent}::")),
+    ];
+    let mut out = String::with_capacity(block.len());
+    for line in block.split_inclusive('\n') {
+        if !line.trim_start().starts_with("///") {
+            out.push_str(line);
+            continue;
+        }
+        let mut rebased = line.to_owned();
+        for (from, to) in &swaps {
+            rebased = rebased.replace(from.as_str(), to);
+        }
+        let body = rebased.trim_end_matches(['\r', '\n']);
+        if let Some(head) = body.strip_suffix("]: self") {
+            rebased = format!("{head}]: {own}{}", &rebased[body.len()..]);
+        } else if let Some(head) = body.strip_suffix("]: super") {
+            rebased = format!("{head}]: {parent}{}", &rebased[body.len()..]);
+        }
+        out.push_str(&rebased);
+    }
+    out
 }
 
 /// The methods the traits re-exported in `reexports`, a crate's

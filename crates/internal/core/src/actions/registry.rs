@@ -155,7 +155,7 @@ impl Registry {
     }
 
     fn online(&self) -> Vec<Player> {
-        crate::world::online(self.host)
+        enshwick_world::__internal::online(self.host)
     }
 
     fn ask<'a>(
