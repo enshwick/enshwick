@@ -19,6 +19,7 @@ re-exports; `crates/runtime/` holds what `enshwick.zip` ships into the game.
 | `enshwick-world` | `crates/internal/world` | the world domain: `World` and the live world's map, voxels, terrain, weather, time of day, altars, buffs and game settings, and the typed handles that read a live world | yes |
 | `enshwick-inventory` | `crates/internal/inventory` | the inventory domain: inventories and items, item and entity data, affixes, stats, damage, effects, survivors and loot | yes |
 | `enshwick-knowledge` | `crates/internal/knowledge` | the knowledge domain: knowledge, quests and the journal, progress (skills, comfort, experience) and rewards | yes |
+| `enshwick-actions` | `crates/internal/actions` | the actions domain: player actions and their windows, console commands, controls and the players' input, chat, interactions and vetoes | yes |
 | `enshwick-typed` | `crates/internal/typed` | the generated typed API, re-exported as `enshwick::typed` | yes |
 | `enshwick-values` | `crates/internal/values` | the value types the layers share: shape, content ids, resource values, the script value model | yes |
 | `enshwick-abi` | `crates/internal/abi` | the `repr(C)` types that cross between the loader and a mod, the ABI version and its golden layout file, and the reads and writes of game memory, re-exported as `enshwick::abi` and `enshwick::raw` | yes |
@@ -42,15 +43,15 @@ stub ──starts──▶ loader ──C ABI──▶ mods (enshwick ▸ enshwi
                    ├──▶ enshwick-gamedata (tables, reflect, archive) ──▶ enshwick-content, enshwick-base
                    └──▶ enshwick-luau ──▶ enshwick-core (script descriptions)
 cargo-enshwick ──▶ enshwick-core, enshwick-abi, enshwick-gamedata
-enshwick ──▶ enshwick-core ──▶ enshwick-knowledge ──▶ enshwick-inventory ──▶ enshwick-world ──▶ enshwick-content ──▶ enshwick-base ──▶ enshwick-abi ──▶ enshwick-values
-                                                                                                enshwick-content ──▶ enshwick-typed ──▶ enshwick-values ──▶ enshwick-macros
+enshwick ──▶ enshwick-core ──▶ enshwick-actions ──▶ enshwick-knowledge ──▶ enshwick-inventory ──▶ enshwick-world ──▶ enshwick-content ──▶ enshwick-base ──▶ enshwick-abi ──▶ enshwick-values
+                                                                                                                     enshwick-content ──▶ enshwick-typed ──▶ enshwick-values ──▶ enshwick-macros
 enshwick ──test──▶ enshwick-fake ──▶ enshwick-core (its `fake` feature)
 ```
 
 - `enshwick` is the one crate a mod names, a facade over its internal parts,
   each re-exported under its paths: `enshwick-core`, `Load` and the domains
-  still in it; `enshwick-knowledge`, `enshwick-inventory`, `enshwick-world`
-  and `enshwick-content`, the domains that left it; `enshwick-base`, what every domain shares; `enshwick-fake`,
+  still in it; `enshwick-actions`, `enshwick-knowledge`, `enshwick-inventory`,
+  `enshwick-world` and `enshwick-content`, the domains that left it; `enshwick-base`, what every domain shares; `enshwick-fake`,
   the fake loader; `enshwick-typed`, the generated
   typed API; `enshwick-abi`, the ABI; `enshwick-values`, the value types the
   layers share. None depends on `enshwick` or on a part above it, so the
@@ -134,7 +135,8 @@ the crate of each domain that has left it.
 
 Domains leave the core downward, lowest first, each in one pull request
 that keeps `enshwick`'s public API equal. Base went first, then content,
-world, inventory and knowledge; each later peel follows the same steps.
+world, inventory, knowledge and actions; each later peel follows the same
+steps.
 
 1. Make the crate `crates/internal/<domain>` (`enshwick-<domain>`): exact
    pins, the description "Internal part of enshwick; depend on enshwick",

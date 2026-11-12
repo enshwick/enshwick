@@ -156,7 +156,7 @@ A line is one of:
   `you.trading-post help`, `you.my-mod give-to 3073 10 Ann`;
 - a mod's [command](commands.md) line, `/adm online` or `adm online`.
 
-[`console::run(line)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/core/src/console.rs)
+[`console::run(line)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/actions/src/console.rs)
 runs a line and returns its answer. Call it on the server's game thread, from
 a scheduled task or a game event; elsewhere it returns
 `RunError::NotOnGameThread`. A first word that neither the loader nor a
