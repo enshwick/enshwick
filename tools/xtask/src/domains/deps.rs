@@ -97,6 +97,7 @@ fn usage(files: &[(String, syn::File)], gated: &[Vec<String>], ident: &str) -> U
 
 /// The modules declared `#[cfg(feature = "...")] mod name;`, whose files
 /// the feature turns off whole.
+// shortcut: reads declarations at a file's top level only, so a gated `mod x;` inside an inline module counts as ungated and the check passes leniently; read inline modules if one appears.
 fn gated_modules(files: &[(String, syn::File)]) -> Vec<Vec<String>> {
     let mut gated = Vec::new();
     for (path, file) in files {
@@ -114,23 +115,29 @@ fn gated_modules(files: &[(String, syn::File)]) -> Vec<Vec<String>> {
     gated
 }
 
-/// Whether the manifest's `[dependencies]` entry of `dep` is optional.
+/// Whether the manifest's entry of `dep`, in `[dependencies]` or a
+/// `[target.*.dependencies]`, is optional.
 fn optional(manifest: &toml::Table, dep: &str) -> bool {
-    manifest
-        .get("dependencies")
+    let targets = manifest
+        .get("target")
         .and_then(toml::Value::as_table)
-        .is_some_and(|deps| {
-            deps.iter().any(|(key, entry)| {
-                let package = entry
-                    .get("package")
-                    .and_then(toml::Value::as_str)
-                    .unwrap_or(key);
-                package == dep
-                    && entry
-                        .get("optional")
-                        .and_then(toml::Value::as_bool)
-                        .unwrap_or(false)
-            })
+        .into_iter()
+        .flat_map(|targets| targets.values());
+    std::iter::once(manifest.get("dependencies"))
+        .chain(targets.map(|target| target.get("dependencies")))
+        .flatten()
+        .filter_map(toml::Value::as_table)
+        .flatten()
+        .any(|(key, entry)| {
+            entry
+                .get("package")
+                .and_then(toml::Value::as_str)
+                .unwrap_or(key)
+                == dep
+                && entry
+                    .get("optional")
+                    .and_then(toml::Value::as_bool)
+                    .unwrap_or(false)
         })
 }
 
@@ -138,6 +145,18 @@ fn optional(manifest: &toml::Table, dep: &str) -> bool {
 mod tests {
     use super::super::tests::Tree;
     use super::*;
+
+    #[test]
+    fn a_dependency_counts_as_optional_in_a_target_table_too() -> Result<(), toml::de::Error> {
+        let manifest: toml::Table = toml::from_str(
+            "[dependencies]\nenshwick-base.workspace = true\nup = { package = \"enshwick-ui\", optional = true }\n\n[target.'cfg(windows)'.dependencies]\nenshwick-world = { workspace = true, optional = true }\n",
+        )?;
+        assert!(!optional(&manifest, "enshwick-base"));
+        assert!(optional(&manifest, "enshwick-ui"));
+        assert!(optional(&manifest, "enshwick-world"));
+        assert!(!optional(&manifest, "enshwick-content"));
+        Ok(())
+    }
 
     #[test]
     fn a_dependency_named_nowhere_in_tests_only_or_only_under_a_feature_without_optional_fails() {
