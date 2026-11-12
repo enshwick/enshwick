@@ -62,7 +62,10 @@ pub(crate) fn to_lua(
         (Value::Record(fields), Ty::Record(record)) => {
             let table = lua.create_table_with_capacity(0, fields.len())?;
             for (value, field) in fields.into_iter().zip(record.fields()) {
-                table.raw_set(field.name(), to_lua(lua, scope, value, field.ty())?)?;
+                table.raw_set(
+                    Interned::name(lua, field.name())?,
+                    to_lua(lua, scope, value, field.ty())?,
+                )?;
             }
             LuaValue::Table(table)
         }
@@ -113,7 +116,12 @@ pub(crate) fn to_lua(
 }
 
 /// The API value of the Luau value `value`, which is to be a `ty`.
-pub(crate) fn from_lua(scope: &Scope, value: LuaValue, ty: &'static Ty) -> Result<Value, Error> {
+pub(crate) fn from_lua(
+    lua: &Lua,
+    scope: &Scope,
+    value: LuaValue,
+    ty: &'static Ty,
+) -> Result<Value, Error> {
     match ty {
         Ty::Nil => Ok(Value::Nil),
         Ty::Bool => match value {
@@ -129,7 +137,7 @@ pub(crate) fn from_lua(scope: &Scope, value: LuaValue, ty: &'static Ty) -> Resul
             LuaValue::Number(n) => Ok(Value::Number(n)),
             other => Err(expected("a number", &other)),
         },
-        Ty::Choice(choice) => choice_from_lua(scope, value, choice),
+        Ty::Choice(choice) => choice_from_lua(lua, value, choice),
         Ty::String => match value {
             LuaValue::String(s) => Ok(Value::String(
                 s.to_str()
@@ -144,7 +152,7 @@ pub(crate) fn from_lua(scope: &Scope, value: LuaValue, ty: &'static Ty) -> Resul
         },
         Ty::Optional(inner_ty) => match value {
             LuaValue::Nil => Ok(Value::Nil),
-            value => from_lua(scope, value, inner_ty),
+            value => from_lua(lua, scope, value, inner_ty),
         },
         Ty::List(inner_ty) => {
             let LuaValue::Table(table) = value else {
@@ -154,7 +162,7 @@ pub(crate) fn from_lua(scope: &Scope, value: LuaValue, ty: &'static Ty) -> Resul
             for (i, item) in table.sequence_values::<LuaValue>().enumerate() {
                 let item = item.map_err(|e| Error::new(e.to_string()))?;
                 items.push(
-                    from_lua(scope, item, inner_ty)
+                    from_lua(lua, scope, item, inner_ty)
                         .map_err(|e| Error::new(format!("[{}]: {e}", i + 1)))?,
                 );
             }
@@ -168,13 +176,13 @@ pub(crate) fn from_lua(scope: &Scope, value: LuaValue, ty: &'static Ty) -> Resul
                 .fields()
                 .iter()
                 .map(|field| {
-                    let value: LuaValue = table
-                        .raw_get(field.name())
+                    let value: LuaValue = Interned::name(lua, field.name())
+                        .and_then(|name| table.raw_get(name))
                         .map_err(|e| Error::new(e.to_string()))?;
                     if field.has_default() && value.is_nil() {
                         return Ok(Value::Nil);
                     }
-                    from_lua(scope, value, field.ty())
+                    from_lua(lua, scope, value, field.ty())
                         .map_err(|e| Error::new(format!("{}: {e}", field.name())))
                 })
                 .collect::<Result<_, _>>()
@@ -207,7 +215,7 @@ pub(crate) fn from_lua(scope: &Scope, value: LuaValue, ty: &'static Ty) -> Resul
             other => Err(expected("a buffer", &other)),
         },
         Ty::Data => data(value, 0),
-        Ty::Union(union) => union_from_lua(scope, value, union),
+        Ty::Union(union) => union_from_lua(lua, scope, value, union),
         Ty::Object(class) => object_from_lua(&value, class),
         _ => Err(Error::new("a type this runtime does not know")),
     }
@@ -215,11 +223,11 @@ pub(crate) fn from_lua(scope: &Scope, value: LuaValue, ty: &'static Ty) -> Resul
 
 /// The API value of `value`, a variant of `choice`: the variant's own
 /// static name, which also checks it.
-fn choice_from_lua(scope: &Scope, value: LuaValue, choice: &Choice) -> Result<Value, Error> {
+fn choice_from_lua(lua: &Lua, value: LuaValue, choice: &Choice) -> Result<Value, Error> {
     let LuaValue::String(s) = value else {
         return Err(expected("a string", &value));
     };
-    if let Some(Some(name)) = scope.with_lua(|lua| Interned::variant(lua, choice, &s)) {
+    if let Some(name) = Interned::variant(lua, choice, &s) {
         return Ok(Value::Name(name));
     }
     let text = s
@@ -237,7 +245,12 @@ fn choice_from_lua(scope: &Scope, value: LuaValue, choice: &Choice) -> Result<Va
 
 /// The API value of `value`, a variant of `union`: its name, or a table of
 /// one variant and its value.
-fn union_from_lua(scope: &Scope, value: LuaValue, union: &Union) -> Result<Value, Error> {
+fn union_from_lua(
+    lua: &Lua,
+    scope: &Scope,
+    value: LuaValue,
+    union: &Union,
+) -> Result<Value, Error> {
     match value {
         LuaValue::String(name) => {
             let name = name
@@ -270,7 +283,7 @@ fn union_from_lua(scope: &Scope, value: LuaValue, union: &Union) -> Result<Value
                 )));
             };
             let inner =
-                from_lua(scope, inner, ty).map_err(|e| Error::new(format!("{name}: {e}")))?;
+                from_lua(lua, scope, inner, ty).map_err(|e| Error::new(format!("{name}: {e}")))?;
             Ok(Value::Map(vec![(name, inner)]))
         }
         other => Err(expected(union.name(), &other)),
@@ -560,6 +573,7 @@ fn data(value: LuaValue, depth: usize) -> Result<Value, Error> {
 }
 
 pub(crate) fn arguments(
+    lua: &Lua,
     scope: &Scope,
     args: impl Spread,
     signature: &'static Signature,
@@ -576,7 +590,7 @@ pub(crate) fn arguments(
     let mut out = Args::new(params.len());
     for (slot, param) in out.slots().iter_mut().zip(params) {
         let value = values.next().unwrap_or(LuaValue::Nil);
-        *slot = from_lua(scope, value, param.ty()).map_err(|e| {
+        *slot = from_lua(lua, scope, value, param.ty()).map_err(|e| {
             let name = if param.name().is_empty() {
                 "argument"
             } else {
@@ -599,7 +613,7 @@ pub(crate) fn call(
     what: &str,
     run: impl FnOnce(&mut [Value]) -> Result<Value, Error>,
 ) -> mlua::Result<LuaValue> {
-    let mut values = arguments(scope, args, signature, what)?;
+    let mut values = arguments(lua, scope, args, signature, what)?;
     let answer = run(values.slots()).map_err(|e| failed(what, e))?;
     to_lua(lua, scope, answer, signature.ret())
 }

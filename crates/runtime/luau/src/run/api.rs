@@ -141,14 +141,14 @@ impl Inner {
             vm: Arc::downgrade(vm),
         };
         vm.lua.create_function(
-            move |_, (point, handler, order): (Table, Function, LuaValue)| {
+            move |lua, (point, handler, order): (Table, Function, LuaValue)| {
                 let vm = weak
                     .upgrade()
                     .ok_or_else(|| mlua::Error::runtime("the mod has stopped"))?;
                 let mut desc = PointDesc::parse(&point)?;
                 if !order.is_nil() {
                     desc.order =
-                        crate::bridge::from_lua(&bridge, order, <Order as script::Typed>::TY)
+                        crate::bridge::from_lua(lua, &bridge, order, <Order as script::Typed>::TY)
                             .and_then(script::FromScript::from_value)
                             .map_err(|e| {
                                 mlua::Error::runtime(format!("enshwick.extend: order: {e}"))
