@@ -8,17 +8,11 @@ use std::sync::OnceLock;
 pub use enshwick_actions::__fake::*;
 pub use enshwick_base::__fake::*;
 pub use enshwick_content::__fake::*;
+pub use enshwick_ui::__fake::*;
 pub use enshwick_world::__fake::*;
 
 pub use crate::__private::rules;
 use crate::abi::{HostApi, Manifest};
-
-/// The most markers one mod places on the map.
-pub const MARKER_LIMIT: usize = crate::ui::MARKER_LIMIT;
-
-/// Every one of the game's screens by name, the open-play screens a mod may
-/// not extend among them.
-pub const SCREENS: &[&str] = &crate::ui::screens::NAMES;
 
 /// Why the fake refuses the manifest of a mod whose init runs on a table,
 /// or `None` when it takes it.

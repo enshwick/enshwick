@@ -11,8 +11,6 @@
 extern crate self as enshwick;
 
 // The base's modules at the paths the domains here name them by.
-#[cfg(feature = "unstable")]
-pub(crate) use enshwick_base::engine_ids;
 #[doc(hidden)]
 pub use enshwick_base::{
     code, command_names,
@@ -80,12 +78,14 @@ pub mod script;
 )]
 mod script;
 #[doc(inline)]
+pub use enshwick_ui::sound;
+#[doc(inline)]
+pub use enshwick_ui::ui;
+#[doc(inline)]
 pub use enshwick_values::shape;
-pub mod sound;
 #[cfg(feature = "typed")]
 #[doc(inline)]
 pub use enshwick_world::typed;
-pub mod ui;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_world::world;
@@ -94,13 +94,13 @@ pub use enshwick_world::world;
 pub use abi::{Entity, ItemId, PlayerKey, RecipeId};
 pub use enshwick_base::{FnPtr, Hook, Host, Loading, Next, Relock, RelockRw, RelockWait, host};
 // The macros, documented where mods meet them, on `enshwick`'s root.
+#[cfg(not(feature = "unstable"))]
+pub(crate) use enshwick_macros::script;
 pub use enshwick_macros::{
     Config, Shape, config, declare_mod, deps, event, hook, point, service, texts,
 };
 #[cfg(feature = "unstable")]
 pub use enshwick_macros::{Script, call, script};
-#[cfg(not(feature = "unstable"))]
-pub(crate) use enshwick_macros::{Script, script};
 pub use enshwick_world::WorldError;
 pub use load::{Load, Mod, Off};
 #[doc(no_inline)]

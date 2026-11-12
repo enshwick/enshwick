@@ -242,10 +242,6 @@ pub use enshwick_base::time;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_core::script::{self};
-#[doc(inline)]
-pub use enshwick_core::sound;
-#[doc(inline)]
-pub use enshwick_core::ui;
 #[cfg(feature = "test")]
 #[doc(inline)]
 pub use enshwick_fake::test;
@@ -256,6 +252,10 @@ pub use enshwick_inventory::survivors;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_knowledge::rewards;
+#[doc(inline)]
+pub use enshwick_ui::sound;
+#[doc(inline)]
+pub use enshwick_ui::ui;
 #[doc(inline)]
 pub use enshwick_values::shape;
 #[doc(inline)]

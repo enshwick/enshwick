@@ -441,6 +441,7 @@ dependencies = [
  "enshwick-inventory",
  "enshwick-knowledge",
  "enshwick-macros",
+ "enshwick-ui",
  "enshwick-values",
  "enshwick-world",
  "hound",
@@ -538,9 +539,9 @@ dependencies = [
  "enshwick-inventory",
  "enshwick-knowledge",
  "enshwick-macros",
+ "enshwick-ui",
  "enshwick-values",
  "enshwick-world",
- "hound",
  "insta",
  "proptest",
  "rustc-hash",
@@ -740,6 +741,21 @@ name = "enshwick-typed"
 version = "1.0.0-alpha.14"
 dependencies = [
  "enshwick-values",
+ "thiserror",
+]
+
+[[package]]
+name = "enshwick-ui"
+version = "1.0.0-alpha.14"
+dependencies = [
+ "enshwick",
+ "enshwick-abi",
+ "enshwick-base",
+ "enshwick-content",
+ "enshwick-macros",
+ "enshwick-values",
+ "enshwick-world",
+ "hound",
  "thiserror",
 ]
 

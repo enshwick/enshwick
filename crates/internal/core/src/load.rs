@@ -3,7 +3,6 @@
 
 pub(crate) use enshwick_base::__off_from as off_from;
 use enshwick_base::load::BaseLoad;
-pub(crate) use enshwick_base::load::{hand_over, ok};
 #[doc(inline)]
 pub use enshwick_values::Off;
 
@@ -174,23 +173,6 @@ impl Load<'_> {
             _init: core::marker::PhantomData,
         }
     }
-
-    /// The state of type `T` a domain keeps while the mod initialises, empty
-    /// until the domain fills it.
-    #[cfg_attr(
-        not(any(feature = "unstable", feature = "typed")),
-        expect(dead_code, reason = "only unstable and typed domains keep state")
-    )]
-    pub(crate) fn slot<T: enshwick_base::load::Slot>(&mut self) -> &mut Option<T> {
-        self.base.slot()
-    }
-
-    /// Whether the mod runs on both sides, so it takes part in the join
-    /// check, as its manifest says.
-    #[cfg(feature = "unstable")]
-    pub(crate) fn joins(&self) -> bool {
-        self.base.joins()
-    }
 }
 
 // `Load`'s methods of the crates below, by the module they forward to.
@@ -241,6 +223,7 @@ mod resources;
 mod rewards;
 mod services;
 mod settings;
+mod sound;
 mod state;
 mod stats;
 mod status;
@@ -249,6 +232,7 @@ mod terrain;
 mod time;
 #[cfg(feature = "typed")]
 mod typed;
+mod ui;
 mod vetoes;
 mod voxels;
 mod weather;

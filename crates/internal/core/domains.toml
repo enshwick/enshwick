@@ -35,12 +35,12 @@ world = "world"
 inventory = "inventory"
 knowledge = "knowledge"
 actions = "actions"
+ui = "ui"
 
 # Each domain's top-level modules still in core.
 [modules]
 # The script binding's runtime, which stays in core beside `Load`.
 base = ["script"]
-ui = ["sound", "ui"]
 packs = ["packs"]
 
 # The fake loader, `crates/internal/fake/src/test`, cut by the same domains:

@@ -48,18 +48,18 @@
 use std::sync::Mutex;
 
 use crate::abi::{Status, UiDialog};
-use crate::{Host, Load, Off};
+use crate::{Host, Off};
 
 mod dialog;
 #[cfg(feature = "unstable")]
-mod extension;
+pub(crate) mod extension;
 mod frame;
-mod hud;
+pub(crate) mod hud;
 #[cfg(feature = "unstable")]
 mod map;
 #[cfg(any(feature = "unstable", feature = "fake"))]
 pub(crate) mod screens;
-mod script;
+pub(crate) mod script;
 mod widgets;
 
 pub use dialog::{Dialog, Response};
@@ -229,33 +229,27 @@ fn client_only(host: Host, what: &str) -> Result<(), Off> {
     Ok(())
 }
 
-impl Load<'_> {
-    /// The interface services: dialogs from any thread. Client only.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] on a server.
-    ///
-    /// # Examples
-    ///
-    /// See [`Ui`].
-    pub fn ui(&mut self) -> Result<Ui, Off> {
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::ui`.
+    #[doc(hidden)]
+    fn ui(&mut self) -> Result<Ui, Off>;
+
+    /// As `Load::on_frame`.
+    #[doc(hidden)]
+    fn on_frame<F>(&mut self, draw: F) -> Result<(), Off>
+    where
+        F: FnMut(&mut Frame<'_>) + Send + 'static;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn ui(&mut self) -> Result<Ui, Off> {
         Ui::open(self)
     }
 
-    /// Runs `draw` once per frame of the interface, on the thread that draws
-    /// it, from the title screen on; it draws with the [`Frame`] it is
-    /// handed. Client only. A panic in `draw` turns the mod off.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] on a server or after `init`. When the loader could not link the interface on this game
-    /// build, `draw` never runs.
-    ///
-    /// # Examples
-    ///
-    /// See the [module](self).
-    pub fn on_frame<F>(&mut self, draw: F) -> Result<(), Off>
+    fn on_frame<F>(&mut self, draw: F) -> Result<(), Off>
     where
         F: FnMut(&mut Frame<'_>) + Send + 'static,
     {

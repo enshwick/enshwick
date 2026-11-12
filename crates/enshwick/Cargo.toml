@@ -23,6 +23,7 @@ enshwick-fake = { workspace = true, optional = true }
 enshwick-inventory.workspace = true
 enshwick-knowledge.workspace = true
 enshwick-actions.workspace = true
+enshwick-ui.workspace = true
 enshwick-values.workspace = true
 enshwick-world.workspace = true
 document-features.workspace = true

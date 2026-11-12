@@ -21,8 +21,8 @@ enshwick-world.workspace = true
 enshwick-inventory.workspace = true
 enshwick-knowledge.workspace = true
 enshwick-actions.workspace = true
+enshwick-ui.workspace = true
 enshwick-values.workspace = true
-hound = { workspace = true, optional = true }
 rustc-hash.workspace = true
 schemars = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
@@ -50,22 +50,24 @@ fake = [
     "enshwick-world/fake",
     "enshwick-knowledge/fake",
     "enshwick-actions/fake",
+    "enshwick-ui/fake",
 ]
 schema = ["dep:schemars", "dep:serde_json", "enshwick-base/schema"]
 unstable = [
-    "dep:hound",
     "enshwick-base/unstable",
     "enshwick-content/unstable",
     "enshwick-world/unstable",
     "enshwick-inventory/unstable",
     "enshwick-knowledge/unstable",
     "enshwick-actions/unstable",
+    "enshwick-ui/unstable",
 ]
 typed = [
     "unstable",
     "enshwick-content/typed",
     "enshwick-world/typed",
     "enshwick-knowledge/typed",
+    "enshwick-ui/typed",
 ]
 
 [lints]
