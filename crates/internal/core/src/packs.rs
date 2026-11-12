@@ -230,7 +230,7 @@ impl Load<'_> {
         }
         let group = group(&pack.namespace);
         for drop in &pack.drops {
-            self.add_loot_in(group, drop.clone())?;
+            enshwick_inventory::__internal::add_loot_in(self, group, drop.clone())?;
         }
         #[cfg(feature = "unstable")]
         for reward in &pack.rewards {

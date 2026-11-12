@@ -6,7 +6,6 @@ use std::sync::OnceLock;
 
 pub use enshwick_base::__fake::*;
 pub use enshwick_content::__fake::*;
-pub use enshwick_inventory::__fake::*;
 pub use enshwick_world::__fake::*;
 
 pub use crate::__private::rules;

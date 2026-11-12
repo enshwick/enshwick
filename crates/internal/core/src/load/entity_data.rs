@@ -1,11 +1,8 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::abi::{EntityDataFlags, Status, Str};
 use crate::entity_data::{EntityData, Replication};
 use crate::resources::Value as Data;
-use crate::{Entity, ItemId};
-use crate::{Host, Load, Off};
-use core::marker::PhantomData;
+use crate::{Load, Off};
 use enshwick_inventory::__load::*;
 
 #[enshwick_macros::forward(base)]

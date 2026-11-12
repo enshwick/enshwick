@@ -1,17 +1,8 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::Entity;
-use crate::abi::{AffixRoll, Header, Status};
 use crate::affixes::{AffixCraft, AffixLoot};
-use crate::game_events::CraftRecipeEvent;
-use crate::inventory::{ItemInstance, Slot};
-use crate::locks::Relock;
-use crate::loot::Source;
 use crate::{Load, Off};
 use enshwick_inventory::__load::*;
-use rustc_hash::{FxHashMap, FxHashSet};
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
 
 #[enshwick_macros::forward(base)]
 #[crate::script(affix_rolls)]

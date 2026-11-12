@@ -1,10 +1,6 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::Entity;
-use crate::ecs::{ComponentType, Components, Ecs};
-use crate::engine_ids as ids;
 use crate::loot::{Container, LootPass};
-use crate::raw::read_at;
 use crate::{Load, Off};
 use enshwick_inventory::__load::*;
 

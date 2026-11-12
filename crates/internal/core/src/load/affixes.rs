@@ -1,11 +1,8 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::abi::{ItemLine, StatRef, Str};
 use crate::affixes::{AffixDef, AffixId, Affixes};
 use crate::content::Id;
-use crate::inventory::ItemInstance;
-use crate::stats::Op;
-use crate::{Host, Load, Off};
+use crate::{Load, Off};
 use enshwick_inventory::__load::*;
 
 #[cfg(feature = "unstable")]

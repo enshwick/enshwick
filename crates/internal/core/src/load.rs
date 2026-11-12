@@ -201,6 +201,7 @@ mod build;
 mod code;
 mod config;
 mod content;
+#[cfg(feature = "unstable")]
 mod damage;
 mod daytime;
 mod effects;

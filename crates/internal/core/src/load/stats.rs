@@ -1,18 +1,9 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::abi::{
-    Header, StatChange as StatChangeData, StatModifierData, StatModify, StatRef, StatSource,
-    Status, Str,
-};
 use crate::buffs::BuffTypeId;
 use crate::content::Id;
-use crate::content::items::StatFormat;
-use crate::inventory::ItemInstance;
-use crate::item_data::ItemData;
 use crate::stats::{Modifier, Stat, StatChange, StatDef, Stats};
-use crate::{Entity, ItemId};
-use crate::{Host, Load, Off};
-use core::ffi::c_void;
+use crate::{Load, Off};
 use enshwick_inventory::__load::*;
 
 #[enshwick_macros::forward(base)]

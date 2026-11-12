@@ -1,16 +1,8 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::ecs::{ComponentType, Components};
-use crate::engine_ids as ids;
-use crate::fresh::Fresh;
-use crate::inventory::Fill;
-use crate::locks::Relock;
-use crate::raw::{read_at, read_ptr_at, write_at, write_bytes_at};
-use crate::{Entity, ItemId};
-use crate::{Load, Next, Off};
+use crate::loot::Drop;
+use crate::{Load, Off};
 use enshwick_inventory::__load::*;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
 
 #[enshwick_macros::forward(base)]
 #[crate::script(loot_drops)]

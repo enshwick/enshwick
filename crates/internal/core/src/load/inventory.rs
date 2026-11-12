@@ -1,9 +1,6 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::__private::{INVENTORY_LINKS as LINKS, INVENTORY_SLOTS as SLOTS};
-use crate::Entity;
 use crate::Load;
-use crate::Off;
 use crate::inventory::Inventories;
 use enshwick_inventory::__load::*;
 
