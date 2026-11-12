@@ -61,7 +61,7 @@ fn run_command(
 ///   one [`ActionReply`], which the loader reads before it asks again on
 ///   this thread.
 /// - `user` is the `Box<Arc<Registry>>` that
-///   [`Load::actions`](crate::Load::actions) handed over, which the loader
+///   `Load::actions` handed over, which the loader
 ///   keeps for the process.
 /// - `out` is null or writable for one [`Str`], which the loader reads
 ///   before it asks again on this thread.

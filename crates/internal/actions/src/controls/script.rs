@@ -74,13 +74,14 @@ pub struct ScriptControl {
     pub runs: Option<String>,
 }
 
-impl From<ScriptControl> for Control {
-    fn from(script: ScriptControl) -> Self {
-        let mut control = Self::new(&script.name, &script.label).fires(&script.fires);
-        control.keys = [script.key, script.second];
-        control.link = script.link;
-        control.action = script.runs;
-        if let Some(hold) = script.hold_for {
+impl ScriptControl {
+    /// The control this declares.
+    pub(crate) fn into_control(self) -> Control {
+        let mut control = Control::new(&self.name, &self.label).fires(&self.fires);
+        control.keys = [self.key, self.second];
+        control.link = self.link;
+        control.action = self.runs;
+        if let Some(hold) = self.hold_for {
             control = control.hold_for(hold);
         }
         control
@@ -198,7 +199,7 @@ impl LoadMethods for crate::BaseLoad {
         control: ScriptControl,
         on: impl Fn(ScriptFired) + Send + Sync + 'static,
     ) -> Result<(), Off> {
-        self.control(control.into(), move |fired| on(fired.into()))
+        self.control(control.into_control(), move |fired| on(fired.into()))
     }
 }
 
@@ -208,8 +209,25 @@ mod tests {
     use crate::abi::ControlSpec;
 
     #[test]
+    fn a_public_control_has_no_conversion_from_the_hidden_script_form() {
+        // With both impls applying, `_` is ambiguous and this fails to build:
+        // a public `From<ScriptControl>` would show on the facade's `Control`
+        // page, naming a type a mod cannot reach.
+        trait FromScript<Which> {
+            const WHICH: u8;
+        }
+        impl<T> FromScript<()> for T {
+            const WHICH: u8 = 0;
+        }
+        impl<T: From<ScriptControl>> FromScript<u8> for T {
+            const WHICH: u8 = 1;
+        }
+        assert_eq!(<Control as FromScript<_>>::WHICH, 0);
+    }
+
+    #[test]
     fn a_script_s_control_names_its_keys_game_action_phases_and_hold() {
-        let control = Control::from(ScriptControl {
+        let control = ScriptControl {
             name: "lights".into(),
             label: "Lights".into(),
             key: Some(Key::parse("Shift+L").unwrap()),
@@ -218,7 +236,8 @@ mod tests {
             fires: vec![Phase::Hold, Phase::Release],
             hold_for: Some(Duration::from_millis(250)),
             runs: Some("lights".into()),
-        });
+        }
+        .into_control();
         assert_eq!(
             control.keys,
             [Key::parse("Shift+L").ok(), Key::parse("Mouse4").ok()]
@@ -227,7 +246,7 @@ mod tests {
         assert_eq!(control.fires, ControlSpec::HOLD | ControlSpec::RELEASE);
         assert_eq!(control.hold, Duration::from_millis(250));
         assert_eq!(control.action.as_deref(), Some("lights"));
-        let plain = Control::from(ScriptControl {
+        let plain = ScriptControl {
             name: "x".into(),
             label: "X".into(),
             key: None,
@@ -236,7 +255,8 @@ mod tests {
             fires: Vec::new(),
             hold_for: None,
             runs: None,
-        });
+        }
+        .into_control();
         assert_eq!(
             (
                 plain.keys,

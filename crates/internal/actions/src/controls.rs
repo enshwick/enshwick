@@ -433,7 +433,7 @@ type Handler = Box<dyn Fn(&Fired<'_>) + Send + Sync>;
 /// - `event` is null or points at a [`ControlEvent`] readable for the size
 ///   its header states, with no other writer during the call; its `name`
 ///   is null or points at its `len` bytes, alive for the call.
-/// - `user` is the `Box<Handler>` that [`Load::control`] handed over, which
+/// - `user` is the `Box<Handler>` that `Load::control` handed over, which
 ///   the loader keeps for the process.
 unsafe extern "system" fn fire(event: *const ControlEvent, user: *mut c_void) {
     // SAFETY: the caller guarantees `event` is null or a `ControlEvent`

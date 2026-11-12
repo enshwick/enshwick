@@ -14,10 +14,7 @@ extern crate self as enshwick;
 pub(crate) use enshwick_base::load::BaseLoad;
 #[doc(hidden)]
 pub use enshwick_base::{
-    code, command_names,
-    config::{self},
-    ecs, events, files, game_events, i18n, mods, net, pacing, points, resources, schedule, script,
-    services, state, status, time,
+    command_names, ecs, events, game_events, i18n, mods, resources, schedule, script, state,
 };
 #[cfg(feature = "unstable")]
 pub(crate) use enshwick_base::{engine_ids, locks, near};
@@ -31,7 +28,7 @@ pub use enshwick_world::world;
 // The macros the base exports, which the code here calls by `crate::`.
 #[doc(hidden)]
 pub use enshwick_base::{
-    __every, __log, __off_from, __once, __require_unwind, __schema_entry, debug, detour, error,
+    __every, __log, __off_from, __once, __require_unwind, __schema_entry, debug, error,
     error_every, error_once, info, info_every, info_once, warn, warn_every, warn_once,
 };
 
@@ -66,13 +63,11 @@ pub mod vetoes;
 
 #[doc(no_inline)]
 pub use abi::{Entity, ItemId, PlayerKey, RecipeId};
-pub use enshwick_base::{
-    FnPtr, Hook, Host, Loading, Next, Off, Relock, RelockRw, RelockWait, host,
-};
+pub use enshwick_base::{Host, Loading, Off, Relock, RelockRw, RelockWait, host};
 // The macros the code here uses; `Script`, `call` and `script` come with the
 // base's `script` module of the same name.
 pub use enshwick_base::{Script, call};
-pub use enshwick_macros::{Config, Shape, config, deps, event, hook, point, service, texts};
+pub use enshwick_macros::Shape;
 #[doc(no_inline)]
 pub use shape::Shape;
 
