@@ -95,3 +95,63 @@ fn texts_kept_on_other_threads_leave_earlier_ones_readable() {
     }
     assert_eq!(read(first), Some("a = 0"));
 }
+
+/// The world events each follower of [`FOLLOWING`] heard, a bit per event.
+static HEARD: AtomicU64 = AtomicU64::new(0);
+/// Whether [`FOLLOWING`]'s part says it follows the world.
+static FOLLOWS: AtomicBool = AtomicBool::new(false);
+
+fn heard(_: &Loader, event: Event) {
+    HEARD.fetch_or(1 << event.0, Ordering::Relaxed);
+}
+
+static FOLLOWING: &[&crate::engine::parts::Part] = &[&crate::engine::parts::Part {
+    world_event: Some(heard),
+    follows: Some(|_| FOLLOWS.load(Ordering::Relaxed)),
+    ..crate::engine::parts::part!("following")
+}];
+static LAYERS: &[(&str, &[&crate::engine::parts::Part])] = &[("test", FOLLOWING)];
+
+fn following_loader() -> Loader {
+    let mut loader = crate::start::tests::bare_loader();
+    loader.parts = crate::engine::parts::Parts::new(LAYERS);
+    loader
+}
+
+#[test]
+fn the_parts_that_follow_the_world_hear_its_three_events_raised_for_every_mod() {
+    let loader = following_loader();
+    for event in [
+        Event::WORLD_LOADED,
+        Event::WORLD_SAVED,
+        Event::SHUTDOWN_STARTED,
+        Event::TICKED,
+    ] {
+        loader.emit(event, None, core::ptr::null());
+    }
+    loader.emit(Event::PLAYER_JOINED, None, core::ptr::null());
+    loader.emit(Event::WORLD_SAVED, Some(0), core::ptr::null());
+    let wanted = (1 << Event::WORLD_LOADED.0)
+        | (1 << Event::WORLD_SAVED.0)
+        | (1 << Event::SHUTDOWN_STARTED.0);
+    assert_eq!(HEARD.load(Ordering::Relaxed), wanted);
+}
+
+#[test]
+fn a_part_that_follows_the_world_has_its_three_events_linked_and_no_other() {
+    let loader = following_loader();
+    assert!(
+        !loader.subscribed(Event::WORLD_LOADED),
+        "it follows nothing yet"
+    );
+    FOLLOWS.store(true, Ordering::Relaxed);
+    for event in [
+        Event::WORLD_LOADED,
+        Event::WORLD_SAVED,
+        Event::SHUTDOWN_STARTED,
+    ] {
+        assert!(loader.subscribed(event), "{event:?}");
+    }
+    assert!(!loader.subscribed(Event::TICKED));
+    assert!(!loader.subscribed(Event::PLAYER_LEFT));
+}
