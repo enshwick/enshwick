@@ -1,7 +1,7 @@
 [package]
 name = "enshwick-core"
 version = "1.0.0-alpha.14"
-description = "Internal part of enshwick; depend on enshwick: Load and the domains built on the other parts"
+description = "Internal part of enshwick; depend on enshwick: Load, the top layer over the domains"
 keywords = ["enshrouded", "modding", "game", "ffi", "hooks"]
 categories = ["game-development", "api-bindings"]
 readme = "README.md"

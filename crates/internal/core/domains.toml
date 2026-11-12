@@ -1,4 +1,5 @@
-# The domains of the API and the modules of each still in enshwick-core.
+# The domains of the API, the crate of each, and which domain each module
+# left in enshwick-core belongs to.
 # A module names only its own domain and the domains before its own in
 # `order`; shared things move down into base. `cargo xtask check` holds it.
 
@@ -38,9 +39,9 @@ actions = "actions"
 ui = "ui"
 packs = "packs"
 
-# Each domain's top-level modules still in core.
+# The top-level modules core keeps besides `Load`, by domain.
 [modules]
-# The script binding's runtime, which stays in core beside `Load`.
+# The script binding's namespace lists, over base's runtime.
 base = ["script"]
 
 # The fake loader, `crates/internal/fake/src/test`, cut by the same domains:

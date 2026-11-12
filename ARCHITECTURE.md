@@ -21,7 +21,7 @@ re-exports; `crates/runtime/` holds what `enshwick.zip` ships into the game.
 | `enshwick-knowledge` | `crates/internal/knowledge` | the knowledge domain: knowledge, quests and the journal, progress (skills, comfort, experience) and rewards | yes |
 | `enshwick-actions` | `crates/internal/actions` | the actions domain: player actions and their windows, console commands, controls and the players' input, chat, interactions and vetoes | yes |
 | `enshwick-ui` | `crates/internal/ui` | the ui domain: the client's interface drawn with the game's own widgets (frames, the HUD, dialogs, map markers, screen panels) and sound | yes |
-| `enshwick-packs` | `crates/internal/packs` | the packs domain: data packs, the content a mod describes in TOML files, read, checked and added through every other domain | yes |
+| `enshwick-packs` | `crates/internal/packs` | the packs domain: data packs, the content a mod describes in TOML files, read, checked and added through the domains below it but actions | yes |
 | `enshwick-typed` | `crates/internal/typed` | the generated typed API, re-exported as `enshwick::typed` | yes |
 | `enshwick-values` | `crates/internal/values` | the value types the layers share: shape, content ids, resource values, the script value model | yes |
 | `enshwick-abi` | `crates/internal/abi` | the `repr(C)` types that cross between the loader and a mod, the ABI version and its golden layout file, and the reads and writes of game memory, re-exported as `enshwick::abi` and `enshwick::raw` | yes |
@@ -101,17 +101,18 @@ enshwick ──test──▶ enshwick-fake ──▶ enshwick-core (its `fake` f
 `crates/internal/core/domains.toml` orders the domains of the API, lowest
 first: base, content, world, inventory, knowledge, actions, ui, packs, and
 names the crate of each. Every domain has a crate of its own; the one module
-`enshwick-core` keeps besides `Load` and `declare_mod!`'s support is the
-script binding's runtime, in base, whose namespace lists open each domain's
-handles through `Load`.
+`enshwick-core` keeps besides `Load` and `declare_mod!`'s support is
+`script`, the script binding's namespace lists, which open each domain's
+handles through `Load`, over the binding's runtime in base.
 
-The crates follow the three levels of the API. `enshwick-core` is the top
-layer, the high level: `Load`, whose typed methods cover the common needs
-of a mod, each forwarding into its domain's crate. `enshwick-base` is the
-mid level, supported as such: the base handle, events, services, settings,
-the resource codec and the ECS reads, on which every domain builds and which
-reach any game data. The low level, hooks and the mod's own manifest rows,
-sits in `enshwick-base` and `enshwick-abi`.
+`enshwick-core` is the top layer: `Load`, the handle a mod's `init` gets,
+whose typed methods are its way into the high level of the API, each
+forwarding into its domain's crate, where the high-level types such as
+`World`, items and windows live. `enshwick-base` holds what every domain
+shares, the high-level events, services, settings, texts, state and
+scheduler among it, and the supported mid level: the resource codec and the
+ECS reads, which reach any game data. The low level, hooks and the mod's own
+manifest rows, sits in `enshwick-base` and `enshwick-abi`.
 
 - A module names only its own domain and the domains before its own.
   Something two domains share moves down into base or the lower domain.
@@ -236,8 +237,8 @@ its own; these steps hold for one that grows inside core first.
    wraps the examples that name items above the crate and writes their
    copies into `crates/enshwick/src/lower_examples/<crate>[_<feature>].rs`.
 7. A domain gets a cargo feature only when the API above works without it:
-   base, content, world and inventory, which every domain above needs, have
-   none. A domain's feature, on by default, is an optional dependency on its
+   base, content, world and inventory, without which the domains above them
+   do not build, have none. A domain's feature, on by default, is an optional dependency on its
    crate plus a `cfg` on core's forwarders and the facade's re-exports, and
    turns on the features of the domains it rests on.
 

@@ -1,6 +1,6 @@
-//! Internal part of [`enshwick`](https://crates.io/crates/enshwick): every
-//! domain of the API not yet in a crate of its own, and [`Load`] on top,
-//! whose methods forward into the crates below.
+//! Internal part of [`enshwick`](https://crates.io/crates/enshwick): [`Load`],
+//! the top layer, whose methods forward into the domains' crates below, and
+//! the script binding's namespace lists.
 //!
 //! Mods depend on `enshwick`, which re-exports every module here at the
 //! same path; this crate's own paths carry no promise.
@@ -10,7 +10,7 @@
 // and examples here that crate is this one, whose root has the same paths.
 extern crate self as enshwick;
 
-// The base's modules at the paths the domains here name them by.
+// The base's modules at the paths the code here names them by.
 pub(crate) use enshwick_base::facts;
 #[doc(hidden)]
 pub use enshwick_base::{

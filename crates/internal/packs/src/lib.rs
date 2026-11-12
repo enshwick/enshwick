@@ -1,6 +1,6 @@
 //! Internal part of [`enshwick`](https://crates.io/crates/enshwick): the
 //! packs domain, data packs that describe content in TOML files instead of
-//! code, which builds on every other domain.
+//! code, which builds on every domain below it but actions.
 //!
 //! Mods depend on `enshwick`, which re-exports every module here at the
 //! same path; this crate's own paths carry no promise.
