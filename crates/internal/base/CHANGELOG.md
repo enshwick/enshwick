@@ -6,17 +6,3 @@ Each entry names the pull request that made the change. What mod authors
 see is in the changelog of `enshwick`.
 
 ## [Unreleased]
-
-### Added
-
-- `host::caught` and `Panicked`, for a mod's callback whose panic turns
-  off only the part that panicked; `host::guard`, points, served calls and
-  the hook macro catch through it (#1062).
-- `script::Bound`, whose `resolve` takes `&mut impl Loading`, and the
-  base's own `Bound` implementations beside their types (#1053).
-- The crate: what every domain of the API shares, cut out of
-  `enshwick-core` (#1046).
-- `BaseLoad`, the base handle `Load` holds, and `Loading`, which the
-  functions below `Load` take for the mod's loader (#1046).
-- `resources::serve`, the served-resource builder, and the host's resource
-  reads, moved down from the content domain (#1046).

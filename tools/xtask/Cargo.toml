@@ -22,7 +22,7 @@ compat = ["dep:anyhow", "cargo-enshwick/cli", "dep:clap", "dep:enshwick-abi", "d
 
 [dependencies]
 anyhow = { workspace = true, optional = true }
-cargo-enshwick.workspace = true
+cargo-enshwick = { path = "../../crates/cargo-enshwick", default-features = false }
 cbindgen.workspace = true
 clap = { workspace = true, optional = true }
 enshwick-abi = { workspace = true, optional = true }

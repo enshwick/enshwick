@@ -158,10 +158,11 @@ pub fn close(changelog: &str, version: &str, date: &str) -> Result<Option<String
     )))
 }
 
-/// The `changelog` with the `fragments` joined under `## [version] - date`,
-/// each heading's entries in the order of the fragments; without fragments
-/// the heading stands alone, as for a release with no change of the
-/// package's own.
+/// The `changelog` with the `fragments` joined under `## [version] - date`.
+///
+/// Each heading's entries come in the order of the fragments; without
+/// fragments the heading stands alone, as for a release with no change of
+/// the package's own.
 ///
 /// # Errors
 ///

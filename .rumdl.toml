@@ -2,5 +2,9 @@
 disable = ["line-length"]
 exclude = ["target", "research", "**/CHANGELOG.md"]
 
+# A change file holds only the `### ` headings of a changelog section.
+[per-file-ignores]
+"**/changes/*.md" = ["MD041"]
+
 [no-duplicate-heading]
 siblings-only = true
