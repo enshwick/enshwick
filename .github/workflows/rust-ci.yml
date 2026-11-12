@@ -92,6 +92,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           git cat-file -e "$BASE^{commit}" 2> /dev/null || git fetch -q origin "$BASE"
+          # Read once: `grep -q` in a pipe can end `git diff` early, and
+          # pipefail then fails the test.
+          files=$(git diff --name-only "$BASE...HEAD")
           reason=""
           if [ "$EVENT" = merge_group ]; then
             number=$(sed -nE 's|.*/pr-([0-9]+)-[0-9a-f]+$|\1|p' <<< "$HEAD_REF")
@@ -108,8 +111,7 @@ jobs:
             never='^(\.github/|[^/]+\.md$|(.*/)?CHANGELOG\.md$|LICENSE$|\.gitignore$|\.gitattributes$|renovate\.json$|_typos\.toml$|\.markdownlint-cli2\.yaml$|lefthook\.yml$|committed\.toml$|release-plz\.toml$|package\.json$|bun\.lock$|codecov\.yml$)'
             # The check's own workflow and actions prove themselves by running.
             check='^\.github/(actions/|workflows/(ci|rust-ci)\.yml$)'
-            if ! git diff --name-only "$BASE...HEAD" | grep -qE "$check" &&
-              ! git diff --name-only "$BASE...HEAD" | grep -qvE "$never"; then
+            if ! grep -qE "$check" <<< "$files" && ! grep -qvE "$never" <<< "$files"; then
               reason="no file that builds changed"
             fi
           fi
@@ -120,7 +122,7 @@ jobs:
           # The full suite runs cargo-deny itself.
           deny=false
           if [ -z "$reason" ] && [ "$FULL" != true ] &&
-            git diff --name-only "$BASE...HEAD" | grep -qE '(^|/)Cargo\.(toml|lock)$|^deny\.toml$'; then
+            grep -qE '(^|/)Cargo\.(toml|lock)$|^deny\.toml$' <<< "$files"; then
             deny=true
           fi
           echo "deny=$deny" >> "$GITHUB_OUTPUT"
