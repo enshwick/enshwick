@@ -1,7 +1,7 @@
 //! The world domain's namespaces, and how `Load` opens each of its
 //! handles.
 
-use super::{Bound, Function, Namespace};
+use super::{Bound, Function, Namespace, Object};
 use crate::altars::Altars;
 use crate::buffs::Buffs;
 use crate::daytime::Clock;
@@ -143,7 +143,7 @@ impl Bound for FogOfWar {
     const DOC: &'static str =
         "The world's map on the server: its markers, its frame, waypoints and snapshots.";
     // One list with the object class the world crate gives the type.
-    const PARTS: &'static [&'static [Function<Self>]] = <Self as crate::script::Object>::PARTS;
+    const PARTS: &'static [&'static [Function<Self>]] = <Self as Object>::PARTS;
 
     fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
         load.fog_of_war()
@@ -186,7 +186,7 @@ impl Bound for Terrain {
     const DOC: &'static str =
         "The world's terrain: add, dig and flatten ground, and its materials.";
     // One list with the object class the world crate gives the type.
-    const PARTS: &'static [&'static [Function<Self>]] = <Self as crate::script::Object>::PARTS;
+    const PARTS: &'static [&'static [Function<Self>]] = <Self as Object>::PARTS;
 
     fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
         Ok(load.terrain())
