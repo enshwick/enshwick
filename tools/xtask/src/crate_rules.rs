@@ -48,14 +48,13 @@ pub(crate) fn check(packages: &[Package]) -> Result<Vec<String>, String> {
         .map_err(|error| format!("reading cargo metadata: {error}"))?;
     let toolchain = toolchain(&read(&crate::workspace_root().join("rust-toolchain.toml"))?)?;
     let root = Path::new(metadata["workspace_root"].as_str().unwrap_or_default());
-    let internal = root.join("crates").join("internal");
     let mut api_crates = Vec::new();
     let mut problems = Vec::new();
     for package in metadata["packages"].as_array().into_iter().flatten() {
         let name = package["name"].as_str().unwrap_or_default();
         let manifest = Path::new(package["manifest_path"].as_str().unwrap_or_default());
         let dir = manifest.parent().unwrap_or(Path::new("."));
-        if name == FACADE || dir.starts_with(&internal) {
+        if is_api_crate(name, dir, root) {
             api_crates.push(name.to_owned());
         }
         problems.extend(test_feature(name, package));
@@ -338,6 +337,13 @@ fn toolchain(text: &str) -> Result<String, String> {
 /// The release-plz version group of the API crate and its internal parts,
 /// which pin each other exactly and so release at one version.
 const API_GROUP: &str = "api";
+
+/// Whether the package `name` in `dir` is a crate of the API, which
+/// release-plz versions as one group: the facade, or a crate in the
+/// workspace `root`'s `crates/internal`.
+fn is_api_crate(name: &str, dir: &Path, root: &Path) -> bool {
+    name == FACADE || dir.starts_with(root.join("crates").join("internal"))
+}
 
 /// The problems of `release_plz`, the text of `release-plz.toml`: a crate of
 /// `api_crates` that is not in the [`API_GROUP`] version group.
@@ -846,6 +852,27 @@ mod tests {
         );
         assert!(release_group(&crates[..1], release_plz).unwrap().is_empty());
         assert!(release_group(&crates, "[[package]\n").is_err());
+    }
+
+    #[test]
+    fn the_api_crates_are_the_facade_and_those_of_crates_internal() {
+        let root = Path::new("/w");
+        assert!(is_api_crate(
+            "enshwick",
+            Path::new("/w/crates/enshwick"),
+            root
+        ));
+        assert!(is_api_crate(
+            "enshwick-world",
+            Path::new("/w/crates/internal/world"),
+            root
+        ));
+        assert!(!is_api_crate(
+            "enshwick-luau",
+            Path::new("/w/crates/runtime/luau"),
+            root
+        ));
+        assert!(!is_api_crate("xtask", Path::new("/w/tools/xtask"), root));
     }
 
     #[test]

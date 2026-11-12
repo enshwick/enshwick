@@ -156,28 +156,29 @@ fn rebase_links(block: &str, module: &str) -> String {
     };
     let parent = module.rsplit_once("::").map_or("", |(parent, _)| parent);
     let (own, parent) = (path(module), path(parent));
+    // A link's target follows `](` inline, or `]: ` in a reference line.
+    let swaps = [
+        ("](self)".to_owned(), format!("]({own})")),
+        ("](self::".to_owned(), format!("]({own}::")),
+        ("](super::".to_owned(), format!("]({parent}::")),
+        ("]: self::".to_owned(), format!("]: {own}::")),
+        ("]: super::".to_owned(), format!("]: {parent}::")),
+    ];
     let mut out = String::with_capacity(block.len());
     for line in block.split_inclusive('\n') {
-        if line.trim_start().starts_with("///") {
-            let mut rebased = line.to_owned();
-            // A link's target follows `](` inline or `]: ` in a reference.
-            for opening in ["](", "]: "] {
-                rebased = rebased
-                    .replace(&format!("{opening}self)"), &format!("{opening}{own})"))
-                    .replace(&format!("{opening}self::"), &format!("{opening}{own}::"))
-                    .replace(
-                        &format!("{opening}super::"),
-                        &format!("{opening}{parent}::"),
-                    );
-                if opening == "]: " && rebased.trim_end().ends_with(&format!("{opening}self")) {
-                    rebased =
-                        rebased.replacen(&format!("{opening}self"), &format!("{opening}{own}"), 1);
-                }
-            }
-            out.push_str(&rebased);
-        } else {
+        if !line.trim_start().starts_with("///") {
             out.push_str(line);
+            continue;
         }
+        let mut rebased = line.to_owned();
+        for (from, to) in &swaps {
+            rebased = rebased.replace(from.as_str(), to);
+        }
+        let body = rebased.trim_end_matches(['\r', '\n']);
+        if let Some(head) = body.strip_suffix("]: self") {
+            rebased = format!("{head}]: {own}{}", &rebased[body.len()..]);
+        }
+        out.push_str(&rebased);
     }
     out
 }

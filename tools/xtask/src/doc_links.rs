@@ -85,7 +85,6 @@ pub(crate) fn check(doc: &Path, krate: &str) -> Result<Vec<String>, String> {
                 Some(ids) => {
                     if let Some(fragment) = fragment
                         && !ids.contains(&fragment)
-                        && !line_anchor(doc, &target, &fragment)
                     {
                         problems.push(format!("{shown}: {href} names an anchor its page lacks"));
                     }
@@ -137,15 +136,6 @@ fn resolve(doc: &Path, page: &Path, href: &str) -> Option<(PathBuf, Option<Strin
         target,
         fragment.filter(|f| !f.is_empty()).map(str::to_owned),
     ))
-}
-
-/// Whether `fragment` names lines of a source page, `12` or `12-20`, which
-/// the page's script resolves rather than an `id`.
-fn line_anchor(doc: &Path, target: &Path, fragment: &str) -> bool {
-    target.starts_with(doc.join("src"))
-        && fragment
-            .split('-')
-            .all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()))
 }
 
 /// The values of every `name="..."` attribute in `html`, with the entities
@@ -215,6 +205,9 @@ mod tests {
                 r##"<a href="../struct.Load.html#method.add_item">good</a>"##,
                 r##"<a href="../../src/enshwick/lib.rs.html#1-4">lines</a>"##,
                 r##"<a href="https://docs.rs/serde">away</a>"##,
+                r##"<a href="//cdn.example/x.html#y">no scheme, another host</a>"##,
+                r##"<a href="../struct.Load.html?search=x">a query</a>"##,
+                r##"<a href="mailto:you@example.org">mail</a>"##,
                 r##"<a href="../../enshwick_values/trait.Object.html#x">another crate</a>"##,
                 r##"<a href="../../../outside.html">out of the docs</a>"##,
                 r##"<a href="../struct.Load.html#method.add_itemx">bad anchor</a>"##,
@@ -246,5 +239,15 @@ mod tests {
             attribute_values(r#"<a href="a.html" id="i&lt;T&gt;">"#, "id"),
             ["i<T>"]
         );
+    }
+
+    #[test]
+    fn a_root_without_built_docs_is_an_error_not_a_pass() {
+        let root = std::env::temp_dir().join(format!("xtask-no-docs-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let outcome = run(&root);
+        std::fs::remove_dir_all(&root).unwrap();
+        assert!(outcome.unwrap_err().contains("holds no docs"));
     }
 }
