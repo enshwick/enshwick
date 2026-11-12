@@ -12,7 +12,8 @@
 
 use std::path::Path;
 
-use crate::{Package, git, packages, say, workspace_root};
+use crate::commands::check::git;
+use crate::{Package, packages, say, workspace_root};
 
 /// What comes before a release on an install or dependency line, and what
 /// comes before its version there: a tag, or a `cargo binstall --git` line's

@@ -7,7 +7,8 @@
 
 use std::process::{Command, Stdio};
 
-use crate::{Step, WINDOWS_TARGET, say};
+use crate::commands::check::{Step, WINDOWS_TARGET};
+use crate::say;
 
 /// Runs the tests of `packages` under Wine. Without Wine on an amd64 Linux
 /// host the step is skipped with a message, and fails only when it was asked

@@ -8,7 +8,8 @@ use std::io::{Cursor, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::{WINDOWS_TARGET, cargo, say};
+use crate::commands::check::WINDOWS_TARGET;
+use crate::{cargo, say};
 
 /// The archive that goes into the game folder.
 const ARCHIVE: &str = "enshwick.zip";

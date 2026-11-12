@@ -47,7 +47,10 @@ pub(crate) fn check(root: &Path, packages: &[Package]) -> Vec<String> {
         }
         for (name, text) in files {
             let shown = shown(&format!("{CHANGES}/{name}"));
-            if !name.ends_with(".md") {
+            if Path::new(&name)
+                .extension()
+                .is_none_or(|ext| !ext.eq_ignore_ascii_case("md"))
+            {
                 problems.push(format!("{shown}: a change file is Markdown, `<name>.md`"));
             } else if let Err(why) = Fragment::parse(&text) {
                 problems.push(format!("{shown}: {why}"));

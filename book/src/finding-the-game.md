@@ -123,8 +123,8 @@ engine functions it calls from the loader's own entries.
 
 When the game updates, a mod's new rows come from
 [`cargo enshwick pin`](https://github.com/enshwick/enshwick/blob/main/crates/cargo-enshwick/README.md#porting-build-rows-pin).
-It takes the old and the new executable. It finds every pinned symbol of the
-rows of each `Cargo.toml` below the folder it runs in again and puts the new
+It takes the old and the new executable and reads every `Cargo.toml` below
+the folder it runs in. It finds each pinned symbol again and puts the new
 rows next to the old ones. What it cannot place for sure it
 leaves out with a `pin:` note, for a human to settle. Rows that pin the start
 of a function or a call site port best; an address in the middle of code that

@@ -3,7 +3,7 @@
 //! seconds, built by cargo-fuzz with the nightly compiler
 //! [`TOOLCHAIN_VAR`] names. Longer runs stay local, as `fuzz/README.md` says.
 
-use crate::Step;
+use crate::commands::check::Step;
 
 /// Seconds of fuzzing shared by the targets a run fuzzes, so the part fits
 /// the pull request lane however many a change reaches.

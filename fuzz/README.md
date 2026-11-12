@@ -47,7 +47,7 @@ cache pull requests start from, not real fuzzing. CI builds with the dated
 nightly that [`setup-rust`](../.github/actions/setup-rust/action.yml) pins
 and hands xtask in `ENSH_FUZZ_TOOLCHAIN`; without it xtask takes
 `nightly`. Which modules reach which target is the table in
-[`tools/xtask/src/fuzz.rs`](../tools/xtask/src/fuzz.rs); a new target gets
+[`tools/xtask/src/commands/fuzz.rs`](../tools/xtask/src/commands/fuzz.rs); a new target gets
 a row there. Before a pull request that changes what a target reads, also
 run that target here for longer, a minute or more with
 `-- -max_total_time=60` after the command above.

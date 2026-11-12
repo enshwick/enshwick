@@ -23,7 +23,7 @@ use crate::affected::{self, Package, Scope};
 use crate::commands::{fuzz, header, wine};
 use crate::{FACADE, cargo, packages, say, tool_path, workspace_root};
 
-const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
+pub(crate) const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// Turned on by name: most of the API crate's test targets need its fake
 /// loader, and without the feature cargo skips them without a word; the
 /// API's unstable calls, its generated typed API and the compat task are
@@ -209,7 +209,7 @@ fn changed_files(base: &str) -> Option<Vec<String>> {
     Some(files)
 }
 
-fn git(args: &[&str]) -> Option<String> {
+pub(crate) fn git(args: &[&str]) -> Option<String> {
     let output = Command::new("git").args(args).output().ok()?;
     output
         .status
@@ -219,14 +219,14 @@ fn git(args: &[&str]) -> Option<String> {
 
 /// One command line: cargo, or another tool of the checks.
 #[derive(Debug)]
-struct Step {
+pub(crate) struct Step {
     program: Option<String>,
     args: Vec<String>,
     env: Vec<(&'static str, String)>,
 }
 
 impl Step {
-    fn new(words: &[&str]) -> Self {
+    pub(crate) fn new(words: &[&str]) -> Self {
         Self {
             program: None,
             args: words.iter().map(|w| (*w).to_owned()).collect(),
@@ -235,7 +235,7 @@ impl Step {
     }
 
     /// A step that runs `program` instead of cargo.
-    fn tool(program: &'static str, words: &[&str]) -> Self {
+    pub(crate) fn tool(program: &'static str, words: &[&str]) -> Self {
         Self {
             program: Some(program.to_owned()),
             ..Self::new(words)
@@ -259,7 +259,7 @@ impl Step {
         self
     }
 
-    fn then(mut self, words: &[&str]) -> Self {
+    pub(crate) fn then(mut self, words: &[&str]) -> Self {
         self.args.extend(words.iter().map(|w| (*w).to_owned()));
         self
     }
@@ -279,7 +279,7 @@ impl Step {
 
     /// Runs the step with its output shown, or captured when `quiet` (for a
     /// step running beside others) and shown only when it fails.
-    fn run(&self, quiet: bool) -> bool {
+    pub(crate) fn run(&self, quiet: bool) -> bool {
         let started = Instant::now();
         let mut command = Command::new(self.program.clone().unwrap_or_else(cargo));
         command
