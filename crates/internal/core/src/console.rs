@@ -109,7 +109,7 @@ impl crate::script::Bound for ConsoleFns {
         "The server's console: lines a tool runs as an administrator with no character.";
     const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_CONSOLE_FNS];
 
-    fn resolve(_load: &mut crate::Load<'_>) -> Result<Self, crate::Off> {
+    fn resolve(_load: &mut impl crate::Loading) -> Result<Self, crate::Off> {
         Ok(Self)
     }
 }

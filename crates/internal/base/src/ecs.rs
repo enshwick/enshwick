@@ -741,6 +741,16 @@ pub fn fixed(metres: [f64; 3]) -> [i64; 3] {
 #[derive(Clone, Copy, Debug)]
 pub struct EcsFns;
 
+impl crate::script::Bound for EcsFns {
+    const NAME: &'static str = "ecs";
+    const DOC: &'static str = "The world's fixed-point coordinates and metres.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_ECS_FNS];
+
+    fn resolve(_load: &mut impl crate::Loading) -> Result<Self, crate::Off> {
+        Ok(Self)
+    }
+}
+
 #[crate::script(ecs_fns)]
 #[expect(
     clippy::unused_self,

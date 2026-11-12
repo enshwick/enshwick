@@ -73,8 +73,8 @@ impl crate::script::Bound for Targets {
         "Players' interactions with entities, and what each player's prompt offers.";
     const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_TARGET];
 
-    fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
-        load.interaction_targets()
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
+        Targets::resolve(load)
     }
 }
 
@@ -93,7 +93,8 @@ static TARGETS: crate::state::ModLocal<TargetsAt> = crate::state::ModLocal::new(
 
 #[cfg(feature = "unstable")]
 impl TargetsAt {
-    fn resolve(load: &Load<'_>) -> Result<Self, Off> {
+    fn resolve(load: &impl crate::Loading) -> Result<Self, Off> {
+        let load = load.base();
         let ty = ComponentType::resolve(load, ids::SELECTED_TARGETS)?;
         let slot = Registry::game()?
             .hashed(load.hash(ids::TARGET_TYPE)?)
@@ -138,7 +139,7 @@ impl TargetsAt {
 #[cfg(feature = "unstable")]
 #[crate::script(target)]
 impl Targets {
-    pub(crate) fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
+    pub(crate) fn resolve(load: &impl crate::Loading) -> Result<Self, Off> {
         if let Some(at) = TARGETS.get() {
             return Ok(Self(at));
         }

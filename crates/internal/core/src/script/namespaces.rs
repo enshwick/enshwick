@@ -366,7 +366,7 @@ impl Bound for Log {
     const DOC: &'static str = "The mod's log file, one line per call.";
     const PARTS: &'static [&'static [Function<Self>]] = &[Self::SCRIPT_LINES];
 
-    fn resolve(load: &mut crate::Load<'_>) -> Result<Self, crate::Off> {
-        Ok(Self(load.host()))
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, crate::Off> {
+        Ok(Self(load.base().host()))
     }
 }

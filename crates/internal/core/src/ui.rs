@@ -232,9 +232,7 @@ impl Load<'_> {
     ///
     /// See [`Ui`].
     pub fn ui(&mut self) -> Result<Ui, Off> {
-        let host = self.host();
-        client_only(host, "the interface")?;
-        Ok(Ui { host })
+        <Ui as crate::script::Bound>::resolve(self)
     }
 
     /// Runs `draw` once per frame of the interface, on the thread that draws

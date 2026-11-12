@@ -121,6 +121,17 @@ impl core::fmt::Debug for Scheduler {
     }
 }
 
+impl crate::script::Bound for Scheduler {
+    const NAME: &'static str = "schedule";
+    const DOC: &'static str =
+        "Work for the server's game thread: on the next pass, after a delay, or repeatedly.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_TASKS];
+
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, crate::Off> {
+        load.base_mut().scheduler()
+    }
+}
+
 #[crate::script(tasks)]
 impl Scheduler {
     /// The scheduler of the mod `me`, and whether the caller is to

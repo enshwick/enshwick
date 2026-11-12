@@ -397,8 +397,10 @@ impl Bound for Ui {
         Self::SCRIPT_MARKERS,
     ];
 
-    fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
-        load.ui()
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
+        let host = load.base().host();
+        super::client_only(host, "the interface")?;
+        Ok(Ui { host })
     }
 }
 

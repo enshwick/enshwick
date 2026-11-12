@@ -232,6 +232,17 @@ fn keep_backup_with(
 #[derive(Clone, Copy, Debug)]
 pub struct FilesFns;
 
+impl crate::script::Bound for FilesFns {
+    const NAME: &'static str = "files";
+    const DOC: &'static str =
+        "Files a mod writes whole, such as exports for tools outside the game.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_FILES_FNS];
+
+    fn resolve(_load: &mut impl crate::Loading) -> Result<Self, crate::Off> {
+        Ok(Self)
+    }
+}
+
 #[crate::script(files_fns)]
 #[expect(
     clippy::unused_self,

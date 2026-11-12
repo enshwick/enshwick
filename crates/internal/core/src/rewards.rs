@@ -632,8 +632,8 @@ impl crate::script::Bound for Rewards {
 
     /// Opened for every script, so it makes no state: a script that
     /// declares no reward pays nothing.
-    fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
-        Ok(Self(load.host().handle()))
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
+        Ok(Self(load.base().host().handle()))
     }
 }
 
