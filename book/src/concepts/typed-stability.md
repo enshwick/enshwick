@@ -35,7 +35,7 @@ mod decides whether to go on without that type.
 
 ## How a rename is decided
 
-A rename is data, never a guess. When `cargo enshwick pin` meets a new build,
+A rename is data, never a guess. When `cargo xtask compat pin` meets a new build,
 it compares the two builds' types. A removed type and an added type count as
 one renamed type only under three conditions. Their layouts match exactly,
 they hold a field or enum constant, and neither has another match. The same
@@ -46,7 +46,8 @@ type's name under its new one.
 
 ## How a new build gets its items
 
-`cargo enshwick pin --old <old exe> --new <new exe>` prints what the new build
+`cargo xtask compat pin --old <old exe> --new <new exe>`, in the Enshwick
+repository, prints what the new build
 changed in the covered types. With `--write` it also writes the typed API
 again. That run also keeps a snapshot of the new build's types in the game
 data folder that `--data` or `ENSH_GAMEDATA` names, outside the repository.

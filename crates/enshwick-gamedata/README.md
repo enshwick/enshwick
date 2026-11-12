@@ -74,8 +74,8 @@ game update that moves a field changes this crate, not the mods.
   `carried = false` and is left out.
   What neither finds stays missing, and only the features and mods that
   need it turn off.
-- [`cargo enshwick pin`](https://github.com/enshwick/enshwick/blob/main/crates/cargo-enshwick/README.md#porting-build-rows-pin)
-  reports how the kept rows port to a new build and writes no table.
+- [`cargo xtask compat pin`](#porting-to-a-new-build) reports how the kept
+  rows port to a new build and writes no table.
 - [`reports/`](https://github.com/enshwick/enshwick/tree/main/crates/enshwick-gamedata/reports)
   holds, under each build's file name, what the loader finds on that build:
   its name, Steam build and game version, how many entries the anchors and
@@ -140,7 +140,7 @@ the run stays unique without them.
   the witness is found once and reads the same value, so a pattern that
   matches changed code leaves the entry missing instead of wrong. A value no
   other instruction holds says why in `one_witness`, and
-  `cargo xtask compat` lists each one a carry takes. `cargo enshwick pin`
+  `cargo xtask compat` lists each one a carry takes. `cargo xtask compat pin`
   writes both.
 - A symbol's expected code bytes (`<id>.bytes`) count where its pattern
   finds code that still starts with them.
@@ -179,7 +179,7 @@ When an entry joins a table, pick the instruction that uses it, in the
 build the table is for, and let the tool write the pattern:
 
 ```bash
-cargo enshwick pin --patterns server/enshrouded_server.exe --write \
+cargo xtask compat patterns server/enshrouded_server.exe --write \
   --from "building.zone_entry_ignored=0x93e247" \
   --from "npc.lookup=ref:0x1f29fa"
 ```
@@ -193,8 +193,109 @@ to check its whole function by a hash (`body:<rva>` finds it through the
 call at `rva`, for a function whose start has a twin). The tool
 checks that the operand holds the table's value, grows the smallest unique
 window around the instruction and writes it. Once written, the entry keeps
-its instruction: later runs and
-[`pin`](https://github.com/enshwick/enshwick/blob/main/crates/cargo-enshwick/README.md#porting-build-rows-pin)
-for a new build find it by the pattern, or port it, and read the value
-there. Constants without a pick get no pattern: a value seen in some code
-says nothing about what that code means.
+its instruction: later runs and [`pin`](#porting-to-a-new-build) for a new
+build find it by the pattern, or port it, and read the value there.
+Constants without a pick get no pattern: a value seen in some code says
+nothing about what that code means. The exit code is 2 when a pick gives no
+pattern, with the reason.
+
+| Pick | For | The pattern |
+| --- | --- | --- |
+| `<rva>` | a constant | reads the displacement or immediate of the instruction at `rva` that holds the value |
+| `disp:`, `neg:`, `imm:`, `shl:<rva>` | a constant | reads that operand: the displacement, the displacement negated (`[rbp - value]`), the immediate, or `1 << immediate` |
+| `<rva>+<n>`, `<rva>-<n>` | a constant | reads the operand and adds `n`, for a value next to it |
+| `confirm:<rva>` | a constant | fixes the instruction, which confirms the value while it stands |
+| `ref:<rva>` | a symbol | follows the rel32 of the call, jump or RIP-relative operand at `rva` |
+| `direct` | a symbol | its own code |
+| `body`, `body:<rva>` | a symbol | its own code, or the call at `rva`, plus a hash of its whole function (`body = { len, open, hash }`), so a change to its logic fails the check |
+
+## Porting to a new build
+
+`cargo xtask compat pin` reports how the loader's entries port to a new game
+build. Every game update changes the build fingerprint and moves functions.
+The loader finds its entries on every build by its engine routes and
+anchors, with no file made for the build, so `pin` writes no loader table:
+it reports how each entry of the old build's kept table ports, which shows a
+route or anchor that needs fixing. It ports by the rules of
+[`cargo enshwick pin`](https://github.com/enshwick/enshwick/blob/main/crates/cargo-enshwick/README.md#how-it-decides),
+which ports a mod's own build rows, and gives each ported entry the pattern
+that finds it on a later build, taken from the new executable.
+
+It reads the kept builds' tables, one TOML file per build in `tables/` of
+the game data folder outside the repository that `--data` or
+`ENSH_GAMEDATA` names. An old build without a kept table ports from what its
+anchors and engine routes find on it, and the report says where each
+section's old values come from. For each table it ports, `pin` also
+refreshes the `check` shapes of the engine routes in
+[`anchors/routes.toml`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick-gamedata/anchors/routes.toml)
+for that side: a check that still holds at its symbol on the old and the new
+build stays, a route of that side alone takes one made from their code, and
+the report lists each route left without one, whose hook then needs an
+anchor row. Last, it compares the covered types of the typed API on both
+builds.
+
+1. **Keep the old executables.** Copy `enshrouded_server.exe` and
+   `enshrouded.exe` aside before you update.
+2. **Download the new build** with
+   [steamcmd](https://developer.valvesoftware.com/wiki/SteamCMD). Anyone can
+   download the dedicated server (app 2278520); the client (app 1203620) needs
+   an account that owns the game:
+
+   ```bash
+   steamcmd +force_install_dir ./server +login anonymous +app_update 2278520 validate +quit
+   steamcmd +force_install_dir ./client +login <account> +app_update 1203620 validate +quit
+   ```
+
+   The Steam build id is in `steamapps/appmanifest_2278520.acf` (`buildid`),
+   and in `appmanifest_1203620.acf` for the client.
+3. **Run the tool** from the repository root, once per executable:
+
+   ```bash
+   cargo xtask compat pin --old old/enshrouded_server.exe \
+     --new server/enshrouded_server.exe \
+     --steam-build 26100000 --write --report pin-server.md
+   cargo xtask compat pin --old old/enshrouded.exe --new client/enshrouded.exe \
+     --steam-build 26100001 --write --report pin-client.md
+   ```
+
+   `--write` writes the refreshed check shapes and, with the game data
+   folder, the new build's typed snapshot, the renames its types show and,
+   for the server, the typed API. The report names the build by
+   `--steam-build` and `--game-version` when they are given and carries the
+   ported table. It writes every file or none. The exit code is 0 when
+   nothing needs a human, 2 when something does, and 1 on an error.
+4. **Review.** Settle each item under "For a human" in the report: a loader
+   entry it cannot port needs its route or anchor fixed. Read `git diff`,
+   build, and try the new build in game.
+5. **Write the report data** of the new build, which the compatibility page
+   reads; given the folder, it takes the build's file name:
+
+   ```bash
+   cargo xtask compat server/enshrouded_server.exe \
+     --data crates/enshwick-gamedata/reports
+   ```
+
+   `--steam-build` and `--game-version` name the build when no Steam
+   appmanifest or game archive lies beside the executable. When steps 3 or 4
+   changed an anchor or a route, every kept report's seal is stale too:
+   rewrite them all with `cargo xtask compat refresh`, with `ENSH_EXES`
+   listing the new executable and every kept one.
+6. **Open a pull request** with the report data, any fixed route or anchor
+   and the report's summary. Never commit an executable or anything else
+   from the game.
+
+Three tests need a game executable, which is never in the repository:
+
+```bash
+ENSHWICK_PIN_EXE=path/to/enshrouded_server.exe ENSH_GAMEDATA=path/to/gamedata \
+  cargo test --release -p xtask --features compat --bin xtask-compat -- --ignored
+```
+
+`a_build_ports_to_itself` ports every kept table of the executable's build
+to the same executable, and every symbol and check must map to itself.
+`moved_code_is_followed` moves all the code 16 bytes on, function table
+included, and rewrites one function. Every other symbol in code must follow
+the move, and the rewritten one must come out `missing`.
+`a_moved_field_is_read_on_the_new_build` moves three fields the table reads
+from code by 8 bytes: porting and the patterns alone must both give the new
+offsets. The same command works with `enshrouded.exe`.
