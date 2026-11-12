@@ -15,7 +15,6 @@ use enshwick_core::__private::rules::{patch_fits, spans_overlap as overlaps};
 use enshwick_core::abi::{HookFlags, Status};
 use rustc_hash::FxHashMap;
 
-use crate::engine::chains::Next;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
@@ -548,10 +547,6 @@ struct Lift {
 
 static LIFT: OnceLock<Lift> = OnceLock::new();
 static LIFTED: AtomicBool = AtomicBool::new(false);
-// SAFETY: `LookupFn` is the exact signature of the game's per-workshop list
-// lookup the table's `recipe.list_lookup` pins, and the slot is
-// used only as the `next` of the `lookup_detour` link on that function.
-static LOOKUP_NEXT: Next<LookupFn> = unsafe { Next::new() };
 /// Full recipe lists of the workshops past the game's limit, as addresses.
 static WORKSHOPS: OnceLock<FxHashMap<u32, Box<[usize]>>> = OnceLock::new();
 
@@ -897,47 +892,44 @@ pub(crate) fn recipes_served(data: usize, len: usize) {
     }
 }
 
-type LookupFn = unsafe extern "system" fn(
-    out: *mut [u64; 2],
-    registry: *mut u8,
-    workshop: *const u32,
-) -> *mut [u64; 2];
-
-/// The per-workshop list lookup: the game's answer, or the full list of a
-/// workshop past the game's limit.
-unsafe extern "system" fn lookup_detour(
-    out: *mut [u64; 2],
-    registry: *mut u8,
-    workshop: *const u32,
-) -> *mut [u64; 2] {
-    // SAFETY: the game's own arguments, passed on unchanged to the rest of
-    // the chain, which has the list lookup's signature.
-    let result = unsafe { LOOKUP_NEXT.get()(out, registry, workshop) };
-    if out.is_null() || workshop.is_null() {
-        return result;
+crate::engine::chains::chain_detour! {
+    /// The per-workshop list lookup the table's `recipe.list_lookup` pins:
+    /// the game's answer, or the full list of a workshop past the game's
+    /// limit.
+    fn lookup_detour(
+        out: *mut [u64; 2],
+        registry: *mut u8,
+        workshop: *const u32,
+    ) -> *mut [u64; 2];
+    next LOOKUP_NEXT;
+    |onward| {
+        let result = onward.call();
+        if out.is_null() || workshop.is_null() {
+            return result;
+        }
+        // SAFETY: the game passes the lookup a pointer to the `u32` workshop
+        // id, non-null by the earlier check and readable for the call.
+        let id: u32 = unsafe { enshwick_core::raw::read_at(workshop.cast(), 0) };
+        if let Some(list) = WORKSHOPS.get().and_then(|lists| lists.get(&id)) {
+            // SAFETY: `out` is the lookup's non-null out span (checked
+            // earlier), writable for a `[u64; 2]` for the call; the list it
+            // now names lives in `WORKSHOPS` for the process.
+            unsafe {
+                enshwick_core::raw::write_at(
+                    out.cast(),
+                    0,
+                    [list.as_ptr().expose_provenance() as u64, list.len() as u64],
+                );
+            };
+        }
+        let _caught = LOOKUP_FUSE.run("the recipe list lookup", || {
+            // SAFETY: `out` is the lookup's non-null out span (checked
+            // earlier) for the call, which the game or the lift just filled
+            // with the address and length of a list of live registry recipes.
+            unsafe { crate::content::recipes::filter(id, out) };
+        });
+        result
     }
-    // SAFETY: the game passes the lookup a pointer to the `u32` workshop id,
-    // non-null by the earlier check and readable for the call.
-    let id: u32 = unsafe { enshwick_core::raw::read_at(workshop.cast(), 0) };
-    if let Some(list) = WORKSHOPS.get().and_then(|lists| lists.get(&id)) {
-        // SAFETY: `out` is the lookup's non-null out span (checked earlier),
-        // writable for a `[u64; 2]` for the call; the list it now names lives
-        // in `WORKSHOPS` for the process.
-        unsafe {
-            enshwick_core::raw::write_at(
-                out.cast(),
-                0,
-                [list.as_ptr().expose_provenance() as u64, list.len() as u64],
-            );
-        };
-    }
-    let _caught = LOOKUP_FUSE.run("the recipe list lookup", || {
-        // SAFETY: `out` is the lookup's non-null out span (checked earlier)
-        // for the call, which the game or the lift just filled with the
-        // address and length of a list of live registry recipes.
-        unsafe { crate::content::recipes::filter(id, out) };
-    });
-    result
 }
 
 /// The switch of the recipe list lookup's filter.

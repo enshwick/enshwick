@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use enshwick_core::abi::Level;
-use enshwick_loader::engine::chains::{Counter, Next};
+use enshwick_loader::engine::chains::{Counter, Next, Onward};
 use enshwick_loader::engine::fuse::Fuse;
 
 type Reward = extern "system" fn(u32) -> u32;
@@ -116,6 +116,24 @@ fn fuse(c: &mut Criterion) {
     let mut group = c.benchmark_group("fuse");
     group.bench_function("run", |b| {
         b.iter(|| FUSE.run("bench", || original(black_box(7))));
+    });
+    // A detour that calls on, then does its work under the fuse: by hand,
+    // and through the detour layer's `Onward`.
+    group.bench_function("detour_by_hand", |b| {
+        b.iter(|| {
+            let answer = original(black_box(7));
+            let _done = FUSE.run("bench", || black_box(answer));
+            answer
+        });
+    });
+    group.bench_function("detour_onward", |b| {
+        b.iter(|| {
+            let onward = Onward::new(|| original(black_box(7)));
+            onward.run(&FUSE, "bench", |onward| {
+                let answer = onward.call();
+                black_box(answer)
+            })
+        });
     });
     group.finish();
 }

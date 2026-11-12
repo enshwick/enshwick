@@ -18,7 +18,6 @@ use arrayvec::ArrayVec;
 use enshwick_core::Entity;
 use enshwick_core::abi::{Header, HookFlags, PlayerInfo, Status};
 
-use crate::engine::chains::Next;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::memory::read;
 use crate::engine::pinned;
@@ -151,12 +150,6 @@ thread_local! {
 /// the thread alone.
 static STEP_LINKED: AtomicBool = AtomicBool::new(false);
 
-type WorldStepFn = unsafe extern "system" fn(world: *mut u8) -> usize;
-// SAFETY: `WorldStepFn` is the signature of the table's `world.step`, and
-// this slot is the `next` of the one link `link` makes on it, whose detour
-// `world_step` alone calls `get`.
-static WORLD_STEP_NEXT: Next<WorldStepFn> = unsafe { Next::new() };
-
 /// Links the world step, which runs every ECS system of a world, the
 /// server's on its game thread and on a client its own as well.
 pub(crate) fn link(loader: &'static Loader) {
@@ -174,14 +167,16 @@ pub(crate) fn link(loader: &'static Loader) {
     }
 }
 
-unsafe extern "system" fn world_step(world: *mut u8) -> usize {
-    STEPPING.set(STEPPING.get().wrapping_add(1));
-    // SAFETY: `world` is the game's argument to `world.step`, passed on
-    // unchanged; the chain is wired before the target jumps here, so the slot
-    // holds the rest of that chain with the same signature.
-    let result = unsafe { WORLD_STEP_NEXT.get()(world) };
-    STEPPING.set(STEPPING.get().wrapping_sub(1));
-    result
+crate::engine::chains::chain_detour! {
+    /// The table's `world.step`, counted while this thread is inside it.
+    fn world_step(world: *mut u8) -> usize;
+    next WORLD_STEP_NEXT;
+    |onward| {
+        STEPPING.set(STEPPING.get().wrapping_add(1));
+        let result = onward.call();
+        STEPPING.set(STEPPING.get().wrapping_sub(1));
+        result
+    }
 }
 
 /// Marks a hand-over to mods inside a step where no system runs, such as

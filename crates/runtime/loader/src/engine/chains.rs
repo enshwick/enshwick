@@ -89,6 +89,110 @@ impl<F: Copy> Next<F> {
     }
 }
 
+/// The rest of the chain for one call of a loader detour: the first
+/// [`Onward::call`] calls it with the game's arguments, and a later one
+/// gives the same answer again, so the game function runs once per call.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::engine::chains::Onward;
+/// use enshwick_loader::engine::fuse::Fuse;
+///
+/// static LANTERNS: Fuse = Fuse::new("doubled lanterns");
+/// let onward = Onward::new(|| 21);
+/// let doubled = onward.run(&LANTERNS, "the lantern count", |onward| onward.call() * 2);
+/// assert_eq!(doubled, 42);
+/// ```
+pub struct Onward<R, N> {
+    next: N,
+    answer: core::cell::Cell<Option<R>>,
+}
+
+impl<R: Copy, N: Fn() -> R> Onward<R, N> {
+    /// The rest of the chain that `next` calls with the detour's arguments.
+    #[inline]
+    pub const fn new(next: N) -> Self {
+        Self {
+            next,
+            answer: core::cell::Cell::new(None),
+        }
+    }
+
+    /// The chain's answer: the chain is called the first time, and the
+    /// answer kept for every later call.
+    #[inline]
+    pub fn call(&self) -> R {
+        if let Some(answer) = self.answer.get() {
+            return answer;
+        }
+        let answer = (self.next)();
+        self.answer.set(Some(answer));
+        answer
+    }
+
+    /// Runs the detour's `work` under `fuse` as `site`. While the feature
+    /// is off, or once `work` panicked, the call goes to the game: the
+    /// chain's answer `work` had already, or the chain called now.
+    #[inline]
+    pub fn run(&self, fuse: &Fuse, site: &str, work: impl FnOnce(&Self) -> R) -> R {
+        fuse.run(site, || work(self)).unwrap_or_else(|| self.call())
+    }
+}
+
+impl<R, N> core::fmt::Debug for Onward<R, N> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Onward").finish_non_exhaustive()
+    }
+}
+
+/// Declares one of the loader's chain detours with its `next` slot, typed
+/// by the detour's own signature, which is the hooked function's: the
+/// documentation names that function. The work reaches the rest of the
+/// chain through `onward.call()` with the game's arguments unchanged, at
+/// most once (an [`Onward`]); with a `fuse`, it runs under it by
+/// [`Onward::run`]. Parameters and answer are `Copy`, as a game function's
+/// are; a detour that changes an argument it passes on is written by hand.
+#[cfg(windows)]
+macro_rules! chain_detour {
+    (
+        $(#[$meta:meta])*
+        fn $name:ident($($arg:ident: $ty:ty),* $(,)?) -> $ret:ty;
+        next $next:ident;
+        $(fuse $fuse:expr, $site:literal;)?
+        |$onward:ident| $work:block
+    ) => {
+        static $next: $crate::engine::chains::Next<unsafe extern "system" fn($($ty),*) -> $ret> =
+            // SAFETY: the slot's type is the detour's own signature, which
+            // the detour's documentation says is the hooked function's; the
+            // loader links the detour only with this slot, since
+            // `link_feature` takes both of one type, so the slot is the
+            // `next` of that one link and only the detour calls `get`.
+            unsafe { $crate::engine::chains::Next::new() };
+
+        $(#[$meta])*
+        unsafe extern "system" fn $name($($arg: $ty),*) -> $ret {
+            let onward = $crate::engine::chains::Onward::new(|| {
+                // SAFETY: the game's own arguments, passed on unchanged to the
+                // rest of the chain, which the slot types as the hooked
+                // function; a chain is wired before its target jumps here.
+                unsafe { $next.get()($($arg),*) }
+            });
+            $crate::engine::chains::chain_detour!(@work onward, |$onward| $work $(, $fuse, $site)?)
+        }
+    };
+    (@work $chain:ident, |$onward:ident| $work:block) => {{
+        let $onward = &$chain;
+        $work
+    }};
+    (@work $chain:ident, |$onward:ident| $work:block, $fuse:expr, $site:literal) => {
+        $chain.run($fuse, $site, |$onward| $work)
+    };
+}
+
+#[cfg(windows)]
+pub(crate) use chain_detour;
+
 /// Calls through a thunk, beside its slot; the thunk writes them.
 ///
 /// Each counter fills 128 bytes, so threads in neighbouring thunks never

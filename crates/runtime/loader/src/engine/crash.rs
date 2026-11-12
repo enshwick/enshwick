@@ -44,7 +44,6 @@ use windows_sys::Win32::System::Threading::{
     GetCurrentProcess, GetCurrentProcessId, GetCurrentThreadId,
 };
 
-use crate::engine::chains::Next;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 
@@ -496,20 +495,6 @@ struct DumpException {
     client_pointers: i32,
 }
 
-type DumpFn = unsafe extern "system" fn(
-    process: HANDLE,
-    process_id: u32,
-    file: HANDLE,
-    kind: u32,
-    exception: *const DumpException,
-    streams: *const core::ffi::c_void,
-    callback: *const core::ffi::c_void,
-) -> i32;
-
-// SAFETY: `DumpFn` is the exact signature of `dbghelp.MiniDumpWriteDump`, and
-// the slot is used only as the `next` of the `dump` link on it.
-static DUMP_NEXT: Next<DumpFn> = unsafe { Next::new() };
-
 /// Whether a dump written for a fault coded `code` is of a crash: only the
 /// faults [`FATAL`] names are, never the breakpoints, C++ exceptions or
 /// reports a handler writes a dump for and survives.
@@ -535,43 +520,43 @@ unsafe fn fault_code(pointers: *const EXCEPTION_POINTERS) -> Option<NTSTATUS> {
     Some(record.ExceptionCode)
 }
 
-/// The game's crash handler writes a dump: report the fault first when it
-/// is one that ends the process.
-unsafe extern "system" fn dump(
-    process: HANDLE,
-    process_id: u32,
-    file: HANDLE,
-    kind: u32,
-    exception: *const DumpException,
-    streams: *const core::ffi::c_void,
-    callback: *const core::ffi::c_void,
-) -> i32 {
-    // Pointers "in the client" are this process's own when the dump is of
-    // this process, as the game's handler writes it.
-    // SAFETY: `GetCurrentProcessId` takes no arguments and has no
-    // preconditions.
-    let ours = process_id == unsafe { GetCurrentProcessId() };
-    // SAFETY: the caller's `MINIDUMP_EXCEPTION_INFORMATION`, null for a dump
-    // of no fault, valid for the call.
-    if let Some(exception) = unsafe { exception.as_ref() }
-        && (exception.client_pointers == 0 || ours)
-        // SAFETY: the pointers are this process's own (`client_pointers` is 0,
-        // or the dump is of this process, checked first) and name the fault
-        // whose thread waits in it while its handler writes the dump.
-        && unsafe { fault_code(exception.pointers) }.is_some_and(fatal)
-    {
-        let (pointers, thread) = (exception.pointers, exception.thread);
-        // SAFETY: the fault's pointers in this process, of the thread the
-        // dump names, which waits in the fault while its handler writes the
-        // dump.
-        unsafe { report(pointers, thread) };
-    }
-    // SAFETY: the caller's own arguments, passed on unchanged to the rest of
-    // the chain, which has `MiniDumpWriteDump`'s signature.
-    unsafe {
-        DUMP_NEXT.get()(
-            process, process_id, file, kind, exception, streams, callback,
-        )
+crate::engine::chains::chain_detour! {
+    /// The game's crash handler writes a dump through `dbghelp`'s
+    /// `MiniDumpWriteDump`: report the fault first when it is one that ends
+    /// the process.
+    fn dump(
+        process: HANDLE,
+        process_id: u32,
+        file: HANDLE,
+        kind: u32,
+        exception: *const DumpException,
+        streams: *const core::ffi::c_void,
+        callback: *const core::ffi::c_void,
+    ) -> i32;
+    next DUMP_NEXT;
+    |onward| {
+        // Pointers "in the client" are this process's own when the dump is
+        // of this process, as the game's handler writes it.
+        // SAFETY: `GetCurrentProcessId` takes no arguments and has no
+        // preconditions.
+        let ours = process_id == unsafe { GetCurrentProcessId() };
+        // SAFETY: the caller's `MINIDUMP_EXCEPTION_INFORMATION`, null for a
+        // dump of no fault, valid for the call.
+        if let Some(exception) = unsafe { exception.as_ref() }
+            && (exception.client_pointers == 0 || ours)
+            // SAFETY: the pointers are this process's own (`client_pointers`
+            // is 0, or the dump is of this process, checked first) and name
+            // the fault whose thread waits in it while its handler writes
+            // the dump.
+            && unsafe { fault_code(exception.pointers) }.is_some_and(fatal)
+        {
+            let (pointers, thread) = (exception.pointers, exception.thread);
+            // SAFETY: the fault's pointers in this process, of the thread
+            // the dump names, which waits in the fault while its handler
+            // writes the dump.
+            unsafe { report(pointers, thread) };
+        }
+        onward.call()
     }
 }
 
