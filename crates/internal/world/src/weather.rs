@@ -349,6 +349,17 @@ pub trait LoadMethods {
         F: Fn(&FrontChanged) + Send + Sync + 'static;
 }
 
+impl crate::script::Bound for Weather {
+    const NAME: &'static str = "weather";
+    const DOC: &'static str =
+        "The weather of the server's world: what it is where, its fronts, and setting it.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_SKY];
+
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, crate::Off> {
+        Ok(load.base_mut().weather())
+    }
+}
+
 impl LoadMethods for crate::BaseLoad {
     fn weather(&mut self) -> Weather {
         Weather { host: self.host() }

@@ -52,6 +52,18 @@ pub trait LoadMethods {
     fn inventories(&mut self) -> Result<Inventories, crate::Off>;
 }
 
+impl crate::script::Bound for Inventories {
+    const NAME: &'static str = "inventory";
+    const DOC: &'static str =
+        "Inventories on the server: their slots and counts, and items given, taken and moved.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
+        &[Self::SCRIPT_STOCK, Self::SCRIPT_READS];
+
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, crate::Off> {
+        load.base_mut().inventories()
+    }
+}
+
 impl LoadMethods for crate::BaseLoad {
     fn inventories(&mut self) -> Result<Inventories, crate::Off> {
         Inventories::resolve(self)

@@ -367,6 +367,19 @@ pub trait LoadMethods {
     fn terrain(&mut self) -> Terrain;
 }
 
+impl crate::script::Bound for Terrain {
+    const NAME: &'static str = "terrain";
+    const DOC: &'static str =
+        "The world's terrain: add, dig and flatten ground, and its materials.";
+    // One list with the object class the type has.
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
+        <Self as crate::script::Object>::PARTS;
+
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, crate::Off> {
+        Ok(load.base_mut().terrain())
+    }
+}
+
 impl LoadMethods for crate::BaseLoad {
     fn terrain(&mut self) -> Terrain {
         Terrain {

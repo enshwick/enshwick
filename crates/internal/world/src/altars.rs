@@ -699,6 +699,17 @@ pub trait LoadMethods {
         F: Fn(&mut AltarLimit) + Send + Sync + 'static;
 }
 
+impl crate::script::Bound for Altars {
+    const NAME: &'static str = "altars";
+    const DOC: &'static str = "Flame Altars: their list, their bases, zones and limits.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
+        &[Self::SCRIPT_LIST, Self::SCRIPT_HELPERS];
+
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
+        load.base_mut().altars()
+    }
+}
+
 impl LoadMethods for crate::BaseLoad {
     fn altars(&mut self) -> Result<Altars, Off> {
         let host = self.host();

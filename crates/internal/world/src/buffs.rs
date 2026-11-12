@@ -399,6 +399,17 @@ pub trait LoadMethods {
     fn buffs(&mut self) -> Buffs;
 }
 
+impl crate::script::Bound for Buffs {
+    const NAME: &'static str = "buffs";
+    const DOC: &'static str =
+        "Buffs: their types, and the buffs entities have, applied and removed.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_BUFFS];
+
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, crate::Off> {
+        Ok(load.base_mut().buffs())
+    }
+}
+
 impl LoadMethods for crate::BaseLoad {
     fn buffs(&mut self) -> Buffs {
         Buffs { host: self.host() }

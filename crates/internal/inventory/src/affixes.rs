@@ -193,6 +193,21 @@ pub trait LoadMethods {
     fn affixes(&mut self) -> Affixes;
 }
 
+impl crate::script::Bound for Affixes {
+    const NAME: &'static str = "affixes";
+    const DOC: &'static str =
+        "Affixes: bundles of stat modifiers rolled onto single items, their lines and rolls.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[
+        Self::SCRIPT_AFFIXES,
+        #[cfg(feature = "unstable")]
+        Self::SCRIPT_ROLLING,
+    ];
+
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
+        Ok(load.base_mut().affixes())
+    }
+}
+
 impl LoadMethods for crate::BaseLoad {
     fn define_affix(&mut self, id: Id, def: &AffixDef) -> Result<AffixId, Off> {
         let full = id.to_string();

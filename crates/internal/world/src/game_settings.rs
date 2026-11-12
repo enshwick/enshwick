@@ -632,6 +632,18 @@ pub trait LoadMethods {
     fn game_settings(&mut self) -> Result<GameSettings, Off>;
 }
 
+impl crate::script::Bound for GameSettings {
+    const NAME: &'static str = "game_settings";
+    const DOC: &'static str =
+        "The server's game settings: read them, change them for now, or keep a change.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
+        &[Self::SCRIPT_SETTINGS, Self::SCRIPT_READS];
+
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
+        load.base_mut().game_settings()
+    }
+}
+
 impl LoadMethods for BaseLoad {
     fn game_settings(&mut self) -> Result<GameSettings, Off> {
         let host = self.host();

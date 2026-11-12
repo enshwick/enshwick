@@ -295,6 +295,30 @@ pub trait LoadMethods {
     fn fog_of_war(&mut self) -> Result<FogOfWar, Off>;
 }
 
+impl crate::script::Bound for Map {
+    const NAME: &'static str = "map";
+    const DOC: &'static str =
+        "The world's map on the server: its markers, its frame, waypoints and snapshots.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
+        &[Self::SCRIPT_MARKERS, Self::SCRIPT_SNAPSHOT];
+
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
+        load.base_mut().map()
+    }
+}
+
+impl crate::script::Bound for FogOfWar {
+    const NAME: &'static str = "map";
+    const DOC: &'static str = <Map as crate::script::Bound>::DOC;
+    // One list with the object class the type has.
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
+        <Self as crate::script::Object>::PARTS;
+
+    fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
+        load.base_mut().fog_of_war()
+    }
+}
+
 impl LoadMethods for BaseLoad {
     fn map(&mut self) -> Result<Map, Off> {
         Map::resolve(self)
