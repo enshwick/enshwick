@@ -28,17 +28,17 @@ mod events;
 #[cfg(windows)]
 mod host;
 #[cfg(windows)]
-mod start;
+mod parts;
 #[cfg(windows)]
-mod table_ids;
+mod start;
 
 #[cfg(windows)]
 #[doc(hidden)]
 pub use engine::pages::{forget as forget_read_only, read_only};
 #[cfg(windows)]
-pub use start::{DryMod, DryRun, DryRunError, dry_run};
+pub use parts::table_ids;
 #[cfg(windows)]
-pub use table_ids::TABLE_IDS;
+pub use start::{DryMod, DryRun, DryRunError, dry_run};
 
 /// Starts the loader; called once by the `powrprof.dll` stub, which holds
 /// the dedicated server's own code until `release` is called.

@@ -24,3 +24,39 @@ pub(crate) mod served;
 pub(crate) mod standins;
 #[cfg(windows)]
 pub(crate) mod textures;
+
+#[cfg(windows)]
+use crate::engine::parts::{Part, part};
+
+/// The content domain's parts, in the order the joins call each of their
+/// phases.
+#[cfg(windows)]
+pub(crate) static PARTS: &[&Part] = &[
+    &Part {
+        link: Some(recipes::init),
+        forget: Some(|_| recipes::left()),
+        ..part!("recipes", recipes)
+    },
+    &Part {
+        table_ids: served::TABLE_IDS,
+        seal: Some(served::seal_and_link),
+        ..part!("content", served)
+    },
+    &Part {
+        table_ids: textures::TABLE_IDS,
+        link: Some(textures::link),
+        ..part!("textures", textures)
+    },
+    &Part {
+        world_event: Some(data_changes::world_event),
+        follows: Some(data_changes::wanted),
+        ..part!("data_changes", data_changes)
+    },
+    &Part {
+        table_ids: rate_links::TABLE_IDS,
+        link: Some(rate_links::link),
+        world_event: Some(|_, event| rate_links::world_event(event)),
+        follows: Some(|_| rate_links::recipes_rated()),
+        ..part!("rate_links", rate_links)
+    },
+];
