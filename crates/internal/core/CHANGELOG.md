@@ -9,6 +9,12 @@ see is in the changelog of `enshwick`.
 
 ### Changed
 
+- The inventory domain left for `enshwick-inventory`: `inventory`,
+  `items`, `item_data`, `entity_data`, `affixes`, `stats`, `damage`,
+  `effects`, `survivors` and `loot`. `Load` forwards their methods there;
+  their script namespaces and `Bound` implementations stay here, and
+  `actions` and `packs` reach the domain's private parts through its hidden
+  `__internal` (#1052).
 - The world domain left for `enshwick-world`: `World` with its methods,
   `world`, `map`, `altars`, `buffs`, `daytime`, `game_settings`, `terrain`,
   `voxels`, `weather`, `WorldError` and the typed handles. `Load` forwards
