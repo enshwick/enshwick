@@ -648,6 +648,60 @@ mod tests {
     }
 
     #[test]
+    fn a_text_argument_is_lent_from_its_slot_and_anything_else_is_refused() {
+        let mut args = [
+            Value::String("kept".into()),
+            Value::Name("named"),
+            Value::Number(1.0),
+        ];
+        let mut slots = args.iter_mut();
+        assert_eq!(text(&mut slots, "a").ok(), Some("kept"));
+        assert_eq!(text(&mut slots, "b").ok(), Some("named"));
+        let refused = text(&mut slots, "c").err().map(|e| e.to_string());
+        assert_eq!(
+            refused.as_deref(),
+            Some("c: expected a string, got a number")
+        );
+        let missing = text(&mut slots, "d").err().map(|e| e.to_string());
+        assert_eq!(missing.as_deref(), Some("d: expected a string, got nil"));
+        assert!(matches!(&args[0], Value::String(kept) if kept == "kept"));
+    }
+
+    #[test]
+    fn a_taken_argument_leaves_nil_in_its_slot() {
+        let mut args = [Value::Number(3.0)];
+        let mut slots = args.iter_mut();
+        assert_eq!(taken::<u8>(&mut slots, "n").ok(), Some(3));
+        assert!(taken::<u8>(&mut slots, "m").is_err());
+        assert!(matches!(args[0], Value::Nil));
+    }
+
+    #[test]
+    fn a_callback_with_a_runtime_tells_it_of_a_fault_and_with_fault_replaces_it() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicU8, Ordering};
+
+        let told = Arc::new(AtomicU8::new(0));
+        let first = Arc::clone(&told);
+        let callback = Callback::with_runtime(
+            |_| Ok(Value::Bool(true)),
+            move |_| {
+                first.fetch_add(1, Ordering::Relaxed);
+            },
+        );
+        assert!(matches!(callback.call(&mut []), Ok(Value::Bool(true))));
+        callback.fault(&Error::new("no"));
+        assert_eq!(told.load(Ordering::Relaxed), 1);
+        let second = Arc::clone(&told);
+        let replaced = callback.with_fault(move |_| {
+            second.fetch_add(10, Ordering::Relaxed);
+        });
+        assert!(matches!(replaced.call(&mut []), Ok(Value::Bool(true))));
+        replaced.fault(&Error::new("no"));
+        assert_eq!(told.load(Ordering::Relaxed), 11);
+    }
+
+    #[test]
     fn a_fixed_point_position_past_half_a_metre_reads_back() {
         let far = [100_i64 << 32, -(50_i64 << 32), 1];
         assert_eq!(<[i64; 3]>::from_value(far.into_value()).ok(), Some(far));

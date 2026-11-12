@@ -852,4 +852,30 @@ mod tests {
         assert!(out.contains("argument_or_default"), "{out}");
         Ok(())
     }
+
+    #[test]
+    fn a_text_parameter_is_lent_from_its_slot_and_others_are_taken() -> syn::Result<()> {
+        let method: ImplItemFn = parse_quote! {
+            /// Says `text` `times` times.
+            fn say(&self, text: &str, times: u32) {}
+        };
+        let out = function(
+            &method,
+            &parse_quote!(Chat),
+            false,
+            None,
+            &quote!(::enshwick),
+        )?
+        .to_string();
+        assert!(
+            out.contains("convert :: text (& mut args , \"text\")"),
+            "{out}"
+        );
+        assert!(
+            out.contains("convert :: taken (& mut args , \"times\")"),
+            "{out}"
+        );
+        assert!(out.contains("args . iter_mut ()"), "{out}");
+        Ok(())
+    }
 }
