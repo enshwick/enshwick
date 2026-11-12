@@ -43,18 +43,17 @@ fn inventories(ops: &[Op]) -> usize {
     seen.len()
 }
 
-impl crate::Load<'_> {
-    /// Inventory reads and transactions in the game server, dedicated or
-    /// hosted by the client; a mod asks for them during `init`.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`](crate::Off) when this game build lacks a piece of them.
-    ///
-    /// # Examples
-    ///
-    /// See [`Inventories`].
-    pub fn inventories(&mut self) -> Result<Inventories, crate::Off> {
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::inventories`.
+    #[doc(hidden)]
+    fn inventories(&mut self) -> Result<Inventories, crate::Off>;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn inventories(&mut self) -> Result<Inventories, crate::Off> {
         Inventories::resolve(self)
     }
 }

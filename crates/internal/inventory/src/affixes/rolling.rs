@@ -7,14 +7,15 @@ use std::time::{Duration, Instant};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::Entity;
+use crate::Off;
 use crate::abi::{AffixRoll, Header, Status};
 use crate::game_events::CraftRecipeEvent;
 use crate::inventory::{ItemInstance, Slot};
 use crate::locks::Relock;
 use crate::loot::Source;
-use crate::{Load, Off};
 
 use super::{Affixes, ItemRarity, RollError, RollRules};
+use crate::__load::*;
 
 /// A seed from the item and the time, for rolls that need no repeating.
 fn fresh_seed(item: ItemInstance) -> u64 {
@@ -189,23 +190,21 @@ fn try_roll(affixes: Affixes, item: ItemInstance, chance: f64, rules: RollRules)
     let _rolled = affixes.roll(item, rules, None, true);
 }
 
-#[crate::script(affix_rolls)]
-impl Load<'_> {
-    /// Rolls affixes onto the items with an entity that random loot puts
-    /// into containers `rule.from` matches, each at `rule.chance`, as the
-    /// container rolls its loot. Each item rolls once: an item rolled
-    /// before, by this rule or another, stays as it is. On the server.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] for a chance outside 0 to 1, or when the build lacks the
-    /// loot or inventory pieces.
-    ///
-    /// # Examples
-    ///
-    /// See the [module](crate::affixes).
-    #[script]
-    pub fn add_loot_affixes(&mut self, rule: AffixLoot) -> Result<(), Off> {
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::add_loot_affixes`.
+    #[doc(hidden)]
+    fn add_loot_affixes(&mut self, rule: AffixLoot) -> Result<(), Off>;
+
+    /// As `Load::add_craft_affixes`.
+    #[doc(hidden)]
+    fn add_craft_affixes(&mut self, rule: AffixCraft) -> Result<(), Off>;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn add_loot_affixes(&mut self, rule: AffixLoot) -> Result<(), Off> {
         if !(0.0..=1.0).contains(&rule.chance) {
             return Err(Off::new(format!(
                 "affix loot: chance {} is not between 0 and 1",
@@ -231,26 +230,7 @@ impl Load<'_> {
         Ok(())
     }
 
-    /// Rolls affixes onto the items with an entity a player crafts, each at
-    /// `rule.chance`: the items new in the crafter's inventories within a
-    /// second of the craft request. Each item rolls once. On the server.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] for a chance outside 0 to 1, or when the build lacks the
-    /// event or inventory pieces.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::affixes::{AffixCraft, RollRules};
-    ///
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.add_craft_affixes(AffixCraft::new(0.2, RollRules::new(1, 1)))
-    /// }
-    /// ```
-    #[script]
-    pub fn add_craft_affixes(&mut self, rule: AffixCraft) -> Result<(), Off> {
+    fn add_craft_affixes(&mut self, rule: AffixCraft) -> Result<(), Off> {
         if !(0.0..=1.0).contains(&rule.chance) {
             return Err(Off::new(format!(
                 "affix craft: chance {} is not between 0 and 1",

@@ -19,6 +19,7 @@ enshwick-base.workspace = true
 enshwick-content.workspace = true
 enshwick-typed = { workspace = true, optional = true }
 enshwick-world.workspace = true
+enshwick-inventory.workspace = true
 enshwick-values.workspace = true
 bytemuck.workspace = true
 hound = { workspace = true, optional = true }
@@ -45,9 +46,9 @@ serde = { workspace = true, features = ["derive"] }
 # what the fake loader reads inside this crate and a mod life per install,
 # which only `enshwick-fake` turns on.
 [features]
-fake = ["enshwick-base/fake", "enshwick-content/fake", "enshwick-world/fake", "enshwick-typed?/test"]
+fake = ["enshwick-base/fake", "enshwick-content/fake", "enshwick-world/fake", "enshwick-inventory/fake", "enshwick-typed?/test"]
 schema = ["dep:schemars", "dep:serde_json", "enshwick-base/schema"]
-unstable = ["dep:hound", "enshwick-base/unstable", "enshwick-content/unstable", "enshwick-world/unstable"]
+unstable = ["dep:hound", "enshwick-base/unstable", "enshwick-content/unstable", "enshwick-world/unstable", "enshwick-inventory/unstable"]
 typed = ["unstable", "dep:enshwick-typed", "enshwick-content/typed", "enshwick-world/typed"]
 
 [lints]

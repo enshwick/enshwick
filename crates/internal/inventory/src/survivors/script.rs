@@ -7,9 +7,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use super::{Answer, Lookup, NpcId, Purpose, WorkshopSurvivor};
+use crate::__load::*;
 use crate::content::Guid;
 use crate::script::{Bound, Class, Function, Object};
-use crate::{Entity, ItemId, Load, Off};
+use crate::{Entity, ItemId, Off};
 
 /// The script's answer to a lookup; nil or an error keeps the game's.
 impl crate::script::Answer for Answer {
@@ -186,16 +187,27 @@ impl Bound for SurvivorFns {
     }
 }
 
-#[crate::script(survivor_hooks)]
-impl Load<'_> {
-    /// Makes `handler` the answer to the game's survivor lookups, as
-    /// [`Load::on_survivor_lookup`] does: it gets the lookup as an object.
-    ///
-    /// # Errors
-    ///
-    /// As [`Load::on_survivor_lookup`].
-    #[script(name = "on_survivor_lookup")]
-    pub(crate) fn on_survivor_lookup_script(
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::on_survivor_lookup_script`.
+    #[doc(hidden)]
+    fn on_survivor_lookup_script(
+        &mut self,
+        handler: impl Fn(ScriptLookup) -> Answer + Send + Sync + 'static,
+    ) -> Result<(), Off>;
+
+    /// As `Load::on_survivor_status_script`.
+    #[doc(hidden)]
+    fn on_survivor_status_script(
+        &mut self,
+        merge: impl Fn(NpcId, Vec<u8>) -> Option<u8> + Send + Sync + 'static,
+    ) -> Result<(), Off>;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn on_survivor_lookup_script(
         &mut self,
         handler: impl Fn(ScriptLookup) -> Answer + Send + Sync + 'static,
     ) -> Result<(), Off> {
@@ -214,15 +226,7 @@ impl Load<'_> {
         })
     }
 
-    /// Makes `merge` decide what the survivor menu shows, as
-    /// [`Load::on_survivor_status`] does: it gets the status bytes as a
-    /// list.
-    ///
-    /// # Errors
-    ///
-    /// As [`Load::on_survivor_status`].
-    #[script(name = "on_survivor_status")]
-    pub(crate) fn on_survivor_status_script(
+    fn on_survivor_status_script(
         &mut self,
         merge: impl Fn(NpcId, Vec<u8>) -> Option<u8> + Send + Sync + 'static,
     ) -> Result<(), Off> {

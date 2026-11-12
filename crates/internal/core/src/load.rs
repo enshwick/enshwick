@@ -194,17 +194,28 @@ impl Load<'_> {
 }
 
 // `Load`'s methods of the crates below, by the module they forward to.
+mod affixes;
 mod altars;
 mod buffs;
 mod build;
 mod code;
 mod config;
 mod content;
+mod damage;
 mod daytime;
+mod effects;
+#[cfg(feature = "unstable")]
+mod entity_data;
 mod events;
 mod game_events;
 mod game_settings;
 mod i18n;
+mod inventory;
+#[cfg(feature = "unstable")]
+mod item_data;
+#[cfg(feature = "unstable")]
+mod items;
+mod loot;
 #[cfg(feature = "unstable")]
 mod map;
 mod net;
@@ -216,7 +227,9 @@ mod resources;
 mod services;
 mod settings;
 mod state;
+mod stats;
 mod status;
+mod survivors;
 mod terrain;
 mod time;
 #[cfg(feature = "typed")]

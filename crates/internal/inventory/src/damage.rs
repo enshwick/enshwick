@@ -33,9 +33,9 @@ use core::ffi::c_void;
 #[cfg(feature = "unstable")]
 use crate::Entity;
 #[cfg(feature = "unstable")]
-use crate::abi::DamageCheck;
+use crate::Off;
 #[cfg(feature = "unstable")]
-use crate::{Load, Off};
+use crate::abi::DamageCheck;
 
 /// A damage type, as the game sorts a hit's damage.
 ///
@@ -408,35 +408,29 @@ where
     }
 }
 
-#[cfg(feature = "unstable")]
-impl Load<'_> {
-    /// Runs `filter` on damage about to reach an entity's health in the
-    /// server's world: hits by type, falls and the shroud. What it leaves is
-    /// what the game applies. It runs on the game's worker threads, inside
-    /// the systems that deal damage, in the dedicated server or a hosting
-    /// client: it must not allocate, lock or log.
-    ///
-    /// Unstable: needs the `unstable` feature and may change in any release.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] after init or on a build without the damage sites.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::damage::{DamageCause, DamageTypeNew};
-    ///
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.on_damage(|damage| match damage.cause() {
-    ///         // Falls hurt half as much, fire twice as much.
-    ///         DamageCause::FallDamage => damage.scale(0.5),
-    ///         DamageCause::Impact => damage.scale_type(DamageTypeNew::MagicalFire, 2.0),
-    ///         _ => {}
-    ///     })
-    /// }
-    /// ```
-    pub fn on_damage<F>(&mut self, filter: F) -> Result<(), Off>
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::on_damage`.
+    #[doc(hidden)]
+    #[cfg(feature = "unstable")]
+    fn on_damage<F>(&mut self, filter: F) -> Result<(), Off>
+    where
+        F: Fn(&mut Damage<'_>) + Send + Sync + 'static;
+
+    /// As `Load::on_damage_script`.
+    #[doc(hidden)]
+    #[cfg(feature = "unstable")]
+    fn on_damage_script(
+        &mut self,
+        filter: impl Fn(std::sync::Arc<ScriptDamage>) + Send + Sync + 'static,
+    ) -> Result<(), Off>;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    #[cfg(feature = "unstable")]
+    fn on_damage<F>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&mut Damage<'_>) + Send + Sync + 'static,
     {
@@ -446,6 +440,41 @@ impl Load<'_> {
             |user| (host.api().damage_filter)(host.handle(), run_damage::<F>, user),
             "damage filter",
         )
+    }
+
+    #[cfg(feature = "unstable")]
+    fn on_damage_script(
+        &mut self,
+        filter: impl Fn(std::sync::Arc<ScriptDamage>) + Send + Sync + 'static,
+    ) -> Result<(), Off> {
+        use crate::Relock as _;
+        use core::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+        /// Frees the kept copy on a panic too, which the hit's guard catches.
+        struct Free<'a>(&'a AtomicBool);
+        impl Drop for Free<'_> {
+            fn drop(&mut self) {
+                self.0.store(false, Ordering::Release);
+            }
+        }
+        let kept = std::sync::OnceLock::new();
+        let busy = AtomicBool::new(false);
+        self.on_damage(move |damage| {
+            let fresh = || Arc::new(ScriptDamage(Arc::new(std::sync::Mutex::new(*damage.check))));
+            // A hit while the kept copy is out, on another thread or inside
+            // the filter, gets a copy of its own.
+            if busy.swap(true, Ordering::Acquire) {
+                let copy = fresh();
+                filter(Arc::clone(&copy));
+                *damage.check = *copy.0.relock();
+                return;
+            }
+            let _free = Free(&busy);
+            let copy: &Arc<ScriptDamage> = kept.get_or_init(fresh);
+            *copy.0.relock() = *damage.check;
+            filter(Arc::clone(copy));
+            *damage.check = *copy.0.relock();
+        })
     }
 }
 
@@ -538,52 +567,6 @@ impl ScriptDamage {
         self.with(|d| {
             d.cancel();
         });
-    }
-}
-
-#[cfg(feature = "unstable")]
-#[crate::script(damage_filter)]
-impl Load<'_> {
-    /// Runs `filter` on damage about to reach an entity's health, as
-    /// [`Load::on_damage`] does: it gets the damage as an object whose
-    /// methods change it.
-    ///
-    /// # Errors
-    ///
-    /// As [`Load::on_damage`].
-    #[script(name = "on_damage")]
-    pub(crate) fn on_damage_script(
-        &mut self,
-        filter: impl Fn(std::sync::Arc<ScriptDamage>) + Send + Sync + 'static,
-    ) -> Result<(), Off> {
-        use crate::Relock as _;
-        use core::sync::atomic::{AtomicBool, Ordering};
-        use std::sync::Arc;
-        /// Frees the kept copy on a panic too, which the hit's guard catches.
-        struct Free<'a>(&'a AtomicBool);
-        impl Drop for Free<'_> {
-            fn drop(&mut self) {
-                self.0.store(false, Ordering::Release);
-            }
-        }
-        let kept = std::sync::OnceLock::new();
-        let busy = AtomicBool::new(false);
-        self.on_damage(move |damage| {
-            let fresh = || Arc::new(ScriptDamage(Arc::new(std::sync::Mutex::new(*damage.check))));
-            // A hit while the kept copy is out, on another thread or inside
-            // the filter, gets a copy of its own.
-            if busy.swap(true, Ordering::Acquire) {
-                let copy = fresh();
-                filter(Arc::clone(&copy));
-                *damage.check = *copy.0.relock();
-                return;
-            }
-            let _free = Free(&busy);
-            let copy: &Arc<ScriptDamage> = kept.get_or_init(fresh);
-            *copy.0.relock() = *damage.check;
-            filter(Arc::clone(copy));
-            *damage.check = *copy.0.relock();
-        })
     }
 }
 

@@ -15,7 +15,7 @@
 //! [`Load::add_loot`] puts a mod item into random loot with an exact chance,
 //! filtered by [`Source`]: corpses, bosses, chests, locked chests, loot labels.
 
-mod drops;
+pub(crate) mod drops;
 mod script;
 
 #[doc(hidden)]
@@ -26,10 +26,10 @@ pub(crate) use drops::watch_rolls;
 pub use drops::{Drop, Kinds, LootContainerId, MeterRoll, Roll, Source, replace_drops};
 
 use crate::Entity;
+use crate::Off;
 use crate::ecs::{ComponentType, Components, Ecs};
 use crate::engine_ids as ids;
 use crate::raw::read_at;
-use crate::{Load, Off};
 
 /// The system that checks every loot container each step, for
 /// [`Load::system`].
@@ -487,16 +487,26 @@ fn after_check(next: crate::Next<'_, unsafe extern "system" fn(*mut u64)>, ctx: 
     }
 }
 
-#[crate::script(loot_pass)]
-impl Load<'_> {
-    /// Runs `handler` after every run of the game's loot container check, as
-    /// `Load::on_loot_pass` does, with that run's containers as a list.
-    ///
-    /// # Errors
-    ///
-    /// As [`Load::on_loot_pass`].
-    #[script(name = "on_loot_pass")]
-    pub(crate) fn on_loot_pass_script(
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::on_loot_pass_script`.
+    #[doc(hidden)]
+    fn on_loot_pass_script(
+        &mut self,
+        handler: impl Fn(Vec<Container>) + Send + Sync + 'static,
+    ) -> Result<(), Off>;
+
+    /// As `Load::on_loot_pass`.
+    #[doc(hidden)]
+    fn on_loot_pass<F>(&mut self, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&LootPass<'_>) + Send + Sync + 'static;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn on_loot_pass_script(
         &mut self,
         handler: impl Fn(Vec<Container>) + Send + Sync + 'static,
     ) -> Result<(), Off> {
@@ -505,6 +515,24 @@ impl Load<'_> {
             pass.each(|container| containers.push(*container));
             handler(containers);
         })
+    }
+
+    fn on_loot_pass<F>(&mut self, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&LootPass<'_>) + Send + Sync + 'static,
+    {
+        let containers = Containers::resolve(self)?;
+        let worlds = crate::ecs::Worlds::resolve(self)?;
+        let system = self.system(SYSTEM)?;
+        if PASS
+            .set((containers, worlds, self.host(), Box::new(handler)))
+            .is_err()
+        {
+            return Err(Off::new("one loot pass handler per mod"));
+        }
+        // SAFETY: `system` is the reflected update function of `SYSTEM`,
+        // which takes one context pointer, the signature `CHECK` declares.
+        unsafe { self.hook(&CHECK, system) }
     }
 }
 
@@ -538,46 +566,6 @@ impl crate::script::Bound for LootFns {
 
     fn resolve(_load: &mut Load<'_>) -> Result<Self, Off> {
         Ok(Self)
-    }
-}
-
-impl Load<'_> {
-    /// Runs `handler` after every run of the game's loot container check in
-    /// the server's world, on the worker thread that runs it, with that run's
-    /// containers. One handler per mod.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] for a second handler, or when the loader or the game lacks a
-    /// piece.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.on_loot_pass(|pass| {
-    ///         let mut emptied = 0;
-    ///         pass.each(|container| emptied += usize::from(container.is_empty));
-    ///         let _ = emptied;
-    ///     })
-    /// }
-    /// ```
-    pub fn on_loot_pass<F>(&mut self, handler: F) -> Result<(), Off>
-    where
-        F: Fn(&LootPass<'_>) + Send + Sync + 'static,
-    {
-        let containers = Containers::resolve(self)?;
-        let worlds = crate::ecs::Worlds::resolve(self)?;
-        let system = self.system(SYSTEM)?;
-        if PASS
-            .set((containers, worlds, self.host(), Box::new(handler)))
-            .is_err()
-        {
-            return Err(Off::new("one loot pass handler per mod"));
-        }
-        // SAFETY: `system` is the reflected update function of `SYSTEM`,
-        // which takes one context pointer, the signature `CHECK` declares.
-        unsafe { self.hook(&CHECK, system) }
     }
 }
 

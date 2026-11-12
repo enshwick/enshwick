@@ -50,7 +50,7 @@ use crate::abi::{EntityDataFlags, Status, Str};
 pub use crate::item_data::{MAX_VALUE, SetError};
 use crate::resources::Value as Data;
 use crate::{Entity, ItemId};
-use crate::{Host, Load, Off};
+use crate::{Host, Off};
 
 /// Who gets a kind's values.
 ///
@@ -188,28 +188,27 @@ where
     }
 }
 
-impl Load<'_> {
-    /// Opens the entity data kind `id`: `name` for the mod's own, or
-    /// `<mod>:<name>` for any mod's, the name 1 to 64 of `[a-z0-9_-]`, see
-    /// [how ids are namespaced](https://github.com/enshwick/enshwick/blob/main/book/src/concepts/ids.md).
-    /// Every mod that opens one id shares its values, so the
-    /// value type must match; the kind is sent to clients once any mod
-    /// opens it with [`Replication::Clients`]. Call it during `init`, on
-    /// both sides.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] for a malformed id, an id opened as an item kind, or after
-    /// init.
-    ///
-    /// # Examples
-    ///
-    /// See the [module](self).
-    pub fn entity_data<T>(
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::entity_data`.
+    #[doc(hidden)]
+    fn entity_data<T>(&mut self, id: &str, replication: Replication) -> Result<EntityData<T>, Off>
+    where
+        T: serde::Serialize + serde::de::DeserializeOwned;
+
+    /// As `Load::entity_data_script`.
+    #[doc(hidden)]
+    fn entity_data_script(
         &mut self,
         id: &str,
         replication: Replication,
-    ) -> Result<EntityData<T>, Off>
+    ) -> Result<EntityData<Data>, Off>;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn entity_data<T>(&mut self, id: &str, replication: Replication) -> Result<EntityData<T>, Off>
     where
         T: serde::Serialize + serde::de::DeserializeOwned,
     {
@@ -230,6 +229,14 @@ impl Load<'_> {
             },
             || format!("entity data {id:?}"),
         )
+    }
+
+    fn entity_data_script(
+        &mut self,
+        id: &str,
+        replication: Replication,
+    ) -> Result<EntityData<Data>, Off> {
+        self.entity_data(id, replication)
     }
 }
 
@@ -267,23 +274,5 @@ impl EntityData<Data> {
     #[script(name = "remove")]
     pub(crate) fn remove_script(&self, entity: Entity) -> Result<(), SetError> {
         self.remove(entity)
-    }
-}
-
-#[crate::script(entity_data)]
-impl Load<'_> {
-    /// Opens the entity data kind `id` of game data values, as
-    /// [`Load::entity_data`] opens one of a Rust type.
-    ///
-    /// # Errors
-    ///
-    /// As [`Load::entity_data`].
-    #[script(name = "entity_data")]
-    pub(crate) fn entity_data_script(
-        &mut self,
-        id: &str,
-        replication: Replication,
-    ) -> Result<EntityData<Data>, Off> {
-        self.entity_data(id, replication)
     }
 }

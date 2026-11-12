@@ -56,7 +56,7 @@ use crate::inventory::ItemInstance;
 use crate::item_data::ItemData;
 pub use crate::item_data::SetError;
 use crate::{Entity, ItemId};
-use crate::{Host, Load, Off};
+use crate::{Host, Off};
 
 /// The item data kind that holds every item's [`ItemStats`].
 pub const ITEM_KIND: &str = "enshwick:stats";
@@ -554,64 +554,45 @@ where
     crate::host::guard("panic in a stats handler", || (), || handler(&change));
 }
 
-#[crate::script(stats)]
-impl Load<'_> {
-    fn open_stat_with(&mut self, id: Id, def: Option<&StatDef>) -> Result<Stat, Off> {
-        let host = self.host();
-        let data = def.map(StatDef::to_data);
-        let def_ptr = data.as_ref().map_or(core::ptr::null(), core::ptr::from_ref);
-        let full = id.to_string();
-        let mut out = StatRef::default();
-        let status = (host.api().stat_open)(host.handle(), Str::new(&full), def_ptr, &raw mut out);
-        crate::load::ok(status, Stat::from_ref(out), || format!("stat {full:?}"))
-    }
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::define_stat`.
+    #[doc(hidden)]
+    fn define_stat(&mut self, id: Id, def: &StatDef) -> Result<Stat, Off>;
 
-    /// Defines the mod's stat kind `id`, named with
-    /// [`id!`](crate::content::id). Its text is `<name>.name` in the mod's
-    /// texts ([`name_key`]). Call it during `init`, on both sides.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] for an id of another mod, a malformed definition, a kind
-    /// defined twice, or after init.
-    ///
-    /// # Examples
-    ///
-    /// See the [module](self).
-    #[script]
-    pub fn define_stat(&mut self, id: Id, def: &StatDef) -> Result<Stat, Off> {
+    /// As `Load::open_stat`.
+    #[doc(hidden)]
+    fn open_stat(&mut self, id: Id) -> Result<Stat, Off>;
+
+    /// As `Load::stats`.
+    #[doc(hidden)]
+    fn stats(&mut self) -> Result<Stats, Off>;
+
+    /// As `Load::add_buff_modifiers`.
+    #[doc(hidden)]
+    fn add_buff_modifiers(&mut self, buff: BuffTypeId, modifiers: &[Modifier]) -> Result<(), Off>;
+
+    /// As `Load::on_stats_changed`.
+    #[doc(hidden)]
+    fn on_stats_changed<F>(&mut self, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&StatChange) + Send + Sync + 'static;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn define_stat(&mut self, id: Id, def: &StatDef) -> Result<Stat, Off> {
         def.check()
             .map_err(|why| Off::new(format!("stat {:?}: {why}", id.to_string())))?;
         self.open_stat_with(id, Some(def))
     }
 
-    /// Opens stat kind `id`: a built-in one from [`builtin`], or another
-    /// mod's through [`deps!`](crate::deps). A kind no mod defines keeps 0
-    /// and reads nothing. Call it during `init`, on both sides.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] for a kind of a loaded mod that does not export it, or after
-    /// init.
-    ///
-    /// # Examples
-    ///
-    /// See the [module](self).
-    #[script]
-    pub fn open_stat(&mut self, id: Id) -> Result<Stat, Off> {
+    fn open_stat(&mut self, id: Id) -> Result<Stat, Off> {
         self.open_stat_with(id, None)
     }
 
-    /// The stat values and modifiers. Call it during `init`.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] after init.
-    ///
-    /// # Examples
-    ///
-    /// See the [module](self).
-    pub fn stats(&mut self) -> Result<Stats, Off> {
+    fn stats(&mut self) -> Result<Stats, Off> {
         let host = self.host();
         Ok(Stats {
             host,
@@ -619,31 +600,7 @@ impl Load<'_> {
         })
     }
 
-    /// Gives every entity that has buff `buff` the `modifiers`, while it has
-    /// it: a mod's own buff type, or a vanilla one. Buffs count on watched
-    /// entities (see [`Stats::watch`]). Call it during `init`.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] after init.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::buffs::BuffTypeId;
-    /// use enshwick::stats::{Modifier, Op, builtin};
-    ///
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let fire = load.open_stat(builtin::RESISTANCE_FIRE)?;
-    ///     load.add_buff_modifiers(BuffTypeId(0x89cb_0b34), &[Modifier::new(fire, Op::Add, 0.2)])
-    /// }
-    /// ```
-    #[script]
-    pub fn add_buff_modifiers(
-        &mut self,
-        buff: BuffTypeId,
-        modifiers: &[Modifier],
-    ) -> Result<(), Off> {
+    fn add_buff_modifiers(&mut self, buff: BuffTypeId, modifiers: &[Modifier]) -> Result<(), Off> {
         let host = self.host();
         let data: Vec<StatModifierData> = modifiers.iter().map(|m| m.to_data()).collect();
         let status = (host.api().stat_buff)(
@@ -655,29 +612,7 @@ impl Load<'_> {
         crate::load::ok(status, (), || format!("buff modifiers for {:#x}", buff.0))
     }
 
-    /// Runs `handler` for every stat value that changed on a watched entity,
-    /// on the server's game thread after the step that changed it.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] after init.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// enshwick::deps!();
-    ///
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let luck = load.open_stat(deps::lockers::stat("luck"))?;
-    ///     load.on_stats_changed(move |change| {
-    ///         if change.stat == luck {
-    ///             enshwick::info!("{:?} has luck {}", change.entity, change.new);
-    ///         }
-    ///     })
-    /// }
-    /// ```
-    #[script]
-    pub fn on_stats_changed<F>(&mut self, handler: F) -> Result<(), Off>
+    fn on_stats_changed<F>(&mut self, handler: F) -> Result<(), Off>
     where
         F: Fn(&StatChange) + Send + Sync + 'static,
     {
@@ -690,10 +625,28 @@ impl Load<'_> {
     }
 }
 
+/// The base handle's helpers of this module for the crate's own code.
+pub(crate) trait LoadHelpers {
+    fn open_stat_with(&mut self, id: Id, def: Option<&StatDef>) -> Result<Stat, Off>;
+}
+
+impl LoadHelpers for crate::BaseLoad {
+    fn open_stat_with(&mut self, id: Id, def: Option<&StatDef>) -> Result<Stat, Off> {
+        let host = self.host();
+        let data = def.map(StatDef::to_data);
+        let def_ptr = data.as_ref().map_or(core::ptr::null(), core::ptr::from_ref);
+        let full = id.to_string();
+        let mut out = StatRef::default();
+        let status = (host.api().stat_open)(host.handle(), Str::new(&full), def_ptr, &raw mut out);
+        crate::load::ok(status, Stat::from_ref(out), || format!("stat {full:?}"))
+    }
+}
+
 mod defs;
 mod modifiers;
 #[cfg(test)]
 mod tests;
 
+use crate::__load::*;
 pub use defs::*;
 pub use modifiers::*;

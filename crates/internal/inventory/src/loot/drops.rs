@@ -18,7 +18,7 @@ use crate::inventory::Fill;
 use crate::locks::Relock;
 use crate::raw::{read_at, read_ptr_at, write_at, write_bytes_at};
 use crate::{Entity, ItemId};
-use crate::{Load, Next, Off};
+use crate::{Next, Off};
 
 /// What a container is, for [`Source::kinds`].
 ///
@@ -813,42 +813,29 @@ pub(crate) fn watch_rolls(load: &mut Load<'_>) -> Result<Arc<Mutex<Vec<Roll>>>, 
     Ok(queue)
 }
 
-#[crate::script(loot_drops)]
-impl Load<'_> {
-    /// Adds a mod item to random loot on the server, the dedicated one or a
-    /// client's while it hosts: each roll of a container `drop.from` matches
-    /// adds the item at `drop.chance`, on top of the vanilla loot. Containers
-    /// roll once, when first opened, so loot already rolled in a save stays
-    /// as it was.
-    ///
-    /// The item must be in the game's item registry, a vanilla item or one
-    /// from [`Load::add_item`]; unknown items are skipped by the game.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] when the drop is not valid or the build lacks a piece.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::content::{Id, id};
-    /// use enshwick::loot::{Drop, Source, Kinds};
-    ///
-    /// const STAFF: Id = id!("staff");
-    ///
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.add_loot(Drop::new(enshwick::ItemId::from_guid(STAFF.guid()), 0.10, Source::bosses()))?;
-    ///     load.add_loot(Drop::new(enshwick::ItemId::from_guid(STAFF.guid()), 0.02, Source::locked_chests()))?;
-    ///     load.add_loot(Drop::new(enshwick::ItemId::from_guid(STAFF.guid()), 0.001, Source::kinds(Kinds::CORPSES)).count(1, 3))
-    /// }
-    /// ```
-    #[script]
-    pub fn add_loot(&mut self, drop: Drop) -> Result<(), Off> {
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::add_loot`.
+    #[doc(hidden)]
+    fn add_loot(&mut self, drop: Drop) -> Result<(), Off>;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn add_loot(&mut self, drop: Drop) -> Result<(), Off> {
         self.add_loot_in(0, drop)
     }
+}
 
+/// The base handle's helpers of this module for the crate's own code.
+pub(crate) trait LoadHelpers {
     /// [`Load::add_loot`] for the drops of group `group`.
-    pub(crate) fn add_loot_in(&mut self, group: u64, drop: Drop) -> Result<(), Off> {
+    fn add_loot_in(&mut self, group: u64, drop: Drop) -> Result<(), Off>;
+}
+
+impl LoadHelpers for crate::BaseLoad {
+    fn add_loot_in(&mut self, group: u64, drop: Drop) -> Result<(), Off> {
         drop.check()?;
         link_roll(self)?;
         if drop.from.kinds.contains(Kinds::DESTROYED)

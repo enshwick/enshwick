@@ -43,7 +43,7 @@ use crate::abi::{ItemLine, StatRef, Str};
 use crate::content::Id;
 use crate::inventory::ItemInstance;
 use crate::stats::Op;
-use crate::{Host, Load, Off};
+use crate::{Host, Off};
 
 /// What an affix is called and how rare it is, from [`Affixes::info`].
 ///
@@ -179,24 +179,22 @@ impl Affixes {
     }
 }
 
-#[crate::script(affix_defs)]
-impl Load<'_> {
-    /// Defines the mod's affix `id`, named with [`id!`](crate::content::id).
-    /// Its text is `<name>.name` in the mod's texts
-    /// ([`name_key`](crate::stats::name_key)). Call it during `init`, on both
-    /// sides, so clients name what items rolled.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] for an id of another mod, a malformed definition, an affix
-    /// defined twice, or
-    /// after init.
-    ///
-    /// # Examples
-    ///
-    /// See the [module](self).
-    #[script]
-    pub fn define_affix(&mut self, id: Id, def: &AffixDef) -> Result<AffixId, Off> {
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::define_affix`.
+    #[doc(hidden)]
+    fn define_affix(&mut self, id: Id, def: &AffixDef) -> Result<AffixId, Off>;
+
+    /// As `Load::affixes`.
+    #[doc(hidden)]
+    #[must_use]
+    fn affixes(&mut self) -> Affixes;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn define_affix(&mut self, id: Id, def: &AffixDef) -> Result<AffixId, Off> {
         let full = id.to_string();
         def.check()
             .map_err(|why| Off::new(format!("affix {full:?}: {why}")))?;
@@ -213,13 +211,7 @@ impl Load<'_> {
         crate::load::ok(status, out.index, || format!("affix {full:?}")).map(AffixId::new)
     }
 
-    /// The affix pool and rolls. Call it during `init`.
-    ///
-    /// # Examples
-    ///
-    /// See [`Affixes::lines`].
-    #[must_use]
-    pub fn affixes(&mut self) -> Affixes {
+    fn affixes(&mut self) -> Affixes {
         Affixes { host: self.host() }
     }
 }
@@ -227,13 +219,14 @@ impl Load<'_> {
 mod defs;
 mod roll;
 #[cfg(feature = "unstable")]
-mod rolling;
+pub(crate) mod rolling;
 mod script;
 #[doc(hidden)]
 pub use script::AffixFns;
 #[cfg(test)]
 mod tests;
 
+use crate::__load::*;
 pub use defs::*;
 pub use roll::*;
 #[cfg(feature = "unstable")]

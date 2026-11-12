@@ -42,7 +42,7 @@ use crate::abi::{Header, PlayerInfo, SpawnRequest, TeleportRequest};
 use crate::ecs::ComponentType;
 use crate::engine_ids as ids;
 use crate::game_events::{EventType, Field, Scalar};
-use crate::{Host, Load, Off};
+use crate::{Host, Off};
 use enshwick_world::__internal::{world_check, world_status};
 
 /// How an entity arrives, for [`Effects::teleport`].
@@ -870,17 +870,18 @@ fn put_quaternion(bytes: &mut [u8], at: u64, value: [f32; 4]) -> Result<(), Worl
     put_floats(bytes, at, value)
 }
 
-impl Load<'_> {
-    /// The mod's [`Effects`] in the server's world: game events it raises
-    /// and spawns; on a client, the built-in server's while it hosts a
-    /// game. An action whose event this build lacks answers
-    /// [`WorldError::Missing`].
-    ///
-    /// # Examples
-    ///
-    /// See the [module](self).
+/// `Load`'s methods of this module on the base handle, which core's
+/// forwarders call.
+#[doc(hidden)]
+pub trait LoadMethods {
+    /// As `Load::effects`.
+    #[doc(hidden)]
     #[must_use]
-    pub fn effects(&mut self) -> Effects {
+    fn effects(&mut self) -> Effects;
+}
+
+impl LoadMethods for crate::BaseLoad {
+    fn effects(&mut self) -> Effects {
         Effects::resolve(self)
     }
 }
