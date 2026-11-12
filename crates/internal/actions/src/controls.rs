@@ -471,10 +471,6 @@ pub trait LoadMethods {
 }
 
 impl LoadMethods for crate::BaseLoad {
-    #[expect(
-        clippy::needless_pass_by_value,
-        reason = "a declaration hands its builder over, as `Actions::add` does"
-    )]
     fn control<F>(&mut self, control: Control, on: F) -> Result<(), Off>
     where
         F: Fn(&Fired<'_>) + Send + Sync + 'static,
