@@ -45,6 +45,7 @@ jobs:
       contents: read
     outputs:
       skip: ${{ steps.scope.outputs.skip }}
+      deny: ${{ steps.scope.outputs.deny }}
       parts: ${{ steps.parts.outputs.parts }}
     steps:
       # One runner per part. A part with `xtask` runs `cargo xtask check
@@ -116,6 +117,13 @@ jobs:
             echo "nothing to check: $reason" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
           echo "skip=$reason" >> "$GITHUB_OUTPUT"
+          # The full suite runs cargo-deny itself.
+          deny=false
+          if [ -z "$reason" ] && [ "$FULL" != true ] &&
+            git diff --name-only "$BASE...HEAD" | grep -qE '(^|/)Cargo\.(toml|lock)$|^deny\.toml$'; then
+            deny=true
+          fi
+          echo "deny=$deny" >> "$GITHUB_OUTPUT"
 
   part:
     name: part (${{ matrix.part }})
@@ -217,6 +225,12 @@ jobs:
           if [ "$PART" != all ]; then args+=(--part "$PART"); fi
           if [ "$PART" = all ] || [ "$PART" = host ]; then cargo fmt --all --check; fi
           cargo xtask check "${args[@]}"
+
+      # A change to a manifest, the lock file or the policy can bring in a
+      # dependency the policy refuses.
+      - name: cargo deny
+        if: needs.scope.outputs.deny == 'true' && (matrix.part == 'host' || matrix.part == 'all')
+        run: cargo deny check
 
       # The test builds the API crate again under target/tests/trybuild,
       # which alone took longer than the rest of the host part's tests. It
@@ -332,9 +346,53 @@ jobs:
         if: ${{ !cancelled() && env.RUSTC_WRAPPER == 'sccache' }}
         run: sccache --show-stats
 
+  # Nothing merges while main is red: a merge queue entry fails while the
+  # newest finished run of this workflow on main failed, unless its pull
+  # request's branch is a fix (`fix/`), so the fix merges first.
+  main:
+    if: github.event_name == 'merge_group'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Main is green
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.event.merge_group.head_ref }}
+          MAIN: ${{ github.event.repository.default_branch }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+        run: |
+          api() {
+            curl --proto '=https' -sSf --retry 6 -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/$1"
+          }
+          # The caller's workflow file: a called workflow's context is its caller's.
+          workflow=${WORKFLOW_REF%%@*}
+          workflow=${workflow##*/}
+          # A cancelled or skipped run says nothing about main.
+          red=$(api "actions/workflows/$workflow/runs?branch=$MAIN&event=push&status=completed&per_page=20" |
+            jq -r '[.workflow_runs[] | select(.conclusion != "cancelled" and .conclusion != "skipped")][0]
+              | select(. != null and .conclusion != "success") | .html_url')
+          if [ -z "$red" ]; then
+            echo "$MAIN is green"
+            exit 0
+          fi
+          number=$(sed -nE 's|.*/pr-([0-9]+)-[0-9a-f]+$|\1|p' <<< "$HEAD_REF")
+          branch=""
+          if [ -n "$number" ]; then branch=$(api "pulls/$number" | jq -r .head.ref); fi
+          if [[ "$branch" == fix/* ]]; then
+            echo "$MAIN is red ($red); #$number is a fix ($branch) and goes first" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "::error::$MAIN is red: $red; only a fix/ pull request merges until it is green"
+          echo "$MAIN is red: $red; only a fix/ pull request merges until it is green" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
   # The required check: every part passed, or there was nothing to prove.
   check:
-    needs: [scope, part, windows]
+    needs: [scope, part, windows, main]
     if: always()
     runs-on: ubuntu-26.04
     timeout-minutes: 2
@@ -345,7 +403,8 @@ jobs:
           SCOPE: ${{ needs.scope.result }}
           PART: ${{ needs.part.result }}
           WINDOWS: ${{ needs.windows.result }}
+          MAIN: ${{ needs.main.result }}
         run: |
-          echo "scope: $SCOPE, parts: $PART, Windows tests: $WINDOWS"
+          echo "scope: $SCOPE, parts: $PART, Windows tests: $WINDOWS, main green: $MAIN"
           ok() { [ "$1" = success ] || [ "$1" = skipped ]; }
-          [ "$SCOPE" = success ] && ok "$PART" && ok "$WINDOWS"
+          [ "$SCOPE" = success ] && ok "$PART" && ok "$WINDOWS" && ok "$MAIN"
