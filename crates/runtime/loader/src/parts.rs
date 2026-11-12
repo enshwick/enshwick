@@ -316,6 +316,7 @@ mod tests {
         let stage = |stage: Stage| -> String {
             parts
                 .steps(stage)
+                .iter()
                 .map(|step| step.work.fuse.feature())
                 .collect::<Vec<_>>()
                 .join(", ")

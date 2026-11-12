@@ -90,6 +90,11 @@ pub(crate) enum Stage {
     Output,
 }
 
+impl Stage {
+    /// Every stage, in the order of the step and of their values.
+    pub(crate) const ALL: [Self; 3] = [Self::Follow, Self::Input, Self::Output];
+}
+
 /// A part's work after each server step.
 #[derive(Debug)]
 pub(crate) struct Step {
@@ -156,27 +161,35 @@ macro_rules! part {
 }
 pub(crate) use part;
 
-/// Every part of the loader, layer by layer, and the feature table rows they
-/// name.
+/// Every part of the loader, layer by layer, the feature table rows they
+/// name, and their step work by stage, gathered once for the step to walk.
 #[derive(Debug)]
 pub(crate) struct Parts {
     layers: &'static [(&'static str, &'static [&'static Part])],
     rows: Box<[(&'static str, &'static [&'static str])]>,
+    /// The steps of each [`Stage`], by its index in [`Stage::ALL`].
+    stages: [Box<[&'static Step]>; Stage::ALL.len()],
 }
 
 impl Parts {
     /// The parts of `layers`, given lowest first.
     pub(crate) fn new(layers: &'static [(&'static str, &'static [&'static Part])]) -> Self {
-        let mut rows: Vec<_> = layers
-            .iter()
-            .flat_map(|(_, parts)| parts.iter())
+        let parts = || layers.iter().flat_map(|(_, parts)| parts.iter().copied());
+        let mut rows: Vec<_> = parts()
             .filter(|part| !part.table_ids.is_empty())
             .map(|part| (part.name, part.table_ids))
             .collect();
         rows.sort_unstable_by_key(|&(name, _)| name);
+        let stages = Stage::ALL.map(|stage| {
+            parts()
+                .flat_map(|part| part.steps)
+                .filter(|step| step.stage == stage)
+                .collect()
+        });
         Self {
             layers,
             rows: rows.into_boxed_slice(),
+            stages,
         }
     }
 
@@ -194,10 +207,8 @@ impl Parts {
     }
 
     /// The work of every part at `stage` of a step, in order.
-    pub(crate) fn steps(&self, stage: Stage) -> impl Iterator<Item = &'static Step> + use<> {
-        self.iter()
-            .flat_map(|part| part.steps)
-            .filter(move |step| step.stage == stage)
+    pub(crate) fn steps(&self, stage: Stage) -> &[&'static Step] {
+        &self.stages[stage as usize]
     }
 }
 
@@ -240,10 +251,15 @@ mod tests {
         let parts = Parts::new(LAYERS);
         let follow: Vec<_> = parts
             .steps(Stage::Follow)
+            .iter()
             .map(|s| s.work.fuse.feature())
             .collect();
         assert_eq!(follow, ["test low follow", "test high follow"]);
-        assert_eq!(parts.steps(Stage::Input).count(), 0);
+        assert!(parts.steps(Stage::Input).is_empty());
+        assert_eq!(parts.steps(Stage::Output).len(), 1);
+        for (index, stage) in Stage::ALL.into_iter().enumerate() {
+            assert_eq!(stage as usize, index, "{stage:?}");
+        }
     }
 
     #[test]
