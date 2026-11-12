@@ -174,7 +174,7 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
         knowledge_guard: crate::knowledge::store::guard::status(),
         messages: crate::base::net::status(),
         settings: loader.settings_problems.clone(),
-        parts: loader.build.parts(crate::TABLE_IDS),
+        parts: loader.build.parts(loader.parts.table_ids()),
     }
 }
 

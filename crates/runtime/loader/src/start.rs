@@ -17,6 +17,7 @@ use crate::engine::code::Watching;
 use crate::engine::code_watch::Stage;
 use crate::engine::loader::{Loader, ModRecord};
 use crate::engine::mod_index::ModIndex;
+use crate::engine::parts::{Part, Parts, part};
 use crate::engine::patch::FrameSlot;
 use crate::host;
 
@@ -30,7 +31,12 @@ pub(crate) mod record;
 pub(crate) mod tests;
 
 pub use dry_run::{DryMod, DryRun, DryRunError, dry_run};
-pub(crate) use join_check::TABLE_IDS;
+
+/// The start's own part: the build table ids of the join check.
+pub(crate) static PART: Part = Part {
+    table_ids: join_check::TABLE_IDS,
+    ..part!("start")
+};
 
 use arm::arm;
 use game::{begin, game, wait_for_window};
@@ -50,55 +56,21 @@ fn enforce_holds(loader: &Loader) {
     crate::base::holds::enforce(&loader.mods_dir, &running, false, Some(loader));
 }
 
-/// Seals the registries mods filled during init, in the order they depend
-/// on each other.
+/// Seals the registries mods filled during init: the subscriptions, then
+/// each part's, in the order of the parts.
 fn seal(loader: &'static Loader) {
-    crate::inventory::stats::seal();
-    crate::inventory::item_data::seal();
     loader.seal_subscriptions();
-    crate::base::services::seal(loader);
-    crate::base::points::seal(loader);
-    crate::base::calls::seal(loader);
-    crate::content::served::seal_and_link(loader);
+    for seal in loader.parts.iter().filter_map(|part| part.seal) {
+        seal(loader);
+    }
 }
 
-/// Runs once, on the stub's thread.
-/// Links the loader's own features; the
-/// client links the server's too, for the games it hosts.
+/// Links the loader's own features, in the order of the parts; the client
+/// links the server's too, for the games it hosts.
 fn link_features(loader: &'static Loader) {
-    crate::engine::crash::link(loader);
-    crate::events::link(loader);
-    crate::engine::world::link(loader);
-    crate::actions::vetoes::link(loader);
-    crate::content::recipes::init(loader);
-    crate::world::daytime::link(loader);
-    crate::inventory::damage::link(loader);
-    crate::inventory::deaths::link(loader);
-    crate::knowledge::store::guard::link(loader);
-    crate::world::weather::link(loader);
-    crate::inventory::item_actions::link(loader);
-    crate::base::game_events::link(loader);
-    crate::base::saves::link(loader);
-    crate::inventory::transactions::link(loader);
-    crate::inventory::item_data::link(loader);
-    crate::base::net::link();
-    crate::actions::chat::link(loader);
-    crate::actions::commands::seal();
-    crate::base::carrier::link(loader);
-    crate::world::label::link(loader);
-    crate::world::altars::link(loader);
-    crate::inventory::survivors::link(loader);
-    crate::content::textures::link(loader);
-    crate::actions::interactions::link(loader);
-    crate::actions::local_held::link(loader);
-    crate::actions::controls::link(loader);
-    crate::content::rate_links::link(loader);
-    crate::knowledge::progress::link(loader);
-    crate::world::bases::link(loader);
-    crate::ui::interface::link(loader);
-    crate::world::fog::link(loader);
-    crate::world::voxels::changes::link(loader);
-    crate::world::terrain_pages::link(loader);
+    for link in loader.parts.iter().filter_map(|part| part.link) {
+        link(loader);
+    }
 }
 
 pub(crate) fn start(
@@ -167,6 +139,7 @@ pub(crate) fn start(
         newer_release: OnceLock::new(),
         retry: crate::engine::retry::Retry::default(),
         skipped: skipped(&libraries, &candidates, &plan),
+        parts: Parts::new(crate::parts::LAYERS),
     };
     let Some(loader) = crate::engine::loader::install(loader) else {
         crate::engine::shipped::release();

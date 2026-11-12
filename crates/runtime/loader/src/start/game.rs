@@ -331,7 +331,7 @@ fn route(
 
 /// Warns about each loader feature `build` serves only partly or not at all.
 fn warn_lacking(build: &builds::KnownBuild) {
-    for part in build.parts(crate::TABLE_IDS) {
+    for part in build.parts(&crate::parts::table_ids()) {
         if let Some(line) = crate::engine::diag::part_line(&part) {
             crate::log!(
                 WARN,

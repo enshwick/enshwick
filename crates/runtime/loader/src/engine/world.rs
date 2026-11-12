@@ -138,7 +138,6 @@ pub(crate) fn release() {
     SERVER.publish(0);
     SERVER_WORLD.store(0, Ordering::Release);
     GAME_THREAD.store(0, Ordering::Release);
-    crate::inventory::stats::forget();
 }
 
 thread_local! {

@@ -216,7 +216,7 @@ fn loader_notes(loader: &Loader, paint: &Painter<'_>) {
     if loader.developer_tools && paint.button(texts::text("mods.demo").as_bytes(), true) {
         crate::ui::interface::open_demo(None);
     }
-    let lacking = loader.build.lacking(crate::TABLE_IDS);
+    let lacking = loader.build.lacking(loader.parts.table_ids());
     if !lacking.is_empty() {
         let line = texts::fill("mods.features.off", &[("features", lacking)]);
         paint.label(line.as_bytes(), UiWidget::STYLE_NEGATIVE, true, false);
