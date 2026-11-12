@@ -2,7 +2,7 @@
 //! core nor the facade re-exports it.
 
 use crate::__load::*;
-use crate::abi::StatDefData;
+use crate::abi::{Header, ItemData, StatDefData};
 use crate::content::items::StatFormat;
 #[cfg(feature = "typed")]
 use crate::content::knowledge::{KnowledgeQuery, KnowledgeTest};
@@ -12,7 +12,7 @@ use crate::content::workshops::NewWorkshop;
 use crate::content::{Guid, Id};
 #[cfg(feature = "typed")]
 use crate::typed::KnowledgeQueryData;
-use crate::{Loading, Off};
+use crate::{Host, ItemId, Loading, Off};
 
 /// The part of a crafting prop that lists its recipes.
 pub const PROP_RECIPES: &str = crate::content::props::RECIPES;
@@ -68,6 +68,30 @@ pub const fn stat_format(format: StatFormat) -> u8 {
         StatFormat::Signed => StatDefData::SIGNED,
         StatFormat::Percent => StatDefData::PERCENT,
     }
+}
+
+/// The static data of `item` as the loader answers it; none for an unknown
+/// item, or while no world runs. Any thread.
+#[must_use]
+pub fn item_data(host: &Host, item: ItemId) -> Option<ItemData> {
+    let mut out = ItemData {
+        header: Header::of::<ItemData>(),
+        id: ItemId::new(0),
+        max_stack: 0,
+        category: 0,
+        rarity: 0,
+        flags: 0,
+        placed_entity: [0; 16],
+    };
+    let status = (host.api().item_info)(host.handle(), item, &raw mut out);
+    status.is_ok().then_some(out)
+}
+
+/// Whether the running game knows `item`, as the loader answers it; false
+/// while no world runs.
+#[must_use]
+pub fn knows_item(host: &Host, item: ItemId) -> bool {
+    item_data(host, item).is_some()
 }
 
 /// Whether `guid` is one of `vanilla`'s items.

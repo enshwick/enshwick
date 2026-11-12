@@ -8,13 +8,6 @@ pub use crate::damage::script::ScriptDamage;
 /// The lookup a script's handler gets from `Load::on_survivor_lookup_script`.
 pub use crate::survivors::script::ScriptLookup;
 
-/// Whether the running game knows `item`, as the loader answers it; false
-/// while no world runs.
-#[must_use]
-pub fn knows_item(host: &crate::Host, item: crate::ItemId) -> bool {
-    crate::inventory::item_data(host, item).is_some()
-}
-
 /// Adds `drop` to random loot as `Load::add_loot` does, in the drops of
 /// `group`, a data pack's, which [`replace_loot_group`] replaces.
 ///

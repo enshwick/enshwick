@@ -17,8 +17,7 @@ enshwick-macros = { path = "../macros", version = "=1.0.0-alpha.14" }
 enshwick-abi.workspace = true
 enshwick-base.workspace = true
 enshwick-content.workspace = true
-enshwick-inventory.workspace = true
-enshwick-typed = { workspace = true, optional = true }
+enshwick-inventory = { workspace = true, optional = true }
 enshwick-values.workspace = true
 enshwick-world.workspace = true
 fastrand.workspace = true
@@ -29,17 +28,20 @@ serde.workspace = true
 # as one binary; cargo drops a dev-dependency without a version when it
 # publishes. `unstable` and `typed` come from the command line.
 enshwick = { path = "../../enshwick", features = ["test"] }
+# The quest tests write a reflected value out whole, which only its crate can.
+enshwick-typed.workspace = true
 
 # The features of `enshwick-core`, which turns each of them on here.
 [features]
-fake = ["enshwick-typed?/test"]
+fake = []
 unstable = [
     "enshwick-base/unstable",
     "enshwick-content/unstable",
     "enshwick-world/unstable",
+    "dep:enshwick-inventory",
     "enshwick-inventory/unstable",
 ]
-typed = ["unstable", "dep:enshwick-typed", "enshwick-content/typed", "enshwick-world/typed"]
+typed = ["unstable", "enshwick-content/typed", "enshwick-world/typed"]
 
 [lints]
 workspace = true

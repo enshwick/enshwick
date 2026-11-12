@@ -478,7 +478,6 @@ dependencies = [
  "enshwick-abi",
  "enshwick-base",
  "enshwick-content",
- "enshwick-inventory",
  "enshwick-macros",
  "enshwick-values",
  "enshwick-world",
@@ -793,7 +792,6 @@ dependencies = [
 name = "enshwick-world"
 version = "1.0.0-alpha.14"
 dependencies = [
- "bytemuck",
  "enshwick",
  "enshwick-abi",
  "enshwick-base",

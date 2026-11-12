@@ -7,7 +7,8 @@
 //! listed one that is gone, fails, so the list only shrinks as domains are
 //! peeled out. A domain peeled into a crate of its own depends on no
 //! internal crate but those below every domain and the crates of the
-//! domains before its own; the compiler holds the rest. The fake loader is
+//! domains before its own, and, as core does, only on those its code names
+//! (`deps`); the compiler holds the rest. The fake loader is
 //! cut by the same domains, a file's domain named by its folder, and held
 //! by the same rule with an `upward` list of its own.
 
@@ -15,10 +16,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use proc_macro2::{Ident, Spacing, TokenStream, TokenTree};
+use syn::punctuated::Punctuated;
 use syn::visit::{self, Visit};
-use syn::{Item, ItemMod, UseTree, Visibility};
+use syn::{
+    Arm, Attribute, Expr, Field, ImplItem, Item, ItemMod, Meta, Stmt, Token, TraitItem, UseTree,
+    Variant, Visibility,
+};
 
 mod calls;
+mod deps;
 mod fake;
 
 /// The map, from the workspace root.
@@ -144,6 +150,7 @@ fn problems(root: &Path) -> Result<Vec<String>, String> {
     files.sort();
     let mut problems = namespace_lists(&map, &files);
     problems.extend(crate_problems(root, &map));
+    problems.extend(deps::problems(root, &map));
     let joined = |path: &str| map.joins.iter().any(|join| path.starts_with(join.as_str()));
     let modules: BTreeSet<String> = files
         .iter()
@@ -427,27 +434,43 @@ fn use_leaves(tree: &UseTree) -> Vec<(Option<String>, Vec<String>)> {
 /// Leaves out the files of modules that exist only in tests, declared
 /// `#[cfg(test)] mod name;`, with the modules under them.
 fn drop_test_modules(files: &mut Vec<(String, String)>) {
-    let mut test_modules = Vec::new();
-    for (path, text) in files.iter() {
-        // A file that does not parse fails where it is read for its paths.
-        let Ok(file) = syn::parse_file(text) else {
-            continue;
-        };
-        for item in &file.items {
-            if let Item::Mod(declared) = item
-                && declared.content.is_none()
-                && test_only(item)
-            {
-                let mut module = module_path(path);
-                module.push(declared.ident.to_string());
-                test_modules.push(module);
-            }
-        }
-    }
+    // A file that does not parse fails where it is read for its paths.
+    let parsed: Vec<(String, syn::File)> = files
+        .iter()
+        .filter_map(|(path, text)| Some((path.clone(), syn::parse_file(text).ok()?)))
+        .collect();
+    let test_modules = declared_modules(&parsed, test_only);
     files.retain(|(path, _)| {
         let module = module_path(path);
         !test_modules.iter().any(|test| module.starts_with(test))
     });
+}
+
+/// The modules of `files` declared by an item `keep` accepts, inline modules
+/// on the way read too, so the files under each are that module's.
+fn declared_modules(files: &[(String, syn::File)], keep: fn(&Item) -> bool) -> Vec<Vec<String>> {
+    fn walk(
+        items: &[Item],
+        module: &mut Vec<String>,
+        keep: fn(&Item) -> bool,
+        out: &mut Vec<Vec<String>>,
+    ) {
+        for item in items {
+            let Item::Mod(declared) = item else { continue };
+            module.push(declared.ident.to_string());
+            if keep(item) {
+                out.push(module.clone());
+            } else if let Some((_, items)) = &declared.content {
+                walk(items, module, keep, out);
+            }
+            module.pop();
+        }
+    }
+    let mut out = Vec::new();
+    for (path, file) in files {
+        walk(&file.items, &mut module_path(path), keep, &mut out);
+    }
+    out
 }
 
 /// The top-level module each of `found`, absolute paths under core's root,
@@ -485,12 +508,25 @@ fn paths(file: &syn::File, module: &[String], externs: &[&str]) -> Named {
     walk.visit_file(file);
     walk.named
 }
+
+/// The paths of [`paths`] that no item under a `#[cfg(feature = "...")]`
+/// holds, read through items, impl and trait items, statements, fields,
+/// variants and match arms.
+fn ungated_paths(file: &syn::File, module: &[String], externs: &[&str]) -> Named {
+    let mut walk = Walk::new(module, externs);
+    walk.ungated = true;
+    walk.visit_file(file);
+    walk.named
+}
+
 /// The walk of [`paths`] over one file.
 struct Walk<'a> {
     /// The module the walk stands in, inline modules counted.
     module: Vec<String>,
     /// The crates whose paths count as external.
     externs: &'a [&'a str],
+    /// Whether the walk leaves out items under a `cfg(feature)`.
+    ungated: bool,
     named: Named,
 }
 
@@ -499,8 +535,15 @@ impl<'a> Walk<'a> {
         Self {
             module: module.to_vec(),
             externs,
+            ungated: false,
             named: Named::default(),
         }
+    }
+
+    /// Whether the walk leaves out what `attrs` put under `cfg(test)`, or,
+    /// when it reads only ungated code, under a `cfg(feature)`.
+    fn left_out(&self, attrs: &[Attribute]) -> bool {
+        test_attrs(attrs) || (self.ungated && feature_only(attrs))
     }
 
     /// Whether `segments` start at one of the external crates.
@@ -580,8 +623,64 @@ impl<'a> Walk<'a> {
 
 impl<'ast> Visit<'ast> for Walk<'_> {
     fn visit_item(&mut self, item: &'ast Item) {
-        if !test_only(item) {
+        if !self.left_out(item_attrs(item)) {
             visit::visit_item(self, item);
+        }
+    }
+
+    fn visit_impl_item(&mut self, item: &'ast ImplItem) {
+        let attrs: &[Attribute] = match item {
+            ImplItem::Const(item) => &item.attrs,
+            ImplItem::Fn(item) => &item.attrs,
+            ImplItem::Type(item) => &item.attrs,
+            ImplItem::Macro(item) => &item.attrs,
+            _ => &[],
+        };
+        if !self.left_out(attrs) {
+            visit::visit_impl_item(self, item);
+        }
+    }
+
+    fn visit_trait_item(&mut self, item: &'ast TraitItem) {
+        let attrs: &[Attribute] = match item {
+            TraitItem::Const(item) => &item.attrs,
+            TraitItem::Fn(item) => &item.attrs,
+            TraitItem::Type(item) => &item.attrs,
+            TraitItem::Macro(item) => &item.attrs,
+            _ => &[],
+        };
+        if !self.left_out(attrs) {
+            visit::visit_trait_item(self, item);
+        }
+    }
+
+    fn visit_stmt(&mut self, stmt: &'ast Stmt) {
+        let attrs = match stmt {
+            Stmt::Local(local) => &local.attrs[..],
+            Stmt::Macro(mac) => &mac.attrs,
+            Stmt::Expr(expr, _) => expr_attrs(expr),
+            Stmt::Item(_) => &[],
+        };
+        if !self.left_out(attrs) {
+            visit::visit_stmt(self, stmt);
+        }
+    }
+
+    fn visit_field(&mut self, field: &'ast Field) {
+        if !self.left_out(&field.attrs) {
+            visit::visit_field(self, field);
+        }
+    }
+
+    fn visit_variant(&mut self, variant: &'ast Variant) {
+        if !self.left_out(&variant.attrs) {
+            visit::visit_variant(self, variant);
+        }
+    }
+
+    fn visit_arm(&mut self, arm: &'ast Arm) {
+        if !self.left_out(&arm.attrs) {
+            visit::visit_arm(self, arm);
         }
     }
 
@@ -610,6 +709,15 @@ impl<'ast> Visit<'ast> for Walk<'_> {
         self.tree(tree);
     }
 
+    /// Records the external paths in an attribute's arguments, such as a
+    /// derive's; its other words are not paths of the crate.
+    fn visit_meta_list(&mut self, list: &'ast syn::MetaList) {
+        let mut inner = Walk::new(&self.module, self.externs);
+        inner.tokens(list.tokens.clone());
+        self.named.external.extend(inner.named.external);
+        visit::visit_meta_list(self, list);
+    }
+
     fn visit_macro(&mut self, mac: &'ast syn::Macro) {
         self.tokens(mac.tokens.clone());
         visit::visit_macro(self, mac);
@@ -618,7 +726,21 @@ impl<'ast> Visit<'ast> for Walk<'_> {
 
 /// Whether `item` exists only in tests, under a plain `#[cfg(test)]`.
 fn test_only(item: &Item) -> bool {
-    let attrs = match item {
+    test_attrs(item_attrs(item))
+}
+
+/// Whether `attrs` hold a plain `#[cfg(test)]`; a compound `cfg` with
+/// `test` in it counts as none.
+fn test_attrs(attrs: &[Attribute]) -> bool {
+    attrs.iter().any(|attr| {
+        attr.path().is_ident("cfg") && attr.parse_args::<Ident>().is_ok_and(|arg| arg == "test")
+    })
+}
+
+/// The attributes of `item`; none for a kind that never carries a `cfg`
+/// here.
+fn item_attrs(item: &Item) -> &[Attribute] {
+    match item {
         Item::Const(item) => &item.attrs,
         Item::Enum(item) => &item.attrs,
         Item::Fn(item) => &item.attrs,
@@ -630,369 +752,56 @@ fn test_only(item: &Item) -> bool {
         Item::Trait(item) => &item.attrs,
         Item::Type(item) => &item.attrs,
         Item::Use(item) => &item.attrs,
-        _ => return false,
-    };
+        _ => &[],
+    }
+}
+
+/// Whether `attrs` hold a `cfg` only a cargo feature turns on: a
+/// `feature = "..."`, an `all` with one among its parts or an `any` of such
+/// parts only. `test`, `not` and the other options count as on, so a reader
+/// of them errs towards ungated.
+fn feature_only(attrs: &[Attribute]) -> bool {
+    fn needs_feature(meta: &Meta) -> bool {
+        match meta {
+            Meta::NameValue(pair) => pair.path.is_ident("feature"),
+            Meta::List(list) => {
+                let Ok(parts) =
+                    list.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
+                else {
+                    return false;
+                };
+                if list.path.is_ident("all") {
+                    parts.iter().any(needs_feature)
+                } else {
+                    list.path.is_ident("any")
+                        && !parts.is_empty()
+                        && parts.iter().all(needs_feature)
+                }
+            }
+            Meta::Path(_) => false,
+        }
+    }
     attrs.iter().any(|attr| {
-        attr.path().is_ident("cfg") && attr.parse_args::<Ident>().is_ok_and(|arg| arg == "test")
+        attr.path().is_ident("cfg")
+            && attr
+                .parse_args::<Meta>()
+                .is_ok_and(|meta| needs_feature(&meta))
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn map(upward: &[&str]) -> Map {
-        Map {
-            order: vec!["base".into(), "world".into(), "ui".into()],
-            joins: Vec::new(),
-            modules: [
-                ("base".to_owned(), vec!["host".to_owned()]),
-                ("world".to_owned(), vec!["map".to_owned()]),
-                ("ui".to_owned(), vec!["ui".to_owned()]),
-            ]
-            .into(),
-            upward: upward.iter().map(|&s| s.to_owned()).collect(),
-            below: Vec::new(),
-            crates: BTreeMap::new(),
-            fake: fake::Fake::default(),
-        }
-    }
-
-    #[test]
-    fn a_peeled_crate_may_name_only_the_crates_below_it() {
-        let root = std::env::temp_dir().join(format!("xtask-crates-{}", std::process::id()));
-        let manifest = |dir: &str, name: &str, deps: &str| {
-            let path = root.join("crates/internal").join(dir);
-            std::fs::create_dir_all(&path).unwrap();
-            std::fs::write(
-                path.join("Cargo.toml"),
-                format!("[package]\nname = \"{name}\"\n[dependencies]\n{deps}"),
-            )
-            .unwrap();
-        };
-        manifest(
-            "base",
-            "enshwick-base",
-            "enshwick-abi.workspace = true\nenshwick-ui.workspace = true\nserde = \"1\"\n",
-        );
-        manifest(
-            "ui",
-            "enshwick-ui",
-            "enshwick-base.workspace = true\nenshwick-core.workspace = true\n",
-        );
-        let mut map = map(&[]);
-        map.below = vec!["enshwick-abi".to_owned()];
-        map.crates = [
-            ("base".to_owned(), "base".to_owned()),
-            ("ui".to_owned(), "ui".to_owned()),
-            ("sound".to_owned(), "sound".to_owned()),
-        ]
-        .into();
-        let problems = crate_problems(&root, &map);
-        let _gone = std::fs::remove_dir_all(&root);
-        assert_eq!(problems.len(), 3, "{problems:?}");
-        assert!(problems[0].contains("enshwick-base, the crate of base, depends on enshwick-ui"));
-        assert!(problems[1].contains("enshwick-ui, the crate of ui, depends on enshwick-core"));
-        assert!(problems[2].contains("the crate of sound is of no domain"));
-    }
-
-    #[test]
-    fn a_renamed_or_target_dependency_counts_by_its_package() -> Result<(), toml::de::Error> {
-        let manifest: toml::Table = toml::from_str(
-            "[dependencies]\nserde = \"1\"\nup = { package = \"enshwick-core\", workspace = true }\n\n[target.'cfg(windows)'.dependencies]\nenshwick-ui.workspace = true\n",
-        )?;
-        assert_eq!(
-            dependencies(&manifest),
-            ["serde", "enshwick-core", "enshwick-ui"]
-        );
-        Ok(())
-    }
-
-    fn set(items: &[&str]) -> BTreeSet<String> {
-        items.iter().map(|&s| s.to_owned()).collect()
-    }
-
-    fn edges(pairs: &[(&str, &str)]) -> BTreeSet<(String, String)> {
-        pairs
-            .iter()
-            .map(|&(a, b)| (a.to_owned(), b.to_owned()))
-            .collect()
-    }
-
-    #[test]
-    fn names_reads_paths_groups_nested_groups_and_macro_bodies() -> Result<(), String> {
-        let code = "use crate::map::Map;\nuse crate::{host::Host, ui::{Ui, frame}};\nfn f() { crate::sound::play(); let a = foo_crate::x; log!(crate::time::now()); }\nmacro_rules! m { () => { $crate::world::W } }";
-        assert_eq!(
-            names(code, &module("x"), &BTreeMap::new())?,
-            set(&["host", "map", "sound", "time", "ui", "world"])
-        );
-        Ok(())
-    }
-
-    pub(super) fn module(path: &str) -> Vec<String> {
-        path.split("::").map(str::to_owned).collect()
-    }
-
-    /// A tree of files under a temporary root, removed however the test
-    /// ends.
-    pub(super) struct Tree(pub(super) std::path::PathBuf);
-
-    impl Tree {
-        /// Writes `text` to `path` under the root, its folders made.
-        pub(super) fn write(&self, path: &str, text: &str) {
-            let path = self.0.join(path);
-            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            std::fs::write(path, text).unwrap();
-        }
-    }
-
-    impl Drop for Tree {
-        fn drop(&mut self) {
-            let _gone = std::fs::remove_dir_all(&self.0);
-        }
-    }
-
-    /// The top-level modules `code`, a file of module `module`, names.
-    fn names(
-        code: &str,
-        module: &[String],
-        roots: &BTreeMap<String, String>,
-    ) -> Result<BTreeSet<String>, String> {
-        let file = syn::parse_file(code).map_err(|e| e.to_string())?;
-        Ok(tops(paths(&file, module, &[]).found, roots))
-    }
-
-    fn named(code: &str, module: &str, externs: &[&str]) -> Result<Named, String> {
-        let file = syn::parse_file(code).map_err(|e| e.to_string())?;
-        Ok(paths(&file, &self::module(module), externs))
-    }
-
-    #[test]
-    fn names_resolves_super_and_self_chains_and_counts_inline_modules() -> Result<(), String> {
-        let code = "use super::super::ui::Ui;\nuse super::frame::F;\nuse self::part::P;\nuse super::super::{host::H, map};\nmod inner { use super::super::super::sound::S; use super::super::time::T; }";
-        assert_eq!(
-            names(code, &module("world::props"), &BTreeMap::new())?,
-            set(&["host", "map", "sound", "ui", "world"])
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn a_self_path_resolves_in_its_module_and_a_super_chain_past_the_root_is_dropped()
-    -> Result<(), String> {
-        let found = named("use self::part::P;", "world", &[])?.found;
-        assert_eq!(found, [module("world::part::P")].into());
-        let found = named("use super::super::x;", "world", &[])?.found;
-        assert!(found.is_empty(), "{found:?}");
-        Ok(())
-    }
-
-    #[test]
-    fn paths_keep_a_named_crate_s_paths_and_the_relative_ones_apart() -> Result<(), String> {
-        let code = "use enshwick_core::ui::Frame;\nuse std::fmt;\nfn f() { other::x(); enshwick_core::chat::send(); ::enshwick_core::map::open(); ::std::mem::drop(1); }";
-        let named = named(code, "test::world", &[fake::CORE_CRATE])?;
-        assert!(named.found.is_empty(), "{:?}", named.found);
-        let joined = |paths: &BTreeSet<Vec<String>>| -> Vec<String> {
-            paths.iter().map(|p| p.join("::")).collect()
-        };
-        assert_eq!(
-            joined(&named.external),
-            [
-                "enshwick_core::chat::send",
-                "enshwick_core::map::open",
-                "enshwick_core::ui::Frame"
-            ]
-        );
-        assert!(
-            named.relative.contains(&module("other::x")),
-            "{:?}",
-            named.relative
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn use_leaves_bind_self_and_renames_and_keep_globs_apart() -> Result<(), syn::Error> {
-        let item: syn::ItemUse = syn::parse_str("use a::{self as b, c::{self}, d as e, f::*};")?;
-        let leaves = use_leaves(&item.tree);
-        let leaf = |name: Option<&str>, path: &str| (name.map(str::to_owned), module(path));
-        assert_eq!(
-            leaves,
-            [
-                leaf(Some("b"), "a"),
-                leaf(Some("c"), "a::c"),
-                leaf(Some("e"), "a::d"),
-                leaf(None, "a::f")
-            ]
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn names_skips_comments_strings_and_test_items_but_reads_code_after_them() -> Result<(), String>
-    {
-        let code = "/// crate::ui::Ui\nuse crate::map; // crate::host\nconst U: &str = \"https://x crate::world\"; use crate::time::T;\n#[cfg(test)]\nmod tests { use crate::ui; }\nuse crate::sound::S;";
-        assert_eq!(
-            names(code, &module("x"), &BTreeMap::new())?,
-            set(&["map", "sound", "time"])
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn names_reads_a_root_re_export_as_the_module_it_comes_from() -> Result<(), String> {
-        let roots = roots(
-            "pub use world_error::WorldError;\npub use load::{Load as L, Mod};\nuse ui::Hidden;\npub use enshwick_content as content;\npub use crate::map::{self as atlas};",
-        )?;
-        assert_eq!(
-            roots.get("content").map(String::as_str),
-            Some("enshwick_content")
-        );
-        assert_eq!(roots.get("atlas").map(String::as_str), Some("map"));
-        assert_eq!(
-            roots.get("WorldError").map(String::as_str),
-            Some("world_error")
-        );
-        assert_eq!(roots.get("L").map(String::as_str), Some("load"));
-        assert!(!roots.contains_key("Hidden"));
-        let code = "use crate::WorldError;\nfn f() { crate::L::x(); }";
-        assert_eq!(
-            names(code, &module("x"), &roots)?,
-            set(&["load", "world_error"])
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn a_namespace_list_naming_another_domain_fails_but_load_passes() {
-        let problems = list_strays(&map(&[]), "world", &set(&["map", "load", "ui"]));
-        assert_eq!(problems.len(), 1, "{problems:?}");
-        assert!(problems[0].contains("names ui of ui"), "{problems:?}");
-    }
-
-    #[test]
-    fn module_path_names_the_modules_of_a_file_path() {
-        assert_eq!(module_path("lib.rs"), Vec::<String>::new());
-        assert_eq!(module_path("ui.rs"), module("ui"));
-        assert_eq!(module_path("ui/mod.rs"), module("ui"));
-        assert_eq!(module_path("ui/frame.rs"), module("ui::frame"));
-        assert_eq!(module_path("ui/frame/mod.rs"), module("ui::frame"));
-    }
-
-    #[test]
-    fn an_edge_down_the_order_passes_and_one_up_fails_unless_listed() {
-        let modules = set(&["host", "map", "ui"]);
-        let down = edges(&[("ui", "map"), ("map", "host")]);
-        assert!(judge(&map(&[]), &modules, &down).is_empty());
-        let up = edges(&[("map", "ui")]);
-        let problems = judge(&map(&[]), &modules, &up);
-        assert!(problems[0].starts_with("map -> ui goes up"), "{problems:?}");
-        assert!(judge(&map(&["map -> ui"]), &modules, &up).is_empty());
-    }
-
-    #[test]
-    fn a_listed_edge_that_is_gone_and_a_module_without_domain_fail() {
-        let modules = set(&["host", "map", "ui", "sound"]);
-        let problems = judge(&map(&["map -> ui"]), &modules, &BTreeSet::new());
-        assert!(problems.iter().any(|p| p.contains("sound has no domain")));
-        assert!(problems.iter().any(|p| p.contains("map -> ui is gone")));
-        let down = edges(&[("ui", "map")]);
-        let problems = judge(&map(&["ui -> map"]), &set(&["host", "map", "ui"]), &down);
-        assert!(
-            problems.len() == 1 && problems[0].contains("ui -> map does not go up"),
-            "{problems:?}"
-        );
-    }
-
-    #[test]
-    fn a_tree_with_an_edge_up_a_stray_namespace_and_a_join_out_of_order_fails() {
-        let root = std::env::temp_dir().join(format!("xtask-domains-{}", std::process::id()));
-        let _gone = std::fs::remove_dir_all(&root);
-        let tree = Tree(root.clone());
-        let write = |path: &str, text: &str| tree.write(&format!("{SOURCES}/{path}"), text);
-        tree.write(
-            MAP,
-            "order = [\"base\", \"ui\"]\njoins = [\"lib.rs\", \"script/namespaces\"]\nupward = []\n[modules]\nbase = [\"host\", \"script\"]\nui = [\"ui\"]\n",
-        );
-        write("lib.rs", "mod host; mod ui; mod script;\npub use ui::Ui;");
-        write("host.rs", "use crate::Ui;\nuse crate::script;");
-        write("ui.rs", "use crate::host::Host;");
-        write(
-            "script/namespaces.rs",
-            "const D: &[&[N]] = &[\n    ui::NAMESPACES,\n    base::NAMESPACES,\n];",
-        );
-        write(
-            "script/namespaces/base.rs",
-            "const N: &[u8] = &[crate::ui::X];",
-        );
-        // A list's own `self::` paths stay inside the lists; a path to the
-        // base runtime is another domain's.
-        write(
-            "script/namespaces/ui.rs",
-            "use self::inner::X;\nconst S: u8 = crate::script::Y;",
-        );
-        write("script/checks.rs", "use crate::ui::Ui;");
-        write("script.rs", "mod namespaces;\n#[cfg(test)]\nmod checks;");
-        tree.write(&format!("{}/{}.rs", fake::SOURCES, fake::ROOT), "");
-        let problems = check(&root);
-        assert!(
-            problems.iter().any(|p| p.starts_with("host -> ui goes up")),
-            "{problems:?}"
-        );
-        assert!(
-            problems
-                .iter()
-                .any(|p| p.contains("joins [\"ui\", \"base\"]")),
-            "{problems:?}"
-        );
-        assert!(
-            problems
-                .iter()
-                .any(|p| p.contains("base.rs names ui of ui")),
-            "{problems:?}"
-        );
-        assert!(
-            problems
-                .iter()
-                .any(|p| p.contains("ui.rs names script of base")),
-            "{problems:?}"
-        );
-        assert_eq!(problems.len(), 4, "{problems:?}");
-    }
-
-    #[test]
-    fn a_load_method_calling_on_self_one_of_a_domain_above_is_an_edge_up() {
-        let root = std::env::temp_dir().join(format!("xtask-domains-calls-{}", std::process::id()));
-        let _gone = std::fs::remove_dir_all(&root);
-        let tree = Tree(root.clone());
-        let write = |path: &str, text: &str| tree.write(&format!("{SOURCES}/{path}"), text);
-        tree.write(
-            MAP,
-            "order = [\"base\", \"ui\"]\njoins = [\"lib.rs\"]\nupward = []\n[modules]\nbase = [\"altars\", \"map\"]\nui = [\"ui\"]\n",
-        );
-        write("lib.rs", "mod altars; mod map; mod ui;");
-        write("ui.rs", "impl Load<'_> { pub fn on_frame(&mut self) {} }");
-        write(
-            "altars.rs",
-            "impl Load<'_> { pub fn limit(&mut self) { let _ = || self.on_frame(); } }",
-        );
-        // Another type's `self`, and a `Load` block only tests build.
-        write(
-            "map.rs",
-            "impl Other { fn f(&self) { self.on_frame(); } }\n#[cfg(test)]\nimpl Load<'_> { fn t(&mut self) { self.on_frame(); } }",
-        );
-        tree.write(&format!("{}/{}.rs", fake::SOURCES, fake::ROOT), "");
-        let problems = check(&root);
-        assert_eq!(problems.len(), 1, "{problems:?}");
-        assert!(
-            problems[0].starts_with("altars -> ui goes up"),
-            "{problems:?}"
-        );
-    }
-
-    #[test]
-    fn the_map_of_core_holds_for_its_code() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        assert_eq!(check(&root), Vec::<String>::new());
+/// The attributes of an expression statement of the forms that carry a
+/// `cfg` in practice.
+// shortcut: reads blocks, calls, method calls, macros and assignments only, so a cfg on another expression statement counts as ungated; add its form if one appears.
+fn expr_attrs(expr: &Expr) -> &[Attribute] {
+    match expr {
+        Expr::Assign(expr) => &expr.attrs,
+        Expr::Block(expr) => &expr.attrs,
+        Expr::Call(expr) => &expr.attrs,
+        Expr::Macro(expr) => &expr.attrs,
+        Expr::MethodCall(expr) => &expr.attrs,
+        _ => &[],
     }
 }
+
+#[cfg(test)]
+mod tests;
