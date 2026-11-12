@@ -95,7 +95,7 @@ impl Change {
 /// The comment at the top of the rename table, kept when `cargo enshwick
 /// pin --write` writes the table again.
 const RENAMES_HEADER: &str = "\
-# Types and fields a game build renamed, which `cargo enshwick pin --write`
+# Types and fields a game build renamed, which `cargo xtask compat pin --write`
 # records when a layout matches exactly and a person adds when the report
 # marks a rename unsure. Each type rename gives the loader an alias, so a mod
 # built before it resolves under the new name.
@@ -110,7 +110,7 @@ const RENAMES_HEADER: &str = "\
 # to = \"<new field name>\"
 ";
 
-/// The renames a person or `cargo enshwick pin` recorded, one table for all
+/// The renames a person or `cargo xtask compat pin` recorded, one table for all
 /// builds; the loader resolves a renamed type's old id under its new name.
 ///
 /// # Examples

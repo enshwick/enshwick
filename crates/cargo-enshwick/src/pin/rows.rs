@@ -1,4 +1,4 @@
-//! Build rows: the loader's tables (read by [`super::table`]) and the
+//! Build rows: the loader's tables (read by `cargo xtask compat pin`) and the
 //! `[[package.metadata.enshwick.builds]]` rows of each mod's `Cargo.toml`
 //! as the files spell them.
 //!
