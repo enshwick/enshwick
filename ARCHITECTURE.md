@@ -124,6 +124,12 @@ manifest rows, sits in `enshwick-base` and `enshwick-abi`.
   every domain (`below` in `domains.toml`) and on the crates of the domains
   before its own; the check holds its manifest, and the compiler holds its
   code.
+- The order allows an edge; only the code makes one. A domain's crate, and
+  core, depend on an internal crate only where their code outside tests
+  names it: one that only tests name is a dev-dependency, and one named
+  only under a `cfg(feature)` is optional and turned on by that feature.
+  The check fails on any other, so the domains form a graph, not a chain,
+  and siblings compile side by side.
 - Registration lists are one per domain, joined in the domain order: the
   script namespaces in `script/namespaces/<domain>.rs`, which the check also
   holds to the map. The loader's `TABLE_IDS` are one list per module, joined
@@ -146,6 +152,25 @@ manifest rows, sits in `enshwick-base` and `enshwick-abi`.
   a public function below `Load` that takes the mod's loader takes
   `&impl Loading` or `&mut impl Loading`, so a mod passes its `Load` as
   before.
+
+The domains' graph, each arrow a dependency, an edge a longer path already
+gives left out; a dotted arrow exists only with `unstable`. Core sits over
+all of them.
+
+```mermaid
+graph BT
+    content --> base
+    world --> content
+    ui --> content
+    inventory --> world
+    knowledge --> world
+    actions --> world
+    knowledge -. unstable .-> inventory
+    ui -. unstable .-> world
+    packs --> inventory
+    packs --> knowledge
+    packs --> ui
+```
 
 ### Peeling a domain out of the core
 

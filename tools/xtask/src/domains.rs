@@ -7,7 +7,8 @@
 //! listed one that is gone, fails, so the list only shrinks as domains are
 //! peeled out. A domain peeled into a crate of its own depends on no
 //! internal crate but those below every domain and the crates of the
-//! domains before its own; the compiler holds the rest. The fake loader is
+//! domains before its own, and, as core does, only on those its code names
+//! (`deps`); the compiler holds the rest. The fake loader is
 //! cut by the same domains, a file's domain named by its folder, and held
 //! by the same rule with an `upward` list of its own.
 
