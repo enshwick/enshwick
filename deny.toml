@@ -36,5 +36,3 @@ deny = [
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-
-# Temporary: proves the pull request lane runs cargo deny on a policy change.
