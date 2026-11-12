@@ -384,15 +384,15 @@ jobs:
           # The caller's workflow file: a called workflow's context is its caller's.
           workflow=${WORKFLOW_REF%%@*}
           workflow=${workflow##*/}
-          # The newest run on main that says something: a cancelled or skipped
-          # run says nothing, a first attempt still running is not known yet,
+          # The newest run on main that says something: a cancelled, stale or
+          # skipped run says nothing, a neutral one passed, a first attempt still running is not known yet,
           # and a re-run still running stays as red as the run it repeats.
           red=$(curl --proto '=https' -sSf --retry 6 -H "Authorization: Bearer $GH_TOKEN" \
             "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?branch=$MAIN&per_page=30" |
             jq -r '[.workflow_runs[] | select(.event == "push" or .event == "workflow_dispatch")
                 | select(.status == "completed" or .run_attempt > 1)
-                | select(.conclusion != "cancelled" and .conclusion != "skipped")][0]
-              | select(. != null and .conclusion != "success") | .html_url')
+                | select(.conclusion | IN("cancelled", "stale", "skipped") | not)][0]
+              | select(. != null and (.conclusion | IN("success", "neutral") | not)) | .html_url')
           if [ -z "$red" ]; then
             echo "$MAIN is green"
             exit 0
