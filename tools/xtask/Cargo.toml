@@ -18,11 +18,11 @@ path = "src/compat.rs"
 required-features = ["compat"]
 
 [features]
-compat = ["dep:anyhow", "dep:cargo-enshwick", "dep:clap", "dep:enshwick-abi", "dep:enshwick-gamedata", "dep:enshwick-loader", "dep:memchr", "dep:rustc-hash", "dep:toml_edit"]
+compat = ["dep:anyhow", "cargo-enshwick/cli", "dep:clap", "dep:enshwick-abi", "dep:enshwick-gamedata", "dep:enshwick-loader", "dep:memchr", "dep:rustc-hash", "dep:toml_edit"]
 
 [dependencies]
 anyhow = { workspace = true, optional = true }
-cargo-enshwick = { workspace = true, optional = true }
+cargo-enshwick.workspace = true
 cbindgen.workspace = true
 clap = { workspace = true, optional = true }
 enshwick-abi = { workspace = true, optional = true }

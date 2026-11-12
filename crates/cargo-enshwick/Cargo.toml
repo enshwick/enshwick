@@ -17,26 +17,53 @@ publish = true
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }{ binary-ext }"
 pkg-fmt = "bin"
 
+[[bin]]
+name = "cargo-enshwick"
+path = "src/main.rs"
+required-features = ["cli"]
+
+[features]
+default = ["cli"]
+## The `cargo enshwick` command and the library modules it runs on; without
+## it the library holds only the crate rules and the changelog reader.
+cli = [
+    "dep:anyhow",
+    "dep:clap",
+    "dep:enshwick-abi",
+    "dep:enshwick-core",
+    "dep:enshwick-gamedata",
+    "dep:iced-x86",
+    "dep:memchr",
+    "dep:rustc-hash",
+    "dep:serde",
+    "dep:toml",
+    "dep:toml_edit",
+    "dep:semver",
+    "dep:sha2",
+    "dep:zip",
+    "dep:windows-sys",
+]
+
 [dependencies]
-anyhow.workspace = true
-clap = { workspace = true }
-enshwick-abi.workspace = true
-enshwick-core = { workspace = true, features = ["schema", "typed"] }
-enshwick-gamedata.workspace = true
-iced-x86.workspace = true
-memchr.workspace = true
-rustc-hash.workspace = true
-serde.workspace = true
+anyhow = { workspace = true, optional = true }
+clap = { workspace = true, optional = true }
+enshwick-abi = { workspace = true, optional = true }
+enshwick-core = { workspace = true, features = ["schema", "typed"], optional = true }
+enshwick-gamedata = { workspace = true, optional = true }
+iced-x86 = { workspace = true, optional = true }
+memchr = { workspace = true, optional = true }
+rustc-hash = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
 serde_json.workspace = true
-toml.workspace = true
-toml_edit.workspace = true
+toml = { workspace = true, optional = true }
+toml_edit = { workspace = true, optional = true }
 thiserror.workspace = true
-semver.workspace = true
-sha2.workspace = true
-zip.workspace = true
+semver = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+zip = { workspace = true, optional = true }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_System_LibraryLoader", "Win32_System_Registry"] }
+windows-sys = { optional = true, workspace = true, features = ["Win32_Foundation", "Win32_System_LibraryLoader", "Win32_System_Registry"] }
 
 [dev-dependencies]
 # The tests compile what the tool writes for mods, which name `enshwick`.

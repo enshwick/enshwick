@@ -52,7 +52,7 @@ enshwick-fake = { path = "crates/internal/fake", version = "=1.0.0-alpha.14" }
 enshwick-values = { path = "crates/internal/values", version = "=1.0.0-alpha.14" }
 enshwick-typed = { path = "crates/internal/typed", version = "=1.0.0-alpha.14" }
 enshwick-gamedata = { path = "crates/enshwick-gamedata", version = "=1.0.0-alpha.14" }
-cargo-enshwick = { path = "crates/cargo-enshwick", version = "=1.0.0-alpha.14" }
+cargo-enshwick = { path = "crates/cargo-enshwick", version = "=1.0.0-alpha.14", default-features = false }
 fastrand = { version = "2.5.0", default-features = false, features = ["std"] }
 insta = { version = "1.49.0", default-features = false }
 iced-x86 = { version = "1.21.0", default-features = false, features = ["std", "decoder", "block_encoder", "instr_info"] }
