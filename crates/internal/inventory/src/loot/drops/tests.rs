@@ -204,6 +204,15 @@ fn the_chance_holds_over_many_rolls() {
 }
 
 #[test]
+fn replacing_a_group_keeps_the_drops_of_every_other_group() {
+    let kept = Drop::new(ItemId::new(1), 0.5, Source::bosses());
+    let gone = Drop::new(ItemId::new(2), 0.5, Source::bosses());
+    rolls().drops.extend([(0, kept.clone()), (7, gone)]);
+    replace_group(7, Vec::new()).unwrap();
+    assert_eq!(rolls().drops, [(0, kept)]);
+}
+
+#[test]
 fn one_of_spreads_over_its_items() {
     let dice = Dice(AtomicU64::new(7));
     let drop = Drop::one_of(
