@@ -160,9 +160,10 @@ and world; each later peel follows the same steps.
    its parent in every peeled module. Peel the domain's
    modules in one run, so each knows the others' methods. `peel-load`
    writes a forwarder's links relative to its module as paths from the
-   crate root; the forwarder file imports by hand the module's own types
-   its signatures name, and the compiler then names the copied imports it
-   does not use. A module that is
+   crate root, and rustdoc names one into a module private to the crate,
+   which takes by hand a path core re-exports. The forwarder file imports
+   by hand the module's own types its signatures name, and the compiler
+   then names the copied imports it does not use. A module that is
    private becomes `pub(crate)`, so `__load` reaches its trait. A module
    that `cfg` gates in its parent gives its blocks, its `__load` lines and
    its forwarder `mod` that `cfg` by hand. A method whose closure takes
