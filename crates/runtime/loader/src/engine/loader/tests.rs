@@ -2,6 +2,47 @@ use enshwick_core::abi::Str;
 
 use super::*;
 
+type Lit = unsafe extern "system" fn(u32) -> u32;
+// SAFETY: `Lit` stands for the hooked function; each slot is the `next` of
+// one link of the test below, which never arms, so no detour calls `get`.
+static FIRST_NEXT: Next<Lit> = unsafe { Next::new() };
+// SAFETY: as `FIRST_NEXT`'s, for the second link.
+static SECOND_NEXT: Next<Lit> = unsafe { Next::new() };
+// SAFETY: as `FIRST_NEXT`'s, for the third link.
+static THIRD_NEXT: Next<Lit> = unsafe { Next::new() };
+
+unsafe extern "system" fn lit(glow: u32) -> u32 {
+    glow
+}
+
+#[test]
+fn a_feature_whose_second_link_fails_is_wholly_off_and_its_first_target_never_armed() {
+    let loader = crate::start::tests::bare_loader();
+    let feature = "test lanterns";
+    let link = |id, at, next: &'static Next<Lit>| {
+        loader.link_feature(feature, Target::Found(id, at), next, lit, HookFlags::NONE)
+    };
+    assert!(link("lantern.light", Some(0x1000), &FIRST_NEXT));
+    assert!(!link("lantern.glow", None, &SECOND_NEXT));
+    assert!(
+        !link("lantern.wick", Some(0x3000), &THIRD_NEXT),
+        "a feature that is off links nothing more"
+    );
+    assert!(Fuse::named(feature).is_off());
+    let mut chains = loader.chains.relock();
+    chains.seal();
+    assert!(
+        chains.is_empty(),
+        "the first link went with its feature, so its target is never patched"
+    );
+    let listed = crate::engine::diag::parts_off();
+    let off = listed.iter().find(|p| p.part == feature);
+    assert!(
+        off.is_some_and(|p| p.reason.starts_with("lantern.glow ")),
+        "{listed:?}"
+    );
+}
+
 #[test]
 fn a_raise_walks_its_event_s_subscriptions_in_their_order() {
     unsafe extern "system" fn handler(

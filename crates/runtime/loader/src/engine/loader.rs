@@ -7,11 +7,12 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use enshwick_core::abi as api_frame;
-use enshwick_core::abi::{Event, EventFn, HookFlags, Level, Manifest, Side, Status, Str};
+use enshwick_core::abi::{Event, EventFn, HookFlags, Level, Manifest, Side, Str};
 use enshwick_gamedata::reflect::{Fingerprint, Reflection};
 
 use crate::engine::builds::KnownBuild;
 use crate::engine::chains::{Chains, Link, Next};
+use crate::engine::fuse::{Fuse, Off};
 use crate::engine::mid::Mids;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned::{Constant, Symbol};
@@ -369,26 +370,6 @@ impl Loader {
             .and_then(|value| usize::try_from(value).ok())
     }
 
-    /// Links one of the loader's own detours on `target`, ahead of every
-    /// mod's link there.
-    pub(crate) fn link<F: Copy>(
-        &self,
-        target: u64,
-        next: &'static Next<F>,
-        detour: F,
-        flags: HookFlags,
-    ) -> Status {
-        let link = Link {
-            owner: ModIndex::LOADER,
-            detour: Next::<F>::address_of(detour),
-            next: next.slot(),
-            priority: i32::MIN,
-            flags,
-            hop: None,
-        };
-        self.chains.relock().add(target, link)
-    }
-
     /// Whether the code at symbol `id` is what the table expects, checked
     /// before a hook patches it or a detour relies on it, by
     /// [`crate::engine::builds::code_holds`]: the anchors made every check of a
@@ -506,8 +487,7 @@ impl Loader {
             crate::packs::data_packs::forget(&record.id);
         }
         crate::engine::diag::turned_off(&record.id, &shown);
-        // A poisoned lock still holds the chains: the mod must be wired past.
-        let chains = self.chains.relock();
+        self.rewire();
         let faulted = |owner: ModIndex| {
             owner != ModIndex::LOADER
                 && self
@@ -515,15 +495,6 @@ impl Loader {
                     .get(owner.get())
                     .is_none_or(|m| m.off.load(Ordering::Acquire))
         };
-        // A mod still waiting for a code patch stays wired past as well.
-        chains.rewire(|owner| {
-            faulted(owner)
-                || self
-                    .mods
-                    .get(owner.get())
-                    .is_some_and(|m| m.waiting.load(Ordering::Acquire))
-        });
-        drop(chains);
         crate::base::points::rearm(faulted);
         if record.joins_when_on() {
             crate::base::advertise::wake();
@@ -542,7 +513,7 @@ impl Loader {
         }
         *record.off_reason.relock() = None;
         crate::engine::log::write(Level::INFO, &record.id, "back on");
-        let chains = self.chains.relock();
+        self.rewire();
         let off = |owner: ModIndex| {
             owner != ModIndex::LOADER
                 && self
@@ -550,14 +521,6 @@ impl Loader {
                     .get(owner.get())
                     .is_none_or(|m| m.off.load(Ordering::Acquire))
         };
-        chains.rewire(|owner| {
-            off(owner)
-                || self
-                    .mods
-                    .get(owner.get())
-                    .is_some_and(|m| m.waiting.load(Ordering::Acquire))
-        });
-        drop(chains);
         crate::base::points::rearm(off);
     }
 

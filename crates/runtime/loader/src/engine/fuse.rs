@@ -1,8 +1,9 @@
-//! A feature the loader runs from game threads, and the one way it turns
-//! off: a panic in its own work, a failed live check or a link the build
-//! cannot make turns it off once, logged with its code, listed for the
-//! status summary and the Mods screen, and wired past in every chain it
-//! linked, so the game runs that part vanilla.
+//! A feature the loader runs from game threads, and the one way it turns off.
+//!
+//! A panic in its own work, a failed live check or a link the build cannot
+//! make turns it off once: logged with its code, listed for the status
+//! summary and the Mods screen, and wired past in every chain it linked, so
+//! the game runs that part vanilla.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -31,6 +32,7 @@ pub(crate) struct Off {
 impl Off {
     /// `feature` is off on the build named `build`, whose entry `id` failed
     /// for `reason`.
+    #[cfg(windows)]
     pub(crate) fn build(feature: &str, build: &str, id: &str, reason: &str) -> Self {
         Self {
             line: crate::engine::builds::off_line(feature, build, id, reason),
@@ -64,6 +66,7 @@ impl Off {
 
     /// A log `line` and a status `entry` a caller wrote for a build that
     /// lacks what the feature needs.
+    #[cfg(windows)]
     pub(crate) fn reported(line: String, entry: String) -> Self {
         Self {
             line,
@@ -249,7 +252,7 @@ impl Fuse {
     /// hold their feature.
     pub(crate) fn named(feature: &str) -> &'static Self {
         // Kept for the process, as every link that names it is.
-        let make = || -> &'static Self {
+        let leaked = || -> &'static Self {
             Box::leak(Box::new(Self::new(Box::leak(
                 feature.to_owned().into_boxed_str(),
             ))))
@@ -259,13 +262,13 @@ impl Fuse {
                 if let Some(found) = named.iter().copied().find(|f| f.feature == feature) {
                     return found;
                 }
-                let made = make();
-                named.push(made);
-                made
+                let new = leaked();
+                named.push(new);
+                new
             })
             // Nothing seals the named features; a sealed list would only
             // cost the twin's dedup.
-            .unwrap_or_else(|_sealed| make())
+            .unwrap_or_else(|_sealed| leaked())
     }
 
     /// Turns the feature off for `off`. The first time for its name, it
@@ -287,6 +290,7 @@ impl Fuse {
             crate::engine::log::write(off.level, source, &line);
         }
         crate::engine::diag::part_off(self.feature, &off.entry);
+        #[cfg(windows)]
         crate::engine::loader::rewire();
     }
 }

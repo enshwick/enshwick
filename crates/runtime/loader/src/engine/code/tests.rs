@@ -21,17 +21,27 @@ fn a_missing_recipe_list_lookup_is_off_on_its_build_and_in_the_status() {
     let off = LiftLimitError::NotInBuild {
         entry: pinned::recipe::LIST_LOOKUP.id().to_owned(),
     };
-    let (line, entry) = lookup_off(&build, &off);
-    assert_eq!(
-        line,
-        format!(
-            "recipe list lookup off on {}: recipe.list_lookup is found by no engine route or anchor",
-            build.name
-        )
+    crate::engine::log::capture();
+    let why = off.to_string();
+    let reason = build.reason(off.entry(), &why);
+    let off = crate::engine::fuse::Off::build(LOOKUP_FEATURE, &build.name, off.entry(), reason);
+    crate::engine::fuse::Fuse::named(LOOKUP_FEATURE).turn_off(&off);
+    let line = format!(
+        "recipe list lookup off on {}: recipe.list_lookup is found by no engine route or anchor ({})",
+        build.name,
+        crate::engine::errors::FEATURES_OFF
     );
+    assert!(
+        crate::engine::log::captured()
+            .iter()
+            .any(|(_, _, l)| *l == line),
+        "{line}"
+    );
+    let listed = crate::engine::diag::parts_off();
+    let lookup = listed.iter().find(|p| p.part == LOOKUP_FEATURE);
     assert_eq!(
-        entry,
-        "recipe.list_lookup is found by no engine route or anchor"
+        lookup.map(|p| p.reason.as_str()),
+        Some("recipe.list_lookup is found by no engine route or anchor")
     );
 }
 
