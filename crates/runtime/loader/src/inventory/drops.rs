@@ -84,6 +84,17 @@ impl Reading {
         }
     }
 
+    /// Starts `read` when `event` is the world's load.
+    fn at(
+        &'static self,
+        event: Event,
+        read: impl FnOnce() -> Result<Layout, ReadLayoutError> + Send + 'static,
+    ) {
+        if event == Event::WORLD_LOADED {
+            self.start(read);
+        }
+    }
+
     /// Keeps `read` for the process, logging a failure and turning drops off.
     fn finish(&self, read: Result<Layout, ReadLayoutError>) {
         let kept = read
@@ -108,10 +119,8 @@ impl Reading {
 
 /// Starts reading the layout as a world loads, where a server runs.
 pub(crate) fn world_event(event: Event) {
-    if event == Event::WORLD_LOADED
-        && let Some(loader) = crate::engine::loader::loader()
-    {
-        READING.start(move || read_layout(loader));
+    if let Some(loader) = crate::engine::loader::loader() {
+        READING.at(event, move || read_layout(loader));
     }
 }
 
@@ -311,6 +320,18 @@ mod tests {
             Some(Status::MISSING),
             "no second read"
         );
+    }
+
+    #[test]
+    fn only_the_world_s_load_starts_the_read() {
+        let reading = reading();
+        for event in [Event::WORLD_SAVED, Event::SHUTDOWN_STARTED, Event::TICKED] {
+            reading.at(event, || Ok(LAYOUT));
+        }
+        assert!(!reading.started.load(Ordering::Acquire));
+        reading.at(Event::WORLD_LOADED, || Ok(LAYOUT));
+        finished(reading);
+        assert_eq!(reading.layout().map(|l| l.hash), Ok(LAYOUT.hash));
     }
 
     #[test]
