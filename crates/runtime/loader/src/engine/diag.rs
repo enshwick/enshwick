@@ -578,6 +578,14 @@ conflicts:
             !short.contains("old/you.lockers.dll"),
             "a second copy of a loaded mod is not off: {short}"
         );
+        s.skipped[1].reason = Skip::Copy {
+            id: "you.gone".into(),
+            first: 0,
+        };
+        assert!(
+            s.render().contains("mods: 1 of 4 running"),
+            "a copy of a mod that did not load counts as off"
+        );
     }
 
     #[test]
