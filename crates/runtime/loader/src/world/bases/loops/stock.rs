@@ -1,36 +1,44 @@
 //! The building stock cache: one base a call, round robin over the index
 //! list, the object's position counting places in that list.
 
+use enshwick_core::abi::HookFlags;
 use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
-use super::{CODE, Code, Game, Layout, MapFields, occupied, rec, windowed};
-use crate::engine::chains::Next;
+use super::{CODE, Code, Game, Layout, MapFields, PAST16, occupied, rec, windowed};
+use crate::engine::loader::{Loader, Target};
+use crate::engine::pinned::bases;
 use crate::world::base_groups::lookup::Bases;
 use crate::world::base_groups::window;
 
 /// The entities a call hands back.
 const PAGE_ENTITIES: u32 = 40;
-pub(super) type StockFn = unsafe extern "system" fn(out: *mut u8, obj: *mut u8) -> *mut u8;
+/// Links the building stock cache under [`PAST16`]; true when linked.
+pub(super) fn link(loader: &Loader) -> bool {
+    loader.link_fused(
+        &PAST16,
+        Target::Pinned(bases::STOCK_CACHE),
+        &STOCK_CACHE_NEXT,
+        stock_cache,
+        HookFlags::EXCLUSIVE,
+    )
+}
 
-// SAFETY: `StockFn` is the signature of the stock cache the table's
-// `bases.stock_cache` pins, and `link` uses this slot only as its next.
-pub(super) static STOCK_CACHE_NEXT: Next<StockFn> = unsafe { Next::new() };
-
-pub(super) unsafe extern "system" fn stock_cache(out: *mut u8, obj: *mut u8) -> *mut u8 {
-    // SAFETY: the cache's own object, read beside no grouping.
-    let game = unsafe { windowed(obj) };
-    if let (Some((game, layout)), Some(code), false) = (game, CODE.get(), out.is_null()) {
-        // SAFETY: the cache's own answer and object.
-        let done = crate::world::bases::BASES_FUSE.run("the building stock cache", || unsafe {
-            cache_stock(out, obj, &game, layout, code);
-        });
-        if done.is_some() {
+crate::engine::chains::chain_detour! {
+    /// The table's `bases.stock_cache`, round robin over the window's
+    /// bases too while the object holds more than 16.
+    fn stock_cache(out: *mut u8, obj: *mut u8) -> *mut u8;
+    next STOCK_CACHE_NEXT;
+    fuse &PAST16, "the building stock cache";
+    |onward| {
+        // SAFETY: the cache's own object, read beside no grouping.
+        let game = unsafe { windowed(obj) };
+        if let (Some((game, layout)), Some(code), false) = (game, CODE.get(), out.is_null()) {
+            // SAFETY: the cache's own answer and object.
+            unsafe { cache_stock(out, obj, &game, layout, code) };
             return out;
         }
+        onward.call()
     }
-    // SAFETY: this detour runs only as the stock cache's link, so the slot
-    // holds the next function of that signature.
-    unsafe { STOCK_CACHE_NEXT.get()(out, obj) }
 }
 
 /// Empties the map at `slot`, keeping its room, as the game does.
