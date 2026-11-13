@@ -200,7 +200,7 @@ impl<'a> Painter<'a> {
         // SAFETY: a window is open on this thread, by the contract of
         // `Painter::new`; `row` stays in place on this stack until
         // `row_end` below, which follows `row_side` whenever this opens.
-        let open = unsafe { self.engine.row_begin(&mut row) };
+        let open = unsafe { self.engine.row_begin(&mut row, self.scrolled()) };
         about();
         if open {
             // SAFETY: `row_begin` returned true for `row` in this frame, on

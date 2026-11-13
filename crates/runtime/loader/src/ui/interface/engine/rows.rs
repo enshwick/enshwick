@@ -64,9 +64,18 @@ const LINE: SeparatorConfig = SeparatorConfig {
 const CELL_GAP: f32 = 10.0;
 /// The gap between the lines of a row's left cell, as the players list's.
 const LINE_GAP: f32 = 5.0;
-/// A row's padding above and below, the players list's, and at its right,
-/// which keeps a row's button clear of the scroll bar beside the list.
-const ROW_PADDING: [f32; 4] = [0.0, 10.0, 24.0, 10.0];
+/// A row's padding above and below, the players list's.
+const ROW_PADDING: [f32; 4] = [0.0, 10.0, 0.0, 10.0];
+
+/// A row's padding: [`ROW_PADDING`], and at its right the scrollbar's width
+/// when the row is in a scroll area, so its buttons stay clear of the bar.
+fn row_padding(scrolled: bool) -> [f32; 4] {
+    let mut padding = ROW_PADDING;
+    if scrolled {
+        padding[2] = super::scroll::BAR_WIDTH;
+    }
+    padding
+}
 
 /// The row's and the separator's functions.
 #[derive(Debug)]
@@ -133,15 +142,16 @@ const SIDE_GAP: f32 = 16.0;
 
 impl Engine {
     /// Opens a row as wide as its column and the left cell in it, which
-    /// takes the width the right cell leaves; false, opening nothing, on a
-    /// build without rows, where the cells stack.
+    /// takes the width the right cell leaves, clear of the scrollbar when
+    /// `scrolled`; false, opening nothing, on a build without rows, where the
+    /// cells stack.
     ///
     /// # Safety
     ///
     /// - Called inside a window, on the frame's thread.
     /// - `row` stays in place until [`Engine::row_end`], which follows
     ///   [`Engine::row_side`] in the same frame when this returns true.
-    pub(in crate::ui::interface) unsafe fn row_begin(&self, row: &mut Row) -> bool {
+    pub(in crate::ui::interface) unsafe fn row_begin(&self, row: &mut Row, scrolled: bool) -> bool {
         let Some(fns) = &self.rows else {
             return false;
         };
@@ -158,7 +168,7 @@ impl Engine {
         // SAFETY: `self.node_padding` is the game's `ui.node_padding`,
         // checked in `Engine::resolve`, on the row's node, with four live
         // floats.
-        unsafe { (self.node_padding)(node, &ROW_PADDING) };
+        unsafe { (self.node_padding)(node, &row_padding(scrolled)) };
         // SAFETY: `fns.column` is the game's `ui.column`, checked in
         // `Rows::resolve`, inside the row just opened; `row.column` holds
         // `FRAME_SIZE` bytes and stays in place.
@@ -265,6 +275,12 @@ mod tests {
         assert!(apart(row, column).is_ok());
         let id = pinned::ui::ROW.id();
         assert!(matches!(apart(column, column), Err(Missing::Bytes(at)) if at == id));
+    }
+
+    #[test]
+    fn a_row_leaves_the_scrollbar_s_width_free_only_where_its_list_scrolls() {
+        assert_eq!(row_padding(true), [0.0, 10.0, 24.0, 10.0]);
+        assert_eq!(row_padding(false), [0.0, 10.0, 0.0, 10.0]);
     }
 
     #[test]

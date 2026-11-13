@@ -8938,3 +8938,20 @@ in = "ui.button"
 shape = ["lea r8,[rbx+*]", "mov rcx,rax"]
 take = "value"
 range = [32, 128]
+
+# The frame `ui.button` hands its config copy to, which reads the config's
+# first word as the button's kind and switches on it to pick its look.
+[[route]]
+id = "~fn:ui.button_frame"
+sides = ["client"]
+in = "ui.button"
+shape = ["movsd [rbp-?],xmm6", "call *", "mov rcx,[rbp-?]"]
+take = "address"
+
+[[route]]
+id = "ui.button_kind"
+sides = ["client"]
+in = "~fn:ui.button_frame"
+shape = ["mov rbx,{ui.context}", "movsxd rcx,[rdi]"]
+take = "spelled"
+value = 0x0

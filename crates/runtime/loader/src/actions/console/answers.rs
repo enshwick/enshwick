@@ -6,6 +6,8 @@ use std::fmt::Write as _;
 use enshwick_core::abi::Side;
 use enshwick_core::content::Guid;
 
+use crate::base::resolve::Skipped;
+
 /// Placed pieces [`Placed`] keeps, newest last.
 pub const REMEMBERED: usize = 32;
 
@@ -161,10 +163,11 @@ pub struct Loaded<'a> {
     pub running: bool,
 }
 
-/// What `enshwick mods` answers.
+/// What `enshwick mods` answers: the loaded mods, then those skipped at
+/// start with their file and why.
 #[must_use]
-pub fn mods(loaded: &[Loaded<'_>]) -> String {
-    if loaded.is_empty() {
+pub fn mods(loaded: &[Loaded<'_>], skipped: &[Skipped]) -> String {
+    if loaded.is_empty() && skipped.is_empty() {
         return "no mods loaded".to_owned();
     }
     loaded
@@ -178,6 +181,11 @@ pub fn mods(loaded: &[Loaded<'_>]) -> String {
             let state = if m.running { "running" } else { "off" };
             format!("{} {} ({side}): {state}", m.id, m.version)
         })
+        .chain(
+            skipped
+                .iter()
+                .map(|s| format!("{} {}: skipped, {}: {}", s.id, s.version, s.file, s.reason)),
+        )
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -272,7 +280,7 @@ mod tests {
 
     #[test]
     fn mods_name_side_and_state() {
-        assert_eq!(mods(&[]), "no mods loaded");
+        assert_eq!(mods(&[], &[]), "no mods loaded");
         let loaded = [
             Loaded {
                 id: "you.trading-post",
@@ -288,8 +296,25 @@ mod tests {
             },
         ];
         assert_eq!(
-            mods(&loaded),
+            mods(&loaded, &[]),
             "you.trading-post 0.3.0 (server): running\nyou.zones 0.1.0 (both): off"
+        );
+    }
+
+    #[test]
+    fn a_mod_skipped_at_start_is_listed_with_its_file_and_reason() {
+        let skipped = Skipped {
+            id: "you.safes".into(),
+            version: "0.2.0".into(),
+            label: "Safes".into(),
+            file: "you.safes/you.safes.dll".into(),
+            reason: crate::base::resolve::Skip::Missing {
+                id: "you.locks".into(),
+            },
+        };
+        assert_eq!(
+            mods(&[], &[skipped]),
+            "you.safes 0.2.0: skipped, you.safes/you.safes.dll: requires you.locks, which is not loaded"
         );
     }
 

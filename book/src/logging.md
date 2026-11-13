@@ -156,6 +156,9 @@ log. It lists:
 - every mod with its name, version and whether it runs. Each also shows its
   authors, licence and homepage, its notes and the lines the mod adds. A note
   may say that a recommended mod is missing;
+- every mod skipped at start for another mod or as a second file of a mod,
+  with its file and why. A second file of a mod that runs is listed but not
+  counted as off;
 - the mods turned off, and why;
 - what mods serve and patch, every service, mod event and extension point
   with the mods on it, and the links left inert with the reason;

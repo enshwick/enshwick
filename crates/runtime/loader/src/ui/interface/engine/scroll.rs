@@ -53,6 +53,12 @@ const STATE_KEY: u64 = 0x656e_7368_7769_636b;
 /// The scrollbar look's `sliderIdleWidth`, `sliderHoverWidth`, `baseWidth`
 /// and `rangeTextureWidth`, as the world settings fill them.
 const LOOK_WIDTHS: [f32; 4] = [24.0, 24.0, 24.0, 20.0];
+/// The widest the scrollbar draws, its slider idle or hovered or its base:
+/// the room a row in the scroll area leaves free beside it.
+pub(super) const BAR_WIDTH: f32 = {
+    let [idle, hover, base, _] = LOOK_WIDTHS;
+    idle.max(hover).max(base)
+};
 /// A nine-slice texture of the look bundle, copied into the look.
 const TEXTURE_SIZE: usize = 32;
 

@@ -92,9 +92,11 @@ fn loader(mods: &[TestMod], developer_tools: bool) -> (Loader, Vec<Library>) {
         // strings `'static` literals and its lists null.
         .map(|library| unsafe { crate::base::manifest::parse(library.manifest) }.unwrap())
         .collect();
+    let (libraries, candidates, copies) =
+        library::drop_duplicates(std::path::Path::new("mods"), libraries, candidates);
     let plan = resolve::resolve(&candidates);
     let mods = records(&libraries, &candidates, &plan);
-    let skipped = skipped(&libraries, &candidates, &plan);
+    let skipped = skipped(&libraries, &candidates, &plan, copies);
     let mut slots: Vec<Option<Library>> = libraries.into_iter().map(Some).collect();
     let order = plan
         .order
@@ -157,7 +159,6 @@ fn a_second_copy_skipped_at_start_is_kept_with_its_reason_but_its_running_mod_is
         skipped.reason,
         resolve::Skip::Copy {
             id: "you.safes".into(),
-            first: 0
         }
     );
     assert_eq!(skipped.file, "you.safes/you.safes.dll");
@@ -170,6 +171,28 @@ fn a_second_copy_skipped_at_start_is_kept_with_its_reason_but_its_running_mod_is
         crate::base::off_line::mods_counted(&loader),
         1,
         "one mod, two files"
+    );
+}
+
+#[test]
+fn the_status_summary_lists_a_mod_skipped_at_start_and_does_not_count_a_second_copy_off() {
+    let (loader, _) = loader(
+        &[TestMod::plain("you.safes"), TestMod::plain("you.safes")],
+        false,
+    );
+    assert_eq!(
+        crate::base::status::summary(&loader).skipped,
+        [crate::engine::diag::SkippedMod {
+            id: "you.safes".into(),
+            version: "1.0.0".into(),
+            file: "you.safes/you.safes.dll".into(),
+            reason: "another copy of you.safes loads instead; delete this one".into(),
+            shown: resolve::Skip::Copy {
+                id: "you.safes".into()
+            }
+            .shown(),
+            off: false,
+        }]
     );
 }
 

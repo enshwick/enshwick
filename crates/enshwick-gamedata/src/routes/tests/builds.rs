@@ -124,6 +124,12 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ("1.0 client (26320373)", "ui.button_icon", 0x38),
     ("1.0 client (26430625)", "ui.button_icon_shown", 0x48),
     ("1.0 client (26430625)", "ui.button_icon", 0x38),
+    // The button's kind, the first word of its config, which the frame
+    // `ui.button` hands it to switches on; read on 26430625.
+    ("1.0 client (1269579)", "ui.button_kind", 0),
+    ("1.0 client (26082781)", "ui.button_kind", 0),
+    ("1.0 client (26320373)", "ui.button_kind", 0),
+    ("1.0 client (26430625)", "ui.button_kind", 0),
     // The editor's commit, which every terrain edit passes; on 26083076 and
     // 26430253 checked live on server copies.
     ("1.0 server (1269579)", "voxel.commit", 0x83_39d0),

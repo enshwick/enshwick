@@ -19,7 +19,9 @@ pub use menu::{KeptLine, MenuNote, menu_line, menu_line_off};
 pub(crate) use summary::clock;
 #[cfg(windows)]
 pub(crate) use summary::{GAME_CRASHED, crash_heading};
-pub use summary::{HookStat, ModStatus, Served, Summary, duration, messages_line, part_line};
+pub use summary::{
+    HookStat, ModStatus, Served, SkippedMod, Summary, duration, messages_line, part_line,
+};
 
 use crate::engine::settings::Settings;
 use enshwick_base::Relock;
@@ -294,6 +296,7 @@ mod tests {
             last_crash: Some("fault 0xc0000005, blamed on you.trading-post: in its code".into()),
             at: 45_000,
             mods: mods(),
+            skipped: Vec::new(),
             others: vec!["other mods' proxies in the game's folder: dbghelp.dll".into()],
             turned_off: vec![TurnedOff {
                 id: "you.trading-post".into(),
@@ -526,6 +529,53 @@ conflicts:
         assert!(
             broken.starts_with(&good) && broken.len() > good.len(),
             "{broken}"
+        );
+    }
+
+    #[test]
+    fn a_mod_skipped_at_start_shows_with_its_file_and_reason_and_a_second_copy_is_not_counted() {
+        let skipped = |id: &str, file: &str, reason: &str, off| SkippedMod {
+            id: id.into(),
+            version: "0.2.0".into(),
+            file: file.into(),
+            reason: reason.into(),
+            shown: format!("[{reason}]"),
+            off,
+        };
+        let mut s = summary();
+        s.skipped = vec![
+            skipped(
+                "you.safes",
+                "you.safes/you.safes.dll",
+                "requires you.locks, which is not loaded",
+                true,
+            ),
+            skipped(
+                "you.lockers",
+                "old/you.lockers.dll",
+                "another copy of you.lockers loads instead; delete this one",
+                false,
+            ),
+        ];
+        let text = s.render();
+        assert!(text.contains("mods: 1 of 3 running"), "{text}");
+        assert!(
+            text.contains(
+                "  you.safes 0.2.0 skipped, you.safes/you.safes.dll: requires you.locks, which is not loaded\n  \
+                 you.lockers 0.2.0 skipped, old/you.lockers.dll: another copy of you.lockers loads instead; delete this one\n"
+            ),
+            "{text}"
+        );
+        let short = s.short();
+        assert!(short.contains("1 of 3 mods running"), "{short}");
+        assert!(
+            short
+                .contains("you.safes/you.safes.dll off: [requires you.locks, which is not loaded]"),
+            "the reason in the reader's language: {short}"
+        );
+        assert!(
+            !short.contains("old/you.lockers.dll"),
+            "a second copy of a loaded mod is not off: {short}"
         );
     }
 

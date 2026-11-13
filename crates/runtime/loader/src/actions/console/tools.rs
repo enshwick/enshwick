@@ -100,10 +100,35 @@ pub(crate) fn mods(loader: &Loader) -> String {
                 running: !m.off.load(Ordering::Acquire),
             })
             .collect::<Vec<_>>(),
+        &loader.skipped,
     )
 }
 
 /// Why the world did not read.
 pub(super) fn unread(status: Status) -> String {
     texts::fill("console.unread", &[("status", &format!("{status:?}"))])
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::base::resolve::{Skip, Skipped};
+
+    #[test]
+    fn enshwick_mods_lists_the_mods_the_loader_skipped_at_start() {
+        let mut loader = crate::start::tests::bare_loader();
+        assert_eq!(super::mods(&loader), "no mods loaded");
+        loader.skipped.push(Skipped {
+            id: "you.safes".into(),
+            version: "0.2.0".into(),
+            label: "Safes".into(),
+            file: "you.safes/you.safes.dll".into(),
+            reason: Skip::Missing {
+                id: "you.locks".into(),
+            },
+        });
+        assert_eq!(
+            super::mods(&loader),
+            "you.safes 0.2.0: skipped, you.safes/you.safes.dll: requires you.locks, which is not loaded"
+        );
+    }
 }

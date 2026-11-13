@@ -52,7 +52,9 @@ log:
 
 Of two files with one mod id, the highest version runs, then the newest
 file, then the first by name. A skipped mod can make the mods that require
-it skip in turn. A circle that
+it skip in turn. The Mods screen, the status summary and `enshwick mods`
+list each of these mods with its file. A second file of a mod that runs
+does not count as off. A circle that
 `after` closes gives way, and its mods load anyway.
 
 ## The mod

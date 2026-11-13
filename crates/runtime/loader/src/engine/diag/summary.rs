@@ -106,6 +106,23 @@ impl ModStatus {
     }
 }
 
+/// A mod skipped at start, in the summary.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SkippedMod {
+    /// The mod id.
+    pub id: String,
+    /// Its version.
+    pub version: String,
+    /// Its file relative to the game's folder.
+    pub file: String,
+    /// Why it does not load, as the log says it.
+    pub reason: String,
+    /// Why, in the reader's language, as the Mods screen shows it.
+    pub shown: String,
+    /// Whether it counts as off: all but a second copy of a loaded mod.
+    pub off: bool,
+}
+
 /// What mods serve to the game.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Served {
@@ -136,6 +153,9 @@ pub struct Summary {
     pub at: u64,
     /// Every loaded mod, in load order.
     pub mods: Vec<ModStatus>,
+    /// The mods skipped at start, which the summary lists after the loaded
+    /// ones with their file and why.
+    pub skipped: Vec<SkippedMod>,
     /// The other mods' proxies that run beside the mods without the API.
     pub others: Vec<String>,
     /// Mods turned off, oldest first.
@@ -278,9 +298,16 @@ impl Summary {
         self.render_settings(&mut out);
         self.render_parts(&mut out);
         let running = self.mods.iter().filter(|m| m.running).count();
-        let _w = writeln!(out, "\nmods: {running} of {} running", self.mods.len());
+        let _w = writeln!(out, "\nmods: {running} of {} running", self.counted());
         for m in &self.mods {
             m.render(&mut out);
+        }
+        for s in &self.skipped {
+            let _w = writeln!(
+                out,
+                "  {} {} skipped, {}: {}",
+                s.id, s.version, s.file, s.reason
+            );
         }
         for line in &self.others {
             let _w = writeln!(out, "  {line}");
@@ -429,11 +456,22 @@ conflicts:"
         }
     }
 
+    /// The mods the summary counts: the loaded ones and those skipped at
+    /// start that count as off, as the main menu line counts them.
+    fn counted(&self) -> usize {
+        self.mods.len() + self.skipped_off().count()
+    }
+
+    /// The mods skipped at start that count as off.
+    fn skipped_off(&self) -> impl Iterator<Item = &SkippedMod> {
+        self.skipped.iter().filter(|s| s.off)
+    }
+
     /// A few lines for the console, in the reader's language.
     #[must_use]
     pub fn short(&self) -> String {
         let running = self.mods.iter().filter(|m| m.running).count().to_string();
-        let mods = self.mods.len().to_string();
+        let mods = self.counted().to_string();
         let uptime = duration(self.uptime);
         let head = if self.hosting {
             "status.short.server"
@@ -458,6 +496,12 @@ conflicts:"
             lines.push(crate::engine::texts::fill(
                 "status.off",
                 &[("id", &t.id), ("reason", &t.reason)],
+            ));
+        }
+        for s in self.skipped_off().take(3) {
+            lines.push(crate::engine::texts::fill(
+                "status.off",
+                &[("id", &s.file), ("reason", &s.shown)],
             ));
         }
         for p in self.parts_off.iter().take(3) {

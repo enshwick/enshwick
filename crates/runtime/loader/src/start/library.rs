@@ -45,13 +45,21 @@ pub(super) struct Library {
 /// where it is mapped, its first byte and end.
 pub(super) type Loaded<'a> = dyn FnMut(&str, Option<(usize, usize)>) + 'a;
 
+/// What [`libraries`] finds in `mods/`.
+pub(super) struct Found {
+    /// The mods with readable manifests, one per folder and mod id.
+    pub(super) libraries: Vec<Library>,
+    /// Their manifests, in the same order.
+    pub(super) candidates: Vec<Candidate>,
+    /// In a game, the proxies of other mods beside it.
+    pub(super) others: Vec<OtherDll>,
+    /// The other files of a mod id, which do not load.
+    pub(super) copies: Vec<resolve::Skipped>,
+}
+
 /// What `mods/` holds: the mods with readable manifests, one per folder, and
 /// their manifests; in a game also the proxies of other mods beside it.
-pub(super) fn libraries(
-    mods_dir: &Path,
-    run: Run,
-    loaded: &mut Loaded<'_>,
-) -> (Vec<Library>, Vec<Candidate>, Vec<OtherDll>) {
+pub(super) fn libraries(mods_dir: &Path, run: Run, loaded: &mut Loaded<'_>) -> Found {
     if run == Run::Game {
         note_old_layout(mods_dir);
     }
@@ -95,8 +103,13 @@ pub(super) fn libraries(
             Err(reason) => log_skip(&Skip::Manifest(reason), &library.file),
         }
     }
-    let (libraries, candidates) = drop_duplicates(mods_dir, libraries, candidates);
-    (libraries, candidates, others)
+    let (libraries, candidates, copies) = drop_duplicates(mods_dir, libraries, candidates);
+    Found {
+        libraries,
+        candidates,
+        others,
+        copies,
+    }
 }
 
 /// Logs one line for each file or folder of the layout before mod folders
@@ -192,12 +205,13 @@ fn dlls(dir: &Path) -> Vec<PathBuf> {
 }
 
 /// Keeps one file per mod id, the one [`resolve::duplicates`] chooses, and
-/// unloads the others, naming in the log each file that can be deleted.
-fn drop_duplicates(
+/// unloads the others, naming in the log each file that can be deleted and
+/// returning them as skipped copies for the screens and the status.
+pub(super) fn drop_duplicates(
     mods_dir: &Path,
     libraries: Vec<Library>,
     candidates: Vec<Candidate>,
-) -> (Vec<Library>, Vec<Candidate>) {
+) -> (Vec<Library>, Vec<Candidate>, Vec<resolve::Skipped>) {
     let installed: Vec<resolve::Installed<'_>> = libraries
         .iter()
         .zip(&candidates)
@@ -212,18 +226,33 @@ fn drop_duplicates(
         .collect();
     let duplicates = resolve::duplicates(&installed);
     if duplicates.is_empty() {
-        return (libraries, candidates);
+        return (libraries, candidates, Vec::new());
     }
+    let mut copies = Vec::with_capacity(duplicates.len());
     for &(extra, runs) in &duplicates {
+        let (library, candidate) = (&libraries[extra], &candidates[extra]);
         let skip = Skip::Duplicate {
-            id: candidates[extra].id.clone(),
-            version: candidates[extra].version.to_string(),
+            id: candidate.id.clone(),
+            version: candidate.version.to_string(),
             runs: libraries[runs].file.clone(),
             runs_version: candidates[runs].version.to_string(),
         };
-        log_skip(&skip, &libraries[extra].file);
+        log_skip(&skip, &library.file);
+        copies.push(resolve::Skipped {
+            id: candidate.id.clone(),
+            version: candidate.version.to_string(),
+            // SAFETY: the manifest is the copy `manifest::read` made for the
+            // process or a pack's manifest built for the process, its strings
+            // and lists readable and never written; its DLL stays loaded
+            // until `unload` below, and `meta` copies what it reads.
+            label: unsafe { crate::base::manifest::meta(library.manifest) }.label(&candidate.id),
+            file: library.file.clone(),
+            reason: resolve::Skip::Copy {
+                id: candidate.id.clone(),
+            },
+        });
     }
-    libraries
+    let (libraries, candidates) = libraries
         .into_iter()
         .zip(candidates)
         .enumerate()
@@ -234,7 +263,8 @@ fn drop_duplicates(
             unload(&pair.0);
             None
         })
-        .unzip()
+        .unzip();
+    (libraries, candidates, copies)
 }
 
 /// Unloads a mod DLL that `discover` loaded only for its manifest, so none of
