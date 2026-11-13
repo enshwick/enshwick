@@ -235,6 +235,8 @@ pub fn verify(
     Ok(start)
 }
 
+#[cfg(all(windows, test))]
+pub(crate) use runtime::start_through_hold;
 #[cfg(windows)]
 pub(crate) use runtime::{HOLD_FUSE, joining, link, set_layout};
 
@@ -301,18 +303,35 @@ mod runtime {
         STATE.hold.join(refused, now());
     }
 
+    /// Starts `request` through the hold, the game's start being `game`.
+    #[cfg(test)]
+    pub(crate) fn start_through_hold(
+        request: *const u8,
+        game: unsafe extern "system" fn(*mut u8, *const u8) -> u32,
+    ) -> u32 {
+        use crate::engine::chains::Next;
+        NEXT.slot()
+            .store(Next::address_of(game), std::sync::atomic::Ordering::Release);
+        // SAFETY: `request` is the caller's live request, readable at the
+        // layout's kind offset, and the slot holds `game`, a start of the
+        // hooked signature.
+        unsafe { detour(core::ptr::null_mut(), request) }
+    }
+
     crate::engine::chains::chain_detour! {
         /// The game's start of a user interaction at the table's
         /// `user.start_interaction`: the user system and the request, whose
         /// kind is a byte in it, null or readable at the build's kind offset
         /// for the call; the interaction's id, 0 when none started (client
         /// builds 410 and 426). Holds back the "could not join" dialog of a
-        /// join the join check refused.
+        /// join the join check refused, while the check is on: once it is
+        /// off, a join it let through keeps the game's own dialog.
         fn detour(users: *mut u8, request: *const u8) -> u32;
         next NEXT;
         fuse &HOLD_FUSE, "the join dialog hold";
         |onward| {
             if STATE.hold.armed()
+                && !crate::base::join::JOIN_FUSE.is_off()
                 && !request.is_null()
                 && let Some(layout) = STATE.layout.get()
                 // SAFETY: `request` is non-null, checked just before, and is
@@ -321,13 +340,23 @@ mod runtime {
                 // (client builds 410 and 426).
                 && unsafe { enshwick_core::raw::read_at::<u8>(request, layout.kind) }
                     == layout.join_failed
-                && STATE.hold.takes(now())
+                && held()
             {
-                crate::log!(INFO, "join refused: the game's own dialog held back");
                 return 0;
             }
             onward.call()
         }
+    }
+
+    /// Whether the "could not join" dialog starting now is the one to hold
+    /// back.
+    #[cold]
+    fn held() -> bool {
+        let taken = STATE.hold.takes(now());
+        if taken {
+            crate::log!(INFO, "join refused: the game's own dialog held back");
+        }
+        taken
     }
 }
 

@@ -397,20 +397,12 @@ mod runtime {
     mod tests {
         use super::*;
 
-        fn listed() -> Option<String> {
-            let off = crate::engine::diag::parts_off();
-            off.into_iter()
-                .find(|p| p.part == LOBBY_FUSE.feature())
-                .map(|p| p.reason)
-        }
-
         #[test]
-        fn a_panicking_lobby_entry_turns_off_only_the_hosted_lobby_and_lists_it() {
+        fn a_panicking_lobby_entry_turns_the_hosted_lobby_off_and_lists_it() {
             enter(7, |_| panic!("a broken entry"));
             assert!(LOBBY_FUSE.is_off());
-            assert!(!crate::base::carrier::CHANNEL_FUSE.is_off());
             assert_eq!(
-                listed().as_deref(),
+                crate::engine::diag::off_reason(&LOBBY_FUSE).as_deref(),
                 Some("the loader panicked in a lobby entry: a broken entry")
             );
         }

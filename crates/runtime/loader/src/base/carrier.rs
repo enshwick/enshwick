@@ -224,7 +224,7 @@ static FRAME_FUSE: Fuse = Fuse::new("the client's frame step");
 
 /// The own channel: each side's sockets, and a hosting client's talk with
 /// its own server half.
-pub(crate) static CHANNEL_FUSE: Fuse = Fuse::new("the own channel");
+static CHANNEL_FUSE: Fuse = Fuse::new("the own channel");
 
 /// The own channel to other machines, off on a build without the game's
 /// socket calls; a hosting client still talks with its own server half.
@@ -239,12 +239,7 @@ pub(crate) fn link(loader: &'static Loader) {
             let _first = CARRIER.game.set(game);
         }
         Err(missing) => {
-            let reason = if loader.build.symbol(missing).is_some() {
-                "does not hold the code the build table expects"
-            } else {
-                crate::engine::builds::ABSENT
-            };
-            let _off = loader.fuse_off(&SOCKETS_FUSE, missing, reason);
+            let _off = loader.fuse_off(&SOCKETS_FUSE, missing.id(), &missing.reason());
         }
     }
     // Linked even without the sockets: the lobby a client hosts is published

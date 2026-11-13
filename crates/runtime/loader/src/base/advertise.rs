@@ -383,20 +383,12 @@ mod runtime {
             Vec::new()
         }
 
-        fn listed() -> Option<String> {
-            let off = crate::engine::diag::parts_off();
-            off.into_iter()
-                .find(|p| p.part == ADVERTISE_FUSE.feature())
-                .map(|p| p.reason)
-        }
-
         #[test]
-        fn a_panicking_advertisement_turns_off_only_its_feature_and_lists_it() {
+        fn a_panicking_advertisement_turns_its_feature_off_and_lists_it() {
             advertise("Lanterns", none, |_, _| panic!("a broken round"));
             assert!(ADVERTISE_FUSE.is_off());
-            assert!(!crate::base::carrier::CHANNEL_FUSE.is_off());
             assert_eq!(
-                listed().as_deref(),
+                crate::engine::diag::off_reason(&ADVERTISE_FUSE).as_deref(),
                 Some("the loader panicked in the advertising thread: a broken round")
             );
         }

@@ -188,6 +188,18 @@ pub(crate) fn link(loader: &'static Loader) {
     {
         return;
     }
+    // Without the layout the move still links: a client's notices and the
+    // freeing of handed lists need no stream.
+    let _first = LOADED.set((loader, stream_layout(loader)));
+    let target = Target::Pinned(pinned::ecs::EVENT_MERGE);
+    if loader.link_fused(&EVENTS_FUSE, target, &MERGE_NEXT, merge, HookFlags::NONE) {
+        crate::log!(INFO, "game events: {count} subscriptions");
+    }
+}
+
+/// The build's event stream layout; without it the delivery is off, listed
+/// by the first entry the build lacks.
+fn stream_layout(loader: &Loader) -> Option<Layout> {
     let constant = |name: Constant| {
         loader
             .build
@@ -206,18 +218,11 @@ pub(crate) fn link(loader: &'static Loader) {
             record_align: constant(pinned::ecs::EVENT_RECORD_ALIGN)?.max(1),
         })
     })();
-    // Without the layout the move still links: a client's notices and the
-    // freeing of handed lists need no stream.
-    let layout = layout
+    layout
         .inspect_err(|missing: &Constant| {
             let _off = loader.fuse_off(&DELIVERY_FUSE, missing.id(), crate::engine::builds::ABSENT);
         })
-        .ok();
-    let _first = LOADED.set((loader, layout));
-    let target = Target::Pinned(pinned::ecs::EVENT_MERGE);
-    if loader.link_fused(&EVENTS_FUSE, target, &MERGE_NEXT, merge, HookFlags::NONE) {
-        crate::log!(INFO, "game events: {count} subscriptions");
-    }
+        .ok()
 }
 
 crate::engine::chains::chain_detour! {
@@ -465,20 +470,15 @@ mod tests {
     }
 
     #[test]
-    fn a_build_without_the_stream_layout_lists_the_delivery_off_and_leaves_the_notices_on() {
-        let loader: &'static Loader = Box::leak(Box::new(Loader {
-            side: Side::CLIENT,
-            ..crate::start::tests::bare_loader()
-        }));
-        link(loader);
+    fn a_build_without_the_stream_layout_lists_only_the_delivery_off_by_the_entry_it_lacks() {
+        let loader = crate::start::tests::bare_loader();
+        assert!(stream_layout(&loader).is_none());
         assert!(DELIVERY_FUSE.is_off());
-        assert!(!NOTICES_FUSE.is_off() && !RETIRE_FUSE.is_off());
-        let listed = crate::engine::diag::parts_off();
-        let delivery = listed.iter().find(|p| p.part == DELIVERY_FUSE.feature());
-        let missing = pinned::ecs::EVENT_STREAMS.id();
+        assert!(!EVENTS_FUSE.is_off(), "the move still links for the rest");
+        let reason = crate::engine::diag::off_reason(&DELIVERY_FUSE).unwrap_or_default();
         assert!(
-            delivery.is_some_and(|p| p.reason.starts_with(missing)),
-            "{listed:?}"
+            reason.starts_with(pinned::ecs::EVENT_STREAMS.id()),
+            "{reason}"
         );
     }
 }

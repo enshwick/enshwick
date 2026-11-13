@@ -579,12 +579,10 @@ mod tests {
         let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
         link(loader);
         assert!(KEYS_FUSE.is_off());
-        let listed = crate::engine::diag::parts_off();
-        let keys = listed.iter().find(|p| p.part == KEYS_FUSE.feature());
-        let missing = pinned::server::SAVE_REQUEST.id();
+        let reason = crate::engine::diag::off_reason(&KEYS_FUSE).unwrap_or_default();
         assert!(
-            keys.is_some_and(|p| p.reason.starts_with(missing)),
-            "{listed:?}"
+            reason.starts_with(pinned::server::SAVE_REQUEST.id()),
+            "{reason}"
         );
     }
 

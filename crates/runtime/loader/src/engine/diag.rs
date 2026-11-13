@@ -143,6 +143,14 @@ pub fn parts_off() -> Vec<PartOff> {
     PARTS_OFF.relock().clone()
 }
 
+/// Why `fuse` is listed off, `None` while it is not.
+#[cfg(test)]
+pub(crate) fn off_reason(fuse: &crate::engine::fuse::Fuse) -> Option<String> {
+    let listed = PARTS_OFF.relock();
+    let part = listed.iter().find(|p| p.part == fuse.feature())?;
+    Some(part.reason.clone())
+}
+
 /// Remembers that `address` was found as `name`, a symbol or a system, so the
 /// summary can name a hooked function.
 pub fn name(address: u64, name: &str) {

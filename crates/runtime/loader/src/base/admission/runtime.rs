@@ -440,12 +440,27 @@ mod tests {
         start(&loader, Names::new());
         assert!(KICKS_FUSE.is_off());
         assert!(!ADMISSION_FUSE.is_off(), "players still get the note");
-        let listed = crate::engine::diag::parts_off();
-        let kicks = listed.iter().find(|p| p.part == KICKS_FUSE.feature());
-        let missing = pinned::session::KICK.id();
-        assert!(
-            kicks.is_some_and(|p| p.reason.starts_with(missing)),
-            "{listed:?}"
-        );
+        let reason = crate::engine::diag::off_reason(&KICKS_FUSE).unwrap_or_default();
+        assert!(reason.starts_with(pinned::session::KICK.id()), "{reason}");
+    }
+
+    #[test]
+    fn the_admission_s_own_fuse_shares_no_name_with_the_calls_of_its_part() {
+        let part = crate::base::PARTS
+            .iter()
+            .find(|p| p.name == "admission")
+            .expect("the admission part");
+        let calls: Vec<&str> = part
+            .steps
+            .iter()
+            .map(|s| s.work.fuse.feature())
+            .chain(
+                [part.joined, part.left]
+                    .into_iter()
+                    .flatten()
+                    .map(|c| c.fuse.feature()),
+            )
+            .collect();
+        assert!(!calls.contains(&ADMISSION_FUSE.feature()), "{calls:?}");
     }
 }

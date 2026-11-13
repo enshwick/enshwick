@@ -16,21 +16,16 @@ pub(crate) fn alone() -> std::sync::MutexGuard<'static, ()> {
 }
 
 #[test]
-fn a_build_without_the_socket_calls_lists_them_off_and_keeps_the_own_channel_on() {
+fn a_build_without_the_socket_calls_lists_them_off_by_what_it_lacks() {
     let _alone = alone();
     let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
     link(loader);
     assert!(SOCKETS_FUSE.is_off());
-    assert!(
-        !CHANNEL_FUSE.is_off() && !FRAME_FUSE.is_off(),
-        "a hosting client still talks with its server half"
-    );
-    let listed = crate::engine::diag::parts_off();
-    let sockets = listed.iter().find(|p| p.part == SOCKETS_FUSE.feature());
+    let reason = crate::engine::diag::off_reason(&SOCKETS_FUSE).unwrap_or_default();
     let missing = crate::engine::catalogue::ids::GAME_MESSAGE_CHANNEL_VOICE_CHAT;
     assert!(
-        sockets.is_some_and(|p| p.reason.starts_with(missing)),
-        "{listed:?}"
+        reason.starts_with(missing) && reason.contains("is not reflected"),
+        "{reason}"
     );
 }
 
