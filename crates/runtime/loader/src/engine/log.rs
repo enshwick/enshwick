@@ -545,6 +545,19 @@ macro_rules! log {
     }};
 }
 
+/// Logs a line from the loader itself as [`log!`] does, only the first time
+/// this call site runs with its level kept.
+#[macro_export]
+macro_rules! log_once {
+    ($level:ident, $($arg:tt)+) => {{
+        static ONCE: ::enshwick_base::__private::Once = ::enshwick_base::__private::Once::new();
+        let level = ::enshwick_core::abi::Level::$level;
+        if $crate::engine::log::enabled(level, $crate::engine::settings::LOADER_ID) && ONCE.first() {
+            $crate::engine::log::write(level, $crate::engine::settings::LOADER_ID, &::std::format!($($arg)+));
+        }
+    }};
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

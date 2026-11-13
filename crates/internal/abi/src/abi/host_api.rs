@@ -349,7 +349,13 @@ pub struct HostApi {
     /// Calls `callback` with `user` on every game event of the reflected
     /// type whose hash is `type_hash`, or on every game event for 0, on
     /// the server's game thread before the systems of the next step run.
-    /// Allowed during `enshwick_mod_init` only.
+    /// Allowed during `enshwick_mod_init` only, [`Status::TOO_LATE`] after.
+    /// `callback` is non-null and stays callable while the mod is loaded;
+    /// the loader keeps `user` and never reads or frees it. The event and
+    /// its bytes are borrowed for the call. `callback` may call the loader
+    /// again, and must not unwind: the Rust layer catches its handler's
+    /// panic and turns the mod off. A panic in the loader returns
+    /// [`Status::REFUSED`].
     pub game_event: extern "system" fn(
         me: ModHandle,
         type_hash: u32,
@@ -2005,13 +2011,13 @@ pub struct HostApi {
     /// and on a client. Any thread, re-entrant; a panic in the loader
     /// returns `0`. ABI 11.27.
     pub language_of: extern "system" fn(me: ModHandle, key: PlayerKey) -> u32,
-    /// Subscribes to one event type from the client's own ECS world only.
-    /// Init only. Client binary only ([`Status::UNAVAILABLE`] otherwise).
-    /// Hash 0 and more than 32 subscriptions per mod are [`Status::BAD_ARGS`].
-    /// Delivery runs on the client simulation thread and grants no server
-    /// World read or mutation authority. Copies are capped at 256 events
-    /// and 64 KiB per merge; traversal is capped at 65,536 records and 256
-    /// streams. A warning is logged once on drops. ABI 11.28.
+    /// As [`HostApi::game_event`] for the events of the client's own world,
+    /// on the thread that steps it, right after the engine moved them; no
+    /// filter, veto or item action runs on them. One move hands the
+    /// client's callbacks at most 256 events and 64 KiB of them, the rest
+    /// dropped with a warning logged once. On a dedicated server
+    /// [`Status::OK`] without keeping `callback`, which never runs there.
+    /// ABI 11.28.
     pub client_game_event: extern "system" fn(
         me: ModHandle,
         type_hash: u32,

@@ -76,6 +76,7 @@ impl BaseLoad {
     }
 
     /// As `Load::on_client_raw_game_event`.
+    #[cfg(feature = "unstable")]
     #[doc(hidden)]
     pub fn on_client_raw_game_event<F>(
         &mut self,
@@ -95,6 +96,16 @@ impl BaseLoad {
         F: Fn(&crate::game_events::RawGameEvent<'_>) + Send + Sync + 'static,
     {
         self.game_events(0, "every type", handler)
+    }
+
+    /// As `Load::on_every_client_raw_game_event`.
+    #[cfg(feature = "unstable")]
+    #[doc(hidden)]
+    pub fn on_every_client_raw_game_event<F>(&mut self, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&crate::game_events::RawGameEvent<'_>) + Send + Sync + 'static,
+    {
+        client_game_events_of(self.host, 0, "every type", handler)
     }
 
     pub(super) fn game_events<F>(
@@ -140,21 +151,25 @@ pub fn game_events_of<F>(host: Host, type_hash: u32, what: &str, handler: F) -> 
 where
     F: Fn(&crate::game_events::RawGameEvent<'_>) + Send + Sync + 'static,
 {
-    let api = host.api();
-    let handle = host.handle();
-    hand_over(
-        handler,
-        |user| (api.game_event)(handle, type_hash, deliver_game::<F>, user),
+    game_events_through(
+        host,
+        host.api().game_event,
+        type_hash,
         &format!("game events of {what}"),
+        handler,
     )
 }
 
-/// Registers one client-world event type for a runtime that holds its mod's host.
-/// Client callbacks grant no server-world access. There is no all-events mode.
+/// [`Load::on_client_raw_game_event`](../struct.Load.html#method.on_client_raw_game_event)
+/// for a runtime that holds the mod's host during its init, such as a script's.
+///
+/// `handler` runs on every event of the type hashed `type_hash` in the
+/// client's own world, 0 for every type; `what` names it in a refusal.
 ///
 /// # Errors
-/// Returns [`Off`] when the loader refuses the handler, such as outside a
-/// client binary, after init, or once 32 client subscriptions were registered.
+///
+/// [`Off`] after `init`.
+#[cfg(feature = "unstable")]
 pub fn client_game_events_of<F>(
     host: Host,
     type_hash: u32,
@@ -164,12 +179,42 @@ pub fn client_game_events_of<F>(
 where
     F: Fn(&crate::game_events::RawGameEvent<'_>) + Send + Sync + 'static,
 {
-    hand_over(
-        handler,
-        |user| (host.api().client_game_event)(host.handle(), type_hash, deliver_game::<F>, user),
+    game_events_through(
+        host,
+        host.api().client_game_event,
+        type_hash,
         &format!("client game events of {what}"),
+        handler,
     )
 }
+
+/// Hands `handler` to the loader through `register`, one of the host's game
+/// event entries, for the type hashed `type_hash`.
+fn game_events_through<F>(
+    host: Host,
+    register: GameEventRegister,
+    type_hash: u32,
+    what: &str,
+    handler: F,
+) -> Result<(), Off>
+where
+    F: Fn(&crate::game_events::RawGameEvent<'_>) + Send + Sync + 'static,
+{
+    let handle = host.handle();
+    hand_over(
+        handler,
+        |user| register(handle, type_hash, deliver_game::<F>, user),
+        what,
+    )
+}
+
+/// A host entry that registers a game event handler.
+type GameEventRegister = extern "system" fn(
+    crate::abi::ModHandle,
+    u32,
+    crate::abi::GameEventFn,
+    *mut c_void,
+) -> crate::abi::Status;
 
 /// A tick handler on the raw data, which reads it as a [`TickData`].
 fn typed_tick(handler: impl Fn(&TickData)) -> impl Fn(*const c_void) {

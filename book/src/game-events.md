@@ -201,39 +201,54 @@ end)
 Game events run on the server's game thread before the step's systems, as
 for a Rust mod. On a client they run only while it hosts a game.
 
-## Client-world observations
+## Events of the client's own world
 
-A native client mod may explicitly subscribe to one reflected client-world
-ECS event with `Load::on_client_raw_game_event`, or use the generated typed
-`EventType<T>::on_client`. These require ABI 11.28. An older loader refuses
-the new mod; existing server subscriptions retain their behavior.
-Luau's event bindings remain server-scoped; these client subscriptions are
-native Rust APIs.
+Unstable: needs the `unstable` feature and may change in any release
+([Stability](stability.md)).
+
+A client's own world raises game events of its own, of the same reflected
+types, such as `keen::ecs::OpenHudScreenEvent`.
+`load.on_client_raw_game_event(ty, handler)` calls the handler on each event
+of type `ty` in that world, and `load.on_every_client_raw_game_event(handler)`
+on every one. With the `typed` feature, `EventType::<T>::on_client` reads them
+as `T`:
 
 ```rust
-use enshwick::typed::{EventType, ecs::OpenHudScreenEvent};
-
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    EventType::<OpenHudScreenEvent>::resolve(load)?.on_client(load, |event| {
-        enshwick::debug!("client opened {:?}", event.screen);
+    let opened = load.game_event_type("keen::ecs::OpenHudScreenEvent")?;
+    load.on_client_raw_game_event(opened, |event| {
+        enshwick::debug!("a screen opened: {} bytes", event.bytes().len());
     })
 }
 ```
 
-Handlers run on the client's simulation thread after its event merge.
-They do not enter a server-world quiet scope and grant no server `World`
-read or mutation authority. Client and hosted-server subscriptions and
-copied batches remain separate. There is no client all-events mode.
-Registration is limited to 32 client subscriptions per mod.
+A handler of the client's own events:
 
-Each client merge copies at most 256 selected events and 64 KiB of payload.
-Traversal stops after 65,536 records or 256 streams. A warning is logged
-once when a copy, traversal or reentrant pending-batch cap drops
-observations. There is no public dropped-event counter or lossless-delivery
-promise. Reacquire state through a supported state API where one exists.
+- runs on the thread that steps the client's world, right after the engine
+  moved that world's events;
+- gets only that world's events, also while the client hosts a game, and a
+  server handler never gets them;
+- runs with no filter, veto or item action on the events;
+- never runs on a dedicated server, where the subscription is kept without
+  an error, so one `both` mod serves both sides.
 
-`UiSelectCraftingStationRecipeEvent` carries a recipe identifier and input
-category selections. Its existence does not establish that passive recipe
-highlighting or top-level tab changes emit it. This API observes events;
-it does not expose a persistent selected tab or recipe. Those semantics
-remain to be validated against independent client UI fixtures.
+While a hosted game starts, until its server's first step, the client's own
+events are not handed over: the loader cannot yet tell its world from the
+server's.
+
+One move of the client's world reads at most 256 streams and 65,536 events,
+and hands the handlers at most 256 events and 64 KiB of them. The rest of
+that move's events are dropped, and the log says so once.
+
+From Luau, `enshwick.on_client_game_type(type, fields, handler)` reads them
+as `enshwick.on_game_type` reads a game event:
+
+```luau
+enshwick.on_client_game_type("keen::ecs::OpenHudScreenEvent", { screen = "u8" }, function(event)
+    enshwick.log.info(`screen {event.screen} opened`)
+end)
+```
+
+In tests, the [`FakeHost`](testing.md) of a client hands an event of the
+client's own world to the mod's handlers with
+`raise_client_game_event(type_hash, bytes)`.

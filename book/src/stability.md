@@ -50,6 +50,7 @@ change in any release, a patch included.
 | `input`. `Frame::open_screen` and `Load::on_screen_changed`.                                                                                               | young; which control each bit stands for and which screen is open are not yet seen in the game           |
 | `Frame::prompt` and `Frame::screen_host`. Also `interactions::Targets` and `Load::on_fog_uncovered`.                                                        | the prompt, the screen's host, a player's prompt target and the uncovered fog are not yet seen in the game |
 | `Frame::screen_host_template` and `Frame::screen_host_position`. Also `Load::extend_screen_for`.                                                           | the host's template and position are not yet seen in the game                                            |
+| `Load::on_client_raw_game_event` and `on_every_client_raw_game_event`. Also `EventType::on_client`.                                                       | that the client moves its own world's events as the server does is read from its code only, not yet seen in the game |
 
 Turn the feature on in the mod's `Cargo.toml`:
 
@@ -66,8 +67,8 @@ feature; the call itself does not.
 ## Luau
 
 A Luau mod has no features to turn on. The definitions in `enshwick.d.luau` mark
-the unstable parts "Unstable". They are the `world` namespace and
-`enshwick.caller`. They
+the unstable parts "Unstable". They are the `world` namespace,
+`enshwick.caller` and `enshwick.on_client_game_type`. They
 may change in any release, as their Rust counterparts do.
 
 ## The ABI

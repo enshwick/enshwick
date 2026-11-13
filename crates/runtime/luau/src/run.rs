@@ -723,6 +723,13 @@ fn subscribe(
                     handled.deliver(&key, |lua, _| raw_table(lua, &reader.read(event)));
                 })?;
             }
+            Subscription::ClientRaw(spec) => {
+                let (ty, reader) = RawReader::resolve(load, spec, &inner.event_types)?;
+                let key = sub.clone();
+                load.on_client_raw_game_event(ty, move |event| {
+                    handled.deliver(&key, |lua, _| raw_table(lua, &reader.read(event)));
+                })?;
+            }
         }
     }
     Ok(())

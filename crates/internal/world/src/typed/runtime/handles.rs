@@ -225,18 +225,33 @@ impl RawEvent {
     where
         F: Fn(&Value) -> Result<(), Off> + Send + Sync + 'static,
     {
-        self.on_scoped(host, false, handler)
+        let ty = self.ty;
+        crate::load::game_events_of(host, ty.hash(), ty.name(), self.decoder(handler))
     }
 
-    fn on_scoped<F>(self, host: Host, client: bool, handler: F) -> Result<(), Off>
+    /// As [`on`](Self::on) for the events of the client's own world.
+    pub(crate) fn on_client<F>(self, host: Host, handler: F) -> Result<(), Off>
     where
         F: Fn(&Value) -> Result<(), Off> + Send + Sync + 'static,
     {
-        let Self { id, ty, name } = self;
+        let ty = self.ty;
+        crate::load::client_game_events_of(host, ty.hash(), ty.name(), self.decoder(handler))
+    }
+
+    /// A raw game event handler that reads each event as the codec's
+    /// [`Value`] and hands it to `handler`.
+    fn decoder<F>(
+        self,
+        handler: F,
+    ) -> impl Fn(&crate::game_events::RawGameEvent<'_>) + Send + Sync + 'static
+    where
+        F: Fn(&Value) -> Result<(), Off> + Send + Sync + 'static,
+    {
+        let Self { id, name, .. } = self;
         // One warning per handler: a `static` here would be shared by every
         // event type.
         let warned = AtomicBool::new(false);
-        let decode = move |raw: &crate::game_events::RawGameEvent<'_>| {
+        move |raw: &crate::game_events::RawGameEvent<'_>| {
             let outcome = Registry::game()
                 .and_then(|registry| Ok(registry.decode(name, raw.bytes())?))
                 .and_then(|value| handler(&value));
@@ -245,11 +260,6 @@ impl RawEvent {
             {
                 crate::warn!("typed {id}: an event does not read: {why}");
             }
-        };
-        if client {
-            crate::load::client_game_events_of(host, ty.hash(), ty.name(), decode)
-        } else {
-            crate::load::game_events_of(host, ty.hash(), ty.name(), decode)
         }
     }
 }
@@ -529,28 +539,32 @@ impl<T: Event> EventType<T> {
             Ok(())
         })
     }
-    /// Observes this event type from the client's own ECS world only.
-    /// No server World authority is available in the handler. This reports
-    /// events, not persistent UI selection state or passive recipe highlights.
+
+    /// Calls `handler` with each event of the type in the client's own
+    /// world, read as `T`, as `Load::on_client_raw_game_event` hands the raw
+    /// ones; an event whose bytes do not read as `T` is logged once and
+    /// skipped. On a dedicated server the handler never runs.
     ///
     /// # Errors
     ///
-    /// As `Load::on_client_raw_game_event`, plus typed decoding failures
-    /// are logged once and skipped as for `EventType::on`.
+    /// [`Off`] when the loader refuses the handler, such as after init.
     ///
     /// # Examples
     ///
     /// ```
     /// use enshwick::typed::{EventType, ecs::OpenHudScreenEvent};
+    ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     EventType::<OpenHudScreenEvent>::resolve(load)?.on_client(load, |_event| {})
+    ///     EventType::<OpenHudScreenEvent>::resolve(load)?.on_client(load, |opened| {
+    ///         enshwick::debug!("the player opened {:?}", opened.screen);
+    ///     })
     /// }
     /// ```
     pub fn on_client<F>(self, load: &mut impl Loading, handler: F) -> Result<(), Off>
     where
         F: Fn(&T) + Send + Sync + 'static,
     {
-        self.raw.on_scoped(load.base().host(), true, move |value| {
+        self.raw.on_client(load.base().host(), move |value| {
             handler(&T::from_value(value)?);
             Ok(())
         })

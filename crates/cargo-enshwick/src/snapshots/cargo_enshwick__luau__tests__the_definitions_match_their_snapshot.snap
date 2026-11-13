@@ -3202,6 +3202,8 @@ declare enshwick: {
 		& ((event: "RevivedPlayerEvent", handler: (data: RevivedPlayerEvent) -> ()) -> ()),
 	--- Calls `handler` on every game event of the reflected type `type_name`, with the fields `fields` names, each read as its kind: u8, i8, u16, i16, u32, i32, u64, i64, f32, f64, bool or entity; 64-bit values as strings. Subscribe at the top level of main.luau.
 	on_game_type: (type_name: string, fields: { [string]: string }, handler: (event: { [string]: any }) -> ()) -> (),
+	--- Calls `handler` on every event of the reflected type `type_name` in the client's own world, read as `on_game_type` reads a game event, on the thread that steps that world; on a dedicated server it never runs. Subscribe at the top level of main.luau. Unstable: may change in any release.
+	on_client_game_type: (type_name: string, fields: { [string]: string }, handler: (event: { [string]: any }) -> ()) -> (),
 	--- Every game event type of the running build, with its size in bytes, read from the game's reflection.
 	game_event_types: () -> { { name: string, size: number } },
 	--- Links `handler` into another mod's extension point, as `cargo enshwick deps <alias> --luau` describes it: it gets the input and the answer so far, and returns a new answer, nothing to keep it, or `enshwick.refuse`. `order` places the link among the point's others: `after` a mod sees its answer, `before` a mod leaves it the last word, and among the rest the lower `priority` runs first. Subscribe at the top level of main.luau.

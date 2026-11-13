@@ -122,3 +122,7 @@ harness = false
 [[bench]]
 name = "read_only"
 harness = false
+
+[[bench]]
+name = "event_copy"
+harness = false

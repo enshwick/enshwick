@@ -19,6 +19,9 @@ pub(crate) enum Subscription {
     Game(&'static str),
     /// A game event by reflected type, with the fields it reads.
     Raw(RawSpec),
+    /// An event of the client's own world by reflected type, with the
+    /// fields it reads.
+    ClientRaw(RawSpec),
     /// Another mod's extension point, by its name.
     Point(String),
     /// A mod event, by its name.
@@ -93,24 +96,24 @@ impl Subscription {
     }
 
     /// A reflected game event `type_name` with the field kinds `fields`
-    /// names, `{ field = "u32" }`.
-    pub(crate) fn raw(type_name: String, fields: &Table) -> mlua::Result<Self> {
+    /// names, `{ field = "u32" }`, for the script function `what`.
+    pub(crate) fn raw(what: &str, type_name: String, fields: &Table) -> mlua::Result<RawSpec> {
         let mut read = Vec::new();
         for pair in fields.pairs::<String, String>() {
             let (field, kind) = pair?;
             let kind = FieldKind::parse(&kind).ok_or_else(|| {
                 mlua::Error::runtime(format!(
-                    "enshwick.on_game_type: {field}: {kind:?} is none of {}",
+                    "{what}: {field}: {kind:?} is none of {}",
                     FieldKind::known()
                 ))
             })?;
             read.push((field, kind));
         }
         read.sort_unstable_by(|a, b| a.0.cmp(&b.0));
-        Ok(Self::Raw(RawSpec {
+        Ok(RawSpec {
             type_name,
             fields: read,
-        }))
+        })
     }
 
     /// What the log calls it.
@@ -120,7 +123,7 @@ impl Subscription {
                 .find(|k| k.event() == *event)
                 .map_or_else(|| format!("event {}", event.0), |k| k.name().to_owned()),
             Self::Game(name) => (*name).to_owned(),
-            Self::Raw(spec) => spec.type_name.clone(),
+            Self::Raw(spec) | Self::ClientRaw(spec) => spec.type_name.clone(),
             Self::Point(name) | Self::ModEvent(name) | Self::Call(name) => name.clone(),
         }
     }
@@ -200,7 +203,7 @@ impl RawReader {
             .find(|name| *name == spec.type_name)
             .ok_or_else(|| {
                 unsubscribable(
-                    "enshwick.on_game_type: this game build",
+                    "this game build",
                     format_args!("game event type {}", spec.type_name),
                 )
             })?;

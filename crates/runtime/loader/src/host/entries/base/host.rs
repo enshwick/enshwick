@@ -6,6 +6,7 @@ use enshwick_core::abi::{EventTypeInfo, Header, Level, ModHandle, Side, Status, 
 use enshwick_core::{Entity, abi as api_frame};
 
 use crate::engine::loader::loader;
+use crate::engine::world::Whose;
 use crate::host::memory::{put, put_headed_list, text};
 use crate::host::{caller, calling, entry};
 
@@ -141,16 +142,7 @@ pub(crate) extern "system" fn client_game_event(
     callback: api_frame::GameEventFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
-    entry("client_game_event", || {
-        let (loader, index, _) = match calling(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        if !crate::engine::loader::in_init(index.get()) {
-            return Status::TOO_LATE;
-        }
-        crate::base::game_events::register_client(loader.side, index, type_hash, callback, user)
-    })
+    game_event_of(Whose::Client, me, type_hash, callback, user)
 }
 
 pub(crate) extern "system" fn game_event(
@@ -159,11 +151,26 @@ pub(crate) extern "system" fn game_event(
     callback: api_frame::GameEventFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
-    entry("game_event", || {
-        let (_, index, _) = match calling(me) {
+    game_event_of(Whose::Server, me, type_hash, callback, user)
+}
+
+/// Registers the calling mod's game event handler for the world `whose`.
+fn game_event_of(
+    whose: Whose,
+    me: ModHandle,
+    type_hash: u32,
+    callback: api_frame::GameEventFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    let entry_name = match whose {
+        Whose::Server => "game_event",
+        Whose::Client => "client_game_event",
+    };
+    entry(entry_name, || {
+        let (loader, index, _) = match calling(me) {
             Ok(found) => found,
             Err(status) => return status,
         };
-        crate::base::game_events::register(index, type_hash, callback, user)
+        crate::base::game_events::register(loader.side, whose, index, type_hash, callback, user)
     })
 }

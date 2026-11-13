@@ -138,6 +138,32 @@ impl<R: Copy, N: Fn() -> R> Onward<R, N> {
     pub fn run(&self, fuse: &Fuse, site: &str, work: impl FnOnce(&Self) -> R) -> R {
         fuse.run(site, || work(self)).unwrap_or_else(|| self.call())
     }
+
+    /// Runs the detour's `work`, which must come before the chain, under
+    /// `fuse` as `site`. While the feature is off, or once `work` panicked,
+    /// nothing runs and the chain waits for its own [`call`](Self::call), so
+    /// work after this one that also needs the chain not yet called still
+    /// finds it so.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader::engine::chains::Onward;
+    /// use enshwick_loader::engine::fuse::Fuse;
+    ///
+    /// static COUNT: Fuse = Fuse::new("lantern count");
+    /// let onward = Onward::new(|| 21);
+    /// onward.before(&COUNT, "the lantern count", || {});
+    /// assert_eq!(onward.call(), 21);
+    /// ```
+    #[inline]
+    pub fn before(&self, fuse: &Fuse, site: &str, work: impl FnOnce()) {
+        debug_assert!(
+            self.answer.get().is_none(),
+            "{site} runs after the chain it must come before"
+        );
+        let _done = fuse.run(site, work);
+    }
 }
 
 impl<R, N> core::fmt::Debug for Onward<R, N> {
@@ -502,6 +528,20 @@ mod tests {
 
     fn value(slot: &AtomicUsize) -> usize {
         slot.load(Ordering::Acquire)
+    }
+
+    #[test]
+    fn work_before_the_chain_under_an_off_feature_leaves_the_chain_uncalled() {
+        static OFF: Fuse = Fuse::new("work before the chain");
+        OFF.blow("a test");
+        let calls = core::cell::Cell::new(0);
+        let onward = Onward::new(|| calls.set(calls.get() + 1));
+        let ran = core::cell::Cell::new(false);
+        onward.before(&OFF, "the work", || ran.set(true));
+        assert!(!ran.get());
+        assert_eq!(calls.get(), 0, "the chain waits for its own call");
+        onward.call();
+        assert_eq!(calls.get(), 1);
     }
 
     #[test]

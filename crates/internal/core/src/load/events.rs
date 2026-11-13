@@ -147,26 +147,33 @@ impl Load<'_> {
     where
         F: Fn(&crate::game_events::RawGameEvent<'_>) + Send + Sync + 'static;
 
-    /// Observes one reflected event type from the client's own ECS world.
-    /// Handlers run on its simulation thread after event merge, without
-    /// server-world read or mutation authority. This observes events, not
-    /// persistent UI selection state.
+    /// Calls `handler` on every game event of type `ty` in the client's own
+    /// world, on the thread that steps it, right after the engine moved that
+    /// world's events; see [`game_events`](crate::game_events). These are
+    /// not the server's events: no filter, veto or item action runs on them.
+    /// On a dedicated server the handler never runs. A panic in `handler`
+    /// turns the mod off.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// A step hands the client's handlers at most 256 events and 64 KiB of
+    /// them; the rest of that step's are dropped, with a warning logged once.
     ///
     /// # Errors
     ///
-    /// [`Off`] outside a client binary, after init, or after 32 client
-    /// subscriptions. Copies are capped at 256 events and 64 KiB per merge;
-    /// traversal is capped at 65,536 records and 256 streams. Observations
-    /// may be dropped with a warning.
+    /// [`Off`] after `init`.
     ///
     /// # Examples
     ///
     /// ```
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let ty = load.game_event_type("ecs::OpenHudScreenEvent")?;
-    ///     load.on_client_raw_game_event(ty, |_event| {})
+    ///     let opened = load.game_event_type("keen::ecs::OpenHudScreenEvent")?;
+    ///     load.on_client_raw_game_event(opened, |event| {
+    ///         enshwick::debug!("a screen opened: {} bytes", event.bytes().len());
+    ///     })
     /// }
     /// ```
+    #[cfg(feature = "unstable")]
     pub fn on_client_raw_game_event<F>(
         &mut self,
         ty: crate::game_events::EventType,
@@ -197,6 +204,30 @@ impl Load<'_> {
     /// }
     /// ```
     pub fn on_every_raw_game_event<F>(&mut self, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&crate::game_events::RawGameEvent<'_>) + Send + Sync + 'static;
+
+    /// Calls `handler` on every game event of every type in the client's own
+    /// world, as [`on_client_raw_game_event`](Self::on_client_raw_game_event)
+    /// does for one type, for finding out what the client raises.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// # Errors
+    ///
+    /// As for [`on_client_raw_game_event`](Self::on_client_raw_game_event).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     load.on_every_client_raw_game_event(|event| {
+    ///         enshwick::debug!("client event {:#010x}", event.type_hash());
+    ///     })
+    /// }
+    /// ```
+    #[cfg(feature = "unstable")]
+    pub fn on_every_client_raw_game_event<F>(&mut self, handler: F) -> Result<(), Off>
     where
         F: Fn(&crate::game_events::RawGameEvent<'_>) + Send + Sync + 'static;
 

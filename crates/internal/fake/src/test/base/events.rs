@@ -121,56 +121,25 @@ impl Installed {
     /// ```
     #[must_use = "the count says whether the mod handles the event"]
     pub fn raise_game_event(&self, type_hash: u32, bytes: &[u8]) -> usize {
-        let handlers: Vec<_> = table::with(Vec::new(), |s| {
-            s.game_events
-                .iter()
-                .filter(|g| g.0 == 0 || g.0 == type_hash)
-                .map(|g| g.1)
-                .collect()
-        });
-        let data = enshwick_core::abi::GameEventData {
-            header: Header::of::<enshwick_core::abi::GameEventData>(),
-            type_hash,
-            size: u32::try_from(bytes.len()).unwrap_or(u32::MAX),
-            data: bytes.as_ptr(),
-        };
-        for handler in &handlers {
-            // SAFETY: `data` lives for the call and `user` is the pointer the
-            // mod subscribed with.
-            handler.run(|callback, user| unsafe { callback(&raw const data, user) });
-        }
-        handlers.len()
+        raise_in(|s| &s.game_events, type_hash, bytes)
     }
 
-    /// Emits only to explicitly client-scoped subscriptions of the fake.
+    /// Hands the event of `type_hash` with `bytes` in the client's own world
+    /// to every client handler of the mod for that type or for every type,
+    /// on this thread; returns how many ran. Its server handlers never run.
     ///
     /// # Examples
     ///
     /// ```
-    /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert_eq!(loader.raise_client_game_event(42, &[0;16]), 0);
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .side(enshwick::abi::Side::CLIENT)
+    ///     .install();
+    /// assert_eq!(loader.raise_client_game_event(0x0042, &[0; 16]), 0);
     /// ```
-    #[must_use]
+    #[cfg(feature = "unstable")]
+    #[must_use = "the count says whether the mod handles the event"]
     pub fn raise_client_game_event(&self, type_hash: u32, bytes: &[u8]) -> usize {
-        let handlers: Vec<_> = table::with(Vec::new(), |s| {
-            s.client_game_events
-                .iter()
-                .filter(|g| g.0 == type_hash)
-                .map(|g| g.1)
-                .collect()
-        });
-        let data = enshwick_core::abi::GameEventData {
-            header: Header::of::<enshwick_core::abi::GameEventData>(),
-            type_hash,
-            size: u32::try_from(bytes.len()).unwrap_or(u32::MAX),
-            data: bytes.as_ptr(),
-        };
-        for handler in &handlers {
-            // SAFETY: the copied event envelope and bytes remain readable
-            // for this synchronous call; user belongs to the subscription.
-            handler.run(|callback, user| unsafe { callback(&raw const data, user) });
-        }
-        handlers.len()
+        raise_in(|s| &s.client_game_events, type_hash, bytes)
     }
 
     /// The mod events the mod defined, by name, in order.
@@ -261,6 +230,34 @@ impl Installed {
         }
         handlers.len()
     }
+}
+
+/// Hands the game event of `type_hash` with `bytes` to every handler of the
+/// list `kept` picks for that type or for every type; returns how many ran.
+fn raise_in(
+    kept: fn(&table::State) -> &Vec<(u32, table::Registered<enshwick_core::abi::GameEventFn>)>,
+    type_hash: u32,
+    bytes: &[u8],
+) -> usize {
+    let handlers: Vec<_> = table::with(Vec::new(), |s| {
+        kept(s)
+            .iter()
+            .filter(|g| g.0 == 0 || g.0 == type_hash)
+            .map(|g| g.1)
+            .collect()
+    });
+    let data = enshwick_core::abi::GameEventData {
+        header: Header::of::<enshwick_core::abi::GameEventData>(),
+        type_hash,
+        size: u32::try_from(bytes.len()).unwrap_or(u32::MAX),
+        data: bytes.as_ptr(),
+    };
+    for handler in &handlers {
+        // SAFETY: `data` and the bytes it points at live for the call, and
+        // `user` is the pointer the mod registered the handler with.
+        handler.run(|callback, user| unsafe { callback(&raw const data, user) });
+    }
+    handlers.len()
 }
 
 /// Hands `event` with `data` to every handler of the mod for it, on this

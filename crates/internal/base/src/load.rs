@@ -360,5 +360,7 @@ mod slots;
 #[cfg(test)]
 mod tests;
 
-pub use events::{client_game_events_of, game_events_of};
+#[cfg(feature = "unstable")]
+pub use events::client_game_events_of;
+pub use events::game_events_of;
 pub use slots::Slot;

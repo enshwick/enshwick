@@ -115,16 +115,14 @@ side = "both""#
         out
     }
 
-    #[test]
-    fn typed_client_events_and_server_events_have_independent_delivery() {
-        unsafe extern "system" fn unused(
-            _event: *const enshwick::abi::GameEventData,
-            _user: *mut core::ffi::c_void,
-        ) {
-        }
-        let hash = |name: &str| fnv1a32(name.as_bytes());
-        let loader = enshwick::test::FakeHost::new()
-            .side(Side::CLIENT)
+    fn hash(name: &str) -> u32 {
+        fnv1a32(name.as_bytes())
+    }
+
+    /// A fake game of `side` that reflects the two client events the mod reads.
+    fn host(side: Side) -> enshwick::test::FakeHost {
+        enshwick::test::FakeHost::new()
+            .side(side)
             .types(types())
             .game_event_type(
                 "ecs::OpenHudScreenEvent",
@@ -136,7 +134,11 @@ side = "both""#
                 hash("keen::ecs::UiSelectCraftingStationRecipeEvent"),
                 56,
             )
-            .install();
+    }
+
+    #[test]
+    fn typed_client_events_and_server_events_have_independent_delivery() {
+        let loader = host(Side::CLIENT).install();
         // SAFETY: these exports are generated for this module's test mod.
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
@@ -173,45 +175,64 @@ side = "both""#
         assert_eq!(*SERVER.lock().unwrap(), [open_hash]);
     }
 
+    unsafe extern "system" fn unused(
+        _event: *const enshwick::abi::GameEventData,
+        _user: *mut core::ffi::c_void,
+    ) {
+    }
+
     #[test]
-    fn client_subscriptions_are_refused_on_the_server_and_for_all_events() {
-        use enshwick::abi::{GameEventData, ModHandle};
-        unsafe extern "system" fn unused(
-            _event: *const GameEventData,
-            _user: *mut core::ffi::c_void,
-        ) {
+    fn a_dedicated_server_keeps_a_client_subscription_that_never_runs() {
+        use enshwick::abi::ModHandle;
+        let loader = enshwick::test::FakeHost::new().side(Side::SERVER).install();
+        // SAFETY: the fake's table is readable and lives for the installation.
+        let register = unsafe { &*loader.api() }.client_game_event;
+        assert_eq!(
+            register(ModHandle(0), 42, unused, core::ptr::null_mut()),
+            Status::OK
+        );
+        assert_eq!(loader.raise_client_game_event(42, &[0; 8]), 0);
+    }
+
+    #[test]
+    fn a_client_takes_every_event_type_and_any_number_of_subscriptions() {
+        use enshwick::abi::ModHandle;
+        let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
+        // SAFETY: the fake's table is readable and lives for the installation.
+        let register = unsafe { &*loader.api() }.client_game_event;
+        assert_eq!(
+            register(ModHandle(0), 0, unused, core::ptr::null_mut()),
+            Status::OK
+        );
+        for _ in 0..100 {
+            assert_eq!(
+                register(ModHandle(0), 42, unused, core::ptr::null_mut()),
+                Status::OK
+            );
         }
+        assert_eq!(loader.raise_client_game_event(7, &[0; 8]), 1);
+        assert_eq!(loader.raise_client_game_event(42, &[0; 8]), 101);
+    }
+
+    #[test]
+    fn a_client_subscription_after_init_is_too_late_on_either_side() {
+        use enshwick::abi::ModHandle;
         for side in [Side::SERVER, Side::CLIENT] {
-            let loader = enshwick::test::FakeHost::new().side(side).install();
+            let loader = host(side).install();
+            // SAFETY: these exports are generated for this module's test mod.
+            let status =
+                unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+            assert_eq!(status, Status::OK, "{:?}", loader.logs());
             // SAFETY: the fake's table is readable and lives for the installation.
             let register = unsafe { &*loader.api() }.client_game_event;
             assert_eq!(
-                register(ModHandle(0), 0, unused, core::ptr::null_mut()),
-                if side == Side::SERVER {
-                    Status::UNAVAILABLE
-                } else {
-                    Status::BAD_ARGS
-                }
+                register(ModHandle(0), 42, unused, core::ptr::null_mut()),
+                Status::TOO_LATE,
+                "{side:?}"
             );
-            if side == Side::CLIENT {
-                for _ in 0..32 {
-                    assert_eq!(
-                        register(ModHandle(0), 42, unused, core::ptr::null_mut()),
-                        Status::OK
-                    );
-                }
-                assert_eq!(
-                    register(ModHandle(0), 42, unused, core::ptr::null_mut()),
-                    Status::BAD_ARGS
-                );
-                assert_eq!(
-                    register(ModHandle(1), 42, unused, core::ptr::null_mut()),
-                    Status::OK,
-                    "the cap belongs to each mod, not the whole client"
-                );
-            }
         }
     }
+
     #[test]
     fn client_event_api_refuses_an_older_or_short_loader_table() {
         use enshwick::abi::{ABI_MINOR, HostApi, ModHandle};
@@ -227,5 +248,53 @@ side = "both""#
             // and remains valid and unchanged for the rest of the process.
             assert!(unsafe { enshwick::Host::new(old, ModHandle(1)) }.is_none());
         }
+    }
+}
+
+/// A mod that reads every event of the client's own world, untyped.
+#[cfg(test)]
+mod every {
+    use enshwick::abi::{Side, Status};
+    use enshwick::{Load, Mod, Off};
+    use std::sync::Mutex;
+
+    static SEEN: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+    struct Every;
+    impl Mod for Every {
+        fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+            load.on_every_client_raw_game_event(|event| {
+                SEEN.lock().unwrap().push(event.type_hash());
+            })?;
+            Ok(Self)
+        }
+    }
+    enshwick::test::declare_mod!(
+        Every,
+        r#"id = "test.client-every"
+side = "both""#
+    );
+
+    #[test]
+    fn the_every_type_handler_gets_each_client_event_and_no_server_event() {
+        let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
+        // SAFETY: these exports are generated for this module's test mod.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert_eq!(loader.raise_client_game_event(7, &[0; 4]), 1);
+        assert_eq!(loader.raise_client_game_event(9, &[]), 1);
+        assert_eq!(loader.raise_game_event(7, &[0; 4]), 0);
+        assert_eq!(*SEEN.lock().unwrap(), [7, 9]);
+    }
+
+    #[test]
+    fn a_both_mod_asking_for_client_events_starts_on_a_dedicated_server() {
+        let loader = enshwick::test::FakeHost::new().side(Side::SERVER).install();
+        // SAFETY: these exports are generated for this module's test mod.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert_eq!(loader.raise_client_game_event(7, &[0; 4]), 0);
+        assert!(SEEN.lock().unwrap().is_empty());
     }
 }
