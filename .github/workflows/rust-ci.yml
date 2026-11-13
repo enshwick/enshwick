@@ -5,8 +5,8 @@ name: Rust CI
 # build cached between runs; a push to main runs the full suite and fills the
 # caches pull requests start from. With `split` the host check, the doctests
 # and rustdoc, the Windows lint, the trybuild test and cargo-semver-checks run
-# as parallel jobs. The
-# Windows tests run natively on a Windows runner. The job `check` sums them
+# as parallel jobs, the doctests and rustdoc only in the merge queue and on
+# main. The Windows tests run natively on a Windows runner. The job `check` sums them
 # up and is the required check.
 
 on:
@@ -45,41 +45,19 @@ jobs:
       contents: read
     outputs:
       skip: ${{ steps.scope.outputs.skip }}
+      proven: ${{ steps.scope.outputs.proven }}
       deny: ${{ steps.scope.outputs.deny }}
       branch: ${{ steps.scope.outputs.branch }}
       parts: ${{ steps.parts.outputs.parts }}
     steps:
-      # One runner per part. A part with `xtask` runs `cargo xtask check
-      # --part <part>`; the others run their own steps in the job `part`.
-      - name: Parts
-        id: parts
-        env:
-          EVENT: ${{ github.event_name }}
-          SEMVER: ${{ inputs.semver }}
-          SPLIT: ${{ inputs.split }}
-        run: |
-          if [ "$SPLIT" = true ]; then
-            parts='{"part":"host","xtask":true},{"part":"docs","xtask":true},{"part":"windows-lint","xtask":true},{"part":"trybuild","xtask":true}'
-            # A pull request also fuzzes, briefly, the targets its change
-            # reaches; a push to main fuzzes every target and fills the fuzz
-            # build cache pull requests restore.
-            if [ "$EVENT" = pull_request ] || [ "$EVENT" = push ]; then
-              parts+=',{"part":"fuzz","xtask":true}'
-            fi
-            if [ -n "$SEMVER" ]; then parts+=',{"part":"semver","xtask":true}'; fi
-          else
-            parts='{"part":"all","xtask":true}'
-          fi
-          echo "parts={\"include\":[$parts]}" | tee -a "$GITHUB_OUTPUT"
-
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
       # Work already proven is not repeated: a merge queue group whose tree
-      # is its pull request's own head passed that pull request's check, and
-      # a change to files that never build (documents outside the book,
+      # is its pull request's own head passed that pull request's check,
+      # which leaves out only the docs part, and a change to files that never build (documents outside the book,
       # repository settings, other workflows) has nothing to compile or test.
       - name: What is left to prove
         id: scope
@@ -94,6 +72,7 @@ jobs:
         run: |
           git cat-file -e "$BASE^{commit}" 2> /dev/null || git fetch -q origin "$BASE"
           reason=""
+          proven=""
           if [ "$EVENT" = merge_group ]; then
             number=$(sed -nE 's|.*/pr-([0-9]+)-[0-9a-f]+$|\1|p' <<< "$HEAD_REF")
             if [ -n "$number" ]; then
@@ -103,7 +82,7 @@ jobs:
               echo "branch=$(jq -r .head.ref <<< "$pr")" >> "$GITHUB_OUTPUT"
               git fetch -q origin "$head"
               if [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse "$head^{tree}")" ]; then
-                reason="the group's tree is pull request #$number's head, whose check passed"
+                proven="the group's tree is pull request #$number's head, whose check passed"
               fi
             fi
           fi
@@ -118,8 +97,11 @@ jobs:
           fi
           if [ -n "$reason" ]; then
             echo "nothing to check: $reason" | tee -a "$GITHUB_STEP_SUMMARY"
+          elif [ -n "$proven" ]; then
+            echo "only the docs part to check: $proven" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
           echo "skip=$reason" >> "$GITHUB_OUTPUT"
+          echo "proven=$proven" >> "$GITHUB_OUTPUT"
           # The full suite runs cargo-deny itself; fuzz/ is a workspace of its
           # own, which `cargo deny check` at the root does not read.
           deny=false
@@ -128,6 +110,35 @@ jobs:
             deny=true
           fi
           echo "deny=$deny" >> "$GITHUB_OUTPUT"
+
+      # One runner per part. A part with `xtask` runs `cargo xtask check
+      # --part <part>`; the others run their own steps in the job `part`.
+      - name: Parts
+        id: parts
+        env:
+          EVENT: ${{ github.event_name }}
+          PROVEN: ${{ steps.scope.outputs.proven }}
+          SEMVER: ${{ inputs.semver }}
+          SPLIT: ${{ inputs.split }}
+        run: |
+          if [ "$SPLIT" != true ]; then
+            parts='{"part":"all","xtask":true}'
+          elif [ -n "$PROVEN" ]; then
+            parts='{"part":"docs","xtask":true}'
+          else
+            parts='{"part":"host","xtask":true},{"part":"windows-lint","xtask":true},{"part":"trybuild","xtask":true}'
+            # The doctests and rustdoc run in the merge queue and on main,
+            # which keeps the pull request lane short.
+            if [ "$EVENT" != pull_request ]; then parts+=',{"part":"docs","xtask":true}'; fi
+            # A pull request also fuzzes, briefly, the targets its change
+            # reaches; a push to main fuzzes every target and fills the fuzz
+            # build cache pull requests restore.
+            if [ "$EVENT" = pull_request ] || [ "$EVENT" = push ]; then
+              parts+=',{"part":"fuzz","xtask":true}'
+            fi
+            if [ -n "$SEMVER" ]; then parts+=',{"part":"semver","xtask":true}'; fi
+          fi
+          echo "parts={\"include\":[$parts]}" | tee -a "$GITHUB_OUTPUT"
 
   part:
     name: part (${{ matrix.part }})
@@ -245,7 +256,7 @@ jobs:
   # ones a change touches; without, every such crate of the workspace runs.
   windows:
     needs: scope
-    if: inputs.windows-tests && needs.scope.outputs.skip == ''
+    if: inputs.windows-tests && needs.scope.outputs.skip == '' && needs.scope.outputs.proven == ''
     runs-on: windows-2025
     timeout-minutes: 45
     permissions:

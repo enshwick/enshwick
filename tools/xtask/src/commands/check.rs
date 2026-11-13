@@ -17,6 +17,7 @@
 //! cargo-semver-checks for the packages `--semver` names.
 
 use std::io::Write as _;
+use std::path::Path;
 use std::process::Command;
 use std::thread;
 use std::time::Instant;
@@ -75,7 +76,7 @@ pub(crate) struct Args {
 pub(crate) fn stable_api(packages: &[Package]) -> Vec<String> {
     let mut args = Vec::new();
     for package in packages.iter().filter(|p| {
-        p.unstable && crate::check::crate_rules::is_api_crate(&p.name, std::path::Path::new(&p.dir))
+        p.unstable && crate::check::crate_rules::is_api_crate(&p.name, Path::new(&p.dir))
     }) {
         args.extend(["--package".to_owned(), package.name.clone()]);
     }
@@ -120,8 +121,15 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
     }
     let scope = if args.all {
         Scope::All
-    } else if let Some(files) = &changed {
-        affected::scope(files, &packages)
+    } else if let (Some(files), Some(merge_base)) = (&changed, merge_base(&args.base)) {
+        affected::scope(
+            files,
+            &packages,
+            &Tree {
+                merge_base,
+                root: &root,
+            },
+        )
     } else {
         say(&format!(
             "no merge base with {}; checking everything",
@@ -256,8 +264,7 @@ impl Part {
 /// Files changed between the merge base with `base` and the working tree,
 /// untracked ones included; `None` without a merge base.
 fn changed_files(base: &str) -> Option<Vec<String>> {
-    let merge_base = git(&["merge-base", "HEAD", base])?;
-    let mut files: Vec<String> = git(&["diff", "--name-only", merge_base.trim()])?
+    let mut files: Vec<String> = git(&["diff", "--name-only", &merge_base(base)?])?
         .lines()
         // `:/` and --full-name: every untracked file, named from the root
         // as diff names it, wherever the check runs from.
@@ -272,8 +279,28 @@ fn changed_files(base: &str) -> Option<Vec<String>> {
 /// What changed between the merge base with `base` and the working tree,
 /// as `git diff --name-status` lists it; `None` without a merge base.
 fn name_status(base: &str) -> Option<String> {
-    let merge_base = git(&["merge-base", "HEAD", base])?;
-    git(&["diff", "--name-status", merge_base.trim()])
+    git(&["diff", "--name-status", &merge_base(base)?])
+}
+
+/// The merge base of `HEAD` with `base`.
+fn merge_base(base: &str) -> Option<String> {
+    Some(git(&["merge-base", "HEAD", base])?.trim().to_owned())
+}
+
+/// The repository between its merge base and the working tree.
+struct Tree<'a> {
+    merge_base: String,
+    root: &'a Path,
+}
+
+impl affected::Texts for Tree<'_> {
+    fn before(&self, path: &str) -> Option<String> {
+        git(&["show", &format!("{}:{path}", self.merge_base)])
+    }
+
+    fn after(&self, path: &str) -> Option<String> {
+        std::fs::read_to_string(self.root.join(path)).ok()
+    }
 }
 
 pub(crate) fn git(args: &[&str]) -> Option<String> {
