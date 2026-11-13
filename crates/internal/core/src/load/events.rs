@@ -147,6 +147,34 @@ impl Load<'_> {
     where
         F: Fn(&crate::game_events::RawGameEvent<'_>) + Send + Sync + 'static;
 
+    /// Observes one reflected event type from the client's own ECS world.
+    /// Handlers run on its simulation thread after event merge, without
+    /// server-world read or mutation authority. This observes events, not
+    /// persistent UI selection state.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] outside a client binary, after init, or after 32 client
+    /// subscriptions. Copies are capped at 256 events and 64 KiB per merge;
+    /// traversal is capped at 65,536 records and 256 streams. Observations
+    /// may be dropped with a warning.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let ty = load.game_event_type("ecs::OpenHudScreenEvent")?;
+    ///     load.on_client_raw_game_event(ty, |_event| {})
+    /// }
+    /// ```
+    pub fn on_client_raw_game_event<F>(
+        &mut self,
+        ty: crate::game_events::EventType,
+        handler: F,
+    ) -> Result<(), Off>
+    where
+        F: Fn(&crate::game_events::RawGameEvent<'_>) + Send + Sync + 'static;
+
     /// Calls `handler` on every game event of every type, for finding out
     /// what the game raises. Each event is copied for the mod, so leave this
     /// to development builds.

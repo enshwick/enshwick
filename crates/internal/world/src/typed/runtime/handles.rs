@@ -225,11 +225,18 @@ impl RawEvent {
     where
         F: Fn(&Value) -> Result<(), Off> + Send + Sync + 'static,
     {
+        self.on_scoped(host, false, handler)
+    }
+
+    fn on_scoped<F>(self, host: Host, client: bool, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&Value) -> Result<(), Off> + Send + Sync + 'static,
+    {
         let Self { id, ty, name } = self;
         // One warning per handler: a `static` here would be shared by every
         // event type.
         let warned = AtomicBool::new(false);
-        crate::load::game_events_of(host, ty.hash(), ty.name(), move |raw| {
+        let decode = move |raw: &crate::game_events::RawGameEvent<'_>| {
             let outcome = Registry::game()
                 .and_then(|registry| Ok(registry.decode(name, raw.bytes())?))
                 .and_then(|value| handler(&value));
@@ -238,7 +245,12 @@ impl RawEvent {
             {
                 crate::warn!("typed {id}: an event does not read: {why}");
             }
-        })
+        };
+        if client {
+            crate::load::client_game_events_of(host, ty.hash(), ty.name(), decode)
+        } else {
+            crate::load::game_events_of(host, ty.hash(), ty.name(), decode)
+        }
     }
 }
 
@@ -513,6 +525,32 @@ impl<T: Event> EventType<T> {
         F: Fn(&T) + Send + Sync + 'static,
     {
         self.raw.on(load.base().host(), move |value| {
+            handler(&T::from_value(value)?);
+            Ok(())
+        })
+    }
+    /// Observes this event type from the client's own ECS world only.
+    /// No server World authority is available in the handler. This reports
+    /// events, not persistent UI selection state or passive recipe highlights.
+    ///
+    /// # Errors
+    ///
+    /// As `Load::on_client_raw_game_event`, plus typed decoding failures
+    /// are logged once and skipped as for `EventType::on`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::typed::{EventType, ecs::OpenHudScreenEvent};
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     EventType::<OpenHudScreenEvent>::resolve(load)?.on_client(load, |_event| {})
+    /// }
+    /// ```
+    pub fn on_client<F>(self, load: &mut impl Loading, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&T) + Send + Sync + 'static,
+    {
+        self.raw.on_scoped(load.base().host(), true, move |value| {
             handler(&T::from_value(value)?);
             Ok(())
         })

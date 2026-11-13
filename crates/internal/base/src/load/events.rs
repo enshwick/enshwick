@@ -75,6 +75,19 @@ impl BaseLoad {
         self.game_events(ty.hash(), ty.name(), handler)
     }
 
+    /// As `Load::on_client_raw_game_event`.
+    #[doc(hidden)]
+    pub fn on_client_raw_game_event<F>(
+        &mut self,
+        ty: crate::game_events::EventType,
+        handler: F,
+    ) -> Result<(), Off>
+    where
+        F: Fn(&crate::game_events::RawGameEvent<'_>) + Send + Sync + 'static,
+    {
+        client_game_events_of(self.host, ty.hash(), ty.name(), handler)
+    }
+
     /// As `Load::on_every_raw_game_event`.
     #[doc(hidden)]
     pub fn on_every_raw_game_event<F>(&mut self, handler: F) -> Result<(), Off>
@@ -133,6 +146,28 @@ where
         handler,
         |user| (api.game_event)(handle, type_hash, deliver_game::<F>, user),
         &format!("game events of {what}"),
+    )
+}
+
+/// Registers one client-world event type for a runtime that holds its mod's host.
+/// Client callbacks grant no server-world access. There is no all-events mode.
+///
+/// # Errors
+/// Returns [`Off`] when the loader refuses the handler, such as outside a
+/// client binary, after init, or once 32 client subscriptions were registered.
+pub fn client_game_events_of<F>(
+    host: Host,
+    type_hash: u32,
+    what: &str,
+    handler: F,
+) -> Result<(), Off>
+where
+    F: Fn(&crate::game_events::RawGameEvent<'_>) + Send + Sync + 'static,
+{
+    hand_over(
+        handler,
+        |user| (host.api().client_game_event)(host.handle(), type_hash, deliver_game::<F>, user),
+        &format!("client game events of {what}"),
     )
 }
 

@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 27
+#define ENSHWICK_ABI_MINOR 28
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -5304,6 +5304,17 @@ typedef struct EnshwickHostApi {
   // and on a client. Any thread, re-entrant; a panic in the loader
   // returns `0`. ABI 11.27.
   uint32_t (*language_of)(EnshwickModHandle me, EnshwickPlayerKey key);
+  // Subscribes to one event type from the client's own ECS world only.
+  // Init only. Client binary only (`Status::UNAVAILABLE` otherwise).
+  // Hash 0 and more than 32 subscriptions per mod are `Status::BAD_ARGS`.
+  // Delivery runs on the client simulation thread and grants no server
+  // World read or mutation authority. Copies are capped at 256 events
+  // and 64 KiB per merge; traversal is capped at 65,536 records and 256
+  // streams. A warning is logged once on drops. ABI 11.28.
+  EnshwickStatus (*client_game_event)(EnshwickModHandle me,
+                                      uint32_t type_hash,
+                                      EnshwickGameEventFn callback,
+                                      void *user);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.
