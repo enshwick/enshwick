@@ -391,6 +391,12 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_rate_no_mod_declared_leaves_the_games_value_as_it_is() {
+        assert!(!RATES.declared(RateId::LOOT));
+        assert_eq!(factor(RateId::LOOT).to_bits(), 1.0_f32.to_bits());
+    }
+
+    #[test]
     fn a_function_no_declared_rate_needs_is_never_linked_nor_its_rate_turned_off() {
         static UNWANTED: Fuse = Fuse::new("test unwanted rate");
         let loader = crate::start::tests::bare_loader();
