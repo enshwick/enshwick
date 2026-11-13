@@ -388,7 +388,7 @@ fn link_actions(loader: &Loader, declared: &[Declared]) {
         let _off = loader.fuse_off(
             &LINKED_FUSE,
             catalogue::ids::PLAYER_INPUT_DIGITAL,
-            crate::engine::builds::UNREFLECTED,
+            super::UNREFLECTED,
         );
         return;
     };

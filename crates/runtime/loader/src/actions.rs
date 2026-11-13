@@ -24,6 +24,11 @@ pub(crate) mod vetoes;
 #[cfg(windows)]
 use crate::engine::parts::{Part, fused, part, step};
 
+/// Why a reflected type or field fails when the build's reflection lacks
+/// it, where `ABSENT` names a missing table entry.
+#[cfg(windows)]
+const UNREFLECTED: &str = "the build's reflection lacks it";
+
 /// The actions domain's parts, in the order the joins call each of their
 /// phases.
 #[cfg(windows)]

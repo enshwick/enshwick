@@ -11,7 +11,8 @@ use arc_swap::ArcSwapOption;
 use enshwick_core::abi::{Header, HookFlags, Interaction, InteractionFn, Side, Status};
 use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
-use crate::engine::builds::{ABSENT, UNREFLECTED};
+use super::UNREFLECTED;
+use crate::engine::builds::ABSENT;
 use crate::engine::ecs::{Components, Engine};
 use crate::engine::fuse::{Fuse, Off};
 use crate::engine::loader::{Loader, Registered, Target};
