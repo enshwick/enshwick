@@ -340,10 +340,12 @@ mod tests {
             std::thread::yield_now();
         };
         assert!(DROPS_FUSE.is_off());
-        assert_eq!(
-            Some(drops.reason.as_str()),
-            Some("its pickup does not read: keen::ecs::PickupItem has no usable type hash or size"),
-            "listed for the status summary and the Mods screen"
+        // Another test's read in this process may turn the one switch off
+        // first, with its own reason.
+        assert!(
+            drops.reason.starts_with("its pickup does not read: "),
+            "listed for the status summary and the Mods screen: {}",
+            drops.reason
         );
         reading.start("build 1", || Ok(LAYOUT));
         assert_eq!(
