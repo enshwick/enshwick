@@ -110,8 +110,8 @@ struct State {
     list: ArcSwapOption<List>,
     building: AtomicBool,
     /// Content read from what mods serve, then the archive, for the name
-    /// tags of mods' items; `None` when its facts do not read.
-    served: std::sync::OnceLock<Option<enshwick_core::content::vanilla::Vanilla>>,
+    /// tags of mods' items, once its facts read.
+    served: std::sync::OnceLock<enshwick_core::content::vanilla::Vanilla>,
 }
 
 /// How often a build whose archive or texts do not read yet tries again,
@@ -204,24 +204,24 @@ fn mod_items(language: enshwick_core::i18n::Language) -> Vec<(Guid, String, &'st
         .collect()
 }
 
-/// Content read from what mods serve, then the client's archive.
+/// Content read from what mods serve, then the client's archive; a try
+/// before its facts read leaves it for the next build to make.
 #[cfg(windows)]
 fn served() -> Option<&'static enshwick_core::content::vanilla::Vanilla> {
+    if let Some(served) = STATE.served.get() {
+        return Some(served);
+    }
     let loader = crate::engine::loader::loader()?;
-    STATE
-        .served
-        .get_or_init(|| {
-            enshwick_core::content::vanilla::Vanilla::new(
-                &crate::engine::catalogue::Reflected(&loader.reflection),
-                |key| {
-                    crate::content::served::served_now(key)
-                        .ok()
-                        .or_else(|| crate::engine::archive::game()?.resource(&key))
-                },
-            )
-            .ok()
-        })
-        .as_ref()
+    let made = enshwick_core::content::vanilla::Vanilla::new(
+        &crate::engine::catalogue::Reflected(&loader.reflection),
+        |key| {
+            crate::content::served::served_now(key)
+                .ok()
+                .or_else(|| crate::engine::archive::game()?.resource(&key))
+        },
+    )
+    .ok()?;
+    Some(STATE.served.get_or_init(|| made))
 }
 
 /// The client's vanilla content, read through its own archive.
