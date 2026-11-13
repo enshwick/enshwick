@@ -11,16 +11,10 @@ use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use enshwick_core::abi::{
-    BedCheckFn, HookFlags, Side, Status, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
-};
+use enshwick_core::abi::{BedCheckFn, Side, Status, SummonFn, SurvivorLookupFn, SurvivorStatusFn};
 use enshwick_core::raw::read_at;
-use lookup::{cursor_link, lookup_link};
-use menu::{menu_link, registry_link};
-use moves::{bed_check_link, move_link, update_link};
-use summons::spawn_link;
 
-use crate::engine::chains::Next;
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Registered, Target, take};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned::{self, Symbol};

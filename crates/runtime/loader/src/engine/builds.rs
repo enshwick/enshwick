@@ -532,6 +532,10 @@ pub fn kept(running: Side) -> Option<KnownBuild> {
     })
 }
 
+/// A build that knows no entry, for tests that run the loader without a
+/// game or a kept table.
+#[cfg(test)]
+#[must_use]
 pub fn empty() -> KnownBuild {
     knowing("")
 }

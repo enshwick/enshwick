@@ -31,7 +31,6 @@ pub(super) fn link_menu(loader: &Loader, menu: Target<'_>) -> bool {
 crate::engine::chains::chain_detour! {
     /// The game's `survivors.registry_load(registry)`: files the staff items
     /// once the load built the registry.
-    #[expect(clippy::unused_unit, reason = "the macro takes the hooked function's answer")]
     fn registry_link(registry: *mut u8) -> ();
     next REGISTRY_NEXT;
     fuse &FILED_FUSE, "the staff item filing";
@@ -143,7 +142,6 @@ pub(super) unsafe fn file(map: &ItemMap, table: *mut u8, item: u32, survivor: u3
 crate::engine::chains::chain_detour! {
     /// The reflected `ui_npc_status` system's entry, a system entry taking
     /// its context: merges the mods' statuses after vanilla's pass.
-    #[expect(clippy::unused_unit, reason = "the macro takes the hooked function's answer")]
     fn menu_link(ctx: *mut u64) -> ();
     next MENU_NEXT;
     fuse &MENU_FUSE, "the status merge";

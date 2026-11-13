@@ -1,5 +1,43 @@
+use std::fmt::Write as _;
+
 use super::menu::file;
 use super::*;
+
+#[test]
+fn the_survivor_lookup_is_wholly_off_when_its_last_link_fails() {
+    let held = [
+        pinned::npc::LOOKUP,
+        pinned::npc::LOOKUP_CURSOR,
+        pinned::npc::MOVE,
+    ];
+    let (mut symbols, mut checks) = (String::from("[symbols]\n"), String::from("[constants]\n"));
+    for (at, id) in (0x1000..).step_by(0x100).zip(held) {
+        writeln!(symbols, "\"{id}\" = {at:#x}").unwrap();
+        writeln!(checks, "\"{id}.bytes\" = 1").unwrap();
+    }
+    let mut loader = crate::start::tests::bare_loader();
+    loader.build = Box::leak(Box::new(crate::engine::builds::knowing(
+        &(symbols + &checks),
+    )));
+    assert!(lookup::link(&loader), "both lookups link");
+    assert!(
+        !moves::link_moves(&loader),
+        "the record update is not in this build"
+    );
+    assert!(LOOKUP_FUSE.is_off());
+    let mut chains = loader.chains.relock();
+    chains.seal();
+    assert!(
+        chains.is_empty(),
+        "the links made before go with the feature"
+    );
+    let listed = crate::engine::diag::parts_off();
+    let off = listed.iter().find(|p| p.part == "survivor lookup");
+    assert!(
+        off.is_some_and(|p| p.reason.starts_with(pinned::npc::UPDATE.id())),
+        "{listed:?}"
+    );
+}
 
 #[test]
 fn filing_marks_a_free_slot_and_overwrites_a_used_one() {

@@ -331,14 +331,17 @@ mod tests {
         assert_eq!(reads.load(Ordering::Relaxed), 1);
         assert_eq!(reading.layout().err(), Some(Status::MISSING));
         let began = std::time::Instant::now();
-        while !DROPS_FUSE.is_off() {
+        let drops = loop {
+            let off = crate::engine::diag::parts_off();
+            if let Some(drops) = off.into_iter().find(|p| p.part == "item drops") {
+                break drops;
+            }
             assert!(began.elapsed().as_secs() < 10, "drops never turned off");
             std::thread::yield_now();
-        }
-        let off = crate::engine::diag::parts_off();
-        let drops = off.iter().find(|p| p.part == "item drops");
+        };
+        assert!(DROPS_FUSE.is_off());
         assert_eq!(
-            drops.map(|p| p.reason.as_str()),
+            Some(drops.reason.as_str()),
             Some("its pickup does not read: keen::ecs::PickupItem has no usable type hash or size"),
             "listed for the status summary and the Mods screen"
         );
