@@ -1,7 +1,7 @@
 //! The server's `enshwick` rules, asked over the Steam query protocol and
 //! read.
 
-use std::net::{SocketAddr, UdpSocket};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
 use std::time::{Duration, Instant};
 
 use super::plan::entries;
@@ -177,11 +177,7 @@ pub fn query_rules(server: SocketAddr) -> std::io::Result<Vec<u8>> {
 /// [`query_rules`] with the whole query bound to `timeout`.
 fn query_rules_within(server: SocketAddr, timeout: Duration) -> std::io::Result<Vec<u8>> {
     let deadline = Instant::now() + timeout;
-    let socket = UdpSocket::bind(if server.is_ipv4() {
-        "0.0.0.0:0"
-    } else {
-        "[::]:0"
-    })?;
+    let socket = UdpSocket::bind(local_for(server))?;
     socket.connect(server)?;
     let recv = |reply: &mut [u8]| {
         let left = deadline.saturating_duration_since(Instant::now());
@@ -231,6 +227,19 @@ fn query_rules_within(server: SocketAddr, timeout: Duration) -> std::io::Result<
     Err(std::io::Error::other("no rules after three challenges"))
 }
 
+/// The address the query's socket takes for `server`: the loopback address
+/// for a server on this computer, so a local join or a test opens nothing to
+/// the network and raises no firewall prompt, else every address of the
+/// server's family.
+fn local_for(server: SocketAddr) -> SocketAddr {
+    let ip = match server.ip() {
+        loopback if loopback.is_loopback() => loopback,
+        IpAddr::V4(_) => IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+        IpAddr::V6(_) => IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+    };
+    SocketAddr::new(ip, 0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -263,6 +272,30 @@ mod tests {
         assert!(Split::default().add(&packet(1, 17, 0, first)).is_err());
         assert!(Split::default().add(&SPLIT).is_err());
         assert!(Split::default().add(&whole).is_err());
+    }
+
+    #[test]
+    fn the_query_takes_a_loopback_socket_for_a_server_on_this_computer() {
+        for server in [
+            SocketAddr::from((Ipv4Addr::LOCALHOST, 15647)),
+            SocketAddr::from((Ipv6Addr::LOCALHOST, 15647)),
+        ] {
+            let local = local_for(server);
+            assert!(local.ip().is_loopback(), "{server}: {local}");
+            assert_eq!(local.is_ipv4(), server.is_ipv4());
+            // Where the host has no IPv6, the address alone is the proof.
+            if let Ok(socket) = UdpSocket::bind(local) {
+                assert!(socket.local_addr().unwrap().ip().is_loopback());
+            }
+        }
+        for server in [
+            SocketAddr::from((Ipv4Addr::new(203, 0, 113, 5), 15647)),
+            SocketAddr::from((Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 5), 15647)),
+        ] {
+            let local = local_for(server);
+            assert!(local.ip().is_unspecified(), "{server}: {local}");
+            assert_eq!(local.is_ipv4(), server.is_ipv4());
+        }
     }
 
     /// A server that sends a part of its reply just before every read times
