@@ -125,10 +125,10 @@ The data types have these fields:
   - `x`
   - `z`
   - `size`
-- `ProgressWriteData` has seven fields. A dropped write has `level`,
-  `experience` and `gained` zeroed.
+- `ProgressWriteData` has seven fields. A dropped write has the last three
+  zeroed.
   - `entity`: the character the write was for.
-  - `what`: the `what` the mod passed, such as `PROGRESS_SET_LEVEL`.
+  - `what`: what the mod asked for, such as `PROGRESS_SET_LEVEL`.
   - `value`: the value the mod passed.
   - `outcome`: one of these constants:
     - `ProgressWriteData::APPLIED`
