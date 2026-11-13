@@ -308,6 +308,13 @@ impl World {
     /// counts them from it, and the game raises no level-up event. On the
     /// server's game thread only.
     ///
+    /// `Ok` means the write waits for that step. After it,
+    /// [`ProgressWritten`](../events/struct.ProgressWritten.html) tells the mod
+    /// what the write left, or why it was dropped: the character left, or
+    /// its level or experience did not read or take the write. Writes of
+    /// [`World::set_experience`] and [`World::add_experience`] are heard the
+    /// same way.
+    ///
     /// # Errors
     ///
     /// [`WorldError::Refused`] for an entity that is not a player's
@@ -330,8 +337,9 @@ impl World {
 
     /// Sets the experience inside the level of `entity`, a player's
     /// character, kept below what the level needs, and drops a gain the game
-    /// has not applied yet. The server's next level step applies it. On the
-    /// server's game thread only.
+    /// has not applied yet. The server's next level step applies it, and the
+    /// mod hears the outcome as for [`World::set_level`]. On the server's game
+    /// thread only.
     ///
     /// # Errors
     ///
@@ -352,7 +360,8 @@ impl World {
     /// Gives `entity`, a player's character, `amount` experience, as a kill
     /// gives it: the server's next level step applies it, and the game
     /// levels up from it, one level a step, with its own level-up events.
-    /// Experience filters do not see it. On the server's game thread only.
+    /// Experience filters do not see it; the mod hears the outcome as for
+    /// [`World::set_level`]. On the server's game thread only.
     ///
     /// # Errors
     ///

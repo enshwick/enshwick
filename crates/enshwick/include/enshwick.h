@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 24
+#define ENSHWICK_ABI_MINOR 25
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -1333,6 +1333,14 @@ typedef uint32_t EnshwickEvent;
 // after the step.
 // Dedicated server only. ABI 11.15.
 #define EnshwickEvent_TERRAIN_PAGE_UNLOADED 25
+// A level or experience write the mod asked for with
+// `HostApi::progress_write` was
+// applied or dropped; data is a
+// `ProgressWriteData`. Raised for that mod
+// only, on the game thread after the step that applied the write, or
+// after the second step end with no level step that could take it.
+// The name is enshwick's. Server only. ABI 11.25.
+#define EnshwickEvent_PROGRESS_WRITTEN 26
 
 // A mod event a mod defines, or the one it subscribes to.
 typedef struct EnshwickEventSpec {
@@ -5338,6 +5346,50 @@ typedef struct EnshwickPlayerDeathData {
 #define EnshwickPlayerDeathData_FOG 2
 // Out of breath, under water.
 #define EnshwickPlayerDeathData_SUFFOCATED 3
+
+// What became of a level or experience write a mod asked for with
+// `HostApi::progress_write`: the data of
+// the `ProgressWritten` event. The
+// name is enshwick's. ABI 11.25.
+typedef struct EnshwickProgressWriteData {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The player's character the write was for.
+  EnshwickEntity entity;
+  // The `what` the mod passed: `PROGRESS_SET_LEVEL`,
+  // `PROGRESS_SET_EXPERIENCE` or `PROGRESS_ADD_EXPERIENCE`.
+  uint32_t what;
+  // The `value` the mod passed.
+  uint32_t value;
+  // `ProgressWriteData::APPLIED`, or why the server dropped the write:
+  // `NO_LEVEL_STEP`,
+  // `UNREADABLE`,
+  // `LEVEL_REFUSED` or
+  // `BEHIND_DROPPED`.
+  uint32_t outcome;
+  // The character's level as the applied write left it; 0 for a dropped
+  // write.
+  uint32_t level;
+  // The experience inside the level as the applied write left it; 0 for
+  // a dropped write.
+  uint32_t experience;
+  // The experience gained and not applied yet as the write left it, which
+  // the game applies in the same step, levelling up from it; 0 for a
+  // dropped write.
+  uint32_t gained;
+} EnshwickProgressWriteData;
+// The server's level step applied the write.
+#define EnshwickProgressWriteData_APPLIED 0
+// No level step took the character by the second step end after the
+// write: it left the world, or the step did not run for it.
+#define EnshwickProgressWriteData_NO_LEVEL_STEP 1
+// The character's experience did not read.
+#define EnshwickProgressWriteData_UNREADABLE 2
+// The character's level did not take the new level.
+#define EnshwickProgressWriteData_LEVEL_REFUSED 3
+// An earlier write for the same character could not be applied, and a
+// character's writes apply in the order given.
+#define EnshwickProgressWriteData_BEHIND_DROPPED 4
 
 // A prop a transaction places, as a player places one from an item, for
 // `TransactionOp::PLACE_PROP`.

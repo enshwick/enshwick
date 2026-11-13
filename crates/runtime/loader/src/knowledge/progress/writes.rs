@@ -5,7 +5,8 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick_core::abi::{
-    PROGRESS_ADD_EXPERIENCE, PROGRESS_OPEN, PROGRESS_SET_EXPERIENCE, PROGRESS_SET_LEVEL, Status,
+    Event, Header, PROGRESS_ADD_EXPERIENCE, PROGRESS_OPEN, PROGRESS_SET_EXPERIENCE,
+    PROGRESS_SET_LEVEL, ProgressWriteData, Status,
 };
 
 use super::{
@@ -24,30 +25,128 @@ const MOST_WRITES: usize = 256;
 /// A level or experience write a mod asked for.
 #[derive(Debug, Clone, Copy)]
 struct Write {
+    owner: ModIndex,
     entity: u32,
     what: u32,
     value: u32,
     /// A step's end passed since it was asked: the next end drops it, its
     /// character was in no level step.
     seen: bool,
+    /// Why it waits, the outcome its mod hears if the next end drops it:
+    /// [`ProgressWriteData::NO_LEVEL_STEP`] until a level step held it.
+    why: u32,
+}
+
+impl Write {
+    const fn new(owner: ModIndex, entity: u32, what: u32, value: u32) -> Self {
+        Self {
+            owner,
+            entity,
+            what,
+            value,
+            seen: false,
+            why: ProgressWriteData::NO_LEVEL_STEP,
+        }
+    }
+
+    /// What its mod hears: `outcome`, with what an applied write `left`.
+    fn heard(self, outcome: u32, left: Left) -> (ModIndex, ProgressWriteData) {
+        let data = ProgressWriteData {
+            header: Header::of::<ProgressWriteData>(),
+            entity: enshwick_core::Entity(self.entity),
+            what: self.what,
+            value: self.value,
+            outcome,
+            level: left.level,
+            experience: left.experience,
+            gained: left.gained,
+        };
+        (self.owner, data)
+    }
+}
+
+/// A character's level and experience as an applied write left them.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct Left {
+    level: u32,
+    experience: u32,
+    gained: u32,
+}
+
+/// The writes that wait for the level step, and the outcomes their mods
+/// hear after it.
+#[derive(Debug)]
+struct Queue {
+    waiting: Vec<Write>,
+    heard: Vec<(ModIndex, ProgressWriteData)>,
 }
 
 /// The level and experience writes mods asked for, which the level step
 /// applies.
 #[derive(Debug)]
 pub(super) struct Writes {
-    waiting: Mutex<Vec<Write>>,
-    /// Whether `waiting` holds any, read first by the level step.
+    queue: Mutex<Queue>,
+    /// Whether `queue` holds a write or an outcome, read first by the level
+    /// step and after it.
     pub(super) any: AtomicBool,
     /// Whether the level step is linked.
     pub(super) linked: AtomicBool,
 }
 
-pub(super) static PENDING: Writes = Writes {
-    waiting: Mutex::new(Vec::new()),
-    any: AtomicBool::new(false),
-    linked: AtomicBool::new(false),
-};
+impl Writes {
+    const fn new() -> Self {
+        Self {
+            queue: Mutex::new(Queue {
+                waiting: Vec::new(),
+                heard: Vec::new(),
+            }),
+            any: AtomicBool::new(false),
+            linked: AtomicBool::new(false),
+        }
+    }
+
+    /// Queues `w` for the level step, while fewer than [`MOST_WRITES`] wait.
+    fn push(&self, w: Write) -> Result<(), Status> {
+        let mut queue = self.queue.relock();
+        if queue.waiting.len() >= MOST_WRITES {
+            return Err(Status::REFUSED);
+        }
+        queue.waiting.push(w);
+        self.any.store(true, Ordering::Release);
+        Ok(())
+    }
+
+    /// The outcomes to tell after a step's end: those the step applied, then
+    /// the writes whose character was in no level step since an end before.
+    fn step_ended(&self) -> Vec<(ModIndex, ProgressWriteData)> {
+        if !self.any.load(Ordering::Acquire) {
+            return Vec::new();
+        }
+        let mut queue = self.queue.relock();
+        let mut heard = core::mem::take(&mut queue.heard);
+        let applied = heard.len();
+        queue.waiting.retain(|w| {
+            if w.seen {
+                heard.push(w.heard(w.why, Left::default()));
+            }
+            !w.seen
+        });
+        let dropped = heard.len() - applied;
+        if dropped != 0 {
+            crate::log!(
+                WARN,
+                "{dropped} level or experience writes dropped: no level step could take them; their mods hear why"
+            );
+        }
+        for w in &mut queue.waiting {
+            w.seen = true;
+        }
+        self.any.store(!queue.waiting.is_empty(), Ordering::Release);
+        heard
+    }
+}
+
+pub(super) static PENDING: Writes = Writes::new();
 /// The mods that asked for level and experience writes.
 pub(super) static WRITERS: Registry<ModIndex> = Registry::new();
 /// The level and experience writes' switch.
@@ -79,12 +178,7 @@ pub(crate) fn write(
     if entity == 0 || !crate::engine::world::player_entities(loader)?.contains(&entity) {
         return Err(Status::REFUSED);
     }
-    queue(Write {
-        entity,
-        what,
-        value,
-        seen: false,
-    })
+    PENDING.push(Write::new(owner, entity, what, value))
 }
 
 /// Whether `what` asks for the writes, which only `Entity(0)` does, rather
@@ -97,37 +191,18 @@ fn asks(entity: u32, what: u32) -> Result<bool, Status> {
     }
 }
 
-/// Queues `w` for the level step, while fewer than [`MOST_WRITES`] wait.
-fn queue(w: Write) -> Result<(), Status> {
-    let mut waiting = PENDING.waiting.relock();
-    if waiting.len() >= MOST_WRITES {
-        return Err(Status::REFUSED);
-    }
-    waiting.push(w);
-    PENDING.any.store(true, Ordering::Release);
-    Ok(())
-}
-
-/// Drops the writes whose character was in no level step since a step's
-/// end passed, on the game thread after the step.
-pub(crate) fn after_step() {
-    if !PENDING.any.load(Ordering::Acquire) {
-        return;
-    }
-    let mut waiting = PENDING.waiting.relock();
-    let before = waiting.len();
-    waiting.retain(|w| !w.seen);
-    let dropped = before - waiting.len();
-    if dropped != 0 {
-        crate::log!(
-            WARN,
-            "{dropped} level or experience writes dropped: their characters were in no level step that could take them"
+/// Tells each mod what became of its writes, on the game thread after the
+/// step: those the step applied, and those dropped as no level step could
+/// take them.
+pub(crate) fn after_step(loader: &Loader) {
+    // Raised with the queue unlocked: a handler may write again.
+    for (owner, data) in PENDING.step_ended() {
+        loader.emit(
+            Event::PROGRESS_WRITTEN,
+            Some(owner.get()),
+            (&raw const data).cast(),
         );
     }
-    for w in waiting.iter_mut() {
-        w.seen = true;
-    }
-    PENDING.any.store(!waiting.is_empty(), Ordering::Release);
 }
 
 /// What `write` makes of a character's level and experience, `None` for
@@ -180,7 +255,8 @@ pub(super) unsafe fn apply_writes(loader: &Loader, engine: &Engine, ctx: *mut u6
     };
     // The step's batches run on several threads at once; a write waits
     // rarely, and only then does a batch take the lock.
-    let mut waiting = PENDING.waiting.relock();
+    let mut queue = PENDING.queue.relock();
+    let Queue { waiting, heard } = &mut *queue;
     // SAFETY: `ctx` is the live query context of `player_level`, which only
     // this thread writes while the system runs (the caller's contract).
     unsafe { engine.set_row(ctx, 0) };
@@ -208,8 +284,12 @@ pub(super) unsafe fn apply_writes(loader: &Loader, engine: &Engine, ctx: *mut u6
         let (mut level_written, mut experience_written) = (false, false);
         // Once a write waits, the character's later ones wait behind it, in order.
         let mut held = false;
-        waiting.retain(|&w| {
-            if w.entity != entity || held {
+        waiting.retain_mut(|w| {
+            if w.entity != entity {
+                return true;
+            }
+            if held {
+                w.why = ProgressWriteData::BEHIND_DROPPED;
                 return true;
             }
             // SAFETY: `experience` is the current row's `Experience` set,
@@ -217,17 +297,19 @@ pub(super) unsafe fn apply_writes(loader: &Loader, engine: &Engine, ctx: *mut u6
             // on the system's thread.
             let read = |attribute| unsafe { engine.attribute(registry, experience, attribute) };
             let (Some(need), Some(gained)) = (read(levels.need), read(levels.gained)) else {
-                // Kept for the next step; `after_step` drops it with a warning.
+                // Kept for the next step; `step_ended` drops it with a warning.
+                w.why = ProgressWriteData::UNREADABLE;
                 held = true;
                 return true;
             };
-            let change = written(w, need, gained, cap, need_for);
+            let change = written(*w, need, gained, cap, need_for);
             if let Some(level) = change.level {
                 // SAFETY: `words[LEVEL]` is the current row's `Level` set,
                 // which `player_level` writes and nothing else writes while
                 // it runs on this thread; `registry` is the row's registry.
                 if !unsafe { engine.set_level(registry, words[LEVEL] as *mut u8, level) } {
                     // The old level keeps its experience, as for a read above.
+                    w.why = ProgressWriteData::LEVEL_REFUSED;
                     held = true;
                     return true;
                 }
@@ -247,6 +329,23 @@ pub(super) unsafe fn apply_writes(loader: &Loader, engine: &Engine, ctx: *mut u6
                         unsafe { engine.set_attribute(registry, experience, attribute, value) };
                 }
             }
+            let left = Left {
+                level: change
+                    .level
+                    .or_else(|| {
+                        // SAFETY: `words[LEVEL]` is the current row's `Level`
+                        // set, null or live, and `registry` the same row's
+                        // attribute registry, on the system's thread.
+                        unsafe { engine.level(registry, words[LEVEL] as *const u8) }
+                    })
+                    .unwrap_or(0),
+                experience: change
+                    .progress
+                    .or_else(|| read(levels.progress))
+                    .unwrap_or(0),
+                gained: change.gained.unwrap_or(gained),
+            };
+            heard.push(w.heard(ProgressWriteData::APPLIED, left));
             false
         });
         for (shift, wanted) in [(0, experience_written), (LEVEL_TRACKING, level_written)] {
@@ -267,7 +366,9 @@ pub(super) unsafe fn apply_writes(loader: &Loader, engine: &Engine, ctx: *mut u6
             }
         }
     }
-    PENDING.any.store(!waiting.is_empty(), Ordering::Release);
+    PENDING
+        .any
+        .store(!waiting.is_empty() || !heard.is_empty(), Ordering::Release);
 }
 
 #[cfg(test)]
@@ -280,12 +381,7 @@ mod tests {
     use crate::engine::loader::Registered;
 
     fn queued(what: u32, value: u32) -> Write {
-        Write {
-            entity: 7,
-            what,
-            value,
-            seen: false,
-        }
+        Write::new(ModIndex::new(1), 7, what, value)
     }
 
     /// The game's table on the 1.0 builds: 100 a level.
@@ -331,21 +427,83 @@ mod tests {
 
     #[test]
     fn writes_wait_up_to_the_limit_and_go_after_a_second_step_s_end() {
+        let pending = Writes::new();
         for _ in 0..MOST_WRITES {
-            assert_eq!(queue(queued(PROGRESS_SET_LEVEL, 3)), Ok(()));
+            assert_eq!(pending.push(queued(PROGRESS_SET_LEVEL, 3)), Ok(()));
         }
-        assert_eq!(queue(queued(PROGRESS_SET_LEVEL, 3)), Err(Status::REFUSED));
-        assert!(PENDING.any.load(Ordering::Acquire));
-        after_step();
-        assert_eq!(PENDING.waiting.relock().len(), MOST_WRITES, "kept one end");
-        assert!(PENDING.any.load(Ordering::Acquire));
-        assert_eq!(queue(queued(PROGRESS_SET_LEVEL, 4)), Err(Status::REFUSED));
-        after_step();
-        assert!(PENDING.waiting.relock().is_empty(), "dropped at the second");
-        assert!(!PENDING.any.load(Ordering::Acquire));
-        assert_eq!(queue(queued(PROGRESS_SET_LEVEL, 5)), Ok(()));
-        after_step();
-        assert_eq!(PENDING.waiting.relock().len(), 1, "a new one waits again");
+        assert_eq!(
+            pending.push(queued(PROGRESS_SET_LEVEL, 3)),
+            Err(Status::REFUSED)
+        );
+        assert!(pending.any.load(Ordering::Acquire));
+        assert!(pending.step_ended().is_empty(), "kept one end");
+        assert_eq!(pending.queue.relock().waiting.len(), MOST_WRITES);
+        assert!(pending.any.load(Ordering::Acquire));
+        assert_eq!(
+            pending.push(queued(PROGRESS_SET_LEVEL, 4)),
+            Err(Status::REFUSED)
+        );
+        let dropped = pending.step_ended();
+        assert_eq!(dropped.len(), MOST_WRITES, "dropped at the second");
+        assert!(pending.queue.relock().waiting.is_empty());
+        assert!(!pending.any.load(Ordering::Acquire));
+        assert_eq!(pending.push(queued(PROGRESS_SET_LEVEL, 5)), Ok(()));
+        assert!(pending.step_ended().is_empty());
+        assert_eq!(
+            pending.queue.relock().waiting.len(),
+            1,
+            "a new one waits again"
+        );
+    }
+
+    #[test]
+    fn a_dropped_write_tells_its_mod_why_and_what_it_asked() {
+        let pending = Writes::new();
+        let mut held = queued(PROGRESS_ADD_EXPERIENCE, 50);
+        held.why = ProgressWriteData::UNREADABLE;
+        assert_eq!(pending.push(held), Ok(()));
+        assert_eq!(pending.push(queued(PROGRESS_SET_LEVEL, 3)), Ok(()));
+        assert!(pending.step_ended().is_empty());
+        let heard = pending.step_ended();
+        assert_eq!(heard.len(), 2);
+        let (owner, first) = heard[0];
+        assert_eq!(owner, ModIndex::new(1));
+        assert_eq!(
+            (first.entity, first.what, first.value, first.outcome),
+            (
+                enshwick_core::Entity(7),
+                PROGRESS_ADD_EXPERIENCE,
+                50,
+                ProgressWriteData::UNREADABLE
+            )
+        );
+        assert_eq!((first.level, first.experience, first.gained), (0, 0, 0));
+        assert_eq!(heard[1].1.outcome, ProgressWriteData::NO_LEVEL_STEP);
+    }
+
+    #[test]
+    fn an_applied_write_is_heard_after_the_step_with_what_it_left() {
+        let pending = Writes::new();
+        let w = queued(PROGRESS_SET_LEVEL, 12);
+        let left = Left {
+            level: 12,
+            experience: 0,
+            gained: 0,
+        };
+        let applied = w.heard(ProgressWriteData::APPLIED, left);
+        pending.queue.relock().heard.push(applied);
+        pending.any.store(true, Ordering::Release);
+        let heard = pending.step_ended();
+        assert_eq!(heard.len(), 1);
+        let (owner, data) = heard[0];
+        assert_eq!(owner, ModIndex::new(1));
+        assert_eq!(data.header, Header::of::<ProgressWriteData>());
+        assert_eq!(
+            (data.outcome, data.what, data.value, data.level),
+            (ProgressWriteData::APPLIED, PROGRESS_SET_LEVEL, 12, 12)
+        );
+        assert!(pending.step_ended().is_empty(), "heard once");
+        assert!(!pending.any.load(Ordering::Acquire));
     }
 
     #[test]
