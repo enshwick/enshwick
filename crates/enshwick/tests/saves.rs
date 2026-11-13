@@ -103,6 +103,35 @@ mod tests {
     }
 
     #[test]
+    fn a_mod_stops_a_dedicated_server_once_and_a_second_stop_is_refused() {
+        let loader = enshwick::test::FakeHost::new().world().install();
+        // SAFETY: the three functions are the exports of this file's `declare_mod!(Keeper)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let world = WORLD.get().unwrap();
+        assert!(!loader.stop_asked());
+        assert_eq!(world.stop(), Ok(()));
+        assert!(loader.stop_asked());
+        assert_eq!(world.stop(), Err(enshwick::WorldError::Refused));
+    }
+
+    #[test]
+    fn a_hosted_game_has_no_stop() {
+        let loader = enshwick::test::FakeHost::new()
+            .world()
+            .hosting(true)
+            .install();
+        // SAFETY: the three functions are the exports of this file's `declare_mod!(Keeper)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let world = WORLD.get().unwrap();
+        assert_eq!(world.stop(), Err(enshwick::WorldError::Missing));
+        assert!(!loader.stop_asked());
+    }
+
+    #[test]
     fn the_final_save_runs_through_a_hold_unless_the_mod_holds_saves_again_as_shutdown_begins() {
         let loader = enshwick::test::FakeHost::new().world().install();
         // SAFETY: the three functions are the exports of this file's `declare_mod!(Keeper)`.

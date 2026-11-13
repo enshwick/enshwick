@@ -73,6 +73,25 @@ mod tests {
     }
 
     #[test]
+    fn a_script_stops_the_server_once_and_a_second_stop_raises_why() {
+        let loader = run(
+            FakeHost::new().world(),
+            r#"
+            enshwick.world.stop()
+            local ok, why = pcall(enshwick.world.stop)
+            enshwick.log.info(`again {ok}: {why}`)
+            "#,
+        );
+        assert!(loader.stop_asked(), "{:?}", loader.logs());
+        assert!(logged(&loader, "again false"), "{:?}", loader.logs());
+        assert!(
+            logged(&loader, "refused by the world"),
+            "{:?}",
+            loader.logs()
+        );
+    }
+
+    #[test]
     fn a_script_keeps_its_own_entity_out_of_the_save_and_never_a_vanilla_one() {
         let loader = run(
             FakeHost::new().world().prop(
