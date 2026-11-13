@@ -129,6 +129,21 @@ impl Panicked {
     }
 }
 
+impl Drop for Panicked {
+    /// Drops the payload under its own guard: a payload whose drop panics
+    /// would otherwise unwind out of the `extern "system"` entry that holds
+    /// it and abort the game.
+    fn drop(&mut self) {
+        // A box of a zero-sized value allocates nothing.
+        let payload = core::mem::replace(&mut self.0, Box::new(()));
+        if let Err(again) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(payload)))
+        {
+            // Its drop may panic as well: kept for the process instead.
+            let _kept = Box::leak(again);
+        }
+    }
+}
+
 /// Faults the mod for `reason`, followed by the message of the panic that
 /// left `payload`.
 #[cold]
@@ -439,6 +454,19 @@ mod tests {
         assert_eq!(panicked.text(), "no oil");
         let silent = caught(|| std::panic::panic_any(7_u8)).unwrap_err();
         assert_eq!(silent.text(), NO_MESSAGE);
+    }
+
+    #[test]
+    fn a_caught_panic_whose_payload_panics_on_drop_drops_without_unwinding() {
+        struct Bomb;
+        impl Drop for Bomb {
+            fn drop(&mut self) {
+                panic!("the payload's own drop");
+            }
+        }
+        let panicked = caught(|| std::panic::panic_any(Bomb)).unwrap_err();
+        let dropped = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(panicked)));
+        assert!(dropped.is_ok());
     }
 
     #[test]
