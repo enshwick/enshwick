@@ -381,12 +381,59 @@ pub fn captured() -> Vec<(Level, String, String)> {
         .unwrap_or_default()
 }
 
-/// Stops [`capture`], so the tests sharing the process log as before.
-#[cfg(all(test, windows))]
-pub(crate) fn end_capture() {
-    CAPTURING.store(false, Ordering::Release);
-    if let Ok(mut lines) = CAPTURED.lock() {
-        *lines = None;
+/// The turn of the one test that captures or reads the log files: capture
+/// is process-wide, so a test running beside a capture would lose its lines.
+#[cfg(test)]
+static CAPTURE_TURN: Mutex<()> = Mutex::new(());
+
+/// A test's turn over the log, from [`capture_turn`] or [`file_turn`].
+#[cfg(test)]
+pub(crate) struct LogTurn {
+    capturing: bool,
+    _turn: std::sync::MutexGuard<'static, ()>,
+}
+
+#[cfg(test)]
+impl Drop for LogTurn {
+    fn drop(&mut self) {
+        if self.capturing {
+            CAPTURING.store(false, Ordering::Release);
+            // Off the poison policy, as `CAPTURED` says.
+            // ast-grep-ignore: lock-through-relock
+            if let Ok(mut lines) = CAPTURED.lock() {
+                *lines = None;
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+fn take_turn() -> std::sync::MutexGuard<'static, ()> {
+    // A test that panicked in its turn leaves nothing behind but the flag
+    // its turn's drop already cleared.
+    CAPTURE_TURN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// [`capture`] until the turn drops, one test at a time.
+#[cfg(test)]
+pub(crate) fn capture_turn() -> LogTurn {
+    let turn = take_turn();
+    capture();
+    LogTurn {
+        capturing: true,
+        _turn: turn,
+    }
+}
+
+/// A turn in which no test captures, for a test that reads what reached
+/// the files.
+#[cfg(test)]
+pub(crate) fn file_turn() -> LogTurn {
+    LogTurn {
+        capturing: false,
+        _turn: take_turn(),
     }
 }
 
@@ -533,6 +580,7 @@ mod tests {
 
     #[test]
     fn a_line_written_before_settling_is_among_the_latest() {
+        let _turn = file_turn();
         let dir = std::env::temp_dir().join(format!("enshwick-settle-{}", std::process::id()));
         open(&dir);
         write(Level::ERROR, LOADER_ID, "the line a report needs");

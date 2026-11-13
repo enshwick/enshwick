@@ -215,13 +215,13 @@ fn a_session_whose_packets_hold_no_message_gets_no_socket_and_no_retry() {
 #[test]
 fn a_socket_the_session_did_not_make_is_tried_again_later() {
     let _alone = alone();
-    crate::engine::log::capture();
+    let turn = crate::engine::log::capture_turn();
     let state = members_twice(1200);
     let sized = crate::engine::log::captured()
         .into_iter()
         .filter(|(_, _, line)| line.contains("bytes a packet"))
         .count();
-    crate::engine::log::end_capture();
+    drop(turn);
     assert_eq!(sized, 0, "no packet size line for a socket never made");
     assert!(!state.off);
     assert_eq!(CREATES.load(Ordering::Relaxed), 2);

@@ -918,10 +918,10 @@ pub(crate) use input::{capture_keys, focused, key_name};
 mod tests {
     #[test]
     fn a_press_the_server_cannot_take_leaves_a_warning_in_the_log() {
-        crate::engine::log::capture();
+        let turn = crate::engine::log::capture_turn();
         super::press("you.weather", "day");
         let lines = crate::engine::log::captured();
-        crate::engine::log::end_capture();
+        drop(turn);
         assert!(
             lines
                 .iter()
