@@ -143,6 +143,32 @@ the server cannot raise one for a client. A notice travels as a
 through a text tag of its own. It raises the game's message event in the
 client's world at its next step.
 
+The console and a remote caller have no account, so a line or notice for them
+goes to no player. The mod logs a warning once. Answer such a request in its
+outcome.
+
+### A text in each player's language
+
+`world.language_of(player.key)` gives the language a player reads the game in,
+as their game named it when they joined. The fallback is for a player whose
+game runs no Enshwick, and on a client. Fill a mod's own text with it for a
+notice outside an action's request, such as a warning to every player:
+
+```rust
+use enshwick::i18n::Texts;
+
+fn warn_everyone(world: &enshwick::world::World, texts: &Texts) {
+    for player in world.players() {
+        let text = texts.fill("restart", world.language_of(player.key), &[]);
+        let _how = world.notify(&player, &text);
+    }
+}
+```
+
+A building event is about one player too. In a handler of `BuildingPlaced` or
+`BuildingRemoved`, texts fill in the language of the player who placed or
+removed the building.
+
 ## The console
 
 Unstable: needs the `unstable` feature and may change in any release

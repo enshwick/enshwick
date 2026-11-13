@@ -27,6 +27,24 @@ mod tests {
     }
 
     #[test]
+    fn a_script_reads_a_player_s_language_and_the_fallback_for_others() {
+        use enshwick::PlayerKey;
+        use enshwick::i18n::Language;
+
+        let loader = run(
+            FakeHost::new()
+                .world()
+                .player_language(PlayerKey::new(7), Language::UK_UA),
+            r#"
+            enshwick.log.info(`seven {enshwick.world.language_of("7")}`)
+            enshwick.log.info(`eight {enshwick.world.language_of("8")}`)
+            "#,
+        );
+        assert!(logged(&loader, "seven uk"), "{:?}", loader.logs());
+        assert!(logged(&loader, "eight en"), "{:?}", loader.logs());
+    }
+
+    #[test]
     fn merging_returns_new_texts_and_names_each_key_a_language_lacks() {
         let loader = run(
             FakeHost::new(),

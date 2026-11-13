@@ -382,6 +382,46 @@ mod tests {
     }
 
     #[test]
+    fn a_pack_of_side_both_declares_what_players_read_and_one_of_side_server_does_not() {
+        use enshwick::abi::{ModHandle, Side};
+        use enshwick::packs::PackManifest;
+        use enshwick_luau::{Limits, Scripts};
+
+        let loader = FakeHost::new().pack(ModHandle(2), Side::BOTH).install();
+        let main = r#"
+            enshwick.content.declare_change({ Items = "Stackable" }, "MaxStackSize", "stacks")
+            enshwick.rates.rate("SkillPoints")
+        "#;
+        let start = |me, side: &str| {
+            let toml = format!("id = \"you.pack{me}\"\nversion = \"1.0.0\"\nside = \"{side}\"\n");
+            let side = if side == "both" {
+                Side::BOTH
+            } else {
+                Side::SERVER
+            };
+            // SAFETY: the fake host's table lives for the process.
+            unsafe {
+                enshwick::__private::init_pack(loader.api(), ModHandle(me), side, |load| {
+                    let manifest = PackManifest::parse(&toml)
+                        .map_err(|why| enshwick::Off::new(why.to_string()))?;
+                    let scripts = Scripts::new().with("main.luau", main);
+                    enshwick_luau::start_pack(load, &manifest, scripts, Limits::default()).map(drop)
+                })
+            }
+        };
+
+        assert_eq!(start(1, "server"), Status::REFUSED);
+        assert!(logged(
+            &loader,
+            "only a mod or pack of side both declares it"
+        ));
+        assert_eq!(start(2, "both"), Status::OK, "{:?}", loader.logs());
+        let live = loader.live_changes();
+        assert_eq!(live.len(), 1, "{live:?}");
+        assert_eq!(live[0].field, Field::MaxStackSize);
+    }
+
+    #[test]
     fn a_change_the_api_refuses_raises_an_error_naming_the_call() {
         let loader = run(
             FakeHost::new(),

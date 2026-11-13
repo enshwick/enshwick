@@ -20,6 +20,21 @@ pub(crate) struct ManifestFacts {
     pub(crate) requires: Vec<String>,
 }
 
+/// Whether the caller `me` runs on both sides, as the loader reads it from
+/// the caller's own record: a pack named by
+/// [`FakeHost::pack`](crate::test::FakeHost::pack) by its side, the mod
+/// under test by its manifest (both when it declared none), any other
+/// handle as a pack of side server.
+pub(crate) fn joins(s: &State, me: ModHandle) -> bool {
+    if let Some(&(_, side)) = s.host.pack_sides.iter().find(|(pack, _)| *pack == me) {
+        side == Side::BOTH
+    } else if me == s.host.handle {
+        s.manifest.as_ref().is_none_or(|manifest| manifest.joins)
+    } else {
+        false
+    }
+}
+
 impl ManifestFacts {
     /// The facts of `manifest`.
     fn of(manifest: &enshwick_core::abi::Manifest) -> Self {
@@ -451,6 +466,43 @@ pub(crate) extern "system" fn texts(_me: ModHandle, toml: Str) -> Status {
     })
 }
 
+std::thread_local! {
+    /// The language of the player the loader calls the mod about on this
+    /// thread, inside [`for_reader`].
+    static READER: core::cell::Cell<Option<u32>> = const { core::cell::Cell::new(None) };
+}
+
+/// Runs `f` with `language` as the reader's, as the loader does around a
+/// call about one player; `None` keeps the reader around the call. Puts the
+/// one before back, also when `f` panics.
+pub(crate) fn for_reader<R>(language: Option<u32>, f: impl FnOnce() -> R) -> R {
+    /// Puts the reader before back.
+    struct Restore(Option<u32>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            READER.set(self.0);
+        }
+    }
+    let _restore = Restore(READER.replace(language.or(READER.get())));
+    f()
+}
+
+/// The language the game of the player whose character is `entity`
+/// named, as the loader scopes a building event: `0`, the fallback, for a
+/// player whose game named none; `None` for no player's character.
+pub(crate) fn language_of_character(entity: enshwick_core::Entity) -> Option<u32> {
+    with(None, |s| {
+        let key = s.host.players.iter().find(|p| p.entity == entity)?.key;
+        Some(
+            s.host
+                .player_languages
+                .get(&key.get())
+                .copied()
+                .unwrap_or(0),
+        )
+    })
+}
+
 pub(crate) extern "system" fn language(_me: ModHandle) -> u32 {
-    with(0, |s| s.host.language)
+    READER.get().unwrap_or_else(|| with(0, |s| s.host.language))
 }

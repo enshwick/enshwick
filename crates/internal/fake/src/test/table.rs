@@ -733,4 +733,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     server_stop,
     fog_uncover,
     content_name,
+    language_of,
 };

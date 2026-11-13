@@ -1,4 +1,5 @@
-//! A mod without `join: true` cannot declare a rate clients count too.
+//! A mod or pack of side server cannot declare a rate clients count too; a
+//! pack of side both may.
 
 #[cfg(test)]
 mod tests {
@@ -33,5 +34,47 @@ mod tests {
         // SAFETY: `enshwick_mod_init` is the export of this file's `declare_mod!(Alone)`.
         assert_eq!(unsafe { loader.init(enshwick_mod_init) }, Status::REFUSED);
         assert_eq!(loader.rate(Rate::FactoryProductionSpeed), None);
+    }
+
+    #[test]
+    fn a_pack_of_side_both_declares_a_rate_clients_count_and_one_of_side_server_does_not() {
+        use enshwick::abi::{ModHandle, Side};
+
+        let loader = FakeHost::new().pack(ModHandle(2), Side::BOTH).install();
+        // SAFETY: the fake host's table lives for the process; the loader
+        // makes its own handle the host of the copy that runs the packs.
+        unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
+        let declare = |me, side| {
+            // SAFETY: the fake host's table lives for the process.
+            unsafe {
+                enshwick::__private::init_pack(loader.api(), ModHandle(me), side, |load| {
+                    load.rate(Rate::SkillPoints).map(drop)
+                })
+            }
+        };
+        assert_eq!(declare(1, Side::SERVER), Status::REFUSED);
+        assert_eq!(declare(2, Side::BOTH), Status::OK, "{:?}", loader.logs());
+    }
+
+    #[test]
+    fn the_raw_rate_entry_refuses_a_pack_of_side_server_by_its_own_side() {
+        use enshwick::abi::{ModHandle, Side};
+
+        let loader = FakeHost::new()
+            .pack(ModHandle(2), Side::BOTH)
+            .pack(ModHandle(3), Side::SERVER)
+            .install();
+        // SAFETY: the fake host's table lives for the process.
+        let api = unsafe { &*loader.api() };
+        let seen = Rate::SkillPoints.id();
+        assert_eq!((api.rate)(ModHandle(3), seen), Status::REFUSED);
+        assert_eq!(
+            (api.rate)(ModHandle(4), seen),
+            Status::REFUSED,
+            "a pack no test named is of side server"
+        );
+        assert_eq!((api.rate)(ModHandle(2), seen), Status::OK);
+        let own = Rate::all().find(|rate| !rate.seen_by_clients()).unwrap();
+        assert_eq!((api.rate)(ModHandle(3), own.id()), Status::OK);
     }
 }

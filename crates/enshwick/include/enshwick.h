@@ -22,7 +22,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 26
+#define ENSHWICK_ABI_MINOR 27
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -3573,7 +3573,9 @@ typedef struct EnshwickHostApi {
   uint64_t (*server_world)(void);
   // Sends `text` to the chat of the player whose account key is `to`, or of
   // everyone for 0, from any thread; the server posts it after the next
-  // step. Lines past 1024 bytes are cut.
+  // step. Lines past 1024 bytes are cut. A request from the console or a
+  // remote caller names key 0, so a reply to its player through this call
+  // goes to everyone: answer such a request in its outcome.
   EnshwickStatus (*chat)(EnshwickModHandle me, EnshwickPlayerKey to, struct EnshwickStr text);
   // Gives `entity` the name `text`, as a player's rename does: shown on
   // hover, sent to every client and saved with the world; cut at 255
@@ -4262,7 +4264,8 @@ typedef struct EnshwickHostApi {
   // The game language of the reader, as the game numbers them (see
   // `crate::i18n::Language`). On a server, while the loader calls the
   // mod about one player (an action, a settings check, the player's mod
-  // message) on that thread, the language that player's game named when
+  // message, a building event of that player's character) on that
+  // thread, the language that player's game named when
   // it joined, always one the game knows; else `0`, the fallback. On a
   // client, the language it last asked a text in, `0` before its first
   // text. Any thread; the answer holds for the calling thread.
@@ -5292,6 +5295,15 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*content_name)(EnshwickModHandle me,
                                  const uint8_t (*guid)[16],
                                  struct EnshwickStr *out);
+  // The game language the player of account `key` reads, as the game
+  // numbers them (see
+  // `crate::i18n::Language`): on a
+  // server, the one that player's game named when it joined, always one
+  // the game knows; `0`, the fallback, for a player whose game runs no
+  // Enshwick, for a key no connected player holds, for a mod that is off
+  // and on a client. Any thread, re-entrant; a panic in the loader
+  // returns `0`. ABI 11.27.
+  uint32_t (*language_of)(EnshwickModHandle me, EnshwickPlayerKey key);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.

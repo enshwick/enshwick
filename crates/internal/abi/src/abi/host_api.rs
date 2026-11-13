@@ -190,7 +190,9 @@ pub struct HostApi {
     pub server_world: extern "system" fn() -> u64,
     /// Sends `text` to the chat of the player whose account key is `to`, or of
     /// everyone for 0, from any thread; the server posts it after the next
-    /// step. Lines past 1024 bytes are cut.
+    /// step. Lines past 1024 bytes are cut. A request from the console or a
+    /// remote caller names key 0, so a reply to its player through this call
+    /// goes to everyone: answer such a request in its outcome.
     pub chat: extern "system" fn(me: ModHandle, to: PlayerKey, text: Str) -> Status,
     /// Gives `entity` the name `text`, as a player's rename does: shown on
     /// hover, sent to every client and saved with the world; cut at 255
@@ -917,7 +919,8 @@ pub struct HostApi {
     /// The game language of the reader, as the game numbers them (see
     /// [`crate::i18n::Language`](../i18n/struct.Language.html)). On a server, while the loader calls the
     /// mod about one player (an action, a settings check, the player's mod
-    /// message) on that thread, the language that player's game named when
+    /// message, a building event of that player's character) on that
+    /// thread, the language that player's game named when
     /// it joined, always one the game knows; else `0`, the fallback. On a
     /// client, the language it last asked a text in, `0` before its first
     /// text. Any thread; the answer holds for the calling thread.
@@ -1993,6 +1996,15 @@ pub struct HostApi {
     /// panic in the loader returns [`Status::REFUSED`]. ABI 11.26.
     pub content_name:
         extern "system" fn(me: ModHandle, guid: *const [u8; 16], out: *mut Str) -> Status,
+    /// The game language the player of account `key` reads, as the game
+    /// numbers them (see
+    /// [`crate::i18n::Language`](../i18n/struct.Language.html)): on a
+    /// server, the one that player's game named when it joined, always one
+    /// the game knows; `0`, the fallback, for a player whose game runs no
+    /// Enshwick, for a key no connected player holds, for a mod that is off
+    /// and on a client. Any thread, re-entrant; a panic in the loader
+    /// returns `0`. ABI 11.27.
+    pub language_of: extern "system" fn(me: ModHandle, key: PlayerKey) -> u32,
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.
@@ -2140,5 +2152,6 @@ const _: () = {
     assert!(offset_of!(HostApi, server_stop) == 24 + 203 * 8);
     assert!(offset_of!(HostApi, fog_uncover) == 24 + 204 * 8);
     assert!(offset_of!(HostApi, content_name) == 24 + 205 * 8);
-    assert!(size_of::<HostApi>() == 24 + 206 * 8);
+    assert!(offset_of!(HostApi, language_of) == 24 + 206 * 8);
+    assert!(size_of::<HostApi>() == 24 + 207 * 8);
 };

@@ -249,6 +249,16 @@ pub(crate) extern "system" fn notify(
     })
 }
 
+pub(crate) extern "system" fn language_of(_me: ModHandle, key: enshwick_core::PlayerKey) -> u32 {
+    with(0, |s| {
+        s.host
+            .player_languages
+            .get(&key.get())
+            .copied()
+            .unwrap_or(0)
+    })
+}
+
 /// The first entity id the fake hands out for a spawn.
 pub(crate) const FIRST_SPAWNED: u32 = 0x10_0000;
 

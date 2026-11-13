@@ -160,10 +160,6 @@ impl Load<'_> {
 }
 
 impl Load<'_> {
-    pub(crate) fn new(host: Host) -> Self {
-        Self::of(host, false, None)
-    }
-
     /// A `Load` for a mod that takes part in the join check when `joins`,
     /// with the texts `declare_mod!` embedded.
     pub(crate) fn of(host: Host, joins: bool, embedded_texts: Option<&'static str>) -> Self {

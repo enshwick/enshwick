@@ -98,9 +98,12 @@ pub unsafe fn init<M: Mod>(
     }
 }
 
-/// Runs `init` with a [`Load`] for the data pack `me`, as the loader
-/// does for a pack folder; [`host`](crate::host()) answers the pack for the
-/// call, and the process's host stays as it is.
+/// Runs `init` with a [`Load`] for the data pack `me` of `side`, as the
+/// loader does for a pack folder.
+///
+/// A pack of [`Side::BOTH`] declares what players' games read, as a mod of
+/// that side does. [`host`](crate::host()) answers the pack for the call,
+/// and the process's host stays as it is.
 ///
 /// # Safety
 ///
@@ -111,6 +114,7 @@ pub unsafe fn init<M: Mod>(
 pub unsafe fn init_pack(
     api: *const HostApi,
     me: ModHandle,
+    side: Side,
     init: impl FnOnce(&mut Load<'_>) -> Result<(), crate::Off>,
 ) -> Status {
     // SAFETY: `Host::new` needs `api` null or a table readable for its
@@ -123,7 +127,9 @@ pub unsafe fn init_pack(
     // on a change of its settings (`refresh_levels`).
     forget_pack_level(me);
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        enshwick_base::__internal::scope(host, || init(&mut Load::new(host)))
+        enshwick_base::__internal::scope(host, || {
+            init(&mut Load::of(host, side == Side::BOTH, None))
+        })
     }));
     match outcome {
         Ok(Ok(())) => Status::OK,

@@ -204,6 +204,27 @@ impl Merged {
             .collect()
     }
 
+    /// The fields of `entry` a mod `on` lets through changes, in no set
+    /// order.
+    #[must_use]
+    pub fn fields(&self, entry: Guid, on: impl Fn(ModIndex) -> bool) -> Vec<Field> {
+        self.values
+            .iter()
+            .filter(|(key, values)| key.entry == entry && values.iter().any(|(m, _)| on(*m)))
+            .map(|(key, _)| key.field)
+            .collect()
+    }
+
+    /// The items whose own values a mod `on` lets through changes: every
+    /// item field but the slots of the container an item places; sorted.
+    #[must_use]
+    pub fn edited(&self, on: impl Fn(ModIndex) -> bool) -> Vec<Guid> {
+        self.entries(Entry::Item)
+            .into_iter()
+            .filter(|item| self.fields(*item, &on).iter().any(|f| *f != Field::Slots))
+            .collect()
+    }
+
     /// The mods that change `field` of any entry.
     #[must_use]
     pub fn changers(&self, field: Field) -> Vec<ModIndex> {
@@ -552,6 +573,38 @@ mod tests {
             item: Some(meat),
         };
         assert_eq!(merged.value(in_table, 1.0, |_| true), Some(5.0));
+    }
+
+    #[test]
+    fn a_mod_that_is_off_edits_no_item_and_names_no_field_of_one() {
+        let slots = Declared {
+            owner: ModIndex::new(1),
+            change: Change::new(STONE, Field::Slots, Value::Set(8.0)),
+            source: String::new(),
+            live: None,
+        };
+        let all = [
+            declared(0, WOOD, Value::Set(100.0), "off.toml:1"),
+            declared(1, STONE, Value::Set(50.0), "on.toml:1"),
+            slots,
+        ];
+        let (merged, _) = merge(&all, no_requires);
+        let on = |m: ModIndex| m.get() == 1;
+        assert_eq!(merged.edited(|_| true), [WOOD, STONE]);
+        assert_eq!(merged.edited(on), [STONE]);
+        assert!(merged.fields(WOOD, on).is_empty());
+        assert_eq!(merged.fields(WOOD, |_| true), [Field::MaxStackSize]);
+        let only_slots = Declared {
+            owner: ModIndex::new(1),
+            change: Change::new(WOOD, Field::Slots, Value::Set(8.0)),
+            source: String::new(),
+            live: None,
+        };
+        let (merged, _) = merge(&[only_slots], no_requires);
+        assert!(
+            merged.edited(|_| true).is_empty(),
+            "slots alone edit no item"
+        );
     }
 
     #[test]

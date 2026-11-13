@@ -33,9 +33,11 @@ pub use script::I18nFns;
 /// dialogs, windows and answers.
 ///
 /// On a server, the language of the player the loader asks the mod about,
-/// such as in an action or a settings check, as that player's game said
-/// when it joined; the fallback elsewhere on a server, and on a client
-/// before its first text.
+/// such as in an action or a settings check, or of the player whose
+/// character placed or removed the building of a `BuildingPlaced` or
+/// `BuildingRemoved` event, as that player's game said when it joined; the
+/// fallback elsewhere on a server, for a player whose game runs no Enshwick,
+/// and on a client before its first text.
 ///
 /// # Examples
 ///
@@ -66,12 +68,7 @@ impl Host {
     /// ```
     #[must_use]
     pub fn language(&self) -> Language {
-        let language = Language((self.api().language)(self.handle()));
-        if language.code().is_empty() {
-            Language::FALLBACK
-        } else {
-            language
-        }
+        Language::known_or_fallback((self.api().language)(self.handle()))
     }
 }
 
@@ -243,6 +240,18 @@ languages! {
 }
 
 impl Language {
+    /// The language the loader answered with number `n`: one the game knows,
+    /// else [`Language::FALLBACK`].
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn known_or_fallback(n: u32) -> Self {
+        if Self(n).code().is_empty() {
+            Self::FALLBACK
+        } else {
+            Self(n)
+        }
+    }
+
     /// The languages the game's settings offer a player, the set a mod
     /// translates into: English as [`Language::FALLBACK`], which the game's
     /// English (`en-us`) reads, then the others in the menu's order (client
@@ -815,6 +824,11 @@ mod tests {
 
     #[test]
     fn every_offered_language_has_a_code_and_english_is_the_fallback() {
+        assert_eq!(Language::known_or_fallback(u32::MAX), Language::FALLBACK);
+        assert_eq!(
+            Language::known_or_fallback(Language::UK_UA.0),
+            Language::UK_UA
+        );
         assert_eq!(Language::OFFERED.first(), Some(&Language::FALLBACK));
         assert!(!Language::OFFERED.contains(&Language::EN_US));
         for language in Language::OFFERED {

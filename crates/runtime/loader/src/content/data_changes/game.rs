@@ -337,16 +337,6 @@ fn report(loader: &Loader, conflicts: &[Conflict]) {
     crate::engine::conflicts::set_fields(lines);
 }
 
-/// The items whose own values some change of `merged` changes: every item
-/// field but the slots of the container it places.
-fn edited(merged: &Merged) -> Vec<Guid> {
-    merged
-        .entries(Entry::Item)
-        .into_iter()
-        .filter(|item| merged.keys(*item).iter().any(|k| k.field != Field::Slots))
-        .collect()
-}
-
 /// Merges every declared change, reports the overridden sets, and returns
 /// the loader's patches, one per changed item: its key and the patch with
 /// its pointer. Called once, when the served resources are sealed.
@@ -361,28 +351,11 @@ pub(crate) fn serve(
     let pending = std::mem::take(&mut *open);
     let (declared, picked) = expand_from_game(loader, pending);
     for p in picked {
-        let level = if p.count == 0 {
-            Level::WARN
-        } else {
-            Level::INFO
-        };
-        crate::engine::log::write(
-            level,
-            &id(loader, p.owner),
-            &format!(
-                "{} {}: changes {} vanilla {}",
-                p.field,
-                p.source,
-                p.count,
-                if p.field.entry() == Entry::Recipe {
-                    "recipes"
-                } else {
-                    "items"
-                }
-            ),
-        );
+        let (level, line) = p.line(on(loader, p.owner));
+        crate::engine::log::write(level, &id(loader, p.owner), &line);
     }
     let (merged, conflicts) = merge(&declared, |a, b| requires(loader, a, b));
+    let changed = merged.edited(|m| on(loader, m)).len();
     report(loader, &conflicts);
     let labels: FxHashMap<Guid, String> = declared
         .iter()
@@ -393,7 +366,7 @@ pub(crate) fn serve(
         crate::log!(WARN, "kept stack sizes do not read: {why}");
         Kept::default()
     });
-    let mut items = edited(&merged);
+    let mut items = merged.edited(|_| true);
     items.extend(kept.items().map(|(item, _)| item));
     items.sort_unstable_by_key(|item| item.0);
     items.dedup();
@@ -424,8 +397,8 @@ pub(crate) fn serve(
     });
     drop(open);
     let mut patches = Vec::new();
-    if !items.is_empty() {
-        crate::log!(INFO, "{} items get changed values", items.len());
+    if changed > 0 {
+        crate::log!(INFO, "{changed} items get changed values");
     }
     let offsets: &'static ItemOffsets = Box::leak(Box::new(offsets));
     for item in items {
@@ -494,7 +467,7 @@ fn apply(
     let loader = sealed.loader;
     let patched = sealed.patched.get().cloned().unwrap_or_default();
     let (merged, conflicts) = merge(&next, |a, b| requires(loader, a, b));
-    if let Some(item) = edited(&merged).into_iter().find(|item| {
+    if let Some(item) = merged.edited(|_| true).into_iter().find(|item| {
         !patched.contains(&item.key_by_hash(crate::engine::catalogue::types::ITEM_INFO))
     }) {
         return Err(ApplyChangesError::Values { item });

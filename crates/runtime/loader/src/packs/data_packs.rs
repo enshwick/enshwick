@@ -17,7 +17,6 @@ use enshwick_core::abi::{
 use enshwick_core::packs::{MANIFEST_FILE, Pack, PackFiles, PackManifest, PackSide};
 use rustc_hash::FxHashMap;
 
-use crate::engine::loader::Loader;
 use enshwick_base::Relock;
 
 /// A pack folder found in `mods/`.
@@ -223,13 +222,13 @@ fn report_skipped(id: &str, pack: &Pack) {
     }
 }
 
-/// The record of the calling pack and its folder.
-fn calling(me: ModHandle) -> Option<(&'static Loader, usize, String, PathBuf)> {
+/// The side, id and folder of the calling pack, as the loader keeps them;
+/// its other calls check the same side.
+fn calling(me: ModHandle) -> Option<(Side, String, PathBuf)> {
     let loader = crate::engine::loader::loader()?;
-    let index = me.0.checked_sub(1)?;
-    let record = loader.mods.get(index)?;
+    let record = loader.mods.get(me.0.checked_sub(1)?)?;
     let dir = with(|packs| packs.get(&record.id).map(|p| p.dir.clone()))?;
-    Some((loader, index, record.id.clone(), dir))
+    Some((record.manifest.side, record.id.clone(), dir))
 }
 
 /// A pack's `init`: reads its files and adds what they describe.
@@ -238,7 +237,7 @@ fn calling(me: ModHandle) -> Option<(&'static Loader, usize, String, PathBuf)> {
 ///
 /// - `api` is the loader's process-wide host table, valid for the process.
 pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) -> Status {
-    let Some((_, _, id, dir)) = calling(me) else {
+    let Some((side, id, dir)) = calling(me) else {
         return Status::BAD_ARGS;
     };
     let files = match PackFiles::read_dir(&dir) {
@@ -276,7 +275,7 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
     // SAFETY: `api` is the loader's process-wide table, by this function's
     // `# Safety` contract, which is what `init_pack` asks for.
     let status = unsafe {
-        enshwick_core::__private::init_pack(api, me, |load| {
+        enshwick_core::__private::init_pack(api, me, side, |load| {
             load.add_pack(&pack)?;
             let scripts = scripts.map(|s| s.with_items(&pack.item_bindings()));
             let limits = enshwick_luau::Limits::default();

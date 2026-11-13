@@ -52,8 +52,14 @@ mod tests {
         let loader = FakeHost::new().items().removal().install();
         let pack = |me, call: fn(&mut Load<'_>) -> Result<(), Off>| {
             // SAFETY: the fake host's table lives for the process.
-            let status =
-                unsafe { enshwick::__private::init_pack(loader.api(), ModHandle(me), call) };
+            let status = unsafe {
+                enshwick::__private::init_pack(
+                    loader.api(),
+                    ModHandle(me),
+                    enshwick::abi::Side::SERVER,
+                    call,
+                )
+            };
             assert_eq!(status, Status::OK, "{:?}", loader.logs());
         };
         // A patch that always fails, which a served read skips.
