@@ -159,6 +159,41 @@ fn late_requests_drain_and_the_rest_stay_in_order() {
 }
 
 #[test]
+fn requests_queued_when_the_feature_turns_off_are_answered_unavailable_at_the_next_step() {
+    QUEUE.push(request(7));
+    INVENTORY_FUSE.blow("a test");
+    expire(Instant::now());
+    assert!(!QUEUE.pending.load(Ordering::Acquire), "no row runs it now");
+    let finished = FINISHED.relock();
+    assert_eq!(
+        finished
+            .iter()
+            .map(|f| (f.user, f.outcome))
+            .collect::<Vec<_>>(),
+        [(7, InventoryResult::UNAVAILABLE)],
+    );
+}
+
+#[test]
+fn a_wanted_row_hook_that_did_not_arm_turns_the_requests_off_and_answers_the_queue() {
+    WANTED.store(true, Ordering::Release);
+    QUEUE.push(request(9));
+    settle(&crate::start::tests::bare_loader(), []);
+    assert!(
+        INVENTORY_FUSE.is_off(),
+        "off by its fuse, not only in the log"
+    );
+    assert!(!QUEUE.pending.load(Ordering::Acquire));
+    assert_eq!(FINISHED.relock()[0].outcome, InventoryResult::UNAVAILABLE);
+}
+
+#[test]
+fn an_unwanted_row_hook_leaves_the_requests_on_at_settling() {
+    settle(&crate::start::tests::bare_loader(), []);
+    assert!(!INVENTORY_FUSE.is_off());
+}
+
+#[test]
 fn operations_must_name_what_they_need() {
     let give = InventoryOp {
         kind: InventoryOp::GIVE,

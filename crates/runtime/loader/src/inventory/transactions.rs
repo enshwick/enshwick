@@ -771,13 +771,7 @@ pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemData, Status> 
 /// Answers the requests that waited too long and hands out the results; on
 /// the game thread after each step.
 pub(crate) fn deliver(now: Instant) {
-    let late = QUEUE.drain(|r| now.duration_since(r.queued) > TIMEOUT);
-    if !late.is_empty() {
-        finish(
-            late.iter()
-                .map(|r| Finished::without_run(r, InventoryResult::TIMED_OUT)),
-        );
-    }
+    expire(now);
     let finished = {
         let mut finished = FINISHED.relock();
         if finished.is_empty() {
@@ -810,6 +804,23 @@ pub(crate) fn deliver(now: Instant) {
             },
         );
     }
+}
+
+/// Answers the requests no row will run: every one as unavailable once the
+/// feature is off, since the mid-hook dispatch passes the row from then on,
+/// and the rest as timed out once they waited past [`TIMEOUT`].
+fn expire(now: Instant) {
+    let off = INVENTORY_FUSE.is_off();
+    let late = QUEUE.drain(|r| off || now.duration_since(r.queued) > TIMEOUT);
+    if late.is_empty() {
+        return;
+    }
+    let outcome = if off {
+        InventoryResult::UNAVAILABLE
+    } else {
+        InventoryResult::TIMED_OUT
+    };
+    finish(late.iter().map(|r| Finished::without_run(r, outcome)));
 }
 
 /// Whether a transaction with these results is committed.
