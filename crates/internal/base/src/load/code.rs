@@ -140,9 +140,10 @@ pub(super) unsafe extern "system" fn run_mid_hook<F: Fn(&mut Registers)>(
     let mut copy = *registers;
     match crate::host::caught(|| (hook.handler)(&mut copy)) {
         Ok(()) => *registers = copy,
-        Err(panicked) => crate::host::fault_with(
-            &format!("panic in the hook at {:#x}", hook.address),
-            panicked.payload(),
-        ),
+        Err(_panicked) => {
+            if let Some(host) = crate::host() {
+                host.fault(&format!("panic in the hook at {:#x}", hook.address));
+            }
+        }
     }
 }
