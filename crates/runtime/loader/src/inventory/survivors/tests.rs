@@ -22,6 +22,20 @@ fn the_survivor_lookup_is_wholly_off_when_one_of_its_links_fails() {
 }
 
 #[test]
+fn a_survivor_feature_no_mod_asked_for_links_nothing_and_stays_on() {
+    let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
+    link(loader);
+    let fuses = [
+        LOOKUP_FUSE.is_off(),
+        BEDS_FUSE.is_off(),
+        STAFFS_FUSE.is_off(),
+    ];
+    assert_eq!(fuses, [false; 3]);
+    assert!(!FILED_FUSE.is_off() && !MENU_FUSE.is_off());
+    assert!(loader.chains.relock().is_empty());
+}
+
+#[test]
 fn filing_marks_a_free_slot_and_overwrites_a_used_one() {
     unsafe extern "system" fn find(_map: *mut u8, key: *const u32) -> u64 {
         // SAFETY: `file` passes a pointer to its own `u32` item.

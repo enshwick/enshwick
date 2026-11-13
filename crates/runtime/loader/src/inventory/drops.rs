@@ -394,6 +394,14 @@ mod tests {
     }
 
     #[test]
+    fn a_read_that_panicked_or_lost_its_thread_is_a_fault_not_the_build() {
+        for why in [ReadLayoutError::Panicked, ReadLayoutError::Thread] {
+            let fault = Off::fault(DROPS_FUSE.feature(), &why.to_string());
+            assert_eq!(format!("{:?}", why.off("build 1")), format!("{fault:?}"));
+        }
+    }
+
+    #[test]
     fn a_count_of_none_or_past_a_pickup_and_an_unknown_rarity_are_refused() {
         assert!(pickup(&LAYOUT, &request(0, 0)).is_none());
         assert!(pickup(&LAYOUT, &request(65_536, 0)).is_none());

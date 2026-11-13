@@ -553,6 +553,40 @@ mod tests {
         assert!(!DAMAGE_FUSE.is_off());
     }
 
+    unsafe extern "system" fn keep(_check: *mut DamageCheck, _user: *mut c_void) {}
+
+    /// Registers one filter of mod 0 and seals them, as the loader does at
+    /// linking.
+    fn one_filter() {
+        let added = FILTERS.add(Registered::new(
+            ModIndex::new(0),
+            keep,
+            core::ptr::null_mut(),
+        ));
+        assert!(added.is_ok());
+    }
+
+    #[test]
+    fn a_hit_a_mod_filters_is_the_loader_s_to_read() {
+        one_filter();
+        let _filters = FILTERS.seal();
+        assert!(filtering());
+        assert!(hits_watched(), "a filter alone makes a hit watched");
+    }
+
+    #[test]
+    fn a_build_without_the_hit_layout_turns_the_filters_off_when_a_mod_filters() {
+        one_filter();
+        link(&crate::start::tests::bare_loader());
+        assert!(DAMAGE_FUSE.is_off(), "off by its fuse, not only in the log");
+    }
+
+    #[test]
+    fn nothing_filtering_damage_links_no_site_and_leaves_the_filters_on() {
+        link(&crate::start::tests::bare_loader());
+        assert!(!DAMAGE_FUSE.is_off());
+    }
+
     #[test]
     fn without_filters_damage_stays() {
         assert_eq!(filtered(DamageCheck::FALL_DAMAGE, 1, 40), 40);
