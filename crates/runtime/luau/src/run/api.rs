@@ -286,6 +286,23 @@ impl Inner {
                 crate::bridge::toml_to_lua(lua, &toml::Value::Table((**values).clone()))
             })?,
         )?;
+        let writer = scope.clone();
+        namespace_table(lua, &api, "config")?.raw_set(
+            "set",
+            lua.create_function(move |_, (key, value): (String, LuaValue)| {
+                let inner = writer
+                    .inner
+                    .upgrade()
+                    .ok_or_else(|| mlua::Error::runtime("the mod has stopped"))?;
+                let config = inner
+                    .config
+                    .get()
+                    .ok_or_else(|| failed(CONFIG_SET, "the mod has no settings"))?;
+                config
+                    .set(&key, setting_value(value)?)
+                    .map_err(|e| failed(CONFIG_SET, e))
+            })?,
+        )?;
         api.raw_set("deps", self.deps_table(lua)?)?;
         self.subscription_functions(vm, &api)?;
         self.serve_functions(vm, &api)?;
@@ -515,6 +532,29 @@ fn namespace_table(lua: &Lua, api: &Table, name: &str) -> mlua::Result<Table> {
     api.raw_set(name, table.clone())?;
     Ok(table)
 }
+
+/// The TOML value of a setting a script writes: a text, a number or a
+/// boolean, the values a pack's settings hold.
+fn setting_value(value: LuaValue) -> mlua::Result<toml::Value> {
+    Ok(match value {
+        LuaValue::String(text) => toml::Value::String(text.to_str()?.to_owned()),
+        LuaValue::Integer(n) => toml::Value::Integer(n.into()),
+        LuaValue::Number(n) => toml::Value::Float(n),
+        LuaValue::Boolean(b) => toml::Value::Boolean(b),
+        other => {
+            return Err(failed(
+                CONFIG_SET,
+                format_args!(
+                    "a setting takes a text, a number or a boolean, not a {}",
+                    other.type_name()
+                ),
+            ));
+        }
+    })
+}
+
+/// The name of the function that writes a setting, as its errors name it.
+const CONFIG_SET: &str = "enshwick.config.set";
 
 /// Follows the mod's settings as `Load::on_settings` and
 /// `Load::on_settings_change` do: the handler gets the values in force now,

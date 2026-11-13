@@ -430,6 +430,46 @@ mod tests {
     }
 
     #[test]
+    fn a_script_writes_its_own_setting_and_a_refusal_raises_why() {
+        let (loader, status) = run_full(
+            r#"enshwick.on("WorldSaved", function()
+                enshwick.config.set("greeting", "hey")
+                local ok, why = pcall(enshwick.config.set, "nope", "x")
+                enshwick.log.info(`unknown {ok} {why}`)
+                ok, why = pcall(enshwick.config.set, "greeting", {})
+                enshwick.log.info(`table {ok} {why}`)
+            end)
+            enshwick.on("SettingsChanged", function()
+                enshwick.log.info(`now {enshwick.settings().greeting}`)
+            end)"#,
+            Limits::default(),
+            Scripts::new(),
+            Some(greeting_schema()),
+            FakeHost::new().world_key("world0"),
+        );
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let _handled = loader.raise::<WorldSaved>(&());
+        assert!(logged(&loader, "now hey"), "{:?}", loader.logs());
+        assert_eq!(
+            loader.settings_text("settings").as_deref(),
+            Some("greeting = \"hey\"\n")
+        );
+        assert!(
+            logged(
+                &loader,
+                "enshwick.config.set: the mod's settings have no such key"
+            ),
+            "{:?}",
+            loader.logs()
+        );
+        assert!(
+            logged(&loader, "a setting takes a text, a number or a boolean"),
+            "{:?}",
+            loader.logs()
+        );
+    }
+
+    #[test]
     fn a_mod_without_settings_reads_an_empty_table() {
         let loader = run("enshwick.log.info(`keys {next(enshwick.settings()) == nil}`)");
         assert!(logged(&loader, "keys true"), "{:?}", loader.logs());

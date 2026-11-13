@@ -3232,6 +3232,11 @@ declare enshwick: {
 	deps: { [string]: { id: string, running: () -> boolean } },
 	--- The mod's settings in force, as its `pack.toml` declares them under `[[setting]]`; read them again in a `SettingsChanged` handler.
 	settings: () -> { [string]: any },
+	--- The mod's own settings in the running world, as a Rust mod's `config` module.
+	config: {
+		--- Writes `value` as the setting `key`, as a Rust mod's `config::set` does: checked as an edit is, a secret never logged, then raised as `SettingsChanged`. Raises an error naming why when nothing was written: no world runs, no such key, a value the setting does not take, or a refusal.
+		set: (key: string, value: string | number | boolean) -> (),
+	},
 	--- The mod's log file, one line per call.
 	log: {
 		--- Writes `text` to the mod's log as information.

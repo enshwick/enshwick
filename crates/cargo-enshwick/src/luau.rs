@@ -432,6 +432,7 @@ pub fn definitions() -> String {
     out.push_str("\t--- Calls `handler` as `on_settings` does, and again on every change in game, as a Rust mod's `on_settings_change` does.\n\ton_settings_change: (handler: (settings: { [string]: any }) -> ()) -> (),\n");
     out.push_str("\t--- The mods `pack.toml` names in `requires` and `after`, by alias: each mod's id, and whether it runs now.\n\tdeps: { [string]: { id: string, running: () -> boolean } },\n");
     out.push_str("\t--- The mod's settings in force, as its `pack.toml` declares them under `[[setting]]`; read them again in a `SettingsChanged` handler.\n\tsettings: () -> { [string]: any },\n");
+    out.push_str("\t--- The mod's own settings in the running world, as a Rust mod's `config` module.\n\tconfig: {\n\t\t--- Writes `value` as the setting `key`, as a Rust mod's `config::set` does: checked as an edit is, a secret never logged, then raised as `SettingsChanged`. Raises an error naming why when nothing was written: no world runs, no such key, a value the setting does not take, or a refusal.\n\t\tset: (key: string, value: string | number | boolean) -> (),\n\t},\n");
     for (name, doc, entries) in namespaces() {
         if name.is_empty() {
             for entry in &entries {

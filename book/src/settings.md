@@ -210,7 +210,58 @@ change, on a thread that is not fixed:
 
 - about a second after a person saves the file;
 - at once after the console or the Mods screen changes a value;
-- when the server of another's world sends new values.
+- when the server of another's world sends new values;
+- at once after the mod writes a value of its own.
+
+## Write a value of the mod's own
+
+A mod writes one of its settings with
+[`config::set`](https://github.com/enshwick/enshwick/blob/main/crates/internal/base/src/config/write.rs),
+for a value it makes itself, such as a password it generates on the first
+start:
+
+```rust
+use enshwick::config::{self, SetSettingError};
+
+/// Remote console settings.
+#[enshwick::config]
+#[derive(Default)]
+struct Settings {
+    /// The password; the first start writes one when it is empty.
+    #[config(secret)]
+    password: String,
+}
+
+fn first_start(settings: &Settings, generated: &str) -> Result<(), SetSettingError> {
+    if settings.password.is_empty() {
+        config::set::<Settings>("password", generated)?;
+    }
+    Ok(())
+}
+```
+
+The write runs the checks of the console: the field's range and choices,
+then `validate`. It goes into the running world's file with the comments
+kept, and raises the change, so `on_settings_change` hears it at once and
+`on_settings` at the next load. A `secret` takes a value this way, and the
+log never shows it. A key of a group is dotted, such as
+`comfort.multiplier`.
+
+It works from any thread while a world runs. With no world, as on a client
+in another's world, it answers `SetSettingError::NoWorld`. A key the type
+lacks, a value the field does not take and a refusal by `validate` each
+have an error of their own; the file then stays as it was, and the mod's
+log says why. A write from a change handler raises the change again, so
+write only when the value differs.
+
+A Luau mod writes with `enshwick.config.set(key, value)`, a text, a number
+or a boolean. A refusal raises an error that names the reason:
+
+```luau
+if enshwick.settings().password == "" then
+    enshwick.config.set("password", generated)
+end
+```
 
 ## Register the same things whatever the settings say
 
