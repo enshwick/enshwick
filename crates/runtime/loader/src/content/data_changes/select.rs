@@ -98,6 +98,7 @@ impl Picked {
 
 /// How many items get a value of their own changed by a mod that is on:
 /// every item field but the slots of the container an item places.
+#[cfg(any(windows, test))]
 #[must_use]
 pub(crate) fn changed_items(declared: &[Declared], on: impl Fn(ModIndex) -> bool) -> usize {
     declared
