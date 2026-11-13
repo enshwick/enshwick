@@ -375,10 +375,10 @@ end)
 ```
 
 `stop()` stops a dedicated server the way Ctrl+C in its console does, for
-a timed restart: after the current step the server shuts down,
-`ShutdownStarted` follows and the holds let go, the final save runs, and
-the process exits with code 0. The host's panel or service manager then
-starts it again. The call returns at once, from any thread. The countdown,
+a timed restart. After the current step the server shuts down, and
+`ShutdownStarted` follows as the holds let go. Then the final save runs,
+and the process exits with code 0. The host's panel or service manager
+then starts it again. The call returns at once, from any thread. The countdown,
 the warnings to players and a save before it are the mod's.
 
 A second `stop()` while the server stops fails with `WorldError::Refused`,

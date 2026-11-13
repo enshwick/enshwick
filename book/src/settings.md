@@ -250,7 +250,7 @@ log never shows it. A key of a group is dotted, such as
 It works from any thread while a world runs. With no world, as on a client
 in another's world, it answers `SetSettingError::NoWorld`. A key the type
 lacks, a value the field does not take and a refusal by `validate` each
-have an error of their own; the file then stays as it was, and the mod's
+have an error of their own. The file then stays as it was, and the mod's
 log says why. A write from a change handler raises the change again, so
 write only when the value differs.
 
