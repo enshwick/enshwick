@@ -7,4 +7,5 @@
 ### Fixed
 
 - `World::tell` and `World::notify` log a line for the console or a remote
-  caller, which has no account and gets nothing (#1067).
+  caller, which has no account and gets nothing; `notify` answers the new
+  `Notice::Nobody` for them instead of `Notice::Chat` (#1067).

@@ -8,6 +8,10 @@
   `BuildingPlaced` or `BuildingRemoved` (#1067).
 - `test`: `FakeHost::player_language`, read by `World::language_of` and by
   a building event of that player's character (#1067).
+- `test`: `FakeHost::pack` names a data pack's side, by which the fake
+  refuses the pack's rates, live changes, crafting props and net channels
+  as the loader does; a handle neither the mod's nor named counts as a
+  pack of side server (#1067).
 
 ### Fixed
 
@@ -15,4 +19,11 @@
   players' games read and a rate clients count, as a mod of that side does
   (#1067).
 - The loader no longer logs a selection of a mod that is off as changing
-  vanilla items, nor counts its items as changed (#1067).
+  vanilla items, nor counts its items as changed, nor warns per item for
+  its fields (#1067).
+- Loader: a language a client names for its action replies counts only
+  when the game knows it, and every reader of a player's language sees the
+  same one; a building event of a player whose game runs no Enshwick reads
+  the fallback, also in a hosted game (#1067).
+- `test`: the fake keeps the reader's language around a nested event and
+  puts it back after a panic, as the loader does (#1067).
