@@ -342,8 +342,9 @@ mod tests {
         assert!(DROPS_FUSE.is_off());
         // Another test's read in this process may turn the one switch off
         // first, with its own reason.
+        let panicked = ReadLayoutError::Panicked.to_string();
         assert!(
-            drops.reason.starts_with("its pickup does not read: "),
+            drops.reason.starts_with("its pickup does not read: ") || drops.reason == panicked,
             "listed for the status summary and the Mods screen: {}",
             drops.reason
         );

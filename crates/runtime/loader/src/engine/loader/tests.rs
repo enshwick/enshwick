@@ -162,6 +162,26 @@ fn a_feature_whose_second_mid_hook_fails_is_wholly_off_and_its_first_address_nev
 }
 
 #[test]
+fn a_feature_whose_mid_hook_fails_to_arm_is_wholly_off_with_its_other_sites() {
+    unsafe extern "system" fn handler(
+        _registers: *mut enshwick_core::abi::Registers,
+        _user: *mut core::ffi::c_void,
+    ) {
+    }
+    static CANDLES: Fuse = Fuse::new("test candles");
+    let loader = crate::start::tests::bare_loader();
+    let link = |id, at| loader.link_mid(&CANDLES, Target::Found(id, at), handler, HookFlags::NONE);
+    assert!(link("candle.wick", Some(0x1000)));
+    assert!(link("candle.wax", Some(0x2000)));
+    loader.mids.relock().seal();
+    loader.unarmed(0x2000, "candle.wax", "could not be armed: a test");
+    assert!(
+        CANDLES.is_off(),
+        "the wick's site is passed by dispatch from now on"
+    );
+}
+
+#[test]
 fn a_feature_whose_second_link_fails_is_wholly_off_and_its_first_target_never_armed() {
     let loader = crate::start::tests::bare_loader();
     let feature = "test lanterns";

@@ -46,6 +46,10 @@ static EVENTS: OnceLock<Events> = OnceLock::new();
 /// The switch of the item filters.
 static ITEMS_FUSE: Fuse = Fuse::new("item filters");
 
+/// The switch of the equips the filters see, apart from the uses and events
+/// so a build without the equipment system leaves those on.
+static EQUIPS_FUSE: Fuse = Fuse::new("item equips");
+
 /// Where one versioned action sits in the player's input, and where its
 /// handled version sits in the consumed input, in bytes.
 #[derive(Debug, Clone, Copy)]
@@ -293,7 +297,7 @@ pub(crate) fn link(loader: &'static Loader) {
     // The uses go through interactions' link on the same system: the
     // loader links a target once.
     let equips = loader.link_fused(
-        &ITEMS_FUSE,
+        &EQUIPS_FUSE,
         Target::Found(EQUIPMENT_SYSTEM, entry(EQUIPMENT_SYSTEM)),
         &EQUIPMENT_NEXT,
         equipment_actions,
@@ -364,7 +368,7 @@ crate::engine::chains::chain_detour! {
     /// taking its context: asks the filters about the pending equips first.
     fn equipment_actions(ctx: *mut u64) -> u64;
     next EQUIPMENT_NEXT;
-    fuse &ITEMS_FUSE, "the item equips";
+    fuse &EQUIPS_FUSE, "the item equips";
     |onward| {
         if !ctx.is_null() {
             // SAFETY: `ctx` is non-null by the check before it and is the

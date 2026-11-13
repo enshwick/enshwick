@@ -70,7 +70,7 @@ struct Layout {
     source: usize,
 }
 
-/// Each site's mid-hook target and handler.
+/// Each site's mid-hook target and handler, the hit site first.
 const SITES: [(Symbol, MidHookFn); 9] = [
     (pinned::damage::HIT, hit),
     (pinned::damage::FALL, fall),
@@ -126,12 +126,19 @@ pub(crate) fn link(loader: &Loader) {
         }
     };
     let _first = LAYOUT.set(layout);
-    let linked = SITES.iter().all(|&(site, handler)| {
+    let sites = sites(!filters.is_empty());
+    let linked = sites.iter().all(|&(site, handler)| {
         loader.link_mid(&DAMAGE_FUSE, Target::Pinned(site), handler, HookFlags::NONE)
     });
     if linked {
-        crate::log!(INFO, "damage filters on: {} sites", SITES.len());
+        crate::log!(INFO, "damage filters on: {} sites", sites.len());
     }
+}
+
+/// The sites to link: all of them for a mod's filters, else only the hit
+/// site stats read, so a site stats never use cannot turn their hits off.
+fn sites(filtering: bool) -> &'static [(Symbol, MidHookFn)] {
+    if filtering { &SITES } else { &SITES[..1] }
 }
 
 /// Whether a mod filters damage; one load, before a site reads anything.
@@ -585,6 +592,18 @@ mod tests {
     fn nothing_filtering_damage_links_no_site_and_leaves_the_filters_on() {
         link(&crate::start::tests::bare_loader());
         assert!(!DAMAGE_FUSE.is_off());
+    }
+
+    #[test]
+    fn stats_alone_link_only_the_hit_site_and_filters_link_all_nine() {
+        let ids = |filtering| {
+            sites(filtering)
+                .iter()
+                .map(|(s, _)| s.id())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ids(false), [pinned::damage::HIT.id()]);
+        assert_eq!(ids(true).len(), 9);
     }
 
     #[test]

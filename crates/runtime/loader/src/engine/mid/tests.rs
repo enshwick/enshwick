@@ -958,3 +958,25 @@ fn sealing_drops_the_handlers_of_features_already_off_and_addresses_left_empty()
     );
     assert_eq!(mids.owners(0x20), [ModIndex::new(0)]);
 }
+
+#[test]
+#[should_panic(expected = "outside the function")]
+fn a_hook_address_outside_its_function_is_flagged_instead_of_passed() {
+    let _branch = branch_into_hook(&[0x90; 32], 0x1000, 0x2000);
+}
+
+#[test]
+fn the_features_at_an_address_are_the_loader_s_links_only() {
+    static WICK: Fuse = Fuse::new("mid wick");
+    let mut mids = Mids::default();
+    let ours = link(ModIndex::LOADER, add_hundred, i32::MIN);
+    assert_eq!(mids.add_fused(0x10, ours, Some(&WICK)), Status::OK);
+    assert_eq!(
+        mids.add(0x10, link(ModIndex::new(1), add_hundred, 0)),
+        Status::OK
+    );
+    let features = mids.features_at(0x10);
+    assert_eq!(features.len(), 1);
+    assert!(core::ptr::eq(features[0], &WICK));
+    assert!(mids.features_at(0x20).is_empty());
+}

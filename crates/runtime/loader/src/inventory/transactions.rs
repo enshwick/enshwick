@@ -531,9 +531,12 @@ const CHECKED: [Symbol; 2] = [pinned::inventory::ACTIONS_ROW, pinned::inventory:
 /// `executor` with its scratch block, when the game code at the hook reads
 /// as the build table says.
 fn checked(loader: &Loader, executor: Executor, txn_size: usize) -> Option<Executor> {
-    if let Some(moved) = CHECKED.iter().find(|&&symbol| !loader.code_holds(symbol)) {
-        let reason = crate::engine::builds::Unhooked::Moved.to_string();
-        let _off = loader.fuse_off(&INVENTORY_FUSE, moved.id(), &reason);
+    if let Some((symbol, why)) = unchecked(loader) {
+        // Read lazily for item facts too: off only where requests are wanted,
+        // by a mod or by a dedicated server's console.
+        if WANTED.load(Ordering::Acquire) || loader.side == Side::SERVER {
+            let _off = loader.fuse_off(&INVENTORY_FUSE, symbol.id(), &why.to_string());
+        }
         return None;
     }
     let layout = std::alloc::Layout::from_size_align(DESC_AREA + txn_size, 16).ok()?;
@@ -549,15 +552,27 @@ fn checked(loader: &Loader, executor: Executor, txn_size: usize) -> Option<Execu
     })
 }
 
+/// The first code check the build fails, with why: absent, or moved.
+fn unchecked(loader: &Loader) -> Option<(Symbol, crate::engine::builds::Unhooked)> {
+    CHECKED.iter().find_map(|&symbol| {
+        let address = loader.address(symbol);
+        crate::engine::builds::hook_target(address, || loader.code_holds(symbol))
+            .err()
+            .map(|why| (symbol, why))
+    })
+}
+
 /// A mod asks for inventories: allowed during init, on a build that has them.
 pub(crate) fn open(loader: &Loader) -> Status {
     if loader.delivery.get().is_some() {
         return Status::TOO_LATE;
     }
+    // Wanted before the executor is read, so a build without it lists the
+    // requests off.
+    WANTED.store(true, Ordering::Release);
     if executor(loader).is_none() {
         return Status::MISSING;
     }
-    WANTED.store(true, Ordering::Release);
     Status::OK
 }
 
@@ -586,6 +601,7 @@ pub(crate) fn link(loader: &Loader) {
 pub(crate) fn settle(loader: &Loader, failed: impl IntoIterator<Item = u64>) {
     let site = executor(loader).map(|e| e.site);
     let armed = WANTED.load(Ordering::Acquire)
+        && !INVENTORY_FUSE.is_off()
         && site.is_some_and(|site| failed.into_iter().all(|f| f != site));
     ARMED.store(armed, Ordering::Release);
     SETTLED.store(true, Ordering::Release);

@@ -154,3 +154,16 @@ pub(super) fn add_max(loader: &Loader, entity: Entity, pool: Pool, delta: i32) -
     add(set.max);
     true
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_build_without_the_attribute_layout_lists_the_stat_maxima_off() {
+        let loader = crate::start::tests::bare_loader();
+        assert!(super::layout(&loader).is_none());
+        assert!(
+            super::MAXIMA_FUSE.is_off(),
+            "off by its fuse, not only in the log"
+        );
+    }
+}

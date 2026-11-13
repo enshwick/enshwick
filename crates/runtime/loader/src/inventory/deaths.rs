@@ -147,7 +147,7 @@ pub(crate) fn link(loader: &'static Loader) {
         let _off = loader.fuse_off(
             &DEATHS_FUSE,
             DEATH_RECORD,
-            "is not reflected with every field the event carries",
+            "is not reflected within 64 bytes with every field the event carries",
         );
         return;
     };

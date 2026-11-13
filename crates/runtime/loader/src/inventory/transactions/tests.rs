@@ -194,6 +194,14 @@ fn an_unwanted_row_hook_leaves_the_requests_on_at_settling() {
 }
 
 #[test]
+fn a_build_without_the_checked_code_names_it_absent_not_moved() {
+    let loader = crate::start::tests::bare_loader();
+    let (symbol, why) = unchecked(&loader).unwrap();
+    assert_eq!(symbol.id(), CHECKED[0].id());
+    assert_eq!(why, crate::engine::builds::Unhooked::Absent);
+}
+
+#[test]
 fn operations_must_name_what_they_need() {
     let give = InventoryOp {
         kind: InventoryOp::GIVE,

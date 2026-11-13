@@ -36,6 +36,13 @@ fn a_survivor_feature_no_mod_asked_for_links_nothing_and_stays_on() {
 }
 
 #[test]
+fn a_build_whose_menu_system_does_not_read_lists_the_survivor_menu_off() {
+    let loader = crate::start::tests::bare_loader();
+    assert!(menu_system(&loader).is_none());
+    assert!(MENU_FUSE.is_off(), "off by its fuse, not only in the log");
+}
+
+#[test]
 fn filing_marks_a_free_slot_and_overwrites_a_used_one() {
     unsafe extern "system" fn find(_map: *mut u8, key: *const u32) -> u64 {
         // SAFETY: `file` passes a pointer to its own `u32` item.

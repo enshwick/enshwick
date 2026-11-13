@@ -518,11 +518,13 @@ impl Loader {
         false
     }
 
-    /// Turns off every loader feature with a link on `target`, the entry
-    /// `id` that could not be armed for `reason`, so the feature's links on
-    /// other targets are wired past too and no feature runs half armed.
+    /// Turns off every loader feature with a detour or a mid-function hook
+    /// on `target`, the entry `id` that could not be armed for `reason`, so
+    /// the feature's links on other targets are passed too and no feature
+    /// runs half armed.
     pub(crate) fn unarmed(&self, target: u64, id: &str, reason: &str) {
-        let features = self.chains.relock().features_at(target);
+        let mut features = self.chains.relock().features_at(target);
+        features.extend(self.mids.relock().features_at(target));
         for feature in features {
             let _off = self.fuse_off(feature, id, reason);
         }

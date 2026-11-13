@@ -281,6 +281,14 @@ impl Mids {
             .unwrap_or_default()
     }
 
+    /// The loader features with a link at `address`.
+    pub(crate) fn features_at(&self, address: u64) -> Vec<&'static Fuse> {
+        self.sites
+            .get(&address)
+            .map(|links| links.iter().filter_map(|&(_, feature)| feature).collect())
+            .unwrap_or_default()
+    }
+
     /// Every address with handlers.
     pub(crate) fn addresses(&self) -> Vec<u64> {
         self.sites.keys().copied().collect()
@@ -330,13 +338,26 @@ pub(crate) unsafe extern "system" fn dispatch(registers: *mut Registers, site: *
 /// lands inside the bytes a mid-function hook at `address` replaces; `None`
 /// when the hook may go there, for tests of a game executable read from its
 /// file.
+///
+/// # Panics
+///
+/// When `address` is outside `code` or the bytes the hook replaces run past
+/// its end: a hook cannot go there either.
 #[cfg(test)]
 pub(crate) fn branch_into_hook(code: &[u8], begin: u64, address: u64) -> Option<u64> {
-    let at = usize::try_from(address.checked_sub(begin)?).ok()?;
-    let mut decoder =
-        iced_x86::Decoder::with_ip(64, code.get(at..)?, address, iced_x86::DecoderOptions::NONE);
+    let inside = address
+        .checked_sub(begin)
+        .and_then(|at| code.get(usize::try_from(at).ok()?..));
+    let Some(from) = inside else {
+        panic!("{address:#x} is outside the function at {begin:#x}");
+    };
+    let mut decoder = iced_x86::Decoder::with_ip(64, from, address, iced_x86::DecoderOptions::NONE);
     let mut stolen = 0;
-    while stolen < crate::engine::detour::PATCH && decoder.can_decode() {
+    while stolen < crate::engine::detour::PATCH {
+        assert!(
+            decoder.can_decode(),
+            "the hook at {address:#x} runs past its function"
+        );
         stolen += decoder.decode().len();
     }
     crate::engine::detour::branch_into(code, begin, address, stolen as u64)
