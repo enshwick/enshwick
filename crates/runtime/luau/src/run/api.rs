@@ -32,9 +32,10 @@ impl Vm {
 
     fn subscribe(&self, what: &str, sub: Subscription, handler: Function) -> mlua::Result<()> {
         if !self.starting.load(Ordering::Acquire) {
-            return Err(mlua::Error::runtime(format!(
-                "{what}: subscribe at the top level of main.luau, while the mod starts"
-            )));
+            return Err(failed(
+                what,
+                "subscribe at the top level of main.luau, while the mod starts",
+            ));
         }
         self.handlers.relock().push((sub, handler));
         Ok(())
@@ -387,19 +388,23 @@ impl Inner {
             .find(|d| d.local == name)
             .cloned()
             .ok_or_else(|| {
-                mlua::Error::runtime(format!(
-                    "{what}: pack.toml declares no [[point]] named {name:?}"
-                ))
+                failed(
+                    what,
+                    format_args!("pack.toml declares no [[point]] named {name:?}"),
+                )
             })?;
         let handle = {
             let mut owned = self.owned.relock();
             match owned.iter().find(|o| o.desc.local == name) {
                 Some(known) => Arc::clone(&known.handle),
                 None if self.started.load(Ordering::Acquire) => {
-                    return Err(mlua::Error::runtime(format!(
-                        "{what}: {} is defined from the next start, at the top level of main.luau",
-                        desc.point.name
-                    )));
+                    return Err(failed(
+                        what,
+                        format_args!(
+                            "{} is defined from the next start, at the top level of main.luau",
+                            desc.point.name
+                        ),
+                    ));
                 }
                 None => {
                     let handle = Arc::new(OnceLock::new());
@@ -431,11 +436,11 @@ impl Inner {
                         large.as_mut_slice()
                     };
                     encode(&input, &desc.input, bytes, 0)
-                        .map_err(|e| mlua::Error::runtime(format!("{what}: the input: {e}")))?;
+                        .map_err(|e| failed(what, format_args!("the input: {e}")))?;
                     let mut out = Aligned([0u8; 16]);
                     let out = out.0.get_mut(..answer_size).unwrap_or_default();
                     encode(&answer, &desc.output, out, 0)
-                        .map_err(|e| mlua::Error::runtime(format!("{what}: the answer: {e}")))?;
+                        .map_err(|e| failed(what, format_args!("the answer: {e}")))?;
                     let Some(point) = asked.get() else {
                         return Ok((answer, kept.clone()));
                     };

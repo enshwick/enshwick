@@ -3,6 +3,7 @@
 //! reads and scales it, and a call into the API with each kind of argument.
 
 use std::alloc::{GlobalAlloc, Layout, System};
+use std::fmt::Write as _;
 use std::hint::black_box;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -46,10 +47,31 @@ static GLOBAL: Counting = Counting;
 /// spreads thin; the `loop` kind makes none and is subtracted.
 const CALLS: u32 = 100;
 
-/// A damage filter that runs the calls of the kind a hit's total names, 1
-/// to 7 for one of [`KINDS`], and scales any other fall by half.
+/// Each kind of call: its bench name and the call [`script`] makes; the
+/// `loop` kind makes none.
+const KINDS: [(&str, &str); 7] = [
+    ("loop", ""),
+    ("scalar", "scale_whole(100, 1.5)"),
+    ("string", r#"is_id("you.bench:a_content_id")"#),
+    ("list", "combine(factors)"),
+    ("record", "start_fill(meter)"),
+    ("bytes", "looks_like_code(bytes)"),
+    ("function", "store:with(read)"),
+];
+
+/// A damage filter that makes [`CALLS`] of the call of the kind a hit's
+/// total names, by its place in [`KINDS`] from 1, and scales any other
+/// fall by half.
+fn script() -> String {
+    let kinds = KINDS.iter().fold(String::new(), |mut kinds, (_, call)| {
+        let _ = writeln!(kinds, "function() for _ = 1, {CALLS} do {call} end end,");
+        kinds
+    });
+    MAIN.replace("--[[kinds]]", &kinds)
+}
+
+/// [`script`] without its kinds.
 const MAIN: &str = r#"
-    local CALLS = 100
     local scale_whole = enshwick.rates.scale_whole
     local is_id = enshwick.content.is_id
     local combine = enshwick.rates.combine
@@ -61,13 +83,7 @@ const MAIN: &str = r#"
     local bytes = buffer.create(64)
     local read = function(value) return value end
     local kinds = {
-        function() for _ = 1, CALLS do end end,
-        function() for _ = 1, CALLS do scale_whole(100, 1.5) end end,
-        function() for _ = 1, CALLS do is_id("you.bench:a_content_id") end end,
-        function() for _ = 1, CALLS do combine(factors) end end,
-        function() for _ = 1, CALLS do start_fill(meter) end end,
-        function() for _ = 1, CALLS do looks_like_code(bytes) end end,
-        function() for _ = 1, CALLS do store:with(read) end end,
+        --[[kinds]]
     }
     enshwick.damage.on_damage(function(damage)
         local kind = kinds[damage:total()]
@@ -78,12 +94,6 @@ const MAIN: &str = r#"
         end
     end)
 "#;
-
-/// The bench names of the kinds a hit's total picks, in the order of
-/// `MAIN`'s `kinds`.
-const KINDS: [&str; 7] = [
-    "loop", "scalar", "string", "list", "record", "bytes", "function",
-];
 
 struct Bench;
 
@@ -96,7 +106,7 @@ impl Mod for Bench {
         let _runtime = enshwick_luau::start(
             load,
             "enshwick.bench",
-            Scripts::new().with("main.luau", MAIN),
+            Scripts::new().with("main.luau", script()),
             None,
             limits,
         )?;
@@ -158,7 +168,7 @@ fn calls(c: &mut Criterion) {
     });
 
     let mut group = c.benchmark_group(format!("luau_call_x{CALLS}"));
-    for (at, kind) in (1u8..).zip(KINDS) {
+    for (at, (kind, _)) in (1u8..).zip(KINDS) {
         let total = f32::from(at);
         let made = allocations(&loader, total, HITS / CALLS);
         let after = loader.damage(hit(40.0));

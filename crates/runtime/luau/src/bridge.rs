@@ -1,7 +1,7 @@
 //! Values between Luau and the API, shaped by the script [`Ty`] of each.
 
-use std::cell::RefCell;
 use std::fmt::Display;
+use std::hash::Hash;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -141,10 +141,11 @@ pub(crate) fn from_lua(
         },
         Ty::Choice(choice) => choice_from_lua(lua, value, choice),
         Ty::String => match value {
-            LuaValue::String(s) => Ok(Value::String(spare_text(
-                &s.to_str()
-                    .map_err(|_| Error::new("expected text in UTF-8"))?,
-            ))),
+            LuaValue::String(s) => Ok(Value::String(
+                s.to_str()
+                    .map_err(|_| Error::new("expected text in UTF-8"))?
+                    .to_owned(),
+            )),
             other => Err(expected("a string", &other)),
         },
         Ty::Vector => match value {
@@ -159,7 +160,9 @@ pub(crate) fn from_lua(
             let LuaValue::Table(table) = value else {
                 return Err(expected("a list", &value));
             };
-            let mut items = Vec::with_capacity(table.raw_len());
+            // Not sized by `raw_len`: a border past a hole overcounts, and
+            // reading it costs more than it saves a short list.
+            let mut items = Vec::new();
             for (i, item) in table.sequence_values::<LuaValue>().enumerate() {
                 let item = item.map_err(|e| Error::new(e.to_string()))?;
                 items.push(
@@ -376,25 +379,25 @@ struct Interned {
     /// The script string of each name a variant or a record's field crossed
     /// as, by text: a record reads one per field on every call.
     names: FxHashMap<&'static str, mlua::LuaString>,
-    /// Each class's table of method functions, by method name, filled as
+    /// Each class's table of method functions, by class name, filled as
     /// `__index` makes them.
-    methods: Vec<(&'static str, mlua::Table)>,
+    methods: FxHashMap<&'static str, mlua::Table>,
     /// Each choice's table from a variant's script string to its place, by
-    /// its variants, since two choices may share a name.
-    choices: Vec<(&'static [(&'static str, &'static str)], mlua::Table)>,
+    /// where its variants live, since two choices may share a name.
+    choices: FxHashMap<usize, mlua::Table>,
 }
 
 impl Interned {
-    /// The entry of `key` in the list `pick` chooses, made by `make` and
+    /// The entry of `key` in the map `pick` chooses, made by `make` and
     /// kept on first use.
-    fn get<K: Copy + PartialEq, T: Clone>(
+    fn get<K: Copy + Eq + Hash, T: Clone>(
         lua: &Lua,
         key: K,
-        pick: fn(&mut Self) -> &mut Vec<(K, T)>,
+        pick: fn(&mut Self) -> &mut FxHashMap<K, T>,
         make: impl FnOnce() -> mlua::Result<T>,
     ) -> mlua::Result<T> {
         if let Some(mut interned) = lua.app_data_mut::<Self>()
-            && let Some((_, kept)) = pick(&mut interned).iter().find(|(k, _)| *k == key)
+            && let Some(kept) = pick(&mut interned).get(&key)
         {
             return Ok(kept.clone());
         }
@@ -403,26 +406,14 @@ impl Interned {
             let _none = lua.set_app_data(Self::default());
         }
         if let Some(mut interned) = lua.app_data_mut::<Self>() {
-            pick(&mut interned).push((key, value.clone()));
+            pick(&mut interned).insert(key, value.clone());
         }
         Ok(value)
     }
 
     /// The script string of the API's name `name`.
     fn name(lua: &Lua, name: &'static str) -> mlua::Result<mlua::LuaString> {
-        if let Some(interned) = lua.app_data_ref::<Self>()
-            && let Some(kept) = interned.names.get(name)
-        {
-            return Ok(kept.clone());
-        }
-        let made = lua.create_string(name)?;
-        if lua.app_data_ref::<Self>().is_none() {
-            let _none = lua.set_app_data(Self::default());
-        }
-        if let Some(mut interned) = lua.app_data_mut::<Self>() {
-            interned.names.insert(name, made.clone());
-        }
-        Ok(made)
+        Self::get(lua, name, |i| &mut i.names, || lua.create_string(name))
     }
 
     /// The table of method functions of the class `class`.
@@ -435,7 +426,7 @@ impl Interned {
     fn variant(lua: &Lua, choice: &Choice, text: &mlua::LuaString) -> Option<&'static str> {
         let table = Self::get(
             lua,
-            choice.values(),
+            choice.values().as_ptr().addr(),
             |i| &mut i.choices,
             || {
                 let table = lua.create_table_with_capacity(0, choice.values().len())?;
@@ -586,7 +577,9 @@ fn data(value: LuaValue, depth: usize) -> Result<Value, Error> {
     })
 }
 
-pub(crate) fn arguments(
+/// The API values of `args` as `signature` has them; a lent text
+/// parameter's text lands in a buffer the VM kept.
+fn arguments(
     lua: &Lua,
     scope: &Scope,
     args: impl Spread,
@@ -604,7 +597,11 @@ pub(crate) fn arguments(
     let mut out = Args::new(params.len());
     for (slot, param) in out.slots().iter_mut().zip(params) {
         let value = values.next().unwrap_or(LuaValue::Nil);
-        *slot = from_lua(lua, scope, value, param.ty()).map_err(|e| {
+        let read = match value {
+            LuaValue::String(text) if param.is_lent() => lent_text(lua, &text),
+            value => from_lua(lua, scope, value, param.ty()),
+        };
+        *slot = read.map_err(|e| {
             let name = if param.name().is_empty() {
                 "argument"
             } else {
@@ -629,7 +626,7 @@ pub(crate) fn call(
 ) -> mlua::Result<LuaValue> {
     let mut values = arguments(lua, scope, args, signature, what)?;
     let answer = run(values.slots()).map_err(|e| failed(what, e));
-    values.give_back_text();
+    values.give_back_text(lua, signature);
     to_lua(lua, scope, answer?, signature.ret())
 }
 
@@ -705,52 +702,65 @@ impl Args {
         }
     }
 
-    /// Keeps the text the API lent from the slots, a `&str` parameter's,
-    /// for the next call's text.
-    fn give_back_text(&mut self) {
-        for slot in self.slots() {
-            if let Value::String(text) = core::mem::replace(slot, Value::Nil) {
-                keep_text(text);
+    /// Gives the VM back the text of `signature`'s lent parameters, which
+    /// the API only borrowed from the slots, for the next call's text.
+    fn give_back_text(&mut self, lua: &Lua, signature: &'static Signature) {
+        for (slot, param) in self.slots().iter_mut().zip(signature.params()) {
+            if param.is_lent()
+                && let Value::String(text) = core::mem::replace(slot, Value::Nil)
+            {
+                KeptText::keep(lua, text);
             }
         }
     }
 }
 
-/// The text buffers a thread keeps at most: a call that passes text copies
-/// it into a kept buffer instead of allocating one.
-const KEPT_TEXTS: usize = 8;
+/// The text buffers a VM keeps for lent text parameters, so a call that
+/// passes text copies it into a kept buffer instead of allocating one.
+#[derive(Default)]
+struct KeptText(Vec<String>);
 
-/// The largest text buffer a thread keeps.
-const KEPT_TEXT_BYTES: usize = 4096;
+impl KeptText {
+    /// The buffers a VM keeps at most: one call lends this many texts
+    /// without allocating.
+    const MOST: usize = 8;
 
-thread_local! {
-    /// The text buffers the API's `&str` parameters left, for the next call.
-    static KEPT_TEXT: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
-}
+    /// The largest buffer a VM keeps.
+    const MOST_BYTES: usize = 4096;
 
-/// `text` in a buffer the thread kept, or a new one when it kept none.
-fn spare_text(text: &str) -> String {
-    let mut buffer = KEPT_TEXT
-        .try_with(|kept| kept.borrow_mut().pop())
-        .ok()
-        .flatten()
-        .unwrap_or_default();
-    buffer.clear();
-    buffer.push_str(text);
-    buffer
-}
-
-/// Keeps `text`'s buffer for [`spare_text`], unless the thread keeps enough
-/// or it is large.
-fn keep_text(text: String) {
-    if text.capacity() <= KEPT_TEXT_BYTES {
-        let _ended = KEPT_TEXT.try_with(|kept| {
-            let mut kept = kept.borrow_mut();
-            if kept.len() < KEPT_TEXTS {
-                kept.push(text);
-            }
-        });
+    /// A kept buffer, or a new one when the VM kept none.
+    fn take(lua: &Lua) -> String {
+        lua.app_data_mut::<Self>()
+            .and_then(|mut kept| kept.0.pop())
+            .unwrap_or_default()
     }
+
+    /// Keeps `text`'s buffer for [`KeptText::take`], unless the VM keeps
+    /// enough or it is large.
+    fn keep(lua: &Lua, mut text: String) {
+        if text.capacity() > Self::MOST_BYTES {
+            return;
+        }
+        text.clear();
+        if let Some(mut kept) = lua.app_data_mut::<Self>() {
+            if kept.0.len() < Self::MOST {
+                kept.0.push(text);
+            }
+            return;
+        }
+        let _none = lua.set_app_data(Self(vec![text]));
+    }
+}
+
+/// The API value of the text `text` for a lent parameter, in a buffer the
+/// VM kept.
+fn lent_text(lua: &Lua, text: &mlua::LuaString) -> Result<Value, Error> {
+    let text = text
+        .to_str()
+        .map_err(|_| Error::new("expected text in UTF-8"))?;
+    let mut buffer = KeptText::take(lua);
+    buffer.push_str(&text);
+    Ok(Value::String(buffer))
 }
 
 /// The Luau value of the TOML value `value`, such as a setting's; a date
@@ -785,7 +795,7 @@ pub(crate) fn toml_to_lua(lua: &Lua, value: &toml::Value) -> mlua::Result<LuaVal
 
 #[cfg(test)]
 mod tests {
-    use enshwick::script::{IntoScript as _, Typed};
+    use enshwick::script::{IntoScript as _, Param, Typed};
 
     use super::*;
 
@@ -831,6 +841,83 @@ mod tests {
         assert_eq!(Interned::variant(&lua, &B, &y), Some("Y"));
         let w = lua.create_string("W").unwrap();
         assert_eq!(Interned::variant(&lua, &B, &w), None);
+    }
+
+    #[test]
+    fn a_vm_keeps_a_bounded_number_of_small_text_buffers() {
+        let lua = Lua::new();
+        KeptText::keep(&lua, String::with_capacity(KeptText::MOST_BYTES + 1));
+        assert!(lua.app_data_ref::<KeptText>().is_none());
+        for _ in 0..=KeptText::MOST {
+            KeptText::keep(&lua, String::with_capacity(KeptText::MOST_BYTES));
+        }
+        let kept = lua.app_data_ref::<KeptText>().map(|kept| kept.0.len());
+        assert_eq!(kept, Some(KeptText::MOST));
+    }
+
+    #[test]
+    fn lent_text_lands_in_a_kept_buffer_and_owned_text_in_its_own() {
+        let lua = Lua::new();
+        KeptText::keep(&lua, String::from("left from a call before"));
+        KeptText::keep(&lua, String::with_capacity(KeptText::MOST_BYTES));
+        let text = lua.create_string("abc").unwrap();
+        let owned = from_lua(
+            &lua,
+            &Scope::detached(),
+            LuaValue::String(text.clone()),
+            &Ty::String,
+        );
+        let Ok(Value::String(owned)) = owned else {
+            panic!("no text: {owned:?}");
+        };
+        assert_eq!((owned.as_str(), owned.capacity()), ("abc", 3));
+        let Ok(Value::String(lent)) = lent_text(&lua, &text) else {
+            panic!("no lent text");
+        };
+        assert_eq!(
+            (lent.as_str(), lent.capacity()),
+            ("abc", KeptText::MOST_BYTES)
+        );
+    }
+
+    #[test]
+    fn a_list_with_a_hole_reserves_nothing_for_its_border() {
+        const NUMBERS: Ty = Ty::List(&Ty::Number);
+        let lua = Lua::new();
+        let table: mlua::Table = lua
+            .load("local t = table.create(100000); t[100000] = 1; return t")
+            .eval()
+            .unwrap();
+        assert_eq!(table.raw_len(), 100_000);
+        let list = from_lua(&lua, &Scope::detached(), LuaValue::Table(table), &NUMBERS);
+        let Ok(Value::List(items)) = list else {
+            panic!("no list: {list:?}");
+        };
+        assert!(items.is_empty());
+        assert_eq!(items.capacity(), 0);
+    }
+
+    #[test]
+    fn a_rust_callback_reaches_luau_as_a_function_that_names_its_error() {
+        const TWICE: Signature = Signature::new(&[Param::new("", &Ty::Number)], &Ty::Number);
+        let lua = Lua::new();
+        let callback = Callback::new(|args| match args.first() {
+            Some(Value::Number(n)) if *n >= 0.0 => Ok(Value::Number(n * 2.0)),
+            _ => Err(Error::new("no negatives")),
+        });
+        let function = to_lua(
+            &lua,
+            &Scope::detached(),
+            Value::Function(callback),
+            &Ty::Function(&TWICE),
+        )
+        .unwrap();
+        let LuaValue::Function(function) = function else {
+            panic!("no function: {function:?}");
+        };
+        assert_eq!(function.call::<f64>(2.0).unwrap(), 4.0);
+        let error = function.call::<f64>(-1.0).unwrap_err().to_string();
+        assert!(error.contains("function: no negatives"), "{error}");
     }
 
     #[test]

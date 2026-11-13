@@ -335,13 +335,38 @@ impl Signature {
 pub struct Param {
     name: &'static str,
     ty: &'static Ty,
+    lent: bool,
 }
 
 impl Param {
     #[doc(hidden)]
     #[must_use]
     pub const fn new(name: &'static str, ty: &'static Ty) -> Self {
-        Self { name, ty }
+        Self {
+            name,
+            ty,
+            lent: false,
+        }
+    }
+
+    /// A text parameter the function only borrows from its slot, a Rust
+    /// `&str`: the caller keeps the text's buffer after the call.
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn lent(name: &'static str) -> Self {
+        Self {
+            name,
+            ty: &Ty::String,
+            lent: true,
+        }
+    }
+
+    /// Whether the function leaves this parameter's text in its slot for
+    /// the caller to take back; see [`Function::call`].
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn is_lent(&self) -> bool {
+        self.lent
     }
 
     /// The Rust parameter's name; empty for a parameter of a function the
@@ -475,7 +500,8 @@ impl<T> Function<T> {
     }
 
     /// Calls the method on `this` with `args`, one per parameter, each of
-    /// the parameter's type; the method takes them out of the slice.
+    /// the parameter's type; the method takes them out of the slice, but
+    /// leaves the text of a `&str` parameter in its slot.
     ///
     /// # Errors
     ///
@@ -825,4 +851,42 @@ pub trait Answer {
     /// answer of another type, which the runtime has reported and turned
     /// the mod off for, answers as the API would without the script.
     fn from_answer(answer: Result<Value, Error>) -> Self;
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU8, Ordering};
+
+    use super::*;
+
+    #[test]
+    fn a_callback_with_a_runtime_tells_it_of_a_fault_and_with_fault_replaces_it() {
+        let told = Arc::new(AtomicU8::new(0));
+        let first = Arc::clone(&told);
+        let callback = Callback::with_runtime(
+            |_| Ok(Value::Bool(true)),
+            move |_| {
+                first.fetch_add(1, Ordering::Relaxed);
+            },
+        );
+        assert!(matches!(callback.call(&mut []), Ok(Value::Bool(true))));
+        callback.fault(&Error::new("no"));
+        assert_eq!(told.load(Ordering::Relaxed), 1);
+        let second = Arc::clone(&told);
+        let replaced = callback.with_fault(move |_| {
+            second.fetch_add(10, Ordering::Relaxed);
+        });
+        assert!(matches!(replaced.call(&mut []), Ok(Value::Bool(true))));
+        replaced.fault(&Error::new("no"));
+        assert_eq!(told.load(Ordering::Relaxed), 11);
+    }
+
+    #[test]
+    fn only_a_lent_parameter_says_it_leaves_its_text() {
+        let lent = Param::lent("text");
+        assert!(lent.is_lent());
+        assert!(matches!(lent.ty(), Ty::String));
+        assert!(!Param::new("text", &Ty::String).is_lent());
+    }
 }

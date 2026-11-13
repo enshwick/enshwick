@@ -6,6 +6,7 @@
 mod tests {
     use std::alloc::{GlobalAlloc, Layout, System};
     use std::cell::Cell;
+    use std::fmt::Write as _;
     use std::time::Duration;
 
     use enshwick::abi::{DamageCheck, Header, Status};
@@ -53,10 +54,33 @@ mod tests {
     /// The calls into the API one hit of a kind of argument makes.
     const CALLS: u64 = 10;
 
+    /// Each kind of argument: its name, the call [`script`] makes with it,
+    /// and the allocations one warm call makes. The floor: mlua allocates a
+    /// counter to read a string's bytes; a list or record parameter owns its
+    /// values, a buffer parameter its bytes, a function parameter its
+    /// callback.
+    const KINDS: [(&str, &str, u64); 6] = [
+        ("scalar", "scale_whole(100, 1.5)", 0),
+        ("string", r#"is_id("you.luau:a_content_id")"#, 1),
+        ("list", "combine(factors)", 2),
+        ("record", "start_fill(meter)", 3),
+        ("bytes", "looks_like_code(bytes)", 1),
+        ("function", "store:with(read)", 1),
+    ];
+
     /// A filter that halves magical fire on impact, and, for a hit whose
-    /// total is 1 to 6, makes [`CALLS`] calls with one kind of argument.
+    /// total is the place of one of [`KINDS`], from 1, makes [`CALLS`] of
+    /// its call.
+    fn script() -> String {
+        let kinds = KINDS.iter().fold(String::new(), |mut kinds, (_, call, _)| {
+            let _ = writeln!(kinds, "function() for _ = 1, {CALLS} do {call} end end,");
+            kinds
+        });
+        MAIN.replace("--[[kinds]]", &kinds)
+    }
+
+    /// [`script`] without its kinds.
     const MAIN: &str = r#"
-        local CALLS = 10
         local scale_whole = enshwick.rates.scale_whole
         local is_id = enshwick.content.is_id
         local combine = enshwick.rates.combine
@@ -68,12 +92,7 @@ mod tests {
         local bytes = buffer.create(64)
         local read = function(value) return value end
         local kinds = {
-            function() for _ = 1, CALLS do scale_whole(100, 1.5) end end,
-            function() for _ = 1, CALLS do is_id("you.luau:a_content_id") end end,
-            function() for _ = 1, CALLS do combine(factors) end end,
-            function() for _ = 1, CALLS do start_fill(meter) end end,
-            function() for _ = 1, CALLS do looks_like_code(bytes) end end,
-            function() for _ = 1, CALLS do store:with(read) end end,
+            --[[kinds]]
         }
         enshwick.damage.on_damage(function(damage)
             local kind = kinds[damage:total()]
@@ -96,7 +115,7 @@ mod tests {
             let _runtime = enshwick_luau::start(
                 load,
                 "you.luau",
-                Scripts::new().with("main.luau", MAIN),
+                Scripts::new().with("main.luau", script()),
                 None,
                 limits,
             )?;
@@ -161,18 +180,7 @@ mod tests {
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
-        // Each kind's floor: mlua allocates a counter to read a string's
-        // bytes; a list or record parameter owns its values, a buffer
-        // parameter its bytes, a function parameter its callback.
-        let kinds = [
-            (1.0, "scalar", 0),
-            (2.0, "string", 1),
-            (3.0, "list", 2),
-            (4.0, "record", 3),
-            (5.0, "bytes", 1),
-            (6.0, "function", 1),
-        ];
-        for (total, kind, per_call) in kinds {
+        for (total, (kind, _, per_call)) in (1u8..).map(f32::from).zip(KINDS) {
             for _ in 0..20 {
                 let _warm = loader.damage(calls_of(total));
             }

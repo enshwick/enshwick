@@ -568,8 +568,9 @@ pub fn record_fields(value: Value, count: usize) -> Result<std::vec::IntoIter<Va
 }
 
 #[doc(hidden)]
-/// The argument at `index` of `args`, nil when the script passed fewer, as
-/// `T`, for [`#[script]`](macro@crate::script).
+/// The next of `args`, nil when the script passed fewer, as `T`, for a
+/// record's fields in [`#[derive(Script)]`](derive@crate::Script) and in a
+/// hand-written [`FromScript`].
 ///
 /// # Errors
 ///
@@ -674,31 +675,6 @@ mod tests {
         assert_eq!(taken::<u8>(&mut slots, "n").ok(), Some(3));
         assert!(taken::<u8>(&mut slots, "m").is_err());
         assert!(matches!(args[0], Value::Nil));
-    }
-
-    #[test]
-    fn a_callback_with_a_runtime_tells_it_of_a_fault_and_with_fault_replaces_it() {
-        use std::sync::Arc;
-        use std::sync::atomic::{AtomicU8, Ordering};
-
-        let told = Arc::new(AtomicU8::new(0));
-        let first = Arc::clone(&told);
-        let callback = Callback::with_runtime(
-            |_| Ok(Value::Bool(true)),
-            move |_| {
-                first.fetch_add(1, Ordering::Relaxed);
-            },
-        );
-        assert!(matches!(callback.call(&mut []), Ok(Value::Bool(true))));
-        callback.fault(&Error::new("no"));
-        assert_eq!(told.load(Ordering::Relaxed), 1);
-        let second = Arc::clone(&told);
-        let replaced = callback.with_fault(move |_| {
-            second.fetch_add(10, Ordering::Relaxed);
-        });
-        assert!(matches!(replaced.call(&mut []), Ok(Value::Bool(true))));
-        replaced.fault(&Error::new("no"));
-        assert_eq!(told.load(Ordering::Relaxed), 11);
     }
 
     #[test]

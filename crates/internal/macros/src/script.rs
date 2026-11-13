@@ -486,8 +486,8 @@ fn parameter(
     if matches!(ty, Type::Reference(r) if matches!(&*r.elem, Type::Path(p) if p.path.is_ident("str")))
     {
         return Ok(Parameter {
-            describe: quote!(#script::Param::new(#param, <::std::string::String as #script::Typed>::TY)),
-            read: quote!(let #local: &str = #script::convert::text(&mut args, #param)?;),
+            describe: quote!(#script::Param::lent(#param)),
+            read: quote!(let #local: &str = #krate::__private::text(&mut args, #param)?;),
             pass: quote!(#local),
         });
     }
@@ -504,7 +504,7 @@ fn parameter(
     };
     Ok(Parameter {
         describe: quote!(#script::Param::new(#param, <#owned as #script::Typed>::TY)),
-        read: quote!(let #local: #owned = #script::convert::taken(&mut args, #param)?;),
+        read: quote!(let #local: #owned = #krate::__private::taken(&mut args, #param)?;),
         pass,
     })
 }
@@ -623,7 +623,7 @@ fn closure(
         },
         read: quote! {
             let #local = {
-                let callback: #script::Callback = #script::convert::taken(&mut args, #param)?;
+                let callback: #script::Callback = #krate::__private::taken(&mut args, #param)?;
                 move |#(#names: #inputs),*| -> #output { #body }
             };
         },
@@ -868,14 +868,44 @@ mod tests {
         )?
         .to_string();
         assert!(
-            out.contains("convert :: text (& mut args , \"text\")"),
+            out.contains("__private :: text (& mut args , \"text\")"),
             "{out}"
         );
+        assert!(out.contains("Param :: lent (\"text\")"), "{out}");
         assert!(
-            out.contains("convert :: taken (& mut args , \"times\")"),
+            out.contains("__private :: taken (& mut args , \"times\")"),
             "{out}"
         );
         assert!(out.contains("args . iter_mut ()"), "{out}");
+        Ok(())
+    }
+
+    #[test]
+    fn a_slice_parameter_owns_a_vec_and_another_reference_its_own_type() -> syn::Result<()> {
+        let method: ImplItemFn = parse_quote! {
+            /// Sums `items` when `bytes` look right.
+            fn sum(&self, items: &[u32], bytes: &Bytes) -> u32 {}
+        };
+        let out = function(
+            &method,
+            &parse_quote!(Rates),
+            false,
+            None,
+            &quote!(::enshwick),
+        )?
+        .to_string();
+        assert!(
+            out.contains(
+                "let arg0 : :: std :: vec :: Vec < u32 > = :: enshwick :: __private :: taken"
+            ),
+            "{out}"
+        );
+        assert!(
+            out.contains("let arg1 : Bytes = :: enshwick :: __private :: taken"),
+            "{out}"
+        );
+        assert!(out.contains("(& arg0 , & arg1)"), "{out}");
+        assert!(!out.contains("Param :: lent"), "{out}");
         Ok(())
     }
 }
