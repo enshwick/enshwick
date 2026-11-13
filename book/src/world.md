@@ -630,4 +630,6 @@ uses labels and a rename filter for its Safes.
 ## Chat lines
 
 `world.broadcast(text)` and `world.tell(&player, text)` send chat lines; see
-[Chat lines](chat.md#chat-lines).
+[Chat lines](chat.md#chat-lines). `world.language_of(player.key)` gives the
+language a player reads the game in; see
+[A text in each player's language](chat.md#a-text-in-each-players-language).
