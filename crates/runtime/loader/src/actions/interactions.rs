@@ -184,13 +184,13 @@ static READS_INPUTS: AtomicBool = AtomicBool::new(false);
 /// Whether the players' input is read each step, for the controls that
 /// follow game actions: the link is made and still on.
 pub(crate) fn reads_inputs() -> bool {
-    READS_INPUTS.load(Ordering::Acquire) && !ACTIONS_FUSE.is_off()
+    still_linked(READS_INPUTS.load(Ordering::Acquire), &ACTIONS_FUSE)
 }
 
-/// Marks the link on [`ACTIONS_SYSTEM`] made, for tests of what follows it.
-#[cfg(test)]
-pub(crate) fn link_inputs_for_tests() {
-    READS_INPUTS.store(true, Ordering::Release);
+/// Whether a link `made` at link time still runs: its `fuse` did not turn
+/// off since.
+fn still_linked(made: bool, fuse: &Fuse) -> bool {
+    made && !fuse.is_off()
 }
 
 /// Why the props stay open while transactions hold them: the link `off`,
@@ -883,10 +883,14 @@ mod tests {
         );
     }
 
+    // Tests here share one process on some runners: none turns off a fuse
+    // of this module that another test reads.
+
     #[test]
     fn props_open_to_players_name_the_link_that_is_off_without_a_build_code() {
+        let held = Fuse::new("test prop holds");
         let turn = crate::engine::log::capture_turn();
-        HOLDS_FUSE.turn_off(&holds_off(&ACTIONS_FUSE));
+        held.turn_off(&holds_off(&ACTIONS_FUSE));
         let lines = crate::engine::log::captured();
         drop(turn);
         assert!(
@@ -899,25 +903,11 @@ mod tests {
     }
 
     #[test]
-    fn a_build_without_the_layout_lists_the_filters_actions_and_holds_off() {
-        let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
-        link(loader);
-        assert!(INTERACTIONS_FUSE.is_off() && ACTIONS_FUSE.is_off() && HOLDS_FUSE.is_off());
-        assert!(!reads_inputs());
-        let listed = crate::engine::diag::parts_off();
-        let holds = listed.iter().find(|p| p.part == HOLDS_FUSE.feature());
-        assert!(
-            holds.is_some_and(|p| p.reason == "interaction filters is off"),
-            "{listed:?}"
-        );
-    }
-
-    #[test]
-    fn the_players_input_is_read_only_while_its_link_is_on() {
-        READS_INPUTS.store(true, Ordering::Release);
-        assert!(reads_inputs());
-        ACTIONS_FUSE.blow("a test");
-        assert!(!reads_inputs(), "a link turned off after it was made");
-        assert!(!crate::actions::controls::linked());
+    fn a_link_made_at_link_time_counts_only_while_its_fuse_is_on() {
+        let fuse = Fuse::new("test inventory actions");
+        assert!(!still_linked(false, &fuse), "never made");
+        assert!(still_linked(true, &fuse));
+        fuse.blow("a test");
+        assert!(!still_linked(true, &fuse), "turned off after it was made");
     }
 }

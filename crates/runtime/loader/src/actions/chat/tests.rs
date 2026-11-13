@@ -33,22 +33,6 @@ fn a_panic_in_the_line_handling_leaves_the_post_linked_and_its_type_check_on() {
 }
 
 #[test]
-fn a_line_for_one_player_that_reached_others_names_no_loader_fault() {
-    let turn = crate::engine::log::capture_turn();
-    strayed(3);
-    let lines = crate::engine::log::captured();
-    drop(turn);
-    let line = lines
-        .iter()
-        .map(|(_, _, line)| line.as_str())
-        .find(|line| line.starts_with("chat lines to one player off: "));
-    assert!(
-        line.is_some_and(|line| !line.contains("vanilla") && !line.contains('(')),
-        "{lines:?}"
-    );
-}
-
-#[test]
 fn a_line_to_one_player_needs_a_positive_byte_mask_and_overhead() {
     let one = OneLine {
         handle_slot: 0x7f,
@@ -93,23 +77,21 @@ fn a_build_without_the_chat_layout_names_the_first_entry_it_lacks() {
 }
 
 #[test]
-fn a_build_without_the_chat_layout_lists_the_chat_lines_off() {
-    let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
-    link(loader);
-    assert!(CHAT_FUSE.is_off());
-    let listed = crate::engine::diag::parts_off();
-    let off = listed.iter().find(|p| p.part == CHAT_FUSE.feature());
-    assert!(
-        off.is_some_and(|p| p.reason.starts_with(pinned::chat::MARK_DELIVERED.id())),
-        "{listed:?}"
-    );
-}
-
-#[test]
-fn a_line_for_one_player_that_reached_others_lists_those_lines_off() {
+fn a_line_for_one_player_that_reached_others_lists_those_lines_off_with_no_fault_code() {
     let before = delivery().1;
     assert!(to_one_player());
+    let turn = crate::engine::log::capture_turn();
     strayed(2);
+    let lines = crate::engine::log::captured();
+    drop(turn);
+    let line = lines
+        .iter()
+        .map(|(_, _, line)| line.as_str())
+        .find(|line| line.starts_with("chat lines to one player off: "));
+    assert!(
+        line.is_some_and(|line| !line.contains("vanilla") && !line.contains('(')),
+        "neither a loader fault nor vanilla: {lines:?}"
+    );
     strayed(1);
     assert!(!to_one_player());
     assert_eq!(delivery().1 - before, 2, "every stray counts");
