@@ -593,7 +593,47 @@ mod tests {
                 client || pins.at(bases::COUNT_GETTER).is_err(),
                 "{variable}"
             );
+            let targets: Vec<u64> = sites.targets().collect();
+            assert!(
+                sites.patches.iter().all(|p| *p.needs == *targets),
+                "{variable}: every patch waits for every hook of the window"
+            );
         }
+    }
+
+    #[test]
+    fn a_fault_in_the_window_leaves_its_teardown_linked() {
+        let loader = crate::start::tests::bare_loader();
+        assert!(loader.link_fused(
+            &TEARDOWN,
+            Target::Found("destroy", Some(0x1000)),
+            &SERVER_DESTROY_NEXT,
+            destroy_server,
+            HookFlags::NONE,
+        ));
+        assert!(loader.link_fused(
+            &PAST16,
+            Target::Found("create", Some(0x2000)),
+            &SERVER_CREATE_NEXT,
+            create_server,
+            HookFlags::NONE,
+        ));
+        PAST16.blow("a test");
+        assert!(!TEARDOWN.is_off());
+        let chains = enshwick_base::Relock::relock(&loader.chains);
+        let at_destroy = chains.features_at(0x1000);
+        assert!(
+            at_destroy.len() == 1 && core::ptr::eq(at_destroy[0], &raw const TEARDOWN),
+            "the destroy keeps freeing the windows made before"
+        );
+    }
+
+    #[test]
+    fn a_fault_in_the_teardown_stops_new_windows() {
+        ARMED.store(true, Ordering::Release);
+        assert!(armed());
+        TEARDOWN.blow("a test");
+        assert!(!armed(), "no window is made that nothing would free");
     }
 
     /// Where the function that starts at an offset into the code at

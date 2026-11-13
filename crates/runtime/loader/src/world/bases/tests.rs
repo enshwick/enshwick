@@ -323,3 +323,49 @@ fn the_lowest_cap_of_every_mod_lowers_the_bases_asked_for() {
     assert_eq!(asked.limits().bases, 40);
     assert_eq!(asked.limits().zones, 64);
 }
+
+#[test]
+fn a_raised_limit_whose_feature_turns_off_reports_the_game_s_own() {
+    let more = VANILLA_ZONES + 8;
+    ASKED.take(Limits {
+        zones: more,
+        bases: MAX_BASES,
+    });
+    RAISED.store(true, Ordering::Release);
+    assert_eq!(base_limit().zones, more);
+    RAISED_FUSE.blow("a test");
+    assert_eq!(
+        base_limit(),
+        Limits::VANILLA,
+        "the lookups run as the game's once the feature is off"
+    );
+    assert_eq!(zones(), None);
+}
+
+#[test]
+fn a_zone_list_lookup_that_panics_leaves_the_game_the_boxes_it_had() {
+    static LOOKUP: Fuse = Fuse::new("test zone list lookup");
+    let container = fake::FIELDS.container;
+    let mut room = [0u64; 64];
+    let list = room.as_mut_ptr().cast::<u8>();
+    // SAFETY: `room` holds the container's u64 length, within its 512 bytes.
+    unsafe { members::set_list_len(list, &container, 3) };
+    let caught = LOOKUP.run("a zone list lookup", || {
+        // SAFETY: `room` stands for the live container, on this thread
+        // until the guard drops.
+        let _guard = unsafe { detours::ListLen::at(list, container) };
+        // SAFETY: `room` holds the container's u64 length.
+        unsafe { members::set_list_len(list, &container, 5) };
+        panic!("a broken lookup");
+    });
+    assert_eq!(caught, None);
+    // SAFETY: `room` holds the container's u64 length.
+    assert_eq!(unsafe { members::list_len(list, &container) }, 3);
+    // SAFETY: `room` stands for the live container, on this thread.
+    let guard = unsafe { detours::ListLen::at(list, container) };
+    // SAFETY: `room` holds the container's u64 length.
+    unsafe { members::set_list_len(list, &container, 4) };
+    guard.keep();
+    // SAFETY: `room` holds the container's u64 length.
+    assert_eq!(unsafe { members::list_len(list, &container) }, 4);
+}

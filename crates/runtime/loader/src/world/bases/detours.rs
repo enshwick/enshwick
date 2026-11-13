@@ -427,7 +427,7 @@ crate::engine::chains::chain_detour! {
 /// Puts a zone box container's length back when dropped, unless kept, so
 /// after a lookup of ours panicked the game's own lookup appends to the
 /// boxes it had.
-struct ListLen {
+pub(super) struct ListLen {
     list: *mut u8,
     container: Container,
     len: u64,
@@ -439,7 +439,7 @@ impl ListLen {
     ///
     /// - `list` is the game's live zone box container, laid out as
     ///   `container`, used on this thread until the guard drops.
-    unsafe fn at(list: *mut u8, container: Container) -> Self {
+    pub(super) unsafe fn at(list: *mut u8, container: Container) -> Self {
         Self {
             list,
             container,
@@ -450,7 +450,7 @@ impl ListLen {
     }
 
     /// Leaves the container as the lookup filled it.
-    fn keep(mut self) {
+    pub(super) fn keep(mut self) {
         self.kept = true;
     }
 }
