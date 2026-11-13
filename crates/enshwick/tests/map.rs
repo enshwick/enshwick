@@ -344,6 +344,53 @@ mod tests {
     }
 
     #[test]
+    fn an_uncover_reaches_only_a_client_that_runs_enshwick_and_checks_its_circle() {
+        let (with, without) = (enshwick::PlayerKey::new(7), enshwick::PlayerKey::new(8));
+        let (loader, map) = start(
+            fake()
+                .map_frame(FRAME)
+                .net_peer(enshwick::net::Peer::Player(with)),
+        );
+
+        assert_eq!(map.uncover(with, [1250.0, -830.0], 200.0), Ok(()));
+        assert_eq!(
+            map.uncover(without, [1250.0, -830.0], 200.0),
+            Err(WorldError::Missing),
+            "a client without Enshwick is not reached"
+        );
+        for (at, radius) in [
+            ([f64::NAN, 0.0], 10.0),
+            ([0.0, 0.0], 0.0),
+            ([0.0, 0.0], 200_000.0),
+        ] {
+            assert_eq!(map.uncover(with, at, radius), Err(WorldError::Refused));
+        }
+        assert_eq!(map.uncover_all(with), Ok(()));
+
+        let sent = loader.fog_uncovers();
+        assert_eq!(sent.len(), 2, "{sent:?}");
+        assert_eq!(sent[0], (with, [1250.0, -830.0], 200.0));
+        let (_, centre, radius) = sent[1];
+        assert_eq!(centre, [4608.0, 5376.0], "the frame's centre");
+        assert!(
+            (radius - 7240.77).abs() < 0.01,
+            "half its diagonal: {radius}"
+        );
+    }
+
+    #[test]
+    fn a_client_in_another_s_game_uncovers_nothing() {
+        let key = enshwick::PlayerKey::new(7);
+        let (loader, map) = start(
+            fake()
+                .side(enshwick::abi::Side::CLIENT)
+                .net_peer(enshwick::net::Peer::Player(key)),
+        );
+        assert_eq!(map.uncover(key, [0.0, 0.0], 50.0), Err(WorldError::Missing));
+        assert!(loader.fog_uncovers().is_empty());
+    }
+
+    #[test]
     fn a_scene_without_a_frame_answers_missing() {
         let (_loader, map) = start(fake());
 

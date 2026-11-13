@@ -258,8 +258,10 @@ A Luau mod writes with `enshwick.config.set(key, value)`, a text, a number
 or a boolean. A refusal raises an error that names the reason:
 
 ```luau
-if enshwick.settings().password == "" then
-    enshwick.config.set("password", generated)
+local function first_start(generated: string)
+    if enshwick.settings().password == "" then
+        enshwick.config.set("password", generated)
+    end
 end
 ```
 
