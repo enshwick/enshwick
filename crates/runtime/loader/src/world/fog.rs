@@ -154,17 +154,22 @@ fn layout(loader: &Loader) -> Result<Layout, Constant> {
     };
     let edge_shift = shift(pinned::map::FOG_TILE_EDGE_SHIFT)?;
     let tile_shift = shift(pinned::map::FOG_TILE_SHIFT)?;
-    // A tile is `edge` × `edge` bytes: the two shifts must agree.
-    if tile_shift != edge_shift * 2 || 1 << tile_shift > MAX_TILE_BYTES {
-        return Err(pinned::map::FOG_TILE_SHIFT);
-    }
+    let (tile_bytes, edge) = tile(edge_shift, tile_shift).ok_or(pinned::map::FOG_TILE_SHIFT)?;
     Ok(Layout {
         size_z: offset(pinned::map::FOG_SIZE_Z)?,
         tiles: offset(pinned::map::FOG_TILES)?,
         tiles_wide: offset(pinned::map::FOG_TILES_WIDE)?,
-        tile_bytes: 1 << tile_shift,
-        edge: 1 << edge_shift,
+        tile_bytes,
+        edge,
     })
+}
+
+/// A tile's bytes and edge from the shifts of each, when they agree: a
+/// tile is `edge` × `edge` bytes, at most [`MAX_TILE_BYTES`]; both shifts
+/// are under 16.
+fn tile(edge_shift: u32, tile_shift: u32) -> Option<(usize, u32)> {
+    (tile_shift == edge_shift * 2 && 1 << tile_shift <= MAX_TILE_BYTES)
+        .then(|| (1 << tile_shift, 1 << edge_shift))
 }
 
 /// Links the reveal on every client, for the uncovers its server asks for,
@@ -493,6 +498,16 @@ mod tests {
             .into_iter()
             .find(|p| p.part == part)
             .map(|p| p.reason)
+    }
+
+    #[test]
+    fn a_tile_is_its_edge_squared_and_fits_the_copy_s_buffer() {
+        assert_eq!(tile(6, 12), Some((4096, 64)));
+        assert_eq!(tile(5, 10), Some((1024, 32)));
+        assert_eq!(tile(0, 0), Some((1, 1)));
+        assert_eq!(tile(6, 13), None, "the shifts disagree");
+        assert_eq!(tile(6, 11), None, "the shifts disagree");
+        assert_eq!(tile(7, 14), None, "past the buffer");
     }
 
     #[test]
