@@ -1,0 +1,15 @@
+[package]
+name = "enshwick-loader-start"
+version = "1.0.0-alpha.14"
+description = "Runtime of Enshwick, not a dependency of a mod: the start contract between the powrprof.dll stub and the Enshwick loader's enshwick_start"
+keywords = ["enshrouded", "modding", "loader"]
+categories = ["game-development"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

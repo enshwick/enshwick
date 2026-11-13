@@ -3,7 +3,8 @@
 //! doctest harness of the API crate, so its Rust examples compile. Every
 //! chapter opens with its page type and description and keeps its intro
 //! short, a chapter that names an id links the page on how ids are
-//! namespaced, and some chapter names each public module of the API crate.
+//! namespaced, some chapter names each public module of the API crate, and
+//! the ABI coverage chapter lists every host table entry in order.
 //! Its links and its sentence lengths are [`mod@links`] and [`mod@prose`].
 
 pub(crate) mod links;
@@ -12,6 +13,7 @@ pub(crate) mod prose;
 use std::path::Path;
 
 use crate::FACADE;
+use crate::commands::header;
 
 /// The book's sources, relative to the workspace root.
 const SOURCE: &str = "book/src";
@@ -56,6 +58,50 @@ pub(crate) fn check(root: &Path) -> Vec<String> {
         Err(error) => found.push(format!("{API_ROOT}: {error}")),
     }
     found
+}
+
+/// The chapter whose entries table audits every host table entry's tests.
+const COVERAGE_CHAPTER: &str = "abi-coverage.md";
+/// The heading of that table's section.
+const COVERAGE_ENTRIES: &str = "## The entries";
+
+/// Why the coverage chapter under `root` does not list the fields of
+/// `HostApi` in the golden layout once each, in the table's order, so an
+/// appended entry cannot skip the audit.
+pub(crate) fn coverage_problem(root: &Path) -> Option<String> {
+    let read = |path: &str| {
+        std::fs::read_to_string(root.join(path)).map_err(|error| format!("{path}: {error}"))
+    };
+    let chapter_path = format!("{SOURCE}/{COVERAGE_CHAPTER}");
+    let fields = match read(header::LAYOUT).and_then(|text| header::host_api_fields(&text)) {
+        Ok(fields) => fields,
+        Err(error) => return Some(error),
+    };
+    let chapter = match read(&chapter_path) {
+        Ok(text) => text,
+        Err(error) => return Some(error),
+    };
+    entries_mismatch(&chapter, &fields).map(|at| {
+        format!(
+            "{chapter_path}: row {} of its entries table should be `{}`, the next HostApi field of {}; list every field once, in order",
+            at + 1,
+            fields.get(at).map_or("(none)", String::as_str),
+            header::LAYOUT
+        )
+    })
+}
+
+/// The first row of `chapter`'s entries table that is not the field of
+/// `fields` at its place, or the row past its end when rows are missing.
+fn entries_mismatch(chapter: &str, fields: &[String]) -> Option<usize> {
+    let mut rows = chapter
+        .lines()
+        .skip_while(|line| *line != COVERAGE_ENTRIES)
+        .skip(1)
+        .take_while(|line| !line.starts_with("## "))
+        .filter_map(|line| line.strip_prefix("| `")?.split_once('`'))
+        .map(|(entry, _)| entry);
+    (0..=fields.len()).find(|&at| rows.next() != fields.get(at).map(String::as_str))
 }
 
 /// The API crate's root, which declares its public modules.
@@ -639,5 +685,41 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let found = check(&root);
         assert!(found.is_empty(), "{found:?}");
+        assert_eq!(coverage_problem(&root), None);
+    }
+
+    fn fields(names: &[&str]) -> Vec<String> {
+        names.iter().map(|&name| name.to_owned()).collect()
+    }
+
+    const ENTRIES: &str = "# ABI coverage\n\n## The entries\n\n| Entry | Test |\n| --- | --- |\n\
+                           | `header` | a.rs |\n| `log` | b.rs |\n\n## Gaps\n\n| `stray` | c.rs |\n";
+
+    #[test]
+    fn an_entries_table_listing_every_field_in_order_passes() {
+        assert_eq!(entries_mismatch(ENTRIES, &fields(&["header", "log"])), None);
+    }
+
+    #[test]
+    fn a_missing_a_swapped_or_an_extra_entry_is_named_by_its_row() {
+        assert_eq!(
+            entries_mismatch(ENTRIES, &fields(&["header", "log", "chat"])),
+            Some(2)
+        );
+        assert_eq!(
+            entries_mismatch(ENTRIES, &fields(&["log", "header"])),
+            Some(0)
+        );
+        assert_eq!(entries_mismatch(ENTRIES, &fields(&["header"])), Some(1));
+    }
+
+    #[test]
+    fn the_golden_layout_gives_the_host_table_fields_in_order() {
+        let layout = "abi 5.0\nHeader size 8 align 4\n    size at 0 size 4 type u32\n\
+                      HostApi size 16 align 8\n    header at 0 size 8 type Header\n    log at 8 size 8 type fn\n";
+        assert_eq!(
+            header::host_api_fields(layout),
+            Ok(fields(&["header", "log"]))
+        );
     }
 }

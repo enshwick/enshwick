@@ -680,6 +680,7 @@ dependencies = [
  "enshwick-base",
  "enshwick-core",
  "enshwick-gamedata",
+ "enshwick-loader-start",
  "enshwick-luau",
  "iced-x86",
  "insta",
@@ -698,9 +699,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "enshwick-loader-start"
+version = "1.0.0-alpha.14"
+
+[[package]]
 name = "enshwick-loader-stub"
 version = "1.0.0-alpha.14"
 dependencies = [
+ "enshwick-loader-start",
  "windows-sys",
 ]
 

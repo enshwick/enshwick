@@ -66,3 +66,7 @@ pub unsafe extern "system" fn enshwick_start(
         ));
     }
 }
+
+// The stub calls the export through this type.
+#[cfg(windows)]
+const _: enshwick_loader_start::Start = enshwick_start;

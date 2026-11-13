@@ -21,18 +21,7 @@ use std::path::PathBuf;
 use windows_sys::Win32::System::LibraryLoader::{GetModuleFileNameW, GetProcAddress};
 use windows_sys::Win32::System::SystemServices::DLL_PROCESS_ATTACH;
 
-/// `enshwick_start(stub_abi, missing_forwards, release)`, exported by the
-/// loader; it calls `release` once its hooks are armed.
-type Start = unsafe extern "system" fn(
-    stub_abi: u32,
-    missing_forwards: u32,
-    release: extern "system" fn() -> u32,
-);
-
-/// The contract between this stub and the loader's `enshwick_start`.
-const STUB_ABI: u32 = 2;
-/// No forward could be installed at all.
-const NO_SYSTEM_COPY: u32 = u32::MAX;
+use enshwick_loader_start::{NO_SYSTEM_COPY, STUB_ABI, Start};
 
 /// Called by Windows when the DLL loads.
 ///
@@ -107,7 +96,8 @@ fn start(missing: u32) {
         ));
         return;
     };
-    // SAFETY: the loader exports `enshwick_start` with the `Start` signature.
+    // SAFETY: the loader exports `enshwick_start` with the `Start` signature,
+    // which a compile-time check in the loader holds it to.
     let start: Start = unsafe { core::mem::transmute(start) };
     // SAFETY: called once, from this thread, outside the loader lock.
     unsafe { start(STUB_ABI, missing, gate::release) };

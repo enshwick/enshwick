@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use enshwick_core::abi::Side;
 use enshwick_gamedata::reflect::{Fingerprint, Image, Layout, Reflection};
+use enshwick_loader_start::{NO_SYSTEM_COPY, STUB_ABI};
 use windows_sys::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW};
 
 use crate::{engine::builds, engine::errors, engine::log};
@@ -19,9 +20,6 @@ const HEADER_PAGE: usize = 0x400; // bound, not a game offset: the loader's read
 
 /// The folders beside the game's executable the loader keeps.
 pub(super) const GAME_DIRS: [&str; 2] = ["mods", "logs"];
-
-/// The stub contract the loader speaks.
-const STUB_ABI: u32 = 2;
 
 /// The game as the loader identified it.
 pub(super) struct Game {
@@ -161,7 +159,7 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
             "stub contract {stub_abi}, the loader speaks {STUB_ABI}"
         );
     }
-    if missing_forwards == u32::MAX {
+    if missing_forwards == NO_SYSTEM_COPY {
         crate::log!(
             WARN,
             "the system powrprof.dll could not be loaded ({})",

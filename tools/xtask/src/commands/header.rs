@@ -20,7 +20,7 @@ const VALUES_ABI_SOURCE: &str = "crates/internal/values/src/abi.rs";
 /// The name of that file's copy beside the ABI module's.
 const VALUES_ABI_COPY: &str = "values_abi.rs";
 /// The golden layout file.
-const LAYOUT: &str = "crates/internal/abi/src/abi/layout.txt";
+pub(crate) const LAYOUT: &str = "crates/internal/abi/src/abi/layout.txt";
 /// cbindgen's settings.
 const CONFIG: &str = "crates/enshwick/cbindgen.toml";
 /// The committed header.
@@ -290,6 +290,15 @@ fn parse_layout(text: &str) -> Result<Vec<Shape>, String> {
         }
     }
     Ok(shapes)
+}
+
+/// The fields of `HostApi` in the golden file `text`, in the table's order.
+pub(crate) fn host_api_fields(text: &str) -> Result<Vec<String>, String> {
+    parse_layout(text)?
+        .into_iter()
+        .find(|shape| shape.name == "HostApi")
+        .map(|host| host.fields.into_iter().map(|(name, _)| name).collect())
+        .ok_or_else(|| format!("{LAYOUT}: no HostApi"))
 }
 
 /// A C file, which compiles as C++ too, asserting every size, alignment and
