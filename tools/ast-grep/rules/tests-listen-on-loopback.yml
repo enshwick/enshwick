@@ -17,15 +17,6 @@ files:
   - "**/tests/**"
   - "**/tests.rs"
   - "**/*_tests.rs"
-utils:
-  every-network:
-    any:
-      - kind: string_content
-        regex: '\b0\.0\.0\.0\b|\[::\]'
-      - kind: identifier
-        regex: '^UNSPECIFIED$'
-      - kind: call_expression
-        regex: 'Ipv[46]Addr::new\(\s*0(\s*,\s*0){3,7}\s*,?\s*\)$'
 rule:
   matches: every-network
 ---
@@ -34,41 +25,13 @@ language: rust
 severity: error
 message: a test listens on 127.0.0.1 or [::1], never on every network
 note: >-
-  As `tests-listen-on-loopback`, for test code in other files: a
-  `#[cfg(test)]` module or function, or a `#[test]` function.
+  As `tests-listen-on-loopback`, for test code in other files: an item
+  under `#[cfg(test)]`, `#[cfg(any(test, ...))]` or `#[cfg(all(test,
+  ...))]`, or a test function. Not seen: `test` nested deeper in a cfg.
 ignores:
   - "**/tests/**"
   - "**/tests.rs"
   - "**/*_tests.rs"
-utils:
-  every-network:
-    any:
-      - kind: string_content
-        regex: '\b0\.0\.0\.0\b|\[::\]'
-      - kind: identifier
-        regex: '^UNSPECIFIED$'
-      - kind: call_expression
-        regex: 'Ipv[46]Addr::new\(\s*0(\s*,\s*0){3,7}\s*,?\s*\)$'
-  in-test:
-    any:
-      - kind: mod_item
-        follows:
-          kind: attribute_item
-          stopBy:
-            not:
-              any:
-                - kind: attribute_item
-                - kind: line_comment
-          regex: '^#\[cfg\(.*\btest\b'
-      - kind: function_item
-        follows:
-          kind: attribute_item
-          stopBy:
-            not:
-              any:
-                - kind: attribute_item
-                - kind: line_comment
-          regex: '^#\[(test|cfg\(.*\btest\b)'
 rule:
   matches: every-network
   inside:

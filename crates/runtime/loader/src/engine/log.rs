@@ -398,8 +398,6 @@ impl Drop for LogTurn {
     fn drop(&mut self) {
         if self.capturing {
             CAPTURING.store(false, Ordering::Release);
-            // Off the poison policy, as `CAPTURED` says.
-            // ast-grep-ignore: lock-through-relock
             if let Ok(mut lines) = CAPTURED.lock() {
                 *lines = None;
             }

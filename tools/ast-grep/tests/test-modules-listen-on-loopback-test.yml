@@ -30,7 +30,50 @@ valid:
             assert_eq!(name.split("::").count(), 2);
         }
     }
+  - |
+    #[cfg(not(test))]
+    fn listen() {
+        let socket = TcpListener::bind("0.0.0.0:7777");
+    }
+  - |
+    #[cfg(feature = "test")]
+    pub fn listen() {
+        let socket = TcpListener::bind("0.0.0.0:7777");
+    }
+  - |
+    #[cfg(any(feature = "test", windows))]
+    pub fn listen() {
+        let socket = TcpListener::bind("0.0.0.0:7777");
+    }
 invalid:
+  - |
+    #[cfg(any(windows, test))]
+    fn listener() -> UdpSocket {
+        UdpSocket::bind("0.0.0.0:0").unwrap()
+    }
+  - |
+    #[cfg(test)]
+    const ADDRESS: &str = "0.0.0.0:0";
+  - |
+    #[cfg(test)]
+    impl Server {
+        fn local() -> Self {
+            Self::bind((Ipv4Addr::UNSPECIFIED, 0))
+        }
+    }
+  - |
+    #[tokio::test]
+    async fn a_client_reaches_the_console() {
+        let socket = TcpListener::bind("0.0.0.0:0").await;
+    }
+  - |
+    #[cfg(test)]
+    /* the console's own listener */
+    mod tests {
+        fn listener() -> TcpListener {
+            TcpListener::bind("[::]:0").unwrap()
+        }
+    }
   - |
     #[cfg(test)]
     mod tests {
