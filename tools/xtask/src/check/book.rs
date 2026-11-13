@@ -725,11 +725,12 @@ mod tests {
         let layout = root.join(header::LAYOUT);
         std::fs::create_dir_all(layout.parent().unwrap()).unwrap();
         std::fs::create_dir_all(root.join(SOURCE)).unwrap();
-        let rows: String = fields
+        let rows = fields
             .iter()
             .enumerate()
             .map(|(at, field)| format!("    {field} at {} size 8 type fn\n", at * 8))
-            .collect();
+            .collect::<Vec<_>>()
+            .concat();
         std::fs::write(&layout, format!("abi 5.0\nHostApi size 16 align 8\n{rows}")).unwrap();
         std::fs::write(root.join(SOURCE).join(COVERAGE_CHAPTER), ENTRIES).unwrap();
         let found = coverage_problem(&root);
