@@ -10,7 +10,11 @@ use enshwick_gamedata::reflect::{Fingerprint, Image, Layout, Reflection};
 const LOOSE_CODE: u64 = 0x200;
 
 /// A game executable on disk.
-pub(crate) struct Exe<'a> {
+#[expect(
+    missing_debug_implementations,
+    reason = "the image and reflection it borrows have no Debug; nothing prints an executable"
+)]
+pub struct Exe<'a> {
     image: Image<'a>,
     /// The `.text` bytes and the RVA they start at.
     text: &'a [u8],
@@ -22,7 +26,7 @@ pub(crate) struct Exe<'a> {
 
 impl<'a> Exe<'a> {
     /// Reads the executable in `bytes`.
-    pub(crate) fn parse(bytes: &'a [u8]) -> anyhow::Result<Self> {
+    pub fn parse(bytes: &'a [u8]) -> anyhow::Result<Self> {
         let image = Image::parse(bytes, Layout::File, None)?;
         let base = image.base();
         let text_section = image.section(".text").context("no .text section")?;
@@ -53,57 +57,66 @@ impl<'a> Exe<'a> {
     }
 
     /// The executable's image.
-    pub(crate) const fn image(&self) -> &Image<'a> {
+    #[must_use]
+    pub const fn image(&self) -> &Image<'a> {
         &self.image
     }
 
     /// The executable's reflection, scanned once.
-    pub(crate) const fn reflection(&self) -> &Reflection<'a> {
+    #[must_use]
+    pub const fn reflection(&self) -> &Reflection<'a> {
         &self.reflection
     }
 
     /// The build fingerprint, when the executable carries one.
-    pub(crate) fn fingerprint(&self) -> Option<Fingerprint> {
+    #[must_use]
+    pub fn fingerprint(&self) -> Option<Fingerprint> {
         self.image.fingerprint()
     }
 
     /// The `.text` bytes and the RVA of the first.
-    pub(crate) fn text(&self) -> (&'a [u8], u64) {
+    #[must_use]
+    pub fn text(&self) -> (&'a [u8], u64) {
         (self.text, self.text_rva)
     }
 
     /// `len` bytes at `rva`, when they lie inside `.text`.
-    pub(crate) fn code(&self, rva: u64, len: u64) -> Option<&'a [u8]> {
+    #[must_use]
+    pub fn code(&self, rva: u64, len: u64) -> Option<&'a [u8]> {
         let start = usize::try_from(rva.checked_sub(self.text_rva)?).ok()?;
         let end = start.checked_add(usize::try_from(len).ok()?)?;
         self.text.get(start..end)
     }
 
     /// `len` initialised bytes at `rva`, in any section.
-    pub(crate) fn data(&self, rva: u64, len: u64) -> Option<&'a [u8]> {
+    #[must_use]
+    pub fn data(&self, rva: u64, len: u64) -> Option<&'a [u8]> {
         self.image.read(self.image.base() + rva, len)
     }
 
     /// The VAs an image at the preferred base can span, for spotting absolute
     /// pointers in code: a PE image is smaller than 4 GiB.
-    pub(crate) fn absolute_range(&self) -> Range<u64> {
+    #[must_use]
+    pub fn absolute_range(&self) -> Range<u64> {
         self.image.base()..self.image.base() + (1 << 32)
     }
 
     /// The function table entry that covers `rva`.
-    pub(crate) fn function_at(&self, rva: u64) -> Option<Range<u64>> {
+    #[must_use]
+    pub fn function_at(&self, rva: u64) -> Option<Range<u64>> {
         let i = self.functions.partition_point(|f| f.start <= rva);
         let f = self.functions.get(i.checked_sub(1)?)?;
         (rva < f.end).then(|| f.clone())
     }
 
     /// Every function table entry, sorted by start.
-    pub(crate) fn functions(&self) -> &[Range<u64>] {
+    #[must_use]
+    pub fn functions(&self) -> &[Range<u64>] {
         &self.functions
     }
 
     /// Every function table entry `len` bytes long.
-    pub(crate) fn functions_of_len(&self, len: u64) -> impl Iterator<Item = &Range<u64>> {
+    pub fn functions_of_len(&self, len: u64) -> impl Iterator<Item = &Range<u64>> {
         self.functions
             .iter()
             .filter(move |f| f.end - f.start == len)
@@ -112,7 +125,8 @@ impl<'a> Exe<'a> {
     /// The code at `rva` and how far it runs: its function table entry, or a
     /// bounded stretch when no entry covers it (a leaf function), from the
     /// leaf's start when the padding before it marks one.
-    pub(crate) fn code_around(&self, rva: u64) -> Option<(Range<u64>, bool)> {
+    #[must_use]
+    pub fn code_around(&self, rva: u64) -> Option<(Range<u64>, bool)> {
         if let Some(f) = self.function_at(rva) {
             // A function split into chunks has an entry per chunk, back to
             // back: a prologue's entry may hold only a few instructions.
@@ -176,7 +190,8 @@ impl<'a> Exe<'a> {
     }
 
     /// The entry of the reflected system `name`, as an RVA.
-    pub(crate) fn system_entry(&self, name: &str) -> Option<u64> {
+    #[must_use]
+    pub fn system_entry(&self, name: &str) -> Option<u64> {
         let entry = self.reflection.system(name).ok()?.entry();
         entry.checked_sub(self.image.base()).filter(|_| entry != 0)
     }

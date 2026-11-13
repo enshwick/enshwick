@@ -60,7 +60,7 @@ pub(crate) struct Found {
 pub(crate) fn check(root: &Path, mods: Option<&Path>) -> Found {
     let source = root.join(SOURCE);
     let mut chapters = Vec::new();
-    if let Err(error) = crate::book::collect(&source, "", &mut chapters) {
+    if let Err(error) = super::collect(&source, "", &mut chapters) {
         return Found {
             problems: vec![format!("{SOURCE}: {error}")],
             skipped: None,

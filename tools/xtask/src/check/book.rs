@@ -4,6 +4,10 @@
 //! chapter opens with its page type and description and keeps its intro
 //! short, a chapter that names an id links the page on how ids are
 //! namespaced, and some chapter names each public module of the API crate.
+//! Its links and its sentence lengths are [`mod@links`] and [`mod@prose`].
+
+pub(crate) mod links;
+pub(crate) mod prose;
 
 use std::path::Path;
 

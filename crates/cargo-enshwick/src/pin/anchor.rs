@@ -16,7 +16,7 @@ use super::signature::Reference;
 
 /// The instruction an entry's pattern is built around.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Anchor {
+pub enum Anchor {
     /// A constant read from the operand of the instruction, plus an
     /// addend.
     Read(u64, Carrier, i64),
@@ -34,7 +34,8 @@ pub(crate) enum Anchor {
 
 impl Anchor {
     /// The instruction it rests on.
-    pub(crate) const fn site(&self) -> Option<u64> {
+    #[must_use]
+    pub const fn site(&self) -> Option<u64> {
         match self {
             Self::Read(site, ..)
             | Self::Confirm(site)
@@ -45,7 +46,8 @@ impl Anchor {
     }
 
     /// The same anchor at another instruction.
-    pub(crate) const fn moved_to(&self, site: u64) -> Self {
+    #[must_use]
+    pub const fn moved_to(&self, site: u64) -> Self {
         match *self {
             Self::Read(_, carrier, plus) => Self::Read(site, carrier, plus),
             Self::Confirm(_) => Self::Confirm(site),
@@ -57,8 +59,9 @@ impl Anchor {
     }
 }
 
-/// Reads a `--from` pick for the entry whose value is `value`: for a
-/// constant `<rva>`, optionally prefixed `disp:`, `neg:`, `imm:` or `shl:` and
+/// Reads a `--from` pick for the entry whose value is `value`.
+///
+/// For a constant `<rva>`, optionally prefixed `disp:`, `neg:`, `imm:` or `shl:` and
 /// followed by `+<n>` or `-<n>` for a value next to the operand, or
 /// `confirm:<rva>`; for a symbol `<rva>`, `ref:<rva>`, `direct`, `body` or
 /// `body:<rva>`.
@@ -66,12 +69,7 @@ impl Anchor {
 /// # Errors
 ///
 /// When the pick does not read or does not fit the code.
-pub(crate) fn parse_pick(
-    text: &str,
-    value: u64,
-    symbol: bool,
-    exe: &Exe<'_>,
-) -> anyhow::Result<Anchor> {
+pub fn parse_pick(text: &str, value: u64, symbol: bool, exe: &Exe<'_>) -> anyhow::Result<Anchor> {
     let number = |t: &str| {
         let digits = t.trim().trim_start_matches("0x").replace('_', "");
         u64::from_str_radix(&digits, 16).with_context(|| format!("{t:?} is no hex RVA"))
@@ -131,11 +129,13 @@ pub(crate) fn parse_pick(
 }
 
 /// The anchors of the entries of `table` that keep one, found in `exe` by
-/// their patterns: constants read from an operand and symbols reached through a
-/// rel32. A constant read via a symbol is searched in that symbol's code,
+/// their patterns.
+///
+/// Constants are read from an operand and symbols reached through a rel32.
+/// A constant read via a symbol is searched in that symbol's code,
 /// which `symbol_at` places in `exe`. Entries whose pattern does not match
 /// once are left out.
-pub(crate) fn of_table(
+pub fn of_table(
     table: &Table,
     exe: &Exe<'_>,
     symbol_at: impl Fn(&str) -> Option<u64>,
@@ -214,7 +214,8 @@ pub(crate) fn of_table(
 }
 
 /// The constant the anchor reads in `exe`.
-pub(crate) fn read(exe: &Exe<'_>, anchor: &Anchor) -> Option<u64> {
+#[must_use]
+pub fn read(exe: &Exe<'_>, anchor: &Anchor) -> Option<u64> {
     let Anchor::Read(site, carrier, plus) = anchor else {
         return None;
     };
@@ -223,7 +224,8 @@ pub(crate) fn read(exe: &Exe<'_>, anchor: &Anchor) -> Option<u64> {
 }
 
 /// Where the instruction at `site` in `exe` points.
-pub(crate) fn target(exe: &Exe<'_>, site: u64) -> Option<u64> {
+#[must_use]
+pub fn target(exe: &Exe<'_>, site: u64) -> Option<u64> {
     let (masked, _, index) = patterns::instruction(exe, site).ok()?;
     match masked.insns[index].reference? {
         Reference::Code(rva) | Reference::Data(rva) => Some(rva),

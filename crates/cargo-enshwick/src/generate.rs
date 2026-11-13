@@ -25,7 +25,7 @@ const TYPED: &str = "crates/internal/typed/src/typed";
 /// # Errors
 ///
 /// When the folder or a table does not read.
-pub(crate) fn tables_of(data: &Path) -> anyhow::Result<Vec<Table>> {
+pub fn tables_of(data: &Path) -> anyhow::Result<Vec<Table>> {
     tables_in(data)
         .with_context(|| data.display().to_string())?
         .iter()
@@ -34,10 +34,8 @@ pub(crate) fn tables_of(data: &Path) -> anyhow::Result<Vec<Table>> {
 }
 
 /// The side whose table among `tables` is for the build `fingerprint`.
-pub(crate) fn side_of(
-    tables: &[Table],
-    fingerprint: enshwick_gamedata::Fingerprint,
-) -> Option<Side> {
+#[must_use]
+pub fn side_of(tables: &[Table], fingerprint: enshwick_gamedata::Fingerprint) -> Option<Side> {
     [Side::Server, Side::Client]
         .into_iter()
         .find(|side| exact(tables, *side, fingerprint).is_some())
@@ -48,7 +46,7 @@ pub(crate) fn side_of(
 /// # Errors
 ///
 /// When they do not read or hold no reflection data.
-pub(crate) fn catalogue(bytes: &[u8]) -> anyhow::Result<Catalogue> {
+pub fn catalogue(bytes: &[u8]) -> anyhow::Result<Catalogue> {
     let image = Image::parse(bytes, Layout::File, None)?;
     let catalogue = Catalogue::from_reflection(&Reflection::scan(&image));
     if catalogue.snapshot().is_empty() {
@@ -62,7 +60,7 @@ pub(crate) fn catalogue(bytes: &[u8]) -> anyhow::Result<Catalogue> {
 /// # Errors
 ///
 /// When the table does not read.
-pub(crate) fn renames(root: &Path) -> anyhow::Result<Renames> {
+pub fn renames(root: &Path) -> anyhow::Result<Renames> {
     let path = root.join(RENAMES);
     match std::fs::read_to_string(&path) {
         Ok(text) => Renames::parse(&text).with_context(|| path.display().to_string()),
@@ -103,7 +101,7 @@ fn generated(
 /// # Errors
 ///
 /// When a file does not write.
-pub(crate) fn write_api(root: &Path, catalogue: &Catalogue, build: &str) -> anyhow::Result<usize> {
+pub fn write_api(root: &Path, catalogue: &Catalogue, build: &str) -> anyhow::Result<usize> {
     let (files, stale) = generated(root, catalogue, build)?;
     for (path, text) in &files {
         if let Some(dir) = path.parent() {
@@ -123,7 +121,7 @@ pub(crate) fn write_api(root: &Path, catalogue: &Catalogue, build: &str) -> anyh
 /// # Errors
 ///
 /// When the file does not write.
-pub(crate) fn write_snapshot(
+pub fn write_snapshot(
     data: &Path,
     catalogue: &Catalogue,
     side: Side,
@@ -137,9 +135,10 @@ pub(crate) fn write_snapshot(
     Ok(path)
 }
 
-/// Snapshots `from` into the game data folder `data` when given, then
-/// writes the typed API from that snapshot when `from` is the server's,
-/// else from the newest server build's snapshot there, or
+/// Snapshots the executable `from` into the game data folder `data` when
+/// given, then writes the typed API.
+///
+/// It writes from that snapshot when `from` is the server's, else from the newest server build's snapshot there, or
 /// with `check` fails when the committed files differ from what it would
 /// write.
 ///
@@ -149,12 +148,7 @@ pub(crate) fn write_snapshot(
 /// write, the executable's side shows neither in its name nor in a kept
 /// table, no server snapshot is kept, or with `check`, when a generated
 /// file differs.
-pub(crate) fn run(
-    root: &Path,
-    data: &Path,
-    from: Option<&Path>,
-    check: bool,
-) -> anyhow::Result<String> {
+pub fn run(root: &Path, data: &Path, from: Option<&Path>, check: bool) -> anyhow::Result<String> {
     if !root.join(RUNTIME).is_file() {
         bail!(
             "{} is not the enshwick repository: {RUNTIME} is missing; pass --root",
@@ -165,12 +159,11 @@ pub(crate) fn run(
     let mut done = Vec::new();
     let mut snapshotted = None;
     if let Some(exe) = from {
-        let exe = crate::types::executable(exe)?;
-        let bytes = std::fs::read(&exe).with_context(|| exe.display().to_string())?;
+        let bytes = std::fs::read(exe).with_context(|| exe.display().to_string())?;
         let fingerprint = Image::parse(&bytes, Layout::File, None)?
             .fingerprint()
             .ok_or_else(|| anyhow!("{} names no build", exe.display()))?;
-        let side = crate::pin::side_of_exe(&exe)
+        let side = crate::pin::side_of_exe(exe)
             .map(crate::pin::gamedata_side)
             .or_else(|| side_of(&tables, fingerprint))
             .ok_or_else(|| {

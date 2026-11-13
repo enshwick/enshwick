@@ -14,15 +14,17 @@ default-run = "xtask"
 # rebuild of the running `xtask.exe` would fail on Windows.
 [[bin]]
 name = "xtask-compat"
-path = "src/compat.rs"
+path = "src/commands/compat.rs"
 required-features = ["compat"]
 
 [features]
-compat = ["dep:clap", "dep:enshwick-abi", "dep:enshwick-gamedata", "dep:enshwick-loader", "dep:memchr"]
+compat = ["dep:anyhow", "cargo-enshwick/cli", "dep:enshwick-abi", "dep:enshwick-gamedata", "dep:enshwick-loader", "dep:memchr", "dep:rustc-hash", "dep:toml_edit"]
 
 [dependencies]
+anyhow = { workspace = true, optional = true }
+cargo-enshwick = { path = "../../crates/cargo-enshwick", default-features = false }
 cbindgen.workspace = true
-clap = { workspace = true, optional = true }
+clap.workspace = true
 enshwick-abi = { workspace = true, optional = true }
 enshwick-gamedata = { workspace = true, optional = true }
 memchr = { workspace = true, optional = true }
@@ -32,7 +34,9 @@ serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 syn = { version = "3.0.9", default-features = false, features = ["full", "parsing", "visit"] }
+rustc-hash = { workspace = true, optional = true }
 toml.workspace = true
+toml_edit = { workspace = true, optional = true }
 zip.workspace = true
 
 [target.'cfg(windows)'.dependencies]

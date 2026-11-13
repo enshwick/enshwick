@@ -85,123 +85,62 @@ is out, at most once a day; without a network it says nothing, and `CI` or
   `pack schema [dir]` writes the JSON Schema of each pack file for editors;
   `pack zip <dir> [--out <file>]` checks the pack and zips it for a release,
   its files under `mods/<id>/`.
-- `pin --old <exe> --new <exe>` ports the mods' build rows to a new game
-  build and reports how the loader's entries port, in an Enshwick checkout,
-  for maintainers. See [below](#porting-build-rows-pin).
+- `pin --old <exe> --new <exe>` ports a mod's own build rows to a new game
+  build. See [below](#porting-build-rows-pin).
 
 ## Porting build rows (`pin`)
 
-`cargo enshwick pin` ports build rows to a new game build. Every game update
-changes the build fingerprint and moves functions. The loader finds its own
-entries on every build by its engine routes and anchors, with no file made
-for the build, so `pin` writes no loader table: it reports how each row of
-the kept table ports, which shows a route or anchor that needs fixing. A
-mod's own rows are per build, and `pin` writes them where it can prove each
-entry and lists the rest for a human. It never guesses.
+`cargo enshwick pin` ports a mod's own build rows to a new game build. Most
+mods have none: the loader finds its entries on every build by its engine
+routes and anchors. A mod that pins addresses or constants of its own does
+so per build, in `[[package.metadata.enshwick.builds]]` rows of its
+`Cargo.toml`, and every game update changes the build fingerprint and moves
+functions. `pin` writes the new rows where it can prove each entry and lists
+the rest for a human. It never guesses.
 
-It reads the kept builds' tables, one TOML file per build in `tables/` of
-the game data folder outside the repository that `--data` or
-`ENSH_GAMEDATA` names, and the
-`[[package.metadata.enshwick.builds]]` rows of every mod's `Cargo.toml`
-under `mods/`. A row gives its symbols and constants as
+```toml
+[[package.metadata.enshwick.builds]]
+side = "server"
+guid = "f1e760a53ff247409ab91462e88b8f49"
+age = 224
+
+[package.metadata.enshwick.builds.symbols]
+"you.mod.spawn" = 0x1f29fa
+
+[package.metadata.enshwick.builds.constants]
+"you.mod.stack_size" = 0x48
+```
+
+A row gives its symbols and constants as
 `[package.metadata.enshwick.builds.symbols]` and
 `[package.metadata.enshwick.builds.constants]` tables of `"id" = value`
 lines; `pin` refuses a row that gives them as an inline table or dotted keys.
-It ports each table and row whose fingerprint is the old executable's. Each
-ported entry also gets the code pattern that finds it on a later build,
-taken from the new executable: the smallest window of instructions that is unique
-in the code, with moving parts masked, and field and frame offsets too where
-the window stays unique without them. A symbol's window is its own code, or
-the code that calls or addresses it; a constant's is the instruction picked
-as its use, with the operand that carries it left open to read. A constant
-read `via` a symbol is read again in that symbol's code, and a slot named by
-its `attribute` is kept as it is (see
-[Patterns](https://github.com/enshwick/enshwick/blob/main/crates/enshwick-gamedata/README.md#patterns)).
+It reads every `Cargo.toml` below `--dir` (the current folder by default),
+outside `target/` and hidden folders, so it ports one mod or a whole
+workspace, and ports each row whose fingerprint is the old executable's:
 
-For each table it ports, `pin` also refreshes the `check` shapes of the
-engine routes in `crates/enshwick-gamedata/anchors/routes.toml` for that
-side: a check that still holds at its symbol on the old and the new build
-stays, a route of that side alone takes one made from their code, and the
-report lists each route left without one, whose hook then needs an anchor
-row.
-
-### Workflow
-
-1. **Keep the old executables.** The tool needs the executable the current
-   rows were made for. Copy `enshrouded_server.exe` and `enshrouded.exe`
-   aside before you update.
-2. **Download the new build** with
-   [steamcmd](https://developer.valvesoftware.com/wiki/SteamCMD). Anyone can
-   download the dedicated server (app 2278520); the client (app 1203620) needs
-   an account that owns the game:
+1. **Keep the old executable.** The tool needs the executable the current
+   rows were made for. Copy `enshrouded_server.exe` or `enshrouded.exe` aside
+   before you update the game.
+2. **Run the tool** once per executable:
 
    ```bash
-   steamcmd +force_install_dir ./server +login anonymous +app_update 2278520 validate +quit
-   steamcmd +force_install_dir ./client +login <account> +app_update 1203620 validate +quit
+   cargo enshwick pin --old old/enshrouded_server.exe \
+     --new server/enshrouded_server.exe --write --report pin-server.md
    ```
 
-   The Steam build id is in `steamapps/appmanifest_2278520.acf` (`buildid`),
-   and in `appmanifest_1203620.acf` for the client.
-3. **Run the tool** from the repository root, once per executable:
+   `--write` puts each new row right after its old one; without it the
+   report carries the new rows instead. It writes every file or none: when
+   one cannot be written, the others stay as they were. The exit code is 0
+   when nothing needs a human, 2 when something does, and 1 on an error.
+3. **Review.** The report lists every entry with its verdict. Settle each
+   item under "For a human": a dropped entry has a `pin:` note where it was
+   in the row, and a flagged constant has one above it. Build the mod and
+   try it on the new build.
 
-   ```bash
-   cargo run --release -p cargo-enshwick -- enshwick pin \
-     --old old/enshrouded_server.exe --new server/enshrouded_server.exe \
-     --steam-build 26100000 --write --report pin-server.md
-   cargo run --release -p cargo-enshwick -- enshwick pin \
-     --old old/enshrouded.exe --new client/enshrouded.exe \
-     --steam-build 26100001 --write --report pin-client.md
-   ```
-
-   `--write` puts each new mod row right after its old one and writes the
-   refreshed check shapes; the report names the build by `--steam-build` and
-   `--game-version` when they are given. Without `--write` the report carries
-   the ported table and the new rows instead. An old build without a kept table
-   in the game data folder ports from what its anchors and engine routes find on it, and
-   the report says where each section's old values come from. It writes every file or none:
-   when one cannot be written, the others stay as they were. The exit code is 0 when nothing
-   needs a human, 2 when something does, and 1 on an error.
-4. **Review.** The report lists every entry with its verdict. Settle each item
-   under "For a human": a dropped mod entry has a `pin:` note where it was
-   in the mod's row, and a flagged constant has one above it. A loader entry
-   the report cannot port needs its route or anchor fixed. Read `git diff`,
-   build, and try the new build in game.
-5. **Write the report data** of the new build, which the compatibility page
-   reads; given the folder, it takes the build's file name:
-
-   ```bash
-   cargo xtask compat server/enshrouded_server.exe \
-     --data crates/enshwick-gamedata/reports
-   ```
-
-   `--steam-build` and `--game-version` name the build when no Steam
-   appmanifest or game archive lies beside the executable. When steps 3 or 4
-   changed an anchor or a route, every kept report's seal is stale too:
-   rewrite them all with `cargo xtask compat refresh`, with `ENSH_EXES`
-   listing the new executable and every kept one.
-6. **Open a pull request** with the report data, the rows, any fixed route or
-   anchor and the report's summary. Never commit an executable or anything
-   else from the game.
-
-`--patterns <exe>` rewrites the patterns of the table for that executable's
-build from the executable itself. With `--write` it writes the table file;
-without, it prints it. `--from <id>=<pick>`, or `--from-file` with one
-`<id> <pick>` per line, builds an entry's pattern around an instruction:
-
-| Pick | For | The pattern |
-| --- | --- | --- |
-| `<rva>` | a constant | reads the displacement or immediate of the instruction at `rva` that holds the value |
-| `disp:`, `neg:`, `imm:`, `shl:<rva>` | a constant | reads that operand: the displacement, the displacement negated (`[rbp - value]`), the immediate, or `1 << immediate` |
-| `<rva>+<n>`, `<rva>-<n>` | a constant | reads the operand and adds `n`, for a value next to it |
-| `confirm:<rva>` | a constant | fixes the instruction, which confirms the value while it stands |
-| `ref:<rva>` | a symbol | follows the rel32 of the call, jump or RIP-relative operand at `rva` |
-| `direct` | a symbol | its own code |
-| `body`, `body:<rva>` | a symbol | its own code, or the call at `rva`, plus a hash of its whole function (`body = { len, open, hash }`), so a change to its logic fails the check |
-
-An entry keeps its instruction from then on: each run finds it again by the
-entry's pattern. A constant without a pick gets no pattern, as a value found
-in some code says nothing about what the code means. The exit code is 2 when
-a pick gives no pattern, with the reason.
+The platform's maintainers port the loader's own entries with
+`cargo xtask compat pin` in the Enshwick repository, by the same rules (see
+[Porting to a new build](https://github.com/enshwick/enshwick/blob/main/crates/enshwick-gamedata/README.md#porting-to-a-new-build)).
 
 ### How it decides
 
@@ -242,30 +181,6 @@ a pick gives no pattern, with the reason.
   compared with the bytes at the symbol's new address. Only flagged constants
   need a human. Unverified ones are worth a look when the report shows that
   the code around them moved a lot.
-
-### Tests
-
-`cargo nextest run -p cargo-enshwick` covers the signatures, the search and the
-row parser. Three more tests need a game executable, which is never in the
-repository:
-
-```bash
-ENSHWICK_PIN_EXE=path/to/enshrouded_server.exe cargo test --release -p cargo-enshwick -- --ignored
-```
-
-`a_build_ports_to_itself` ports every table and row of the executable's build
-to the same executable, and every symbol and check must map to itself.
-`moved_code_is_followed` moves all the code 16 bytes on, function table
-included, and rewrites one function. Every other symbol in code must follow
-the move, and the rewritten one must come out `missing`.
-`a_moved_field_is_read_on_the_new_build` moves three fields the table reads
-from code by 8 bytes: porting and the patterns alone must both give the new
-offsets. The same command works with `enshrouded.exe`. With `ENSH_SERVER_EXE`,
-`ENSH_CLIENT_EXE` and the game data folder `ENSH_GAMEDATA` set,
-`cargo nextest run -p enshwick-gamedata`
-checks that every pattern of each table matches exactly once on its own
-build and yields the table's value, and that the patterns cover at least as
-many entries as they do today.
 
 ## More
 

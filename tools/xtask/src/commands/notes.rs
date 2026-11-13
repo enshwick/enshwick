@@ -6,44 +6,68 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use crate::reports::REPORTS;
+use cargo_enshwick::changelog::{ALPHA_WARNING, CHANGELOG, CHANGES, closed};
+
+use crate::check::changelog::fragments;
+use crate::check::reports::REPORTS;
 use crate::{Package, packages, say, workspace_root};
 
-const USAGE: &str = "usage: cargo xtask notes [--out <file>] [--known-issues <text>]";
 /// The package whose version names the release.
 pub(crate) const LOADER: &str = "enshwick-loader";
 /// GitHub refuses a release body longer than this, in characters.
 const MAX_BODY: usize = 125_000;
-const WARNING: &str = "\
-> [!WARNING]
-> This is an alpha. Before 1.0 anything may change, including the API, the
-> ABI, file layouts, settings and mod ids. Mods built for one alpha may need a
-> rebuild for the next. Back up your saves.
->
-> Це альфа-версія. До 1.0 може змінитися будь-що: API, ABI, розташування
-> файлів, налаштування та ідентифікатори модів. Моди, зібрані для однієї
-> альфа-версії, можуть потребувати перезбирання для наступної. Зробіть
-> резервні копії збережень.
-";
 const INSTALL: &str = "Extract `enshwick.zip` into the folder that holds \
 `enshrouded.exe` or `enshrouded_server.exe`. It holds the loader and no mod: \
 each mod ships in its own archive.";
 const NO_KNOWN_ISSUES: &str = "None reported for this alpha.";
 
-pub(crate) fn run(args: &[String]) -> Result<bool, String> {
-    let root = workspace_root();
-    let (out, known_issues) = options(&root, args)?;
-    let packages = packages()?;
-    let version = &packages
+/// The command line `notes` takes.
+#[derive(Debug, clap::Args)]
+pub(crate) struct Args {
+    /// The file to write; `target/notes.md` of the workspace when left out.
+    #[arg(long)]
+    out: Option<PathBuf>,
+    /// The known issues, as Markdown; empty says none are reported. A list
+    /// starts with a dash, so the value may.
+    #[arg(long, default_value = "", allow_hyphen_values = true)]
+    known_issues: String,
+}
+
+/// The version the release carries: the loader's, which notes, tag lines
+/// and closed changelogs all name.
+///
+/// # Errors
+///
+/// When the loader is not among the packages.
+pub(crate) fn release_version(packages: &[Package]) -> Result<&str, String> {
+    packages
         .iter()
         .find(|p| p.name == LOADER)
-        .ok_or_else(|| format!("no package {LOADER}"))?
-        .version;
+        .map(|p| p.version.as_str())
+        .ok_or_else(|| format!("no package {LOADER}"))
+}
+
+/// Writes the notes `args` ask for; whether it did.
+///
+/// # Errors
+///
+/// When the loader is not among the packages, a report or changelog does
+/// not read, a changelog is not closed for the version or the notes do not
+/// write.
+pub(crate) fn run(args: &Args) -> Result<bool, String> {
+    let root = workspace_root();
+    let out = args
+        .out
+        .clone()
+        .unwrap_or_else(|| root.join("target").join("notes.md"));
+    let known_issues = &args.known_issues;
+    let packages = packages()?;
+    let version = release_version(&packages)?;
     let text = notes(
         version,
         &builds(&root.join(REPORTS))?,
         &changes(&root, &packages, version)?,
-        &known_issues,
+        known_issues,
     )?;
     if let Some(dir) = out.parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -54,22 +78,6 @@ pub(crate) fn run(args: &[String]) -> Result<bool, String> {
         out.display()
     ));
     Ok(true)
-}
-
-/// The file to write, `target/notes.md` of the workspace by default, and the
-/// known issues.
-fn options(root: &Path, args: &[String]) -> Result<(PathBuf, String), String> {
-    let mut out = root.join("target").join("notes.md");
-    let mut known_issues = String::new();
-    let mut rest = args.iter();
-    while let Some(arg) = rest.next() {
-        match arg.as_str() {
-            "--out" => out = PathBuf::from(rest.next().ok_or(USAGE)?),
-            "--known-issues" => known_issues.clone_from(rest.next().ok_or(USAGE)?),
-            _ => return Err(USAGE.to_owned()),
-        }
-    }
-    Ok((out, known_issues))
 }
 
 /// One game build a compatibility report covers; a report may leave out
@@ -139,7 +147,8 @@ fn build(table: &str) -> Result<GameBuild, String> {
 }
 
 /// Each package's changelog section of `version`, as `(package, section)`;
-/// a package without a changelog, or with an empty section, is left out.
+/// a package without a changelog, or with an empty section, is left out,
+/// and one with change files not joined yet is refused.
 fn changes(
     root: &Path,
     packages: &[Package],
@@ -147,12 +156,19 @@ fn changes(
 ) -> Result<Vec<(String, String)>, String> {
     let mut changes = Vec::new();
     for package in packages {
-        let path = root.join(&package.dir).join("CHANGELOG.md");
+        let dir = root.join(&package.dir);
+        let path = dir.join(CHANGELOG);
         let text = match std::fs::read_to_string(&path) {
             Ok(text) => text,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
             Err(e) => return Err(format!("{}: {e}", path.display())),
         };
+        if !fragments(&dir)?.is_empty() {
+            return Err(format!(
+                "{}/{CHANGES}: change files not joined yet; run cargo xtask close first",
+                package.dir
+            ));
+        }
         if let Some(section) =
             closed(&text, version).map_err(|e| format!("{}: {e}", path.display()))?
         {
@@ -163,43 +179,6 @@ fn changes(
         return Err(format!("no changelog has a change in {version}"));
     }
     Ok(changes)
-}
-
-/// The section of `version` in a changelog closed as it: one with changes
-/// still under Unreleased, or without the version's heading, is refused, so
-/// an alpha never ships changes its notes leave out.
-fn closed<'a>(changelog: &'a str, version: &str) -> Result<Option<&'a str>, String> {
-    if section(changelog, "Unreleased").is_some() {
-        return Err(format!(
-            "changes under Unreleased; close them as `## [{version}]` first"
-        ));
-    }
-    let heading = format!("## [{version}]");
-    if !changelog.lines().any(|line| line.starts_with(&heading)) {
-        return Err(format!("no section `{heading}`"));
-    }
-    Ok(section(changelog, version))
-}
-
-/// The body of the `## [version]` section of a Keep a Changelog file, up to
-/// the next section, trimmed; `None` without one or when it is empty.
-fn section<'a>(changelog: &'a str, version: &str) -> Option<&'a str> {
-    let heading = format!("## [{version}]");
-    let mut offset = 0;
-    let mut start = None;
-    for line in changelog.split_inclusive('\n') {
-        if let Some(start) = start {
-            if line.starts_with("## ") {
-                return Some(changelog[start..offset].trim()).filter(|s| !s.is_empty());
-            }
-        } else if line.starts_with(&heading) {
-            start = Some(offset + line.len());
-        }
-        offset += line.len();
-    }
-    start
-        .map(|start| changelog[start..].trim())
-        .filter(|s| !s.is_empty())
 }
 
 /// The game version `builds` name, once when several sides share it, else
@@ -239,7 +218,7 @@ fn notes(
         ));
     }
     let mut text = format!(
-        "{WARNING}\n{INSTALL}\n\n## Game version\n\nThis alpha was checked against {}.\n",
+        "{ALPHA_WARNING}\n{INSTALL}\n\n## Game version\n\nThis alpha was checked against {}.\n",
         checked(builds)?
     );
     text.push_str("\n## What changed\n");
@@ -278,41 +257,21 @@ fn notes(
 mod tests {
     use super::*;
 
-    const CHANGELOG: &str = "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- next\n\n\
-        ## [1.0.0-alpha.12] - 2026-11-05\n\n### Added\n\n- controls (#930)\n\n\
-        ## [1.0.0-alpha.11] - 2026-10-28\n\n### Changed\n\n- older\n";
-
-    #[test]
-    fn a_section_ends_at_the_next_version() {
-        assert_eq!(
-            section(CHANGELOG, "1.0.0-alpha.12"),
-            Some("### Added\n\n- controls (#930)")
-        );
+    #[derive(Debug, clap::Parser)]
+    struct Cli {
+        #[command(flatten)]
+        args: Args,
     }
 
     #[test]
-    fn the_last_section_runs_to_the_end_of_the_file() {
+    fn known_issues_that_open_with_a_list_dash_are_taken_as_the_value() {
+        use clap::Parser as _;
+        let cli = Cli::try_parse_from(["notes", "--known-issues", "- The map flickers."]).unwrap();
+        assert_eq!(cli.args.known_issues, "- The map flickers.");
         assert_eq!(
-            section(CHANGELOG, "1.0.0-alpha.11"),
-            Some("### Changed\n\n- older")
+            Cli::try_parse_from(["notes"]).unwrap().args.known_issues,
+            ""
         );
-    }
-
-    #[test]
-    fn a_version_without_a_section_or_with_an_empty_one_has_none() {
-        assert_eq!(section(CHANGELOG, "1.0.0-alpha.13"), None);
-        assert_eq!(
-            section(
-                "## [1.0.0-alpha.2]\n\n## [1.0.0-alpha.1]\n- a\n",
-                "1.0.0-alpha.2"
-            ),
-            None
-        );
-    }
-
-    #[test]
-    fn a_version_is_not_matched_by_its_prefix() {
-        assert_eq!(section("## [1.0.0-alpha.12]\n- a\n", "1.0.0-alpha.1"), None);
     }
 
     fn sample() -> Result<String, String> {
@@ -332,10 +291,10 @@ mod tests {
     }
 
     #[test]
-    fn the_notes_open_with_the_warning_in_english_and_ukrainian() -> Result<(), String> {
+    fn the_notes_open_with_the_warning_in_english_only() -> Result<(), String> {
         let text = sample()?;
         assert!(text.starts_with("> [!WARNING]\n> This is an alpha."));
-        assert!(text.contains("> Це альфа-версія."));
+        assert!(text.is_ascii(), "release notes are English only");
         Ok(())
     }
 
@@ -514,28 +473,16 @@ mod tests {
     }
 
     #[test]
-    fn a_changelog_with_open_changes_or_without_the_version_is_refused() {
-        assert!(
-            closed(
-                "## [Unreleased]\n- next\n## [1.0.0-alpha.12]\n- a\n",
-                "1.0.0-alpha.12"
-            )
-            .is_err()
-        );
-        assert!(
-            closed(
-                "## [Unreleased]\n\n## [1.0.0-alpha.11]\n- a\n",
-                "1.0.0-alpha.12"
-            )
-            .is_err()
-        );
-        assert_eq!(
-            closed(
-                "## [Unreleased]\n\n## [1.0.0-alpha.12]\n- a\n",
-                "1.0.0-alpha.12"
-            ),
-            Ok(Some("- a"))
-        );
+    fn a_changelog_with_change_files_not_joined_is_refused() {
+        let root = workspace(&[("g", "## [Unreleased]\n\n## [1.0.0-alpha.12]\n- g\n")]);
+        std::fs::create_dir_all(root.join("g").join(CHANGES)).unwrap();
+        std::fs::write(
+            root.join("g").join(CHANGES).join("late.md"),
+            "### Added\n\n- Late.\n",
+        )
+        .unwrap();
+        let refused = changes(&root, &[package("g", "g")], "1.0.0-alpha.12").unwrap_err();
+        assert!(refused.contains("cargo xtask close"), "{refused}");
     }
 
     #[test]
@@ -557,23 +504,6 @@ mod tests {
     fn a_release_version_gets_no_alpha_notes() {
         assert!(notes("1.0.0", &[], &[], "").is_err());
         assert!(notes("1.0.0+build-1", &[], &[], "").is_err());
-    }
-
-    #[test]
-    fn the_notes_go_to_the_workspace_target_unless_told_otherwise() -> Result<(), String> {
-        let root = Path::new("root");
-        assert_eq!(
-            options(root, &[])?,
-            (root.join("target").join("notes.md"), String::new())
-        );
-        let args = ["--out", "x.md", "--known-issues", "- crash"].map(str::to_owned);
-        assert_eq!(
-            options(root, &args)?,
-            (PathBuf::from("x.md"), "- crash".to_owned())
-        );
-        assert!(options(root, &["--out".to_owned()]).is_err());
-        assert!(options(root, &["--other".to_owned()]).is_err());
-        Ok(())
     }
 
     #[test]

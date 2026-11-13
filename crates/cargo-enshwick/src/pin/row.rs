@@ -16,7 +16,7 @@ const MIN_SAMPLED: u64 = 0x10;
 
 /// What kind of entry a report line is about.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Kind {
+pub enum Kind {
     /// A system whose reflected entry must match.
     Check,
     /// A pinned address.
@@ -37,7 +37,7 @@ impl fmt::Display for Kind {
 
 /// The verdict on one entry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Status {
+pub enum Status {
     /// At the same address.
     Unchanged,
     /// At a new address.
@@ -58,7 +58,8 @@ pub(crate) enum Status {
 
 impl Status {
     /// Whether a human must decide before the row is used.
-    pub(crate) fn needs_human(self) -> bool {
+    #[must_use]
+    pub fn needs_human(self) -> bool {
         matches!(self, Self::Ambiguous | Self::Missing | Self::Flagged)
     }
 }
@@ -80,34 +81,35 @@ impl fmt::Display for Status {
 
 /// One line of the report.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Line {
+pub struct Line {
     /// What kind of entry.
-    pub(crate) kind: Kind,
+    pub kind: Kind,
     /// Its id.
-    pub(crate) id: String,
+    pub id: String,
     /// The old value.
-    pub(crate) old: u64,
+    pub old: u64,
     /// The new value, when there is one.
-    pub(crate) new: Option<u64>,
+    pub new: Option<u64>,
     /// The verdict.
-    pub(crate) status: Status,
+    pub status: Status,
     /// How sure, for a found address.
-    pub(crate) confidence: Option<String>,
+    pub confidence: Option<String>,
     /// How it was decided.
-    pub(crate) note: String,
+    pub note: String,
 }
 
 /// A row, ported: the edits for its new text and the report.
 #[derive(Debug)]
-pub(crate) struct PortedRow<'r> {
+pub struct PortedRow<'r> {
     /// How each entry changes.
-    pub(crate) edits: Vec<(&'r Entry, Edit)>,
+    pub edits: Vec<(&'r Entry, Edit)>,
     /// One line per entry.
-    pub(crate) lines: Vec<Line>,
+    pub lines: Vec<Line>,
 }
 
 /// Ports `row`, made for `old`, to `new`.
-pub(crate) fn port_row<'r>(row: &'r Row, old: &Exe<'_>, new: &Exe<'_>) -> PortedRow<'r> {
+#[must_use]
+pub fn port_row<'r>(row: &'r Row, old: &Exe<'_>, new: &Exe<'_>) -> PortedRow<'r> {
     let mut edits = Vec::new();
     let mut lines = Vec::new();
     for entry in &row.checks {
@@ -325,12 +327,14 @@ fn sampled(value: u64, ported: &[(&Entry, Ported)]) -> (Status, String) {
     }
 }
 
-/// Finds the anchors of `table`'s entries on `new`, by their patterns or by
-/// porting their instructions from `old`, and settles those entries of
-/// `ported` by them: a constant takes the value its ported
+/// Finds the anchors of `table`'s entries on `new` and settles those entries
+/// of `ported` by them.
+///
+/// An anchor is found by its pattern or by porting its instruction from
+/// `old`; a constant takes the value its ported
 /// instruction carries, a symbol the target of its ported reference. The
 /// anchors in `new`, for the new table's patterns.
-pub(crate) fn port_anchors<'r>(
+pub fn port_anchors<'r>(
     row: &'r Row,
     ported: &mut PortedRow<'r>,
     table: &Table,
@@ -433,7 +437,7 @@ pub(crate) fn port_anchors<'r>(
 
 /// Settles the constants of `ported` whose pattern in `table` only
 /// confirms the value: kept where it still matches once in `new`.
-pub(crate) fn confirm_by_patterns(ported: &mut PortedRow<'_>, table: &Table, new: &Exe<'_>) {
+pub fn confirm_by_patterns(ported: &mut PortedRow<'_>, table: &Table, new: &Exe<'_>) {
     let (code, _) = new.text();
     for constant in table.constants() {
         let (Some(pattern), None) = (constant.pattern(), constant.operand()) else {
@@ -454,14 +458,12 @@ pub(crate) fn confirm_by_patterns(ported: &mut PortedRow<'_>, table: &Table, new
 }
 
 /// Settles the symbols of `ported` left missing or ambiguous that `table`'s
-/// own patterns find on `new`, the rule the loader trusts when it carries
+/// own patterns find on `new`.
+///
+/// This is the rule the loader trusts when it carries
 /// the table to a build without one, and reads their `.bytes` constants
 /// again at the found address.
-pub(crate) fn confirm_symbols_by_patterns(
-    ported: &mut PortedRow<'_>,
-    table: &Table,
-    new: &Exe<'_>,
-) {
+pub fn confirm_symbols_by_patterns(ported: &mut PortedRow<'_>, table: &Table, new: &Exe<'_>) {
     let (code, code_rva) = new.text();
     let cell = |rva| {
         new.data(rva, 4)
@@ -517,11 +519,13 @@ fn set_edit(ported: &mut PortedRow<'_>, id: &str, edit: Edit) {
 }
 
 /// Settles the constants of `ported` the game keeps in a data cell
-/// ([`Constant::cell`](enshwick_gamedata::Constant::cell)): the value is
+/// ([`Constant::cell`](enshwick_gamedata::Constant::cell)).
+///
+/// The value is
 /// the `u32` in `new` at the cell's ported symbol, kept when unchanged and
 /// flagged when not, since a cell holds game data a build seldom changes
 /// and a new value more likely means a wrongly ported symbol.
-pub(crate) fn confirm_cells(ported: &mut PortedRow<'_>, table: &Table, new: &Exe<'_>) {
+pub fn confirm_cells(ported: &mut PortedRow<'_>, table: &Table, new: &Exe<'_>) {
     for constant in table.constants() {
         let Some(cell) = constant.cell() else {
             continue;

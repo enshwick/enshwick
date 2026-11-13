@@ -174,7 +174,7 @@ mod tests {
     /// both have; skipped without `ENSH_EXES` and the game data folder.
     #[test]
     fn the_table_found_on_a_build_agrees_with_its_own() {
-        let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let repo = super::super::tests::repo();
         let Some(data) = enshwick_gamedata::data_dir() else {
             return;
         };
@@ -222,7 +222,7 @@ mod tests {
             .find(|(s, _)| s == side)
             .map(|(_, p)| p)
             .unwrap();
-        let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let repo = super::super::tests::repo();
         let held = std::env::temp_dir().join(format!("enshwick-pin-held-{}", std::process::id()));
         let _old = fs::remove_dir_all(&held);
         let anchors = held.join(ANCHORS);
@@ -231,17 +231,8 @@ mod tests {
         fs::copy(repo.join(checks::ROUTES), held.join(checks::ROUTES)).unwrap();
         let report = held.join("report.md");
         let args = Args {
-            old: Some(old.clone()),
-            new: Some(new.clone()),
-            patterns: None,
-            repo: held.clone(),
-            data: None,
-            steam_build: None,
-            game_version: None,
-            write: false,
             report: Some(report.clone()),
-            from: Vec::new(),
-            from_file: None,
+            ..super::super::tests::args(old.clone(), new.clone(), held.clone())
         };
         run(&args).unwrap();
         let text = fs::read_to_string(&report).unwrap();

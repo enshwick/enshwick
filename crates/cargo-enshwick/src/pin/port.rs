@@ -24,7 +24,7 @@ const MIN_SIGNIFICANT: usize = 16;
 
 /// How sure a match is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Confidence {
+pub enum Confidence {
     /// The whole function is unchanged, apart from where it points.
     High,
     /// A unique stretch of code around the address, or a whole function told
@@ -34,7 +34,7 @@ pub(crate) enum Confidence {
 
 /// What became of a pinned address.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Outcome {
+pub enum Outcome {
     /// Found, at the same address or a new one.
     Found {
         /// The new RVA.
@@ -52,7 +52,8 @@ pub(crate) enum Outcome {
 
 impl Outcome {
     /// The new RVA, when found.
-    pub(crate) fn rva(&self) -> Option<u64> {
+    #[must_use]
+    pub fn rva(&self) -> Option<u64> {
         match self {
             Self::Found { rva, .. } => Some(*rva),
             Self::Ambiguous(_) | Self::Missing(_) => None,
@@ -71,20 +72,20 @@ impl fmt::Display for Confidence {
 
 /// A pinned address, ported: the outcome, and the old code it rests on.
 #[derive(Debug)]
-pub(crate) struct Ported {
+pub struct Ported {
     /// What became of it.
-    pub(crate) outcome: Outcome,
+    pub outcome: Outcome,
     /// The old code around the address and where it starts.
-    pub(crate) old_code: Option<(u64, Masked)>,
+    pub old_code: Option<(u64, Masked)>,
     /// The old RVAs proven unchanged by the match.
-    pub(crate) proven: Option<Range<u64>>,
+    pub proven: Option<Range<u64>>,
     /// For an ambiguous whole function, where each alike copy would put the
     /// address.
-    pub(crate) candidates: Vec<u64>,
+    pub candidates: Vec<u64>,
 }
 
 /// Ports addresses from one build to another.
-pub(crate) struct Porter<'p, 'a> {
+pub struct Porter<'p, 'a> {
     old: &'p Exe<'a>,
     new: &'p Exe<'a>,
     /// Every reference in the old build's functions: `(target, site)`,
@@ -100,7 +101,8 @@ impl fmt::Debug for Porter<'_, '_> {
 
 impl<'p, 'a> Porter<'p, 'a> {
     /// A porter from `old` to `new`.
-    pub(crate) fn new(old: &'p Exe<'a>, new: &'p Exe<'a>) -> Self {
+    #[must_use]
+    pub fn new(old: &'p Exe<'a>, new: &'p Exe<'a>) -> Self {
         Self {
             old,
             new,
@@ -110,7 +112,7 @@ impl<'p, 'a> Porter<'p, 'a> {
 
     /// Re-finds `rva`: by its own code, else, when that is ambiguous or the
     /// address is data, through the code that references it.
-    pub(crate) fn symbol(&self, rva: u64) -> Ported {
+    pub fn symbol(&self, rva: u64) -> Ported {
         let mut ported = direct(self.old, self.new, rva);
         // References point at a function's start or at the data itself.
         let (target, offset) = match &ported.old_code {

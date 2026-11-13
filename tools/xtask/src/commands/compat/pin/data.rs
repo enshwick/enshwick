@@ -39,10 +39,10 @@ pub(super) fn old_side(
         return Ok(gamedata_side(side));
     }
     let tables = match data {
-        Some(data) => crate::generate::tables_of(data)?,
+        Some(data) => cargo_enshwick::generate::tables_of(data)?,
         None => Vec::new(),
     };
-    crate::generate::side_of(&tables, fingerprint)
+    cargo_enshwick::generate::side_of(&tables, fingerprint)
         .with_context(|| format!("no table is for the old build {}", spell(fingerprint)))
 }
 
@@ -88,12 +88,14 @@ mod tests {
         let mut guid = [0; 16];
         guid[15] = 1;
         let side = old_side(Some(&data), None, Fingerprint::new(guid, 2));
-        let files = table_files(Some(&data));
+        let files = table_files(Some(&data)).unwrap();
+        // `patterns --write` writes the table back where the folder holds it.
+        let kept = data.join(&files[0].0).is_file();
         drop(fs::remove_dir_all(&data));
         assert_eq!(side.unwrap(), enshwick_gamedata::Side::Server);
-        let files = files.unwrap();
         assert_eq!(files.len(), 1);
         assert!(files[0].0.is_relative(), "{:?}", files[0].0);
+        assert!(kept, "{:?}", files[0].0);
     }
 
     /// `--write` in the enshwick repository without a game data folder is
@@ -101,19 +103,11 @@ mod tests {
     /// `--write`, no folder is needed.
     #[test]
     fn a_write_without_a_data_folder_is_refused_before_anything_is_written() {
-        let enshwick = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let enshwick = super::super::tests::repo();
         let args = |repo: PathBuf, write, data: Option<PathBuf>| Args {
-            old: None,
-            new: None,
-            patterns: None,
-            repo,
             data,
-            steam_build: None,
-            game_version: None,
             write,
-            report: None,
-            from: Vec::new(),
-            from_file: None,
+            ..super::super::tests::args(PathBuf::new(), PathBuf::new(), repo)
         };
         let refused = args(enshwick.clone(), true, None);
         let error = snapshot_dir(&refused).unwrap_err().to_string();

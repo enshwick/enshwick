@@ -57,6 +57,21 @@ rules the hooks enforce, and the ones they cannot, are in this file:
   and `main`'s last run passed; while `main` is red only a `fix/` or revert
   branch merges, so the fix goes first;
 - code follows the style of the code around it, unsafe code included;
+- a pull request adds its changelog entries as a file of its own,
+  `changes/<branch>.md` beside the `CHANGELOG.md` of each crate it changes,
+  named after its branch, so parallel pull requests never edit one file. The file holds the Keep a Changelog headings it needs
+  (`### Added`, `### Changed`, `### Deprecated`, `### Removed`, `### Fixed`,
+  `### Security`), each once, with a list of entries under each;
+  `cargo xtask check` refuses a file that does not read so, an edit to a
+  change file already on `main`, and a change written under a changelog's
+  Unreleased section by hand:
+
+  ```markdown
+  ### Added
+
+  - `world`: `World::revive` stands a dead character up (#1036).
+  ```
+
 - what mod authors need to know goes into [the modding book](book/src/SUMMARY.md)
   with the change; `cargo xtask check` checks its structure, and its Rust
   examples run as doctests;
@@ -108,19 +123,24 @@ that players, admins or mod authors get, at most one a day:
 
 1. A pull request moves every crate to the next `1.0.0-alpha.N`, with the
    exact `=` pins between the published crates, and closes each
-   `CHANGELOG.md`'s Unreleased section as `## [1.0.0-alpha.N] - <date>`.
+   `CHANGELOG.md` with `cargo xtask close --date <YYYY-MM-DD>`: each
+   crate's change files join its changelog under
+   `## [1.0.0-alpha.N] - <date>`, each heading's entries in the files' name
+   order, and the files go; a crate without one gets the heading alone. A
+   change file that merges after it joins the same section when `close`
+   runs again.
    `cargo xtask tag-lines` moves the install and dependency lines of the
    Markdown (`--tag v…`, `tag = "v…"`) to the new tag; `cargo xtask check`
    fails a line that names another one.
 2. Once it merges, the [alpha workflow](.github/workflows/alpha.yml), run by
    hand on `main`, makes the GitHub prerelease `v1.0.0-alpha.N`:
    `enshwick.zip` with the PDB and CycloneDX SBOM of each DLL and their build
-   provenance. `cargo xtask notes` writes its notes: a warning in English and
-   Ukrainian that anything may change before 1.0, the game version
+   provenance. `cargo xtask notes` writes its notes: a warning that anything
+   may change before 1.0, the game version
    the alpha was checked against, each crate's changelog section and the known
    issues the run is given. A version on GitHub or crates.io already is
-   refused, and so is one whose changelogs lack its section or still hold
-   changes under Unreleased. The workflow scans the archive on VirusTotal.
+   refused, and so is one whose changelogs lack its section or whose change
+   files are not joined yet. The workflow scans the archive on VirusTotal.
 
 `enshwick.zip` holds the stub and the loader, and no mod: each mod ships in
 its own archive from its own repository. `cargo xtask dist` writes the same

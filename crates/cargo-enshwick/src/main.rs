@@ -1,5 +1,5 @@
 //! `cargo enshwick`: start an Enshwick mod, build it and install it into the game,
-//! and port the build rows to a new game build.
+//! and port its build rows to a new game build.
 
 use std::io::Write as _;
 use std::path::PathBuf;
@@ -9,15 +9,15 @@ use anyhow::Context as _;
 use clap::{Parser, Subcommand, ValueEnum};
 use enshwick_core::content::Guid;
 
+use cargo_enshwick::{generate, pin};
+
 mod check;
 mod deps;
-mod generate;
 mod install;
 mod loader;
 mod manifest;
 mod new;
 mod pack;
-mod pin;
 mod steam;
 mod types;
 mod update;
@@ -112,8 +112,8 @@ enum Command {
         #[arg(long)]
         with_loader: bool,
     },
-    /// Ports the build rows of the loader and the mods in an Enshwick
-    /// checkout to a new game build. Exits with 2 when an entry needs a human.
+    /// Ports a mod's own build rows, `[[package.metadata.enshwick.builds]]`,
+    /// to a new game build. Exits with 2 when an entry needs a human.
     Pin(pin::Args),
     /// Checks, describes and packages data packs.
     #[command(subcommand)]
@@ -335,7 +335,11 @@ fn run(args: Args) -> ExitCode {
             root,
             data,
             check,
-        } => generate::run(&root, &data, from.as_deref(), check),
+        } => from
+            .as_deref()
+            .map(types::executable)
+            .transpose()
+            .and_then(|from| generate::run(&root, &data, from.as_deref(), check)),
     };
     match outcome {
         Ok(done) => {
