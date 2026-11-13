@@ -1,0 +1,46 @@
+id: catch-through-caught
+language: rust
+severity: error
+message: catch a mod's panic through `host::caught` or `host::guard`
+note: >-
+  `caught` drops the panic's payload under its own guard, so a payload whose
+  drop panics again cannot unwind out of an `extern "system"` entry and abort
+  the game; `guard` also faults the mod with its reason. A raw
+  `catch_unwind` drops the payload unguarded.
+files:
+  - "crates/internal/**"
+ignores:
+  - "crates/internal/base/src/host.rs"
+  - "**/tests/**"
+  - "**/tests.rs"
+  - "**/benches/**"
+utils:
+  in-test:
+    any:
+      - kind: mod_item
+        follows:
+          kind: attribute_item
+          stopBy:
+            not:
+              any:
+                - kind: attribute_item
+                - kind: line_comment
+          regex: '^#\[cfg\(.*\btest\b'
+      - kind: function_item
+        follows:
+          kind: attribute_item
+          stopBy:
+            not:
+              any:
+                - kind: attribute_item
+                - kind: line_comment
+          regex: '^#\[(test|cfg\(.*\btest\b)'
+rule:
+  kind: call_expression
+  has:
+    field: function
+    regex: '(^|::)catch_unwind$'
+  not:
+    inside:
+      stopBy: end
+      matches: in-test
