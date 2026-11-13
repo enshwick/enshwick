@@ -20,11 +20,14 @@ use crate::say;
 type Rule = fn(&Path, &[Package]) -> Result<Vec<String>, String>;
 
 /// Every rule with the label its problems carry, in the order they run.
-const RULES: [(&str, Rule); 10] = [
+const RULES: [(&str, Rule); 11] = [
     ("manifest range", |root, packages| {
         Ok(ranges::check(root, packages))
     }),
     ("book", |root, _| Ok(book::check(root))),
+    ("book abi coverage", |root, _| {
+        Ok(book::coverage_problems(root))
+    }),
     ("book prose", |root, _| Ok(book::prose::check(root))),
     ("book link", |root, _| {
         let mods = book::links::mods_clone(root).map_err(|why| format!("book links: {why}"))?;

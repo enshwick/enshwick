@@ -57,7 +57,6 @@ pub(crate) fn check(root: &Path) -> Vec<String> {
         Ok(lib) => found.extend(unnamed_modules(&lib, &texts)),
         Err(error) => found.push(format!("{API_ROOT}: {error}")),
     }
-    found.extend(coverage_problem(root));
     found
 }
 
@@ -69,6 +68,11 @@ const COVERAGE_ENTRIES: &str = "## The entries";
 /// Why the coverage chapter under `root` does not list the fields of
 /// `HostApi` in the golden layout once each, in the table's order, so an
 /// appended entry cannot skip the audit.
+pub(crate) fn coverage_problems(root: &Path) -> Vec<String> {
+    coverage_problem(root).into_iter().collect()
+}
+
+/// The one problem [`coverage_problems`] finds, if any.
 fn coverage_problem(root: &Path) -> Option<String> {
     let read = |path: &str| {
         std::fs::read_to_string(root.join(path)).map_err(|error| format!("{path}: {error}"))
@@ -690,6 +694,7 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let found = check(&root);
         assert!(found.is_empty(), "{found:?}");
+        assert_eq!(coverage_problems(&root), Vec::<String>::new());
     }
 
     fn fields(names: &[&str]) -> Vec<String> {
