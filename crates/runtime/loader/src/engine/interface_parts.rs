@@ -13,19 +13,15 @@ pub(crate) enum Missing {
     Looks,
     /// A type and its field the build's reflection lacks.
     Reflected(&'static str, &'static str),
-    /// An entry found, with a value the loader cannot take.
-    Range(&'static str),
 }
 
 impl Missing {
     /// The table entry or the reflected name that failed.
     pub(crate) const fn id(&self) -> &'static str {
         match self {
-            Self::Entry(name)
-            | Self::Bytes(name)
-            | Self::Room(name)
-            | Self::Reflected(_, name)
-            | Self::Range(name) => name,
+            Self::Entry(name) | Self::Bytes(name) | Self::Room(name) | Self::Reflected(_, name) => {
+                name
+            }
             Self::Looks => "the look bundle",
         }
     }
@@ -38,7 +34,6 @@ impl Missing {
             Self::Room(_) => "runs past the loader's buffer".to_owned(),
             Self::Looks => "lacks a reflected field".to_owned(),
             Self::Reflected(ty, _) => format!("of {ty} is not reflected on this build"),
-            Self::Range(_) => "holds a value out of range".to_owned(),
         }
     }
 }

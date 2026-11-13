@@ -208,30 +208,62 @@ impl Game {
     }
 }
 
+/// Why the socket calls stay off: an entry the build lacks or whose code
+/// does not hold, or one found with a value the carrier cannot take.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Unresolved {
+    Missing(Missing),
+    Range(&'static str),
+}
+
+impl Unresolved {
+    /// The entry that failed.
+    pub(super) const fn id(&self) -> &'static str {
+        match self {
+            Self::Missing(missing) => missing.id(),
+            Self::Range(id) => id,
+        }
+    }
+
+    /// Why it failed, after its [`Unresolved::id`].
+    pub(super) fn reason(&self) -> String {
+        match self {
+            Self::Missing(missing) => missing.reason(),
+            Self::Range(_) => "holds a value out of range".to_owned(),
+        }
+    }
+}
+
 impl Game {
     /// The calls and offsets from `loader`'s table and the game's
     /// reflection; the first entry it lacks, whose code does not hold or
     /// whose value it cannot take.
-    pub(super) fn resolve(loader: &Loader) -> Result<Self, Missing> {
+    pub(super) fn resolve(loader: &Loader) -> Result<Self, Unresolved> {
+        use Unresolved::Range;
+        let lacks = |missing| Unresolved::Missing(missing);
         let call = |name: Symbol| {
-            let address = loader.address(name).ok_or(Missing::Entry(name.id()))?;
+            let address = loader
+                .address(name)
+                .ok_or(lacks(Missing::Entry(name.id())))?;
             if !loader.code_holds(name) {
-                return Err(Missing::Bytes(name.id()));
+                return Err(lacks(Missing::Bytes(name.id())));
             }
-            usize::try_from(address).map_err(|_| Missing::Range(name.id()))
+            usize::try_from(address).map_err(|_| Range(name.id()))
         };
-        let offset = |name: Constant| loader.offset(name).ok_or(Missing::Entry(name.id()));
+        let offset = |name: Constant| loader.offset(name).ok_or(lacks(Missing::Entry(name.id())));
         let byte = |name: Constant| {
-            offset(name)
-                .and_then(|value| u8::try_from(value).map_err(|_| Missing::Range(name.id())))
+            offset(name).and_then(|value| u8::try_from(value).map_err(|_| Range(name.id())))
         };
         let voice = catalogue::ids::GAME_MESSAGE_CHANNEL_VOICE_CHAT;
         let channel = catalogue::constant(voice, &loader.reflection)
-            .ok_or(Missing::Reflected(catalogue::type_name(voice), voice))
-            .and_then(|value| u32::try_from(value).map_err(|_| Missing::Range(voice)))?;
+            .ok_or(lacks(Missing::Reflected(
+                catalogue::type_name(voice),
+                voice,
+            )))
+            .and_then(|value| u32::try_from(value).map_err(|_| Range(voice)))?;
         let base_id = pinned::net::CHANNEL_BASE.id();
         let base = offset(pinned::net::CHANNEL_BASE)
-            .and_then(|value| u32::try_from(value).map_err(|_| Missing::Range(base_id)))?;
+            .and_then(|value| u32::try_from(value).map_err(|_| Range(base_id)))?;
         let client = loader.side == enshwick_core::abi::Side::CLIENT;
         Ok(Self {
             // SAFETY: `net.socket_create` is the game's socket create on
@@ -254,7 +286,7 @@ impl Game {
             limit: unsafe { function(call(pinned::net::SESSION_LIMIT)?) },
             manager: offset(pinned::net::SESSION_MANAGER)?,
             channel,
-            session_channel: channel.checked_add(base).ok_or(Missing::Range(base_id))?,
+            session_channel: channel.checked_add(base).ok_or(Range(base_id))?,
             socket_channel: offset(pinned::net::SOCKET_CHANNEL)?,
             socket_peer: offset(pinned::net::SOCKET_PEER)?,
             machine_kind: byte(pinned::net::SOCKET_KIND_MACHINE)?,

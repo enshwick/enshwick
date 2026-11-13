@@ -475,7 +475,7 @@ mod tests {
         assert!(stream_layout(&loader).is_none());
         assert!(DELIVERY_FUSE.is_off());
         assert!(!EVENTS_FUSE.is_off(), "the move still links for the rest");
-        let reason = crate::engine::diag::off_reason(&DELIVERY_FUSE).unwrap_or_default();
+        let reason = crate::base::off_reason(&DELIVERY_FUSE).unwrap_or_default();
         assert!(
             reason.starts_with(pinned::ecs::EVENT_STREAMS.id()),
             "{reason}"

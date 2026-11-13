@@ -440,7 +440,7 @@ mod tests {
         start(&loader, Names::new());
         assert!(KICKS_FUSE.is_off());
         assert!(!ADMISSION_FUSE.is_off(), "players still get the note");
-        let reason = crate::engine::diag::off_reason(&KICKS_FUSE).unwrap_or_default();
+        let reason = crate::base::off_reason(&KICKS_FUSE).unwrap_or_default();
         assert!(reason.starts_with(pinned::session::KICK.id()), "{reason}");
     }
 

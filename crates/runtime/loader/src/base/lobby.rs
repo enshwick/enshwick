@@ -402,7 +402,7 @@ mod runtime {
             enter(7, |_| panic!("a broken entry"));
             assert!(LOBBY_FUSE.is_off());
             assert_eq!(
-                crate::engine::diag::off_reason(&LOBBY_FUSE).as_deref(),
+                crate::base::off_reason(&LOBBY_FUSE).as_deref(),
                 Some("the loader panicked in a lobby entry: a broken entry")
             );
         }

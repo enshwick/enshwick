@@ -181,7 +181,7 @@ mod tests {
         }
         link_check(&crate::start::tests::bare_loader());
         assert!(JOIN_FUSE.is_off());
-        let reason = crate::engine::diag::off_reason(&JOIN_FUSE).unwrap_or_default();
+        let reason = crate::base::off_reason(&JOIN_FUSE).unwrap_or_default();
         assert!(
             reason.starts_with(pinned::net::JOIN_GAME.id())
                 && reason.contains(pinned::join::TARGET_PASSWORD.id()),

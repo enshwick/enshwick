@@ -388,7 +388,7 @@ mod runtime {
             advertise("Lanterns", none, |_, _| panic!("a broken round"));
             assert!(ADVERTISE_FUSE.is_off());
             assert_eq!(
-                crate::engine::diag::off_reason(&ADVERTISE_FUSE).as_deref(),
+                crate::base::off_reason(&ADVERTISE_FUSE).as_deref(),
                 Some("the loader panicked in the advertising thread: a broken round")
             );
         }
