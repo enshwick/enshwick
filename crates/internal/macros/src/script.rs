@@ -60,11 +60,12 @@ pub(crate) fn expand_derive(input: &DeriveInput, krate: &TokenStream) -> syn::Re
 /// only with the facade's `unstable` feature.
 const API_REPOSITORY: &str = "https://github.com/enshwick/enshwick";
 
-/// `expanded`, with the `unstable` badge rustdoc shows under `docsrs` on
-/// each of its impls when `repository` is the [`API_REPOSITORY`]: the traits
-/// live in a crate without that feature, so rustdoc badges their impls only
-/// when each carries its own `doc(cfg)`, and the facade's docs.rs build
-/// compiles these crates with `docsrs` through its `rustc-args`.
+/// `expanded`, with the `unstable` badge on each of its impls when
+/// `repository` is the [`API_REPOSITORY`]: the traits live in a crate
+/// without that feature, so rustdoc badges their impls only when each
+/// carries its own `doc(cfg)`. The badge is under `enshwick_docs`, which the
+/// facade's docs.rs build passes to every crate it compiles through its
+/// `rustc-args` (`docsrs` reaches only the facade, through `rustdoc-args`).
 fn badged(expanded: TokenStream, repository: Option<&str>) -> syn::Result<TokenStream> {
     if repository != Some(API_REPOSITORY) {
         return Ok(expanded);
@@ -903,6 +904,13 @@ mod tests {
             assert_eq!(other, impls.to_string(), "{repository:?}");
         }
         Ok(())
+    }
+
+    #[test]
+    fn the_api_s_crates_name_the_repository_the_badge_looks_for() {
+        // This crate's repository is the workspace's, as every API crate's
+        // is: a changed URL would drop every badge without this test.
+        assert_eq!(env!("CARGO_PKG_REPOSITORY"), API_REPOSITORY);
     }
 
     #[test]

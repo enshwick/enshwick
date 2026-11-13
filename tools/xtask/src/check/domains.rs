@@ -23,8 +23,6 @@ mod fake;
 mod loader;
 mod walk;
 
-pub(super) use walk::Cfg;
-
 use walk::{Walk, paths, test_only};
 
 /// The map, from the workspace root.
