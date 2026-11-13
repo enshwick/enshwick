@@ -79,62 +79,67 @@ struct Filter {
     user: usize,
 }
 
-static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
+static LAYOUT: OnceLock<Result<Layout, &'static str>> = OnceLock::new();
 static LOADED: OnceLock<&'static Loader> = OnceLock::new();
 /// The switch of the mods' rename filters.
 static FUSE: Fuse = Fuse::new("rename filters");
-/// What the line names when the build lacks part of [`Layout`].
-const LAYOUT_ENTRY: &str = "the label layout";
 static FILTERS: Registry<Filter> = Registry::new();
 
 fn layout(loader: &Loader) -> Option<&'static Layout> {
-    LAYOUT
-        .get_or_init(|| {
-            let symbol = |name: Symbol| {
-                loader
+    found(loader).as_ref().ok()
+}
+
+/// The labels' layout, or the id of the first entry this build lacks.
+fn found(loader: &Loader) -> &'static Result<Layout, &'static str> {
+    LAYOUT.get_or_init(|| {
+        let symbol = |name: Symbol| {
+            loader
+                .build
+                .symbol(name.id())
+                .and_then(|rva| usize::try_from(loader.base + rva).ok())
+                .ok_or(name.id())
+        };
+        let constant = |name: Constant| {
+            loader
+                .build
+                .constant(name.id())
+                .and_then(|v| usize::try_from(v).ok())
+                .ok_or(name.id())
+        };
+        let (find, replace, add) = (
+            symbol(pinned::label::FIND)?,
+            symbol(pinned::label::REPLACE)?,
+            symbol(pinned::label::ADD)?,
+        );
+        let custom = crate::engine::catalogue::ids::CUSTOM_PLAYER_STRING;
+        let descriptor = loader
+            .reflection
+            .type_info(crate::engine::catalogue::type_name(custom))
+            .map_err(|_| custom)?
+            .va();
+        Ok(Layout {
+            // SAFETY: the build table's `label.find` is the address of
+            // the game function with the `FindFn` signature on this build.
+            find: unsafe { core::mem::transmute::<usize, FindFn>(find) },
+            // SAFETY: the build table's `label.replace` is the address of
+            // the game function with the `ReplaceFn` signature on this
+            // build.
+            replace: unsafe { core::mem::transmute::<usize, ReplaceFn>(replace) },
+            // SAFETY: the build table's `label.add` is the address of the
+            // game function with the `AddFn` signature on this build.
+            add: unsafe { core::mem::transmute::<usize, AddFn>(add) },
+            label_type: crate::engine::world::type_hash(descriptor).ok_or(custom)?,
+            world: constant(pinned::server::WORLD)?,
+            strings: constant(pinned::server::CUSTOM_STRINGS)?,
+            max_text: constant(pinned::label::MAX_TEXT)?,
+            rename_return: loader.base
+                + loader
                     .build
-                    .symbol(name.id())
-                    .and_then(|rva| usize::try_from(loader.base + rva).ok())
-            };
-            let constant = |name: Constant| {
-                loader
-                    .build
-                    .constant(name.id())
-                    .and_then(|v| usize::try_from(v).ok())
-            };
-            let (find, replace, add) = (
-                symbol(pinned::label::FIND)?,
-                symbol(pinned::label::REPLACE)?,
-                symbol(pinned::label::ADD)?,
-            );
-            let descriptor = loader
-                .reflection
-                .type_info(crate::engine::catalogue::type_name(
-                    crate::engine::catalogue::ids::CUSTOM_PLAYER_STRING,
-                ))
-                .ok()?
-                .va();
-            Some(Layout {
-                // SAFETY: the build table's `label.find` is the address of
-                // the game function with the `FindFn` signature on this build.
-                find: unsafe { core::mem::transmute::<usize, FindFn>(find) },
-                // SAFETY: the build table's `label.replace` is the address of
-                // the game function with the `ReplaceFn` signature on this
-                // build.
-                replace: unsafe { core::mem::transmute::<usize, ReplaceFn>(replace) },
-                // SAFETY: the build table's `label.add` is the address of the
-                // game function with the `AddFn` signature on this build.
-                add: unsafe { core::mem::transmute::<usize, AddFn>(add) },
-                label_type: crate::engine::world::type_hash(descriptor)?,
-                world: constant(pinned::server::WORLD)?,
-                strings: constant(pinned::server::CUSTOM_STRINGS)?,
-                max_text: constant(pinned::label::MAX_TEXT)?,
-                rename_return: loader.base
-                    + loader.build.symbol(pinned::label::RENAME_RETURN.id())?,
-                rename_entity: constant(pinned::label::RENAME_ENTITY)?,
-            })
+                    .symbol(pinned::label::RENAME_RETURN.id())
+                    .ok_or(pinned::label::RENAME_RETURN.id())?,
+            rename_entity: constant(pinned::label::RENAME_ENTITY)?,
         })
-        .as_ref()
+    })
 }
 
 /// Registers mod `owner`'s rename filter.
@@ -159,8 +164,8 @@ pub(crate) fn link(loader: &'static Loader) {
     if !wanted {
         return;
     }
-    if layout(loader).is_none() {
-        let _off = loader.fuse_off(&FUSE, LAYOUT_ENTRY, "is not all in this build");
+    if let Err(id) = found(loader) {
+        let _off = loader.fuse_off(&FUSE, id, crate::engine::builds::ABSENT);
         return;
     }
     let target = Target::Pinned(pinned::label::REPLACE);
@@ -407,7 +412,8 @@ mod tests {
         assert!(
             listed
                 .iter()
-                .any(|p| p.part == "rename filters" && p.reason.starts_with(LAYOUT_ENTRY)),
+                .any(|p| p.part == "rename filters"
+                    && p.reason.starts_with(pinned::label::FIND.id())),
             "listed for the Mods screen, not only logged: {listed:?}"
         );
     }

@@ -48,8 +48,8 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 /// the server asks for.
 static FUSE: Fuse = Fuse::new("fog of war");
 
-/// The switch of the copy alone, off on a build without its layout while
-/// the uncovers run on.
+/// The switch of the copy alone, off on a build without its layout or
+/// after a panic in the copy, while the uncovers run on.
 static COPY_FUSE: Fuse = Fuse::new("fog of war copy");
 
 /// The largest tile the copy takes, on the stack of the reveal's thread.
@@ -141,20 +141,20 @@ pub(crate) fn opened(owner: ModIndex) -> bool {
     OPENERS.relock().contains(&owner)
 }
 
-/// The fog's layout, or the entry of the first that is not in the build
-/// or does not fit the copy.
-fn layout(loader: &Loader) -> Result<Layout, Constant> {
-    let offset = |id: Constant| loader.offset(id).ok_or(id);
+/// The fog's layout, or the first entry that is not in the build or does
+/// not fit the copy, and why.
+fn layout(loader: &Loader) -> Result<Layout, (Constant, &'static str)> {
+    let offset = |id: Constant| loader.offset(id).ok_or((id, crate::engine::builds::ABSENT));
     let shift = |id: Constant| {
-        offset(id)
+        u32::try_from(offset(id)?)
             .ok()
-            .and_then(|shift| u32::try_from(shift).ok())
             .filter(|&shift| shift < 16)
-            .ok_or(id)
+            .ok_or((id, UNFIT))
     };
     let edge_shift = shift(pinned::map::FOG_TILE_EDGE_SHIFT)?;
     let tile_shift = shift(pinned::map::FOG_TILE_SHIFT)?;
-    let (tile_bytes, edge) = tile(edge_shift, tile_shift).ok_or(pinned::map::FOG_TILE_SHIFT)?;
+    let (tile_bytes, edge) =
+        tile(edge_shift, tile_shift).ok_or((pinned::map::FOG_TILE_SHIFT, UNFIT))?;
     Ok(Layout {
         size_z: offset(pinned::map::FOG_SIZE_Z)?,
         tiles: offset(pinned::map::FOG_TILES)?,
@@ -163,6 +163,9 @@ fn layout(loader: &Loader) -> Result<Layout, Constant> {
         edge,
     })
 }
+
+/// Why an entry the build has is still left out of the copy.
+const UNFIT: &str = "does not fit the copy's tiles";
 
 /// A tile's bytes and edge from the shifts of each, when they agree: a
 /// tile is `edge` × `edge` bytes, at most [`MAX_TILE_BYTES`]; both shifts
@@ -195,13 +198,8 @@ fn find_layout(loader: &Loader) {
         Ok(found) => {
             let _first = LAYOUT.set(found);
         }
-        Err(id) => {
-            let reason = if loader.offset(id).is_none() {
-                crate::engine::builds::ABSENT
-            } else {
-                "does not fit the copy's tiles"
-            };
-            let _off = loader.fuse_off(&COPY_FUSE, id.id(), reason);
+        Err((id, why)) => {
+            let _off = loader.fuse_off(&COPY_FUSE, id.id(), why);
         }
     }
 }
@@ -260,9 +258,7 @@ crate::engine::chains::chain_detour! {
         });
         let result = onward.call();
         if !fog.is_null() {
-            if let Some(layout) = LAYOUT.get() {
-                copy(layout, fog.expose_provenance(), at, range);
-            }
+            copy_after(fog, at, range);
             if UNCOVERS.waiting.load(Ordering::Acquire) {
                 uncover(fog);
             }
@@ -292,9 +288,18 @@ fn uncover(fog: *mut u8) {
         // this runs inside its link, on the live fog the game revealed on
         // this same thread a moment ago; `at` lives for the call.
         let _uncovered = unsafe { next(fog, &raw const at, range) };
-        if let Some(layout) = LAYOUT.get() {
-            copy(layout, fog.expose_provenance(), Some(at), range);
-        }
+        copy_after(fog, Some(at), range);
+    }
+}
+
+/// Copies what a reveal of `range` around `at` changed on `fog` while the
+/// copy has its layout, under the copy's own fuse: a panic there turns off
+/// the copy alone, and the uncovers run on.
+fn copy_after(fog: *mut u8, at: Option<[f32; 2]>, range: f32) {
+    if let Some(layout) = LAYOUT.get() {
+        let _copied = COPY_FUSE.run("the copy", || {
+            copy(layout, fog.expose_provenance(), at, range);
+        });
     }
 }
 
@@ -457,7 +462,8 @@ pub(crate) fn read(
     if !opened(owner) {
         return Status::REFUSED;
     }
-    if FUSE.is_off() {
+    // A copy turned off mid-run may hold a stale image.
+    if FUSE.is_off() || COPY_FUSE.is_off() {
         return Status::MISSING;
     }
     let mut mirror = MIRROR.relock();
@@ -531,6 +537,19 @@ mod tests {
         assert!(chains.is_empty(), "the destroy went with its feature");
         drop(chains);
         assert!(reason("fog of war").is_some_and(|r| r.starts_with("fog.reveal ")));
+    }
+
+    #[test]
+    fn a_fog_read_once_the_copy_is_off_answers_missing_while_the_reveal_stays_on() {
+        let reader = ModIndex::new(0);
+        OPENERS.relock().push(reader);
+        COPY_FUSE.blow("the copy");
+        assert!(!FUSE.is_off(), "the reveal and its uncovers run on");
+        let mut info: FogInfo = bytemuck::Zeroable::zeroed();
+        assert_eq!(
+            read(reader, &mut info, [0, 0], [0, 0], &mut []),
+            Status::MISSING
+        );
     }
 
     #[test]

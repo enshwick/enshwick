@@ -48,8 +48,8 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 /// What the loader knows of scenes: the reflected layouts, resolved once,
 /// and the markers and the frame of the last scene asked for.
 struct SceneState {
-    layout: OnceLock<Option<SceneLayout>>,
-    frame_layout: OnceLock<Option<FrameLayout>>,
+    layout: OnceLock<Result<SceneLayout, Lacks>>,
+    frame_layout: OnceLock<Result<FrameLayout, Lacks>>,
     markers: SceneCache<Arc<[MapMarkerInfo]>, ReadSceneError>,
     frame: SceneCache<MapFrameInfo, ReadFrameError>,
     /// The client's marker types, once read; `None` when they do not read.
@@ -101,14 +101,33 @@ fn size(loader: &Loader, id: &str) -> Option<usize> {
     usize::try_from(info.size()).ok()
 }
 
-/// The reflected layout the marker parse reads, from the catalogue's facts.
-fn layout(loader: &Loader) -> Option<SceneLayout> {
-    let field = |id: &str| field(loader, id);
+/// A catalogue entry a layout lacks or that does not fit its parse, and
+/// why.
+type Lacks = (&'static str, &'static str);
+
+/// Why an entry whose offsets read is still left out.
+const UNSOUND: &str = "does not fit the parse";
+
+/// The offset of the catalogue's field `id`, or what the layout lacks.
+fn field_of(loader: &Loader, id: &'static str) -> Result<usize, Lacks> {
+    field(loader, id).ok_or((id, crate::engine::builds::ABSENT))
+}
+
+/// The size of the catalogue's type `id`, or what the layout lacks.
+fn size_of(loader: &Loader, id: &'static str) -> Result<usize, Lacks> {
+    size(loader, id).ok_or((id, crate::engine::builds::ABSENT))
+}
+
+/// The reflected layout the marker parse reads, from the catalogue's facts,
+/// or the first entry it lacks.
+fn layout(loader: &Loader) -> Result<SceneLayout, Lacks> {
+    let field = |id| field_of(loader, id);
+    let size = |id| size_of(loader, id);
     let [x0, x1, y0, y1, z0, z1] = names::SCENE_TRANSFORM_POSITION;
-    Some(SceneLayout {
+    Ok(SceneLayout {
         templates: field(names::ids::SCENE_CHUNK_TEMPLATES)?,
         entities: field(names::ids::SCENE_CHUNK_ENTITIES)?,
-        entry_size: size(loader, names::ids::SCENE_SPAWN_ENTRY)?,
+        entry_size: size(names::ids::SCENE_SPAWN_ENTRY)?,
         entry_template: field(names::ids::SCENE_SPAWN_ENTRY_TEMPLATE_INDEX)?,
         entry_transform: field(names::ids::SCENE_SPAWN_ENTRY_TRANSFORM)?,
         position: [
@@ -122,23 +141,46 @@ fn layout(loader: &Loader) -> Option<SceneLayout> {
         components: field(names::ids::TEMPLATE_COMPONENTS)?,
         marker_id: field(names::ids::MAP_MARKER_MARKER_ID)?,
         marker_type: field(names::ids::MAP_MARKER_MARKER_TYPE)?,
-        marker_size: size(loader, names::ids::MAP_MARKER)?,
+        marker_size: size(names::ids::MAP_MARKER)?,
     })
-    .filter(SceneLayout::is_sound)
+    .and_then(|layout| {
+        layout
+            .is_sound()
+            .then_some(layout)
+            .ok_or((names::ids::SCENE_SPAWN_ENTRY, UNSOUND))
+    })
 }
 
-/// The reflected layout the frame parse reads, from the catalogue's facts.
-fn frame_layout(loader: &Loader) -> Option<FrameLayout> {
-    let field = |id: &str| field(loader, id);
-    Some(FrameLayout {
+/// The reflected layout the frame parse reads, from the catalogue's facts,
+/// or the first entry it lacks.
+fn frame_layout(loader: &Loader) -> Result<FrameLayout, Lacks> {
+    let field = |id| field_of(loader, id);
+    let size = |id| size_of(loader, id);
+    Ok(FrameLayout {
         has_biome_map: field(names::ids::SCENE_RESOURCE_HAS_BIOME_MAP)?,
-        scene_size: size(loader, names::ids::SCENE_RESOURCE)?,
+        scene_size: size(names::ids::SCENE_RESOURCE)?,
         world_origin: field(names::ids::BIOME_MAP_WORLD_ORIGIN)?,
         world_size: field(names::ids::BIOME_MAP_WORLD_SIZE)?,
         map_scale: field(names::ids::BIOME_MAP_MAP_SCALE)?,
-        biome_map_size: size(loader, names::ids::BIOME_MAP)?,
+        biome_map_size: size(names::ids::BIOME_MAP)?,
     })
-    .filter(FrameLayout::is_sound)
+    .and_then(|layout| {
+        layout
+            .is_sound()
+            .then_some(layout)
+            .ok_or((names::ids::BIOME_MAP, UNSOUND))
+    })
+}
+
+/// The layout `found` holds, or [`Status::MISSING`] with `fuse` turned off
+/// for the entry it lacks.
+fn sound<L>(loader: &Loader, fuse: &'static Fuse, found: Result<L, Lacks>) -> Result<L, Status> {
+    found.map_err(|(id, why)| {
+        if !fuse.is_off() {
+            let _off = loader.fuse_off(fuse, id, why);
+        }
+        Status::MISSING
+    })
 }
 
 /// The scene the server runs now and its global chunk; on the game thread
@@ -175,10 +217,9 @@ fn scene_key(loader: &Loader) -> Result<SceneKey, Status> {
 
 /// Reads the markers of the scene `key` from the archive.
 fn read_markers(
-    layout: Option<SceneLayout>,
+    layout: SceneLayout,
     key: SceneKey,
 ) -> Result<Arc<[MapMarkerInfo]>, ReadSceneError> {
-    let layout = layout.ok_or(ReadSceneError::Layout)?;
     let chunk_hash = names::type_hash(names::ids::SCENE_CHUNK).ok_or(ReadSceneError::Layout)?;
     let marker_hash = names::type_hash(names::ids::MAP_MARKER).ok_or(ReadSceneError::Layout)?;
     let archive = crate::engine::archive::game().ok_or(ReadSceneError::Archive)?;
@@ -218,8 +259,7 @@ fn read_markers(
 
 /// Reads the frame of the scene `key` from the archive: its scene
 /// resource's flag, then its biome map.
-fn read_frame(layout: Option<FrameLayout>, key: SceneKey) -> Result<MapFrameInfo, ReadFrameError> {
-    let layout = layout.ok_or(ReadFrameError::Layout)?;
+fn read_frame(layout: FrameLayout, key: SceneKey) -> Result<MapFrameInfo, ReadFrameError> {
     let scene_hash = names::type_hash(names::ids::SCENE_RESOURCE).ok_or(ReadFrameError::Layout)?;
     let biome_hash = names::type_hash(names::ids::BIOME_MAP).ok_or(ReadFrameError::Layout)?;
     let archive = crate::engine::archive::game().ok_or(ReadFrameError::Archive)?;
@@ -278,46 +318,30 @@ impl ReadFailure for ReadFrameError {
     const THREAD: Self = Self::Thread;
 }
 
-/// A failed read of a scene, which turns its feature off when no scene
-/// could read: the build lacks the reflected layout, or the read itself
-/// failed.
+/// A failed read of a scene: a fault of the loader's read turns its
+/// feature off; a scene's own data, or a thread that did not start, leaves
+/// the next scene to read again.
 trait SceneFailure: ReadFailure + Clone {
-    /// Why `feature` is off on the build named `build`; `None` for a
-    /// failure of one scene's data, which leaves the next scene to read.
-    fn off(&self, feature: &str, build: &str) -> Option<Off>;
+    /// Whether the read itself failed: it panicked, or its parse disagrees
+    /// with the layout the feature checked before it started.
+    fn is_fault(&self) -> bool;
 }
 
-/// What the line names when the build lacks part of a read's layout, and
-/// why.
-const LAYOUT_OFF: (&str, &str) = ("its reflected layout", "is not all in this build");
-
 impl SceneFailure for ReadSceneError {
-    fn off(&self, feature: &str, build: &str) -> Option<Off> {
-        match self {
-            Self::Layout => Some(Off::build(feature, build, LAYOUT_OFF.0, LAYOUT_OFF.1)),
-            Self::Panicked | Self::Thread => Some(Off::fault(feature, &self.to_string())),
-            Self::Archive | Self::Chunk | Self::ChunkUnreadable | Self::Templates => None,
-        }
+    fn is_fault(&self) -> bool {
+        matches!(self, Self::Layout | Self::Panicked)
     }
 }
 
 impl SceneFailure for ReadFrameError {
-    fn off(&self, feature: &str, build: &str) -> Option<Off> {
-        match self {
-            Self::Layout => Some(Off::build(feature, build, LAYOUT_OFF.0, LAYOUT_OFF.1)),
-            Self::Panicked | Self::Thread => Some(Off::fault(feature, &self.to_string())),
-            Self::Archive
-            | Self::Scene
-            | Self::SceneUnreadable
-            | Self::NoBiomeMap
-            | Self::BiomeMap
-            | Self::BiomeMapUnreadable => None,
-        }
+    fn is_fault(&self) -> bool {
+        matches!(self, Self::Layout | Self::Panicked)
     }
 }
 
-/// The switch of the map markers.
-static MARKERS_FUSE: Fuse = Fuse::new("map markers");
+/// The switch of the markers the scene places, read from its data; apart
+/// from the interface's `map markers`, which draws mods' own.
+static MARKERS_FUSE: Fuse = Fuse::new("world map markers");
 /// The switch of the map's frame.
 static FRAME_FUSE: Fuse = Fuse::new("map frame");
 /// The switch of the client's marker types.
@@ -325,12 +349,10 @@ static TYPES_FUSE: Fuse = Fuse::new("map marker types");
 
 /// The read of `key` that `cache` keeps, or [`Status::NOT_LOADED`] while it
 /// runs: the first call for a scene starts `read` on a thread of its own,
-/// named for `fuse`'s feature, on the game build named `build`. A failure
-/// that leaves no scene to read turns the feature off.
+/// named for `fuse`'s feature. A fault of the read turns the feature off.
 fn cached<V: Described, E: SceneFailure>(
     key: SceneKey,
     fuse: &'static Fuse,
-    build: &str,
     cache: fn(&mut SceneState) -> &mut SceneCache<V, E>,
     read: impl FnOnce() -> Result<V, E> + Send + 'static,
 ) -> Result<V, Status> {
@@ -343,17 +365,11 @@ fn cached<V: Described, E: SceneFailure>(
         Lookup::Start => {}
     }
     let what = fuse.feature();
-    let build = build.to_owned();
     crate::engine::off_thread::read(what, read, move |found, took| {
         match &found {
             Ok(value) => crate::log!(DEBUG, "{}", value.done(took.as_millis())),
-            Err(why) => {
-                if let Some(off) = why.off(what, &build) {
-                    fuse.turn_off(&off);
-                } else {
-                    crate::log!(WARN, "{what}: this scene does not read: {why}");
-                }
-            }
+            Err(why) if why.is_fault() => fuse.turn_off(&Off::fault(what, &why.to_string())),
+            Err(why) => crate::log!(WARN, "{what}: this scene does not read: {why}"),
         }
         let _kept = cache(&mut STATE.relock()).finish(key, found);
     });
@@ -366,11 +382,11 @@ fn cached<V: Described, E: SceneFailure>(
 /// answers [`Status::NOT_LOADED`] until it is done.
 pub(crate) fn markers(loader: &Loader) -> Result<Arc<[MapMarkerInfo]>, Status> {
     let key = scene_key(loader)?;
-    let layout = *STATE.relock().layout.get_or_init(|| layout(loader));
+    let found = *STATE.relock().layout.get_or_init(|| layout(loader));
+    let layout = sound(loader, &MARKERS_FUSE, found)?;
     cached(
         key,
         &MARKERS_FUSE,
-        &loader.build.name,
         |state| &mut state.markers,
         move || read_markers(layout, key),
     )
@@ -380,14 +396,14 @@ pub(crate) fn markers(loader: &Loader) -> Result<Arc<[MapMarkerInfo]>, Status> {
 /// quiet moment, read like [`markers`].
 pub(crate) fn frame_info(loader: &Loader) -> Result<MapFrameInfo, Status> {
     let key = scene_key(loader)?;
-    let layout = *STATE
+    let found = *STATE
         .relock()
         .frame_layout
         .get_or_init(|| frame_layout(loader));
+    let layout = sound(loader, &FRAME_FUSE, found)?;
     cached(
         key,
         &FRAME_FUSE,
-        &loader.build.name,
         |state| &mut state.frame,
         move || read_frame(layout, key),
     )
@@ -402,29 +418,35 @@ pub(crate) fn marker_types(loader: &Loader) -> Result<Arc<[MapMarkerTypeInfo]>, 
         return Err(Status::MISSING);
     }
     let state = STATE.relock();
-    let known = state.marker_types.get_or_init(|| {
-        let started = Instant::now();
-        match read_marker_types(loader) {
-            Ok(read) => {
-                crate::log!(
-                    INFO,
-                    "map marker types: {} in the registry, read in {} ms",
-                    read.len(),
-                    started.elapsed().as_millis()
-                );
-                Some(Arc::from(read))
-            }
-            Err(why) => {
-                let _off = loader.fuse_off(
-                    &TYPES_FUSE,
-                    names::ids::MAP_MARKER_REGISTRY,
-                    &why.to_string(),
-                );
-                None
-            }
-        }
-    });
+    let known = state
+        .marker_types
+        .get_or_init(|| kept_types(loader, &TYPES_FUSE, || read_marker_types(loader)));
     known.clone().ok_or(Status::MISSING)
+}
+
+/// The marker types `read` gives, run under `fuse`; `None`, with `fuse`
+/// off, when they do not read or `read` panics.
+fn kept_types(
+    loader: &Loader,
+    fuse: &'static Fuse,
+    read: impl FnOnce() -> Result<Vec<MapMarkerTypeInfo>, ReadTypesError>,
+) -> Option<Arc<[MapMarkerTypeInfo]>> {
+    let started = Instant::now();
+    match fuse.run("the marker types read", read)? {
+        Ok(read) => {
+            crate::log!(
+                INFO,
+                "map marker types: {} in the registry, read in {} ms",
+                read.len(),
+                started.elapsed().as_millis()
+            );
+            Some(Arc::from(read))
+        }
+        Err(why) => {
+            let _off = loader.fuse_off(fuse, names::ids::MAP_MARKER_REGISTRY, &why.to_string());
+            None
+        }
+    }
 }
 
 /// The reflected layout the marker type parse reads, from the catalogue's
@@ -483,7 +505,7 @@ mod tests {
     ) -> Result<V, Status> {
         let began = Instant::now();
         loop {
-            let found = cached(key, fuse, "build 1", cache, read.clone());
+            let found = cached(key, fuse, cache, read.clone());
             if found.as_ref().err() != Some(&Status::NOT_LOADED) {
                 return found;
             }
@@ -515,7 +537,7 @@ mod tests {
         let other = SceneKey::new([2; 16], 2).unwrap();
         let unread = || -> Result<Arc<[MapMarkerInfo]>, ReadSceneError> { unreachable!("off") };
         assert_eq!(
-            cached(other, &MARKS, "build 1", |state| &mut state.markers, unread).err(),
+            cached(other, &MARKS, |state| &mut state.markers, unread).err(),
             Some(Status::MISSING)
         );
     }
@@ -533,12 +555,56 @@ mod tests {
     }
 
     #[test]
-    fn only_a_missing_layout_a_panic_or_no_thread_turns_a_scene_read_off() {
-        let off = |why: ReadSceneError| why.off("marks", "build 1").is_some();
-        assert!(off(ReadSceneError::Layout) && off(ReadSceneError::Panicked));
-        assert!(off(ReadSceneError::Thread) && !off(ReadSceneError::Chunk));
-        assert!(!off(ReadSceneError::Archive) && !off(ReadSceneError::Templates));
-        let frame_off = |why: ReadFrameError| why.off("frames", "build 1").is_some();
-        assert!(frame_off(ReadFrameError::Layout) && !frame_off(ReadFrameError::BiomeMap));
+    fn only_a_fault_of_the_read_turns_a_scene_feature_off_and_a_thread_that_did_not_start_retries()
+    {
+        assert!(ReadSceneError::Layout.is_fault() && ReadSceneError::Panicked.is_fault());
+        assert!(!ReadSceneError::Thread.is_fault() && !ReadSceneError::Chunk.is_fault());
+        assert!(!ReadSceneError::Archive.is_fault() && !ReadSceneError::Templates.is_fault());
+        assert!(ReadFrameError::Panicked.is_fault() && !ReadFrameError::Thread.is_fault());
+        assert!(!ReadFrameError::BiomeMap.is_fault());
+    }
+
+    #[test]
+    fn a_scene_read_whose_thread_does_not_start_leaves_its_feature_on() {
+        static FRAMES: Fuse = Fuse::new("test scene threads");
+        let key = SceneKey::new([4; 16], 2).unwrap();
+        let read = || -> Result<MapFrameInfo, ReadFrameError> { Err(ReadFrameError::Thread) };
+        assert_eq!(
+            settled(key, &FRAMES, |state| &mut state.frame, read).err(),
+            Some(Status::MISSING)
+        );
+        assert!(!FRAMES.is_off());
+    }
+
+    #[test]
+    fn a_scene_layout_the_build_lacks_turns_its_feature_off_naming_the_first_entry() {
+        static LAID: Fuse = Fuse::new("test scene layout");
+        let loader = crate::start::tests::bare_loader();
+        assert_eq!(
+            sound(&loader, &LAID, layout(&loader)).err(),
+            Some(Status::MISSING)
+        );
+        assert!(LAID.is_off());
+        let listed = crate::engine::diag::parts_off();
+        let laid = listed.iter().find(|p| p.part == "test scene layout");
+        assert!(
+            laid.is_some_and(|p| p.reason.starts_with(names::ids::SCENE_CHUNK_TEMPLATES)),
+            "names the entry, not a placeholder: {listed:?}"
+        );
+    }
+
+    #[test]
+    fn a_marker_types_read_that_panics_turns_them_off_instead_of_unwinding() {
+        static KINDS: Fuse = Fuse::new("test marker types");
+        let loader = crate::start::tests::bare_loader();
+        let read = || -> Result<Vec<MapMarkerTypeInfo>, ReadTypesError> { panic!("a broken read") };
+        assert!(kept_types(&loader, &KINDS, read).is_none());
+        assert!(KINDS.is_off());
+        assert!(
+            crate::engine::diag::parts_off()
+                .iter()
+                .any(|p| p.part == "test marker types"),
+            "listed for the Mods screen"
+        );
     }
 }

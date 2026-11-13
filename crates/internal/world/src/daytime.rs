@@ -206,7 +206,8 @@ impl ClockSpeed {
     ///
     /// [`WorldError::Refused`] for a factor outside 0 to [`ClockSpeed::MAX`],
     /// [`WorldError::WrongThread`] off the game thread and
-    /// [`WorldError::Missing`] on a build without the clock.
+    /// [`WorldError::Missing`] on a build without the clock or once the
+    /// loader turned the clock's speed off.
     ///
     /// # Examples
     ///

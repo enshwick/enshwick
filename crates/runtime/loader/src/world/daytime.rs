@@ -296,14 +296,14 @@ pub(crate) fn set_speed(loader: &Loader, owner: ModIndex, factor: f32) -> Result
     if !(0.0..=MAX_FACTOR).contains(&factor) {
         return Err(Status::BAD_ARGS);
     }
-    // Off, the speed runs as on a build without the setter's link.
-    if SPEED_FUSE.is_off() {
-        return Err(Status::MISSING);
-    }
     let slot = FACTORS
         .get()
         .and_then(|factors| factors.iter().find(|(id, _)| *id == owner))
         .ok_or(Status::REFUSED)?;
+    // Off, the speed runs as on a build without the setter's link.
+    if SPEED_FUSE.is_off() {
+        return Err(Status::MISSING);
+    }
     let (layout, world, daytime) = daytime(loader)?;
     let next = SPEED_NEXT.wired().ok_or(Status::MISSING)?;
     slot.1.store(factor.to_bits(), Ordering::Relaxed);
@@ -454,12 +454,16 @@ mod tests {
     }
 
     #[test]
-    fn a_speed_set_once_the_time_speed_is_off_is_refused_as_missing() {
+    fn a_speed_set_once_the_time_speed_is_off_is_missing_for_its_mods_and_refused_for_others() {
         let loader = crate::start::tests::bare_loader();
+        let speeder = ModIndex::new(0);
+        let _first = FACTORS.set(Box::new([(speeder, AtomicU32::new(1.0f32.to_bits()))]));
         SPEED_FUSE.blow("a test");
+        assert_eq!(set_speed(&loader, speeder, 2.0), Err(Status::MISSING));
         assert_eq!(
-            set_speed(&loader, ModIndex::new(0), 2.0),
-            Err(Status::MISSING)
+            set_speed(&loader, ModIndex::new(1), 2.0),
+            Err(Status::REFUSED),
+            "a mod without the control is told so, as on a build with it"
         );
         assert_eq!(SPEED_FUSE.feature(), "time speed", "its link's name");
     }
