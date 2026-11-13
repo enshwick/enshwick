@@ -1,6 +1,8 @@
 //! What a script subscribes to: a loader event, a typed game event, or a
 //! game event read by its reflected type and the fields the script names.
 
+use std::fmt::Display;
+
 use enshwick_core::Entity;
 use enshwick_core::abi::Event;
 use enshwick_core::game_events::{Field, RawGameEvent};
@@ -127,15 +129,21 @@ impl Subscription {
     pub(crate) fn loader_kind(event: Event) -> Result<&'static EventKind, Off> {
         script::events()
             .find(|k| k.event() == event)
-            .ok_or_else(|| Off::new(format!("event {} has no script entry", event.0)))
+            .ok_or_else(|| unsubscribable(format_args!("event {}", event.0), "script entry"))
     }
 
     /// The typed game event's script entry.
     pub(crate) fn game_kind(name: &str) -> Result<&'static GameEventKind, Off> {
         script::game_events()
             .find(|k| k.name() == name)
-            .ok_or_else(|| Off::new(format!("game event {name} has no script entry")))
+            .ok_or_else(|| unsubscribable(format_args!("game event {name}"), "script entry"))
     }
+}
+
+/// Why the runtime cannot make a subscription: `what` has no `lacks`, such
+/// as a description, a script entry or a game event type.
+pub(crate) fn unsubscribable(what: impl Display, lacks: impl Display) -> Off {
+    Off::new(format!("{what} has no {lacks}"))
 }
 
 /// A value read from a raw game event.
@@ -191,10 +199,10 @@ impl RawReader {
             .map(|(name, _)| *name)
             .find(|name| *name == spec.type_name)
             .ok_or_else(|| {
-                Off::new(format!(
-                    "enshwick.on_game_type: no game event type {} on this build",
-                    spec.type_name
-                ))
+                unsubscribable(
+                    "enshwick.on_game_type: this game build",
+                    format_args!("game event type {}", spec.type_name),
+                )
             })?;
         let ty = load.game_event_type(name)?;
         let mut fields = Vec::new();

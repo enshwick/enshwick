@@ -568,8 +568,9 @@ pub fn record_fields(value: Value, count: usize) -> Result<std::vec::IntoIter<Va
 }
 
 #[doc(hidden)]
-/// The argument at `index` of `args`, nil when the script passed fewer, as
-/// `T`, for [`#[script]`](macro@crate::script).
+/// The next of `args`, nil when the script passed fewer, as `T`, for a
+/// record's fields in [`#[derive(Script)]`](derive@crate::Script) and in a
+/// hand-written [`FromScript`].
 ///
 /// # Errors
 ///
@@ -598,6 +599,40 @@ pub fn argument_or_default<T: FromScript + Default>(
     }
 }
 
+#[doc(hidden)]
+/// [`argument`] for a method's arguments, each taken out of its slot, for
+/// [`#[script]`](macro@crate::script).
+///
+/// # Errors
+///
+/// As [`argument`].
+pub fn taken<T: FromScript>(
+    args: &mut core::slice::IterMut<'_, Value>,
+    name: &str,
+) -> Result<T, Error> {
+    let value = args
+        .next()
+        .map_or(Value::Nil, |slot| core::mem::replace(slot, Value::Nil));
+    T::from_value(value).map_err(|e| e.within(name))
+}
+
+#[doc(hidden)]
+/// A method's `&str` argument, lent from its slot for the call, for
+/// [`#[script]`](macro@crate::script): the runtime keeps the text's buffer
+/// for its next call.
+///
+/// # Errors
+///
+/// As [`argument`] for a [`String`].
+pub fn text<'a>(args: &mut core::slice::IterMut<'a, Value>, name: &str) -> Result<&'a str, Error> {
+    match args.next() {
+        Some(Value::String(text)) => Ok(text),
+        Some(Value::Name(text)) => Ok(text),
+        Some(other) => Err(expected("a string", other).within(name)),
+        None => Err(expected("a string", &Value::Nil).within(name)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -611,6 +646,35 @@ mod tests {
                 "{refused}"
             );
         }
+    }
+
+    #[test]
+    fn a_text_argument_is_lent_from_its_slot_and_anything_else_is_refused() {
+        let mut args = [
+            Value::String("kept".into()),
+            Value::Name("named"),
+            Value::Number(1.0),
+        ];
+        let mut slots = args.iter_mut();
+        assert_eq!(text(&mut slots, "a").ok(), Some("kept"));
+        assert_eq!(text(&mut slots, "b").ok(), Some("named"));
+        let refused = text(&mut slots, "c").err().map(|e| e.to_string());
+        assert_eq!(
+            refused.as_deref(),
+            Some("c: expected a string, got a number")
+        );
+        let missing = text(&mut slots, "d").err().map(|e| e.to_string());
+        assert_eq!(missing.as_deref(), Some("d: expected a string, got nil"));
+        assert!(matches!(&args[0], Value::String(kept) if kept == "kept"));
+    }
+
+    #[test]
+    fn a_taken_argument_leaves_nil_in_its_slot() {
+        let mut args = [Value::Number(3.0)];
+        let mut slots = args.iter_mut();
+        assert_eq!(taken::<u8>(&mut slots, "n").ok(), Some(3));
+        assert!(taken::<u8>(&mut slots, "m").is_err());
+        assert!(matches!(args[0], Value::Nil));
     }
 
     #[test]

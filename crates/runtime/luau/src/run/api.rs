@@ -11,7 +11,7 @@ use enshwick_core::{Load, Relock as _};
 use mlua::{Function, Lua, MultiValue, Table, Value as LuaValue};
 
 use super::{Asked, Defined, Inner, Owned, Scope, Vm};
-use crate::bridge::{LuaArgs, arguments, to_lua};
+use crate::bridge::{LuaArgs, call, failed, to_lua};
 use crate::calls::{CallDesc, ServedCall};
 use crate::files::{Requirer, Scripts};
 use crate::points::{EventDesc, PointDesc, Read, decode, encode};
@@ -32,9 +32,10 @@ impl Vm {
 
     fn subscribe(&self, what: &str, sub: Subscription, handler: Function) -> mlua::Result<()> {
         if !self.starting.load(Ordering::Acquire) {
-            return Err(mlua::Error::runtime(format!(
-                "{what}: subscribe at the top level of main.luau, while the mod starts"
-            )));
+            return Err(failed(
+                what,
+                "subscribe at the top level of main.luau, while the mod starts",
+            ));
         }
         self.handlers.relock().push((sub, handler));
         Ok(())
@@ -141,14 +142,14 @@ impl Inner {
             vm: Arc::downgrade(vm),
         };
         vm.lua.create_function(
-            move |_, (point, handler, order): (Table, Function, LuaValue)| {
+            move |lua, (point, handler, order): (Table, Function, LuaValue)| {
                 let vm = weak
                     .upgrade()
                     .ok_or_else(|| mlua::Error::runtime("the mod has stopped"))?;
                 let mut desc = PointDesc::parse(&point)?;
                 if !order.is_nil() {
                     desc.order =
-                        crate::bridge::from_lua(&bridge, order, <Order as script::Typed>::TY)
+                        crate::bridge::from_lua(lua, &bridge, order, <Order as script::Typed>::TY)
                             .and_then(script::FromScript::from_value)
                             .map_err(|e| {
                                 mlua::Error::runtime(format!("enshwick.extend: order: {e}"))
@@ -266,11 +267,9 @@ impl Inner {
                 table.raw_set(
                     declared.name(),
                     lua.create_function(move |lua, args: LuaArgs| {
-                        let mut values = arguments(&scope, args, signature, &what)?;
-                        let answer = opened
-                            .call(&declared, values.slots())
-                            .map_err(|e| mlua::Error::runtime(format!("{what}: {e}")))?;
-                        to_lua(lua, &scope, answer, signature.ret())
+                        call(lua, &scope, args, signature, &what, |slots| {
+                            opened.call(&declared, slots)
+                        })
                     })?,
                 )?;
             }
@@ -389,19 +388,23 @@ impl Inner {
             .find(|d| d.local == name)
             .cloned()
             .ok_or_else(|| {
-                mlua::Error::runtime(format!(
-                    "{what}: pack.toml declares no [[point]] named {name:?}"
-                ))
+                failed(
+                    what,
+                    format_args!("pack.toml declares no [[point]] named {name:?}"),
+                )
             })?;
         let handle = {
             let mut owned = self.owned.relock();
             match owned.iter().find(|o| o.desc.local == name) {
                 Some(known) => Arc::clone(&known.handle),
                 None if self.started.load(Ordering::Acquire) => {
-                    return Err(mlua::Error::runtime(format!(
-                        "{what}: {} is defined from the next start, at the top level of main.luau",
-                        desc.point.name
-                    )));
+                    return Err(failed(
+                        what,
+                        format_args!(
+                            "{} is defined from the next start, at the top level of main.luau",
+                            desc.point.name
+                        ),
+                    ));
                 }
                 None => {
                     let handle = Arc::new(OnceLock::new());
@@ -433,11 +436,11 @@ impl Inner {
                         large.as_mut_slice()
                     };
                     encode(&input, &desc.input, bytes, 0)
-                        .map_err(|e| mlua::Error::runtime(format!("{what}: the input: {e}")))?;
+                        .map_err(|e| failed(what, format_args!("the input: {e}")))?;
                     let mut out = Aligned([0u8; 16]);
                     let out = out.0.get_mut(..answer_size).unwrap_or_default();
                     encode(&answer, &desc.output, out, 0)
-                        .map_err(|e| mlua::Error::runtime(format!("{what}: the answer: {e}")))?;
+                        .map_err(|e| failed(what, format_args!("the answer: {e}")))?;
                     let Some(point) = asked.get() else {
                         return Ok((answer, kept.clone()));
                     };
@@ -569,16 +572,12 @@ impl Inner {
                 let during = {
                     let (bridge, what) = (bridge.clone(), what.clone());
                     scope.create_function(move |lua, args: MultiValue| {
-                        let mut values = arguments(&bridge, args, signature, &what)?;
-                        let mut load = load.try_relock().ok_or_else(|| {
-                            mlua::Error::runtime(format!(
-                                "{what}: called from inside another start call"
-                            ))
-                        })?;
-                        let answer = function
-                            .call(&mut load, values.slots())
-                            .map_err(|e| mlua::Error::runtime(format!("{what}: {e}")))?;
-                        to_lua(lua, &bridge, answer, signature.ret())
+                        call(lua, &bridge, args, signature, &what, |slots| {
+                            let mut load = load.try_relock().ok_or_else(|| {
+                                script::Error::new("called from inside another start call")
+                            })?;
+                            function.call(&mut load, slots)
+                        })
                     })?
                 };
                 table.raw_set(function.name(), start_only(vm, what, during)?)?;
@@ -605,9 +604,10 @@ fn start_only(vm: &Arc<Vm>, what: String, during: Function) -> mlua::Result<Func
             .upgrade()
             .is_some_and(|vm| vm.starting.load(Ordering::Acquire))
         {
-            return Err(mlua::Error::runtime(format!(
-                "{what}: allowed only while the mod starts, at the top level of main.luau"
-            )));
+            return Err(failed(
+                &what,
+                "allowed only while the mod starts, at the top level of main.luau",
+            ));
         }
         during.call::<MultiValue>(args)
     })
@@ -636,28 +636,27 @@ fn requested<'scope, 'env>(
             declared.name(),
             lua.create_function(move |lua, args: LuaArgs| {
                 let opened = slot.get().ok_or_else(|| {
-                    mlua::Error::runtime(format!(
-                        "{what}: call {ask}() at the top level of main.luau first"
-                    ))
+                    failed(
+                        &what,
+                        format_args!("call {ask}() at the top level of main.luau first"),
+                    )
                 })?;
-                let mut values = arguments(&bridge, args, signature, &what)?;
-                let answer = opened
-                    .call(&declared, values.slots())
-                    .map_err(|e| mlua::Error::runtime(format!("{what}: {e}")))?;
-                to_lua(lua, &bridge, answer, signature.ret())
+                call(lua, &bridge, args, signature, &what, |slots| {
+                    opened.call(&declared, slots)
+                })
             })?,
         )?;
     }
     let during = {
         let (bridge, what) = (bridge.clone(), ask.clone());
         scope.create_function(move |lua, ()| {
-            let mut load = load.try_relock().ok_or_else(|| {
-                mlua::Error::runtime(format!("{what}: called from inside another start call"))
-            })?;
+            let mut load = load
+                .try_relock()
+                .ok_or_else(|| failed(&what, "called from inside another start call"))?;
             let (opened, handle) = namespace
                 .request(&mut load)
-                .ok_or_else(|| mlua::Error::runtime(format!("{what}: no such function")))?
-                .map_err(|off| mlua::Error::runtime(format!("{what}: {off}")))?;
+                .ok_or_else(|| failed(&what, "no such function"))?
+                .map_err(|off| failed(&what, off))?;
             let _first = slot.set(opened);
             to_lua(lua, &bridge, handle, getter.signature().ret())
         })?

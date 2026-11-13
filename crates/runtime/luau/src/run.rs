@@ -23,7 +23,7 @@ use enshwick_core::packs::SCRIPT_MAIN as MAIN;
 use crate::calls::{CallDesc, ServedCall};
 use crate::files::Scripts;
 use crate::points::{EventDesc, OwnedDesc, PointDesc, Read, decode};
-use crate::subscribe::{RawReader, Subscription, raw_table};
+use crate::subscribe::{RawReader, Subscription, raw_table, unsubscribable};
 use enshwick_core::points::DescribedOwnedPoint;
 use enshwick_core::services::{DescribedCall, DescribedCaller, DescribedEmitter};
 use sandbox::describe;
@@ -382,7 +382,7 @@ impl Scope {
             answer
         });
         let answer = answer.ok_or_else(|| script::Error::new("the script failed"))?;
-        from_lua(self, answer, signature.ret()).inspect_err(|error| {
+        from_lua(&vm.lua, self, answer, signature.ret()).inspect_err(|error| {
             inner.fail(&format!("a function passed to the API answered {error}"));
         })
     }
@@ -393,12 +393,6 @@ impl Scope {
         if let Some(inner) = self.inner.upgrade() {
             inner.fail(&format!("a function passed to the API answered {error}"));
         }
-    }
-
-    /// Runs `with` on the Luau state of this scope's VM; `None` once the VM
-    /// is gone.
-    pub(crate) fn with_lua<R>(&self, with: impl FnOnce(&Lua) -> R) -> Option<R> {
-        self.vm.upgrade().map(|vm| with(&vm.lua))
     }
 }
 
@@ -660,18 +654,13 @@ fn subscribe(
                 })?;
             }
             Subscription::Point(name) => {
-                let desc = inner
-                    .vm
-                    .load()
-                    .as_ref()
-                    .and_then(|vm| {
-                        vm.points
-                            .relock()
-                            .iter()
-                            .find(|d| d.point.name == *name)
-                            .cloned()
-                    })
-                    .ok_or_else(|| Off::new(format!("point {name} has no description")))?;
+                let desc = described(inner, "point", name, |vm| {
+                    vm.points
+                        .relock()
+                        .iter()
+                        .find(|d| d.point.name == *name)
+                        .cloned()
+                })?;
                 let key = sub.clone();
                 let point = desc.point.clone();
                 // SAFETY: in a mode that changes the answer, `PointDesc::parse`
@@ -688,18 +677,13 @@ fn subscribe(
                 }?;
             }
             Subscription::ModEvent(name) => {
-                let desc = inner
-                    .vm
-                    .load()
-                    .as_ref()
-                    .and_then(|vm| {
-                        vm.events
-                            .relock()
-                            .iter()
-                            .find(|d| d.event.name == *name)
-                            .cloned()
-                    })
-                    .ok_or_else(|| Off::new(format!("mod event {name} has no description")))?;
+                let desc = described(inner, "mod event", name, |vm| {
+                    vm.events
+                        .relock()
+                        .iter()
+                        .find(|d| d.event.name == *name)
+                        .cloned()
+                })?;
                 let key = sub.clone();
                 let read = Read::Struct(desc.fields.clone());
                 load.on_described_mod_event(&desc.event, move |data| {
@@ -707,18 +691,13 @@ fn subscribe(
                 })?;
             }
             Subscription::Call(name) => {
-                let desc = inner
-                    .vm
-                    .load()
-                    .as_ref()
-                    .and_then(|vm| {
-                        vm.served
-                            .relock()
-                            .iter()
-                            .find(|d| d.call.name == *name)
-                            .cloned()
-                    })
-                    .ok_or_else(|| Off::new(format!("call {name} has no description")))?;
+                let desc = described(inner, "call", name, |vm| {
+                    vm.served
+                        .relock()
+                        .iter()
+                        .find(|d| d.call.name == *name)
+                        .cloned()
+                })?;
                 let key = sub.clone();
                 let call = desc.call.clone();
                 // SAFETY: `ServedCall::parse` accepts only a primitive answer
@@ -742,6 +721,22 @@ fn subscribe(
         }
     }
     Ok(())
+}
+
+/// The description of the `kind` `name` that `pick` finds among what the
+/// running VM's scripts described at start.
+fn described<D>(
+    inner: &Inner,
+    kind: &str,
+    name: &str,
+    pick: impl FnOnce(&Vm) -> Option<D>,
+) -> Result<D, Off> {
+    inner
+        .vm
+        .load()
+        .as_deref()
+        .and_then(pick)
+        .ok_or_else(|| unsubscribable(format_args!("{kind} {name}"), "description"))
 }
 
 impl Inner {

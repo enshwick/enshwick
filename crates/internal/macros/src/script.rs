@@ -482,10 +482,16 @@ fn parameter(
     if let Some((inputs, output)) = closure_bound(ty).or_else(|| generic_closure(ty, generics)) {
         return closure(&param, &local, &inputs, &output, krate);
     }
+    // Lent from its slot, so the runtime keeps the text's buffer.
+    if matches!(ty, Type::Reference(r) if matches!(&*r.elem, Type::Path(p) if p.path.is_ident("str")))
+    {
+        return Ok(Parameter {
+            describe: quote!(#script::Param::lent(#param)),
+            read: quote!(let #local: &str = #krate::__private::text(&mut args, #param)?;),
+            pass: quote!(#local),
+        });
+    }
     let (owned, pass): (Type, TokenStream) = match ty {
-        Type::Reference(r) if matches!(&*r.elem, Type::Path(p) if p.path.is_ident("str")) => {
-            (syn::parse_quote!(::std::string::String), quote!(&#local))
-        }
         Type::Reference(r) if matches!(&*r.elem, Type::Slice(_)) => {
             let Type::Slice(slice) = &*r.elem else {
                 unreachable!("matched as a slice")
@@ -498,7 +504,7 @@ fn parameter(
     };
     Ok(Parameter {
         describe: quote!(#script::Param::new(#param, <#owned as #script::Typed>::TY)),
-        read: quote!(let #local: #owned = #krate::__private::argument(&mut args, #param)?;),
+        read: quote!(let #local: #owned = #krate::__private::taken(&mut args, #param)?;),
         pass,
     })
 }
@@ -617,7 +623,7 @@ fn closure(
         },
         read: quote! {
             let #local = {
-                let callback: #script::Callback = #krate::__private::argument(&mut args, #param)?;
+                let callback: #script::Callback = #krate::__private::taken(&mut args, #param)?;
                 move |#(#names: #inputs),*| -> #output { #body }
             };
         },
@@ -734,7 +740,7 @@ fn function(
     let take = if parameters.is_empty() {
         quote!(let _no_arguments = args;)
     } else {
-        quote!(let mut args = args.iter_mut().map(|value| ::core::mem::replace(value, #script::Value::Nil));)
+        quote!(let mut args = args.iter_mut();)
     };
     let (kind, this) = if starting {
         (quote!(InitFunction), quote!(&mut #krate::Load<'_>))
@@ -844,6 +850,62 @@ mod tests {
         let out = expand_derive(&input, &quote!(::enshwick))?.to_string();
         assert!(out.contains("Context for Kept"), "{out}");
         assert!(out.contains("argument_or_default"), "{out}");
+        Ok(())
+    }
+
+    #[test]
+    fn a_text_parameter_is_lent_from_its_slot_and_others_are_taken() -> syn::Result<()> {
+        let method: ImplItemFn = parse_quote! {
+            /// Says `text` `times` times.
+            fn say(&self, text: &str, times: u32) {}
+        };
+        let out = function(
+            &method,
+            &parse_quote!(Chat),
+            false,
+            None,
+            &quote!(::enshwick),
+        )?
+        .to_string();
+        assert!(
+            out.contains("__private :: text (& mut args , \"text\")"),
+            "{out}"
+        );
+        assert!(out.contains("Param :: lent (\"text\")"), "{out}");
+        assert!(
+            out.contains("__private :: taken (& mut args , \"times\")"),
+            "{out}"
+        );
+        assert!(out.contains("args . iter_mut ()"), "{out}");
+        Ok(())
+    }
+
+    #[test]
+    fn a_slice_parameter_owns_a_vec_and_another_reference_its_own_type() -> syn::Result<()> {
+        let method: ImplItemFn = parse_quote! {
+            /// Sums `items` when `bytes` look right.
+            fn sum(&self, items: &[u32], bytes: &Bytes) -> u32 {}
+        };
+        let out = function(
+            &method,
+            &parse_quote!(Rates),
+            false,
+            None,
+            &quote!(::enshwick),
+        )?
+        .to_string();
+        assert!(
+            out.contains(
+                "let arg0 : :: std :: vec :: Vec < u32 > = :: enshwick :: __private :: taken"
+            ),
+            "{out}"
+        );
+        assert!(
+            out.contains("let arg1 : Bytes = :: enshwick :: __private :: taken"),
+            "{out}"
+        );
+        assert!(out.contains("(& arg0 , & arg1)"), "{out}");
+        assert!(!out.contains("Param :: lent"), "{out}");
         Ok(())
     }
 }

@@ -6,6 +6,7 @@
 mod tests {
     use std::alloc::{GlobalAlloc, Layout, System};
     use std::cell::Cell;
+    use std::fmt::Write as _;
     use std::time::Duration;
 
     use enshwick::abi::{DamageCheck, Header, Status};
@@ -50,9 +51,54 @@ mod tests {
     #[global_allocator]
     static GLOBAL: Counting = Counting;
 
+    /// The calls into the API one hit of a kind of argument makes.
+    const CALLS: u64 = 10;
+
+    /// Each kind of argument: its name, the call [`script`] makes with it,
+    /// and the allocations one warm call makes. The floor: mlua allocates a
+    /// counter to read a string's bytes; a list or record parameter owns its
+    /// values, a buffer parameter its bytes, a function parameter its
+    /// callback.
+    const KINDS: [(&str, &str, u64); 6] = [
+        ("scalar", "scale_whole(100, 1.5)", 0),
+        ("string", r#"is_id("you.luau:a_content_id")"#, 1),
+        ("list", "combine(factors)", 2),
+        ("record", "start_fill(meter)", 3),
+        ("bytes", "looks_like_code(bytes)", 1),
+        ("function", "store:with(read)", 1),
+    ];
+
+    /// A filter that halves magical fire on impact, and, for a hit whose
+    /// total is the place of one of [`KINDS`], from 1, makes [`CALLS`] of
+    /// its call.
+    fn script() -> String {
+        let kinds = KINDS.iter().fold(String::new(), |mut kinds, (_, call, _)| {
+            let _ = writeln!(kinds, "function() for _ = 1, {CALLS} do {call} end end,");
+            kinds
+        });
+        MAIN.replace("--[[kinds]]", &kinds)
+    }
+
+    /// [`script`] without its kinds.
     const MAIN: &str = r#"
+        local scale_whole = enshwick.rates.scale_whole
+        local is_id = enshwick.content.is_id
+        local combine = enshwick.rates.combine
+        local start_fill = enshwick.content.start_fill
+        local looks_like_code = enshwick.net.looks_like_code
+        local store = enshwick.world_store("allocations")
+        local factors = { 1.5, 2, 0.5, 1.25 }
+        local meter = { template = "you.luau:pouch", max_fuel_charges = 4, start = 2 }
+        local bytes = buffer.create(64)
+        local read = function(value) return value end
+        local kinds = {
+            --[[kinds]]
+        }
         enshwick.damage.on_damage(function(damage)
-            if damage:cause() == "Impact" and damage:amount("MagicalFire") > 10 then
+            local kind = kinds[damage:total()]
+            if kind then
+                kind()
+            elseif damage:cause() == "Impact" and damage:amount("MagicalFire") > 10 then
                 damage:scale_type("MagicalFire", 0.5)
             end
         end)
@@ -69,7 +115,7 @@ mod tests {
             let _runtime = enshwick_luau::start(
                 load,
                 "you.luau",
-                Scripts::new().with("main.luau", MAIN),
+                Scripts::new().with("main.luau", script()),
                 None,
                 limits,
             )?;
@@ -116,5 +162,40 @@ mod tests {
         }
         let made = MADE.with(Cell::get) - before;
         assert_eq!(made, 0, "allocations in 1000 warm hits");
+    }
+
+    /// A hit that makes the calls of the kind `total` names.
+    fn calls_of(total: f32) -> DamageCheck {
+        DamageCheck {
+            cause: DamageCheck::FALL_DAMAGE,
+            total,
+            ..fire()
+        }
+    }
+
+    #[test]
+    fn a_warm_call_allocates_only_what_its_kind_of_argument_needs() {
+        let loader = FakeHost::new().install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Luau)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        for (total, (kind, _, per_call)) in (1u8..).map(f32::from).zip(KINDS) {
+            for _ in 0..20 {
+                let _warm = loader.damage(calls_of(total));
+            }
+            let before = MADE.with(Cell::get);
+            for _ in 0..100 {
+                let _hit = loader.damage(calls_of(total));
+            }
+            let made = MADE.with(Cell::get) - before;
+            assert_eq!(made, per_call * 100 * CALLS, "{kind}: {:?}", loader.logs());
+        }
+        let fire_at = enshwick::damage::DamageTypeNew::MagicalFire.index();
+        assert!(
+            (loader.damage(fire()).amounts[fire_at] - 20.0).abs() < 1e-6,
+            "the mod still runs: {:?}",
+            loader.logs()
+        );
     }
 }

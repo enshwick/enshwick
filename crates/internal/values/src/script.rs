@@ -335,13 +335,38 @@ impl Signature {
 pub struct Param {
     name: &'static str,
     ty: &'static Ty,
+    lent: bool,
 }
 
 impl Param {
     #[doc(hidden)]
     #[must_use]
     pub const fn new(name: &'static str, ty: &'static Ty) -> Self {
-        Self { name, ty }
+        Self {
+            name,
+            ty,
+            lent: false,
+        }
+    }
+
+    /// A text parameter the function only borrows from its slot, a Rust
+    /// `&str`: the caller keeps the text's buffer after the call.
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn lent(name: &'static str) -> Self {
+        Self {
+            name,
+            ty: &Ty::String,
+            lent: true,
+        }
+    }
+
+    /// Whether the function leaves this parameter's text in its slot for
+    /// the caller to take back; see [`Function::call`].
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn is_lent(&self) -> bool {
+        self.lent
     }
 
     /// The Rust parameter's name; empty for a parameter of a function the
@@ -475,7 +500,8 @@ impl<T> Function<T> {
     }
 
     /// Calls the method on `this` with `args`, one per parameter, each of
-    /// the parameter's type; the method takes them out of the slice.
+    /// the parameter's type; the method takes them out of the slice, but
+    /// leaves the text of a `&str` parameter in its slot.
     ///
     /// # Errors
     ///
@@ -583,8 +609,47 @@ pub enum Value {
     Object(Handle),
 }
 
-/// The function behind a [`Callback`].
-type CallbackFn = dyn Fn(&mut [Value]) -> Result<Value, Error> + Send + Sync;
+/// What a [`Callback`] runs, and what its runtime does with an answer the
+/// API cannot use; one allocation holds both.
+trait Run: Send + Sync {
+    fn call(&self, args: &mut [Value]) -> Result<Value, Error>;
+
+    fn fault(&self, error: &Error);
+}
+
+/// A function without a runtime to tell of a fault.
+struct Plain<F>(F);
+
+impl<F> Run for Plain<F>
+where
+    F: Fn(&mut [Value]) -> Result<Value, Error> + Send + Sync,
+{
+    fn call(&self, args: &mut [Value]) -> Result<Value, Error> {
+        (self.0)(args)
+    }
+
+    fn fault(&self, _error: &Error) {}
+}
+
+/// A function and what its runtime does with a fault.
+struct Faulting<F, G> {
+    function: F,
+    fault: G,
+}
+
+impl<F, G> Run for Faulting<F, G>
+where
+    F: Fn(&mut [Value]) -> Result<Value, Error> + Send + Sync,
+    G: Fn(&Error) + Send + Sync,
+{
+    fn call(&self, args: &mut [Value]) -> Result<Value, Error> {
+        (self.function)(args)
+    }
+
+    fn fault(&self, error: &Error) {
+        (self.fault)(error);
+    }
+}
 
 /// A function a script passed in, callable from Rust on any thread the
 /// runtime allows; the runtime reports the script's own errors.
@@ -602,13 +667,7 @@ type CallbackFn = dyn Fn(&mut [Value]) -> Result<Value, Error> + Send + Sync;
 /// assert!(matches!(double.call(&mut [Value::Number(2.0)]), Ok(Value::Number(4.0))));
 /// ```
 #[derive(Clone)]
-pub struct Callback {
-    function: Arc<CallbackFn>,
-    fault: Option<Arc<FaultFn>>,
-}
-
-/// What a [`Callback`]'s runtime does with an answer the API cannot use.
-type FaultFn = dyn Fn(&Error) + Send + Sync;
+pub struct Callback(Arc<dyn Run>);
 
 impl core::fmt::Debug for Callback {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -625,10 +684,18 @@ impl Callback {
     pub fn new(
         function: impl Fn(&mut [Value]) -> Result<Value, Error> + Send + Sync + 'static,
     ) -> Self {
-        Self {
-            function: Arc::new(function),
-            fault: None,
-        }
+        Self(Arc::new(Plain(function)))
+    }
+
+    /// Wraps `function` with `fault`, as [`Callback::with_fault`] does, in
+    /// one allocation: a runtime makes one for each function a script
+    /// passes.
+    #[doc(hidden)]
+    pub fn with_runtime(
+        function: impl Fn(&mut [Value]) -> Result<Value, Error> + Send + Sync + 'static,
+        fault: impl Fn(&Error) + Send + Sync + 'static,
+    ) -> Self {
+        Self(Arc::new(Faulting { function, fault }))
     }
 
     /// The same function, with `fault` told of an answer the API cannot
@@ -649,10 +716,7 @@ impl Callback {
     /// ```
     #[must_use]
     pub fn with_fault(self, fault: impl Fn(&Error) + Send + Sync + 'static) -> Self {
-        Self {
-            fault: Some(Arc::new(fault)),
-            ..self
-        }
+        Self::with_runtime(move |args| self.call(args), fault)
     }
 
     /// Calls the function with `args`, which it may take out of the slice:
@@ -666,7 +730,7 @@ impl Callback {
     ///
     /// See [`Callback`].
     pub fn call(&self, args: &mut [Value]) -> Result<Value, Error> {
-        (self.function)(args)
+        self.0.call(args)
     }
 
     /// Tells the runtime that the function's answer did not fit, with
@@ -676,9 +740,7 @@ impl Callback {
     ///
     /// See [`Callback::with_fault`].
     pub fn fault(&self, error: &Error) {
-        if let Some(fault) = &self.fault {
-            fault(error);
-        }
+        self.0.fault(error);
     }
 }
 
@@ -789,4 +851,42 @@ pub trait Answer {
     /// answer of another type, which the runtime has reported and turned
     /// the mod off for, answers as the API would without the script.
     fn from_answer(answer: Result<Value, Error>) -> Self;
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU8, Ordering};
+
+    use super::*;
+
+    #[test]
+    fn a_callback_with_a_runtime_tells_it_of_a_fault_and_with_fault_replaces_it() {
+        let told = Arc::new(AtomicU8::new(0));
+        let first = Arc::clone(&told);
+        let callback = Callback::with_runtime(
+            |_| Ok(Value::Bool(true)),
+            move |_| {
+                first.fetch_add(1, Ordering::Relaxed);
+            },
+        );
+        assert!(matches!(callback.call(&mut []), Ok(Value::Bool(true))));
+        callback.fault(&Error::new("no"));
+        assert_eq!(told.load(Ordering::Relaxed), 1);
+        let second = Arc::clone(&told);
+        let replaced = callback.with_fault(move |_| {
+            second.fetch_add(10, Ordering::Relaxed);
+        });
+        assert!(matches!(replaced.call(&mut []), Ok(Value::Bool(true))));
+        replaced.fault(&Error::new("no"));
+        assert_eq!(told.load(Ordering::Relaxed), 11);
+    }
+
+    #[test]
+    fn only_a_lent_parameter_says_it_leaves_its_text() {
+        let lent = Param::lent("text");
+        assert!(lent.is_lent());
+        assert!(matches!(lent.ty(), Ty::String));
+        assert!(!Param::new("text", &Ty::String).is_lent());
+    }
 }
