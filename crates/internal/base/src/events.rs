@@ -21,8 +21,8 @@ use core::time::Duration;
 #[cfg(feature = "unstable")]
 use crate::abi::PlayerDeathData;
 use crate::abi::{
-    BuildingData, ChunkData, Event, KnowledgeData, PlayerData, QuestData, TerrainPageData,
-    TickData, TickHandle,
+    BuildingData, ChunkData, Event, KnowledgeData, PlayerData, ProgressWriteData, QuestData,
+    TerrainPageData, TickData, TickHandle,
 };
 
 pub(crate) mod sealed {
@@ -290,6 +290,11 @@ with_data! {
     TerrainPageLoaded = TERRAIN_PAGE_LOADED: TerrainPageData, size_of::<TerrainPageData>();
     /// [`Event::TERRAIN_PAGE_UNLOADED`].
     TerrainPageUnloaded = TERRAIN_PAGE_UNLOADED: TerrainPageData, size_of::<TerrainPageData>();
+    /// [`Event::PROGRESS_WRITTEN`], for each level or experience write the
+    /// mod asked for: [`World::set_level`](../world/struct.World.html#method.set_level),
+    /// [`World::set_experience`](../world/struct.World.html#method.set_experience)
+    /// and [`World::add_experience`](../world/struct.World.html#method.add_experience).
+    ProgressWritten = PROGRESS_WRITTEN: ProgressWriteData, size_of::<ProgressWriteData>();
 }
 
 impl Ticked {

@@ -81,6 +81,7 @@ macro_rules! headed {
             PointHandle,
             PointLink,
             PointSpec,
+            ProgressWriteData,
             QuestData,
             RenameCall,
             SaveInfo,

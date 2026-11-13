@@ -202,6 +202,7 @@ shapes! {
         TeleportRequest { header, entity, flags, position, orientation },
         SpawnRequest { header, template, position, orientation, level, reserved, lifetime_ns, flags },
         DropRequest { header, item, count, position, level, rarity },
+        ProgressWriteData { header, entity, what, value, outcome, level, experience, gained },
         CraftCheck { header, crafting_operator_id, crafting_station_id, recipe_id, recipe_amount, reserved },
         BuildCheck { header, player, item, position, reason },
         NetMessage { header, channel, reserved, peer, data, size, reserved_tail },

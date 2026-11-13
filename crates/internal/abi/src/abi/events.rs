@@ -139,6 +139,14 @@ impl Event {
     /// after the step.
     /// Dedicated server only. ABI 11.15.
     pub const TERRAIN_PAGE_UNLOADED: Self = Self(25);
+    /// A level or experience write the mod asked for with
+    /// [`HostApi::progress_write`](super::HostApi::progress_write) was
+    /// applied or dropped; data is a
+    /// [`ProgressWriteData`](super::ProgressWriteData). Raised for that mod
+    /// only, on the game thread after the step that applied the write, or
+    /// after the second step end with no level step that could take it.
+    /// The name is enshwick's. Server only. ABI 11.25.
+    pub const PROGRESS_WRITTEN: Self = Self(26);
 }
 
 /// The data of the `PlayerDied` event.
