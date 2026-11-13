@@ -326,6 +326,22 @@ pub(crate) unsafe extern "system" fn dispatch(registers: *mut Registers, site: *
     }
 }
 
+/// The first branch of the function `code`, which starts at `begin`, that
+/// lands inside the bytes a mid-function hook at `address` replaces; `None`
+/// when the hook may go there, for tests of a game executable read from its
+/// file.
+#[cfg(test)]
+pub(crate) fn branch_into_hook(code: &[u8], begin: u64, address: u64) -> Option<u64> {
+    let at = usize::try_from(address.checked_sub(begin)?).ok()?;
+    let mut decoder =
+        iced_x86::Decoder::with_ip(64, code.get(at..)?, address, iced_x86::DecoderOptions::NONE);
+    let mut stolen = 0;
+    while stolen < crate::engine::detour::PATCH && decoder.can_decode() {
+        stolen += decoder.decode().len();
+    }
+    crate::engine::detour::branch_into(code, begin, address, stolen as u64)
+}
+
 /// Declares one of the loader's mid-function handlers, linked by
 /// [`Loader::link_mid`](crate::engine::loader::Loader::link_mid): the `gate`,
 /// a cheap test of whether the hit is the loader's, runs first and reads no
