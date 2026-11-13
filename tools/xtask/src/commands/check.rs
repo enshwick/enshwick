@@ -33,9 +33,13 @@ pub(crate) const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 const TEST_FEATURE: &str = "enshwick/test,enshwick/unstable,enshwick/typed,xtask/compat";
 
 /// The nextest filter of the trybuild test, which builds the API crate again
-/// under `target/tests/trybuild`: [`Part::Trybuild`] runs it, and the host
-/// part leaves it out whenever that part runs too.
+/// under `target/tests/trybuild`: only [`Part::Trybuild`] runs it.
 const TRYBUILD: &str = "binary_id(enshwick::main) & test(/^(config_files|internals)::/)";
+
+/// The API crate's features the trybuild test builds with: trybuild builds
+/// its cases with the features of the test, and none of them needs the
+/// generated typed API, the costliest part of the crate to build.
+const TRYBUILD_FEATURES: &str = "test,unstable";
 
 /// The command line `check` takes.
 #[derive(Debug, clap::Args)]
@@ -224,7 +228,7 @@ pub(crate) enum Part {
     Fuzz,
     /// The trybuild test ([`TRYBUILD`]), when the API crate's tests are in
     /// the change's scope; a run that finds no such test fails, so a moved
-    /// test does not go untested. Without this part the host part runs it.
+    /// test does not go untested. The host part never runs it.
     Trybuild,
     /// cargo-semver-checks for the packages `--semver` names.
     Semver,
@@ -470,26 +474,33 @@ fn host_steps(
     if full && run_host {
         steps.push(Step::new(&["fmt", "--all", "--check"]));
     }
-    let run_trybuild = parts.contains(&Part::Trybuild);
     if code && run_host {
         steps.push(host(&["clippy", "--all-targets"]).then(&["--", "-D", "warnings"]));
-        let filter = match (tests, run_trybuild) {
-            (Some(""), _) => None,
-            (Some(filter), true) => Some(format!("({filter}) & not ({TRYBUILD})")),
-            (Some(filter), false) => Some(filter.to_owned()),
-            (None, true) => Some(format!("not ({TRYBUILD})")),
-            (None, false) => Some(String::new()),
+        // CI runs each part in a job of its own, so the host part never
+        // runs the trybuild test, whatever other parts this command runs.
+        let filter = match tests {
+            Some("") => None,
+            Some(filter) => Some(format!("({filter}) & not ({TRYBUILD})")),
+            None => Some(format!("not ({TRYBUILD})")),
         };
-        match filter.as_deref() {
-            None => {}
-            Some("") => steps.push(host(&["nextest", "run", "--no-tests=pass"])),
-            Some(filter) => {
-                steps.push(host(&["nextest", "run", "--no-tests=pass"]).then(&["-E", filter]));
-            }
+        if let Some(filter) = filter {
+            steps.push(host(&["nextest", "run", "--no-tests=pass"]).then(&["-E", &filter]));
         }
     }
-    if run_trybuild && touches(scope, FACADE) {
-        steps.push(host(&["nextest", "run", "--no-tests=fail", "-E", TRYBUILD]));
+    if parts.contains(&Part::Trybuild) && touches(scope, FACADE) {
+        steps.push(Step::new(&[
+            "nextest",
+            "run",
+            "--package",
+            FACADE,
+            "--test",
+            "main",
+            "--features",
+            TRYBUILD_FEATURES,
+            "--no-tests=fail",
+            "-E",
+            TRYBUILD,
+        ]));
     }
     if docs && run_docs {
         steps.push(host(&["test", "--doc"]));
@@ -642,7 +653,9 @@ mod tests {
 
     #[test]
     fn the_trybuild_part_runs_the_test_only_when_the_api_crate_s_tests_are_in_scope() {
-        let trybuild = format!("cargo nextest run --no-tests=fail -E {TRYBUILD}");
+        let trybuild = format!(
+            "cargo nextest run --package enshwick --test main --features {TRYBUILD_FEATURES} --no-tests=fail -E {TRYBUILD}"
+        );
         assert_eq!(
             planned_for(&["enshwick-core", "enshwick"], &[Part::Trybuild]),
             [trybuild.as_str()]
@@ -652,25 +665,21 @@ mod tests {
     }
 
     #[test]
-    fn the_host_part_leaves_the_trybuild_test_out_only_when_its_own_part_runs() {
+    fn the_host_part_never_runs_the_trybuild_test_whatever_parts_run_beside_it() {
         let nextest = |steps: Vec<String>| {
             steps
                 .into_iter()
                 .find(|step| step.starts_with("cargo nextest run --no-tests=pass"))
                 .unwrap()
         };
-        let alone = nextest(planned_for(&["enshwick"], &[Part::Host]));
-        assert!(alone.ends_with("-E package(enshwick)"), "{alone}");
-        let beside = nextest(planned_for(&["enshwick"], &[Part::Host, Part::Trybuild]));
-        assert!(
-            beside.ends_with(&format!("-E (package(enshwick)) & not ({TRYBUILD})")),
-            "{beside}"
-        );
-        assert!(nextest(planned(&Part::every(false))).ends_with(&format!("-E not ({TRYBUILD})")));
-        assert_eq!(
-            nextest(planned(&[Part::Host])),
-            "cargo nextest run --no-tests=pass"
-        );
+        let in_scope = format!("-E (package(enshwick)) & not ({TRYBUILD})");
+        for parts in [&[Part::Host][..], &[Part::Host, Part::Trybuild]] {
+            let step = nextest(planned_for(&["enshwick"], parts));
+            assert!(step.ends_with(&in_scope), "{parts:?}: {step}");
+        }
+        let everything = format!("-E not ({TRYBUILD})");
+        assert!(nextest(planned(&Part::every(false))).ends_with(&everything));
+        assert!(nextest(planned(&[Part::Host])).ends_with(&everything));
     }
 
     #[test]
