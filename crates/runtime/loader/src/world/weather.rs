@@ -897,8 +897,9 @@ crate::engine::chains::chain_detour! {
         // chunk argument, live for the call, which starts with its u8 state.
         let before = unsafe { read_at::<u8>(chunk, 0) };
         let done = onward.call();
-        // SAFETY: as for `before`: the non-null chunk argument, live for
-        // the call, its u8 state at its start, which the step just wrote.
+        // SAFETY: `chunk` is non-null (checked first) and is the step's
+        // chunk argument, live for the call, which starts with its u8 state
+        // the step just wrote.
         let after = unsafe { read_at::<u8>(chunk, 0) };
         if let Some(event) = turn(before, after) {
             // SAFETY: `entities` and `chunk` are the step's own arguments,
