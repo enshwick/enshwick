@@ -72,6 +72,14 @@ pub mod worlds;
 #[cfg(windows)]
 use crate::engine::parts::{Part, fused, part, step};
 
+/// Why `fuse` is listed off, `None` while it is not.
+#[cfg(all(windows, test))]
+pub(crate) fn off_reason(fuse: &crate::engine::fuse::Fuse) -> Option<String> {
+    let listed = crate::engine::diag::parts_off();
+    let part = listed.into_iter().find(|p| p.part == fuse.feature())?;
+    Some(part.reason)
+}
+
 /// The base layer's parts, in the order the joins call each of their phases.
 #[cfg(windows)]
 pub(crate) static PARTS: &[&Part] = &[
@@ -118,9 +126,9 @@ pub(crate) static PARTS: &[&Part] = &[
     },
     &Part {
         table_ids: admission::TABLE_IDS,
-        steps: &[step!(Input, "join admission", |s| admission::after_step(
-            s.loader
-        ))],
+        steps: &[step!(Input, "join admission at the step", |s| {
+            admission::after_step(s.loader);
+        })],
         joined: Some(fused!("join admission at join", |_, player| {
             admission::joined(player.key.get());
         })),

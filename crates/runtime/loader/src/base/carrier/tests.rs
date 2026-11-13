@@ -16,6 +16,20 @@ pub(crate) fn alone() -> std::sync::MutexGuard<'static, ()> {
 }
 
 #[test]
+fn a_build_without_the_socket_calls_lists_them_off_by_what_it_lacks() {
+    let _alone = alone();
+    let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
+    link(loader);
+    assert!(SOCKETS_FUSE.is_off());
+    let reason = crate::base::off_reason(&SOCKETS_FUSE).unwrap_or_default();
+    let missing = crate::engine::catalogue::ids::GAME_MESSAGE_CHANNEL_VOICE_CHAT;
+    assert!(
+        reason.starts_with(missing) && reason.contains("is not reflected"),
+        "{reason}"
+    );
+}
+
+#[test]
 fn a_hosted_message_waits_until_its_half_takes_it_whole() {
     let _alone = alone();
     assert!(loop_back(true, 7, 5, b"to the server").is_ok());

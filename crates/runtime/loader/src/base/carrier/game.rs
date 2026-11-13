@@ -11,6 +11,7 @@ use std::time::Instant;
 
 use crate::base::wire::Link;
 use crate::engine::catalogue;
+use crate::engine::interface_parts::Missing;
 use crate::engine::loader::Loader;
 use crate::engine::memory;
 use crate::engine::pinned;
@@ -207,29 +208,62 @@ impl Game {
     }
 }
 
+/// Why the socket calls stay off: an entry the build lacks or whose code
+/// does not hold, or one found with a value the carrier cannot take.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Unresolved {
+    Missing(Missing),
+    Range(&'static str),
+}
+
+impl Unresolved {
+    /// The entry that failed.
+    pub(super) const fn id(&self) -> &'static str {
+        match self {
+            Self::Missing(missing) => missing.id(),
+            Self::Range(id) => id,
+        }
+    }
+
+    /// Why it failed, after its [`Unresolved::id`].
+    pub(super) fn reason(&self) -> String {
+        match self {
+            Self::Missing(missing) => missing.reason(),
+            Self::Range(_) => "holds a value out of range".to_owned(),
+        }
+    }
+}
+
 impl Game {
     /// The calls and offsets from `loader`'s table and the game's
-    /// reflection; the first id it lacks, or whose code does not hold.
-    pub(super) fn resolve(loader: &Loader) -> Result<Self, &'static str> {
+    /// reflection; the first entry it lacks, whose code does not hold or
+    /// whose value it cannot take.
+    pub(super) fn resolve(loader: &Loader) -> Result<Self, Unresolved> {
+        use Unresolved::Range;
+        let lacks = |missing| Unresolved::Missing(missing);
         let call = |name: Symbol| {
-            loader
+            let address = loader
                 .address(name)
-                .filter(|_| loader.code_holds(name))
-                .and_then(|address| usize::try_from(address).ok())
-                .ok_or(name.id())
+                .ok_or(lacks(Missing::Entry(name.id())))?;
+            if !loader.code_holds(name) {
+                return Err(lacks(Missing::Bytes(name.id())));
+            }
+            usize::try_from(address).map_err(|_| Range(name.id()))
         };
-        let offset = |name: Constant| loader.offset(name).ok_or(name.id());
+        let offset = |name: Constant| loader.offset(name).ok_or(lacks(Missing::Entry(name.id())));
         let byte = |name: Constant| {
-            offset(name).and_then(|value| u8::try_from(value).map_err(|_| name.id()))
+            offset(name).and_then(|value| u8::try_from(value).map_err(|_| Range(name.id())))
         };
-        let channel = catalogue::constant(
-            catalogue::ids::GAME_MESSAGE_CHANNEL_VOICE_CHAT,
-            &loader.reflection,
-        )
-        .and_then(|value| u32::try_from(value).ok())
-        .ok_or(catalogue::ids::GAME_MESSAGE_CHANNEL_VOICE_CHAT)?;
+        let voice = catalogue::ids::GAME_MESSAGE_CHANNEL_VOICE_CHAT;
+        let channel = catalogue::constant(voice, &loader.reflection)
+            .ok_or(lacks(Missing::Reflected(
+                catalogue::type_name(voice),
+                voice,
+            )))
+            .and_then(|value| u32::try_from(value).map_err(|_| Range(voice)))?;
+        let base_id = pinned::net::CHANNEL_BASE.id();
         let base = offset(pinned::net::CHANNEL_BASE)
-            .and_then(|value| u32::try_from(value).map_err(|_| pinned::net::CHANNEL_BASE.id()))?;
+            .and_then(|value| u32::try_from(value).map_err(|_| Range(base_id)))?;
         let client = loader.side == enshwick_core::abi::Side::CLIENT;
         Ok(Self {
             // SAFETY: `net.socket_create` is the game's socket create on
@@ -252,9 +286,7 @@ impl Game {
             limit: unsafe { function(call(pinned::net::SESSION_LIMIT)?) },
             manager: offset(pinned::net::SESSION_MANAGER)?,
             channel,
-            session_channel: channel
-                .checked_add(base)
-                .ok_or(pinned::net::CHANNEL_BASE.id())?,
+            session_channel: channel.checked_add(base).ok_or(Range(base_id))?,
             socket_channel: offset(pinned::net::SOCKET_CHANNEL)?,
             socket_peer: offset(pinned::net::SOCKET_PEER)?,
             machine_kind: byte(pinned::net::SOCKET_KIND_MACHINE)?,

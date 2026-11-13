@@ -73,7 +73,12 @@ mod runtime {
 
     use enshwick_core::abi::UiDialog;
 
+    use crate::engine::fuse::{Fuse, Off};
     use crate::engine::module::Export;
+
+    /// The hosted lobby: a hosting client names its mods in its Steam
+    /// lobby, and a client entering a lobby reads the host's.
+    static LOBBY_FUSE: Fuse = Fuse::new("the hosted lobby");
 
     /// Steam's callback id of `LobbyEnter_t`: matchmaking callbacks start at
     /// 500, and it is the fourth.
@@ -175,9 +180,13 @@ mod runtime {
         if response != ENTERED || lobby == 0 {
             return;
         }
-        if std::panic::catch_unwind(|| entered(lobby)).is_err() {
-            crate::log!(WARN, "hosted games: a lobby entry panicked");
-        }
+        enter(lobby, entered);
+    }
+
+    /// Runs `entered` for the client's entry into `lobby`, on Steam's
+    /// callback thread, under the hosted lobby's fuse.
+    fn enter(lobby: u64, entered: fn(u64)) {
+        let _ran = LOBBY_FUSE.run("a lobby entry", || entered(lobby));
     }
 
     /// Steam's `GetCallbackSizeBytes`: the size of `LobbyEnter_t`.
@@ -193,10 +202,14 @@ mod runtime {
     /// game's thread that runs Steam's callbacks.
     pub(crate) fn register() {
         let Some((api, register)) = load() else {
-            crate::log!(
-                WARN,
-                "hosted games: steam_api64.dll lacks the lobby API, friends of a host get no join values"
-            );
+            let why = "steam_api64.dll lacks the lobby API";
+            LOBBY_FUSE.turn_off(&Off::reported(
+                format!(
+                    "{} off: {why}, friends of a host get no join values",
+                    LOBBY_FUSE.feature()
+                ),
+                why.to_owned(),
+            ));
             return;
         };
         if API.set(api).is_err() {
@@ -312,7 +325,7 @@ mod runtime {
         {
             return;
         }
-        publish(lobby);
+        let _ran = LOBBY_FUSE.run("the lobby data", || publish(lobby));
     }
 
     #[cold]
@@ -377,6 +390,21 @@ mod runtime {
         }
         if let Some(text) = note {
             crate::ui::interface::show("Enshwick", &text, "", 1 << UiDialog::OK, |_| {});
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn a_panicking_lobby_entry_turns_the_hosted_lobby_off_and_lists_it() {
+            enter(7, |_| panic!("a broken entry"));
+            assert!(LOBBY_FUSE.is_off());
+            assert_eq!(
+                crate::base::off_reason(&LOBBY_FUSE).as_deref(),
+                Some("the loader panicked in a lobby entry: a broken entry")
+            );
         }
     }
 }

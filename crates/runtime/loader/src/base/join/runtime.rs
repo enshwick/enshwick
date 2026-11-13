@@ -4,18 +4,22 @@ use std::sync::OnceLock;
 
 use enshwick_core::abi::UiDialog;
 
-use crate::engine::chains::Next;
+use enshwick_core::abi::HookFlags;
 
-/// The online provider's join: every join from the game's menus, to a
-/// dedicated server or into a hosted game's lobby, passes a target
-/// ([`super::Target`]) through it, and it ends in the provider's state
-/// change, whose `bool` it returns in `al` (client builds 410 and 426).
-pub(crate) type JoinGame = unsafe extern "system" fn(provider: *mut u8, target: *mut u8) -> u8;
+use crate::engine::fuse::Fuse;
+use crate::engine::loader::{Loader, Target};
+use crate::engine::pinned;
 
-// SAFETY: the slot is linked only into the chain of the provider's join,
-// whose functions all have the `JoinGame` signature.
-/// The rest of the chain after the loader's link.
-pub(crate) static NEXT: Next<JoinGame> = unsafe { Next::new() };
+/// The join check: a join from the game's menus to a server whose mods the
+/// client lacks is refused before the game connects.
+pub(crate) static JOIN_FUSE: Fuse = Fuse::new("join check");
+
+/// Links the join check on `join`, the online provider's join the caller
+/// found in its function table and checked; true when linked.
+pub(crate) fn link(loader: &Loader, join: u64) -> bool {
+    let target = Target::Found(pinned::net::JOIN_GAME.id(), Some(join));
+    loader.link_fused(&JOIN_FUSE, target, &NEXT, detour, HookFlags::NONE)
+}
 
 static NAMES: OnceLock<super::Names> = OnceLock::new();
 static LAYOUT: OnceLock<super::Layout> = OnceLock::new();
@@ -35,62 +39,65 @@ pub(crate) fn names() -> super::Names {
     NAMES.get().cloned().unwrap_or_default()
 }
 
-/// The loader's link on the online provider's join.
-///
-/// # Safety
-///
-/// - The game calls it in place of its join, on the thread that joins.
-/// - `target` is null or the join target, readable and writable for the
-///   call up to its password at the build's [`super::Layout::head_len`].
-pub(crate) unsafe extern "system" fn detour(provider: *mut u8, target: *mut u8) -> u8 {
-    let Some(layout) = LAYOUT.get() else {
-        // SAFETY: the chain's rest takes the provider and target the game
-        // passed this link, unchanged.
-        return unsafe { NEXT.get()(provider, target) };
-    };
-    let allowed = target.is_null() || {
-        let mut head: super::Target = [0; super::TARGET_BYTES];
-        // SAFETY: `target` is non-null, checked just before, and is the join
-        // target the game passes the hooked join, plain data the caller holds
-        // for the call up to its password at `head_len` (client builds 410
-        // and 426, the build table's `join.target_*` rows), which `Layout`
-        // keeps within `head`.
-        unsafe {
-            enshwick_core::raw::read_bytes_at(
-                target.cast_const(),
-                0,
-                &mut head[..layout.head_len()],
-            );
+crate::engine::chains::chain_detour! {
+    /// The online provider's join at the table's `net.join_game`: every join
+    /// from the game's menus, to a dedicated server or into a hosted game's
+    /// lobby, passes a target ([`super::Target`]) through it, and it ends in
+    /// the provider's state change, whose `bool` it returns in `al` (client
+    /// builds 410 and 426). The game calls it on the thread that joins, with
+    /// `target` null or the join target, readable and writable for the call
+    /// up to its password at the build's [`super::Layout::head_len`]. A
+    /// refused join reaches the rest of the chain with the target's host
+    /// cleared, so the game connects nowhere.
+    fn detour(provider: *mut u8, target: *mut u8) -> u8;
+    next NEXT;
+    fuse &JOIN_FUSE, "the join check";
+    |onward| {
+        let Some(layout) = LAYOUT.get() else {
+            return onward.call();
         };
-        std::panic::catch_unwind(|| check(layout, &head)).unwrap_or(true)
-    };
-    if allowed {
-        super::interaction::joining(false);
-        // SAFETY: the chain's rest takes the provider and target the game
-        // passed this link, unchanged.
-        return unsafe { NEXT.get()(provider, target) };
+        let allowed = target.is_null() || {
+            let mut head: super::Target = [0; super::TARGET_BYTES];
+            // SAFETY: `target` is non-null, checked just before, and is the
+            // join target the game passes the hooked join, plain data the
+            // caller holds for the call up to its password at `head_len`
+            // (client builds 410 and 426, the build table's `join.target_*`
+            // rows), which `Layout` keeps within `head`.
+            unsafe {
+                enshwick_core::raw::read_bytes_at(
+                    target.cast_const(),
+                    0,
+                    &mut head[..layout.head_len()],
+                );
+            };
+            check(layout, &head)
+        };
+        if allowed {
+            super::interaction::joining(false);
+            return onward.call();
+        }
+        crate::log!(WARN, "join refused: the server runs mods this client lacks");
+        super::interaction::joining(true);
+        // The provider copies the target into its own state before it
+        // returns, and the caller keeps its target, so the caller's copy
+        // gets its host back (client builds 410 and 426).
+        // SAFETY: `target` is non-null, since a null one sets `allowed`,
+        // which returns early, and is the join target the game passes the
+        // hooked join, whose `u64` host the build's layout places before its
+        // password.
+        let host: u64 =
+            unsafe { enshwick_core::raw::read_at(target.cast_const(), layout.host_at()) };
+        // SAFETY: the same host, writable for the length of this call, and
+        // the game reads it only once the chain's rest runs.
+        unsafe { enshwick_core::raw::write_at(target, layout.host_at(), 0_u64) };
+        let state_changed = onward.call();
+        // SAFETY: the caller's target outlives this call, which its caller
+        // makes with the target in hand, and the game holds no reference to
+        // it once the provider returned (client builds 410 and 426); its
+        // host id is a u64 at the layout's `host_at`.
+        unsafe { enshwick_core::raw::write_at(target, layout.host_at(), host) };
+        state_changed
     }
-    crate::log!(WARN, "join refused: the server runs mods this client lacks");
-    super::interaction::joining(true);
-    // The provider copies the target into its own state before it
-    // returns, and the caller keeps its target, so the caller's copy
-    // gets its host back (client builds 410 and 426).
-    // SAFETY: `target` is non-null, since a null one sets `allowed`, which
-    // returns early, and is the join target the game passes the hooked join,
-    // whose `u64` host the build's layout places before its password.
-    let host: u64 = unsafe { enshwick_core::raw::read_at(target.cast_const(), layout.host_at()) };
-    // SAFETY: the same host, writable for the length of this call, and the
-    // game reads it only once the chain's rest runs.
-    unsafe { enshwick_core::raw::write_at(target, layout.host_at(), 0_u64) };
-    // SAFETY: the chain's rest takes the provider the game passed and the
-    // target with its host cleared.
-    let state_changed = unsafe { NEXT.get()(provider, target) };
-    // SAFETY: the caller's target outlives this call, which its caller
-    // makes with the target in hand, and the game holds no reference to
-    // it once the provider returned (client builds 410 and 426); its
-    // host id is a u64 at the layout's `host_at`.
-    unsafe { enshwick_core::raw::write_at(target, layout.host_at(), host) };
-    state_changed
 }
 
 /// Joins a game whose mods the check cannot read: the client's mods stay

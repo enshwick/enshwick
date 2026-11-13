@@ -73,8 +73,15 @@ struct State {
     unkeyed: AtomicBool,
     /// Set once the host's hello came under a second key.
     rehosted: AtomicBool,
-    fuse: Fuse,
 }
+
+/// The join admission: players without the world's join mods are told and
+/// kicked.
+static ADMISSION_FUSE: Fuse = Fuse::new("join admission");
+
+/// The kicks of the join admission, off on a build without the game's kick:
+/// players without the join mods then get the note and stay.
+static KICKS_FUSE: Fuse = Fuse::new("join check kicks");
 
 static STATE: State = State {
     serving: OnceLock::new(),
@@ -87,7 +94,6 @@ static STATE: State = State {
     nonce: OnceLock::new(),
     unkeyed: AtomicBool::new(false),
     rehosted: AtomicBool::new(false),
-    fuse: Fuse::new("join admission"),
 };
 
 /// Takes the loaded world's `require_enshwick` rule: with it off, players
@@ -126,10 +132,15 @@ pub(crate) fn start(loader: &Loader, names: Names) {
             })
     });
     match kick {
-        None => crate::log!(
-            WARN,
-            "join check kicks off: not in this build; players without the join mods get the note and stay"
-        ),
+        None => {
+            let kick = pinned::session::KICK;
+            let missing = if loader.address(kick).is_none() {
+                kick.id()
+            } else {
+                pinned::server::SESSION.id()
+            };
+            let _off = loader.fuse_off(&KICKS_FUSE, missing, crate::engine::builds::ABSENT);
+        }
         Some(Kick {
             host_machine: None, ..
         }) if loader.side == Side::CLIENT => crate::log!(
@@ -210,7 +221,7 @@ pub(crate) fn joined(key: u64) {
         }
         return;
     }
-    let _ran = STATE.fuse.run("a player's join", || {
+    let _ran = ADMISSION_FUSE.run("a player's join", || {
         let server = server_mods();
         let steps = with_gate(|gate| {
             gate.make_room(key, crate::engine::world::live_keys);
@@ -224,7 +235,7 @@ pub(crate) fn joined(key: u64) {
 
 /// Forgets the player `key`, who left.
 pub(crate) fn left(key: u64) {
-    let _ran = STATE.fuse.run("a player's leave", || {
+    let _ran = ADMISSION_FUSE.run("a player's leave", || {
         with_gate(|gate| gate.left(key));
     });
 }
@@ -238,9 +249,7 @@ pub(crate) fn hello(key: u64, hello: &Hello) -> bool {
     let Some(serving) = STATE.serving.get() else {
         return true;
     };
-    STATE
-        .fuse
-        .run("a hello", || {
+    ADMISSION_FUSE.run("a hello", || {
             let own = serving.side == Side::CLIENT && hello.nonce == nonce();
             if own {
                 let (answered, _) = with_gate(|gate| gate.host_hello(key, hello));
@@ -291,7 +300,7 @@ pub(crate) fn after_step(loader: &Loader) {
     let Some(serving) = STATE.serving.get() else {
         return;
     };
-    let _ran = STATE.fuse.run("the join admission step", || {
+    let _ran = ADMISSION_FUSE.run("the join admission step", || {
         crate::base::net::keep_greeting(&live);
         let in_game: Vec<u64> = if serving.side == Side::CLIENT {
             crate::engine::world::players(loader)
@@ -419,4 +428,39 @@ fn disconnect(
     // actions call it.
     unsafe { (kick.call)(session, machine, false) };
     Ok(machine)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_build_without_the_game_s_kick_lists_the_kicks_off_and_keeps_the_admission_on() {
+        let loader = crate::start::tests::bare_loader();
+        start(&loader, Names::new());
+        assert!(KICKS_FUSE.is_off());
+        assert!(!ADMISSION_FUSE.is_off(), "players still get the note");
+        let reason = crate::base::off_reason(&KICKS_FUSE).unwrap_or_default();
+        assert!(reason.starts_with(pinned::session::KICK.id()), "{reason}");
+    }
+
+    #[test]
+    fn the_admission_s_own_fuse_shares_no_name_with_the_calls_of_its_part() {
+        let part = crate::base::PARTS
+            .iter()
+            .find(|p| p.name == "admission")
+            .expect("the admission part");
+        let calls: Vec<&str> = part
+            .steps
+            .iter()
+            .map(|s| s.work.fuse.feature())
+            .chain(
+                [part.joined, part.left]
+                    .into_iter()
+                    .flatten()
+                    .map(|c| c.fuse.feature()),
+            )
+            .collect();
+        assert!(!calls.contains(&ADMISSION_FUSE.feature()), "{calls:?}");
+    }
 }

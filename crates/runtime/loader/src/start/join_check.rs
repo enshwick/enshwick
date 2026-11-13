@@ -1,6 +1,8 @@
 //! Linking the loader's join check and its dialog hold on the client.
 
-use crate::engine::loader::{Loader, Target};
+use crate::base::join::JOIN_FUSE;
+use crate::engine::fuse::Fuse;
+use crate::engine::loader::Loader;
 use crate::engine::pinned;
 
 use super::game::identify;
@@ -34,35 +36,26 @@ pub(super) fn link_join(loader: &Loader) {
         .collect();
     crate::base::join::set_names(names);
     crate::base::lobby::register();
+    link_check(loader);
+}
+
+/// Links the join check once the build's join target layout reads and the
+/// provider's join checks out; otherwise turns it off, naming why.
+fn link_check(loader: &Loader) {
+    let join_off = |why: &dyn core::fmt::Display| {
+        not_checked(loader, &JOIN_FUSE, pinned::net::JOIN_GAME.id(), why);
+    };
     match crate::base::join::Layout::from_table(|id| loader.build.constant(id)) {
         Ok(layout) => crate::base::join::set_layout(layout),
-        Err(error) => {
-            crate::log!(
-                WARN,
-                "join check off on {}: {error}; nothing patched",
-                loader.build.name
-            );
-            return;
-        }
+        Err(error) => return join_off(&error),
     }
     match verified_join(loader) {
         Ok((join, code)) => {
-            let linked = loader.link_feature(
-                "join check",
-                Target::Found(pinned::net::JOIN_GAME.id(), Some(join)),
-                &crate::base::join::NEXT,
-                crate::base::join::detour,
-                enshwick_core::abi::HookFlags::NONE,
-            );
-            if linked {
+            if crate::base::join::link(loader, join) {
                 link_join_hold(loader, code);
             }
         }
-        Err(error) => crate::log!(
-            WARN,
-            "join check off on {}: {error}; nothing patched",
-            loader.build.name
-        ),
+        Err(error) => join_off(&error),
     }
 }
 
@@ -71,7 +64,7 @@ pub(super) fn link_join(loader: &Loader) {
 /// with the pinned bytes. Without it a refused join shows the game's dialog
 /// before the loader's.
 fn link_join_hold(loader: &Loader, code: core::ops::Range<u64>) {
-    use crate::base::join::interaction::{self, BYTES_ID};
+    use crate::base::join::interaction::{self, BYTES_ID, HOLD_FUSE};
     let read = |va: u64| {
         let address = usize::try_from(va).ok()?;
         // SAFETY: `verify` reads only eight bytes inside the game's code
@@ -85,37 +78,34 @@ fn link_join_hold(loader: &Loader, code: core::ops::Range<u64>) {
         read,
         code,
     );
+    let hold_off = |why: &dyn core::fmt::Display| {
+        not_checked(
+            loader,
+            &HOLD_FUSE,
+            pinned::user::START_INTERACTION.id(),
+            why,
+        );
+    };
     let start = match start {
         Ok(start) => start,
-        Err(error) => {
-            crate::log!(
-                WARN,
-                "join dialog hold off on {}: {error}; nothing patched",
-                loader.build.name
-            );
-            return;
-        }
+        Err(error) => return hold_off(&error),
     };
     if !interaction::set_layout(
         loader.build.constant(pinned::user::INTERACTION_KIND.id()),
         loader.build.constant(pinned::user::JOIN_FAILED_KIND.id()),
     ) {
-        crate::log!(
-            WARN,
-            "join dialog hold off on {}: the build table pins no {} or {}; nothing patched",
-            loader.build.name,
+        return hold_off(&format_args!(
+            "this build lacks {} or {}",
             pinned::user::INTERACTION_KIND,
             pinned::user::JOIN_FAILED_KIND,
-        );
-        return;
+        ));
     }
-    loader.link_feature(
-        "join dialog hold",
-        Target::Found(pinned::user::START_INTERACTION.id(), Some(start)),
-        &interaction::NEXT,
-        interaction::detour,
-        enshwick_core::abi::HookFlags::NONE,
-    );
+    let _linked = interaction::link(loader, start);
+}
+
+/// Turns `fuse` off, its entry `id` not checked because `why`.
+fn not_checked(loader: &Loader, fuse: &'static Fuse, id: &str, why: &dyn core::fmt::Display) {
+    let _off = loader.fuse_off(fuse, id, &format!("is not checked: {why}"));
 }
 
 /// The online provider's join, once the provider's function table holds it
@@ -155,4 +145,54 @@ pub(super) fn names(loader: &Loader) -> Vec<(String, String)> {
         .filter(|m| m.joins() && !m.meta.name.is_empty())
         .map(|m| (m.id.clone(), m.meta.name.clone()))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // One test for both: the join check's fuse is one per process, and
+    // `cargo test` runs every test in one.
+    #[test]
+    fn the_join_links_and_once_off_it_lists_why_and_holds_back_no_game_dialog() {
+        use crate::base::join::interaction;
+        use crate::engine::mod_index::ModIndex;
+        use enshwick_base::Relock;
+        const JOIN_FAILED: u8 = 7;
+        unsafe extern "system" fn game(_: *mut u8, _: *const u8) -> u32 {
+            9
+        }
+        let loader = crate::start::tests::bare_loader();
+        assert!(crate::base::join::link(&loader, 0x7100));
+        assert!(interaction::link(&loader, 0x7200));
+        {
+            let chains = loader.chains.relock();
+            assert_eq!(chains.owners(0x7100), [ModIndex::LOADER]);
+            assert_eq!(chains.owners(0x7200), [ModIndex::LOADER]);
+            let fuses: Vec<_> = [0x7100, 0x7200]
+                .iter()
+                .flat_map(|&at| chains.features_at(at))
+                .map(Fuse::feature)
+                .collect();
+            assert_eq!(
+                fuses,
+                [JOIN_FUSE.feature(), interaction::HOLD_FUSE.feature()]
+            );
+        }
+        link_check(&crate::start::tests::bare_loader());
+        assert!(JOIN_FUSE.is_off());
+        let reason = crate::base::off_reason(&JOIN_FUSE).unwrap_or_default();
+        assert!(
+            reason.starts_with(pinned::net::JOIN_GAME.id())
+                && reason.contains(pinned::join::TARGET_PASSWORD.id()),
+            "{reason}"
+        );
+        // A refusal armed the hold, then the check turned off (a panic does
+        // so mid-join): the join it let through keeps the game's dialog.
+        assert!(interaction::set_layout(Some(0), Some(JOIN_FAILED.into())));
+        interaction::joining(true);
+        let request = [JOIN_FAILED];
+        assert_eq!(interaction::start_through_hold(request.as_ptr(), game), 9);
+        interaction::joining(false);
+    }
 }

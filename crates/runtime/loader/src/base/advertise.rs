@@ -188,7 +188,12 @@ mod runtime {
     use std::path::Path;
     use std::time::{Duration, Instant};
 
+    use crate::engine::fuse::{Fuse, Off};
     use crate::engine::module::Export;
+
+    /// The mod set a dedicated server advertises to Steam, for the join
+    /// check of clients that query it.
+    static ADVERTISE_FUSE: Fuse = Fuse::new("mod set advertisement");
 
     type Interface = unsafe extern "C" fn() -> *mut c_void;
     /// Returns a C++ `bool`, read as its byte so no other value can make an
@@ -227,19 +232,29 @@ mod runtime {
             .name("enshwick-advertise".into())
             .spawn(move || {
                 let _first = THREAD.set(std::thread::current());
-                if std::panic::catch_unwind(|| run(&configured, mods)).is_err() {
-                    crate::log!(WARN, "mod set advertisement stopped: it panicked");
-                }
+                advertise(&configured, mods, run);
             });
         drop(spawned);
     }
 
+    /// Runs `run`, the advertising thread's work, under the advertisement's
+    /// fuse.
+    fn advertise(configured: &str, mods: JoinMods, run: fn(&str, JoinMods)) {
+        let _ran = ADVERTISE_FUSE.run("the advertising thread", || run(configured, mods));
+    }
+
+    /// Turns the advertisement off because `why`.
+    #[cold]
+    fn off(why: &str) {
+        ADVERTISE_FUSE.turn_off(&Off::reported(
+            format!("{} off: {why}", ADVERTISE_FUSE.feature()),
+            why.to_owned(),
+        ));
+    }
+
     fn run(configured: &str, mods: JoinMods) {
         let Some(api) = Api::load() else {
-            crate::log!(
-                WARN,
-                "mod set advertisement off: steam_api64.dll lacks the game server API"
-            );
+            off("steam_api64.dll lacks the game server API");
             return;
         };
         let started = Instant::now();
@@ -255,10 +270,7 @@ mod runtime {
                 break server;
             }
             if started.elapsed() > GIVE_UP {
-                crate::log!(
-                    WARN,
-                    "mod set advertisement off: the server never logged on to Steam"
-                );
+                off("the server never logged on to Steam");
                 return;
             }
             std::thread::sleep(POLL);
@@ -360,6 +372,25 @@ mod runtime {
                 set_name,
                 set_key_value,
             })
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        fn none() -> Vec<(String, String)> {
+            Vec::new()
+        }
+
+        #[test]
+        fn a_panicking_advertisement_turns_its_feature_off_and_lists_it() {
+            advertise("Lanterns", none, |_, _| panic!("a broken round"));
+            assert!(ADVERTISE_FUSE.is_off());
+            assert_eq!(
+                crate::base::off_reason(&ADVERTISE_FUSE).as_deref(),
+                Some("the loader panicked in the advertising thread: a broken round")
+            );
         }
     }
 }
