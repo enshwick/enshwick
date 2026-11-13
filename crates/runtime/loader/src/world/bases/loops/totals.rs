@@ -2,13 +2,15 @@
 //! for the window too, and the count the client's base list sizes itself
 //! by.
 
+use enshwick_core::abi::HookFlags;
 use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
 use super::{
-    ANIMAL_COUNTS, BEDS, Game, Layout, ObjFn, ObjWorldFn, RecordFields, add_u16, found_layout,
-    occupied, rec, window_of, windowed,
+    ANIMAL_COUNTS, BEDS, Game, Layout, PAST16, RecordFields, add_u16, found_layout, occupied, rec,
+    window_of, windowed,
 };
-use crate::engine::chains::Next;
+use crate::engine::loader::{Loader, Target};
+use crate::engine::pinned::bases;
 use crate::world::base_groups::lookup::Bases;
 use crate::world::base_groups::window;
 
@@ -25,34 +27,59 @@ const NPC_AT_HOME: u8 = 7;
 /// A cleanup's work on one record, whose fields it gets.
 type Clear = unsafe fn(*mut u8, &RecordFields);
 
-// SAFETY: `ObjFn` is the signature of the NPC totals the table's
-// `bases.npc_totals` pins, and `link` uses this slot only as its next.
-pub(super) static NPC_TOTALS_NEXT: Next<ObjFn> = unsafe { Next::new() };
-// SAFETY: `ObjWorldFn` is the signature of the server update the table's
-// `bases.server_update` pins, and `link` uses this slot only as its next.
-pub(super) static SERVER_UPDATE_NEXT: Next<ObjWorldFn> = unsafe { Next::new() };
-// SAFETY: `ObjFn` is the signature of the cleanup the table's
-// `bases.bed_cleanup` pins, and `link` uses this slot only as its next.
-pub(super) static BED_CLEANUP_NEXT: Next<ObjFn> = unsafe { Next::new() };
-// SAFETY: `ObjFn` is the signature of the cleanup the table's
-// `bases.comfort_cleanup` pins, and `link` uses this slot only as its next.
-pub(super) static COMFORT_CLEANUP_NEXT: Next<ObjFn> = unsafe { Next::new() };
-// SAFETY: `ObjFn` is the signature of the cleanup the table's
-// `bases.props_cleanup` pins, and `link` uses this slot only as its next.
-pub(super) static PROPS_CLEANUP_NEXT: Next<ObjFn> = unsafe { Next::new() };
+/// Links the totals and the cleanups, all under [`PAST16`]; true when every
+/// link is made.
+pub(super) fn link(loader: &Loader) -> bool {
+    let at = Target::Pinned;
+    let none = HookFlags::NONE;
+    loader.link_fused(
+        &PAST16,
+        at(bases::NPC_TOTALS),
+        &NPC_TOTALS_NEXT,
+        npc_totals,
+        none,
+    ) && loader.link_fused(
+        &PAST16,
+        at(bases::SERVER_UPDATE),
+        &SERVER_UPDATE_NEXT,
+        server_update,
+        none,
+    ) && loader.link_fused(
+        &PAST16,
+        at(bases::BED_CLEANUP),
+        &BED_CLEANUP_NEXT,
+        bed_cleanup,
+        none,
+    ) && loader.link_fused(
+        &PAST16,
+        at(bases::COMFORT_CLEANUP),
+        &COMFORT_CLEANUP_NEXT,
+        comfort_cleanup,
+        none,
+    ) && loader.link_fused(
+        &PAST16,
+        at(bases::PROPS_CLEANUP),
+        &PROPS_CLEANUP_NEXT,
+        props_cleanup,
+        none,
+    )
+}
 
-pub(super) unsafe extern "system" fn npc_totals(obj: *mut u8) -> u64 {
-    // SAFETY: this detour runs only as the NPC totals' link, so the slot
-    // holds the next function of that signature.
-    let vanilla = unsafe { NPC_TOTALS_NEXT.get()(obj) };
-    // SAFETY: the object of the serial bases update.
-    if let Some((game, layout)) = unsafe { windowed(obj) } {
-        // SAFETY: the same live object, viewed by `game`.
-        let _done = crate::world::bases::BASES_FUSE.run("the NPC totals", || unsafe {
-            count_npcs(obj, &game, layout);
-        });
+crate::engine::chains::chain_detour! {
+    /// The table's `bases.npc_totals`, with the window's NPCs counted after
+    /// the game's while the object holds more than 16 bases.
+    fn npc_totals(obj: *mut u8) -> u64;
+    next NPC_TOTALS_NEXT;
+    fuse &PAST16, "the NPC totals";
+    |onward| {
+        let vanilla = onward.call();
+        // SAFETY: the object of the serial bases update.
+        if let Some((game, layout)) = unsafe { windowed(obj) } {
+            // SAFETY: the same live object, viewed by `game`.
+            unsafe { count_npcs(obj, &game, layout) };
+        }
+        vanilla
     }
-    vanilla
 }
 
 /// The NPC totals' work for the window of `game`.
@@ -93,16 +120,19 @@ pub(super) unsafe fn count_npcs(obj: *mut u8, game: &Game, layout: &Layout) {
     }
 }
 
-pub(super) unsafe extern "system" fn server_update(obj: *mut u8, world: *mut u8) {
-    // SAFETY: this detour runs only as the server update's link, so the
-    // slot holds the next function of that signature.
-    unsafe { SERVER_UPDATE_NEXT.get()(obj, world) };
-    // SAFETY: the server's object, after its serial update.
-    if let Some((game, layout)) = unsafe { windowed(obj) } {
-        // SAFETY: the same live object, viewed by `game`.
-        let _done = crate::world::bases::BASES_FUSE.run("the animal totals", || unsafe {
-            count_animals(obj, &game, layout);
-        });
+crate::engine::chains::chain_detour! {
+    /// The table's `bases.server_update`, with the window's animals counted
+    /// after the game's update while the object holds more than 16 bases.
+    fn server_update(obj: *mut u8, world: *mut u8) -> ();
+    next SERVER_UPDATE_NEXT;
+    fuse &PAST16, "the animal totals";
+    |onward| {
+        onward.call();
+        // SAFETY: the server's object, after its serial update.
+        if let Some((game, layout)) = unsafe { windowed(obj) } {
+            // SAFETY: the same live object, viewed by `game`.
+            unsafe { count_animals(obj, &game, layout) };
+        }
     }
 }
 
@@ -152,13 +182,11 @@ pub(super) unsafe fn count_animals(obj: *mut u8, game: &Game, layout: &Layout) {
 /// # Safety
 ///
 /// - `obj` is null or a live bases object.
-unsafe fn clean(obj: *mut u8, site: &str, clear: Clear) {
+unsafe fn clean(obj: *mut u8, clear: Clear) {
     // SAFETY: the caller's guarantee.
     if let Some((game, layout)) = unsafe { windowed(obj) } {
         // SAFETY: the same live object, viewed by `game`.
-        let _done = crate::world::bases::BASES_FUSE.run(site, || unsafe {
-            clean_window(obj, &game, layout, clear);
-        });
+        unsafe { clean_window(obj, &game, layout, clear) };
     }
 }
 
@@ -211,34 +239,49 @@ pub(super) unsafe fn clear_props(base: *mut u8, record: &RecordFields) {
     unsafe { write_at(base, record.props, 0u64) };
 }
 
-pub(super) unsafe extern "system" fn bed_cleanup(obj: *mut u8) -> u64 {
-    // SAFETY: this detour runs only as the cleanup's link, so the slot holds
-    // the next function of that signature.
-    let vanilla = unsafe { BED_CLEANUP_NEXT.get()(obj) };
-    // SAFETY: the cleanup's own object; `clean` hands each window record
-    // that holds a base.
-    unsafe { clean(obj, "the bed count cleanup", clear_beds) };
-    vanilla
+crate::engine::chains::chain_detour! {
+    /// The table's `bases.bed_cleanup`, which clears the window's bed counts
+    /// too.
+    fn bed_cleanup(obj: *mut u8) -> u64;
+    next BED_CLEANUP_NEXT;
+    fuse &PAST16, "the bed count cleanup";
+    |onward| {
+        let vanilla = onward.call();
+        // SAFETY: the cleanup's own object; `clean` hands each window record
+        // that holds a base.
+        unsafe { clean(obj, clear_beds) };
+        vanilla
+    }
 }
 
-pub(super) unsafe extern "system" fn comfort_cleanup(obj: *mut u8) -> u64 {
-    // SAFETY: this detour runs only as the cleanup's link, so the slot holds
-    // the next function of that signature.
-    let vanilla = unsafe { COMFORT_CLEANUP_NEXT.get()(obj) };
-    // SAFETY: the cleanup's own object; `clean` hands each window record
-    // that holds a base.
-    unsafe { clean(obj, "the comfort cleanup", clear_comfort) };
-    vanilla
+crate::engine::chains::chain_detour! {
+    /// The table's `bases.comfort_cleanup`, which clears the window's
+    /// comfort too.
+    fn comfort_cleanup(obj: *mut u8) -> u64;
+    next COMFORT_CLEANUP_NEXT;
+    fuse &PAST16, "the comfort cleanup";
+    |onward| {
+        let vanilla = onward.call();
+        // SAFETY: the cleanup's own object; `clean` hands each window record
+        // that holds a base.
+        unsafe { clean(obj, clear_comfort) };
+        vanilla
+    }
 }
 
-pub(super) unsafe extern "system" fn props_cleanup(obj: *mut u8) -> u64 {
-    // SAFETY: this detour runs only as the cleanup's link, so the slot holds
-    // the next function of that signature.
-    let vanilla = unsafe { PROPS_CLEANUP_NEXT.get()(obj) };
-    // SAFETY: the cleanup's own object; `clean` hands each window record
-    // that holds a base.
-    unsafe { clean(obj, "the crafting prop cleanup", clear_props) };
-    vanilla
+crate::engine::chains::chain_detour! {
+    /// The table's `bases.props_cleanup`, which clears the window's crafting
+    /// props too.
+    fn props_cleanup(obj: *mut u8) -> u64;
+    next PROPS_CLEANUP_NEXT;
+    fuse &PAST16, "the crafting prop cleanup";
+    |onward| {
+        let vanilla = onward.call();
+        // SAFETY: the cleanup's own object; `clean` hands each window record
+        // that holds a base.
+        unsafe { clean(obj, clear_props) };
+        vanilla
+    }
 }
 
 /// The client's count getter, which the base list sizes itself by: the
@@ -255,7 +298,9 @@ pub(super) unsafe extern "system" fn shown_bases(obj: *const u8) -> u32 {
     // the same way; its u32 count sits at the layout's `count`, which `find`
     // checked in the getter's bytes.
     let count = unsafe { read_at::<u32>(obj, layout.count) };
-    let shown = crate::world::bases::BASES_FUSE.run("the base list's count", || {
+    // A code patch jumps here, not a chain, so it catches under the
+    // window's fuse; refused, the list keeps the game's count.
+    let shown = PAST16.run("the base list's count", || {
         // SAFETY: the same object, read in the client's UI system.
         unsafe { windowed(obj) }.map(|(game, _)| {
             let count = usize::try_from(count).unwrap_or(0);

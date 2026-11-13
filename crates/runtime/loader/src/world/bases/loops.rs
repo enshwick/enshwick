@@ -17,14 +17,13 @@ mod stock;
 mod tests;
 mod totals;
 
-use enshwick_core::abi::HookFlags;
 use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
 use super::Container;
 use super::members::Game;
-use super::past16::{Pins, SiteError};
+use super::past16::{PAST16, Pins, SiteError};
 use crate::engine::code::CodePatch;
-use crate::engine::loader::{Loader, Target};
+use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned::{Constant, bases};
 use crate::world::base_groups::lookup::Bases;
@@ -337,8 +336,6 @@ impl Layout {
     }
 }
 
-type ObjWorldFn = unsafe extern "system" fn(obj: *mut u8, world: *mut u8);
-type ObjFn = unsafe extern "system" fn(obj: *mut u8) -> u64;
 type QueryFn = unsafe extern "system" fn(found: *mut u8, world: *mut u8, hash: u32) -> u8;
 type InsertFn =
     unsafe extern "system" fn(set: *mut u8, result: *mut u8, key: *const u32) -> *mut u8;
@@ -465,9 +462,9 @@ pub(super) fn find(
     })
 }
 
-/// Links every loop site and resolves the code the replacements call;
-/// whether each link holds.
-pub(super) fn link(loader: &Loader, sites: &Sites) -> [bool; 10] {
+/// Links every loop site under [`PAST16`], all or none, and resolves the
+/// code the replacements call; true when every link is made.
+pub(super) fn link(loader: &Loader, sites: &Sites) -> bool {
     // SAFETY: the table's `bases.entity_hash`, a u32 the table pins inside
     // the game's mapped image through the rebuild's own `mov r8d, [rip+d]`,
     // so it is readable before the rebuild's code check; a rebuild that does
@@ -489,82 +486,10 @@ pub(super) fn link(loader: &Loader, sites: &Sites) -> [bool; 10] {
         advance: unsafe { core::mem::transmute::<usize, AdvanceFn>(sites.advance) },
     };
     let _first = CODE.set(code);
-    let none = HookFlags::NONE;
-    let only = HookFlags::EXCLUSIVE;
-    let at = |symbol| Target::Pinned(symbol);
-    [
-        loader.link_feature(
-            super::past16::PAST_16,
-            at(bases::SORT),
-            &sort::SORT_NEXT,
-            sort::sort,
-            only,
-        ),
-        loader.link_feature(
-            super::past16::PAST_16,
-            at(bases::SORT_ALL),
-            &sort::SORT_ALL_NEXT,
-            sort::sort_all,
-            none,
-        ),
-        sites.base_ids.is_none()
-            || loader.link_feature(
-                super::past16::PAST_16,
-                at(bases::BASE_IDS),
-                &sort::BASE_IDS_NEXT,
-                sort::base_ids,
-                none,
-            ),
-        loader.link_feature(
-            super::past16::PAST_16,
-            at(bases::REBUILD),
-            &rebuild::REBUILD_NEXT,
-            rebuild::rebuild,
-            only,
-        ),
-        loader.link_feature(
-            super::past16::PAST_16,
-            at(bases::STOCK_CACHE),
-            &stock::STOCK_CACHE_NEXT,
-            stock::stock_cache,
-            only,
-        ),
-        loader.link_feature(
-            super::past16::PAST_16,
-            at(bases::NPC_TOTALS),
-            &totals::NPC_TOTALS_NEXT,
-            totals::npc_totals,
-            none,
-        ),
-        loader.link_feature(
-            super::past16::PAST_16,
-            at(bases::SERVER_UPDATE),
-            &totals::SERVER_UPDATE_NEXT,
-            totals::server_update,
-            none,
-        ),
-        loader.link_feature(
-            super::past16::PAST_16,
-            at(bases::BED_CLEANUP),
-            &totals::BED_CLEANUP_NEXT,
-            totals::bed_cleanup,
-            none,
-        ),
-        loader.link_feature(
-            super::past16::PAST_16,
-            at(bases::COMFORT_CLEANUP),
-            &totals::COMFORT_CLEANUP_NEXT,
-            totals::comfort_cleanup,
-            none,
-        ),
-        loader.link_feature(
-            super::past16::PAST_16,
-            at(bases::PROPS_CLEANUP),
-            &totals::PROPS_CLEANUP_NEXT,
-            totals::props_cleanup,
-            none,
-        ),
-    ]
+    sort::link(loader, sites.base_ids.is_some())
+        && rebuild::link(loader)
+        && stock::link(loader)
+        && totals::link(loader)
 }
 
 /// The bases of `obj` when it holds more than the game's 16 and the window
