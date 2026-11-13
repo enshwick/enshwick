@@ -118,6 +118,11 @@ pub(crate) static PARTS: &[&Part] = &[
         ..part!("stat steps", stats)
     },
     &Part {
+        link: Some(drops::link),
+        hosting: Some(drops::start),
+        ..part!("drops", drops)
+    },
+    &Part {
         table_ids: spawns::TABLE_IDS,
         forget: Some(|_| spawns::forget()),
         ..part!("spawns", spawns)

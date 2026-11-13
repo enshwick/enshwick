@@ -53,6 +53,8 @@ pub(crate) mod mid;
 pub mod mod_index;
 #[cfg(windows)]
 pub(crate) mod module;
+#[cfg(windows)]
+pub(crate) mod off_thread;
 #[cfg_attr(
     all(not(windows), not(test)),
     expect(dead_code, reason = "used by the start, which runs on Windows")

@@ -3,15 +3,13 @@
 //! client's archive and texts, so no name travels from the server.
 
 #[cfg(windows)]
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 #[cfg(windows)]
-use std::sync::{Arc, OnceLock};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(windows)]
 use arc_swap::ArcSwapOption;
 use enshwick_core::content::Guid;
-#[cfg(windows)]
-use enshwick_core::content::vanilla::Vanilla;
 
 /// An item with the name the game shows for it, and that name's lower
 /// case, which a search compares.
@@ -110,7 +108,6 @@ pub(crate) fn listed<'a>(named: impl Iterator<Item = (Guid, &'a str, &'a str)>) 
 struct State {
     list: ArcSwapOption<List>,
     building: AtomicBool,
-    vanilla: OnceLock<Option<Vanilla>>,
 }
 
 /// How often a build whose archive or texts do not read yet tries again,
@@ -124,7 +121,6 @@ const BUILD_TRIES: u32 = 30;
 static STATE: State = State {
     list: ArcSwapOption::const_empty(),
     building: AtomicBool::new(false),
-    vanilla: OnceLock::new(),
 };
 
 /// Every vanilla item the game shows a name for in `language`, sorted by
@@ -177,18 +173,8 @@ fn build(language: enshwick_core::i18n::Language) -> Option<List> {
 
 /// The client's vanilla content, read through its own archive.
 #[cfg(windows)]
-fn vanilla() -> Option<&'static Vanilla> {
-    STATE
-        .vanilla
-        .get_or_init(|| {
-            let loader = crate::engine::loader::loader()?;
-            Vanilla::new(
-                &crate::engine::catalogue::Reflected(&loader.reflection),
-                |key| crate::engine::archive::game()?.resource(&key),
-            )
-            .ok()
-        })
-        .as_ref()
+fn vanilla() -> Option<&'static enshwick_core::content::vanilla::Vanilla> {
+    crate::engine::archive::vanilla(crate::engine::loader::loader()?).ok()
 }
 
 #[cfg(test)]

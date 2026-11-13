@@ -72,6 +72,7 @@ The types are in
 | `PlayerDied` | `PlayerDeathData` | A player died from a hit, a fall, the shroud or drowning, and the data names the cause. For a hit, it also names the killer's template and the attacker of the last hit. It is raised after the step. Freezing and an administrator's kill raise none. Any other entity's death is the game event `Died`. Unstable. | game |
 | `TerrainPageLoaded` | `TerrainPageData` | A page of the terrain came into the server's memory, with players near or not ([hearing the terrain load and unload](terrain.md#hearing-the-terrain-load-and-unload)). Dedicated server only. | game |
 | `TerrainPageUnloaded` | `TerrainPageData` | A page of the terrain left the server's memory. Dedicated server only. | game |
+| `ProgressWritten` | `ProgressWriteData` | The server's level step applied a level or experience write of this mod, or the write was dropped ([stats](world.md#stats)). Only the mod that wrote hears it. | game |
 
 The data types have these fields:
 
@@ -124,6 +125,25 @@ The data types have these fields:
   - `x`
   - `z`
   - `size`
+- `ProgressWriteData` has seven fields. Unless the write was applied, the
+  last three are zeroed.
+  - `entity`: the character the write was for.
+  - `what`: what the mod asked for: 1 sets the level (`PROGRESS_SET_LEVEL`),
+    2 sets the experience and 3 adds experience.
+  - `value`: the value the mod passed.
+  - `outcome`: one of these numbers, each a constant of `ProgressWriteData`:
+    - 0, `APPLIED`: the write was applied.
+    - 1, `NO_LEVEL_STEP`: no level step took the character by the second
+      step end, as when it left the world or the hosted game ended.
+    - 2, `UNREADABLE`: the character's experience did not read.
+    - 3, `LEVEL_REFUSED`: the character's level did not take the new level.
+    - 4, `BEHIND_DROPPED`: an earlier write for the character could not be
+      applied, and a character's writes apply in order.
+    - 5, `UNCONFIRMED`: the server wrote the character, but a part of the
+      write did not take or did not read back. Read the character again.
+  - `level`: the level the write left, read back after the write.
+  - `experience`: the experience inside the level the write left.
+  - `gained`: the experience the game applies later in the same step.
 
 For typed settings, `on_settings` wraps `SettingsReplaced`.
 `on_settings_change` wraps both events; see [Settings](settings.md). The loader re-reads log levels on

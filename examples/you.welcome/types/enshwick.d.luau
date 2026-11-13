@@ -1987,6 +1987,24 @@ export type Progress = {
 	experience_needed: number,
 }
 
+--- What became of a level or experience write a mod asked for with `HostApi.progress_write`: the data of the `ProgressWritten` event. The name is enshwick's. ABI 11.25.
+export type ProgressWriteData = {
+	--- The player's character the write was for.
+	entity: number,
+	--- The `what` the mod passed: 1 to set the level (`PROGRESS_SET_LEVEL`), 2 to set the experience (`PROGRESS_SET_EXPERIENCE`) or 3 to add experience (`PROGRESS_ADD_EXPERIENCE`).
+	what: number,
+	--- The `value` the mod passed.
+	value: number,
+	--- 0 when the write was applied (`APPLIED`), else why not: 1 no level step took the character (`NO_LEVEL_STEP`), 2 its experience did not read (`UNREADABLE`), 3 its level did not take the write (`LEVEL_REFUSED`), 4 an earlier write for it was not applied (`BEHIND_DROPPED`), 5 written but not confirmed (`UNCONFIRMED`).
+	outcome: number,
+	--- The character's level as the applied write left it, read back after the write; 0 unless the outcome is 0.
+	level: number,
+	--- The experience inside the level as the applied write left it, read back after the write; 0 unless the outcome is 0.
+	experience: number,
+	--- The experience gained and not applied yet as the write left it, which the game applies in the same step, levelling up from it; 0 unless the outcome is 0.
+	gained: number,
+}
+
 --- What the player's interaction prompt offers in a frame, from `Frame.prompt`. The name is enshwick's.
 export type Prompt = {
 	--- What the prompt names, such as a chest's or a survivor's name, as the game shows it in the player's language.
@@ -3163,6 +3181,7 @@ declare enshwick: {
 		& ((event: "PlayerDied", handler: (data: PlayerDeathData) -> ()) -> ())
 		& ((event: "TerrainPageLoaded", handler: (data: TerrainPageData) -> ()) -> ())
 		& ((event: "TerrainPageUnloaded", handler: (data: TerrainPageData) -> ()) -> ())
+		& ((event: "ProgressWritten", handler: (data: ProgressWriteData) -> ()) -> ())
 		& ((event: "HitEvent", handler: (data: HitEvent) -> ()) -> ())
 		& ((event: "EntityDiedEvent", handler: (data: EntityDiedEvent) -> ()) -> ())
 		& ((event: "LevelUpEvent", handler: (data: LevelUpEvent) -> ()) -> ())
@@ -3664,11 +3683,11 @@ declare enshwick: {
 		skills: (entity: number) -> {UnlockedSkill}?,
 		--- `entity`'s level and experience; nil for an entity without them, off the game thread, or on a build without stat reads.
 		progress: (entity: number) -> Progress?,
-		--- Sets the level of `entity`, a player's character, as the game leaves a level it raised: no experience inside it and what the level needs to go on; a gain the game has not applied yet is dropped. The server's next level step applies it, kept between 1 and the game's level cap; skill points follow the level, as the game counts them from it, and the game raises no level-up event. On the server's game thread only.
+		--- Sets the level of `entity`, a player's character, as the game leaves a level it raised: no experience inside it and what the level needs to go on; a gain the game has not applied yet is dropped. The server's next level step applies it, kept between 1 and the game's level cap; skill points follow the level, as the game counts them from it, and the game raises no level-up event. On the server's game thread only. A call that succeeds leaves the write waiting for that step. After it, `ProgressWritten` tells the mod what the write left, or why it was dropped: the character left, or its level or experience did not read or take the write. Writes of `World.set_experience` and `World.add_experience` are heard the same way.
 		set_level: (entity: number, level: number) -> (),
-		--- Sets the experience inside the level of `entity`, a player's character, kept below what the level needs, and drops a gain the game has not applied yet. The server's next level step applies it. On the server's game thread only.
+		--- Sets the experience inside the level of `entity`, a player's character, kept below what the level needs, and drops a gain the game has not applied yet. The server's next level step applies it, and the mod hears the outcome as for `World.set_level`. On the server's game thread only.
 		set_experience: (entity: number, experience: number) -> (),
-		--- Gives `entity`, a player's character, `amount` experience, as a kill gives it: the server's next level step applies it, and the game levels up from it, one level a step, with its own level-up events. Experience filters do not see it. On the server's game thread only.
+		--- Gives `entity`, a player's character, `amount` experience, as a kill gives it: the server's next level step applies it, and the game levels up from it, one level a step, with its own level-up events. Experience filters do not see it; the mod hears the outcome as for `World.set_level`. On the server's game thread only.
 		add_experience: (entity: number, amount: number) -> (),
 		--- Changes an item's meter on its entity `pide` to what `change` returns for the value now, as `World.change_item_meter` does; nil keeps it.
 		change_item_meter: (pide: number, change: (arg1: number) -> number?) -> Meter,
@@ -3898,7 +3917,7 @@ declare enshwick: {
 		teleport_player: (player: string, position: vector, how: Teleport) -> (),
 		--- Asks the server to move the character of the connected player `player` to where the connected player `to` stands, as `teleport_player` does; the game always picks a free spot beside them, so the two never stand in one place.
 		teleport_player_to: (player: string, to: string, how: Teleport) -> (),
-		--- Drops `count` new items of `item` on the ground at `at` in metres, as one loose stack any player can pick up, as the game spills loot; the pickup's entity comes back at once and is in the world after the next step. The game drops it to the ground and does not save it. The first drop reads the names of the game's templates once, about a tenth of a second on a dedicated server. On the server's game thread only.
+		--- Drops `count` new items of `item` on the ground at `at` in metres, as one loose stack any player can pick up, as the game spills loot; the pickup's entity comes back at once and is in the world after the next step. The game drops it to the ground and does not save it. The loader reads the pickup as the server starts, in about a tenth of a second, and a drop before that read ends waits for it. On the server's game thread only.
 		drop_items: (item: number, count: number, at: vector, how: ItemDrop) -> number,
 		--- Asks the server to spawn an entity of `template`, its GUID as `World.template` gives it, at `position` in metres, as its admin spawn does: an enemy, an animal, a survivor or a prop. The new entity's id comes back at once; the entity is in the world after the next step, and a template the game does not know spawns nothing.
 		spawn: (template: string, position: vector, how: Spawn) -> number,

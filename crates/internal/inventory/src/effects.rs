@@ -709,9 +709,9 @@ impl Effects {
     /// one loose stack any player can pick up, as the game spills loot; the
     /// pickup's entity comes back at once and is in the world after the
     /// next step. The game drops it to the ground and does not save it. The
-    /// first drop reads the names of the game's templates once, about a
-    /// tenth of a second on a dedicated server. On the server's game thread
-    /// only.
+    /// loader reads the pickup as the server starts, in about a tenth of a
+    /// second, and a drop before that read ends waits for it. On the
+    /// server's game thread only.
     ///
     /// # Errors
     ///

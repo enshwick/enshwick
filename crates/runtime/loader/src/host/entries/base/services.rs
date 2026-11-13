@@ -521,7 +521,7 @@ pub(crate) extern "system" fn subscribe(
             Ok(found) => found,
             Err(status) => return status,
         };
-        if !(Event::SETTINGS_CHANGED.0..=Event::TERRAIN_PAGE_UNLOADED.0).contains(&event.0) {
+        if !(Event::SETTINGS_CHANGED.0..=Event::PROGRESS_WRITTEN.0).contains(&event.0) {
             return Status::MISSING;
         }
         let subscription = Subscription {

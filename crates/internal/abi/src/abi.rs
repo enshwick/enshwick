@@ -805,6 +805,7 @@ const _: () = {
     assert!(size_of::<WeatherFront>() == 8 + 8 + 24 + 8 + 8 + 16);
     assert!(size_of::<ChunkData>() == 8 + 16);
     assert!(size_of::<TerrainPageData>() == 8 + 12);
+    assert!(size_of::<ProgressWriteData>() == 8 + 28);
     // Frozen: written as an array.
     assert!(size_of::<TerrainMaterialInfo>() == 8 + 12);
     assert!(size_of::<TerrainEdit>() == 8 + 16 + 12 + 8 + 16);

@@ -1913,7 +1913,10 @@ pub struct HostApi {
     /// counts them from it. A mod asks for
     /// the writes during `init` with [`PROGRESS_OPEN`](super::PROGRESS_OPEN) and `Entity(0)`;
     /// [`Status::TOO_LATE`] for that after `init`. [`Status::OK`] queues
-    /// the write; the step applies writes in the order given.
+    /// the write; the step applies writes in the order given, and
+    /// [`Event::PROGRESS_WRITTEN`](super::Event::PROGRESS_WRITTEN) tells the
+    /// mod after the step whether it applied the write or why it was
+    /// dropped (ABI 11.25).
     /// [`Status::REFUSED`] for a mod that did not ask, an entity that is
     /// not a player's character in the game, or while 256 writes wait;
     /// [`Status::BAD_ARGS`] for another `what`; [`Status::WRONG_THREAD`]
@@ -1931,7 +1934,9 @@ pub struct HostApi {
     /// 65535, or a rarity the game lacks; [`Status::REFUSED`] for an item
     /// the game does not know; [`Status::WRONG_THREAD`] off the server's
     /// game thread; [`Status::MISSING`] on a client or a build without the
-    /// pickup. `request` and `out` are borrowed for the call. A panic in
+    /// pickup. The loader reads the pickup off the game thread as the server
+    /// starts, before its world loads, in about a tenth of a second; a call
+    /// before that read ends waits for the rest of it. `request` and `out` are borrowed for the call. A panic in
     /// the loader returns [`Status::REFUSED`]. ABI 11.24.
     pub drop_items:
         extern "system" fn(me: ModHandle, request: *const DropRequest, out: *mut Entity) -> Status,

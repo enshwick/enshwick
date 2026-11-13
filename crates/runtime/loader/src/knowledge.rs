@@ -24,7 +24,12 @@ pub(crate) static PARTS: &[&Part] = &[
     &Part {
         table_ids: progress::TABLE_IDS,
         link: Some(progress::link),
-        steps: &[step!(Follow, "level writes", |_| progress::after_step())],
+        steps: &[step!(Follow, "level writes", |s| progress::after_step(
+            s.loader
+        ))],
+        end: Some(fused!("level writes at a game's end", |loader| {
+            progress::game_ended(loader);
+        })),
         ..part!("progress", progress)
     },
     &Part {

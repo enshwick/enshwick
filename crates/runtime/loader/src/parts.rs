@@ -354,8 +354,10 @@ mod tests {
     }
 
     /// The parts whose end runs mods' handlers, in the order a hosted game
-    /// ends them: windows tell their close handlers, which may queue an
-    /// inventory request, and then the inventory answers what is queued.
+    /// ends them: windows tell their close handlers, which may queue a level
+    /// write or an inventory request, then the level writes are told, whose
+    /// handlers may queue an inventory request, and then the inventory
+    /// answers what is queued.
     /// Every forget runs after them and drops what the handlers queued.
     #[test]
     fn a_hosted_game_tells_mods_top_layer_first_before_any_part_forgets() {
@@ -365,7 +367,7 @@ mod tests {
             .filter(|part| part.end.is_some())
             .map(|part| part.name)
             .collect();
-        assert_eq!(ending, ["windows", "inventory"]);
+        assert_eq!(ending, ["windows", "progress", "inventory"]);
         let both = Parts::new(LAYERS)
             .iter()
             .find(|part| part.end.is_some() && part.forget.is_some());
