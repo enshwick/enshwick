@@ -452,6 +452,20 @@ mod tests {
     }
 
     #[test]
+    fn the_golden_layout_gives_the_host_table_fields_in_order() {
+        let layout = "abi 5.0\nHeader size 8 align 4\n    size at 0 size 4 type u32\n\
+                      HostApi size 16 align 8\n    header at 0 size 8 type Header\n    log at 8 size 8 type fn\n";
+        assert_eq!(
+            host_api_fields(layout),
+            Ok(vec!["header".to_owned(), "log".to_owned()])
+        );
+        assert_eq!(
+            host_api_fields(GOLDEN),
+            Err(format!("{LAYOUT}: no HostApi"))
+        );
+    }
+
+    #[test]
     fn a_malformed_layout_line_is_named() {
         let error =
             parse_layout("abi 5.0\nPair size 8 align 4\nPair size eight align 4\n").unwrap_err();

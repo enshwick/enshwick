@@ -2,7 +2,7 @@
 //!
 //! Windows loads it from the game's folder. It forwards every POWRPROF.dll
 //! export to the system copy, then, outside the loader lock, loads
-//! `mods/enshwick/enshwick.dll` and calls its `enshwick_start`. Without the loader the game runs vanilla.
+//! `mods/enshwick/enshwick.dll` and calls its start export. Without the loader the game runs vanilla.
 //! On the dedicated server the server's own code waits until the loader has
 //! armed its hooks.
 
@@ -21,7 +21,7 @@ use std::path::PathBuf;
 use windows_sys::Win32::System::LibraryLoader::{GetModuleFileNameW, GetProcAddress};
 use windows_sys::Win32::System::SystemServices::DLL_PROCESS_ATTACH;
 
-use enshwick_loader_start::{NO_SYSTEM_COPY, STUB_ABI, Start};
+use enshwick_loader_start::{EXPORT, NO_SYSTEM_COPY, Start, export_name};
 
 /// Called by Windows when the DLL loads.
 ///
@@ -87,20 +87,24 @@ fn start(missing: u32) {
         ));
         return;
     }
-    // SAFETY: `module` is loaded and the name is NUL-terminated.
-    let Some(start) = (unsafe { GetProcAddress(module, c"enshwick_start".as_ptr().cast()) }) else {
+    // SAFETY: `module` is loaded and `EXPORT` is NUL-terminated.
+    let Some(start) = (unsafe { GetProcAddress(module, EXPORT.as_ptr().cast()) }) else {
         note::note(&format!(
-            "{} has no enshwick_start ({}); the game runs without mods. Install the loader again",
+            "{} has no {} ({}): it and powrprof.dll come from different Enshwick releases; \
+             the game runs without mods. Install Enshwick again",
             load::LOADER,
+            export_name!(),
             std::io::Error::last_os_error()
         ));
         return;
     };
-    // SAFETY: the loader exports `enshwick_start` with the `Start` signature,
-    // which a compile-time check in the loader holds it to.
+    // SAFETY: a loader exports `EXPORT` only with the `Start` type: the
+    // export's name carries the start contract's version, and a
+    // compile-time check in the loader holds the export to that type.
     let start: Start = unsafe { core::mem::transmute(start) };
-    // SAFETY: called once, from this thread, outside the loader lock.
-    unsafe { start(STUB_ABI, missing, gate::release) };
+    // SAFETY: `Start`'s guarantees: called once, from this thread of the
+    // stub's own, outside the loader lock, with the stub's `release`.
+    unsafe { start(missing, gate::release) };
 }
 
 /// The folder of the game's executable.

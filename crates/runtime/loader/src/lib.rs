@@ -43,23 +43,22 @@ pub use start::{DryMod, DryRun, DryRunError, dry_run};
 /// Starts the loader; called once by the `powrprof.dll` stub, which holds
 /// the dedicated server's own code until `release` is called.
 ///
+/// Exported under [`enshwick_loader_start::EXPORT`], whose name carries the
+/// start contract's version, so a stub of another contract finds nothing to
+/// call.
+///
 /// # Safety
 ///
-/// - Called by the stub, once per process.
-/// - Called outside the Windows loader lock.
-/// - When `stub_abi` is 2 or more, `release` is the stub's function that
-///   lets the server's own code go on; below 2 it is never called.
+/// The stub's guarantees of [`enshwick_loader_start::Start`]: called outside
+/// the Windows loader lock, and `release` is the stub's function that lets
+/// the server's own code go on.
 #[cfg(windows)]
-#[unsafe(no_mangle)]
+#[unsafe(export_name = enshwick_loader_start::export_name!())]
 pub unsafe extern "system" fn enshwick_start(
-    stub_abi: u32,
     missing_forwards: u32,
     release: extern "system" fn() -> u32,
 ) {
-    let release = (stub_abi >= 2).then_some(release);
-    if let Err(payload) =
-        std::panic::catch_unwind(|| start::start(stub_abi, missing_forwards, release))
-    {
+    if let Err(payload) = std::panic::catch_unwind(|| start::start(missing_forwards, release)) {
         engine::early::note(&format!(
             "the loader's start panicked: {}; mods that did not start stay off",
             engine::early::panic_text(payload.as_ref())

@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use enshwick_core::abi::Side;
 use enshwick_gamedata::reflect::{Fingerprint, Image, Layout, Reflection};
-use enshwick_loader_start::{NO_SYSTEM_COPY, STUB_ABI};
+use enshwick_loader_start::NO_SYSTEM_COPY;
 use windows_sys::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW};
 
 use crate::{engine::builds, engine::errors, engine::log};
@@ -100,7 +100,7 @@ pub(super) struct Begun {
 
 /// Creates `mods/`, reads the loader settings and opens the log; `None`
 /// when the folders cannot be made.
-pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
+pub(super) fn begin(missing_forwards: u32) -> Option<Begun> {
     crate::engine::early::log_panics();
     let Some(game_dir) = game_dir() else {
         crate::engine::early::note("the game's folder was not found; nothing loads");
@@ -151,12 +151,6 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
             ERROR,
             "loader settings: {problem}; {applies} ({})",
             errors::BAD_SETTINGS
-        );
-    }
-    if stub_abi != STUB_ABI {
-        crate::log!(
-            WARN,
-            "stub contract {stub_abi}, the loader speaks {STUB_ABI}"
         );
     }
     if missing_forwards == NO_SYSTEM_COPY {

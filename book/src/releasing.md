@@ -20,7 +20,6 @@ The platform's crates carry versions of their own:
 
 - the loader, `enshwick-loader`
 - the `powrprof.dll` stub, `enshwick-loader-stub`
-- the start contract between them, `enshwick-loader-start`
 - `enshwick` and `enshwick-macros`
 - the internal parts of the API crate, released at its version:
   - `enshwick-core`, the mod's loader

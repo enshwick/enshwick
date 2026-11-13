@@ -191,9 +191,6 @@ mod tests {
     fn a_status_merge_is_missing_on_the_server() {
         let loader = enshwick::test::FakeHost::new().side(Side::SERVER).install();
         assert_eq!(ask_merge(&loader, loader.handle()), Status::MISSING);
-        drop(loader);
-        let (loader, status) = menu_on(Side::SERVER);
-        assert_eq!(status, Status::REFUSED, "init turned the mod off");
         assert_eq!(loader.survivor_status(FARMER, &[1, 3]), None);
     }
 

@@ -96,12 +96,12 @@ name = "enshwick-loader-stub"
 git_only = true
 publish = false
 
+# The start contract, built into the loader and the stub, examples and
+# tools never release.
 [[package]]
 name = "enshwick-loader-start"
-git_only = true
-publish = false
+release = false
 
-# Examples and tools never release.
 [[package]]
 name = "enshwick-example-haggling"
 release = false

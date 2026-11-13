@@ -57,6 +57,7 @@ pub(crate) fn check(root: &Path) -> Vec<String> {
         Ok(lib) => found.extend(unnamed_modules(&lib, &texts)),
         Err(error) => found.push(format!("{API_ROOT}: {error}")),
     }
+    found.extend(coverage_problem(root));
     found
 }
 
@@ -68,7 +69,7 @@ const COVERAGE_ENTRIES: &str = "## The entries";
 /// Why the coverage chapter under `root` does not list the fields of
 /// `HostApi` in the golden layout once each, in the table's order, so an
 /// appended entry cannot skip the audit.
-pub(crate) fn coverage_problem(root: &Path) -> Option<String> {
+fn coverage_problem(root: &Path) -> Option<String> {
     let read = |path: &str| {
         std::fs::read_to_string(root.join(path)).map_err(|error| format!("{path}: {error}"))
     };
@@ -81,13 +82,17 @@ pub(crate) fn coverage_problem(root: &Path) -> Option<String> {
         Ok(text) => text,
         Err(error) => return Some(error),
     };
-    entries_mismatch(&chapter, &fields).map(|at| {
-        format!(
-            "{chapter_path}: row {} of its entries table should be `{}`, the next HostApi field of {}; list every field once, in order",
+    entries_mismatch(&chapter, &fields).map(|at| match fields.get(at) {
+        Some(field) => format!(
+            "{chapter_path}: row {} of its entries table should be `{field}`, the next HostApi field of {}; list every field once, in order",
             at + 1,
-            fields.get(at).map_or("(none)", String::as_str),
             header::LAYOUT
-        )
+        ),
+        None => format!(
+            "{chapter_path}: row {} of its entries table names no HostApi field of {}; remove it",
+            at + 1,
+            header::LAYOUT
+        ),
     })
 }
 
@@ -685,7 +690,6 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let found = check(&root);
         assert!(found.is_empty(), "{found:?}");
-        assert_eq!(coverage_problem(&root), None);
     }
 
     fn fields(names: &[&str]) -> Vec<String> {
@@ -713,36 +717,44 @@ mod tests {
         assert_eq!(entries_mismatch(ENTRIES, &fields(&["header"])), Some(1));
     }
 
-    #[test]
-    fn the_golden_layout_gives_the_host_table_fields_in_order() {
-        let layout = "abi 5.0\nHeader size 8 align 4\n    size at 0 size 4 type u32\n\
-                      HostApi size 16 align 8\n    header at 0 size 8 type Header\n    log at 8 size 8 type fn\n";
-        assert_eq!(
-            header::host_api_fields(layout),
-            Ok(fields(&["header", "log"]))
-        );
+    /// The coverage problem of a tree holding `ENTRIES` and a golden layout
+    /// whose `HostApi` has `fields`, made in a folder named after `case`.
+    fn coverage_with(case: &str, fields: &[&str]) -> Option<String> {
+        let root =
+            std::env::temp_dir().join(format!("xtask-coverage-{case}-{}", std::process::id()));
+        let layout = root.join(header::LAYOUT);
+        std::fs::create_dir_all(layout.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(root.join(SOURCE)).unwrap();
+        let rows: String = fields
+            .iter()
+            .enumerate()
+            .map(|(at, field)| format!("    {field} at {} size 8 type fn\n", at * 8))
+            .collect();
+        std::fs::write(&layout, format!("abi 5.0\nHostApi size 16 align 8\n{rows}")).unwrap();
+        std::fs::write(root.join(SOURCE).join(COVERAGE_CHAPTER), ENTRIES).unwrap();
+        let found = coverage_problem(&root);
+        std::fs::remove_dir_all(&root).unwrap();
+        found
     }
 
     #[test]
     fn a_coverage_chapter_missing_a_host_table_entry_fails_the_check() {
-        let root = std::env::temp_dir().join(format!("xtask-coverage-{}", std::process::id()));
-        let layout = root.join(header::LAYOUT);
-        std::fs::create_dir_all(layout.parent().unwrap()).unwrap();
-        std::fs::create_dir_all(root.join(SOURCE)).unwrap();
-        std::fs::write(
-            &layout,
-            "abi 5.0\nHostApi size 16 align 8\n    header at 0 size 8 type Header\n    \
-             log at 8 size 8 type fn\n    chat at 16 size 8 type fn\n",
-        )
-        .unwrap();
-        std::fs::write(root.join(SOURCE).join(COVERAGE_CHAPTER), ENTRIES).unwrap();
-        let found = coverage_problem(&root);
-        std::fs::remove_dir_all(&root).unwrap();
         assert_eq!(
-            found.as_deref(),
+            coverage_with("missing", &["header", "log", "chat"]).as_deref(),
             Some(
                 "book/src/abi-coverage.md: row 3 of its entries table should be `chat`, the next \
                  HostApi field of crates/internal/abi/src/abi/layout.txt; list every field once, in order"
+            )
+        );
+    }
+
+    #[test]
+    fn a_coverage_row_past_the_last_host_table_entry_is_named_for_removal() {
+        assert_eq!(
+            coverage_with("extra", &["header"]).as_deref(),
+            Some(
+                "book/src/abi-coverage.md: row 2 of its entries table names no HostApi field of \
+                 crates/internal/abi/src/abi/layout.txt; remove it"
             )
         );
     }

@@ -73,11 +73,7 @@ fn link_features(loader: &'static Loader) {
     }
 }
 
-pub(crate) fn start(
-    stub_abi: u32,
-    missing_forwards: u32,
-    release: Option<extern "system" fn() -> u32>,
-) {
+pub(crate) fn start(missing_forwards: u32, release: extern "system" fn() -> u32) {
     if STARTED.swap(true, Ordering::AcqRel) {
         return;
     }
@@ -90,7 +86,7 @@ pub(crate) fn start(
         settings_problems,
         developer_tools,
         release_check,
-    }) = begin(stub_abi, missing_forwards)
+    }) = begin(missing_forwards)
     else {
         return;
     };
@@ -204,14 +200,14 @@ fn serve(loader: &'static Loader) {
 
 /// Lets the dedicated server's own code run once the hooks are armed, and
 /// logs whether the stub held it that long.
-fn release_server(release: Option<extern "system" fn() -> u32>, began: std::time::Instant) {
-    match release.map(|release| release()) {
-        Some(1) => crate::log!(
+fn release_server(release: extern "system" fn() -> u32, began: std::time::Instant) {
+    match release() {
+        1 => crate::log!(
             INFO,
             "the server's own code starts after the hooks, {} ms after the loader started",
             began.elapsed().as_millis()
         ),
-        Some(2) => crate::log!(
+        2 => crate::log!(
             WARN,
             "the server's own code started before the hooks: the loader took {} ms, past the stub's hold",
             began.elapsed().as_millis()
