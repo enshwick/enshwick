@@ -379,3 +379,21 @@ fn only_the_executable_the_game_was_mapped_from_counts_as_its_build() {
     assert!(!same_build(&headers(0x6543_2100, 0x0400_1000, 0), &mapped));
     assert!(!same_build(&file[..0x80], &mapped), "headers cut short");
 }
+
+#[test]
+fn a_function_s_end_is_found_only_from_where_it_starts() {
+    #[inline(never)]
+    extern "system" fn measured(x: u64) -> u64 {
+        x.wrapping_mul(31).rotate_left(7) ^ 0x5a5a
+    }
+    let start = (measured as extern "system" fn(u64) -> u64 as *const ()).addr();
+    let text = (start - 0x40, usize::MAX);
+    let end = function_end(text, 0x40).expect("the test binary's function table has it");
+    assert!(end > 0x40, "it ends after it starts");
+    assert_eq!(function_end((start, usize::MAX), 0), Some(end - 0x40));
+    assert_eq!(
+        function_end(text, 0x41),
+        None,
+        "not where a function starts"
+    );
+}
