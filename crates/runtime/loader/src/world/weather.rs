@@ -26,7 +26,7 @@ use std::sync::{Mutex, OnceLock};
 use enshwick_core::abi::{ChunkData, Event, Header, HookFlags, Status, WeatherFront};
 use enshwick_core::raw::read_at;
 
-use crate::engine::chains::Next;
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::memory::{BlobArray, read, write};
 use crate::engine::pinned::{self, Symbol};
@@ -102,8 +102,6 @@ type SpawnFn = unsafe extern "system" fn(
     phenomenon: u8,
     duration: *const [u64; 2],
 );
-type ChunkFn = unsafe extern "system" fn(entities: *mut u8, chunk: *mut u8, budget: *mut u32) -> u8;
-
 /// Where everything lies, from the build table and reflection.
 #[derive(Debug)]
 struct Layout {
@@ -824,9 +822,6 @@ pub(crate) fn set(loader: &Loader, effect: u32, duration: i64) -> Result<(), Sta
 
 static CHUNKS: OnceLock<ChunkLayout> = OnceLock::new();
 static CHUNK_EVENTS: Mutex<Vec<(Event, ChunkData)>> = Mutex::new(Vec::new());
-// SAFETY: `ChunkFn` is the signature of the build table's `chunks.step`, and
-// `link` uses this slot only as that function's next.
-static CHUNK_NEXT: Next<ChunkFn> = unsafe { Next::new() };
 
 /// Where a chunk keeps its state and index, and the manager its width.
 #[derive(Debug, Clone, Copy)]
@@ -842,30 +837,40 @@ pub(crate) fn link(loader: &'static Loader) {
     if !loader.subscribed(Event::CHUNK_LOADED) && !loader.subscribed(Event::CHUNK_UNLOADED) {
         return;
     }
-    let found = (|| {
-        Some(ChunkLayout {
-            manager: loader.offset(pinned::chunks::MANAGER)?,
-            width: loader.offset(pinned::chunks::WIDTH)?,
-            height: loader.offset(pinned::chunks::HEIGHT)?,
-            index: loader.offset(pinned::chunks::INDEX)?,
+    link_chunks(loader);
+}
+
+/// Links the chunk step, or turns the chunk events off for the first entry
+/// of their layout the build lacks.
+fn link_chunks(loader: &Loader) {
+    let offset = |id: pinned::Constant| loader.offset(id).ok_or(id);
+    let found = (|| -> Result<ChunkLayout, pinned::Constant> {
+        Ok(ChunkLayout {
+            manager: offset(pinned::chunks::MANAGER)?,
+            width: offset(pinned::chunks::WIDTH)?,
+            height: offset(pinned::chunks::HEIGHT)?,
+            index: offset(pinned::chunks::INDEX)?,
         })
     })();
-    let Some(chunks) = found else {
-        crate::log!(WARN, "chunk events off: not in this build");
-        return;
+    let chunks = match found {
+        Ok(chunks) => chunks,
+        Err(id) => {
+            let _off = loader.fuse_off(&CHUNKS_FUSE, id.id(), crate::engine::builds::ABSENT);
+            return;
+        }
     };
     let _first = CHUNKS.set(chunks);
-    loader.link_feature(
-        "chunk events",
+    let _linked = loader.link_fused(
+        &CHUNKS_FUSE,
         Target::Pinned(pinned::chunks::STEP),
         &CHUNK_NEXT,
-        chunk_step as ChunkFn,
+        chunk_step,
         HookFlags::NONE,
     );
 }
 
 /// The switch of the chunk events.
-static CHUNKS_FUSE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("chunk events");
+static CHUNKS_FUSE: Fuse = Fuse::new("chunk events");
 
 /// The event a chunk's step from state `before` to `after` raises: only a
 /// finished load or unload of its entities, never a step that stays.
@@ -877,34 +882,32 @@ const fn turn(before: u8, after: u8) -> Option<Event> {
     }
 }
 
-unsafe extern "system" fn chunk_step(entities: *mut u8, chunk: *mut u8, budget: *mut u32) -> u8 {
-    let before = if chunk.is_null() {
-        0xff
-    } else {
-        // SAFETY: `chunk` is non-null by the check before it and is the step's
-        // chunk argument, which starts with its u8 state.
-        unsafe { read_at::<u8>(chunk, 0) }
-    };
-    // SAFETY: this detour runs only as the `chunks.step` link, so the slot
-    // holds the next function of that signature; the game's arguments pass
-    // unchanged.
-    let done = unsafe { CHUNK_NEXT.get()(entities, chunk, budget) };
-    if chunk.is_null() {
-        return done;
+crate::engine::chains::chain_detour! {
+    /// The table's `chunks.step`: one step of a chunk of an entity world,
+    /// whose state is the chunk's first byte; a finished load or unload is
+    /// queued for after the step.
+    fn chunk_step(entities: *mut u8, chunk: *mut u8, budget: *mut u32) -> u8;
+    next CHUNK_NEXT;
+    fuse &CHUNKS_FUSE, "the chunk step";
+    |onward| {
+        if chunk.is_null() {
+            return onward.call();
+        }
+        // SAFETY: `chunk` is non-null (checked first) and is the step's
+        // chunk argument, live for the call, which starts with its u8 state.
+        let before = unsafe { read_at::<u8>(chunk, 0) };
+        let done = onward.call();
+        // SAFETY: as for `before`: the non-null chunk argument, live for
+        // the call, its u8 state at its start, which the step just wrote.
+        let after = unsafe { read_at::<u8>(chunk, 0) };
+        if let Some(event) = turn(before, after) {
+            // SAFETY: `entities` and `chunk` are the step's own arguments,
+            // `chunk` non-null (checked first), and this runs on the step's
+            // thread inside it.
+            unsafe { record(event, entities, chunk) };
+        }
+        done
     }
-    // SAFETY: `chunk` is non-null by the check before it and is the step's
-    // chunk argument, live for the call, which starts with its u8 state.
-    let after = unsafe { read_at::<u8>(chunk, 0) };
-    let Some(event) = turn(before, after) else {
-        return done;
-    };
-    let _caught = CHUNKS_FUSE.run("the chunk step", || {
-        // SAFETY: `entities` and `chunk` are the step's own arguments,
-        // `chunk` non-null by the check before it, and this runs on the step's
-        // thread inside it.
-        unsafe { record(event, entities, chunk) };
-    });
-    done
 }
 
 /// Queues a chunk's turn in the server's world for after the step.

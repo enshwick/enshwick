@@ -15,7 +15,7 @@ use std::sync::atomic::Ordering;
 use enshwick_core::Entity;
 use enshwick_core::abi::{Header, HookFlags, PlayerInfo, RenameCall, RenameCallFn, Status, Str};
 
-use crate::engine::chains::Next;
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
@@ -81,10 +81,10 @@ struct Filter {
 
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 static LOADED: OnceLock<&'static Loader> = OnceLock::new();
-// SAFETY: `ReplaceFn` is the exact signature of the game's string swap at the
-// table's `label.replace`, and the slot is used only as the `next` of the
-// `replace` link on that function.
-static REPLACE_NEXT: Next<ReplaceFn> = unsafe { Next::new() };
+/// The switch of the mods' rename filters.
+static FUSE: Fuse = Fuse::new("rename filters");
+/// What the line names when the build lacks part of [`Layout`].
+const LAYOUT_ENTRY: &str = "the label layout";
 static FILTERS: Registry<Filter> = Registry::new();
 
 fn layout(loader: &Loader) -> Option<&'static Layout> {
@@ -160,12 +160,12 @@ pub(crate) fn link(loader: &'static Loader) {
         return;
     }
     if layout(loader).is_none() {
-        crate::log!(WARN, "rename filters off: this build has no label layout");
+        let _off = loader.fuse_off(&FUSE, LAYOUT_ENTRY, crate::engine::builds::ABSENT);
         return;
     }
     let target = Target::Pinned(pinned::label::REPLACE);
     let flags = HookFlags::CALLER_FRAME;
-    if loader.link_feature("rename filters", target, &REPLACE_NEXT, replace, flags) {
+    if loader.link_fused(&FUSE, target, &REPLACE_NEXT, replace, flags) {
         crate::log!(INFO, "rename filters on");
     }
 }
@@ -248,30 +248,31 @@ pub(crate) fn set(loader: &Loader, entity: Entity, text: &str) -> Status {
     Status::OK
 }
 
-/// The switch of the label renames.
-static LABELS_FUSE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("label renames");
-
-unsafe extern "system" fn replace(
-    out: *mut [u64; 2],
-    strings: *mut u8,
-    old: u64,
-    text: *const [usize; 2],
-) -> *mut u8 {
-    let refused = LABELS_FUSE.run("the replace", || {
+crate::engine::chains::chain_detour! {
+    /// The game's string swap at the table's `label.replace`: refuses a
+    /// player's rename a mod's filter refuses with the game's own error,
+    /// and passes every other call on.
+    fn replace(
+        out: *mut [u64; 2],
+        strings: *mut u8,
+        old: u64,
+        text: *const [usize; 2],
+    ) -> *mut u8;
+    next REPLACE_NEXT;
+    fuse &FUSE, "the replace";
+    |onward| {
         // SAFETY: `text` is the swap's own text argument, null or a span the
         // game keeps for the call, and this runs at the chain's entry on the
         // thread the game called the swap on.
-        unsafe { refused(text) }
-    });
-    if matches!(refused, Some(true)) && !out.is_null() {
-        // SAFETY: `out` is the swap's non-null result record (checked earlier),
-        // writable for the call; its first byte is the error code.
-        unsafe { enshwick_core::raw::write_at(out.cast(), 0, REFUSED) };
-        return out.cast();
+        if unsafe { refused(text) } && !out.is_null() {
+            // SAFETY: `out` is the swap's non-null result record (checked
+            // just before), writable for the call; its first byte is the
+            // error code.
+            unsafe { enshwick_core::raw::write_at(out.cast(), 0, REFUSED) };
+            return out.cast();
+        }
+        onward.call()
     }
-    // SAFETY: the game's own arguments, passed on unchanged to the rest of
-    // the chain, which has the string swap's signature.
-    unsafe { REPLACE_NEXT.get()(out, strings, old, text) }
 }
 
 /// Whether a filter refuses this swap, when it is a player's rename.
