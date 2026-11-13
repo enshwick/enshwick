@@ -337,16 +337,6 @@ fn report(loader: &Loader, conflicts: &[Conflict]) {
     crate::engine::conflicts::set_fields(lines);
 }
 
-/// The items whose own values some change of `merged` changes: every item
-/// field but the slots of the container it places.
-fn edited(merged: &Merged) -> Vec<Guid> {
-    merged
-        .entries(Entry::Item)
-        .into_iter()
-        .filter(|item| merged.keys(*item).iter().any(|k| k.field != Field::Slots))
-        .collect()
-}
-
 /// Merges every declared change, reports the overridden sets, and returns
 /// the loader's patches, one per changed item: its key and the patch with
 /// its pointer. Called once, when the served resources are sealed.
@@ -364,8 +354,8 @@ pub(crate) fn serve(
         let (level, line) = p.line(on(loader, p.owner));
         crate::engine::log::write(level, &id(loader, p.owner), &line);
     }
-    let changed = super::select::changed_items(&declared, |m| on(loader, m));
     let (merged, conflicts) = merge(&declared, |a, b| requires(loader, a, b));
+    let changed = merged.edited(|m| on(loader, m)).len();
     report(loader, &conflicts);
     let labels: FxHashMap<Guid, String> = declared
         .iter()
@@ -376,7 +366,7 @@ pub(crate) fn serve(
         crate::log!(WARN, "kept stack sizes do not read: {why}");
         Kept::default()
     });
-    let mut items = edited(&merged);
+    let mut items = merged.edited(|_| true);
     items.extend(kept.items().map(|(item, _)| item));
     items.sort_unstable_by_key(|item| item.0);
     items.dedup();
@@ -477,7 +467,7 @@ fn apply(
     let loader = sealed.loader;
     let patched = sealed.patched.get().cloned().unwrap_or_default();
     let (merged, conflicts) = merge(&next, |a, b| requires(loader, a, b));
-    if let Some(item) = edited(&merged).into_iter().find(|item| {
+    if let Some(item) = merged.edited(|_| true).into_iter().find(|item| {
         !patched.contains(&item.key_by_hash(crate::engine::catalogue::types::ITEM_INFO))
     }) {
         return Err(ApplyChangesError::Values { item });

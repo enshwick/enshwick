@@ -96,21 +96,6 @@ impl Picked {
     }
 }
 
-/// How many items get a value of their own changed by a mod that is on:
-/// every item field but the slots of the container an item places.
-#[cfg(any(windows, test))]
-#[must_use]
-pub(crate) fn changed_items(declared: &[Declared], on: impl Fn(ModIndex) -> bool) -> usize {
-    declared
-        .iter()
-        .filter(|d| {
-            d.change.field.entry() == Entry::Item && d.change.field != Field::Slots && on(d.owner)
-        })
-        .map(|d| d.change.entry)
-        .collect::<FxHashSet<_>>()
-        .len()
-}
-
 /// Every change of `pending` as changes of one entry each, in load order,
 /// with how many entries each selection picked.
 ///
@@ -486,24 +471,6 @@ mod tests {
         assert!(picked.line(true).1.ends_with("changes 2266 vanilla items"));
         let none = Picked { count: 0, ..picked };
         assert_eq!(none.line(true).0, Level::WARN);
-    }
-
-    #[test]
-    fn only_items_a_mod_that_is_on_changes_count_as_changed() {
-        let pending = vec![
-            each(0, Items::Stackable, Field::MaxStackSize, Value::Times(4.0)),
-            one(1, guid(9), Value::Set(99.0)),
-        ];
-        let (declared, _) = expand(pending, &selectable());
-        let off = ModIndex::new(0);
-        let all = changed_items(&declared, |_| true);
-        assert!(all > 1, "{declared:?}");
-        assert_eq!(
-            changed_items(&declared, |m| m != off),
-            1,
-            "the on mod's one item"
-        );
-        assert_eq!(changed_items(&declared, |_| false), 0);
     }
 
     #[test]

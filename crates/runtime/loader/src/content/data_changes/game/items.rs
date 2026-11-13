@@ -104,11 +104,7 @@ fn changed_item(patch: &ItemPatch, bytes: &mut [u8]) {
     let (loader, labels) = (sealed.loader, &sealed.labels);
     let merged = sealed.merged();
     let live = |m: ModIndex| on(loader, m);
-    let fields: Vec<Field> = merged
-        .keys(patch.item)
-        .into_iter()
-        .map(|key| key.field)
-        .collect();
+    let fields = merged.fields(patch.item, live);
     let vanilla = stack_at(bytes, patch.offsets);
     let edit = edit_item(bytes, patch.offsets, &fields, |field, base| {
         merged.value(Key::new(patch.item, field), base, live)
