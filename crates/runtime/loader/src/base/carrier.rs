@@ -29,7 +29,7 @@ use rustc_hash::FxHashMap;
 use crate::base::wire::{
     CONTROL, Link, MAX_SEALED, PROBES, open, probe, read_probe, seal, sealable,
 };
-use crate::engine::chains::Next;
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
 use enshwick_base::Relock;
@@ -94,8 +94,6 @@ const MEMBERS_EVERY: u32 = 30;
 const UNHEARD_FOR: Duration = Duration::from_secs(30);
 /// The step between the epochs of two links: room for the restarts of one.
 const EPOCH_STEP: u32 = 0x1_0000;
-
-type ClientSendFn = unsafe extern "system" fn(client: *mut u8) -> u64;
 
 /// One peer's socket and link.
 #[derive(Debug)]
@@ -191,11 +189,6 @@ struct Carrier {
     epochs: AtomicU32,
     /// Packets dropped: unreadable, over a bound or a rate.
     dropped: AtomicU64,
-    client_send: Next<ClientSendFn>,
-    fuse: crate::engine::fuse::Fuse,
-    /// The switch of the lobby a hosting client publishes, apart from the
-    /// channel's.
-    lobby_fuse: crate::engine::fuse::Fuse,
     /// Server steps of a hosting client, to look for its own player now and
     /// then.
     hosted_steps: AtomicU32,
@@ -219,65 +212,75 @@ static CARRIER: Carrier = Carrier {
     client_retired: AtomicBool::new(false),
     epochs: AtomicU32::new(EPOCH_STEP),
     dropped: AtomicU64::new(0),
-    // SAFETY: `ClientSendFn` is the signature of the game's
-    // `chat.client_send`, and `link` uses this slot only as the `next` of
-    // `client_send`, its link on that function.
-    client_send: unsafe { Next::new() },
-    fuse: crate::engine::fuse::Fuse::new("the own channel"),
-    lobby_fuse: crate::engine::fuse::Fuse::new("the hosted lobby"),
     hosted_steps: AtomicU32::new(0),
     #[cfg(test)]
     hosts: AtomicBool::new(false),
 };
 
+/// The loader's link on the client's chat send, where the own channel and
+/// the hosted lobby run each frame; off only when this build cannot link it
+/// or its own checks panicked, since each of them has its own fuse.
+static FRAME_FUSE: Fuse = Fuse::new("the client's frame step");
+
+/// The own channel: each side's sockets, and a hosting client's talk with
+/// its own server half.
+pub(crate) static CHANNEL_FUSE: Fuse = Fuse::new("the own channel");
+
+/// The own channel to other machines, off on a build without the game's
+/// socket calls; a hosting client still talks with its own server half.
+static SOCKETS_FUSE: Fuse = Fuse::new("the own channel to other machines");
+
 /// Resolves and checks the game's socket calls, and on a client links its
 /// chat send, where the client pumps its socket; without them the own
-/// channel stays off and the log says which part is missing.
-pub(crate) fn link(loader: &Loader) {
-    let game = Game::resolve(loader);
-    if let Ok(game) = game {
-        let _first = CARRIER.game.set(game);
+/// channel to other machines stays off, naming the part this build lacks.
+pub(crate) fn link(loader: &'static Loader) {
+    match Game::resolve(loader) {
+        Ok(game) => {
+            let _first = CARRIER.game.set(game);
+        }
+        Err(missing) => {
+            let reason = if loader.build.symbol(missing).is_some() {
+                "does not hold the code the build table expects"
+            } else {
+                crate::engine::builds::ABSENT
+            };
+            let _off = loader.fuse_off(&SOCKETS_FUSE, missing, reason);
+        }
     }
-    // Linked even without the channel: the lobby a client hosts is published
-    // from here too.
+    // Linked even without the sockets: the lobby a client hosts is published
+    // from here too, and a hosting client talks with its server half.
     let linked = loader.side != Side::CLIENT
-        || loader.link_feature(
-            "the client's frame step",
+        || loader.link_fused(
+            &FRAME_FUSE,
             Target::Pinned(pinned::chat::CLIENT_SEND),
-            &CARRIER.client_send,
-            client_send as ClientSendFn,
+            &CLIENT_SEND_NEXT,
+            client_send,
             HookFlags::NONE,
         );
-    match game {
-        Ok(game) if linked => {
-            crate::log!(INFO, "own channel ready on game channel {}", game.channel());
-        }
-        Ok(_) => {}
-        Err(missing) => crate::log!(WARN, "own channel off: this build has no {missing}"),
+    if let Some(game) = CARRIER.game.get()
+        && linked
+    {
+        crate::log!(INFO, "own channel ready on game channel {}", game.channel());
     }
 }
 
-/// The loader's link on the client's chat send: pumps the own channel
-/// before the game sends.
-///
-/// # Safety
-///
-/// - Called only by the game through the chain on `chat.client_send`, on the
-///   thread that sends the client's chat, with the game client or null.
-unsafe extern "system" fn client_send(client: *mut u8) -> u64 {
-    let _published = CARRIER
-        .lobby_fuse
-        .run("the hosted lobby", crate::base::lobby::poll);
-    let _caught = CARRIER.fuse.run("the client's own channel", || {
-        // SAFETY: `client` is the game's own argument, null or the game
-        // client, on the thread that sends its chat, by this function's
-        // `# Safety`.
-        unsafe { client_frame(client, Instant::now()) };
-    });
-    // SAFETY: `client_send` holds the rest of `chat.client_send`'s chain
-    // while this detour runs, and `client` is the game's own argument, passed
-    // on unchanged.
-    unsafe { CARRIER.client_send.get()(client) }
+crate::engine::chains::chain_detour! {
+    /// The client's chat send at the table's `chat.client_send`, on the
+    /// thread that sends the client's chat, with the game client or null:
+    /// publishes the hosted lobby and pumps the own channel before the game
+    /// sends.
+    fn client_send(client: *mut u8) -> u64;
+    next CLIENT_SEND_NEXT;
+    fuse &FRAME_FUSE, "the client's frame step";
+    |onward| {
+        crate::base::lobby::poll();
+        onward.run(&CHANNEL_FUSE, "the client's own channel", |onward| {
+            // SAFETY: `client` is the game's own argument, null or the game
+            // client, on the thread that sends its chat.
+            unsafe { client_frame(client, Instant::now()) };
+            onward.call()
+        })
+    }
 }
 
 /// Sends `payload` on `channel` to `key`: the server for the server's key,

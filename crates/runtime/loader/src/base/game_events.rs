@@ -19,7 +19,6 @@ use std::sync::{Mutex, OnceLock};
 use enshwick_core::abi::{GameEventData, GameEventFn, Header, HookFlags, Side, Status};
 use rustc_hash::FxHashSet;
 
-use crate::engine::chains::Next;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
@@ -125,13 +124,14 @@ fn give_back(mut batch: Batch) {
 
 static PENDING: Mutex<Vec<Subscriber>> = Mutex::new(Vec::new());
 static SEALED: OnceLock<Sealed> = OnceLock::new();
-static LOADED: OnceLock<(&'static Loader, Layout)> = OnceLock::new();
-// SAFETY: `MergeFn` is the signature of the table's `ecs.event_merge`, and
-// this slot is the `next` of the one link `link` makes on it, whose detour
-// `merge` calls `get`.
-static MERGE_NEXT: Next<MergeFn> = unsafe { Next::new() };
-/// Game events, off once the loader's own copy or delivery panicked.
+/// The loader, and the build's stream layout when it has one.
+static LOADED: OnceLock<(&'static Loader, Option<Layout>)> = OnceLock::new();
+/// The event move's link, off only when this build cannot link it or its
+/// own checks panicked: the features it runs have fuses of their own, so
+/// one of them failing leaves the others running.
 static EVENTS_FUSE: Fuse = Fuse::new("game events");
+/// The copy and delivery of the server's events to the mods.
+static DELIVERY_FUSE: Fuse = Fuse::new("game event delivery");
 /// The client's notices from its server, off once raising one panicked.
 static NOTICES_FUSE: Fuse = Fuse::new("server notices");
 /// The switch for freeing what the loader handed the game.
@@ -140,8 +140,6 @@ static RETIRE_FUSE: Fuse = Fuse::new("freeing handed lists");
 thread_local! {
     static BATCH: RefCell<Batch> = RefCell::new(Batch::default());
 }
-
-type MergeFn = unsafe extern "system" fn(entity_world: *mut u8);
 
 /// Registers mod `owner`'s handler for events of `type_hash`, 0 for all.
 pub(crate) fn register(
@@ -195,9 +193,10 @@ pub(crate) fn link(loader: &'static Loader) {
             .build
             .constant(name.id())
             .and_then(|v| usize::try_from(v).ok())
+            .ok_or(name)
     };
     let layout = (|| {
-        Some(Layout {
+        Ok(Layout {
             streams: constant(pinned::ecs::EVENT_STREAMS)?,
             stream_count: constant(pinned::ecs::EVENT_STREAM_COUNT)?,
             stream_size: constant(pinned::ecs::EVENT_STREAM_SIZE)?,
@@ -207,64 +206,70 @@ pub(crate) fn link(loader: &'static Loader) {
             record_align: constant(pinned::ecs::EVENT_RECORD_ALIGN)?.max(1),
         })
     })();
-    let Some(layout) = layout else {
-        crate::log!(WARN, "game events off: this build has no event layout");
-        return;
-    };
+    // Without the layout the move still links: a client's notices and the
+    // freeing of handed lists need no stream.
+    let layout = layout
+        .inspect_err(|missing| {
+            let _off = loader.fuse_off(&DELIVERY_FUSE, missing.id(), crate::engine::builds::ABSENT);
+        })
+        .ok();
     let _first = LOADED.set((loader, layout));
     let target = Target::Pinned(pinned::ecs::EVENT_MERGE);
-    if loader.link_feature("game events", target, &MERGE_NEXT, merge, HookFlags::NONE) {
+    if loader.link_fused(&EVENTS_FUSE, target, &MERGE_NEXT, merge, HookFlags::NONE) {
         crate::log!(INFO, "game events: {count} subscriptions");
     }
 }
 
-unsafe extern "system" fn merge(entity_world: *mut u8) {
-    let ours = LOADED
-        .get()
-        .filter(|_| !EVENTS_FUSE.is_off() && is_server(entity_world));
-    // The process's own world: the server's on a dedicated server, the
-    // client's own on a client, hosting or not.
-    let own_world = LOADED.get().is_some_and(|(loader, _)| match loader.side {
-        Side::CLIENT => {
-            !entity_world.is_null()
-                && entity_world.addr() as u64 != crate::engine::world::server_world()
+crate::engine::chains::chain_detour! {
+    /// The engine's move of the event streams at the table's
+    /// `ecs.event_merge`, on the thread that steps `entity_world`: copies the
+    /// server's wanted events before the move and hands them to the mods
+    /// after it, raises a client's notices, and frees what the game was
+    /// handed, each under its own fuse.
+    fn merge(entity_world: *mut u8) -> ();
+    next MERGE_NEXT;
+    fuse &EVENTS_FUSE, "the event move";
+    |onward| {
+        let Some(&(loader, layout)) = LOADED.get() else {
+            return onward.call();
+        };
+        let server = is_server(entity_world);
+        let client_own = loader.side == Side::CLIENT
+            && !entity_world.is_null()
+            && entity_world.addr() as u64 != crate::engine::world::server_world();
+        let ours = layout.filter(|_| server);
+        if let Some(layout) = &ours {
+            onward.run(&DELIVERY_FUSE, "the event copy", |_| {
+                let _quiet = crate::engine::world::Quiet::enter();
+                // SAFETY: `entity_world` is the running server's entity world
+                // and this is its game thread (checked by `is_server`); the
+                // game passed it to `ecs.event_merge`, which has not moved its
+                // streams yet.
+                unsafe { copy(layout, entity_world) };
+            });
+        } else if client_own {
+            onward.run(&NOTICES_FUSE, "the notice raise", |_| {
+                // SAFETY: on a client, `entity_world` is non-null and not the
+                // hosted server's (`client_own`), so the client's own live
+                // entity world, which the game passed to `ecs.event_merge` on
+                // its game thread before moving its streams.
+                unsafe { crate::base::notices::raise(loader, entity_world.expose_provenance()) };
+            });
         }
-        _ => is_server(entity_world),
-    });
-    if let Some((_, layout)) = ours {
-        let _quiet = crate::engine::world::Quiet::enter();
-        // SAFETY: `entity_world` is the running server's entity world and this
-        // is its game thread (checked by `is_server`); the game passed it to
-        // `ecs.event_merge`, which has not moved its streams yet.
-        let _copied = EVENTS_FUSE.run("the event link's copy", || unsafe {
-            copy(layout, entity_world);
-        });
-    } else if let Some((loader, _)) = LOADED.get()
-        && loader.side == Side::CLIENT
-        && !entity_world.is_null()
-        && entity_world.addr() as u64 != crate::engine::world::server_world()
-    {
-        // SAFETY: on a client, `entity_world` is non-null and not the hosted
-        // server's (the `if let` conditions), so the client's own live entity
-        // world, which the game passed to `ecs.event_merge` on its game thread
-        // before moving its streams.
-        let _raised = NOTICES_FUSE.run("the event link", || unsafe {
-            crate::base::notices::raise(loader, entity_world.expose_provenance());
-        });
-    }
-    // SAFETY: `entity_world` is the game's argument to `ecs.event_merge`,
-    // passed on unchanged to the rest of the chain, which the slot holds
-    // since the chain is wired before the target jumps here.
-    unsafe { MERGE_NEXT.get()(entity_world) };
-    if own_world {
-        let _stepped = RETIRE_FUSE.run(
-            "freeing what the game was handed",
-            crate::engine::retire::step,
-        );
-    }
-    if let Some((loader, _)) = ours {
-        let _quiet = crate::engine::world::Quiet::enter();
-        let _delivered = EVENTS_FUSE.run("the event link's delivery", || deliver(loader));
+        onward.call();
+        // The process's own world: the server's on a dedicated server, the
+        // client's own on a client, hosting or not.
+        if client_own || (loader.side != Side::CLIENT && server) {
+            onward.run(&RETIRE_FUSE, "freeing what the game was handed", |_| {
+                crate::engine::retire::step();
+            });
+        }
+        if ours.is_some() {
+            onward.run(&DELIVERY_FUSE, "the event delivery", |_| {
+                let _quiet = crate::engine::world::Quiet::enter();
+                deliver(loader);
+            });
+        }
     }
 }
 
@@ -457,5 +462,23 @@ mod tests {
         assert_eq!(payloads(&back), [(1, b"ab".to_vec()), (2, b"cde".to_vec())]);
         give_back(Batch::default());
         BATCH.with_borrow(|held| assert!(held.events.is_empty() && held.bytes.is_empty()));
+    }
+
+    #[test]
+    fn a_build_without_the_stream_layout_lists_the_delivery_off_and_leaves_the_notices_on() {
+        let loader: &'static Loader = Box::leak(Box::new(Loader {
+            side: Side::CLIENT,
+            ..crate::start::tests::bare_loader()
+        }));
+        link(loader);
+        assert!(DELIVERY_FUSE.is_off());
+        assert!(!NOTICES_FUSE.is_off() && !RETIRE_FUSE.is_off());
+        let listed = crate::engine::diag::parts_off();
+        let delivery = listed.iter().find(|p| p.part == DELIVERY_FUSE.feature());
+        let missing = pinned::ecs::EVENT_STREAMS.id();
+        assert!(
+            delivery.is_some_and(|p| p.reason.starts_with(missing)),
+            "{listed:?}"
+        );
     }
 }

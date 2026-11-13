@@ -23,7 +23,7 @@ use std::sync::{Mutex, OnceLock};
 
 use enshwick_core::abi::{Event, HookFlags, Side, Status};
 
-use crate::engine::chains::Next;
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::module::Export;
 use crate::engine::pinned;
@@ -61,7 +61,6 @@ const STEAM_CLOUD_FOLDER: &str = "remote";
 const STEAM_LOCAL_FOLDER: &str = "local";
 
 type RequestFn = unsafe extern "system" fn(server: *mut u8);
-type PathFn = unsafe extern "system" fn(result: *mut u8, path: *mut u8, slot: *mut u8) -> *mut u8;
 
 /// The game functions and offsets, from the build table.
 #[derive(Debug, Clone, Copy)]
@@ -80,10 +79,8 @@ struct Layout {
 /// `flags` bit: the world may be saved now, set once it has loaded.
 const SAVE_ALLOWED: u8 = 1 << 2;
 
-static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
-// SAFETY: `PathFn` is the signature of the game's `save.path`, and `link`
-// uses this slot only as the `next` of `built`, its link on that function.
-static PATH_NEXT: Next<PathFn> = unsafe { Next::new() };
+/// The build's save layout, or the first entry the build lacks.
+static LAYOUT: OnceLock<Result<Layout, &'static str>> = OnceLock::new();
 
 /// The world key built last, and on a client whether a hosted game names
 /// its world now.
@@ -131,84 +128,87 @@ impl Keys {
 static KEYS: Mutex<Keys> = Mutex::new(Keys::CLOSED);
 
 fn layout(loader: &Loader) -> Option<&'static Layout> {
-    LAYOUT
-        .get_or_init(|| {
-            let constant = |name: Constant| {
-                loader
-                    .build
-                    .constant(name.id())
-                    .and_then(|v| usize::try_from(v).ok())
-            };
-            let request = usize::try_from(
-                loader.base + loader.build.symbol(pinned::server::SAVE_REQUEST.id())?,
-            )
-            .ok()?;
-            Some(Layout {
-                // SAFETY: `request` is the build table's `server.save_request`
-                // in the loaded executable, the game function `RequestFn`
-                // types.
-                request: unsafe { core::mem::transmute::<usize, RequestFn>(request) },
-                save_system: constant(pinned::server::SAVE_SYSTEM)?,
-                blocked: constant(pinned::server::SAVE_BLOCKED)?,
-                flags: constant(pinned::save::FLAGS)?,
-                phase: constant(pinned::save::PHASE)?,
-                path_data: constant(pinned::save::PATH_DATA)?,
-                path_lengths: constant(pinned::save::PATH_LENGTHS)?,
-                path_parts: constant(pinned::save::PATH_PARTS)?,
-                side: loader.side,
-            })
-        })
-        .as_ref()
+    read_layout(loader).as_ref().ok()
 }
+
+/// The build's save layout, read once, or the first entry the build lacks.
+fn read_layout(loader: &Loader) -> &'static Result<Layout, &'static str> {
+    LAYOUT.get_or_init(|| {
+        let constant = |name: Constant| {
+            loader
+                .build
+                .constant(name.id())
+                .and_then(|v| usize::try_from(v).ok())
+                .ok_or(name.id())
+        };
+        let request = pinned::server::SAVE_REQUEST.id();
+        let request = loader
+            .build
+            .symbol(request)
+            .and_then(|rva| usize::try_from(loader.base + rva).ok())
+            .ok_or(request)?;
+        Ok(Layout {
+            // SAFETY: `request` is the build table's `server.save_request`
+            // in the loaded executable, the game function `RequestFn` types.
+            request: unsafe { core::mem::transmute::<usize, RequestFn>(request) },
+            save_system: constant(pinned::server::SAVE_SYSTEM)?,
+            blocked: constant(pinned::server::SAVE_BLOCKED)?,
+            flags: constant(pinned::save::FLAGS)?,
+            phase: constant(pinned::save::PHASE)?,
+            path_data: constant(pinned::save::PATH_DATA)?,
+            path_lengths: constant(pinned::save::PATH_LENGTHS)?,
+            path_parts: constant(pinned::save::PATH_PARTS)?,
+            side: loader.side,
+        })
+    })
+}
+
+/// The world keys: each world save path the game builds names its world.
+static KEYS_FUSE: Fuse = Fuse::new("world keys");
 
 /// Links the save path builder, for the world key.
 pub(crate) fn link(loader: &'static Loader) {
-    if layout(loader).is_none() {
-        crate::log!(WARN, "world keys off: this build has no save layout");
+    if let Err(missing) = read_layout(loader) {
+        let _off = loader.fuse_off(&KEYS_FUSE, missing, crate::engine::builds::ABSENT);
         return;
     }
     let target = Target::Pinned(pinned::save::PATH);
-    loader.link_feature("world keys", target, &PATH_NEXT, built, HookFlags::NONE);
+    let _linked = loader.link_fused(&KEYS_FUSE, target, &PATH_NEXT, built, HookFlags::NONE);
 }
 
-/// The switch of the save path notes.
-static SAVES_FUSE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("save path notes");
-
-/// The loader's link on the game's save path builder: notes the world key
-/// of each world save path the game builds.
-///
-/// # Safety
-///
-/// - Called only by the game through the chain on `save.path`, with its own
-///   result, path and slot arguments.
-unsafe extern "system" fn built(result: *mut u8, path: *mut u8, slot: *mut u8) -> *mut u8 {
-    // SAFETY: `PATH_NEXT` holds the rest of `save.path`'s chain while this
-    // detour runs, and the arguments are the game's own, passed on unchanged.
-    let out = unsafe { PATH_NEXT.get()(result, path, slot) };
-    let layout = LAYOUT.get().copied().flatten();
-    // SAFETY: `result` is non-null, checked first, and is the result the game
-    // passed to `save.path`, whose first byte it wrote, 0 on success.
-    let code = (!result.is_null()).then(|| unsafe { enshwick_core::raw::read_at::<u8>(result, 0) });
-    if let Some(layout) = layout {
-        let _caught = SAVES_FUSE.run("the built", || {
-            // SAFETY: `path` is the game's own argument to `save.path`, null
-            // or the engine path it just built, owned by the caller of this
-            // detour on this thread.
-            let text = unsafe { read_path(&layout, path) };
-            // SAFETY: `GetCurrentThreadId` takes no arguments and cannot fail.
-            let thread = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
-            crate::log!(
-                DEBUG,
-                "save path built ({code:?}) on thread {thread}: {text:?}"
-            );
-            if code == Some(0)
-                && let Some(text) = text
-            {
-                remember(&text, layout.side, steam_saves);
-            }
-        });
+crate::engine::chains::chain_detour! {
+    /// The game's save path builder at the table's `save.path`: notes the
+    /// world key of each world save path it builds, once the rest of the
+    /// chain built it.
+    fn built(result: *mut u8, path: *mut u8, slot: *mut u8) -> *mut u8;
+    next PATH_NEXT;
+    fuse &KEYS_FUSE, "the save path note";
+    |onward| {
+        let out = onward.call();
+        let Some(layout) = LAYOUT.get().and_then(|layout| layout.as_ref().ok()) else {
+            return out;
+        };
+        // SAFETY: `result` is non-null, checked first, and is the result the
+        // game passed to `save.path`, whose first byte it wrote, 0 on success.
+        let code =
+            (!result.is_null()).then(|| unsafe { enshwick_core::raw::read_at::<u8>(result, 0) });
+        // SAFETY: `path` is the game's own argument to `save.path`, null or
+        // the engine path it just built, owned by the caller of this detour
+        // on this thread.
+        let text = unsafe { read_path(layout, path) };
+        // SAFETY: `GetCurrentThreadId` takes no arguments and cannot fail.
+        let thread = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
+        crate::log!(
+            DEBUG,
+            "save path built ({code:?}) on thread {thread}: {text:?}"
+        );
+        if code == Some(0)
+            && let Some(text) = text
+        {
+            remember(&text, layout.side, steam_saves);
+        }
+        out
     }
-    out
 }
 
 /// The text of an engine path: its buffer and the lengths of its parts.
@@ -573,6 +573,20 @@ pub(crate) fn info(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_build_without_the_save_layout_lists_the_world_keys_off_by_the_entry_it_lacks() {
+        let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
+        link(loader);
+        assert!(KEYS_FUSE.is_off());
+        let listed = crate::engine::diag::parts_off();
+        let keys = listed.iter().find(|p| p.part == KEYS_FUSE.feature());
+        let missing = pinned::server::SAVE_REQUEST.id();
+        assert!(
+            keys.is_some_and(|p| p.reason.starts_with(missing)),
+            "{listed:?}"
+        );
+    }
 
     #[test]
     fn every_save_begins_once_and_the_next_begins_again() {
