@@ -143,9 +143,9 @@ the server cannot raise one for a client. A notice travels as a
 through a text tag of its own. It raises the game's message event in the
 client's world at its next step.
 
-A line or notice for the console or a remote caller goes to no player, since
-neither has an account; the mod logs a warning once. Answer such a request in
-its outcome.
+The console and a remote caller have no account, so a line or notice for them
+goes to no player. The mod logs a warning once. Answer such a request in its
+outcome.
 
 ### A text in each player's language
 
@@ -165,9 +165,9 @@ fn warn_everyone(world: &enshwick::world::World, texts: &Texts) {
 }
 ```
 
-In a handler of `BuildingPlaced` or `BuildingRemoved`, `i18n::language()`
-gives the language of the player whose character placed or removed the
-building.
+A building event is about one player too. In a handler of `BuildingPlaced` or
+`BuildingRemoved`, the language a text is filled in is that of the player whose
+character placed or removed the building.
 
 ## The console
 
