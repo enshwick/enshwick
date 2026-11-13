@@ -11,7 +11,11 @@ mod tests {
     struct Flaky;
 
     impl Mod for Flaky {
-        fn init(_load: &mut Load<'_>) -> Result<Self, Off> {
+        fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+            if let Ok(site) = load.symbol("site") {
+                // SAFETY: the fake runs the handler on its own registers.
+                unsafe { load.hook_at(site, |_| std::panic::panic_any(Bomb)) }?;
+            }
             Ok(Self)
         }
 
@@ -23,6 +27,15 @@ mod tests {
     impl Drop for Flaky {
         fn drop(&mut self) {
             panic!("the lamp would not go out")
+        }
+    }
+
+    /// A panic payload whose own drop panics again.
+    struct Bomb;
+
+    impl Drop for Bomb {
+        fn drop(&mut self) {
+            panic!("the payload's own drop")
         }
     }
 
@@ -56,6 +69,18 @@ mod tests {
         assert_eq!((first, second), (Status::OK, Status::REFUSED));
         assert!(loader.faults().is_empty(), "{:?}", loader.faults());
         assert!(Flaky::instance().is_some());
+    }
+
+    #[test]
+    fn a_hook_s_panic_whose_payload_panics_on_drop_faults_the_mod_and_returns() {
+        const SITE: u64 = 0x1_4009_0a6c;
+        let loader = FakeHost::new().symbol("site", SITE).install();
+        // SAFETY: `enshwick_mod_init` is the export of `declare_mod!` above.
+        assert_eq!(unsafe { loader.init(enshwick_mod_init) }, Status::OK);
+        let mut registers = enshwick::abi::Registers::default();
+        assert_eq!(loader.run_at(SITE, &mut registers), 1);
+        assert_eq!(registers, enshwick::abi::Registers::default());
+        assert_eq!(loader.faults(), ["panic in the hook at 0x140090a6c"]);
     }
 
     #[test]
