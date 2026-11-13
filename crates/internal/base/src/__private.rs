@@ -436,8 +436,22 @@ pub const fn or_default<T: Copy>(given: &[T], default: T) -> T {
     }
 }
 
-pub fn fault_in(hook: &str, payload: &(dyn core::any::Any + Send)) {
-    crate::host::fault_with(&format!("panic in hook {hook}"), payload);
+/// Runs the body of the hook `name` for the entry `detour!` and `#[hook]`
+/// expand.
+///
+/// A panic faults the mod and answers what the rest of the chain returned
+/// into `frame`, or calls it through `rest` when the body never did.
+#[inline]
+pub fn run_hook<R>(
+    name: &str,
+    frame: &Frame<R>,
+    body: impl FnOnce() -> R,
+    rest: impl FnOnce() -> R,
+) -> R {
+    caught(body).unwrap_or_else(|panicked| {
+        crate::host::fault_with(&format!("panic in hook {name}"), panicked.payload());
+        frame.take().unwrap_or_else(rest)
+    })
 }
 
 /// The most detailed level the loader keeps, read at init and again at each
