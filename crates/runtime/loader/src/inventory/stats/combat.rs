@@ -1,3 +1,4 @@
+use std::sync::atomic::Ordering;
 use std::time::Instant;
 
 use enshwick_core::Entity;
@@ -6,7 +7,7 @@ use rustc_hash::FxHashSet;
 
 use crate::engine::loader::Loader;
 
-use super::{Combat, HEALING, SNAPSHOT, Sealed, State, TYPES};
+use super::{Combat, HEALING, HITS, SNAPSHOT, Sealed, State, TYPES};
 
 /// The hit factors of an entity with `values`; `None` when it changes no
 /// hit.
@@ -31,6 +32,12 @@ pub(super) fn combat(sealed: &Sealed, values: &[f32]) -> Option<Combat> {
         .chain(&row.takes)
         .any(|f| f.to_bits() != 1.0f32.to_bits()))
     .then_some(row)
+}
+
+/// Whether any entity has hit factors, for the damage site's check before it
+/// reads a hit: one load.
+pub(crate) fn changes_hits() -> bool {
+    HITS.load(Ordering::Acquire)
 }
 
 /// Applies the hit factors of `source` and `target` to a hit's damage by

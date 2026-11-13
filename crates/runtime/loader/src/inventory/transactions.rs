@@ -30,9 +30,10 @@ use enshwick_core::abi::{
 };
 use run::run;
 
-use crate::engine::loader::Loader;
+use crate::engine::fuse::Fuse;
+use crate::engine::loader::{Loader, Target};
 use crate::engine::memory::read_ptr;
-use crate::engine::mid::MidLink;
+use crate::engine::mid::mid_handler;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::pinned::{Constant, Symbol};
@@ -530,11 +531,12 @@ const CHECKED: [Symbol; 2] = [pinned::inventory::ACTIONS_ROW, pinned::inventory:
 /// `executor` with its scratch block, when the game code at the hook reads
 /// as the build table says.
 fn checked(loader: &Loader, executor: Executor, txn_size: usize) -> Option<Executor> {
-    if !CHECKED.iter().all(|&symbol| loader.code_holds(symbol)) {
-        crate::log!(
-            WARN,
-            "inventories off: the inventory system's code differs from the build table"
-        );
+    if let Some((symbol, why)) = unchecked(loader) {
+        // Read lazily for item facts too: off only where requests are wanted,
+        // by a mod or by a dedicated server's console.
+        if WANTED.load(Ordering::Acquire) || loader.side == Side::SERVER {
+            let _off = loader.fuse_off(&INVENTORY_FUSE, symbol.id(), &why.to_string());
+        }
         return None;
     }
     let layout = std::alloc::Layout::from_size_align(DESC_AREA + txn_size, 16).ok()?;
@@ -550,15 +552,27 @@ fn checked(loader: &Loader, executor: Executor, txn_size: usize) -> Option<Execu
     })
 }
 
+/// The first code check the build fails, with why: absent, or moved.
+fn unchecked(loader: &Loader) -> Option<(Symbol, crate::engine::builds::Unhooked)> {
+    CHECKED.iter().find_map(|&symbol| {
+        let address = loader.address(symbol);
+        crate::engine::builds::hook_target(address, || loader.code_holds(symbol))
+            .err()
+            .map(|why| (symbol, why))
+    })
+}
+
 /// A mod asks for inventories: allowed during init, on a build that has them.
 pub(crate) fn open(loader: &Loader) -> Status {
     if loader.delivery.get().is_some() {
         return Status::TOO_LATE;
     }
+    // Wanted before the executor is read, so a build without it lists the
+    // requests off.
+    WANTED.store(true, Ordering::Release);
     if executor(loader).is_none() {
         return Status::MISSING;
     }
-    WANTED.store(true, Ordering::Release);
     Status::OK
 }
 
@@ -571,24 +585,15 @@ pub(crate) fn link(loader: &Loader) {
     if !WANTED.load(Ordering::Acquire) {
         return;
     }
-    let Some(executor) = executor(loader) else {
+    if executor(loader).is_none() {
         return;
-    };
-    let link = MidLink {
-        owner: ModIndex::LOADER,
-        handler: row,
-        user: 0,
-        priority: i32::MIN,
-        flags: HookFlags::NONE,
-    };
-    let status = loader.mids.relock().add(executor.site, link);
-    if !status.is_ok() {
-        crate::log!(
-            WARN,
-            "inventories off: the row hook was refused ({})",
-            status.0
-        );
     }
+    let _linked = loader.link_mid(
+        &INVENTORY_FUSE,
+        Target::Pinned(pinned::inventory::ACTIONS_ROW),
+        row,
+        HookFlags::NONE,
+    );
 }
 
 /// Records whether the row hook got armed; `failed` are the mid-function
@@ -596,11 +601,13 @@ pub(crate) fn link(loader: &Loader) {
 pub(crate) fn settle(loader: &Loader, failed: impl IntoIterator<Item = u64>) {
     let site = executor(loader).map(|e| e.site);
     let armed = WANTED.load(Ordering::Acquire)
+        && !INVENTORY_FUSE.is_off()
         && site.is_some_and(|site| failed.into_iter().all(|f| f != site));
     ARMED.store(armed, Ordering::Release);
     SETTLED.store(true, Ordering::Release);
     if WANTED.load(Ordering::Acquire) && !armed {
-        crate::log!(WARN, "inventories off: the row hook is not armed");
+        let id = pinned::inventory::ACTIONS_ROW.id();
+        let _off = loader.fuse_off(&INVENTORY_FUSE, id, "could not be armed");
         let gone = QUEUE.drain(|_| true);
         finish(
             gone.iter()
@@ -780,13 +787,7 @@ pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemData, Status> 
 /// Answers the requests that waited too long and hands out the results; on
 /// the game thread after each step.
 pub(crate) fn deliver(now: Instant) {
-    let late = QUEUE.drain(|r| now.duration_since(r.queued) > TIMEOUT);
-    if !late.is_empty() {
-        finish(
-            late.iter()
-                .map(|r| Finished::without_run(r, InventoryResult::TIMED_OUT)),
-        );
-    }
+    expire(now);
     let finished = {
         let mut finished = FINISHED.relock();
         if finished.is_empty() {
@@ -821,6 +822,23 @@ pub(crate) fn deliver(now: Instant) {
     }
 }
 
+/// Answers the requests no row will run: every one as unavailable once the
+/// feature is off, since the mid-hook dispatch passes the row from then on,
+/// and the rest as timed out once they waited past [`TIMEOUT`].
+fn expire(now: Instant) {
+    let off = INVENTORY_FUSE.is_off();
+    let late = QUEUE.drain(|r| off || now.duration_since(r.queued) > TIMEOUT);
+    if late.is_empty() {
+        return;
+    }
+    let outcome = if off {
+        InventoryResult::UNAVAILABLE
+    } else {
+        InventoryResult::TIMED_OUT
+    };
+    finish(late.iter().map(|r| Finished::without_run(r, outcome)));
+}
+
 /// Whether a transaction with these results is committed.
 fn commits(results: &[InventoryOpResult], count: usize, allow_partial: bool) -> bool {
     results.len() == count
@@ -830,16 +848,27 @@ fn commits(results: &[InventoryOpResult], count: usize, allow_partial: bool) -> 
 }
 
 /// The switch of the inventory requests.
-static INVENTORY_FUSE: crate::engine::fuse::Fuse =
-    crate::engine::fuse::Fuse::new("inventory requests");
+static INVENTORY_FUSE: Fuse = Fuse::new("inventory requests");
 
-/// The row hook: runs the queued requests inside the inventory system.
-unsafe extern "system" fn row(registers: *mut Registers, _user: *mut c_void) {
-    // SAFETY: the loader's mid-function stub passes null or its own saved
-    // registers, valid and unaliased for the call.
-    let Some(registers) = (unsafe { registers.as_ref() }) else {
-        return;
-    };
+mid_handler! {
+    /// The row hook: runs the queued requests inside the inventory system.
+    fn row;
+    fuse INVENTORY_FUSE, "the row";
+    |registers| {
+        // SAFETY: the loader links `row` only at the table's
+        // `inventory.actions_row`, so these are the registers there, on the
+        // inventory system's thread while it runs.
+        unsafe { row_hit(registers) }
+    }
+}
+
+/// One hit of [`row`].
+///
+/// # Safety
+///
+/// - `registers` are the ones saved at the table's `inventory.actions_row`,
+///   on the inventory system's thread while it runs.
+unsafe fn row_hit(registers: &Registers) {
     let Some(executor) = EXECUTOR.get().and_then(Option::as_ref) else {
         return;
     };
@@ -891,19 +920,17 @@ unsafe extern "system" fn row(registers: *mut Registers, _user: *mut c_void) {
     let Some(_turn) = Turn::take(&BUSY) else {
         return;
     };
-    let _outcome = INVENTORY_FUSE.run("the row", || {
-        while let Some(request) = QUEUE.claim() {
-            if crate::engine::loader::is_off(request.owner) {
-                continue;
-            }
-            // SAFETY: this runs in the row hook on the inventory system's
-            // thread inside its row loop, with the system's live context in
-            // `ctx` and its filled view at `view`, and `Turn` lets one
-            // transaction run at a time.
-            let finished = unsafe { run(executor, ctx, view, &request) };
-            finish([finished]);
+    while let Some(request) = QUEUE.claim() {
+        if crate::engine::loader::is_off(request.owner) {
+            continue;
         }
-    });
+        // SAFETY: this runs in the row hook on the inventory system's thread
+        // inside its row loop, with the system's live context in `ctx` and
+        // its filled view at `view`, and `Turn` lets one transaction run at a
+        // time.
+        let finished = unsafe { run(executor, ctx, view, &request) };
+        finish([finished]);
+    }
 }
 
 /// Whether `ctx` is a context of the hosted server's world.

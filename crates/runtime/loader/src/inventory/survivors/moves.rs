@@ -6,52 +6,78 @@ use enshwick_core::abi::{BedCheck, Header};
 use enshwick_core::raw::{read_at, read_ptr_at};
 
 use enshwick_base::Relock;
+use enshwick_core::abi::HookFlags;
 
 use super::lookup::{home, position_of};
 use super::{
-    BED_CHECK_NEXT, LOADED, MOVE_ACTIVE, MOVE_NEXT, MOVE_WINDOW, MOVING, SEALED, SKIP_UPDATE,
-    SURVIVORS_FUSE, UPDATE_NEXT, layout,
+    BEDS_FUSE, LOADED, LOOKUP_FUSE, MOVE_ACTIVE, MOVE_WINDOW, MOVING, SEALED, SKIP_UPDATE, layout,
 };
+use crate::engine::loader::{Loader, Target};
+use crate::engine::pinned;
 
-pub(super) unsafe extern "system" fn update_link(
-    bases: *mut u8,
-    npc: *const u32,
-    state: usize,
-    flag: usize,
-) -> usize {
-    let skip = SKIP_UPDATE.with(Cell::take);
-    // SAFETY: the game passes the update a non-null (checked first) pointer
-    // to the `u32` survivor id it updates, readable for the call.
-    if skip.is_some() && !npc.is_null() && skip == Some(unsafe { read_at(npc.cast(), 0) }) {
-        return 0;
-    }
-    // SAFETY: the game's own arguments, passed on unchanged to the rest of
-    // the chain, which has the update's signature.
-    unsafe { UPDATE_NEXT.get()(bases, npc, state, flag) }
+/// Links the survivor lookup's moves and record updates, after its lookups;
+/// false once it is off.
+pub(super) fn link_moves(loader: &Loader) -> bool {
+    loader.link_fused(
+        &LOOKUP_FUSE,
+        Target::Pinned(pinned::npc::MOVE),
+        &MOVE_NEXT,
+        move_link,
+        HookFlags::NONE,
+    ) && loader.link_fused(
+        &LOOKUP_FUSE,
+        Target::Pinned(pinned::npc::UPDATE),
+        &UPDATE_NEXT,
+        update_link,
+        HookFlags::NONE,
+    )
 }
 
-pub(super) unsafe extern "system" fn move_link(
-    ctx: *mut *mut u64,
-    b: usize,
-    c: usize,
-    d: usize,
-) -> usize {
-    let skip = MOVE_ACTIVE.load(Ordering::Acquire)
-        && !ctx.is_null()
-        && SURVIVORS_FUSE
-            .run("a survivor move", || {
-                // SAFETY: the game passes the move the non-null (checked
-                // earlier) behaviour context of the survivor it moves, on the
-                // system's thread while it runs.
-                unsafe { skip_move(ctx) }
-            })
-            .unwrap_or(false);
-    if skip {
-        return 0;
+/// Links the bed checks; false once they are off.
+pub(super) fn link_bed_checks(loader: &Loader) -> bool {
+    loader.link_fused(
+        &BEDS_FUSE,
+        Target::Pinned(pinned::npc::BED_CHECK),
+        &BED_CHECK_NEXT,
+        bed_check_link,
+        HookFlags::NONE,
+    )
+}
+
+crate::engine::chains::chain_detour! {
+    /// The game's `npc.update(bases, npc, state, flag)`, a survivor's record
+    /// update: skipped once for the survivor the uniqueness pass kept
+    /// another entity of. Its work reads one thread-local and the id.
+    fn update_link(bases: *mut u8, npc: *const u32, state: usize, flag: usize) -> usize;
+    next UPDATE_NEXT;
+    |onward| {
+        let skip = SKIP_UPDATE.with(Cell::take);
+        // SAFETY: the game passes the update a non-null (checked first)
+        // pointer to the `u32` survivor id it updates, readable for the call.
+        if skip.is_some() && !npc.is_null() && skip == Some(unsafe { read_at(npc.cast(), 0) }) {
+            0
+        } else {
+            onward.call()
+        }
     }
-    // SAFETY: the game's own arguments, passed on unchanged to the rest of
-    // the chain, which has the move's signature.
-    unsafe { MOVE_NEXT.get()(ctx, b, c, d) }
+}
+
+crate::engine::chains::chain_detour! {
+    /// The game's `npc.move(ctx, ..)`, a survivor's move: skipped for another
+    /// entity of the survivor a staff moves.
+    fn move_link(ctx: *mut *mut u64, b: usize, c: usize, d: usize) -> usize;
+    next MOVE_NEXT;
+    fuse &LOOKUP_FUSE, "a survivor move";
+    |onward| {
+        // SAFETY: the game passes the move the non-null (checked first)
+        // behaviour context of the survivor it moves, on the system's thread
+        // while it runs.
+        if MOVE_ACTIVE.load(Ordering::Acquire) && !ctx.is_null() && unsafe { skip_move(ctx) } {
+            0
+        } else {
+            onward.call()
+        }
+    }
 }
 
 /// Whether this entity is another entity of the survivor a staff moves.
@@ -103,18 +129,23 @@ pub(super) unsafe fn skip_move(ctx: *mut *mut u64) -> bool {
     id == survivor
 }
 
-pub(super) unsafe extern "system" fn bed_check_link(ctx: *mut u8) -> u8 {
-    // SAFETY: the game's own argument, passed on unchanged to the rest of the
-    // chain, which has the bed check's signature.
-    let valid = unsafe { BED_CHECK_NEXT.get()(ctx) };
-    if valid == 0 || ctx.is_null() {
-        return valid;
+crate::engine::chains::chain_detour! {
+    /// The game's `npc.bed_check(ctx)`: a bed the game kept is asked of the
+    /// mods' bed checks.
+    fn bed_check_link(ctx: *mut u8) -> u8;
+    next BED_CHECK_NEXT;
+    fuse &BEDS_FUSE, "a bed check";
+    |onward| {
+        let valid = onward.call();
+        // SAFETY: the game passes the bed check the non-null (checked first)
+        // behaviour context of the survivor it checks, on the system's
+        // thread while it runs.
+        if valid == 0 || ctx.is_null() || unsafe { bed_kept(ctx.cast_const()) } {
+            valid
+        } else {
+            0
+        }
     }
-    // SAFETY: the game passes the bed check the non-null (checked earlier)
-    // behaviour context of the survivor it checks, on the system's thread
-    // while it runs.
-    let keep = SURVIVORS_FUSE.run("a bed check", || unsafe { bed_kept(ctx.cast_const()) });
-    if keep.unwrap_or(true) { valid } else { 0 }
 }
 
 /// Whether the mods keep a bed the game kept.

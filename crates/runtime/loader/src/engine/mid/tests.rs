@@ -675,6 +675,7 @@ fn per_call(function: Unary) -> f64 {
 #[test]
 #[ignore = "a measurement: cargo test -p enshwick-loader --release --lib measures_the_stub_cost -- --ignored --nocapture"]
 fn measures_the_stub_cost() {
+    static MEASURED: Fuse = Fuse::new("measured feature");
     let callback = (nothing as *const ()).addr();
     println!("chosen here: {:?}", Vectors::current());
     let mut cases: Vec<(&str, Unary)> = vec![("clear", plain_clear)];
@@ -702,6 +703,15 @@ fn measures_the_stub_cost() {
     println!(
         "clear, one handler through dispatch: {dispatched:.2} ns (+{:.2} over the stub alone)",
         dispatched - alone
+    );
+    let mut mids = Mids::default();
+    let ours = link(ModIndex::LOADER, empty, i32::MIN);
+    assert_eq!(mids.add_fused(0x10, ours, Some(&MEASURED)), Status::OK);
+    let site = core::ptr::from_ref(mids.sites(|_| false)[0]).expose_provenance();
+    let fused = per_call(hook_mark_with(plain_clear, dispatching, site, vectors));
+    println!(
+        "clear, one loader handler of a feature through dispatch: {fused:.2} ns (+{:.2} over a mod's)",
+        fused - dispatched
     );
 }
 
@@ -898,4 +908,75 @@ fn duplicate_and_exclusive_handlers_are_refused() {
         Status::TOO_LATE
     );
     assert_eq!(mids.len(), 2);
+}
+
+/// Calls `site`'s handlers on `registers` as its stub would.
+fn hit(site: &'static Site, registers: &mut Registers) {
+    // SAFETY: `registers` is borrowed unaliased for the call, and `site` is
+    // a `&'static Site` from `Mids::sites`.
+    unsafe { dispatch(registers, site) };
+}
+
+#[test]
+fn a_loader_handler_of_a_feature_that_turns_off_is_passed_and_a_mod_s_still_runs() {
+    static GLOW: Fuse = Fuse::new("mid glow");
+    let mut mids = Mids::default();
+    let ours = link(ModIndex::LOADER, add_hundred, i32::MIN);
+    assert_eq!(mids.add_fused(0x10, ours, Some(&GLOW)), Status::OK);
+    assert_eq!(
+        mids.add(0x10, link(ModIndex::new(1), add_hundred, 0)),
+        Status::OK
+    );
+    mids.seal();
+    let site = mids.sites(|_| false)[0];
+    let mut registers = Registers::default();
+    hit(site, &mut registers);
+    assert_eq!(registers.rax, 200);
+    GLOW.blow("a test");
+    hit(site, &mut registers);
+    assert_eq!(registers.rax, 300, "only the mod's handler ran");
+}
+
+#[test]
+fn sealing_drops_the_handlers_of_features_already_off_and_addresses_left_empty() {
+    static LAMP: Fuse = Fuse::new("mid lamp");
+    let mut mids = Mids::default();
+    let first = link(ModIndex::LOADER, add_hundred, i32::MIN);
+    let second = link(ModIndex::LOADER, add_hundred, i32::MIN);
+    assert_eq!(mids.add_fused(0x10, first, Some(&LAMP)), Status::OK);
+    assert_eq!(mids.add_fused(0x20, second, Some(&LAMP)), Status::OK);
+    assert_eq!(
+        mids.add(0x20, link(ModIndex::new(0), add_hundred, 0)),
+        Status::OK
+    );
+    LAMP.blow("a test");
+    mids.seal();
+    assert_eq!(
+        mids.addresses(),
+        [0x20],
+        "only the address a mod still wants"
+    );
+    assert_eq!(mids.owners(0x20), [ModIndex::new(0)]);
+}
+
+#[test]
+#[should_panic(expected = "outside the function")]
+fn a_hook_address_outside_its_function_is_flagged_instead_of_passed() {
+    let _branch = branch_into_hook(&[0x90; 32], 0x1000, 0x2000);
+}
+
+#[test]
+fn the_features_at_an_address_are_the_loader_s_links_only() {
+    static WICK: Fuse = Fuse::new("mid wick");
+    let mut mids = Mids::default();
+    let ours = link(ModIndex::LOADER, add_hundred, i32::MIN);
+    assert_eq!(mids.add_fused(0x10, ours, Some(&WICK)), Status::OK);
+    assert_eq!(
+        mids.add(0x10, link(ModIndex::new(1), add_hundred, 0)),
+        Status::OK
+    );
+    let features = mids.features_at(0x10);
+    assert_eq!(features.len(), 1);
+    assert!(core::ptr::eq(features[0], &raw const WICK));
+    assert!(mids.features_at(0x20).is_empty());
 }

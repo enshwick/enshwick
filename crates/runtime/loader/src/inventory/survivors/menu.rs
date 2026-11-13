@@ -1,11 +1,54 @@
 use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
+use enshwick_core::abi::HookFlags;
+
+use crate::engine::chains::Onward;
+use crate::engine::loader::{Loader, Target};
+use crate::engine::pinned;
+
 use super::{
-    ItemMap, LOADED, MENU_NEXT, Menu, REGISTRY_NEXT, SEALED, STATUS_ROWS, SURVIVORS_FUSE,
-    UI_PLAY_DATA, UI_STATE, UI_WORDS, item_map, menu,
+    FILED_FUSE, ItemMap, LOADED, MENU_FUSE, Menu, SEALED, STATUS_ROWS, UI_PLAY_DATA, UI_STATE,
+    UI_WORDS, item_map, menu,
 };
 
-pub(super) unsafe extern "system" fn registry_link(registry: *mut u8) {
+/// Links the registry load that files the staff items; false once it is
+/// off.
+pub(super) fn link_registry(loader: &Loader) -> bool {
+    loader.link_fused(
+        &FILED_FUSE,
+        Target::Pinned(pinned::survivors::REGISTRY_LOAD),
+        &REGISTRY_NEXT,
+        registry_link,
+        HookFlags::NONE,
+    )
+}
+
+/// Links the survivor menu's system `menu`; false once it is off.
+pub(super) fn link_menu(loader: &Loader, menu: Target<'_>) -> bool {
+    loader.link_fused(&MENU_FUSE, menu, &MENU_NEXT, menu_link, HookFlags::NONE)
+}
+
+crate::engine::chains::chain_detour! {
+    /// The game's `survivors.registry_load(registry)`: files the staff items
+    /// once the load built the registry.
+    fn registry_link(registry: *mut u8) -> ();
+    next REGISTRY_NEXT;
+    fuse &FILED_FUSE, "the staff item filing";
+    |onward| {
+        // SAFETY: the game's own registry, live for the call, on the load's
+        // thread.
+        unsafe { load_registry(onward, registry) }
+    }
+}
+
+/// Runs the registry load `onward` and files the staff items in the
+/// registry it built.
+///
+/// # Safety
+///
+/// - `registry` is the game's own argument to the load, null or live for
+///   the call, on the load's thread.
+unsafe fn load_registry(onward: &Onward<(), impl Fn()>, registry: *mut u8) {
     let ready = LOADED
         .get()
         .and_then(|loader| item_map(loader))
@@ -18,27 +61,23 @@ pub(super) unsafe extern "system" fn registry_link(registry: *mut u8) {
     // until it is built, at the table's `survivors.registry_loaded`.
     let built =
         ready.is_some_and(|(m, _)| !unsafe { read_ptr_at::<u8>(registry, m.loaded) }.is_null());
-    // SAFETY: the game's own argument, passed on unchanged to the rest of the
-    // chain, which has the registry load's signature.
-    unsafe { REGISTRY_NEXT.get()(registry) };
+    onward.call();
     let Some((map, sealed)) = ready.filter(|_| !built) else {
         return;
     };
-    let _filed = SURVIVORS_FUSE.run("the staff item filing", || {
-        let mut filed = 0;
-        for &(item, survivor) in &sealed.items {
-            // SAFETY: the game's load just built the non-null registry, whose
-            // staff item map lies at the table's `survivors.registry_item_map`;
-            // the load's thread alone uses it during the call.
-            if unsafe { file(map, registry.wrapping_add(map.at), item, survivor) } {
-                filed += 1;
-            }
+    let mut filed = 0;
+    for &(item, survivor) in &sealed.items {
+        // SAFETY: the game's load just built the non-null registry, whose
+        // staff item map lies at the table's `survivors.registry_item_map`;
+        // the load's thread alone uses it during the call.
+        if unsafe { file(map, registry.wrapping_add(map.at), item, survivor) } {
+            filed += 1;
         }
-        crate::log!(
-            INFO,
-            "survivors: filed {filed} staff items in the survivor registry"
-        );
-    });
+    }
+    crate::log!(
+        INFO,
+        "survivors: filed {filed} staff items in the survivor registry"
+    );
 }
 
 /// Maps `item` to `survivor` in the game's map at `table`, as its own build
@@ -100,17 +139,21 @@ pub(super) unsafe fn file(map: &ItemMap, table: *mut u8, item: u32, survivor: u3
     true
 }
 
-pub(super) unsafe extern "system" fn menu_link(ctx: *mut u64) {
-    // SAFETY: the game's own argument, passed on unchanged to the rest of the
-    // chain, which has the system's signature.
-    unsafe { MENU_NEXT.get()(ctx) };
-    if ctx.is_null() {
-        return;
+crate::engine::chains::chain_detour! {
+    /// The reflected `ui_npc_status` system's entry, a system entry taking
+    /// its context: merges the mods' statuses after vanilla's pass.
+    fn menu_link(ctx: *mut u64) -> ();
+    next MENU_NEXT;
+    fuse &MENU_FUSE, "the status merge";
+    |onward| {
+        onward.call();
+        if !ctx.is_null() {
+            // SAFETY: the game passes `ui_npc_status` its non-null (checked
+            // first) live context, used here on the system's thread after
+            // vanilla's pass, while the system still runs.
+            unsafe { merge_statuses(ctx) };
+        }
     }
-    // SAFETY: the game passes `ui_npc_status` its non-null (checked earlier)
-    // live context, used here on the system's thread after vanilla's pass,
-    // while the system still runs.
-    let _done = SURVIVORS_FUSE.run("the status merge", || unsafe { merge_statuses(ctx) });
 }
 
 /// Hands every survivor's statuses to the merging mod and writes its answer

@@ -158,6 +158,51 @@ fn late_requests_drain_and_the_rest_stay_in_order() {
     assert!(queue.claim().is_none());
 }
 
+/// A turn over the process-wide queue, fuse and results, for the tests that
+/// use them in one process.
+static SHARED: Mutex<()> = Mutex::new(());
+
+/// The outcome the results hold for the request with `user`.
+fn outcome_of(user: usize) -> Option<u32> {
+    FINISHED
+        .relock()
+        .iter()
+        .find(|f| f.user == user)
+        .map(|f| f.outcome)
+}
+
+#[test]
+fn requests_queued_when_the_feature_turns_off_are_answered_unavailable_at_the_next_step() {
+    let _turn = SHARED.relock();
+    QUEUE.push(request(7));
+    INVENTORY_FUSE.blow("a test");
+    expire(Instant::now());
+    assert!(!QUEUE.pending.load(Ordering::Acquire), "no row runs it now");
+    assert_eq!(outcome_of(7), Some(InventoryResult::UNAVAILABLE));
+}
+
+#[test]
+fn a_wanted_row_hook_that_did_not_arm_turns_the_requests_off_and_answers_the_queue() {
+    let _turn = SHARED.relock();
+    WANTED.store(true, Ordering::Release);
+    QUEUE.push(request(9));
+    settle(&crate::start::tests::bare_loader(), []);
+    assert!(
+        INVENTORY_FUSE.is_off(),
+        "off by its fuse, not only in the log"
+    );
+    assert!(!QUEUE.pending.load(Ordering::Acquire));
+    assert_eq!(outcome_of(9), Some(InventoryResult::UNAVAILABLE));
+}
+
+#[test]
+fn a_build_without_the_checked_code_names_it_absent_not_moved() {
+    let loader = crate::start::tests::bare_loader();
+    let (symbol, why) = unchecked(&loader).unwrap();
+    assert_eq!(symbol.id(), CHECKED[0].id());
+    assert_eq!(why, crate::engine::builds::Unhooked::Absent);
+}
+
 #[test]
 fn operations_must_name_what_they_need() {
     let give = InventoryOp {

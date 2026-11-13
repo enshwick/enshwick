@@ -412,8 +412,58 @@ impl Loader {
         detour: F,
         flags: HookFlags,
     ) -> bool {
-        if feature.is_off() {
+        let Some((id, address)) = self.checked_target(feature, target) else {
             return false;
+        };
+        let link = Link {
+            owner: ModIndex::LOADER,
+            detour: Next::<F>::address_of(detour),
+            next: next.slot(),
+            priority: i32::MIN,
+            flags,
+            hop: None,
+            feature: Some(feature),
+        };
+        let status = self.chains.relock().add(address, link);
+        self.linked(feature, id, address, status)
+    }
+
+    /// Links one of the loader's own mid-function `handler`s of `feature` at
+    /// `target`, ahead of every mod's handler there, checked and armed all
+    /// or none as [`Loader::link_fused`] links a detour. Declare the handler
+    /// with [`mid_handler!`](crate::engine::mid::mid_handler). True when
+    /// linked.
+    pub(crate) fn link_mid(
+        &self,
+        feature: &'static Fuse,
+        target: Target<'_>,
+        handler: api_frame::MidHookFn,
+        flags: HookFlags,
+    ) -> bool {
+        let Some((id, address)) = self.checked_target(feature, target) else {
+            return false;
+        };
+        let link = crate::engine::mid::MidLink {
+            owner: ModIndex::LOADER,
+            handler,
+            user: 0,
+            priority: i32::MIN,
+            flags,
+        };
+        let status = self.mids.relock().add_fused(address, link, Some(feature));
+        self.linked(feature, id, address, status)
+    }
+
+    /// The address of `target` for a link of `feature`, after its checks: a
+    /// table symbol's code must hold by [`Loader::code_holds`]. `None` while
+    /// the feature is off, and when a check fails, which turns it off.
+    fn checked_target<'a>(
+        &self,
+        feature: &'static Fuse,
+        target: Target<'a>,
+    ) -> Option<(&'a str, u64)> {
+        if feature.is_off() {
+            return None;
         }
         let (id, address) = match target {
             Target::Pinned(symbol) => (
@@ -426,20 +476,24 @@ impl Loader {
                 (id, crate::engine::builds::hook_target(address, || true))
             }
         };
-        let address = match address {
-            Ok(address) => address,
-            Err(why) => return self.fuse_off(feature, id, &why.to_string()),
-        };
-        let link = Link {
-            owner: ModIndex::LOADER,
-            detour: Next::<F>::address_of(detour),
-            next: next.slot(),
-            priority: i32::MIN,
-            flags,
-            hop: None,
-            feature: Some(feature),
-        };
-        let status = self.chains.relock().add(address, link);
+        match address {
+            Ok(address) => Some((id, address)),
+            Err(why) => {
+                let _off = self.fuse_off(feature, id, &why.to_string());
+                None
+            }
+        }
+    }
+
+    /// Whether the link of `feature` on `address`, the entry `id`, was made
+    /// with `status`; a refused link turns the feature off.
+    fn linked(
+        &self,
+        feature: &'static Fuse,
+        id: &str,
+        address: u64,
+        status: api_frame::Status,
+    ) -> bool {
         if !status.is_ok() {
             return self.fuse_off(feature, id, &format!("refused the link ({})", status.0));
         }
@@ -458,17 +512,19 @@ impl Loader {
     /// `reason`, by [`Fuse::turn_off`]: one warning that names the build, the
     /// feature off on the Mods screen and in the status summary, and its
     /// links wired past. Always false, for the caller to return.
-    fn fuse_off(&self, feature: &'static Fuse, id: &str, reason: &str) -> bool {
+    pub(crate) fn fuse_off(&self, feature: &'static Fuse, id: &str, reason: &str) -> bool {
         let reason = self.build.reason(id, reason);
         feature.turn_off(&Off::build(feature.feature(), &self.build.name, id, reason));
         false
     }
 
-    /// Turns off every loader feature with a link on `target`, the entry
-    /// `id` that could not be armed for `reason`, so the feature's links on
-    /// other targets are wired past too and no feature runs half armed.
+    /// Turns off every loader feature with a detour or a mid-function hook
+    /// on `target`, the entry `id` that could not be armed for `reason`, so
+    /// the feature's links on other targets are passed too and no feature
+    /// runs half armed.
     pub(crate) fn unarmed(&self, target: u64, id: &str, reason: &str) {
-        let features = self.chains.relock().features_at(target);
+        let mut features = self.chains.relock().features_at(target);
+        features.extend(self.mids.relock().features_at(target));
         for feature in features {
             let _off = self.fuse_off(feature, id, reason);
         }

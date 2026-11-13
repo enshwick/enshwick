@@ -28,8 +28,8 @@ use std::time::Instant;
 use enshwick_core::abi::{Header, HookFlags, ItemAction, ItemActionFn, Side, Status};
 use enshwick_core::raw::{read_at, write_at};
 
-use crate::engine::chains::Next;
 use crate::engine::ecs::{Components, Engine};
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Registered, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::registry::Registry;
@@ -43,15 +43,12 @@ static FILTERS: Registry<Registered<ItemActionFn>> = Registry::new();
 static LOADED: OnceLock<(&'static Loader, Layout, Components)> = OnceLock::new();
 static EVENTS: OnceLock<Events> = OnceLock::new();
 
-type ActionsFn = unsafe extern "system" fn(*mut u64) -> u64;
-
-// SAFETY: `ActionsFn` is the signature of a system entry, here the reflected
-// `equipment_actions` system's, and `link` uses this slot only as that
-// function's next.
-static EQUIPMENT_NEXT: Next<ActionsFn> = unsafe { Next::new() };
-
 /// The switch of the item filters.
-static ITEMS_FUSE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("item filters");
+static ITEMS_FUSE: Fuse = Fuse::new("item filters");
+
+/// The switch of the equips the filters see, apart from the uses and events
+/// so a build without the equipment system leaves those on.
+static EQUIPS_FUSE: Fuse = Fuse::new("item equips");
 
 /// Where one versioned action sits in the player's input, and where its
 /// handled version sits in the consumed input, in bytes.
@@ -299,11 +296,11 @@ pub(crate) fn link(loader: &'static Loader) {
     };
     // The uses go through interactions' link on the same system: the
     // loader links a target once.
-    let equips = loader.link_feature(
-        "item equips",
+    let equips = loader.link_fused(
+        &EQUIPS_FUSE,
         Target::Found(EQUIPMENT_SYSTEM, entry(EQUIPMENT_SYSTEM)),
         &EQUIPMENT_NEXT,
-        equipment_actions as ActionsFn,
+        equipment_actions,
         HookFlags::NONE,
     );
     crate::log!(
@@ -366,16 +363,20 @@ pub(crate) unsafe fn screen_uses(ctx: *mut u64) {
     }
 }
 
-unsafe extern "system" fn equipment_actions(ctx: *mut u64) -> u64 {
-    if !ctx.is_null() {
-        // SAFETY: `ctx` is non-null by the check before it and is the system's
-        // own context, at its entry on its thread.
-        let _done = ITEMS_FUSE.run("the item equips", || unsafe { screen_pending(ctx, true) });
+crate::engine::chains::chain_detour! {
+    /// The entry of the reflected `equipment_actions` system, a system entry
+    /// taking its context: asks the filters about the pending equips first.
+    fn equipment_actions(ctx: *mut u64) -> u64;
+    next EQUIPMENT_NEXT;
+    fuse &EQUIPS_FUSE, "the item equips";
+    |onward| {
+        if !ctx.is_null() {
+            // SAFETY: `ctx` is non-null by the check before it and is the
+            // system's own context, at its entry on its thread.
+            unsafe { screen_pending(ctx, true) };
+        }
+        onward.call()
     }
-    // SAFETY: this detour runs only as the `equipment_actions` system's
-    // link, so the slot holds the next function of that signature; the game's
-    // context passes unchanged.
-    unsafe { EQUIPMENT_NEXT.get()(ctx) }
 }
 
 /// Asks the filters about each player's pending item action, or equipment

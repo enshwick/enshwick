@@ -134,6 +134,21 @@ fn hits_without_factors_stay_as_they_are() {
 }
 
 #[test]
+fn hits_count_as_changed_only_while_the_snapshot_holds_hit_factors() {
+    let mut next = Snapshot::default();
+    let factors = Combat {
+        deals: [1.5; TYPES],
+        takes: [1.0; TYPES],
+    };
+    next.combat.insert(7, factors);
+    assert!(next.changes_hits());
+    assert!(
+        !Snapshot::default().changes_hits(),
+        "an empty snapshot changes no hit"
+    );
+}
+
+#[test]
 fn saved_modifiers_round_trip() {
     let saved = vec![Saved {
         player: 77,

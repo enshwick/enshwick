@@ -7,13 +7,17 @@ use enshwick_core::abi::{Header, Side, SurvivorLookup};
 use enshwick_core::altars::cell_of_fixed;
 use enshwick_core::raw::read_at;
 
+use enshwick_core::abi::HookFlags;
+
+use crate::engine::chains::Onward;
 use crate::engine::ecs::Engine;
-use crate::engine::loader::Loader;
+use crate::engine::loader::{Loader, Target};
+use crate::engine::pinned;
 use enshwick_base::Relock;
 
 use super::{
-    CURSOR_NEXT, LOADED, LOOKUP_NEXT, Layout, LookupFn, MOVE_ACTIVE, MOVING, NPC_COMMON_TYPE,
-    SEALED, SKIP_UPDATE, SURVIVORS_FUSE, TRANSFORM_TYPE, layout,
+    LOADED, LOOKUP_FUSE, Layout, MOVE_ACTIVE, MOVING, NPC_COMMON_TYPE, SEALED, SKIP_UPDATE,
+    TRANSFORM_TYPE, layout,
 };
 
 /// Asks the registered lookup; `None` for the game's own answer.
@@ -54,36 +58,64 @@ pub(super) fn call(
     }
 }
 
-pub(super) unsafe extern "system" fn lookup_link(bases: *mut u8, npc: *const u32) -> u32 {
-    // SAFETY: the game's own arguments to `npc.lookup`, passed with the rest
-    // of its chain, at the chain's entry on the game's calling thread.
-    unsafe { lookup(LOOKUP_NEXT.get(), bases, npc) }
+/// Links the two lookups of the survivor lookup; false once it is off.
+pub(super) fn link(loader: &Loader) -> bool {
+    loader.link_fused(
+        &LOOKUP_FUSE,
+        Target::Pinned(pinned::npc::LOOKUP),
+        &LOOKUP_NEXT,
+        lookup_link,
+        HookFlags::CALLER_FRAME,
+    ) && loader.link_fused(
+        &LOOKUP_FUSE,
+        Target::Pinned(pinned::npc::LOOKUP_CURSOR),
+        &CURSOR_NEXT,
+        cursor_link,
+        HookFlags::CALLER_FRAME,
+    )
 }
 
-pub(super) unsafe extern "system" fn cursor_link(bases: *mut u8, npc: *const u32) -> u32 {
-    // SAFETY: the game's own arguments to `npc.lookup_cursor`, passed with the
-    // rest of its chain, at the chain's entry on the game's calling thread.
-    unsafe { lookup(CURSOR_NEXT.get(), bases, npc) }
+crate::engine::chains::chain_detour! {
+    /// The game's `npc.lookup(bases, npc)`, which finds a survivor's entity.
+    fn lookup_link(bases: *mut u8, npc: *const u32) -> u32;
+    next LOOKUP_NEXT;
+    fuse &LOOKUP_FUSE, "a survivor lookup";
+    |onward| {
+        // SAFETY: the game's own `npc` to the lookup, at the chain's entry
+        // on the game's calling thread.
+        unsafe { lookup(onward, npc) }
+    }
 }
 
+crate::engine::chains::chain_detour! {
+    /// The game's `npc.lookup_cursor(bases, npc)`, the lookup of the
+    /// survivor under the cursor; its signature is `npc.lookup`'s.
+    fn cursor_link(bases: *mut u8, npc: *const u32) -> u32;
+    next CURSOR_NEXT;
+    fuse &LOOKUP_FUSE, "a survivor cursor lookup";
+    |onward| {
+        // SAFETY: the game's own `npc` to the lookup, at the chain's entry
+        // on the game's calling thread.
+        unsafe { lookup(onward, npc) }
+    }
+}
+
+/// The survivor's entity as the mods answer the lookup that `onward` runs.
+///
 /// # Safety
 ///
-/// - `next` is the rest of the chain of the hooked lookup, and `bases` and
-///   `npc` are the arguments the game passed it.
-/// - `npc` is null or readable for a `u32` survivor id for the call.
+/// - `onward` runs the rest of the chain of the hooked lookup, and `npc` is
+///   the survivor id argument the game passed it: null or readable for a
+///   `u32` for the call.
 /// - The call runs at the chain's entry, on the thread the game called the
 ///   lookup on, so the loader's caller frame is the lookup's.
-pub(super) unsafe fn lookup(next: LookupFn, bases: *mut u8, npc: *const u32) -> u32 {
+unsafe fn lookup(onward: &Onward<u32, impl Fn() -> u32>, npc: *const u32) -> u32 {
     let Some(loader) = LOADED.get() else {
-        // SAFETY: the caller's contract makes `next` the rest of the chain
-        // and `bases` and `npc` the game's own arguments to it.
-        return unsafe { next(bases, npc) };
+        return onward.call();
     };
     // Read the frame before the chain runs: a deeper hook takes its own.
     let frame = (loader.caller_frame)();
-    // SAFETY: the caller's contract makes `next` the rest of the chain and
-    // `bases` and `npc` the game's own arguments to it.
-    let found = unsafe { next(bases, npc) };
+    let found = onward.call();
     if npc.is_null() || frame.rsp == 0 {
         return found;
     }
@@ -99,12 +131,9 @@ pub(super) unsafe fn lookup(next: LookupFn, bases: *mut u8, npc: *const u32) -> 
     // SAFETY: the caller's contract makes the non-null `npc` (checked earlier)
     // readable for the `u32` survivor id the game looks up.
     let survivor: u32 = unsafe { read_at(npc.cast(), 0) };
-    let answered = SURVIVORS_FUSE.run("a survivor lookup", || {
-        // SAFETY: `frame` is the caller frame of the running lookup, taken at
-        // its chain's entry on this thread, and `caller` its return address.
-        unsafe { resolve(loader, layout, engine, found, survivor, caller, &frame) }
-    });
-    answered.flatten().unwrap_or(found)
+    // SAFETY: `frame` is the caller frame of the running lookup, taken at
+    // its chain's entry on this thread, and `caller` its return address.
+    unsafe { resolve(loader, layout, engine, found, survivor, caller, &frame) }.unwrap_or(found)
 }
 
 /// # Safety

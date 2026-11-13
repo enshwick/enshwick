@@ -11,16 +11,10 @@ use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use enshwick_core::abi::{
-    BedCheckFn, HookFlags, Side, Status, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
-};
+use enshwick_core::abi::{BedCheckFn, Side, Status, SummonFn, SurvivorLookupFn, SurvivorStatusFn};
 use enshwick_core::raw::read_at;
-use lookup::{cursor_link, lookup_link};
-use menu::{menu_link, registry_link};
-use moves::{bed_check_link, move_link, update_link};
-use summons::spawn_link;
 
-use crate::engine::chains::Next;
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Registered, Target, take};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned::{self, Symbol};
@@ -213,46 +207,6 @@ thread_local! {
     static STATUS_ROWS: RefCell<StatusRows> = const { RefCell::new((Vec::new(), Vec::new())) };
 }
 
-// SAFETY: `LookupFn` is the exact signature of the game function at the
-// table's `npc.lookup`, and the slot is used only as the `next` of the
-// `lookup_link` link on it.
-static LOOKUP_NEXT: Next<LookupFn> = unsafe { Next::new() };
-// SAFETY: `LookupFn` is the exact signature of the game function at the
-// table's `npc.lookup_cursor`, and the slot is used only as the `next` of the
-// `cursor_link` link on it.
-static CURSOR_NEXT: Next<LookupFn> = unsafe { Next::new() };
-// SAFETY: `MoveFn` is the exact signature of the game function at the
-// table's `npc.move`, and the slot is used only as the `next` of the
-// `move_link` link on it.
-static MOVE_NEXT: Next<MoveFn> = unsafe { Next::new() };
-// SAFETY: `UpdateFn` is the exact signature of the game function at the
-// table's `npc.update`, and the slot is used only as the `next` of the
-// `update_link` link on it.
-static UPDATE_NEXT: Next<UpdateFn> = unsafe { Next::new() };
-// SAFETY: `BedCheckGameFn` is the exact signature of the game function at the
-// table's `npc.bed_check`, and the slot is used only as the `next` of the
-// `bed_check_link` link on it.
-static BED_CHECK_NEXT: Next<BedCheckGameFn> = unsafe { Next::new() };
-// SAFETY: `SpawnFn` is the exact signature of the game function at the
-// table's `survivors.spawn`, and the slot is used only as the `next` of the
-// `spawn_link` link on it.
-static SPAWN_NEXT: Next<SpawnFn> = unsafe { Next::new() };
-// SAFETY: `RegistryLoadFn` is the exact signature of the game function at the
-// table's `survivors.registry_load`, and the slot is used only as the `next`
-// of the `registry_link` link on it.
-static REGISTRY_NEXT: Next<RegistryLoadFn> = unsafe { Next::new() };
-// SAFETY: `SystemFn` is the exact signature of the reflected ECS system
-// `ui_npc_status`, and the slot is used only as the `next` of the
-// `menu_link` link on its entry.
-static MENU_NEXT: Next<SystemFn> = unsafe { Next::new() };
-
-type LookupFn = unsafe extern "system" fn(bases: *mut u8, npc: *const u32) -> u32;
-type MoveFn = unsafe extern "system" fn(*mut *mut u64, usize, usize, usize) -> usize;
-type UpdateFn = unsafe extern "system" fn(*mut u8, *const u32, usize, usize) -> usize;
-type BedCheckGameFn = unsafe extern "system" fn(*mut u8) -> u8;
-type SpawnFn = unsafe extern "system" fn(*mut u64, *mut u8) -> u8;
-type RegistryLoadFn = unsafe extern "system" fn(*mut u8);
-type SystemFn = unsafe extern "system" fn(*mut u64);
 type FindSlotFn = unsafe extern "system" fn(map: *mut u8, key: *const u32) -> u64;
 type TemplateFn = unsafe extern "system" fn(ctx: *mut u64) -> *const [u8; 16];
 
@@ -494,8 +448,7 @@ fn menu_system(loader: &Loader) -> Option<Target<'static>> {
                 .map(enshwick_gamedata::reflect::System::entry),
         )),
         Err(why) => {
-            crate::log!(WARN, "survivor menu off: {why}");
-            crate::engine::diag::part_off("survivor menu", &why.to_string());
+            let _off = loader.fuse_off(&MENU_FUSE, MENU_SYSTEM, &why.to_string());
             None
         }
     }
@@ -522,73 +475,14 @@ pub(crate) fn link(loader: &'static Loader) {
     );
     let _first = SEALED.set(sealed);
     let _first = LOADED.set(loader);
-    if lookup {
-        loader.link_feature(
-            "survivor lookup",
-            Target::Pinned(pinned::npc::LOOKUP),
-            &LOOKUP_NEXT,
-            lookup_link as LookupFn,
-            HookFlags::CALLER_FRAME,
-        );
-        loader.link_feature(
-            "survivor lookup",
-            Target::Pinned(pinned::npc::LOOKUP_CURSOR),
-            &CURSOR_NEXT,
-            cursor_link as LookupFn,
-            HookFlags::CALLER_FRAME,
-        );
-        loader.link_feature(
-            "survivor lookup",
-            Target::Pinned(pinned::npc::MOVE),
-            &MOVE_NEXT,
-            move_link,
-            HookFlags::NONE,
-        );
-        loader.link_feature(
-            "survivor lookup",
-            Target::Pinned(pinned::npc::UPDATE),
-            &UPDATE_NEXT,
-            update_link,
-            HookFlags::NONE,
-        );
-    }
-    if beds {
-        loader.link_feature(
-            "survivor bed checks",
-            Target::Pinned(pinned::npc::BED_CHECK),
-            &BED_CHECK_NEXT,
-            bed_check_link,
-            HookFlags::NONE,
-        );
-    }
-    if summons {
-        loader.link_feature(
-            "survivor staffs",
-            Target::Pinned(pinned::survivors::SPAWN),
-            &SPAWN_NEXT,
-            spawn_link,
-            HookFlags::NONE,
-        );
-    }
-    if items {
-        loader.link_feature(
-            "survivor filed items",
-            Target::Pinned(pinned::survivors::REGISTRY_LOAD),
-            &REGISTRY_NEXT,
-            registry_link,
-            HookFlags::NONE,
-        );
-    }
-    if status && let Some(menu) = menu_system(loader) {
-        loader.link_feature(
-            "survivor menu",
-            menu,
-            &MENU_NEXT,
-            menu_link,
-            HookFlags::NONE,
-        );
-    }
-    if lookup || beds || summons || items || status {
+    let wanted = lookup || beds || summons || items || status;
+    let lookup = lookup && lookup::link(loader) && moves::link_moves(loader);
+    let beds = beds && moves::link_bed_checks(loader);
+    let summons = summons && summons::link(loader);
+    let items = items && menu::link_registry(loader);
+    let status =
+        status && menu_system(loader).is_some_and(|system| menu::link_menu(loader, system));
+    if wanted {
         crate::log!(
             INFO,
             "survivors: lookup {lookup}, bed checks {beds}, staffs {summons}, filed items {items}, menu {status}"
@@ -647,9 +541,17 @@ pub(crate) fn forget() {
     MOVE_ACTIVE.store(false, Ordering::Release);
 }
 
-/// The survivors features' switch.
-static SURVIVORS_FUSE: crate::engine::fuse::Fuse =
-    crate::engine::fuse::Fuse::new("survivor features");
+/// The survivor lookups with the moves and record updates that keep one
+/// entity per survivor: a failed link or a panic turns all of them off.
+static LOOKUP_FUSE: Fuse = Fuse::new("survivor lookup");
+/// The mods' bed checks.
+static BEDS_FUSE: Fuse = Fuse::new("survivor bed checks");
+/// The staffs' summon filters.
+static STAFFS_FUSE: Fuse = Fuse::new("survivor staffs");
+/// The staff items filed in the survivor registry.
+static FILED_FUSE: Fuse = Fuse::new("survivor filed items");
+/// The survivor menu's merged statuses.
+static MENU_FUSE: Fuse = Fuse::new("survivor menu");
 
 mod lookup;
 mod menu;

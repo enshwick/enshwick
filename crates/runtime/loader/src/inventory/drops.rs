@@ -19,6 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use enshwick_core::abi::{DropRequest, Header, Side, SpawnRequest, Status};
 use enshwick_core::affixes::ItemRarity;
 
+use crate::engine::fuse::{Fuse, Off};
 use crate::engine::loader::Loader;
 
 /// The template the game spills loose loot with.
@@ -48,6 +49,9 @@ struct Reading {
 
 static READING: Reading = Reading::new();
 
+/// The switch of the item drops, off once the pickup does not read.
+static DROPS_FUSE: Fuse = Fuse::new("item drops");
+
 impl Reading {
     const fn new() -> Self {
         Self {
@@ -56,23 +60,30 @@ impl Reading {
         }
     }
 
-    /// Runs `read` on a thread of its own, unless a read started before.
+    /// Runs `read` on a thread of its own, unless a read started before, on
+    /// the game build named `build`.
     fn start(
         &'static self,
+        build: &'static str,
         read: impl FnOnce() -> Result<Layout, ReadLayoutError> + Send + 'static,
     ) {
         if self.started.load(Ordering::Acquire) || self.started.swap(true, Ordering::AcqRel) {
             return;
         }
-        crate::engine::off_thread::read("item drops", read, |read, took| {
-            self.finish(read, took);
+        crate::engine::off_thread::read(DROPS_FUSE.feature(), read, move |read, took| {
+            self.finish(read, took, build);
         });
     }
 
     /// Keeps `read` for the process, then logs it and turns drops off on a
     /// failure: kept first, so a drop waiting in [`Reading::layout`] wakes
     /// even if the log panics.
-    fn finish(&self, read: Result<Layout, ReadLayoutError>, took: std::time::Duration) {
+    fn finish(
+        &self,
+        read: Result<Layout, ReadLayoutError>,
+        took: std::time::Duration,
+        build: &str,
+    ) {
         let why = match read {
             Ok(layout) => {
                 let _first = self.layout.set(Some(layout));
@@ -89,10 +100,7 @@ impl Reading {
                 "item drops ready: the pickup read in {} ms off the game thread",
                 took.as_millis()
             ),
-            Some(why) => {
-                crate::log!(WARN, "item drops off: {why}");
-                crate::engine::diag::part_off("item drops", &why.to_string());
-            }
+            Some(why) => DROPS_FUSE.turn_off(&why.off(build)),
         }
     }
 
@@ -115,7 +123,7 @@ pub(crate) fn link(loader: &'static Loader) {
 /// Starts reading the layout, as a dedicated server links or a client
 /// starts hosting a game.
 pub(crate) fn start(loader: &'static Loader) {
-    READING.start(move || read_layout(loader));
+    READING.start(&loader.build.name, move || read_layout(loader));
 }
 
 fn read_layout(loader: &Loader) -> Result<Layout, ReadLayoutError> {
@@ -187,6 +195,23 @@ enum ReadLayoutError {
     /// No thread could be started for the read.
     #[error("no thread to read the pickup")]
     Thread,
+}
+
+impl ReadLayoutError {
+    /// Why drops are off on the build named `build`: a fault of the read
+    /// itself, or a pickup the build does not give.
+    fn off(&self, build: &str) -> Off {
+        let feature = DROPS_FUSE.feature();
+        match self {
+            Self::Panicked | Self::Thread => Off::fault(feature, &self.to_string()),
+            _ => Off::build(
+                feature,
+                build,
+                "its pickup",
+                &format!("does not read: {self}"),
+            ),
+        }
+    }
 }
 
 impl crate::engine::off_thread::ReadFailure for ReadLayoutError {
@@ -297,7 +322,7 @@ mod tests {
         let reads = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         for _ in 0..3 {
             let reads = std::sync::Arc::clone(&reads);
-            reading.start(move || {
+            reading.start("build 1", move || {
                 reads.fetch_add(1, Ordering::Relaxed);
                 Err(ReadLayoutError::Type)
             });
@@ -305,7 +330,25 @@ mod tests {
         finished(reading);
         assert_eq!(reads.load(Ordering::Relaxed), 1);
         assert_eq!(reading.layout().err(), Some(Status::MISSING));
-        reading.start(|| Ok(LAYOUT));
+        let began = std::time::Instant::now();
+        let drops = loop {
+            let off = crate::engine::diag::parts_off();
+            if let Some(drops) = off.into_iter().find(|p| p.part == "item drops") {
+                break drops;
+            }
+            assert!(began.elapsed().as_secs() < 10, "drops never turned off");
+            std::thread::yield_now();
+        };
+        assert!(DROPS_FUSE.is_off());
+        // Another test's read in this process may turn the one switch off
+        // first, with its own reason.
+        let panicked = ReadLayoutError::Panicked.to_string();
+        assert!(
+            drops.reason.starts_with("its pickup does not read: ") || drops.reason == panicked,
+            "listed for the status summary and the Mods screen: {}",
+            drops.reason
+        );
+        reading.start("build 1", || Ok(LAYOUT));
         assert_eq!(
             reading.layout().err(),
             Some(Status::MISSING),
@@ -332,7 +375,7 @@ mod tests {
     #[test]
     fn a_drop_during_the_read_waits_for_it_instead_of_failing() {
         let reading = reading();
-        reading.start(|| {
+        reading.start("build 1", || {
             std::thread::sleep(std::time::Duration::from_millis(200));
             Ok(LAYOUT)
         });
@@ -342,13 +385,21 @@ mod tests {
     #[test]
     fn a_read_layout_answers_every_drop_and_a_panicking_read_turns_drops_off() {
         let read = reading();
-        read.start(|| Ok(LAYOUT));
+        read.start("build 1", || Ok(LAYOUT));
         finished(read);
         assert_eq!(read.layout().map(|l| l.hash), Ok(LAYOUT.hash));
         let panicked = reading();
-        panicked.start(|| panic!("a read that panics"));
+        panicked.start("build 1", || panic!("a read that panics"));
         finished(panicked);
         assert_eq!(panicked.layout().err(), Some(Status::MISSING));
+    }
+
+    #[test]
+    fn a_read_that_panicked_or_lost_its_thread_is_a_fault_not_the_build() {
+        for why in [ReadLayoutError::Panicked, ReadLayoutError::Thread] {
+            let fault = Off::fault(DROPS_FUSE.feature(), &why.to_string());
+            assert_eq!(format!("{:?}", why.off("build 1")), format!("{fault:?}"));
+        }
     }
 
     #[test]

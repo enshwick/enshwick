@@ -15,7 +15,7 @@ use std::sync::{Mutex, OnceLock};
 use enshwick_core::Entity;
 use enshwick_core::abi::{Event, Header, HookFlags, PlayerDeathData};
 
-use crate::engine::chains::Next;
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
 use enshwick_base::Relock;
@@ -25,14 +25,6 @@ pub(crate) const TABLE_IDS: &[&str] = &[pinned::player::DEATH_SINK.id()];
 
 /// The most deaths kept between two steps.
 const MOST: usize = 64;
-
-type SinkFn =
-    unsafe extern "system" fn(out: *mut u8, tracker: *mut u8, death: *const u8) -> *mut u8;
-
-// SAFETY: `SinkFn` is the exact signature of the game's death sink at the
-// table's `player.death_sink`, and the slot is used only as the `next` of the
-// `sink` link on that function.
-static SINK_NEXT: Next<SinkFn> = unsafe { Next::new() };
 
 /// Where the record keeps what the event carries, from reflection.
 #[derive(Debug, Clone, Copy)]
@@ -117,8 +109,11 @@ static HISTORY: OnceLock<Option<History>> = OnceLock::new();
 /// Deaths seen since the last step, as the records' bytes.
 static SEEN: Mutex<Vec<[u8; 64]>> = Mutex::new(Vec::new());
 
+/// The record the sink takes.
+const DEATH_RECORD: &str = "keen::PlayerDeath";
+
 fn record(loader: &Loader) -> Option<Record> {
-    let ty = "keen::PlayerDeath";
+    let ty = DEATH_RECORD;
     let field = |name: &str| {
         loader
             .reflection
@@ -149,7 +144,11 @@ pub(crate) fn link(loader: &'static Loader) {
         return;
     }
     let Some(layout) = record(loader) else {
-        crate::log!(WARN, "player deaths off: no death record in this build");
+        let _off = loader.fuse_off(
+            &DEATHS_FUSE,
+            DEATH_RECORD,
+            "is not reflected within 64 bytes with every field the event carries",
+        );
         return;
     };
     let _first = RECORD.set(layout);
@@ -160,8 +159,8 @@ pub(crate) fn link(loader: &'static Loader) {
             "player deaths: no hit history in this build, killers stay 0"
         );
     }
-    loader.link_feature(
-        "player deaths",
+    let _linked = loader.link_fused(
+        &DEATHS_FUSE,
         Target::Pinned(pinned::player::DEATH_SINK),
         &SINK_NEXT,
         sink,
@@ -170,13 +169,18 @@ pub(crate) fn link(loader: &'static Loader) {
 }
 
 /// The switch of the player deaths.
-static DEATHS_FUSE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("player deaths");
+static DEATHS_FUSE: Fuse = Fuse::new("player deaths");
 
-unsafe extern "system" fn sink(out: *mut u8, tracker: *mut u8, death: *const u8) -> *mut u8 {
-    if let Some(layout) = RECORD.get()
-        && !death.is_null()
-    {
-        let _caught = DEATHS_FUSE.run("the sink", || {
+crate::engine::chains::chain_detour! {
+    /// The game's death sink at the table's `player.death_sink`: keeps a
+    /// copy of the record for the event after the step.
+    fn sink(out: *mut u8, tracker: *mut u8, death: *const u8) -> *mut u8;
+    next SINK_NEXT;
+    fuse &DEATHS_FUSE, "the sink";
+    |onward| {
+        if let Some(layout) = RECORD.get()
+            && !death.is_null()
+        {
             let mut bytes = [0u8; 64];
             for (at, byte) in bytes.iter_mut().enumerate().take(layout.size) {
                 // SAFETY: the game hands the sink a non-null record (checked
@@ -188,11 +192,9 @@ unsafe extern "system" fn sink(out: *mut u8, tracker: *mut u8, death: *const u8)
             if seen.len() < MOST {
                 seen.push(bytes);
             }
-        });
+        }
+        onward.call()
     }
-    // SAFETY: the game's own arguments, passed on unchanged to the rest of
-    // the chain, which has the death sink's signature.
-    unsafe { SINK_NEXT.get()(out, tracker, death) }
 }
 
 fn field<const N: usize>(bytes: &[u8; 64], at: usize) -> [u8; N] {

@@ -9,6 +9,7 @@ use std::sync::OnceLock;
 use enshwick_core::Entity;
 use enshwick_core::raw::{read_at, write_at};
 
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
 use crate::engine::pinned;
 use crate::engine::pinned::Constant;
@@ -43,6 +44,9 @@ struct Layout {
 use enshwick_core::__private::ATTRIBUTE_SET_INITIALISED as SET_INITIALISED;
 
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
+
+/// The switch of the stat maxima, off on a build without the layout.
+static MAXIMA_FUSE: Fuse = Fuse::new("stat maxima");
 
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT
@@ -91,9 +95,10 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 })
             })();
             if layout.is_none() {
-                crate::log!(
-                    WARN,
-                    "stat maxima off: this game build lacks the attribute layout; maximum health, stamina and mana stay the game's"
+                let _off = loader.fuse_off(
+                    &MAXIMA_FUSE,
+                    "the attribute layout",
+                    "is not in this build; maximum health, stamina and mana stay the game's",
                 );
             }
             layout
@@ -148,4 +153,17 @@ pub(super) fn add_max(loader: &Loader, entity: Entity, pool: Pool, delta: i32) -
     add(set.adder);
     add(set.max);
     true
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_build_without_the_attribute_layout_lists_the_stat_maxima_off() {
+        let loader = crate::start::tests::bare_loader();
+        assert!(super::layout(&loader).is_none());
+        assert!(
+            super::MAXIMA_FUSE.is_off(),
+            "off by its fuse, not only in the log"
+        );
+    }
 }
