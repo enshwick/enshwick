@@ -22,11 +22,14 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // `Header::covers` it.
-#define ENSHWICK_ABI_MINOR 25
+#define ENSHWICK_ABI_MINOR 26
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
 #define ENSHWICK_DAMAGE_TYPES 13
+
+// The largest radius `HostApi::fog_uncover` takes, in metres.
+#define ENSHWICK_MAX_UNCOVER_RADIUS 100000.0
 
 // The `what` of `HostApi::progress_write`
 // that adds experience for the game to apply. ABI 11.24.
@@ -5229,6 +5232,66 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*drop_items)(EnshwickModHandle me,
                                const struct EnshwickDropRequest *request,
                                EnshwickEntity *out);
+  // Writes `value`, one TOML value, as the setting `key` of the mod's own
+  // settings file `file` in the world this process runs, as the console
+  // does: checked against the file's schema and by the mod's
+  // `HostApi::config_check`, written atomically with the file's
+  // comments kept, then raised as a settings change. A secret setting
+  // too, whose value the log never shows. Any thread; writes of settings
+  // wait for each other, and a write from the mod's settings handler
+  // raises the change again. The strings are borrowed for the call.
+  // `Status::UNAVAILABLE` while no world runs here, as on a client in
+  // another's world; `Status::MISSING` for a file or key the mod's
+  // settings lack; `Status::BAD_ARGS` for a value the setting does not
+  // accept or a string that is not UTF-8; `Status::REFUSED` when the
+  // mod's check refuses the file with the value, the file does not read
+  // or write, or the write comes from inside the mod's own check or
+  // nested more than four deep through its settings handler. On an error the file stays as it was and the loader
+  // logs why. A panic in the loader returns `Status::REFUSED`. ABI
+  // 11.26.
+  EnshwickStatus (*config_set)(EnshwickModHandle me,
+                               struct EnshwickStr file,
+                               struct EnshwickStr key,
+                               struct EnshwickStr value);
+  // Asks the dedicated server to stop the way the game stops on Ctrl+C:
+  // after the current step the server shuts down, `ShutdownStarted` is
+  // raised and the save holds let go, the final save runs, and the
+  // process exits with code 0. Returns at once; the stop runs on a
+  // thread of the loader's. Any thread. `Status::REFUSED` when a stop
+  // is under way already, asked by a mod or by the game, or the game has
+  // not started yet;
+  // `Status::UNAVAILABLE` off a dedicated server, as in single player
+  // or a hosted game; `Status::MISSING` when the loader did not find
+  // the game's stop on this build. A panic in the loader returns
+  // `Status::REFUSED`. ABI 11.26.
+  EnshwickStatus (*server_stop)(EnshwickModHandle me);
+  // Uncovers the fog of war of the player with account key `player` in
+  // the circle of `radius` metres around world `x` and `z`, as exploring
+  // there does: the server's loader sends it to the loader on the
+  // player's client, which hands it to the game's own reveal, and the
+  // character's save keeps it. Returns once it is sent. The server holds
+  // no fog, so a client without Enshwick is not reached. Any thread, on
+  // a dedicated server or a client that hosts. `Status::UNAVAILABLE`
+  // for a player whose client takes no messages from the loader, as one
+  // without Enshwick or not online, and on a client in another's game;
+  // `Status::BAD_ARGS` for a place that is not finite or a radius that
+  // is not above 0 and at most 100 000; `Status::REFUSED` when the
+  // link to the player has no room. A panic in the loader returns
+  // `Status::REFUSED`. ABI 11.26.
+  EnshwickStatus (*fog_uncover)(EnshwickModHandle me,
+                                EnshwickPlayerKey player,
+                                float x,
+                                float z,
+                                float radius);
+  // Writes to `out` the content id, `<mod>:<name>`, that a loaded mod
+  // declared for exactly the GUID at `guid`, not only for its game id: a
+  // mod's item, recipe or other content. The text lives for the process.
+  // Any thread. `Status::MISSING` for a GUID no mod declared, such as a
+  // vanilla item's; `Status::BAD_ARGS` for a null `guid` or `out`. A
+  // panic in the loader returns `Status::REFUSED`. ABI 11.26.
+  EnshwickStatus (*content_name)(EnshwickModHandle me,
+                                 const uint8_t (*guid)[16],
+                                 struct EnshwickStr *out);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.

@@ -138,6 +138,34 @@ impl TableConfig {
         &self.schema
     }
 
+    /// Writes `value` as the setting `key` of the running world's file, as
+    /// [`config::set`](crate::config::set) does for a type: checked against
+    /// the schema, a secret never logged, raised as a change. Any thread
+    /// while a world runs.
+    ///
+    /// # Errors
+    ///
+    /// [`SetSettingError`](crate::config::SetSettingError) as for
+    /// [`config::set`](crate::config::set).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate enshwick_base as enshwick;
+    /// use enshwick::config::{SetSettingError, TableConfig};
+    ///
+    /// fn first_start(settings: &TableConfig, generated: &str) -> Result<(), SetSettingError> {
+    ///     settings.set("password", generated)
+    /// }
+    /// ```
+    pub fn set(
+        &self,
+        key: &str,
+        value: impl Into<toml::Value>,
+    ) -> Result<(), crate::config::SetSettingError> {
+        super::write::write(&self.host, FILE, key, &value.into())
+    }
+
     /// Calls `handler` with the world's values as each world loads, the
     /// defaults as it stops, and the file's again each time it changes while
     /// the world runs; the thread is not fixed. What does not read takes

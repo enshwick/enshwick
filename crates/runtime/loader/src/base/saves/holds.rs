@@ -338,6 +338,11 @@ pub(crate) fn shut_down(loader: &Loader, announce: impl FnOnce()) {
     }
 }
 
+/// Whether the hosted game's shutdown began, as [`shut_down`] marks it.
+pub(crate) fn shutting_down() -> bool {
+    SAVING.relock().shutdown != Shutdown::Not
+}
+
 /// Forgets every mod's hold, when a hosted game ends.
 pub(super) fn forget() {
     // A hold is on its world's saves; carried on, it would stop the next world's.

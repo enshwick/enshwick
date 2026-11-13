@@ -48,3 +48,25 @@ pub use enshwick_values::content::{DebugName, Guid, Id, NAMESPACE, is_id};
 pub fn game_resource(key: ResourceKey) -> Option<Vec<u8>> {
     crate::host()?.game_resource(key)
 }
+
+/// The content id, `<mod>:<name>`, that a loaded mod declared for exactly
+/// `guid`, such as a mod's item a player picked, which
+/// [`Vanilla`](crate::content::vanilla::Vanilla) does not know. A cheap
+/// lookup in the loader's ids, from any thread.
+///
+/// `None` for a GUID no loaded mod declared, a vanilla item's included, and
+/// one that only shares a declared id's game id.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::content::{Guid, content_id};
+///
+/// fn picked(item: Guid) -> String {
+///     content_id(item).unwrap_or_else(|| "a vanilla item".to_owned())
+/// }
+/// ```
+#[must_use]
+pub fn content_id(guid: Guid) -> Option<String> {
+    crate::__internal::content_id(&crate::host()?, guid)
+}

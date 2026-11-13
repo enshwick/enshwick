@@ -822,4 +822,4 @@ mod patches;
 mod tests;
 mod texts;
 
-pub(crate) use texts::{add_text, language};
+pub(crate) use texts::{add_text, language, mod_text, mod_texts_sealed};

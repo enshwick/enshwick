@@ -4,7 +4,7 @@ use enshwick_core::Entity;
 use enshwick_core::abi::{Header, ModHandle, SaveInfo, Status};
 
 use crate::host::memory::put_headed;
-use crate::host::{caller, caller_index, entry};
+use crate::host::{caller, caller_index, calling, entry};
 
 pub(crate) extern "system" fn save_info(me: ModHandle, out: *mut SaveInfo) -> Status {
     entry("save_info", || {
@@ -49,5 +49,12 @@ pub(crate) extern "system" fn set_saved(me: ModHandle, entity: Entity, saved: u8
             Ok(()) => Status::OK,
             Err(status) => status,
         }
+    })
+}
+
+pub(crate) extern "system" fn server_stop(me: ModHandle) -> Status {
+    entry("server_stop", || match calling(me) {
+        Ok((loader, _, record)) => crate::base::stop::request(loader, &record.id),
+        Err(status) => status,
     })
 }

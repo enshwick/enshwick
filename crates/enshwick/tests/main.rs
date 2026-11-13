@@ -205,6 +205,7 @@ mod served_reads;
 #[cfg(feature = "unstable")]
 mod server_controls;
 mod services;
+mod settings_write;
 mod shapes;
 mod sides;
 #[cfg(feature = "typed")]

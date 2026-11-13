@@ -625,6 +625,36 @@ impl Installed {
         })
     }
 
+    /// Whether the mod asked the server to stop with `World::stop`; the fake
+    /// stops nothing, so a test raises
+    /// [`events::ShutdownStarted`](enshwick_core::events::ShutdownStarted)
+    /// itself to go on as the game would.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(!loader.stop_asked());
+    /// ```
+    #[must_use]
+    pub fn stop_asked(&self) -> bool {
+        table::with(false, |s| s.stops > 0)
+    }
+
+    /// The fog uncovers the mod sent, in order: the player, the circle's
+    /// centre as world x and z and its radius, in metres.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.fog_uncovers().is_empty());
+    /// ```
+    #[must_use]
+    pub fn fog_uncovers(&self) -> Vec<(enshwick_core::PlayerKey, [f32; 2], f32)> {
+        table::with(Vec::new(), |s| s.uncovers.clone())
+    }
+
     /// The drops the mod asked for, with the entity ids the fake handed
     /// out, in order.
     ///

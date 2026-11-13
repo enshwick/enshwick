@@ -254,6 +254,31 @@ impl Content {
         vanilla::items()
     }
 
+    /// The debug name of the vanilla item `item`, as
+    /// [`Vanilla::item_name`](vanilla::Vanilla::item_name) reads it; `None`
+    /// for a GUID that is no vanilla item and outside the game.
+    #[script]
+    #[must_use]
+    pub fn item_name(self, item: Guid) -> Option<String> {
+        Vanilla::game()?.item_name(item).map(str::to_owned)
+    }
+
+    /// The tag of the name the game shows for the vanilla item `item`, as
+    /// [`Vanilla::name_tag`](vanilla::Vanilla::name_tag) reads it.
+    #[script]
+    #[must_use]
+    pub fn name_tag(self, item: Guid) -> Option<Guid> {
+        Vanilla::game()?.name_tag(item)
+    }
+
+    /// The content id a loaded mod declared for exactly `item`, as
+    /// [`content_id`](super::content_id).
+    #[script]
+    #[must_use]
+    pub fn content_id(self, item: Guid) -> Option<String> {
+        super::content_id(item)
+    }
+
     /// Every vanilla recipe with its debug name and the item it makes.
     ///
     /// # Errors

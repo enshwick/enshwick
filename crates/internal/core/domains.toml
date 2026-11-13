@@ -94,6 +94,7 @@ upward = [
     "base::remote -> content::recipes",
     "base::remote -> ui::interface",
     "base::remote -> ui::windows",
+    "base::remote -> world::fog",
     "base::saves -> actions::console",
     "base::saves -> actions::player_actions",
     "base::status -> content::served",

@@ -425,6 +425,33 @@ pub(crate) extern "system" fn declare_content(
     })
 }
 
+pub(crate) extern "system" fn content_name(
+    me: ModHandle,
+    guid: *const [u8; 16],
+    out: *mut Str,
+) -> Status {
+    entry("content_name", || {
+        if let Err(status) = calling(me) {
+            return status;
+        }
+        if out.is_null() {
+            return Status::BAD_ARGS;
+        }
+        // SAFETY: `HostApi::content_name` has the mod pass `guid` null or
+        // pointing at 16 readable bytes for the call; null is checked here.
+        let Some(&guid) = (unsafe { guid.as_ref() }) else {
+            return Status::BAD_ARGS;
+        };
+        match crate::base::ids::content_named(enshwick_core::content::Guid(guid)) {
+            // SAFETY: `out` is non-null (checked above) and
+            // `HostApi::content_name` has the mod pass a writable, aligned
+            // `Str` that no other thread touches during the call.
+            Some(name) => unsafe { put(out, name) },
+            None => Status::MISSING,
+        }
+    })
+}
+
 pub(crate) extern "system" fn crafting_prop(
     me: ModHandle,
     prop: *const [u8; 16],

@@ -369,6 +369,20 @@ impl Host {
         Ok(text.to_owned())
     }
 
+    /// The content id a loaded mod declared for exactly `guid`, as
+    /// `HostApi::content_name` answers it; `None` for none.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn content_name(&self, guid: [u8; 16]) -> Option<String> {
+        let mut out = Str::EMPTY;
+        let status = (self.api.content_name)(self.me, &raw const guid, &raw mut out);
+        if !status.is_ok() {
+            return None;
+        }
+        // SAFETY: the loader keeps the text for the life of the process.
+        unsafe { out.as_str() }.map(str::to_owned)
+    }
+
     /// Hands the loader the schema and template of this mod's settings file
     /// `file`.
     pub(crate) fn config_schema(

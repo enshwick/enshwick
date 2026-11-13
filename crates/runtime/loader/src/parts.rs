@@ -219,23 +219,45 @@ mod tests {
         );
     }
 
+    /// The catalogued ids `text` names through `pinned::`.
+    fn named<'a>(text: &str, catalogue: &'a BTreeMap<String, String>) -> Vec<&'a str> {
+        text.split("pinned::")
+            .skip(1)
+            .filter_map(|rest| {
+                let end = rest
+                    .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == ':'))
+                    .unwrap_or(rest.len());
+                catalogue.get(&rest[..end]).map(String::as_str)
+            })
+            .collect()
+    }
+
     #[test]
     fn every_id_a_module_names_is_in_its_list() {
         let catalogue = catalogue();
         for (name, ids) in table_ids() {
-            let text = sources(name);
-            let missing: Vec<_> = text
-                .split("pinned::")
-                .skip(1)
-                .filter_map(|rest| {
-                    let end = rest
-                        .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == ':'))
-                        .unwrap_or(rest.len());
-                    catalogue.get(&rest[..end])
-                })
-                .filter(|id| !ids.contains(&id.as_str()))
+            let missing: Vec<_> = named(&sources(name), &catalogue)
+                .into_iter()
+                .filter(|id| !ids.contains(id))
                 .collect();
             assert!(missing.is_empty(), "{name} names {missing:?} unlisted");
+        }
+    }
+
+    #[test]
+    fn every_id_any_part_names_is_listed_by_some_part() {
+        let (catalogue, listed) = (catalogue(), listed());
+        // Parts without a list count too: one whose list went missing would pass the test above.
+        for part in Parts::new(LAYERS).iter() {
+            let missing: Vec<_> = named(&sources(part.name), &catalogue)
+                .into_iter()
+                .filter(|id| !listed.contains(id))
+                .collect();
+            assert!(
+                missing.is_empty(),
+                "{} names {missing:?} no part lists",
+                part.name
+            );
         }
     }
 

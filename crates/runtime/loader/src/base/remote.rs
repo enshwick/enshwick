@@ -41,6 +41,10 @@ pub const CONTROLS: u8 = 16;
 pub const WINDOW: u8 = 17;
 /// The server closes a window of one of its mods.
 pub const WINDOW_CLOSE: u8 = 18;
+/// The server uncovers a circle of its player's fog of war.
+pub const FOG_UNCOVER: u8 = 19;
+
+pub use enshwick_core::abi::MAX_UNCOVER_RADIUS;
 
 /// The controls of one mod a [`Message::Controls`] carries at most.
 pub const MAX_CARRIED: usize = 24;
@@ -167,6 +171,15 @@ pub enum Message {
         id: String,
         /// The window's id in the mod.
         window: String,
+    },
+    /// The server uncovers the client's fog of war in a circle, as
+    /// exploring there does.
+    FogUncover {
+        /// The circle's centre: world x and z, in metres.
+        at: [f32; 2],
+        /// Its radius in metres, above 0 and at most
+        /// [`MAX_UNCOVER_RADIUS`].
+        radius: f32,
     },
 }
 
@@ -346,6 +359,7 @@ impl Message {
             Self::Controls { .. } => CONTROLS,
             Self::Window { .. } => WINDOW,
             Self::WindowClose { .. } => WINDOW_CLOSE,
+            Self::FogUncover { .. } => FOG_UNCOVER,
         }
     }
 
@@ -446,8 +460,20 @@ impl Message {
                 put(&mut out, id);
                 put(&mut out, window);
             }
+            Self::FogUncover { at, radius } => {
+                for value in [at[0], at[1], *radius] {
+                    out.extend_from_slice(&value.to_le_bytes());
+                }
+            }
         }
         out
+    }
+
+    /// Whether a fog uncover's circle is one the client takes: a finite
+    /// centre and a radius above 0 and at most [`MAX_UNCOVER_RADIUS`].
+    #[must_use]
+    pub fn uncover_fits(at: [f32; 2], radius: f32) -> bool {
+        at.iter().all(|v| v.is_finite()) && radius > 0.0 && radius <= MAX_UNCOVER_RADIUS
     }
 
     /// Reads a [`Message::Window`] or [`Message::WindowClose`] from the
@@ -474,6 +500,17 @@ impl Message {
             open: open == 1,
             text: text.to_owned(),
         })
+    }
+
+    /// Reads a [`Message::FogUncover`] from its body: `None` for one that is
+    /// not exactly three numbers or whose circle the client does not take.
+    fn read_uncover(bytes: &[u8]) -> Option<Self> {
+        let ([x, z, radius], []) = bytes.as_chunks::<4>() else {
+            return None;
+        };
+        let at = [f32::from_le_bytes(*x), f32::from_le_bytes(*z)];
+        let radius = f32::from_le_bytes(*radius);
+        Self::uncover_fits(at, radius).then_some(Self::FogUncover { at, radius })
     }
 
     /// Reads a message of `kind` from its body.
@@ -569,6 +606,7 @@ impl Message {
                 Self::Controls { id, name, controls }
             }
             WINDOW | WINDOW_CLOSE => Self::read_window(kind, bytes)?,
+            FOG_UNCOVER => Self::read_uncover(bytes)?,
             _ => return None,
         })
     }

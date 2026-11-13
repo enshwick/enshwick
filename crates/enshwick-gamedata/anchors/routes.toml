@@ -8955,3 +8955,31 @@ in = "~fn:ui.button_frame"
 shape = ["mov rbx,{ui.context}", "movsxd rcx,[rdi]"]
 take = "spelled"
 value = 0x0
+
+[[route]]
+id = "~server.console_setup"
+sides = ["server"]
+loads = ["MessageSystemSend", "MessageSystemRecv"]
+
+[[route]]
+id = "server.console_handler"
+sides = ["server"]
+in = "~server.console_setup"
+shape = ["lea rcx,[rip-*]", "mov edx,?r", "call [rip+?]"]
+take = "address"
+check = ["sub rsp,0x28", "mov rax,[rip+?]", "test rax,rax", "je ?b", "cmp byte [rax+0xaa0],0x0"]
+
+[[route]]
+id = "server.application"
+sides = ["server"]
+in = "server.console_handler"
+shape = ["mov rax,[rip+*]", "test rax,rax"]
+take = "address"
+
+[[route]]
+id = "server.exit_reason"
+sides = ["server"]
+in = "server.console_handler"
+shape = ["cmp byte [rax+*],0x0"]
+take = "value"
+range = [0x100, 0x4000]

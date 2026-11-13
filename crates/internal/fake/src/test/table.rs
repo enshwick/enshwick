@@ -144,6 +144,10 @@ pub(crate) struct State {
     pub(crate) progress_steps: Vec<u64>,
     /// The drops the mod asked for, with the ids handed out.
     pub(crate) drops: Vec<(enshwick_core::Entity, enshwick_core::abi::DropRequest)>,
+    /// The server stops the mod asked for and the fake took: 0 or 1.
+    pub(crate) stops: u8,
+    /// The fog uncovers the mod sent: player, centre and radius.
+    pub(crate) uncovers: Vec<(enshwick_core::PlayerKey, [f32; 2], f32)>,
     pub(crate) craft_filters: Vec<Registered<CraftCheckFn>>,
     /// Channels the mod opened: full name, id, handler and pointer.
     pub(crate) channels: Vec<(String, u32, Registered<NetMessageFn>)>,
@@ -242,6 +246,9 @@ pub(crate) struct State {
     pub(crate) markers: Vec<super::FakeMarker>,
     /// The mod's checks of new settings texts, by file.
     pub(crate) config_checks: std::collections::BTreeMap<String, Registered<ConfigCheckFn>>,
+    /// The mod's settings writes in flight, one per nested write, each
+    /// `true` while it runs the mod's check, as the loader refuses them.
+    pub(crate) config_writes: Vec<bool>,
     /// The texts the mod handed the loader last, as TOML.
     pub(crate) published_texts: Option<String>,
     /// The frame drawing now: its token, whether a window is open and what
@@ -414,6 +421,8 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         progress_writes: None,
         progress_steps: Vec::new(),
         drops: Vec::new(),
+        stops: 0,
+        uncovers: Vec::new(),
         craft_filters: Vec::new(),
         daytime: None,
         clock_speed: None,
@@ -452,6 +461,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         hud: None,
         markers: Vec::new(),
         config_checks: std::collections::BTreeMap::new(),
+        config_writes: Vec::new(),
         published_texts: None,
         frame: None,
         inputs: Vec::new(),
@@ -719,4 +729,8 @@ pub(crate) static TABLE: HostApi = HostApi {
     action_window,
     progress_write,
     drop_items,
+    config_set,
+    server_stop,
+    fog_uncover,
+    content_name,
 };

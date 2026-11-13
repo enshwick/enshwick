@@ -247,7 +247,9 @@ local give = {
 
 `Arg::item(label)` asks for one of the game's items. The handler gets
 `Value::Item` with the item's GUID. The server refuses an item its game
-does not know before the handler runs: "No item …".
+does not know before the handler runs: "No item …". A mod's item counts by
+the GUID of its declared content id. `add_item` declares it; an item served
+under a key of the mod's own needs `Load::declare`.
 
 | Where | How the player names the item |
 | --- | --- |
@@ -258,8 +260,9 @@ A server has the game's texts in single player and in a game a player
 hosts.
 
 The names come from the player's own game, so a dedicated server needs no
-texts and sends none. A window lists vanilla items; a typed line also takes
-a mod's item by its content id. On a typed line the item takes words as a
+texts and sends none. A window lists vanilla items and the mods' items
+named in their texts; a typed line also takes a mod's item by its content
+id. On a typed line the item takes words as a
 text does: `spawn Stone Axe 5` is the item `Stone Axe` five times.
 
 ```rust

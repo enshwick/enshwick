@@ -12,6 +12,13 @@ const MAX_TILES: u32 = 256;
 /// A larger tile edge is a misread.
 const MAX_EDGE: u32 = 256;
 
+/// The game's reveal `range` per metre of radius that uncovers a circle fully.
+///
+/// `map.fog_reveal` (client 26430625) covers a pixel `d` metres from
+/// the centre by `2 - 4d / range`, clamped to 0..1, so all of it out to
+/// `range / 4`, fading to nothing at `range / 2`.
+pub const UNCOVER_RANGE_PER_RADIUS: f32 = 4.0;
+
 /// The shape of the game's fog: its tiles and the world they cover. The
 /// game reads only the world's z size; its pixels are square, one scale
 /// for both axes.
@@ -439,6 +446,22 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
+
+    /// The coverage, 0 to 1, the game's reveal gives a pixel `distance`
+    /// metres from its centre, as `map.fog_reveal` computes it on client
+    /// 26430625.
+    fn game_coverage(distance: f32, range: f32) -> f32 {
+        (2.0 - 4.0 * distance / range).clamp(0.0, 1.0)
+    }
+
+    #[test]
+    fn an_uncover_covers_its_whole_circle_fully_and_little_past_it() {
+        for radius in [8.0, 200.0, 7_000.0, 100_000.0] {
+            let range = radius * UNCOVER_RANGE_PER_RADIUS;
+            assert!(game_coverage(radius, range) >= 1.0, "{radius}");
+            assert!(game_coverage(radius * 2.0, range) <= 0.0, "{radius}");
+        }
+    }
 
     fn world() -> FogShape {
         FogShape::new(40, 40, 32, 10_240.0).unwrap()

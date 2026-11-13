@@ -300,6 +300,46 @@ pub(crate) extern "system" fn progress_write(
     })
 }
 
+pub(crate) extern "system" fn server_stop(_me: ModHandle) -> Status {
+    with(Status::UNAVAILABLE, |s| {
+        if s.host.side != Side::SERVER || s.host.hosting {
+            return Status::UNAVAILABLE;
+        }
+        if s.stops > 0 {
+            return Status::REFUSED;
+        }
+        s.stops = 1;
+        Status::OK
+    })
+}
+
+pub(crate) extern "system" fn fog_uncover(
+    _me: ModHandle,
+    player: enshwick_core::PlayerKey,
+    x: f32,
+    z: f32,
+    radius: f32,
+) -> Status {
+    with(Status::UNAVAILABLE, |s| {
+        if !serving(s) {
+            return Status::UNAVAILABLE;
+        }
+        if !(x.is_finite()
+            && z.is_finite()
+            && radius > 0.0
+            && radius <= enshwick_core::abi::MAX_UNCOVER_RADIUS)
+        {
+            return Status::BAD_ARGS;
+        }
+        // As the loader: only a client that takes its messages is reached.
+        if !s.host.net_peers.contains(&player.get()) {
+            return Status::UNAVAILABLE;
+        }
+        s.uncovers.push((player, [x, z], radius));
+        Status::OK
+    })
+}
+
 pub(crate) extern "system" fn build_rights(
     _me: ModHandle,
     check: *mut enshwick_core::abi::BuildRights,

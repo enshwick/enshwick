@@ -3228,6 +3228,11 @@ declare enshwick: {
 	deps: { [string]: { id: string, running: () -> boolean } },
 	--- The mod's settings in force, as its `pack.toml` declares them under `[[setting]]`; read them again in a `SettingsChanged` handler.
 	settings: () -> { [string]: any },
+	--- The mod's own settings in the running world, as a Rust mod's `config` module.
+	config: {
+		--- Writes `value` as the setting `key` in the running world's file: checked as an edit is, a secret never logged, then raised as `SettingsChanged`. Raises an error naming why when nothing was written: no world runs, no such key, a value the setting does not take, or a refusal.
+		set: (key: string, value: string | number | boolean) -> (),
+	},
 	--- The mod's log file, one line per call.
 	log: {
 		--- Writes `text` to the mod's log as information.
@@ -3423,6 +3428,12 @@ declare enshwick: {
 		item_by_display_name: (name: string) -> string,
 		--- Every vanilla item with its debug name and the tag of the name the game shows.
 		items: () -> {VanillaItem},
+		--- The debug name of the vanilla item `item`, as `Vanilla.item_name` reads it; nil for a GUID that is no vanilla item and outside the game.
+		item_name: (item: string) -> string?,
+		--- The tag of the name the game shows for the vanilla item `item`, as `Vanilla.name_tag` reads it.
+		name_tag: (item: string) -> string?,
+		--- The content id a loaded mod declared for exactly `item`, as `content_id`.
+		content_id: (item: string) -> string?,
 		--- Every vanilla recipe with its debug name and the item it makes.
 		recipes: () -> {VanillaRecipe},
 		--- The item id of `id`, a GUID such as `item` gives for a vanilla item, or a content id in full (`<mod>:<name>`) for a mod's own item, as `ItemId.from_guid` and `ItemId.named` give it in Rust: the number `inventory` and `items` take.
@@ -3705,6 +3716,8 @@ declare enshwick: {
 		save_info: () -> SaveInfo?,
 		--- Holds the world's saves while `held`, or lets them go: the game saves only while no running mod holds them, so its timed saves wait and `World.save` is refused meanwhile, for example while players are outside a safe room. Each mod holds its own; a mod that turns off lets go, and every hold ends with its hosted game. As a dedicated server or a hosted game shuts down, every hold lets go, so the final save runs; a mod that holds saves again inside its `ShutdownStarted` handler refuses that save, and a hold asked for after that handler is not taken. The log names each mod that holds or lets go; once saves stay held for 10 minutes, the log and a notice to each administrator online warn, again every 10 minutes while they stay held. Takes effect after the next step, and at once inside the `ShutdownStarted` handler; any thread.
 		hold_saves: (held: boolean) -> (),
+		--- Stops the dedicated server the way the game stops on Ctrl+C, for a timed restart: after the current step the server shuts down, `ShutdownStarted` follows and every hold on saves lets go, the final save runs, and the process exits with code 0, for the host's panel or service manager to start it again. Returns at once; the countdown, the warnings and a save before it are the mod's. Any thread.
+		stop: () -> (),
 		--- Keeps an entity of the mod's out of the world's saves, or puts it back in them. With `saved` false the game's own `DoNotSave` component leaves it out: it is gone after the server restarts, while the world goes on. Only entities a mod spawned (`Effects.spawn`) or placed (a transaction's props) since the world loaded are allowed, from the step after their spawn, so no mod drops the game's own data from a save; once the world loads again, they count as the game's. The change shows from the next step and counts from the next save that starts after it. For a new entity, `Spawn.do_not_save` keeps it out from its first step. On the server's game thread only.
 		set_saved: (entity: number, saved: boolean) -> (),
 		--- Runs `filter` before the server applies a player's rename of any entity, on its game thread; returning `false` refuses the rename. The game itself checks no permission for renames. A client runs it while it hosts a game.
@@ -3764,6 +3777,10 @@ declare enshwick: {
 		markers_in: (a: vector, b: vector) -> {MapMarker},
 		--- The frame of the map of the scene the server runs: where the map starts, how far it reaches and the size of its cells, in metres. The loader reads it from the game's data once per scene, apart from the game thread, as it reads the markers.
 		frame: () -> MapFrame,
+		--- Uncovers the fog of war of `player` in the circle of `radius` metres around world x and z `at`, as exploring there does: all of the circle, with the fog thinning out from its edge to twice the radius. The server holds no fog: the loader sends the circle to the loader on the player's client, which hands it to the game's own reveal within a frame, and the character's save keeps it, in every world the character enters. A client without Enshwick is not reached, and the mod decides what to tell whoever asked. Returns once the circle is sent; any thread, on a dedicated server or a client that hosts.
+		uncover: (player: string, at: {number}, radius: number) -> (),
+		--- Uncovers the whole map of `player`, as `uncover` does for one circle: the circle around the map's `frame` that holds all of it. On the server's game thread, as `frame` is.
+		uncover_all: (player: string) -> (),
 		--- Where `player` has set the waypoint all players see, in metres; nil while it is off or for an entity without one. The server keeps it only while the player plays.
 		waypoint: (player: number) -> vector?,
 		--- What the map shows now as a `MapSnapshot`: every player with position and waypoint, the Flame Altars of `altars` with their bases, every marker and the map's frame. Without `altars` the snapshot has none; without a frame its `frame` is nil; on a game build without waypoints no player has one. The loader reads every marker, so take one now and then, not every step.

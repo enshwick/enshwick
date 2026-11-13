@@ -20,6 +20,7 @@ postcard.workspace = true
 rustc-hash.workspace = true
 serde.workspace = true
 thiserror.workspace = true
+toml.workspace = true
 
 # The examples name the API as a mod does, through the facade; cargo drops
 # a dev-dependency without a version when it publishes.

@@ -220,6 +220,44 @@ from 0 (hidden) to 255 (uncovered). `fog.coverage(position)` reads one place. Wh
 the client is in no world, on a game build without the fog, or after the
 loader stopped copying it, they fail with `FogError::Missing`.
 
+## Uncover a player's fog of war
+
+`map.uncover(player, at, radius)` uncovers a player's fog of war in a
+circle, as exploring there does. The centre is world x and z in metres. The
+radius is above 0 and at most 100 000 metres. Everything inside the circle
+is uncovered, and the fog thins out from its edge to twice the radius.
+`map.uncover_all(player)`
+uncovers the whole map, the circle around the map's frame. The server holds
+no fog, so the loader sends the circle to the loader on the player's
+client. There the game's own reveal takes it within a frame, and the
+character's save keeps it, in every world the character enters.
+
+A client without Enshwick is not reached, and the call fails with
+`WorldError::Missing`. It fails so for a player who is not online too, and
+on a client in another's game. The mod decides what to tell whoever asked. A
+place that is not finite and a radius out of bounds fail with `Refused`.
+`uncover` returns once the circle is sent and works from any thread;
+`uncover_all` reads the frame, so it runs on the game thread.
+
+```rust
+use enshwick::map::Map;
+
+fn reveal_for(map: Map, player: enshwick::PlayerKey) {
+    if let Err(why) = map.uncover_all(player) {
+        enshwick::warn!("map not uncovered: {why}");
+    }
+}
+```
+
+```luau
+for _, player in enshwick.world.players() do
+    local ok, why = pcall(enshwick.map.uncover_all, player.key)
+    if not ok then
+        enshwick.log.warn(`map not uncovered: {why}`)
+    end
+end
+```
+
 ## What a server does not have
 
 The markers a player places by hand and the map's image live only on the

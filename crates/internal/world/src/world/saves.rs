@@ -1,5 +1,6 @@
 //! The world's save: what is on disk, holding saves while a mod needs the
-//! world unsaved, and keeping a mod's entities out of it.
+//! world unsaved, keeping a mod's entities out of it, and stopping the
+//! server after its final save.
 
 use core::time::Duration;
 
@@ -105,6 +106,35 @@ impl World {
             self.0.host.handle(),
             u8::from(held),
         ))
+    }
+
+    /// Stops the dedicated server the way the game stops on Ctrl+C, for a
+    /// timed restart: after the current step the server shuts down,
+    /// [`ShutdownStarted`](crate::events::ShutdownStarted) follows and
+    /// every hold on saves lets go, the final save runs, and the process
+    /// exits with code 0, for the host's panel or service manager to start
+    /// it again. Returns at once; the countdown, the warnings and a save
+    /// before it are the mod's. Any thread.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Refused`] when a stop is under way already, asked by a
+    /// mod or by the game, or the game has not started yet; [`WorldError::Missing`] off a dedicated server,
+    /// as in single player or a hosted game, which have no restart, and on
+    /// a build where the loader did not find the game's stop.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn countdown_over(world: &enshwick::world::World) {
+    ///     if let Err(why) = world.stop() {
+    ///         enshwick::warn!("server not stopped: {why}");
+    ///     }
+    /// }
+    /// ```
+    #[script]
+    pub fn stop(self) -> Result<(), WorldError> {
+        WorldError::from_status((self.0.host.api().server_stop)(self.0.host.handle()))
     }
 
     /// Keeps an entity of the mod's out of the world's saves, or puts it back

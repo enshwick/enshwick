@@ -13,6 +13,7 @@ mod reason;
 mod schema;
 mod table;
 mod values;
+mod write;
 
 pub(crate) use read::read;
 pub(crate) use reason::reason;
@@ -20,6 +21,7 @@ pub use schema::{Field, Group, Kind, Schema, value_at};
 pub use table::TableConfig;
 #[doc(hidden)]
 pub use values::{__check_field, __entry};
+pub use write::{MAX_NESTED_WRITES, SetSettingError, set};
 
 /// A mod's settings type: one file of each world's settings, written from
 /// the type as the world first loads.

@@ -73,13 +73,24 @@ pub(super) fn text_for(id: u32, language: u32) -> Option<Handed> {
     if let Some(text) = crate::ui::interface::text(id) {
         return Some(Handed::of(text));
     }
+    mod_text(id, language).map(Handed::of)
+}
+
+/// Whether the mods' texts are sealed, so [`mod_text`] answers.
+pub(crate) fn mod_texts_sealed() -> bool {
+    TEXTS.get().is_some()
+}
+
+/// A mod's text `id` for `language`, as [`text_for`] picks it: its own, else
+/// the next language of its lookup order's, else English; `None` before the
+/// texts seal or for a tag no mod gave text.
+pub(crate) fn mod_text(id: u32, language: u32) -> Option<&'static str> {
     let texts = TEXTS.get()?.get(&id)?;
     let pick = |wanted: u32| texts.iter().find(|(l, _)| *l == wanted).map(|(_, t)| *t);
     enshwick_core::i18n::Language(language)
         .lookup_order()
         .find_map(|language| pick(language.0))
         .or_else(|| pick(ENGLISH))
-        .map(Handed::of)
 }
 
 /// Answers a text lookup with `text`.

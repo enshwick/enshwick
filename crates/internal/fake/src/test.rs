@@ -313,6 +313,8 @@ pub struct FakeHost {
     refused_writes: FxHashSet<u32>,
     static_halves: FxHashSet<u32>,
     net_peers: FxHashSet<u64>,
+    /// Content ids other loaded mods declared.
+    declared_content: Vec<String>,
     icons_ready: bool,
     archive: std::collections::BTreeMap<[u32; 4], Vec<u8>>,
     resources: FxHashMap<([u8; 16], u32, u32), Vec<u8>>,
@@ -412,6 +414,7 @@ impl FakeHost {
             refused_writes: FxHashSet::default(),
             static_halves: FxHashSet::default(),
             net_peers: FxHashSet::default(),
+            declared_content: Vec::new(),
             icons_ready: false,
             archive: std::collections::BTreeMap::new(),
             resources: FxHashMap::default(),

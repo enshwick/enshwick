@@ -352,6 +352,9 @@ pub struct Vanilla {
     read: Reader,
     /// The item names, kept once the registry reads.
     names: OnceLock<Option<Names>>,
+    /// Each item by the id the game keys it by, [`Guid::fnv1a`], with its
+    /// GUID and debug name, made from `names` once they read.
+    item_ids: OnceLock<rustc_hash::FxHashMap<u32, (Guid, String)>>,
     /// Where an item's resource holds the tag of its shown name, when the
     /// build reflects it.
     item_name: Option<usize>,
@@ -483,6 +486,7 @@ impl Vanilla {
             hashes,
             read: Box::new(read),
             names: OnceLock::new(),
+            item_ids: OnceLock::new(),
             item_name: None,
             item_entries: OnceLock::new(),
             recipes: None,
@@ -690,12 +694,52 @@ impl Vanilla {
     /// GUID; `None` for none, or without the registry.
     #[cfg(any(feature = "unstable", test))]
     pub(crate) fn item_with_id(&self, id: u32) -> Option<Guid> {
-        self.names()
-            .ok()?
-            .values()
-            .flatten()
-            .find(|item| item.fnv1a() == id)
-            .copied()
+        self.item_ids()?.get(&id).map(|(item, _)| *item)
+    }
+
+    /// Each item by [`Guid::fnv1a`] of its GUID, with its GUID and debug
+    /// name; `None` while the registry does not read.
+    fn item_ids(&self) -> Option<&rustc_hash::FxHashMap<u32, (Guid, String)>> {
+        if let Some(ids) = self.item_ids.get() {
+            return Some(ids);
+        }
+        let names = self.names().ok()?;
+        Some(self.item_ids.get_or_init(|| {
+            names
+                .iter()
+                .flat_map(|(name, items)| {
+                    items
+                        .iter()
+                        .map(|item| (item.fnv1a(), (*item, name.clone())))
+                })
+                .collect()
+        }))
+    }
+
+    /// The debug name the game's item registry lists for the vanilla item
+    /// `item`, such as `Craftingstation_Workbench`, to name an item a player
+    /// picked. It reads the registry once, never each item's resource, so it
+    /// is cheap from the second call on. `None` for a GUID that is no vanilla
+    /// item, a mod's item included
+    /// ([`content_id`](crate::content::content_id) names those), or while
+    /// the registry does not read.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::Guid;
+    /// use enshwick::content::vanilla::Vanilla;
+    ///
+    /// fn named(item: Guid) -> Option<String> {
+    ///     Vanilla::game()?.item_name(item).map(str::to_owned)
+    /// }
+    /// ```
+    #[must_use]
+    pub fn item_name(&self, item: Guid) -> Option<&str> {
+        self.item_ids()?
+            .get(&item.fnv1a())
+            .filter(|(known, _)| *known == item)
+            .map(|(_, name)| name.as_str())
     }
 
     /// The vanilla item with the debug name `name`, as the item registry

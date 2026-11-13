@@ -307,6 +307,39 @@ fn a_server_s_windows_round_trip_and_a_client_refuses_them_out_of_bounds() {
 }
 
 #[test]
+fn a_fog_uncover_round_trips_and_a_client_refuses_one_out_of_bounds() {
+    let message = Message::FogUncover {
+        at: [-1250.5, 3000.25],
+        radius: MAX_UNCOVER_RADIUS,
+    };
+    assert_eq!(message.body().len(), 12);
+    assert_eq!(
+        Message::read(message.kind(), &message.body()),
+        Some(message)
+    );
+    for (at, radius) in [
+        ([f32::NAN, 0.0], 10.0),
+        ([0.0, f32::INFINITY], 10.0),
+        ([0.0, 0.0], 0.0),
+        ([0.0, 0.0], -5.0),
+        ([0.0, 0.0], MAX_UNCOVER_RADIUS * 2.0),
+        ([0.0, 0.0], f32::INFINITY),
+    ] {
+        let body = Message::FogUncover { at, radius }.body();
+        assert_eq!(Message::read(FOG_UNCOVER, &body), None, "{at:?} {radius}");
+    }
+    let body = Message::FogUncover {
+        at: [1.0, 2.0],
+        radius: 3.0,
+    }
+    .body();
+    assert_eq!(Message::read(FOG_UNCOVER, &body[..11]), None, "short");
+    let mut long = body.clone();
+    long.push(0);
+    assert_eq!(Message::read(FOG_UNCOVER, &long), None, "long");
+}
+
+#[test]
 fn a_mod_s_carried_controls_replace_its_earlier_ones_and_the_mods_are_bounded() {
     let lights = Carried {
         name: "lights".into(),

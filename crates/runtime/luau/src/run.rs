@@ -178,6 +178,9 @@ pub(crate) struct Inner {
     off: AtomicBool,
     /// The mod's settings in force, from its `pack.toml` schema.
     settings: ArcSwap<toml::Table>,
+    /// The mod's settings file, for `enshwick.config.set`; unset for a mod
+    /// without settings.
+    config: OnceLock<enshwick_core::config::TableConfig>,
     calls: AtomicU64,
     overruns: Arc<AtomicU64>,
     peak: AtomicUsize,
@@ -527,6 +530,7 @@ fn begin(
         epoch: Instant::now(),
         second: crate::budget::Window::default(),
         settings: ArcSwap::from_pointee(toml::Table::new()),
+        config: OnceLock::new(),
     });
     if let Some(schema) = settings {
         // A pack's settings are declared once, by `add_pack` when it ran.
@@ -543,6 +547,7 @@ fn begin(
                 inner.settings.store(Arc::new(values));
             }
         })?;
+        let _first = inner.config.set(settings);
     }
     let vm = inner
         .run_main(load, scripts)

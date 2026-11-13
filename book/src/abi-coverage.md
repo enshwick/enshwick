@@ -242,3 +242,7 @@ names every entry of the golden layout once, in that order.
 | `action_window` | game | — | client |
 | `progress_write` | game | — | with a player |
 | `drop_items` | game | — | with a player |
+| `config_set` | loader | — | — |
+| `server_stop` | game | — | — |
+| `fog_uncover` | game | — | with a player |
+| `content_name` | loader | — | — |

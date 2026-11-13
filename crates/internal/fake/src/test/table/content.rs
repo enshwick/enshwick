@@ -50,11 +50,15 @@ pub(crate) extern "system" fn declare_content(
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
-        let clash = s.content_ids.iter().any(|known| {
-            *known != id
-                && enshwick_core::content::Guid::try_named(known)
-                    .is_some_and(|g| g.fnv1a() == guid.fnv1a())
-        });
+        let clash = s
+            .content_ids
+            .iter()
+            .chain(&s.host.declared_content)
+            .any(|known| {
+                *known != id
+                    && enshwick_core::content::Guid::try_named(known)
+                        .is_some_and(|g| g.fnv1a() == guid.fnv1a())
+            });
         if clash {
             return Status::REFUSED;
         }
@@ -62,6 +66,31 @@ pub(crate) extern "system" fn declare_content(
             s.content_ids.push(id);
         }
         put(out, guid.0)
+    })
+}
+
+pub(crate) extern "system" fn content_name(
+    _me: ModHandle,
+    guid: *const [u8; 16],
+    out: *mut Str,
+) -> Status {
+    if out.is_null() {
+        return Status::BAD_ARGS;
+    }
+    // SAFETY: the mod passes null or 16 readable bytes for the call.
+    let Some(&guid) = (unsafe { guid.as_ref() }) else {
+        return Status::BAD_ARGS;
+    };
+    let guid = enshwick_core::content::Guid(guid);
+    with(Status::MISSING, |s| {
+        // The id's heap text stays where it is while the state keeps it.
+        let named = s
+            .content_ids
+            .iter()
+            .chain(&s.host.declared_content)
+            .find(|id| enshwick_core::content::Guid::try_named(id) == Some(guid))
+            .map(|id| Str::new(id));
+        found(named, out)
     })
 }
 

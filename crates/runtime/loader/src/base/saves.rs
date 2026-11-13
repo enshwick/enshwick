@@ -32,7 +32,7 @@ use enshwick_base::Relock;
 
 mod holds;
 
-pub(crate) use holds::{hold, shut_down};
+pub(crate) use holds::{hold, shut_down, shutting_down};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
