@@ -2,10 +2,10 @@
 //! per item from the game's data when the loader seals the changes, and
 //! the summary of the conflicts many items share.
 
-use enshwick_core::abi::ChangeId;
+use enshwick_core::abi::{ChangeId, Level};
 use enshwick_core::content::Guid;
 use enshwick_core::content::changes::{
-    Field, ItemTraits, ItemsChange, RecipeTraits, RecipesChange,
+    Entry, Field, ItemTraits, ItemsChange, RecipeTraits, RecipesChange,
 };
 use rustc_hash::FxHashSet;
 
@@ -62,6 +62,52 @@ pub struct Picked {
     pub source: String,
     /// How many vanilla entries it reached.
     pub count: usize,
+}
+
+impl Picked {
+    /// The selection's log line and its level: how many vanilla entries it
+    /// changes, or, for a mod that is off (`on` false), that it changes none.
+    #[must_use]
+    pub fn line(&self, on: bool) -> (Level, String) {
+        let what = if self.field.entry() == Entry::Recipe {
+            "recipes"
+        } else {
+            "items"
+        };
+        let (field, source, count) = (self.field, &self.source, self.count);
+        if !on {
+            (
+                Level::INFO,
+                format!(
+                    "{field} {source}: changes none of the {count} vanilla {what} it picks, since the mod is off"
+                ),
+            )
+        } else if count == 0 {
+            (
+                Level::WARN,
+                format!("{field} {source}: changes 0 vanilla {what}"),
+            )
+        } else {
+            (
+                Level::INFO,
+                format!("{field} {source}: changes {count} vanilla {what}"),
+            )
+        }
+    }
+}
+
+/// How many items get a value of their own changed by a mod that is on:
+/// every item field but the slots of the container an item places.
+#[must_use]
+pub(crate) fn changed_items(declared: &[Declared], on: impl Fn(ModIndex) -> bool) -> usize {
+    declared
+        .iter()
+        .filter(|d| {
+            d.change.field.entry() == Entry::Item && d.change.field != Field::Slots && on(d.owner)
+        })
+        .map(|d| d.change.entry)
+        .collect::<FxHashSet<_>>()
+        .len()
 }
 
 /// Every change of `pending` as changes of one entry each, in load order,
@@ -419,6 +465,44 @@ mod tests {
         let (declared, picked) = expand(pending, &selectable());
         assert!(declared.is_empty());
         assert_eq!(picked[0].count, 0);
+    }
+
+    #[test]
+    fn a_selection_of_a_mod_that_is_off_says_it_changes_nothing() {
+        let picked = Picked {
+            owner: ModIndex::new(0),
+            field: Field::MaxStackSize,
+            source: "stacks".to_owned(),
+            count: 2266,
+        };
+        let (level, line) = picked.line(false);
+        assert_eq!(level, Level::INFO);
+        assert!(!line.contains("changes 2266"), "{line}");
+        assert!(
+            line.contains("changes none") && line.contains("the mod is off"),
+            "{line}"
+        );
+        assert!(picked.line(true).1.ends_with("changes 2266 vanilla items"));
+        let none = Picked { count: 0, ..picked };
+        assert_eq!(none.line(true).0, Level::WARN);
+    }
+
+    #[test]
+    fn only_items_a_mod_that_is_on_changes_count_as_changed() {
+        let pending = vec![
+            each(0, Items::Stackable, Field::MaxStackSize, Value::Times(4.0)),
+            one(1, guid(9), Value::Set(99.0)),
+        ];
+        let (declared, _) = expand(pending, &selectable());
+        let off = ModIndex::new(0);
+        let all = changed_items(&declared, |_| true);
+        assert!(all > 1, "{declared:?}");
+        assert_eq!(
+            changed_items(&declared, |m| m != off),
+            1,
+            "the on mod's one item"
+        );
+        assert_eq!(changed_items(&declared, |_| false), 0);
     }
 
     #[test]

@@ -17,8 +17,8 @@ impl Load<'_> {
     /// # Errors
     ///
     /// [`Off`] on a build that lacks what the rate needs, and for a rate
-    /// [`seen by clients`](Rate::seen_by_clients) in a mod without
-    /// `join: true`; the rest of the mod keeps running when it carries on
+    /// [`seen by clients`](Rate::seen_by_clients) in a mod or pack of side
+    /// server; the rest of the mod keeps running when it carries on
     /// without this rate.
     ///
     /// # Examples

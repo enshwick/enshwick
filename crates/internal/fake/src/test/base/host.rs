@@ -110,6 +110,31 @@ impl FakeHost {
         self
     }
 
+    /// A player whose game runs Enshwick and named `language` when it
+    /// joined: a [`net_peer`](Self::net_peer) whose language
+    /// `World::language_of` gives, and `i18n::language()` while the mod
+    /// handles a building event of that player's character.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::i18n::Language;
+    ///
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .player_language(enshwick::PlayerKey::new(7), Language::UK_UA)
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn player_language(
+        mut self,
+        key: enshwick_core::PlayerKey,
+        language: enshwick_core::i18n::Language,
+    ) -> Self {
+        self.player_languages.insert(key.get(), language.0);
+        self.net_peer(enshwick_core::net::Peer::Player(key))
+    }
+
     /// A loaded mod `enshwick::mods::all()` lists, in order; the loader
     /// itself comes first in the game.
     ///

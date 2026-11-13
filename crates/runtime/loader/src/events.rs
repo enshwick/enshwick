@@ -414,13 +414,23 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
     if !BUILDING_FUSE.is_off() {
         guarded(&BUILDING_FUSE, "the post-step link", || {
             actions::console::remember(&built);
+            let players = if built.is_empty() {
+                Vec::new()
+            } else {
+                crate::engine::world::players(loader).unwrap_or_default()
+            };
             for data in &built {
                 let event = if data.kind == BuildingData::PLACED {
                     Event::BUILDING_PLACED
                 } else {
                     Event::BUILDING_REMOVED
                 };
-                loader.emit(event, None, (&raw const *data).cast());
+                let emit = || loader.emit(event, None, (&raw const *data).cast());
+                // A handler fills its texts in the language of the player who built.
+                match players.iter().find(|p| p.entity == data.player) {
+                    Some(player) => crate::engine::texts::for_player(player.key.get(), emit),
+                    None => emit(),
+                }
             }
         });
     }

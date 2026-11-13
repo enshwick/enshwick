@@ -253,11 +253,23 @@ pub(crate) unsafe fn dispatch(event: Event, data: *const core::ffi::c_void) -> u
             .chain(periodic.into_iter().flatten())
             .collect()
     });
-    for handler in &handlers {
+    // As the loader, a building event reads in its player's language.
+    let reader = if event == Event::BUILDING_PLACED || event == Event::BUILDING_REMOVED {
         // SAFETY: the caller guarantees `data` is null or the event's data
-        // struct, readable for the call; `user` is the pointer the mod
-        // subscribed `callback` with.
-        handler.run(|callback, user| unsafe { callback(event, data, user) });
-    }
+        // struct, which a building event's is a `BuildingData`, readable for
+        // the call.
+        unsafe { data.cast::<enshwick_core::abi::BuildingData>().as_ref() }
+            .and_then(|built| table::base::mods::language_of_character(built.player))
+    } else {
+        None
+    };
+    table::base::mods::for_reader(reader, || {
+        for handler in &handlers {
+            // SAFETY: the caller guarantees `data` is null or the event's
+            // data struct, readable for the call; `user` is the pointer the
+            // mod subscribed `callback` with.
+            handler.run(|callback, user| unsafe { callback(event, data, user) });
+        }
+    });
     handlers.len()
 }

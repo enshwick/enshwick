@@ -1,4 +1,5 @@
 use crate::abi::Str;
+use crate::i18n::Language;
 use crate::{Entity, PlayerKey};
 
 use super::{Notice, Player, World, blank_info, online};
@@ -98,8 +99,39 @@ impl World {
         self.chat(PlayerKey::new(0), text);
     }
 
+    /// The language the player of account `key` reads the game in, as their
+    /// game named it when they joined, for a mod's own texts in a notice or
+    /// line to that player outside an action's request. The fallback for a
+    /// player whose game runs no Enshwick, for a key no connected player
+    /// holds and on a client. Any thread.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::i18n::Texts;
+    ///
+    /// fn warn_everyone(world: &enshwick::world::World, texts: &Texts) {
+    ///     for player in world.players() {
+    ///         let text = texts.fill("restart", world.language_of(player.key), &[]);
+    ///         let _how = world.notify(&player, &text);
+    ///     }
+    /// }
+    /// ```
+    #[must_use]
+    #[script]
+    pub fn language_of(self, key: PlayerKey) -> Language {
+        let language = Language((self.0.host.api().language_of)(self.0.host.handle(), key));
+        if language.code().is_empty() {
+            Language::FALLBACK
+        } else {
+            language
+        }
+    }
+
     /// Sends `text` to `player`'s chat alone, after the next step; callable
-    /// from any thread.
+    /// from any thread. The console and a remote caller have no account, so
+    /// a line for them goes to no player, with a log line: answer them in
+    /// the action's outcome.
     ///
     /// # Examples
     ///
@@ -110,15 +142,21 @@ impl World {
     /// ```
     #[script]
     pub fn tell(self, player: &Player, text: &str) {
-        if player.key.get() != 0 {
-            self.chat(player.key, text);
+        if player.key.get() == 0 {
+            crate::warn_once!(
+                "a chat line for the console or a remote caller goes to no player: they have no account, so answer them in the action's outcome"
+            );
+            return;
         }
+        self.chat(player.key, text);
     }
 
     /// Shows `text` on `player`'s screen, as the game shows its own "can't
     /// do that" messages, or tells it in chat when the player's client lacks
     /// Enshwick to show it; says which. The game shows 255 bytes; keep it to
-    /// a line. On the game thread; elsewhere it goes to chat.
+    /// a line. On the game thread; elsewhere it goes to chat. A notice for
+    /// the console or a remote caller goes to no player, as with
+    /// [`tell`](World::tell).
     ///
     /// # Examples
     ///

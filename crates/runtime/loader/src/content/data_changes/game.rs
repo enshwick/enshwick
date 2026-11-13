@@ -361,27 +361,10 @@ pub(crate) fn serve(
     let pending = std::mem::take(&mut *open);
     let (declared, picked) = expand_from_game(loader, pending);
     for p in picked {
-        let level = if p.count == 0 {
-            Level::WARN
-        } else {
-            Level::INFO
-        };
-        crate::engine::log::write(
-            level,
-            &id(loader, p.owner),
-            &format!(
-                "{} {}: changes {} vanilla {}",
-                p.field,
-                p.source,
-                p.count,
-                if p.field.entry() == Entry::Recipe {
-                    "recipes"
-                } else {
-                    "items"
-                }
-            ),
-        );
+        let (level, line) = p.line(on(loader, p.owner));
+        crate::engine::log::write(level, &id(loader, p.owner), &line);
     }
+    let changed = super::select::changed_items(&declared, |m| on(loader, m));
     let (merged, conflicts) = merge(&declared, |a, b| requires(loader, a, b));
     report(loader, &conflicts);
     let labels: FxHashMap<Guid, String> = declared
@@ -424,8 +407,8 @@ pub(crate) fn serve(
     });
     drop(open);
     let mut patches = Vec::new();
-    if !items.is_empty() {
-        crate::log!(INFO, "{} items get changed values", items.len());
+    if changed > 0 {
+        crate::log!(INFO, "{changed} items get changed values");
     }
     let offsets: &'static ItemOffsets = Box::leak(Box::new(offsets));
     for item in items {

@@ -14,6 +14,12 @@ pub(crate) mod environment;
 pub(crate) mod saves;
 pub(crate) mod transactions;
 
+pub(crate) extern "system" fn language_of(_me: ModHandle, key: enshwick_core::PlayerKey) -> u32 {
+    entry("language_of", || {
+        crate::base::net::language_of(key.get()).map_or(0, |language| language.0)
+    })
+}
+
 pub(crate) extern "system" fn progress_write(
     me: ModHandle,
     entity: Entity,

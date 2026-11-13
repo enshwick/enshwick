@@ -11,14 +11,14 @@ impl Load<'_> {
     /// `source`, whose value the mod sets later through the handle. The
     /// loader builds what it reaches from the first read on, so a set after
     /// init needs no restart. A field players' games read needs the same
-    /// value on every side: only a mod with `join: true` declares one, and
+    /// value on every side: only a mod or pack of side both declares one, and
     /// it sets the value from a synced setting.
     ///
     /// # Errors
     ///
     /// [`Off`] for a field the target does not take (an ingredient, whose
     /// change alters a recipe's length, or a field a selection does not
-    /// reach), for a field clients read in a mod without `join: true`, after
+    /// reach), for a field clients read in a mod or pack of side server, after
     /// init, and when the running build does not reflect the field.
     ///
     /// # Examples

@@ -33,9 +33,11 @@ pub use script::I18nFns;
 /// dialogs, windows and answers.
 ///
 /// On a server, the language of the player the loader asks the mod about,
-/// such as in an action or a settings check, as that player's game said
-/// when it joined; the fallback elsewhere on a server, and on a client
-/// before its first text.
+/// such as in an action or a settings check, or of the player whose
+/// character placed or removed the building of a `BuildingPlaced` or
+/// `BuildingRemoved` event, as that player's game said when it joined; the
+/// fallback elsewhere on a server, for a player whose game runs no Enshwick,
+/// and on a client before its first text.
 ///
 /// # Examples
 ///

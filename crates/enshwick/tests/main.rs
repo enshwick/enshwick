@@ -23,6 +23,7 @@ mod base_limits;
 mod buffs;
 #[cfg(feature = "unstable")]
 mod build_rights;
+mod building_language;
 #[cfg(feature = "unstable")]
 mod calls;
 #[cfg(feature = "unstable")]
@@ -114,6 +115,7 @@ mod knowledge_revokes;
 #[cfg(feature = "unstable")]
 mod labels_and_renames;
 mod language;
+mod language_of;
 mod lifecycle;
 mod live_changes;
 mod live_changes_join;
@@ -161,6 +163,8 @@ mod points_described_owned;
 mod points_links;
 mod points_owner;
 mod poisoned_locks;
+#[cfg(feature = "unstable")]
+mod private_replies;
 mod props;
 mod props_server;
 mod published_texts;

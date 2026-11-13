@@ -209,7 +209,7 @@ impl LoadMethods for crate::BaseLoad {
             .map_err(|why| Off::new(format!("{}: {why}", what())))?;
         if field.seen_by_clients() && !self.joins() {
             return Err(Off::new(format!(
-                "{}: players' games read it, so only a mod with `join: true` declares it",
+                "{}: players' games read it, so only a mod or pack of side both declares it",
                 what()
             )));
         }

@@ -75,7 +75,8 @@ mod tests {
         // makes its own handle the host of the copy that runs the packs.
         unsafe { enshwick_base::__internal::install_host(loader.api(), LOADER) };
         // SAFETY: the fake host's table lives for the process.
-        let status = unsafe { enshwick::__private::init_pack(loader.api(), PACK, init) };
+        let status =
+            unsafe { enshwick::__private::init_pack(loader.api(), PACK, Side::SERVER, init) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         SEEN.store(0, Ordering::Relaxed);
         loader

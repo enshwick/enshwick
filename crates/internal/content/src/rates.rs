@@ -89,7 +89,7 @@ pub enum Rate {
     /// How fast timed workshops produce: 2 halves the time an item takes,
     /// and a factor below 0.01 counts as 0.01, so a workshop never stops.
     /// Clients count it too, for the time their screens show, so only a
-    /// mod with `join: true` declares it and sets it from a synced setting:
+    /// mod or pack of side both declares it and sets it from a synced setting:
     /// every player on a server then runs the mod with the server's factor.
     FactoryProductionSpeed,
     /// How many resources a drop stacks, as the game's own setting does.
@@ -100,8 +100,8 @@ pub enum Rate {
     /// The skill points a character gains per level, rounded to a whole
     /// number; points from knowledge stay as they are. Clients count it
     /// too, for the points their skill tree shows, and the server checks
-    /// every unlock against its own count, so only a mod with
-    /// `join: true` declares it, set from a synced setting. Lowering it
+    /// every unlock against its own count, so only a mod or pack of side
+    /// both declares it, set from a synced setting. Lowering it
     /// mid-game leaves a character that spent more than its new total
     /// unable to unlock more skills until it resets its tree.
     SkillPoints,
@@ -113,7 +113,7 @@ pub enum Rate {
     /// How many items a recipe makes, for the vanilla and mod recipes whose
     /// output is of this kind, rounded and at least one; applied after every
     /// mod's own recipe patch. The crafting menu shows the counts, so only a
-    /// mod with `join: true` declares it, set from a synced setting.
+    /// mod or pack of side both declares it, set from a synced setting.
     RecipeOutput(RecipeKind),
 }
 
@@ -191,8 +191,8 @@ impl Rate {
         Self::all().find(|rate| rate.id() == id)
     }
 
-    /// Whether clients count the rate too, so only a mod that joins
-    /// declares it.
+    /// Whether clients count the rate too, so only a mod or pack of side
+    /// both declares it.
     ///
     /// # Examples
     ///
@@ -435,7 +435,7 @@ impl LoadMethods for crate::BaseLoad {
     fn rate(&mut self, rate: Rate) -> Result<RateHandle, Off> {
         if !may_declare_rate(rate.id(), self.joins()) {
             return Err(Off::new(format!(
-                "the rate {rate:?}: clients count it too, so only a mod with `join: true` declares it"
+                "the rate {rate:?}: clients count it too, so only a mod or pack of side both declares it"
             )));
         }
         let host = self.host();

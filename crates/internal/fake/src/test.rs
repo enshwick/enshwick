@@ -315,6 +315,7 @@ pub struct FakeHost {
     net_peers: FxHashSet<u64>,
     /// Content ids other loaded mods declared.
     declared_content: Vec<String>,
+    player_languages: FxHashMap<u64, u32>,
     icons_ready: bool,
     archive: std::collections::BTreeMap<[u32; 4], Vec<u8>>,
     resources: FxHashMap<([u8; 16], u32, u32), Vec<u8>>,
@@ -415,6 +416,7 @@ impl FakeHost {
             static_halves: FxHashSet::default(),
             net_peers: FxHashSet::default(),
             declared_content: Vec::new(),
+            player_languages: FxHashMap::default(),
             icons_ready: false,
             archive: std::collections::BTreeMap::new(),
             resources: FxHashMap::default(),

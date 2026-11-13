@@ -238,9 +238,14 @@ fn calling(me: ModHandle) -> Option<(&'static Loader, usize, String, PathBuf)> {
 ///
 /// - `api` is the loader's process-wide host table, valid for the process.
 pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) -> Status {
-    let Some((_, _, id, dir)) = calling(me) else {
+    let Some((loader, index, id, dir)) = calling(me) else {
         return Status::BAD_ARGS;
     };
+    // The side the loader keeps for the pack, which its other calls check.
+    let side = loader
+        .mods
+        .get(index)
+        .map_or(Side::SERVER, |record| record.manifest.side);
     let files = match PackFiles::read_dir(&dir) {
         Ok(files) => files,
         Err(why) => {
@@ -276,7 +281,7 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
     // SAFETY: `api` is the loader's process-wide table, by this function's
     // `# Safety` contract, which is what `init_pack` asks for.
     let status = unsafe {
-        enshwick_core::__private::init_pack(api, me, |load| {
+        enshwick_core::__private::init_pack(api, me, side, |load| {
             load.add_pack(&pack)?;
             let scripts = scripts.map(|s| s.with_items(&pack.item_bindings()));
             let limits = enshwick_luau::Limits::default();

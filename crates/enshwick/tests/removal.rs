@@ -216,7 +216,14 @@ mod tests {
         unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
         let init = |me, call: fn(&mut Load<'_>) -> Result<(), Off>| {
             // SAFETY: the fake host's table lives for the process.
-            unsafe { enshwick::__private::init_pack(loader.api(), ModHandle(me), call) }
+            unsafe {
+                enshwick::__private::init_pack(
+                    loader.api(),
+                    ModHandle(me),
+                    enshwick::abi::Side::SERVER,
+                    call,
+                )
+            }
         };
         let added = init(1, |load| load.add_item(NewItem::new(LANTERN, OTHER_ITEM)));
         assert_eq!(added, Status::OK, "{:?}", loader.logs());

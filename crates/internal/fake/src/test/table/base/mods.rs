@@ -451,6 +451,31 @@ pub(crate) extern "system" fn texts(_me: ModHandle, toml: Str) -> Status {
     })
 }
 
+std::thread_local! {
+    /// The language of the player the loader calls the mod about on this
+    /// thread, inside [`for_reader`].
+    static READER: core::cell::Cell<Option<u32>> = const { core::cell::Cell::new(None) };
+}
+
+/// Runs `f` with `language` as the reader's, as the loader does around a
+/// call about one player; `None` leaves the host's.
+pub(crate) fn for_reader<R>(language: Option<u32>, f: impl FnOnce() -> R) -> R {
+    let before = READER.replace(language);
+    let result = f();
+    READER.set(before);
+    result
+}
+
+/// The language the game of the player whose character is `entity`
+/// named, as the loader scopes a building event; `None` for no such
+/// player or one that named none.
+pub(crate) fn language_of_character(entity: enshwick_core::Entity) -> Option<u32> {
+    with(None, |s| {
+        let key = s.host.players.iter().find(|p| p.entity == entity)?.key;
+        s.host.player_languages.get(&key.get()).copied()
+    })
+}
+
 pub(crate) extern "system" fn language(_me: ModHandle) -> u32 {
-    with(0, |s| s.host.language)
+    READER.get().unwrap_or_else(|| with(0, |s| s.host.language))
 }
