@@ -1983,6 +1983,14 @@ pub struct HostApi {
     /// [`Status::REFUSED`]. ABI 11.26.
     pub fog_uncover:
         extern "system" fn(me: ModHandle, player: PlayerKey, x: f32, z: f32, radius: f32) -> Status,
+    /// Writes to `out` the content id, `<mod>:<name>`, that a loaded mod
+    /// declared for exactly the GUID at `guid`, not only for its game id: a
+    /// mod's item, recipe or other content. The text lives for the process.
+    /// Any thread. [`Status::MISSING`] for a GUID no mod declared, such as a
+    /// vanilla item's; [`Status::BAD_ARGS`] for a null `guid` or `out`. A
+    /// panic in the loader returns [`Status::REFUSED`]. ABI 11.26.
+    pub content_name:
+        extern "system" fn(me: ModHandle, guid: *const [u8; 16], out: *mut Str) -> Status,
 }
 
 // Every function keeps its slot: 24 header and version bytes, then 8 per slot.
@@ -2126,5 +2134,6 @@ const _: () = {
     assert!(offset_of!(HostApi, config_set) == 24 + 202 * 8);
     assert!(offset_of!(HostApi, server_stop) == 24 + 203 * 8);
     assert!(offset_of!(HostApi, fog_uncover) == 24 + 204 * 8);
-    assert!(size_of::<HostApi>() == 24 + 205 * 8);
+    assert!(offset_of!(HostApi, content_name) == 24 + 205 * 8);
+    assert!(size_of::<HostApi>() == 24 + 206 * 8);
 };

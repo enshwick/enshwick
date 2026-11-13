@@ -208,6 +208,18 @@ pub(crate) fn declare_content(owner: &str, name: &str) -> Result<Guid, DeclareId
     Ok(guid)
 }
 
+/// The content id a mod declared whose GUID is exactly `guid`, not only its
+/// game id, as a text that lives for the process: ids are never forgotten,
+/// and a boxed name's heap text never moves.
+pub(crate) fn content_named(guid: Guid) -> Option<enshwick_core::abi::Str> {
+    with(|ids| {
+        ids.known
+            .get(&(Space::Content, guid.fnv1a()))
+            .filter(|(name, _)| Guid::try_named(name) == Some(guid))
+            .map(|(name, _)| enshwick_core::abi::Str::new(name))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -264,5 +276,25 @@ mod tests {
         );
         assert!(declare_content("ids-test", "other:lamp").is_err());
         assert!(declare_content("ids-test", "lamp").is_err());
+    }
+
+    #[test]
+    fn a_content_id_is_found_by_its_exact_guid_and_never_by_a_shared_key() {
+        let locker = declare_content("ids-named", "ids-named:locker").unwrap();
+        // SAFETY: the name lives in the ids for the process.
+        let named = content_named(locker).map(|s| unsafe { s.as_str() }.unwrap().to_owned());
+        assert_eq!(named.as_deref(), Some("ids-named:locker"));
+        let crafted = Guid([3; 16]);
+        with(|ids| {
+            ids.known.insert(
+                (Space::Content, crafted.fnv1a()),
+                ("ids-named:other".into(), "ids-named".into()),
+            )
+        });
+        assert!(
+            content_named(crafted).is_none(),
+            "the key's name is not this GUID"
+        );
+        assert!(content_named(Guid([4; 16])).is_none());
     }
 }
