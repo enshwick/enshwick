@@ -625,6 +625,22 @@ impl Installed {
         })
     }
 
+    /// Whether the mod asked the server to stop with `World::stop`; the fake
+    /// stops nothing, so a test raises
+    /// [`events::ShutdownStarted`](enshwick_core::events::ShutdownStarted)
+    /// itself to go on as the game would.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(!loader.stop_asked());
+    /// ```
+    #[must_use]
+    pub fn stop_asked(&self) -> bool {
+        table::with(false, |s| s.stop_asked)
+    }
+
     /// The drops the mod asked for, with the entity ids the fake handed
     /// out, in order.
     ///

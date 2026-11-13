@@ -342,7 +342,7 @@ HookSpec size 32 align 8
     next at 16 size 8 type *const Atomic<usize>
     priority at 24 size 4 type i32
     flags at 28 size 4 type HookFlags
-HostApi size 1648 align 8
+HostApi size 1656 align 8
     header at 0 size 8 type Header
     host_version at 8 size 16 type Str
     build at 24 size 8 type extern "system" fn(*mut BuildInfo)
@@ -548,6 +548,7 @@ HostApi size 1648 align 8
     progress_write at 1624 size 8 type extern "system" fn(ModHandle, Entity, u32, u32) -> Status
     drop_items at 1632 size 8 type extern "system" fn(ModHandle, *const DropRequest, *mut Entity) -> Status
     config_set at 1640 size 8 type extern "system" fn(ModHandle, Str, Str, Str) -> Status
+    server_stop at 1648 size 8 type extern "system" fn(ModHandle) -> Status
 Interaction size 56 align 8 born 56
     header at 0 size 8 type Header
     kind at 8 size 4 type u32

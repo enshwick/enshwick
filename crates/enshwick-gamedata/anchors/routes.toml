@@ -8955,3 +8955,15 @@ in = "~fn:ui.button_frame"
 shape = ["mov rbx,{ui.context}", "movsxd rcx,[rdi]"]
 take = "spelled"
 value = 0x0
+
+[[route]]
+id = "~server.console_setup"
+sides = ["server"]
+loads = ["MessageSystemSend", "MessageSystemRecv"]
+
+[[route]]
+id = "server.console_handler"
+sides = ["server"]
+in = "~server.console_setup"
+shape = ["lea rcx,[rip+*]", "call [rip+?]"]
+take = "address"

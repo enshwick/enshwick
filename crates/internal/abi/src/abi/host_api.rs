@@ -1957,6 +1957,17 @@ pub struct HostApi {
     /// logs why. A panic in the loader returns [`Status::REFUSED`]. ABI
     /// 11.26.
     pub config_set: extern "system" fn(me: ModHandle, file: Str, key: Str, value: Str) -> Status,
+    /// Asks the dedicated server to stop the way the game stops on Ctrl+C:
+    /// after the current step the server shuts down, `ShutdownStarted` is
+    /// raised and the save holds let go, the final save runs, and the
+    /// process exits with code 0. Returns at once; the stop runs on a
+    /// thread of the loader's. Any thread. [`Status::REFUSED`] when a stop
+    /// is under way already, asked by a mod or by the game;
+    /// [`Status::UNAVAILABLE`] off a dedicated server, as in single player
+    /// or a hosted game; [`Status::MISSING`] when the loader did not find
+    /// the game's stop on this build. A panic in the loader returns
+    /// [`Status::REFUSED`]. ABI 11.26.
+    pub server_stop: extern "system" fn(me: ModHandle) -> Status,
 }
 
 // Every function keeps its slot: 24 header and version bytes, then 8 per slot.
@@ -2098,5 +2109,6 @@ const _: () = {
     assert!(offset_of!(HostApi, progress_write) == 24 + 200 * 8);
     assert!(offset_of!(HostApi, drop_items) == 24 + 201 * 8);
     assert!(offset_of!(HostApi, config_set) == 24 + 202 * 8);
-    assert!(size_of::<HostApi>() == 24 + 203 * 8);
+    assert!(offset_of!(HostApi, server_stop) == 24 + 203 * 8);
+    assert!(size_of::<HostApi>() == 24 + 204 * 8);
 };

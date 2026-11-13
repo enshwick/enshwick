@@ -227,4 +227,5 @@ pub(crate) static API: HostApi = HostApi {
     progress_write,
     drop_items,
     config_set,
+    server_stop,
 };

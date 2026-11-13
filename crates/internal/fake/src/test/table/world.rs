@@ -300,6 +300,18 @@ pub(crate) extern "system" fn progress_write(
     })
 }
 
+pub(crate) extern "system" fn server_stop(_me: ModHandle) -> Status {
+    with(Status::UNAVAILABLE, |s| {
+        if s.host.side != Side::SERVER || s.host.hosting {
+            return Status::UNAVAILABLE;
+        }
+        if core::mem::replace(&mut s.stop_asked, true) {
+            return Status::REFUSED;
+        }
+        Status::OK
+    })
+}
+
 pub(crate) extern "system" fn build_rights(
     _me: ModHandle,
     check: *mut enshwick_core::abi::BuildRights,

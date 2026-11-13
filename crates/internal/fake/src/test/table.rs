@@ -144,6 +144,8 @@ pub(crate) struct State {
     pub(crate) progress_steps: Vec<u64>,
     /// The drops the mod asked for, with the ids handed out.
     pub(crate) drops: Vec<(enshwick_core::Entity, enshwick_core::abi::DropRequest)>,
+    /// Whether the mod asked the server to stop.
+    pub(crate) stop_asked: bool,
     pub(crate) craft_filters: Vec<Registered<CraftCheckFn>>,
     /// Channels the mod opened: full name, id, handler and pointer.
     pub(crate) channels: Vec<(String, u32, Registered<NetMessageFn>)>,
@@ -414,6 +416,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         progress_writes: None,
         progress_steps: Vec::new(),
         drops: Vec::new(),
+        stop_asked: false,
         craft_filters: Vec::new(),
         daytime: None,
         clock_speed: None,
@@ -720,4 +723,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     progress_write,
     drop_items,
     config_set,
+    server_stop,
 };

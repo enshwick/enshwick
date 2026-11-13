@@ -62,6 +62,8 @@ pub(crate) mod services;
 #[cfg(windows)]
 pub(crate) mod status;
 #[cfg(windows)]
+pub(crate) mod stop;
+#[cfg(windows)]
 pub(crate) mod watch;
 pub mod wire;
 pub mod world_folders;
@@ -153,5 +155,9 @@ pub(crate) static PARTS: &[&Part] = &[
     &Part {
         table_ids: notices::TABLE_IDS,
         ..part!("notices", notices)
+    },
+    &Part {
+        table_ids: stop::TABLE_IDS,
+        ..part!("stop", stop)
     },
 ];
