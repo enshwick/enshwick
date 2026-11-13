@@ -115,6 +115,7 @@ mod knowledge_revokes;
 #[cfg(feature = "unstable")]
 mod labels_and_renames;
 mod language;
+#[cfg(feature = "unstable")]
 mod language_of;
 mod lifecycle;
 mod live_changes;
