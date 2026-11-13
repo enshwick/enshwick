@@ -188,20 +188,18 @@ pub(crate) fn link(loader: &'static Loader) {
             }
         }
     }
-    // The destroy goes first: a copy must never outlive its fog.
-    let linked = loader.link_fused(
-        &FUSE,
+    link_at(
+        loader,
         Target::Pinned(pinned::map::FOG_DESTROY),
-        &DESTROY_NEXT,
-        destroy,
-        HookFlags::NONE,
-    ) && loader.link_fused(
-        &FUSE,
         Target::Pinned(pinned::map::FOG_REVEAL),
-        &REVEAL_NEXT,
-        reveal,
-        HookFlags::NONE,
     );
+}
+
+/// Links the fog's `destroy` and its `reveal`, both or neither.
+fn link_at(loader: &Loader, destroy_at: Target<'_>, reveal_at: Target<'_>) {
+    // The destroy goes first: a copy must never outlive its fog.
+    let linked = loader.link_fused(&FUSE, destroy_at, &DESTROY_NEXT, destroy, HookFlags::NONE)
+        && loader.link_fused(&FUSE, reveal_at, &REVEAL_NEXT, reveal, HookFlags::NONE);
     UNCOVERS.linked.store(linked, Ordering::Release);
 }
 
@@ -490,36 +488,41 @@ pub(crate) fn read(
 mod tests {
     use super::*;
 
+    fn reason(part: &str) -> Option<String> {
+        crate::engine::diag::parts_off()
+            .into_iter()
+            .find(|p| p.part == part)
+            .map(|p| p.reason)
+    }
+
     #[test]
     fn a_fog_whose_reveal_fails_to_link_is_wholly_off_and_its_destroy_never_armed() {
-        let mut loader = crate::start::tests::bare_loader();
-        loader.side = Side::CLIENT;
-        loader.build = Box::leak(Box::new(crate::engine::builds::with_rows(
-            "[symbols]\n\"map.fog_destroy\" = 0x1000\n[constants]\n\"map.fog_destroy.bytes\" = 1",
-        )));
-        let loader: &'static Loader = Box::leak(Box::new(loader));
-        assert_eq!(open(loader, ModIndex::new(0)), Status::OK);
-        link(loader);
-        assert!(FUSE.is_off() && COPY_FUSE.is_off());
+        let loader = crate::start::tests::bare_loader();
+        link_at(
+            &loader,
+            Target::Found("fog.destroy", Some(0x1000)),
+            Target::Found("fog.reveal", None),
+        );
+        assert!(FUSE.is_off());
         assert!(!UNCOVERS.linked.load(Ordering::Acquire));
         let mut chains = loader.chains.relock();
         chains.seal();
         assert!(chains.is_empty(), "the destroy went with its feature");
         drop(chains);
-        let listed = crate::engine::diag::parts_off();
-        let reason = |part: &str| {
-            listed
-                .iter()
-                .find(|p| p.part == part)
-                .map(|p| p.reason.clone())
-        };
-        assert!(
-            reason("fog of war").is_some_and(|r| r.starts_with("map.fog_reveal ")),
-            "{listed:?}"
-        );
+        assert!(reason("fog of war").is_some_and(|r| r.starts_with("fog.reveal ")));
+    }
+
+    #[test]
+    fn a_fog_copy_without_its_layout_is_listed_off_with_the_first_entry_missing() {
+        let mut loader = crate::start::tests::bare_loader();
+        loader.side = Side::CLIENT;
+        let loader: &'static Loader = Box::leak(Box::new(loader));
+        assert_eq!(open(loader, ModIndex::new(0)), Status::OK);
+        link(loader);
+        assert!(COPY_FUSE.is_off());
         assert!(
             reason("fog of war copy").is_some_and(|r| r.starts_with("map.fog_tile_edge_shift ")),
-            "listed for the Mods screen, not only logged: {listed:?}"
+            "listed for the Mods screen, not only logged"
         );
     }
 }

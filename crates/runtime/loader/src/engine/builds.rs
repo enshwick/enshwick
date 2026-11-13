@@ -555,29 +555,6 @@ pub fn empty() -> KnownBuild {
     }
 }
 
-/// A build that knows only the entries of `rows`, a table's `[symbols]`
-/// and `[constants]` sections, for tests that link part of a feature.
-///
-/// # Panics
-///
-/// When `rows` do not read as a table's sections.
-#[cfg(test)]
-#[must_use]
-pub fn with_rows(rows: &str) -> KnownBuild {
-    let table = tables::Table::parse(&format!(
-        "name = \"rows\"\nside = \"server\"\nguid = \"00000000000000000000000000000000\"\nage = 0\n{rows}"
-    ))
-    .unwrap();
-    KnownBuild {
-        name: table.name().to_owned(),
-        table: table.resolve(),
-        unanchored: Vec::new(),
-        conflicts: Vec::new(),
-        outside: Vec::new(),
-        lacking: OnceLock::new(),
-    }
-}
-
 /// What `ids` read on the executables `ENSH_SERVER_EXE` and
 /// `ENSH_CLIENT_EXE` name, each skipped without its variable: by the
 /// executable's own table, then by every table of its side carried to it by

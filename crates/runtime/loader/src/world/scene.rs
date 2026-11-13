@@ -469,3 +469,76 @@ fn read_marker_types(loader: &Loader) -> Result<Vec<MapMarkerTypeInfo>, ReadType
     let registry = archive.resource(key).ok_or(ReadTypesError::Unreadable)?;
     types(&layout, &groups, &registry)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Asks `cache` for `key` under `fuse` until the read is done.
+    fn settled<V: Described, E: SceneFailure>(
+        key: SceneKey,
+        fuse: &'static Fuse,
+        cache: fn(&mut SceneState) -> &mut SceneCache<V, E>,
+        read: impl Fn() -> Result<V, E> + Clone + Send + 'static,
+    ) -> Result<V, Status> {
+        let began = Instant::now();
+        loop {
+            let found = cached(key, fuse, "build 1", cache, read.clone());
+            if found.as_ref().err() != Some(&Status::NOT_LOADED) {
+                return found;
+            }
+            assert!(began.elapsed().as_secs() < 10, "the read never finished");
+            std::thread::yield_now();
+        }
+    }
+
+    #[test]
+    fn a_scene_read_that_panics_turns_its_feature_off_and_starts_no_other_read() {
+        static MARKS: Fuse = Fuse::new("test scene marks");
+        let key = SceneKey::new([1; 16], 2).unwrap();
+        let read = || -> Result<Arc<[MapMarkerInfo]>, ReadSceneError> { panic!("a broken read") };
+        assert_eq!(
+            settled(key, &MARKS, |state| &mut state.markers, read).err(),
+            Some(Status::MISSING)
+        );
+        assert!(MARKS.is_off());
+        let began = Instant::now();
+        let marks = loop {
+            let listed = crate::engine::diag::parts_off();
+            if let Some(marks) = listed.into_iter().find(|p| p.part == "test scene marks") {
+                break marks;
+            }
+            assert!(began.elapsed().as_secs() < 10, "never listed off");
+            std::thread::yield_now();
+        };
+        assert_eq!(marks.reason, "the read panicked");
+        let other = SceneKey::new([2; 16], 2).unwrap();
+        let unread = || -> Result<Arc<[MapMarkerInfo]>, ReadSceneError> { unreachable!("off") };
+        assert_eq!(
+            cached(other, &MARKS, "build 1", |state| &mut state.markers, unread).err(),
+            Some(Status::MISSING)
+        );
+    }
+
+    #[test]
+    fn a_scene_without_its_biome_map_leaves_the_map_frame_on_for_the_next_scene() {
+        static FRAMES: Fuse = Fuse::new("test scene frames");
+        let key = SceneKey::new([3; 16], 2).unwrap();
+        let read = || -> Result<MapFrameInfo, ReadFrameError> { Err(ReadFrameError::NoBiomeMap) };
+        assert_eq!(
+            settled(key, &FRAMES, |state| &mut state.frame, read).err(),
+            Some(Status::MISSING)
+        );
+        assert!(!FRAMES.is_off());
+    }
+
+    #[test]
+    fn only_a_missing_layout_a_panic_or_no_thread_turns_a_scene_read_off() {
+        let off = |why: ReadSceneError| why.off("marks", "build 1").is_some();
+        assert!(off(ReadSceneError::Layout) && off(ReadSceneError::Panicked));
+        assert!(off(ReadSceneError::Thread) && !off(ReadSceneError::Chunk));
+        assert!(!off(ReadSceneError::Archive) && !off(ReadSceneError::Templates));
+        let frame_off = |why: ReadFrameError| why.off("frames", "build 1").is_some();
+        assert!(frame_off(ReadFrameError::Layout) && !frame_off(ReadFrameError::BiomeMap));
+    }
+}
