@@ -675,6 +675,7 @@ fn per_call(function: Unary) -> f64 {
 #[test]
 #[ignore = "a measurement: cargo test -p enshwick-loader --release --lib measures_the_stub_cost -- --ignored --nocapture"]
 fn measures_the_stub_cost() {
+    static MEASURED: Fuse = Fuse::new("measured feature");
     let callback = (nothing as *const ()).addr();
     println!("chosen here: {:?}", Vectors::current());
     let mut cases: Vec<(&str, Unary)> = vec![("clear", plain_clear)];
@@ -703,7 +704,6 @@ fn measures_the_stub_cost() {
         "clear, one handler through dispatch: {dispatched:.2} ns (+{:.2} over the stub alone)",
         dispatched - alone
     );
-    static MEASURED: Fuse = Fuse::new("measured feature");
     let mut mids = Mids::default();
     let ours = link(ModIndex::LOADER, empty, i32::MIN);
     assert_eq!(mids.add_fused(0x10, ours, Some(&MEASURED)), Status::OK);

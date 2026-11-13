@@ -534,24 +534,16 @@ pub fn kept(running: Side) -> Option<KnownBuild> {
 
 /// A build that knows no entry, for tests that run the loader without a
 /// game or a kept table.
-#[cfg(test)]
-#[must_use]
-pub fn empty() -> KnownBuild {
-    knowing("")
-}
-
-/// A build that knows only the table `entries`, such as `[symbols]` and
-/// `[constants]` rows, for tests that link against chosen entries.
 ///
 /// # Panics
 ///
-/// When `entries` do not parse as a table's rows.
+/// When `tables::Table::parse` stops taking its fixed text.
 #[cfg(test)]
 #[must_use]
-pub fn knowing(entries: &str) -> KnownBuild {
-    let table = tables::Table::parse(&format!(
-        "name = \"empty\"\nside = \"server\"\nguid = \"00000000000000000000000000000000\"\nage = 0\n{entries}"
-    ))
+pub fn empty() -> KnownBuild {
+    let table = tables::Table::parse(
+        "name = \"empty\"\nside = \"server\"\nguid = \"00000000000000000000000000000000\"\nage = 0",
+    )
     .unwrap();
     KnownBuild {
         name: table.name().to_owned(),
