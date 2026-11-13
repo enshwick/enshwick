@@ -505,9 +505,7 @@ pub(crate) unsafe extern "system" fn run_typed<C: Call, F: Fn(&C) -> C::Output>(
     // ast-grep-ignore: game-memory-through-raw
     let input = unsafe { input.cast::<C>().read_unaligned() };
     let output = output.cast::<C::Output>();
-    let Ok(answer) =
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (served.run)(&input)))
-    else {
+    let Ok(answer) = crate::host::caught(|| (served.run)(&input)) else {
         return served.panicked();
     };
     // SAFETY: the loader matched the caller's answer to `C::Output` field by
@@ -546,7 +544,7 @@ unsafe extern "system" fn run_described<F: Fn(&[u8], &mut [u8]) -> bool>(
     unsafe { core::ptr::write_bytes(output.cast::<u8>(), 0, sized.output_size) };
     // SAFETY: the same bytes, zeroed just before, so initialised.
     let answer = unsafe { core::slice::from_raw_parts_mut(output.cast::<u8>(), sized.output_size) };
-    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (sized.run)(input, answer))) {
+    match crate::host::caught(|| (sized.run)(input, answer)) {
         Ok(true) => Status::OK,
         Ok(false) => Status::FAULTED,
         Err(_) => served.panicked(),

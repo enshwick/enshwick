@@ -8,6 +8,9 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- Loader: error code E1010 names a loader feature that turned itself off
+  while the game ran; the log line, the status summary and the Mods screen
+  name the feature (#1062).
 - `world`: `World::set_level`, `set_experience` and `add_experience` write
   a player's level and experience in the server's next level step, as the
   game raises levels: a set level starts empty with what the game asks of
@@ -301,6 +304,13 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- Loader: a feature arms all its detours or none. When one of its links
+  fails to link or to arm, its other links are dropped or wired past, and
+  once a feature turns off the game runs past every detour of it. A
+  feature that turns off logs once and is listed in the status summary and
+  on the Mods screen (#1062).
+- Loader: a mod's panic whose payload panics again when dropped no longer
+  aborts the game from a served call, a point or a detour (#1062).
 - Loader: a crash line names the module a fault lies in when no mod or the
   loader holds the address, and says `the game itself crashed` only when it
   searched the whole stack and found no mod's or loader's code, in a module's

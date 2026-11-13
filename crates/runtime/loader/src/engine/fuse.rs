@@ -1,8 +1,85 @@
-//! The switch of a feature the loader runs from game threads: a panic in the
-//! loader's own work turns the feature off, logged once, and its detours
-//! hand every later call to the game unchanged.
+//! A feature the loader runs from game threads, and the one way it turns off.
+//!
+//! A panic in its own work, a failed live check or a link the build cannot
+//! make turns it off once: logged with its code, listed for the status
+//! summary and the Mods screen, and wired past in every chain it linked, so
+//! the game runs that part vanilla.
 
 use std::sync::atomic::{AtomicBool, Ordering};
+
+use enshwick_core::abi::Level;
+
+use crate::engine::errors::{self, Code};
+#[cfg(windows)]
+use crate::engine::registry::Registry;
+
+/// The features the loader's links and reports name, each once, so all the
+/// links of a feature turn off with it. Never sealed: a report may name a
+/// feature after the hooks arm.
+#[cfg(windows)]
+static NAMED: Registry<&'static Fuse> = Registry::new();
+
+/// Why a feature is off, as the log, the status summary and the Mods screen
+/// say it; every way a feature turns off builds its text here.
+#[derive(Debug, Clone)]
+pub(crate) struct Off {
+    /// The log line, before its code.
+    line: String,
+    /// The reason the status summary and the Mods screen list.
+    entry: String,
+    level: Level,
+    /// The error code the line ends with; none when the cause is neither
+    /// the build nor a fault, such as two mods asking for one name.
+    code: Option<Code>,
+}
+
+impl Off {
+    /// `feature` is off on the build named `build`, whose entry `id` failed
+    /// for `reason`.
+    #[cfg(windows)]
+    pub(crate) fn build(feature: &str, build: &str, id: &str, reason: &str) -> Self {
+        Self {
+            line: crate::engine::builds::off_line(feature, build, id, reason),
+            entry: format!("{id} {reason}"),
+            level: Level::WARN,
+            code: Some(errors::FEATURES_OFF),
+        }
+    }
+
+    /// The live object of `feature` does not hold what the build named
+    /// `build` found: `why`.
+    #[cfg(windows)]
+    fn live(feature: &str, build: &str, why: &str) -> Self {
+        Self {
+            line: format!("{feature} off on {build}: {why}"),
+            entry: why.to_owned(),
+            level: Level::WARN,
+            code: Some(errors::FEATURES_OFF),
+        }
+    }
+
+    /// The loader's own code of `feature` failed while the game ran.
+    pub(crate) fn fault(feature: &str, reason: &str) -> Self {
+        Self {
+            line: format!("{feature} off: {reason}; the game runs it vanilla"),
+            entry: reason.to_owned(),
+            level: Level::ERROR,
+            code: Some(errors::FEATURE_FAULT),
+        }
+    }
+
+    /// A log `line` and a status `entry` a caller wrote for a build that
+    /// lacks what the feature needs.
+    #[cfg(windows)]
+    pub(crate) fn reported(line: String, entry: String) -> Self {
+        Self {
+            line,
+            entry,
+            level: Level::WARN,
+            code: None,
+        }
+    }
+}
 
 /// A feature's switch, read by every detour of the feature.
 #[derive(Debug)]
@@ -73,10 +150,7 @@ impl Fuse {
             // refusing without a message; name it once a build shows one.
             Ok(Err(why)) if why.is_null() => false,
             Ok(Err(why)) => {
-                if !self.off.swap(true, Ordering::Relaxed) {
-                    crate::log!(WARN, "{} off on {build}: {why}", self.feature);
-                    crate::engine::diag::part_off(self.feature, &why.to_string());
-                }
+                self.turn_off(&Off::live(self.feature, build, &why.to_string()));
                 false
             }
             Err(payload) => {
@@ -163,30 +237,69 @@ impl Fuse {
     #[cold]
     #[inline(never)]
     fn panicked(&self, site: &str, payload: &(dyn core::any::Any + Send)) {
-        self.turn_off(&format!(
+        let reason = format!(
             "the loader panicked in {site}: {}",
             crate::engine::early::panic_text(payload)
-        ));
+        );
+        self.turn_off(&Off::fault(self.feature, &reason));
     }
 
     /// Turns the feature off after a panic at `site`, logged the first time.
     #[cold]
     pub fn blow(&self, site: &str) {
-        self.turn_off(&format!("the loader panicked in {site}"));
+        let reason = format!("the loader panicked in {site}");
+        self.turn_off(&Off::fault(self.feature, &reason));
     }
 
-    /// Turns the feature off for `reason`, logged and kept for the status
-    /// summary and the Mods screen the first time.
+    /// The feature named `feature`, one for the name, made the first time
+    /// a link or a report names it. A cold lookup under a lock: hot paths
+    /// hold their feature.
+    #[cfg(windows)]
+    pub(crate) fn named(feature: &str) -> &'static Self {
+        // Kept for the process, as every link that names it is.
+        let leaked = || -> &'static Self {
+            Box::leak(Box::new(Self::new(Box::leak(
+                feature.to_owned().into_boxed_str(),
+            ))))
+        };
+        NAMED
+            .edit(|named| {
+                if let Some(found) = named.iter().copied().find(|f| f.feature == feature) {
+                    return found;
+                }
+                let new = leaked();
+                named.push(new);
+                new
+            })
+            // Nothing seals the named features; a sealed list would only
+            // cost the twin's dedup.
+            .unwrap_or_else(|_sealed| leaked())
+    }
+
+    /// Turns the feature off for `off`. The first time, it logs the line
+    /// with its code, lists the feature for the status summary and the Mods
+    /// screen, and wires every chain past the links that carry this fuse;
+    /// another fuse of the same name stays as it is, since a name may be
+    /// shared by parts that must keep running. Never call it with the chains
+    /// held: it takes their lock.
     #[cold]
-    fn turn_off(&self, reason: &str) {
-        if !self.off.swap(true, Ordering::Relaxed) {
-            crate::log!(
-                ERROR,
-                "{} off: {reason}; the game runs it vanilla",
-                self.feature
-            );
-            crate::engine::diag::part_off(self.feature, reason);
+    #[inline(never)]
+    pub(crate) fn turn_off(&self, off: &Off) {
+        if self.off.swap(true, Ordering::AcqRel) {
+            return;
         }
+        let source = crate::engine::settings::LOADER_ID;
+        if crate::engine::log::enabled(off.level, source) {
+            match off.code {
+                Some(code) => {
+                    crate::engine::log::write(off.level, source, &format!("{} ({code})", off.line));
+                }
+                None => crate::engine::log::write(off.level, source, &off.line),
+            }
+        }
+        crate::engine::diag::part_off(self.feature, &off.entry);
+        #[cfg(windows)]
+        crate::engine::loader::rewire();
     }
 }
 
@@ -233,6 +346,21 @@ mod tests {
         assert_eq!(off, [false, true, true, false]);
         walk(&mut ran);
         assert_eq!(ran, [0, 3, 0, 3], "a blown item is skipped from then on");
+    }
+
+    #[test]
+    fn a_feature_reports_off_once_and_another_fuse_of_its_name_stays_on() {
+        static LAMPS: Fuse = Fuse::new("twin lamps");
+        let _turn = crate::engine::log::capture_turn();
+        LAMPS.turn_off(&Off::fault("twin lamps", "the first site"));
+        LAMPS.blow("a later site");
+        #[cfg(windows)]
+        assert!(!Fuse::named("twin lamps").is_off());
+        let reported = crate::engine::log::captured()
+            .iter()
+            .filter(|(_, _, line)| line.starts_with("twin lamps off"))
+            .count();
+        assert_eq!(reported, 1);
     }
 
     #[test]

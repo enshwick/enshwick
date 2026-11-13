@@ -91,10 +91,57 @@ pub(crate) fn spawn(
 /// `reason` and the panic's message, and `fallback` answers in its place.
 #[inline]
 pub fn guard<R>(reason: &str, fallback: impl FnOnce() -> R, call: impl FnOnce() -> R) -> R {
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(call)).unwrap_or_else(|payload| {
-        fault_with(reason, payload.as_ref());
+    caught(call).unwrap_or_else(|panicked| {
+        fault_with(reason, panicked.payload());
         fallback()
     })
+}
+
+/// Runs a mod's callback whose panic turns off only the part that panicked,
+/// not the whole mod as [`guard`] does.
+///
+/// A served call, a chat filter or a point's link: the caller turns
+/// [`Panicked`] into its answer and its part's switch.
+///
+/// # Errors
+///
+/// [`Panicked`] when `call` panicked; the mod's panic hook logged it.
+#[inline]
+pub fn caught<R>(call: impl FnOnce() -> R) -> Result<R, Panicked> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(call)).map_err(Panicked)
+}
+
+/// What a mod's callback left when it panicked, for [`caught`]'s caller.
+#[derive(Debug)]
+pub struct Panicked(Box<dyn core::any::Any + Send>);
+
+impl Panicked {
+    /// The first line of the panic's message.
+    #[must_use]
+    pub fn text(&self) -> &str {
+        panic_text(self.payload())
+    }
+
+    /// What the panic left, for [`fault_with`].
+    #[must_use]
+    pub fn payload(&self) -> &(dyn core::any::Any + Send) {
+        self.0.as_ref()
+    }
+}
+
+impl Drop for Panicked {
+    /// Drops the payload under its own guard: a payload whose drop panics
+    /// would otherwise unwind out of the `extern "system"` entry that holds
+    /// it and abort the game.
+    fn drop(&mut self) {
+        // A box of a zero-sized value allocates nothing.
+        let payload = core::mem::replace(&mut self.0, Box::new(()));
+        if let Err(again) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(payload)))
+        {
+            // Its drop may panic as well: kept for the process instead.
+            let _kept = Box::leak(again);
+        }
+    }
 }
 
 /// Faults the mod for `reason`, followed by the message of the panic that
@@ -398,6 +445,28 @@ mod tests {
             abi_major: major,
             abi_minor: minor,
         }
+    }
+
+    #[test]
+    fn a_caught_panic_answers_err_with_the_first_line_of_its_message() {
+        assert_eq!(caught(|| 7).ok(), Some(7));
+        let panicked = caught(|| -> u32 { panic!("no oil\nleft: 0") }).unwrap_err();
+        assert_eq!(panicked.text(), "no oil");
+        let silent = caught(|| std::panic::panic_any(7_u8)).unwrap_err();
+        assert_eq!(silent.text(), NO_MESSAGE);
+    }
+
+    #[test]
+    fn a_caught_panic_whose_payload_panics_on_drop_drops_without_unwinding() {
+        struct Bomb;
+        impl Drop for Bomb {
+            fn drop(&mut self) {
+                panic!("the payload's own drop");
+            }
+        }
+        let panicked = caught(|| std::panic::panic_any(Bomb)).unwrap_err();
+        let dropped = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(panicked)));
+        assert!(dropped.is_ok());
     }
 
     #[test]

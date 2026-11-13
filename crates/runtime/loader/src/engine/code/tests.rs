@@ -15,23 +15,35 @@ fn patch(owner: ModIndex, address: usize, expected: &[u8], replacement: &[u8]) -
 /// loader part: its line names the build, and the status lists it.
 #[test]
 fn a_missing_recipe_list_lookup_is_off_on_its_build_and_in_the_status() {
+    // Its own fuse, so the process's recipe list lookup stays linkable.
+    static LOOKUP: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new(LOOKUP_FEATURE);
     let Some(build) = crate::engine::builds::kept(enshwick_core::abi::Side::SERVER) else {
         return;
     };
     let off = LiftLimitError::NotInBuild {
         entry: pinned::recipe::LIST_LOOKUP.id().to_owned(),
     };
-    let (line, entry) = lookup_off(&build, &off);
-    assert_eq!(
-        line,
-        format!(
-            "recipe list lookup off on {}: recipe.list_lookup is found by no engine route or anchor",
-            build.name
-        )
+    let _turn = crate::engine::log::capture_turn();
+    let why = off.to_string();
+    let reason = build.reason(off.entry(), &why);
+    let off = crate::engine::fuse::Off::build(LOOKUP_FEATURE, &build.name, off.entry(), reason);
+    LOOKUP.turn_off(&off);
+    let line = format!(
+        "recipe list lookup off on {}: recipe.list_lookup is found by no engine route or anchor ({})",
+        build.name,
+        crate::engine::errors::FEATURES_OFF
     );
+    assert!(
+        crate::engine::log::captured()
+            .iter()
+            .any(|(_, _, l)| *l == line),
+        "{line}"
+    );
+    let listed = crate::engine::diag::parts_off();
+    let lookup = listed.iter().find(|p| p.part == LOOKUP_FEATURE);
     assert_eq!(
-        entry,
-        "recipe.list_lookup is found by no engine route or anchor"
+        lookup.map(|p| p.reason.as_str()),
+        Some("recipe.list_lookup is found by no engine route or anchor")
     );
 }
 

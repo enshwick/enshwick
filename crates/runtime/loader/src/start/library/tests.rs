@@ -308,13 +308,13 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
         log_level: Level::INFO,
         ..crate::engine::settings::Settings::default()
     });
-    crate::engine::log::capture();
+    let turn = crate::engine::log::capture_turn();
     let mut mapped = Vec::new();
     let (found, candidates, others) = libraries(&mods, Run::Dry, &mut |file, range| {
         mapped.push((file.to_owned(), range));
     });
     let lines = loader_lines();
-    crate::engine::log::end_capture();
+    drop(turn);
 
     // A DLL freed for its exports or ABI still ran while it loaded, so the
     // code watch needs where it was mapped; only a file that never mapped
@@ -404,10 +404,10 @@ fn each_file_of_the_layout_before_mod_folders_gets_one_line() {
     std::fs::write(mods.join("lanterns.dll"), "").unwrap();
     std::fs::write(mods.join("enshwick/mods.toml"), "").unwrap();
     std::fs::create_dir_all(dir.join("mod-configs")).unwrap();
-    crate::engine::log::capture();
+    let turn = crate::engine::log::capture_turn();
     super::note_old_layout(&mods);
     let lines = loader_lines();
-    crate::engine::log::end_capture();
+    drop(turn);
     let old: Vec<&str> = lines
         .iter()
         .filter(|(level, _)| *level == Level::WARN)

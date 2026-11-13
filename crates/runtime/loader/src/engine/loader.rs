@@ -7,11 +7,12 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use enshwick_core::abi as api_frame;
-use enshwick_core::abi::{Event, EventFn, HookFlags, Level, Manifest, Side, Status, Str};
+use enshwick_core::abi::{Event, EventFn, HookFlags, Level, Manifest, Side, Str};
 use enshwick_gamedata::reflect::{Fingerprint, Reflection};
 
 use crate::engine::builds::KnownBuild;
 use crate::engine::chains::{Chains, Link, Next};
+use crate::engine::fuse::{Fuse, Off};
 use crate::engine::mid::Mids;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned::{Constant, Symbol};
@@ -225,29 +226,19 @@ pub(crate) struct Loader {
     pub(crate) parts: crate::engine::parts::Parts,
 }
 
-/// The warning line and the status entry of `feature` turned off on `build`
-/// because its entry `id` failed for `reason`, as [`Loader::feature_off`]
-/// reports them.
-pub(crate) fn off_report(
-    build: &KnownBuild,
-    feature: &str,
-    id: &str,
-    reason: &str,
-) -> (String, String) {
-    let reason = build.reason(id, reason);
-    (
-        crate::engine::builds::off_line(feature, &build.name, id, reason),
-        format!("{id} {reason}"),
-    )
+/// Turns `feature` off for the warning `line` and the status `entry` a
+/// caller wrote, through [`Fuse::turn_off`], with no error code: the cause
+/// is the caller's, not the game build's.
+pub(crate) fn report_off(feature: &str, (line, entry): (String, String)) {
+    Fuse::named(feature).turn_off(&Off::reported(line, entry));
 }
 
-/// Logs the warning line of an [`off_report`] and lists `feature` with its
-/// status entry among the loader parts off, on the Mods screen and in the
-/// status summary. Always false, for the caller to return.
-pub(crate) fn report_off(feature: &str, (line, entry): (String, String)) -> bool {
-    crate::log!(WARN, "{line}");
-    crate::engine::diag::part_off(feature, &entry);
-    false
+/// Wires every armed chain of the running loader past the mods that are off
+/// or waiting and the loader features that are off.
+pub(crate) fn rewire() {
+    if let Some(loader) = loader() {
+        loader.rewire();
+    }
 }
 
 static LOADER: OnceLock<Loader> = OnceLock::new();
@@ -328,22 +319,17 @@ pub(crate) fn take<T>(list: &Mutex<Vec<T>>) -> Vec<T> {
 
 /// Whether the mod at index `owner` is off; the loader's own links never are.
 pub(crate) fn is_off(owner: ModIndex) -> bool {
-    owner != ModIndex::LOADER
-        && loader().is_none_or(|loader| {
-            loader
-                .mods
-                .get(owner.get())
-                .is_none_or(|m| m.off.load(Ordering::Acquire))
-        })
+    loader().map_or(owner != ModIndex::LOADER, |loader| {
+        loader.passed(owner, false)
+    })
 }
 
 /// Whether the detours and mid-function hooks of `owner` are passed by: it
 /// is off, or waiting for a code patch. Only atomic loads, for hook calls.
 pub(crate) fn bypassed(owner: ModIndex) -> bool {
-    is_off(owner)
-        || loader()
-            .and_then(|l| l.mods.get(owner.get()))
-            .is_some_and(|m| m.waiting.load(Ordering::Acquire))
+    loader().map_or(owner != ModIndex::LOADER, |loader| {
+        loader.passed(owner, true)
+    })
 }
 
 /// Marks `owner` waiting for a code patch; the loader never waits. A plain
@@ -378,26 +364,6 @@ impl Loader {
             .and_then(|value| usize::try_from(value).ok())
     }
 
-    /// Links one of the loader's own detours on `target`, ahead of every
-    /// mod's link there.
-    pub(crate) fn link<F: Copy>(
-        &self,
-        target: u64,
-        next: &'static Next<F>,
-        detour: F,
-        flags: HookFlags,
-    ) -> Status {
-        let link = Link {
-            owner: ModIndex::LOADER,
-            detour: Next::<F>::address_of(detour),
-            next: next.slot(),
-            priority: i32::MIN,
-            flags,
-            hop: None,
-        };
-        self.chains.relock().add(target, link)
-    }
-
     /// Whether the code at symbol `id` is what the table expects, checked
     /// before a hook patches it or a detour relies on it, by
     /// [`crate::engine::builds::code_holds`]: the anchors made every check of a
@@ -418,10 +384,8 @@ impl Loader {
         ])
     }
 
-    /// [`Loader::link`] for a feature, after checking its target: a table
-    /// symbol's code must hold by [`Loader::code_holds`]. A target this
-    /// build lacks, code that does not hold or a refused link turns only
-    /// `feature` off, named by [`Loader::feature_off`]. True when linked.
+    /// [`Loader::link_fused`] for the feature named `feature`, the one
+    /// [`Fuse::named`] keeps for the name.
     pub(crate) fn link_feature<F: Copy>(
         &self,
         feature: &str,
@@ -430,6 +394,27 @@ impl Loader {
         detour: F,
         flags: HookFlags,
     ) -> bool {
+        self.link_fused(Fuse::named(feature), target, next, detour, flags)
+    }
+
+    /// Links one of the loader's own detours of `feature` on `target`, ahead
+    /// of every mod's link there, after checking the target: a table
+    /// symbol's code must hold by [`Loader::code_holds`]. A feature arms all
+    /// its links or none: a target this build lacks, code that does not hold
+    /// or a refused link turns the whole feature off by [`Fuse::turn_off`],
+    /// its links made before are dropped when the hooks arm, and its later
+    /// links are not made. True when linked.
+    pub(crate) fn link_fused<F: Copy>(
+        &self,
+        feature: &'static Fuse,
+        target: Target<'_>,
+        next: &'static Next<F>,
+        detour: F,
+        flags: HookFlags,
+    ) -> bool {
+        if feature.is_off() {
+            return false;
+        }
         let (id, address) = match target {
             Target::Pinned(symbol) => (
                 symbol.id(),
@@ -443,22 +428,70 @@ impl Loader {
         };
         let address = match address {
             Ok(address) => address,
-            Err(why) => return self.feature_off(feature, id, &why.to_string()),
+            Err(why) => return self.fuse_off(feature, id, &why.to_string()),
         };
-        let status = self.link(address, next, detour, flags);
+        let link = Link {
+            owner: ModIndex::LOADER,
+            detour: Next::<F>::address_of(detour),
+            next: next.slot(),
+            priority: i32::MIN,
+            flags,
+            hop: None,
+            feature: Some(feature),
+        };
+        let status = self.chains.relock().add(address, link);
         if !status.is_ok() {
-            return self.feature_off(feature, id, &format!("refused the link ({})", status.0));
+            return self.fuse_off(feature, id, &format!("refused the link ({})", status.0));
         }
         crate::engine::diag::name(address, id);
         true
     }
 
     /// Turns `feature` off on this build because its entry `id` failed for
-    /// `reason`: one warning that names the build, and the part off on the
-    /// Mods screen and in the status summary. Always false, for the caller
-    /// to return.
+    /// `reason`, by [`Loader::fuse_off`]. Always false, for the caller to
+    /// return.
     pub(crate) fn feature_off(&self, feature: &str, id: &str, reason: &str) -> bool {
-        report_off(feature, off_report(self.build, feature, id, reason))
+        self.fuse_off(Fuse::named(feature), id, reason)
+    }
+
+    /// Turns `feature` off on this build because its entry `id` failed for
+    /// `reason`, by [`Fuse::turn_off`]: one warning that names the build, the
+    /// feature off on the Mods screen and in the status summary, and its
+    /// links wired past. Always false, for the caller to return.
+    fn fuse_off(&self, feature: &'static Fuse, id: &str, reason: &str) -> bool {
+        let reason = self.build.reason(id, reason);
+        feature.turn_off(&Off::build(feature.feature(), &self.build.name, id, reason));
+        false
+    }
+
+    /// Turns off every loader feature with a link on `target`, the entry
+    /// `id` that could not be armed for `reason`, so the feature's links on
+    /// other targets are wired past too and no feature runs half armed.
+    pub(crate) fn unarmed(&self, target: u64, id: &str, reason: &str) {
+        let features = self.chains.relock().features_at(target);
+        for feature in features {
+            let _off = self.fuse_off(feature, id, reason);
+        }
+    }
+
+    /// Wires every armed chain past the mods that are off or waiting for a
+    /// code patch and the loader features that are off.
+    pub(crate) fn rewire(&self) {
+        // A poisoned lock still holds the chains: they must be wired past.
+        let chains = self.chains.relock();
+        chains.rewire(|owner| self.passed(owner, true));
+    }
+
+    /// Whether the hooks and points of `owner` are passed by: the mod is
+    /// off or unknown, or with `waiting`, it waits for a code patch. The
+    /// loader's own links never are. The one rule [`is_off`] and
+    /// [`bypassed`] follow too; only atomic loads, for hook calls.
+    #[inline]
+    fn passed(&self, owner: ModIndex, waiting: bool) -> bool {
+        owner != ModIndex::LOADER
+            && self.mods.get(owner.get()).is_none_or(|m| {
+                m.off.load(Ordering::Acquire) || (waiting && m.waiting.load(Ordering::Acquire))
+            })
     }
 
     /// The mod named `id`, as a player or an administrator names it.
@@ -485,24 +518,8 @@ impl Loader {
             crate::packs::data_packs::forget(&record.id);
         }
         crate::engine::diag::turned_off(&record.id, &shown);
-        // A poisoned lock still holds the chains: the mod must be wired past.
-        let chains = self.chains.relock();
-        let faulted = |owner: ModIndex| {
-            owner != ModIndex::LOADER
-                && self
-                    .mods
-                    .get(owner.get())
-                    .is_none_or(|m| m.off.load(Ordering::Acquire))
-        };
-        // A mod still waiting for a code patch stays wired past as well.
-        chains.rewire(|owner| {
-            faulted(owner)
-                || self
-                    .mods
-                    .get(owner.get())
-                    .is_some_and(|m| m.waiting.load(Ordering::Acquire))
-        });
-        drop(chains);
+        self.rewire();
+        let faulted = |owner: ModIndex| self.passed(owner, false);
         crate::base::points::rearm(faulted);
         if record.joins_when_on() {
             crate::base::advertise::wake();
@@ -521,22 +538,8 @@ impl Loader {
         }
         *record.off_reason.relock() = None;
         crate::engine::log::write(Level::INFO, &record.id, "back on");
-        let chains = self.chains.relock();
-        let off = |owner: ModIndex| {
-            owner != ModIndex::LOADER
-                && self
-                    .mods
-                    .get(owner.get())
-                    .is_none_or(|m| m.off.load(Ordering::Acquire))
-        };
-        chains.rewire(|owner| {
-            off(owner)
-                || self
-                    .mods
-                    .get(owner.get())
-                    .is_some_and(|m| m.waiting.load(Ordering::Acquire))
-        });
-        drop(chains);
+        self.rewire();
+        let off = |owner: ModIndex| self.passed(owner, false);
         crate::base::points::rearm(off);
     }
 

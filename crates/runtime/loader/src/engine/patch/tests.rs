@@ -252,6 +252,7 @@ fn the_owners_of_a_failed_mid_function_hook_count_as_failed() {
         priority: 0,
         flags: HookFlags::NONE,
         hop: None,
+        feature: None,
     };
     let _ = chains.add(0x10, link(ModIndex::LOADER));
     let _ = chains.add(0x10, link(ModIndex::new(2)));
@@ -321,6 +322,7 @@ fn a_target_another_program_took_stays_its_and_names_who_took_it() {
             priority: 0,
             flags: HookFlags::NONE,
             hop: None,
+            feature: None,
         };
         assert!(chains.add(target as u64, link).is_ok());
     }

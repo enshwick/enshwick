@@ -17,5 +17,7 @@ see is in the changelog of `enshwick`.
 
 ### Changed
 
+- A chat filter's panic warning names the panic's message; the chat filter
+  and the typed lines catch through `host::caught` (#1062).
 - `enshwick-inventory` is no longer a dependency: the console's item
   check asks `enshwick-content` (#1056).

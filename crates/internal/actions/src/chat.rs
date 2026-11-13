@@ -155,7 +155,7 @@ where
         return ChatRewrite::KEEP;
     }
     let line = ChatLine::of(line);
-    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (filter.run)(&line))) {
+    match crate::host::caught(|| (filter.run)(&line)) {
         Ok(ChatVerdict::Keep) => ChatRewrite::KEEP,
         Ok(ChatVerdict::Drop) => ChatRewrite::DROP,
         Ok(ChatVerdict::Rewrite(text)) => {
@@ -166,11 +166,12 @@ where
             rewrite.len = u32::try_from(text.len()).unwrap_or(0);
             ChatRewrite::REWRITTEN
         }
-        Err(_) => {
+        Err(panicked) => {
             if !filter.off.swap(true, Ordering::AcqRel) {
+                let text = panicked.text();
                 filter.host.log(
                     Level::WARN,
-                    "a chat filter panicked: it is off, and lines pass it",
+                    &format!("a chat filter panicked: {text}; it is off, and lines pass it"),
                 );
             }
             ChatRewrite::KEEP

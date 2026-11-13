@@ -112,6 +112,17 @@ cause = "Деякі моди мають власний powrprof.dll, dinput8.dll
 fix = "Поверніть powrprof.dll Enshwick у теку гри. powrprof.dll іншого мода не може працювати поруч із ним, тому залиште один із двох модів."
 
 [[error]]
+code = "E1010"
+title = "An Enshwick feature turned itself off"
+cause = "Enshwick's own code for one feature failed while the game ran. Only that feature stops, and the game runs that part without it. Mods and the other features keep running."
+fix = "Play on, or restart the game to turn the feature on again. Report the problem with the Enshwick report attached. The log and the Mods screen name the feature."
+
+[error.translations.uk]
+title = "Функція Enshwick вимкнула себе"
+cause = "Власний код Enshwick для однієї функції дав збій під час гри. Зупиняється лише ця функція, і гра виконує цю частину без неї. Моди й інші функції працюють далі."
+fix = "Грайте далі або перезапустіть гру, щоб знову увімкнути функцію. Повідомте про проблему й додайте звіт Enshwick. Журнал і екран Mods називають функцію."
+
+[[error]]
 code = "E2001"
 title = "A mod is made for another Enshwick"
 cause = "The mod was built for another version of Enshwick. A mod starts with the Enshwick version it was built for and with later versions. A release that changes how mods talk to Enshwick needs the mod rebuilt. A mod built for a newer Enshwick does not start on an older one."

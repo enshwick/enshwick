@@ -8,6 +8,7 @@
 
 use core::marker::PhantomData;
 
+use crate::engine::fuse::Fuse;
 use crate::engine::mod_index::ModIndex;
 // The loom model in `model` swaps in loom's atomics, which
 // record every load and store for the model to permute.
@@ -88,6 +89,110 @@ impl<F: Copy> Next<F> {
     }
 }
 
+/// The rest of the chain for one call of a loader detour: the first
+/// [`Onward::call`] calls it with the game's arguments, and a later one
+/// gives the same answer again, so the game function runs once per call.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::engine::chains::Onward;
+/// use enshwick_loader::engine::fuse::Fuse;
+///
+/// static LANTERNS: Fuse = Fuse::new("doubled lanterns");
+/// let onward = Onward::new(|| 21);
+/// let doubled = onward.run(&LANTERNS, "the lantern count", |onward| onward.call() * 2);
+/// assert_eq!(doubled, 42);
+/// ```
+pub struct Onward<R, N> {
+    next: N,
+    answer: core::cell::Cell<Option<R>>,
+}
+
+impl<R: Copy, N: Fn() -> R> Onward<R, N> {
+    /// The rest of the chain that `next` calls with the detour's arguments.
+    #[inline]
+    pub const fn new(next: N) -> Self {
+        Self {
+            next,
+            answer: core::cell::Cell::new(None),
+        }
+    }
+
+    /// The chain's answer: the chain is called the first time, and the
+    /// answer kept for every later call.
+    #[inline]
+    pub fn call(&self) -> R {
+        if let Some(answer) = self.answer.get() {
+            return answer;
+        }
+        let answer = (self.next)();
+        self.answer.set(Some(answer));
+        answer
+    }
+
+    /// Runs the detour's `work` under `fuse` as `site`. While the feature
+    /// is off, or once `work` panicked, the call goes to the game: the
+    /// chain's answer `work` had already, or the chain called now.
+    #[inline]
+    pub fn run(&self, fuse: &Fuse, site: &str, work: impl FnOnce(&Self) -> R) -> R {
+        fuse.run(site, || work(self)).unwrap_or_else(|| self.call())
+    }
+}
+
+impl<R, N> core::fmt::Debug for Onward<R, N> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Onward").finish_non_exhaustive()
+    }
+}
+
+/// Declares one of the loader's chain detours with its `next` slot, typed
+/// by the detour's own signature, which is the hooked function's: the
+/// documentation names that function. The work reaches the rest of the
+/// chain through `onward.call()` with the game's arguments unchanged, at
+/// most once (an [`Onward`]); with a `fuse`, it runs under it by
+/// [`Onward::run`]. Parameters and answer are `Copy`, as a game function's
+/// are; a detour that changes an argument it passes on is written by hand.
+#[cfg(windows)]
+macro_rules! chain_detour {
+    (
+        $(#[$meta:meta])*
+        fn $name:ident($($arg:ident: $ty:ty),* $(,)?) -> $ret:ty;
+        next $next:ident;
+        $(fuse $fuse:expr, $site:literal;)?
+        |$onward:ident| $work:block
+    ) => {
+        static $next: $crate::engine::chains::Next<unsafe extern "system" fn($($ty),*) -> $ret> =
+            // SAFETY: the slot's type is the detour's own signature, which
+            // the detour's documentation says is the hooked function's; the
+            // loader links the detour only with this slot, since
+            // `link_feature` takes both of one type, so the slot is the
+            // `next` of that one link and only the detour calls `get`.
+            unsafe { $crate::engine::chains::Next::new() };
+
+        $(#[$meta])*
+        unsafe extern "system" fn $name($($arg: $ty),*) -> $ret {
+            let onward = $crate::engine::chains::Onward::new(|| {
+                // SAFETY: the game's own arguments, passed on unchanged to the
+                // rest of the chain, which the slot types as the hooked
+                // function; a chain is wired before its target jumps here.
+                unsafe { $next.get()($($arg),*) }
+            });
+            $crate::engine::chains::chain_detour!(@work onward, |$onward| $work $(, $fuse, $site)?)
+        }
+    };
+    (@work $chain:ident, |$onward:ident| $work:block) => {{
+        let $onward = &$chain;
+        $work
+    }};
+    (@work $chain:ident, |$onward:ident| $work:block, $fuse:expr, $site:literal) => {
+        $chain.run($fuse, $site, |$onward| $work)
+    };
+}
+
+#[cfg(windows)]
+pub(crate) use chain_detour;
+
 /// Calls through a thunk, beside its slot; the thunk writes them.
 ///
 /// Each counter fills 128 bytes, so threads in neighbouring thunks never
@@ -154,6 +259,9 @@ pub struct Link {
     pub flags: HookFlags,
     /// The timed thunk in front of the link, with timing on.
     pub hop: Option<Hop>,
+    /// The loader feature the link belongs to, `None` for a mod's: once it
+    /// is off, the chain runs past the link.
+    pub feature: Option<&'static Fuse>,
 }
 
 impl Link {
@@ -161,6 +269,11 @@ impl Link {
     #[must_use]
     pub fn entry(&self) -> usize {
         self.hop.map_or(self.detour, |hop| hop.entry)
+    }
+
+    /// Whether the link's loader feature is off.
+    fn feature_off(&self) -> bool {
+        self.feature.is_some_and(Fuse::is_off)
     }
 }
 
@@ -200,7 +313,7 @@ impl Chain {
     }
 
     /// Points the head and every `next` slot past links whose owner is
-    /// `faulted`, ending at the original.
+    /// `faulted` or whose loader feature is off, ending at the original.
     pub fn wire(&self, faulted: impl Fn(ModIndex) -> bool) {
         let links = self.running_order();
         let original = match self.original_hop {
@@ -213,7 +326,7 @@ impl Chain {
         let after = |from: usize| {
             links[from..]
                 .iter()
-                .find(|l| !faulted(l.owner))
+                .find(|l| !faulted(l.owner) && !l.feature_off())
                 .map_or(original, |l| l.entry())
         };
         // From the end back to the head: a slot is pointed at a link only
@@ -296,12 +409,16 @@ impl Chains {
         self.by_target.values()
     }
 
-    /// Marks the chains armed: no more links.
+    /// Marks the chains armed: no more links. The links of loader features
+    /// already off go, and so does a chain left without links, so arming
+    /// never patches a target only an off feature wanted.
     pub fn seal(&mut self) {
         self.armed = true;
         for chain in self.by_target.values_mut() {
+            chain.links.retain(|l| !l.feature_off());
             chain.frame = chain.wants_caller_frame();
         }
+        self.by_target.retain(|_, chain| !chain.links.is_empty());
     }
 
     /// Rewires every chain past the links of faulted mods.
@@ -319,6 +436,15 @@ impl Chains {
         self.by_target
             .get(&target)
             .map(|c| c.links.iter().map(|l| l.owner).collect())
+            .unwrap_or_default()
+    }
+
+    /// The loader features with a link on `target`.
+    #[must_use]
+    pub fn features_at(&self, target: u64) -> Vec<&'static Fuse> {
+        self.by_target
+            .get(&target)
+            .map(|c| c.links.iter().filter_map(|l| l.feature).collect())
             .unwrap_or_default()
     }
 
@@ -365,7 +491,13 @@ mod tests {
             priority,
             flags,
             hop: None,
+            feature: None,
         }
+    }
+
+    fn of(feature: &'static Fuse, mut link: Link) -> Link {
+        link.feature = Some(feature);
+        link
     }
 
     fn value(slot: &AtomicUsize) -> usize {
@@ -392,6 +524,82 @@ mod tests {
             chains.add(0x20, link(ModIndex::new(0), 0xa, 0, HookFlags::NONE)),
             Status::OK
         );
+    }
+
+    #[test]
+    fn a_detour_reaches_the_game_once_whatever_its_work_does() {
+        static WICKS: Fuse = Fuse::new("chains wicks");
+        let calls = core::cell::Cell::new(0);
+        let game = || {
+            calls.set(calls.get() + 1);
+            7
+        };
+        let onward = Onward::new(game);
+        let twice = onward.run(&WICKS, "a double call", |o| o.call() + o.call());
+        assert_eq!(
+            (twice, calls.get()),
+            (14, 1),
+            "a second call keeps the answer"
+        );
+        let onward = Onward::new(game);
+        let after = onward.run(&WICKS, "a panic after the call", |o| {
+            let _answer = o.call();
+            panic!("broken wick")
+        });
+        assert_eq!(
+            (after, calls.get()),
+            (7, 2),
+            "the chain's answer, not a second call"
+        );
+        assert!(WICKS.is_off());
+        let onward = Onward::new(game);
+        let off = onward.run(&WICKS, "a call while off", |_| unreachable!("off"));
+        assert_eq!(
+            (off, calls.get()),
+            (7, 3),
+            "an off feature hands the call to the game"
+        );
+    }
+
+    #[test]
+    fn a_link_of_a_feature_that_turns_off_is_wired_past_and_the_rest_still_runs() {
+        static GLOW: Fuse = Fuse::new("chains glow");
+        let mut chains = Chains::default();
+        let ours = link(ModIndex::LOADER, 0xa, i32::MIN, HookFlags::NONE);
+        assert_eq!(chains.add(0x10, of(&GLOW, ours)), Status::OK);
+        assert_eq!(
+            chains.add(0x10, link(ModIndex::new(0), 0xb, 0, HookFlags::NONE)),
+            Status::OK
+        );
+        chains.seal();
+        let head = slot();
+        for chain in chains.iter_mut() {
+            chain.head = Some(head);
+            chain.original = 0xff;
+            chain.wire(|_| false);
+        }
+        assert_eq!(value(head), 0xa);
+        GLOW.blow("a test");
+        chains.rewire(|_| false);
+        assert_eq!(value(head), 0xb, "the mod's link still runs");
+    }
+
+    #[test]
+    fn sealing_drops_the_links_of_features_already_off_and_chains_left_empty() {
+        static LAMP: Fuse = Fuse::new("chains lamp");
+        let mut chains = Chains::default();
+        let first = link(ModIndex::LOADER, 0xa, i32::MIN, HookFlags::NONE);
+        let second = link(ModIndex::LOADER, 0xb, i32::MIN, HookFlags::NONE);
+        assert_eq!(chains.add(0x10, of(&LAMP, first)), Status::OK);
+        assert_eq!(chains.add(0x20, of(&LAMP, second)), Status::OK);
+        assert_eq!(
+            chains.add(0x20, link(ModIndex::new(0), 0xc, 0, HookFlags::NONE)),
+            Status::OK
+        );
+        LAMP.blow("a test");
+        chains.seal();
+        assert_eq!(chains.len(), 1, "only the target a mod still wants stays");
+        assert_eq!(chains.owners(0x20), [ModIndex::new(0)]);
     }
 
     #[test]
