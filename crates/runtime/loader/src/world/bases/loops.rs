@@ -486,7 +486,14 @@ pub(super) fn link(loader: &Loader, sites: &Sites) -> bool {
         advance: unsafe { core::mem::transmute::<usize, AdvanceFn>(sites.advance) },
     };
     let _first = CODE.set(code);
-    sort::link(loader, sites.base_ids.is_some())
+    link_parts(loader, sites.base_ids.is_some())
+}
+
+/// Links the sorts, with `base_ids` the client's base id list, the rebuild,
+/// the stock cache and the totals under [`PAST16`], all or none; true when
+/// every link is made.
+pub(super) fn link_parts(loader: &Loader, base_ids: bool) -> bool {
+    sort::link(loader, base_ids)
         && rebuild::link(loader)
         && stock::link(loader)
         && totals::link(loader)

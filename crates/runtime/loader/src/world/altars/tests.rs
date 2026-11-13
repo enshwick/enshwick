@@ -244,6 +244,61 @@ fn the_altars_arm_both_systems_or_neither_and_report_why() {
 }
 
 #[test]
+fn a_range_pass_that_writes_nothing_or_panics_puts_the_row_back_and_one_that_writes_keeps_it() {
+    use crate::engine::pinned::{altar, balancing, ecs};
+    let loader = crate::start::tests::pinning_loader(
+        Side::SERVER,
+        &[
+            ecs::ITERATOR_INIT,
+            ecs::ITERATOR_NEXT,
+            ecs::MARK_CHANGED,
+            ecs::ATTRIBUTE_FIND,
+            balancing::ZONE_SIZE,
+            ecs::COMPONENT_READ,
+        ],
+        &[
+            (ecs::CONTEXT_ROW, 8),
+            (ecs::DESCRIPTOR_ENTITY_RECORDS, 0),
+            (ecs::ENTITY_RECORD_SIZE, 0),
+            (ecs::CONTEXT_ENTITY_WORLD, 0),
+            (ecs::LEVEL_FLAGS, 0),
+            (ecs::LEVEL_DATA_OFFSET, 0),
+            (ecs::ATTRIBUTE_SLOT, 0),
+            (balancing::ZONE_SIZE_VALID, 0),
+            (altar::LEVEL_ATTRIBUTE, 0),
+        ],
+    );
+    let engine: &'static Engine = Box::leak(Box::new(Engine::resolve(&loader).unwrap()));
+    let mut room = [0u64; 4];
+    let ctx = room.as_mut_ptr();
+    let pass = |keep: bool, panics: bool| {
+        // SAFETY: `room` stands for a live context on this thread, its u32
+        // row counter at the table's offset 8, inside its 32 bytes.
+        unsafe { engine.set_row(ctx, 3) };
+        let _caught = std::panic::catch_unwind(core::panic::AssertUnwindSafe(|| {
+            // SAFETY: `room` stands for a live context on this thread
+            // until the rewind drops at the end of this closure.
+            let rewind = unsafe { Rewind::at(engine, ctx) };
+            // SAFETY: the row counter of `room`, at offset 8.
+            unsafe { engine.set_row(ctx, 7) };
+            assert!(!panics, "a range pass that panics part way");
+            if keep {
+                rewind.keep();
+            }
+        }));
+        // SAFETY: the row counter of `room`, at offset 8.
+        unsafe { engine.row(ctx) }
+    };
+    assert_eq!(pass(true, false), 7, "a pass that wrote keeps its rows");
+    assert_eq!(
+        pass(false, false),
+        3,
+        "vanilla runs the tick from its start"
+    );
+    assert_eq!(pass(true, true), 3, "and so after a pass that panicked");
+}
+
+#[test]
 fn levels_are_read_after_vanilla_whenever_the_range_pass_writes_nothing() {
     let ran = RefCell::new(Vec::new());
     let run = |sized, wrote| {

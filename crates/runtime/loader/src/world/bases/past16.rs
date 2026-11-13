@@ -605,6 +605,44 @@ mod tests {
     /// own and a test run may share one process.
     #[test]
     fn the_window_arms_all_or_none_and_its_teardown_outlives_it() {
+        let sites = [
+            (bases::SERVER_CREATE, &PAST16, false),
+            (bases::CLIENT_CREATE, &PAST16, true),
+            (bases::SERVER_DESTROY, &TEARDOWN, false),
+            (bases::CLIENT_DESTROY, &TEARDOWN, true),
+            (bases::SORT, &PAST16, false),
+            (bases::SORT_ALL, &PAST16, false),
+            (bases::BASE_IDS, &PAST16, true),
+            (bases::REBUILD, &PAST16, false),
+            (bases::STOCK_CACHE, &PAST16, false),
+            (bases::NPC_TOTALS, &PAST16, false),
+            (bases::SERVER_UPDATE, &PAST16, false),
+            (bases::BED_CLEANUP, &PAST16, false),
+            (bases::COMFORT_CLEANUP, &PAST16, false),
+            (bases::PROPS_CLEANUP, &PAST16, false),
+        ];
+        let ids: Vec<Symbol> = sites.iter().map(|&(id, ..)| id).collect();
+        for client in [false, true] {
+            let side = if client { Side::CLIENT } else { Side::SERVER };
+            let loader = crate::start::tests::pinning_loader(side, &ids, &[]);
+            assert!(
+                link_teardown(&loader, client)
+                    && link_creates(&loader, client)
+                    && loops::link_parts(&loader, client),
+                "client {client}: every site the build pins links"
+            );
+            let chains = enshwick_base::Relock::relock(&loader.chains);
+            for (id, fuse, client_only) in sites {
+                let at = chains.features_at(loader.address(id).unwrap());
+                let linked = at.len() == 1 && core::ptr::eq(at[0], fuse);
+                assert_eq!(
+                    linked,
+                    client || !client_only,
+                    "client {client}: {id} linked under its own fuse, the client's on a client only"
+                );
+            }
+        }
+
         let loader = crate::start::tests::bare_loader();
         assert!(loader.link_fused(
             &TEARDOWN,

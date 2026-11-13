@@ -132,6 +132,23 @@ pub(crate) fn bare_loader() -> Loader {
     loader(&[], false).0
 }
 
+/// A loader of `side` with no game and no mods whose build pins every
+/// symbol of `ids` and every one of `constants`, for the tests of a part's
+/// links.
+pub(crate) fn pinning_loader(
+    side: Side,
+    ids: &[crate::engine::pinned::Symbol],
+    constants: &[(crate::engine::pinned::Constant, u64)],
+) -> Loader {
+    let ids: Vec<&str> = ids.iter().map(|id| id.id()).collect();
+    let constants: Vec<(&str, u64)> = constants.iter().map(|&(id, v)| (id.id(), v)).collect();
+    Loader {
+        side,
+        build: Box::leak(Box::new(crate::engine::builds::pinning(&ids, &constants))),
+        ..bare_loader()
+    }
+}
+
 #[test]
 fn a_second_copy_skipped_at_start_is_kept_with_its_reason_but_its_running_mod_is_not_off() {
     let (loader, order) = loader(

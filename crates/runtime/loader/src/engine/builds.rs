@@ -541,10 +541,34 @@ pub fn kept(running: Side) -> Option<KnownBuild> {
 #[cfg(test)]
 #[must_use]
 pub fn empty() -> KnownBuild {
-    let table = tables::Table::parse(
-        "name = \"empty\"\nside = \"server\"\nguid = \"00000000000000000000000000000000\"\nage = 0",
-    )
-    .unwrap();
+    pinning(&[], &[])
+}
+
+/// A build that pins each symbol of `ids` at its own address with a code
+/// check that holds, and each of `constants` at its value, for tests that
+/// link the loader's detours without a game.
+///
+/// # Panics
+///
+/// When `tables::Table::parse` stops taking the text it is given.
+#[cfg(test)]
+#[must_use]
+pub fn pinning(ids: &[&str], constants: &[(&str, u64)]) -> KnownBuild {
+    use core::fmt::Write as _;
+    let mut text = String::from(
+        "name = \"empty\"\nside = \"server\"\nguid = \"00000000000000000000000000000000\"\nage = 0\n[symbols]\n",
+    );
+    for (i, id) in ids.iter().enumerate() {
+        let _written = writeln!(text, "\"{id}\" = {:#x}", 0x1000 + 0x10 * i);
+    }
+    text.push_str("[constants]\n");
+    for id in ids {
+        let _written = writeln!(text, "\"{id}.bytes\" = 1");
+    }
+    for (id, value) in constants {
+        let _written = writeln!(text, "\"{id}\" = {value:#x}");
+    }
+    let table = tables::Table::parse(&text).unwrap();
     KnownBuild {
         name: table.name().to_owned(),
         table: table.resolve(),

@@ -324,8 +324,34 @@ fn the_lowest_cap_of_every_mod_lowers_the_bases_asked_for() {
     assert_eq!(asked.limits().zones, 64);
 }
 
+/// One test, in order, since the raised limit's fuse is the process's own
+/// and a test run may share one process.
 #[test]
-fn a_raised_limit_whose_feature_turns_off_reports_the_game_s_own() {
+fn the_raised_limit_links_every_site_and_once_off_reports_the_game_s_own() {
+    use crate::engine::pinned::{bases, building};
+    let sites = [
+        (building::MAX_ALTARS, &ALTAR_LIMIT),
+        (bases::GROUPING, &RAISED_FUSE),
+        (bases::NEW_BASE, &RAISED_FUSE),
+        (bases::BASE_AT, &RAISED_FUSE),
+        (bases::IN_BASE, &RAISED_FUSE),
+        (bases::HOLDER_AT, &RAISED_FUSE),
+        (bases::ZONES_AT, &RAISED_FUSE),
+        (bases::CURSOR, &RAISED_FUSE),
+    ];
+    let ids: Vec<_> = sites.iter().map(|&(id, _)| id).collect();
+    let loader = crate::start::tests::pinning_loader(enshwick_core::abi::Side::SERVER, &ids, &[]);
+    assert!(detours::link_limit(&loader) && detours::link_raised(&loader));
+    let chains = loader.chains.relock();
+    for (id, fuse) in sites {
+        let at = chains.features_at(loader.address(id).unwrap());
+        assert!(
+            at.len() == 1 && core::ptr::eq(at[0], fuse),
+            "{id} is linked under its own fuse"
+        );
+    }
+    drop(chains);
+
     let more = VANILLA_ZONES + 8;
     ASKED.take(Limits {
         zones: more,
