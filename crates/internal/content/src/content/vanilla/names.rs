@@ -232,8 +232,22 @@ impl Vanilla {
     }
 
     /// The tag of the name the game shows for `item`, read from its
-    /// resource; `None` for an item without one.
-    pub(crate) fn name_tag(&self, item: Guid) -> Option<Guid> {
+    /// resource through what this content reads, for
+    /// [`i18n::game_text_in`](crate::i18n::game_text_in); `None` for an
+    /// item without one or whose resource does not read.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::Guid;
+    /// use enshwick::content::vanilla::Vanilla;
+    ///
+    /// let chest = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+    /// let tag = Vanilla::game().and_then(|vanilla| vanilla.name_tag(chest));
+    /// # let _ = tag;
+    /// ```
+    #[must_use]
+    pub fn name_tag(&self, item: Guid) -> Option<Guid> {
         let at = self.item_name?;
         let info = (self.read)(item.key_by_hash(self.hashes.item))?;
         Some(Guid(info.get(at..at.checked_add(16)?)?.try_into().ok()?))

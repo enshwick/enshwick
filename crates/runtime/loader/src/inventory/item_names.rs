@@ -103,11 +103,14 @@ pub(crate) fn listed<'a>(named: impl Iterator<Item = (Guid, &'a str, &'a str)>) 
 }
 
 /// The picker's lists: the one built last, which a frame loads without a
-/// lock, and whether a build runs.
+/// lock, and whether a build runs; and the reader of the items mods serve.
 #[cfg(windows)]
 struct State {
     list: ArcSwapOption<List>,
     building: AtomicBool,
+    /// Content read from what mods serve, then the archive, for the name
+    /// tags of mods' items; `None` when its facts do not read.
+    served: std::sync::OnceLock<Option<enshwick_core::content::vanilla::Vanilla>>,
 }
 
 /// How often a build whose archive or texts do not read yet tries again,
@@ -121,6 +124,7 @@ const BUILD_TRIES: u32 = 30;
 static STATE: State = State {
     list: ArcSwapOption::const_empty(),
     building: AtomicBool::new(false),
+    served: std::sync::OnceLock::new(),
 };
 
 /// Every vanilla item the game shows a name for in `language`, sorted by
@@ -157,18 +161,67 @@ pub(crate) fn items(language: enshwick_core::i18n::Language) -> Option<Arc<List>
     None
 }
 
-/// The list of `language`, read from the client's archive and texts.
+/// The list of `language`, read from the client's archive and texts: the
+/// game's items, and the items mods serve with the names their texts give.
 #[cfg(windows)]
 fn build(language: enshwick_core::i18n::Language) -> Option<List> {
     let vanilla = vanilla()?.items().ok()?;
-    let items = listed(vanilla.iter().filter_map(|item| {
-        let text = crate::engine::game_texts::text(item.name_tag?.fnv1a(), language.0)?;
-        Some((item.guid, item.name.as_str(), text))
-    }));
+    let mods = mod_items(language);
+    let items = listed(
+        vanilla
+            .iter()
+            .filter_map(|item| {
+                let text = crate::engine::game_texts::text(item.name_tag?.fnv1a(), language.0)?;
+                Some((item.guid, item.name.as_str(), text))
+            })
+            .chain(
+                mods.iter()
+                    .map(|(item, id, text)| (*item, id.as_str(), *text)),
+            ),
+    );
     (!items.is_empty()).then_some(List {
         language: language.0,
         items,
     })
+}
+
+/// The items mods that are on serve, each with the content id that names
+/// it and its name in `language` from its mod's texts; an item that keeps
+/// a vanilla item's name or has no text in any language is left out.
+#[cfg(windows)]
+fn mod_items(language: enshwick_core::i18n::Language) -> Vec<(Guid, String, &'static str)> {
+    let Some(served) = served() else {
+        return Vec::new();
+    };
+    crate::content::served::new_keys_of_type(crate::engine::catalogue::types::ITEM_INFO)
+        .into_iter()
+        .filter_map(|key| {
+            let item = Guid(key.guid);
+            let text =
+                crate::content::served::mod_text(served.name_tag(item)?.fnv1a(), language.0)?;
+            Some((item, crate::base::ids::content_id(item)?, text))
+        })
+        .collect()
+}
+
+/// Content read from what mods serve, then the client's archive.
+#[cfg(windows)]
+fn served() -> Option<&'static enshwick_core::content::vanilla::Vanilla> {
+    let loader = crate::engine::loader::loader()?;
+    STATE
+        .served
+        .get_or_init(|| {
+            enshwick_core::content::vanilla::Vanilla::new(
+                &crate::engine::catalogue::Reflected(&loader.reflection),
+                |key| {
+                    crate::content::served::served_now(key)
+                        .ok()
+                        .or_else(|| crate::engine::archive::game()?.resource(&key))
+                },
+            )
+            .ok()
+        })
+        .as_ref()
 }
 
 /// The client's vanilla content, read through its own archive.
