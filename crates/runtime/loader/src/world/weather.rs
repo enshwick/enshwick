@@ -859,14 +859,16 @@ fn link_chunks(loader: &Loader) {
             return;
         }
     };
-    let _first = CHUNKS.set(chunks);
-    let _linked = loader.link_fused(
+    // Set only once linked: `after_step` takes no events without it.
+    if loader.link_fused(
         &CHUNKS_FUSE,
         Target::Pinned(pinned::chunks::STEP),
         &CHUNK_NEXT,
         chunk_step,
         HookFlags::NONE,
-    );
+    ) {
+        let _first = CHUNKS.set(chunks);
+    }
 }
 
 /// The switch of the chunk events.

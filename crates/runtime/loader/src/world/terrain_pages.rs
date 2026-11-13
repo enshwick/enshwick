@@ -349,17 +349,19 @@ pub(crate) fn link(loader: &Loader) {
         let _off = loader.fuse_off(&PAGES.fuse, id.id(), "this build has no column grid slots");
         return;
     }
-    let link = |symbol, handler| {
-        loader.link_mid(
-            &PAGES.fuse,
-            Target::Pinned(symbol),
-            handler,
-            HookFlags::NONE,
-        )
-    };
-    if link(pinned::voxel::PAGE_LOADED, page_loaded)
-        && link(pinned::voxel::PAGE_DROPPED, page_dropped)
-    {
+    link_sites(
+        loader,
+        Target::Pinned(pinned::voxel::PAGE_LOADED),
+        Target::Pinned(pinned::voxel::PAGE_DROPPED),
+    );
+}
+
+/// Links the sites where the cache marks a load at `load_site` and drops a
+/// page at `drop_site`, both or neither.
+#[cfg(windows)]
+fn link_sites(loader: &Loader, load_site: Target<'_>, drop_site: Target<'_>) {
+    let link = |target, handler| loader.link_mid(&PAGES.fuse, target, handler, HookFlags::NONE);
+    if link(load_site, page_loaded) && link(drop_site, page_dropped) {
         PAGES.on.store(true, Ordering::Release);
         crate::log!(INFO, "terrain page events on");
     }
@@ -471,6 +473,33 @@ pub(crate) fn forget() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn page_events_whose_drop_site_fails_to_link_are_wholly_off_and_their_load_site_never_armed() {
+        let loader = crate::start::tests::bare_loader();
+        link_sites(
+            &loader,
+            Target::Found("pages.loaded", Some(0x2000)),
+            Target::Found("pages.dropped", None),
+        );
+        assert!(PAGES.fuse.is_off());
+        assert!(!PAGES.on.load(Ordering::Acquire));
+        let mut mids = loader.mids.relock();
+        mids.seal();
+        assert!(
+            mids.owners(0x2000).is_empty(),
+            "the load site went with its feature"
+        );
+        drop(mids);
+        let listed = crate::engine::diag::parts_off();
+        assert!(
+            listed
+                .iter()
+                .any(|p| p.part == "terrain page events" && p.reason.starts_with("pages.dropped ")),
+            "{listed:?}"
+        );
+    }
 
     fn turn(loaded: bool, handle: u32) -> Turn {
         Turn { loaded, handle }

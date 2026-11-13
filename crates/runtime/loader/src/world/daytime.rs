@@ -351,14 +351,16 @@ pub(crate) fn link(loader: &'static Loader) {
             .map(|owner| (owner, AtomicU32::new(1.0f32.to_bits())))
             .collect(),
     );
-    if wanted {
-        let _linked = loader.link_fused(
+    if wanted
+        && loader.link_fused(
             &SPEED_FUSE,
             Target::Pinned(pinned::daytime::SET_SPEED),
             &SPEED_NEXT,
             speed as SetSpeedFn,
             HookFlags::NONE,
-        );
+        )
+    {
+        crate::log!(INFO, "time speed on");
     }
 }
 
