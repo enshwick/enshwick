@@ -3590,7 +3590,7 @@ declare enshwick: {
 		--- Declares `change` during `init`, from `source`, as `Load.change` declares a change of one recipe; the loader turns it into one change of each vanilla recipe the selection picks, read from the game's data, in this mod's place in load order. Recipes of mods are not picked, and a recipe the mod changes by name keeps that change of the field alone.
 		--- Only while the mod starts, at the top level of main.luau.
 		change_recipes: (change: RecipesChange, source: string) -> (),
-		--- Declares during `init` a change of `field` of `target`, from `source`, whose value the mod sets later through the handle. The loader builds what it reaches from the first read on, so a set after init needs no restart. A field players' games read needs the same value on every side: only a mod with `join: true` declares one, and it sets the value from a synced setting.
+		--- Declares during `init` a change of `field` of `target`, from `source`, whose value the mod sets later through the handle. The loader builds what it reaches from the first read on, so a set after init needs no restart. A field players' games read needs the same value on every side: only a mod or pack of side both declares one, and it sets the value from a synced setting.
 		--- Only while the mod starts, at the top level of main.luau.
 		declare_change: (target: Target, field: ChangeField, source: string) -> ChangeHandle,
 	},
@@ -3618,9 +3618,11 @@ declare enshwick: {
 		set_label: (entity: number, text: string) -> boolean,
 		--- Sends `text` to every player's chat, after the next step; callable from any thread. Each line becomes a message of its own.
 		broadcast: (text: string) -> (),
-		--- Sends `text` to `player`'s chat alone, after the next step; callable from any thread.
+		--- The language the player of account `key` reads the game in, as their game named it when they joined, for a mod's own texts in a notice or line to that player outside an action's request. The fallback for a player whose game runs no Enshwick, for a key no connected player holds and on a client. Any thread.
+		language_of: (key: string) -> string,
+		--- Sends `text` to `player`'s chat alone, after the next step; callable from any thread. The console and a remote caller have no account, so a line for them goes to no player, with a log line: answer them in the action's outcome.
 		tell: (player: Player, text: string) -> (),
-		--- Shows `text` on `player`'s screen, as the game shows its own "can't do that" messages, or tells it in chat when the player's client lacks Enshwick to show it; says which. The game shows 255 bytes; keep it to a line. On the game thread; elsewhere it goes to chat.
+		--- Shows `text` on `player`'s screen, as the game shows its own "can't do that" messages, or tells it in chat when the player's client lacks Enshwick to show it; says which. The game shows 255 bytes; keep it to a line. On the game thread; elsewhere it goes to chat. A notice for the console or a remote caller goes to no player, as with `tell`.
 		notify: (player: Player, text: string) -> Notice,
 		--- Sends a notice to every connected player, as `notify` does to one.
 		notify_all: (text: string) -> (),
