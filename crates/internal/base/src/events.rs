@@ -291,9 +291,8 @@ with_data! {
     /// [`Event::TERRAIN_PAGE_UNLOADED`].
     TerrainPageUnloaded = TERRAIN_PAGE_UNLOADED: TerrainPageData, size_of::<TerrainPageData>();
     /// [`Event::PROGRESS_WRITTEN`], for each level or experience write the
-    /// mod asked for: [`World::set_level`](../world/struct.World.html#method.set_level),
-    /// [`World::set_experience`](../world/struct.World.html#method.set_experience)
-    /// and [`World::add_experience`](../world/struct.World.html#method.add_experience).
+    /// mod asked for: `World::set_level`, `World::set_experience` and
+    /// `World::add_experience`.
     ProgressWritten = PROGRESS_WRITTEN: ProgressWriteData, size_of::<ProgressWriteData>();
 }
 
