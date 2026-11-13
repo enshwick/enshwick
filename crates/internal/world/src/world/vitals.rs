@@ -308,7 +308,7 @@ impl World {
     /// counts them from it, and the game raises no level-up event. On the
     /// server's game thread only.
     ///
-    /// `Ok` means the write waits for that step. After it,
+    /// A call that succeeds leaves the write waiting for that step. After it,
     /// [`ProgressWritten`](../events/struct.ProgressWritten.html) tells the mod
     /// what the write left, or why it was dropped: the character left, or
     /// its level or experience did not read or take the write. Writes of
