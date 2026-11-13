@@ -53,7 +53,6 @@ use std::sync::{Arc, Mutex, OnceLock};
 use arc_swap::ArcSwap;
 use enshwick_core::abi::{AltarLimitFilterFn, Status};
 
-use self::detours::view;
 use crate::engine::builds::Unhooked;
 use crate::engine::code::{CodePatch, Verdict};
 use crate::engine::fuse::Fuse;

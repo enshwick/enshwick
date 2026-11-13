@@ -378,7 +378,7 @@ fn the_raised_limit_links_every_site_and_once_off_keeps_the_cap_and_reports_the_
         .relock()
         .features_at(loader.address(bases::NEW_BASE).unwrap());
     assert!(
-        cap.len() == 1 && core::ptr::eq(cap[0], &BASE_CAP) && !BASE_CAP.is_off(),
+        cap.len() == 1 && core::ptr::eq(cap[0], &raw const BASE_CAP) && !BASE_CAP.is_off(),
         "the grown zone list keeps the cap on the game's new base code"
     );
 }
