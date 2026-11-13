@@ -977,6 +977,6 @@ fn the_features_at_an_address_are_the_loader_s_links_only() {
     );
     let features = mids.features_at(0x10);
     assert_eq!(features.len(), 1);
-    assert!(core::ptr::eq(features[0], &WICK));
+    assert!(core::ptr::eq(features[0], &raw const WICK));
     assert!(mids.features_at(0x20).is_empty());
 }
