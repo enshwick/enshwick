@@ -134,6 +134,48 @@ mod tests {
     }
 
     #[test]
+    fn only_a_crate_without_the_feature_is_refused_its_tests_and_nested_files_included() {
+        let root = std::env::temp_dir().join(format!("xtask-unstable-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&root);
+        let write = |path: &str, text: &str| {
+            let path = root.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        };
+        let gated = "#[cfg(feature = \"unstable\")]\nfn f() {}\n";
+        write("abi/src/inner/deep.rs", gated);
+        write("abi/tests/main.rs", gated);
+        write("abi/src/notes.txt", gated);
+        write("abi/src/lib.rs", "fn g() {}\n");
+        write("core/src/lib.rs", gated);
+        let package = |name: &str, unstable| Package {
+            name: name.to_owned(),
+            version: "0.0.0-dev".to_owned(),
+            dir: name.to_owned(),
+            deps: Vec::new(),
+            lib: None,
+            windows_only: false,
+            windows_tests: false,
+            unstable,
+        };
+        let problems = check(&root, &[package("abi", false), package("core", true)]);
+        let _gone = std::fs::remove_dir_all(&root);
+        let files: Vec<String> = problems
+            .iter()
+            .map(|problem| problem.split(':').next().unwrap().replace('\\', "/"))
+            .collect();
+        assert_eq!(
+            files,
+            ["abi/src/inner/deep.rs", "abi/tests/main.rs"],
+            "{problems:?}"
+        );
+        assert!(
+            problems[0].contains("which abi does not declare"),
+            "{problems:?}"
+        );
+    }
+
+    #[test]
     fn another_feature_or_a_derive_s_template_is_not_seen() {
         assert!(!names("#[cfg(feature = \"test\")] fn f() {}"));
         assert!(!names(

@@ -524,3 +524,37 @@ fn expr_attrs(expr: &Expr) -> &[Attribute] {
         _ => &[],
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cfg(text: &str) -> Cfg {
+        Cfg::new(&syn::parse_str::<Meta>(text).unwrap())
+    }
+
+    #[test]
+    fn a_negated_all_or_any_holds_with_every_feature_off_and_a_feature_alone_does_not() {
+        let off = |_: &str| false;
+        assert!(cfg("not(all(feature = \"a\", feature = \"b\"))").can_hold(&off));
+        assert!(cfg("not(any(feature = \"a\", feature = \"b\"))").can_hold(&off));
+        assert!(!cfg("all(feature = \"a\", windows)").can_hold(&off));
+        assert!(!cfg("any(feature = \"a\", feature = \"b\")").can_hold(&off));
+        assert!(cfg("any(feature = \"a\", windows)").can_hold(&off));
+        assert!(cfg("all(feature = \"a\", windows)").can_hold(&|f| f == "a"));
+    }
+
+    #[test]
+    fn a_cfg_reads_back_as_written_and_a_lone_all_part_as_itself() {
+        let shown = |text: &str| cfg(text).to_string();
+        assert_eq!(
+            shown("all(feature = \"a\", not(windows))"),
+            "all(feature = \"a\", not(windows))"
+        );
+        assert_eq!(
+            shown("any(test, feature = \"b\")"),
+            "any(test, feature = \"b\")"
+        );
+        assert_eq!(Cfg::All(vec![cfg("windows")]).to_string(), "windows");
+    }
+}
