@@ -36,7 +36,16 @@ fuzz_target!(|data: &[u8]| {
     let schema = schema();
     drop(configure::list("fuzz", &schema, text));
     drop(configure::get("fuzz", &schema, text, key));
-    if configure::set("fuzz", &schema, text, key, value).is_ok() {
+    if configure::set(
+        "fuzz",
+        &schema,
+        text,
+        key,
+        value,
+        configure::Changer::Person,
+    )
+    .is_ok()
+    {
         assert!(!schema.field(key).is_some_and(|f| f.secret));
     }
     let hidden = remote::redacted(&schema, text);
