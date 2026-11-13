@@ -233,6 +233,32 @@ impl Fuse {
         }
     }
 
+    /// Runs `work` on each of `items` whose fuse is on, in order, as `site`,
+    /// under one unwind guard, until one panics: that item's fuse turns off
+    /// and the walk ends there for this call. For work whose later items
+    /// build on state an item that panicked part way may have left broken,
+    /// such as the game's window stack; [`Fuse::run_each`] goes on instead.
+    #[inline]
+    pub fn run_in_turn<'fuse, T>(
+        items: &[T],
+        site: &str,
+        fuse: impl Fn(&T) -> &'fuse Fuse,
+        mut work: impl FnMut(&T),
+    ) {
+        let running = core::cell::Cell::new(0);
+        let walked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            for (at, item) in items.iter().enumerate() {
+                if !fuse(item).is_off() {
+                    running.set(at);
+                    work(item);
+                }
+            }
+        }));
+        if let (Err(payload), Some(item)) = (walked, items.get(running.get())) {
+            fuse(item).panicked(site, payload.as_ref());
+        }
+    }
+
     /// Turns the feature off after the panic at `site` that left `payload`.
     #[cold]
     #[inline(never)]
@@ -346,6 +372,33 @@ mod tests {
         assert_eq!(off, [false, true, true, false]);
         walk(&mut ran);
         assert_eq!(ran, [0, 3, 0, 3], "a blown item is skipped from then on");
+    }
+
+    #[test]
+    fn a_walk_in_turn_stops_at_the_item_that_panicked_and_skips_it_from_then_on() {
+        let fuses = [
+            Fuse::new("turn first"),
+            Fuse::new("turn second"),
+            Fuse::new("turn third"),
+        ];
+        let mut ran = Vec::new();
+        let walk = |ran: &mut Vec<usize>| {
+            Fuse::run_in_turn(
+                &[0, 1, 2],
+                "a walk in turn",
+                |&i| &fuses[i],
+                |&i| {
+                    ran.push(i);
+                    assert!(i != 1, "broken {i}");
+                },
+            );
+        };
+        walk(&mut ran);
+        assert_eq!(ran, [0, 1], "the walk ends at the panic");
+        let off: Vec<_> = fuses.iter().map(Fuse::is_off).collect();
+        assert_eq!(off, [false, true, false]);
+        walk(&mut ran);
+        assert_eq!(ran, [0, 1, 0, 2], "the next walk passes the blown item");
     }
 
     #[test]

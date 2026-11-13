@@ -24,7 +24,7 @@ use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 
 use enshwick_gamedata::catalogue;
 
-use crate::engine::chains::Next;
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned::{self, Constant};
@@ -153,6 +153,16 @@ enum LayoutError {
     Reflection(&'static str),
 }
 
+impl LayoutError {
+    /// The table row or the reflected name that failed.
+    const fn id(&self) -> &'static str {
+        match self {
+            Self::Table(id) => id.id(),
+            Self::Reflection(id) => id,
+        }
+    }
+}
+
 /// The map markers' state: the layout, the mods' markers and what the
 /// replicate system's frames noted.
 struct Markers {
@@ -204,10 +214,8 @@ struct Owned {
 
 type SystemFn = unsafe extern "system" fn(context: *mut u8);
 
-// SAFETY: `SystemFn` is the exact signature of the reflected ECS system
-// `replicate_map_markers_for_ui`, and the slot is used only as the `next` of
-// the `detour` link on that system's entry.
-static NEXT: Next<SystemFn> = unsafe { Next::new() };
+/// The mods' map markers: the link on the replicate system and its pass.
+static MARKERS_FUSE: Fuse = Fuse::new("map markers");
 /// Every mod's markers, one shared set each.
 type Sets = Vec<Arc<[Owned]>>;
 /// How old the play data may be: frames that stop noting it, such as under a
@@ -330,14 +338,15 @@ pub(crate) fn link(loader: &Loader) {
     let layout = match Layout::read(loader) {
         Ok(layout) if layout.fits() => layout,
         Ok(_) => {
-            crate::log!(
-                WARN,
-                "map markers off: this build's marker entries do not fit the loader's"
+            loader.fuse_off(
+                &MARKERS_FUSE,
+                pinned::map::ENTRY_SIZE.id(),
+                "does not fit the loader's marker entries",
             );
             return;
         }
         Err(why) => {
-            crate::log!(WARN, "map markers off: {why}");
+            loader.fuse_off(&MARKERS_FUSE, why.id(), &why.to_string());
             return;
         }
     };
@@ -351,8 +360,8 @@ pub(crate) fn link(loader: &Loader) {
             .ok()
             .map(enshwick_gamedata::reflect::System::entry),
     );
-    loader.link_feature(
-        "map markers",
+    loader.link_fused(
+        &MARKERS_FUSE,
         target,
         &NEXT,
         detour as SystemFn,
@@ -360,17 +369,20 @@ pub(crate) fn link(loader: &Loader) {
     );
 }
 
-/// Turns the mods' map markers off at their first panic.
-static MARKERS_FUSE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("map markers");
-
-unsafe extern "system" fn detour(context: *mut u8) {
-    // SAFETY: the game's own argument, passed on unchanged to the rest of the
-    // chain, which has the replicate system's signature.
-    unsafe { NEXT.get()(context) };
-    let _appended = MARKERS_FUSE.run("adding the markers", append);
-    let now = MARKERS.frame.fetch_add(1, Ordering::AcqRel) + 1;
-    if let Some(mut retired) = MARKERS.retired.try_relock() {
-        retire(&mut retired, now);
+crate::engine::chains::chain_detour! {
+    /// The loader's link on the reflected ECS system
+    /// `replicate_map_markers_for_ui`, whose exact signature this is: the
+    /// game's markers, then the mods'.
+    fn detour(context: *mut u8) -> ();
+    next NEXT;
+    fuse &MARKERS_FUSE, "adding the markers";
+    |onward| {
+        onward.call();
+        append();
+        let now = MARKERS.frame.fetch_add(1, Ordering::AcqRel) + 1;
+        if let Some(mut retired) = MARKERS.retired.try_relock() {
+            retire(&mut retired, now);
+        }
     }
 }
 
@@ -571,6 +583,20 @@ fn pick(types: &[(u32, bool, bool, bool)]) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn markers_a_build_cannot_lay_out_are_listed_off_not_only_logged() {
+        let loader = crate::start::tests::bare_loader();
+        link(&loader);
+        assert!(MARKERS_FUSE.is_off());
+        assert!(NEXT.wired().is_none(), "nothing is linked");
+        let listed = crate::engine::diag::parts_off();
+        let markers = listed.iter().find(|p| p.part == MARKERS_FUSE.feature());
+        assert!(
+            markers.is_some_and(|p| p.reason.starts_with(catalogue::ids::MAP_MARKER_TYPE)),
+            "the reason names what the build lacks first: {listed:?}"
+        );
+    }
 
     /// The layout of client 426, from its table and reflection.
     fn client_426() -> Layout {

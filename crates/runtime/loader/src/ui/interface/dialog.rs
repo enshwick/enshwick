@@ -181,10 +181,21 @@ pub(crate) fn text(id: u32) -> Option<&'static str> {
     Some(unsafe { &*core::ptr::from_ref::<str>(text) })
 }
 
+/// Whether dialogs show as system message boxes: they were settled so at
+/// arming, or settled in game while the interface draws them no more.
+const fn as_system(mode: u8, drawn: bool) -> bool {
+    mode == SYSTEM || (mode == IN_GAME && !drawn)
+}
+
 /// Queues `dialog`, or shows it as a system message box when the interface
-/// hook could not be armed.
+/// hook could not be armed or has turned off since, with those still
+/// waiting.
 pub(crate) fn queue(dialog: Pending) -> Status {
-    if MODE.load(Ordering::Acquire) == SYSTEM {
+    if as_system(MODE.load(Ordering::Acquire), super::dialogs_drawn()) {
+        let waiting = std::mem::take(&mut *WAITING.relock());
+        for queued in waiting {
+            system_box(queued);
+        }
         system_box(dialog);
         return Status::OK;
     }
@@ -432,6 +443,14 @@ mod tests {
         assert_eq!(dialog.buttons, 1 << UiDialog::OK);
         assert!(dialog.message.len() <= MAX_TEXT);
         assert!(dialog.message.chars().all(|c| c == 'ж'));
+    }
+
+    #[test]
+    fn dialogs_fall_back_to_system_boxes_once_the_interface_draws_them_no_more() {
+        assert!(!as_system(QUEUED, false), "before arming they wait");
+        assert!(!as_system(IN_GAME, true));
+        assert!(as_system(IN_GAME, false), "turned off after arming");
+        assert!(as_system(SYSTEM, true));
     }
 
     #[test]

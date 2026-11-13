@@ -11,6 +11,7 @@
 //! code that uses it. Each object the game fills or reads has a constant for
 //! how far it reaches, checked against the loader's buffer for it.
 
+use crate::engine::fuse::Fuse;
 pub(crate) use crate::engine::interface_parts::Missing;
 use crate::engine::interface_parts::{Part, check_functions};
 use crate::engine::loader::Loader;
@@ -670,6 +671,14 @@ unsafe fn game_fn<F: Copy>(loader: &Loader, name: Symbol) -> Result<F, Missing> 
     Ok(unsafe { core::mem::transmute_copy::<usize, F>(&address) })
 }
 
+/// The Mods screen's lists scroll; off, they page.
+static SCROLLING_FUSE: Fuse = Fuse::new("scrolling on the Mods screen (lists page)");
+/// The Mods screen edits text settings; off, they are read-only.
+static TEXT_FIELDS_FUSE: Fuse = Fuse::new("text settings on the Mods screen (read-only)");
+static HINTS_FUSE: Fuse = Fuse::new("input hints");
+/// The Mods screen lays settings out in rows; off, they stack.
+static ROWS_FUSE: Fuse = Fuse::new("rows on the Mods screen (stacked)");
+
 /// The interface's optional parts read from the build's table and
 /// reflection, each `None` when it turned off alone.
 struct Optional {
@@ -695,28 +704,30 @@ impl Optional {
                 }
             }
         }
-        let off = |part: &'static str| {
+        let off = |fuse: &'static Fuse| {
             move |why: &Missing| {
-                loader.feature_off(part, why.id(), &why.reason());
+                loader.fuse_off(fuse, why.id(), &why.reason());
             }
         };
         for (part, why) in parts_off.iter() {
-            off(part.name)(why);
+            off(super::part_fuse(*part))(why);
         }
         Self {
             menu: menu.ok(),
-            dialog: DialogLayout::read(&lookup).inspect_err(off("dialogs")).ok(),
+            dialog: DialogLayout::read(&lookup)
+                .inspect_err(off(&super::DIALOGS_FUSE))
+                .ok(),
             scroll: scroll::Scrolling::resolve(loader)
-                .inspect_err(off("scrolling on the Mods screen (lists page)"))
+                .inspect_err(off(&SCROLLING_FUSE))
                 .ok(),
             text_fields: text_field::TextFields::resolve(loader)
-                .inspect_err(off("text settings on the Mods screen (read-only)"))
+                .inspect_err(off(&TEXT_FIELDS_FUSE))
                 .ok(),
             hint: hint::InputHints::resolve(loader)
-                .inspect_err(off("input hints"))
+                .inspect_err(off(&HINTS_FUSE))
                 .ok(),
             rows: rows::Rows::resolve(loader)
-                .inspect_err(off("rows on the Mods screen (stacked)"))
+                .inspect_err(off(&ROWS_FUSE))
                 .ok(),
         }
     }

@@ -12,6 +12,7 @@ use std::sync::atomic::Ordering;
 use enshwick_core::abi::{Header, Side, Status, Str, UiExtension, UiFrame, UiFrameFn};
 use enshwick_gamedata::catalogue;
 
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Registered};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
@@ -20,8 +21,12 @@ use crate::engine::registry::Registry;
 use super::engine::{Engine, UiText, Window};
 use super::{DRAWING, Drawing, NEXT_TOKEN, copy};
 
-/// The feature's name in the log and on the Mods screen.
-const FEATURE: &str = "screen extensions";
+/// The open screen's name in what mods' frames read.
+static SCREEN_NAMES_FUSE: Fuse = Fuse::new("open screen names");
+/// The interaction prompt in what mods' frames read.
+static PROMPT_FUSE: Fuse = Fuse::new("interaction prompt reads");
+/// Why a build lacks a part of what mods' frames read.
+const LACKS: &str = "this build's table lacks it";
 
 /// Each edge's window name, by edge, outside the `enshwick/<mod id>/` names
 /// of mods' own windows.
@@ -223,13 +228,10 @@ pub(super) fn link(loader: &Loader) {
                 );
             }
         }
-        Err(id) if !extensions.is_empty() => {
-            loader.feature_off(FEATURE, id, "this build's table lacks it");
+        Err(id) => {
+            loader.fuse_off(&super::READS_FUSE, id, LACKS);
+            loader.fuse_off(&super::EXTENSIONS_FUSE, id, LACKS);
         }
-        Err(id) => crate::log!(
-            INFO,
-            "interface: mods read no open screen on this build: it lacks {id}"
-        ),
     }
 }
 
@@ -237,9 +239,10 @@ fn screen_names(loader: &Loader) -> Vec<&'static str> {
     let screens = catalogue::type_name(catalogue::ids::HUD_SCREEN_TYPE);
     let mut names = vec![""; usize::from(u8::MAX) + 1];
     let Ok(info) = loader.reflection.type_info(screens) else {
-        crate::log!(
-            INFO,
-            "interface: mods read no open screen on this build: reflection lacks {screens}"
+        loader.fuse_off(
+            &SCREEN_NAMES_FUSE,
+            screens,
+            "is not reflected on this build",
         );
         return names;
     };
@@ -254,8 +257,8 @@ fn screen_names(loader: &Loader) -> Vec<&'static str> {
     names
 }
 
-/// Where the play data keeps the interaction prompt, or `None` with a log
-/// line when the table lacks an entry of it.
+/// Where the play data keeps the interaction prompt, or `None` with its
+/// feature off when the table lacks an entry of it.
 fn prompt_at(loader: &Loader) -> Option<PromptAt> {
     let table = |id: pinned::Constant| loader.offset(id).ok_or(id.id());
     let found = (|| {
@@ -267,10 +270,7 @@ fn prompt_at(loader: &Loader) -> Option<PromptAt> {
     })();
     found
         .inspect_err(|id| {
-            crate::log!(
-                INFO,
-                "interface: mods read no prompt on this build: it lacks {id}"
-            );
+            loader.fuse_off(&PROMPT_FUSE, id, LACKS);
         })
         .ok()
 }
@@ -538,6 +538,24 @@ unsafe fn run(registered: Registered<UiFrameFn>, context: usize, edge: u32, read
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_build_without_the_screens_reflected_names_none_and_lists_the_names_off() {
+        let names = screen_names(&crate::start::tests::bare_loader());
+        assert_eq!(
+            names.len(),
+            usize::from(u8::MAX) + 1,
+            "a slot per screen byte"
+        );
+        assert!(names.iter().all(|name| name.is_empty()));
+        assert!(SCREEN_NAMES_FUSE.is_off());
+    }
+
+    #[test]
+    fn a_build_without_the_prompt_reads_none_and_lists_the_prompt_off() {
+        assert!(prompt_at(&crate::start::tests::bare_loader()).is_none());
+        assert!(PROMPT_FUSE.is_off());
+    }
 
     #[test]
     fn the_open_screen_is_read_only_in_a_game() {

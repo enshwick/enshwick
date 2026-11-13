@@ -174,6 +174,25 @@ fn fuse(c: &mut Criterion) {
             onward.run(&FUSE, "bench", |_| black_box(0))
         });
     });
+    // Six parts of one detour, each under its own fuse, that stop at the
+    // first panic: a guard per part, and one guard for the walk.
+    let parts = [&FUSE; 6];
+    group.bench_function("six_parts_by_hand", |b| {
+        let drew = |fuse: &Fuse| fuse.is_off() || fuse.run("bench", || black_box(7)).is_some();
+        b.iter(|| parts.iter().all(|fuse| drew(fuse)));
+    });
+    group.bench_function("six_parts_in_turn", |b| {
+        b.iter(|| {
+            Fuse::run_in_turn(
+                &parts,
+                "bench",
+                |fuse| *fuse,
+                |_| {
+                    black_box(7);
+                },
+            );
+        });
+    });
     group.finish();
 }
 
