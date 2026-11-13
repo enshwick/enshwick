@@ -4,7 +4,7 @@
 //! mod's log line.
 
 use std::hint::black_box;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -135,8 +135,25 @@ fn fuse(c: &mut Criterion) {
             })
         });
     });
+    // A mid-function hit no mod watches, as the damage hit site takes it:
+    // its frame read under the fuse before the gate, one load with it.
+    let frame = [7u32; 40];
+    group.bench_function("hit_read", |b| {
+        b.iter(|| FUSE.run("bench", || black_box(&frame).iter().sum::<u32>()));
+    });
+    group.bench_function("hit_gated", |b| {
+        b.iter(|| {
+            if !black_box(&WATCHED).load(Ordering::Acquire) {
+                return None;
+            }
+            FUSE.run("bench", || black_box(&frame).iter().sum::<u32>())
+        });
+    });
     group.finish();
 }
+
+/// Whether a mod watches the hits of [`fuse`]'s gated case: none does.
+static WATCHED: AtomicBool = AtomicBool::new(false);
 
 #[cfg(target_arch = "x86_64")]
 fn profile(c: &mut Criterion) {

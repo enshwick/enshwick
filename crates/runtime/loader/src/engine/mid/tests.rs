@@ -703,6 +703,16 @@ fn measures_the_stub_cost() {
         "clear, one handler through dispatch: {dispatched:.2} ns (+{:.2} over the stub alone)",
         dispatched - alone
     );
+    static MEASURED: Fuse = Fuse::new("measured feature");
+    let mut mids = Mids::default();
+    let ours = link(ModIndex::LOADER, empty, i32::MIN);
+    assert_eq!(mids.add_fused(0x10, ours, Some(&MEASURED)), Status::OK);
+    let site = core::ptr::from_ref(mids.sites(|_| false)[0]).expose_provenance();
+    let fused = per_call(hook_mark_with(plain_clear, dispatching, site, vectors));
+    println!(
+        "clear, one loader handler of a feature through dispatch: {fused:.2} ns (+{:.2} over a mod's)",
+        fused - dispatched
+    );
 }
 
 /// A handler that does nothing, as a mod's would at the least.
