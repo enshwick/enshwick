@@ -205,12 +205,11 @@ fn expand_hook(
         .filter(|a| a.path().is_ident("doc") || a.path().is_ident("cfg"));
     let priority = priority.map_or_else(|| quote!(0), |p| quote!(#p));
     let flags = flags.map_or_else(|| quote!(#krate::abi::HookFlags::NONE), |f| quote!(#f));
-    let (entry, next, value, frame, returned) = (
+    let (entry, next, frame, rest) = (
         Ident::new("__enshwick_entry", Span::mixed_site()),
         Ident::new("next", Span::mixed_site()),
-        Ident::new("value", Span::mixed_site()),
         Ident::new("frame", Span::mixed_site()),
-        Ident::new("returned", Span::mixed_site()),
+        Ident::new("rest", Span::mixed_site()),
     );
     let copies = copy_checks(&arg_types, output, krate);
     // The entry point is a safe fn, which coerces to the target's type
@@ -226,26 +225,19 @@ fn expand_hook(
             extern "system" fn #entry(#(#idents: #arg_types),*) #output {
                 let #frame = #krate::__private::Frame::new();
                 let #next = #name.next(&#frame);
-                match ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(
+                #[allow(
+                    unused_unsafe,
+                    reason = "the target may be a safe or an unsafe fn"
+                )]
+                // SAFETY: the rest of the chain takes the arguments the game
+                // passed.
+                let #rest = || unsafe { #next.call(#(#idents),*) };
+                #krate::__private::run_hook(
+                    ::core::stringify!(#name),
+                    &#frame,
                     || #body(#next, #(#idents),*),
-                )) {
-                    ::core::result::Result::Ok(#value) => #value,
-                    ::core::result::Result::Err(__enshwick_panic) => {
-                        #krate::__private::fault_in(::core::stringify!(#name), __enshwick_panic.as_ref());
-                        match #frame.take() {
-                            ::core::option::Option::Some(#returned) => #returned,
-                            #[allow(
-                                unused_unsafe,
-                                reason = "the target may be a safe or an unsafe fn"
-                            )]
-                            ::core::option::Option::None => {
-                                // SAFETY: the rest of the chain takes the
-                                // arguments the game passed.
-                                unsafe { #next.call(#(#idents),*) }
-                            }
-                        }
-                    }
-                }
+                    #rest,
+                )
             }
             #krate::Hook::new(::core::stringify!(#name), #entry, #priority, #flags)
         };

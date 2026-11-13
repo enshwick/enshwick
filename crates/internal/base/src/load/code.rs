@@ -138,12 +138,11 @@ pub(super) unsafe extern "system" fn run_mid_hook<F: Fn(&mut Registers)>(
     // The handler works on a copy, so a panic halfway leaves the game's
     // registers whole.
     let mut copy = *registers;
-    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (hook.handler)(&mut copy))) {
+    match crate::host::caught(|| (hook.handler)(&mut copy)) {
         Ok(()) => *registers = copy,
-        Err(_) => {
-            if let Some(host) = crate::host() {
-                host.fault(&format!("panic in the hook at {:#x}", hook.address));
-            }
-        }
+        Err(panicked) => crate::host::fault_with(
+            &format!("panic in the hook at {:#x}", hook.address),
+            panicked.payload(),
+        ),
     }
 }

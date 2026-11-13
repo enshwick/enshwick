@@ -1,0 +1,17 @@
+id: catch-through-caught
+valid:
+  - "fn f() { let r = caught(|| run()); }"
+  - "fn f() { guard(\"panic in ready\", || (), || run()); }"
+  - |
+    #[cfg(test)]
+    mod tests {
+        fn f() { let r = std::panic::catch_unwind(|| run()); }
+    }
+  - |
+    #[test]
+    fn panics() { let r = std::panic::catch_unwind(|| run()); }
+invalid:
+  - "fn f() { let r = std::panic::catch_unwind(|| run()); }"
+  - "fn f() { let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run())).ok(); }"
+  - "fn f() { let r = core::panic::catch_unwind(|| run()); }"
+  - "fn f() { let r = catch_unwind(|| run()); }"

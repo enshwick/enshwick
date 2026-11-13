@@ -73,28 +73,18 @@ pub unsafe fn init<M: Mod>(
         host.fault(&refused);
         return Status::REFUSED;
     }
-    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        M::init(&mut Load::of(host, manifest.side == Side::BOTH, texts))
-    }));
+    let outcome = caught(|| M::init(&mut Load::of(host, manifest.side == Side::BOTH, texts)));
     let _set = INITIALISED.set(());
-    match outcome {
-        Ok(Ok(state)) => match slot.set(state) {
+    match settled(host, outcome) {
+        Ok(state) => match slot.set(state) {
             Ok(()) => Status::OK,
             Err(state) => {
-                let _dropped =
-                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(state)));
+                // A second init's state, dropped unused: its drop's panic changes nothing.
+                let _dropped = caught(|| drop(state));
                 Status::REFUSED
             }
         },
-        Ok(Err(off)) => {
-            host.fault(off.to_reason());
-            Status::REFUSED
-        }
-        Err(payload) => {
-            let message = crate::host::panic_text(payload.as_ref());
-            host.fault(&format!("init panicked: {message}"));
-            Status::FAULTED
-        }
+        Err(status) => status,
     }
 }
 
@@ -126,21 +116,29 @@ pub unsafe fn init_pack(
     // A pack that runs again reads its level afresh; the loader refreshes it
     // on a change of its settings (`refresh_levels`).
     forget_pack_level(me);
-    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        enshwick_base::__internal::scope(host, || {
-            init(&mut Load::of(host, side == Side::BOTH, None))
-        })
-    }));
+    // The panic's payload drops inside the scope, so even its drop logs as
+    // the pack.
+    enshwick_base::__internal::scope(host, || {
+        let outcome = caught(|| init(&mut Load::of(host, side == Side::BOTH, None)));
+        settled(host, outcome).map_or_else(|status| status, |()| Status::OK)
+    })
+}
+
+/// What an init gave, or the status it answers the loader with once `host`
+/// is faulted for its [`Off`](crate::Off) or its panic.
+fn settled<T>(
+    host: Host,
+    outcome: Result<Result<T, crate::Off>, crate::host::Panicked>,
+) -> Result<T, Status> {
     match outcome {
-        Ok(Ok(())) => Status::OK,
+        Ok(Ok(value)) => Ok(value),
         Ok(Err(off)) => {
             host.fault(off.to_reason());
-            Status::REFUSED
+            Err(Status::REFUSED)
         }
-        Err(payload) => {
-            let message = crate::host::panic_text(payload.as_ref());
-            host.fault(&format!("init panicked: {message}"));
-            Status::FAULTED
+        Err(panicked) => {
+            host.fault(&format!("init panicked: {}", panicked.text()));
+            Err(Status::FAULTED)
         }
     }
 }
@@ -149,9 +147,5 @@ pub fn ready<M: Mod>(slot: &'static Slot<M>) {
     let (Some(state), Some(host)) = (slot.get(), crate::host()) else {
         return;
     };
-    if let Err(payload) =
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| state.ready(host)))
-    {
-        crate::host::fault_with("panic in ready", payload.as_ref());
-    }
+    crate::host::guard("panic in ready", || (), || state.ready(host));
 }

@@ -378,18 +378,12 @@ macro_rules! detour {
             $($unsafe)? extern "system" fn __enshwick_entry($($arg: $ty),*) $(-> $ret)? {
                 let frame = $crate::__private::Frame::new();
                 let next = $name.next(&frame);
-                match $crate::__private::caught(|| BODY(next, $($arg),*)) {
-                    ::core::result::Result::Ok(value) => value,
-                    ::core::result::Result::Err(panic) => {
-                        $crate::__private::fault_in(::core::stringify!($name), panic.payload());
-                        match frame.take() {
-                            ::core::option::Option::Some(returned) => returned,
-                            ::core::option::Option::None => {
-                                $crate::detour!(@call [$($unsafe)?] next ($($arg),*))
-                            }
-                        }
-                    }
-                }
+                $crate::__private::run_hook(
+                    ::core::stringify!($name),
+                    &frame,
+                    || BODY(next, $($arg),*),
+                    || $crate::detour!(@call [$($unsafe)?] next ($($arg),*)),
+                )
             }
             $crate::Hook::new(
                 ::core::stringify!($name),

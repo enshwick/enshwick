@@ -1,7 +1,8 @@
 //! `#[hook]` and `detour!` on the shapes mods write: a target type by an alias, a raw
 //! body name, `Ok` and `Err` taken by a glob import; and a panicking body
 //! that falls through to the rest of the chain, and a body that panics after
-//! calling `next`, which keeps what the chain gave without running it again.
+//! calling `next`, which keeps what the chain gave without running it again;
+//! a panic whose payload panics again on drop stays inside the entry.
 
 #[cfg(test)]
 mod tests {
@@ -100,6 +101,28 @@ mod tests {
         n
     }
 
+    /// A panic payload whose own drop panics again.
+    struct Bomb;
+
+    impl Drop for Bomb {
+        fn drop(&mut self) {
+            panic!("the payload's own drop")
+        }
+    }
+
+    /// Panics with a payload that panics again on drop.
+    #[hook]
+    fn bombed(next: Next<'_, Count>, n: u32) -> u32 {
+        if n == 13 {
+            std::panic::panic_any(Bomb);
+        }
+        next.call(n)
+    }
+
+    extern "system" fn bomb_site(n: u32) -> u32 {
+        n
+    }
+
     unsafe extern "system" fn upgrade(level: u32) -> u32 {
         level + 1
     }
@@ -132,6 +155,8 @@ mod tests {
             unsafe { load.hook(&TALLY_TOO, load.symbol("counted_once")?) }?;
             // SAFETY: the fake's symbol is a function of the hook's type.
             unsafe { load.hook(&EARLY, load.symbol("early_ran")?) }?;
+            // SAFETY: the fake's symbol is a function of the hook's type.
+            unsafe { load.hook(&BOMBED, load.symbol("bomb_site")?) }?;
             Result::Ok(Self)
         }
     }
@@ -153,6 +178,7 @@ mod tests {
             .symbol("tallied", address(tallied as Count))
             .symbol("counted_once", address(counted_once as Upgrade))
             .symbol("early_ran", address(early_ran as Count))
+            .symbol("bomb_site", address(bomb_site as Count))
             .install();
         // SAFETY: `enshwick_mod_init` is the export of this file's `declare_mod!(Hooks)`.
         let status = unsafe { loader.init(enshwick_mod_init) };
@@ -206,6 +232,13 @@ mod tests {
         assert_eq!(
             loader.faults().last().map(String::as_str),
             Some("panic in hook EARLY: assertion `left != right` failed: unlucky")
+        );
+
+        let bombed = loader.detour(&BOMBED).expect("linked");
+        assert_eq!(bombed(13), 13, "the original's own answer");
+        assert_eq!(
+            loader.faults().last().map(String::as_str),
+            Some("panic in hook BOMBED: a panic without a message")
         );
     }
 
