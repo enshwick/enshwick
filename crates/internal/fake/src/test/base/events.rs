@@ -92,26 +92,8 @@ impl Installed {
     /// ```
     #[must_use = "the count says whether the mod handles the event"]
     pub unsafe fn raise_raw(&self, event: Event, data: *const core::ffi::c_void) -> usize {
-        if event == Event::LOADER_SETTINGS_CHANGED {
-            // As the loader refreshes its own copy, which runs the packs.
-            enshwick_core::__fake::refresh_levels();
-        }
-        let handlers: Vec<_> = table::with(Vec::new(), |s| {
-            let periodic = (event == Event::TICKED).then(|| s.ticks.handlers());
-            s.subscriptions
-                .iter()
-                .filter(|s| s.0 == event)
-                .map(|s| s.1)
-                .chain(periodic.into_iter().flatten())
-                .collect()
-        });
-        for handler in &handlers {
-            // SAFETY: the caller guarantees `data` is null or the event's data
-            // struct, readable for the call; `user` is the pointer the mod
-            // subscribed `callback` with.
-            handler.run(|callback, user| unsafe { callback(event, data, user) });
-        }
-        handlers.len()
+        // SAFETY: the caller's guarantees, passed on.
+        unsafe { dispatch(event, data) }
     }
 
     /// The game event types the mod asked for, by hash, 0 for every type.
@@ -248,4 +230,34 @@ impl Installed {
         }
         handlers.len()
     }
+}
+
+/// Hands `event` with `data` to every handler of the mod for it, on this
+/// thread, as the loader raises it; returns how many ran.
+///
+/// # Safety
+///
+/// As [`Installed::raise_raw`]: `data` is null or the event's data struct,
+/// readable, aligned and unchanged for the call.
+pub(crate) unsafe fn dispatch(event: Event, data: *const core::ffi::c_void) -> usize {
+    if event == Event::LOADER_SETTINGS_CHANGED {
+        // As the loader refreshes its own copy, which runs the packs.
+        enshwick_core::__fake::refresh_levels();
+    }
+    let handlers: Vec<_> = table::with(Vec::new(), |s| {
+        let periodic = (event == Event::TICKED).then(|| s.ticks.handlers());
+        s.subscriptions
+            .iter()
+            .filter(|s| s.0 == event)
+            .map(|s| s.1)
+            .chain(periodic.into_iter().flatten())
+            .collect()
+    });
+    for handler in &handlers {
+        // SAFETY: the caller guarantees `data` is null or the event's data
+        // struct, readable for the call; `user` is the pointer the mod
+        // subscribed `callback` with.
+        handler.run(|callback, user| unsafe { callback(event, data, user) });
+    }
+    handlers.len()
 }

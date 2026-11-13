@@ -5,7 +5,7 @@ use core::ffi::c_void;
 
 use crate::test::table::{Registered, State, TABLE, found, put, text, with};
 use enshwick_core::abi::{
-    ConfigCheckFn, ContentRename, HostApi, Level, ModHandle, ModInfo, Status, Str,
+    ConfigCheckFn, ContentRename, HostApi, Level, ModHandle, ModInfo, Side, Status, Str,
 };
 
 /// What the fake reads from the mod's manifest, as the loader does.
@@ -32,7 +32,7 @@ impl ManifestFacts {
         };
         Self {
             id: text(manifest.id),
-            joins: manifest.side == enshwick_core::abi::Side::BOTH,
+            joins: manifest.side == Side::BOTH,
             requires: dependencies
                 .iter()
                 .filter(|d| d.relation == enshwick_core::abi::Relation::REQUIRES)
@@ -312,6 +312,105 @@ pub(crate) extern "system" fn config_check(
             .insert(file, Registered::new(callback, user, me));
         Status::OK
     })
+}
+
+pub(crate) extern "system" fn config_set(
+    _me: ModHandle,
+    file: Str,
+    key: Str,
+    value: Str,
+) -> Status {
+    let (file, key, value) = (text(file), text(key), text(value));
+    let prepared = with(Err(Status::MISSING), |s| {
+        let serving = s.host.side == Side::SERVER || s.host.hosting;
+        if !serving || s.host.world_key.is_none() {
+            return Err(Status::UNAVAILABLE);
+        }
+        // shortcut: no list element keys (`per_level[2]`), which the loader
+        // takes; add them when a test needs one.
+        let schema = s
+            .config_schemas
+            .get(&file)
+            .and_then(|text| enshwick_core::config::Schema::parse(text).ok())
+            .ok_or(Status::MISSING)?;
+        let field = schema.field(&key).ok_or(Status::MISSING)?;
+        let mut parsed = format!("v = {value}")
+            .parse::<toml::Table>()
+            .ok()
+            .and_then(|mut table| table.remove("v"))
+            .ok_or(Status::BAD_ARGS)?;
+        if let (toml::Value::Integer(n), Some(enshwick_core::config::Kind::Float)) =
+            (&parsed, field.kind)
+        {
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "a whole number for a number setting, as the loader reads it"
+            )]
+            let float = *n as f64;
+            parsed = toml::Value::Float(float);
+        }
+        field.check(&parsed).map_err(|_| Status::BAD_ARGS)?;
+        let mut table = s
+            .host
+            .settings
+            .get(&file)
+            .map_or_else(
+                || Ok(toml::Table::new()),
+                |text| text.parse::<toml::Table>(),
+            )
+            .map_err(|_| Status::REFUSED)?;
+        if !set_dotted(&mut table, &key, parsed) {
+            return Err(Status::REFUSED);
+        }
+        Ok(table.to_string())
+    });
+    let new = match prepared {
+        Ok(new) => new,
+        Err(status) => return status,
+    };
+    let check = with(None, |s| s.config_checks.get(&file).copied());
+    if let Some(check) = check {
+        let mut why = Str::EMPTY;
+        // SAFETY: the mod's check with its own pointer; the text lives for
+        // the call.
+        let status =
+            check.run(|callback, user| unsafe { callback(Str::new(&new), &raw mut why, user) });
+        if !status.is_ok() {
+            return Status::REFUSED;
+        }
+    }
+    with((), |s| {
+        s.host.settings.insert(file, new);
+    });
+    // SAFETY: the settings change carries no data.
+    let _ran = unsafe {
+        crate::test::base::events::dispatch(
+            enshwick_core::abi::Event::SETTINGS_CHANGED,
+            core::ptr::null(),
+        )
+    };
+    Status::OK
+}
+
+/// Sets the dotted `key` in `table`, making the tables on its way; `false`
+/// when a part of the way is no table.
+fn set_dotted(table: &mut toml::Table, key: &str, value: toml::Value) -> bool {
+    let mut parts = key.split('.').peekable();
+    let mut here = table;
+    while let Some(part) = parts.next() {
+        if parts.peek().is_none() {
+            here.insert(part.to_owned(), value);
+            return true;
+        }
+        let next = here
+            .entry(part.to_owned())
+            .or_insert_with(|| toml::Value::Table(toml::Table::new()));
+        let toml::Value::Table(next) = next else {
+            return false;
+        };
+        here = next;
+    }
+    false
 }
 
 pub(crate) extern "system" fn texts(_me: ModHandle, toml: Str) -> Status {

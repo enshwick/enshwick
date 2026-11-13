@@ -1940,6 +1940,23 @@ pub struct HostApi {
     /// the loader returns [`Status::REFUSED`]. ABI 11.24.
     pub drop_items:
         extern "system" fn(me: ModHandle, request: *const DropRequest, out: *mut Entity) -> Status,
+    /// Writes `value`, one TOML value, as the setting `key` of the mod's own
+    /// settings file `file` in the world this process runs, as the console
+    /// does: checked against the file's schema and by the mod's
+    /// [`HostApi::config_check`], written atomically with the file's
+    /// comments kept, then raised as a settings change. A secret setting
+    /// too, whose value the log never shows. Any thread, but never inside
+    /// the mod's own check; a write from the mod's settings handler raises
+    /// the change again. The strings are borrowed for the call.
+    /// [`Status::UNAVAILABLE`] while no world runs here, as on a client in
+    /// another's world; [`Status::MISSING`] for a file or key the mod's
+    /// settings lack; [`Status::BAD_ARGS`] for a value the setting does not
+    /// accept or a string that is not UTF-8; [`Status::REFUSED`] when the
+    /// mod's check refuses the file with the value or the file does not
+    /// read or write. On an error the file stays as it was and the loader
+    /// logs why. A panic in the loader returns [`Status::REFUSED`]. ABI
+    /// 11.26.
+    pub config_set: extern "system" fn(me: ModHandle, file: Str, key: Str, value: Str) -> Status,
 }
 
 // Every function keeps its slot: 24 header and version bytes, then 8 per slot.
@@ -2080,5 +2097,6 @@ const _: () = {
     assert!(offset_of!(HostApi, action_window) == 24 + 199 * 8);
     assert!(offset_of!(HostApi, progress_write) == 24 + 200 * 8);
     assert!(offset_of!(HostApi, drop_items) == 24 + 201 * 8);
-    assert!(size_of::<HostApi>() == 24 + 202 * 8);
+    assert!(offset_of!(HostApi, config_set) == 24 + 202 * 8);
+    assert!(size_of::<HostApi>() == 24 + 203 * 8);
 };

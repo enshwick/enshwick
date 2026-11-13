@@ -1,4 +1,5 @@
 use crate::abi::{Status, Str};
+use crate::host::Host;
 
 use super::Config;
 
@@ -47,10 +48,20 @@ use super::Config;
 /// ```
 pub fn set<T: Config>(key: &str, value: impl Into<toml::Value>) -> Result<(), SetSettingError> {
     let host = crate::host().ok_or(SetSettingError::NoWorld)?;
-    let value = value.into().to_string();
+    write(&host, T::FILE, key, &value.into())
+}
+
+/// Writes `value` as `key` of `host`'s settings file `file`.
+pub(super) fn write(
+    host: &Host,
+    file: &str,
+    key: &str,
+    value: &toml::Value,
+) -> Result<(), SetSettingError> {
+    let value = value.to_string();
     let status = (host.api().config_set)(
         host.handle(),
-        Str::new(T::FILE),
+        Str::new(file),
         Str::new(key),
         Str::new(&value),
     );

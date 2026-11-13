@@ -135,6 +135,21 @@ impl Installed {
         });
     }
 
+    /// The text of the running world's `<file>.toml` for the mod: what
+    /// [`set_settings`](Self::set_settings) or the mod's own
+    /// `config::set` wrote last; `None` before either.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().settings("limit = 7\n").install();
+    /// assert_eq!(loader.settings_text("settings").as_deref(), Some("limit = 7\n"));
+    /// ```
+    #[must_use]
+    pub fn settings_text(&self, file: &str) -> Option<String> {
+        table::with(None, |s| s.host.settings.get(file).cloned())
+    }
+
     /// Makes `level` the data pack `pack`'s most detailed log level, as an
     /// edit of the loader's settings would; raise
     /// [`events::LoaderSettingsChanged`](enshwick_core::events::LoaderSettingsChanged)

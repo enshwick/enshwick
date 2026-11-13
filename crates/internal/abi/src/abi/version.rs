@@ -34,7 +34,7 @@ pub const ABI_MAJOR: u16 = 11;
 ///
 /// assert_eq!(Header::of::<Manifest>().abi_minor, ABI_MINOR);
 /// ```
-pub const ABI_MINOR: u16 = 25;
+pub const ABI_MINOR: u16 = 26;
 
 /// Why a loader or its tools refuse a mod built for another ABI, naming the
 /// mod's version, this build's and what to do.

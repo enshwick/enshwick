@@ -719,4 +719,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     action_window,
     progress_write,
     drop_items,
+    config_set,
 };
