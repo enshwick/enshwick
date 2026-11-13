@@ -73,16 +73,15 @@ pub unsafe fn init<M: Mod>(
         host.fault(&refused);
         return Status::REFUSED;
     }
-    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        M::init(&mut Load::of(host, manifest.side == Side::BOTH, texts))
-    }));
+    let outcome =
+        crate::host::caught(|| M::init(&mut Load::of(host, manifest.side == Side::BOTH, texts)));
     let _set = INITIALISED.set(());
     match outcome {
         Ok(Ok(state)) => match slot.set(state) {
             Ok(()) => Status::OK,
             Err(state) => {
-                let _dropped =
-                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(state)));
+                // A second init's state, dropped unused: its drop's panic changes nothing.
+                let _dropped = crate::host::caught(|| drop(state));
                 Status::REFUSED
             }
         },
@@ -90,9 +89,8 @@ pub unsafe fn init<M: Mod>(
             host.fault(off.to_reason());
             Status::REFUSED
         }
-        Err(payload) => {
-            let message = crate::host::panic_text(payload.as_ref());
-            host.fault(&format!("init panicked: {message}"));
+        Err(panicked) => {
+            host.fault(&format!("init panicked: {}", panicked.text()));
             Status::FAULTED
         }
     }
@@ -126,20 +124,20 @@ pub unsafe fn init_pack(
     // A pack that runs again reads its level afresh; the loader refreshes it
     // on a change of its settings (`refresh_levels`).
     forget_pack_level(me);
-    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+    let outcome = crate::host::caught(|| {
         enshwick_base::__internal::scope(host, || {
             init(&mut Load::of(host, side == Side::BOTH, None))
         })
-    }));
+    });
     match outcome {
         Ok(Ok(())) => Status::OK,
         Ok(Err(off)) => {
             host.fault(off.to_reason());
             Status::REFUSED
         }
-        Err(payload) => {
-            let message = crate::host::panic_text(payload.as_ref());
-            host.fault(&format!("init panicked: {message}"));
+        // `host`, not `fault_with`: the pack's scope ended with the panic.
+        Err(panicked) => {
+            host.fault(&format!("init panicked: {}", panicked.text()));
             Status::FAULTED
         }
     }
@@ -149,9 +147,5 @@ pub fn ready<M: Mod>(slot: &'static Slot<M>) {
     let (Some(state), Some(host)) = (slot.get(), crate::host()) else {
         return;
     };
-    if let Err(payload) =
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| state.ready(host)))
-    {
-        crate::host::fault_with("panic in ready", payload.as_ref());
-    }
+    crate::host::guard("panic in ready", || (), || state.ready(host));
 }

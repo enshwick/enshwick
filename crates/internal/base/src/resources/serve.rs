@@ -72,7 +72,7 @@ unsafe extern "system" fn build(
         // `base_len` readable bytes there, unchanged for the call.
         unsafe { core::slice::from_raw_parts(base, base_len) }
     };
-    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| builder(base)));
+    let built = crate::host::caught(|| builder(base));
     let Ok(Some(bytes)) = built else {
         return Status::REFUSED;
     };
@@ -140,5 +140,18 @@ mod tests {
             )
         };
         assert_eq!(refused, Status::BAD_ARGS);
+    }
+
+    #[test]
+    fn a_panicking_builder_refuses_its_resource_and_writes_nothing() {
+        let builder: Builder = Box::new(|_: &[u8]| panic!("a broken builder"));
+        let user = core::ptr::from_ref(&builder).cast_mut().cast();
+        let (mut out, mut out_len) = (core::ptr::null::<u8>(), 0usize);
+        // SAFETY: a null base, `user` points at the `Builder` alive in this
+        // frame, and both out pointers are writable locals.
+        let status = unsafe { build(core::ptr::null(), 0, user, &raw mut out, &raw mut out_len) };
+        assert_eq!(status, Status::REFUSED);
+        assert!(out.is_null());
+        assert_eq!(out_len, 0);
     }
 }

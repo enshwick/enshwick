@@ -191,10 +191,7 @@ impl Manifested {
     /// building or `read` panicked.
     pub fn with_built<R>(&self, read: impl FnOnce(&Built) -> R) -> Option<R> {
         use crate::locks::Relock as _;
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            read(self.built.relock().get_or_insert_with(|| self.build()))
-        }))
-        .ok()
+        crate::host::caught(|| read(self.built.relock().get_or_insert_with(|| self.build()))).ok()
     }
 
     /// The manifest with the mod's schema text and exports; when the section

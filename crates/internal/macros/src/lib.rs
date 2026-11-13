@@ -226,12 +226,10 @@ fn expand_hook(
             extern "system" fn #entry(#(#idents: #arg_types),*) #output {
                 let #frame = #krate::__private::Frame::new();
                 let #next = #name.next(&#frame);
-                match ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(
-                    || #body(#next, #(#idents),*),
-                )) {
+                match #krate::__private::caught(|| #body(#next, #(#idents),*)) {
                     ::core::result::Result::Ok(#value) => #value,
                     ::core::result::Result::Err(__enshwick_panic) => {
-                        #krate::__private::fault_in(::core::stringify!(#name), __enshwick_panic.as_ref());
+                        #krate::__private::fault_in(::core::stringify!(#name), __enshwick_panic.payload());
                         match #frame.take() {
                             ::core::option::Option::Some(#returned) => #returned,
                             #[allow(
