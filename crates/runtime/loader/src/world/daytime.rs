@@ -296,8 +296,9 @@ pub(crate) fn set_speed(loader: &Loader, owner: ModIndex, factor: f32) -> Result
     if !(0.0..=MAX_FACTOR).contains(&factor) {
         return Err(Status::BAD_ARGS);
     }
+    // Off, the speed runs as on a build without the setter's link.
     if SPEED_FUSE.is_off() {
-        return Err(Status::UNAVAILABLE);
+        return Err(Status::MISSING);
     }
     let slot = FACTORS
         .get()
@@ -451,12 +452,12 @@ mod tests {
     }
 
     #[test]
-    fn a_speed_set_once_the_time_speed_is_off_is_refused_as_unavailable() {
+    fn a_speed_set_once_the_time_speed_is_off_is_refused_as_missing() {
         let loader = crate::start::tests::bare_loader();
         SPEED_FUSE.blow("a test");
         assert_eq!(
             set_speed(&loader, ModIndex::new(0), 2.0),
-            Err(Status::UNAVAILABLE)
+            Err(Status::MISSING)
         );
         assert_eq!(SPEED_FUSE.feature(), "time speed", "its link's name");
     }
