@@ -5,6 +5,7 @@ pub(crate) mod book;
 pub(crate) mod changelog;
 pub(crate) mod crate_rules;
 mod domains;
+mod features;
 mod ranges;
 pub(crate) mod reports;
 pub(crate) mod rules;
@@ -20,7 +21,7 @@ use crate::say;
 type Rule = fn(&Path, &[Package]) -> Result<Vec<String>, String>;
 
 /// Every rule with the label its problems carry, in the order they run.
-const RULES: [(&str, Rule); 11] = [
+const RULES: [(&str, Rule); 12] = [
     ("manifest range", |root, packages| {
         Ok(ranges::check(root, packages))
     }),
@@ -42,6 +43,9 @@ const RULES: [(&str, Rule); 11] = [
     }),
     ("crate rule", |_, packages| crate_rules::check(packages)),
     ("domain rule", |root, _| Ok(domains::check(root))),
+    ("unstable feature", |root, packages| {
+        Ok(features::check(root, packages))
+    }),
     ("internal example", |root, packages| {
         Ok(lower_examples::check(root, packages))
     }),

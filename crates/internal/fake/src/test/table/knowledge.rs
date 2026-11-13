@@ -3,7 +3,7 @@
 
 use core::ffi::c_void;
 
-use crate::test::table::{Registered, with};
+use crate::test::table::{Registered, State, with};
 use enshwick_core::abi::{
     ComfortFn, ExperiencePassFn, KnowledgeInfo, KnowledgeInputFn, ModHandle, SkillCheckFn, Status,
 };
@@ -43,6 +43,17 @@ pub(crate) extern "system" fn experience_filter(
     })
 }
 
+/// The scope of knowledge `id` when the fake knows it and `kind` is its
+/// kind; `BAD_ARGS` otherwise, as the loader answers on the game.
+fn scope_of(s: &State, id: enshwick_core::abi::KnowledgeId, kind: u32) -> Result<u8, Status> {
+    s.knowledge
+        .iter()
+        .find(|(_, k)| k.id == id)
+        .filter(|(_, k)| u32::from(k.kind) == kind)
+        .map(|(_, k)| k.scope)
+        .ok_or(Status::BAD_ARGS)
+}
+
 pub(crate) extern "system" fn revoke_knowledge(
     _me: ModHandle,
     entity: enshwick_core::Entity,
@@ -51,6 +62,9 @@ pub(crate) extern "system" fn revoke_knowledge(
     value: u32,
 ) -> Status {
     with(Status::MISSING, |s| {
+        if let Err(status) = scope_of(s, id, kind) {
+            return status;
+        }
         s.revokes
             .push((enshwick_core::Entity::from_raw(entity.0), id, kind, value));
         Status::OK
@@ -66,6 +80,10 @@ pub(crate) extern "system" fn account_knowledge(
     revoke: u32,
 ) -> Status {
     with(Status::MISSING, |s| {
+        // As the loader, which keeps only a character's knowledge per account.
+        if scope_of(s, id, kind) != Ok(KnowledgeInfo::PLAYER) {
+            return Status::BAD_ARGS;
+        }
         s.account_changes.push((key, id, kind, value, revoke != 0));
         Status::OK
     })
@@ -151,16 +169,8 @@ pub(crate) extern "system" fn grant_knowledge(
     value: u32,
 ) -> Status {
     with(Status::MISSING, |s| {
-        let Some(info) = s
-            .knowledge
-            .iter()
-            .find(|(_, k)| k.id == id)
-            .map(|(_, k)| *k)
-        else {
-            return Status::BAD_ARGS;
-        };
-        if u32::from(info.kind) != kind {
-            return Status::BAD_ARGS;
+        if let Err(status) = scope_of(s, id, kind) {
+            return status;
         }
         s.grants
             .push((enshwick_core::Entity::from_raw(entity.0), id, kind, value));

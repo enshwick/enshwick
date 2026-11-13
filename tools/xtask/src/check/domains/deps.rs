@@ -2,13 +2,16 @@
 //! crate a domain's crate, or core, depends on is named by its code outside
 //! tests, and one named only under `#[cfg(feature = "...")]` is an optional
 //! dependency, so a build without that feature compiles the two side by
-//! side.
+//! side; every feature that meets such a `cfg` turns the dependency on, so
+//! no feature set fails to build.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use super::walk::{Named, feature_only, item_attrs, ungated_paths};
-use super::{MAP, Map, collect, declared_modules, drop_test_modules, module_path, package, paths};
+use syn::Item;
+
+use super::walk::{Cfg, Named, cfgs, feature_only, item_attrs, paths_under, ungated_paths};
+use super::{MAP, Map, collect, declared_modules, drop_test_modules, module_path, package};
 
 /// The crate above every domain, by its folder under `crates/internal`.
 const CORE: &str = "core";
@@ -20,7 +23,9 @@ const GRAPH: &str = "ARCHITECTURE.md";
 struct Dep {
     /// Its package name.
     package: String,
-    /// The name the code writes it by: the manifest's key, `-` as `_`.
+    /// The manifest's key, which features name it by.
+    key: String,
+    /// The name the code writes it by: the key, `-` as `_`.
     ident: String,
     optional: bool,
 }
@@ -86,14 +91,28 @@ fn manifests(root: &Path, map: &Map) -> (Vec<String>, Vec<Edge>) {
             }
         };
         let idents: Vec<&str> = deps.iter().map(|dep| dep.ident.as_str()).collect();
-        let (always, named) = usage(&files, &idents);
+        let (always, named, conditions) = usage(&files, &idents);
         let at = format!("crates/internal/{dir}/Cargo.toml: {name}");
+        let no_features = toml::Table::new();
+        let features = manifest
+            .get("features")
+            .and_then(toml::Value::as_table)
+            .unwrap_or(&no_features);
         for Dep {
             package,
+            key,
             ident,
             optional,
         } in &deps
         {
+            if *optional {
+                problems.extend(
+                    conditions
+                        .iter()
+                        .filter(|(named, _)| named == ident)
+                        .filter_map(|(_, cfg)| ungated_use(&at, package, cfg, features, key)),
+                );
+            }
             if !named.contains(ident) {
                 problems.push(format!(
                     "{at} depends on {package}, which its code names nowhere outside tests: drop it, or make it a dev-dependency ({MAP})"
@@ -134,24 +153,152 @@ fn sources(root: &Path, dir: &str) -> Result<Vec<(String, syn::File)>, String> {
 }
 
 /// Of `idents`, the crates the code names where no feature turns it off,
-/// and those it names at all.
-fn usage(files: &[(String, syn::File)], idents: &[&str]) -> (BTreeSet<String>, BTreeSet<String>) {
+/// those it names at all, and each with the `cfg`s around a place that
+/// names it.
+fn usage(
+    files: &[(String, syn::File)],
+    idents: &[&str],
+) -> (BTreeSet<String>, BTreeSet<String>, BTreeSet<(String, Cfg)>) {
     let gated = declared_modules(files, |item| feature_only(item_attrs(item)));
+    let contexts = contexts(files);
     let firsts = |named: Named| {
         named
             .external
             .into_iter()
             .filter_map(|path| path.into_iter().next())
     };
-    let (mut always, mut named) = (BTreeSet::new(), BTreeSet::new());
+    let (mut always, mut named, mut conditions) =
+        (BTreeSet::new(), BTreeSet::new(), BTreeSet::new());
     for (path, file) in files {
         let module = module_path(path);
         if !feature_only(&file.attrs) && !gated.iter().any(|g| module.starts_with(g)) {
             always.extend(firsts(ungated_paths(file, &module, idents)));
         }
-        named.extend(firsts(paths(file, &module, idents)));
+        let context = contexts.get(&module).map_or(&[][..], Vec::as_slice);
+        let mut found = paths_under(file, &module, idents, context);
+        conditions.append(&mut found.conditions);
+        named.extend(firsts(found));
     }
-    (always, named)
+    (always, named, conditions)
+}
+
+/// The `cfg`s each file's code sits under, by its module: those of every
+/// `mod` item on the way to it and every file's own `#![cfg]` on the way.
+fn contexts(files: &[(String, syn::File)]) -> BTreeMap<Vec<String>, Vec<Cfg>> {
+    fn declared(
+        items: &[Item],
+        module: &mut Vec<String>,
+        above: &mut Vec<Cfg>,
+        out: &mut BTreeMap<Vec<String>, Vec<Cfg>>,
+    ) {
+        for item in items {
+            let Item::Mod(declared_mod) = item else {
+                continue;
+            };
+            module.push(declared_mod.ident.to_string());
+            let depth = above.len();
+            above.extend(cfgs(&declared_mod.attrs));
+            match &declared_mod.content {
+                Some((_, items)) => declared(items, module, above, out),
+                None => {
+                    out.insert(module.clone(), above.clone());
+                }
+            }
+            above.truncate(depth);
+            module.pop();
+        }
+    }
+    let mut declarations = BTreeMap::new();
+    let mut own = BTreeMap::new();
+    for (path, file) in files {
+        let mut module = module_path(path);
+        own.insert(module.clone(), cfgs(&file.attrs).collect::<Vec<_>>());
+        declared(&file.items, &mut module, &mut Vec::new(), &mut declarations);
+    }
+    own.keys()
+        .map(|module: &Vec<String>| {
+            let context = (0..=module.len())
+                .flat_map(|depth| {
+                    let at = &module[..depth];
+                    declarations
+                        .get(at)
+                        .into_iter()
+                        .chain(own.get(at))
+                        .flatten()
+                        .cloned()
+                })
+                .collect();
+            (module.clone(), context)
+        })
+        .collect()
+}
+
+/// The line of a problem when code names the optional dependency `key`
+/// under a `cfg` that can hold while every feature that turns it on is off,
+/// so that build fails.
+fn ungated_use(
+    at: &str,
+    package: &str,
+    cfg: &Cfg,
+    features: &toml::Table,
+    key: &str,
+) -> Option<String> {
+    if !cfg.can_hold(&|feature| !turns_on(features, key, feature)) {
+        return None;
+    }
+    let missing: Vec<&str> = cfg
+        .features()
+        .into_iter()
+        .filter(|feature| !turns_on(features, key, feature))
+        .collect();
+    Some(if missing.is_empty() {
+        format!(
+            "{at} names the optional {package} where no feature gates it: gate that code with a feature that turns it on, or make it required ({MAP})"
+        )
+    } else {
+        format!(
+            "{at} names {package} under cfg({cfg}), which features [{}] meet without turning it on: turn it on with each of them ({MAP})",
+            missing.join(", ")
+        )
+    })
+}
+
+/// Whether turning on `feature` turns on the optional dependency `key`:
+/// through `dep:key` or `key/...` in its list, through another feature it
+/// turns on, or as the feature cargo makes for `key` while no list names
+/// `dep:key`.
+fn turns_on(features: &toml::Table, key: &str, feature: &str) -> bool {
+    let dep = format!("dep:{key}");
+    let entries = |feature: &str| {
+        features
+            .get(feature)
+            .and_then(toml::Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(toml::Value::as_str)
+    };
+    let implicit = !features
+        .keys()
+        .any(|name| entries(name).any(|entry| entry == dep));
+    let mut todo = vec![feature];
+    let mut seen = BTreeSet::new();
+    while let Some(at) = todo.pop() {
+        if implicit && at == key {
+            return true;
+        }
+        if !seen.insert(at) {
+            continue;
+        }
+        for entry in entries(at) {
+            match entry.split_once('/') {
+                _ if entry == dep => return true,
+                Some((enabled, _)) if enabled == key => return true,
+                None if !entry.starts_with("dep:") => todo.push(entry),
+                Some(_) | None => {}
+            }
+        }
+    }
+    false
 }
 
 /// The manifest's dependencies, in `[dependencies]` and every
@@ -173,6 +320,7 @@ fn dependencies(manifest: &toml::Table) -> impl Iterator<Item = Dep> {
                 .and_then(toml::Value::as_str)
                 .unwrap_or(key)
                 .to_owned(),
+            key: key.clone(),
             ident: key.replace('-', "_"),
             optional: entry
                 .get("optional")
@@ -262,7 +410,7 @@ mod tests {
         Map {
             order: dirs.iter().map(|dir| (*dir).to_owned()).collect(),
             joins: Vec::new(),
-            modules: std::collections::BTreeMap::new(),
+            modules: BTreeMap::new(),
             upward: Vec::new(),
             below: Vec::new(),
             crates: dirs
@@ -499,7 +647,7 @@ mod tests {
         }
         manifest(
             "ui",
-            "enshwick-base.workspace = true\nenshwick-world.workspace = true\nenshwick-inventory = { workspace = true, optional = true }\nserde = \"1\"\n",
+            "enshwick-base.workspace = true\nenshwick-world.workspace = true\nenshwick-inventory = { workspace = true, optional = true }\nserde = \"1\"\n[features]\nunstable = [\"dep:enshwick-inventory\"]\n",
         );
         manifest(
             "core",
@@ -526,5 +674,99 @@ mod tests {
             problems[2]
                 .contains("enshwick-core depends on enshwick-base, which its code names nowhere")
         );
+    }
+
+    /// A ui root whose `screens` module stands under two features.
+    const SCREENS: &str = "#[cfg(any(feature = \"unstable\", feature = \"fake\"))]\nmod screens;\n";
+
+    /// The problems of a tree where ui's world is optional, with
+    /// `features` as ui's feature table, `lib` as its root and `code` as
+    /// its `screens` module.
+    fn screens(name: &str, features: &str, lib: &str, code: &str) -> Vec<String> {
+        let root = std::env::temp_dir().join(format!("xtask-deps-{name}-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&root);
+        let tree = Tree(root.clone());
+        for dir in ["world", "core"] {
+            tree.write(
+                &format!("crates/internal/{dir}/Cargo.toml"),
+                &format!("[package]\nname = \"enshwick-{dir}\"\n"),
+            );
+            tree.write(&format!("crates/internal/{dir}/src/lib.rs"), "");
+        }
+        tree.write(
+            "crates/internal/ui/Cargo.toml",
+            &format!(
+                "[package]\nname = \"enshwick-ui\"\n[dependencies]\nenshwick-world = {{ workspace = true, optional = true }}\n[features]\n{features}"
+            ),
+        );
+        tree.write("crates/internal/ui/src/lib.rs", lib);
+        tree.write("crates/internal/ui/src/screens.rs", code);
+        manifests(&root, &map(&["world", "ui"])).0
+    }
+
+    #[test]
+    fn a_feature_that_meets_the_gating_cfg_without_turning_the_dependency_on_fails() {
+        let problems = screens(
+            "gap",
+            "unstable = [\"dep:enshwick-world\"]\nfake = []\n",
+            SCREENS,
+            "use enshwick_world::W;",
+        );
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(
+            problems[0].contains(
+                "enshwick-ui names enshwick-world under cfg(any(feature = \"unstable\", feature = \"fake\")), which features [fake] meet"
+            ),
+            "{problems:?}"
+        );
+        let weak = screens(
+            "weak",
+            "unstable = [\"dep:enshwick-world\"]\nfake = [\"enshwick-world?/fake\"]\n",
+            SCREENS,
+            "use enshwick_world::W;",
+        );
+        assert_eq!(weak.len(), 1, "a weak feature turns nothing on: {weak:?}");
+    }
+
+    #[test]
+    fn a_feature_turns_the_dependency_on_directly_through_another_feature_or_through_its_features()
+    {
+        for (name, features) in [
+            (
+                "through",
+                "unstable = [\"dep:enshwick-world\"]\nfake = [\"unstable\"]\n",
+            ),
+            (
+                "its",
+                "unstable = [\"dep:enshwick-world\"]\nfake = [\"enshwick-world/fake\"]\n",
+            ),
+        ] {
+            let problems = screens(name, features, SCREENS, "use enshwick_world::W;");
+            assert!(problems.is_empty(), "{name}: {problems:?}");
+        }
+    }
+
+    #[test]
+    fn an_optional_dependency_named_where_no_feature_gates_it_fails() {
+        let problems = screens(
+            "open",
+            "unstable = [\"dep:enshwick-world\"]\nfake = [\"unstable\"]\n",
+            "#[cfg(any(feature = \"unstable\", windows))]\nuse enshwick_world::W;",
+            "",
+        );
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(
+            problems[0].contains("names the optional enshwick-world where no feature gates it"),
+            "{problems:?}"
+        );
+    }
+
+    #[test]
+    fn the_feature_cargo_makes_for_an_optional_dependency_turns_it_on() {
+        let features = toml::Table::new();
+        assert!(turns_on(&features, "enshwick-world", "enshwick-world"));
+        let explicit: toml::Table = toml::from_str("w = [\"dep:enshwick-world\"]").unwrap();
+        assert!(!turns_on(&explicit, "enshwick-world", "enshwick-world"));
+        assert!(turns_on(&explicit, "enshwick-world", "w"));
     }
 }

@@ -1,0 +1,66 @@
+id: test-modules-listen-on-loopback
+valid:
+  - |
+    fn listen() {
+        let socket = TcpListener::bind("0.0.0.0:0");
+    }
+  - |
+    mod tests {
+        fn not_a_test_module() {
+            let socket = TcpListener::bind("0.0.0.0:0");
+        }
+    }
+  - |
+    #[cfg(test)]
+    mod tests {
+        #[test]
+        fn a_client_reaches_the_console() {
+            let socket = TcpListener::bind("127.0.0.1:0");
+            let other = TcpListener::bind((Ipv6Addr::LOCALHOST, 0));
+            let six = TcpListener::bind("[::1]:0");
+            let mine = Ipv4Addr::new(127, 0, 0, 1);
+        }
+    }
+  - |
+    #[cfg(test)]
+    mod proofs {
+        #[test]
+        fn a_private_network_and_a_path_are_not_every_network() {
+            assert!(allowed("10.0.0.0/8"));
+            assert_eq!(name.split("::").count(), 2);
+        }
+    }
+invalid:
+  - |
+    #[cfg(test)]
+    mod tests {
+        #[test]
+        fn a_client_reaches_the_console() {
+            let socket = TcpListener::bind("0.0.0.0:0");
+        }
+    }
+  - |
+    #[cfg(test)]
+    mod dropdown_tests {
+        fn settings() -> String {
+            format!("rcon_ip = \"[::]\"\nrcon_port = {port}\n")
+        }
+    }
+  - |
+    #[test]
+    fn a_client_reaches_the_console() {
+        let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0));
+    }
+  - |
+    #[cfg(test)]
+    fn listener() -> UdpSocket {
+        UdpSocket::bind((Ipv4Addr::new(0, 0, 0, 0), 0)).unwrap()
+    }
+  - |
+    #[cfg(all(test, windows))]
+    mod tests {
+        #[test]
+        fn a_client_reaches_the_console() {
+            let socket = TcpListener::bind((std::net::Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0), 0));
+        }
+    }

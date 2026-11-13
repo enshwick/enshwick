@@ -105,6 +105,9 @@ age = 387
 targets = ["x86_64-pc-windows-msvc"]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+# The internal crates' impls carry their `unstable` badge only when built with
+# it; a cfg of their own, since a dependency's `docsrs` code may not build.
+rustc-args = ["--cfg", "enshwick_docs"]
 
 [[bench]]
 name = "hook_dispatch"

@@ -23,7 +23,7 @@ fn hidden(field: &syn::Field) -> bool {
 
 pub(crate) fn expand_derive(input: &DeriveInput, krate: &TokenStream) -> syn::Result<TokenStream> {
     let ident = &input.ident;
-    match &input.data {
+    let expanded = match &input.data {
         Data::Struct(data) => match &data.fields {
             Fields::Named(named) => Ok(derive_record(input, named, krate)),
             Fields::Unnamed(unnamed) if unnamed.unnamed.len() == 1 => {
@@ -47,7 +47,37 @@ pub(crate) fn expand_derive(input: &DeriveInput, krate: &TokenStream) -> syn::Re
             ident,
             "`Script` takes a struct or an enum",
         )),
+    }?;
+    // The repository of the package cargo compiles: the API's own crates
+    // badge their impls, a mod's crate never gets a `doc(cfg)` it cannot build.
+    badged(
+        expanded,
+        std::env::var("CARGO_PKG_REPOSITORY").ok().as_deref(),
+    )
+}
+
+/// The repository of the API's crates, where the script traits are public
+/// only with the facade's `unstable` feature.
+const API_REPOSITORY: &str = "https://github.com/enshwick/enshwick";
+
+/// `expanded`, with the `unstable` badge rustdoc shows under `docsrs` on
+/// each of its impls when `repository` is the [`API_REPOSITORY`]: the traits
+/// live in a crate without that feature, so rustdoc badges their impls only
+/// when each carries its own `doc(cfg)`, and the facade's docs.rs build
+/// compiles these crates with `docsrs` through its `rustc-args`.
+fn badged(expanded: TokenStream, repository: Option<&str>) -> syn::Result<TokenStream> {
+    if repository != Some(API_REPOSITORY) {
+        return Ok(expanded);
     }
+    let mut file: syn::File = syn::parse2(expanded)?;
+    for item in &mut file.items {
+        if let syn::Item::Impl(item) = item {
+            item.attrs.push(syn::parse_quote!(
+                #[cfg_attr(enshwick_docs, doc(cfg(feature = "unstable")))]
+            ));
+        }
+    }
+    Ok(quote::ToTokens::into_token_stream(file))
 }
 
 /// The type's name in a script: `#[script(name = "...")]` on the type,
@@ -850,6 +880,28 @@ mod tests {
         let out = expand_derive(&input, &quote!(::enshwick))?.to_string();
         assert!(out.contains("Context for Kept"), "{out}");
         assert!(out.contains("argument_or_default"), "{out}");
+        Ok(())
+    }
+
+    #[test]
+    fn only_the_api_s_own_crates_get_the_unstable_badge_on_their_impls() -> syn::Result<()> {
+        let impls = quote! {
+            impl ::enshwick::script::Typed for Id {}
+            impl ::enshwick::script::IntoScript for Id {}
+        };
+        let badge = "# [cfg_attr (enshwick_docs , doc (cfg (feature = \"unstable\")))] impl";
+        let ours = badged(impls.clone(), Some(API_REPOSITORY))?.to_string();
+        assert_eq!(ours.matches(badge).count(), 2, "{ours}");
+        // A mod's crate: another repository, a near one, or none at all.
+        for repository in [
+            Some("https://github.com/you/mod"),
+            Some("https://github.com/enshwick/mods"),
+            Some(""),
+            None,
+        ] {
+            let other = badged(impls.clone(), repository)?.to_string();
+            assert_eq!(other, impls.to_string(), "{repository:?}");
+        }
         Ok(())
     }
 

@@ -4,7 +4,7 @@
 //!
 //! Mods depend on `enshwick`, which re-exports every module here at the
 //! same path; this crate's own paths carry no promise.
-#![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(any(docsrs, enshwick_docs), feature(doc_cfg))]
 
 // The macros name the API crate by its path, as mods see it; for the code
 // here that crate is this one, whose root has the same paths.
