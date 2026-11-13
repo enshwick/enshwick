@@ -1968,6 +1968,21 @@ pub struct HostApi {
     /// the game's stop on this build. A panic in the loader returns
     /// [`Status::REFUSED`]. ABI 11.26.
     pub server_stop: extern "system" fn(me: ModHandle) -> Status,
+    /// Uncovers the fog of war of the player with account key `player` in
+    /// the circle of `radius` metres around world `x` and `z`, as exploring
+    /// there does: the server's loader sends it to the loader on the
+    /// player's client, which hands it to the game's own reveal, and the
+    /// character's save keeps it. Returns once it is sent. The server holds
+    /// no fog, so a client without Enshwick is not reached. Any thread, on
+    /// a dedicated server or a client that hosts. [`Status::UNAVAILABLE`]
+    /// for a player whose client takes no messages from the loader, as one
+    /// without Enshwick or not online, and on a client in another's game;
+    /// [`Status::BAD_ARGS`] for a place that is not finite or a radius that
+    /// is not above 0 and at most 100 000; [`Status::REFUSED`] when the
+    /// link to the player has no room. A panic in the loader returns
+    /// [`Status::REFUSED`]. ABI 11.26.
+    pub fog_uncover:
+        extern "system" fn(me: ModHandle, player: PlayerKey, x: f32, z: f32, radius: f32) -> Status,
 }
 
 // Every function keeps its slot: 24 header and version bytes, then 8 per slot.
@@ -2110,5 +2125,6 @@ const _: () = {
     assert!(offset_of!(HostApi, drop_items) == 24 + 201 * 8);
     assert!(offset_of!(HostApi, config_set) == 24 + 202 * 8);
     assert!(offset_of!(HostApi, server_stop) == 24 + 203 * 8);
-    assert!(size_of::<HostApi>() == 24 + 204 * 8);
+    assert!(offset_of!(HostApi, fog_uncover) == 24 + 204 * 8);
+    assert!(size_of::<HostApi>() == 24 + 205 * 8);
 };

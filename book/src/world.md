@@ -374,6 +374,33 @@ enshwick.on("ShutdownStarted", function()
 end)
 ```
 
+`stop()` stops a dedicated server the way Ctrl+C in its console does, for
+a timed restart: after the current step the server shuts down,
+`ShutdownStarted` follows and the holds let go, the final save runs, and
+the process exits with code 0. The host's panel or service manager then
+starts it again. The call returns at once, from any thread. The countdown,
+the warnings to players and a save before it are the mod's.
+
+A second `stop()` while the server stops fails with `WorldError::Refused`,
+as does one after a person pressed Ctrl+C. In single player and in a hosted
+game, which have no restart, it fails with `WorldError::Missing`. A server
+under Wine or Proton has not been tried.
+
+```rust
+fn countdown_over(world: &enshwick::world::World) {
+    if let Err(why) = world.stop() {
+        enshwick::warn!("server not stopped: {why}");
+    }
+}
+```
+
+```luau
+local ok, why = pcall(enshwick.world.stop)
+if not ok then
+    enshwick.log.warn(`server not stopped: {why}`)
+end
+```
+
 An entity spawned with `Spawn::new().do_not_save()` stays out of the save,
 as the game's own passing animals do: it is gone once the world loads again.
 `set_saved(entity, false)` leaves out an entity a mod spawned or placed
