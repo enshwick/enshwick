@@ -48,8 +48,9 @@ pub(crate) struct Args {
     /// The new executable.
     #[arg(long)]
     new: PathBuf,
-    /// The enshwick repository whose anchors and routes to port.
-    #[arg(long, default_value = ".")]
+    /// The enshwick repository whose anchors and routes to port; this
+    /// checkout by default, wherever the task runs from.
+    #[arg(long, default_value = crate::ROOT)]
     repo: PathBuf,
     /// The game data folder outside the repository: the kept builds' tables
     /// in `tables/`, ported when one is for the old build, and the typed
@@ -350,8 +351,13 @@ pub(crate) fn patterns(args: &PatternsArgs) -> anyhow::Result<bool> {
             summary.push('\n');
         }
         if args.write {
+            // The path is the report's, below the data folder the table came from.
+            let file = args
+                .data
+                .as_deref()
+                .map_or_else(|| path.clone(), |data| data.join(&path));
             let mut staged = Staged::default();
-            staged.replace(path, text, src);
+            staged.replace(file, text, src);
             staged.commit()?;
             let _shown = write!(std::io::stdout(), "{summary}");
         } else {

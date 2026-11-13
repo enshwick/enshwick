@@ -55,6 +55,10 @@ pub enum Error {
     /// The changelog has no Unreleased section.
     #[error("no `## [Unreleased]` section")]
     NoUnreleased,
+    /// The version's section holds entries outside the form of change
+    /// files, so more cannot join it.
+    #[error("the section `## [{0}]` does not read as change files; join them into it by hand")]
+    NotJoinable(String),
     /// Changes were written under Unreleased by hand.
     #[error("changes under Unreleased; a pull request adds them as a file in `changes/`")]
     HandEdited,
@@ -162,32 +166,58 @@ pub fn close(changelog: &str, version: &str, date: &str) -> Result<Option<String
 ///
 /// Each heading's entries come in the order of the fragments; without
 /// fragments the heading stands alone, as for a release with no change of
-/// the package's own.
+/// the package's own. When the version is closed already, the fragments
+/// join its section after the entries there, so a change file merged after
+/// the close joins on a second run; an empty heading of the version is
+/// replaced, as [`close`] does.
 ///
 /// # Errors
 ///
 /// When the changelog has no Unreleased section, holds changes there
-/// written by hand, or has a section of the version with changes already.
+/// written by hand, or has a section of the version that does not read as
+/// change files do.
 pub fn join(
     changelog: &str,
     version: &str,
     date: &str,
     fragments: &[Fragment],
 ) -> Result<String, Error> {
-    let (start, end) = span(changelog, UNRELEASED).ok_or(Error::NoUnreleased)?;
-    if !changelog[start..end].trim().is_empty() {
+    span(changelog, UNRELEASED).ok_or(Error::NoUnreleased)?;
+    if hand_edited(changelog) {
         return Err(Error::HandEdited);
     }
+    let stripped;
+    let mut changelog = changelog;
+    if let Some((at, start, end)) = heading(changelog, version) {
+        let body = changelog[start..end].trim();
+        if fragments.is_empty() {
+            return Ok(changelog.to_owned());
+        }
+        if !body.is_empty() {
+            let closed =
+                Fragment::parse(body).map_err(|_| Error::NotJoinable(version.to_owned()))?;
+            let all: Vec<Fragment> = std::iter::once(closed)
+                .chain(fragments.iter().cloned())
+                .collect();
+            return Ok(format!(
+                "{}\n{}\n{}",
+                &changelog[..start],
+                Fragment::merged(&all),
+                &changelog[end..]
+            ));
+        }
+        stripped = format!("{}{}", &changelog[..at], &changelog[end..]);
+        changelog = &stripped;
+    }
+    let (start, end) = span(changelog, UNRELEASED).ok_or(Error::NoUnreleased)?;
     let body = Fragment::merged(fragments);
-    if !body.is_empty() {
-        let open = format!("{}\n{body}\n{}", &changelog[..start], &changelog[end..]);
-        return Ok(close(&open, version, date)?.unwrap_or(open));
-    }
-    if heading(changelog, version).is_some() {
-        return Ok(changelog.to_owned());
-    }
+    let body = if body.is_empty() {
+        String::new()
+    } else {
+        format!("{body}\n")
+    };
     Ok(format!(
-        "{}\n## [{version}] - {date}\n\n{}",
+        "{}\n## [{version}] - {date}\n\n{body}{}",
         &changelog[..start],
         &changelog[end..]
     ))
@@ -460,6 +490,44 @@ mod tests {
     }
 
     #[test]
+    fn a_change_file_merged_after_the_close_joins_the_closed_section_on_a_second_run() {
+        let first = Fragment::parse("### Fixed\n\n- Fix a.\n").unwrap();
+        let late =
+            Fragment::parse("### Added\n\n- Add late.\n\n### Fixed\n\n- Fix late.\n").unwrap();
+        let once = join(
+            &format!("{HEAD}\n{RELEASED}"),
+            "0.1.1",
+            "2026-11-13",
+            &[first],
+        )
+        .unwrap();
+        let again = join(&once, "0.1.1", "2026-11-14", &[late]).unwrap();
+        assert_eq!(
+            again,
+            format!(
+                "{HEAD}\n## [0.1.1] - 2026-11-13\n\n### Added\n\n- Add late.\n\n\
+                 ### Fixed\n\n- Fix a.\n- Fix late.\n\n{RELEASED}"
+            )
+        );
+        assert_eq!(
+            closed(&again, "0.1.1"),
+            Ok(Some(
+                "### Added\n\n- Add late.\n\n### Fixed\n\n- Fix a.\n- Fix late."
+            ))
+        );
+    }
+
+    #[test]
+    fn an_empty_heading_of_the_version_is_replaced_when_change_files_join() {
+        let fragment = Fragment::parse("### Fixed\n\n- A bug.\n").unwrap();
+        let stray = format!("{HEAD}\n## [0.1.1]\n\n{RELEASED}");
+        assert_eq!(
+            join(&stray, "0.1.1", "2026-11-13", &[fragment]).unwrap(),
+            format!("{HEAD}\n## [0.1.1] - 2026-11-13\n\n### Fixed\n\n- A bug.\n\n{RELEASED}")
+        );
+    }
+
+    #[test]
     fn only_a_calendar_shaped_date_is_a_date() {
         assert!(is_date("2026-11-13"));
         for not in ["2026-1-13", "2026/11/13", "2026-11-13 ", "", "abcd-ef-gh"] {
@@ -468,7 +536,7 @@ mod tests {
     }
 
     #[test]
-    fn joining_refuses_a_hand_edited_unreleased_section_and_a_closed_version() {
+    fn joining_refuses_a_hand_edited_unreleased_section_and_a_closed_version_of_another_form() {
         let fragment = Fragment::parse("### Added\n\n- A.\n").unwrap();
         let edited = format!("{HEAD}\n- By hand.\n\n{RELEASED}");
         assert!(hand_edited(&edited));
@@ -478,9 +546,10 @@ mod tests {
         );
         let released = format!("{HEAD}\n{RELEASED}");
         assert!(!hand_edited(&released));
+        let prose = format!("{HEAD}\n## [0.1.0] - 2026-11-05\n\nFirst release.\n");
         assert_eq!(
-            join(&released, "0.1.0", "d", std::slice::from_ref(&fragment)),
-            Err(Error::ClosedAlready("0.1.0".to_owned()))
+            join(&prose, "0.1.0", "d", std::slice::from_ref(&fragment)),
+            Err(Error::NotJoinable("0.1.0".to_owned()))
         );
         assert_eq!(
             join(RELEASED, "0.1.1", "d", &[fragment]),

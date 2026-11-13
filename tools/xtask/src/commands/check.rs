@@ -89,7 +89,13 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
     let root = workspace_root();
     let changed = changed_files(&args.base);
     if parts.contains(&Part::Host) && !args.list_windows_tests {
-        let problems = crate::check::problems(&root, &packages)?;
+        let mut problems = crate::check::problems(&root, &packages)?;
+        problems.extend(
+            name_status(&args.base)
+                .iter()
+                .flat_map(|status| crate::check::changelog::edited(status))
+                .map(|problem| format!("changelog: {problem}")),
+        );
         for problem in &problems {
             say(problem);
         }
@@ -207,6 +213,13 @@ fn changed_files(base: &str) -> Option<Vec<String>> {
     files.sort();
     files.dedup();
     Some(files)
+}
+
+/// What changed between the merge base with `base` and the working tree,
+/// as `git diff --name-status` lists it; `None` without a merge base.
+fn name_status(base: &str) -> Option<String> {
+    let merge_base = git(&["merge-base", "HEAD", base])?;
+    git(&["diff", "--name-status", merge_base.trim()])
 }
 
 pub(crate) fn git(args: &[&str]) -> Option<String> {

@@ -79,10 +79,4 @@ mod tests {
         labels.dedup();
         assert_eq!(labels.len(), RULES.len());
     }
-
-    #[test]
-    fn the_tree_meets_every_rule() {
-        let problems = problems(&crate::workspace_root(), &crate::packages().unwrap()).unwrap();
-        assert_eq!(problems, Vec::<String>::new());
-    }
 }

@@ -11,7 +11,7 @@ use cargo_enshwick::changelog::{CHANGELOG, CHANGES, Fragment, is_date, join};
 
 use crate::affected::Package;
 use crate::check::changelog::fragments;
-use crate::commands::notes::LOADER;
+use crate::commands::notes::release_version;
 
 /// The command line `close` takes.
 #[derive(Debug, clap::Args)]
@@ -37,11 +37,7 @@ fn date(text: &str) -> Result<String, String> {
 /// When the loader is not among the packages, a file does not read or
 /// write, or a changelog does not close ([`join`]).
 pub(crate) fn run(root: &Path, packages: &[Package], args: &Args) -> Result<String, String> {
-    let version = &packages
-        .iter()
-        .find(|p| p.name == LOADER)
-        .ok_or_else(|| format!("no package {LOADER}"))?
-        .version;
+    let version = release_version(packages)?;
     let mut written = Vec::new();
     let mut gone: Vec<PathBuf> = Vec::new();
     for package in packages {
@@ -84,6 +80,7 @@ pub(crate) fn run(root: &Path, packages: &[Package], args: &Args) -> Result<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::notes::LOADER;
 
     fn package(name: &str, dir: &str) -> Package {
         Package {

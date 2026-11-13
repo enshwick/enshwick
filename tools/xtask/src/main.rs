@@ -88,48 +88,46 @@ enum Task {
 }
 
 fn main() -> ExitCode {
-    let cli = Cli::parse();
-    if let Task::Compat { args } = &cli.task {
-        return compat_task(args);
-    }
-    match run(cli.task) {
-        Ok(true) => ExitCode::SUCCESS,
-        Ok(false) => ExitCode::FAILURE,
-        Err(error) => {
-            let _shown = writeln!(std::io::stderr(), "xtask: {error}");
-            ExitCode::FAILURE
-        }
-    }
+    run(Cli::parse().task).unwrap_or_else(|error| {
+        let _shown = writeln!(std::io::stderr(), "xtask: {error}");
+        ExitCode::FAILURE
+    })
 }
 
-/// Runs `task`; whether it passed.
-fn run(task: Task) -> Result<bool, String> {
+/// Runs `task`; `compat` passes on the exit code of `xtask-compat`, 2
+/// included.
+fn run(task: Task) -> Result<ExitCode, String> {
     let root = workspace_root();
-    match task {
-        Task::Check(args) => commands::check::run(&args),
-        Task::Dist { out } => commands::dist::run(&out),
-        Task::Notes(args) => commands::notes::run(&args),
+    let passed = match task {
+        Task::Check(args) => commands::check::run(&args)?,
+        Task::Dist { out } => commands::dist::run(&out)?,
+        Task::Notes(args) => commands::notes::run(&args)?,
         Task::Close(args) => {
             say(&commands::close::run(&root, &packages()?, &args)?);
-            Ok(true)
+            true
         }
-        Task::TagLines => commands::tag_lines::run(),
-        Task::Header => commands::header::run(&root),
-        Task::DocLinks => commands::doc_links::run(&root),
-        Task::AliasExamples => commands::lower_examples::run(&root, &packages()?),
-        Task::PeelLoad { pairs } => commands::peel::run(&root, &pairs),
+        Task::TagLines => commands::tag_lines::run()?,
+        Task::Header => commands::header::run(&root)?,
+        Task::DocLinks => commands::doc_links::run(&root)?,
+        Task::AliasExamples => commands::lower_examples::run(&root, &packages()?)?,
+        Task::PeelLoad { pairs } => commands::peel::run(&root, &pairs)?,
         Task::WrapExamples { log, cfg } => {
-            commands::lower_examples::wrap(&root, &packages()?, &log, cfg.as_deref())
+            commands::lower_examples::wrap(&root, &packages()?, &log, cfg.as_deref())?
         }
         Task::HostArgs => {
             // One argument a line, for CI runs that test the host as the check does.
             for arg in commands::check::host_args(&packages()?, cfg!(windows)) {
                 let _shown = writeln!(std::io::stdout(), "{arg}");
             }
-            Ok(true)
+            true
         }
-        Task::Compat { args } => Ok(compat_task(&args) == ExitCode::SUCCESS),
-    }
+        Task::Compat { args } => return Ok(compat_task(&args)),
+    };
+    Ok(if passed {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    })
 }
 
 /// The workspace root, two levels above this crate.

@@ -88,12 +88,14 @@ mod tests {
         let mut guid = [0; 16];
         guid[15] = 1;
         let side = old_side(Some(&data), None, Fingerprint::new(guid, 2));
-        let files = table_files(Some(&data));
+        let files = table_files(Some(&data)).unwrap();
+        // `patterns --write` writes the table back where the folder holds it.
+        let kept = data.join(&files[0].0).is_file();
         drop(fs::remove_dir_all(&data));
         assert_eq!(side.unwrap(), enshwick_gamedata::Side::Server);
-        let files = files.unwrap();
         assert_eq!(files.len(), 1);
         assert!(files[0].0.is_relative(), "{:?}", files[0].0);
+        assert!(kept, "{:?}", files[0].0);
     }
 
     /// `--write` in the enshwick repository without a game data folder is

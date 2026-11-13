@@ -27,9 +27,24 @@ pub(crate) struct Args {
     /// The file to write; `target/notes.md` of the workspace when left out.
     #[arg(long)]
     out: Option<PathBuf>,
-    /// The known issues, as Markdown; empty says none are reported.
-    #[arg(long, default_value = "")]
+    /// The known issues, as Markdown; empty says none are reported. A list
+    /// starts with a dash, so the value may.
+    #[arg(long, default_value = "", allow_hyphen_values = true)]
     known_issues: String,
+}
+
+/// The version the release carries: the loader's, which notes, tag lines
+/// and closed changelogs all name.
+///
+/// # Errors
+///
+/// When the loader is not among the packages.
+pub(crate) fn release_version(packages: &[Package]) -> Result<&str, String> {
+    packages
+        .iter()
+        .find(|p| p.name == LOADER)
+        .map(|p| p.version.as_str())
+        .ok_or_else(|| format!("no package {LOADER}"))
 }
 
 /// Writes the notes `args` ask for; whether it did.
@@ -47,11 +62,7 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
         .unwrap_or_else(|| root.join("target").join("notes.md"));
     let known_issues = &args.known_issues;
     let packages = packages()?;
-    let version = &packages
-        .iter()
-        .find(|p| p.name == LOADER)
-        .ok_or_else(|| format!("no package {LOADER}"))?
-        .version;
+    let version = release_version(&packages)?;
     let text = notes(
         version,
         &builds(&root.join(REPORTS))?,
@@ -245,6 +256,23 @@ fn notes(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[derive(Debug, clap::Parser)]
+    struct Cli {
+        #[command(flatten)]
+        args: Args,
+    }
+
+    #[test]
+    fn known_issues_that_open_with_a_list_dash_are_taken_as_the_value() {
+        use clap::Parser as _;
+        let cli = Cli::try_parse_from(["notes", "--known-issues", "- The map flickers."]).unwrap();
+        assert_eq!(cli.args.known_issues, "- The map flickers.");
+        assert_eq!(
+            Cli::try_parse_from(["notes"]).unwrap().args.known_issues,
+            ""
+        );
+    }
 
     fn sample() -> Result<String, String> {
         notes(

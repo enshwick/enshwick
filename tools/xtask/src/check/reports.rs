@@ -20,7 +20,8 @@ pub(crate) type Inputs = [u8; 32];
 /// repository root: the anchors, the pattern scanner, the code that reads an
 /// executable and routes to its entries and fields, the loader's attribute
 /// slot and Steam build readers and the tool that writes the report. Files
-/// only tests compile are left out; a test module inside a listed file is
+/// only tests compile, and the porting of `compat pin`, which no report
+/// reads, are left out; a test module inside a listed file is
 /// not. The loader's feature table is spread over its parts, so a test of
 /// the compat tool holds it instead.
 const INPUTS: &[&str] = &[
@@ -47,6 +48,8 @@ const INPUTS: &[&str] = &[
     ":(exclude)crates/enshwick-gamedata/anchors/classes.toml",
     ":(exclude)crates/enshwick-gamedata/src/entries/proofs.rs",
     ":(exclude)crates/enshwick-gamedata/src/table/carry.rs",
+    ":(exclude)tools/xtask/src/commands/compat/pin.rs",
+    ":(exclude)tools/xtask/src/commands/compat/pin",
     ":(exclude,glob)**/tests.rs",
     ":(exclude,glob)**/tests/**",
 ];

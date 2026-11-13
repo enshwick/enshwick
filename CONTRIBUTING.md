@@ -58,13 +58,13 @@ rules the hooks enforce, and the ones they cannot, are in this file:
   branch merges, so the fix goes first;
 - code follows the style of the code around it, unsafe code included;
 - a pull request adds its changelog entries as a file of its own,
-  `changes/<name>.md` beside the `CHANGELOG.md` of each crate it changes,
-  so parallel pull requests never edit one section. The file holds the
-  Keep a Changelog headings it needs (`### Added`, `### Changed`,
-  `### Deprecated`, `### Removed`, `### Fixed`, `### Security`), each once,
-  with a list of entries under each; `cargo xtask check` refuses a file that
-  does not read so, and a change written under a changelog's Unreleased
-  section by hand:
+  `changes/<branch>.md` beside the `CHANGELOG.md` of each crate it changes,
+  named after its branch, so parallel pull requests never edit one file. The file holds the Keep a Changelog headings it needs
+  (`### Added`, `### Changed`, `### Deprecated`, `### Removed`, `### Fixed`,
+  `### Security`), each once, with a list of entries under each;
+  `cargo xtask check` refuses a file that does not read so, an edit to a
+  change file already on `main`, and a change written under a changelog's
+  Unreleased section by hand:
 
   ```markdown
   ### Added
@@ -126,7 +126,9 @@ that players, admins or mod authors get, at most one a day:
    `CHANGELOG.md` with `cargo xtask close --date <YYYY-MM-DD>`: each
    crate's change files join its changelog under
    `## [1.0.0-alpha.N] - <date>`, each heading's entries in the files' name
-   order, and the files go; a crate without one gets the heading alone.
+   order, and the files go; a crate without one gets the heading alone. A
+   change file that merges after it joins the same section when `close`
+   runs again.
    `cargo xtask tag-lines` moves the install and dependency lines of the
    Markdown (`--tag v…`, `tag = "v…"`) to the new tag; `cargo xtask check`
    fails a line that names another one.

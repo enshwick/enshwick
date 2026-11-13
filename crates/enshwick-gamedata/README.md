@@ -262,7 +262,9 @@ builds.
    folder, the new build's typed snapshot, the renames its types show and,
    for the server, the typed API. The report names the build by
    `--steam-build` and `--game-version` when they are given and carries the
-   ported table. It writes every file or none. The exit code is 0 when
+   ported table. The report and the check shapes are written together or
+   not at all; the typed files follow them, so a failure there leaves the
+   check shapes written and `git diff` shows what. The exit code is 0 when
    nothing needs a human, 2 when something does, and 1 on an error.
 4. **Review.** Settle each item under "For a human" in the report: a loader
    entry it cannot port needs its route or anchor fixed. Read `git diff`,

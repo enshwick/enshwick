@@ -164,6 +164,10 @@ fn port_mods(
     let mut sections = Vec::new();
     for path in manifests(dir) {
         let src = fs::read_to_string(&path).with_context(|| path.display().to_string())?;
+        // A file that is not TOML is no package cargo builds: a test fixture.
+        if toml::from_str::<toml::Table>(&src).is_err() {
+            continue;
+        }
         let rows = rows::parse(&src).with_context(|| path.display().to_string())?;
         let file = relative(dir, &path);
         let mut inserts = Vec::new();
@@ -218,8 +222,9 @@ pub fn relative(root: &Path, path: &Path) -> String {
         .replace('\\', "/")
 }
 
-/// Every `Cargo.toml` below `dir`, sorted, outside `target` and hidden
-/// folders: the manifests that may hold build rows.
+/// Every `Cargo.toml` below `dir`, sorted, outside `target`, hidden folders
+/// and links, which could lead back up the tree: the manifests that may
+/// hold build rows.
 fn manifests(dir: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let mut dirs = vec![dir.to_path_buf()];
@@ -227,18 +232,20 @@ fn manifests(dir: &Path) -> Vec<PathBuf> {
         let Ok(entries) = fs::read_dir(&dir) else {
             continue;
         };
-        let mut found: Vec<PathBuf> = entries.filter_map(|e| e.ok().map(|e| e.path())).collect();
-        found.sort();
-        for path in found {
+        let mut found: Vec<(PathBuf, fs::FileType)> = entries
+            .filter_map(|e| e.ok().and_then(|e| Some((e.path(), e.file_type().ok()?))))
+            .collect();
+        found.sort_by(|a, b| a.0.cmp(&b.0));
+        for (path, kind) in found {
             let name = path
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or_default();
-            if path.is_dir() {
+            if kind.is_dir() {
                 if name != "target" && !name.starts_with('.') {
                     dirs.push(path);
                 }
-            } else if name == "Cargo.toml" {
+            } else if kind.is_file() && name == "Cargo.toml" {
                 out.push(path);
             }
         }
@@ -292,12 +299,18 @@ mod tests {
     }
 
     #[test]
-    fn every_manifest_of_a_workspace_is_found_but_those_in_target_and_hidden_folders() {
+    fn every_manifest_of_a_workspace_is_found_but_those_in_target_hidden_folders_and_links() {
         let dir = scratch("manifests");
         for sub in ["", "mods/a", "b", "target/c", ".git/d"] {
             fs::create_dir_all(dir.join(sub)).unwrap();
             fs::write(dir.join(sub).join("Cargo.toml"), "").unwrap();
         }
+        // A link back up the tree; where links need rights the test lacks,
+        // it checks the rest.
+        #[cfg(windows)]
+        let _linked = std::os::windows::fs::symlink_dir(&dir, dir.join("b/up"));
+        #[cfg(unix)]
+        let _linked = std::os::unix::fs::symlink(&dir, dir.join("b/up"));
         let found: Vec<String> = manifests(&dir).iter().map(|p| relative(&dir, p)).collect();
         fs::remove_dir_all(&dir).unwrap();
         assert_eq!(found, ["Cargo.toml", "b/Cargo.toml", "mods/a/Cargo.toml"]);
@@ -328,17 +341,19 @@ mod tests {
         let fp = exe.fingerprint().unwrap();
         let start = exe.functions()[1000].start;
         let dir = scratch("one-row");
+        let row = format!(
+            "[[package.metadata.enshwick.builds]]\nside = \"server\"\nguid = \"{}\"\nage = {}\n\n\
+             [package.metadata.enshwick.builds.symbols]\n\"demo.hook\" = {start:#x}\n",
+            guid_hex(fp.guid()),
+            fp.age()
+        );
         fs::write(
             dir.join("Cargo.toml"),
-            format!(
-                "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n\n\
-                 [[package.metadata.enshwick.builds]]\nside = \"server\"\nguid = \"{}\"\nage = {}\n\n\
-                 [package.metadata.enshwick.builds.symbols]\n\"demo.hook\" = {start:#x}\n",
-                guid_hex(fp.guid()),
-                fp.age()
-            ),
+            format!("[package]\nname = \"demo\"\nversion = \"0.1.0\"\n\n{row}"),
         )
         .unwrap();
+        fs::create_dir_all(dir.join("tests/fixtures/broken")).unwrap();
+        fs::write(dir.join("tests/fixtures/broken/Cargo.toml"), "[package\n").unwrap();
         let report = dir.join("report.md");
         let settled = run(&Args {
             old: path.clone(),
@@ -357,5 +372,10 @@ mod tests {
             "{text}"
         );
         assert!(text.contains("New row:"), "{text}");
+        assert!(
+            text.contains(&row),
+            "the row ports to its own build as written:\n{text}"
+        );
+        assert!(!text.contains("broken"), "{text}");
     }
 }

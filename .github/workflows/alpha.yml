@@ -3,8 +3,8 @@
 # prerelease `v1.0.0-alpha.N` with `enshwick.zip`, `cargo-enshwick` for
 # Windows and Linux, their PDBs, SBOMs, SHA-256 checksums and build
 # provenance, and notes from `cargo xtask notes`. The pull request before it
-# moves the crates to that version and closes their Unreleased changelog
-# sections as it; a version already released is refused. Nothing goes to
+# moves the crates to that version and joins their change files into each
+# changelog with `cargo xtask close`; a version already released is refused. Nothing goes to
 # crates.io.
 name: alpha
 

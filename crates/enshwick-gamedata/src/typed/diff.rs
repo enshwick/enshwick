@@ -92,8 +92,8 @@ impl Change {
     }
 }
 
-/// The comment at the top of the rename table, kept when `cargo enshwick
-/// pin --write` writes the table again.
+/// The comment at the top of the rename table, kept when `cargo xtask
+/// compat pin --write` writes the table again.
 const RENAMES_HEADER: &str = "\
 # Types and fields a game build renamed, which `cargo xtask compat pin --write`
 # records when a layout matches exactly and a person adds when the report
@@ -235,7 +235,7 @@ impl Renames {
 
 /// Every change between an old and a new build's catalogues, by the old
 /// full name (the new one for an added type), for the report `cargo
-/// enshwick pin` prints.
+/// xtask compat pin` prints.
 ///
 /// # Examples
 ///

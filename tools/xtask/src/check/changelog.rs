@@ -88,6 +88,36 @@ pub(crate) fn fragments(dir: &Path) -> Result<Vec<(String, String)>, String> {
     Ok(files)
 }
 
+/// Whether `path`, from the repository root with forward slashes as git
+/// names it, is a change file: Markdown in a package's `changes/` folder.
+pub(crate) fn is_change_file(path: &str) -> bool {
+    let path = Path::new(path);
+    path.extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("md"))
+        && path
+            .parent()
+            .and_then(Path::file_name)
+            .is_some_and(|dir| dir == CHANGES)
+}
+
+/// The change files a branch edits, from `git diff --name-status` against
+/// its merge base, one problem each: a pull request adds change files of
+/// its own and never edits another's, so two pull requests never meet in
+/// one file. Removing them, as the release pull request does, is no edit.
+pub(crate) fn edited(name_status: &str) -> Vec<String> {
+    name_status
+        .lines()
+        .filter_map(|line| {
+            let (status, path) = line.split_once('\t')?;
+            (status.starts_with('M') && is_change_file(path)).then(|| {
+                format!(
+                    "{path}: edits a change file of another pull request; add one of your own, named after your branch"
+                )
+            })
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -103,6 +133,26 @@ mod tests {
             windows_tests: false,
             unstable: false,
         }
+    }
+
+    #[test]
+    fn a_branch_that_edits_a_change_file_on_its_base_is_a_problem_and_one_that_adds_or_removes_is_not()
+     {
+        let status = "M\tcrates/enshwick/changes/earlier.md\n\
+                      A\tcrates/enshwick/changes/my-branch.md\n\
+                      D\tcrates/internal/base/changes/other.md\n\
+                      M\tcrates/enshwick/CHANGELOG.md\n\
+                      M\tcrates/runtime/loader/src/content/changes/items.rs\n\
+                      R100\tcrates/enshwick/changes/a.md\tcrates/enshwick/changes/b.md\n";
+        assert_eq!(
+            edited(status),
+            [
+                "crates/enshwick/changes/earlier.md: edits a change file of another pull request; add one of your own, named after your branch"
+            ]
+        );
+        assert!(is_change_file("changes/a.md"));
+        assert!(!is_change_file("book/changes.md"));
+        assert!(!is_change_file("a.md"));
     }
 
     #[test]

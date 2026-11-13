@@ -12,6 +12,9 @@
 
 use std::path::Path;
 
+use cargo_enshwick::changelog::CHANGELOG;
+
+use crate::check::changelog::is_change_file;
 use crate::commands::check::git;
 use crate::{Package, packages, say, workspace_root};
 
@@ -19,7 +22,6 @@ use crate::{Package, packages, say, workspace_root};
 /// comes before its version there: a tag, or a `cargo binstall --git` line's
 /// `<crate>@<version>`, as binstall takes no tag.
 const PREFIXES: [(&str, &str); 3] = [("--tag ", "v"), ("tag = \"", "v"), ("@", "")];
-const CHANGELOG: &str = "CHANGELOG.md";
 /// What a line names when its tag is the platform's, as the site reads it.
 const REPOSITORY: &str = "github.com/enshwick/enshwick";
 
@@ -243,20 +245,17 @@ fn quoted(value: &str) -> Option<&str> {
 /// tags mark real releases, which go to crates.io, so their lines name a
 /// crates.io version and no tag.
 fn tag(packages: &[Package]) -> Result<String, String> {
-    packages
-        .iter()
-        .find(|p| p.name == crate::commands::notes::LOADER)
-        .map(|p| format!("v{}", p.version))
-        .ok_or_else(|| format!("no package {}", crate::commands::notes::LOADER))
+    crate::commands::notes::release_version(packages).map(|version| format!("v{version}"))
 }
 
-/// The tracked Markdown files but changelogs, relative to `root`.
+/// The tracked Markdown files but changelogs and change files, which keep
+/// the tag of their release, relative to `root`.
 fn markdown(root: &Path) -> Result<Vec<String>, String> {
     let root = root.to_str().ok_or("the workspace root is not UTF-8")?;
     Ok(git(&["-C", root, "ls-files", "*.md"])
         .ok_or("git ls-files failed")?
         .lines()
-        .filter(|file| !file.ends_with(CHANGELOG))
+        .filter(|file| !file.ends_with(CHANGELOG) && !is_change_file(file))
         .map(str::to_owned)
         .collect())
 }
@@ -361,20 +360,23 @@ mod tests {
         let root_text = root.to_str().unwrap();
         assert!(git(&["-C", root_text, "init", "--quiet"]).is_some());
         for (path, text) in files {
-            std::fs::write(root.join(path), text).unwrap();
+            let file = root.join(path);
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(file, text).unwrap();
             assert!(git(&["-C", root_text, "add", path]).is_some());
         }
         root
     }
 
     #[test]
-    fn the_check_names_each_tracked_line_of_another_tag_but_changelogs() {
+    fn the_check_names_each_tracked_line_of_another_tag_but_changelogs_and_change_files() {
         let line = "cargo install --git https://github.com/enshwick/enshwick --tag v1.0.0-alpha.12 cargo-enshwick\n";
         let root = repository(&[
             ("README.md", line),
             ("book/a.md", &format!("a\n{line}")),
             ("book/ok.md", &line.replace("alpha.12", "alpha.13")),
             ("CHANGELOG.md", line),
+            ("crates/a/changes/fix.md", line),
             ("notes.txt", line),
         ]);
         let problems = check(&root, &loader("1.0.0-alpha.13"));
