@@ -18,6 +18,7 @@ use std::sync::OnceLock;
 use enshwick_core::abi::{HookFlags, MidHookFn, ModHandle, Registers, Status};
 use rustc_hash::FxHashMap;
 
+use crate::engine::fuse::Fuse;
 use crate::engine::mod_index::ModIndex;
 
 /// Bytes per stub: the code, `int3` padding, [`UPPER`] and the continuation.
@@ -172,14 +173,22 @@ pub(crate) struct MidLink {
     pub(crate) flags: HookFlags,
 }
 
+/// A link with the loader feature it belongs to, `None` for a mod's: once
+/// the feature is off, [`dispatch`] passes the link.
+type Fused = (MidLink, Option<&'static Fuse>);
+
+/// A [`Fused`] link at arming, with its owner's data pack between.
+type Armed = (MidLink, Option<ModHandle>, Option<&'static Fuse>);
+
 /// Every handler on one address, in running order; built when arming and
 /// never freed.
 #[derive(Debug)]
 pub(crate) struct Site {
     /// The hooked instruction.
     pub(crate) address: u64,
-    /// Each link with its owner's data pack, found once at arming.
-    links: Box<[(MidLink, Option<ModHandle>)]>,
+    /// Each link with its owner's data pack, found once at arming, and its
+    /// loader feature.
+    links: Box<[Armed]>,
     /// Whether a mod is off, by index.
     off: fn(ModIndex) -> bool,
 }
@@ -187,16 +196,26 @@ pub(crate) struct Site {
 /// Every mid-function hook, keyed by address.
 #[derive(Debug, Default)]
 pub(crate) struct Mids {
-    sites: FxHashMap<u64, Vec<MidLink>>,
+    sites: FxHashMap<u64, Vec<Fused>>,
     armed: bool,
 }
 
 impl Mids {
-    /// Adds `link` at `address`.
+    /// Adds a mod's `link` at `address`, by [`Mids::add_fused`].
+    pub(crate) fn add(&mut self, address: u64, link: MidLink) -> Status {
+        self.add_fused(address, link, None)
+    }
+
+    /// Adds `link` at `address`, of the loader `feature` if any.
     ///
     /// Refused after arming, for a second link of the same mod on one address,
     /// and when either side claims the address exclusively.
-    pub(crate) fn add(&mut self, address: u64, link: MidLink) -> Status {
+    pub(crate) fn add_fused(
+        &mut self,
+        address: u64,
+        link: MidLink,
+        feature: Option<&'static Fuse>,
+    ) -> Status {
         if self.armed {
             return Status::TOO_LATE;
         }
@@ -204,19 +223,25 @@ impl Mids {
             return Status::BAD_ARGS;
         }
         let links = self.sites.entry(address).or_default();
-        let clash = links.iter().any(|l| {
+        let clash = links.iter().any(|(l, _)| {
             enshwick_core::__private::rules::hooks_clash(l.owner == link.owner, l.flags, link.flags)
         });
         if clash {
             return Status::REFUSED;
         }
-        links.push(link);
+        links.push((link, feature));
         Status::OK
     }
 
-    /// Marks the hooks armed: no more links.
+    /// Marks the hooks armed: no more links. The links of loader features
+    /// already off go, and so does an address left without links, so arming
+    /// never patches an address only an off feature wanted.
     pub(crate) fn seal(&mut self) {
         self.armed = true;
+        for links in self.sites.values_mut() {
+            links.retain(|(_, feature)| !feature.is_some_and(Fuse::is_off));
+        }
+        self.sites.retain(|_, links| !links.is_empty());
     }
 
     /// Every address with its links in running order, for arming.
@@ -235,10 +260,13 @@ impl Mids {
             .iter()
             .map(|(&address, links)| {
                 let mut links = links.clone();
-                links.sort_by_key(|l| l.priority);
+                links.sort_by_key(|(l, _)| l.priority);
                 &*Box::leak(Box::new(Site {
                     address,
-                    links: links.into_iter().map(|l| (l, pack(l.owner))).collect(),
+                    links: links
+                        .into_iter()
+                        .map(|(l, feature)| (l, pack(l.owner), feature))
+                        .collect(),
                     off,
                 }))
             })
@@ -249,7 +277,7 @@ impl Mids {
     pub(crate) fn owners(&self, address: u64) -> Vec<ModIndex> {
         self.sites
             .get(&address)
-            .map(|links| links.iter().map(|l| l.owner).collect())
+            .map(|links| links.iter().map(|(l, _)| l.owner).collect())
             .unwrap_or_default()
     }
 
@@ -264,7 +292,8 @@ impl Mids {
     }
 }
 
-/// Calls every handler at `site` whose mod is on; what each stub calls.
+/// Calls every handler at `site` whose mod and loader feature are on; what
+/// each stub calls.
 ///
 /// # Safety
 ///
@@ -281,8 +310,8 @@ pub(crate) unsafe extern "system" fn dispatch(registers: *mut Registers, site: *
     let Some(site) = (unsafe { site.as_ref() }) else {
         return;
     };
-    for (link, pack) in &site.links {
-        if !(site.off)(link.owner) {
+    for (link, pack, feature) in &site.links {
+        if !feature.is_some_and(Fuse::is_off) && !(site.off)(link.owner) {
             let user = core::ptr::with_exposed_provenance_mut::<c_void>(link.user);
             let hooks = crate::engine::profile::Feature::Hooks;
             crate::engine::profile::call_as(link.owner, *pack, hooks, || {
@@ -296,6 +325,41 @@ pub(crate) unsafe extern "system" fn dispatch(registers: *mut Registers, site: *
         }
     }
 }
+
+/// Declares one of the loader's mid-function handlers, linked by
+/// [`Loader::link_mid`](crate::engine::loader::Loader::link_mid): the `gate`,
+/// a cheap test of whether the hit is the loader's, runs first and reads no
+/// game memory; then the work, on the registers the stub saved, under `fuse`
+/// as `site`, so a panic turns the feature off and the game runs on.
+macro_rules! mid_handler {
+    (
+        $(#[$meta:meta])*
+        fn $name:ident;
+        $(gate $gate:expr;)?
+        fuse $fuse:expr, $site:literal;
+        |$registers:ident| $work:block
+    ) => {
+        $(#[$meta])*
+        unsafe extern "system" fn $name(
+            registers: *mut enshwick_core::abi::Registers,
+            _user: *mut core::ffi::c_void,
+        ) {
+            $(if !$gate {
+                return;
+            })?
+            // SAFETY: the loader links the handler only through `link_mid`,
+            // whose stub calls it by `dispatch` with null or the registers
+            // the stub saved on this thread's stack for the call, which
+            // nothing else touches during it.
+            let Some($registers) = (unsafe { registers.as_mut() }) else {
+                return;
+            };
+            let _caught = $fuse.run($site, || $work);
+        }
+    };
+}
+
+pub(crate) use mid_handler;
 
 /// The stubs of one batch, writable until sealed.
 #[derive(Debug)]

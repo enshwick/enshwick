@@ -185,8 +185,18 @@ static ITEMS: AtomicU64 = AtomicU64::new(0);
 /// Set when something asks for a look before the next round.
 static LOOK: AtomicBool = AtomicBool::new(false);
 
+/// Set while the snapshot holds hit factors, so a hit without any skips the
+/// snapshot.
+static HITS: AtomicBool = AtomicBool::new(false);
+
 fn snapshot() -> &'static ArcSwap<Snapshot> {
     SNAPSHOT.get_or_init(|| ArcSwap::from_pointee(Snapshot::default()))
+}
+
+/// Makes `next` the snapshot every reader sees.
+fn swap_in(next: Snapshot) {
+    HITS.store(!next.combat.is_empty(), Ordering::Release);
+    snapshot().store(Arc::new(next));
 }
 
 fn pending<R>(f: impl FnOnce(&mut Pending) -> R) -> Result<R, Status> {
@@ -787,7 +797,7 @@ pub(crate) fn after_step(loader: &Loader, step: u64, now: Instant) {
         (moved || forgot).then(|| publish(sealed, state))
     });
     if let Some(next) = published {
-        snapshot().store(Arc::new(next));
+        swap_in(next);
     }
     for change in &changes {
         for handler in sealed.handlers.iter().filter(|h| h.live()) {
@@ -865,7 +875,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
                 world: key,
                 ..State::default()
             });
-            snapshot().store(Arc::new(Snapshot::default()));
+            swap_in(Snapshot::default());
         }
         Event::WORLD_SAVED | Event::SHUTDOWN_STARTED => save(),
         _ => {}
@@ -877,7 +887,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
 pub(crate) fn forget() {
     save();
     *STATE.relock() = None;
-    snapshot().store(Arc::new(Snapshot::default()));
+    swap_in(Snapshot::default());
 }
 
 fn save() {
@@ -900,6 +910,6 @@ fn save() {
 }
 
 mod combat;
-pub(crate) use combat::on_hit;
+pub(crate) use combat::{changes_hits, on_hit};
 #[cfg(test)]
 mod tests;

@@ -899,3 +899,52 @@ fn duplicate_and_exclusive_handlers_are_refused() {
     );
     assert_eq!(mids.len(), 2);
 }
+
+/// Calls `site`'s handlers on `registers` as its stub would.
+fn hit(site: &'static Site, registers: &mut Registers) {
+    // SAFETY: `registers` is borrowed unaliased for the call, and `site` is
+    // a `&'static Site` from `Mids::sites`.
+    unsafe { dispatch(registers, site) };
+}
+
+#[test]
+fn a_loader_handler_of_a_feature_that_turns_off_is_passed_and_a_mod_s_still_runs() {
+    static GLOW: Fuse = Fuse::new("mid glow");
+    let mut mids = Mids::default();
+    let ours = link(ModIndex::LOADER, add_hundred, i32::MIN);
+    assert_eq!(mids.add_fused(0x10, ours, Some(&GLOW)), Status::OK);
+    assert_eq!(
+        mids.add(0x10, link(ModIndex::new(1), add_hundred, 0)),
+        Status::OK
+    );
+    mids.seal();
+    let site = mids.sites(|_| false)[0];
+    let mut registers = Registers::default();
+    hit(site, &mut registers);
+    assert_eq!(registers.rax, 200);
+    GLOW.blow("a test");
+    hit(site, &mut registers);
+    assert_eq!(registers.rax, 300, "only the mod's handler ran");
+}
+
+#[test]
+fn sealing_drops_the_handlers_of_features_already_off_and_addresses_left_empty() {
+    static LAMP: Fuse = Fuse::new("mid lamp");
+    let mut mids = Mids::default();
+    let first = link(ModIndex::LOADER, add_hundred, i32::MIN);
+    let second = link(ModIndex::LOADER, add_hundred, i32::MIN);
+    assert_eq!(mids.add_fused(0x10, first, Some(&LAMP)), Status::OK);
+    assert_eq!(mids.add_fused(0x20, second, Some(&LAMP)), Status::OK);
+    assert_eq!(
+        mids.add(0x20, link(ModIndex::new(0), add_hundred, 0)),
+        Status::OK
+    );
+    LAMP.blow("a test");
+    mids.seal();
+    assert_eq!(
+        mids.addresses(),
+        [0x20],
+        "only the address a mod still wants"
+    );
+    assert_eq!(mids.owners(0x20), [ModIndex::new(0)]);
+}
