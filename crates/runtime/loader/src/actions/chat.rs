@@ -98,9 +98,9 @@ struct Layout {
     delivered: usize,
     max_text: usize,
     reply_type: u8,
-    /// What lines to one connection need; without it only those lines are
-    /// off.
-    one: Option<OneLine>,
+    /// What lines to one connection need, or the id of the row that keeps
+    /// them off; without it only those lines are off.
+    one: Result<OneLine, &'static str>,
 }
 
 /// What a line to one connection needs from the table.
@@ -114,7 +114,7 @@ struct OneLine {
 
 /// The largest row value taken for a mask or an overhead: the game uses
 /// both as a sign-extended byte, so a larger byte would be a negative.
-const MOST_BYTE: u64 = 0x7f; // bound, not a game offset: the largest positive imm8
+const MOST_BYTE: u8 = 0x7f; // bound, not a game offset: the largest positive imm8
 
 impl OneLine {
     /// The handle mask and line overhead from the table's rows; the id of
@@ -125,15 +125,15 @@ impl OneLine {
     ) -> Result<Self, &'static str> {
         let byte = |value: Option<u64>, id: Constant| {
             value
-                .filter(|&value| (1..=MOST_BYTE).contains(&value))
+                .and_then(|value| u8::try_from(value).ok())
+                .filter(|value| (1..=MOST_BYTE).contains(value))
                 .ok_or(id.id())
         };
         let handle_slot = byte(handle_slot, pinned::chat::HANDLE_SLOT)?;
         let line_overhead = byte(line_overhead, pinned::chat::LINE_OVERHEAD)?;
         Ok(Self {
-            handle_slot: u32::try_from(handle_slot).map_err(|_| pinned::chat::HANDLE_SLOT.id())?,
-            line_overhead: usize::try_from(line_overhead)
-                .map_err(|_| pinned::chat::LINE_OVERHEAD.id())?,
+            handle_slot: u32::from(handle_slot),
+            line_overhead: usize::from(line_overhead),
         })
     }
 }
@@ -243,11 +243,14 @@ fn dropped(count: usize) {
 fn strayed(others: u32) {
     let _total = DELIVERY.strayed.add(1);
     if !ONE_FUSE.is_off() {
-        ONE_FUSE.turn_off(&Off::fault(
-            ONE_FUSE.feature(),
-            &format!(
-                "a line for one player reached {others} other players, since this game build's chat did not mark it delivered to them"
-            ),
+        // Neither a loader fault nor vanilla: the build's chat strays, and
+        // such lines are dropped from now on.
+        let why = format!(
+            "a line for one player reached {others} other players, since this game build's chat did not mark it delivered to them"
+        );
+        ONE_FUSE.turn_off(&Off::reported(
+            format!("{} off: {why}", ONE_FUSE.feature()),
+            why,
         ));
     }
 }
@@ -294,7 +297,7 @@ fn replied(text: &str) -> impl Iterator<Item = &str> {
 /// messages clients send stay off, reported by [`CHAT_FUSE`].
 pub(crate) fn link(loader: &'static Loader) {
     said::seal();
-    let (layout, one) = match layout(loader) {
+    let layout = match layout(loader) {
         Ok(found) => found,
         Err((id, reason)) => {
             let _off = loader.fuse_off(&CHAT_FUSE, id, reason);
@@ -304,7 +307,7 @@ pub(crate) fn link(loader: &'static Loader) {
     if LOADED.get().is_some() {
         return;
     }
-    if let Err(id) = one {
+    if let Err(id) = layout.one {
         // Refused at the queue, so callers and the status see them off.
         let _off = loader.fuse_off(&ONE_FUSE, id, "is missing or not a positive byte");
     }
@@ -329,7 +332,7 @@ type Lacks = (&'static str, &'static str);
 /// The chat layout of this build, with what lines to one player need or
 /// the id of the row that keeps them off; else the id of the entry it
 /// lacks and why.
-fn layout(loader: &Loader) -> Result<(Layout, Result<OneLine, &'static str>), Lacks> {
+fn layout(loader: &Loader) -> Result<Layout, Lacks> {
     let absent = |id: &'static str| (id, ABSENT);
     let symbol = |id: Symbol| loader.address(id).ok_or(absent(id.id()));
     let constant = |id: Constant| loader.offset(id).ok_or(absent(id.id()));
@@ -341,11 +344,7 @@ fn layout(loader: &Loader) -> Result<(Layout, Result<OneLine, &'static str>), La
     })?;
     let reply_type = u8::try_from(constant(pinned::chat::REPLY_TYPE)?)
         .map_err(|_| (pinned::chat::REPLY_TYPE.id(), "is not a byte"))?;
-    let one = OneLine::from_rows(
-        loader.build.constant(pinned::chat::HANDLE_SLOT.id()),
-        loader.build.constant(pinned::chat::LINE_OVERHEAD.id()),
-    );
-    let layout = Layout {
+    Ok(Layout {
         post_return: symbol(pinned::chat::POST_RETURN)?,
         // SAFETY: `mark` is the build table's `chat.mark_delivered` in the
         // loaded executable, the game function `MarkFn` types.
@@ -358,14 +357,21 @@ fn layout(loader: &Loader) -> Result<(Layout, Result<OneLine, &'static str>), La
         delivered: constant(pinned::chat::NODE_DELIVERED)?,
         max_text: constant(pinned::chat::MAX_TEXT)?,
         reply_type,
-        one: one.ok(),
-    };
-    Ok((layout, one))
+        one: OneLine::from_rows(
+            loader.build.constant(pinned::chat::HANDLE_SLOT.id()),
+            loader.build.constant(pinned::chat::LINE_OVERHEAD.id()),
+        ),
+    })
 }
 
 /// The switch of the loader's link on the chat post, and so of the chat
-/// lines, the chat mute and the type check on what players send.
+/// lines and the type check on what players send: off when the link
+/// cannot be made, or when the type check itself panicked.
 static CHAT_FUSE: Fuse = Fuse::new("chat lines");
+/// The switch of what the post does with a line besides the type check:
+/// the commands, the mute and the lines for mods. A panic here leaves the
+/// post linked, so a client's line still keeps a type a client sends.
+static HANDLING_FUSE: Fuse = Fuse::new("chat line handling");
 /// The switch of the chat lines mods filter and hear, apart from the mute.
 static MODS_FUSE: Fuse = Fuse::new("chat lines for mods");
 /// The switch of the mods' commands typed in chat.
@@ -436,10 +442,11 @@ fn next() -> Option<PostFn> {
 /// rest of the chain to post through.
 ///
 /// Written by hand, not with `chain_detour!`: a line a chat filter rewrote
-/// goes on with a new text. It runs under [`CHAT_FUSE`] through [`Onward`]
-/// all the same; the commands, the mute check and the lines for mods run
-/// under fuses of their own inside it, so a panic in one of them leaves the
-/// post linked and the type check on what players send in force.
+/// goes on with a new text. Its handling runs under [`HANDLING_FUSE`], with
+/// the commands and the lines for mods under fuses of their own inside it;
+/// once the handling is off or panicked, the type check alone runs under
+/// [`CHAT_FUSE`], the link's own, so the post stays linked and a client's
+/// line of a type no client sends is still dropped.
 ///
 /// # Safety
 ///
@@ -464,7 +471,7 @@ unsafe extern "system" fn post(
         Some(next) => unsafe { next(out, store, kind, text, loca1, loca2, handle, hash, extra) },
         None => out,
     });
-    onward.run(&CHAT_FUSE, "the chat post", |onward| {
+    let handled = HANDLING_FUSE.run("the chat post", || {
         // SAFETY: this is the entry of the loader's link on `chat.post`, on
         // the game's calling thread, by this function's `# Safety`.
         let typed = unsafe { typed_line(out) };
@@ -546,6 +553,22 @@ unsafe extern "system" fn post(
             },
             None => out,
         }
+    });
+    if let Some(answer) = handled {
+        return answer;
+    }
+    onward.run(&CHAT_FUSE, "the chat type check", |onward| {
+        // SAFETY: this is the entry of the loader's link on `chat.post`, on
+        // the game's calling thread, by this function's `# Safety`.
+        let typed = unsafe { typed_line(out) }.is_some();
+        if verdict(typed, kind, false, false) == Verdict::Drop {
+            // SAFETY: a line is judged a player's only for a non-null `out`,
+            // a result record of at least 8 writable bytes by this
+            // function's `# Safety`.
+            unsafe { enshwick_core::raw::write_at(out, 0, 0u64) };
+            return out;
+        }
+        onward.call()
     })
 }
 
@@ -808,7 +831,7 @@ pub(crate) fn drain() {
 unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &str) {
     let (handle, key, target) = match to {
         To::Machine(handle, key) => {
-            let Some(one) = layout.one else {
+            let Ok(one) = layout.one else {
                 dropped(1);
                 return;
             };

@@ -226,23 +226,12 @@ pub(crate) fn link(loader: &Loader) {
     let _linked = link_system(loader, entry);
 }
 
-/// Links the reads at `entry`, the system's; without it, each read whose
-/// layout this build has turns off too. True when linked.
+/// Links the reads at `entry`, the system's, under [`LINK_FUSE`], which
+/// alone lists a failed link off: no step renews either read after it, so
+/// both answer as stale. True when linked.
 fn link_system(loader: &Loader, entry: Option<u64>) -> bool {
     let target = Target::Found(SYSTEM, entry);
-    if loader.link_fused(&LINK_FUSE, target, &NEXT, player_ui, HookFlags::NONE) {
-        return true;
-    }
-    let reads = [
-        (&FUSE, STATE.layout.get().is_some()),
-        (&HOST_FUSE, STATE.host_layout.get().is_some()),
-    ];
-    for (fuse, laid_out) in reads {
-        if laid_out {
-            let _off = loader.fuse_off(fuse, SYSTEM, "its system did not link");
-        }
-    }
-    false
+    loader.link_fused(&LINK_FUSE, target, &NEXT, player_ui, HookFlags::NONE)
 }
 
 /// Reads the local player's mask from `player_ui`'s context.
@@ -405,6 +394,21 @@ mod tests {
             head.load(Ordering::Acquire),
             ours,
             "the host reads still run in the system"
+        );
+    }
+
+    #[test]
+    fn a_system_that_does_not_link_lists_only_the_shared_link_off() {
+        let loader = crate::start::tests::bare_loader();
+        assert!(!link_system(&loader, None));
+        assert!(LINK_FUSE.is_off());
+        assert!(!FUSE.is_off() && !HOST_FUSE.is_off());
+        let listed = crate::engine::diag::parts_off();
+        let parts: Vec<&str> = listed.iter().map(|p| p.part.as_str()).collect();
+        assert!(parts.contains(&LINK_FUSE.feature()), "{parts:?}");
+        assert!(
+            !parts.contains(&FEATURE) && !parts.contains(&HOST_FEATURE),
+            "one cause, one entry: {parts:?}"
         );
     }
 

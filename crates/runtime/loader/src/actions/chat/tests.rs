@@ -19,6 +19,36 @@ fn a_panic_in_the_part_for_mods_leaves_the_chat_mute_on() {
 }
 
 #[test]
+fn a_panic_in_the_line_handling_leaves_the_post_linked_and_its_type_check_on() {
+    let panicked = HANDLING_FUSE.run("a test", || panic!("a test"));
+    assert_eq!(panicked, None::<()>);
+    assert!(HANDLING_FUSE.is_off());
+    assert!(!CHAT_FUSE.is_off(), "the post stays linked");
+    assert_eq!(
+        verdict(true, 2, false, false),
+        Verdict::Drop,
+        "a client's line of a type no client sends"
+    );
+    assert_eq!(verdict(true, EMOTE, false, false), Verdict::Pass);
+}
+
+#[test]
+fn a_line_for_one_player_that_reached_others_names_no_loader_fault() {
+    let turn = crate::engine::log::capture_turn();
+    strayed(3);
+    let lines = crate::engine::log::captured();
+    drop(turn);
+    let line = lines
+        .iter()
+        .map(|(_, _, line)| line.as_str())
+        .find(|line| line.starts_with("chat lines to one player off: "));
+    assert!(
+        line.is_some_and(|line| !line.contains("vanilla") && !line.contains('(')),
+        "{lines:?}"
+    );
+}
+
+#[test]
 fn a_line_to_one_player_needs_a_positive_byte_mask_and_overhead() {
     let one = OneLine {
         handle_slot: 0x7f,

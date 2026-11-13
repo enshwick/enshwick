@@ -388,7 +388,7 @@ fn link_actions(loader: &Loader, declared: &[Declared]) {
         let _off = loader.fuse_off(
             &LINKED_FUSE,
             catalogue::ids::PLAYER_INPUT_DIGITAL,
-            "the build's reflection lacks it",
+            crate::engine::builds::UNREFLECTED,
         );
         return;
     };
@@ -586,9 +586,12 @@ unsafe fn in_game(context: usize, gate: &Gate) -> bool {
     is_open_screen(gate.open, screen)
 }
 
-/// Whether any declared control follows a game action on this build.
+/// Whether any declared control follows a game action on this build, and
+/// the link that reads the players' input is still on.
 pub(crate) fn linked() -> bool {
-    STATE.linked.get().is_some() && !LINKED_FUSE.is_off()
+    STATE.linked.get().is_some()
+        && !LINKED_FUSE.is_off()
+        && crate::actions::interactions::reads_inputs()
 }
 
 /// The server's look at `players`, the character entities in its world,

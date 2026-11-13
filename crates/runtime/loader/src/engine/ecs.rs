@@ -559,24 +559,32 @@ pub(crate) struct Components {
 impl Components {
     /// The reads on this build, if the table has them all.
     pub(crate) fn resolve(loader: &Loader) -> Option<Self> {
+        Self::found(loader).ok()
+    }
+
+    /// The reads on this build, or the id of the first table entry it
+    /// lacks, for a report that names it.
+    pub(crate) fn found(loader: &Loader) -> Result<Self, &'static str> {
         let function = |name: Symbol| {
             loader
                 .build
                 .symbol(name.id())
                 .and_then(|rva| usize::try_from(loader.base + rva).ok())
+                .ok_or(name.id())
         };
         let size = |name: Constant| {
             loader
                 .build
                 .constant(name.id())
                 .and_then(|v| usize::try_from(v).ok())
+                .ok_or(name.id())
         };
         let (type_index, read, slot_root) = (
             function(pinned::ecs::TYPE_INDEX)?,
             function(pinned::ecs::COMPONENT_READ_RAW)?,
             function(pinned::ecs::SLOT_ROOT)?,
         );
-        Some(Self {
+        Ok(Self {
             // SAFETY: the build table's `ecs.type_index` is the game function with the
             // `TypeIndex` signature on this build.
             type_index: unsafe { core::mem::transmute::<usize, TypeIndex>(type_index) },

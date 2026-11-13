@@ -11,9 +11,9 @@ use arc_swap::ArcSwapOption;
 use enshwick_core::abi::{Header, HookFlags, Interaction, InteractionFn, Side, Status};
 use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
-use crate::engine::builds::ABSENT;
+use crate::engine::builds::{ABSENT, UNREFLECTED};
 use crate::engine::ecs::{Components, Engine};
-use crate::engine::fuse::Fuse;
+use crate::engine::fuse::{Fuse, Off};
 use crate::engine::loader::{Loader, Registered, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned::{self, Constant, Symbol};
@@ -104,16 +104,24 @@ static ACTIONS_FUSE: Fuse = Fuse::new("inventory actions");
 /// when a link the hold relies on is off.
 static HOLDS_FUSE: Fuse = Fuse::new("prop removal by transactions");
 
+/// A table entry or reflected type the interactions lack, and why.
+type Lacks = (&'static str, &'static str);
+
 /// Where the layout comes from: the table entry or reflected type it lacks.
-fn layout(loader: &Loader) -> Result<Layout, &'static str> {
-    let size = |id: Constant| loader.offset(id).ok_or(id.id());
+fn layout(loader: &Loader) -> Result<Layout, Lacks> {
+    let size = |id: Constant| loader.offset(id).ok_or((id.id(), ABSENT));
     let hash = |name: &'static str| {
-        let descriptor = loader.reflection.type_info(name).map_err(|_| name)?.va();
-        crate::engine::world::type_hash(descriptor).ok_or(name)
+        let unreflected = (name, UNREFLECTED);
+        let descriptor = loader
+            .reflection
+            .type_info(name)
+            .map_err(|_| unreflected)?
+            .va();
+        crate::engine::world::type_hash(descriptor).ok_or(unreflected)
     };
     let stock_ui_return = if loader.side == Side::CLIENT {
         let id = pinned::access::BASE_STOCK_UI_RETURN;
-        loader.address(id).ok_or(id.id())?
+        loader.address(id).ok_or((id.id(), ABSENT))?
     } else {
         0
     };
@@ -173,9 +181,17 @@ pub(crate) const ACTIONS_SYSTEM: &str = "inventory_actions";
 static READS_INPUTS: AtomicBool = AtomicBool::new(false);
 
 /// Whether the players' input is read each step, for the controls that
-/// follow game actions.
+/// follow game actions: the link is made and still on.
 pub(crate) fn reads_inputs() -> bool {
-    READS_INPUTS.load(Ordering::Acquire)
+    READS_INPUTS.load(Ordering::Acquire) && !ACTIONS_FUSE.is_off()
+}
+
+/// Why the props stay open while transactions hold them: the link `off`,
+/// which the hold relies on, is off. Neither the build's fault nor a
+/// panic of the holds, so no error code.
+fn holds_off(off: &Fuse) -> Off {
+    let why = format!("{} is off", off.feature());
+    Off::reported(format!("{} off: {why}", HOLDS_FUSE.feature()), why)
 }
 
 pub(crate) fn link(loader: &'static Loader) {
@@ -183,7 +199,7 @@ pub(crate) fn link(loader: &'static Loader) {
     // Linked on every side, as any can host a world whose transactions hold
     // props; the detours act only in a server's world.
     let found = layout(loader).and_then(|layout| {
-        let components = Components::resolve(loader).ok_or(pinned::ecs::COMPONENT_READ_RAW.id())?;
+        let components = Components::found(loader).map_err(|id| (id, ABSENT))?;
         Ok((layout, components))
     });
     let (filtered, actions) = match found {
@@ -210,9 +226,9 @@ pub(crate) fn link(loader: &'static Loader) {
                 ),
             )
         }
-        Err(id) => {
+        Err((id, reason)) => {
             for fuse in [&INTERACTIONS_FUSE, &ACTIONS_FUSE] {
-                let _off = loader.fuse_off(fuse, id, ABSENT);
+                let _off = loader.fuse_off(fuse, id, reason);
             }
             (false, false)
         }
@@ -225,7 +241,7 @@ pub(crate) fn link(loader: &'static Loader) {
         } else {
             &INTERACTIONS_FUSE
         };
-        let _off = loader.fuse_off(&HOLDS_FUSE, off.feature(), "is off");
+        HOLDS_FUSE.turn_off(&holds_off(off));
     }
     crate::world::transactions::holds().linked(filters.len(), hold_ready);
     if filtered {
@@ -849,5 +865,38 @@ mod tests {
             off.is_some_and(|p| p.reason.starts_with("access.base_stock ")),
             "{listed:?}"
         );
+    }
+
+    #[test]
+    fn a_build_without_the_component_reads_names_the_first_entry_it_lacks() {
+        let loader = crate::start::tests::bare_loader();
+        assert_eq!(
+            Components::found(&loader).err(),
+            Some(pinned::ecs::TYPE_INDEX.id())
+        );
+    }
+
+    #[test]
+    fn props_open_to_players_name_the_link_that_is_off_without_a_build_code() {
+        let turn = crate::engine::log::capture_turn();
+        HOLDS_FUSE.turn_off(&holds_off(&ACTIONS_FUSE));
+        let lines = crate::engine::log::captured();
+        drop(turn);
+        assert!(
+            lines
+                .iter()
+                .any(|(_, _, line)| line
+                    == "prop removal by transactions off: inventory actions is off"),
+            "{lines:?}"
+        );
+    }
+
+    #[test]
+    fn the_players_input_is_read_only_while_its_link_is_on() {
+        READS_INPUTS.store(true, Ordering::Release);
+        assert!(reads_inputs());
+        ACTIONS_FUSE.blow("a test");
+        assert!(!reads_inputs(), "a link turned off after it was made");
+        assert!(!crate::actions::controls::linked());
     }
 }

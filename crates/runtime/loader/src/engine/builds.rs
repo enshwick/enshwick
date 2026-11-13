@@ -462,6 +462,10 @@ pub fn code_holds(checks: &[Option<bool>]) -> bool {
 /// build without a table [`KnownBuild::reason`] tells it apart.
 pub const ABSENT: &str = "is not in this build";
 
+/// Why a reflected type or field fails when the build's reflection lacks
+/// it, unlike a table entry, which [`ABSENT`] names.
+pub const UNREFLECTED: &str = "the build's reflection lacks it";
+
 /// Why a hook stays off before anything is patched.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Unhooked {

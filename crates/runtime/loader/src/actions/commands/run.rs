@@ -90,7 +90,7 @@ pub(crate) fn register(loader: &Loader, owner: ModIndex, alias: &str) -> Status 
                     "{feature} off: it is not shorter than /{name}, the name in the mod's id; /{name} runs its commands"
                 );
                 let entry = format!("/{alias} is not shorter than /{name}; use /{name}");
-                part_off(feature, line, entry);
+                part_off(&feature, line, entry);
             }
             if let Some(holder) = holder {
                 let (mine, theirs) = (id(owner), id(holder));
@@ -99,7 +99,7 @@ pub(crate) fn register(loader: &Loader, owner: ModIndex, alias: &str) -> Status 
                     "{feature} off: /{alias} is {theirs}'s; /{name} runs the commands of {mine}"
                 );
                 part_off(
-                    feature,
+                    &feature,
                     line,
                     format!("/{alias} is {theirs}'s; use /{name}"),
                 );
@@ -113,7 +113,7 @@ pub(crate) fn register(loader: &Loader, owner: ModIndex, alias: &str) -> Status 
             let name = enshwick_core::commands::name_of(mine);
             let feature = format!("commands of {mine}");
             let line = format!("{feature} off: /{name} is taken by {theirs}");
-            part_off(feature, line, format!("/{name} taken by {theirs}"));
+            part_off(&feature, line, format!("/{name} taken by {theirs}"));
             Status::REFUSED
         }
     }
@@ -122,12 +122,11 @@ pub(crate) fn register(loader: &Loader, owner: ModIndex, alias: &str) -> Status 
 /// Turns `feature`, a part of one mod's commands, off for the log `line`
 /// and the status `entry`, through [`Fuse::turn_off`] with no error code:
 /// two mods asked for one name, neither the build's fault nor a panic.
+/// The part is the one fuse its name keeps, so a mod asking again reports
+/// nothing more.
 #[cold]
-fn part_off(feature: String, line: String, entry: String) {
-    // Once per mod and name at init; the status lists the part for the
-    // process, as it does a loader feature.
-    let feature: &'static str = Box::leak(feature.into_boxed_str());
-    Fuse::new(feature).turn_off(&Off::reported(line, entry));
+fn part_off(feature: &str, line: String, entry: String) {
+    Fuse::named(feature).turn_off(&Off::reported(line, entry));
 }
 
 /// Seals the command names once every mod's init ran.
@@ -322,21 +321,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_name_clash_is_logged_without_a_build_code_and_listed_off() {
+    fn a_name_clash_is_logged_once_without_a_build_code_and_listed_off() {
         let turn = crate::engine::log::capture_turn();
-        part_off(
-            "test alias /lamp".to_owned(),
-            "test alias /lamp off: /lamp is taken".to_owned(),
-            "/lamp is taken".to_owned(),
-        );
+        for _ in 0..2 {
+            part_off(
+                "test alias /lamp",
+                "test alias /lamp off: /lamp is taken".to_owned(),
+                "/lamp is taken".to_owned(),
+            );
+        }
         let lines = crate::engine::log::captured();
         drop(turn);
-        assert!(
-            lines
-                .iter()
-                .any(|(_, _, line)| line == "test alias /lamp off: /lamp is taken"),
-            "{lines:?}"
-        );
+        let logged = lines
+            .iter()
+            .filter(|(_, _, line)| line == "test alias /lamp off: /lamp is taken")
+            .count();
+        assert_eq!(logged, 1, "a mod asking again logs nothing more: {lines:?}");
         let listed = crate::engine::diag::parts_off();
         let off = listed.iter().find(|p| p.part == "test alias /lamp");
         assert_eq!(off.map(|p| p.reason.as_str()), Some("/lamp is taken"));
