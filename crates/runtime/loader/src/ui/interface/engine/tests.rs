@@ -6,24 +6,47 @@ fn a_button_s_icon_fields_must_fit_its_config_clear_of_its_other_fields() {
     // The button fields of the kept clients' frozen tables: align, centred,
     // enabled, size mode, padding, scale, sound.
     let others = [0x4, 0x6, 0x9, 0x10, 0x4c, 0x50, 0x54, 0x58];
-    assert!(icon_fits(&others, 0x38, 0x48), "the kept clients");
+    let icon = |kind, texture, shown| ButtonIcon {
+        kind,
+        texture,
+        shown,
+    };
+    assert!(icon_fits(&others, icon(0, 0x38, 0x48)), "the kept clients");
     assert!(
-        !icon_fits(&others, 0x78, 0x48),
+        !icon_fits(&others, icon(0, 0x78, 0x48)),
         "the texture past the config"
     );
-    assert!(!icon_fits(&others, 0x38, BUTTON_CONFIG), "the flag past it");
     assert!(
-        !icon_fits(&others, 0x38, 0x40),
+        !icon_fits(&others, icon(0, 0x38, BUTTON_CONFIG)),
+        "the flag past it"
+    );
+    assert!(
+        !icon_fits(&others, icon(0, 0x38, 0x40)),
         "the flag inside the texture"
     );
     assert!(
-        !icon_fits(&others, 0x48, 0x38),
+        !icon_fits(&others, icon(0, 0x48, 0x38)),
         "padding inside the texture"
     );
-    assert!(!icon_fits(&others, 0x38, 0x4c), "the flag on padding");
     assert!(
-        !icon_fits(&[0x2], 0x38, 0x48),
+        !icon_fits(&others, icon(0, 0x38, 0x4c)),
+        "the flag on padding"
+    );
+    assert!(
+        !icon_fits(&[0x2], icon(0, 0x38, 0x48)),
         "a field under the kind word"
+    );
+    assert!(
+        !icon_fits(&others, icon(0x40, 0x38, 0x48)),
+        "the kind word inside the texture"
+    );
+    assert!(
+        !icon_fits(&others, icon(BUTTON_CONFIG - 2, 0x38, 0x48)),
+        "the kind word past the config"
+    );
+    assert!(
+        icon_fits(&[0x8], icon(0x20, 0x38, 0x48)),
+        "a routed kind word elsewhere"
     );
 }
 

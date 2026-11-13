@@ -294,6 +294,8 @@ mod tests {
             last_crash: Some("fault 0xc0000005, blamed on you.trading-post: in its code".into()),
             at: 45_000,
             mods: mods(),
+            skipped: Vec::new(),
+            skipped_off: 0,
             others: vec!["other mods' proxies in the game's folder: dbghelp.dll".into()],
             turned_off: vec![TurnedOff {
                 id: "you.trading-post".into(),
@@ -526,6 +528,53 @@ conflicts:
         assert!(
             broken.starts_with(&good) && broken.len() > good.len(),
             "{broken}"
+        );
+    }
+
+    #[test]
+    fn a_mod_skipped_at_start_shows_with_its_file_and_reason_and_a_second_copy_is_not_counted() {
+        use crate::base::resolve::{Skip, Skipped};
+
+        let skipped = |id: &str, file: &str, reason| Skipped {
+            id: id.into(),
+            version: "0.2.0".into(),
+            label: id.into(),
+            file: file.into(),
+            reason,
+        };
+        let mut s = summary();
+        s.skipped = vec![
+            skipped(
+                "you.safes",
+                "you.safes/you.safes.dll",
+                Skip::Missing {
+                    id: "you.locks".into(),
+                },
+            ),
+            skipped(
+                "you.lockers",
+                "old/you.lockers.dll",
+                Skip::Copy {
+                    id: "you.lockers".into(),
+                    first: 0,
+                },
+            ),
+        ];
+        s.skipped_off = 1;
+        let text = s.render();
+        assert!(text.contains("mods: 1 of 3 running"), "{text}");
+        assert!(
+            text.contains(
+                "  you.safes 0.2.0 skipped, you.safes/you.safes.dll: requires you.locks, which is not loaded\n  \
+                 you.lockers 0.2.0 skipped, old/you.lockers.dll: a second copy of you.lockers, after #0\n"
+            ),
+            "{text}"
+        );
+        let short = s.short();
+        assert!(short.contains("1 of 3 mods running"), "{short}");
+        assert!(
+            short.contains("you.safes/you.safes.dll off: requires you.locks, which is not loaded"),
+            "{short}"
         );
     }
 

@@ -183,12 +183,6 @@ const NAV_SIZE: usize = 0x300; // bound, not a game offset: the loader's room
 const NAV_CONFIG: usize = 0x58; // bound, not a game offset: the loader's room
 const PANEL_CONFIG: usize = 0x100; // bound, not a game offset: the loader's room
 const BUTTON_CONFIG: usize = 0x80; // bound, not a game offset: the loader's room
-/// Where a button's config holds its kind, a `u32` that picks its frame's
-/// look and size: `ui.button` hands the config to its frame, which reads the
-/// kind as its first word (client 26430625).
-// shortcut: a code constant `Layout::checked` only keeps clear of the
-// routed fields, until a route finds the word.
-const BUTTON_KIND_AT: usize = 0;
 const TOGGLE_CONFIG: usize = 0xc50; // bound, not a game offset: the loader's room
 const SLIDER_CONFIG: usize = 0x140; // bound, not a game offset: the loader's room
 const DROPDOWN_CONFIG: usize = 0xca0; // bound, not a game offset: the loader's room
@@ -258,9 +252,21 @@ pub(super) struct Layout {
     dropdown_external: Option<usize>,
     dropdown_capacity: usize,
     dropdown_entry_text: usize,
-    /// The button config's icon texture and the byte that draws it in
-    /// place of an empty label; `None` keeps buttons to text.
-    pub(super) button_icon: Option<(usize, usize)>,
+    /// What an icon button writes in its config; `None` keeps buttons to
+    /// text.
+    pub(super) button_icon: Option<ButtonIcon>,
+}
+
+/// Where a button's config holds what an icon button writes in it.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct ButtonIcon {
+    /// The button's kind, a `u32` its frame reads to pick its look and
+    /// size.
+    pub(super) kind: usize,
+    /// The icon's texture, 16 bytes.
+    pub(super) texture: usize,
+    /// The byte that draws the icon in place of an empty label.
+    pub(super) shown: usize,
 }
 
 /// The navigation group's fields the loader's config sets, as offsets in
@@ -403,9 +409,15 @@ impl Layout {
             dropdown_external: f(pinned::ui::DROPDOWN_EXTERNAL.id()).ok(),
             dropdown_capacity: f(pinned::ui::DROPDOWN_CAPACITY.id())?,
             dropdown_entry_text: f(pinned::ui::DROPDOWN_ENTRY_TEXT.id())?,
-            button_icon: f(pinned::ui::BUTTON_ICON.id())
+            button_icon: f(pinned::ui::BUTTON_KIND.id())
                 .ok()
-                .zip(f(pinned::ui::BUTTON_ICON_SHOWN.id()).ok()),
+                .zip(f(pinned::ui::BUTTON_ICON.id()).ok())
+                .zip(f(pinned::ui::BUTTON_ICON_SHOWN.id()).ok())
+                .map(|((kind, texture), shown)| ButtonIcon {
+                    kind,
+                    texture,
+                    shown,
+                }),
         }
         .checked()
     }
@@ -425,7 +437,7 @@ impl Layout {
         ];
         if self
             .button_icon
-            .is_some_and(|(texture, shown)| !icon_fits(&others, texture, shown))
+            .is_some_and(|icon| !icon_fits(&others, icon))
         {
             crate::log!(
                 WARN,
@@ -451,19 +463,25 @@ impl Layout {
     }
 }
 
-/// Whether a button's icon texture at `texture` and its flag byte at
-/// `shown` fit its config beside the kind word and the `others` fields
-/// without one write landing on another's start.
-fn icon_fits(others: &[usize], texture: usize, shown: usize) -> bool {
-    let kind = BUTTON_KIND_AT..BUTTON_KIND_AT + 4;
+/// Whether an icon button's kind word, texture and flag byte fit its config
+/// beside the `others` fields without one write landing on another's start.
+fn icon_fits(others: &[usize], icon: ButtonIcon) -> bool {
+    let ButtonIcon {
+        kind,
+        texture,
+        shown,
+    } = icon;
+    let word = kind..kind + 4;
     let image = texture..texture + 16;
     let starts_clear = others
         .iter()
         .chain([&texture, &shown])
-        .all(|at| !kind.contains(at));
+        .all(|at| !word.contains(at));
     starts_clear
+        && word.end <= BUTTON_CONFIG
         && image.end <= BUTTON_CONFIG
         && shown < BUTTON_CONFIG
+        && !image.contains(&kind)
         && !image.contains(&shown)
         && others.iter().all(|at| !image.contains(at) && *at != shown)
 }

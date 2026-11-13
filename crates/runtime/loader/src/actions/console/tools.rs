@@ -100,6 +100,7 @@ pub(crate) fn mods(loader: &Loader) -> String {
                 running: !m.off.load(Ordering::Acquire),
             })
             .collect::<Vec<_>>(),
+        &loader.skipped,
     )
 }
 

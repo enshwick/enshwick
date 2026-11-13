@@ -323,7 +323,7 @@ impl Engine {
         icon: Icon,
         enabled: bool,
     ) -> Option<bool> {
-        let (texture, shown) = self.layout.button_icon?;
+        let fields = self.layout.button_icon?;
         let (icons, kind) = self.looks.icons?;
         let offset = *icons.get(icon as usize)?;
         // SAFETY: `bundle` is the frame's look bundle, read from the live
@@ -341,10 +341,10 @@ impl Engine {
             BUTTON_FITS_TEXT,
             [0.0, ICON_MARGIN],
         );
-        config.u32(super::BUTTON_KIND_AT, kind);
-        config.u64(texture, image[0]);
-        config.u64(texture + 8, image[1]);
-        config.u8(shown, 1);
+        config.u32(fields.kind, kind);
+        config.u64(fields.texture, image[0]);
+        config.u64(fields.texture + 8, image[1]);
+        config.u8(fields.shown, 1);
         // SAFETY: `self.button` is the game's `ui.button`, checked in
         // `Engine::resolve`, inside the window this function's `# Safety`
         // gives; `config` holds the table's `ui.button_extent` bytes

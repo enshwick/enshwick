@@ -17,6 +17,7 @@ pub(crate) const BUTTON_PADDING_Y: Constant = Constant::new("ui.button_padding_y
 pub(crate) const BUTTON_SCALE: Constant = Constant::new("ui.button_scale");
 pub(crate) const BUTTON_SIZE_MODE: Constant = Constant::new("ui.button_size_mode");
 pub(crate) const BUTTON_SOUND: Constant = Constant::new("ui.button_sound");
+pub(crate) const BUTTON_KIND: Constant = Constant::new("ui.button_kind");
 pub(crate) const BUTTON_ICON: Constant = Constant::new("ui.button_icon");
 pub(crate) const BUTTON_ICON_SHOWN: Constant = Constant::new("ui.button_icon_shown");
 pub(crate) const COLUMN: Symbol = Symbol::new("ui.column");
