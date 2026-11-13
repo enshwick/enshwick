@@ -56,12 +56,9 @@ pub use target::{Destination, Layout, LayoutError, TARGET_BYTES, Target};
 pub type Names = BTreeMap<String, String>;
 
 #[cfg(windows)]
-pub(crate) use runtime::{NEXT, detour};
-
-#[cfg(windows)]
 pub(crate) mod client;
 #[cfg(windows)]
 mod runtime;
 
 #[cfg(windows)]
-pub(crate) use runtime::{names, set_layout, set_names};
+pub(crate) use runtime::{JOIN_FUSE, link, names, set_layout, set_names};

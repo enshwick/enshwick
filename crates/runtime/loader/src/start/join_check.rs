@@ -1,6 +1,7 @@
 //! Linking the loader's join check and its dialog hold on the client.
 
-use crate::engine::loader::{Loader, Target};
+use crate::base::join::JOIN_FUSE;
+use crate::engine::loader::Loader;
 use crate::engine::pinned;
 
 use super::game::identify;
@@ -34,35 +35,21 @@ pub(super) fn link_join(loader: &Loader) {
         .collect();
     crate::base::join::set_names(names);
     crate::base::lobby::register();
+    let join_off = |why: &dyn core::fmt::Display| {
+        let reason = format!("is not checked: {why}");
+        let _off = loader.fuse_off(&JOIN_FUSE, pinned::net::JOIN_GAME.id(), &reason);
+    };
     match crate::base::join::Layout::from_table(|id| loader.build.constant(id)) {
         Ok(layout) => crate::base::join::set_layout(layout),
-        Err(error) => {
-            crate::log!(
-                WARN,
-                "join check off on {}: {error}; nothing patched",
-                loader.build.name
-            );
-            return;
-        }
+        Err(error) => return join_off(&error),
     }
     match verified_join(loader) {
         Ok((join, code)) => {
-            let linked = loader.link_feature(
-                "join check",
-                Target::Found(pinned::net::JOIN_GAME.id(), Some(join)),
-                &crate::base::join::NEXT,
-                crate::base::join::detour,
-                enshwick_core::abi::HookFlags::NONE,
-            );
-            if linked {
+            if crate::base::join::link(loader, join) {
                 link_join_hold(loader, code);
             }
         }
-        Err(error) => crate::log!(
-            WARN,
-            "join check off on {}: {error}; nothing patched",
-            loader.build.name
-        ),
+        Err(error) => join_off(&error),
     }
 }
 
@@ -71,7 +58,7 @@ pub(super) fn link_join(loader: &Loader) {
 /// with the pinned bytes. Without it a refused join shows the game's dialog
 /// before the loader's.
 fn link_join_hold(loader: &Loader, code: core::ops::Range<u64>) {
-    use crate::base::join::interaction::{self, BYTES_ID};
+    use crate::base::join::interaction::{self, BYTES_ID, HOLD_FUSE};
     let read = |va: u64| {
         let address = usize::try_from(va).ok()?;
         // SAFETY: `verify` reads only eight bytes inside the game's code
@@ -85,37 +72,25 @@ fn link_join_hold(loader: &Loader, code: core::ops::Range<u64>) {
         read,
         code,
     );
+    let hold_off = |why: &dyn core::fmt::Display| {
+        let reason = format!("is not checked: {why}");
+        let _off = loader.fuse_off(&HOLD_FUSE, pinned::user::START_INTERACTION.id(), &reason);
+    };
     let start = match start {
         Ok(start) => start,
-        Err(error) => {
-            crate::log!(
-                WARN,
-                "join dialog hold off on {}: {error}; nothing patched",
-                loader.build.name
-            );
-            return;
-        }
+        Err(error) => return hold_off(&error),
     };
     if !interaction::set_layout(
         loader.build.constant(pinned::user::INTERACTION_KIND.id()),
         loader.build.constant(pinned::user::JOIN_FAILED_KIND.id()),
     ) {
-        crate::log!(
-            WARN,
-            "join dialog hold off on {}: the build table pins no {} or {}; nothing patched",
-            loader.build.name,
+        return hold_off(&format_args!(
+            "the build table pins no {} or {}",
             pinned::user::INTERACTION_KIND,
             pinned::user::JOIN_FAILED_KIND,
-        );
-        return;
+        ));
     }
-    loader.link_feature(
-        "join dialog hold",
-        Target::Found(pinned::user::START_INTERACTION.id(), Some(start)),
-        &interaction::NEXT,
-        interaction::detour,
-        enshwick_core::abi::HookFlags::NONE,
-    );
+    let _linked = interaction::link(loader, start);
 }
 
 /// The online provider's join, once the provider's function table holds it
@@ -155,4 +130,26 @@ pub(super) fn names(loader: &Loader) -> Vec<(String, String)> {
         .filter(|m| m.joins() && !m.meta.name.is_empty())
         .map(|m| (m.id.clone(), m.meta.name.clone()))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_build_without_the_join_target_layout_lists_the_join_check_off_by_its_join() {
+        let loader = crate::start::tests::bare_loader();
+        link_join(&loader);
+        assert!(JOIN_FUSE.is_off());
+        let listed = crate::engine::diag::parts_off();
+        let join = listed.iter().find(|p| p.part == JOIN_FUSE.feature());
+        let (entry, missing) = (
+            pinned::net::JOIN_GAME.id(),
+            pinned::join::TARGET_PASSWORD.id(),
+        );
+        assert!(
+            join.is_some_and(|p| p.reason.starts_with(entry) && p.reason.contains(missing)),
+            "{listed:?}"
+        );
+    }
 }
