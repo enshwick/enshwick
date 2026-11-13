@@ -17,6 +17,7 @@
 //! cargo-semver-checks for the packages `--semver` names.
 
 use std::io::Write as _;
+use std::path::Path;
 use std::process::Command;
 use std::thread;
 use std::time::Instant;
@@ -75,7 +76,7 @@ pub(crate) struct Args {
 pub(crate) fn stable_api(packages: &[Package]) -> Vec<String> {
     let mut args = Vec::new();
     for package in packages.iter().filter(|p| {
-        p.unstable && crate::check::crate_rules::is_api_crate(&p.name, std::path::Path::new(&p.dir))
+        p.unstable && crate::check::crate_rules::is_api_crate(&p.name, Path::new(&p.dir))
     }) {
         args.extend(["--package".to_owned(), package.name.clone()]);
     }
@@ -94,19 +95,22 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
     } else {
         args.part.clone()
     };
+    let merge_base = merge_base(&args.base);
+    let changed = merge_base.as_deref().and_then(changed_files);
     if parts.contains(&Part::Fuzz) {
-        let fuzzed = fuzz_part(&args.base, args.all);
+        let fuzzed = fuzz_part(changed.as_deref(), args.all);
         if !fuzzed || parts.len() == 1 {
             return Ok(fuzzed);
         }
     }
     let packages = packages()?;
     let root = workspace_root();
-    let changed = changed_files(&args.base);
     if parts.contains(&Part::Host) && !args.list_windows_tests {
         let mut problems = crate::check::problems(&root, &packages)?;
         problems.extend(
-            name_status(&args.base)
+            merge_base
+                .as_deref()
+                .and_then(name_status)
                 .iter()
                 .flat_map(|status| crate::check::changelog::edited(status))
                 .map(|problem| format!("changelog: {problem}")),
@@ -120,8 +124,15 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
     }
     let scope = if args.all {
         Scope::All
-    } else if let Some(files) = &changed {
-        affected::scope(files, &packages)
+    } else if let (Some(files), Some(merge_base)) = (&changed, merge_base) {
+        affected::scope(
+            files,
+            &packages,
+            &Tree {
+                merge_base,
+                root: &root,
+            },
+        )
     } else {
         say(&format!(
             "no merge base with {}; checking everything",
@@ -199,11 +210,11 @@ fn semver_step(packages: &[String]) -> Option<Step> {
     })
 }
 
-/// The fuzz part: the targets the change since `base` reaches, or every
-/// target in the full suite or without a merge base; whether none crashed.
-fn fuzz_part(base: &str, all: bool) -> bool {
-    let targets = match changed_files(base) {
-        Some(files) if !all => fuzz::reached(&files),
+/// The fuzz part: the targets the `changed` files reach, or every target in
+/// the full suite or without a merge base; whether none crashed.
+fn fuzz_part(changed: Option<&[String]>, all: bool) -> bool {
+    let targets = match changed {
+        Some(files) if !all => fuzz::reached(files),
         _ => fuzz::all(),
     };
     fuzz::run(&targets)
@@ -253,11 +264,10 @@ impl Part {
     }
 }
 
-/// Files changed between the merge base with `base` and the working tree,
-/// untracked ones included; `None` without a merge base.
-fn changed_files(base: &str) -> Option<Vec<String>> {
-    let merge_base = git(&["merge-base", "HEAD", base])?;
-    let mut files: Vec<String> = git(&["diff", "--name-only", merge_base.trim()])?
+/// Files changed between `merge_base` and the working tree, untracked ones
+/// included; `None` when git fails.
+fn changed_files(merge_base: &str) -> Option<Vec<String>> {
+    let mut files: Vec<String> = git(&["diff", "--name-only", merge_base])?
         .lines()
         // `:/` and --full-name: every untracked file, named from the root
         // as diff names it, wherever the check runs from.
@@ -269,11 +279,31 @@ fn changed_files(base: &str) -> Option<Vec<String>> {
     Some(files)
 }
 
-/// What changed between the merge base with `base` and the working tree,
-/// as `git diff --name-status` lists it; `None` without a merge base.
-fn name_status(base: &str) -> Option<String> {
-    let merge_base = git(&["merge-base", "HEAD", base])?;
-    git(&["diff", "--name-status", merge_base.trim()])
+/// What changed between `merge_base` and the working tree, as
+/// `git diff --name-status` lists it; `None` when git fails.
+fn name_status(merge_base: &str) -> Option<String> {
+    git(&["diff", "--name-status", merge_base])
+}
+
+/// The merge base of `HEAD` with `base`.
+fn merge_base(base: &str) -> Option<String> {
+    Some(git(&["merge-base", "HEAD", base])?.trim().to_owned())
+}
+
+/// The repository between its merge base and the working tree.
+struct Tree<'a> {
+    merge_base: String,
+    root: &'a Path,
+}
+
+impl affected::Texts for Tree<'_> {
+    fn before(&self, path: &str) -> Option<String> {
+        git(&["show", &format!("{}:{path}", self.merge_base)])
+    }
+
+    fn after(&self, path: &str) -> Option<String> {
+        std::fs::read_to_string(self.root.join(path)).ok()
+    }
 }
 
 pub(crate) fn git(args: &[&str]) -> Option<String> {

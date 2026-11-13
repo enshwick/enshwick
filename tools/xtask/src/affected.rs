@@ -1,6 +1,8 @@
 //! Which packages a change touches: the packages whose files changed and
 //! every workspace package that depends on them.
 
+mod shared;
+
 use std::collections::BTreeSet;
 
 /// A workspace package, as far as choosing checks needs it.
@@ -40,36 +42,62 @@ pub(crate) enum Scope {
     },
 }
 
-/// Files that every package builds with.
+/// The text of a file before and after the change, for the shared build
+/// files whose content says which packages they reach.
+pub(crate) trait Texts {
+    /// At the merge base; `None` when it was not there.
+    fn before(&self, path: &str) -> Option<String>;
+    /// In the working tree; `None` when it is gone.
+    fn after(&self, path: &str) -> Option<String>;
+}
+
+/// Files whose every change reaches every package; Cargo still reads its
+/// settings under the legacy name `.cargo/config`.
 const GLOBAL_FILES: &[&str] = &[
-    "Cargo.toml",
-    "Cargo.lock",
     "rust-toolchain.toml",
     "clippy.toml",
+    ".cargo/config.toml",
+    ".cargo/config",
 ];
-const GLOBAL_DIRS: &[&str] = &[".cargo/", ".config/"];
+/// Directories of tool settings every test run reads, such as nextest's
+/// `.config/nextest.toml`.
+const GLOBAL_DIRS: &[&str] = &[".config/"];
 /// The book's chapters, compiled as doctests of the API crate.
 const BOOK_DIR: &str = "book/src/";
 const BOOK_HARNESS: &str = "enshwick";
 /// The package whose tests compile and type-check the book's Luau examples.
 const BOOK_LUAU: &str = "enshwick-luau";
 
-/// Sorts changed files (relative to the root, `/` separators) into a scope.
-pub(crate) fn scope(files: &[String], packages: &[Package]) -> Scope {
+/// Sorts changed files (relative to the root, `/` separators) into a scope;
+/// `texts` gives the lock file and the root manifest before and after.
+pub(crate) fn scope(files: &[String], packages: &[Package], texts: &dyn Texts) -> Scope {
     let mut changed = BTreeSet::new();
     let mut docs = BTreeSet::new();
     let mut luau = false;
     for file in files {
-        if GLOBAL_FILES.contains(&file.as_str())
-            || GLOBAL_DIRS.iter().any(|dir| file.starts_with(dir))
-        {
-            return Scope::All;
-        }
-        if file.starts_with(BOOK_DIR) {
-            docs.insert(BOOK_HARNESS.to_owned());
-            luau = true;
-        } else if let Some(package) = owner(file, packages) {
-            changed.insert(package.name.clone());
+        match file.as_str() {
+            shared::LOCK => {
+                let Some(reached) = shared::locked(texts, packages) else {
+                    return Scope::All;
+                };
+                changed.extend(reached);
+            }
+            shared::MANIFEST => {
+                let Some(reached) = shared::inherited(texts, packages) else {
+                    return Scope::All;
+                };
+                changed.extend(reached);
+            }
+            path if GLOBAL_FILES.contains(&path)
+                || GLOBAL_DIRS.iter().any(|dir| path.starts_with(dir)) =>
+            {
+                return Scope::All;
+            }
+            path if path.starts_with(BOOK_DIR) => {
+                docs.insert(BOOK_HARNESS.to_owned());
+                luau = true;
+            }
+            path => changed.extend(owner(path, packages).map(|package| package.name.clone())),
         }
     }
     let mut code = dependents(&changed, packages);
@@ -107,6 +135,8 @@ pub(crate) fn dependents(changed: &BTreeSet<String>, packages: &[Package]) -> BT
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
 
     fn package(name: &str, dir: &str, deps: &[&str]) -> Package {
@@ -141,6 +171,287 @@ mod tests {
         list.iter().map(|n| (*n).to_owned()).collect()
     }
 
+    /// The shared files before and after a change, and every member's
+    /// manifest as it is after.
+    #[derive(Default)]
+    struct Tree {
+        before: BTreeMap<String, String>,
+        after: BTreeMap<String, String>,
+    }
+
+    impl Tree {
+        fn changed(path: &str, before: &str, after: &str) -> Self {
+            let mut tree = Self::default();
+            for package in workspace() {
+                tree.after.insert(
+                    format!("{}/Cargo.toml", package.dir),
+                    format!("[package]\nname = \"{}\"\n", package.name),
+                );
+            }
+            tree.before.insert(path.to_owned(), before.to_owned());
+            tree.after.insert(path.to_owned(), after.to_owned());
+            tree
+        }
+
+        fn member(mut self, dir: &str, manifest: &str) -> Self {
+            self.after
+                .insert(format!("{dir}/Cargo.toml"), manifest.to_owned());
+            self
+        }
+    }
+
+    impl Texts for Tree {
+        fn before(&self, path: &str) -> Option<String> {
+            self.before.get(path).cloned()
+        }
+
+        fn after(&self, path: &str) -> Option<String> {
+            self.after.get(path).cloned()
+        }
+    }
+
+    /// The scope of a change to files whose content the scope does not read.
+    fn scope(files: &[String], packages: &[Package]) -> Scope {
+        super::scope(files, packages, &Tree::default())
+    }
+
+    fn code(scope: Scope) -> BTreeSet<String> {
+        let Scope::Some { code, .. } = scope else {
+            panic!("the whole workspace");
+        };
+        code
+    }
+
+    /// The workspace's lock file: `macros` builds on `syn`, the loader on
+    /// `windows` 0.1 and `my-mod` on `windows` 0.2.
+    fn lock(windows_checksum: &str) -> String {
+        let registry = "registry+https://github.com/rust-lang/crates.io-index";
+        format!(
+            r#"version = 4
+
+[[package]]
+name = "enshwick"
+version = "0.0.0-dev"
+dependencies = ["macros"]
+
+[[package]]
+name = "haggling"
+version = "0.0.0-dev"
+dependencies = ["trading-post"]
+
+[[package]]
+name = "loader"
+version = "0.0.0-dev"
+dependencies = ["enshwick", "windows 0.1.0"]
+
+[[package]]
+name = "macros"
+version = "0.0.0-dev"
+dependencies = ["syn"]
+
+[[package]]
+name = "my-mod"
+version = "0.0.0-dev"
+dependencies = ["enshwick", "windows 0.2.0"]
+
+[[package]]
+name = "syn"
+version = "2.0.0"
+source = "{registry}"
+checksum = "aa"
+
+[[package]]
+name = "trading-post"
+version = "0.0.0-dev"
+dependencies = ["enshwick"]
+
+[[package]]
+name = "windows"
+version = "0.1.0"
+source = "{registry}"
+checksum = "{windows_checksum}"
+
+[[package]]
+name = "windows"
+version = "0.2.0"
+source = "{registry}"
+checksum = "cc"
+"#
+        )
+    }
+
+    fn manifest(workspace: &str) -> String {
+        format!("[workspace]\nmembers = [\"crates/*\", \"mods/*\"]\n{workspace}")
+    }
+
+    #[test]
+    fn a_toolchain_lint_cargo_or_nextest_config_change_checks_everything() {
+        for file in [
+            "rust-toolchain.toml",
+            "clippy.toml",
+            ".cargo/config.toml",
+            ".cargo/config",
+            ".config/nextest.toml",
+        ] {
+            assert_eq!(scope(&files(&[file]), &workspace()), Scope::All, "{file}");
+        }
+    }
+
+    #[test]
+    fn a_lock_change_checks_only_the_packages_built_on_the_changed_entry() {
+        let tree = Tree::changed("Cargo.lock", &lock("bb"), &lock("b2"));
+        assert_eq!(
+            code(super::scope(&files(&["Cargo.lock"]), &workspace(), &tree)),
+            names(&["loader"])
+        );
+    }
+
+    #[test]
+    fn a_lock_change_reaches_the_dependents_of_a_package_built_on_it() {
+        let tree = Tree::changed(
+            "Cargo.lock",
+            &lock("bb"),
+            &lock("bb").replace("checksum = \"aa\"", "checksum = \"a2\""),
+        );
+        assert_eq!(
+            code(super::scope(&files(&["Cargo.lock"]), &workspace(), &tree)),
+            names(&[
+                "macros",
+                "enshwick",
+                "loader",
+                "trading-post",
+                "haggling",
+                "my-mod"
+            ])
+        );
+    }
+
+    #[test]
+    fn a_lock_that_does_not_read_checks_everything() {
+        let tree = Tree::changed("Cargo.lock", &lock("bb"), "[[package]");
+        assert_eq!(
+            super::scope(&files(&["Cargo.lock"]), &workspace(), &tree),
+            Scope::All
+        );
+    }
+
+    #[test]
+    fn a_workspace_dependency_change_checks_the_members_that_inherit_it() {
+        let tree = Tree::changed(
+            "Cargo.toml",
+            &manifest("[workspace.dependencies]\nserde = \"1.0.1\"\nsyn = \"2\"\n"),
+            &manifest("[workspace.dependencies]\nserde = \"1.0.2\"\nsyn = \"2\"\n"),
+        )
+        .member(
+            "mods/trading-post",
+            "[dev-dependencies]\nserde.workspace = true\nsyn.workspace = true\n",
+        )
+        .member(
+            "crates/runtime/loader",
+            "[target.'cfg(windows)'.dependencies]\nserde = { workspace = true }\n",
+        )
+        .member(
+            "crates/internal/macros",
+            "[dependencies]\nsyn.workspace = true\n",
+        );
+        assert_eq!(
+            code(super::scope(&files(&["Cargo.toml"]), &workspace(), &tree)),
+            names(&["trading-post", "haggling", "loader"])
+        );
+    }
+
+    #[test]
+    fn a_workspace_package_field_change_checks_the_members_that_inherit_it() {
+        let tree = Tree::changed(
+            "Cargo.toml",
+            &manifest("[workspace.package]\nrust-version = \"1.99\"\nedition = \"2024\"\n"),
+            &manifest("[workspace.package]\nrust-version = \"1.100\"\nedition = \"2024\"\n"),
+        )
+        .member("mods/my-mod", "[package]\nrust-version.workspace = true\n")
+        .member("mods/haggling", "[package]\nedition.workspace = true\n");
+        assert_eq!(
+            code(super::scope(&files(&["Cargo.toml"]), &workspace(), &tree)),
+            names(&["my-mod"])
+        );
+    }
+
+    #[test]
+    fn a_member_whose_manifest_does_not_read_is_checked() {
+        let tree = Tree::changed(
+            "Cargo.toml",
+            &manifest("[workspace.dependencies]\nserde = \"1.0.1\"\n"),
+            &manifest("[workspace.dependencies]\nserde = \"1.0.2\"\n"),
+        )
+        .member("mods/my-mod", "[dependencies");
+        assert_eq!(
+            code(super::scope(&files(&["Cargo.toml"]), &workspace(), &tree)),
+            names(&["my-mod"])
+        );
+    }
+
+    #[test]
+    fn a_lint_profile_or_patch_change_in_the_root_manifest_checks_everything() {
+        for (before, after) in [
+            (
+                "[workspace.lints.rust]\nunsafe_code = \"warn\"\n",
+                "[workspace.lints.rust]\nunsafe_code = \"deny\"\n",
+            ),
+            (
+                "[profile.release]\nlto = true\n",
+                "[profile.release]\nlto = false\n",
+            ),
+            ("", "[patch.crates-io]\nsyn = { path = \"../syn\" }\n"),
+        ] {
+            let tree = Tree::changed("Cargo.toml", &manifest(before), &manifest(after));
+            assert_eq!(
+                super::scope(&files(&["Cargo.toml"]), &workspace(), &tree),
+                Scope::All,
+                "{after}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_membership_change_checks_everything() {
+        // A changed glob or exclude can make a path dependency a member,
+        // whose own files and lock entry stay the same.
+        for (before, after) in [
+            ("", "exclude = [\"crates/runtime/legacy\"]\n"),
+            ("", "members = [\"vendor/*\"]\n"),
+        ] {
+            let tree = Tree::changed(
+                "Cargo.toml",
+                &format!("[workspace]\n{before}"),
+                &format!("[workspace]\n{after}"),
+            );
+            assert_eq!(
+                super::scope(&files(&["Cargo.toml"]), &workspace(), &tree),
+                Scope::All,
+                "{after}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_workspace_dependency_change_reaches_every_package_built_on_it() {
+        // Features unify: a member that gets `windows` without inheriting it
+        // builds with the new features too.
+        let mut tree = Tree::changed(
+            "Cargo.toml",
+            &manifest(
+                "[workspace.dependencies]\nwin = { package = \"windows\", version = \"0.1\" }\n",
+            ),
+            &manifest(
+                "[workspace.dependencies]\nwin = { package = \"windows\", version = \"0.1\", features = [\"Win32\"] }\n",
+            ),
+        );
+        tree.after.insert("Cargo.lock".to_owned(), lock("bb"));
+        assert_eq!(
+            code(super::scope(&files(&["Cargo.toml"]), &workspace(), &tree)),
+            names(&["loader", "my-mod"])
+        );
+    }
+
     #[test]
     fn a_mod_change_checks_the_mod_and_its_dependents_only() {
         let scope = scope(&files(&["mods/trading-post/src/lib.rs"]), &workspace());
@@ -164,19 +475,6 @@ mod tests {
             code,
             names(&["enshwick", "loader", "trading-post", "haggling", "my-mod"])
         );
-    }
-
-    #[test]
-    fn a_shared_build_file_checks_everything() {
-        for file in [
-            "Cargo.lock",
-            "Cargo.toml",
-            "rust-toolchain.toml",
-            ".cargo/config.toml",
-            ".config/nextest.toml",
-        ] {
-            assert_eq!(scope(&files(&[file]), &workspace()), Scope::All, "{file}");
-        }
     }
 
     #[test]
