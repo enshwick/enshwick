@@ -722,4 +722,28 @@ mod tests {
             Ok(fields(&["header", "log"]))
         );
     }
+
+    #[test]
+    fn a_coverage_chapter_missing_a_host_table_entry_fails_the_check() {
+        let root = std::env::temp_dir().join(format!("xtask-coverage-{}", std::process::id()));
+        let layout = root.join(header::LAYOUT);
+        std::fs::create_dir_all(layout.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(root.join(SOURCE)).unwrap();
+        std::fs::write(
+            &layout,
+            "abi 5.0\nHostApi size 16 align 8\n    header at 0 size 8 type Header\n    \
+             log at 8 size 8 type fn\n    chat at 16 size 8 type fn\n",
+        )
+        .unwrap();
+        std::fs::write(root.join(SOURCE).join(COVERAGE_CHAPTER), ENTRIES).unwrap();
+        let found = coverage_problem(&root);
+        std::fs::remove_dir_all(&root).unwrap();
+        assert_eq!(
+            found.as_deref(),
+            Some(
+                "book/src/abi-coverage.md: row 3 of its entries table should be `chat`, the next \
+                 HostApi field of crates/internal/abi/src/abi/layout.txt; list every field once, in order"
+            )
+        );
+    }
 }
