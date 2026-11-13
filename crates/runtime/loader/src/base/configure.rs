@@ -14,7 +14,7 @@ use crate::engine::texts;
 mod apply;
 pub mod rows;
 #[cfg(windows)]
-pub(crate) use apply::{ApplySettingError, apply};
+pub(crate) use apply::{ApplySettingError, apply, apply_own};
 
 /// What `enshwick config` was asked.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -199,6 +199,18 @@ pub struct Change {
     pub text: String,
     /// The value as written.
     pub value: String,
+    /// Whether the setting is secret, so its value is never shown.
+    pub secret: bool,
+}
+
+/// Who changes a setting: a person never changes a secret, which the mod
+/// itself writes, such as a password it generated.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Changer {
+    /// A person, at the console, on the Mods screen or from afar.
+    Person,
+    /// The mod whose setting it is.
+    Mod,
 }
 
 /// Sets `key` to `value` in the settings file `text`, checked against
@@ -207,16 +219,17 @@ pub struct Change {
 /// # Errors
 ///
 /// [`ChangeSettingError`] when the mod has no such setting, the value does
-/// not fit it or the file is not TOML.
+/// not fit it, a person sets a secret or the file is not TOML.
 pub fn set(
     id: &str,
     schema: &Schema,
     text: &str,
     key: &str,
     value: &str,
+    by: Changer,
 ) -> Result<Change, ChangeSettingError> {
     let field = field(id, schema, key)?;
-    if field.secret {
+    if field.secret && by == Changer::Person {
         return Err(ChangeSettingError::Secret {
             key: key.to_owned(),
         });
@@ -242,6 +255,7 @@ pub fn set(
     Ok(Change {
         text: doc.to_string(),
         value,
+        secret: field.secret,
     })
 }
 
@@ -478,16 +492,68 @@ mod tests {
         let shared = get("you.trading-post", &schema(), &file, "shared").unwrap();
         assert!(!shared.contains("letmein"), "{shared}");
         assert_eq!(
-            set("you.trading-post", &schema(), &file, "token", "\"x\"")
-                .unwrap_err()
-                .reply(),
+            set(
+                "you.trading-post",
+                &schema(),
+                &file,
+                "token",
+                "\"x\"",
+                Changer::Person
+            )
+            .unwrap_err()
+            .reply(),
             "token is changed in the server's file only."
         );
     }
 
     #[test]
+    fn the_mod_writes_its_own_secret_and_the_change_keeps_it_hidden() {
+        let file = format!("{FILE}token = \"hunter2\"\n");
+        let own = set(
+            "you.trading-post",
+            &schema(),
+            &file,
+            "token",
+            "\"fresh\"",
+            Changer::Mod,
+        )
+        .unwrap();
+        assert!(own.secret);
+        assert!(own.text.ends_with("token = \"fresh\"\n"), "{}", own.text);
+        let open = set(
+            "you.trading-post",
+            &schema(),
+            FILE,
+            "limit",
+            "6",
+            Changer::Mod,
+        )
+        .unwrap();
+        assert!(!open.secret);
+        assert!(
+            set(
+                "you.trading-post",
+                &schema(),
+                FILE,
+                "limit",
+                "40",
+                Changer::Mod
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn a_change_is_checked_and_keeps_the_comments() {
-        let change = set("you.trading-post", &schema(), FILE, "limit", "6").unwrap();
+        let change = set(
+            "you.trading-post",
+            &schema(),
+            FILE,
+            "limit",
+            "6",
+            Changer::Person,
+        )
+        .unwrap();
         assert!(
             change.text.contains("# How many.\nlimit = 6 # four\n"),
             "{}",
@@ -498,38 +564,92 @@ mod tests {
             "you.trading-post limit = 6: saved for this world; it takes effect when the world loads again."
         );
         assert!(
-            set("you.trading-post", &schema(), FILE, "limit", "40")
-                .unwrap_err()
-                .reply()
-                .contains("1 to 16")
+            set(
+                "you.trading-post",
+                &schema(),
+                FILE,
+                "limit",
+                "40",
+                Changer::Person
+            )
+            .unwrap_err()
+            .reply()
+            .contains("1 to 16")
         );
-        assert!(set("you.trading-post", &schema(), FILE, "limit", "many").is_err());
         assert!(
-            set("you.trading-post", &schema(), FILE, "language", "de")
-                .unwrap_err()
-                .reply()
-                .contains("one of")
+            set(
+                "you.trading-post",
+                &schema(),
+                FILE,
+                "limit",
+                "many",
+                Changer::Person
+            )
+            .is_err()
         );
-        let radius = set("you.trading-post", &schema(), FILE, "radius", "10").unwrap();
+        assert!(
+            set(
+                "you.trading-post",
+                &schema(),
+                FILE,
+                "language",
+                "de",
+                Changer::Person
+            )
+            .unwrap_err()
+            .reply()
+            .contains("one of")
+        );
+        let radius = set(
+            "you.trading-post",
+            &schema(),
+            FILE,
+            "radius",
+            "10",
+            Changer::Person,
+        )
+        .unwrap();
         assert!(radius.text.contains("radius = 10.0"));
-        let words = set("you.trading-post", &schema(), FILE, "note", "hello there").unwrap();
+        let words = set(
+            "you.trading-post",
+            &schema(),
+            FILE,
+            "note",
+            "hello there",
+            Changer::Person,
+        )
+        .unwrap();
         assert!(
             words.text.ends_with("note = \"hello there\"\n"),
             "{}",
             words.text
         );
-        let broken = set("you.trading-post", &schema(), "limit = ", "limit", "2")
-            .unwrap_err()
-            .reply();
+        let broken = set(
+            "you.trading-post",
+            &schema(),
+            "limit = ",
+            "limit",
+            "2",
+            Changer::Person,
+        )
+        .unwrap_err()
+        .reply();
         assert!(
             broken.starts_with("Not changed: you.trading-post is not valid TOML: ")
                 && broken.len() > 55,
             "{broken}"
         );
         assert_eq!(
-            set("you.trading-post", &schema(), FILE, "limit", "40")
-                .unwrap_err()
-                .reply(),
+            set(
+                "you.trading-post",
+                &schema(),
+                FILE,
+                "limit",
+                "40",
+                Changer::Person
+            )
+            .unwrap_err()
+            .reply(),
             "Not changed: limit takes 1 to 16."
         );
     }
@@ -543,6 +663,7 @@ mod tests {
             "limit = 4\n",
             "comfort.multiplier",
             "2.5",
+            Changer::Person,
         )
         .unwrap();
         assert_eq!(change.text, "limit = 4\n\n[comfort]\nmultiplier = 2.5\n");
@@ -557,12 +678,48 @@ mod tests {
             vec![Field::new("per_level", &[2, 4, 8]).with_range(Some(1.0), Some(32.0))],
         );
         let file = "# Altars.\nper_level = [2, 4, 8]\n";
-        let change = set("you.altars", &schema, file, "per_level[1]", "12").unwrap();
+        let change = set(
+            "you.altars",
+            &schema,
+            file,
+            "per_level[1]",
+            "12",
+            Changer::Person,
+        )
+        .unwrap();
         assert_eq!(change.text, "# Altars.\nper_level = [2, 12, 8]\n");
         assert_eq!(change.value, "12");
-        assert!(set("you.altars", &schema, file, "per_level[1]", "40").is_err());
-        assert!(set("you.altars", &schema, file, "per_level[3]", "4").is_err());
-        let fresh = set("you.altars", &schema, "", "per_level[0]", "3").unwrap();
+        assert!(
+            set(
+                "you.altars",
+                &schema,
+                file,
+                "per_level[1]",
+                "40",
+                Changer::Person
+            )
+            .is_err()
+        );
+        assert!(
+            set(
+                "you.altars",
+                &schema,
+                file,
+                "per_level[3]",
+                "4",
+                Changer::Person
+            )
+            .is_err()
+        );
+        let fresh = set(
+            "you.altars",
+            &schema,
+            "",
+            "per_level[0]",
+            "3",
+            Changer::Person,
+        )
+        .unwrap();
         assert_eq!(fresh.text, "per_level = [3, 4, 8]\n");
         assert_eq!(element("per_level[2]"), ("per_level", Some(2)));
         assert_eq!(element("per_level"), ("per_level", None));

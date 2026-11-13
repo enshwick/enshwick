@@ -3,23 +3,23 @@
 //! atomically with the file's comments kept, and the mod told. It applies
 //! when the world loads again, or at once for a mod that follows changes.
 //! With no world running nothing is written: settings belong to each world.
-//! The console's `enshwick config`, the Mods screen and a server's
-//! administrators all change settings through here.
+//! The console's `enshwick config`, the Mods screen, a server's
+//! administrators and the mod itself all change settings through here.
 
 use std::sync::atomic::Ordering;
 
-use enshwick_core::abi::Str;
+use enshwick_core::abi::{Status, Str};
 
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::texts;
 use enshwick_base::Relock;
 
-use super::{Change, ChangeSettingError, refused};
+use super::{Change, ChangeSettingError, Changer, refused};
 
 /// Sets mod `index`'s setting `key`, a key of its settings files seen as
 /// one, to `value`, TOML or for a text setting the words as typed; `who`
-/// names the player for the log.
+/// names the player for the log. A person never sets a secret.
 ///
 /// # Errors
 ///
@@ -32,6 +32,35 @@ pub(crate) fn apply(
     value: &str,
     who: &str,
 ) -> Result<Change, ApplySettingError> {
+    write(loader, index, None, key, value, Some(who))
+}
+
+/// Sets `key` of mod `index`'s own settings file `file` to `value`, one
+/// TOML value, for the mod itself: a secret too, which the log never shows.
+///
+/// # Errors
+///
+/// [`ApplySettingError`] as for [`apply`].
+pub(crate) fn apply_own(
+    loader: &Loader,
+    index: usize,
+    file: &str,
+    key: &str,
+    value: &str,
+) -> Result<Change, ApplySettingError> {
+    write(loader, index, Some(file), key, value, None)
+}
+
+/// Writes `key` of `file`, or of the files seen as one when `file` is
+/// `None`; `who` names the person, `None` the mod itself.
+fn write(
+    loader: &Loader,
+    index: usize,
+    file: Option<&str>,
+    key: &str,
+    value: &str,
+    who: Option<&str>,
+) -> Result<Change, ApplySettingError> {
     let record = loader.mods.get(index).ok_or(ApplySettingError::NoMod)?;
     let id = record.id.as_str();
     let files = record.settings_files.relock().clone();
@@ -39,7 +68,10 @@ pub(crate) fn apply(
         return Err(ApplySettingError::NoSchema { id: id.to_owned() });
     }
     let world = crate::base::worlds::current().ok_or(ApplySettingError::NoWorld)?;
-    let (file, inner) = crate::base::worlds::split_key(key, &files);
+    let (file, inner) = file.map_or_else(
+        || crate::base::worlds::split_key(key, &files),
+        |file| (file, key),
+    );
     let Some(settings) = files.iter().find(|f| f.file == file) else {
         return Err(ApplySettingError::NoSchema { id: id.to_owned() });
     };
@@ -50,8 +82,13 @@ pub(crate) fn apply(
             source,
         })?
         .unwrap_or_else(|| settings.template.clone());
-    let shown = crate::base::worlds::shown_file(id, &files, key);
-    let change = super::set(&shown, &settings.schema, &text, inner, value)?;
+    let shown = format!("{id}/{file}.toml");
+    let by = if who.is_some() {
+        Changer::Person
+    } else {
+        Changer::Mod
+    };
+    let change = super::set(&shown, &settings.schema, &text, inner, value, by)?;
     check_settings(index, file, &change.text)?;
     crate::base::watch::write_noted(&path, || {
         crate::base::worlds::write_target(&path, &change.text)
@@ -60,7 +97,15 @@ pub(crate) fn apply(
         path: path.clone(),
         source,
     })?;
-    crate::log!(INFO, "{who} set {id} {key} = {}", change.value);
+    let written = if change.secret {
+        texts::fill("config.secret", &[])
+    } else {
+        change.value.clone()
+    };
+    match who {
+        Some(who) => crate::log!(INFO, "{who} set {id} {key} = {written}"),
+        None => crate::log!(INFO, "{id} set its own {shown} {inner} = {written}"),
+    }
     // The change is not the asking player's: the mod's handler reads no
     // reader's language.
     texts::for_nobody(|| crate::base::worlds::changed(loader, index));
@@ -110,6 +155,38 @@ impl ApplySettingError {
             ),
             Self::Change(error) => error.reply(),
             Self::Check(error) => refused(&error.reply()),
+        }
+    }
+
+    /// The answer to a mod's write of its own setting, as
+    /// `HostApi::config_set` states it.
+    pub(crate) fn status(&self) -> Status {
+        match self {
+            Self::NoWorld => Status::UNAVAILABLE,
+            Self::NoMod => Status::BAD_ARGS,
+            Self::NoSchema { .. } | Self::Change(ChangeSettingError::Find(_)) => Status::MISSING,
+            Self::Change(
+                ChangeSettingError::BadValue { .. }
+                | ChangeSettingError::Refused { .. }
+                | ChangeSettingError::NoElement { .. },
+            ) => Status::BAD_ARGS,
+            Self::Change(
+                ChangeSettingError::Secret { .. }
+                | ChangeSettingError::Toml { .. }
+                | ChangeSettingError::Unwritable { .. },
+            )
+            | Self::Write { .. }
+            | Self::Check(_) => Status::REFUSED,
+        }
+    }
+
+    /// Why, for the log, never quoting the value, which may be secret.
+    pub(crate) fn logged(&self) -> String {
+        match self {
+            Self::Change(ChangeSettingError::BadValue { field, .. }) => {
+                format!("{} does not take the value", field.key)
+            }
+            other => other.to_string(),
         }
     }
 }

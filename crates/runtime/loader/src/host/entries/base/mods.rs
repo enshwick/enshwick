@@ -247,6 +247,29 @@ pub(crate) extern "system" fn config_check(
     })
 }
 
+pub(crate) extern "system" fn config_set(me: ModHandle, file: Str, key: Str, value: Str) -> Status {
+    entry("config_set", || {
+        let (loader, index, record) = match calling(me) {
+            Ok(called) => called,
+            Err(status) => return status,
+        };
+        let (Some(file), Some(key), Some(value)) = (text(file), text(key), text(value)) else {
+            return Status::BAD_ARGS;
+        };
+        match crate::base::configure::apply_own(loader, index.get(), file, key, value) {
+            Ok(_) => Status::OK,
+            Err(error) => {
+                crate::engine::log::write(
+                    Level::WARN,
+                    &record.id,
+                    &format!("{file}.toml {key} not written: {}", error.logged()),
+                );
+                error.status()
+            }
+        }
+    })
+}
+
 pub(crate) extern "system" fn texts(me: ModHandle, toml: Str) -> Status {
     entry("texts", || {
         let (_, _, record) = match calling(me) {
