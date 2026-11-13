@@ -654,6 +654,22 @@ mod tests {
         assert_eq!(WRITERS.add(writer), Ok(()));
         super::super::link(loader);
         assert!(WRITERS.sealed().is_some_and(|mods| mods.contains(&writer)));
+        assert!(
+            super::super::LEVEL_FUSE.is_off(),
+            "a build without the level system lists experience off by its fuse"
+        );
+        assert_eq!(
+            write(loader, writer, 7, PROGRESS_SET_LEVEL, 3),
+            Err(Status::MISSING),
+            "writes answer missing while the level step is not linked"
+        );
+        let listed = crate::engine::diag::parts_off();
+        assert!(
+            listed
+                .iter()
+                .any(|p| p.part == "experience" && p.reason.starts_with("player_level")),
+            "{listed:?}"
+        );
         // As if the level step had linked, which needs a game.
         PENDING.linked.store(true, Ordering::Relaxed);
         assert_eq!(

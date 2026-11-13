@@ -185,3 +185,38 @@ fn the_rate_patch_serves_the_registry_alone_or_not_at_all() {
     assert_eq!(served[0].patches.len(), 1);
     assert!(served[0].keeps_base.load(Ordering::Relaxed));
 }
+
+#[test]
+fn the_served_resources_link_all_three_or_none_and_say_why_they_are_off() {
+    let loader = crate::start::tests::bare_loader();
+    assert!(
+        !link_resources(&loader),
+        "this build has no resource database"
+    );
+    assert!(
+        RESOURCES_FUSE.is_off(),
+        "off by its fuse, not only in the log"
+    );
+    let mut chains = loader.chains.relock();
+    chains.seal();
+    assert!(chains.is_empty(), "no link of the resources is made");
+    let listed = crate::engine::diag::parts_off();
+    let off = listed.iter().find(|p| p.part == "served resources");
+    assert!(
+        off.is_some_and(|p| p.reason.starts_with(pinned::resource::OPEN.id())),
+        "{listed:?}"
+    );
+}
+
+#[test]
+fn a_stand_in_that_panics_turns_the_stand_ins_off_and_refuses() {
+    let builder: crate::content::standins::Builder = Box::new(|_| panic!("broken stand-in"));
+    let user = core::ptr::from_ref(&builder).cast_mut().cast::<c_void>();
+    let base = [1u8];
+    let (mut out, mut out_len) = (core::ptr::null::<u8>(), 0usize);
+    // SAFETY: `user` is a builder that outlives the call, `base` holds one
+    // readable byte, and `out` and `out_len` are writable locals.
+    let status = unsafe { build_stand_in(base.as_ptr(), 1, user, &raw mut out, &raw mut out_len) };
+    assert_eq!(status, Status::REFUSED);
+    assert!(STAND_INS_FUSE.is_off());
+}

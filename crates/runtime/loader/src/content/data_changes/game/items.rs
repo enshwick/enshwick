@@ -81,20 +81,25 @@ pub(super) unsafe extern "system" fn build_item(
     // SAFETY: `user` is the `ItemPatch` `serve` leaked for this key, which
     // lives for the process.
     let patch = unsafe { &*user.cast::<ItemPatch>() };
-    let mut bytes = vec![0; base_len];
     // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at `base`,
-    // unchanged for the call.
-    unsafe { enshwick_core::raw::read_bytes_at(base, 0, &mut bytes) };
-    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        changed_item(patch, &mut bytes);
-    }));
-    if built.is_err() {
-        return Status::REFUSED;
+    // unchanged for the call, and `run_patches` passes `out` and `out_len`
+    // pointing at locals, writable for the call.
+    unsafe {
+        crate::content::served::patched(
+            &ITEMS_FUSE,
+            "an item patch",
+            (base, base_len),
+            (out, out_len),
+            |mut bytes| {
+                changed_item(patch, &mut bytes);
+                Some(bytes)
+            },
+        )
     }
-    // SAFETY: `run_patches` passes `out` and `out_len` pointing at locals,
-    // writable for the call.
-    unsafe { crate::content::served::hand_out(bytes, out, out_len) }
 }
+
+/// The switch of the item changes.
+static ITEMS_FUSE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("item changes");
 
 /// Writes the changed stack size into the item `bytes`, and notes a raise.
 fn changed_item(patch: &ItemPatch, bytes: &mut [u8]) {

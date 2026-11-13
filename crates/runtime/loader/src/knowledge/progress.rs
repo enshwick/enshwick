@@ -11,8 +11,9 @@ use enshwick_core::abi::{
     SkillCheck, SkillCheckFn, Status,
 };
 
-use crate::engine::chains::Next;
+use crate::engine::chains::{Next, Onward};
 use crate::engine::ecs::Engine;
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::loader::{Registered, take};
 use crate::engine::mod_index::ModIndex;
@@ -90,32 +91,22 @@ static LOADED: OnceLock<&'static Loader> = OnceLock::new();
 static FLY_MODE: AtomicUsize = AtomicUsize::new(0);
 static LEVELS: OnceLock<Option<Levels>> = OnceLock::new();
 
-// SAFETY: `NodeUnlockedFn` is the signature of the table's
-// `skill.node_unlocked`, and this slot is the `next` of the one link `link`
-// makes on it, whose detour `node_unlocked` calls `get`.
-static SKILL_NEXT: Next<NodeUnlockedFn> = unsafe { Next::new() };
 // SAFETY: `RegisterFn` is the signature of the table's
 // `comfort.base_register`, and this slot is the `next` of the one link `link`
 // makes on it, whose detour `register` calls `get`.
 static COMFORT_NEXT: Next<RegisterFn> = unsafe { Next::new() };
-// SAFETY: `SystemFn` is the signature of the reflected `player_level` system
-// entry, and this slot is the `next` of the one link `link` makes on it,
-// whose detour `player_level_link` calls `get`.
-static LEVEL_NEXT: Next<SystemFn> = unsafe { Next::new() };
 
 thread_local! {
     static ROWS: RefCell<Vec<ExperienceRow>> = const { RefCell::new(Vec::new()) };
     static BEFORE: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
 }
 
-type NodeUnlockedFn = unsafe extern "system" fn(node: u32, bits: *const u64, tree: *const u8) -> u8;
 type RegisterFn = unsafe extern "system" fn(
     system: *mut u8,
     category: u32,
     comfort: i32,
     position: *const f32,
 ) -> u64;
-type SystemFn = unsafe extern "system" fn(ctx: *mut u64);
 type NeedForFn = unsafe extern "system" fn(level: u32, balancing: u64) -> u32;
 type LevelCapFn = unsafe extern "system" fn(balancing: u64) -> u32;
 
@@ -244,20 +235,16 @@ pub(crate) fn link(loader: &'static Loader) {
                     .map(enshwick_gamedata::reflect::System::entry),
             )),
             Err(why) => {
-                // Every mod with a world asks for the writes, so only filters
-                // a mod registered are worth a warning; writes answer MISSING.
-                if filters {
-                    crate::log!(WARN, "experience filters off: {why}");
-                    crate::engine::diag::part_off("experience", &why.to_string());
-                } else if writers {
-                    crate::log!(INFO, "level writes off: {why}");
+                if wants[2] {
+                    let why = format!("does not match: {why}");
+                    let _off = loader.fuse_off(&LEVEL_FUSE, LEVEL_SYSTEM, &why);
                 }
                 None
             }
         };
     if wants[0]
-        && loader.link_feature(
-            "skill checks",
+        && loader.link_fused(
+            &SKILLS_FUSE,
             Target::Pinned(pinned::skill::NODE_UNLOCKED),
             &SKILL_NEXT,
             node_unlocked,
@@ -267,8 +254,8 @@ pub(crate) fn link(loader: &'static Loader) {
         crate::log!(INFO, "skill checks filtered by mods");
     }
     if wants[1]
-        && loader.link_feature(
-            "comfort",
+        && loader.link_fused(
+            &COMFORT_FUSE,
             Target::Pinned(pinned::comfort::BASE_REGISTER),
             &COMFORT_NEXT,
             register,
@@ -279,8 +266,8 @@ pub(crate) fn link(loader: &'static Loader) {
     }
     if wants[2]
         && let Some(player_level) = player_level
-        && loader.link_feature(
-            "experience",
+        && loader.link_fused(
+            &LEVEL_FUSE,
             player_level,
             &LEVEL_NEXT,
             player_level_link,
@@ -293,43 +280,48 @@ pub(crate) fn link(loader: &'static Loader) {
 }
 
 /// The skill checks' switch.
-static SKILLS_FUSE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("skill checks");
-/// The comfort filters' switch.
-static COMFORT_FUSE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("comfort filters");
+static SKILLS_FUSE: Fuse = Fuse::new("skill checks");
+/// The switch of the comfort link, which the comfort filters and the
+/// comfort rate share.
+static COMFORT_FUSE: Fuse = Fuse::new("comfort");
+/// The switch of the `player_level` link, which the experience filters and
+/// the level writes share; each of them has a switch of its own besides,
+/// so a fault in one leaves the other running.
+static LEVEL_FUSE: Fuse = Fuse::new("experience");
 /// The experience filters' switch.
-static EXPERIENCE_FUSE: crate::engine::fuse::Fuse =
-    crate::engine::fuse::Fuse::new("experience filters");
+static EXPERIENCE_FUSE: Fuse = Fuse::new("experience filters");
 
-unsafe extern "system" fn node_unlocked(node: u32, bits: *const u64, tree: *const u8) -> u8 {
-    let ours = SEALED
-        .get()
-        .is_some_and(|s| s.skills.iter().any(|(n, _)| *n == node));
-    if ours
-        // SAFETY: `node`, `bits` and `tree` are the game's arguments to
-        // `skill.node_unlocked`, passed on unchanged, on the thread the game
-        // called it on, inside the chain whose frame `CALLER_FRAME` took.
-        && let Some(answer) = SKILLS_FUSE.run("a skill check", || unsafe {
-            override_skill(node, bits, tree)
+crate::engine::chains::chain_detour! {
+    /// The table's `skill.node_unlocked(node, bits, tree)`, whether a skill
+    /// node is unlocked: asked of the mods' skill checks for the nodes they
+    /// registered.
+    fn node_unlocked(node: u32, bits: *const u64, tree: *const u8) -> u8;
+    next SKILL_NEXT;
+    |onward| {
+        let ours = SEALED
+            .get()
+            .is_some_and(|s| s.skills.iter().any(|(n, _)| *n == node));
+        if !ours {
+            return onward.call();
+        }
+        onward.run(&SKILLS_FUSE, "a skill check", |onward| {
+            // SAFETY: inside the `node_unlocked` link, on the thread the
+            // game called it on, in the chain whose frame `CALLER_FRAME`
+            // took.
+            unsafe { override_skill(onward, node) }
         })
-    {
-        return answer;
     }
-    // SAFETY: the game's arguments to `skill.node_unlocked`, passed on
-    // unchanged to the rest of the chain, which the slot holds since the
-    // chain is wired before the target jumps here.
-    unsafe { SKILL_NEXT.get()(node, bits, tree) }
 }
 
-/// Answers a skill check a mod asked for, after the rest of the chain.
+/// Answers a skill check of `node` a mod asked for, after the rest of the
+/// chain `onward`.
 ///
 /// # Safety
 ///
-/// - `node`, `bits` and `tree` are the game's arguments to
-///   `skill.node_unlocked`, unchanged.
 /// - Called from the `node_unlocked` detour on the game's calling thread,
 ///   inside the chain whose caller frame the link took.
 #[cold]
-unsafe fn override_skill(node: u32, bits: *const u64, tree: *const u8) -> u8 {
+unsafe fn override_skill(onward: &Onward<u8, impl Fn() -> u8>, node: u32) -> u8 {
     let gate = LOADED.get().map_or(SkillCheck::OTHER, |loader| {
         let frame = (loader.caller_frame)();
         let fly_mode = FLY_MODE.load(Ordering::Relaxed) as u64;
@@ -342,10 +334,7 @@ unsafe fn override_skill(node: u32, bits: *const u64, tree: *const u8) -> u8 {
             SkillCheck::OTHER
         }
     });
-    // SAFETY: the game's arguments to `skill.node_unlocked`, unchanged by the
-    // caller's contract, passed on to the rest of the chain, which the slot
-    // holds since the chain is wired before the target jumps here.
-    let vanilla = unsafe { SKILL_NEXT.get()(node, bits, tree) };
+    let vanilla = onward.call();
     let check = SkillCheck {
         header: Header::of::<SkillCheck>(),
         node: enshwick_core::abi::SkillNode::new(node),
@@ -379,6 +368,10 @@ unsafe fn override_skill(node: u32, bits: *const u64, tree: *const u8) -> u8 {
     vanilla
 }
 
+/// The loader's link on the table's `comfort.base_register`: a comfort
+/// provider's value, filtered by the mods and scaled by the comfort rate.
+/// Written by hand, not by `chain_detour!`, since it passes the rest of the
+/// chain the value it filtered.
 unsafe extern "system" fn register(
     system: *mut u8,
     category: u32,
@@ -418,14 +411,13 @@ unsafe extern "system" fn register(
                 )
             })
     };
-    let comfort = SEALED
-        .get()
-        .and_then(|sealed| COMFORT_FUSE.run("a comfort provider", || filtered(sealed)))
+    let comfort = COMFORT_FUSE
+        .run("a comfort provider", || {
+            let rate = crate::content::rate_links::factor(enshwick_core::abi::RateId::COMFORT);
+            let filtered = SEALED.get().map_or(comfort, filtered);
+            crate::content::rates::scale_comfort(filtered, rate)
+        })
         .unwrap_or(comfort);
-    let comfort = crate::content::rates::scale_comfort(
-        comfort,
-        crate::content::rate_links::factor(enshwick_core::abi::RateId::COMFORT),
-    );
     // SAFETY: the game's arguments to `comfort.base_register`, with `comfort`
     // filtered, an `i32` like the game's own, passed on to the rest of the
     // chain, which the slot holds since the chain is wired before the target
@@ -433,11 +425,38 @@ unsafe extern "system" fn register(
     unsafe { COMFORT_NEXT.get()(system, category, comfort, position) }
 }
 
-unsafe extern "system" fn player_level_link(ctx: *mut u64) {
-    let filtered = SEALED.get().is_some_and(|s| !s.experience.is_empty());
-    let writes = PENDING.any.load(Ordering::Acquire);
-    if (filtered || writes)
-        && let (Some(loader), Some(engine)) = (LOADED.get(), crate::engine::ecs::resolved())
+crate::engine::chains::chain_detour! {
+    /// The entry of the reflected `player_level` system, a system entry
+    /// taking its context: the experience filters and the level writes run
+    /// before vanilla's pass levels the players up.
+    fn player_level_link(ctx: *mut u64) -> ();
+    next LEVEL_NEXT;
+    |onward| {
+        let filtered = SEALED.get().is_some_and(|s| !s.experience.is_empty());
+        let writes = PENDING.any.load(Ordering::Acquire);
+        if filtered || writes {
+            onward.run(&LEVEL_FUSE, "the player level pass", |onward| {
+                // SAFETY: `ctx` is the game's own context of `player_level`,
+                // on the system's thread before vanilla's pass.
+                unsafe { level_pass(ctx, filtered, writes) };
+                onward.call();
+            });
+        } else {
+            onward.call();
+        }
+    }
+}
+
+/// Runs the experience filters when `filtered` and the level writes when
+/// `writes` on the players `player_level` iterates, each under its own
+/// switch, and leaves the iterator where it found it.
+///
+/// # Safety
+///
+/// - `ctx` is null or the live context the game passed to `player_level`,
+///   used on its thread while the system runs, before vanilla's pass.
+unsafe fn level_pass(ctx: *mut u64, filtered: bool, writes: bool) {
+    if let (Some(loader), Some(engine)) = (LOADED.get(), crate::engine::ecs::resolved())
         && !ctx.is_null()
         // SAFETY: `ctx` is non-null (the `is_null` condition) and the live
         // context the game passed to `player_level`, used on its thread while
@@ -469,10 +488,6 @@ unsafe extern "system" fn player_level_link(ctx: *mut u64) {
         // runs.
         unsafe { engine.set_row(ctx, saved) };
     }
-    // SAFETY: `ctx` is the game's argument to `player_level`, passed on
-    // unchanged to the rest of the chain, which the slot holds since the
-    // chain is wired before the target jumps here.
-    unsafe { LEVEL_NEXT.get()(ctx) };
 }
 
 /// What `need_for` needs during one pass.

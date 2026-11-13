@@ -12,8 +12,9 @@ use enshwick_core::content::loot_tables::{
 use enshwick_gamedata::catalogue;
 use rustc_hash::FxHashMap;
 
-use super::{CHANGES, on};
+use super::{CHANGES, UNREADABLE, on};
 use crate::content::data_changes::Key;
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
 
 /// The loader's patches of the loot tables the changes reach: the random
@@ -49,10 +50,7 @@ pub(super) fn loot_patches(
         crate::engine::archive::game(),
         hashes,
     ) else {
-        crate::log!(
-            WARN,
-            "loot changes are off: this build does not reflect the loot tables, or the game's archive does not read"
-        );
+        let _off = loader.fuse_off(&LOOT_FUSE, "the loot table layout", UNREADABLE);
         return Vec::new();
     };
     let items: &'static FxHashMap<u32, Guid> = Box::leak(Box::new(items));
@@ -115,34 +113,41 @@ unsafe extern "system" fn build_loot(
     // SAFETY: `user` is the `LootPatch` `loot_patches` leaked, which lives
     // for the process.
     let patch = unsafe { &*user.cast::<LootPatch>() };
-    let mut bytes = vec![0; base_len];
     // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at `base`,
-    // unchanged for the call.
-    unsafe { enshwick_core::raw::read_bytes_at(base, 0, &mut bytes) };
-    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let sealed = CHANGES.sealed.get()?;
-        let merged = sealed.merged();
-        let value = |id: enshwick_core::ItemId, field: Field, base: f64| {
-            let item = *patch.items.get(&id.get())?;
-            let on = |m| on(sealed.loader, m);
-            let every = merged.value(Key::new(item, field), base, on);
-            let here = Key {
-                entry: patch.table,
-                field,
-                item: Some(item),
-            };
-            merged.value(here, every.unwrap_or(base), on).or(every)
-        };
-        if patch.fill {
-            change_fill_table(&patch.layout, &bytes, &value)
-        } else {
-            change_random_loot(&patch.layout, &bytes, &value)
-        }
-    }));
-    let Ok(Some((built, _))) = built else {
-        return Status::REFUSED;
-    };
-    // SAFETY: `run_patches` passes `out` and `out_len` pointing at locals,
-    // writable for the call.
-    unsafe { crate::content::served::hand_out(built, out, out_len) }
+    // unchanged for the call, and `run_patches` passes `out` and `out_len`
+    // pointing at locals, writable for the call.
+    unsafe {
+        crate::content::served::patched(
+            &LOOT_FUSE,
+            "a loot table patch",
+            (base, base_len),
+            (out, out_len),
+            |bytes| changed_loot(patch, &bytes),
+        )
+    }
 }
+
+fn changed_loot(patch: &LootPatch, bytes: &[u8]) -> Option<Vec<u8>> {
+    let sealed = CHANGES.sealed.get()?;
+    let merged = sealed.merged();
+    let value = |id: enshwick_core::ItemId, field: Field, base: f64| {
+        let item = *patch.items.get(&id.get())?;
+        let on = |m| on(sealed.loader, m);
+        let every = merged.value(Key::new(item, field), base, on);
+        let here = Key {
+            entry: patch.table,
+            field,
+            item: Some(item),
+        };
+        merged.value(here, every.unwrap_or(base), on).or(every)
+    };
+    let changed = if patch.fill {
+        change_fill_table(&patch.layout, bytes, &value)
+    } else {
+        change_random_loot(&patch.layout, bytes, &value)
+    };
+    changed.map(|(built, _)| built)
+}
+
+/// The switch of the loot changes.
+static LOOT_FUSE: Fuse = Fuse::new("loot changes");

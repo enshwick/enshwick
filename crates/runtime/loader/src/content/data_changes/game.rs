@@ -22,6 +22,7 @@ use enshwick_gamedata::catalogue;
 use enshwick_gamedata::reflect::Reflection;
 use rustc_hash::FxHashMap;
 
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use enshwick_base::Relock;
@@ -223,13 +224,19 @@ fn vanilla_items(loader: &Loader) -> Vec<(Guid, ItemTraits)> {
     let items =
         crate::engine::archive::game().and_then(|archive| items_in(&loader.reflection, archive));
     items.unwrap_or_else(|| {
-        crate::log!(
-            WARN,
-            "changes of selected items are off: this build does not reflect what they read, or the game's archive does not read"
-        );
+        let what = "the item values a selection reads";
+        let _off = loader.fuse_off(&SELECTED_ITEMS_FUSE, what, UNREADABLE);
         Vec::new()
     })
 }
+
+/// The switch of the changes of selected items, which needs the values a
+/// selection reads of every vanilla item.
+static SELECTED_ITEMS_FUSE: Fuse = Fuse::new("changes of selected items");
+
+/// Why a data change is off where the build or the archive lacks what it
+/// reads, after what it lacks.
+const UNREADABLE: &str = "are not reflected, or the game's archive does not read";
 
 /// Every item of `archive` with what a selection reads of it, by the
 /// offsets `reflection` gives; `None` when it lacks one.

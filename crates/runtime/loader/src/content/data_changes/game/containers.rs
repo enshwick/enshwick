@@ -17,8 +17,9 @@ use enshwick_core::content::containers::{ContainerLayout, container_slots, resiz
 use enshwick_gamedata::catalogue;
 use rustc_hash::FxHashMap;
 
-use super::{CHANGES, on};
+use super::{CHANGES, UNREADABLE, on};
 use crate::content::data_changes::{Key, grown_slots, template_slots};
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
 
 /// The loader's patches of the templates the items with changed container
@@ -53,10 +54,7 @@ pub(super) fn container_patches(
         placed,
         crate::engine::archive::game(),
     ) else {
-        crate::log!(
-            WARN,
-            "container slot changes are off: this build does not reflect containers, or the game's archive does not read"
-        );
+        let _off = loader.fuse_off(&CONTAINERS_FUSE, "the container layout", UNREADABLE);
         return Vec::new();
     };
     let mut templates: Vec<(Guid, Vec<Guid>)> = Vec::new();
@@ -136,18 +134,22 @@ unsafe extern "system" fn build_container(
     // SAFETY: `user` is the `ContainerPatch` `container_patches` leaked,
     // which lives for the process.
     let patch = unsafe { &*user.cast::<ContainerPatch>() };
-    let mut bytes = vec![0; base_len];
     // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at `base`,
-    // unchanged for the call.
-    unsafe { enshwick_core::raw::read_bytes_at(base, 0, &mut bytes) };
-    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| resized(patch, &bytes)));
-    let Ok(Some(built)) = built else {
-        return Status::REFUSED;
-    };
-    // SAFETY: `run_patches` passes `out` and `out_len` pointing at locals,
-    // writable for the call.
-    unsafe { crate::content::served::hand_out(built, out, out_len) }
+    // unchanged for the call, and `run_patches` passes `out` and `out_len`
+    // pointing at locals, writable for the call.
+    unsafe {
+        crate::content::served::patched(
+            &CONTAINERS_FUSE,
+            "a container patch",
+            (base, base_len),
+            (out, out_len),
+            |bytes| resized(patch, &bytes),
+        )
+    }
 }
+
+/// The switch of the container slot changes.
+static CONTAINERS_FUSE: Fuse = Fuse::new("container slot changes");
 
 /// The template `bytes` with the slots its changed items give it.
 fn resized(patch: &ContainerPatch, bytes: &[u8]) -> Option<Vec<u8>> {

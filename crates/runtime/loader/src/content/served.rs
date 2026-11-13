@@ -29,10 +29,11 @@ use enshwick_core::abi::{HookFlags, ResourceKey, ResourcePatchFn, Status};
 use enshwick_core::raw::{read_at, write_at};
 #[cfg(test)]
 pub(crate) use patches::enter_build;
-pub(crate) use patches::{builds_begun, hand_out, lend, rebuild, scratch, served_now};
+pub(crate) use patches::{builds_begun, hand_out, lend, patched, rebuild, scratch, served_now};
 use texts::{TEXTS, seal_texts};
 
 use crate::engine::chains::Next;
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
@@ -105,9 +106,11 @@ struct State {
     built_by: Vec<ModIndex>,
 }
 
-/// The served resources' switch.
-static RESOURCES_FUSE: crate::engine::fuse::Fuse =
-    crate::engine::fuse::Fuse::new("served resources");
+/// The served resources' switch, of their three links on the resource
+/// database: they arm together or not at all.
+static RESOURCES_FUSE: Fuse = Fuse::new("served resources");
+/// The switch of the stand-ins for the items of removed mods.
+static STAND_INS_FUSE: Fuse = Fuse::new("item stand-ins");
 
 /// Registrations while mods initialise.
 static PENDING: Mutex<Vec<Served>> = Mutex::new(Vec::new());
@@ -123,9 +126,6 @@ static OPEN_NEXT: Next<OpenFn> = unsafe { Next::new() };
 // `resource.resolve`, and `seal_and_link` uses this slot only as that
 // function's next.
 static RESOLVE_NEXT: Next<ResolveFn> = unsafe { Next::new() };
-// SAFETY: `KeyFn` is the signature of the build table's `resource.key_of`,
-// and `seal_and_link` uses this slot only as that function's next.
-static KEY_NEXT: Next<KeyFn> = unsafe { Next::new() };
 
 type OpenFn = unsafe extern "system" fn(
     out: *mut u32,
@@ -134,7 +134,6 @@ type OpenFn = unsafe extern "system" fn(
 ) -> *mut u32;
 type ResolveFn =
     unsafe extern "system" fn(out: *mut [u64; 3], database: *mut u8, handle: u32) -> *mut [u64; 3];
-type KeyFn = unsafe extern "system" fn(out: *mut u8, database: *mut u8, handle: u32) -> *mut u8;
 
 /// Adds mod `owner`'s patch of `key`; refused after init and for a key another
 /// mod serves from a different base.
@@ -232,26 +231,9 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     if mods_serve_recipes() {
         crate::engine::code::lift_workshop_limit(loader);
     }
-    let none = HookFlags::NONE;
-    let _linked = loader.link_feature(
-        "served resources (resource.open)",
-        Target::Pinned(pinned::resource::OPEN),
-        &OPEN_NEXT,
-        open,
-        none,
-    ) && loader.link_feature(
-        "served resources (resource.resolve)",
-        Target::Pinned(pinned::resource::RESOLVE),
-        &RESOLVE_NEXT,
-        resolve,
-        none,
-    ) && loader.link_feature(
-        "served resources (resource.key_of)",
-        Target::Pinned(pinned::resource::KEY_OF),
-        &KEY_NEXT,
-        key_of,
-        none,
-    );
+    if !link_resources(loader) {
+        return;
+    }
     crate::log!(INFO, "{count} resources served by mods");
     if !renames.is_empty() {
         crate::log!(
@@ -272,6 +254,21 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
             "{standing} items of removed mods stand in until their mods are back"
         );
     }
+}
+
+/// Links the resource database's open, resolve and key lookup, all three or
+/// none: a served handle one of them does not know would reach the game.
+/// Whether they linked.
+fn link_resources(loader: &Loader) -> bool {
+    let none = HookFlags::NONE;
+    let (open_at, resolve_at, key_at) = (
+        Target::Pinned(pinned::resource::OPEN),
+        Target::Pinned(pinned::resource::RESOLVE),
+        Target::Pinned(pinned::resource::KEY_OF),
+    );
+    loader.link_fused(&RESOURCES_FUSE, open_at, &OPEN_NEXT, open, none)
+        && loader.link_fused(&RESOURCES_FUSE, resolve_at, &RESOLVE_NEXT, resolve, none)
+        && loader.link_fused(&RESOURCES_FUSE, key_at, &KEY_NEXT, key_of, none)
 }
 
 /// Adds the loader's stand-ins for the items of removed mods to `served`,
@@ -365,18 +362,18 @@ unsafe extern "system" fn build_stand_in(
     // SAFETY: `user` is the builder `serve_stand_ins` leaked for it, which
     // lives for the process.
     let builder = unsafe { &*user.cast::<crate::content::standins::Builder>() };
-    let mut copy = vec![0; base_len];
     // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at `base`,
-    // unchanged for the call.
-    unsafe { enshwick_core::raw::read_bytes_at(base, 0, &mut copy) };
-    let base = copy;
-    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| builder(&base)));
-    let Ok(Some(bytes)) = built else {
-        return Status::REFUSED;
-    };
-    // SAFETY: `run_patches` passes `out` and `out_len` pointing at locals,
-    // writable for the call.
-    unsafe { hand_out(bytes, out, out_len) }
+    // unchanged for the call, and `run_patches` passes `out` and `out_len`
+    // pointing at locals, writable for the call.
+    unsafe {
+        patched(
+            &STAND_INS_FUSE,
+            "a stand-in build",
+            (base, base_len),
+            (out, out_len),
+            |base| builder(&base),
+        )
+    }
 }
 
 /// The served resources of type `type_hash` that are new, not a vanilla
@@ -596,6 +593,10 @@ unsafe fn read_key(key: *const ResourceKey) -> ResourceKey {
     }
 }
 
+/// The loader's link on the table's `resource.open`: a served key opens its
+/// base and gets a handle of the loader's, a renamed or aliased key opens
+/// the key it reads as. Written by hand, not by `chain_detour!`, since it
+/// calls the rest of the chain with keys of its own.
 unsafe extern "system" fn open(
     out: *mut u32,
     database: *mut u8,
@@ -642,8 +643,10 @@ unsafe extern "system" fn open(
             // SAFETY: `out` is non-null by the check before it and is the
             // open's u32 out handle, which the game's open just wrote; zero
             // when the open failed, which `opened` skips.
-            crate::content::item_kinds::ITEMS
-                .opened(unsafe { read_at(out.cast_const().cast(), 0) });
+            let handle = unsafe { read_at(out.cast_const().cast(), 0) };
+            let _noted = RESOURCES_FUSE.run("an item open", || {
+                crate::content::item_kinds::ITEMS.opened(handle);
+            });
         }
         return opened;
     };
@@ -670,6 +673,11 @@ unsafe extern "system" fn open(
     out
 }
 
+/// The loader's link on the table's `resource.resolve`: a served handle
+/// resolves to the resource built from its base, every other one as the
+/// game has it. Written by hand, not by `chain_detour!`, since a build
+/// calls the rest of the chain with its base's handle, and a served handle
+/// never reaches the game, even once the served resources are off.
 unsafe extern "system" fn resolve(
     out: *mut [u64; 3],
     database: *mut u8,
@@ -685,8 +693,12 @@ unsafe extern "system" fn resolve(
             // resolve's out triple of three u64, which the game's resolve
             // just wrote.
             let [data, len, _] = unsafe { read_at::<[u64; 3]>(out.cast_const().cast(), 0) };
-            if data != 0 && crate::content::item_kinds::ITEMS.take_opened(handle) {
-                record_item(data, len);
+            if data != 0 {
+                let _noted = RESOURCES_FUSE.run("an item resolve", || {
+                    if crate::content::item_kinds::ITEMS.take_opened(handle) {
+                        record_item(data, len);
+                    }
+                });
             }
         }
         return resolved;
@@ -797,24 +809,30 @@ fn hex(bytes: &[u8]) -> String {
         })
 }
 
-unsafe extern "system" fn key_of(out: *mut u8, database: *mut u8, handle: u32) -> *mut u8 {
-    let Some(entry) = served(handle) else {
-        // SAFETY: this detour runs only as the `resource.key_of` link, so the
-        // slot holds the next function of that signature; the game's
-        // arguments pass unchanged.
-        return unsafe { KEY_NEXT.get()(out, database, handle) };
-    };
-    if !out.is_null() {
-        // Status byte, a word, then the key padded to 32 bytes, as the game writes it.
-        let mut bytes = [0u8; 0x28];
-        bytes[8..24].copy_from_slice(&entry.key.guid);
-        bytes[24..28].copy_from_slice(&entry.key.type_hash.to_le_bytes());
-        bytes[28..32].copy_from_slice(&entry.key.part.to_le_bytes());
-        // SAFETY: `out` is non-null by the check before it and is the key
-        // lookup's writable out record of 0x28 bytes.
-        unsafe { write_at(out, 0, bytes) };
+crate::engine::chains::chain_detour! {
+    /// The table's `resource.key_of(out, database, handle)`: a served
+    /// handle's key, as the game writes one, and every other one as the
+    /// game has it. Its work copies a few bytes and cannot panic, so it runs
+    /// under no fuse: a served handle must never reach the game.
+    fn key_of(out: *mut u8, database: *mut u8, handle: u32) -> *mut u8;
+    next KEY_NEXT;
+    |onward| {
+        let Some(entry) = served(handle) else {
+            return onward.call();
+        };
+        if !out.is_null() {
+            // Status byte, a word, then the key padded to 32 bytes, as the
+            // game writes it.
+            let mut bytes = [0u8; 0x28];
+            bytes[8..24].copy_from_slice(&entry.key.guid);
+            bytes[24..28].copy_from_slice(&entry.key.type_hash.to_le_bytes());
+            bytes[28..32].copy_from_slice(&entry.key.part.to_le_bytes());
+            // SAFETY: `out` is non-null by the check before it and is the
+            // key lookup's writable out record of 0x28 bytes.
+            unsafe { write_at(out, 0, bytes) };
+        }
+        out
     }
-    out
 }
 
 mod patches;

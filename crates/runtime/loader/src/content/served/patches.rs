@@ -22,6 +22,7 @@ use super::{
     LOADED, OPEN_NEXT, PENDING, RESOLVE_NEXT, RESOURCES_FUSE, SERVED_LIST, Served, State, hex,
     key_name, mod_on, route,
 };
+use crate::engine::fuse::Fuse;
 use crate::engine::mod_index::ModIndex;
 use enshwick_base::Relock;
 
@@ -271,6 +272,36 @@ pub(crate) unsafe fn hand_out(built: Vec<u8>, out: *mut *const u8, out_len: *mut
     // SAFETY: the caller guarantees `out_len` writable for one `usize`.
     unsafe { out_len.write(len) };
     Status::OK
+}
+
+/// What every resource patch of the loader's own does around its edit:
+/// `build` gets a copy of the `base_len` bytes at `base` and runs under
+/// `fuse` as `site`, and the bytes it makes are handed out.
+/// [`Status::REFUSED`] when it makes none, panics, which turns its feature
+/// off, or its feature is off.
+///
+/// # Safety
+///
+/// - `base` is readable for `base_len` bytes, unchanged for the call, and
+///   `out` and `out_len` are writable for one value each, as
+///   [`ResourcePatchFn`](enshwick_core::abi::ResourcePatchFn) says.
+pub(crate) unsafe fn patched(
+    fuse: &Fuse,
+    site: &str,
+    (base, base_len): (*const u8, usize),
+    (out, out_len): (*mut *const u8, *mut usize),
+    build: impl FnOnce(Vec<u8>) -> Option<Vec<u8>>,
+) -> Status {
+    let mut bytes = vec![0; base_len];
+    // SAFETY: the caller guarantees `base_len` readable bytes at `base`,
+    // unchanged for the call.
+    unsafe { enshwick_core::raw::read_bytes_at(base, 0, &mut bytes) };
+    let Some(made) = fuse.run(site, || build(bytes)).flatten() else {
+        return Status::REFUSED;
+    };
+    // SAFETY: the caller guarantees `out` and `out_len` writable for one
+    // value each.
+    unsafe { hand_out(made, out, out_len) }
 }
 
 /// Gives `bytes` to the build running on this thread, which frees them once
