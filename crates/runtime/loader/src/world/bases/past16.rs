@@ -689,6 +689,10 @@ mod tests {
             (bases::COMFORT_CLEANUP, &PAST16, false),
             (bases::PROPS_CLEANUP, &PAST16, false),
         ];
+        ARMED.store(true, Ordering::Release);
+        assert!(armed(), "armed with the window and its teardown on");
+        ARMED.store(false, Ordering::Release);
+        assert!(!armed());
         let ids: Vec<Symbol> = sites.iter().map(|&(id, ..)| id).collect();
         for client in [false, true] {
             let side = if client { Side::CLIENT } else { Side::SERVER };
