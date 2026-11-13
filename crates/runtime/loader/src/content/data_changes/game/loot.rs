@@ -3,7 +3,7 @@
 
 use core::ffi::c_void;
 
-use enshwick_core::abi::{ResourceKey, Status};
+use enshwick_core::abi::ResourceKey;
 use enshwick_core::content::Guid;
 use enshwick_core::content::changes::Field;
 use enshwick_core::content::loot_tables::{
@@ -14,6 +14,7 @@ use rustc_hash::FxHashMap;
 
 use super::{CHANGES, UNREADABLE, on};
 use crate::content::data_changes::Key;
+use crate::content::served::OwnPatch;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
 
@@ -56,14 +57,14 @@ pub(super) fn loot_patches(
     let items: &'static FxHashMap<u32, Guid> = Box::leak(Box::new(items));
     let mut patches = Vec::new();
     let mut add = |key: ResourceKey, fill: bool| {
-        let patch: &'static LootPatch = Box::leak(Box::new(LootPatch {
+        let (apply, user) = crate::content::served::own_patch(LootPatch {
             layout,
             items,
             fill,
             table: Guid(key.guid),
-        }));
-        let user = core::ptr::from_ref(patch).cast_mut().cast::<c_void>();
-        patches.push((key, build_loot as enshwick_core::abi::ResourcePatchFn, user));
+            fuse: Fuse::new(LOOT_FUSE.feature()),
+        });
+        patches.push((key, apply, user));
     };
     for key in archive.keys_of(random) {
         add(key, false);
@@ -99,31 +100,21 @@ struct LootPatch {
     /// The table's GUID: changes of this table alone apply after the
     /// changes of every table.
     table: Guid,
+    /// This table's switch alone.
+    fuse: Fuse,
 }
 
 /// The loader's patch of a loot table: the base with the values the
 /// changes of the mods still on give its items.
-unsafe extern "system" fn build_loot(
-    base: *const u8,
-    base_len: usize,
-    user: *mut c_void,
-    out: *mut *const u8,
-    out_len: *mut usize,
-) -> Status {
-    // SAFETY: `user` is the `LootPatch` `loot_patches` leaked, which lives
-    // for the process.
-    let patch = unsafe { &*user.cast::<LootPatch>() };
-    // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at `base`,
-    // unchanged for the call, and `run_patches` passes `out` and `out_len`
-    // pointing at locals, writable for the call.
-    unsafe {
-        crate::content::served::patched(
-            &LOOT_FUSE,
-            "a loot table patch",
-            (base, base_len),
-            (out, out_len),
-            |bytes| changed_loot(patch, &bytes),
-        )
+impl OwnPatch for LootPatch {
+    const SITE: &'static str = "a loot table patch";
+
+    fn fuse(&self) -> &Fuse {
+        &self.fuse
+    }
+
+    fn build(&self, bytes: Vec<u8>) -> Option<Vec<u8>> {
+        changed_loot(self, &bytes)
     }
 }
 
@@ -149,5 +140,6 @@ fn changed_loot(patch: &LootPatch, bytes: &[u8]) -> Option<Vec<u8>> {
     changed.map(|(built, _)| built)
 }
 
-/// The switch of the loot changes.
+/// The switch of the loot changes where the build lacks what they read;
+/// each table's patch has a switch of its own besides.
 static LOOT_FUSE: Fuse = Fuse::new("loot changes");

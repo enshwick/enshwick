@@ -29,7 +29,9 @@ use enshwick_core::abi::{HookFlags, ResourceKey, ResourcePatchFn, Status};
 use enshwick_core::raw::{read_at, write_at};
 #[cfg(test)]
 pub(crate) use patches::enter_build;
-pub(crate) use patches::{builds_begun, hand_out, lend, patched, rebuild, scratch, served_now};
+pub(crate) use patches::{
+    OwnPatch, builds_begun, hand_out, lend, own_patch, rebuild, scratch, served_now,
+};
 use texts::{TEXTS, seal_texts};
 
 use crate::engine::chains::Next;
@@ -107,10 +109,14 @@ struct State {
 }
 
 /// The served resources' switch, of their three links on the resource
-/// database: they arm together or not at all.
+/// database: they arm together or not at all. Only a failed check or link
+/// turns it off; the work inside the links runs under [`SERVING_FUSE`].
 static RESOURCES_FUSE: Fuse = Fuse::new("served resources");
-/// The switch of the stand-ins for the items of removed mods.
-static STAND_INS_FUSE: Fuse = Fuse::new("item stand-ins");
+/// The switch of the served resources' work inside their links: a panic
+/// there turns it off and leaves the links wired, since a handle of the
+/// loader's the game already holds must never reach the game's resolve or
+/// key lookup, which would read past the game's table.
+static SERVING_FUSE: Fuse = Fuse::new("served resource builds");
 
 /// Registrations while mods initialise.
 static PENDING: Mutex<Vec<Served>> = Mutex::new(Vec::new());
@@ -279,10 +285,14 @@ fn serve_stand_ins(
     registry: crate::content::standins::Builder,
 ) -> usize {
     fn patch(builder: crate::content::standins::Builder) -> Patch {
+        let (apply, user) = own_patch(StandInPatch {
+            builder,
+            fuse: Fuse::new(STAND_INS),
+        });
         Patch {
             owner: ModIndex::LOADER,
-            apply: build_stand_in,
-            user: Box::into_raw(Box::new(builder)).expose_provenance(),
+            apply,
+            user: user.expose_provenance(),
         }
     }
     let count = items.len();
@@ -351,30 +361,30 @@ fn serve_changes(
     count
 }
 
-/// The loader's own patch: a stand-in built by the builder at `user`.
-unsafe extern "system" fn build_stand_in(
-    base: *const u8,
-    base_len: usize,
-    user: *mut c_void,
-    out: *mut *const u8,
-    out_len: *mut usize,
-) -> Status {
-    // SAFETY: `user` is the builder `serve_stand_ins` leaked for it, which
-    // lives for the process.
-    let builder = unsafe { &*user.cast::<crate::content::standins::Builder>() };
-    // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at `base`,
-    // unchanged for the call, and `run_patches` passes `out` and `out_len`
-    // pointing at locals, writable for the call.
-    unsafe {
-        patched(
-            &STAND_INS_FUSE,
-            "a stand-in build",
-            (base, base_len),
-            (out, out_len),
-            |base| builder(&base),
-        )
+/// The loader's own patch of a stand-in, or of the item registry that lists
+/// them: what its builder makes of the base.
+struct StandInPatch {
+    builder: crate::content::standins::Builder,
+    /// This patch's switch alone: a stand-in that panics is refused, and
+    /// the others, and the registry that lists them, keep building, so the
+    /// items they stand in for keep their stacks in the save.
+    fuse: Fuse,
+}
+
+impl OwnPatch for StandInPatch {
+    const SITE: &'static str = "a stand-in build";
+
+    fn fuse(&self) -> &Fuse {
+        &self.fuse
+    }
+
+    fn build(&self, base: Vec<u8>) -> Option<Vec<u8>> {
+        (self.builder)(&base)
     }
 }
+
+/// The feature every stand-in's switch names.
+const STAND_INS: &str = "item stand-ins";
 
 /// The served resources of type `type_hash` that are new, not a vanilla
 /// one changed, whose mods are on.
@@ -609,7 +619,7 @@ unsafe extern "system" fn open(
         // game passes the open, which it owns for the call.
         Some(unsafe { read_key(key) })
     };
-    let decided = RESOURCES_FUSE.run("a resource open", || {
+    let decided = SERVING_FUSE.run("a resource open", || {
         wanted.as_ref().map_or((None, None, None), route)
     });
     let Some((found, new, aliased)) = decided else {
@@ -644,7 +654,7 @@ unsafe extern "system" fn open(
             // open's u32 out handle, which the game's open just wrote; zero
             // when the open failed, which `opened` skips.
             let handle = unsafe { read_at(out.cast_const().cast(), 0) };
-            let _noted = RESOURCES_FUSE.run("an item open", || {
+            let _noted = SERVING_FUSE.run("an item open", || {
                 crate::content::item_kinds::ITEMS.opened(handle);
             });
         }
@@ -694,7 +704,7 @@ unsafe extern "system" fn resolve(
             // just wrote.
             let [data, len, _] = unsafe { read_at::<[u64; 3]>(out.cast_const().cast(), 0) };
             if data != 0 {
-                let _noted = RESOURCES_FUSE.run("an item resolve", || {
+                let _noted = SERVING_FUSE.run("an item resolve", || {
                     if crate::content::item_kinds::ITEMS.take_opened(handle) {
                         record_item(data, len);
                     }
@@ -705,7 +715,7 @@ unsafe extern "system" fn resolve(
     };
     // A served handle never reaches the game's resolve, even once the
     // resources are off: it would read past the game's table.
-    let result = RESOURCES_FUSE
+    let result = SERVING_FUSE
         .run("a resource build", || build(entry, database))
         .flatten()
         .map_or([0; 3], |(data, len)| [data as u64, len as u64, RESIDENT]);

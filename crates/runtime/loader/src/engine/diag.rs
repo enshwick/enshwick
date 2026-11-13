@@ -31,9 +31,11 @@ use enshwick_base::Relock;
 pub const SAMPLE_EVERY: u64 = 256;
 /// Mods turned off that the summary remembers; older ones are dropped.
 const HISTORY: usize = 64;
-/// Loader parts off that the summary remembers. A test process lists the
-/// parts of every test in one list, which [`HISTORY`] would fill before
-/// the later tests' parts.
+/// Loader parts off that the summary remembers: [`HISTORY`], but in a test
+/// process, where CI runs the Windows tests one after another and every
+/// test lists its parts in the one list, which [`HISTORY`] would fill
+/// before the later tests' parts. [`keep_part`]'s own test holds the
+/// shipped [`HISTORY`].
 const PARTS_HISTORY: usize = if cfg!(test) { 4096 } else { HISTORY };
 
 /// Counting and timing, fixed by the settings read at start.
@@ -118,7 +120,12 @@ pub struct PartOff {
 /// summary and the Mods screen. A part keeps its first reason; past
 /// [`PARTS_HISTORY`] parts, later ones reach only the log.
 pub fn part_off(part: &str, reason: &str) {
-    keep_part(&mut PARTS_OFF.relock(), part, reason, now());
+    keep_part(
+        &mut PARTS_OFF.relock(),
+        PARTS_HISTORY,
+        (part, reason),
+        now(),
+    );
     ANY_PART_OFF.store(true, Ordering::Release);
 }
 
@@ -129,9 +136,9 @@ pub fn any_part_off() -> bool {
 }
 
 /// Adds `part` off for `reason` at `at` to `parts`, unless it is there or
-/// `parts` is full.
-fn keep_part(parts: &mut Vec<PartOff>, part: &str, reason: &str, at: u64) {
-    if parts.len() == PARTS_HISTORY || parts.iter().any(|p| p.part == part) {
+/// `parts` holds `cap` already.
+fn keep_part(parts: &mut Vec<PartOff>, cap: usize, (part, reason): (&str, &str), at: u64) {
+    if parts.len() >= cap || parts.iter().any(|p| p.part == part) {
         return;
     }
     parts.push(PartOff {
@@ -608,17 +615,13 @@ conflicts:
     #[test]
     fn a_part_off_keeps_its_first_reason_and_the_list_stays_bounded() {
         let mut off = Vec::new();
-        keep_part(
-            &mut off,
-            "map markers",
-            "the loader panicked in the marker pass: boom",
-            1,
-        );
-        keep_part(&mut off, "map markers", "a later reason", 2);
-        for i in 0..PARTS_HISTORY + 2 {
-            keep_part(&mut off, &format!("part {i}"), "off", 3);
+        let first = "the loader panicked in the marker pass: boom";
+        keep_part(&mut off, HISTORY, ("map markers", first), 1);
+        keep_part(&mut off, HISTORY, ("map markers", "a later reason"), 2);
+        for i in 0..HISTORY + 2 {
+            keep_part(&mut off, HISTORY, (&format!("part {i}"), "off"), 3);
         }
-        assert_eq!(off.len(), PARTS_HISTORY);
+        assert_eq!(off.len(), HISTORY, "the shipped cap holds");
         let markers = off.iter().find(|p| p.part == "map markers");
         assert_eq!(
             markers.map(|p| p.reason.as_str()),

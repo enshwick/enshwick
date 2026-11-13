@@ -29,7 +29,7 @@ use enshwick_base::Relock;
 
 use self::containers::container_patches;
 pub(crate) use self::holds::world_event;
-use self::items::{STATS, build_item, item_offsets};
+use self::items::{STATS, item_offsets};
 use self::loot::loot_patches;
 use self::recipes::{menu_patch, recipe_patch, stations, vanilla_recipes};
 use super::{
@@ -94,6 +94,8 @@ static CHANGES: Changes = Changes {
 struct ItemPatch {
     item: Guid,
     offsets: &'static ItemOffsets,
+    /// This item's switch alone.
+    fuse: Fuse,
 }
 
 /// Records mod `owner`'s `change` from `source`; refused once init is over.
@@ -224,7 +226,7 @@ fn vanilla_items(loader: &Loader) -> Vec<(Guid, ItemTraits)> {
     let items =
         crate::engine::archive::game().and_then(|archive| items_in(&loader.reflection, archive));
     items.unwrap_or_else(|| {
-        let what = "the item values a selection reads";
+        let what = "the item layout a selection reads";
         let _off = loader.fuse_off(&SELECTED_ITEMS_FUSE, what, UNREADABLE);
         Vec::new()
     })
@@ -234,9 +236,12 @@ fn vanilla_items(loader: &Loader) -> Vec<(Guid, ItemTraits)> {
 /// selection reads of every vanilla item.
 static SELECTED_ITEMS_FUSE: Fuse = Fuse::new("changes of selected items");
 
+/// The feature each changed item's own switch names.
+const ITEM_CHANGES: &str = "item changes";
+
 /// Why a data change is off where the build or the archive lacks what it
 /// reads, after what it lacks.
-const UNREADABLE: &str = "are not reflected, or the game's archive does not read";
+const UNREADABLE: &str = "is not reflected on this build, or the game's archive does not read";
 
 /// Every item of `archive` with what a selection reads of it, by the
 /// offsets `reflection` gives; `None` when it lacks one.
@@ -409,10 +414,13 @@ pub(crate) fn serve(
     }
     let offsets: &'static ItemOffsets = Box::leak(Box::new(offsets));
     for item in items {
-        let patch: &'static ItemPatch = Box::leak(Box::new(ItemPatch { item, offsets }));
         let key = item.key_by_hash(crate::engine::catalogue::types::ITEM_INFO);
-        let user = core::ptr::from_ref(patch).cast_mut().cast::<c_void>();
-        patches.push((key, build_item as enshwick_core::abi::ResourcePatchFn, user));
+        let (apply, user) = crate::content::served::own_patch(ItemPatch {
+            item,
+            offsets,
+            fuse: Fuse::new(ITEM_CHANGES),
+        });
+        patches.push((key, apply, user));
     }
     if let Some(patch) = recipe_patch(loader) {
         patches.push(patch);

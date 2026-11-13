@@ -19,8 +19,8 @@ use std::sync::atomic::Ordering;
 use enshwick_core::abi::{ResourceKey, Status};
 
 use super::{
-    LOADED, OPEN_NEXT, PENDING, RESOLVE_NEXT, RESOURCES_FUSE, SERVED_LIST, Served, State, hex,
-    key_name, mod_on, route,
+    LOADED, OPEN_NEXT, PENDING, RESOLVE_NEXT, RESOURCES_FUSE, SERVED_LIST, SERVING_FUSE, Served,
+    State, hex, key_name, mod_on, route,
 };
 use crate::engine::fuse::Fuse;
 use crate::engine::mod_index::ModIndex;
@@ -228,9 +228,13 @@ fn note_read(entry: &Served) {
     });
 }
 
-/// Whether the game reads served resources: their links made and not off.
+/// Whether the game reads served resources: their links made, and neither
+/// the links nor the work in them off.
 fn linked() -> bool {
-    !RESOURCES_FUSE.is_off() && OPEN_NEXT.wired().is_some() && RESOLVE_NEXT.wired().is_some()
+    !RESOURCES_FUSE.is_off()
+        && !SERVING_FUSE.is_off()
+        && OPEN_NEXT.wired().is_some()
+        && RESOLVE_NEXT.wired().is_some()
 }
 
 /// Whether patches of `key` run on this thread.
@@ -302,6 +306,55 @@ pub(crate) unsafe fn patched(
     // SAFETY: the caller guarantees `out` and `out_len` writable for one
     // value each.
     unsafe { hand_out(made, out, out_len) }
+}
+
+/// One of the loader's own resource patches: what it needs, leaked for the
+/// process by [`own_patch`], and the edit it makes of a base.
+pub(crate) trait OwnPatch: Sync + 'static {
+    /// The site a panic of [`OwnPatch::build`] names.
+    const SITE: &'static str;
+
+    /// The switch the patch builds under. A patch of one key of many has a
+    /// switch of its own, so a panic refuses that key alone and the other
+    /// keys keep their changes, which the save would otherwise lose.
+    fn fuse(&self) -> &Fuse;
+
+    /// The resource `base` with the patch's edit; `None` leaves it be.
+    fn build(&self, base: Vec<u8>) -> Option<Vec<u8>>;
+}
+
+/// The function and user value of a loader patch that builds with `patch`,
+/// leaked for the process.
+pub(crate) fn own_patch<P: OwnPatch>(
+    patch: P,
+) -> (enshwick_core::abi::ResourcePatchFn, *mut core::ffi::c_void) {
+    (apply_own::<P>, Box::into_raw(Box::new(patch)).cast())
+}
+
+/// The patch [`own_patch`] made: [`OwnPatch::build`] under its switch, by
+/// [`patched`].
+unsafe extern "system" fn apply_own<P: OwnPatch>(
+    base: *const u8,
+    base_len: usize,
+    user: *mut core::ffi::c_void,
+    out: *mut *const u8,
+    out_len: *mut usize,
+) -> Status {
+    // SAFETY: `user` is the `P` `own_patch` leaked with this function, which
+    // lives for the process.
+    let patch = unsafe { &*user.cast::<P>() };
+    // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at `base`,
+    // unchanged for the call, and `run_patches` passes `out` and `out_len`
+    // pointing at locals, writable for the call.
+    unsafe {
+        patched(
+            patch.fuse(),
+            P::SITE,
+            (base, base_len),
+            (out, out_len),
+            |bytes| patch.build(bytes),
+        )
+    }
 }
 
 /// Gives `bytes` to the build running on this thread, which frees them once

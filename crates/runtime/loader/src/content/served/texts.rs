@@ -90,9 +90,14 @@ pub(super) unsafe fn answer(out: *mut [u64; 3], text: Handed) -> *mut [u64; 3] {
     out
 }
 
-/// The mod texts' switch, of the three text links of the client: they arm
-/// together or not at all.
+/// The switch of the client's text lookup. Each of the three text links has
+/// a switch of its own: a build that lacks one still serves mod texts
+/// through the others.
 static TEXTS_FUSE: Fuse = Fuse::new("mod texts");
+/// The switch of the client's English text lookup.
+static ENGLISH_FUSE: Fuse = Fuse::new("mod English texts");
+/// The switch of the client's text format.
+static FORMAT_FUSE: Fuse = Fuse::new("mod texts in the game's text format");
 
 crate::engine::chains::chain_detour! {
     /// The table's `text.lookup(out, pool, id)`: the text of tag `id` in
@@ -125,7 +130,7 @@ crate::engine::chains::chain_detour! {
     /// tag `id`, the loader's for its own tags.
     fn lookup_english(out: *mut [u64; 3], pool: *mut u8, id: u32) -> *mut [u64; 3];
     next ENGLISH_NEXT;
-    fuse &TEXTS_FUSE, "the English text lookup";
+    fuse &ENGLISH_FUSE, "the English text lookup";
     |onward| {
         match text_for(id, ENGLISH) {
             // SAFETY: `out` is the lookup's own out record argument, null or
@@ -151,7 +156,7 @@ crate::engine::chains::chain_detour! {
         if out.is_null() || !OURS.get().is_some_and(|ours| ours.contains(&id)) {
             return onward.call();
         }
-        onward.run(&TEXTS_FUSE, "the text format", |onward| {
+        onward.run(&FORMAT_FUSE, "the text format", |onward| {
             let Some(text) = text_for(id, LANGUAGE.load(Ordering::Relaxed)) else {
                 return onward.call();
             };
@@ -215,23 +220,40 @@ pub(super) fn seal_texts(loader: &'static Loader) {
         usize::try_from(offset).unwrap_or(usize::MAX),
         Ordering::Relaxed,
     );
-    if link_texts(loader) {
+    if link_texts(loader) > 0 {
         crate::log!(INFO, "{count} texts from mods");
     }
 }
 
 /// Links the client's text lookup, its English lookup and its text format,
-/// all three or none; whether they linked.
-fn link_texts(loader: &Loader) -> bool {
+/// each on its own, so a build that lacks one serves mod texts through the
+/// others; how many linked.
+fn link_texts(loader: &Loader) -> usize {
     let none = HookFlags::NONE;
-    let (lookup_at, english_at, format_at) = (
-        Target::Pinned(pinned::text::LOOKUP),
-        Target::Pinned(pinned::text::LOOKUP_ENGLISH),
-        Target::Pinned(pinned::text::FORMAT),
-    );
-    loader.link_fused(&TEXTS_FUSE, lookup_at, &TEXT_NEXT, lookup, none)
-        && loader.link_fused(&TEXTS_FUSE, english_at, &ENGLISH_NEXT, lookup_english, none)
-        && loader.link_fused(&TEXTS_FUSE, format_at, &FORMAT_NEXT, format, none)
+    let linked = [
+        loader.link_fused(
+            &TEXTS_FUSE,
+            Target::Pinned(pinned::text::LOOKUP),
+            &TEXT_NEXT,
+            lookup,
+            none,
+        ),
+        loader.link_fused(
+            &ENGLISH_FUSE,
+            Target::Pinned(pinned::text::LOOKUP_ENGLISH),
+            &ENGLISH_NEXT,
+            lookup_english,
+            none,
+        ),
+        loader.link_fused(
+            &FORMAT_FUSE,
+            Target::Pinned(pinned::text::FORMAT),
+            &FORMAT_NEXT,
+            format,
+            none,
+        ),
+    ];
+    linked.into_iter().filter(|&made| made).count()
 }
 
 #[cfg(test)]
@@ -303,8 +325,12 @@ mod tests {
         );
 
         let loader = crate::start::tests::bare_loader();
-        assert!(!link_texts(&loader), "this build has no text lookup");
+        assert_eq!(link_texts(&loader), 0, "this build has no text links");
         assert!(TEXTS_FUSE.is_off(), "off by its fuse, not only in the log");
+        assert!(
+            ENGLISH_FUSE.is_off() && FORMAT_FUSE.is_off(),
+            "each link is tried and turned off on its own"
+        );
         let mut chains = loader.chains.relock();
         chains.seal();
         assert!(chains.is_empty());

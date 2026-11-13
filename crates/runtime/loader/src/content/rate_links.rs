@@ -397,6 +397,29 @@ mod tests {
     }
 
     #[test]
+    fn a_panic_in_the_loot_rate_turns_off_the_loot_rate_alone() {
+        let ran = LOOT_FUSE.run("the loot rate", || panic!("broken roll"));
+        assert!(ran.is_none());
+        assert!(LOOT_FUSE.is_off());
+        for other in [
+            &DROPS_FUSE,
+            &FACTORY_FUSE,
+            &EXPERIENCE_FUSE,
+            &KILL_FUSE,
+            &POINTS_FUSE,
+            &RATES_FUSE,
+        ] {
+            assert!(!other.is_off(), "{} keeps running", other.feature());
+        }
+        assert!(
+            crate::engine::diag::parts_off()
+                .iter()
+                .any(|p| p.part == "the loot rate" && p.reason.contains("broken roll")),
+            "the loot rate shows off by its own name"
+        );
+    }
+
+    #[test]
     fn a_function_no_declared_rate_needs_is_never_linked_nor_its_rate_turned_off() {
         static UNWANTED: Fuse = Fuse::new("test unwanted rate");
         let loader = crate::start::tests::bare_loader();

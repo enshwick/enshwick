@@ -235,10 +235,7 @@ pub(crate) fn link(loader: &'static Loader) {
                     .map(enshwick_gamedata::reflect::System::entry),
             )),
             Err(why) => {
-                if wants[2] {
-                    let why = format!("does not match: {why}");
-                    let _off = loader.fuse_off(&LEVEL_FUSE, LEVEL_SYSTEM, &why);
-                }
+                level_unmatched(loader, &LEVEL_FUSE, &why.to_string(), filters);
                 None
             }
         };
@@ -279,11 +276,24 @@ pub(crate) fn link(loader: &'static Loader) {
     }
 }
 
+/// The `player_level` system does not match what the level step reads and
+/// writes, for `why`. Every mod with a world asks for the level writes, so
+/// only experience filters a mod registered (`filters`) turn `fuse` off
+/// where players see it; a write answers MISSING to the mod that asks.
+fn level_unmatched(loader: &Loader, fuse: &'static Fuse, why: &str, filters: bool) {
+    if filters {
+        let _off = loader.fuse_off(fuse, LEVEL_SYSTEM, &format!("does not match: {why}"));
+    }
+}
+
 /// The skill checks' switch.
 static SKILLS_FUSE: Fuse = Fuse::new("skill checks");
 /// The switch of the comfort link, which the comfort filters and the
-/// comfort rate share.
+/// comfort rate share, and of the rate's work in it.
 static COMFORT_FUSE: Fuse = Fuse::new("comfort");
+/// The comfort filters' switch: a fault in them leaves the comfort rate
+/// running.
+static COMFORT_FILTERS_FUSE: Fuse = Fuse::new("comfort filters");
 /// The switch of the `player_level` link, which the experience filters and
 /// the level writes share; each of them has a switch of its own besides,
 /// so a fault in one leaves the other running.
@@ -411,13 +421,16 @@ unsafe extern "system" fn register(
                 )
             })
     };
+    let filtered = SEALED
+        .get()
+        .and_then(|sealed| COMFORT_FILTERS_FUSE.run("a comfort provider", || filtered(sealed)))
+        .unwrap_or(comfort);
     let comfort = COMFORT_FUSE
-        .run("a comfort provider", || {
+        .run("the comfort rate", || {
             let rate = crate::content::rate_links::factor(enshwick_core::abi::RateId::COMFORT);
-            let filtered = SEALED.get().map_or(comfort, filtered);
             crate::content::rates::scale_comfort(filtered, rate)
         })
-        .unwrap_or(comfort);
+        .unwrap_or(filtered);
     // SAFETY: the game's arguments to `comfort.base_register`, with `comfort`
     // filtered, an `i32` like the game's own, passed on to the rest of the
     // chain, which the slot holds since the chain is wired before the target

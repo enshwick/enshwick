@@ -10,7 +10,7 @@
 
 use core::ffi::c_void;
 
-use enshwick_core::abi::{ResourceKey, Status};
+use enshwick_core::abi::ResourceKey;
 use enshwick_core::content::Guid;
 use enshwick_core::content::changes::{Entry, Field};
 use enshwick_core::content::containers::{ContainerLayout, container_slots, resize_container};
@@ -19,6 +19,7 @@ use rustc_hash::FxHashMap;
 
 use super::{CHANGES, UNREADABLE, on};
 use crate::content::data_changes::{Key, grown_slots, template_slots};
+use crate::content::served::OwnPatch;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
 
@@ -99,17 +100,16 @@ pub(super) fn container_patches(
                 .collect::<Vec<_>>()
                 .join(", ")
         );
-        let patch: &'static ContainerPatch = Box::leak(Box::new(ContainerPatch { items, layout }));
         let key = template.key_by_hash(crate::engine::catalogue::types::TEMPLATE);
-        for item in &patch.items {
+        for item in &items {
             placed_by.insert(*item, key);
         }
-        let user = core::ptr::from_ref(patch).cast_mut().cast::<c_void>();
-        patches.push((
-            key,
-            build_container as enshwick_core::abi::ResourcePatchFn,
-            user,
-        ));
+        let (apply, user) = crate::content::served::own_patch(ContainerPatch {
+            items,
+            layout,
+            fuse: Fuse::new(CONTAINERS_FUSE.feature()),
+        });
+        patches.push((key, apply, user));
     }
     let _first = sealed.templates.set(placed_by);
     patches
@@ -120,35 +120,26 @@ pub(super) fn container_patches(
 struct ContainerPatch {
     items: Vec<Guid>,
     layout: ContainerLayout,
+    /// This template's switch alone.
+    fuse: Fuse,
 }
 
 /// The loader's patch of a container's template: the base with the slots
 /// the changes of the mods still on give it, never fewer than it has.
-unsafe extern "system" fn build_container(
-    base: *const u8,
-    base_len: usize,
-    user: *mut c_void,
-    out: *mut *const u8,
-    out_len: *mut usize,
-) -> Status {
-    // SAFETY: `user` is the `ContainerPatch` `container_patches` leaked,
-    // which lives for the process.
-    let patch = unsafe { &*user.cast::<ContainerPatch>() };
-    // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at `base`,
-    // unchanged for the call, and `run_patches` passes `out` and `out_len`
-    // pointing at locals, writable for the call.
-    unsafe {
-        crate::content::served::patched(
-            &CONTAINERS_FUSE,
-            "a container patch",
-            (base, base_len),
-            (out, out_len),
-            |bytes| resized(patch, &bytes),
-        )
+impl OwnPatch for ContainerPatch {
+    const SITE: &'static str = "a container patch";
+
+    fn fuse(&self) -> &Fuse {
+        &self.fuse
+    }
+
+    fn build(&self, bytes: Vec<u8>) -> Option<Vec<u8>> {
+        resized(self, &bytes)
     }
 }
 
-/// The switch of the container slot changes.
+/// The switch of the container slot changes where the build lacks what
+/// they read; each template's patch has a switch of its own besides.
 static CONTAINERS_FUSE: Fuse = Fuse::new("container slot changes");
 
 /// The template `bytes` with the slots its changed items give it.

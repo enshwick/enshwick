@@ -91,12 +91,13 @@ static LOADED: OnceLock<&'static Loader> = OnceLock::new();
 // `textures.request`, and `link` uses this slot only as that function's next.
 static REQUEST_NEXT: Next<RequestFn> = unsafe { Next::new() };
 
-/// The switch of the mod textures, of their three links: the content
-/// request, the UI registry's fill and the key listing, which arm together
-/// or not at all.
+/// The switch of the mod textures, of their two links: the content request
+/// and the UI registry's fill, which arm together or not at all. They need
+/// the key listing of [`TEMPLATES_FUSE`] as well, and pass the requests on
+/// while it is off.
 static TEXTURES_FUSE: Fuse = Fuse::new("mod textures");
 /// The switch of the mod templates, whose one link is the key listing,
-/// made when the mod textures did not make it.
+/// which lists the served UI images too while the mod textures are on.
 static TEMPLATES_FUSE: Fuse = Fuse::new("mod templates");
 
 type RequestFn = unsafe extern "system" fn(requester: *mut u8, requests: *mut Requests);
@@ -288,69 +289,65 @@ pub(crate) fn ready() -> bool {
         && RELISTED.load(Ordering::Acquire)
 }
 
-/// Links the content request, the key listing and the UI registry's fill
-/// on a client that serves UI images; on any side that serves templates of
-/// its own, the key listing alone when the images did not link it, so the
-/// game registers them.
+/// Links the key listing on any side that serves templates or UI images of
+/// its own, so the game registers them, and the content request and the UI
+/// registry's fill on a client that serves UI images.
 pub(crate) fn link(loader: &'static Loader) {
     let images = loader.side == Side::CLIENT
         && !crate::content::served::new_keys_of_type(UI_IMAGE).is_empty();
-    let textures = images && {
-        let _first = LOADED.set(loader);
-        link_textures(loader)
-    };
-    if textures {
-        crate::log!(INFO, "mod textures: linked for the served UI images");
-    }
     let templates = !crate::content::served::new_keys_of_type(TEMPLATE).is_empty()
         || !crate::content::served::orphan_templates().is_empty();
-    if templates && !textures {
-        link_templates(loader);
+    if !images && !templates {
+        return;
+    }
+    let listed = link_keys(loader);
+    if !images {
+        return;
+    }
+    if !listed {
+        let why = "is off, and the game would not list the served UI images";
+        let _off = loader.fuse_off(&TEXTURES_FUSE, TEMPLATES_FUSE.feature(), why);
+        return;
+    }
+    let _first = LOADED.set(loader);
+    if link_textures(loader) {
+        crate::log!(INFO, "mod textures: linked for the served UI images");
     }
 }
 
-/// Links the content request, the UI registry's fill and the key listing,
-/// all three or none, once their code and layout check out; whether they
-/// linked. The key listing links last: a target links once for the loader,
-/// so the templates can take it only while the textures have not.
+/// Links the content request and the UI registry's fill, both or none, once
+/// their code and layout check out; whether they linked.
 fn link_textures(loader: &Loader) -> bool {
     if layout(loader).is_none() {
         return false;
     }
     let none = HookFlags::NONE;
-    let (request_at, fill_at, keys_at) = (
+    let (request_at, fill_at) = (
         Target::Pinned(pinned::textures::REQUEST),
         Target::Pinned(pinned::textures::REGISTRY_FILL),
-        Target::Pinned(pinned::textures::KEYS),
     );
     loader.link_fused(&TEXTURES_FUSE, request_at, &REQUEST_NEXT, request, none)
         && loader.link_fused(&TEXTURES_FUSE, fill_at, &FILL_NEXT, fill, none)
-        && loader.link_fused(&TEXTURES_FUSE, keys_at, &KEYS_NEXT, keys, none)
 }
 
-/// Links the key listing alone, for served templates, once its code and key
-/// size check out.
-fn link_templates(loader: &Loader) {
+/// Links the key listing, for the served templates and UI images, once its
+/// code and key size check out; whether it linked.
+fn link_keys(loader: &Loader) -> bool {
     if !loader.code_holds(pinned::textures::KEYS) {
         let _off = loader.fuse_off(&TEMPLATES_FUSE, pinned::textures::KEYS.id(), UNKNOWN_CODE);
-        return;
+        return false;
     }
     if loader.offset(pinned::textures::KEY_SIZE) != Some(KEY) {
         let id = pinned::textures::KEY_SIZE.id();
         let _off = loader.fuse_off(&TEMPLATES_FUSE, id, &format!("is not {KEY} bytes"));
-        return;
+        return false;
     }
     let keys_at = Target::Pinned(pinned::textures::KEYS);
-    let none = HookFlags::NONE;
-    if loader.link_fused(
-        &TEMPLATES_FUSE,
-        keys_at,
-        &TEMPLATE_KEYS_NEXT,
-        template_keys,
-        none,
-    ) {
-        crate::log!(INFO, "mod templates: linked for the served templates");
+    let linked = loader.link_fused(&TEMPLATES_FUSE, keys_at, &KEYS_NEXT, keys, HookFlags::NONE);
+    if linked {
+        crate::log!(INFO, "mod templates: the key listing is linked");
     }
+    linked
 }
 
 /// The loader's link on the table's `textures.request`: answers the
@@ -363,7 +360,7 @@ unsafe extern "system" fn request(requester: *mut u8, requests: *mut Requests) {
     let layout = LAYOUT.get().copied().flatten();
     let Some(content) = content
         .as_ref()
-        .filter(|m| !m.is_empty() && !TEXTURES_FUSE.is_off())
+        .filter(|m| !m.is_empty() && !TEXTURES_FUSE.is_off() && !TEMPLATES_FUSE.is_off())
     else {
         // SAFETY: this detour runs only as the `textures.request` link, so
         // the slot holds the next function of that signature; the game's
@@ -546,35 +543,18 @@ unsafe fn post(layout: &Layout, requester: *mut u8, code: u8, context: [u8; 16])
 
 crate::engine::chains::chain_detour! {
     /// The table's `textures.keys(out, database, type, found)`, the
-    /// database's key listing of a type, as the mod textures link it: their
-    /// content request and UI registry's fill arm with it, so the served UI
-    /// images join the listing, and so do the served templates.
+    /// database's key listing of a type: the served templates join it, and
+    /// so do the served UI images while the mod textures are on. It belongs
+    /// to the mod templates, so a fault in the textures leaves the
+    /// templates listed.
     fn keys(out: *mut KeysOut, database: *mut u8, type_hash: u32, found: *mut u32) -> *mut KeysOut;
     next KEYS_NEXT;
-    fuse &TEXTURES_FUSE, "the keys";
+    fuse &TEMPLATES_FUSE, "the keys";
     |onward| {
+        let images = !TEXTURES_FUSE.is_off() && REQUEST_NEXT.wired().is_some();
         // SAFETY: the game's own listing result, written by the rest of the
         // chain, on the listing's thread.
-        unsafe { listed(onward, out, type_hash, true) }
-    }
-}
-
-crate::engine::chains::chain_detour! {
-    /// The table's `textures.keys(out, database, type, found)`, as the mod
-    /// templates link it when the mod textures did not: the served
-    /// templates join the listing.
-    fn template_keys(
-        out: *mut KeysOut,
-        database: *mut u8,
-        type_hash: u32,
-        found: *mut u32,
-    ) -> *mut KeysOut;
-    next TEMPLATE_KEYS_NEXT;
-    fuse &TEMPLATES_FUSE, "the template keys";
-    |onward| {
-        // SAFETY: the game's own listing result, written by the rest of the
-        // chain, on the listing's thread.
-        unsafe { listed(onward, out, type_hash, false) }
+        unsafe { listed(onward, out, type_hash, images) }
     }
 }
 
@@ -808,7 +788,7 @@ mod tests {
     #[test]
     fn textures_and_templates_whose_code_does_not_hold_are_off_by_their_own_fuses() {
         let loader = crate::start::tests::bare_loader();
-        link_templates(&loader);
+        assert!(!link_keys(&loader));
         assert!(TEMPLATES_FUSE.is_off());
         assert!(
             !TEXTURES_FUSE.is_off(),
@@ -829,6 +809,14 @@ mod tests {
         let mut chains = loader.chains.relock();
         chains.seal();
         assert!(chains.is_empty());
+    }
+
+    #[test]
+    fn the_key_listing_lists_templates_whether_or_not_the_textures_are_on() {
+        assert!(lists(TEMPLATE, false), "templates list without the images");
+        assert!(lists(TEMPLATE, true));
+        assert!(!lists(UI_IMAGE, false), "images list only while on");
+        assert!(lists(UI_IMAGE, true));
     }
 
     #[test]

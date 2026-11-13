@@ -1,15 +1,14 @@
 //! The loader's patch of each changed item: its stats and stack size, and
 //! the raise and kept size it notes.
 
-use core::ffi::c_void;
-
-use enshwick_core::abi::Status;
 use enshwick_core::content::changes::Field;
 use enshwick_gamedata::catalogue;
 use rustc_hash::FxHashMap;
 
 use super::{CHANGES, ItemPatch, on};
 use crate::content::data_changes::{ItemOffsets, Key, Raised, credited, edit_item, served};
+use crate::content::served::OwnPatch;
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use enshwick_base::Relock;
@@ -71,35 +70,18 @@ pub(super) fn item_offsets(loader: &Loader) -> ItemOffsets {
 }
 
 /// The loader's patch of an item: the base with its changed values.
-pub(super) unsafe extern "system" fn build_item(
-    base: *const u8,
-    base_len: usize,
-    user: *mut c_void,
-    out: *mut *const u8,
-    out_len: *mut usize,
-) -> Status {
-    // SAFETY: `user` is the `ItemPatch` `serve` leaked for this key, which
-    // lives for the process.
-    let patch = unsafe { &*user.cast::<ItemPatch>() };
-    // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at `base`,
-    // unchanged for the call, and `run_patches` passes `out` and `out_len`
-    // pointing at locals, writable for the call.
-    unsafe {
-        crate::content::served::patched(
-            &ITEMS_FUSE,
-            "an item patch",
-            (base, base_len),
-            (out, out_len),
-            |mut bytes| {
-                changed_item(patch, &mut bytes);
-                Some(bytes)
-            },
-        )
+impl OwnPatch for ItemPatch {
+    const SITE: &'static str = "an item patch";
+
+    fn fuse(&self) -> &Fuse {
+        &self.fuse
+    }
+
+    fn build(&self, mut bytes: Vec<u8>) -> Option<Vec<u8>> {
+        changed_item(self, &mut bytes);
+        Some(bytes)
     }
 }
-
-/// The switch of the item changes.
-static ITEMS_FUSE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("item changes");
 
 /// Writes the changed stack size into the item `bytes`, and notes a raise.
 fn changed_item(patch: &ItemPatch, bytes: &mut [u8]) {

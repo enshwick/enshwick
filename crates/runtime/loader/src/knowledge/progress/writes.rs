@@ -190,7 +190,8 @@ pub(crate) fn write(
         }
         return WRITERS.add(owner).map_err(Status::from);
     }
-    if !PENDING.linked.load(Ordering::Relaxed) || WRITES_FUSE.is_off() {
+    if !PENDING.linked.load(Ordering::Relaxed) || WRITES_FUSE.is_off() || super::LEVEL_FUSE.is_off()
+    {
         return Err(Status::MISSING);
     }
     if !WRITERS.sealed().is_some_and(|mods| mods.contains(&owner)) {
@@ -645,7 +646,7 @@ mod tests {
     unsafe extern "system" fn no_pass(_pass: *mut ExperiencePass, _user: *mut c_void) {}
 
     #[test]
-    fn writers_are_sealed_when_experience_filters_link_too_and_only_they_may_write() {
+    fn writers_are_sealed_with_experience_filters_and_no_write_goes_in_once_experience_is_off() {
         let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
         let (filter, writer) = (ModIndex::new(0), ModIndex::new(1));
         super::super::EXPERIENCE_FILTERS
@@ -670,17 +671,25 @@ mod tests {
                 .any(|p| p.part == "experience" && p.reason.starts_with("player_level")),
             "{listed:?}"
         );
-        // As if the level step had linked, which needs a game.
+        // As if the level step had linked before its switch went off.
         PENDING.linked.store(true, Ordering::Relaxed);
         assert_eq!(
-            write(loader, filter, 7, PROGRESS_SET_LEVEL, 3),
-            Err(Status::REFUSED),
-            "a mod that did not ask"
-        );
-        assert_ne!(
             write(loader, writer, 7, PROGRESS_SET_LEVEL, 3),
-            Err(Status::REFUSED),
-            "the mod that asked gets past the seal to the world checks"
+            Err(Status::MISSING),
+            "no step applies a write once experience is off"
         );
+    }
+
+    #[test]
+    fn an_unmatched_level_system_turns_experience_off_only_for_filters_not_for_writers() {
+        static LEVEL: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("test experience");
+        let loader = crate::start::tests::bare_loader();
+        super::super::level_unmatched(&loader, &LEVEL, "a field moved", false);
+        assert!(
+            !LEVEL.is_off(),
+            "every mod with a world asks for the writes, so they alone turn nothing off"
+        );
+        super::super::level_unmatched(&loader, &LEVEL, "a field moved", true);
+        assert!(LEVEL.is_off(), "a filter a mod registered does");
     }
 }

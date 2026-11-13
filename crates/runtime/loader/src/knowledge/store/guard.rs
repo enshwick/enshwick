@@ -55,8 +55,12 @@ struct Site {
     skill_points: usize,
 }
 
-/// The guard's line for the status summary, once its site is in.
+/// The guard's line for the status summary, once it hooked its site and
+/// while it is on.
 pub(crate) fn status() -> Option<String> {
+    if GUARD_FUSE.is_off() {
+        return None;
+    }
     SITE.get()?;
     Some(format!(
         "enforcing; {} refused",
@@ -74,7 +78,7 @@ pub(crate) fn register(
     if FILTERS.is_sealed() {
         return Status::TOO_LATE;
     }
-    if site(loader).is_none() || loader.address(pinned::knowledge::INPUT_CHECK).is_none() {
+    if site(loader).is_none() || !loader.code_holds(pinned::knowledge::INPUT_CHECK) {
         return Status::MISSING;
     }
     FILTERS
@@ -103,22 +107,25 @@ fn site(loader: &Loader) -> Option<Site> {
 /// reads there.
 pub(crate) fn link(loader: &Loader) {
     let _filters = FILTERS.seal();
-    let absent = crate::engine::builds::ABSENT;
+    let unknown = "is not found on this build";
     let Some(site) = site(loader) else {
-        let _off = loader.fuse_off(&GUARD_FUSE, "the knowledge request layout", absent);
+        let _off = loader.fuse_off(&GUARD_FUSE, "the knowledge request layout", unknown);
         return;
     };
     if layout(loader).is_none() {
-        let _off = loader.fuse_off(&GUARD_FUSE, "the knowledge store layout", absent);
+        let _off = loader.fuse_off(&GUARD_FUSE, "the knowledge store layout", unknown);
         return;
     }
     if crate::engine::ecs::engine(loader).is_none() {
-        let _off = loader.fuse_off(&GUARD_FUSE, "the entity reads", absent);
+        let _off = loader.fuse_off(&GUARD_FUSE, "the entity layout", unknown);
         return;
     }
-    let _first = SITE.set(site);
     let at = Target::Pinned(pinned::knowledge::INPUT_CHECK);
+    // The site goes in before the hooks arm, so the check never runs
+    // without it, and only once the link is made, so the status line shows
+    // a guard that hooked.
     if loader.link_mid(&GUARD_FUSE, at, check, HookFlags::NONE) {
+        let _first = SITE.set(site);
         crate::log!(
             INFO,
             "knowledge guard on: refusing what a vanilla client never asks for"
@@ -333,6 +340,20 @@ mod tests {
                 && p.reason.starts_with("the knowledge request layout")),
             "{listed:?}"
         );
+    }
+
+    #[test]
+    fn an_off_guard_has_no_status_line_even_with_its_site_in() {
+        let site = Site {
+            action: 0,
+            kind: 0,
+            value: 0,
+            experience: 0,
+            skill_points: 0,
+        };
+        let _first = SITE.set(site);
+        GUARD_FUSE.blow("the check");
+        assert!(status().is_none(), "an off guard enforces nothing");
     }
 
     #[test]

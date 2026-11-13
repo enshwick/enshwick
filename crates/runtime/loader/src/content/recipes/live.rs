@@ -117,7 +117,9 @@ fn keep_layout(loader: &Loader, resolved: Result<RecipeLayout, impl core::fmt::D
 }
 
 /// Turns disabled recipes off: the recipe registry, the game's or the one
-/// mods served it, does not read with the layout the build reflects.
+/// mods served it, does not read with the layout the build reflects. The
+/// rules in force go too, since nothing applies new ones once it is off,
+/// and the crafting menus and the craft veto must not keep an old world's.
 #[cold]
 fn unreadable(loader: &Loader, registry: &str) {
     let _off = loader.fuse_off(
@@ -125,6 +127,11 @@ fn unreadable(loader: &Loader, registry: &str) {
         registry,
         "does not read with the recipe layout",
     );
+    let generation = DISABLED.load().generation + 1;
+    DISABLED.store(Arc::new(Disabled {
+        ids: FxHashSet::default(),
+        generation,
+    }));
 }
 
 /// The world's own recipe file, while a world runs.
@@ -793,6 +800,19 @@ mod tests {
             rule(owner, RecipeRuleKind::OUTPUT, "a-guid", true),
             Status::MISSING,
             "a build without the layout refuses"
+        );
+    }
+
+    #[test]
+    fn a_registry_that_does_not_read_turns_the_rules_in_force_off_with_the_feature() {
+        disable_for_test(&[5]);
+        assert!(is_disabled(5));
+        let loader = crate::start::tests::bare_loader();
+        unreadable(&loader, "the served recipe registry");
+        assert!(DISABLED_FUSE.is_off());
+        assert!(
+            !is_disabled(5),
+            "an off feature disables nothing, not the last world's rules"
         );
     }
 
