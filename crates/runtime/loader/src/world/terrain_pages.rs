@@ -13,8 +13,6 @@
 //! coarser levels match no slot there and raise nothing.
 
 #[cfg(windows)]
-use core::ffi::c_void;
-#[cfg(windows)]
 use core::sync::atomic::{AtomicBool, Ordering};
 #[cfg(windows)]
 use std::sync::Mutex;
@@ -27,7 +25,7 @@ use crate::base::wire::Drops;
 #[cfg(windows)]
 use crate::engine::fuse::Fuse;
 #[cfg(windows)]
-use crate::engine::loader::Loader;
+use crate::engine::loader::{Loader, Target};
 #[cfg(windows)]
 use crate::engine::pinned;
 #[cfg(windows)]
@@ -332,10 +330,6 @@ fn dropped(count: u64) {
     }
 }
 
-/// The name the log and the Mods screen give the page events.
-#[cfg(windows)]
-const FEATURE: &str = "terrain page events";
-
 /// Links both sites in the page cache's update when a mod listens for a
 /// terrain page event; without either they stay off, and the log and the
 /// Mods screen say why.
@@ -351,98 +345,69 @@ pub(crate) fn link(loader: &Loader) {
     {
         return;
     }
-    match crate::world::voxels::finest_slots(loader) {
-        Ok(()) => {}
-        Err(id) => {
-            loader.feature_off(FEATURE, id.id(), "this build has no column grid slots");
-            return;
-        }
-    }
-    let sites: [(pinned::Symbol, MidFn); 2] = [
-        (pinned::voxel::PAGE_LOADED, page_loaded),
-        (pinned::voxel::PAGE_DROPPED, page_dropped),
-    ];
-    let mut addresses = [0; 2];
-    for ((symbol, _), address) in sites.iter().zip(&mut addresses) {
-        let Some(found) = loader.address(*symbol) else {
-            loader.feature_off(FEATURE, symbol.id(), crate::engine::builds::ABSENT);
-            return;
-        };
-        if !loader.code_holds(*symbol) {
-            loader.feature_off(
-                FEATURE,
-                symbol.id(),
-                &crate::engine::builds::Unhooked::Moved.to_string(),
-            );
-            return;
-        }
-        *address = found;
-    }
-    for ((symbol, handler), address) in sites.into_iter().zip(addresses) {
-        let link = crate::engine::mid::MidLink {
-            owner: crate::engine::mod_index::ModIndex::LOADER,
-            handler,
-            user: 0,
-            priority: i32::MIN,
-            flags: HookFlags::NONE,
-        };
-        let status = loader.mids.relock().add(address, link);
-        if !status.is_ok() {
-            loader.feature_off(FEATURE, symbol.id(), "the loader refused its hook");
-            return;
-        }
-    }
-    PAGES.on.store(true, Ordering::Release);
-    crate::log!(INFO, "terrain page events on");
-}
-
-#[cfg(windows)]
-type MidFn = unsafe extern "system" fn(registers: *mut Registers, user: *mut c_void);
-
-/// The site where the cache marks a finished load: `rsi` holds its entry
-/// past the entry's first 8 bytes, the entry's handle first (server
-/// 26430253, server copy).
-#[cfg(windows)]
-unsafe extern "system" fn page_loaded(registers: *mut Registers, _user: *mut c_void) {
-    queue(registers, true);
-}
-
-/// The site where the cache drops a loaded page, its data freed and its
-/// state not yet cleared: `rsi` as at [`page_loaded`] (server 26430253,
-/// server copy).
-#[cfg(windows)]
-unsafe extern "system" fn page_dropped(registers: *mut Registers, _user: *mut c_void) {
-    queue(registers, false);
-}
-
-/// Queues the turn of the entry in the registers of a page site.
-#[cfg(windows)]
-fn queue(registers: *mut Registers, loaded: bool) {
-    if !PAGES.on.load(Ordering::Acquire) {
+    if let Err(id) = crate::world::voxels::finest_slots(loader) {
+        let _off = loader.fuse_off(&PAGES.fuse, id.id(), "this build has no column grid slots");
         return;
     }
-    let _caught = PAGES.fuse.run("the page cache update", || {
-        // SAFETY: `registers` is null or the block the mid-hook stub saved on
-        // this thread's stack for the handler call, which nothing else
-        // touches during it.
-        let Some(registers) = (unsafe { registers.as_ref() }) else {
-            return;
-        };
-        let Ok(entry) = usize::try_from(registers.rsi) else {
-            return;
-        };
-        if entry == 0 {
-            return;
-        }
-        // SAFETY: at both sites `rsi` points 8 bytes into the cache entry
-        // the update holds locked, whose `u32` handle is there and changes
-        // only when the entry is freed, which the update does not do while
-        // it holds it; the site's pattern checks the `[rsi+0x40]` state
-        // write that names the register (server 26430253, server copy).
-        let handle: u32 = unsafe { crate::engine::memory::read(entry, 0) };
-        let _kept = PAGES.waiting.relock().push(Turn { loaded, handle });
-        PAGES.pending.store(true, Ordering::Release);
-    });
+    let link = |symbol, handler| {
+        loader.link_mid(
+            &PAGES.fuse,
+            Target::Pinned(symbol),
+            handler,
+            HookFlags::NONE,
+        )
+    };
+    if link(pinned::voxel::PAGE_LOADED, page_loaded)
+        && link(pinned::voxel::PAGE_DROPPED, page_dropped)
+    {
+        PAGES.on.store(true, Ordering::Release);
+        crate::log!(INFO, "terrain page events on");
+    }
+}
+
+#[cfg(windows)]
+crate::engine::mid::mid_handler! {
+    /// The site where the cache marks a finished load: `rsi` holds its
+    /// entry past the entry's first 8 bytes, the entry's handle first
+    /// (server 26430253, server copy).
+    fn page_loaded;
+    gate PAGES.on.load(Ordering::Acquire);
+    fuse PAGES.fuse, "the page cache update";
+    |registers| {
+        queue(registers, true);
+    }
+}
+
+#[cfg(windows)]
+crate::engine::mid::mid_handler! {
+    /// The site where the cache drops a loaded page, its data freed and
+    /// its state not yet cleared: `rsi` as at [`page_loaded`] (server
+    /// 26430253, server copy).
+    fn page_dropped;
+    gate PAGES.on.load(Ordering::Acquire);
+    fuse PAGES.fuse, "the page cache update";
+    |registers| {
+        queue(registers, false);
+    }
+}
+
+/// Queues the turn of the entry in the `registers` of a page site.
+#[cfg(windows)]
+fn queue(registers: &Registers, loaded: bool) {
+    let Ok(entry) = usize::try_from(registers.rsi) else {
+        return;
+    };
+    if entry == 0 {
+        return;
+    }
+    // SAFETY: at both sites `rsi` points 8 bytes into the cache entry the
+    // update holds locked, whose `u32` handle is there and changes only
+    // when the entry is freed, which the update does not do while it holds
+    // it; the site's pattern checks the `[rsi+0x40]` state write that names
+    // the register (server 26430253, server copy).
+    let handle: u32 = unsafe { crate::engine::memory::read(entry, 0) };
+    let _kept = PAGES.waiting.relock().push(Turn { loaded, handle });
+    PAGES.pending.store(true, Ordering::Release);
 }
 
 /// Raises the page turns of the step for the pages of the editor the voxel
