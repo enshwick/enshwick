@@ -155,7 +155,6 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
         at: crate::engine::diag::now(),
         mods,
         skipped: loader.skipped.clone(),
-        skipped_off: crate::base::off_line::skipped_off(loader).count(),
         others: crate::engine::others::lines(&loader.others),
         turned_off: crate::engine::diag::history(),
         parts_off: crate::engine::diag::parts_off(),

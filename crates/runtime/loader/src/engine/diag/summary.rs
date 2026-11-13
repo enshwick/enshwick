@@ -139,9 +139,6 @@ pub struct Summary {
     /// The mods skipped at start, which the summary lists after the loaded
     /// ones with their file and why.
     pub skipped: Vec<crate::base::resolve::Skipped>,
-    /// How many of `skipped` count as off: all but a second copy of a mod
-    /// that runs.
-    pub skipped_off: usize,
     /// The other mods' proxies that run beside the mods without the API.
     pub others: Vec<String>,
     /// Mods turned off, oldest first.
@@ -445,7 +442,15 @@ conflicts:"
     /// The mods the summary counts: the loaded ones and those skipped at
     /// start that count as off, as the main menu line counts them.
     fn counted(&self) -> usize {
-        self.mods.len() + self.skipped_off
+        self.mods.len() + self.skipped_off().count()
+    }
+
+    /// The mods skipped at start that count as off: all but a second copy
+    /// of a loaded mod.
+    fn skipped_off(&self) -> impl Iterator<Item = &crate::base::resolve::Skipped> {
+        self.skipped
+            .iter()
+            .filter(|s| s.counts_off(|id| self.mods.iter().any(|m| m.id == id)))
     }
 
     /// A few lines for the console, in the reader's language.
@@ -479,7 +484,7 @@ conflicts:"
                 &[("id", &t.id), ("reason", &t.reason)],
             ));
         }
-        for s in self.skipped.iter().take(3) {
+        for s in self.skipped_off().take(3) {
             lines.push(crate::engine::texts::fill(
                 "status.off",
                 &[("id", &s.file), ("reason", &s.reason.to_string())],

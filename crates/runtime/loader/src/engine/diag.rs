@@ -295,7 +295,6 @@ mod tests {
             at: 45_000,
             mods: mods(),
             skipped: Vec::new(),
-            skipped_off: 0,
             others: vec!["other mods' proxies in the game's folder: dbghelp.dll".into()],
             turned_off: vec![TurnedOff {
                 id: "you.trading-post".into(),
@@ -560,7 +559,6 @@ conflicts:
                 },
             ),
         ];
-        s.skipped_off = 1;
         let text = s.render();
         assert!(text.contains("mods: 1 of 3 running"), "{text}");
         assert!(
@@ -575,6 +573,10 @@ conflicts:
         assert!(
             short.contains("you.safes/you.safes.dll off: requires you.locks, which is not loaded"),
             "{short}"
+        );
+        assert!(
+            !short.contains("old/you.lockers.dll"),
+            "a second copy of a loaded mod is not off: {short}"
         );
     }
 
