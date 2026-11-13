@@ -698,6 +698,33 @@ impl Vanilla {
             .copied()
     }
 
+    /// The debug name the game's item registry lists for the vanilla item
+    /// `item`, such as `Craftingstation_Workbench`, to name an item a player
+    /// picked. It reads the registry once, never each item's resource, so it
+    /// is cheap from the second call on. `None` for a GUID that is no vanilla
+    /// item, a mod's item included
+    /// ([`content_id`](crate::content::content_id) names those), or while
+    /// the registry does not read.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::Guid;
+    /// use enshwick::content::vanilla::Vanilla;
+    ///
+    /// fn named(item: Guid) -> Option<String> {
+    ///     Vanilla::game()?.item_name(item).map(str::to_owned)
+    /// }
+    /// ```
+    #[must_use]
+    pub fn item_name(&self, item: Guid) -> Option<&str> {
+        self.names()
+            .ok()?
+            .iter()
+            .find(|(_, items)| items.contains(&item))
+            .map(|(name, _)| name.as_ref())
+    }
+
     /// The vanilla item with the debug name `name`, as the item registry
     /// lists it, such as `Craftingstation_Workbench`.
     ///

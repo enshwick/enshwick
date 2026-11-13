@@ -95,6 +95,21 @@ impl FakeHost {
         self
     }
 
+    /// A content id, `<mod>:<name>`, that another loaded mod declared, as
+    /// for an item of its own the mod under test names by GUID.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().declared_content("you.lockers:locker").install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn declared_content(mut self, id: &str) -> Self {
+        self.declared_content.push(id.to_owned());
+        self
+    }
+
     /// A loaded mod `enshwick::mods::all()` lists, in order; the loader
     /// itself comes first in the game.
     ///

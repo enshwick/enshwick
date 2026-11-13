@@ -443,16 +443,22 @@ impl Registry {
     }
 
     /// Whether the server's game knows `item` by this very GUID. The game
-    /// keys items by [`Guid::fnv1a`], so a GUID that shares a vanilla
-    /// item's key but is not that item is refused; a mod's item never
-    /// shares one, as content ids that collide are refused.
-    // shortcut: a GUID crafted to share a mod item's key passes; an exact check needs the GUID of an item id from the loader.
+    /// keys items by [`Guid::fnv1a`], so a GUID that shares an item's key
+    /// but is not that item is refused: a vanilla item's GUID is the one its
+    /// registry lists, and a mod's the one its declared content id gives.
+    /// Without the item registry the key is all the server knows.
     fn knows_item(&self, item: Guid) -> bool {
         let id = crate::ItemId::from_guid(item);
-        enshwick_content::__internal::knows_item(&self.host, id)
-            && crate::content::vanilla::Vanilla::game()
-                .and_then(|vanilla| enshwick_content::__internal::item_with_id(vanilla, id.get()))
-                .is_none_or(|vanilla_item| vanilla_item == item)
+        if !enshwick_content::__internal::knows_item(&self.host, id) {
+            return false;
+        }
+        let Some(vanilla) = crate::content::vanilla::Vanilla::game() else {
+            return true;
+        };
+        match enshwick_content::__internal::item_with_id(vanilla, id.get()) {
+            Some(vanilla_item) => vanilla_item == item,
+            None => enshwick_content::__internal::content_id(&self.host, item).is_some(),
+        }
     }
 
     /// The first item of `values` the server's game does not know.

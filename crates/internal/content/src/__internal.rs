@@ -94,6 +94,13 @@ pub fn knows_item(host: &Host, item: ItemId) -> bool {
     item_data(host, item).is_some()
 }
 
+/// The content id a loaded mod declared for exactly `guid`, as the loader
+/// answers it; `None` for a GUID no mod declared, such as a vanilla item's.
+#[must_use]
+pub fn content_id(host: &Host, guid: Guid) -> Option<String> {
+    host.content_name(guid.0)
+}
+
 /// Whether `guid` is one of `vanilla`'s items.
 #[must_use]
 pub fn is_item(vanilla: &Vanilla, guid: Guid) -> bool {

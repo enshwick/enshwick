@@ -140,6 +140,52 @@ mod tests {
     }
 
     #[test]
+    fn an_item_s_guid_is_checked_exactly_not_only_by_the_key_the_game_knows() {
+        // The game knows its key, as it knows a GUID crafted to share a
+        // mod item's, yet no vanilla item and no content id has this GUID.
+        const STRAY: Guid = Guid([5; 16]);
+        let loader = enshwick::test::FakeHost::new()
+            .player(root())
+            .items()
+            .workshops()
+            .item(ItemId::from_guid(TORCH), 20, 0)
+            .item(ItemId::from_guid(LAMP), 1, 0)
+            .item(ItemId::from_guid(STRAY), 1, 0)
+            .vanilla_items(&[(TORCH, "Torch")])
+            .declared_content("you.spawner:lamp")
+            .install();
+        // SAFETY: the three functions are the exports of this file's `declare_mod!`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let run = |item: Guid| {
+            loader.ask_actions(ActionCall::RUN, &root(), 0, "spawn", &format!("i{item}"))
+        };
+        let replies = [run(TORCH), run(LAMP)];
+        assert_eq!(
+            runs().len(),
+            2,
+            "a vanilla item and a mod's declared item pass: {replies:?}"
+        );
+        assert_eq!(
+            run(STRAY).as_deref(),
+            Some(format!("0No item {STRAY}.").as_str())
+        );
+        assert!(
+            runs().is_empty(),
+            "the stray GUID never reached the handler"
+        );
+        assert_eq!(
+            enshwick::content::content_id(LAMP).as_deref(),
+            Some("you.spawner:lamp")
+        );
+        assert_eq!(enshwick::content::content_id(TORCH), None);
+        let vanilla = enshwick::content::vanilla::Vanilla::game().unwrap();
+        assert_eq!(vanilla.item_name(TORCH), Some("Torch"));
+        assert_eq!(vanilla.item_name(LAMP), None);
+    }
+
+    #[test]
     fn the_console_names_an_item_by_its_guid_or_content_id() {
         let loader = start();
         let chat = |line: &str| loader.type_in_chat(&root(), 0, line);
