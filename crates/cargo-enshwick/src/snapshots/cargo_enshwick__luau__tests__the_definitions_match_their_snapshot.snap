@@ -3432,6 +3432,12 @@ declare enshwick: {
 		item_by_display_name: (name: string) -> string,
 		--- Every vanilla item with its debug name and the tag of the name the game shows.
 		items: () -> {VanillaItem},
+		--- The debug name of the vanilla item `item`, as `Vanilla.item_name` reads it; nil for a GUID that is no vanilla item and outside the game.
+		item_name: (item: string) -> string?,
+		--- The tag of the name the game shows for the vanilla item `item`, as `Vanilla.name_tag` reads it.
+		name_tag: (item: string) -> string?,
+		--- The content id a loaded mod declared for exactly `item`, as `content_id`.
+		content_id: (item: string) -> string?,
 		--- Every vanilla recipe with its debug name and the item it makes.
 		recipes: () -> {VanillaRecipe},
 		--- The item id of `id`, a GUID such as `item` gives for a vanilla item, or a content id in full (`<mod>:<name>`) for a mod's own item, as `ItemId.from_guid` and `ItemId.named` give it in Rust: the number `inventory` and `items` take.

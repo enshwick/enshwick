@@ -245,3 +245,4 @@ names every entry of the golden layout once, in that order.
 | `config_set` | loader | — | — |
 | `server_stop` | game | — | — |
 | `fog_uncover` | game | — | with a player |
+| `content_name` | loader | — | — |

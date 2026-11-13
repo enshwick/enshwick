@@ -1,6 +1,7 @@
-//! The game's items by the names this client's game shows, for the picker
-//! of an action's item argument: a language's list is read once from the
-//! client's archive and texts, so no name travels from the server.
+//! The game's items and the ones mods serve, by the names this client's
+//! game shows, for the picker of an action's item argument: a language's
+//! list is read once from the client's archive, what its mods serve and
+//! their texts, so no name travels from the server.
 
 #[cfg(windows)]
 use std::sync::Arc;
@@ -127,11 +128,10 @@ static STATE: State = State {
     served: std::sync::OnceLock::new(),
 };
 
-/// Every vanilla item the game shows a name for in `language`, sorted by
-/// name. `None` while the list is built on a thread of its own, which
+/// Every item the game shows a name for in `language`, vanilla and the
+/// ones mods serve, sorted by name. `None` while the list is built on a thread of its own, which
 /// reads every item's resource from the archive, and while the archive or
 /// its texts do not read, as on a server, which a later call tries again.
-// shortcut: vanilla items only; a mod's own items join once the loader lists the items it serves with their name tags.
 #[cfg(windows)]
 pub(crate) fn items(language: enshwick_core::i18n::Language) -> Option<Arc<List>> {
     if let Some(list) = STATE
