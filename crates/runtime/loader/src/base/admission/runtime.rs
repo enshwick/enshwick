@@ -429,3 +429,23 @@ fn disconnect(
     unsafe { (kick.call)(session, machine, false) };
     Ok(machine)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_build_without_the_game_s_kick_lists_the_kicks_off_and_keeps_the_admission_on() {
+        let loader = crate::start::tests::bare_loader();
+        start(&loader, Names::new());
+        assert!(KICKS_FUSE.is_off());
+        assert!(!ADMISSION_FUSE.is_off(), "players still get the note");
+        let listed = crate::engine::diag::parts_off();
+        let kicks = listed.iter().find(|p| p.part == KICKS_FUSE.feature());
+        let missing = pinned::session::KICK.id();
+        assert!(
+            kicks.is_some_and(|p| p.reason.starts_with(missing)),
+            "{listed:?}"
+        );
+    }
+}

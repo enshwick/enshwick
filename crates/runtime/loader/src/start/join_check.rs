@@ -152,4 +152,26 @@ mod tests {
             "{listed:?}"
         );
     }
+
+    #[test]
+    fn the_join_check_and_its_dialog_hold_link_on_the_functions_they_are_given() {
+        use crate::base::join::interaction;
+        use crate::engine::mod_index::ModIndex;
+        use enshwick_base::Relock;
+        let loader = crate::start::tests::bare_loader();
+        assert!(crate::base::join::link(&loader, 0x7100));
+        assert!(interaction::link(&loader, 0x7200));
+        let chains = loader.chains.relock();
+        assert_eq!(chains.owners(0x7100), [ModIndex::LOADER]);
+        assert_eq!(chains.owners(0x7200), [ModIndex::LOADER]);
+        let fuses: Vec<_> = [0x7100, 0x7200]
+            .iter()
+            .flat_map(|&at| chains.features_at(at))
+            .map(crate::engine::fuse::Fuse::feature)
+            .collect();
+        assert_eq!(
+            fuses,
+            [JOIN_FUSE.feature(), interaction::HOLD_FUSE.feature()]
+        );
+    }
 }
