@@ -251,8 +251,10 @@ It works from any thread while a world runs. With no world, as on a client
 in another's world, it answers `SetSettingError::NoWorld`. A key the type
 lacks, a value the field does not take and a refusal by `validate` each
 have an error of their own. The file then stays as it was, and the mod's
-log says why. A write from a change handler raises the change again, so
-write only when the value differs.
+log says why. Writes wait for each other, so two threads never lose a
+change. A write from a change handler raises the change again, so write only
+when the value differs. A write inside `validate` is refused, and so is one
+nested more than four writes deep through change handlers.
 
 A Luau mod writes with `enshwick.config.set(key, value)`, a text, a number
 or a boolean. A refusal raises an error that names the reason:

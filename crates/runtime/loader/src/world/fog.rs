@@ -27,7 +27,9 @@ use crate::engine::chains::Next;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
-use crate::world::fog_image::{FogImage, FogShape, Plan, ReadError, TileRect, plan};
+use crate::world::fog_image::{
+    FogImage, FogShape, Plan, ReadError, TileRect, UNCOVER_RANGE_PER_RADIUS, plan,
+};
 use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
@@ -91,12 +93,16 @@ struct Uncovers {
     linked: AtomicBool,
     /// Whether `circles` holds any, read first on every reveal.
     waiting: AtomicBool,
+    /// Whether an uncover the client dropped was logged since the last fog
+    /// went, so a server that keeps asking fills no log.
+    warned: AtomicBool,
     circles: Mutex<Vec<([f32; 2], f32)>>,
 }
 
 static UNCOVERS: Uncovers = Uncovers {
     linked: AtomicBool::new(false),
     waiting: AtomicBool::new(false),
+    warned: AtomicBool::new(false),
     circles: Mutex::new(Vec::new()),
 };
 
@@ -227,6 +233,7 @@ fn forget(fog: usize) {
     drop(mirror);
     UNCOVERS.circles.relock().clear();
     UNCOVERS.waiting.store(false, Ordering::Release);
+    UNCOVERS.warned.store(false, Ordering::Release);
 }
 
 unsafe extern "system" fn reveal(fog: *mut u8, xz: *const [f32; 2], range: f32) -> usize {
@@ -266,12 +273,13 @@ fn uncover(fog: *mut u8) {
     UNCOVERS.waiting.store(false, Ordering::Release);
     drop(circles);
     for (at, radius) in taken {
+        let range = radius * UNCOVER_RANGE_PER_RADIUS;
         // SAFETY: the game's reveal, the next of the chain, on the live fog
         // the game revealed on this same thread a moment ago; `at` lives for
         // the call.
-        let _uncovered = unsafe { NEXT.get()(fog, &raw const at, radius) };
+        let _uncovered = unsafe { NEXT.get()(fog, &raw const at, range) };
         if let Some(layout) = LAYOUT.get() {
-            copy(layout, fog.expose_provenance(), Some(at), radius);
+            copy(layout, fog.expose_provenance(), Some(at), range);
         }
     }
 }
@@ -279,19 +287,22 @@ fn uncover(fog: *mut u8) {
 /// Queues a circle the server asked this client to uncover, on the thread
 /// that reads the server's messages; the next reveal runs it.
 pub(crate) fn uncover_here(at: [f32; 2], radius: f32) {
-    if !UNCOVERS.linked.load(Ordering::Acquire) {
-        crate::log!(
-            WARN,
-            "the server asked to uncover the fog of war, which is off on this client"
-        );
+    let dropped = |why: &str| {
+        if !UNCOVERS.warned.swap(true, Ordering::AcqRel) {
+            crate::log!(
+                WARN,
+                "fog of war uncovers from the server dropped until the fog goes: {why}"
+            );
+        }
+    };
+    if !UNCOVERS.linked.load(Ordering::Acquire) || FUSE.is_off() {
+        dropped("the fog of war is off on this client");
         return;
     }
     let mut circles = UNCOVERS.circles.relock();
     if circles.len() >= MAX_UNCOVERS {
-        crate::log!(
-            WARN,
-            "a fog of war uncover from the server dropped: {MAX_UNCOVERS} wait already"
-        );
+        drop(circles);
+        dropped(&format!("{MAX_UNCOVERS} wait already"));
         return;
     }
     circles.push((at, radius));

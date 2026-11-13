@@ -136,6 +136,10 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ("1.0 server (1269579)", "server.console_handler", 0x57_5100),
     ("1.0 server (26319703)", "server.console_handler", 0x57_ba80),
     ("1.0 server (26430253)", "server.console_handler", 0x57_ba80),
+    // The application the handler stops and its exit reason, which the
+    // handler spins on when set; read on 26430253.
+    ("1.0 server (26430253)", "server.application", 0x14d_75f0),
+    ("1.0 server (26430253)", "server.exit_reason", 0xaa0),
     // The editor's commit, which every terrain edit passes; on 26083076 and
     // 26430253 checked live on server copies.
     ("1.0 server (1269579)", "voxel.commit", 0x83_39d0),

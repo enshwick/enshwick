@@ -382,8 +382,9 @@ then starts it again. The call returns at once, from any thread. The countdown,
 the warnings to players and a save before it are the mod's.
 
 A second `stop()` while the server stops fails with `WorldError::Refused`,
-as does one after a person pressed Ctrl+C. In single player and in a hosted
-game, which have no restart, it fails with `WorldError::Missing`. A server
+as does one after a person pressed Ctrl+C or before the game has started.
+In single player and in a hosted game, which have no restart, it fails with
+`WorldError::Missing`. A server
 under Wine or Proton has not been tried.
 
 ```rust

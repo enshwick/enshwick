@@ -313,9 +313,6 @@ pub(crate) extern "system" fn server_stop(_me: ModHandle) -> Status {
     })
 }
 
-/// The largest radius the loader's fog uncover takes, in metres.
-const MAX_UNCOVER_RADIUS: f32 = 100_000.0;
-
 pub(crate) extern "system" fn fog_uncover(
     _me: ModHandle,
     player: enshwick_core::PlayerKey,
@@ -327,7 +324,11 @@ pub(crate) extern "system" fn fog_uncover(
         if !serving(s) {
             return Status::UNAVAILABLE;
         }
-        if !(x.is_finite() && z.is_finite() && radius > 0.0 && radius <= MAX_UNCOVER_RADIUS) {
+        if !(x.is_finite()
+            && z.is_finite()
+            && radius > 0.0
+            && radius <= enshwick_core::abi::MAX_UNCOVER_RADIUS)
+        {
             return Status::BAD_ARGS;
         }
         // As the loader: only a client that takes its messages is reached.

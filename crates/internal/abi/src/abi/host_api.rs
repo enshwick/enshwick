@@ -1945,15 +1945,16 @@ pub struct HostApi {
     /// does: checked against the file's schema and by the mod's
     /// [`HostApi::config_check`], written atomically with the file's
     /// comments kept, then raised as a settings change. A secret setting
-    /// too, whose value the log never shows. Any thread, but never inside
-    /// the mod's own check; a write from the mod's settings handler raises
-    /// the change again. The strings are borrowed for the call.
+    /// too, whose value the log never shows. Any thread; writes of settings
+    /// wait for each other, and a write from the mod's settings handler
+    /// raises the change again. The strings are borrowed for the call.
     /// [`Status::UNAVAILABLE`] while no world runs here, as on a client in
     /// another's world; [`Status::MISSING`] for a file or key the mod's
     /// settings lack; [`Status::BAD_ARGS`] for a value the setting does not
     /// accept or a string that is not UTF-8; [`Status::REFUSED`] when the
-    /// mod's check refuses the file with the value or the file does not
-    /// read or write. On an error the file stays as it was and the loader
+    /// mod's check refuses the file with the value, the file does not read
+    /// or write, or the write comes from inside the mod's own check or
+    /// nested more than four deep through its settings handler. On an error the file stays as it was and the loader
     /// logs why. A panic in the loader returns [`Status::REFUSED`]. ABI
     /// 11.26.
     pub config_set: extern "system" fn(me: ModHandle, file: Str, key: Str, value: Str) -> Status,
@@ -1962,7 +1963,8 @@ pub struct HostApi {
     /// raised and the save holds let go, the final save runs, and the
     /// process exits with code 0. Returns at once; the stop runs on a
     /// thread of the loader's. Any thread. [`Status::REFUSED`] when a stop
-    /// is under way already, asked by a mod or by the game;
+    /// is under way already, asked by a mod or by the game, or the game has
+    /// not started yet;
     /// [`Status::UNAVAILABLE`] off a dedicated server, as in single player
     /// or a hosted game; [`Status::MISSING`] when the loader did not find
     /// the game's stop on this build. A panic in the loader returns
@@ -1992,6 +1994,9 @@ pub struct HostApi {
     pub content_name:
         extern "system" fn(me: ModHandle, guid: *const [u8; 16], out: *mut Str) -> Status,
 }
+
+/// The largest radius [`HostApi::fog_uncover`] takes, in metres.
+pub const MAX_UNCOVER_RADIUS: f32 = 100_000.0;
 
 // Every function keeps its slot: 24 header and version bytes, then 8 per slot.
 const _: () = {

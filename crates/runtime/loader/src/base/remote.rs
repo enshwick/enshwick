@@ -44,8 +44,7 @@ pub const WINDOW_CLOSE: u8 = 18;
 /// The server uncovers a circle of its player's fog of war.
 pub const FOG_UNCOVER: u8 = 19;
 
-/// The largest radius a [`Message::FogUncover`] takes, in metres.
-pub const MAX_UNCOVER_RADIUS: f32 = 100_000.0;
+pub use enshwick_core::abi::MAX_UNCOVER_RADIUS;
 
 /// The controls of one mod a [`Message::Controls`] carries at most.
 pub const MAX_CARRIED: usize = 24;

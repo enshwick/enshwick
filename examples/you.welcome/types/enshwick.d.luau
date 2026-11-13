@@ -3777,7 +3777,7 @@ declare enshwick: {
 		markers_in: (a: vector, b: vector) -> {MapMarker},
 		--- The frame of the map of the scene the server runs: where the map starts, how far it reaches and the size of its cells, in metres. The loader reads it from the game's data once per scene, apart from the game thread, as it reads the markers.
 		frame: () -> MapFrame,
-		--- Uncovers the fog of war of `player` in the circle of `radius` metres around world x and z `at`, as exploring there does. The server holds no fog: the loader sends the circle to the loader on the player's client, which hands it to the game's own reveal within a frame, and the character's save keeps it, in every world the character enters. A client without Enshwick is not reached, and the mod decides what to tell whoever asked. Returns once the circle is sent; any thread, on a dedicated server or a client that hosts.
+		--- Uncovers the fog of war of `player` in the circle of `radius` metres around world x and z `at`, as exploring there does: all of the circle, with the fog thinning out from its edge to twice the radius. The server holds no fog: the loader sends the circle to the loader on the player's client, which hands it to the game's own reveal within a frame, and the character's save keeps it, in every world the character enters. A client without Enshwick is not reached, and the mod decides what to tell whoever asked. Returns once the circle is sent; any thread, on a dedicated server or a client that hosts.
 		uncover: (player: string, at: {number}, radius: number) -> (),
 		--- Uncovers the whole map of `player`, as `uncover` does for one circle: the circle around the map's `frame` that holds all of it. On the server's game thread, as `frame` is.
 		uncover_all: (player: string) -> (),

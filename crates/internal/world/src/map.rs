@@ -514,7 +514,9 @@ impl Map {
     }
 
     /// Uncovers the fog of war of `player` in the circle of `radius` metres
-    /// around world x and z `at`, as exploring there does. The server holds
+    /// around world x and z `at`, as exploring there does: all of the
+    /// circle, with the fog thinning out from its edge to twice the radius.
+    /// The server holds
     /// no fog: the loader sends the circle to the loader on the player's
     /// client, which hands it to the game's own reveal within a frame, and
     /// the character's save keeps it, in every world the character enters.

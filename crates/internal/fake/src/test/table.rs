@@ -246,6 +246,9 @@ pub(crate) struct State {
     pub(crate) markers: Vec<super::FakeMarker>,
     /// The mod's checks of new settings texts, by file.
     pub(crate) config_checks: std::collections::BTreeMap<String, Registered<ConfigCheckFn>>,
+    /// The mod's settings writes in flight, one per nested write, each
+    /// `true` while it runs the mod's check, as the loader refuses them.
+    pub(crate) config_writes: Vec<bool>,
     /// The texts the mod handed the loader last, as TOML.
     pub(crate) published_texts: Option<String>,
     /// The frame drawing now: its token, whether a window is open and what
@@ -458,6 +461,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         hud: None,
         markers: Vec::new(),
         config_checks: std::collections::BTreeMap::new(),
+        config_writes: Vec::new(),
         published_texts: None,
         frame: None,
         inputs: Vec::new(),

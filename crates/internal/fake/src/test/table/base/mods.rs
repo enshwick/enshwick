@@ -320,7 +320,35 @@ pub(crate) extern "system" fn config_set(
     key: Str,
     value: Str,
 ) -> Status {
-    let (file, key, value) = (text(file), text(key), text(value));
+    let entered = with(false, |s| {
+        let refused = s.config_writes.iter().any(|&checking| checking)
+            || s.config_writes.len() >= enshwick_core::config::MAX_NESTED_WRITES;
+        if !refused {
+            s.config_writes.push(false);
+        }
+        !refused
+    });
+    if !entered {
+        return Status::REFUSED;
+    }
+    let status = write_setting(text(file), &text(key), &text(value));
+    with((), |s| {
+        s.config_writes.pop();
+    });
+    status
+}
+
+/// Marks whether the innermost settings write runs the mod's check.
+fn checking(on: bool) {
+    with((), |s| {
+        if let Some(last) = s.config_writes.last_mut() {
+            *last = on;
+        }
+    });
+}
+
+/// Writes `value` as `key` of the settings file `file`, as the loader does.
+fn write_setting(file: String, key: &str, value: &str) -> Status {
     let prepared = with(Err(Status::MISSING), |s| {
         let serving = s.host.side == Side::SERVER || s.host.hosting;
         if !serving || s.host.world_key.is_none() {
@@ -333,7 +361,7 @@ pub(crate) extern "system" fn config_set(
             .get(&file)
             .and_then(|text| enshwick_core::config::Schema::parse(text).ok())
             .ok_or(Status::MISSING)?;
-        let field = schema.field(&key).ok_or(Status::MISSING)?;
+        let field = schema.field(key).ok_or(Status::MISSING)?;
         let mut parsed = format!("v = {value}")
             .parse::<toml::Table>()
             .ok()
@@ -359,7 +387,7 @@ pub(crate) extern "system" fn config_set(
                 |text| text.parse::<toml::Table>(),
             )
             .map_err(|_| Status::REFUSED)?;
-        if !set_dotted(&mut table, &key, parsed) {
+        if !set_dotted(&mut table, key, parsed) {
             return Err(Status::REFUSED);
         }
         Ok(table.to_string())
@@ -371,10 +399,12 @@ pub(crate) extern "system" fn config_set(
     let check = with(None, |s| s.config_checks.get(&file).copied());
     if let Some(check) = check {
         let mut why = Str::EMPTY;
+        checking(true);
         // SAFETY: the mod's check with its own pointer; the text lives for
         // the call.
         let status =
             check.run(|callback, user| unsafe { callback(Str::new(&new), &raw mut why, user) });
+        checking(false);
         if !status.is_ok() {
             return Status::REFUSED;
         }

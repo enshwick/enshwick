@@ -5,6 +5,7 @@
 #[cfg(test)]
 mod tests {
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     use enshwick::abi::Status;
     use enshwick::config::{self, SetSettingError};
@@ -24,6 +25,10 @@ mod tests {
 
     impl Remote {
         fn check(&self) -> Result<(), String> {
+            // Once: the check runs again on every read of the settings.
+            if self.limit == 9 && !CHECK_WROTE.swap(true, Ordering::Relaxed) {
+                note(config::set::<Remote>("password", "from the check"));
+            }
             (self.limit != 13)
                 .then_some(())
                 .ok_or_else(|| "13 is unlucky".to_owned())
@@ -31,6 +36,13 @@ mod tests {
     }
 
     static SEEN: Mutex<Vec<(String, u32)>> = Mutex::new(Vec::new());
+    /// What the writes from inside the check or a change handler answered.
+    static NESTED: Mutex<Vec<Result<(), SetSettingError>>> = Mutex::new(Vec::new());
+    static CHECK_WROTE: AtomicBool = AtomicBool::new(false);
+
+    fn note(answer: Result<(), SetSettingError>) {
+        NESTED.lock().unwrap().push(answer);
+    }
 
     struct Console;
 
@@ -40,6 +52,9 @@ mod tests {
                 SEEN.lock()
                     .unwrap()
                     .push((remote.password.clone(), remote.limit));
+                if remote.limit == 7 {
+                    note(config::set::<Remote>("limit", 7));
+                }
             })?;
             Ok(Self)
         }
@@ -127,6 +142,40 @@ mod tests {
                 .unwrap()
                 .contains("limit = 6")
         );
+    }
+
+    fn started() -> enshwick::test::Installed {
+        let loader = enshwick::test::FakeHost::new()
+            .world_key("world0")
+            .settings("limit = 4\n")
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Console)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        loader
+    }
+
+    #[test]
+    fn a_write_from_inside_the_check_is_refused_and_the_outer_one_lands() {
+        let loader = started();
+        config::set::<Remote>("limit", 9).unwrap();
+        assert_eq!(*NESTED.lock().unwrap(), [Err(SetSettingError::Refused)]);
+        let text = loader.settings_text("settings").unwrap();
+        assert!(
+            text.contains("limit = 9") && !text.contains("password"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn a_handler_that_writes_on_every_change_stops_after_a_few_nested_writes() {
+        let _loader = started();
+        config::set::<Remote>("limit", 7).unwrap();
+        let nested = NESTED.lock().unwrap();
+        assert_eq!(nested.len(), config::MAX_NESTED_WRITES, "{nested:?}");
+        assert_eq!(nested[0], Err(SetSettingError::Refused));
+        assert!(nested[1..].iter().all(Result::is_ok), "{nested:?}");
     }
 
     #[test]

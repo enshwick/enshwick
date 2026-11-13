@@ -15,8 +15,10 @@ use super::Config;
 /// hears it at once and [`Load::on_settings`](../struct.Load.html#method.on_settings)
 /// at the world's next load. A `secret` field takes a value too, and the log
 /// never shows it. `key` is the field's key in the file, dotted for a field
-/// of a group (`rcon.password`). Any thread while a world runs; never inside
-/// `validate`, and a write from a change handler raises the change again.
+/// of a group (`rcon.password`). Any thread while a world runs; writes wait
+/// for each other, and a write from a change handler raises the change
+/// again. One from inside `validate`, or nested more than four deep through
+/// change handlers, is refused.
 ///
 /// # Errors
 ///
@@ -50,6 +52,12 @@ pub fn set<T: Config>(key: &str, value: impl Into<toml::Value>) -> Result<(), Se
     let host = crate::host().ok_or(SetSettingError::NoWorld)?;
     write(&host, T::FILE, key, &value.into())
 }
+
+/// The settings writes one thread may nest in one another through change
+/// handlers; one more is refused, as a handler that writes each time it
+/// hears a change would never end.
+#[doc(hidden)]
+pub const MAX_NESTED_WRITES: usize = 4;
 
 /// Writes `value` as `key` of `host`'s settings file `file`.
 pub(super) fn write(
@@ -94,8 +102,9 @@ pub enum SetSettingError {
     /// range or choices.
     #[error("the setting does not take the value")]
     BadValue,
-    /// The settings type's check refused the file with the value, or the
-    /// file did not read or write.
+    /// The settings type's check refused the file with the value, the file
+    /// did not read or write, or the write came from inside the check or
+    /// nested too deep through change handlers.
     #[error("the settings were not written: the check refused them or the file did not write")]
     Refused,
 }

@@ -36,6 +36,9 @@ impl Shown {
 pub(crate) struct List {
     /// The game's number of the language.
     pub(crate) language: u32,
+    /// Which mods were on and whether their texts were sealed when it was
+    /// built, as [`mods_mark`] marks them: a list of other mods is stale.
+    pub(crate) mods: u64,
     pub(crate) items: Vec<Shown>,
 }
 
@@ -134,10 +137,11 @@ static STATE: State = State {
 /// its texts do not read, as on a server, which a later call tries again.
 #[cfg(windows)]
 pub(crate) fn items(language: enshwick_core::i18n::Language) -> Option<Arc<List>> {
+    let mods = mods_mark();
     if let Some(list) = STATE
         .list
         .load_full()
-        .filter(|list| list.language == language.0)
+        .filter(|list| list.language == language.0 && list.mods == mods)
     {
         return Some(list);
     }
@@ -146,7 +150,7 @@ pub(crate) fn items(language: enshwick_core::i18n::Language) -> Option<Arc<List>
             .name("enshwick-item-names".into())
             .spawn(move || {
                 for _ in 0..BUILD_TRIES {
-                    if let Some(list) = build(language) {
+                    if let Some(list) = build(language, mods) {
                         STATE.list.store(Some(Arc::new(list)));
                         break;
                     }
@@ -164,7 +168,7 @@ pub(crate) fn items(language: enshwick_core::i18n::Language) -> Option<Arc<List>
 /// The list of `language`, read from the client's archive and texts: the
 /// game's items, and the items mods serve with the names their texts give.
 #[cfg(windows)]
-fn build(language: enshwick_core::i18n::Language) -> Option<List> {
+fn build(language: enshwick_core::i18n::Language, mark: u64) -> Option<List> {
     let vanilla = vanilla()?.items().ok()?;
     let mods = mod_items(language);
     let items = listed(
@@ -181,8 +185,31 @@ fn build(language: enshwick_core::i18n::Language) -> Option<List> {
     );
     (!items.is_empty()).then_some(List {
         language: language.0,
+        mods: mark,
         items,
     })
+}
+
+/// A mark of which mods are on and whether their texts are sealed, which
+/// changes when the items mods serve or their names can: a client turns
+/// mods off and on as it joins worlds. A few atomic reads, for each draw.
+#[cfg(windows)]
+fn mods_mark() -> u64 {
+    let on = crate::engine::loader::loader()
+        .into_iter()
+        .flat_map(|loader| loader.mods.iter().map(|m| !m.off.load(Ordering::Acquire)));
+    mark(on, crate::content::served::mod_texts_sealed())
+}
+
+/// [`mods_mark`] of the mods whose on flags `on` lists in order, and of
+/// whether their texts are `sealed`.
+fn mark(on: impl IntoIterator<Item = bool>, sealed: bool) -> u64 {
+    use core::hash::Hasher;
+    let mut hash = rustc_hash::FxHasher::default();
+    for flag in on.into_iter().chain([sealed]) {
+        hash.write_u8(u8::from(flag));
+    }
+    hash.finish()
 }
 
 /// The items mods that are on serve, each with the content id that names
@@ -233,6 +260,16 @@ fn vanilla() -> Option<&'static enshwick_core::content::vanilla::Vanilla> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_list_built_for_other_mods_or_before_their_texts_has_another_mark() {
+        let built = mark([true, false, true], true);
+        assert_eq!(built, mark([true, false, true], true));
+        assert_ne!(built, mark([true, true, true], true), "a mod turned on");
+        assert_ne!(built, mark([true, false, false], true), "a mod turned off");
+        assert_ne!(built, mark([true, false, true], false), "texts not sealed");
+        assert_ne!(built, mark([true, false], true), "a mod fewer");
+    }
 
     #[test]
     fn a_search_finds_names_that_start_with_it_first_whatever_the_case() {

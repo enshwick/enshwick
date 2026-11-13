@@ -119,7 +119,7 @@ impl World {
     /// # Errors
     ///
     /// [`WorldError::Refused`] when a stop is under way already, asked by a
-    /// mod or by the game; [`WorldError::Missing`] off a dedicated server,
+    /// mod or by the game, or the game has not started yet; [`WorldError::Missing`] off a dedicated server,
     /// as in single player or a hosted game, which have no restart, and on
     /// a build where the loader did not find the game's stop.
     ///

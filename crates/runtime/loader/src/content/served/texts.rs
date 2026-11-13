@@ -76,6 +76,11 @@ pub(super) fn text_for(id: u32, language: u32) -> Option<Handed> {
     mod_text(id, language).map(Handed::of)
 }
 
+/// Whether the mods' texts are sealed, so [`mod_text`] answers.
+pub(crate) fn mod_texts_sealed() -> bool {
+    TEXTS.get().is_some()
+}
+
 /// A mod's text `id` for `language`, as [`text_for`] picks it: its own, else
 /// the next language of its lookup order's, else English; `None` before the
 /// texts seal or for a tag no mod gave text.
