@@ -43,15 +43,34 @@ pub(crate) extern "system" fn experience_filter(
     })
 }
 
-/// The scope of knowledge `id` when the fake knows it and `kind` is its
-/// kind; `BAD_ARGS` otherwise, as the loader answers on the game.
-fn scope_of(s: &State, id: enshwick_core::abi::KnowledgeId, kind: u32) -> Result<u8, Status> {
+/// The scope and expected flags of knowledge `id` when the fake knows it
+/// and `kind` is its kind; `BAD_ARGS` otherwise, as the loader answers on
+/// the game.
+fn definition(
+    s: &State,
+    id: enshwick_core::abi::KnowledgeId,
+    kind: u32,
+) -> Result<(u8, u32), Status> {
     s.knowledge
         .iter()
         .find(|(_, k)| k.id == id)
         .filter(|(_, k)| u32::from(k.kind) == kind)
-        .map(|(_, k)| k.scope)
+        .map(|(_, k)| (k.scope, k.flags))
         .ok_or(Status::BAD_ARGS)
+}
+
+/// Whether a change of a character's knowledge names the world, which the
+/// loader refuses: such knowledge has no world value.
+fn names_the_world(scope: u8, entity: enshwick_core::Entity) -> bool {
+    scope == KnowledgeInfo::PLAYER && entity.0 == 0
+}
+
+/// Whether `value` names a flag the loader cannot set or clear: one past the
+/// 32 a value holds, or one outside the definition's `expected` flags when
+/// it lists any.
+fn flag_outside(kind: u32, value: u32, expected: u32) -> bool {
+    kind == u32::from(KnowledgeInfo::FLAGS)
+        && (value >= u32::BITS || (expected != 0 && expected & (1 << value) == 0))
 }
 
 pub(crate) extern "system" fn revoke_knowledge(
@@ -62,8 +81,16 @@ pub(crate) extern "system" fn revoke_knowledge(
     value: u32,
 ) -> Status {
     with(Status::MISSING, |s| {
-        if let Err(status) = scope_of(s, id, kind) {
-            return status;
+        let scope = match definition(s, id, kind) {
+            Ok((scope, _)) => scope,
+            Err(status) => return status,
+        };
+        if names_the_world(scope, entity) {
+            return Status::REFUSED;
+        }
+        // The loader clears any bit of the 32, listed or not.
+        if flag_outside(kind, value, 0) {
+            return Status::BAD_ARGS;
         }
         s.revokes
             .push((enshwick_core::Entity::from_raw(entity.0), id, kind, value));
@@ -81,7 +108,7 @@ pub(crate) extern "system" fn account_knowledge(
 ) -> Status {
     with(Status::MISSING, |s| {
         // As the loader, which keeps only a character's knowledge per account.
-        if scope_of(s, id, kind) != Ok(KnowledgeInfo::PLAYER) {
+        if definition(s, id, kind).map(|(scope, _)| scope) != Ok(KnowledgeInfo::PLAYER) {
             return Status::BAD_ARGS;
         }
         s.account_changes.push((key, id, kind, value, revoke != 0));
@@ -169,8 +196,15 @@ pub(crate) extern "system" fn grant_knowledge(
     value: u32,
 ) -> Status {
     with(Status::MISSING, |s| {
-        if let Err(status) = scope_of(s, id, kind) {
-            return status;
+        let (scope, expected) = match definition(s, id, kind) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        if flag_outside(kind, value, expected) {
+            return Status::BAD_ARGS;
+        }
+        if names_the_world(scope, entity) {
+            return Status::REFUSED;
         }
         s.grants
             .push((enshwick_core::Entity::from_raw(entity.0), id, kind, value));
