@@ -139,6 +139,29 @@ fn a_feature_that_turns_off_after_arming_is_wired_past_by_the_loader() {
 }
 
 #[test]
+fn a_feature_whose_second_mid_hook_fails_is_wholly_off_and_its_first_address_never_hooked() {
+    unsafe extern "system" fn handler(
+        _registers: *mut enshwick_core::abi::Registers,
+        _user: *mut core::ffi::c_void,
+    ) {
+    }
+    static TORCHES: Fuse = Fuse::new("test torches");
+    let loader = crate::start::tests::bare_loader();
+    let link = |id, at| loader.link_mid(&TORCHES, Target::Found(id, at), handler, HookFlags::NONE);
+    assert!(link("torch.flame", Some(0x1000)));
+    assert_eq!(loader.mids.relock().addresses(), [0x1000]);
+    assert!(!link("torch.smoke", None));
+    assert!(TORCHES.is_off());
+    assert!(
+        !link("torch.ash", Some(0x3000)),
+        "a feature that is off links nothing more"
+    );
+    let mut mids = loader.mids.relock();
+    mids.seal();
+    assert_eq!(mids.len(), 0, "the first hook went with its feature");
+}
+
+#[test]
 fn a_feature_whose_second_link_fails_is_wholly_off_and_its_first_target_never_armed() {
     let loader = crate::start::tests::bare_loader();
     let feature = "test lanterns";
