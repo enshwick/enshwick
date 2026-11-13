@@ -35,6 +35,12 @@ pub(super) fn link_join(loader: &Loader) {
         .collect();
     crate::base::join::set_names(names);
     crate::base::lobby::register();
+    link_check(loader);
+}
+
+/// Links the join check once the build's join target layout reads and the
+/// provider's join checks out; otherwise turns it off, naming why.
+fn link_check(loader: &Loader) {
     let join_off = |why: &dyn core::fmt::Display| {
         let reason = format!("is not checked: {why}");
         let _off = loader.fuse_off(&JOIN_FUSE, pinned::net::JOIN_GAME.id(), &reason);
@@ -136,10 +142,31 @@ pub(super) fn names(loader: &Loader) -> Vec<(String, String)> {
 mod tests {
     use super::*;
 
+    // One test for both: the join check's fuse is one per process, and
+    // `cargo test` runs every test in one.
     #[test]
-    fn a_build_without_the_join_target_layout_lists_the_join_check_off_by_its_join() {
+    fn the_join_links_on_its_join_and_a_build_without_the_target_layout_lists_it_off() {
+        use crate::base::join::interaction;
+        use crate::engine::mod_index::ModIndex;
+        use enshwick_base::Relock;
         let loader = crate::start::tests::bare_loader();
-        link_join(&loader);
+        assert!(crate::base::join::link(&loader, 0x7100));
+        assert!(interaction::link(&loader, 0x7200));
+        {
+            let chains = loader.chains.relock();
+            assert_eq!(chains.owners(0x7100), [ModIndex::LOADER]);
+            assert_eq!(chains.owners(0x7200), [ModIndex::LOADER]);
+            let fuses: Vec<_> = [0x7100, 0x7200]
+                .iter()
+                .flat_map(|&at| chains.features_at(at))
+                .map(crate::engine::fuse::Fuse::feature)
+                .collect();
+            assert_eq!(
+                fuses,
+                [JOIN_FUSE.feature(), interaction::HOLD_FUSE.feature()]
+            );
+        }
+        link_check(&crate::start::tests::bare_loader());
         assert!(JOIN_FUSE.is_off());
         let listed = crate::engine::diag::parts_off();
         let join = listed.iter().find(|p| p.part == JOIN_FUSE.feature());
@@ -150,28 +177,6 @@ mod tests {
         assert!(
             join.is_some_and(|p| p.reason.starts_with(entry) && p.reason.contains(missing)),
             "{listed:?}"
-        );
-    }
-
-    #[test]
-    fn the_join_check_and_its_dialog_hold_link_on_the_functions_they_are_given() {
-        use crate::base::join::interaction;
-        use crate::engine::mod_index::ModIndex;
-        use enshwick_base::Relock;
-        let loader = crate::start::tests::bare_loader();
-        assert!(crate::base::join::link(&loader, 0x7100));
-        assert!(interaction::link(&loader, 0x7200));
-        let chains = loader.chains.relock();
-        assert_eq!(chains.owners(0x7100), [ModIndex::LOADER]);
-        assert_eq!(chains.owners(0x7200), [ModIndex::LOADER]);
-        let fuses: Vec<_> = [0x7100, 0x7200]
-            .iter()
-            .flat_map(|&at| chains.features_at(at))
-            .map(crate::engine::fuse::Fuse::feature)
-            .collect();
-        assert_eq!(
-            fuses,
-            [JOIN_FUSE.feature(), interaction::HOLD_FUSE.feature()]
         );
     }
 }

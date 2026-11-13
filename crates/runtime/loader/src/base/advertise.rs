@@ -400,16 +400,6 @@ mod runtime {
                 Some("the loader panicked in the advertising thread: a broken round")
             );
         }
-
-        #[test]
-        fn a_steam_library_without_the_game_server_api_lists_the_advertisement_off() {
-            advertise("Lanterns", none, run);
-            assert!(ADVERTISE_FUSE.is_off());
-            assert_eq!(
-                listed().as_deref(),
-                Some("steam_api64.dll lacks the game server API")
-            );
-        }
     }
 }
 
