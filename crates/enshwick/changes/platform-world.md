@@ -5,6 +5,12 @@
   hears whether it was applied, with the level and experience it left, or
   why it was dropped (#1064).
 
+### Fixed
+
+- Loader: level and experience writes still waiting when a hosted game
+  ends are dropped with it, and their mods hear so; none applies to a
+  character of the next game (#1064).
+
 ### Changed
 
 - Loader: the item drop's pickup is read on a thread of its own as the

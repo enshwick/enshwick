@@ -63,25 +63,9 @@ impl Reading {
         if self.started.load(Ordering::Acquire) || self.started.swap(true, Ordering::AcqRel) {
             return;
         }
-        let work = move || {
-            let began = std::time::Instant::now();
-            let read = std::panic::catch_unwind(std::panic::AssertUnwindSafe(read))
-                .unwrap_or(Err(ReadLayoutError::Panicked));
-            if read.is_ok() {
-                crate::log!(
-                    INFO,
-                    "item drops ready: the pickup read in {} ms off the game thread",
-                    began.elapsed().as_millis()
-                );
-            }
-            self.finish(read);
-        };
-        if let Err(why) = std::thread::Builder::new()
-            .name("enshwick item drops".into())
-            .spawn(work)
-        {
-            self.finish(Err(ReadLayoutError::Thread(why.to_string())));
-        }
+        crate::engine::off_thread::read("item drops", read, |read, took| {
+            self.finish(read, took);
+        });
     }
 
     /// Starts `read` when `event` is the world's load.
@@ -95,15 +79,31 @@ impl Reading {
         }
     }
 
-    /// Keeps `read` for the process, logging a failure and turning drops off.
-    fn finish(&self, read: Result<Layout, ReadLayoutError>) {
-        let kept = read
-            .inspect_err(|why| {
+    /// Keeps `read` for the process, then logs it and turns drops off on a
+    /// failure: kept first, so a drop waiting in [`Reading::layout`] wakes
+    /// even if the log panics.
+    fn finish(&self, read: Result<Layout, ReadLayoutError>, took: std::time::Duration) {
+        let why = match read {
+            Ok(layout) => {
+                let _first = self.layout.set(Some(layout));
+                None
+            }
+            Err(why) => {
+                let _first = self.layout.set(None);
+                Some(why)
+            }
+        };
+        match why {
+            None => crate::log!(
+                INFO,
+                "item drops ready: the pickup read in {} ms off the game thread",
+                took.as_millis()
+            ),
+            Some(why) => {
                 crate::log!(WARN, "item drops off: {why}");
                 crate::engine::diag::part_off("item drops", &why.to_string());
-            })
-            .ok();
-        let _first = self.layout.set(kept);
+            }
+        }
     }
 
     /// The layout, waiting for a read [`Reading::start`] began, so a drop
@@ -116,6 +116,9 @@ impl Reading {
 
 /// Starts reading the layout as a world loads, where a server runs.
 pub(crate) fn world_event(event: Event) {
+    if crate::engine::world::server().is_err() {
+        return;
+    }
     if let Some(loader) = crate::engine::loader::loader() {
         READING.at(event, move || read_layout(loader));
     }
@@ -146,11 +149,7 @@ fn read_layout(loader: &Loader) -> Result<Layout, ReadLayoutError> {
         }
         usize::try_from(at).map_err(|_| ReadLayoutError::Field(name))
     };
-    let vanilla = enshwick_core::content::vanilla::Vanilla::new(
-        &enshwick_gamedata::catalogue::Reflected(reflection),
-        |key| crate::engine::archive::game()?.resource(&key),
-    );
-    let template = match vanilla.map(|vanilla| vanilla.template(TEMPLATE)) {
+    let template = match crate::engine::archive::vanilla(loader).map(|v| v.template(TEMPLATE)) {
         Ok(Ok(guid)) => guid.0,
         why => return Err(ReadLayoutError::Template(format!("{why:?}"))),
     };
@@ -192,8 +191,13 @@ enum ReadLayoutError {
     #[error("the read of the pickup panicked")]
     Panicked,
     /// No thread could be started for the read.
-    #[error("no thread to read the pickup: {0}")]
-    Thread(String),
+    #[error("no thread to read the pickup")]
+    Thread,
+}
+
+impl crate::engine::off_thread::ReadFailure for ReadLayoutError {
+    const PANICKED: Self = Self::Panicked;
+    const THREAD: Self = Self::Thread;
 }
 
 /// `PickupItem`'s bytes for `request` on `layout`, `None` for a count or a

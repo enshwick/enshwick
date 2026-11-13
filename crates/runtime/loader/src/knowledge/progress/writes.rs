@@ -86,9 +86,10 @@ struct Queue {
 #[derive(Debug)]
 pub(super) struct Writes {
     queue: Mutex<Queue>,
-    /// Whether `queue` holds a write or an outcome, read first by the level
-    /// step and after it.
+    /// Whether `queue` holds a write, read first by the level step.
     pub(super) any: AtomicBool,
+    /// Whether `queue` holds an outcome to tell after the step.
+    told: AtomicBool,
     /// Whether the level step is linked.
     pub(super) linked: AtomicBool,
 }
@@ -101,6 +102,7 @@ impl Writes {
                 heard: Vec::new(),
             }),
             any: AtomicBool::new(false),
+            told: AtomicBool::new(false),
             linked: AtomicBool::new(false),
         }
     }
@@ -119,7 +121,7 @@ impl Writes {
     /// The outcomes to tell after a step's end: those the step applied, then
     /// the writes whose character was in no level step since an end before.
     fn step_ended(&self) -> Vec<(ModIndex, ProgressWriteData)> {
-        if !self.any.load(Ordering::Acquire) {
+        if !self.any.load(Ordering::Acquire) && !self.told.load(Ordering::Acquire) {
             return Vec::new();
         }
         let mut queue = self.queue.relock();
@@ -138,10 +140,13 @@ impl Writes {
                 "{dropped} level or experience writes dropped: no level step could take them; their mods hear why"
             );
         }
+        // The next step says anew why a write waits, if it looks at it.
         for w in &mut queue.waiting {
             w.seen = true;
+            w.why = ProgressWriteData::NO_LEVEL_STEP;
         }
         self.any.store(!queue.waiting.is_empty(), Ordering::Release);
+        self.told.store(false, Ordering::Release);
         heard
     }
 
@@ -158,6 +163,7 @@ impl Writes {
                 .map(|w| w.heard(w.why, Left::default())),
         );
         self.any.store(false, Ordering::Release);
+        self.told.store(false, Ordering::Release);
         heard
     }
 }
@@ -219,11 +225,8 @@ pub(crate) fn after_step(loader: &Loader) {
 /// character.
 pub(crate) fn game_ended(loader: &Loader) {
     tell(loader, PENDING.game_ended());
-}
-
-/// Forgets the writes mods' handlers asked for as the hosted game ended.
-pub(crate) fn forget() {
-    let _told = PENDING.game_ended();
+    // What the handlers asked for while hearing it goes with the game too.
+    let _queued_by_handlers = PENDING.game_ended();
 }
 
 /// Raises each outcome for the mod it belongs to.
@@ -348,6 +351,7 @@ pub(super) unsafe fn apply_writes(loader: &Loader, engine: &Engine, ctx: *mut u6
                 }
                 level_written = true;
             }
+            let mut took = true;
             for (value, attribute) in [
                 (change.progress, levels.progress),
                 (change.need, levels.need),
@@ -358,27 +362,29 @@ pub(super) unsafe fn apply_writes(loader: &Loader, engine: &Engine, ctx: *mut u6
                     // set, which `player_level` writes and nothing else
                     // writes while it runs on this thread; `registry` is the
                     // same row's attribute registry.
-                    experience_written |=
+                    let set =
                         unsafe { engine.set_attribute(registry, experience, attribute, value) };
+                    experience_written |= set;
+                    took &= set;
                 }
             }
-            let left = Left {
-                level: change
-                    .level
-                    .or_else(|| {
-                        // SAFETY: `words[LEVEL]` is the current row's `Level`
-                        // set, null or live, and `registry` the same row's
-                        // attribute registry, on the system's thread.
-                        unsafe { engine.level(registry, words[LEVEL] as *const u8) }
-                    })
-                    .unwrap_or(0),
-                experience: change
-                    .progress
-                    .or_else(|| read(levels.progress))
-                    .unwrap_or(0),
-                gained: change.gained.unwrap_or(gained),
+            // What the character holds now, read back rather than assumed.
+            // SAFETY: `words[LEVEL]` is the current row's `Level` set, null
+            // or live, and `registry` the same row's attribute registry, on
+            // the system's thread.
+            let level = unsafe { engine.level(registry, words[LEVEL] as *const u8) };
+            let left = match (took, level, read(levels.progress), read(levels.gained)) {
+                (true, Some(level), Some(experience), Some(gained)) => Some(Left {
+                    level,
+                    experience,
+                    gained,
+                }),
+                _ => None,
             };
-            heard.push(w.heard(ProgressWriteData::APPLIED, left));
+            heard.push(match left {
+                Some(left) => w.heard(ProgressWriteData::APPLIED, left),
+                None => w.heard(ProgressWriteData::UNCONFIRMED, Left::default()),
+            });
             false
         });
         for (shift, wanted) in [(0, experience_written), (LEVEL_TRACKING, level_written)] {
@@ -399,9 +405,10 @@ pub(super) unsafe fn apply_writes(loader: &Loader, engine: &Engine, ctx: *mut u6
             }
         }
     }
-    PENDING
-        .any
-        .store(!waiting.is_empty() || !heard.is_empty(), Ordering::Release);
+    PENDING.any.store(!waiting.is_empty(), Ordering::Release);
+    if !heard.is_empty() {
+        PENDING.told.store(true, Ordering::Release);
+    }
 }
 
 #[cfg(test)]
@@ -492,11 +499,11 @@ mod tests {
     #[test]
     fn a_dropped_write_tells_its_mod_why_and_what_it_asked() {
         let pending = Writes::new();
-        let mut held = queued(PROGRESS_ADD_EXPERIENCE, 50);
-        held.why = ProgressWriteData::UNREADABLE;
-        assert_eq!(pending.push(held), Ok(()));
+        assert_eq!(pending.push(queued(PROGRESS_ADD_EXPERIENCE, 50)), Ok(()));
         assert_eq!(pending.push(queued(PROGRESS_SET_LEVEL, 3)), Ok(()));
         assert!(pending.step_ended().is_empty());
+        // The second step holds the first write: its experience did not read.
+        pending.queue.relock().waiting[0].why = ProgressWriteData::UNREADABLE;
         let heard = pending.step_ended();
         assert_eq!(heard.len(), 2);
         let (owner, first) = heard[0];
@@ -512,6 +519,40 @@ mod tests {
         );
         assert_eq!((first.level, first.experience, first.gained), (0, 0, 0));
         assert_eq!(heard[1].1.outcome, ProgressWriteData::NO_LEVEL_STEP);
+    }
+
+    #[test]
+    fn the_step_s_end_and_the_game_s_end_tell_what_waits_and_keep_nothing() {
+        let loader = crate::start::tests::bare_loader();
+        let applied =
+            queued(PROGRESS_SET_LEVEL, 12).heard(ProgressWriteData::APPLIED, Left::default());
+        PENDING.queue.relock().heard.push(applied);
+        PENDING.told.store(true, Ordering::Release);
+        after_step(&loader);
+        assert!(
+            PENDING.queue.relock().heard.is_empty(),
+            "told after the step"
+        );
+        assert!(!PENDING.told.load(Ordering::Acquire));
+        assert_eq!(PENDING.push(queued(PROGRESS_SET_LEVEL, 3)), Ok(()));
+        game_ended(&loader);
+        assert!(
+            PENDING.queue.relock().waiting.is_empty(),
+            "told at the game's end"
+        );
+        assert!(!PENDING.any.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn a_write_held_once_then_in_no_level_step_is_dropped_for_the_last_step() {
+        let pending = Writes::new();
+        assert_eq!(pending.push(queued(PROGRESS_ADD_EXPERIENCE, 50)), Ok(()));
+        // The first step holds it, the second does not take its character.
+        pending.queue.relock().waiting[0].why = ProgressWriteData::UNREADABLE;
+        assert!(pending.step_ended().is_empty());
+        let heard = pending.step_ended();
+        assert_eq!(heard.len(), 1);
+        assert_eq!(heard[0].1.outcome, ProgressWriteData::NO_LEVEL_STEP);
     }
 
     #[test]
@@ -546,7 +587,7 @@ mod tests {
         };
         let applied = w.heard(ProgressWriteData::APPLIED, left);
         pending.queue.relock().heard.push(applied);
-        pending.any.store(true, Ordering::Release);
+        pending.told.store(true, Ordering::Release);
         let heard = pending.step_ended();
         assert_eq!(heard.len(), 1);
         let (owner, data) = heard[0];
@@ -558,6 +599,7 @@ mod tests {
         );
         assert!(pending.step_ended().is_empty(), "heard once");
         assert!(!pending.any.load(Ordering::Acquire));
+        assert!(!pending.told.load(Ordering::Acquire));
     }
 
     #[test]

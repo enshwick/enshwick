@@ -5362,26 +5362,32 @@ typedef struct EnshwickProgressWriteData {
   struct EnshwickHeader header;
   // The player's character the write was for.
   EnshwickEntity entity;
-  // The `what` the mod passed: `PROGRESS_SET_LEVEL`,
-  // `PROGRESS_SET_EXPERIENCE` or `PROGRESS_ADD_EXPERIENCE`.
+  // The `what` the mod passed: 1 to set the level
+  // (`PROGRESS_SET_LEVEL`), 2 to set the experience
+  // (`PROGRESS_SET_EXPERIENCE`) or 3 to add experience
+  // (`PROGRESS_ADD_EXPERIENCE`).
   uint32_t what;
   // The `value` the mod passed.
   uint32_t value;
-  // `ProgressWriteData::APPLIED`, or why the server dropped the write:
-  // `NO_LEVEL_STEP`,
-  // `UNREADABLE`,
-  // `LEVEL_REFUSED` or
-  // `BEHIND_DROPPED`.
+  // 0 when the write was applied (`APPLIED`),
+  // else why not: 1 no level step took the character
+  // (`NO_LEVEL_STEP`), 2 its
+  // experience did not read (`UNREADABLE`),
+  // 3 its level did not take the write
+  // (`LEVEL_REFUSED`), 4 an earlier
+  // write for it was not applied
+  // (`BEHIND_DROPPED`), 5 written but
+  // not confirmed (`UNCONFIRMED`).
   uint32_t outcome;
-  // The character's level as the applied write left it; 0 for a dropped
-  // write.
+  // The character's level as the applied write left it, read back after
+  // the write; 0 unless the outcome is 0.
   uint32_t level;
-  // The experience inside the level as the applied write left it; 0 for
-  // a dropped write.
+  // The experience inside the level as the applied write left it, read
+  // back after the write; 0 unless the outcome is 0.
   uint32_t experience;
   // The experience gained and not applied yet as the write left it, which
-  // the game applies in the same step, levelling up from it; 0 for a
-  // dropped write.
+  // the game applies in the same step, levelling up from it; 0 unless the
+  // outcome is 0.
   uint32_t gained;
 } EnshwickProgressWriteData;
 // The server's level step applied the write.
@@ -5396,6 +5402,10 @@ typedef struct EnshwickProgressWriteData {
 // An earlier write for the same character could not be applied, and a
 // character's writes apply in the order given.
 #define EnshwickProgressWriteData_BEHIND_DROPPED 4
+// The server wrote the character's level or experience, but a part of
+// the write did not take or what it left did not read back; the mod
+// reads the character again to know.
+#define EnshwickProgressWriteData_UNCONFIRMED 5
 
 // A prop a transaction places, as a player places one from an item, for
 // `TransactionOp::PLACE_PROP`.

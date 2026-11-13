@@ -1991,17 +1991,17 @@ export type Progress = {
 export type ProgressWriteData = {
 	--- The player's character the write was for.
 	entity: number,
-	--- The `what` the mod passed: `PROGRESS_SET_LEVEL`, `PROGRESS_SET_EXPERIENCE` or `PROGRESS_ADD_EXPERIENCE`.
+	--- The `what` the mod passed: 1 to set the level (`PROGRESS_SET_LEVEL`), 2 to set the experience (`PROGRESS_SET_EXPERIENCE`) or 3 to add experience (`PROGRESS_ADD_EXPERIENCE`).
 	what: number,
 	--- The `value` the mod passed.
 	value: number,
-	--- `ProgressWriteData.APPLIED`, or why the server dropped the write: `NO_LEVEL_STEP`, `UNREADABLE`, `LEVEL_REFUSED` or `BEHIND_DROPPED`.
+	--- 0 when the write was applied (`APPLIED`), else why not: 1 no level step took the character (`NO_LEVEL_STEP`), 2 its experience did not read (`UNREADABLE`), 3 its level did not take the write (`LEVEL_REFUSED`), 4 an earlier write for it was not applied (`BEHIND_DROPPED`), 5 written but not confirmed (`UNCONFIRMED`).
 	outcome: number,
-	--- The character's level as the applied write left it; 0 for a dropped write.
+	--- The character's level as the applied write left it, read back after the write; 0 unless the outcome is 0.
 	level: number,
-	--- The experience inside the level as the applied write left it; 0 for a dropped write.
+	--- The experience inside the level as the applied write left it, read back after the write; 0 unless the outcome is 0.
 	experience: number,
-	--- The experience gained and not applied yet as the write left it, which the game applies in the same step, levelling up from it; 0 for a dropped write.
+	--- The experience gained and not applied yet as the write left it, which the game applies in the same step, levelling up from it; 0 unless the outcome is 0.
 	gained: number,
 }
 

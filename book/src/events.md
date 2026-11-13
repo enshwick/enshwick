@@ -125,20 +125,23 @@ The data types have these fields:
   - `x`
   - `z`
   - `size`
-- `ProgressWriteData` has seven fields. A dropped write has the last three
-  zeroed.
+- `ProgressWriteData` has seven fields. Unless the write was applied, the
+  last three are zeroed.
   - `entity`: the character the write was for.
-  - `what`: what the mod asked for, such as `PROGRESS_SET_LEVEL`.
+  - `what`: what the mod asked for: 1 sets the level (`PROGRESS_SET_LEVEL`),
+    2 sets the experience and 3 adds experience.
   - `value`: the value the mod passed.
-  - `outcome`: one of these constants:
-    - `ProgressWriteData::APPLIED`
-    - `NO_LEVEL_STEP`: no level step took the character by the second step
-      end, as when it left the world.
-    - `UNREADABLE`: the character's experience did not read.
-    - `LEVEL_REFUSED`: the character's level did not take the new level.
-    - `BEHIND_DROPPED`: an earlier write for the character could not be
+  - `outcome`: one of these numbers, each a constant of `ProgressWriteData`:
+    - 0, `APPLIED`: the write was applied.
+    - 1, `NO_LEVEL_STEP`: no level step took the character by the second
+      step end, as when it left the world or the hosted game ended.
+    - 2, `UNREADABLE`: the character's experience did not read.
+    - 3, `LEVEL_REFUSED`: the character's level did not take the new level.
+    - 4, `BEHIND_DROPPED`: an earlier write for the character could not be
       applied, and a character's writes apply in order.
-  - `level`: the level the write left.
+    - 5, `UNCONFIRMED`: the server wrote the character, but a part of the
+      write did not take or did not read back. Read the character again.
+  - `level`: the level the write left, read back after the write.
   - `experience`: the experience inside the level the write left.
   - `gained`: the experience the game applies later in the same step.
 

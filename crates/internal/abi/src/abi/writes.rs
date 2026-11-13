@@ -83,26 +83,32 @@ pub struct ProgressWriteData {
     pub header: Header,
     /// The player's character the write was for.
     pub entity: Entity,
-    /// The `what` the mod passed: [`PROGRESS_SET_LEVEL`],
-    /// [`PROGRESS_SET_EXPERIENCE`] or [`PROGRESS_ADD_EXPERIENCE`].
+    /// The `what` the mod passed: 1 to set the level
+    /// ([`PROGRESS_SET_LEVEL`]), 2 to set the experience
+    /// ([`PROGRESS_SET_EXPERIENCE`]) or 3 to add experience
+    /// ([`PROGRESS_ADD_EXPERIENCE`]).
     pub what: u32,
     /// The `value` the mod passed.
     pub value: u32,
-    /// [`ProgressWriteData::APPLIED`], or why the server dropped the write:
-    /// [`NO_LEVEL_STEP`](ProgressWriteData::NO_LEVEL_STEP),
-    /// [`UNREADABLE`](ProgressWriteData::UNREADABLE),
-    /// [`LEVEL_REFUSED`](ProgressWriteData::LEVEL_REFUSED) or
-    /// [`BEHIND_DROPPED`](ProgressWriteData::BEHIND_DROPPED).
+    /// 0 when the write was applied ([`APPLIED`](ProgressWriteData::APPLIED)),
+    /// else why not: 1 no level step took the character
+    /// ([`NO_LEVEL_STEP`](ProgressWriteData::NO_LEVEL_STEP)), 2 its
+    /// experience did not read ([`UNREADABLE`](ProgressWriteData::UNREADABLE)),
+    /// 3 its level did not take the write
+    /// ([`LEVEL_REFUSED`](ProgressWriteData::LEVEL_REFUSED)), 4 an earlier
+    /// write for it was not applied
+    /// ([`BEHIND_DROPPED`](ProgressWriteData::BEHIND_DROPPED)), 5 written but
+    /// not confirmed ([`UNCONFIRMED`](ProgressWriteData::UNCONFIRMED)).
     pub outcome: u32,
-    /// The character's level as the applied write left it; 0 for a dropped
-    /// write.
+    /// The character's level as the applied write left it, read back after
+    /// the write; 0 unless the outcome is 0.
     pub level: u32,
-    /// The experience inside the level as the applied write left it; 0 for
-    /// a dropped write.
+    /// The experience inside the level as the applied write left it, read
+    /// back after the write; 0 unless the outcome is 0.
     pub experience: u32,
     /// The experience gained and not applied yet as the write left it, which
-    /// the game applies in the same step, levelling up from it; 0 for a
-    /// dropped write.
+    /// the game applies in the same step, levelling up from it; 0 unless the
+    /// outcome is 0.
     pub gained: u32,
 }
 
@@ -121,4 +127,8 @@ impl ProgressWriteData {
     /// An earlier write for the same character could not be applied, and a
     /// character's writes apply in the order given.
     pub const BEHIND_DROPPED: u32 = 4;
+    /// The server wrote the character's level or experience, but a part of
+    /// the write did not take or what it left did not read back; the mod
+    /// reads the character again to know.
+    pub const UNCONFIRMED: u32 = 5;
 }

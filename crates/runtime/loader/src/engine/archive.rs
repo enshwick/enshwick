@@ -44,6 +44,30 @@ pub(crate) fn open_game(dir: &Path, side: enshwick_core::abi::Side) -> Option<&'
 #[cfg(windows)]
 static GAME: std::sync::OnceLock<Option<Archive>> = std::sync::OnceLock::new();
 
+/// The game's vanilla content read through its archive, built once for the
+/// process, so every reader shares its indices: the template names cost
+/// about 139 ms to read on a dedicated server.
+#[cfg(windows)]
+pub(crate) fn vanilla(
+    loader: &crate::engine::loader::Loader,
+) -> Result<&'static Vanilla, &'static enshwick_core::Off> {
+    VANILLA
+        .get_or_init(|| {
+            Vanilla::new(
+                &crate::engine::catalogue::Reflected(&loader.reflection),
+                |key| game()?.resource(&key),
+            )
+        })
+        .as_ref()
+}
+
+#[cfg(windows)]
+use enshwick_core::content::vanilla::Vanilla;
+
+#[cfg(windows)]
+static VANILLA: std::sync::OnceLock<Result<Vanilla, enshwick_core::Off>> =
+    std::sync::OnceLock::new();
+
 /// Lets go of the unpacked chunks of the game's archive, if it was opened.
 #[cfg(windows)]
 pub(crate) fn trim_game() {

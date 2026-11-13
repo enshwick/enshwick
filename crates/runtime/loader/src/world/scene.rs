@@ -19,6 +19,8 @@
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
+use crate::engine::off_thread::ReadFailure;
+
 use enshwick_core::abi::{
     Header, MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MarkerTypeSorting, ResourceKey, Side,
     Status,
@@ -265,14 +267,6 @@ impl Described for MapFrameInfo {
     }
 }
 
-/// The failures every read of a scene shares.
-trait ReadFailure: core::fmt::Display + Clone + Send + 'static {
-    /// The read panicked.
-    const PANICKED: Self;
-    /// No thread could be started.
-    const THREAD: Self;
-}
-
 impl ReadFailure for ReadSceneError {
     const PANICKED: Self = Self::Panicked;
     const THREAD: Self = Self::Thread;
@@ -286,7 +280,7 @@ impl ReadFailure for ReadFrameError {
 /// The read of `key` that `cache` keeps, or [`Status::NOT_LOADED`] while it
 /// runs: the first call for a scene starts `read` on a thread of its own,
 /// named for `what`.
-fn cached<V: Described, E: ReadFailure>(
+fn cached<V: Described, E: ReadFailure + Clone>(
     key: SceneKey,
     what: &'static str,
     cache: fn(&mut SceneState) -> &mut SceneCache<V, E>,
@@ -297,23 +291,13 @@ fn cached<V: Described, E: ReadFailure>(
         Lookup::Pending => return Err(Status::NOT_LOADED),
         Lookup::Start => {}
     }
-    let work = move || {
-        let began = Instant::now();
-        let found = std::panic::catch_unwind(std::panic::AssertUnwindSafe(read))
-            .unwrap_or(Err(E::PANICKED));
+    crate::engine::off_thread::read(what, read, move |found, took| {
         match &found {
-            Ok(value) => crate::log!(DEBUG, "{}", value.done(began.elapsed().as_millis())),
+            Ok(value) => crate::log!(DEBUG, "{}", value.done(took.as_millis())),
             Err(why) => crate::log!(WARN, "{what} off for this scene: {why}"),
         }
         let _kept = cache(&mut STATE.relock()).finish(key, found);
-    };
-    if let Err(why) = std::thread::Builder::new()
-        .name(format!("enshwick {what}"))
-        .spawn(work)
-    {
-        crate::log!(WARN, "{what}: no thread to read the scene ({why})");
-        let _kept = cache(&mut STATE.relock()).finish(key, Err(E::THREAD));
-    }
+    });
     Err(Status::NOT_LOADED)
 }
 
