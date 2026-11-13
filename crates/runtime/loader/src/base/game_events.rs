@@ -209,7 +209,7 @@ pub(crate) fn link(loader: &'static Loader) {
     // Without the layout the move still links: a client's notices and the
     // freeing of handed lists need no stream.
     let layout = layout
-        .inspect_err(|missing| {
+        .inspect_err(|missing: &Constant| {
             let _off = loader.fuse_off(&DELIVERY_FUSE, missing.id(), crate::engine::builds::ABSENT);
         })
         .ok();
