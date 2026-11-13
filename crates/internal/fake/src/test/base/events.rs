@@ -142,6 +142,37 @@ impl Installed {
         handlers.len()
     }
 
+    /// Emits only to explicitly client-scoped subscriptions of the fake.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert_eq!(loader.raise_client_game_event(42, &[0;16]), 0);
+    /// ```
+    #[must_use]
+    pub fn raise_client_game_event(&self, type_hash: u32, bytes: &[u8]) -> usize {
+        let handlers: Vec<_> = table::with(Vec::new(), |s| {
+            s.client_game_events
+                .iter()
+                .filter(|g| g.0 == type_hash)
+                .map(|g| g.1)
+                .collect()
+        });
+        let data = enshwick_core::abi::GameEventData {
+            header: Header::of::<enshwick_core::abi::GameEventData>(),
+            type_hash,
+            size: u32::try_from(bytes.len()).unwrap_or(u32::MAX),
+            data: bytes.as_ptr(),
+        };
+        for handler in &handlers {
+            // SAFETY: the copied event envelope and bytes remain readable
+            // for this synchronous call; user belongs to the subscription.
+            handler.run(|callback, user| unsafe { callback(&raw const data, user) });
+        }
+        handlers.len()
+    }
+
     /// The mod events the mod defined, by name, in order.
     ///
     /// # Examples

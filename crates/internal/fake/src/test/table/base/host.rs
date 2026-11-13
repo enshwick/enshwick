@@ -80,6 +80,34 @@ pub(crate) extern "system" fn game_event(
     })
 }
 
+pub(crate) extern "system" fn client_game_event(
+    me: ModHandle,
+    type_hash: u32,
+    callback: GameEventFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        if s.host.side != Side::CLIENT {
+            return Status::UNAVAILABLE;
+        }
+        if s.registration == crate::test::table::Registration::Closed {
+            return Status::TOO_LATE;
+        }
+        if type_hash == 0
+            || s.client_game_events
+                .iter()
+                .filter(|(_, handler)| handler.owner() == Some(me))
+                .count()
+                >= 32
+        {
+            return Status::BAD_ARGS;
+        }
+        s.client_game_events
+            .push((type_hash, Registered::new(callback, user, me)));
+        Status::OK
+    })
+}
+
 pub(crate) extern "system" fn event_types(
     _me: ModHandle,
     out: *mut EventTypeInfo,

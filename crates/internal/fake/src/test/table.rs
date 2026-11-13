@@ -77,6 +77,7 @@ pub(crate) struct State {
     pub(crate) subscriptions: Vec<(Event, Registered<EventFn>)>,
     /// Game event handlers, by type hash (0 for every type).
     pub(crate) game_events: Vec<(u32, Registered<GameEventFn>)>,
+    pub(crate) client_game_events: Vec<(u32, Registered<GameEventFn>)>,
     pub(crate) served: Vec<(ServedResource, Registered<ResourcePatchFn>)>,
     /// Every rebuild of a served resource the mod asked for, at init and
     /// after.
@@ -386,6 +387,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         mid_hooks: Vec::new(),
         subscriptions: Vec::new(),
         game_events: Vec::new(),
+        client_game_events: Vec::new(),
         served: Vec::new(),
         rebuilds: Vec::new(),
         kept_outputs: 0,
@@ -734,4 +736,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     fog_uncover,
     content_name,
     language_of,
+    client_game_event,
 };

@@ -2005,6 +2005,19 @@ pub struct HostApi {
     /// and on a client. Any thread, re-entrant; a panic in the loader
     /// returns `0`. ABI 11.27.
     pub language_of: extern "system" fn(me: ModHandle, key: PlayerKey) -> u32,
+    /// Subscribes to one event type from the client's own ECS world only.
+    /// Init only. Client binary only ([`Status::UNAVAILABLE`] otherwise).
+    /// Hash 0 and more than 32 subscriptions per mod are [`Status::BAD_ARGS`].
+    /// Delivery runs on the client simulation thread and grants no server
+    /// World read or mutation authority. Copies are capped at 256 events
+    /// and 64 KiB per merge; traversal is capped at 65,536 records and 256
+    /// streams. A warning is logged once on drops. ABI 11.28.
+    pub client_game_event: extern "system" fn(
+        me: ModHandle,
+        type_hash: u32,
+        callback: GameEventFn,
+        user: *mut c_void,
+    ) -> Status,
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.
@@ -2153,5 +2166,6 @@ const _: () = {
     assert!(offset_of!(HostApi, fog_uncover) == 24 + 204 * 8);
     assert!(offset_of!(HostApi, content_name) == 24 + 205 * 8);
     assert!(offset_of!(HostApi, language_of) == 24 + 206 * 8);
-    assert!(size_of::<HostApi>() == 24 + 207 * 8);
+    assert!(offset_of!(HostApi, client_game_event) == 24 + 207 * 8);
+    assert!(size_of::<HostApi>() == 24 + 208 * 8);
 };

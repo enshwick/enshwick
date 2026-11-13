@@ -36,7 +36,7 @@ pub use enshwick_base::{
 pub(crate) mod load {
     pub(crate) use enshwick_base::__off_from as off_from;
     #[cfg(feature = "typed")]
-    pub(crate) use enshwick_base::load::game_events_of;
+    pub(crate) use enshwick_base::load::{client_game_events_of, game_events_of};
     pub(crate) use enshwick_base::load::{hand_over, off_status, ok};
 }
 

@@ -231,4 +231,5 @@ pub(crate) static API: HostApi = HostApi {
     fog_uncover,
     content_name,
     language_of,
+    client_game_event,
 };

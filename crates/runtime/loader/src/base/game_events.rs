@@ -9,11 +9,12 @@
 //! streams before the engine moves them (see the vetoes module).
 //!
 //! A client runs the same move for its own world as well as for a hosted
-//! game's server; only the server's entity world is followed.
+//! game's server. Explicit client subscriptions follow its own world in a
+//! separate observation batch, without running server filters or actions.
 
 use core::cell::RefCell;
 use core::ffi::c_void;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use enshwick_core::abi::{GameEventData, GameEventFn, Header, HookFlags, Side, Status};
@@ -38,9 +39,60 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ecs::EVENT_STREAMS.id(),
 ];
 
+/// Client observations never share a batch or callbacks with server events.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Scope {
+    Server,
+    Client,
+}
+
+impl Scope {
+    fn matches(self, delivered: Self, wanted: u32, actual: u32) -> bool {
+        self == delivered && (wanted == actual || self == Self::Server && wanted == 0)
+    }
+}
+
+fn scope_for(side: Side, server: bool, own_client: bool) -> Option<Scope> {
+    if server {
+        Some(Scope::Server)
+    } else if side == Side::CLIENT && own_client {
+        Some(Scope::Client)
+    } else {
+        None
+    }
+}
+
+const CLIENT_EVENTS: usize = 256;
+const CLIENT_BYTES: usize = 64 * 1024;
+const CLIENT_SUBSCRIPTIONS: usize = 32;
+/// Bound traversal even when no subscribed event occurs in a client merge.
+const CLIENT_RECORDS: usize = 65_536;
+const CLIENT_STREAMS: usize = 256;
+static CLIENT_DROPPED: AtomicBool = AtomicBool::new(false);
+
+fn client_registration(side: Side, type_hash: u32, count: usize) -> Status {
+    if side != Side::CLIENT {
+        Status::UNAVAILABLE
+    } else if type_hash == 0 || count >= CLIENT_SUBSCRIPTIONS {
+        Status::BAD_ARGS
+    } else {
+        Status::OK
+    }
+}
+
+fn client_drop() {
+    if !CLIENT_DROPPED.swap(true, Ordering::Relaxed) {
+        crate::log!(
+            WARN,
+            "client game events: copy or scan cap reached; observations dropped (256 events, 64 KiB, 65536 records, 256 streams per merge)"
+        );
+    }
+}
+
 /// A mod's handler for one event type, or for all with hash 0.
 #[derive(Debug, Clone, Copy)]
 struct Subscriber {
+    scope: Scope,
     owner: ModIndex,
     type_hash: u32,
     callback: GameEventFn,
@@ -52,14 +104,20 @@ struct Subscriber {
 struct Sealed {
     subscribers: Box<[Subscriber]>,
     wanted: FxHashSet<u32>,
+    client_wanted: FxHashSet<u32>,
     every: bool,
     /// The equipment event, when stats follow it.
     equipment: Option<u32>,
 }
 
 impl Sealed {
-    fn wants(&self, type_hash: u32) -> bool {
-        self.every || self.wanted.contains(&type_hash) || self.equipment == Some(type_hash)
+    fn wants(&self, scope: Scope, type_hash: u32) -> bool {
+        match scope {
+            Scope::Server => {
+                self.every || self.wanted.contains(&type_hash) || self.equipment == Some(type_hash)
+            }
+            Scope::Client => self.client_wanted.contains(&type_hash),
+        }
     }
 }
 
@@ -104,41 +162,55 @@ impl Batch {
 
 /// Takes this thread's batch out of its cell, so the mod callbacks that run
 /// while it is filled or handed out may reach the loader again.
-fn take_batch() -> Batch {
-    BATCH.take()
+fn take_batch(scope: Scope) -> Batch {
+    match scope {
+        Scope::Server => BATCH.take(),
+        Scope::Client => CLIENT_BATCH.take(),
+    }
 }
 
 /// Puts `batch` back into this thread's cell, after the events a callback
 /// copied meanwhile, keeping its buffers when there were none.
-fn give_back(mut batch: Batch) {
-    BATCH.with_borrow_mut(|held| {
+fn give_back(scope: Scope, mut batch: Batch) {
+    let put = |held: &mut Batch| {
         if held.events.is_empty() && held.bytes.is_empty() {
             core::mem::swap(held, &mut batch);
         } else {
             let newer = core::mem::take(held);
-            batch.append(&newer);
+            if scope == Scope::Client
+                && (batch.events.len() + newer.events.len() > CLIENT_EVENTS
+                    || batch.bytes.len() + newer.bytes.len() > CLIENT_BYTES)
+            {
+                client_drop();
+            } else {
+                batch.append(&newer);
+            }
             *held = batch;
         }
-    });
+    };
+    match scope {
+        Scope::Server => BATCH.with_borrow_mut(put),
+        Scope::Client => CLIENT_BATCH.with_borrow_mut(put),
+    }
 }
 
 static PENDING: Mutex<Vec<Subscriber>> = Mutex::new(Vec::new());
 static SEALED: OnceLock<Sealed> = OnceLock::new();
-/// The loader, and the build's stream layout when it has one.
+/// The loader and the build's stream layout, when available.
 static LOADED: OnceLock<(&'static Loader, Option<Layout>)> = OnceLock::new();
-/// The event move's link, off only when this build cannot link it or its
-/// own checks panicked: the features it runs have fuses of their own, so
-/// one of them failing leaves the others running.
+/// The event move links independently from each consumer's delivery fuse.
 static EVENTS_FUSE: Fuse = Fuse::new("game events");
-/// The copy and delivery of the server's events to the mods.
+/// Copies and delivers server events to subscribed mods.
 static DELIVERY_FUSE: Fuse = Fuse::new("game event delivery");
+static CLIENT_FUSE: Fuse = Fuse::new("client game events");
 /// The client's notices from its server, off once raising one panicked.
 static NOTICES_FUSE: Fuse = Fuse::new("server notices");
-/// The switch for freeing what the loader handed the game.
+/// Frees lists handed to the engine.
 static RETIRE_FUSE: Fuse = Fuse::new("freeing handed lists");
 
 thread_local! {
     static BATCH: RefCell<Batch> = RefCell::new(Batch::default());
+    static CLIENT_BATCH: RefCell<Batch> = RefCell::new(Batch::default());
 }
 
 /// Registers mod `owner`'s handler for events of `type_hash`, 0 for all.
@@ -152,6 +224,37 @@ pub(crate) fn register(
         return Status::TOO_LATE;
     }
     PENDING.relock().push(Subscriber {
+        scope: Scope::Server,
+        owner,
+        type_hash,
+        callback,
+        user: user.expose_provenance(),
+    });
+    Status::OK
+}
+
+/// A separate, explicitly selected client-world observation subscription.
+pub(crate) fn register_client(
+    side: Side,
+    owner: ModIndex,
+    type_hash: u32,
+    callback: GameEventFn,
+    user: *mut c_void,
+) -> Status {
+    if SEALED.get().is_some() {
+        return Status::TOO_LATE;
+    }
+    let mut pending = PENDING.relock();
+    let count = pending
+        .iter()
+        .filter(|s| s.owner == owner && s.scope == Scope::Client)
+        .count();
+    let status = client_registration(side, type_hash, count);
+    if !status.is_ok() {
+        return status;
+    }
+    pending.push(Subscriber {
+        scope: Scope::Client,
         owner,
         type_hash,
         callback,
@@ -172,8 +275,19 @@ pub(crate) fn link(loader: &'static Loader) {
         })
         .flatten();
     let sealed = Sealed {
-        wanted: subscribers.iter().map(|s| s.type_hash).collect(),
-        every: subscribers.iter().any(|s| s.type_hash == 0),
+        wanted: subscribers
+            .iter()
+            .filter(|s| s.scope == Scope::Server)
+            .map(|s| s.type_hash)
+            .collect(),
+        client_wanted: subscribers
+            .iter()
+            .filter(|s| s.scope == Scope::Client)
+            .map(|s| s.type_hash)
+            .collect(),
+        every: subscribers
+            .iter()
+            .any(|s| s.scope == Scope::Server && s.type_hash == 0),
         subscribers: subscribers.into_boxed_slice(),
         equipment,
     };
@@ -226,11 +340,8 @@ fn stream_layout(loader: &Loader) -> Option<Layout> {
 }
 
 crate::engine::chains::chain_detour! {
-    /// The engine's move of the event streams at the table's
-    /// `ecs.event_merge`, on the thread that steps `entity_world`: copies the
-    /// server's wanted events before the move and hands them to the mods
-    /// after it, raises a client's notices, and frees what the game was
-    /// handed, each under its own fuse.
+    /// The engine's event-stream move. Copies selected events before the
+    /// move and delivers each scope afterwards under independent fuses.
     fn merge(entity_world: *mut u8) -> ();
     next MERGE_NEXT;
     fuse &EVENTS_FUSE, "the event move";
@@ -242,37 +353,44 @@ crate::engine::chains::chain_detour! {
         let client_own = loader.side == Side::CLIENT
             && !entity_world.is_null()
             && entity_world.addr() as u64 != crate::engine::world::server_world();
-        let ours = layout.filter(|_| server);
-        if let Some(layout) = &ours {
-            onward.run(&DELIVERY_FUSE, "the event copy", |_| {
-                let _quiet = crate::engine::world::Quiet::enter();
-                // SAFETY: `entity_world` is the running server's entity world
-                // and this is its game thread (checked by `is_server`); the
-                // game passed it to `ecs.event_merge`, which has not moved its
-                // streams yet.
-                unsafe { copy(layout, entity_world) };
-            });
-        } else if client_own {
+        let scope = scope_for(loader.side, server, client_own);
+        if let Some(layout) = &layout {
+            if scope == Some(Scope::Server) {
+                onward.run(&DELIVERY_FUSE, "the event copy", |_| {
+                    let _quiet = crate::engine::world::Quiet::enter();
+                    // SAFETY: is_server checks the live server world and its
+                    // simulation thread before the engine moves its streams.
+                    unsafe { copy(layout, entity_world, Scope::Server) };
+                });
+            } else if scope == Some(Scope::Client) {
+                onward.run(&CLIENT_FUSE, "the client event copy", |_| {
+                    // SAFETY: the existing merge route supplies the non-null
+                    // client world on its own simulation thread before merge.
+                    unsafe { copy(layout, entity_world, Scope::Client) };
+                });
+            }
+        }
+        if client_own {
             onward.run(&NOTICES_FUSE, "the notice raise", |_| {
-                // SAFETY: on a client, `entity_world` is non-null and not the
-                // hosted server's (`client_own`), so the client's own live
-                // entity world, which the game passed to `ecs.event_merge` on
-                // its game thread before moving its streams.
+                // SAFETY: client_own identifies the game's live client-world
+                // argument on its simulation thread before the merge.
                 unsafe { crate::base::notices::raise(loader, entity_world.expose_provenance()) };
             });
         }
         onward.call();
-        // The process's own world: the server's on a dedicated server, the
-        // client's own on a client, hosting or not.
         if client_own || (loader.side != Side::CLIENT && server) {
             onward.run(&RETIRE_FUSE, "freeing what the game was handed", |_| {
                 crate::engine::retire::step();
             });
         }
-        if ours.is_some() {
+        if layout.is_some() && scope == Some(Scope::Server) {
             onward.run(&DELIVERY_FUSE, "the event delivery", |_| {
                 let _quiet = crate::engine::world::Quiet::enter();
-                deliver(loader);
+                deliver(loader, Scope::Server);
+            });
+        } else if layout.is_some() && scope == Some(Scope::Client) {
+            onward.run(&CLIENT_FUSE, "the client event delivery", |_| {
+                deliver(loader, Scope::Client);
             });
         }
     }
@@ -284,32 +402,44 @@ fn is_server(entity_world: *mut u8) -> bool {
     server != 0 && entity_world.addr() as u64 == server && crate::engine::world::reader().is_ok()
 }
 
-/// Copies every wanted event of the server's streams into this thread's
-/// batch.
+/// Copies wanted events from one explicitly selected simulation world into
+/// its own thread-local batch.
 ///
 /// # Safety
 ///
-/// - `entity_world` is the running server's live entity world.
-/// - Called on the server's game thread before the engine moves its event
-///   streams, so no system writes them during the call.
-unsafe fn copy(layout: &Layout, entity_world: *mut u8) {
+/// - `entity_world` is the live simulation world identified by `scope`.
+/// - Called on that world's simulation thread before the engine moves its
+///   event streams, so no system writes them during the call.
+unsafe fn copy(layout: &Layout, entity_world: *mut u8, scope: Scope) {
     let Some(sealed) = SEALED.get() else {
         return;
     };
+    if scope == Scope::Client && sealed.client_wanted.is_empty() {
+        return;
+    }
     let world = entity_world.expose_provenance();
-    // SAFETY: `world` is the server's live entity world on its game thread
+    // SAFETY: `world` is the selected live simulation world on its thread
     // (the caller's contract); the table's `ecs.event_streams` offset holds
     // its stream array pointer.
     let streams: usize = unsafe { crate::engine::memory::read(world, layout.streams) };
-    // SAFETY: `world` is the server's live entity world on its game thread
+    // SAFETY: `world` is the selected live simulation world on its thread
     // (the caller's contract); the table's `ecs.event_stream_count` offset
     // holds its stream count.
     let count: usize = unsafe { crate::engine::memory::read(world, layout.stream_count) };
     if streams == 0 {
         return;
     }
-    let mut batch = take_batch();
-    for index in 0..count {
+    let mut batch = take_batch(scope);
+    let mut records = 0;
+    let streams_count = if scope == Scope::Client {
+        count.min(CLIENT_STREAMS)
+    } else {
+        count
+    };
+    if streams_count != count {
+        client_drop();
+    }
+    'streams: for index in 0..streams_count {
         let stream = streams + index * layout.stream_size;
         // SAFETY: `streams` is non-zero (`streams == 0` returns first) and
         // holds `count` streams of the table's `ecs.event_stream_size` bytes,
@@ -327,6 +457,11 @@ unsafe fn copy(layout: &Layout, entity_world: *mut u8) {
         }
         let mut at = 0;
         while at + layout.record_header <= used {
+            if scope == Scope::Client && records >= CLIENT_RECORDS {
+                client_drop();
+                break 'streams;
+            }
+            records += 1;
             let record = base + at;
             // SAFETY: `base` is non-zero (`base == 0` skips the stream) and
             // `record` lies inside its bytes used, header included (`at +
@@ -342,20 +477,30 @@ unsafe fn copy(layout: &Layout, entity_world: *mut u8) {
             if at + layout.record_header + size > used {
                 break;
             }
-            // SAFETY: the payload is the live event of `type_hash` after the
-            // record's header, `size` bytes inside the bytes used (the `> used`
-            // check breaks first), on the game thread before the engine moves
-            // the streams (the caller's contract).
-            unsafe {
-                crate::actions::vetoes::screen(
-                    type_hash,
-                    core::ptr::with_exposed_provenance_mut(record + layout.record_header),
-                    size,
-                );
-            };
+            if scope == Scope::Server {
+                // SAFETY: the payload is the server event of `type_hash`
+                // after its header, `size` bytes inside the bytes used (the
+                // check above breaks first), before the engine moves streams.
+                unsafe {
+                    crate::actions::vetoes::screen(
+                        type_hash,
+                        core::ptr::with_exposed_provenance_mut(record + layout.record_header),
+                        size,
+                    );
+                }
+            }
             // Item notices are after the fact: they go out with the batch,
             // after the merge, so a filter may change the world.
-            if sealed.wants(type_hash) || crate::inventory::item_actions::hears(type_hash) {
+            if sealed.wants(scope, type_hash)
+                || scope == Scope::Server && crate::inventory::item_actions::hears(type_hash)
+            {
+                if scope == Scope::Client
+                    && (batch.events.len() >= CLIENT_EVENTS
+                        || batch.bytes.len().saturating_add(size) > CLIENT_BYTES)
+                {
+                    client_drop();
+                    break 'streams;
+                }
                 batch.events.push(Copied {
                     type_hash,
                     size: u32::try_from(size).unwrap_or(0),
@@ -372,22 +517,23 @@ unsafe fn copy(layout: &Layout, entity_world: *mut u8) {
             at += layout.record_header + size.next_multiple_of(layout.record_align);
         }
     }
-    give_back(batch);
+    give_back(scope, batch);
 }
 
 /// Hands this thread's batch to the subscribers still on, and empties it.
-fn deliver(loader: &Loader) {
+fn deliver(loader: &Loader, scope: Scope) {
     let Some(sealed) = SEALED.get() else {
         return;
     };
-    let mut batch = take_batch();
+    let mut batch = take_batch(scope);
     for event in &batch.events {
-        if sealed.equipment == Some(event.type_hash) {
+        if scope == Scope::Server && sealed.equipment == Some(event.type_hash) {
             crate::inventory::stats::equipment_changed();
         }
-        if let Some(payload) = usize::try_from(event.size)
-            .ok()
-            .and_then(|size| batch.bytes.get(event.start..event.start + size))
+        if scope == Scope::Server
+            && let Some(payload) = usize::try_from(event.size)
+                .ok()
+                .and_then(|size| batch.bytes.get(event.start..event.start + size))
         {
             // SAFETY: `payload` is the event's copy in this batch, its `size`
             // bytes, which nothing writes during the call.
@@ -406,7 +552,7 @@ fn deliver(loader: &Loader) {
             data: batch.bytes[event.start..].as_ptr(),
         };
         for subscriber in sealed.subscribers.iter().filter(|s| {
-            (s.type_hash == 0 || s.type_hash == event.type_hash)
+            s.scope.matches(scope, s.type_hash, event.type_hash)
                 && loader
                     .mods
                     .get(s.owner.get())
@@ -430,12 +576,71 @@ fn deliver(loader: &Loader) {
     }
     batch.events.clear();
     batch.bytes.clear();
-    give_back(batch);
+    give_back(scope, batch);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hosted_client_and_server_scopes_never_cross() {
+        assert_eq!(scope_for(Side::CLIENT, true, false), Some(Scope::Server));
+        assert_eq!(scope_for(Side::CLIENT, false, true), Some(Scope::Client));
+        assert_eq!(scope_for(Side::SERVER, false, true), None);
+        assert_eq!(scope_for(Side::CLIENT, false, false), None);
+        assert!(!Scope::Client.matches(Scope::Server, 42, 42));
+        assert!(!Scope::Server.matches(Scope::Client, 0, 42));
+        assert!(Scope::Server.matches(Scope::Server, 0, 42));
+        assert!(Scope::Client.matches(Scope::Client, 42, 42));
+        assert!(!client_registration(Side::SERVER, 42, 0).is_ok());
+        assert!(!client_registration(Side::CLIENT, 0, 0).is_ok());
+        assert!(!client_registration(Side::CLIENT, 42, 32).is_ok());
+        assert!(client_registration(Side::CLIENT, 42, 31).is_ok());
+    }
+
+    #[test]
+    fn client_batches_are_separate_and_reentrant_copies_stay_bounded() {
+        give_back(Scope::Server, Batch::default());
+        give_back(Scope::Client, Batch::default());
+        let mut server = take_batch(Scope::Server);
+        copied(1, b"server", &mut server);
+        give_back(Scope::Server, server);
+        let mut client = take_batch(Scope::Client);
+        copied(2, b"client", &mut client);
+        give_back(Scope::Client, client);
+        assert_eq!(
+            payloads(&take_batch(Scope::Server)),
+            [(1, b"server".to_vec())]
+        );
+        assert_eq!(
+            payloads(&take_batch(Scope::Client)),
+            [(2, b"client".to_vec())]
+        );
+        let mut outer = Batch::default();
+        for _ in 0..CLIENT_EVENTS {
+            copied(3, b"x", &mut outer);
+        }
+        CLIENT_BATCH.with_borrow_mut(|held| copied(4, b"y", held));
+        give_back(Scope::Client, outer);
+        let back = take_batch(Scope::Client);
+        assert_eq!(back.events.len(), CLIENT_EVENTS);
+        assert!(back.bytes.len() <= CLIENT_BYTES);
+    }
+
+    #[test]
+    fn no_client_subscriptions_request_no_client_event_types() {
+        let sealed = Sealed {
+            subscribers: Box::new([]),
+            wanted: [42].into_iter().collect(),
+            client_wanted: FxHashSet::default(),
+            every: true,
+            equipment: Some(43),
+        };
+        assert!(!sealed.wants(Scope::Client, 42));
+        assert!(!sealed.wants(Scope::Client, 43));
+        assert!(sealed.wants(Scope::Server, 99));
+    }
 
     fn copied(type_hash: u32, bytes: &[u8], into: &mut Batch) {
         into.events.push(Copied {
@@ -459,16 +664,15 @@ mod tests {
 
     #[test]
     fn a_batch_taken_out_leaves_the_cell_free_and_keeps_events_copied_meanwhile() {
-        let mut first = take_batch();
+        let mut first = take_batch(Scope::Server);
         copied(1, b"ab", &mut first);
         BATCH.with_borrow_mut(|held| copied(2, b"cde", held));
-        give_back(first);
-        let back = take_batch();
+        give_back(Scope::Server, first);
+        let back = take_batch(Scope::Server);
         assert_eq!(payloads(&back), [(1, b"ab".to_vec()), (2, b"cde".to_vec())]);
-        give_back(Batch::default());
+        give_back(Scope::Server, Batch::default());
         BATCH.with_borrow(|held| assert!(held.events.is_empty() && held.bytes.is_empty()));
     }
-
     #[test]
     fn a_build_without_the_stream_layout_lists_only_the_delivery_off_by_the_entry_it_lacks() {
         let loader = crate::start::tests::bare_loader();

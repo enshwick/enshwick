@@ -135,6 +135,24 @@ pub(crate) extern "system" fn status(
     })
 }
 
+pub(crate) extern "system" fn client_game_event(
+    me: ModHandle,
+    type_hash: u32,
+    callback: api_frame::GameEventFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    entry("client_game_event", || {
+        let (loader, index, _) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        if !crate::engine::loader::in_init(index.get()) {
+            return Status::TOO_LATE;
+        }
+        crate::base::game_events::register_client(loader.side, index, type_hash, callback, user)
+    })
+}
+
 pub(crate) extern "system" fn game_event(
     me: ModHandle,
     type_hash: u32,

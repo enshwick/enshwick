@@ -30,6 +30,8 @@ mod calls;
 mod capture;
 #[cfg(feature = "unstable")]
 mod chat;
+#[cfg(all(feature = "unstable", feature = "typed"))]
+mod client_game_events;
 #[cfg(feature = "unstable")]
 mod commands;
 mod config_check;

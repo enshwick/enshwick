@@ -200,3 +200,40 @@ end)
 
 Game events run on the server's game thread before the step's systems, as
 for a Rust mod. On a client they run only while it hosts a game.
+
+## Client-world observations
+
+A native client mod may explicitly subscribe to one reflected client-world
+ECS event with `Load::on_client_raw_game_event`, or use the generated typed
+`EventType<T>::on_client`. These require ABI 11.28. An older loader refuses
+the new mod; existing server subscriptions retain their behavior.
+Luau's event bindings remain server-scoped; these client subscriptions are
+native Rust APIs.
+
+```rust
+use enshwick::typed::{EventType, ecs::OpenHudScreenEvent};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    EventType::<OpenHudScreenEvent>::resolve(load)?.on_client(load, |event| {
+        enshwick::debug!("client opened {:?}", event.screen);
+    })
+}
+```
+
+Handlers run on the client's simulation thread after its event merge.
+They do not enter a server-world quiet scope and grant no server `World`
+read or mutation authority. Client and hosted-server subscriptions and
+copied batches remain separate. There is no client all-events mode.
+Registration is limited to 32 client subscriptions per mod.
+
+Each client merge copies at most 256 selected events and 64 KiB of payload.
+Traversal stops after 65,536 records or 256 streams. A warning is logged
+once when a copy, traversal or reentrant pending-batch cap drops
+observations. There is no public dropped-event counter or lossless-delivery
+promise. Reacquire state through a supported state API where one exists.
+
+`UiSelectCraftingStationRecipeEvent` carries a recipe identifier and input
+category selections. Its existence does not establish that passive recipe
+highlighting or top-level tab changes emit it. This API observes events;
+it does not expose a persistent selected tab or recipe. Those semantics
+remain to be validated against independent client UI fixtures.
