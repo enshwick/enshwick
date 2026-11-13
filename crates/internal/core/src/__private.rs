@@ -73,15 +73,14 @@ pub unsafe fn init<M: Mod>(
         host.fault(&refused);
         return Status::REFUSED;
     }
-    let outcome =
-        crate::host::caught(|| M::init(&mut Load::of(host, manifest.side == Side::BOTH, texts)));
+    let outcome = caught(|| M::init(&mut Load::of(host, manifest.side == Side::BOTH, texts)));
     let _set = INITIALISED.set(());
     match outcome {
         Ok(Ok(state)) => match slot.set(state) {
             Ok(()) => Status::OK,
             Err(state) => {
                 // A second init's state, dropped unused: its drop's panic changes nothing.
-                let _dropped = crate::host::caught(|| drop(state));
+                let _dropped = caught(|| drop(state));
                 Status::REFUSED
             }
         },
@@ -124,7 +123,7 @@ pub unsafe fn init_pack(
     // A pack that runs again reads its level afresh; the loader refreshes it
     // on a change of its settings (`refresh_levels`).
     forget_pack_level(me);
-    let outcome = crate::host::caught(|| {
+    let outcome = caught(|| {
         enshwick_base::__internal::scope(host, || {
             init(&mut Load::of(host, side == Side::BOTH, None))
         })
