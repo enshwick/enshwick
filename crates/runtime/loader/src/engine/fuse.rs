@@ -10,11 +10,13 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use enshwick_core::abi::Level;
 
 use crate::engine::errors::{self, Code};
+#[cfg(windows)]
 use crate::engine::registry::Registry;
 
 /// The features the loader's links and reports name, each once, so all the
 /// links of a feature turn off with it. Never sealed: a report may name a
 /// feature after the hooks arm.
+#[cfg(windows)]
 static NAMED: Registry<&'static Fuse> = Registry::new();
 
 /// Why a feature is off, as the log, the status summary and the Mods screen
@@ -252,6 +254,7 @@ impl Fuse {
     /// The feature named `feature`, one for the name, made the first time
     /// a link or a report names it. A cold lookup under a lock: hot paths
     /// hold their feature.
+    #[cfg(windows)]
     pub(crate) fn named(feature: &str) -> &'static Self {
         // Kept for the process, as every link that names it is.
         let leaked = || -> &'static Self {
@@ -351,6 +354,7 @@ mod tests {
         let _turn = crate::engine::log::capture_turn();
         LAMPS.turn_off(&Off::fault("twin lamps", "the first site"));
         LAMPS.blow("a later site");
+        #[cfg(windows)]
         assert!(!Fuse::named("twin lamps").is_off());
         let reported = crate::engine::log::captured()
             .iter()
