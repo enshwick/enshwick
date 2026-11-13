@@ -144,7 +144,7 @@ pub fn parts_off() -> Vec<PartOff> {
 }
 
 /// Why `fuse` is listed off, `None` while it is not.
-#[cfg(test)]
+#[cfg(all(windows, test))]
 pub(crate) fn off_reason(fuse: &crate::engine::fuse::Fuse) -> Option<String> {
     let listed = PARTS_OFF.relock();
     let part = listed.iter().find(|p| p.part == fuse.feature())?;
