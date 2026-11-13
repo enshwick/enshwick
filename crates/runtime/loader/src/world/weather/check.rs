@@ -4,6 +4,7 @@
 use enshwick_core::abi::Status;
 
 use super::Layout;
+use crate::engine::fuse::Fuse;
 use crate::engine::live::{self, Broken};
 use crate::engine::loader::Loader;
 use crate::engine::pinned;
@@ -17,7 +18,7 @@ const MAX_PAGES: u64 = 1 << 16;
 
 /// The switch of [`super::set`] and [`super::remap`], the parts that write
 /// the weather, off once the live system does not hold its found offsets.
-static CHANGES_FUSE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("weather changes");
+static CHANGES_FUSE: Fuse = Fuse::new("weather changes");
 
 /// Walks the live weather system of the running `server` the way
 /// [`super::set`], [`super::empty`] and [`super::instance`] do, through reads

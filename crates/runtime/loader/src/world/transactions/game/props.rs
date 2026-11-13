@@ -4,6 +4,7 @@ use enshwick_core::Entity;
 use enshwick_core::abi::{Header, PropPlace, SpawnRequest, Status};
 use enshwick_gamedata::catalogue;
 
+use crate::engine::fuse::Fuse;
 use crate::engine::live;
 use crate::engine::loader::Loader;
 use crate::engine::world::ServerAccess;
@@ -411,8 +412,7 @@ pub(super) fn release(loader: &Loader, entity: u32) {
 
 /// The switch of [`set_deposit`]'s writes, off once a live Quick Stash
 /// switch does not hold its found fields; the rest of a transaction runs on.
-static SWITCH_FUSE: crate::engine::fuse::Fuse =
-    crate::engine::fuse::Fuse::new("Quick Stash switches");
+static SWITCH_FUSE: Fuse = Fuse::new("Quick Stash switches");
 
 /// Checks the live switch `data` before the first write to it: both bools
 /// at their reflected offsets read, each 0 or 1 as the engine writes them.

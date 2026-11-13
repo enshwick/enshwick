@@ -26,6 +26,7 @@ use std::sync::{Mutex, OnceLock};
 
 use enshwick_core::abi::{Event, Status};
 
+use crate::engine::fuse::Fuse;
 use crate::engine::live;
 use crate::engine::loader::Loader;
 use crate::engine::pinned;
@@ -166,8 +167,7 @@ pub(crate) fn read(loader: &Loader, out: &mut [u8]) -> Result<u8, Status> {
 
 /// The switch of [`write`], off once the live settings do not hold their
 /// found offsets.
-static WRITES_FUSE: crate::engine::fuse::Fuse =
-    crate::engine::fuse::Fuse::new("game settings changes");
+static WRITES_FUSE: Fuse = Fuse::new("game settings changes");
 
 /// Checks the live settings of `server` before the first write to them:
 /// their pointer and their whole reflected size read, the day and night

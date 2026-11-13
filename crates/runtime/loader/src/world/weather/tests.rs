@@ -1,6 +1,24 @@
+use enshwick_base::Relock as _;
 use enshwick_core::abi::Event;
 
-use super::{LOADED, LOADING, UNLOADED, UNLOADING, as_saved, remapped, turn};
+use super::{
+    CHUNKS_FUSE, LOADED, LOADING, UNLOADED, UNLOADING, as_saved, link_chunks, remapped, turn,
+};
+
+#[test]
+fn chunk_events_without_their_layout_are_listed_off_with_the_first_entry_missing() {
+    let loader = crate::start::tests::bare_loader();
+    link_chunks(&loader);
+    assert!(CHUNKS_FUSE.is_off());
+    let listed = crate::engine::diag::parts_off();
+    assert!(
+        listed
+            .iter()
+            .any(|p| p.part == "chunk events" && p.reason.starts_with("chunks.manager ")),
+        "listed for the Mods screen, not only logged: {listed:?}"
+    );
+    assert!(loader.chains.relock().is_empty(), "nothing linked");
+}
 
 #[test]
 fn only_a_finished_load_or_unload_of_a_chunk_raises_its_event() {

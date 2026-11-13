@@ -26,6 +26,7 @@ use std::sync::{Mutex, OnceLock};
 use enshwick_core::abi::{DaytimeInfo, Event, Header, HookFlags, Status};
 
 use crate::engine::chains::Next;
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target, is_off, take};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
@@ -95,6 +96,8 @@ static WAS_DAY: AtomicU32 = AtomicU32::new(0);
 // and this slot is the `next` of the one link `link` makes on it, whose
 // detour `speed` calls `get`; `set_speed` calls through `wired` only.
 static SPEED_NEXT: Next<SetSpeedFn> = unsafe { Next::new() };
+/// The switch of the mods' factors on the clock's speed.
+static SPEED_FUSE: Fuse = Fuse::new("time speed");
 
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT
@@ -297,6 +300,10 @@ pub(crate) fn set_speed(loader: &Loader, owner: ModIndex, factor: f32) -> Result
         .get()
         .and_then(|factors| factors.iter().find(|(id, _)| *id == owner))
         .ok_or(Status::REFUSED)?;
+    // Off, the speed runs as on a build without the setter's link.
+    if SPEED_FUSE.is_off() {
+        return Err(Status::MISSING);
+    }
     let (layout, world, daytime) = daytime(loader)?;
     let next = SPEED_NEXT.wired().ok_or(Status::MISSING)?;
     slot.1.store(factor.to_bits(), Ordering::Relaxed);
@@ -344,25 +351,28 @@ pub(crate) fn link(loader: &'static Loader) {
             .map(|owner| (owner, AtomicU32::new(1.0f32.to_bits())))
             .collect(),
     );
-    if wanted {
-        loader.link_feature(
-            "time speed",
+    if wanted
+        && loader.link_fused(
+            &SPEED_FUSE,
             Target::Pinned(pinned::daytime::SET_SPEED),
             &SPEED_NEXT,
             speed as SetSpeedFn,
             HookFlags::NONE,
-        );
+        )
+    {
+        crate::log!(INFO, "time speed on");
     }
 }
 
-/// The switch of the day length.
-static DAYTIME_FUSE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("day length");
-
+/// Hand-written, not a `chain_detour!`: it passes on the speed scaled by
+/// the mods' factors, not the game's own, and skips a call that would
+/// change nothing.
 unsafe extern "system" fn speed(daytime: *mut u8, game: f32, now: i64) {
     GAME_SPEED.store(game.to_bits(), Ordering::Relaxed);
-    let factor = DAYTIME_FUSE.run("the speed", product).unwrap_or(1.0);
+    let factor = SPEED_FUSE.run("the speed", product).unwrap_or(1.0);
+    let mut speed = game;
     if !same(factor, 1.0) && !daytime.is_null() {
-        let wanted = game * factor;
+        speed = game * factor;
         let at = LAYOUT
             .get()
             .and_then(Option::as_ref)
@@ -373,21 +383,16 @@ unsafe extern "system" fn speed(daytime: *mut u8, game: f32, now: i64) {
             // table's `daytime.speed` offset holds its `f32` speed, which the
             // setter writes only after this read.
             let current: f32 = unsafe { enshwick_core::raw::read_at(daytime, at) };
-            if same(current, wanted) {
+            if same(current, speed) {
                 return;
             }
         }
-        // SAFETY: the game's arguments to `daytime.set_speed`, with the speed
-        // scaled by the mods' factors, passed on to the rest of the chain,
-        // which the slot holds since the chain is wired before the target
-        // jumps here.
-        unsafe { SPEED_NEXT.get()(daytime, wanted, now) };
-        return;
     }
-    // SAFETY: the game's arguments to `daytime.set_speed`, passed on
-    // unchanged to the rest of the chain, which the slot holds since the
-    // chain is wired before the target jumps here.
-    unsafe { SPEED_NEXT.get()(daytime, game, now) };
+    // SAFETY: the game's arguments to `daytime.set_speed`, the speed scaled
+    // by the mods' factors when any differs from 1, passed on to the rest of
+    // the chain, which the slot holds since the chain is wired before the
+    // target jumps here.
+    unsafe { SPEED_NEXT.get()(daytime, speed, now) };
 }
 
 /// Raises the turn of day or night the last step brought, on the game
@@ -446,6 +451,21 @@ mod tests {
         assert_eq!(forward(10 * day + 50, 50, day), 10 * day + 50);
         assert_eq!(forward(10, 50, day), 50, "already ahead");
         assert_eq!(forward(10 * day, 50, 0), 50, "no day length");
+    }
+
+    #[test]
+    fn a_speed_set_once_the_time_speed_is_off_is_missing_for_its_mods_and_refused_for_others() {
+        let loader = crate::start::tests::bare_loader();
+        let speeder = ModIndex::new(0);
+        let _first = FACTORS.set(Box::new([(speeder, AtomicU32::new(1.0f32.to_bits()))]));
+        SPEED_FUSE.blow("a test");
+        assert_eq!(set_speed(&loader, speeder, 2.0), Err(Status::MISSING));
+        assert_eq!(
+            set_speed(&loader, ModIndex::new(1), 2.0),
+            Err(Status::REFUSED),
+            "a mod without the control is told so, as on a build with it"
+        );
+        assert_eq!(SPEED_FUSE.feature(), "time speed", "its link's name");
     }
 
     #[test]

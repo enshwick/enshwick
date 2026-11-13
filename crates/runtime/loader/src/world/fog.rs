@@ -23,10 +23,11 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use enshwick_core::abi::{FogInfo, Header, HookFlags, Side, Status};
 
-use crate::engine::chains::Next;
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
+use crate::engine::pinned::Constant;
 use crate::world::fog_image::{
     FogImage, FogShape, Plan, ReadError, TileRect, UNCOVER_RANGE_PER_RADIUS, plan,
 };
@@ -43,23 +44,13 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::map::FOG_TILE_SHIFT.id(),
 ];
 
-type RevealFn = unsafe extern "system" fn(fog: *mut u8, xz: *const [f32; 2], range: f32) -> usize;
+/// The switch of the reveal and destroy links: the copy and the uncovers
+/// the server asks for.
+static FUSE: Fuse = Fuse::new("fog of war");
 
-// SAFETY: `RevealFn` is the signature of the game's fog reveal at the
-// table's `map.fog_reveal`, its result passed through whatever it is, and
-// the slot is used only as the `next` of the `reveal` link on that function.
-static NEXT: Next<RevealFn> = unsafe { Next::new() };
-
-type DestroyFn = unsafe extern "system" fn(allocator: *mut u8, fog: *mut u8) -> usize;
-
-// SAFETY: `DestroyFn` is the signature of the game's fog destroy at the
-// table's `map.fog_destroy`, its result passed through whatever it is, and
-// the slot is used only as the `next` of the `destroy` link on that
-// function.
-static DESTROY_NEXT: Next<DestroyFn> = unsafe { Next::new() };
-
-/// The switch of the fog copy.
-static FUSE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("fog of war");
+/// The switch of the copy alone, off on a build without its layout or
+/// after a panic in the copy, while the uncovers run on.
+static COPY_FUSE: Fuse = Fuse::new("fog of war copy");
 
 /// The largest tile the copy takes, on the stack of the reveal's thread.
 const MAX_TILE_BYTES: usize = 4096;
@@ -150,24 +141,38 @@ pub(crate) fn opened(owner: ModIndex) -> bool {
     OPENERS.relock().contains(&owner)
 }
 
-fn layout(loader: &Loader) -> Option<Layout> {
-    let shift = |id| {
-        loader
-            .offset(id)
-            .and_then(|shift| u32::try_from(shift).ok())
+/// The fog's layout, or the first entry that is not in the build or does
+/// not fit the copy, and why.
+fn layout(loader: &Loader) -> Result<Layout, (Constant, &'static str)> {
+    let offset = |id: Constant| loader.offset(id).ok_or((id, crate::engine::builds::ABSENT));
+    let shift = |id: Constant| {
+        u32::try_from(offset(id)?)
+            .ok()
             .filter(|&shift| shift < 16)
+            .ok_or((id, UNFIT))
     };
     let edge_shift = shift(pinned::map::FOG_TILE_EDGE_SHIFT)?;
     let tile_shift = shift(pinned::map::FOG_TILE_SHIFT)?;
-    // A tile is `edge` × `edge` bytes: the two shifts must agree.
-    (tile_shift == edge_shift * 2 && 1 << tile_shift <= MAX_TILE_BYTES).then_some(())?;
-    Some(Layout {
-        size_z: loader.offset(pinned::map::FOG_SIZE_Z)?,
-        tiles: loader.offset(pinned::map::FOG_TILES)?,
-        tiles_wide: loader.offset(pinned::map::FOG_TILES_WIDE)?,
-        tile_bytes: 1 << tile_shift,
-        edge: 1 << edge_shift,
+    let (tile_bytes, edge) =
+        tile(edge_shift, tile_shift).ok_or((pinned::map::FOG_TILE_SHIFT, UNFIT))?;
+    Ok(Layout {
+        size_z: offset(pinned::map::FOG_SIZE_Z)?,
+        tiles: offset(pinned::map::FOG_TILES)?,
+        tiles_wide: offset(pinned::map::FOG_TILES_WIDE)?,
+        tile_bytes,
+        edge,
     })
+}
+
+/// Why an entry the build has is still left out of the copy.
+const UNFIT: &str = "does not fit the copy's tiles";
+
+/// A tile's bytes and edge from the shifts of each, when they agree: a
+/// tile is `edge` × `edge` bytes, at most [`MAX_TILE_BYTES`]; both shifts
+/// are under 16.
+fn tile(edge_shift: u32, tile_shift: u32) -> Option<(usize, u32)> {
+    (tile_shift == edge_shift * 2 && 1 << tile_shift <= MAX_TILE_BYTES)
+        .then(|| (1 << tile_shift, 1 << edge_shift))
 }
 
 /// Links the reveal on every client, for the uncovers its server asks for,
@@ -177,48 +182,49 @@ pub(crate) fn link(loader: &'static Loader) {
         return;
     }
     if WANTED.load(Ordering::Acquire) {
-        if let Some(found) = layout(loader) {
+        find_layout(loader);
+    }
+    link_at(
+        loader,
+        Target::Pinned(pinned::map::FOG_DESTROY),
+        Target::Pinned(pinned::map::FOG_REVEAL),
+    );
+}
+
+/// Keeps the fog's layout for the copy, or turns the copy off for the
+/// first entry that is not in the build or does not fit.
+fn find_layout(loader: &Loader) {
+    match layout(loader) {
+        Ok(found) => {
             let _first = LAYOUT.set(found);
-        } else {
-            crate::log!(WARN, "fog of war copy off: its layout is not in this build");
+        }
+        Err((id, why)) => {
+            let _off = loader.fuse_off(&COPY_FUSE, id.id(), why);
         }
     }
-    let checked = [pinned::map::FOG_REVEAL, pinned::map::FOG_DESTROY];
-    if let Some(symbol) = checked.iter().find(|s| !loader.code_holds(**s)) {
-        crate::log!(
-            WARN,
-            "fog of war off: the code of {symbol} on {} is not the table's",
-            loader.build.name
-        );
-        return;
-    }
+}
+
+/// Links the fog's `destroy` and its `reveal`, both or neither.
+fn link_at(loader: &Loader, destroy_at: Target<'_>, reveal_at: Target<'_>) {
     // The destroy goes first: a copy must never outlive its fog.
-    if !loader.link_feature(
-        "fog of war",
-        Target::Pinned(pinned::map::FOG_DESTROY),
-        &DESTROY_NEXT,
-        destroy,
-        HookFlags::NONE,
-    ) {
-        return;
-    }
-    let linked = loader.link_feature(
-        "fog of war",
-        Target::Pinned(pinned::map::FOG_REVEAL),
-        &NEXT,
-        reveal,
-        HookFlags::NONE,
-    );
+    let linked = loader.link_fused(&FUSE, destroy_at, &DESTROY_NEXT, destroy, HookFlags::NONE)
+        && loader.link_fused(&FUSE, reveal_at, &REVEAL_NEXT, reveal, HookFlags::NONE);
     UNCOVERS.linked.store(linked, Ordering::Release);
 }
 
-unsafe extern "system" fn destroy(allocator: *mut u8, fog: *mut u8) -> usize {
-    if !fog.is_null() {
-        forget(fog.expose_provenance());
+crate::engine::chains::chain_detour! {
+    /// The game's fog destroy at the table's `map.fog_destroy`, which the
+    /// client's world teardown alone calls: drops the copy of the fog
+    /// first.
+    fn destroy(allocator: *mut u8, fog: *mut u8) -> usize;
+    next DESTROY_NEXT;
+    fuse &FUSE, "the destroy";
+    |onward| {
+        if !fog.is_null() {
+            forget(fog.expose_provenance());
+        }
+        onward.call()
     }
-    // SAFETY: the game's own arguments, passed on unchanged to the rest of
-    // the chain, which has the destroy's signature.
-    unsafe { DESTROY_NEXT.get()(allocator, fog) }
 }
 
 /// Drops the copy of the fog at `fog`, which the game frees now, and the
@@ -236,36 +242,40 @@ fn forget(fog: usize) {
     UNCOVERS.warned.store(false, Ordering::Release);
 }
 
-unsafe extern "system" fn reveal(fog: *mut u8, xz: *const [f32; 2], range: f32) -> usize {
-    let at = if xz.is_null() {
-        None
-    } else {
-        // SAFETY: the game passes the reveal a non-null (checked earlier)
-        // pointer to the two f32 of the place it uncovers, valid for the
-        // call.
-        Some(unsafe { enshwick_core::raw::read_at::<[f32; 2]>(xz.cast(), 0) })
-    };
-    // SAFETY: the game's own arguments, passed on unchanged to the rest of
-    // the chain, which has the reveal's signature.
-    let result = unsafe { NEXT.get()(fog, xz, range) };
-    if !fog.is_null() {
-        if let Some(layout) = LAYOUT.get() {
-            let _caught = FUSE.run("the copy", || {
-                copy(layout, fog.expose_provenance(), at, range);
-            });
+crate::engine::chains::chain_detour! {
+    /// The game's fog reveal at the table's `map.fog_reveal`, `reveal(fog,
+    /// &[x, z], range)`: once it returns, copies the tiles it touched and
+    /// hands it the circles the server asked to uncover.
+    fn reveal(fog: *mut u8, xz: *const [f32; 2], range: f32) -> usize;
+    next REVEAL_NEXT;
+    fuse &FUSE, "the reveal";
+    |onward| {
+        let at = (!xz.is_null()).then(|| {
+            // SAFETY: the game passes the reveal a non-null (the `then`
+            // condition) pointer to the two f32 of the place it uncovers,
+            // valid for the call.
+            unsafe { enshwick_core::raw::read_at::<[f32; 2]>(xz.cast(), 0) }
+        });
+        let result = onward.call();
+        if !fog.is_null() {
+            copy_after(fog, at, range);
+            if UNCOVERS.waiting.load(Ordering::Acquire) {
+                uncover(fog);
+            }
         }
-        if UNCOVERS.waiting.load(Ordering::Acquire) {
-            let _caught = FUSE.run("the uncover", || uncover(fog));
-        }
+        result
     }
-    result
 }
 
 /// Hands the game's reveal on `fog`, the fog it reveals on this thread, the
-/// circles the server asked for; a reveal that finds them held by the
-/// thread that queues one leaves them for the next.
+/// circles the server asked for: a call of the loader's own into the rest
+/// of the chain, so mods' links hear it as a reveal. A reveal that finds
+/// the circles held by the thread that queues one leaves them for the next.
 #[cold]
 fn uncover(fog: *mut u8) {
+    let Some(next) = REVEAL_NEXT.wired() else {
+        return;
+    };
     let Some(mut circles) = UNCOVERS.circles.try_relock() else {
         return;
     };
@@ -274,13 +284,22 @@ fn uncover(fog: *mut u8) {
     drop(circles);
     for (at, radius) in taken {
         let range = radius * UNCOVER_RANGE_PER_RADIUS;
-        // SAFETY: the game's reveal, the next of the chain, on the live fog
-        // the game revealed on this same thread a moment ago; `at` lives for
-        // the call.
-        let _uncovered = unsafe { NEXT.get()(fog, &raw const at, range) };
-        if let Some(layout) = LAYOUT.get() {
-            copy(layout, fog.expose_provenance(), Some(at), range);
-        }
+        // SAFETY: the rest of the chain of the game's reveal, wired since
+        // this runs inside its link, on the live fog the game revealed on
+        // this same thread a moment ago; `at` lives for the call.
+        let _uncovered = unsafe { next(fog, &raw const at, range) };
+        copy_after(fog, Some(at), range);
+    }
+}
+
+/// Copies what a reveal of `range` around `at` changed on `fog` while the
+/// copy has its layout, under the copy's own fuse: a panic there turns off
+/// the copy alone, and the uncovers run on.
+fn copy_after(fog: *mut u8, at: Option<[f32; 2]>, range: f32) {
+    if let Some(layout) = LAYOUT.get() {
+        let _copied = COPY_FUSE.run("the copy", || {
+            copy(layout, fog.expose_provenance(), at, range);
+        });
     }
 }
 
@@ -443,7 +462,8 @@ pub(crate) fn read(
     if !opened(owner) {
         return Status::REFUSED;
     }
-    if FUSE.is_off() {
+    // A copy turned off mid-run may hold a stale image.
+    if FUSE.is_off() || COPY_FUSE.is_off() {
         return Status::MISSING;
     }
     let mut mirror = MIRROR.relock();
@@ -478,5 +498,67 @@ pub(crate) fn read(
         Ok(()) => Status::OK,
         Err(ReadError::Outside) => Status::OUTSIDE_WORLD,
         Err(ReadError::Short) => Status::BAD_ARGS,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn reason(part: &str) -> Option<String> {
+        crate::engine::diag::parts_off()
+            .into_iter()
+            .find(|p| p.part == part)
+            .map(|p| p.reason)
+    }
+
+    #[test]
+    fn a_tile_is_its_edge_squared_and_fits_the_copy_s_buffer() {
+        assert_eq!(tile(6, 12), Some((4096, 64)));
+        assert_eq!(tile(5, 10), Some((1024, 32)));
+        assert_eq!(tile(0, 0), Some((1, 1)));
+        assert_eq!(tile(6, 13), None, "the shifts disagree");
+        assert_eq!(tile(6, 11), None, "the shifts disagree");
+        assert_eq!(tile(7, 14), None, "past the buffer");
+    }
+
+    #[test]
+    fn a_fog_whose_reveal_fails_to_link_is_wholly_off_and_its_destroy_never_armed() {
+        let loader = crate::start::tests::bare_loader();
+        link_at(
+            &loader,
+            Target::Found("fog.destroy", Some(0x1000)),
+            Target::Found("fog.reveal", None),
+        );
+        assert!(FUSE.is_off());
+        assert!(!UNCOVERS.linked.load(Ordering::Acquire));
+        let mut chains = loader.chains.relock();
+        chains.seal();
+        assert!(chains.is_empty(), "the destroy went with its feature");
+        drop(chains);
+        assert!(reason("fog of war").is_some_and(|r| r.starts_with("fog.reveal ")));
+    }
+
+    #[test]
+    fn a_fog_read_once_the_copy_is_off_answers_missing_while_the_reveal_stays_on() {
+        let reader = ModIndex::new(0);
+        OPENERS.relock().push(reader);
+        COPY_FUSE.blow("the copy");
+        assert!(!FUSE.is_off(), "the reveal and its uncovers run on");
+        let mut info: FogInfo = bytemuck::Zeroable::zeroed();
+        assert_eq!(
+            read(reader, &mut info, [0, 0], [0, 0], &mut []),
+            Status::MISSING
+        );
+    }
+
+    #[test]
+    fn a_fog_copy_without_its_layout_is_listed_off_with_the_first_entry_missing() {
+        find_layout(&crate::start::tests::bare_loader());
+        assert!(COPY_FUSE.is_off());
+        assert!(
+            reason("fog of war copy").is_some_and(|r| r.starts_with("map.fog_tile_edge_shift ")),
+            "listed for the Mods screen, not only logged"
+        );
     }
 }
