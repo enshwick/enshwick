@@ -638,7 +638,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn stop_asked(&self) -> bool {
-        table::with(false, |s| s.stop_asked)
+        table::with(false, |s| s.stops > 0)
     }
 
     /// The fog uncovers the mod sent, in order: the player, the circle's

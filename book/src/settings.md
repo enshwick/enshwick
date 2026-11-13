@@ -242,7 +242,7 @@ fn first_start(settings: &Settings, generated: &str) -> Result<(), SetSettingErr
 
 The write runs the checks of the console: the field's range and choices,
 then `validate`. It goes into the running world's file with the comments
-kept, and raises the change, so `on_settings_change` hears it at once and
+kept. It raises the change, so `on_settings_change` hears it at once and
 `on_settings` at the next load. A `secret` takes a value this way, and the
 log never shows it. A key of a group is dotted, such as
 `comfort.multiplier`.

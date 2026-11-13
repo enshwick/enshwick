@@ -544,6 +544,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "each refusal of one file's change, in the order a reader checks them"
+    )]
     fn a_change_is_checked_and_keeps_the_comments() {
         let change = set(
             "you.trading-post",

@@ -76,11 +76,11 @@ mod tests {
     fn a_script_stops_the_server_once_and_a_second_stop_raises_why() {
         let loader = run(
             FakeHost::new().world(),
-            r#"
+            r"
             enshwick.world.stop()
             local ok, why = pcall(enshwick.world.stop)
             enshwick.log.info(`again {ok}: {why}`)
-            "#,
+            ",
         );
         assert!(loader.stop_asked(), "{:?}", loader.logs());
         assert!(logged(&loader, "again false"), "{:?}", loader.logs());

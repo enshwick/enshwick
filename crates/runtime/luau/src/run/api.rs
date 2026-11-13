@@ -538,7 +538,7 @@ fn namespace_table(lua: &Lua, api: &Table, name: &str) -> mlua::Result<Table> {
 fn setting_value(value: LuaValue) -> mlua::Result<toml::Value> {
     Ok(match value {
         LuaValue::String(text) => toml::Value::String(text.to_str()?.to_owned()),
-        LuaValue::Integer(n) => toml::Value::Integer(n.into()),
+        LuaValue::Integer(n) => toml::Value::Integer(n),
         LuaValue::Number(n) => toml::Value::Float(n),
         LuaValue::Boolean(b) => toml::Value::Boolean(b),
         other => {

@@ -171,11 +171,10 @@ pub(crate) fn link(loader: &'static Loader) {
         return;
     }
     if WANTED.load(Ordering::Acquire) {
-        match layout(loader) {
-            Some(found) => {
-                let _first = LAYOUT.set(found);
-            }
-            None => crate::log!(WARN, "fog of war copy off: its layout is not in this build"),
+        if let Some(found) = layout(loader) {
+            let _first = LAYOUT.set(found);
+        } else {
+            crate::log!(WARN, "fog of war copy off: its layout is not in this build");
         }
     }
     let checked = [pinned::map::FOG_REVEAL, pinned::map::FOG_DESTROY];

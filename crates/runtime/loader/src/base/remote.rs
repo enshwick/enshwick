@@ -503,6 +503,17 @@ impl Message {
         })
     }
 
+    /// Reads a [`Message::FogUncover`] from its body: `None` for one that is
+    /// not exactly three numbers or whose circle the client does not take.
+    fn read_uncover(bytes: &[u8]) -> Option<Self> {
+        let ([x, z, radius], []) = bytes.as_chunks::<4>() else {
+            return None;
+        };
+        let at = [f32::from_le_bytes(*x), f32::from_le_bytes(*z)];
+        let radius = f32::from_le_bytes(*radius);
+        Self::uncover_fits(at, radius).then_some(Self::FogUncover { at, radius })
+    }
+
     /// Reads a message of `kind` from its body.
     #[must_use]
     pub fn read(kind: u8, mut body: &[u8]) -> Option<Self> {
@@ -596,17 +607,7 @@ impl Message {
                 Self::Controls { id, name, controls }
             }
             WINDOW | WINDOW_CLOSE => Self::read_window(kind, bytes)?,
-            FOG_UNCOVER => {
-                let ([x, z, radius], []) = bytes.as_chunks::<4>() else {
-                    return None;
-                };
-                let at = [f32::from_le_bytes(*x), f32::from_le_bytes(*z)];
-                let radius = f32::from_le_bytes(*radius);
-                if !Self::uncover_fits(at, radius) {
-                    return None;
-                }
-                Self::FogUncover { at, radius }
-            }
+            FOG_UNCOVER => Self::read_uncover(bytes)?,
             _ => return None,
         })
     }

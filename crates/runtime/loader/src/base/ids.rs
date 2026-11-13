@@ -212,7 +212,7 @@ pub(crate) fn declare_content(owner: &str, name: &str) -> Result<Guid, DeclareId
 /// game id, as a text that lives for the process: ids are never forgotten,
 /// and a boxed name's heap text never moves.
 pub(crate) fn content_named(guid: Guid) -> Option<enshwick_core::abi::Str> {
-    with(|ids| declared(ids, guid).map(|name| enshwick_core::abi::Str::new(name)))
+    with(|ids| declared(ids, guid).map(enshwick_core::abi::Str::new))
 }
 
 /// The content id a mod declared for exactly `guid`, copied.

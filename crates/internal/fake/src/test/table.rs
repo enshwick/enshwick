@@ -144,8 +144,8 @@ pub(crate) struct State {
     pub(crate) progress_steps: Vec<u64>,
     /// The drops the mod asked for, with the ids handed out.
     pub(crate) drops: Vec<(enshwick_core::Entity, enshwick_core::abi::DropRequest)>,
-    /// Whether the mod asked the server to stop.
-    pub(crate) stop_asked: bool,
+    /// The server stops the mod asked for and the fake took: 0 or 1.
+    pub(crate) stops: u8,
     /// The fog uncovers the mod sent: player, centre and radius.
     pub(crate) uncovers: Vec<(enshwick_core::PlayerKey, [f32; 2], f32)>,
     pub(crate) craft_filters: Vec<Registered<CraftCheckFn>>,
@@ -418,7 +418,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         progress_writes: None,
         progress_steps: Vec::new(),
         drops: Vec::new(),
-        stop_asked: false,
+        stops: 0,
         uncovers: Vec::new(),
         craft_filters: Vec::new(),
         daytime: None,

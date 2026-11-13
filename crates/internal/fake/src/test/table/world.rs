@@ -305,9 +305,10 @@ pub(crate) extern "system" fn server_stop(_me: ModHandle) -> Status {
         if s.host.side != Side::SERVER || s.host.hosting {
             return Status::UNAVAILABLE;
         }
-        if core::mem::replace(&mut s.stop_asked, true) {
+        if s.stops > 0 {
             return Status::REFUSED;
         }
+        s.stops = 1;
         Status::OK
     })
 }

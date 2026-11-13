@@ -102,9 +102,10 @@ fn write(
     } else {
         change.value.clone()
     };
-    match who {
-        Some(who) => crate::log!(INFO, "{who} set {id} {key} = {written}"),
-        None => crate::log!(INFO, "{id} set its own {shown} {inner} = {written}"),
+    if let Some(who) = who {
+        crate::log!(INFO, "{who} set {id} {key} = {written}");
+    } else {
+        crate::log!(INFO, "{id} set its own {shown} {inner} = {written}");
     }
     // The change is not the asking player's: the mod's handler reads no
     // reader's language.
@@ -163,9 +164,9 @@ impl ApplySettingError {
     pub(crate) fn status(&self) -> Status {
         match self {
             Self::NoWorld => Status::UNAVAILABLE,
-            Self::NoMod => Status::BAD_ARGS,
             Self::NoSchema { .. } | Self::Change(ChangeSettingError::Find(_)) => Status::MISSING,
-            Self::Change(
+            Self::NoMod
+            | Self::Change(
                 ChangeSettingError::BadValue { .. }
                 | ChangeSettingError::Refused { .. }
                 | ChangeSettingError::NoElement { .. },

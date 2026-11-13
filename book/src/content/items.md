@@ -94,9 +94,9 @@ answer on the server too, without reading each item's resource:
 | `Vanilla::item_name(guid)` | a vanilla item's debug name from the game's item registry, read once; Luau `enshwick.content.item_name(guid)` |
 | `content::content_id(guid)` | the content id a loaded mod declared for exactly that GUID, such as `you.lockers:locker`; Luau `enshwick.content.content_id(guid)` |
 
-Each answers `None` for the other kind. The item picker of an action's item
-argument lists the items mods serve beside the game's, by the names their
-mods' texts give in the player's language.
+Each answers `None` for the other kind. An action's item picker lists the
+items mods serve beside the game's. It shows them by the names their mods'
+texts give in the player's language.
 
 An unknown name answers `Unknown`, with the names that look like it. A name
 the game shows for several items answers `Ambiguous`, with those items. The
