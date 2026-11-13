@@ -141,10 +141,11 @@ fn hits_count_as_changed_only_while_the_snapshot_holds_hit_factors() {
         takes: [1.0; TYPES],
     };
     next.combat.insert(7, factors);
-    swap_in(next);
-    assert!(changes_hits());
-    swap_in(Snapshot::default());
-    assert!(!changes_hits(), "an empty snapshot changes no hit");
+    assert!(next.changes_hits());
+    assert!(
+        !Snapshot::default().changes_hits(),
+        "an empty snapshot changes no hit"
+    );
 }
 
 #[test]

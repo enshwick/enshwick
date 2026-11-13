@@ -167,6 +167,13 @@ struct Snapshot {
     combat: FxHashMap<u32, Combat>,
 }
 
+impl Snapshot {
+    /// Whether an entity of this snapshot changes hits.
+    fn changes_hits(&self) -> bool {
+        !self.combat.is_empty()
+    }
+}
+
 /// What an entity does to hits: factors on what it deals and takes, by
 /// damage type.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -193,9 +200,11 @@ fn snapshot() -> &'static ArcSwap<Snapshot> {
     SNAPSHOT.get_or_init(|| ArcSwap::from_pointee(Snapshot::default()))
 }
 
-/// Makes `next` the snapshot every reader sees.
+/// Makes `next` the snapshot every reader sees. Only the game thread swaps
+/// (the step, world events and forget phases), so [`HITS`] follows the last
+/// snapshot.
 fn swap_in(next: Snapshot) {
-    HITS.store(!next.combat.is_empty(), Ordering::Release);
+    HITS.store(next.changes_hits(), Ordering::Release);
     snapshot().store(Arc::new(next));
 }
 
