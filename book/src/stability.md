@@ -67,8 +67,8 @@ feature; the call itself does not.
 ## Luau
 
 A Luau mod has no features to turn on. The definitions in `enshwick.d.luau` mark
-the unstable parts "Unstable". They are the `world` namespace,
-`enshwick.caller` and `enshwick.on_client_game_type`. They
+the unstable parts "Unstable". They are the `world` namespace and
+`enshwick.caller`. `enshwick.on_client_game_type` is one too. They
 may change in any release, as their Rust counterparts do.
 
 ## The ABI

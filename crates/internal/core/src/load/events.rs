@@ -166,10 +166,12 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let opened = load.game_event_type("keen::ecs::OpenHudScreenEvent")?;
-    ///     load.on_client_raw_game_event(opened, |event| {
-    ///         enshwick::debug!("a screen opened: {} bytes", event.bytes().len());
+    /// use enshwick::game_events::EventType;
+    ///
+    /// // `ty` from `load.game_event_type`, as `EventType` shows.
+    /// fn listen(load: &mut enshwick::Load<'_>, ty: EventType) -> Result<(), enshwick::Off> {
+    ///     load.on_client_raw_game_event(ty, |event| {
+    ///         enshwick::debug!("{}: {} bytes", event.type_hash(), event.bytes().len());
     ///     })
     /// }
     /// ```

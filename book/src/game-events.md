@@ -207,11 +207,11 @@ Unstable: needs the `unstable` feature and may change in any release
 ([Stability](stability.md)).
 
 A client's own world raises game events of its own, of the same reflected
-types, such as `keen::ecs::OpenHudScreenEvent`.
-`load.on_client_raw_game_event(ty, handler)` calls the handler on each event
-of type `ty` in that world, and `load.on_every_client_raw_game_event(handler)`
-on every one. With the `typed` feature, `EventType::<T>::on_client` reads them
-as `T`:
+types, such as `keen::ecs::OpenHudScreenEvent`. The handler of
+`load.on_client_raw_game_event(ty, handler)` runs on each event of type `ty`
+in that world. The handler of `load.on_every_client_raw_game_event(handler)`
+runs on every one. The `typed` feature adds `EventType::<T>::on_client`,
+which reads them as the generated type:
 
 ```rust
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -232,12 +232,12 @@ A handler of the client's own events:
 - never runs on a dedicated server, where the subscription is kept without
   an error, so one `both` mod serves both sides.
 
-While a hosted game starts, until its server's first step, the client's own
-events are not handed over: the loader cannot yet tell its world from the
-server's.
+While a hosted game starts, the client's own events are not handed over.
+Until the server's first step, the loader cannot tell its world from the
+client's.
 
-One move of the client's world reads at most 256 streams and 65,536 events,
-and hands the handlers at most 256 events and 64 KiB of them. The rest of
+One move of the client's world reads at most 256 streams and 65,536 events.
+It hands the handlers at most 256 events and 64 KiB of them. The rest of
 that move's events are dropped, and the log says so once.
 
 From Luau, `enshwick.on_client_game_type(type, fields, handler)` reads them

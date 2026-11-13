@@ -73,8 +73,8 @@ fn tell(seen: Seen) -> Option<Whose> {
 mod tests {
     use super::*;
 
-    const SERVER: usize = 0x1000;
-    const CLIENT: usize = 0x2000;
+    const SERVER: usize = 0x1000; // bound, not a game offset: a test's own world address
+    const CLIENT: usize = 0x2000; // bound, not a game offset: a test's own world address
 
     fn seen(side: Side, world: usize, server: usize, starting: bool) -> Seen {
         Seen {

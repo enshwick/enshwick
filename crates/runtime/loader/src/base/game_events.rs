@@ -1,9 +1,11 @@
-//! Game events for mods: every ECS event a world's systems write goes into
-//! an event stream, and the engine moves the streams into its event queues
-//! at the start of each step, on the thread that steps that world, before
-//! any system runs. The loader links that move, copies the events a mod
-//! subscribed to and hands them over right after it, with the world still
-//! quiescent and the entities they name still in it.
+//! Game events for mods, copied as the engine moves a world's event streams.
+//!
+//! Every ECS event a world's systems write goes into an event stream, and
+//! the engine moves the streams into its event queues at the start of each
+//! step, on the thread that steps that world, before any system runs. The
+//! loader links that move, copies the events a mod subscribed to and hands
+//! them over right after it, with the world still quiescent and the
+//! entities they name still in it.
 //!
 //! The same pass lets the craft filters screen the craft requests in the
 //! server's streams before the engine moves them (see the vetoes module).

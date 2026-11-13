@@ -25,7 +25,7 @@ const WANTED: u32 = 42;
 /// hold the memory the world points into.
 fn world(type_hash: u32) -> (Vec<u64>, Vec<u64>, Vec<u8>) {
     let mut records = vec![0u8; RECORDS * (HEADER + PAYLOAD)];
-    for record in records.chunks_exact_mut(HEADER + PAYLOAD) {
+    for record in records.as_chunks_mut::<{ HEADER + PAYLOAD }>().0 {
         record[..4].copy_from_slice(&type_hash.to_le_bytes());
         record[6] = u8::try_from(PAYLOAD).unwrap_or(u8::MAX);
     }
