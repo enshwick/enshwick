@@ -21,7 +21,7 @@ on:
         type: boolean
         default: true
       split:
-        description: Run the host check, the doctests and rustdoc, the Windows lint, the trybuild test and cargo-semver-checks as parallel jobs and only the Windows tests a change touches; the repository's `cargo xtask` must know `check --part`, `check --list-windows-tests` and `host-args`, and its `.config/nextest.toml` the profiles `ci` and `trybuild`.
+        description: Run the host check, the doctests and rustdoc, the Windows lint, the trybuild test and cargo-semver-checks as parallel jobs and only the Windows tests a change touches; the repository's `cargo xtask` must know `check --part` with the parts `trybuild` and `semver`, `check --semver` and `check --list-windows-tests`.
         type: boolean
         default: false
       semver:
@@ -59,14 +59,14 @@ jobs:
           SPLIT: ${{ inputs.split }}
         run: |
           if [ "$SPLIT" = true ]; then
-            parts='{"part":"host","xtask":true},{"part":"docs","xtask":true},{"part":"windows-lint","xtask":true},{"part":"trybuild","xtask":false}'
+            parts='{"part":"host","xtask":true},{"part":"docs","xtask":true},{"part":"windows-lint","xtask":true},{"part":"trybuild","xtask":true}'
             # A pull request also fuzzes, briefly, the targets its change
             # reaches; a push to main fuzzes every target and fills the fuzz
             # build cache pull requests restore.
             if [ "$EVENT" = pull_request ] || [ "$EVENT" = push ]; then
               parts+=',{"part":"fuzz","xtask":true}'
             fi
-            if [ -n "$SEMVER" ]; then parts+=',{"part":"semver","xtask":false}'; fi
+            if [ -n "$SEMVER" ]; then parts+=',{"part":"semver","xtask":true}'; fi
           else
             parts='{"part":"all","xtask":true}'
           fi
@@ -227,38 +227,14 @@ jobs:
         if: matrix.xtask
         env:
           ENSH_MODS_DIR: ${{ github.workspace }}/.mods
-          # The host part leaves the trybuild test to the part `trybuild`
-          # (.config/nextest.toml).
-          NEXTEST_PROFILE: ${{ matrix.part == 'host' && 'ci' || 'default' }}
+          SEMVER: ${{ inputs.semver }}
         run: |
           args=()
           if [ "$FULL" = true ]; then args+=(--all); else args+=(--base "$BASE"); fi
           if [ "$PART" != all ]; then args+=(--part "$PART"); fi
+          for package in $SEMVER; do args+=(--semver "$package"); done
           if [ "$PART" = all ] || [ "$PART" = host ]; then cargo fmt --all --check; fi
           cargo xtask check "${args[@]}"
-
-      # The test builds the API crate again under target/tests/trybuild,
-      # which alone took longer than the rest of the host part's tests. It
-      # runs on every change that builds, with the host part's features; a
-      # moved test fails here instead of going untested.
-      - name: The trybuild test
-        if: matrix.part == 'trybuild'
-        run: |
-          # A substitution in an assignment fails the step; `< <(...)` would not.
-          host_args=$(cargo xtask host-args)
-          mapfile -t args <<< "$host_args"
-          cargo nextest run "${args[@]}" --test main --profile trybuild --no-tests=fail
-
-      # A version that claims less change than the public API made fails;
-      # unreleased changes keep the released version and pass.
-      - name: cargo semver-checks
-        if: inputs.semver != '' && (matrix.part == 'semver' || matrix.part == 'all')
-        env:
-          PACKAGES: ${{ inputs.semver }}
-        run: |
-          args=()
-          for package in $PACKAGES; do args+=(--package "$package"); done
-          cargo semver-checks "${args[@]}"
 
       - name: sccache statistics
         if: ${{ !cancelled() && env.RUSTC_WRAPPER == 'sccache' }}

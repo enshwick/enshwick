@@ -1,0 +1,12 @@
+# An address on every network: the strings 0.0.0.0 and [::], `UNSPECIFIED`
+# and an all-zero `Ipv4Addr::new` or `Ipv6Addr::new`.
+id: every-network
+language: rust
+rule:
+  any:
+    - kind: string_content
+      regex: '\b0\.0\.0\.0\b|\[::\]'
+    - kind: identifier
+      regex: '^UNSPECIFIED$'
+    - kind: call_expression
+      regex: 'Ipv[46]Addr::new\(\s*0(\s*,\s*0){3,7}\s*,?\s*\)$'

@@ -6,6 +6,8 @@
 //! `enshwick::abi` and `enshwick::raw`; this crate's own paths carry no
 //! promise.
 
+#![cfg_attr(enshwick_docs, feature(doc_cfg))]
+
 // The macros name the API crate by its path, as mods see it; for the types
 // here that crate is this one.
 extern crate self as enshwick;

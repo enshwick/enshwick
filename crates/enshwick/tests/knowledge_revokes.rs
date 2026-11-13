@@ -7,7 +7,7 @@ mod tests {
 
     use enshwick::abi::{Header, KnowledgeInfo, KnowledgeInput, Status};
     use enshwick::knowledge::{Grant, Knowledge, KnowledgeId, Refusal, Revoke};
-    use enshwick::{Entity, Load, Mod, Off, PlayerKey};
+    use enshwick::{Entity, Load, Mod, Off, PlayerKey, WorldError};
 
     static KNOWLEDGE: OnceLock<Knowledge> = OnceLock::new();
 
@@ -121,6 +121,75 @@ mod tests {
                 (ACCOUNT, RECIPE, u32::from(KnowledgeInfo::FLAGS), 1, true),
             ]
         );
+    }
+
+    #[test]
+    fn a_revoke_or_account_change_of_an_unknown_id_a_wrong_kind_or_a_world_id_is_refused() {
+        let (loader, knowledge) = started();
+        let unknown = KnowledgeId::new(0x99);
+        assert_eq!(
+            knowledge.revoke(Entity(2), unknown, Revoke::Clear),
+            Err(WorldError::Refused)
+        );
+        assert_eq!(
+            knowledge.revoke(Entity(2), RECIPE, Revoke::Clear),
+            Err(WorldError::Refused),
+            "a bool revoke of flags"
+        );
+        assert_eq!(
+            knowledge.revoke_account(ACCOUNT, RECIPE, Revoke::Clear),
+            Err(WorldError::Refused),
+            "a bool revoke of flags"
+        );
+        assert_eq!(
+            knowledge.revoke_account(ACCOUNT, unknown, Revoke::Clear),
+            Err(WorldError::Refused)
+        );
+        assert_eq!(
+            knowledge.grant_account(ACCOUNT, PLACE, Grant::Set),
+            Err(WorldError::Refused),
+            "an account grant of a world id"
+        );
+        assert!(loader.revokes().is_empty());
+        assert!(loader.account_changes().is_empty());
+    }
+
+    #[test]
+    fn a_flag_past_the_value_or_the_listed_ones_and_a_character_s_id_on_the_world_are_refused() {
+        let (loader, knowledge) = started();
+        let listed = KnowledgeId::new(0x2d);
+        loader.set_knowledge(
+            &[
+                (
+                    Some(Entity(2)),
+                    info(RECIPE, KnowledgeInfo::FLAGS, KnowledgeInfo::PLAYER),
+                ),
+                (
+                    Some(Entity(2)),
+                    KnowledgeInfo {
+                        flags: 0b100,
+                        ..info(listed, KnowledgeInfo::FLAGS, KnowledgeInfo::PLAYER)
+                    },
+                ),
+            ],
+            &[],
+        );
+        let refused = [
+            knowledge.revoke(Entity(2), RECIPE, Revoke::Unflag(32)),
+            knowledge.revoke_world(RECIPE, Revoke::Unflag(1)),
+            knowledge.grant(Entity(2), RECIPE, Grant::Flag(32)),
+            knowledge.grant(Entity(2), listed, Grant::Flag(1)),
+            knowledge.grant_world(listed, Grant::Flag(2)),
+        ];
+        for (call, answer) in refused.into_iter().enumerate() {
+            assert_eq!(answer, Err(WorldError::Refused), "call {call}");
+        }
+        knowledge.grant(Entity(2), listed, Grant::Flag(2)).unwrap();
+        knowledge
+            .revoke(Entity(2), listed, Revoke::Unflag(1))
+            .unwrap();
+        assert_eq!(loader.grants().len(), 1);
+        assert_eq!(loader.revokes().len(), 1);
     }
 
     fn input(id: KnowledgeId, kind: u8, refusal: u32, allowed: bool) -> KnowledgeInput {

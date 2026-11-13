@@ -12,7 +12,9 @@
 //! `--all` runs the full suite, the Windows tests included where they can
 //! run, but no fuzzing. `--part fuzz` runs the fuzz targets the change
 //! reaches for a short while, or with `--all` every target
-//! ([`super::fuzz`]).
+//! ([`super::fuzz`]). `--part trybuild` runs the trybuild test only when
+//! the API crate's tests are in scope, and `--part semver` runs
+//! cargo-semver-checks for the packages `--semver` names.
 
 use std::io::Write as _;
 use std::process::Command;
@@ -30,6 +32,15 @@ pub(crate) const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// linted and tested with the rest.
 const TEST_FEATURE: &str = "enshwick/test,enshwick/unstable,enshwick/typed,xtask/compat";
 
+/// The nextest filter of the trybuild test, which builds the API crate again
+/// under `target/tests/trybuild`: only [`Part::Trybuild`] runs it.
+const TRYBUILD: &str = "binary_id(enshwick::main) & test(/^(config_files|internals)::/)";
+
+/// The API crate's features the trybuild test builds with: trybuild builds
+/// its cases with the features of the test, and none of them needs the
+/// generated typed API, the costliest part of the crate to build.
+const TRYBUILD_FEATURES: &str = "test,unstable";
+
 /// The command line `check` takes.
 #[derive(Debug, clap::Args)]
 pub(crate) struct Args {
@@ -46,6 +57,10 @@ pub(crate) struct Args {
     /// Runs only these parts, so CI can run them as parallel jobs.
     #[arg(long, value_enum)]
     part: Vec<Part>,
+    /// A package the semver part checks against its last release on
+    /// crates.io; repeatable, and the part checks none without one.
+    #[arg(long, value_name = "PACKAGE")]
+    semver: Vec<String>,
     /// Lists, one a line, the packages whose Windows tests the change
     /// reaches, and checks nothing.
     #[arg(long)]
@@ -139,7 +154,13 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
             return Ok(false);
         }
     }
-    let checked = check(&scope, &packages, args.all, &parts);
+    if parts.contains(&Part::Trybuild) && !touches(&scope, FACADE) {
+        say(&format!(
+            "the trybuild test is out of scope: the change does not reach {FACADE}"
+        ));
+    }
+    let checked = check(&scope, &packages, args.all, &parts)
+        && (!parts.contains(&Part::Semver) || semver(&args.semver));
     if !(checked && parts.contains(&Part::WindowsTests)) {
         return Ok(checked);
     }
@@ -156,6 +177,26 @@ fn touches(scope: &Scope, package: &str) -> bool {
         Scope::All => true,
         Scope::Some { code, .. } => code.iter().any(|name| name == package),
     }
+}
+
+fn semver(packages: &[String]) -> bool {
+    if let Some(step) = semver_step(packages) {
+        step.run(false)
+    } else {
+        say("no package for cargo-semver-checks; --semver names them");
+        true
+    }
+}
+
+/// The cargo-semver-checks run of `packages`; none without one.
+fn semver_step(packages: &[String]) -> Option<Step> {
+    (!packages.is_empty()).then(|| {
+        packages
+            .iter()
+            .fold(Step::new(&["semver-checks"]), |step, package| {
+                step.then(&["--package", package])
+            })
+    })
 }
 
 /// The fuzz part: the targets the change since `base` reaches, or every
@@ -185,13 +226,26 @@ pub(crate) enum Part {
     /// Short runs of the fuzz targets the change reaches ([`fuzz`]); only
     /// when named, since it needs the nightly compiler.
     Fuzz,
+    /// The trybuild test ([`TRYBUILD`]), when the API crate's tests are in
+    /// the change's scope; a run that finds no such test fails, so a moved
+    /// test does not go untested. The host part never runs it.
+    Trybuild,
+    /// cargo-semver-checks for the packages `--semver` names.
+    Semver,
 }
 
 impl Part {
-    /// The parts that run when none is named: the host check, the docs and
-    /// the Windows lint, and the Windows tests with `--all` or `--windows`.
+    /// The parts that run when none is named: the host check, the docs, the
+    /// Windows lint, the trybuild test and semver-checks, and the Windows
+    /// tests with `--all` or `--windows`.
     fn every(windows_tests: bool) -> Vec<Self> {
-        let mut every = vec![Self::Host, Self::Docs, Self::WindowsLint];
+        let mut every = vec![
+            Self::Host,
+            Self::Docs,
+            Self::WindowsLint,
+            Self::Trybuild,
+            Self::Semver,
+        ];
         if windows_tests {
             every.push(Self::WindowsTests);
         }
@@ -422,13 +476,31 @@ fn host_steps(
     }
     if code && run_host {
         steps.push(host(&["clippy", "--all-targets"]).then(&["--", "-D", "warnings"]));
-        match tests {
-            Some("") => {}
-            Some(filter) => {
-                steps.push(host(&["nextest", "run", "--no-tests=pass"]).then(&["-E", filter]));
-            }
-            None => steps.push(host(&["nextest", "run", "--no-tests=pass"])),
+        // CI runs each part in a job of its own, so the host part never
+        // runs the trybuild test, whatever other parts this command runs.
+        let filter = match tests {
+            Some("") => None,
+            Some(filter) => Some(format!("({filter}) & not ({TRYBUILD})")),
+            None => Some(format!("not ({TRYBUILD})")),
+        };
+        if let Some(filter) = filter {
+            steps.push(host(&["nextest", "run", "--no-tests=pass"]).then(&["-E", &filter]));
         }
+    }
+    if parts.contains(&Part::Trybuild) && touches(scope, FACADE) {
+        steps.push(Step::new(&[
+            "nextest",
+            "run",
+            "--package",
+            FACADE,
+            "--test",
+            "main",
+            "--features",
+            TRYBUILD_FEATURES,
+            "--no-tests=fail",
+            "-E",
+            TRYBUILD,
+        ]));
     }
     if docs && run_docs {
         steps.push(host(&["test", "--doc"]));
@@ -540,15 +612,84 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_docs_part_parses_and_runs_when_no_part_is_named() {
+    fn the_docs_trybuild_and_semver_parts_parse_and_run_when_no_part_is_named() {
         assert_eq!(Part::from_str("docs", false), Ok(Part::Docs));
         assert_eq!(
             Part::from_str("windows-tests", false),
             Ok(Part::WindowsTests)
         );
-        assert!(Part::every(false).contains(&Part::Docs));
-        assert!(Part::every(true).contains(&Part::Docs));
+        assert_eq!(Part::from_str("trybuild", false), Ok(Part::Trybuild));
+        assert_eq!(Part::from_str("semver", false), Ok(Part::Semver));
+        for part in [Part::Docs, Part::Trybuild, Part::Semver] {
+            assert!(Part::every(false).contains(&part), "{part:?}");
+            assert!(Part::every(true).contains(&part), "{part:?}");
+        }
         assert!(Part::from_str("doc", false).is_err());
+    }
+
+    /// The step lines `parts` plan for a change to the packages `code`.
+    fn planned_for(code: &[&str], parts: &[Part]) -> Vec<String> {
+        let scope = Scope::Some {
+            code: code.iter().map(|name| (*name).to_owned()).collect(),
+            docs: BTreeSet::new(),
+        };
+        let filter = code
+            .iter()
+            .map(|name| format!("package({name})"))
+            .collect::<Vec<_>>()
+            .join(" | ");
+        host_steps(
+            &scope,
+            (&[], &[]),
+            (true, false),
+            Some(&filter),
+            false,
+            parts,
+        )
+        .iter()
+        .map(Step::line)
+        .collect()
+    }
+
+    #[test]
+    fn the_trybuild_part_runs_the_test_only_when_the_api_crate_s_tests_are_in_scope() {
+        let trybuild = format!(
+            "cargo nextest run --package enshwick --test main --features {TRYBUILD_FEATURES} --no-tests=fail -E {TRYBUILD}"
+        );
+        assert_eq!(
+            planned_for(&["enshwick-core", "enshwick"], &[Part::Trybuild]),
+            [trybuild.as_str()]
+        );
+        assert!(planned_for(&["cargo-enshwick"], &[Part::Trybuild]).is_empty());
+        assert_eq!(planned(&[Part::Trybuild]), [trybuild.as_str()]);
+    }
+
+    #[test]
+    fn the_host_part_never_runs_the_trybuild_test_whatever_parts_run_beside_it() {
+        let nextest = |steps: Vec<String>| {
+            steps
+                .into_iter()
+                .find(|step| step.starts_with("cargo nextest run --no-tests=pass"))
+                .unwrap()
+        };
+        let in_scope = format!("-E (package(enshwick)) & not ({TRYBUILD})");
+        for parts in [&[Part::Host][..], &[Part::Host, Part::Trybuild]] {
+            let step = nextest(planned_for(&["enshwick"], parts));
+            assert!(step.ends_with(&in_scope), "{parts:?}: {step}");
+        }
+        let everything = format!("-E not ({TRYBUILD})");
+        assert!(nextest(planned(&Part::every(false))).ends_with(&everything));
+        assert!(nextest(planned(&[Part::Host])).ends_with(&everything));
+    }
+
+    #[test]
+    fn the_semver_part_checks_each_package_it_is_given_and_none_without() {
+        assert!(semver_step(&[]).is_none());
+        let step = semver_step(&["enshwick".to_owned(), "enshwick-core".to_owned()]).unwrap();
+        assert_eq!(
+            step.line(),
+            "cargo semver-checks --package enshwick --package enshwick-core"
+        );
     }
 
     fn planned(parts: &[Part]) -> Vec<String> {
@@ -567,7 +708,8 @@ mod tests {
 
     #[test]
     fn the_host_and_docs_parts_split_the_steps_a_check_of_every_part_runs_in_order() {
-        let (host, docs) = (planned(&[Part::Host]), planned(&[Part::Docs]));
+        let host = planned(&[Part::Host, Part::Trybuild]);
+        let docs = planned(&[Part::Docs]);
         let starts = |steps: &[String], with: &str| steps.iter().any(|s| s.starts_with(with));
         assert!(starts(&host, "cargo nextest") && starts(&host, "cargo deny"));
         assert!(!starts(&host, "cargo test --doc") && !starts(&host, "cargo doc"));

@@ -1,0 +1,34 @@
+# Test code in a source file: an item under `#[cfg(test)]`, with `test`
+# plain or first in `any` or `all` (never `not(test)` or the `test`
+# feature), or a test function (`#[test]`, `#[tokio::test]`, `#[rstest]`),
+# its attributes read past comments. The rules that skip test code or read
+# only test code share it.
+id: in-test
+language: rust
+rule:
+  any:
+    - any:
+        - kind: mod_item
+        - kind: function_item
+        - kind: impl_item
+        - kind: const_item
+        - kind: static_item
+      follows:
+        kind: attribute_item
+        stopBy:
+          not:
+            any:
+              - kind: attribute_item
+              - kind: line_comment
+              - kind: block_comment
+        regex: '^#\[cfg\(((any|all)\(([^()]*,\s*)?)?test\b'
+    - kind: function_item
+      follows:
+        kind: attribute_item
+        stopBy:
+          not:
+            any:
+              - kind: attribute_item
+              - kind: line_comment
+              - kind: block_comment
+        regex: '^#\[((\w+::)*test|rstest)\b'

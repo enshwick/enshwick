@@ -5,5 +5,7 @@
 # rule asks; the list only shrinks.
 ruleDirs:
   - tools/ast-grep/rules
+utilDirs:
+  - tools/ast-grep/utils
 testConfigs:
   - testDir: tools/ast-grep/tests

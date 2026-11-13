@@ -24,26 +24,6 @@ utils:
       - kind: type_identifier
       - kind: scoped_type_identifier
     regex: '(^|::)String$'
-  in-test:
-    any:
-      - kind: mod_item
-        follows:
-          kind: attribute_item
-          stopBy:
-            not:
-              any:
-                - kind: attribute_item
-                - kind: line_comment
-          regex: '^#\[cfg\(.*\btest\b'
-      - kind: function_item
-        follows:
-          kind: attribute_item
-          stopBy:
-            not:
-              any:
-                - kind: attribute_item
-                - kind: line_comment
-          regex: '^#\[(test|cfg\(.*\btest\b)'
 rule:
   kind: generic_type
   all:
