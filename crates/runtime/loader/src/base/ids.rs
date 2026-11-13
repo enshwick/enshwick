@@ -304,5 +304,7 @@ mod tests {
             "the key's name is not this GUID"
         );
         assert!(content_named(Guid([4; 16])).is_none());
+        assert_eq!(content_id(locker).as_deref(), Some("ids-named:locker"));
+        assert_eq!(content_id(crafted), None);
     }
 }

@@ -470,6 +470,30 @@ mod tests {
     }
 
     #[test]
+    fn a_script_uncovers_a_player_s_fog_and_names_items_by_guid() {
+        let key = enshwick::PlayerKey::new(7);
+        let (loader, status) = run_full(
+            r#"enshwick.on("WorldSaved", function()
+                enshwick.map.uncover("7", {100, -50}, 25)
+                local ok = pcall(enshwick.map.uncover, "7", {0, 0}, 0)
+                enshwick.log.info(`zero radius {ok}`)
+                local id = enshwick.content.content_id("05050505-0505-0505-0505-050505050505")
+                local name = enshwick.content.item_name("05050505-0505-0505-0505-050505050505")
+                enshwick.log.info(`unnamed {id} {name}`)
+            end)"#,
+            Limits::default(),
+            Scripts::new(),
+            None,
+            FakeHost::new().net_peer(enshwick::net::Peer::Player(key)),
+        );
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let _handled = loader.raise::<WorldSaved>(&());
+        assert_eq!(loader.fog_uncovers(), [(key, [100.0, -50.0], 25.0)]);
+        assert!(logged(&loader, "zero radius false"), "{:?}", loader.logs());
+        assert!(logged(&loader, "unnamed nil nil"), "{:?}", loader.logs());
+    }
+
+    #[test]
     fn a_mod_without_settings_reads_an_empty_table() {
         let loader = run("enshwick.log.info(`keys {next(enshwick.settings()) == nil}`)");
         assert!(logged(&loader, "keys true"), "{:?}", loader.logs());
