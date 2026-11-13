@@ -9,6 +9,7 @@ use enshwick_core::abi::{ActionCall, CommandInfo, Header, Status, Str};
 use enshwick_core::command_names::{alias_asked, check};
 
 use super::{MAX_LINE, Named, Refusal, Reply, Typed, parse, remote_caller, reply_by, typed, word};
+use crate::engine::fuse::{Fuse, Off};
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::registry::Registry;
@@ -85,27 +86,22 @@ pub(crate) fn register(loader: &Loader, owner: ModIndex, alias: &str) -> Status 
             if asked.is_none() {
                 let mine = id(owner);
                 let feature = format!("alias /{alias} of {mine}");
-                crate::engine::loader::report_off(
-                    &feature,
-                    (
-                        format!(
-                            "{feature} off: it is not shorter than /{name}, the name in the mod's id; /{name} runs its commands"
-                        ),
-                        format!("/{alias} is not shorter than /{name}; use /{name}"),
-                    ),
+                let line = format!(
+                    "{feature} off: it is not shorter than /{name}, the name in the mod's id; /{name} runs its commands"
                 );
+                let entry = format!("/{alias} is not shorter than /{name}; use /{name}");
+                part_off(&feature, line, entry);
             }
             if let Some(holder) = holder {
                 let (mine, theirs) = (id(owner), id(holder));
                 let feature = format!("alias /{alias} of {mine}");
-                crate::engine::loader::report_off(
+                let line = format!(
+                    "{feature} off: /{alias} is {theirs}'s; /{name} runs the commands of {mine}"
+                );
+                part_off(
                     &feature,
-                    (
-                        format!(
-                            "{feature} off: /{alias} is {theirs}'s; /{name} runs the commands of {mine}"
-                        ),
-                        format!("/{alias} is {theirs}'s; use /{name}"),
-                    ),
+                    line,
+                    format!("/{alias} is {theirs}'s; use /{name}"),
                 );
             }
             Status::OK
@@ -116,16 +112,21 @@ pub(crate) fn register(loader: &Loader, owner: ModIndex, alias: &str) -> Status 
             let (mine, theirs) = (id(owner), id(other));
             let name = enshwick_core::commands::name_of(mine);
             let feature = format!("commands of {mine}");
-            crate::engine::loader::report_off(
-                &feature,
-                (
-                    format!("{feature} off: /{name} is taken by {theirs}"),
-                    format!("/{name} taken by {theirs}"),
-                ),
-            );
+            let line = format!("{feature} off: /{name} is taken by {theirs}");
+            part_off(&feature, line, format!("/{name} taken by {theirs}"));
             Status::REFUSED
         }
     }
+}
+
+/// Turns `feature`, a part of one mod's commands, off for the log `line`
+/// and the status `entry`, through [`Fuse::turn_off`] with no error code:
+/// two mods asked for one name, neither the build's fault nor a panic.
+/// The part is the one fuse its name keeps, so a mod asking again reports
+/// nothing more.
+#[cold]
+fn part_off(feature: &str, line: String, entry: String) {
+    Fuse::named(feature).turn_off(&Off::reported(line, entry));
 }
 
 /// Seals the command names once every mod's init ran.
@@ -318,6 +319,28 @@ pub(crate) fn list(loader: &'static Loader) -> Vec<CommandInfo> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_name_clash_is_logged_once_without_a_build_code_and_listed_off() {
+        let turn = crate::engine::log::capture_turn();
+        for _ in 0..2 {
+            part_off(
+                "test alias /lamp",
+                "test alias /lamp off: /lamp is taken".to_owned(),
+                "/lamp is taken".to_owned(),
+            );
+        }
+        let lines = crate::engine::log::captured();
+        drop(turn);
+        let logged = lines
+            .iter()
+            .filter(|(_, _, line)| line == "test alias /lamp off: /lamp is taken")
+            .count();
+        assert_eq!(logged, 1, "a mod asking again logs nothing more: {lines:?}");
+        let listed = crate::engine::diag::parts_off();
+        let off = listed.iter().find(|p| p.part == "test alias /lamp");
+        assert_eq!(off.map(|p| p.reason.as_str()), Some("/lamp is taken"));
+    }
 
     #[test]
     fn a_command_typed_in_one_hosted_game_never_runs_in_the_next() {

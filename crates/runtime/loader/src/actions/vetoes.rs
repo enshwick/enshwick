@@ -23,7 +23,7 @@ use enshwick_core::abi::{
 };
 use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
-use crate::engine::chains::Next;
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Registered, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
@@ -40,20 +40,13 @@ static CRAFT_FILTERS: Registry<Registered<CraftCheckFn>> = Registry::new();
 static BUILD_FILTERS: Registry<Registered<BuildCheckFn>> = Registry::new();
 static CRAFT: OnceLock<CraftLayout> = OnceLock::new();
 static BUILD: OnceLock<BuildLayout> = OnceLock::new();
-// SAFETY: `CursorFn` is the signature of the table's
-// `building.cursor_check`, and this slot is the `next` of the one link `link`
-// makes on it, whose detour `cursor` calls `get`.
-static CURSOR_NEXT: Next<CursorFn> = unsafe { Next::new() };
-
-type CursorFn = unsafe extern "system" fn(
-    flags: *mut u32,
-    cursor: *mut u8,
-    placement: *mut u8,
-    transform: *const i64,
-    a: u8,
-    b: u8,
-    range: f32,
-);
+/// The switch of the craft filters, and of the screen of craft requests
+/// disabled recipes rely on too.
+static CRAFT_FUSE: Fuse = Fuse::new("craft filters");
+/// The switch of the build filters and their link on the cursor check.
+static BUILD_FUSE: Fuse = Fuse::new("build filters");
+/// The reflected type of a craft request.
+const CRAFT_EVENT: &str = "keen::ecs::CraftRecipeEvent";
 
 /// `CraftRecipeEvent`'s hash and fields, from reflection.
 #[derive(Debug, Clone, Copy)]
@@ -113,7 +106,7 @@ pub(crate) fn register_build(
 }
 
 fn craft_layout(loader: &Loader) -> Option<CraftLayout> {
-    let name = "keen::ecs::CraftRecipeEvent";
+    let name = CRAFT_EVENT;
     let reflection = &loader.reflection;
     let info = reflection.type_info(name).ok()?;
     let field = |field: &str| {
@@ -162,9 +155,10 @@ pub(crate) fn seal(loader: &Loader) {
             crate::log!(INFO, "craft filters on: {}", crafts.len());
         }
     } else {
-        crate::log!(
-            WARN,
-            "craft requests are not screened: this build's CraftRecipeEvent is not reflected"
+        let _off = loader.fuse_off(
+            &CRAFT_FUSE,
+            CRAFT_EVENT,
+            "or a field of it is not reflected on this build; craft requests are not screened",
         );
     }
 }
@@ -173,21 +167,18 @@ pub(crate) fn seal(loader: &Loader) {
 /// one.
 pub(crate) fn link(loader: &'static Loader) {
     let builds = BUILD_FILTERS.seal();
-    let wanted = !builds.is_empty();
-    if !wanted {
+    if builds.is_empty() {
         return;
     }
+    // A filter registers only on a build with the layout.
     let Some(layout) = build_layout(loader) else {
         return;
     };
     let _first = BUILD.set(layout);
-    loader.link_feature(
-        "build filters",
-        Target::Pinned(pinned::building::CURSOR_CHECK),
-        &CURSOR_NEXT,
-        cursor as CursorFn,
-        HookFlags::NONE,
-    );
+    let target = Target::Pinned(pinned::building::CURSOR_CHECK);
+    if loader.link_fused(&BUILD_FUSE, target, &CURSOR_NEXT, cursor, HookFlags::NONE) {
+        crate::log!(INFO, "build filters on: {}", builds.len());
+    }
 }
 
 /// Screens one event record of the server's streams on the game thread:
@@ -200,29 +191,42 @@ pub(crate) fn link(loader: &'static Loader) {
 /// - Called on the game thread before the engine moves the streams, so
 ///   nothing else reads or writes the event during the call.
 pub(crate) unsafe fn screen(type_hash: u32, payload: *mut u8, size: usize) {
-    let (Some(layout), Some(filters)) = (CRAFT.get(), CRAFT_FILTERS.sealed()) else {
+    let Some(layout) = CRAFT.get() else {
         return;
     };
     if type_hash != layout.hash || size < layout.size {
         return;
     }
-    // SAFETY: the event is a `CraftRecipeEvent` of at least its reflected size
-    // (`size < layout.size` returns first), `size` readable bytes (the caller's
-    // contract), and reflection places its `u32` `craftingOperatorId` at
+    // SAFETY: the caller's contract, for a `CraftRecipeEvent` of at least
+    // its reflected size (`size < layout.size` returns first).
+    let _screened = CRAFT_FUSE.run("the craft request", || unsafe { request(layout, payload) });
+}
+
+/// Empties the craft request `payload` when a filter refuses it or its
+/// recipe is disabled.
+///
+/// # Safety
+///
+/// - `payload` is a live `CraftRecipeEvent`, readable and writable for
+///   `layout.size` bytes, which nothing else reads or writes during the
+///   call.
+unsafe fn request(layout: &CraftLayout, payload: *mut u8) {
+    let Some(filters) = CRAFT_FILTERS.sealed() else {
+        return;
+    };
+    // SAFETY: the event is a `CraftRecipeEvent` readable for its reflected
+    // size (the caller's contract), and reflection places its `u32` `craftingOperatorId` at
     // `player`.
     let player: u32 = unsafe { read_at(payload, layout.player) };
-    // SAFETY: the event is a `CraftRecipeEvent` of at least its reflected size
-    // (`size < layout.size` returns first), `size` readable bytes (the caller's
-    // contract), and reflection places its `u32` `craftingStationId` at
+    // SAFETY: the event is a `CraftRecipeEvent` readable for its reflected
+    // size (the caller's contract), and reflection places its `u32` `craftingStationId` at
     // `station`.
     let station: u32 = unsafe { read_at(payload, layout.station) };
-    // SAFETY: the event is a `CraftRecipeEvent` of at least its reflected size
-    // (`size < layout.size` returns first), `size` readable bytes (the caller's
-    // contract), and reflection places its `u32` `recipeId` at `recipe`.
+    // SAFETY: the event is a `CraftRecipeEvent` readable for its reflected
+    // size (the caller's contract), and reflection places its `u32` `recipeId` at `recipe`.
     let recipe: u32 = unsafe { read_at(payload, layout.recipe) };
-    // SAFETY: the event is a `CraftRecipeEvent` of at least its reflected size
-    // (`size < layout.size` returns first), `size` readable bytes (the caller's
-    // contract), and reflection places its `u16` `recipeAmount` at `amount`.
+    // SAFETY: the event is a `CraftRecipeEvent` readable for its reflected
+    // size (the caller's contract), and reflection places its `u16` `recipeAmount` at `amount`.
     let amount: u16 = unsafe { read_at(payload, layout.amount) };
     let call = CraftCheck {
         header: Header::of::<CraftCheck>(),
@@ -249,14 +253,12 @@ pub(crate) unsafe fn screen(type_hash: u32, payload: *mut u8, size: usize) {
             )
         });
     if !allowed {
-        // SAFETY: the event is a `CraftRecipeEvent` of at least its reflected
-        // size (`size < layout.size` returns first), `size` writable bytes
-        // nothing else touches until the engine moves the streams (the caller's
+        // SAFETY: the event is a `CraftRecipeEvent` writable for its reflected
+        // size, which nothing else touches during the call (the caller's
         // contract), with its `u32` `craftingOperatorId` at `player`.
         unsafe { write_at(payload, layout.player, 0u32) };
-        // SAFETY: the event is a `CraftRecipeEvent` of at least its reflected
-        // size (`size < layout.size` returns first), `size` writable bytes
-        // nothing else touches until the engine moves the streams (the caller's
+        // SAFETY: the event is a `CraftRecipeEvent` writable for its reflected
+        // size, which nothing else touches during the call (the caller's
         // contract), with its `u16` `recipeAmount` at `amount`.
         unsafe { write_at(payload, layout.amount, 0u16) };
         crate::log!(
@@ -273,28 +275,26 @@ pub(crate) unsafe fn screen(type_hash: u32, payload: *mut u8, size: usize) {
     }
 }
 
-/// The switch of the crafting and building vetoes.
-static VETOES_FUSE: crate::engine::fuse::Fuse =
-    crate::engine::fuse::Fuse::new("crafting and building vetoes");
-
-unsafe extern "system" fn cursor(
-    flags: *mut u32,
-    cursor_context: *mut u8,
-    placement: *mut u8,
-    transform: *const i64,
-    a: u8,
-    b: u8,
-    range: f32,
-) {
-    // SAFETY: the game's arguments to `building.cursor_check`, passed on
-    // unchanged to the rest of the chain, which the slot holds since the
-    // chain is wired before the target jumps here.
-    unsafe { CURSOR_NEXT.get()(flags, cursor_context, placement, transform, a, b, range) };
-    let _caught = VETOES_FUSE.run("the cursor", || {
+crate::engine::chains::chain_detour! {
+    /// The table's `building.cursor_check`: after the game's own check, a
+    /// placement a filter refuses gets the game's "no permission" flag.
+    fn cursor(
+        flags: *mut u32,
+        cursor_context: *mut u8,
+        placement: *mut u8,
+        transform: *const i64,
+        a: u8,
+        b: u8,
+        range: f32,
+    ) -> ();
+    next CURSOR_NEXT;
+    fuse &BUILD_FUSE, "the cursor";
+    |onward| {
+        onward.call();
         // SAFETY: the game's arguments to `building.cursor_check`, after its
         // own check returned, on the thread that ran it.
         unsafe { refuse(flags, cursor_context, placement, transform) };
-    });
+    }
 }
 
 /// Adds the "no permission" flag to a placement a filter refuses.

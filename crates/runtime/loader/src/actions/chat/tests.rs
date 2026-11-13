@@ -19,29 +19,87 @@ fn a_panic_in_the_part_for_mods_leaves_the_chat_mute_on() {
 }
 
 #[test]
+fn a_panic_in_the_line_handling_leaves_the_post_linked_and_its_type_check_on() {
+    let panicked = HANDLING_FUSE.run("a test", || panic!("a test"));
+    assert_eq!(panicked, None::<()>);
+    assert!(HANDLING_FUSE.is_off());
+    assert!(!CHAT_FUSE.is_off(), "the post stays linked");
+    assert_eq!(
+        verdict(true, 2, false, false),
+        Verdict::Drop,
+        "a client's line of a type no client sends"
+    );
+    assert_eq!(verdict(true, EMOTE, false, false), Verdict::Pass);
+}
+
+#[test]
 fn a_line_to_one_player_needs_a_positive_byte_mask_and_overhead() {
     let one = OneLine {
         handle_slot: 0x7f,
         line_overhead: 0x17,
     };
-    assert_eq!(OneLine::from_rows(Some(0x7f), Some(0x17)), Some(one));
-    assert_eq!(OneLine::from_rows(None, Some(0x17)), None, "no mask");
-    assert_eq!(OneLine::from_rows(Some(0x7f), None), None, "no overhead");
+    let (mask, overhead) = (
+        Err(pinned::chat::HANDLE_SLOT.id()),
+        Err(pinned::chat::LINE_OVERHEAD.id()),
+    );
+    assert_eq!(OneLine::from_rows(Some(0x7f), Some(0x17)), Ok(one));
+    assert_eq!(OneLine::from_rows(None, Some(0x17)), mask, "no mask");
+    assert_eq!(
+        OneLine::from_rows(Some(0x7f), None),
+        overhead,
+        "no overhead"
+    );
     assert_eq!(
         OneLine::from_rows(Some(0x80), Some(0x17)),
-        None,
+        mask,
         "a negative mask"
     );
     assert_eq!(
         OneLine::from_rows(Some(0x7f), Some(0xe9)),
-        None,
+        overhead,
         "a negative overhead"
     );
-    assert_eq!(OneLine::from_rows(Some(0), Some(0x17)), None, "a zero mask");
+    assert_eq!(OneLine::from_rows(Some(0), Some(0x17)), mask, "a zero mask");
     assert_eq!(
         OneLine::from_rows(Some(0x7f), Some(0)),
-        None,
+        overhead,
         "a zero overhead"
+    );
+}
+
+#[test]
+fn a_build_without_the_chat_layout_names_the_first_entry_it_lacks() {
+    let loader = crate::start::tests::bare_loader();
+    assert_eq!(
+        layout(&loader).err(),
+        Some((pinned::chat::MARK_DELIVERED.id(), ABSENT))
+    );
+}
+
+#[test]
+fn a_line_for_one_player_that_reached_others_lists_those_lines_off_with_no_fault_code() {
+    let before = delivery().1;
+    assert!(to_one_player());
+    let turn = crate::engine::log::capture_turn();
+    strayed(2);
+    let lines = crate::engine::log::captured();
+    drop(turn);
+    let line = lines
+        .iter()
+        .map(|(_, _, line)| line.as_str())
+        .find(|line| line.starts_with("chat lines to one player off: "));
+    assert!(
+        line.is_some_and(|line| !line.contains("vanilla") && !line.contains('(')),
+        "neither a loader fault nor vanilla: {lines:?}"
+    );
+    strayed(1);
+    assert!(!to_one_player());
+    assert_eq!(delivery().1 - before, 2, "every stray counts");
+    let listed = crate::engine::diag::parts_off();
+    let off = listed.iter().find(|p| p.part == "chat lines to one player");
+    assert!(
+        off.is_some_and(|p| p.reason.starts_with("a line for one player reached 2 ")),
+        "{listed:?}"
     );
 }
 
