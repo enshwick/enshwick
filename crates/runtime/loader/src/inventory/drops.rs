@@ -64,8 +64,16 @@ impl Reading {
             return;
         }
         let work = move || {
+            let began = std::time::Instant::now();
             let read = std::panic::catch_unwind(std::panic::AssertUnwindSafe(read))
                 .unwrap_or(Err(ReadLayoutError::Panicked));
+            if read.is_ok() {
+                crate::log!(
+                    INFO,
+                    "item drops ready: the pickup read in {} ms off the game thread",
+                    began.elapsed().as_millis()
+                );
+            }
             self.finish(read);
         };
         if let Err(why) = std::thread::Builder::new()
