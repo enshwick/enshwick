@@ -75,8 +75,8 @@ pub unsafe fn init<M: Mod>(
     }
     let outcome = caught(|| M::init(&mut Load::of(host, manifest.side == Side::BOTH, texts)));
     let _set = INITIALISED.set(());
-    match outcome {
-        Ok(Ok(state)) => match slot.set(state) {
+    match settled(host, outcome) {
+        Ok(state) => match slot.set(state) {
             Ok(()) => Status::OK,
             Err(state) => {
                 // A second init's state, dropped unused: its drop's panic changes nothing.
@@ -84,14 +84,7 @@ pub unsafe fn init<M: Mod>(
                 Status::REFUSED
             }
         },
-        Ok(Err(off)) => {
-            host.fault(off.to_reason());
-            Status::REFUSED
-        }
-        Err(panicked) => {
-            host.fault(&format!("init panicked: {}", panicked.text()));
-            Status::FAULTED
-        }
+        Err(status) => status,
     }
 }
 
@@ -123,21 +116,29 @@ pub unsafe fn init_pack(
     // A pack that runs again reads its level afresh; the loader refreshes it
     // on a change of its settings (`refresh_levels`).
     forget_pack_level(me);
-    let outcome = caught(|| {
-        enshwick_base::__internal::scope(host, || {
-            init(&mut Load::of(host, side == Side::BOTH, None))
-        })
-    });
+    // The panic's payload drops inside the scope, so even its drop logs as
+    // the pack.
+    enshwick_base::__internal::scope(host, || {
+        let outcome = caught(|| init(&mut Load::of(host, side == Side::BOTH, None)));
+        settled(host, outcome).map_or_else(|status| status, |()| Status::OK)
+    })
+}
+
+/// What an init gave, or the status it answers the loader with once `host`
+/// is faulted for its [`Off`](crate::Off) or its panic.
+fn settled<T>(
+    host: Host,
+    outcome: Result<Result<T, crate::Off>, crate::host::Panicked>,
+) -> Result<T, Status> {
     match outcome {
-        Ok(Ok(())) => Status::OK,
+        Ok(Ok(value)) => Ok(value),
         Ok(Err(off)) => {
             host.fault(off.to_reason());
-            Status::REFUSED
+            Err(Status::REFUSED)
         }
-        // `host`, not `fault_with`: the pack's scope ended with the panic.
         Err(panicked) => {
             host.fault(&format!("init panicked: {}", panicked.text()));
-            Status::FAULTED
+            Err(Status::FAULTED)
         }
     }
 }
