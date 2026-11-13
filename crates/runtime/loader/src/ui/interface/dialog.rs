@@ -8,8 +8,9 @@
 //! flag into the interface host, which the loader reads and clears right
 //! after drawing, so the game's own flow never sees it.
 //!
-//! When the interface hook could not be armed, a dialog shows as a system
-//! message box on a thread of its own instead, so the game never waits.
+//! When the interface hook could not be armed, or it or its dialogs turned
+//! off since, a dialog shows as a system message box on a thread of its own
+//! instead, so the game never waits.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
@@ -111,11 +112,26 @@ struct Shown {
     read: AtomicBool,
 }
 
-/// The dialog on screen: its answerer, popup state and texts.
+/// The dialog on screen: its answerer, buttons, popup state and texts.
 struct Current {
     answerer: Answerer,
+    buttons: u32,
     state: Box<Buf<{ engine::POPUP_SIZE }>>,
-    _texts: Arc<Shown>,
+    texts: Arc<Shown>,
+}
+
+impl Current {
+    /// The dialog to show again elsewhere, with its texts, buttons and
+    /// answerer.
+    fn into_pending(self) -> Pending {
+        Pending {
+            title: self.texts.title.to_string(),
+            message: self.texts.message.to_string(),
+            detail: self.texts.detail.to_string(),
+            buttons: self.buttons,
+            answerer: self.answerer,
+        }
+    }
 }
 
 const QUEUED: u8 = 0;
@@ -181,14 +197,16 @@ pub(crate) fn text(id: u32) -> Option<&'static str> {
     Some(unsafe { &*core::ptr::from_ref::<str>(text) })
 }
 
-/// Queues `dialog`, or shows it as a system message box when the interface
-/// hook could not be armed.
+/// Queues `dialog`, or shows it as a system message box once dialogs show
+/// so. The mode is read under the queue's lock, so a dialog queued while
+/// [`fall_back`] runs is either drained by it or shows as a box itself.
 pub(crate) fn queue(dialog: Pending) -> Status {
+    let mut waiting = WAITING.relock();
     if MODE.load(Ordering::Acquire) == SYSTEM {
+        drop(waiting);
         system_box(dialog);
         return Status::OK;
     }
-    let mut waiting = WAITING.relock();
     if waiting.len() >= MAX_WAITING {
         return Status::REFUSED;
     }
@@ -228,6 +246,31 @@ pub(crate) fn armed(in_game: bool) {
             system_box(dialog);
         }
     }
+}
+
+/// Shows dialogs as system message boxes once the interface draws them no
+/// more: the one on screen, which no frame would answer, then those
+/// waiting, and every later one at once. On the interface thread, which
+/// holds the dialog on screen.
+pub(super) fn fall_back() {
+    if MODE.load(Ordering::Acquire) == SYSTEM || MODE.swap(SYSTEM, Ordering::AcqRel) == SYSTEM {
+        return;
+    }
+    let on_screen = CURRENT.take();
+    let dialogs = stranded(on_screen, &mut WAITING.relock());
+    for dialog in dialogs {
+        system_box(dialog);
+    }
+}
+
+/// The dialog on screen, then those waiting, in the order they would have
+/// shown, leaving none waiting.
+fn stranded(on_screen: Option<Current>, waiting: &mut VecDeque<Pending>) -> Vec<Pending> {
+    on_screen
+        .map(Current::into_pending)
+        .into_iter()
+        .chain(waiting.drain(..))
+        .collect()
 }
 
 /// Draws the dialog on screen, taking the next when none shows, and hears
@@ -325,8 +368,9 @@ fn take_next(layout: &DialogLayout, active: usize) -> Option<Current> {
     state.u8(active, 1);
     Some(Current {
         answerer: dialog.answerer,
+        buttons: dialog.buttons,
         state,
-        _texts: texts,
+        texts,
     })
 }
 
@@ -432,6 +476,32 @@ mod tests {
         assert_eq!(dialog.buttons, 1 << UiDialog::OK);
         assert!(dialog.message.len() <= MAX_TEXT);
         assert!(dialog.message.chars().all(|c| c == 'ж'));
+    }
+
+    #[test]
+    fn the_dialog_on_screen_falls_back_first_with_its_texts_then_those_waiting() {
+        let loader = || Answerer::Loader(Box::new(|_| {}));
+        let on_screen = Current {
+            answerer: loader(),
+            buttons: 1 << UiDialog::CANCEL,
+            state: Box::new(Buf::zeroed()),
+            texts: Arc::new(Shown {
+                slot: 0,
+                title: "shown".into(),
+                message: "message".into(),
+                detail: "detail".into(),
+                read: AtomicBool::new(false),
+            }),
+        };
+        let mut waiting = VecDeque::from([Pending::new("next", "", "", 0, loader())]);
+        let dialogs = stranded(Some(on_screen), &mut waiting);
+        let titles: Vec<_> = dialogs.iter().map(|d| d.title.as_str()).collect();
+        assert_eq!(titles, ["shown", "next"]);
+        assert_eq!(dialogs[0].message, "message");
+        assert_eq!(dialogs[0].detail, "detail");
+        assert_eq!(dialogs[0].buttons, 1 << UiDialog::CANCEL);
+        assert!(waiting.is_empty(), "none is left waiting");
+        assert!(stranded(None, &mut waiting).is_empty());
     }
 
     #[test]

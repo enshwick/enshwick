@@ -47,26 +47,6 @@ pub fn menu_line(version: &str, mods: usize, off: usize, notes: &[MenuNote]) -> 
     })
 }
 
-/// Why the main menu's line stays off on this build; `None` when it shows.
-///
-/// The hook needs its site, which the build's table names (`in_table`) and
-/// whose code holds there (`site`), and reflection must know the version
-/// line's look (`look`).
-#[must_use]
-pub const fn menu_line_off(site: bool, in_table: bool, look: bool) -> Option<&'static str> {
-    if !site {
-        return Some(if in_table {
-            "the code at ui.legal_line_site does not match its pattern or bytes"
-        } else {
-            "its table has no ui.legal_line_site"
-        });
-    }
-    if !look {
-        return Some("reflection lacks the version line's look (legalText, fontSizes.xsmall)");
-    }
-    None
-}
-
 /// The main menu's line, kept with the count of mods off it was made for,
 /// so a frame only makes it again when that count changes.
 #[derive(Debug, Default)]

@@ -27,7 +27,7 @@ use enshwick_gamedata::catalogue;
 use crate::actions::bindings;
 use crate::actions::linked_controls::{Follow, Players};
 use crate::base::remote::{Carried, Heard, MAX_CARRIED};
-use crate::engine::fuse::Fuse;
+use crate::engine::fuse::{Fuse, Off};
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
@@ -818,6 +818,12 @@ fn label_of(record: &crate::engine::loader::ModRecord, label: &str) -> String {
 /// Whether the client reads mod keys on this build.
 pub(crate) fn keys_on() -> bool {
     STATE.gate.get().is_some() && !KEYS_FUSE.is_off()
+}
+
+/// Turns the mod control keys off for `reason`, when what reads them each
+/// frame, the interface, turned off.
+pub(crate) fn keys_off(reason: &str) {
+    KEYS_FUSE.turn_off(&Off::fault(KEYS_FUSE.feature(), reason));
 }
 
 /// Sets control `index`'s key in `slot` to `bits` (0 unbinds) and writes

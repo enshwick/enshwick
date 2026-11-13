@@ -35,7 +35,7 @@
 use core::cell::RefCell;
 use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 
-use enshwick_core::abi::{Registers, UiWidget};
+use enshwick_core::abi::UiWidget;
 use list::{Listed, list};
 use server::{server_list, server_settings};
 use settings::{page_rows, settings};
@@ -43,8 +43,7 @@ use settings::{page_rows, settings};
 use crate::base::configure::rows::Row;
 use crate::engine::fuse::Fuse;
 use crate::engine::interface_parts::Part;
-use crate::engine::loader::Loader;
-use crate::engine::mod_index::ModIndex;
+use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
 use crate::engine::texts;
 use crate::ui::listing;
@@ -71,10 +70,10 @@ const FROM_PAUSE: u8 = 2;
 
 /// Asked to open, from a menu hook: where from.
 static OPEN: AtomicU8 = AtomicU8::new(0);
-/// Turns the main menu's Mods entry off at its first panic.
-static MAIN_MENU_FUSE: Fuse = Fuse::new("main menu Mods entry");
-/// Turns the pause menu's Mods entry off at its first panic.
-static PAUSE_MENU_FUSE: Fuse = Fuse::new("pause menu Mods entry");
+/// The main menu's Mods entry: its hook and its draw.
+pub(super) static MAIN_MENU_FUSE: Fuse = Fuse::new(Part::MAIN_MENU.name);
+/// The pause menu's Mods entry: its hook and its draw.
+pub(super) static PAUSE_MENU_FUSE: Fuse = Fuse::new(Part::PAUSE_MENU.name);
 /// The frame each menu hook last ran in.
 static MAIN_SEEN: AtomicU64 = AtomicU64::new(0);
 static PAUSE_SEEN: AtomicU64 = AtomicU64::new(0);
@@ -220,35 +219,29 @@ pub(super) fn frame() -> u64 {
 
 /// Links the menu hooks; the screen draws from the interface hook.
 pub(super) fn link(loader: &Loader, engine: &Engine) {
-    for (site, handler, part, id) in [
+    for (site, handler, fuse, id) in [
         (
             engine.main_menu_site,
             main_menu as enshwick_core::abi::MidHookFn,
-            Part::MAIN_MENU,
+            &MAIN_MENU_FUSE,
             pinned::ui::MAIN_MENU_SITE,
         ),
         (
             engine.pause_menu_site,
             pause_menu,
-            Part::PAUSE_MENU,
+            &PAUSE_MENU_FUSE,
             pinned::ui::PAUSE_MENU_SITE,
         ),
     ] {
         if site == 0 {
             continue;
         }
-        let link = crate::engine::mid::MidLink {
-            owner: ModIndex::LOADER,
+        loader.link_mid(
+            fuse,
+            Target::Found(id.id(), Some(site)),
             handler,
-            user: 0,
-            priority: i32::MIN,
-            flags: enshwick_core::abi::HookFlags::NONE,
-        };
-        let status = loader.mids.relock().add(site, link);
-        if !status.is_ok() {
-            let reason = format!("refused the link ({})", status.0);
-            loader.feature_off(part.name, id.id(), &reason);
-        }
+            enshwick_core::abi::HookFlags::NONE,
+        );
     }
 }
 
@@ -281,35 +274,36 @@ fn entry(from: u8, draw: impl FnOnce(&Engine, &super::engine::UiText) -> bool) {
 }
 
 /// Whether the mismatch screen can show on this build: the interface draws
-/// frames, the main menu's entry has run, and neither it nor the screen
-/// turned off.
+/// frames, the main menu's entry has run, and neither the interface, the
+/// entry nor the screen turned off.
 pub(crate) fn mismatch_screen_on() -> bool {
     FRAME.load(Ordering::Relaxed) > 0
         && MAIN_SEEN.load(Ordering::Relaxed) > 0
-        && !MAIN_MENU_FUSE.is_off()
-        && !super::MODS_SCREEN_FUSE.is_off()
+        && screen_drawn(
+            &super::INTERFACE_FUSE,
+            &MAIN_MENU_FUSE,
+            &super::MODS_SCREEN_FUSE,
+        )
 }
 
-/// The hook before the main menu's Credits entry: draws the Mods entry.
-///
-/// # Safety
-///
-/// - Called only by the mid-hook stub, on the hooked thread, with null or
-///   the registers it saved, valid and unaliased for the call.
-unsafe extern "system" fn main_menu(registers: *mut Registers, _user: *mut core::ffi::c_void) {
-    // SAFETY: the mid-hook stub passes either null or the registers it saved
-    // on its stack, valid and unaliased for this call.
-    let Some(registers) = (unsafe { registers.as_ref() }) else {
-        return;
-    };
-    let Some(menu) = usize::try_from(registers.rdi)
-        .ok()
-        .filter(|&page| page != 0)
-    else {
-        return;
-    };
-    let menu = menu + 8;
-    let _drawn = MAIN_MENU_FUSE.run("the main menu's entry", || {
+/// Whether the Mods screen draws: the `interface` it draws in, the main
+/// menu's `entry` that opens it and the `screen` itself are on.
+pub(super) fn screen_drawn(interface: &Fuse, entry: &Fuse, screen: &Fuse) -> bool {
+    [interface, entry, screen].iter().all(|fuse| !fuse.is_off())
+}
+
+crate::engine::mid::mid_handler! {
+    /// The hook before the main menu's Credits entry: draws the Mods entry.
+    fn main_menu;
+    fuse MAIN_MENU_FUSE, "the main menu's entry";
+    |registers| {
+        let Some(menu) = usize::try_from(registers.rdi)
+            .ok()
+            .filter(|&page| page != 0)
+        else {
+            return;
+        };
+        let menu = menu + 8;
         // SAFETY: the hook at the table's `ui.main_menu_site` sits before the
         // main menu's Credits entry, on the frame's thread, where `rdi` holds
         // the menu page and +8 its entries' state; the text lives in the
@@ -317,23 +311,21 @@ unsafe extern "system" fn main_menu(registers: *mut Registers, _user: *mut core:
         entry(FROM_MAIN, |engine, text| unsafe {
             engine.main_menu_entry(menu, text)
         });
-    });
+    }
 }
 
-/// The hook after the pause menu's Settings entry: draws the Mods entry.
-///
-/// # Safety
-///
-/// - Called only by the mid-hook stub, on the hooked thread.
-unsafe extern "system" fn pause_menu(_registers: *mut Registers, _user: *mut core::ffi::c_void) {
-    let _drawn = PAUSE_MENU_FUSE.run("the pause menu's entry", || {
+crate::engine::mid::mid_handler! {
+    /// The hook after the pause menu's Settings entry: draws the Mods entry.
+    fn pause_menu;
+    fuse PAUSE_MENU_FUSE, "the pause menu's entry";
+    |_registers| {
         // SAFETY: the hook at the table's `ui.pause_menu_site` sits right
         // after the pause menu's Settings entry, on the frame's thread; the
         // text lives in the frame's arena.
         entry(FROM_PAUSE, |engine, text| unsafe {
             engine.pause_menu_entry(text)
         });
-    });
+    }
 }
 
 /// Draws the screen while it is open.

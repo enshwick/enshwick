@@ -3,16 +3,14 @@
 
 use core::cell::RefCell;
 
-use enshwick_core::abi::Registers;
+use enshwick_core::abi::HookFlags;
 
 use crate::engine::diag::KeptLine;
 use crate::engine::fuse::Fuse;
-use crate::engine::loader::Loader;
-use crate::engine::mod_index::ModIndex;
+use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
-use enshwick_base::Relock;
 
-use super::engine::Engine;
+use super::engine::{Engine, Missing};
 use super::{ENGINE, copy};
 
 thread_local! {
@@ -26,35 +24,41 @@ static FUSE: Fuse = Fuse::new("the main menu's Enshwick line");
 /// Links the hook between the version line and the legal line, on a build
 /// whose site holds and that has the version line's look.
 pub(super) fn link(loader: &Loader, engine: &Engine) {
-    let build = &loader.build.name;
-    let off = crate::engine::diag::menu_line_off(
+    let site = pinned::ui::LEGAL_LINE_SITE;
+    let missing = missing(
         engine.legal_line_site != 0,
-        loader.address(pinned::ui::LEGAL_LINE_SITE).is_some(),
+        loader.address(site).is_some(),
         engine.has_legal_look(),
     );
-    if let Some(why) = off {
-        crate::log!(
-            WARN,
-            "interface: the main menu's Enshwick line off on {build}: {why}"
-        );
+    if let Some(why) = missing {
+        loader.fuse_off(&FUSE, why.id(), &why.reason());
         return;
     }
-    let link = crate::engine::mid::MidLink {
-        owner: ModIndex::LOADER,
-        handler: version_line,
-        user: 0,
-        priority: i32::MIN,
-        flags: enshwick_core::abi::HookFlags::NONE,
-    };
-    let status = loader.mids.relock().add(engine.legal_line_site, link);
-    if !status.is_ok() {
-        crate::log!(
-            WARN,
-            "interface: the main menu's Enshwick line off: its hook was refused ({})",
-            status.0
-        );
-    }
+    loader.link_mid(
+        &FUSE,
+        Target::Found(site.id(), Some(engine.legal_line_site)),
+        version_line,
+        HookFlags::NONE,
+    );
 }
+
+/// What the line lacks on this build: its site, when the engine found none
+/// (`site`) in the table or at all (`in_table`), else the version line's
+/// look (`look`).
+fn missing(site: bool, in_table: bool, look: bool) -> Option<Missing> {
+    let id = pinned::ui::LEGAL_LINE_SITE.id();
+    if !site {
+        return Some(if in_table {
+            Missing::Bytes(id)
+        } else {
+            Missing::Entry(id)
+        });
+    }
+    (!look).then_some(LOOK)
+}
+
+/// The version line's look the line needs from the game's look bundle.
+const LOOK: Missing = Missing::Reflected("the look bundle", "legalText or fontSizes.xsmall");
 
 /// The line for this frame in the frame's text arena, built again only when
 /// the count of mods off changed.
@@ -82,15 +86,12 @@ fn line(loader: &Loader) -> super::engine::UiText {
     })
 }
 
-/// The hook between the main menu's version line and its legal line: draws
-/// the loader's line under the version.
-///
-/// # Safety
-///
-/// - Called only by the mid-hook stub, on the hooked thread, with null or
-///   the registers it saved, valid and unaliased for the call.
-unsafe extern "system" fn version_line(_registers: *mut Registers, _user: *mut core::ffi::c_void) {
-    let _drawn = FUSE.run("the main menu's frame", || {
+crate::engine::mid::mid_handler! {
+    /// The hook between the main menu's version line and its legal line:
+    /// draws the loader's line under the version.
+    fn version_line;
+    fuse FUSE, "the main menu's frame";
+    |_registers| {
         let (Some(engine), Some(loader)) = (ENGINE.get(), crate::engine::loader::loader()) else {
             return;
         };
@@ -105,5 +106,24 @@ unsafe extern "system" fn version_line(_registers: *mut Registers, _user: *mut c
         // 426); `context` is this frame's non-zero context, and the text
         // lives in the frame's arena.
         let _drawn = unsafe { engine.legal_line(context, &text) };
-    });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_line_names_what_this_build_lacks_its_site_before_its_look() {
+        let id = pinned::ui::LEGAL_LINE_SITE.id();
+        assert_eq!(missing(true, true, true), None);
+        assert_eq!(missing(false, false, false), Some(Missing::Entry(id)));
+        assert_eq!(missing(false, true, true), Some(Missing::Bytes(id)));
+        let no_look = missing(true, true, false).map(|why| why.to_string());
+        assert_eq!(
+            no_look.as_deref(),
+            Some("legalText or fontSizes.xsmall of the look bundle is not reflected on this build"),
+            "the fields it lacks, apart from the whole interface's looks"
+        );
+    }
 }

@@ -23,6 +23,7 @@ mod extensions;
 mod map;
 mod menu_line;
 mod mods;
+mod off;
 
 use core::cell::{Cell, RefCell};
 use std::sync::OnceLock;
@@ -40,9 +41,11 @@ pub(crate) use map::play_data;
 pub(crate) use map::set as set_markers;
 pub(crate) use mods::mismatch_screen_on;
 
-use crate::engine::chains::Next;
+use crate::engine::chains::{Next, Onward};
 use crate::engine::fuse::Fuse;
+use crate::engine::interface_parts::Part;
 use crate::engine::loader::{Loader, Registered, Target};
+use off::{PART_FUSES, dialogs_drawn, drawn_no_more, parts_off_with_interface};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -229,15 +232,15 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 // SAFETY: `PopupFn` is the signature of the game's `ui.popup`, and `link`
 // uses this slot only as the `next` of `detour`, its link on that function.
 static NEXT: Next<PopupFn> = unsafe { Next::new() };
+/// The interface: the link on the game's popup, which every window and
+/// dialog of the mods and the loader draws from.
+static INTERFACE_FUSE: Fuse = Fuse::new("interface");
 static ENGINE: OnceLock<Engine> = OnceLock::new();
 /// Frame callbacks: open while mods initialise, sealed after.
 static FRAMES: Registry<Registered<UiFrameFn>> = Registry::new();
 /// HUD callbacks: open while mods initialise, sealed after.
 static HUDS: Registry<Registered<UiFrameFn>> = Registry::new();
 
-// SAFETY: `HudFn` is the signature of the game's `ui.hud`, and `link` uses
-// this slot only as the `next` of `hud_detour`, its link on that function.
-static HUD_NEXT: Next<HudFn> = unsafe { Next::new() };
 type HudFn = unsafe extern "system" fn(arg: *mut u8);
 /// HUD items a frame gathers at most.
 const MAX_HUD_ITEMS: usize = 128;
@@ -256,8 +259,8 @@ static DEMO_FUSE: Fuse = Fuse::new("interface demo");
 static CARRIED_FUSE: Fuse = Fuse::new("carried windows");
 static MODS_SCREEN_FUSE: Fuse = Fuse::new("Mods screen");
 static DIALOGS_FUSE: Fuse = Fuse::new("dialogs");
-/// Turns the mods' HUD items off at their first panic.
-static HUD_FUSE: Fuse = Fuse::new("HUD items");
+/// The HUD part: its link on the game's HUD and the mods' HUD items.
+static HUD_FUSE: Fuse = Fuse::new(Part::HUD.name);
 
 /// Frames a text copied into the arena stays readable.
 const ARENA_FRAMES: usize = 3;
@@ -472,7 +475,8 @@ pub(crate) fn link(loader: &'static Loader) {
     let engine = match Engine::resolve(loader) {
         Ok(engine) => engine,
         Err(missing) => {
-            loader.feature_off("interface", missing.id(), &missing.reason());
+            loader.fuse_off(&INTERFACE_FUSE, missing.id(), &missing.reason());
+            parts_off_with_interface();
             return;
         }
     };
@@ -482,16 +486,10 @@ pub(crate) fn link(loader: &'static Loader) {
         menu_line::link(loader, engine);
     }
     if ENGINE.get().is_some_and(Engine::has_hud) {
-        loader.link_feature(
-            crate::engine::interface_parts::Part::HUD.name,
-            Target::Pinned(pinned::ui::HUD),
-            &HUD_NEXT,
-            hud_detour as HudFn,
-            HookFlags::NONE,
-        );
+        link_hud(loader, &HUD_FUSE);
     }
-    if loader.link_feature(
-        "interface",
+    if loader.link_fused(
+        &INTERFACE_FUSE,
         Target::Pinned(pinned::ui::POPUP),
         &NEXT,
         detour as PopupFn,
@@ -501,16 +499,40 @@ pub(crate) fn link(loader: &'static Loader) {
             INFO,
             "interface: {count} frame and {hud_count} HUD callbacks from mods"
         );
-        extensions::link(loader);
+        extensions::link(loader, count + hud_count > 0);
+    } else {
+        parts_off_with_interface();
     }
+}
+
+/// Links the HUD part under `feature`, [`HUD_FUSE`] outside tests: the
+/// feature its draw runs under, so a panic there wires the chain past it.
+fn link_hud(loader: &Loader, feature: &'static Fuse) -> bool {
+    loader.link_fused(
+        feature,
+        Target::Pinned(pinned::ui::HUD),
+        &HUD_NEXT,
+        hud_detour as HudFn,
+        HookFlags::NONE,
+    )
+}
+
+/// Whether the popup's link runs: wired and its feature on.
+fn popup_runs() -> bool {
+    runs(&NEXT, &INTERFACE_FUSE)
+}
+
+/// Whether the link whose `next` slot is `next` runs: its chain is wired
+/// and its `feature` on.
+fn runs<F: Copy>(next: &Next<F>, feature: &Fuse) -> bool {
+    next.wired().is_some() && !feature.is_off()
 }
 
 /// After arming: dialogs show in game when the popup is wired, else as
 /// system message boxes.
 pub(crate) fn armed(loader: &Loader) {
     if loader.side == Side::CLIENT {
-        let in_game =
-            NEXT.wired().is_some() && ENGINE.get().is_some_and(|engine| engine.dialog.is_some());
+        let in_game = popup_runs() && ENGINE.get().is_some_and(|engine| engine.dialog.is_some());
         if !in_game {
             crate::log!(WARN, "interface not armed: dialogs show as system windows");
         }
@@ -522,26 +544,49 @@ pub(crate) fn armed(loader: &Loader) {
 /// there.
 static RETRY_FUSE: Fuse = Fuse::new("code patch tries in the interface");
 
-/// The loader's link on the game's error popup: the game's draw, then the
-/// mods' frames, the loader's windows and its dialog.
+/// The loader's link on the game's error popup, `ui.popup`: the game's
+/// draw, then the mods' frames, the loader's windows and its dialog. Written
+/// by hand, not by `chain_detour!`: the dialogs call the rest of the chain
+/// again with the loader's own popup state.
 ///
 /// # Safety
 ///
 /// - Called only by the game through the chain on `ui.popup`, inside a frame
 ///   on the interface thread, with the game's own popup state or null.
 unsafe extern "system" fn detour(state: *mut u8) {
+    let next = NEXT.get();
+    let onward = Onward::new(|| {
+        // SAFETY: `next` is the rest of `ui.popup`'s chain, wired before the
+        // target jumps here, and `state` is the game's own argument, passed
+        // on unchanged.
+        unsafe { next(state) }
+    });
+    onward.run(&INTERFACE_FUSE, "the interface frame", |onward| {
+        // SAFETY: this detour's own contract; `next` is the rest of
+        // `ui.popup`'s chain, which `onward` calls with `state`.
+        unsafe { frame(state, next, onward) }
+    });
+    if !dialogs_drawn() {
+        drawn_no_more();
+    }
+}
+
+/// One frame of the interface: the game's popup through `onward`, then the
+/// mods' frames, the loader's windows and its dialog.
+///
+/// # Safety
+///
+/// - Called only from [`detour`], inside a frame on the interface thread,
+///   with the game's own popup state or null as `state`.
+/// - `next` is the rest of `ui.popup`'s chain, and `onward` calls it with
+///   `state`.
+unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
     let Some(engine) = ENGINE.get() else {
-        // SAFETY: `NEXT` holds the rest of `ui.popup`'s chain while this
-        // detour runs, and `state` is the game's own argument, passed on
-        // unchanged.
-        unsafe { NEXT.get()(state) };
-        return;
+        return onward.call();
     };
     let context = engine.context();
     let nav = if context == 0 { 0 } else { engine.nav(context) };
-    // SAFETY: `NEXT` holds the rest of `ui.popup`'s chain while this detour
-    // runs, and `state` is the game's own argument, passed on unchanged.
-    unsafe { NEXT.get()(state) };
+    onward.call();
     ARENA.with_borrow_mut(Arena::next_frame);
     // A client that never hosts never steps, so its waiting patches are also
     // tried here; one atomic compare until a check is due.
@@ -570,87 +615,150 @@ unsafe extern "system" fn detour(state: *mut u8) {
     let frame = mods::next_frame();
     map::note(context);
     let asked = extensions::hosts_asked(FRAMES.sealed().is_some_and(|f| !f.is_empty()));
-    let reads = READS_FUSE
-        .run("the frame's screen reads", || {
-            // SAFETY: the game draws its popup inside the frame on the
-            // interface thread, and `context` is the frame's own, non-zero by
-            // the guard before it.
-            unsafe { extensions::frame_reads(engine, context, asked) }
-        })
-        .unwrap_or(extensions::FrameReads::NONE);
-    // A window that panicked between its begin and end leaves the game's
-    // window stack unbalanced, so a panic ends this frame's windows; its own
-    // fuse keeps it off from the next frame on.
-    let _drawn = drew(&FRAMES_FUSE, "the mods' frames", || frames(engine, context, reads))
-        // SAFETY: the game draws its popup inside the frame on the interface
-        // thread, `context` is non-zero (checked by the guard before it),
-        // `frames` closed every window a mod's callback left open, and
-        // `reads` are this frame's.
-        && drew(&EXTENSIONS_FUSE, "the screen extensions' draw", || unsafe {
-            extensions::draw(engine, context, reads);
-        })
-        // SAFETY: the game draws its popup inside the frame on the interface
-        // thread, `context` is non-zero (checked by the guard before it), and
-        // `extensions::draw` ends each window before it returns.
-        && drew(&DEMO_FUSE, "the demo's draw", || unsafe { demo::draw(engine, context) })
-        // SAFETY: the game draws its popup inside the frame on the interface
-        // thread, `context` is non-zero (checked by the guard before it), and
-        // `demo::draw` ends its window before it returns.
-        && drew(&CARRIED_FUSE, "the carried windows' draw", || unsafe {
-            carried::draw(engine, context);
-        })
-        && drew(&MODS_SCREEN_FUSE, "the Mods screen's draw", || {
-            if let Some(loader) = crate::engine::loader::loader() {
-                // SAFETY: the game draws its popup inside the frame on the
-                // interface thread, `context` is non-zero (checked by the
-                // guard before it), `carried::draw` ends its window before it
-                // returns, and `frame` is the count `mods::next_frame` gave
-                // this frame.
-                unsafe { mods::draw(loader, engine, context, frame) };
-            }
-        })
-        // SAFETY: the game draws its popup inside the frame on the interface
-        // thread, `context` is non-zero and the game's popup is not active
-        // (both checked by the guard before it), and `NEXT` holds the rest of
-        // `ui.popup`'s chain while this detour runs.
-        && drew(&DIALOGS_FUSE, "the dialogs' draw", || unsafe {
-            dialog::draw(engine, NEXT.get(), context);
-        });
+    // SAFETY: the game draws its popup inside the frame on the interface
+    // thread, and `context` is the frame's own, non-zero by the guard before
+    // it.
+    let reads = unsafe { frame_reads(engine, context, asked) };
+    let drawn = Drawn {
+        engine,
+        context,
+        reads,
+        frame,
+        next,
+    };
+    Fuse::run_in_turn(
+        &DRAWS,
+        |draw| draw.site,
+        |draw| draw.fuse,
+        |draw| {
+            // SAFETY: `draw` is one of `DRAWS`, run in their order, inside the
+            // frame on the interface thread; `drawn.context` is non-zero and the
+            // game's popup is not active (both checked by the guards before it),
+            // and `drawn.next` is the rest of `ui.popup`'s chain.
+            unsafe { (draw.run)(&drawn) };
+        },
+    );
 }
 
-/// Runs `work` under `fuse` at `site`: false only when it panicked now.
-fn drew(fuse: &Fuse, site: &str, work: impl FnOnce()) -> bool {
-    fuse.is_off() || fuse.run(site, work).is_some()
-}
-
-/// The loader's link on the game's HUD: the game's draw, then the mods' HUD
-/// items.
+/// This frame's screen, prompt and host reads, or none once they are off.
 ///
 /// # Safety
 ///
-/// - Called only by the game through the chain on `ui.hud`, inside a frame
-///   on the interface thread, with the game's own argument.
-unsafe extern "system" fn hud_detour(arg: *mut u8) {
-    // SAFETY: `HUD_NEXT` holds the rest of `ui.hud`'s chain while this
-    // detour runs, and `arg` is the game's own argument, passed on unchanged.
-    unsafe { HUD_NEXT.get()(arg) };
-    let Some(engine) = ENGINE.get() else {
-        return;
-    };
-    if hud_turns_frames(NEXT.wired().is_some()) {
-        ARENA.with_borrow_mut(Arena::next_frame);
-    }
-    let context = engine.context();
-    if context == 0 {
-        return;
-    }
-    let _drawn = HUD_FUSE.run("the HUD's draw", || {
+/// - Called inside a frame on the interface thread, with `context` the
+///   frame's own and non-zero.
+unsafe fn frame_reads(engine: &Engine, context: usize, asked: bool) -> extensions::FrameReads {
+    READS_FUSE
+        .run("the frame's screen reads", || {
+            // SAFETY: the caller's contract.
+            unsafe { extensions::frame_reads(engine, context, asked) }
+        })
+        .unwrap_or(extensions::FrameReads::NONE)
+}
+
+/// What the loader's windows draw from in one frame.
+struct Drawn<'frame> {
+    engine: &'frame Engine,
+    context: usize,
+    reads: extensions::FrameReads,
+    /// The count [`mods::next_frame`] gave this frame.
+    frame: u64,
+    /// The rest of the chain on the game's `ui.popup`.
+    next: PopupFn,
+}
+
+/// One of the loader's windows, a feature of its own.
+struct Draw {
+    fuse: &'static Fuse,
+    /// Where a panic came from, as its fault names it.
+    site: &'static str,
+    /// Draws the window.
+    ///
+    /// # Safety
+    ///
+    /// - Called only from [`frame`], inside the frame on the interface
+    ///   thread, after every window before it in [`DRAWS`] ended.
+    /// - The frame's context is non-zero and the game's popup is not active.
+    run: unsafe fn(&Drawn<'_>),
+}
+
+/// The loader's windows in the order they draw. A window that panicked
+/// between its begin and end leaves the game's window stack unbalanced, so
+/// a panic ends this frame's windows; its own fuse keeps it off from the
+/// next frame on.
+static DRAWS: [Draw; 6] = [
+    Draw {
+        fuse: &FRAMES_FUSE,
+        site: "the mods' frames",
+        run: |drawn| frames(drawn.engine, drawn.context, drawn.reads),
+    },
+    Draw {
+        fuse: &EXTENSIONS_FUSE,
+        site: "the screen extensions' draw",
+        // SAFETY: `Draw::run`'s contract, and `frames` closed every window
+        // a mod's callback left open.
+        run: |drawn| unsafe { extensions::draw(drawn.engine, drawn.context, drawn.reads) },
+    },
+    Draw {
+        fuse: &DEMO_FUSE,
+        site: "the demo's draw",
+        // SAFETY: `Draw::run`'s contract, and `extensions::draw` ends each
+        // window before it returns.
+        run: |drawn| unsafe { demo::draw(drawn.engine, drawn.context) },
+    },
+    Draw {
+        fuse: &CARRIED_FUSE,
+        site: "the carried windows' draw",
+        // SAFETY: `Draw::run`'s contract, and `demo::draw` ends its window
+        // before it returns.
+        run: |drawn| unsafe { carried::draw(drawn.engine, drawn.context) },
+    },
+    Draw {
+        fuse: &MODS_SCREEN_FUSE,
+        site: "the Mods screen's draw",
+        run: |drawn| {
+            if let Some(loader) = crate::engine::loader::loader() {
+                // SAFETY: `Draw::run`'s contract, `carried::draw` ends its
+                // window before it returns, and `drawn.frame` is the count
+                // `mods::next_frame` gave this frame.
+                unsafe { mods::draw(loader, drawn.engine, drawn.context, drawn.frame) };
+            }
+        },
+    },
+    Draw {
+        fuse: &DIALOGS_FUSE,
+        site: "the dialogs' draw",
+        // SAFETY: `Draw::run`'s contract, and `drawn.next` is the rest of
+        // `ui.popup`'s chain.
+        run: |drawn| unsafe { dialog::draw(drawn.engine, drawn.next, drawn.context) },
+    },
+];
+
+crate::engine::chains::chain_detour! {
+    /// The loader's link on the game's HUD, `ui.hud`: the game's draw, then
+    /// the mods' HUD items.
+    ///
+    /// # Safety
+    ///
+    /// - Called only by the game through the chain on `ui.hud`, inside a
+    ///   frame on the interface thread, with the game's own argument.
+    fn hud_detour(arg: *mut u8) -> ();
+    next HUD_NEXT;
+    fuse &HUD_FUSE, "the HUD's draw";
+    |onward| {
+        onward.call();
+        let Some(engine) = ENGINE.get() else {
+            return;
+        };
+        if hud_turns_frames(popup_runs()) {
+            ARENA.with_borrow_mut(Arena::next_frame);
+        }
+        let context = engine.context();
         // SAFETY: the game draws its HUD inside the frame on the interface
         // thread, and this runs after the game's own HUD draw returned.
-        if unsafe { engine.hud_visible() } {
+        if context != 0 && unsafe { engine.hud_visible() } {
             hud(engine, context);
         }
-    });
+    }
 }
 
 /// Whether the HUD turns the text arena to the next frame: only when the
@@ -674,7 +782,7 @@ fn hud(engine: &Engine, context: usize) {
     HUD_ITEMS.with_borrow_mut(Vec::clear);
     // SAFETY: `hud_detour` calls this inside the frame on the interface
     // thread with the frame's own non-zero `context`.
-    let reads = unsafe { extensions::frame_reads(engine, context, !huds.is_empty()) };
+    let reads = unsafe { frame_reads(engine, context, !huds.is_empty()) };
     for registered in huds.iter().filter(|r| r.live()) {
         let token = NEXT_TOKEN.fetch_add(1, Ordering::Relaxed);
         DRAWING.set(Some(Drawing {
