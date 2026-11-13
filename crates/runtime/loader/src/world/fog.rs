@@ -179,25 +179,31 @@ pub(crate) fn link(loader: &'static Loader) {
         return;
     }
     if WANTED.load(Ordering::Acquire) {
-        match layout(loader) {
-            Ok(found) => {
-                let _first = LAYOUT.set(found);
-            }
-            Err(id) => {
-                let reason = if loader.offset(id).is_none() {
-                    crate::engine::builds::ABSENT
-                } else {
-                    "does not fit the copy's tiles"
-                };
-                let _off = loader.fuse_off(&COPY_FUSE, id.id(), reason);
-            }
-        }
+        find_layout(loader);
     }
     link_at(
         loader,
         Target::Pinned(pinned::map::FOG_DESTROY),
         Target::Pinned(pinned::map::FOG_REVEAL),
     );
+}
+
+/// Keeps the fog's layout for the copy, or turns the copy off for the
+/// first entry that is not in the build or does not fit.
+fn find_layout(loader: &Loader) {
+    match layout(loader) {
+        Ok(found) => {
+            let _first = LAYOUT.set(found);
+        }
+        Err(id) => {
+            let reason = if loader.offset(id).is_none() {
+                crate::engine::builds::ABSENT
+            } else {
+                "does not fit the copy's tiles"
+            };
+            let _off = loader.fuse_off(&COPY_FUSE, id.id(), reason);
+        }
+    }
 }
 
 /// Links the fog's `destroy` and its `reveal`, both or neither.
@@ -529,11 +535,7 @@ mod tests {
 
     #[test]
     fn a_fog_copy_without_its_layout_is_listed_off_with_the_first_entry_missing() {
-        let mut loader = crate::start::tests::bare_loader();
-        loader.side = Side::CLIENT;
-        let loader: &'static Loader = Box::leak(Box::new(loader));
-        assert_eq!(open(loader, ModIndex::new(0)), Status::OK);
-        link(loader);
+        find_layout(&crate::start::tests::bare_loader());
         assert!(COPY_FUSE.is_off());
         assert!(
             reason("fog of war copy").is_some_and(|r| r.starts_with("map.fog_tile_edge_shift ")),
