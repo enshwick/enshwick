@@ -31,6 +31,10 @@ use enshwick_base::Relock;
 pub const SAMPLE_EVERY: u64 = 256;
 /// Mods turned off that the summary remembers; older ones are dropped.
 const HISTORY: usize = 64;
+/// Loader parts off that the summary remembers. A test process lists the
+/// parts of every test in one list, which [`HISTORY`] would fill before
+/// the later tests' parts.
+const PARTS_HISTORY: usize = if cfg!(test) { 4096 } else { HISTORY };
 
 /// Counting and timing, fixed by the settings read at start.
 static COUNTING: OnceLock<(bool, bool)> = OnceLock::new();
@@ -112,7 +116,7 @@ pub struct PartOff {
 
 /// Remembers that the loader's `part` is off for `reason`, for the status
 /// summary and the Mods screen. A part keeps its first reason; past
-/// [`HISTORY`] parts, later ones reach only the log.
+/// [`PARTS_HISTORY`] parts, later ones reach only the log.
 pub fn part_off(part: &str, reason: &str) {
     keep_part(&mut PARTS_OFF.relock(), part, reason, now());
     ANY_PART_OFF.store(true, Ordering::Release);
@@ -127,7 +131,7 @@ pub fn any_part_off() -> bool {
 /// Adds `part` off for `reason` at `at` to `parts`, unless it is there or
 /// `parts` is full.
 fn keep_part(parts: &mut Vec<PartOff>, part: &str, reason: &str, at: u64) {
-    if parts.len() == HISTORY || parts.iter().any(|p| p.part == part) {
+    if parts.len() == PARTS_HISTORY || parts.iter().any(|p| p.part == part) {
         return;
     }
     parts.push(PartOff {
@@ -611,10 +615,10 @@ conflicts:
             1,
         );
         keep_part(&mut off, "map markers", "a later reason", 2);
-        for i in 0..HISTORY + 2 {
+        for i in 0..PARTS_HISTORY + 2 {
             keep_part(&mut off, &format!("part {i}"), "off", 3);
         }
-        assert_eq!(off.len(), HISTORY);
+        assert_eq!(off.len(), PARTS_HISTORY);
         let markers = off.iter().find(|p| p.part == "map markers");
         assert_eq!(
             markers.map(|p| p.reason.as_str()),
