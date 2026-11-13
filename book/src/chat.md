@@ -166,8 +166,8 @@ fn warn_everyone(world: &enshwick::world::World, texts: &Texts) {
 ```
 
 A building event is about one player too. In a handler of `BuildingPlaced` or
-`BuildingRemoved`, the language a text is filled in is that of the player whose
-character placed or removed the building.
+`BuildingRemoved`, texts fill in the language of the player who placed or
+removed the building.
 
 ## The console
 
