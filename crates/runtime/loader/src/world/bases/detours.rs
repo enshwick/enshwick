@@ -178,9 +178,9 @@ crate::engine::chains::chain_detour! {
             // grouping and `settle` have just filled, on this thread.
             unsafe { keep(bases, kind, sites.fields, &grouped) };
         } else {
-                Side::of(kind).forget();
-                let why = "the game's grouping left bases the loader cannot settle";
-                RAISED_FUSE.turn_off(&Off::fault(RAISED_ZONES, why));
+            Side::of(kind).forget();
+            let why = "the game's grouping left bases the loader cannot settle";
+            RAISED_FUSE.turn_off(&Off::fault(RAISED_ZONES, why));
         }
     }
 }
