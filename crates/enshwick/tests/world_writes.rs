@@ -3,25 +3,28 @@
 
 #[cfg(test)]
 mod tests {
-    use std::sync::OnceLock;
+    use std::sync::{Mutex, OnceLock};
 
     use enshwick::abi::{
         Header, PROGRESS_ADD_EXPERIENCE, PROGRESS_SET_EXPERIENCE, PROGRESS_SET_LEVEL, PlayerInfo,
-        Status,
+        ProgressWriteData, Status,
     };
     use enshwick::affixes::ItemRarity;
     use enshwick::effects::{Effects, ItemDrop};
+    use enshwick::events::ProgressWritten;
     use enshwick::test::{FakeHost, Installed};
     use enshwick::world::{Meter, World};
     use enshwick::{Entity, ItemId, Load, Mod, Off, WorldError};
 
     static WORLD: OnceLock<(World, Effects)> = OnceLock::new();
+    static HEARD: Mutex<Vec<ProgressWriteData>> = Mutex::new(Vec::new());
 
     struct Writes;
 
     impl Mod for Writes {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = WORLD.set((load.world()?, load.effects()));
+            load.on::<ProgressWritten>(|written| HEARD.lock().unwrap().push(*written))?;
             Ok(Self)
         }
     }
@@ -113,6 +116,37 @@ mod tests {
         );
         let _handled = loader.tick(std::time::Duration::from_millis(50));
         assert_eq!(world.add_experience(Entity(7), 1), Ok(()), "a new step");
+    }
+
+    fn written(what: u32, value: u32, outcome: u32, level: u32) -> ProgressWriteData {
+        ProgressWriteData {
+            header: Header::of::<ProgressWriteData>(),
+            entity: Entity(7),
+            what,
+            value,
+            outcome,
+            level,
+            experience: 0,
+            gained: 0,
+        }
+    }
+
+    #[test]
+    fn a_mod_hears_what_became_of_each_level_or_experience_write() {
+        let (loader, world, _) = started(FakeHost::new().player(player(7)));
+        assert_eq!(world.set_level(Entity(7), 10), Ok(()));
+        assert_eq!(world.add_experience(Entity(7), 500), Ok(()));
+
+        let applied = written(PROGRESS_SET_LEVEL, 10, ProgressWriteData::APPLIED, 10);
+        let dropped = written(
+            PROGRESS_ADD_EXPERIENCE,
+            500,
+            ProgressWriteData::NO_LEVEL_STEP,
+            0,
+        );
+        assert_eq!(loader.raise::<ProgressWritten>(&applied), 1);
+        assert_eq!(loader.raise::<ProgressWritten>(&dropped), 1);
+        assert_eq!(*HEARD.lock().unwrap(), [applied, dropped]);
     }
 
     #[test]

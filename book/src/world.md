@@ -177,7 +177,9 @@ Skill points follow the level, as the game counts them from it. Experience
 filters (`Load::on_experience`) do not see these writes. Each call is refused
 (`WorldError::Refused`) for an entity that is not a player's character in the
 game, and while 256 writes wait for the step. `progress(entity)` reads the
-result after the step.
+result after the step. The `ProgressWritten` event tells the mod that wrote,
+after the step, what each write left or why it was dropped
+([events](events.md)).
 
 ```rust
 use enshwick::actions::{Action, Outcome};

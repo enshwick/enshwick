@@ -5,7 +5,9 @@
 mod tests {
     use enshwick::abi::{
         Header, PROGRESS_ADD_EXPERIENCE, PROGRESS_SET_EXPERIENCE, PROGRESS_SET_LEVEL, PlayerInfo,
+        ProgressWriteData,
     };
+    use enshwick::events::ProgressWritten;
     use enshwick::test::FakeHost;
     use enshwick::{Entity, ItemId};
 
@@ -65,5 +67,33 @@ mod tests {
         );
         assert_eq!(request.item, ItemId(42));
         assert_eq!((request.count, request.level, request.rarity), (5, 3, 2));
+    }
+
+    #[test]
+    fn a_script_hears_what_became_of_its_level_write() {
+        let loader = run(
+            FakeHost::new().world(),
+            r#"
+            enshwick.on("ProgressWritten", function(written)
+                enshwick.log.info(`written {written.entity} {written.what} {written.value} {written.outcome} {written.level} {written.experience} {written.gained}`)
+            end)
+            "#,
+        );
+        let applied = ProgressWriteData {
+            header: Header::of::<ProgressWriteData>(),
+            entity: Entity(7),
+            what: PROGRESS_SET_LEVEL,
+            value: 12,
+            outcome: ProgressWriteData::APPLIED,
+            level: 12,
+            experience: 0,
+            gained: 40,
+        };
+        assert_ne!(loader.raise::<ProgressWritten>(&applied), 0);
+        assert!(
+            logged(&loader, "written 7 1 12 0 12 0 40"),
+            "{:?}",
+            loader.logs()
+        );
     }
 }

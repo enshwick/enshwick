@@ -72,6 +72,7 @@ The types are in
 | `PlayerDied` | `PlayerDeathData` | A player died from a hit, a fall, the shroud or drowning, and the data names the cause. For a hit, it also names the killer's template and the attacker of the last hit. It is raised after the step. Freezing and an administrator's kill raise none. Any other entity's death is the game event `Died`. Unstable. | game |
 | `TerrainPageLoaded` | `TerrainPageData` | A page of the terrain came into the server's memory, with players near or not ([hearing the terrain load and unload](terrain.md#hearing-the-terrain-load-and-unload)). Dedicated server only. | game |
 | `TerrainPageUnloaded` | `TerrainPageData` | A page of the terrain left the server's memory. Dedicated server only. | game |
+| `ProgressWritten` | `ProgressWriteData` | The server's level step applied a level or experience write of this mod, or the write was dropped ([stats](world.md#stats)). Only the mod that wrote hears it. | game |
 
 The data types have these fields:
 
@@ -124,6 +125,22 @@ The data types have these fields:
   - `x`
   - `z`
   - `size`
+- `ProgressWriteData` has seven fields. A dropped write has `level`,
+  `experience` and `gained` zeroed.
+  - `entity`: the character the write was for.
+  - `what`: the `what` the mod passed, such as `PROGRESS_SET_LEVEL`.
+  - `value`: the value the mod passed.
+  - `outcome`: one of these constants:
+    - `ProgressWriteData::APPLIED`
+    - `NO_LEVEL_STEP`: no level step took the character by the second step
+      end, as when it left the world.
+    - `UNREADABLE`: the character's experience did not read.
+    - `LEVEL_REFUSED`: the character's level did not take the new level.
+    - `BEHIND_DROPPED`: an earlier write for the character could not be
+      applied, and a character's writes apply in order.
+  - `level`: the level the write left.
+  - `experience`: the experience inside the level the write left.
+  - `gained`: the experience the game applies later in the same step.
 
 For typed settings, `on_settings` wraps `SettingsReplaced`.
 `on_settings_change` wraps both events; see [Settings](settings.md). The loader re-reads log levels on
