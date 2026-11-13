@@ -49,12 +49,10 @@ pub struct Plan {
 /// [`Skip::shown`] in their language.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Skip {
-    /// A second copy of a mod id.
+    /// Another file of a mod id that loads from one file only.
     Copy {
         /// The mod id.
         id: String,
-        /// The index of the copy that loads.
-        first: usize,
     },
     /// A required mod is not loaded.
     Missing {
@@ -110,7 +108,9 @@ impl Skipped {
 impl core::fmt::Display for Skip {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::Copy { id, first } => write!(f, "a second copy of {id}, after #{first}"),
+            Self::Copy { id } => {
+                write!(f, "another copy of {id} loads instead; delete this one")
+            }
             Self::Missing { id } => write!(f, "requires {id}, which is not loaded"),
             Self::Version { id, range, found } => write!(f, "requires {id} {range}, found {found}"),
             Self::Breaks { id, version } => {
@@ -127,7 +127,7 @@ impl Skip {
     #[must_use]
     pub fn shown(&self) -> String {
         match self {
-            Self::Copy { id, .. } => crate::engine::texts::fill("mods.skipped.copy", &[("id", id)]),
+            Self::Copy { id } => crate::engine::texts::fill("mods.skipped.copy", &[("id", id)]),
             Self::Missing { id } => {
                 crate::engine::texts::fill("mods.skipped.missing", &[("id", id)])
             }
@@ -204,12 +204,11 @@ pub fn resolve(candidates: &[Candidate]) -> Plan {
     let mut skipped: BTreeMap<usize, Skip> = BTreeMap::new();
     let mut by_id: BTreeMap<&str, usize> = BTreeMap::new();
     for (i, candidate) in candidates.iter().enumerate() {
-        if let Some(&first) = by_id.get(candidate.id.as_str()) {
+        if by_id.contains_key(candidate.id.as_str()) {
             skipped.insert(
                 i,
                 Skip::Copy {
                     id: candidate.id.clone(),
-                    first,
                 },
             );
         } else {
@@ -370,12 +369,22 @@ mod tests {
         };
         let copy = skipped(Skip::Copy {
             id: "you.safes".into(),
-            first: 0,
         });
         assert!(!copy.counts_off(|id| id == "you.safes"));
         assert!(copy.counts_off(|_| false), "no copy of it runs");
         let missing = skipped(Skip::Missing { id: "x".into() });
         assert!(missing.counts_off(|_| true));
+    }
+
+    #[test]
+    fn the_log_names_a_copy_s_reason_as_the_player_reads_it_without_an_index() {
+        let copy = Skip::Copy {
+            id: "you.safes".into(),
+        };
+        assert_eq!(
+            copy.to_string(),
+            "another copy of you.safes loads instead; delete this one"
+        );
     }
 
     #[test]

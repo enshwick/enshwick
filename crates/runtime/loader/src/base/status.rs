@@ -162,6 +162,7 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
                 version: s.version.clone(),
                 file: s.file.clone(),
                 reason: s.reason.to_string(),
+                shown: s.reason.shown(),
                 off: crate::base::off_line::counts_off(loader, s),
             })
             .collect(),

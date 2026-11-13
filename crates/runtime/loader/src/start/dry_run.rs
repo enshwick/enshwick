@@ -6,14 +6,14 @@ use std::sync::{Mutex, OnceLock};
 
 use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 
-use crate::base::resolve::{self, Candidate};
+use crate::base::resolve;
 use crate::engine::chains::Chains;
 use crate::engine::loader::Loader;
 use crate::engine::pe;
 use crate::{engine::builds, engine::log};
 
 use super::game::GAME_DIRS;
-use super::library::{Library, Run, libraries};
+use super::library::{Found, Library, Run, libraries};
 use super::{initialise, read_frame, records, skipped};
 
 /// Why a dry run could not start the loader.
@@ -152,7 +152,12 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         let dir = game_dir.join(dir);
         std::fs::create_dir_all(&dir).map_err(io(&dir))?;
     }
-    let (libraries, candidates, others) = libraries(&mods_dir, Run::Dry, &mut |_, _| {});
+    let Found {
+        libraries,
+        candidates,
+        others,
+        copies,
+    } = libraries(&mods_dir, Run::Dry, &mut |_, _| {});
     let plan = resolve::resolve(&candidates);
     let loader = Loader {
         side,
@@ -172,14 +177,14 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         settings_problems: Vec::new(),
         newer_release: OnceLock::new(),
         retry: crate::engine::retry::Retry::default(),
-        skipped: skipped(&libraries, &candidates, &plan),
+        skipped: skipped(&libraries, &candidates, &plan, copies),
         parts: crate::engine::parts::Parts::new(crate::parts::LAYERS),
     };
     let loader = crate::engine::loader::install(loader).ok_or(DryRunError::AlreadyRan)?;
     let order: Vec<&Library> = plan.order.iter().map(|&i| &libraries[i]).collect();
     initialise(loader, &order, None);
     let lines = log::captured();
-    let mods = outcomes(loader, &order, &libraries, &candidates, &plan, &lines);
+    let mods = outcomes(loader, &order, &lines);
     Ok(DryRun {
         table: build.name.clone(),
         exact: build.complete(),
@@ -194,9 +199,6 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
 fn outcomes(
     loader: &Loader,
     order: &[&Library],
-    libraries: &[Library],
-    candidates: &[Candidate],
-    plan: &resolve::Plan,
     lines: &[(enshwick_core::abi::Level, String, String)],
 ) -> Vec<DryMod> {
     let reason_of = |id: &str| {
@@ -226,12 +228,12 @@ fn outcomes(
             }
         })
         .collect();
-    mods.extend(plan.skipped.iter().map(|(index, reason)| DryMod {
-        file: libraries[*index].file.clone(),
-        id: candidates[*index].id.clone(),
-        version: candidates[*index].version.to_string(),
+    mods.extend(loader.skipped.iter().map(|skipped| DryMod {
+        file: skipped.file.clone(),
+        id: skipped.id.clone(),
+        version: skipped.version.clone(),
         running: false,
-        reason: format!("skipped: {reason}"),
+        reason: format!("skipped: {}", skipped.reason),
     }));
     mods
 }

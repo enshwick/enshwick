@@ -312,6 +312,7 @@ unsafe fn window(engine: &Engine, context: usize, view: &View, drawn: &mut Drawn
     // window; it did not move, and the painter's widgets close every frame
     // they open.
     unsafe { engine.scroll_end(&mut drawn.scroll) };
+    paint.set_scrolled(false);
     if paint.button(texts::text("actions.close").as_bytes(), true) {
         click = Click::Close;
     }

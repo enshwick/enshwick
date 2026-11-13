@@ -496,6 +496,7 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
     // this window; it did not move, and the painter's widgets close every
     // frame they open.
     unsafe { engine.scroll_end(&mut screen.scroll) };
+    paint.set_scrolled(false);
     let close = if matches!(screen.page, Page::Mismatch { .. }) {
         "join.screen.ok"
     } else {

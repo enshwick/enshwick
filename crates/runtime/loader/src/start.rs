@@ -94,11 +94,12 @@ pub(crate) fn start(missing_forwards: u32, release: extern "system" fn() -> u32)
         return;
     };
     let mut watching = Watching::start(game.base);
-    let (libraries, candidates, others) = libraries(&mods_dir, Run::Game, &mut |file, image| {
+    let found = libraries(&mods_dir, Run::Game, &mut |file, image| {
         if let Some(w) = watching.as_mut() {
             w.check(file, image, Stage::Load);
         }
     });
+    let (libraries, candidates) = (found.libraries, found.candidates);
     let folders: Vec<(String, String, String)> = libraries
         .iter()
         .zip(&candidates)
@@ -125,7 +126,7 @@ pub(crate) fn start(missing_forwards: u32, release: extern "system" fn() -> u32)
         developer_tools,
         mods_dir,
         mods: records(&libraries, &candidates, &plan),
-        others,
+        others: found.others,
         chains: Mutex::new(Chains::default()),
         mids: Mutex::default(),
         caller_frame: read_frame,
@@ -134,7 +135,7 @@ pub(crate) fn start(missing_forwards: u32, release: extern "system" fn() -> u32)
         settings_problems,
         newer_release: OnceLock::new(),
         retry: crate::engine::retry::Retry::default(),
-        skipped: skipped(&libraries, &candidates, &plan),
+        skipped: skipped(&libraries, &candidates, &plan, found.copies),
         parts: Parts::new(crate::parts::LAYERS),
     };
     let Some(loader) = crate::engine::loader::install(loader) else {
@@ -228,11 +229,13 @@ fn skip(libraries: &[Library], plan: &resolve::Plan) {
     }
 }
 
-/// The mods `plan` skips, as the screens name them.
+/// The mods `plan` skips, then the other `copies` of a mod id, as the screens
+/// name them.
 fn skipped(
     libraries: &[Library],
     candidates: &[Candidate],
     plan: &resolve::Plan,
+    copies: Vec<resolve::Skipped>,
 ) -> Vec<resolve::Skipped> {
     plan.skipped
         .iter()
@@ -248,6 +251,7 @@ fn skipped(
             file: libraries[*i].file.clone(),
             reason: reason.clone(),
         })
+        .chain(copies)
         .collect()
 }
 

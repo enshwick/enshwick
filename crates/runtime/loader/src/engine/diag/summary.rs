@@ -117,6 +117,8 @@ pub struct SkippedMod {
     pub file: String,
     /// Why it does not load, as the log says it.
     pub reason: String,
+    /// Why, in the reader's language, as the Mods screen shows it.
+    pub shown: String,
     /// Whether it counts as off: all but a second copy of a loaded mod.
     pub off: bool,
 }
@@ -499,7 +501,7 @@ conflicts:"
         for s in self.skipped_off().take(3) {
             lines.push(crate::engine::texts::fill(
                 "status.off",
-                &[("id", &s.file), ("reason", &s.reason)],
+                &[("id", &s.file), ("reason", &s.shown)],
             ));
         }
         for p in self.parts_off.iter().take(3) {

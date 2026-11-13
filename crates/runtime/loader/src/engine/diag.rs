@@ -539,6 +539,7 @@ conflicts:
             version: "0.2.0".into(),
             file: file.into(),
             reason: reason.into(),
+            shown: format!("[{reason}]"),
             off,
         };
         let mut s = summary();
@@ -552,7 +553,7 @@ conflicts:
             skipped(
                 "you.lockers",
                 "old/you.lockers.dll",
-                "a second copy of you.lockers, after #0",
+                "another copy of you.lockers loads instead; delete this one",
                 false,
             ),
         ];
@@ -561,15 +562,16 @@ conflicts:
         assert!(
             text.contains(
                 "  you.safes 0.2.0 skipped, you.safes/you.safes.dll: requires you.locks, which is not loaded\n  \
-                 you.lockers 0.2.0 skipped, old/you.lockers.dll: a second copy of you.lockers, after #0\n"
+                 you.lockers 0.2.0 skipped, old/you.lockers.dll: another copy of you.lockers loads instead; delete this one\n"
             ),
             "{text}"
         );
         let short = s.short();
         assert!(short.contains("1 of 3 mods running"), "{short}");
         assert!(
-            short.contains("you.safes/you.safes.dll off: requires you.locks, which is not loaded"),
-            "{short}"
+            short
+                .contains("you.safes/you.safes.dll off: [requires you.locks, which is not loaded]"),
+            "the reason in the reader's language: {short}"
         );
         assert!(
             !short.contains("old/you.lockers.dll"),

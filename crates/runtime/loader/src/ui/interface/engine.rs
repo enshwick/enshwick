@@ -419,25 +419,27 @@ impl Layout {
                     shown,
                 }),
         }
-        .checked()
+        .checked(f(pinned::ui::BUTTON_EXTENT.id())?)
     }
 
     /// Refuses a layout whose lists would run past the loader's buffers,
-    /// and keeps buttons to their text when the icon fields would.
-    fn checked(mut self) -> Result<Self, Missing> {
+    /// and keeps buttons to their text when the icon fields would run past
+    /// the `button_extent` bytes the game takes or onto another field.
+    fn checked(mut self, button_extent: usize) -> Result<Self, Missing> {
+        // Each field with the width `Engine::button_config` writes there.
         let others = [
-            self.button_align,
-            self.button_centered,
-            self.button_enabled,
-            self.button_size_mode,
-            self.button_padding[0],
-            self.button_padding[1],
-            self.button_scale,
-            self.button_sound,
+            (self.button_align, 2),
+            (self.button_centered, 1),
+            (self.button_enabled, 1),
+            (self.button_size_mode, 8),
+            (self.button_padding[0], 4),
+            (self.button_padding[1], 4),
+            (self.button_scale, 4),
+            (self.button_sound, 1),
         ];
         if self
             .button_icon
-            .is_some_and(|icon| !icon_fits(&others, icon))
+            .is_some_and(|icon| !icon_fits(&others, icon, button_extent))
         {
             crate::log!(
                 WARN,
@@ -463,27 +465,20 @@ impl Layout {
     }
 }
 
-/// Whether an icon button's kind word, texture and flag byte fit its config
-/// beside the `others` fields without one write landing on another's start.
-fn icon_fits(others: &[usize], icon: ButtonIcon) -> bool {
-    let ButtonIcon {
-        kind,
-        texture,
-        shown,
-    } = icon;
-    let word = kind..kind + 4;
-    let image = texture..texture + 16;
-    let starts_clear = others
-        .iter()
-        .chain([&texture, &shown])
-        .all(|at| !word.contains(at));
-    starts_clear
-        && word.end <= BUTTON_CONFIG
-        && image.end <= BUTTON_CONFIG
-        && shown < BUTTON_CONFIG
-        && !image.contains(&kind)
-        && !image.contains(&shown)
-        && others.iter().all(|at| !image.contains(at) && *at != shown)
+/// Whether an icon button's kind word, texture and flag byte lie inside the
+/// `extent` bytes of its config the game takes, apart from each other and
+/// from the `others` fields, each an offset and its width in bytes.
+fn icon_fits(others: &[(usize, usize)], icon: ButtonIcon, extent: usize) -> bool {
+    let span = |(at, width): (usize, usize)| at..at.saturating_add(width);
+    let apart = |a: &core::ops::Range<usize>, b: &core::ops::Range<usize>| {
+        a.end <= b.start || b.end <= a.start
+    };
+    let own = [(icon.kind, 4), (icon.texture, 16), (icon.shown, 1)].map(span);
+    own.iter().enumerate().all(|(i, a)| {
+        a.end <= extent
+            && own[i + 1..].iter().all(|b| apart(a, b))
+            && others.iter().all(|&field| apart(a, &span(field)))
+    })
 }
 
 impl DialogLayout {

@@ -285,6 +285,28 @@ fn fill_mods(built: &Path, mods: &Path) {
     std::fs::write(mods.join("not-pe/not-pe.dll"), "not a DLL").unwrap();
 }
 
+/// The fixtures' second lanterns file reaches the screens and the status as
+/// the one skipped copy, the file the log `line` names.
+fn assert_one_copy_of_lanterns(copies: &[crate::base::resolve::Skipped], line: &str) {
+    let [copy] = copies else {
+        panic!("one copy for the screens and the status: {copies:?}");
+    };
+    assert!(
+        line.starts_with(&copy.file),
+        "the copy the log names: {copy:?}"
+    );
+    assert_eq!(
+        (copy.id.as_str(), copy.version.as_str(), &copy.reason),
+        (
+            "fixture.lanterns",
+            "0.1.0",
+            &crate::base::resolve::Skip::Copy {
+                id: "fixture.lanterns".into()
+            }
+        )
+    );
+}
+
 #[test]
 fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
     let dir = std::env::temp_dir().join(format!("enshwick-discovery-{}", std::process::id()));
@@ -310,7 +332,7 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
     });
     let turn = crate::engine::log::capture_turn();
     let mut mapped = Vec::new();
-    let (found, candidates, others) = libraries(&mods, Run::Dry, &mut |file, range| {
+    let all = libraries(&mods, Run::Dry, &mut |file, range| {
         mapped.push((file.to_owned(), range));
     });
     let lines = loader_lines();
@@ -325,6 +347,7 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
         .collect();
     assert_eq!(unmapped, ["not-pe/not-pe.dll"], "{mapped:?}");
 
+    let (found, candidates, others) = (all.libraries, all.candidates, all.others);
     let ids: Vec<&str> = candidates.iter().map(|c| c.id.as_str()).collect();
     assert_eq!(ids, ["fixture.lanterns", "fixture.lockers"], "{lines:#?}");
     let files: Vec<&str> = found.iter().map(|l| l.file.as_str()).collect();
@@ -386,6 +409,7 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
         "{}",
         duplicates[0]
     );
+    assert_one_copy_of_lanterns(&all.copies, duplicates[0]);
 
     for library in &found {
         super::unload(library);

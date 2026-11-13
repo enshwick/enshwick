@@ -3,51 +3,98 @@ use super::*;
 
 #[test]
 fn a_button_s_icon_fields_must_fit_its_config_clear_of_its_other_fields() {
-    // The button fields of the kept clients' frozen tables: align, centred,
-    // enabled, size mode, padding, scale, sound.
-    let others = [0x4, 0x6, 0x9, 0x10, 0x4c, 0x50, 0x54, 0x58];
-    let icon = |kind, texture, shown| ButtonIcon {
-        kind,
-        texture,
-        shown,
+    // The button fields of the kept clients' frozen tables with the widths
+    // the loader writes: align, centred, enabled, size mode, padding,
+    // scale, sound.
+    let others = [
+        (0x4, 2),
+        (0x6, 1),
+        (0x9, 1),
+        (0x10, 8),
+        (0x4c, 4),
+        (0x50, 4),
+        (0x54, 4),
+        (0x58, 1),
+    ];
+    let fits = |others: &[(usize, usize)], kind, texture, shown, extent| {
+        icon_fits(
+            others,
+            ButtonIcon {
+                kind,
+                texture,
+                shown,
+            },
+            extent,
+        )
     };
-    assert!(icon_fits(&others, icon(0, 0x38, 0x48)), "the kept clients");
+    let kept = |kind, texture, shown| fits(&others, kind, texture, shown, 0x60);
+    assert!(kept(0, 0x38, 0x48), "the kept clients");
+    assert!(!kept(0, 0x58, 0x48), "the texture past the extent");
+    assert!(!kept(0, 0x38, 0x60), "the flag past it");
     assert!(
-        !icon_fits(&others, icon(0, 0x78, 0x48)),
-        "the texture past the config"
+        !fits(&others, 0, 0x38, 0x48, 0x48),
+        "the flag past a smaller extent the game takes"
     );
+    assert!(!kept(0, 0x38, 0x40), "the flag inside the texture");
+    assert!(!kept(0, 0x48, 0x38), "padding inside the texture");
+    assert!(!kept(0, 0x38, 0x4c), "the flag on padding");
     assert!(
-        !icon_fits(&others, icon(0, 0x38, BUTTON_CONFIG)),
-        "the flag past it"
-    );
-    assert!(
-        !icon_fits(&others, icon(0, 0x38, 0x40)),
-        "the flag inside the texture"
-    );
-    assert!(
-        !icon_fits(&others, icon(0, 0x48, 0x38)),
-        "padding inside the texture"
-    );
-    assert!(
-        !icon_fits(&others, icon(0, 0x38, 0x4c)),
-        "the flag on padding"
-    );
-    assert!(
-        !icon_fits(&[0x2], icon(0, 0x38, 0x48)),
+        !fits(&[(0x2, 1)], 0, 0x38, 0x48, 0x60),
         "a field under the kind word"
     );
     assert!(
-        !icon_fits(&others, icon(0x40, 0x38, 0x48)),
-        "the kind word inside the texture"
+        !kept(0x14, 0x38, 0x48),
+        "the kind word inside the size mode"
     );
     assert!(
-        !icon_fits(&others, icon(BUTTON_CONFIG - 2, 0x38, 0x48)),
-        "the kind word past the config"
+        !fits(&[(0x34, 8)], 0, 0x38, 0x48, 0x60),
+        "a wide field running into the texture"
     );
+    assert!(!kept(0x40, 0x38, 0x48), "the kind word inside the texture");
+    assert!(!kept(0x5e, 0x38, 0x48), "the kind word past the extent");
     assert!(
-        icon_fits(&[0x8], icon(0x20, 0x38, 0x48)),
+        fits(&[(0x8, 1)], 0x20, 0x38, 0x48, 0x60),
         "a routed kind word elsewhere"
     );
+}
+
+/// The routed icon fields reach the layout when they fit the button's
+/// config, and leave buttons to their text when the kind word lands on a
+/// field the table routes.
+#[test]
+fn a_layout_keeps_icon_buttons_only_where_the_routed_kind_word_fits() {
+    for table in &client_tables() {
+        let icon = |kind: u64| {
+            move |id: &str| match id {
+                _ if id == pinned::ui::BUTTON_KIND.id() => Some(kind),
+                _ if id == pinned::ui::BUTTON_ICON.id() => Some(0x38),
+                _ if id == pinned::ui::BUTTON_ICON_SHOWN.id() => Some(0x48),
+                _ => constant(table, id),
+            }
+        };
+        let fits = Layout::read(&icon(0)).unwrap().button_icon;
+        assert!(
+            matches!(
+                fits,
+                Some(ButtonIcon {
+                    kind: 0,
+                    texture: 0x38,
+                    shown: 0x48
+                })
+            ),
+            "{fits:?}"
+        );
+        let align = constant(table, pinned::ui::BUTTON_ALIGN.id()).unwrap();
+        assert!(
+            Layout::read(&icon(align)).unwrap().button_icon.is_none(),
+            "a kind word on the button's alignment"
+        );
+        let unrouted = |id: &str| (id != pinned::ui::BUTTON_KIND.id()).then(|| icon(0)(id))?;
+        assert!(
+            Layout::read(&unrouted).unwrap().button_icon.is_none(),
+            "a build no kind route reads keeps buttons to text"
+        );
+    }
 }
 
 #[test]
