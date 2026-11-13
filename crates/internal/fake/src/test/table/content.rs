@@ -95,7 +95,7 @@ pub(crate) extern "system" fn content_name(
 }
 
 pub(crate) extern "system" fn crafting_prop(
-    _me: ModHandle,
+    me: ModHandle,
     prop: *const [u8; 16],
     first: u8,
     width: u8,
@@ -112,7 +112,7 @@ pub(crate) extern "system" fn crafting_prop(
         if s.registration == Registration::Closed {
             return Status::TOO_LATE;
         }
-        if !s.manifest.as_ref().is_none_or(|manifest| manifest.joins) {
+        if !super::base::mods::joins(s, me) {
             return Status::REFUSED;
         }
         let (bounds, added) = &mut s.crafting_props;
@@ -162,12 +162,12 @@ pub(crate) extern "system" fn use_content(_me: ModHandle, id: Str) -> Status {
     })
 }
 
-pub(crate) extern "system" fn rate(_me: ModHandle, rate: RateId) -> Status {
+pub(crate) extern "system" fn rate(me: ModHandle, rate: RateId) -> Status {
     with(Status::MISSING, |s| {
         if enshwick_core::__fake::Rate::from_id(rate).is_none() {
             return Status::BAD_ARGS;
         }
-        let joins = s.manifest.as_ref().is_none_or(|manifest| manifest.joins);
+        let joins = super::base::mods::joins(s, me);
         if !enshwick_core::__fake::rules::may_declare_rate(rate, joins) {
             return Status::REFUSED;
         }
@@ -329,7 +329,7 @@ pub(crate) extern "system" fn change_data(
 }
 
 pub(crate) extern "system" fn declare_change(
-    _me: ModHandle,
+    me: ModHandle,
     change: *const enshwick_core::abi::DataChange,
     out: *mut enshwick_core::abi::ChangeId,
 ) -> Status {
@@ -366,6 +366,9 @@ pub(crate) extern "system" fn declare_change(
         .unwrap_or_default()
         .to_owned();
     with(Status::MISSING, |s| {
+        if field.seen_by_clients() && !super::base::mods::joins(s, me) {
+            return Status::REFUSED;
+        }
         s.changes.live.push(crate::test::content::LiveChange {
             target,
             field,

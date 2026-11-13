@@ -106,6 +106,30 @@ impl FakeHost {
         self.pack_log_levels.push((pack, level));
         self
     }
+
+    /// A data pack the loader runs with handle `pack`, of `side` as its
+    /// `pack.toml` says. Its calls are refused by that side as the loader
+    /// refuses them: a rate or value clients read, a crafting prop and a
+    /// net channel need [`Side::BOTH`](enshwick_core::abi::Side::BOTH). A
+    /// handle that is neither the mod's nor a pack named here counts as a
+    /// pack of side server.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{ModHandle, Side};
+    ///
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .pack(ModHandle(2), Side::BOTH)
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn pack(mut self, pack: ModHandle, side: enshwick_core::abi::Side) -> Self {
+        self.pack_sides.retain(|(other, _)| *other != pack);
+        self.pack_sides.push((pack, side));
+        self
+    }
 }
 
 #[expect(

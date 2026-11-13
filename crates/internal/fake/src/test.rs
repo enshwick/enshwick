@@ -278,6 +278,8 @@ pub struct FakeHost {
     log_level: Level,
     /// The levels of data packs that differ from `log_level`.
     pack_log_levels: Vec<(ModHandle, Level)>,
+    /// The sides of data packs, by handle.
+    pack_sides: Vec<(ModHandle, Side)>,
     caller_frame: CallerFrame,
     components: FxHashMap<(u32, u32), (usize, usize)>,
     templates: FxHashMap<u32, [u8; 16]>,
@@ -383,6 +385,7 @@ impl FakeHost {
             mod_dir: "mods/test".to_owned(),
             log_level: Level::INFO,
             pack_log_levels: Vec::new(),
+            pack_sides: Vec::new(),
             caller_frame: CallerFrame::default(),
             components: FxHashMap::default(),
             templates: FxHashMap::default(),

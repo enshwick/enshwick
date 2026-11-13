@@ -387,7 +387,7 @@ mod tests {
         use enshwick::packs::PackManifest;
         use enshwick_luau::{Limits, Scripts};
 
-        let loader = FakeHost::new().install();
+        let loader = FakeHost::new().pack(ModHandle(2), Side::BOTH).install();
         let main = r#"
             enshwick.content.declare_change({ Items = "Stackable" }, "MaxStackSize", "stacks")
             enshwick.rates.rate("SkillPoints")

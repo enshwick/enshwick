@@ -47,7 +47,10 @@ mod tests {
     fn a_pack_of_side_both_declares_a_change_players_read_and_one_of_side_server_does_not() {
         use enshwick::abi::{ModHandle, Side};
 
-        let loader = FakeHost::new().install();
+        let loader = FakeHost::new()
+            .pack(ModHandle(2), Side::BOTH)
+            .pack(ModHandle(3), Side::SERVER)
+            .install();
         // SAFETY: the fake host's table lives for the process; the loader
         // makes its own handle the host of the copy that runs the packs.
         unsafe { enshwick_base::__internal::install_host(loader.api(), ModHandle(9)) };
@@ -66,5 +69,36 @@ mod tests {
         let live = loader.live_changes();
         assert_eq!(live.len(), 1);
         assert_eq!(live[0].field, Field::MaxStackSize);
+
+        // The raw entry refuses by the caller's own side, as the loader does.
+        let raw = |me, field: Field| {
+            let change = enshwick::abi::DataChange {
+                header: enshwick::abi::Header::of::<enshwick::abi::DataChange>(),
+                entry: [7; 16],
+                field: field.to_abi(),
+                op: enshwick::abi::ChangeOp::TIMES,
+                value: 1.0,
+                source: enshwick::abi::Str::new("raw"),
+                item: [0; 16],
+                select: enshwick::abi::DataSelect::ENTRY,
+                categories: 0,
+            };
+            let mut id = enshwick::abi::ChangeId(0);
+            // SAFETY: the fake host's table lives for the process; `change`
+            // and `id` are locals alive for the call.
+            (unsafe { &*loader.api() }.declare_change)(
+                ModHandle(me),
+                &raw const change,
+                &raw mut id,
+            )
+        };
+        assert_eq!(raw(3, Field::MaxStackSize), Status::REFUSED);
+        assert_eq!(raw(4, Field::MaxStackSize), Status::REFUSED);
+        assert_eq!(raw(2, Field::MaxStackSize), Status::OK);
+        assert_eq!(
+            raw(3, Field::StackSize),
+            Status::OK,
+            "loot only the server reads"
+        );
     }
 }
