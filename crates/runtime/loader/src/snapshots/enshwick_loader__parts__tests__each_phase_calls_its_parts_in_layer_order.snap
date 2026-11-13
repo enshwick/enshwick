@@ -3,14 +3,14 @@ source: crates/runtime/loader/src/parts.rs
 expression: phases()
 ---
 seal: services, points, calls, content, item_actions, stats, item_data, vetoes, commands
-link: crash, world, events, game_events, saves, net, carrier, recipes, textures, rate_links, altars, daytime, weather, label, bases, fog, voxels, terrain_pages, inventory, damage, deaths, item_actions, survivors, item_data, knowledge, progress, vetoes, chat, interactions, local_held, controls, ui
+link: crash, world, events, game_events, saves, net, carrier, recipes, textures, rate_links, altars, daytime, weather, label, bases, fog, voxels, terrain_pages, inventory, damage, deaths, item_actions, survivors, item_data, drops, knowledge, progress, vetoes, chat, interactions, local_held, controls, ui
 step, follow: altar steps, day steps, game settings steps, weather steps, inventory deliveries, death steps, survivor steps, item data steps, stat steps, knowledge steps, level writes, knowledge change steps, interaction steps, control firings, carried controls, build refusals, carried windows
 step, input: join admission, console lines, chat commands, chat sending
 step, output: world saving, own channel, world edits, voxel edits, terrain pages
 joined: join admission at join, the greeting at join, stats at join, item data at join, the players' screens at join
 left: the wire at leave, remote edits at leave, join admission at leave, item data at leave, controls at leave, windows at leave
-hosting: saves, join, controls
+hosting: saves, join, drops, controls
 end: windows at a game's end, level writes at a game's end, inventory requests at a game's end
 forget: saves, net, admission, recipes, altars, daytime, weather, bases, transactions, voxels, terrain_pages, item_actions, survivors, stats, spawns, knowledge, commands, chat, interactions, controls, player_actions
-world event: data changes at world events, recipe rates at world events, game settings at world events, weather at world events, stats at world events, item data at world events, item drops at world events, knowledge changes at world events, chat mutes at world events
+world event: data changes at world events, recipe rates at world events, game settings at world events, weather at world events, stats at world events, item data at world events, knowledge changes at world events, chat mutes at world events
 follows: data_changes, rate_links, weather, stats, item_data

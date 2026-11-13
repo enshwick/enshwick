@@ -118,9 +118,8 @@ pub(crate) static PARTS: &[&Part] = &[
         ..part!("stat steps", stats)
     },
     &Part {
-        world_event: Some(fused!("item drops at world events", |_, event| {
-            drops::world_event(event);
-        })),
+        link: Some(drops::link),
+        hosting: Some(drops::start),
         ..part!("drops", drops)
     },
     &Part {

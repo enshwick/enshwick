@@ -14,6 +14,6 @@
 ### Changed
 
 - Loader: the item drop's pickup is read on a thread of its own as the
-  world loads, so the first drop no longer holds a server frame; only a
-  drop asked for during that read, about a tenth of a second, waits for
-  the rest of it (#1064).
+  server starts, before its world loads, so the first drop no longer holds
+  a server frame; only a drop asked for during that read, about a tenth of
+  a second, waits for the rest of it (#1064).

@@ -3917,7 +3917,7 @@ declare enshwick: {
 		teleport_player: (player: string, position: vector, how: Teleport) -> (),
 		--- Asks the server to move the character of the connected player `player` to where the connected player `to` stands, as `teleport_player` does; the game always picks a free spot beside them, so the two never stand in one place.
 		teleport_player_to: (player: string, to: string, how: Teleport) -> (),
-		--- Drops `count` new items of `item` on the ground at `at` in metres, as one loose stack any player can pick up, as the game spills loot; the pickup's entity comes back at once and is in the world after the next step. The game drops it to the ground and does not save it. A drop in the first tenth of a second after the world loads waits for the loader's read of the pickup. On the server's game thread only.
+		--- Drops `count` new items of `item` on the ground at `at` in metres, as one loose stack any player can pick up, as the game spills loot; the pickup's entity comes back at once and is in the world after the next step. The game drops it to the ground and does not save it. The loader reads the pickup as the server starts, in about a tenth of a second, and a drop before that read ends waits for it. On the server's game thread only.
 		drop_items: (item: number, count: number, at: vector, how: ItemDrop) -> number,
 		--- Asks the server to spawn an entity of `template`, its GUID as `World.template` gives it, at `position` in metres, as its admin spawn does: an enemy, an animal, a survivor or a prop. The new entity's id comes back at once; the entity is in the world after the next step, and a template the game does not know spawns nothing.
 		spawn: (template: string, position: vector, how: Spawn) -> number,

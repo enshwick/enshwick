@@ -1934,9 +1934,9 @@ pub struct HostApi {
     /// 65535, or a rarity the game lacks; [`Status::REFUSED`] for an item
     /// the game does not know; [`Status::WRONG_THREAD`] off the server's
     /// game thread; [`Status::MISSING`] on a client or a build without the
-    /// pickup. The loader reads the pickup off the game thread as the world
-    /// loads, about a tenth of a second; a call before that read ends waits
-    /// for the rest of it. `request` and `out` are borrowed for the call. A panic in
+    /// pickup. The loader reads the pickup off the game thread as the server
+    /// starts, before its world loads, in about a tenth of a second; a call
+    /// before that read ends waits for the rest of it. `request` and `out` are borrowed for the call. A panic in
     /// the loader returns [`Status::REFUSED`]. ABI 11.24.
     pub drop_items:
         extern "system" fn(me: ModHandle, request: *const DropRequest, out: *mut Entity) -> Status,

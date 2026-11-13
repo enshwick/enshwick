@@ -708,9 +708,10 @@ impl Effects {
     /// Drops `count` new items of `item` on the ground at `at` in metres, as
     /// one loose stack any player can pick up, as the game spills loot; the
     /// pickup's entity comes back at once and is in the world after the
-    /// next step. The game drops it to the ground and does not save it. A
-    /// drop in the first tenth of a second after the world loads waits for
-    /// the loader's read of the pickup. On the server's game thread only.
+    /// next step. The game drops it to the ground and does not save it. The
+    /// loader reads the pickup as the server starts, in about a tenth of a
+    /// second, and a drop before that read ends waits for it. On the
+    /// server's game thread only.
     ///
     /// # Errors
     ///

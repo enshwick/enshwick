@@ -9,13 +9,14 @@
 //!
 //! The template is found by its name, which reads every template's name
 //! from the archive, about a tenth of a second on a dedicated server: the
-//! loader reads it on a thread of its own as the world loads, and only a
-//! drop asked for before the read ends waits for the rest of it.
+//! loader reads it on a thread of its own as a dedicated server links or a
+//! client starts hosting, before the world loads, and only a drop asked for
+//! before the read ends waits for the rest of it.
 
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick_core::abi::{DropRequest, Event, Header, SpawnRequest, Status};
+use enshwick_core::abi::{DropRequest, Header, Side, SpawnRequest, Status};
 use enshwick_core::affixes::ItemRarity;
 
 use crate::engine::loader::Loader;
@@ -68,17 +69,6 @@ impl Reading {
         });
     }
 
-    /// Starts `read` when `event` is the world's load.
-    fn at(
-        &'static self,
-        event: Event,
-        read: impl FnOnce() -> Result<Layout, ReadLayoutError> + Send + 'static,
-    ) {
-        if event == Event::WORLD_LOADED {
-            self.start(read);
-        }
-    }
-
     /// Keeps `read` for the process, then logs it and turns drops off on a
     /// failure: kept first, so a drop waiting in [`Reading::layout`] wakes
     /// even if the log panics.
@@ -114,14 +104,18 @@ impl Reading {
     }
 }
 
-/// Starts reading the layout as a world loads, where a server runs.
-pub(crate) fn world_event(event: Event) {
-    if crate::engine::world::server().is_err() {
-        return;
+/// Starts reading the layout as a dedicated server links, long before its
+/// world loads, so a drop in a `WorldLoaded` handler does not wait.
+pub(crate) fn link(loader: &'static Loader) {
+    if loader.side == Side::SERVER {
+        start(loader);
     }
-    if let Some(loader) = crate::engine::loader::loader() {
-        READING.at(event, move || read_layout(loader));
-    }
+}
+
+/// Starts reading the layout, as a dedicated server links or a client
+/// starts hosting a game.
+pub(crate) fn start(loader: &'static Loader) {
+    READING.start(move || read_layout(loader));
 }
 
 fn read_layout(loader: &Loader) -> Result<Layout, ReadLayoutError> {
@@ -221,8 +215,8 @@ fn pickup(layout: &Layout, request: &DropRequest) -> Option<Vec<u8>> {
 /// Drops the stack `request` asks for; the pickup's entity.
 pub(crate) fn drop_items(loader: &'static Loader, request: &DropRequest) -> Result<u32, Status> {
     crate::engine::world::server()?;
-    // A drop before any world load reached the parts starts the read itself.
-    READING.start(move || read_layout(loader));
+    // A drop on a server no phase started the read for starts it itself.
+    start(loader);
     let layout = READING.layout()?;
     let bytes = pickup(layout, request).ok_or(Status::BAD_ARGS)?;
     crate::inventory::transactions::item_info(loader, request.item.get())
@@ -320,24 +314,28 @@ mod tests {
     }
 
     #[test]
+    fn a_dedicated_server_starts_the_read_as_it_links_and_a_client_does_not() {
+        let side = |side| {
+            let mut loader = crate::start::tests::bare_loader();
+            loader.side = side;
+            &*Box::leak(Box::new(loader))
+        };
+        link(side(Side::CLIENT));
+        assert!(
+            !READING.started.load(Ordering::Acquire),
+            "a client waits to host"
+        );
+        link(side(Side::SERVER));
+        assert!(READING.started.load(Ordering::Acquire));
+    }
+
+    #[test]
     fn a_drop_during_the_read_waits_for_it_instead_of_failing() {
         let reading = reading();
         reading.start(|| {
             std::thread::sleep(std::time::Duration::from_millis(200));
             Ok(LAYOUT)
         });
-        assert_eq!(reading.layout().map(|l| l.hash), Ok(LAYOUT.hash));
-    }
-
-    #[test]
-    fn only_the_world_s_load_starts_the_read() {
-        let reading = reading();
-        for event in [Event::WORLD_SAVED, Event::SHUTDOWN_STARTED, Event::TICKED] {
-            reading.at(event, || Ok(LAYOUT));
-        }
-        assert!(!reading.started.load(Ordering::Acquire));
-        reading.at(Event::WORLD_LOADED, || Ok(LAYOUT));
-        finished(reading);
         assert_eq!(reading.layout().map(|l| l.hash), Ok(LAYOUT.hash));
     }
 

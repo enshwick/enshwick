@@ -215,8 +215,9 @@ change it:
 - `.rarity(rarity)` gives it an `ItemRarity`.
 
 An item the game does not know is refused (`WorldError::Refused`). The loader
-reads the pickup on a thread of its own as the world loads, about a tenth of
-a second. A drop asked for before that read ends waits for the rest of it.
+reads the pickup on a thread of its own as the server starts, before its
+world loads. The read takes about a tenth of a second, and a drop asked for
+before it ends waits for the rest of it.
 
 ```rust
 use enshwick::actions::{Action, Outcome};
