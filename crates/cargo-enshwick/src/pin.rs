@@ -357,14 +357,23 @@ mod tests {
         let report = dir.join("report.md");
         let settled = run(&Args {
             old: path.clone(),
-            new: path,
+            new: path.clone(),
             dir: dir.clone(),
             write: false,
             report: Some(report.clone()),
         })
         .unwrap();
         let text = fs::read_to_string(&report).unwrap();
+        let same = run(&Args {
+            old: path.clone(),
+            new: path,
+            dir: dir.clone(),
+            write: true,
+            report: None,
+        });
         fs::remove_dir_all(&dir).unwrap();
+        let same = same.unwrap_err().to_string();
+        assert!(same.contains("same build"), "{same}");
         assert!(settled, "{text}");
         assert!(text.contains("## Cargo.toml: server row"), "{text}");
         assert!(

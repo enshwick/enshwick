@@ -391,6 +391,70 @@ mod tests {
         assert!(uses_unsafe(
             "fn f<'a>(x: &'a u8) { let q = '\\''; unsafe {} }"
         ));
+        assert!(uses_unsafe("let a = x / y * z; unsafe {}"));
+        assert!(uses_unsafe("let a = 1; // a note\nunsafe {}"));
+        assert!(uses_unsafe("let a = 1; /* a note */ unsafe {}"));
+        assert!(!uses_unsafe("let a = 1; /* a /* nested */ unsafe */"));
+    }
+
+    #[test]
+    fn only_unsafe_code_of_the_package_itself_lifts_the_forbid_rule() {
+        let dir = crate::scratch("unsafe-in-package");
+        let write = |path: &str, text: &str| {
+            let path = dir.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        };
+        write("src/lib.rs", "//! A crate.\n");
+        write("examples/raw.txt", "unsafe {}\n");
+        write("target/debug/build/x.rs", "unsafe {}\n");
+        write("inner/Cargo.toml", "[package]\nname = \"inner\"\n");
+        write("inner/src/lib.rs", "unsafe {}\n");
+        let without = has_unsafe(&dir).unwrap();
+        write(
+            "src/deep/read.rs",
+            "pub fn f(p: *const u8) -> u8 { unsafe { *p } }\n",
+        );
+        let with = has_unsafe(&dir).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(!without);
+        assert!(with);
+    }
+
+    #[test]
+    fn only_a_dll_names_its_version_and_only_crate_roots_forbid_unsafe() {
+        let dir = crate::scratch("library");
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::write(dir.join("Cargo.toml"), "[package]\nname = \"l\"\n").unwrap();
+        std::fs::write(dir.join("src/lib.rs"), "#![forbid(unsafe_code)]\n").unwrap();
+        std::fs::write(dir.join("src/bench.rs"), "fn main() {}\n").unwrap();
+        let package = serde_json::json!({
+            "name": "l",
+            "manifest_path": dir.join("Cargo.toml"),
+            "features": {},
+            "dependencies": [],
+            "targets": [
+                { "kind": ["lib"], "src_path": dir.join("src/lib.rs") },
+                { "kind": ["bench"], "src_path": dir.join("src/bench.rs") },
+            ],
+        });
+        let problems = check(&package).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(problems.is_empty(), "{problems:?}");
+    }
+
+    #[test]
+    fn features_that_turn_each_other_on_are_walked_once() {
+        let package = serde_json::json!({
+            "name": "a",
+            "features": {
+                "default": ["a"],
+                "a": ["default", "dep:serde", "serde/std", "b"],
+                "b": ["a"],
+            },
+            "dependencies": [],
+        });
+        assert!(test_feature(&package).is_empty());
     }
 
     #[test]
