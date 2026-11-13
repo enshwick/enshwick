@@ -365,8 +365,13 @@ pub(crate) fn player(loader: &Loader, key: u64) -> Option<PlayerInfo> {
 
 /// A client names the language its player reads replies in, on the
 /// server's game thread; a run takes its hello's language before this one.
+/// A number the game does not know is dropped, as the hello's is.
 pub(crate) fn language(key: u64, language: u32) {
-    server_state(|s| s.clients.entry(key).or_default().language = language);
+    let named = enshwick_core::i18n::Language(language);
+    if enshwick_core::i18n::Language::ALL.contains(&named) {
+        server_state(|s| s.clients.entry(key).or_default().language = language);
+        crate::base::net::language_named(key, named);
+    }
 }
 
 /// A client runs mod `id`'s action on the object `target` its client named,
@@ -510,6 +515,21 @@ pub(crate) fn joined() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_language_the_game_does_not_know_is_dropped_and_a_known_one_kept() {
+        use enshwick_core::i18n::Language;
+        let key = 0x5eed_1a96;
+        language(key, u32::MAX);
+        assert_eq!(
+            language_of(key),
+            0,
+            "an unknown number reads as the fallback"
+        );
+        language(key, Language::UK_UA.0);
+        language(key, 9999);
+        assert_eq!(language_of(key), Language::UK_UA.0);
+    }
 
     #[test]
     fn a_reply_of_several_lines_shows_every_line_in_its_notice() {

@@ -14,8 +14,11 @@ pub(crate) mod environment;
 pub(crate) mod saves;
 pub(crate) mod transactions;
 
-pub(crate) extern "system" fn language_of(_me: ModHandle, key: enshwick_core::PlayerKey) -> u32 {
+pub(crate) extern "system" fn language_of(me: ModHandle, key: enshwick_core::PlayerKey) -> u32 {
     entry("language_of", || {
+        if calling(me).is_err() {
+            return 0;
+        }
         crate::base::net::language_of(key.get()).map_or(0, |language| language.0)
     })
 }

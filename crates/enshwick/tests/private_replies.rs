@@ -10,10 +10,12 @@ mod tests {
     use enshwick::commands::{self, Caller};
     use enshwick::i18n::Texts;
     use enshwick::net::Peer;
-    use enshwick::world::World;
+    use enshwick::world::{Notice, World};
     use enshwick::{Load, Mod, Off, PlayerKey};
 
     static WORLD: OnceLock<World> = OnceLock::new();
+    /// What each `notify` answered, in order.
+    static HOW: std::sync::Mutex<Vec<Notice>> = std::sync::Mutex::new(Vec::new());
 
     struct Whisper;
 
@@ -24,7 +26,8 @@ mod tests {
             actions.add(Action::new("whisper", "Whisper"), |request| {
                 let world = WORLD.get().unwrap();
                 world.tell(request.player, "psst in chat");
-                let _how = world.notify(request.player, "psst on screen");
+                let how = world.notify(request.player, "psst on screen");
+                HOW.lock().unwrap().push(how);
                 Outcome::done("whispered")
             })?;
             actions.commands("wh")?;
@@ -60,6 +63,7 @@ mod tests {
             .player(ann())
             .net_peer(Peer::Player(PlayerKey::new(7)))
             .install();
+        HOW.lock().unwrap().clear();
         // SAFETY: the three functions are the exports of this file's `declare_mod!`.
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
@@ -97,6 +101,7 @@ mod tests {
             loader.notices()
         );
         assert_eq!(warned(&loader), 1, "logged once: {:?}", loader.logs());
+        assert_eq!(*HOW.lock().unwrap(), [Notice::Nobody, Notice::Nobody]);
     }
 
     #[test]

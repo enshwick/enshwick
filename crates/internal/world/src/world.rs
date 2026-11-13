@@ -296,6 +296,9 @@ pub enum Notice {
     /// could not leave now. A full line queue on the server can still drop
     /// the chat line.
     Chat,
+    /// Shown to no player: the console or a remote caller, which has no
+    /// account; answer it in the action's outcome.
+    Nobody,
 }
 
 /// A [`PlayerInfo`] for the loader to fill, its header naming this build's

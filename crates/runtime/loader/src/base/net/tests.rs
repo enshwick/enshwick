@@ -42,6 +42,31 @@ fn data_dropped_on_the_way_is_owed_until_it_goes_whole() {
 }
 
 #[test]
+fn a_language_named_after_the_hello_fills_only_a_peer_whose_hello_named_none() {
+    let (silent, named) = (0x1a96_0001, 0x1a96_0002);
+    state(|s| {
+        s.peers.insert(silent, Peer::new());
+        let mut peer = Peer::new();
+        peer.language = Some(Language::FALLBACK);
+        s.peers.insert(named, peer);
+    });
+    language_named(silent, Language::UK_UA);
+    language_named(named, Language::UK_UA);
+    language_named(0x1a96_0003, Language::UK_UA);
+    assert_eq!(language_of(silent), Some(Language::UK_UA));
+    assert_eq!(
+        language_of(named),
+        Some(Language::FALLBACK),
+        "the hello's wins"
+    );
+    assert_eq!(language_of(0x1a96_0003), None, "no peer, nothing kept");
+    state(|s| {
+        s.peers.remove(&silent);
+        s.peers.remove(&named);
+    });
+}
+
+#[test]
 fn owed_data_stops_after_a_few_tries() {
     let mut state = State::default();
     let now = Instant::now();

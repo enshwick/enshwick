@@ -422,6 +422,17 @@ pub(crate) fn language_of(key: u64) -> Option<Language> {
     state(|s| language_in(s, key))
 }
 
+/// Keeps `language`, which client `key` named after its hello for its
+/// action replies, as the peer's language where its hello named none, so
+/// every reader of [`language_of`] sees the one the actions use.
+pub(crate) fn language_named(key: u64, language: Language) {
+    state(|s| {
+        if let Some(peer) = s.peers.get_mut(&key) {
+            peer.language.get_or_insert(language);
+        }
+    });
+}
+
 /// Keeps the `language` client `key`'s hello named on its peer, or on its
 /// hello on the way in, so it goes when they go.
 fn remember_language(state: &mut State, key: u64, language: Language) {

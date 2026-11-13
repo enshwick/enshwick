@@ -5300,8 +5300,9 @@ typedef struct EnshwickHostApi {
   // `crate::i18n::Language`): on a
   // server, the one that player's game named when it joined, always one
   // the game knows; `0`, the fallback, for a player whose game runs no
-  // Enshwick, for a key no connected player holds and on a client. Any
-  // thread. ABI 11.27.
+  // Enshwick, for a key no connected player holds, for a mod that is off
+  // and on a client. Any thread, re-entrant; a panic in the loader
+  // returns `0`. ABI 11.27.
   uint32_t (*language_of)(EnshwickModHandle me, EnshwickPlayerKey key);
 } EnshwickHostApi;
 

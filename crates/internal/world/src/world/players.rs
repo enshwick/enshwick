@@ -120,12 +120,7 @@ impl World {
     #[must_use]
     #[script]
     pub fn language_of(self, key: PlayerKey) -> Language {
-        let language = Language((self.0.host.api().language_of)(self.0.host.handle(), key));
-        if language.code().is_empty() {
-            Language::FALLBACK
-        } else {
-            language
-        }
+        Language::known_or_fallback((self.0.host.api().language_of)(self.0.host.handle(), key))
     }
 
     /// Sends `text` to `player`'s chat alone, after the next step; callable
@@ -156,7 +151,7 @@ impl World {
     /// Enshwick to show it; says which. The game shows 255 bytes; keep it to
     /// a line. On the game thread; elsewhere it goes to chat. A notice for
     /// the console or a remote caller goes to no player, as with
-    /// [`tell`](World::tell).
+    /// [`tell`](World::tell), and answers [`Notice::Nobody`].
     ///
     /// # Examples
     ///
@@ -175,6 +170,10 @@ impl World {
     )]
     #[script]
     pub fn notify(self, player: &Player, text: &str) -> Notice {
+        if player.key.get() == 0 {
+            self.tell(player, text);
+            return Notice::Nobody;
+        }
         if (self.0.host.api().notify)(self.0.host.handle(), player.key, Str::new(text)).is_ok() {
             return Notice::OnScreen;
         }

@@ -414,10 +414,12 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
     if !BUILDING_FUSE.is_off() {
         guarded(&BUILDING_FUSE, "the post-step link", || {
             actions::console::remember(&built);
-            let players = if built.is_empty() {
-                Vec::new()
-            } else {
+            let heard = crate::engine::loader::handles(Event::BUILDING_PLACED)
+                || crate::engine::loader::handles(Event::BUILDING_REMOVED);
+            let players = if heard && !built.is_empty() {
                 crate::engine::world::players(loader).unwrap_or_default()
+            } else {
+                Vec::new()
             };
             for data in &built {
                 let event = if data.kind == BuildingData::PLACED {
@@ -428,7 +430,13 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
                 let emit = || loader.emit(event, None, (&raw const *data).cast());
                 // A handler fills its texts in the language of the player who built.
                 match players.iter().find(|p| p.entity == data.player) {
-                    Some(player) => crate::engine::texts::for_player(player.key.get(), emit),
+                    Some(player) => crate::engine::texts::for_reader(
+                        Some(
+                            crate::base::net::language_of(player.key.get())
+                                .unwrap_or(enshwick_core::i18n::Language::FALLBACK),
+                        ),
+                        emit,
+                    ),
                     None => emit(),
                 }
             }

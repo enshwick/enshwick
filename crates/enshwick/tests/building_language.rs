@@ -58,7 +58,13 @@ mod tests {
 
     #[test]
     fn a_building_event_reads_in_the_language_of_the_player_who_built() {
+        let host = Language::ALL
+            .iter()
+            .copied()
+            .find(|l| *l != Language::UK_UA && *l != Language::FALLBACK)
+            .unwrap();
         let loader = enshwick::test::FakeHost::new()
+            .language(host)
             .player(character(2, 7))
             .player(character(3, 8))
             .player_language(PlayerKey::new(7), Language::UK_UA)
@@ -87,18 +93,9 @@ mod tests {
 
         assert_eq!(
             *READ.lock().unwrap(),
-            [
-                Language::UK_UA,
-                Language::UK_UA,
-                Language::FALLBACK,
-                Language::FALLBACK
-            ],
-            "the builder's, then the fallback for a game without Enshwick and for no player"
+            [Language::UK_UA, Language::UK_UA, Language::FALLBACK, host],
+            "the builder's, the fallback for a game without Enshwick, the host's for no player"
         );
-        assert_eq!(
-            language(),
-            Language::FALLBACK,
-            "the host's after the events"
-        );
+        assert_eq!(language(), host, "the host's after the events");
     }
 }

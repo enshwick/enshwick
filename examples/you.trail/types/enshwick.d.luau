@@ -1793,7 +1793,7 @@ export type NewWorkshop = {
 }
 
 --- How a notice reached a player, from `notify`.
-export type Notice = "OnScreen" | "Chat"
+export type Notice = "OnScreen" | "Chat" | "Nobody"
 
 --- What a survivor does on `Effects.npc_command`.
 export type NpcCommandType = { GoToPosition: vector } | "Reset"
@@ -3622,7 +3622,7 @@ declare enshwick: {
 		language_of: (key: string) -> string,
 		--- Sends `text` to `player`'s chat alone, after the next step; callable from any thread. The console and a remote caller have no account, so a line for them goes to no player, with a log line: answer them in the action's outcome.
 		tell: (player: Player, text: string) -> (),
-		--- Shows `text` on `player`'s screen, as the game shows its own "can't do that" messages, or tells it in chat when the player's client lacks Enshwick to show it; says which. The game shows 255 bytes; keep it to a line. On the game thread; elsewhere it goes to chat. A notice for the console or a remote caller goes to no player, as with `tell`.
+		--- Shows `text` on `player`'s screen, as the game shows its own "can't do that" messages, or tells it in chat when the player's client lacks Enshwick to show it; says which. The game shows 255 bytes; keep it to a line. On the game thread; elsewhere it goes to chat. A notice for the console or a remote caller goes to no player, as with `tell`, and answers `Notice.Nobody`.
 		notify: (player: Player, text: string) -> Notice,
 		--- Sends a notice to every connected player, as `notify` does to one.
 		notify_all: (text: string) -> (),
