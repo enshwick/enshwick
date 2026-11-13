@@ -35,6 +35,7 @@ toml_edit.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 arrayvec.workspace = true
+enshwick-loader-start.workspace = true
 enshwick-luau.workspace = true
 iced-x86.workspace = true
 memchr.workspace = true

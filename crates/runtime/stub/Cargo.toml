@@ -17,6 +17,7 @@ name = "powrprof"
 crate-type = ["cdylib"]
 
 [target.'cfg(windows)'.dependencies]
+enshwick-loader-start.workspace = true
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_Security",

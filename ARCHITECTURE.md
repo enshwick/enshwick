@@ -28,6 +28,7 @@ re-exports; `crates/runtime/` holds what `enshwick.zip` ships into the game.
 | `enshwick-macros` | `crates/internal/macros` | `#[hook]`, `#[config]` and the other macros of the API | yes |
 | `enshwick-fake` | `crates/internal/fake` | the fake loader for a mod's unit tests, re-exported as `enshwick::test` behind the `test` feature | yes |
 | `enshwick-loader-stub` | `crates/runtime/stub` | the `powrprof.dll` proxy: forwards the system exports, holds the dedicated server's entry point and starts the loader | no, in `enshwick.zip` |
+| `enshwick-loader-start` | `crates/runtime/start` | the start contract between the stub and the loader: the name of the loader's start export, which carries the contract's version, and its type, which the stub calls through and the loader is checked against when it compiles | no, built into both |
 | `enshwick-loader` | `crates/runtime/loader` | the loader DLL: finds the game build, loads and resolves mods, links their hooks, answers the ABI | no, in `enshwick.zip` |
 | `enshwick-luau` | `crates/runtime/luau` | Luau mods: one sandboxed VM per mod with memory and time budgets, the API bound from the script descriptions of `enshwick` and its internal parts | no, in `enshwick.zip` |
 | `enshwick-gamedata` | `crates/enshwick-gamedata` | game data the loader and the tools share: the engine routes and anchors, the compatibility reports, the engine's reflection reader (`reflect`) and the game archive reader (`archive`) | yes |

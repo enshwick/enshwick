@@ -3,6 +3,7 @@
 
 #[cfg(test)]
 mod tests {
+    use core::ffi::c_void;
     use std::sync::Mutex;
 
     use enshwick::abi::{self, Header, Side, Status};
@@ -176,10 +177,36 @@ mod tests {
         assert_eq!(loader.survivor_status(FARMER, &[0b0111]), None);
     }
 
+    unsafe extern "system" fn no_merge(_: NpcId, _: *const u8, _: usize, _: *mut c_void) -> u32 {
+        0
+    }
+
+    fn ask_merge(loader: &enshwick::test::Installed, as_mod: abi::ModHandle) -> Status {
+        // SAFETY: the fake's table lives for the process.
+        let api = unsafe { &*loader.api() };
+        (api.survivor_status)(as_mod, no_merge, core::ptr::null_mut())
+    }
+
     #[test]
-    fn a_status_merge_is_refused_on_the_server() {
-        let (loader, status) = menu_on(Side::SERVER);
-        assert_ne!(status, Status::OK);
+    fn a_status_merge_is_missing_on_the_server() {
+        let loader = enshwick::test::FakeHost::new().side(Side::SERVER).install();
+        assert_eq!(ask_merge(&loader, loader.handle()), Status::MISSING);
         assert_eq!(loader.survivor_status(FARMER, &[1, 3]), None);
+    }
+
+    #[test]
+    fn a_status_merge_is_held_by_one_mod_which_may_register_it_again() {
+        let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
+        let other = abi::ModHandle(loader.handle().0 + 1);
+        assert_eq!(ask_merge(&loader, loader.handle()), Status::OK);
+        assert_eq!(ask_merge(&loader, loader.handle()), Status::OK);
+        assert_eq!(ask_merge(&loader, other), Status::REFUSED);
+    }
+
+    #[test]
+    fn a_status_merge_after_init_comes_too_late() {
+        let (loader, status) = menu_on(Side::CLIENT);
+        assert_eq!(status, Status::OK, "{:?}", loader.faults());
+        assert_eq!(ask_merge(&loader, loader.handle()), Status::TOO_LATE);
     }
 }

@@ -208,7 +208,15 @@ pub(crate) extern "system" fn survivor_status(
     user: *mut c_void,
 ) -> Status {
     with(Status::MISSING, |s| {
-        if s.host.side != Side::CLIENT || s.survivor_status.is_some() {
+        if s.registration == Registration::Closed {
+            return Status::TOO_LATE;
+        }
+        if s.host.side != Side::CLIENT {
+            return Status::MISSING;
+        }
+        if s.survivor_status
+            .is_some_and(|held| held.owner() != Some(me))
+        {
             return Status::REFUSED;
         }
         s.survivor_status = Some(Registered::new(callback, user, me));

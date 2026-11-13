@@ -3,7 +3,8 @@
 //! doctest harness of the API crate, so its Rust examples compile. Every
 //! chapter opens with its page type and description and keeps its intro
 //! short, a chapter that names an id links the page on how ids are
-//! namespaced, and some chapter names each public module of the API crate.
+//! namespaced, some chapter names each public module of the API crate, and
+//! the ABI coverage chapter lists every host table entry in order.
 //! Its links and its sentence lengths are [`mod@links`] and [`mod@prose`].
 
 pub(crate) mod links;
@@ -12,6 +13,7 @@ pub(crate) mod prose;
 use std::path::Path;
 
 use crate::FACADE;
+use crate::commands::header;
 
 /// The book's sources, relative to the workspace root.
 const SOURCE: &str = "book/src";
@@ -56,6 +58,59 @@ pub(crate) fn check(root: &Path) -> Vec<String> {
         Err(error) => found.push(format!("{API_ROOT}: {error}")),
     }
     found
+}
+
+/// The chapter whose entries table audits every host table entry's tests.
+const COVERAGE_CHAPTER: &str = "abi-coverage.md";
+/// The heading of that table's section.
+const COVERAGE_ENTRIES: &str = "## The entries";
+
+/// Why the coverage chapter under `root` does not list the fields of
+/// `HostApi` in the golden layout once each, in the table's order, so an
+/// appended entry cannot skip the audit.
+pub(crate) fn coverage_problems(root: &Path) -> Vec<String> {
+    coverage_problem(root).into_iter().collect()
+}
+
+/// The one problem [`coverage_problems`] finds, if any.
+fn coverage_problem(root: &Path) -> Option<String> {
+    let read = |path: &str| {
+        std::fs::read_to_string(root.join(path)).map_err(|error| format!("{path}: {error}"))
+    };
+    let chapter_path = format!("{SOURCE}/{COVERAGE_CHAPTER}");
+    let fields = match read(header::LAYOUT).and_then(|text| header::host_api_fields(&text)) {
+        Ok(fields) => fields,
+        Err(error) => return Some(error),
+    };
+    let chapter = match read(&chapter_path) {
+        Ok(text) => text,
+        Err(error) => return Some(error),
+    };
+    entries_mismatch(&chapter, &fields).map(|at| match fields.get(at) {
+        Some(field) => format!(
+            "{chapter_path}: row {} of its entries table should be `{field}`, the next HostApi field of {}; list every field once, in order",
+            at + 1,
+            header::LAYOUT
+        ),
+        None => format!(
+            "{chapter_path}: row {} of its entries table names no HostApi field of {}; remove it",
+            at + 1,
+            header::LAYOUT
+        ),
+    })
+}
+
+/// The first row of `chapter`'s entries table that is not the field of
+/// `fields` at its place, or the row past its end when rows are missing.
+fn entries_mismatch(chapter: &str, fields: &[String]) -> Option<usize> {
+    let mut rows = chapter
+        .lines()
+        .skip_while(|line| *line != COVERAGE_ENTRIES)
+        .skip(1)
+        .take_while(|line| !line.starts_with("## "))
+        .filter_map(|line| line.strip_prefix("| `")?.split_once('`'))
+        .map(|(entry, _)| entry);
+    (0..=fields.len()).find(|&at| rows.next() != fields.get(at).map(String::as_str))
 }
 
 /// The API crate's root, which declares its public modules.
@@ -639,5 +694,74 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let found = check(&root);
         assert!(found.is_empty(), "{found:?}");
+        assert_eq!(coverage_problems(&root), Vec::<String>::new());
+    }
+
+    fn fields(names: &[&str]) -> Vec<String> {
+        names.iter().map(|&name| name.to_owned()).collect()
+    }
+
+    const ENTRIES: &str = "# ABI coverage\n\n## The entries\n\n| Entry | Test |\n| --- | --- |\n\
+                           | `header` | a.rs |\n| `log` | b.rs |\n\n## Gaps\n\n| `stray` | c.rs |\n";
+
+    #[test]
+    fn an_entries_table_listing_every_field_in_order_passes() {
+        assert_eq!(entries_mismatch(ENTRIES, &fields(&["header", "log"])), None);
+    }
+
+    #[test]
+    fn a_missing_a_swapped_or_an_extra_entry_is_named_by_its_row() {
+        assert_eq!(
+            entries_mismatch(ENTRIES, &fields(&["header", "log", "chat"])),
+            Some(2)
+        );
+        assert_eq!(
+            entries_mismatch(ENTRIES, &fields(&["log", "header"])),
+            Some(0)
+        );
+        assert_eq!(entries_mismatch(ENTRIES, &fields(&["header"])), Some(1));
+    }
+
+    /// The coverage problem of a tree holding `ENTRIES` and a golden layout
+    /// whose `HostApi` has `fields`, made in a folder named after `case`.
+    fn coverage_with(case: &str, fields: &[&str]) -> Option<String> {
+        let root =
+            std::env::temp_dir().join(format!("xtask-coverage-{case}-{}", std::process::id()));
+        let layout = root.join(header::LAYOUT);
+        std::fs::create_dir_all(layout.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(root.join(SOURCE)).unwrap();
+        let rows = fields
+            .iter()
+            .enumerate()
+            .map(|(at, field)| format!("    {field} at {} size 8 type fn\n", at * 8))
+            .collect::<Vec<_>>()
+            .concat();
+        std::fs::write(&layout, format!("abi 5.0\nHostApi size 16 align 8\n{rows}")).unwrap();
+        std::fs::write(root.join(SOURCE).join(COVERAGE_CHAPTER), ENTRIES).unwrap();
+        let found = coverage_problem(&root);
+        std::fs::remove_dir_all(&root).unwrap();
+        found
+    }
+
+    #[test]
+    fn a_coverage_chapter_missing_a_host_table_entry_fails_the_check() {
+        assert_eq!(
+            coverage_with("missing", &["header", "log", "chat"]).as_deref(),
+            Some(
+                "book/src/abi-coverage.md: row 3 of its entries table should be `chat`, the next \
+                 HostApi field of crates/internal/abi/src/abi/layout.txt; list every field once, in order"
+            )
+        );
+    }
+
+    #[test]
+    fn a_coverage_row_past_the_last_host_table_entry_is_named_for_removal() {
+        assert_eq!(
+            coverage_with("extra", &["header"]).as_deref(),
+            Some(
+                "book/src/abi-coverage.md: row 2 of its entries table names no HostApi field of \
+                 crates/internal/abi/src/abi/layout.txt; remove it"
+            )
+        );
     }
 }

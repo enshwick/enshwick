@@ -23,15 +23,18 @@ the loader's own tests cover it.
 
 ## How is the stub's start contract tested?
 
-The `powrprof.dll` stub starts the loader through
-`enshwick_start(stub_abi, missing_forwards, release)`. A test checks that the
-stub and the loader name the same contract number. Every server copy runs the
-call as it starts.
+The `powrprof.dll` stub starts the loader through one export,
+`enshwick_start_v3(missing_forwards, release)`. Its name carries the contract's
+version, so a stub and a loader of different releases find no common export,
+and the game runs without mods. Both take the name and the type from one
+crate, and the loader does not compile when its export has another type. A
+test fails when the type changes without a new name. Every server copy runs
+the call as it starts.
 
 ## The entries
 
-The table follows the order of `HostApi`. A test of the `enshwick` crate
-checks that it names every entry once, in that order.
+The table follows the order of `HostApi`. `cargo xtask check` fails unless it
+names every entry of the golden layout once, in that order.
 
 | Entry | Rests on | Server copy | In game |
 | --- | --- | --- | --- |

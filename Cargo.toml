@@ -38,6 +38,7 @@ cbindgen = { version = "0.29.4", default-features = false }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics"] }
 enshwick = { path = "crates/enshwick", version = "=1.0.0-alpha.14" }
 enshwick-luau = { path = "crates/runtime/luau", version = "=1.0.0-alpha.14" }
+enshwick-loader-start = { path = "crates/runtime/start", version = "=1.0.0-alpha.14" }
 enshwick-abi = { path = "crates/internal/abi", version = "=1.0.0-alpha.14" }
 enshwick-base = { path = "crates/internal/base", version = "=1.0.0-alpha.14" }
 enshwick-content = { path = "crates/internal/content", version = "=1.0.0-alpha.14" }

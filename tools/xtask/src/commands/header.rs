@@ -20,7 +20,7 @@ const VALUES_ABI_SOURCE: &str = "crates/internal/values/src/abi.rs";
 /// The name of that file's copy beside the ABI module's.
 const VALUES_ABI_COPY: &str = "values_abi.rs";
 /// The golden layout file.
-const LAYOUT: &str = "crates/internal/abi/src/abi/layout.txt";
+pub(crate) const LAYOUT: &str = "crates/internal/abi/src/abi/layout.txt";
 /// cbindgen's settings.
 const CONFIG: &str = "crates/enshwick/cbindgen.toml";
 /// The committed header.
@@ -292,6 +292,15 @@ fn parse_layout(text: &str) -> Result<Vec<Shape>, String> {
     Ok(shapes)
 }
 
+/// The fields of `HostApi` in the golden file `text`, in the table's order.
+pub(crate) fn host_api_fields(text: &str) -> Result<Vec<String>, String> {
+    parse_layout(text)?
+        .into_iter()
+        .find(|shape| shape.name == "HostApi")
+        .map(|host| host.fields.into_iter().map(|(name, _)| name).collect())
+        .ok_or_else(|| format!("{LAYOUT}: no HostApi"))
+}
+
 /// A C file, which compiles as C++ too, asserting every size, alignment and
 /// field offset of `shapes` against `header`.
 ///
@@ -440,6 +449,20 @@ mod tests {
             [("left".to_owned(), 0), ("right".to_owned(), 4)]
         );
         assert_eq!((shapes[1].size, shapes[1].align), (4, 4));
+    }
+
+    #[test]
+    fn the_golden_layout_gives_the_host_table_fields_in_order() {
+        let layout = "abi 5.0\nHeader size 8 align 4\n    size at 0 size 4 type u32\n\
+                      HostApi size 16 align 8\n    header at 0 size 8 type Header\n    log at 8 size 8 type fn\n";
+        assert_eq!(
+            host_api_fields(layout),
+            Ok(vec!["header".to_owned(), "log".to_owned()])
+        );
+        assert_eq!(
+            host_api_fields(GOLDEN),
+            Err(format!("{LAYOUT}: no HostApi"))
+        );
     }
 
     #[test]
