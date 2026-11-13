@@ -144,7 +144,14 @@ mod tests {
 
     #[test]
     fn a_panicking_builder_refuses_its_resource_and_writes_nothing() {
-        let builder: Builder = Box::new(|_: &[u8]| panic!("a broken builder"));
+        /// A panic payload whose own drop panics again.
+        struct Bomb;
+        impl Drop for Bomb {
+            fn drop(&mut self) {
+                panic!("the payload's own drop");
+            }
+        }
+        let builder: Builder = Box::new(|_: &[u8]| std::panic::panic_any(Bomb));
         let user = core::ptr::from_ref(&builder).cast_mut().cast();
         let (mut out, mut out_len) = (core::ptr::null::<u8>(), 0usize);
         // SAFETY: a null base, `user` points at the `Builder` alive in this

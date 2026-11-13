@@ -1,6 +1,7 @@
-//! A panic in a mod's ready, in a state dropped unused, in a read of the
-//! manifest or in a data pack's init turns off what it should and leaves the
-//! rest running.
+//! A panic in a mod's ready, in a state dropped unused, in a mid-function
+//! hook, in a read of the manifest or in a data pack's init turns off what it
+//! should and leaves the rest running, even when its payload panics again on
+//! drop.
 
 #[cfg(test)]
 mod tests {
@@ -20,13 +21,13 @@ mod tests {
         }
 
         fn ready(&self, _host: Host) {
-            panic!("the dawn never came")
+            std::panic::panic_any(Bomb)
         }
     }
 
     impl Drop for Flaky {
         fn drop(&mut self) {
-            panic!("the lamp would not go out")
+            std::panic::panic_any(Bomb)
         }
     }
 
@@ -54,7 +55,7 @@ mod tests {
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
-        assert_eq!(loader.faults(), ["panic in ready: the dawn never came"]);
+        assert_eq!(loader.faults(), ["panic in ready: a panic without a message"]);
         assert!(Flaky::instance().is_some());
     }
 
@@ -80,7 +81,10 @@ mod tests {
         let mut registers = enshwick::abi::Registers::default();
         assert_eq!(loader.run_at(SITE, &mut registers), 1);
         assert_eq!(registers, enshwick::abi::Registers::default());
-        assert_eq!(loader.faults(), ["panic in the hook at 0x140090a6c"]);
+        assert_eq!(
+            loader.faults(),
+            ["panic in the hook at 0x140090a6c: a panic without a message"]
+        );
     }
 
     #[test]
@@ -88,7 +92,7 @@ mod tests {
         let _loader = FakeHost::new().install();
         assert!(
             __ENSHWICK_MANIFEST
-                .with_built(|_| panic!("a broken read"))
+                .with_built(|_| std::panic::panic_any(Bomb))
                 .is_none()
         );
         assert!(!enshwick_mod_query().is_null());
@@ -102,7 +106,7 @@ mod tests {
         // SAFETY: the fake host's table lives for the process.
         let status = unsafe {
             enshwick::__private::init_pack(loader.api(), ModHandle(1), Side::SERVER, |_| {
-                panic!("the pack's rewards")
+                std::panic::panic_any(Bomb)
             })
         };
         assert_eq!(status, Status::FAULTED);
@@ -116,7 +120,7 @@ mod tests {
             [(
                 ModHandle(1),
                 Level::ERROR,
-                "off: init panicked: the pack's rewards".to_owned()
+                "off: init panicked: a panic without a message".to_owned()
             )]
         );
     }
