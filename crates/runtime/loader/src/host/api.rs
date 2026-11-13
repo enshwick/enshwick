@@ -228,4 +228,5 @@ pub(crate) static API: HostApi = HostApi {
     drop_items,
     config_set,
     server_stop,
+    fog_uncover,
 };

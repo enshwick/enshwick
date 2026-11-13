@@ -513,6 +513,88 @@ impl Map {
         MapFrame::from_info(&info).ok_or(WorldError::Missing)
     }
 
+    /// Uncovers the fog of war of `player` in the circle of `radius` metres
+    /// around world x and z `at`, as exploring there does. The server holds
+    /// no fog: the loader sends the circle to the loader on the player's
+    /// client, which hands it to the game's own reveal within a frame, and
+    /// the character's save keeps it, in every world the character enters.
+    /// A client without Enshwick is not reached, and the mod decides what
+    /// to tell whoever asked. Returns once the circle is sent; any thread,
+    /// on a dedicated server or a client that hosts.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Missing`] for a player whose client takes no messages
+    /// from the loader, as one without Enshwick or not online, and on a
+    /// client in another's game; [`WorldError::Refused`] for a place that
+    /// is not finite, a radius that is not above 0 and at most 100 000
+    /// metres, or a link to the player with no room.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::map::Map;
+    ///
+    /// fn show_the_shrine(map: Map, player: enshwick::PlayerKey) {
+    ///     if let Err(why) = map.uncover(player, [1250.0, -830.0], 200.0) {
+    ///         enshwick::warn!("fog not uncovered: {why}");
+    ///     }
+    /// }
+    /// ```
+    #[script]
+    pub fn uncover(
+        self,
+        player: crate::PlayerKey,
+        at: [f64; 2],
+        radius: f32,
+    ) -> Result<(), WorldError> {
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "the game's reveal takes the place as f32, as its world is far smaller than f32's range"
+        )]
+        let (x, z) = (at[0] as f32, at[1] as f32);
+        let host = self.0.host;
+        WorldError::from_status((host.api().fog_uncover)(
+            host.handle(),
+            player,
+            x,
+            z,
+            radius,
+        ))
+    }
+
+    /// Uncovers the whole map of `player`, as [`uncover`](Self::uncover)
+    /// does for one circle: the circle around the map's [`frame`](Self::frame)
+    /// that holds all of it. On the server's game thread, as `frame` is.
+    ///
+    /// # Errors
+    ///
+    /// As [`frame`](Self::frame) and [`uncover`](Self::uncover).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::map::Map;
+    ///
+    /// fn reveal_all(map: Map, player: enshwick::PlayerKey) -> Result<(), enshwick::WorldError> {
+    ///     map.uncover_all(player)
+    /// }
+    /// ```
+    #[script]
+    pub fn uncover_all(self, player: crate::PlayerKey) -> Result<(), WorldError> {
+        let frame = self.frame()?;
+        let centre = [
+            frame.origin[0] + frame.size[0] / 2.0,
+            frame.origin[1] + frame.size[1] / 2.0,
+        ];
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "a map's half diagonal in metres fits f32 by far"
+        )]
+        let radius = (frame.size[0].hypot(frame.size[1]) / 2.0) as f32;
+        self.uncover(player, centre, radius)
+    }
+
     /// Where `player` has set the waypoint all players see, in metres;
     /// `None` while it is off or for an entity without one. The server
     /// keeps it only while the player plays.

@@ -244,6 +244,19 @@ pub(crate) extern "system" fn map_frame(
     })
 }
 
+pub(crate) extern "system" fn fog_uncover(
+    me: ModHandle,
+    player: enshwick_core::PlayerKey,
+    x: f32,
+    z: f32,
+    radius: f32,
+) -> Status {
+    entry("fog_uncover", || match caller(me) {
+        Ok(loader) => crate::world::fog::uncover_for(loader, player.get(), [x, z], radius),
+        Err(status) => status,
+    })
+}
+
 pub(crate) extern "system" fn component_write(
     me: ModHandle,
     entity: Entity,

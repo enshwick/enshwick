@@ -641,6 +641,20 @@ impl Installed {
         table::with(false, |s| s.stop_asked)
     }
 
+    /// The fog uncovers the mod sent, in order: the player, the circle's
+    /// centre as world x and z and its radius, in metres.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.fog_uncovers().is_empty());
+    /// ```
+    #[must_use]
+    pub fn fog_uncovers(&self) -> Vec<(enshwick_core::PlayerKey, [f32; 2], f32)> {
+        table::with(Vec::new(), |s| s.uncovers.clone())
+    }
+
     /// The drops the mod asked for, with the entity ids the fake handed
     /// out, in order.
     ///
