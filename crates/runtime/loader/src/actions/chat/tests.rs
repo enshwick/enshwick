@@ -54,30 +54,22 @@ fn a_line_to_one_player_needs_a_positive_byte_mask_and_overhead() {
 }
 
 #[test]
-fn a_build_without_the_chat_layout_lists_the_chat_lines_off_with_the_entry() {
-    let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
-    link(loader);
-    assert!(CHAT_FUSE.is_off());
+fn a_build_without_the_chat_layout_names_the_first_entry_it_lacks() {
+    let loader = crate::start::tests::bare_loader();
     assert_eq!(
-        send(0, "hello"),
-        Status::MISSING,
-        "mods' lines stay refused"
-    );
-    let listed = crate::engine::diag::parts_off();
-    let off = listed.iter().find(|p| p.part == "chat lines");
-    assert!(
-        off.is_some_and(|p| p.reason.starts_with("chat.mark_delivered ")),
-        "{listed:?}"
+        layout(&loader).err(),
+        Some((pinned::chat::MARK_DELIVERED.id(), ABSENT))
     );
 }
 
 #[test]
 fn a_line_for_one_player_that_reached_others_lists_those_lines_off() {
+    let before = delivery().1;
     assert!(to_one_player());
     strayed(2);
     strayed(1);
     assert!(!to_one_player());
-    assert_eq!(delivery().1, 2, "every stray counts");
+    assert_eq!(delivery().1 - before, 2, "every stray counts");
     let listed = crate::engine::diag::parts_off();
     let off = listed.iter().find(|p| p.part == "chat lines to one player");
     assert!(

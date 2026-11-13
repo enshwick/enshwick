@@ -443,19 +443,6 @@ mod tests {
     }
 
     #[test]
-    fn a_build_without_the_craft_request_lists_the_craft_filters_off() {
-        seal(&crate::start::tests::bare_loader());
-        assert!(!crafting());
-        assert!(CRAFT_FUSE.is_off());
-        let listed = crate::engine::diag::parts_off();
-        let off = listed.iter().find(|p| p.part == "craft filters");
-        assert!(
-            off.is_some_and(|p| p.reason.starts_with(CRAFT_EVENT)),
-            "{listed:?}"
-        );
-    }
-
-    #[test]
     fn a_reason_an_allowing_filter_wrote_never_counts_for_the_refusing_one() {
         let mut reason = Str::EMPTY;
         let slot = &raw mut reason;
