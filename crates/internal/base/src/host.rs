@@ -97,11 +97,12 @@ pub fn guard<R>(reason: &str, fallback: impl FnOnce() -> R, call: impl FnOnce() 
     })
 }
 
-/// Runs a mod's callback whose panic turns off only the part that panicked,
-/// not the whole mod as [`guard`] does.
+/// Runs a mod's callback and hands its panic back instead of faulting the
+/// mod, so the caller chooses what the panic turns off.
 ///
-/// A served call, a chat filter or a point's link: the caller turns
-/// [`Panicked`] into its answer and its part's switch.
+/// A served call, a chat filter or a point's link turns off only its part;
+/// an init or a hook faults the mod with a reason of its own, which
+/// [`guard`] gives when the reason is all the caller needs.
 ///
 /// # Errors
 ///

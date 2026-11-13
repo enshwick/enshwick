@@ -61,6 +61,9 @@ mod tests {
                 ..Registers::default()
             }
         );
-        assert_eq!(loader.faults(), ["panic in the hook at 0x140090a6c"]);
+        assert_eq!(
+            loader.faults(),
+            ["panic in the hook at 0x140090a6c: assertion `left != right` failed: unlucky"]
+        );
     }
 }
