@@ -278,12 +278,12 @@ fn a_range_pass_that_writes_nothing_or_panics_puts_the_row_back_and_one_that_wri
         let _caught = std::panic::catch_unwind(core::panic::AssertUnwindSafe(|| {
             // SAFETY: `room` stands for a live context on this thread
             // until the rewind drops at the end of this closure.
-            let rewind = unsafe { Rewind::at(engine, ctx) };
+            let rows = unsafe { rewind(engine, ctx) };
             // SAFETY: the row counter of `room`, at offset 8.
             unsafe { engine.set_row(ctx, 7) };
             assert!(!panics, "a range pass that panics part way");
             if keep {
-                rewind.keep();
+                rows.keep();
             }
         }));
         // SAFETY: the row counter of `room`, at offset 8.

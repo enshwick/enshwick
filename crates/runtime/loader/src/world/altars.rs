@@ -40,6 +40,7 @@ use self::geometry::Placed;
 use crate::engine::ecs::Engine;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Registered, Target};
+use crate::engine::undo::Undo;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -695,19 +696,20 @@ crate::engine::chains::chain_detour! {
         let write = || {
             // SAFETY: `ctx` is the hooked system's live context, on its
             // thread until the rewind drops at the end of this pass.
-            let rewind = unsafe { Rewind::at(engine, ctx) };
+            let rows = unsafe { rewind(engine, ctx) };
             // SAFETY: `ctx` is the live context of `upgrade_building_range`,
             // on its thread, and vanilla has not run this tick.
             let wrote = unsafe { write_ranges(engine, ctx, &loader.build.name) };
             if wrote {
-                rewind.keep();
+                rows.keep();
             }
             wrote
         };
         // SAFETY: `ctx` is the live context of `upgrade_building_range`, on
         // its thread after vanilla ran.
         let read = || unsafe { read_levels(engine, ctx) };
-        tick(running_sizers().next().is_some(), write, || onward.call(), read);
+        let sized = !RANGES_FUSE.is_off() && running_sizers().next().is_some();
+        tick(sized, write, || onward.call(), read);
     }
 }
 
@@ -723,44 +725,19 @@ fn tick(sized: bool, write: impl FnOnce() -> bool, vanilla: impl FnOnce(), read:
 }
 
 /// Puts a system context's row counter back where it was when dropped,
-/// unless kept, so vanilla runs the tick from its start after a range pass
-/// that wrote nothing or panicked part way.
-struct Rewind {
-    engine: &'static Engine,
-    ctx: *mut u64,
-    row: u32,
-    kept: bool,
-}
-
-impl Rewind {
-    /// # Safety
-    ///
-    /// - `ctx` is a live system context, used on its system's thread until
-    ///   the rewind drops.
-    unsafe fn at(engine: &'static Engine, ctx: *mut u64) -> Self {
-        Self {
-            engine,
-            ctx,
-            // SAFETY: the caller guarantees the live context on its thread.
-            row: unsafe { engine.row(ctx) },
-            kept: false,
-        }
-    }
-
-    /// Leaves the row counter where the pass left it.
-    fn keep(mut self) {
-        self.kept = true;
-    }
-}
-
-impl Drop for Rewind {
-    fn drop(&mut self) {
-        if !self.kept {
-            // SAFETY: `at`'s caller guarantees the live context on its
-            // thread, which alone writes it, until this drop.
-            unsafe { self.engine.set_row(self.ctx, self.row) };
-        }
-    }
+/// unless kept: vanilla runs the tick from its start after a range pass
+/// that wrote nothing or panicked part way, and after a walk of our own.
+///
+/// # Safety
+///
+/// - `ctx` is a live system context, used on its system's thread, which
+///   alone writes it, until the guard drops.
+unsafe fn rewind(engine: &Engine, ctx: *mut u64) -> Undo<impl FnOnce() + '_> {
+    // SAFETY: the caller guarantees the live context on its thread.
+    let row = unsafe { engine.row(ctx) };
+    // SAFETY: the caller guarantees the live context on its thread, which
+    // alone writes it, until the guard drops.
+    Undo::new(move || unsafe { engine.set_row(ctx, row) })
 }
 
 /// How many entries a thread holds back while the state is busy before it

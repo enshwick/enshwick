@@ -642,7 +642,7 @@ pub(crate) fn report(loader: &Loader, already: &[&str]) {
 }
 
 fn raised() -> bool {
-    RAISED.load(Ordering::Acquire) && !RAISED_FUSE.is_off()
+    RAISED.load(Ordering::Acquire) && !RAISED_FUSE.is_off() && !BASE_CAP.is_off()
 }
 
 /// The zones and bases of the last grouping.
@@ -698,9 +698,13 @@ pub(crate) fn link(loader: &'static Loader) {
     }
 }
 
-/// The raised limit: its seven links arm together or not at all, and once
-/// it is off every replaced lookup and the grouping run as the game's, and
-/// new bases stay within the game's 16.
+/// The raised limit: its six links arm together or not at all, and once it
+/// is off every replaced lookup and the grouping run as the game's.
 static RAISED_FUSE: Fuse = Fuse::new(RAISED_ZONES);
+/// The cap on the game's new base code, apart from [`RAISED_FUSE`]: a zone
+/// list the raised limit let grow keeps its allocator, so the game's own
+/// grouping copies every zone after the limit turns off, and only the cap
+/// keeps it from a 17th base, which would write over the zone list.
+static BASE_CAP: Fuse = Fuse::new("the base cap");
 /// The mods' altar limit filters, apart from the raised limit.
 static ALTAR_LIMIT: Fuse = Fuse::new("altar limit");

@@ -19,6 +19,7 @@ use super::Fields;
 use super::lifecycle::{self, Code, CtorFn, SlotFreeFn, SlotInitFn, TeardownFn};
 use super::loops;
 use crate::engine::builds::Unhooked;
+use crate::engine::chains::Next;
 use crate::engine::code::{CodePatch, Verdict};
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
@@ -172,6 +173,8 @@ static LINKED: AtomicBool = AtomicBool::new(false);
 static ARMED: AtomicBool = AtomicBool::new(false);
 /// Set at arming, armed or not.
 static SETTLED: AtomicBool = AtomicBool::new(false);
+/// Set at arming when a size patch is skipped for good, not waiting.
+static SKIPPED: AtomicBool = AtomicBool::new(false);
 /// Bases past 16: the creates that fill windows and the loops that walk
 /// them, linked all or none. A fault in any of them turns them all off, and
 /// no window is made from then on.
@@ -340,57 +343,61 @@ pub(super) fn link(loader: &'static Loader, fields: Fields) {
         return;
     }
     let sites = SITES.get_or_init(|| sites);
+    // The teardown first: no window is made that nothing would free. The
+    // patches only after every link, so a link that fails is told once.
+    if !(link_teardown(loader, client)
+        && link_creates(loader, client)
+        && loops::link(loader, &sites.loops))
+    {
+        return;
+    }
     let status = crate::engine::code::register_all(sites.patches.clone(), text);
     if !status.is_ok() {
         let why = format!("were refused ({})", status.0);
         let _off = loader.fuse_off(&PAST16, "the size patches", &why);
         return;
     }
-    // The teardown first: no window is made that nothing would free.
-    let linked = link_teardown(loader, client)
-        && link_creates(loader, client)
-        && loops::link(loader, &sites.loops);
-    LINKED.store(linked, Ordering::Release);
+    LINKED.store(true, Ordering::Release);
 }
 
-/// Links the creates, the client's on a `client` only, under [`PAST16`];
-/// true when every link is made.
+/// Links the creates under [`PAST16`]; true when every link is made.
 fn link_creates(loader: &Loader, client: bool) -> bool {
-    let at = Target::Pinned;
-    loader.link_fused(
+    link_sides(
+        loader,
         &PAST16,
-        at(bases::SERVER_CREATE),
-        &SERVER_CREATE_NEXT,
-        create_server,
-        HookFlags::NONE,
-    ) && (!client
-        || loader.link_fused(
-            &PAST16,
-            at(bases::CLIENT_CREATE),
-            &CLIENT_CREATE_NEXT,
-            create_client,
-            HookFlags::NONE,
-        ))
+        client,
+        [
+            (bases::SERVER_CREATE, &SERVER_CREATE_NEXT, create_server),
+            (bases::CLIENT_CREATE, &CLIENT_CREATE_NEXT, create_client),
+        ],
+    )
 }
 
-/// Links the destroys, the client's on a `client` only, under
-/// [`TEARDOWN`]; true when every link is made.
+/// Links the destroys under [`TEARDOWN`]; true when every link is made.
 fn link_teardown(loader: &Loader, client: bool) -> bool {
-    let at = Target::Pinned;
-    loader.link_fused(
+    link_sides(
+        loader,
         &TEARDOWN,
-        at(bases::SERVER_DESTROY),
-        &SERVER_DESTROY_NEXT,
-        destroy_server,
-        HookFlags::NONE,
-    ) && (!client
-        || loader.link_fused(
-            &TEARDOWN,
-            at(bases::CLIENT_DESTROY),
-            &CLIENT_DESTROY_NEXT,
-            destroy_client,
-            HookFlags::NONE,
-        ))
+        client,
+        [
+            (bases::SERVER_DESTROY, &SERVER_DESTROY_NEXT, destroy_server),
+            (bases::CLIENT_DESTROY, &CLIENT_DESTROY_NEXT, destroy_client),
+        ],
+    )
+}
+
+/// Links the server's site of `sites` and, on a `client`, the client's,
+/// under `fuse`, all or none; true when every link is made.
+fn link_sides<F: Copy>(
+    loader: &Loader,
+    fuse: &'static Fuse,
+    client: bool,
+    [server, own]: [(Symbol, &'static Next<F>, F); 2],
+) -> bool {
+    let link = |(at, next, detour)| {
+        loader.link_fused(fuse, Target::Pinned(at), next, detour, HookFlags::NONE)
+    };
+    link(server) && (!client || link(own))
 }
 
 /// Settles, before arming writes anything, whether bases past 16 are armed:
@@ -398,25 +405,65 @@ fn link_teardown(loader: &Loader, client: bool) -> bool {
 /// patch written. It runs before each round of writes and so only settles
 /// the state; [`report`] tells the outcome once, after the last round.
 pub(super) fn arming(patches: &[CodePatch], verdicts: &[Verdict], hooked: &[u64]) {
+    let verdict = |mine: &CodePatch| {
+        patches
+            .iter()
+            .zip(verdicts)
+            .find(|(p, _)| p.address == mine.address)
+            .map(|(_, v)| v)
+    };
+    let sites = SITES.get();
     let armed = LINKED.load(Ordering::Acquire)
-        && SITES.get().is_some_and(|sites| {
+        && sites.is_some_and(|sites| {
             sites.targets().all(|at| hooked.contains(&at))
-                && sites.patches.iter().all(|mine| {
-                    patches
-                        .iter()
-                        .zip(verdicts)
-                        .any(|(p, v)| p.address == mine.address && *v == Verdict::Write)
-                })
+                && sites
+                    .patches
+                    .iter()
+                    .all(|mine| verdict(mine) == Some(&Verdict::Write))
         });
+    let skipped = sites.is_some_and(|sites| {
+        sites
+            .patches
+            .iter()
+            .any(|mine| matches!(verdict(mine), Some(Verdict::Skip(_))))
+    });
     ARMED.store(armed, Ordering::Release);
+    SKIPPED.store(skipped, Ordering::Release);
     SETTLED.store(true, Ordering::Release);
 }
 
 /// Tells once, after the hooks are armed, that bases past 16 are off, unless
-/// a skipped patch already reported it among `already`.
+/// a skipped patch already reported it among `already`; a patch that waits
+/// leaves the window to its retry.
 pub(super) fn report(loader: &Loader, already: &[&str]) {
-    if SITES.get().is_some() && !armed() && !already.contains(&PAST_16) {
-        let _off = loader.fuse_off(&PAST16, "bases", "a hook or a size patch is not armed");
+    let off = off_after_arming(
+        SITES.get().is_some(),
+        armed(),
+        already,
+        SKIPPED.load(Ordering::Acquire),
+    );
+    if let Some((id, why)) = off {
+        let _off = loader.fuse_off(&PAST16, id, why);
+    }
+}
+
+/// The entry and reason [`PAST16`] turns off for after arming, for a window
+/// `found` and not `armed`: a patch that named it among `already`
+/// leaves the window's own links to this fuse when `skipped` for good, and
+/// to the patch's retry when it waits.
+fn off_after_arming(
+    found: bool,
+    armed: bool,
+    already: &[&str],
+    skipped: bool,
+) -> Option<(&'static str, &'static str)> {
+    let reported = already.contains(&PAST_16);
+    if !found || armed || (reported && !skipped) {
+        None
+    } else if reported {
+        Some(("the size patches", "were skipped"))
+    } else {
+        Some(("bases", "a hook or a size patch is not armed"))
     }
 }
 
@@ -601,8 +648,29 @@ mod tests {
         }
     }
 
-    /// One test, in order, since the window's two fuses are the process's
-    /// own and a test run may share one process.
+    #[test]
+    fn a_size_patch_skipped_for_good_turns_the_window_s_own_fuse_off_and_one_that_waits_does_not() {
+        let named = [PAST_16];
+        assert_eq!(
+            off_after_arming(true, false, &named, true).map(|o| o.0),
+            Some("the size patches")
+        );
+        assert_eq!(
+            off_after_arming(true, false, &named, false),
+            None,
+            "it waits for its retry"
+        );
+        assert_eq!(
+            off_after_arming(true, false, &[], false).map(|o| o.0),
+            Some("bases")
+        );
+        assert_eq!(off_after_arming(true, true, &named, true), None);
+        assert_eq!(off_after_arming(false, false, &[], true), None);
+    }
+
+    /// One test, in order: the steps share the window's two fuses, which
+    /// are the process's own, and nextest runs each test in a process of
+    /// its own.
     #[test]
     fn the_window_arms_all_or_none_and_its_teardown_outlives_it() {
         let sites = [

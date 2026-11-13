@@ -324,15 +324,15 @@ fn the_lowest_cap_of_every_mod_lowers_the_bases_asked_for() {
     assert_eq!(asked.limits().zones, 64);
 }
 
-/// One test, in order, since the raised limit's fuse is the process's own
-/// and a test run may share one process.
+/// One test, in order: the steps share the raised limit's fuses, which are
+/// the process's own, and nextest runs each test in a process of its own.
 #[test]
-fn the_raised_limit_links_every_site_and_once_off_reports_the_game_s_own() {
+fn the_raised_limit_links_every_site_and_once_off_keeps_the_cap_and_reports_the_game_s_own() {
     use crate::engine::pinned::{bases, building};
     let sites = [
         (building::MAX_ALTARS, &ALTAR_LIMIT),
         (bases::GROUPING, &RAISED_FUSE),
-        (bases::NEW_BASE, &RAISED_FUSE),
+        (bases::NEW_BASE, &BASE_CAP),
         (bases::BASE_AT, &RAISED_FUSE),
         (bases::IN_BASE, &RAISED_FUSE),
         (bases::HOLDER_AT, &RAISED_FUSE),
@@ -359,13 +359,45 @@ fn the_raised_limit_links_every_site_and_once_off_reports_the_game_s_own() {
     });
     RAISED.store(true, Ordering::Release);
     assert_eq!(base_limit().zones, more);
-    RAISED_FUSE.blow("a test");
+    assert_eq!(detours::plan_bases(|| 20), 20);
+    assert_eq!(
+        detours::plan_bases(|| panic!("a broken plan")),
+        window::VANILLA,
+        "a plan that panics leaves the game's 16"
+    );
+    assert!(RAISED_FUSE.is_off());
     assert_eq!(
         base_limit(),
         Limits::VANILLA,
         "the lookups run as the game's once the feature is off"
     );
     assert_eq!(zones(), None);
+    assert_eq!(detours::plan_bases(|| 20), window::VANILLA);
+    let cap = loader
+        .chains
+        .relock()
+        .features_at(loader.address(bases::NEW_BASE).unwrap());
+    assert!(
+        cap.len() == 1 && core::ptr::eq(cap[0], &BASE_CAP) && !BASE_CAP.is_off(),
+        "the grown zone list keeps the cap on the game's new base code"
+    );
+}
+
+#[test]
+fn a_grouping_starts_no_base_past_its_plan_nor_past_the_game_s_16() {
+    let planned = AtomicUsize::new(0);
+    let starts = |plan: usize| {
+        (0u32..20)
+            .filter(|&n| detours::may_start(n, &planned, || plan))
+            .count()
+    };
+    assert_eq!(starts(5), 5);
+    assert_eq!(starts(40), window::VANILLA, "the game's array holds 16");
+    assert_eq!(starts(0), 0);
+    assert!(
+        !detours::may_start(3, &planned, || unreachable!("asked on the first base only")),
+        "the plan of the grouping's first base holds"
+    );
 }
 
 #[test]
@@ -379,7 +411,7 @@ fn a_zone_list_lookup_that_panics_leaves_the_game_the_boxes_it_had() {
     let caught = LOOKUP.run("a zone list lookup", || {
         // SAFETY: `room` stands for the live container, on this thread
         // until the guard drops.
-        let _guard = unsafe { detours::ListLen::at(list, container) };
+        let _guard = unsafe { detours::list_len_undo(list, container) };
         // SAFETY: `room` holds the container's u64 length.
         unsafe { members::set_list_len(list, &container, 5) };
         panic!("a broken lookup");
@@ -388,7 +420,7 @@ fn a_zone_list_lookup_that_panics_leaves_the_game_the_boxes_it_had() {
     // SAFETY: `room` holds the container's u64 length.
     assert_eq!(unsafe { members::list_len(list, &container) }, 3);
     // SAFETY: `room` stands for the live container, on this thread.
-    let guard = unsafe { detours::ListLen::at(list, container) };
+    let guard = unsafe { detours::list_len_undo(list, container) };
     // SAFETY: `room` holds the container's u64 length.
     unsafe { members::set_list_len(list, &container, 4) };
     guard.keep();

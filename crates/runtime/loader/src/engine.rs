@@ -112,6 +112,11 @@ pub(crate) mod spawn_request;
 pub(crate) mod static_halves;
 pub(crate) mod texts;
 pub mod ticks;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the game's detours undo their writes")
+)]
+pub(crate) mod undo;
 #[cfg(any(windows, test))]
 pub(crate) mod unwind_info;
 #[cfg(windows)]

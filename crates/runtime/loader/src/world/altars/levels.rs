@@ -49,8 +49,9 @@ pub(super) unsafe fn observe_into(
     };
     // Vanilla left the row counter at the end: walk again from the start and
     // restore it.
-    // SAFETY: the caller guarantees the system's live context on its thread.
-    let saved = unsafe { engine.row(ctx) };
+    // SAFETY: the caller guarantees the system's live context on its thread,
+    // which alone writes it, until the guard drops at the end of this call.
+    let _rows = unsafe { super::rewind(engine, ctx) };
     // SAFETY: the caller guarantees the system's live context on its
     // thread, which alone writes it.
     unsafe { engine.set_row(ctx, 0) };
@@ -87,9 +88,6 @@ pub(super) unsafe fn observe_into(
             },
         ));
     }
-    // SAFETY: the caller guarantees the system's live context on its
-    // thread, which alone writes it.
-    unsafe { engine.set_row(ctx, saved) };
 }
 
 /// Learns levels after vanilla's `upgrade_building_range`.
@@ -121,8 +119,9 @@ pub(super) unsafe fn read_levels_into(
     ctx: *mut u64,
     levels: &mut Vec<(u32, Sizes)>,
 ) {
-    // SAFETY: the caller guarantees the system's live context on its thread.
-    let saved = unsafe { engine.row(ctx) };
+    // SAFETY: the caller guarantees the system's live context on its thread,
+    // which alone writes it, until the guard drops at the end of this call.
+    let _rows = unsafe { super::rewind(engine, ctx) };
     // SAFETY: the caller guarantees the system's live context on its
     // thread, which alone writes it.
     unsafe { engine.set_row(ctx, 0) };
@@ -146,9 +145,6 @@ pub(super) unsafe fn read_levels_into(
         // thread.
         levels.push((unsafe { engine.entity(ctx) }, sizes));
     }
-    // SAFETY: the caller guarantees the system's live context on its
-    // thread, which alone writes it.
-    unsafe { engine.set_row(ctx, saved) };
 }
 
 /// Vanilla's `upgrade_building_range`, writing the controlling mod's ranges

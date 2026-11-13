@@ -10,4 +10,7 @@
 - Loader: altars keep their levels when the range pass's live check fails
   (#1071).
 - Loader: the altar zone limit reads as the game's own once the raised
-  altar zones turn off (#1071).
+  altar zones turn off, and the game still starts no 17th base from the
+  zone list they let grow (#1071).
+- Loader: a skipped size patch turns bases past 16 off with all its
+  detours, not only by name (#1071).

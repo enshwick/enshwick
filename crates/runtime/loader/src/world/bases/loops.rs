@@ -510,12 +510,15 @@ pub(super) fn link_parts(loader: &Loader, base_ids: bool) -> bool {
 ///   does not run beside.
 unsafe fn windowed(obj: *const u8) -> Option<(Game, &'static Layout)> {
     super::members::note_entry();
-    if !super::past_16() {
+    // One check of the raised limit and the window; the rest only reads.
+    if obj.is_null() || !super::past_16() {
         return None;
     }
-    let layout = &super::past16::sites()?.loops.layout;
-    // SAFETY: the caller's guarantee, passed on.
-    let game = unsafe { super::view(obj) }?;
+    let layout = &super::past16::found()?.loops.layout;
+    let fields = super::SITES.get()?.fields;
+    // SAFETY: `obj` is non-null by the check before it, and the caller
+    // guarantees a live bases object read beside no grouping.
+    let game = unsafe { Game::new(obj, fields) };
     (game.count() > window::VANILLA).then_some((game, layout))
 }
 

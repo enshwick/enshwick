@@ -2,20 +2,21 @@
 //! new base code, the four zone lookups and the placement cursor.
 
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use enshwick_core::abi::{AltarLimit, HookFlags};
 use enshwick_core::raw::read_at;
 
 use super::members::{Game, Side, side_of};
 use super::{
-    ALTAR_LIMIT, ASKED, Container, Fields, LIMITS, LimitFilter, PLANNED, RAISED_FUSE, RAISED_ZONES,
-    SITES, Sites, ZONE_COUNT, ZONES, base_limit, cursor, kind_index, lifecycle, members, past16,
-    raised,
+    ALTAR_LIMIT, ASKED, BASE_CAP, Container, Fields, LIMITS, LimitFilter, PLANNED, RAISED_FUSE,
+    RAISED_ZONES, SITES, Sites, ZONE_COUNT, ZONES, base_limit, cursor, kind_index, lifecycle,
+    members, past16, raised,
 };
 use crate::engine::fuse::Off;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
+use crate::engine::undo::Undo;
 use crate::world::base_groups::grouping::Grouped;
 use crate::world::base_groups::limit::{Zone, Zones};
 use crate::world::base_groups::window::{self, Kind};
@@ -32,22 +33,18 @@ pub(super) fn link_limit(loader: &Loader) -> bool {
     )
 }
 
-/// Links the grouping, its new base code, the four lookups and the cursor,
-/// all or none, under [`RAISED_FUSE`]: a site left to the game would keep
-/// its limits beside the raised ones. True when every link is made.
+/// Links the new base code's cap under [`BASE_CAP`], then the grouping, the
+/// four lookups and the cursor, all or none, under [`RAISED_FUSE`]: a site
+/// left to the game would keep its limits beside the raised ones, and no
+/// zone list grows without the cap. True when every link is made.
 pub(super) fn link_raised(loader: &Loader) -> bool {
     let at = Target::Pinned;
     let none = HookFlags::NONE;
     let only = HookFlags::EXCLUSIVE;
     let fuse = &RAISED_FUSE;
-    loader.link_fused(fuse, at(pinned::bases::GROUPING), &GROUP_NEXT, group, none)
-        && loader.link_fused(
-            fuse,
-            at(pinned::bases::NEW_BASE),
-            &ADD_BASE_NEXT,
-            add_base,
-            none,
-        )
+    let new_base = at(pinned::bases::NEW_BASE);
+    loader.link_fused(&BASE_CAP, new_base, &ADD_BASE_NEXT, add_base, none)
+        && loader.link_fused(fuse, at(pinned::bases::GROUPING), &GROUP_NEXT, group, none)
         && loader.link_fused(
             fuse,
             at(pinned::bases::BASE_AT),
@@ -169,6 +166,9 @@ crate::engine::chains::chain_detour! {
         let (Some(sites), Some(kind)) = (SITES.get().filter(|_| raised()), kind) else {
             return;
         };
+        // Unless the grouping settles, a panic part way included, the side
+        // table forgets what it half wrote.
+        let forget = Undo::new(|| Side::of(kind).forget());
         // SAFETY: `bases` is non-null, since `kind` is known, and is the
         // bases object the grouping has just filled, on the grouping's
         // thread; the game's new base code is what `ADD_BASE_NEXT` holds past
@@ -177,8 +177,9 @@ crate::engine::chains::chain_detour! {
             // SAFETY: `bases` is non-null and is the object the game's
             // grouping and `settle` have just filled, on this thread.
             unsafe { keep(bases, kind, sites.fields, &grouped) };
+            forget.keep();
         } else {
-            Side::of(kind).forget();
+            drop(forget);
             let why = "the game's grouping left bases the loader cannot settle";
             RAISED_FUSE.turn_off(&Off::fault(RAISED_ZONES, why));
         }
@@ -193,7 +194,7 @@ crate::engine::chains::chain_detour! {
 /// - `bases` is the live `kind` object the game's grouping has just filled,
 ///   on the grouping's thread.
 unsafe fn regroup(bases: *mut u8, kind: Kind, sites: &Sites) -> Option<Grouped> {
-    // The new base code's link is armed with the grouping's, all or none.
+    // The cap links first, and the grouping never without it.
     let new_base = ADD_BASE_NEXT.wired()?;
     let window = past16::sites().map(past16::Sites::code);
     let ready = window.and_then(|code| {
@@ -275,16 +276,13 @@ unsafe fn keep(bases: *const u8, kind: Kind, fields: Fields, grouped: &Grouped) 
 
 crate::engine::chains::chain_detour! {
     /// The table's `bases.new_base`: the game's new base code, held back
-    /// past the bases the raised grouping plans.
+    /// past the bases the raised grouping plans, and past the game's 16
+    /// whatever the zone list holds.
     fn add_base(bases: *mut u8, zone: *const u8, index: u32) -> ();
     next ADD_BASE_NEXT;
-    fuse &RAISED_FUSE, "the base plan";
+    fuse &BASE_CAP, "the base cap";
     |onward| {
-        if let Some(fields) = SITES
-            .get()
-            .filter(|_| raised() && !bases.is_null())
-            .map(|sites| sites.fields)
-        {
+        if let Some(fields) = SITES.get().filter(|_| !bases.is_null()).map(|sites| sites.fields) {
             // SAFETY: `bases` is non-null by the filter before it and is the
             // bases object the grouping passes; its u32 base count sits at
             // the build table's `bases.count`.
@@ -292,21 +290,38 @@ crate::engine::chains::chain_detour! {
             // SAFETY: `bases` is non-null by the filter and is the live
             // object the grouping passes to its new base code.
             let kind = unsafe { side_of(bases, &fields) };
-            let planned = &PLANNED[kind_index(kind)];
-            if started == 0 {
-                // SAFETY: the game's grouping calls the new base code only
-                // after it refilled the object's zone list, on its own
-                // thread.
-                let plan = unsafe { members::planned(bases, fields, ASKED.bases(kind)) };
-                planned.store(plan, Ordering::Relaxed);
-            }
-            let limit = planned.load(Ordering::Relaxed).min(window::VANILLA);
-            if usize::try_from(started).map_or(true, |n| n >= limit) {
+            // SAFETY: the game's grouping calls the new base code only after
+            // it refilled the object's zone list, on its own thread.
+            let plan = || plan_bases(|| unsafe { members::planned(bases, fields, ASKED.bases(kind)) });
+            if !may_start(started, &PLANNED[kind_index(kind)], plan) {
                 return;
             }
         }
         onward.call();
     }
+}
+
+/// The bases a grouping may start: what the raised limit `planned`, or the
+/// game's 16 while it is not raised. A plan that panics turns the raised
+/// limit off, never the cap, and leaves 16.
+pub(super) fn plan_bases(planned: impl FnOnce() -> usize) -> usize {
+    if !raised() {
+        return window::VANILLA;
+    }
+    RAISED_FUSE
+        .run("the base plan", planned)
+        .unwrap_or(window::VANILLA)
+}
+
+/// Whether a grouping may start base number `started`: below what it
+/// `plan`s, asked on its first base and kept in `planned`, and below the
+/// game's 16, which its array of bases holds.
+pub(super) fn may_start(started: u32, planned: &AtomicUsize, plan: impl FnOnce() -> usize) -> bool {
+    if started == 0 {
+        planned.store(plan(), Ordering::Relaxed);
+    }
+    let limit = planned.load(Ordering::Relaxed).min(window::VANILLA);
+    usize::try_from(started).is_ok_and(|n| n < limit)
 }
 
 /// The view of `bases` for a lookup, while the raised limit holds.
@@ -415,7 +430,7 @@ crate::engine::chains::chain_detour! {
         if let (Some(p), Some(game), false) = (p, game, out.is_null() || list.is_null()) {
             // SAFETY: the game's live zone box container, used on this
             // thread until the guard drops at the end of this lookup.
-            let guard = unsafe { ListLen::at(list, game.fields().container) };
+            let guard = unsafe { list_len_undo(list, game.fields().container) };
             // SAFETY: the lookup's own answer and the game's live zone box
             // container with its own grow callback.
             unsafe { members::zones_at(out, list, &game, p) };
@@ -429,43 +444,17 @@ crate::engine::chains::chain_detour! {
 /// Puts a zone box container's length back when dropped, unless kept, so
 /// after a lookup of ours panicked the game's own lookup appends to the
 /// boxes it had.
-pub(super) struct ListLen {
-    list: *mut u8,
-    container: Container,
-    len: u64,
-    kept: bool,
-}
-
-impl ListLen {
-    /// # Safety
-    ///
-    /// - `list` is the game's live zone box container, laid out as
-    ///   `container`, used on this thread until the guard drops.
-    pub(super) unsafe fn at(list: *mut u8, container: Container) -> Self {
-        Self {
-            list,
-            container,
-            // SAFETY: the caller guarantees the live container.
-            len: unsafe { members::list_len(list, &container) },
-            kept: false,
-        }
-    }
-
-    /// Leaves the container as the lookup filled it.
-    pub(super) fn keep(mut self) {
-        self.kept = true;
-    }
-}
-
-impl Drop for ListLen {
-    fn drop(&mut self) {
-        if !self.kept {
-            // SAFETY: `at`'s caller guarantees the live container until this
-            // drop; it held `len` boxes then, which the lookup only appended
-            // to.
-            unsafe { members::set_list_len(self.list, &self.container, self.len) };
-        }
-    }
+///
+/// # Safety
+///
+/// - `list` is the game's live zone box container, laid out as `container`,
+///   used on this thread until the guard drops, and only appended to.
+pub(super) unsafe fn list_len_undo(list: *mut u8, container: Container) -> Undo<impl FnOnce()> {
+    // SAFETY: the caller guarantees the live container.
+    let len = unsafe { members::list_len(list, &container) };
+    // SAFETY: the caller guarantees the live container until the guard
+    // drops; it held `len` boxes then, which the lookup only appended to.
+    Undo::new(move || unsafe { members::set_list_len(list, &container, len) })
 }
 
 crate::engine::chains::chain_detour! {
