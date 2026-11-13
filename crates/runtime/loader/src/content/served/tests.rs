@@ -185,3 +185,84 @@ fn the_rate_patch_serves_the_registry_alone_or_not_at_all() {
     assert_eq!(served[0].patches.len(), 1);
     assert!(served[0].keeps_base.load(Ordering::Relaxed));
 }
+
+#[test]
+fn the_served_resources_link_all_three_or_none_and_say_why_they_are_off() {
+    let loader = crate::start::tests::bare_loader();
+    assert!(
+        !link_resources(&loader),
+        "this build has no resource database"
+    );
+    assert!(
+        RESOURCES_FUSE.is_off(),
+        "off by its fuse, not only in the log"
+    );
+    let mut chains = loader.chains.relock();
+    chains.seal();
+    assert!(chains.is_empty(), "no link of the resources is made");
+    let listed = crate::engine::diag::parts_off();
+    let off = listed.iter().find(|p| p.part == "served resources");
+    assert!(
+        off.is_some_and(|p| p.reason.starts_with(pinned::resource::OPEN.id())),
+        "{listed:?}"
+    );
+}
+
+/// Builds `base` with the loader patch `apply` and its `user`.
+fn build_with(apply: ResourcePatchFn, user: *mut c_void, base: &[u8]) -> Status {
+    let (mut out, mut out_len) = (core::ptr::null::<u8>(), 0usize);
+    // SAFETY: `user` is the value `own_patch` made with `apply`, `base` is
+    // readable for its length, and `out` and `out_len` are writable locals.
+    unsafe {
+        apply(
+            base.as_ptr(),
+            base.len(),
+            user,
+            &raw mut out,
+            &raw mut out_len,
+        )
+    }
+}
+
+#[test]
+fn a_stand_in_that_panics_is_refused_alone_and_the_others_keep_building() {
+    let stand_in = |builder: crate::content::standins::Builder| {
+        let patch = StandInPatch {
+            builder,
+            fuse: Fuse::new(STAND_INS),
+        };
+        own_patch(patch)
+    };
+    let (broken, broken_user) = stand_in(Box::new(|_| panic!("broken stand-in")));
+    let (sound, sound_user) = stand_in(Box::new(|base| Some(base.to_vec())));
+    assert_eq!(build_with(broken, broken_user, &[1]), Status::REFUSED);
+    assert_eq!(
+        build_with(sound, sound_user, &[1]),
+        Status::OK,
+        "another stand-in keeps building after one panicked"
+    );
+    assert!(
+        crate::engine::diag::parts_off()
+            .iter()
+            .any(|p| p.part == STAND_INS && p.reason.contains("broken stand-in")),
+        "the panic still shows"
+    );
+}
+
+#[test]
+fn a_panic_in_the_served_work_leaves_the_resource_links_wired() {
+    let ran = SERVING_FUSE.run("a resource build", || panic!("broken build"));
+    assert!(ran.is_none());
+    assert!(SERVING_FUSE.is_off());
+    assert!(
+        !core::ptr::eq(&raw const SERVING_FUSE, &raw const RESOURCES_FUSE),
+        "the work turns off a switch no link carries, so a served handle never reaches the game"
+    );
+    let listed = crate::engine::diag::parts_off();
+    assert!(
+        listed
+            .iter()
+            .any(|p| p.part == "served resource builds" && p.reason.contains("broken build")),
+        "{listed:?}"
+    );
+}

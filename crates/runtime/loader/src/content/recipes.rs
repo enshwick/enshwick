@@ -26,6 +26,11 @@ use enshwick_core::mods::GAME_ID;
 
 /// A world's recipe file, in its folder of the loader's settings.
 pub const WORLD_FILE: &str = "recipes.toml";
+
+/// The entry an off line names when the build does not reflect where a
+/// recipe keeps what the loader reads.
+#[cfg(windows)]
+pub(crate) const RECIPE_LAYOUT: &str = "the recipe layout";
 /// The workshop of crafting by hand.
 pub const HAND: &str = "hand";
 

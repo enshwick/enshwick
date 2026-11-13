@@ -22,15 +22,14 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use enshwick_core::abi::{
-    Header, HookFlags, KnowledgeInfo, KnowledgeInput, KnowledgeInputFn, Registers, Status,
+    Header, HookFlags, KnowledgeInfo, KnowledgeInput, KnowledgeInputFn, Status,
 };
 
-use crate::engine::loader::{Loader, Registered};
-use crate::engine::mid::MidLink;
+use crate::engine::fuse::Fuse;
+use crate::engine::loader::{Loader, Registered, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 use crate::engine::registry::Registry;
-use enshwick_base::Relock;
 
 use super::{Layout, definition, layout, quest_set, read};
 
@@ -56,8 +55,12 @@ struct Site {
     skill_points: usize,
 }
 
-/// The guard's line for the status summary, once its site is in.
+/// The guard's line for the status summary, once it hooked its site and
+/// while it is on.
 pub(crate) fn status() -> Option<String> {
+    if GUARD_FUSE.is_off() {
+        return None;
+    }
     SITE.get()?;
     Some(format!(
         "enforcing; {} refused",
@@ -75,7 +78,7 @@ pub(crate) fn register(
     if FILTERS.is_sealed() {
         return Status::TOO_LATE;
     }
-    if site(loader).is_none() || loader.address(pinned::knowledge::INPUT_CHECK).is_none() {
+    if site(loader).is_none() || !loader.code_holds(pinned::knowledge::INPUT_CHECK) {
         return Status::MISSING;
     }
     FILTERS
@@ -100,37 +103,33 @@ fn site(loader: &Loader) -> Option<Site> {
     })
 }
 
-/// Seals the filters and adds the site.
+/// Seals the filters and links the site, once the build has what the guard
+/// reads there.
 pub(crate) fn link(loader: &Loader) {
     let _filters = FILTERS.seal();
-    let (Some(site), Some(_), Some(address)) = (
-        site(loader),
-        layout(loader),
-        loader.address(pinned::knowledge::INPUT_CHECK),
-    ) else {
-        crate::log!(WARN, "knowledge guard off: not in this build");
+    let unknown = "is not found on this build";
+    let Some(site) = site(loader) else {
+        let _off = loader.fuse_off(&GUARD_FUSE, "the knowledge request layout", unknown);
         return;
     };
-    if crate::engine::ecs::engine(loader).is_none() {
-        crate::log!(WARN, "knowledge guard off: no entity reads on this build");
+    if layout(loader).is_none() {
+        let _off = loader.fuse_off(&GUARD_FUSE, "the knowledge store layout", unknown);
         return;
     }
-    let _first = SITE.set(site);
-    let link = MidLink {
-        owner: ModIndex::LOADER,
-        handler: check,
-        user: 0,
-        priority: i32::MIN,
-        flags: HookFlags::NONE,
-    };
-    let status = loader.mids.relock().add(address, link);
-    if status.is_ok() {
+    if crate::engine::ecs::engine(loader).is_none() {
+        let _off = loader.fuse_off(&GUARD_FUSE, "the entity layout", unknown);
+        return;
+    }
+    let at = Target::Pinned(pinned::knowledge::INPUT_CHECK);
+    // The site goes in before the hooks arm, so the check never runs
+    // without it, and only once the link is made, so the status line shows
+    // a guard that hooked.
+    if loader.link_mid(&GUARD_FUSE, at, check, HookFlags::NONE) {
+        let _first = SITE.set(site);
         crate::log!(
             INFO,
             "knowledge guard on: refusing what a vanilla client never asks for"
         );
-    } else {
-        crate::log!(WARN, "knowledge guard off: refused ({})", status.0);
     }
 }
 
@@ -252,15 +251,15 @@ fn address(register: u64) -> usize {
 }
 
 /// The switch of the knowledge guard.
-static GUARD_FUSE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("knowledge guard");
+static GUARD_FUSE: Fuse = Fuse::new("knowledge guard");
 
-unsafe extern "system" fn check(registers: *mut Registers, _user: *mut c_void) {
-    let _caught = GUARD_FUSE.run("the check", || {
-        // SAFETY: the mid-function stub passes its own saved register block,
-        // or null, live and unaliased for the call.
-        let Some(registers) = (unsafe { registers.as_mut() }) else {
-            return;
-        };
+crate::engine::mid::mid_handler! {
+    /// The guard at the handler's test of the game's own check: a request
+    /// the game would queue (`al` set) is asked of the guard and the
+    /// filters, and a refused one takes the path of a malformed action.
+    fn check;
+    fuse GUARD_FUSE, "the check";
+    |registers| {
         if registers.rax.trailing_zeros() >= 8 {
             return;
         }
@@ -310,12 +309,13 @@ unsafe extern "system" fn check(registers: *mut Registers, _user: *mut c_void) {
             registers.rax &= !0xff;
             note(&call);
         }
-    });
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use enshwick_base::Relock;
 
     fn player(kind: u8) -> Definition {
         Definition {
@@ -325,6 +325,35 @@ mod tests {
             skill_points: 0,
             quest: false,
         }
+    }
+
+    #[test]
+    fn a_build_without_the_guards_site_lists_the_guard_off_by_its_fuse() {
+        let loader = crate::start::tests::bare_loader();
+        link(&loader);
+        assert!(GUARD_FUSE.is_off(), "off by its fuse, not only in the log");
+        assert!(status().is_none(), "no site, no status line");
+        assert_eq!(loader.mids.relock().len(), 0, "no site is hooked");
+        let listed = crate::engine::diag::parts_off();
+        assert!(
+            listed.iter().any(|p| p.part == "knowledge guard"
+                && p.reason.starts_with("the knowledge request layout")),
+            "{listed:?}"
+        );
+    }
+
+    #[test]
+    fn an_off_guard_has_no_status_line_even_with_its_site_in() {
+        let site = Site {
+            action: 0,
+            kind: 0,
+            value: 0,
+            experience: 0,
+            skill_points: 0,
+        };
+        let _first = SITE.set(site);
+        GUARD_FUSE.blow("the check");
+        assert!(status().is_none(), "an off guard enforces nothing");
     }
 
     #[test]

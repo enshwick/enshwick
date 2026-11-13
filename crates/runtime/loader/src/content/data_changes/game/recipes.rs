@@ -4,7 +4,7 @@
 
 use core::ffi::c_void;
 
-use enshwick_core::abi::{ResourceKey, Status};
+use enshwick_core::abi::ResourceKey;
 use enshwick_core::content::Guid;
 use enshwick_core::content::changes::{Entry, Field, RecipeTraits};
 use enshwick_core::content::menu::{MenuLayout, UI_BUNDLE, move_recipes};
@@ -15,9 +15,11 @@ use enshwick_core::content::workshops::WorkshopId;
 use enshwick_gamedata::catalogue;
 use rustc_hash::FxHashMap;
 
-use super::{CHANGES, on};
+use super::{CHANGES, UNREADABLE, on};
 use crate::content::data_changes::{Key, Merged};
 use crate::content::item_kinds::ItemKindLayout;
+use crate::content::served::OwnPatch;
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 
@@ -26,10 +28,8 @@ use crate::engine::mod_index::ModIndex;
 /// recipes or the items' equipment slots, or the archive does not read.
 pub(super) fn vanilla_recipes(loader: &Loader) -> Vec<(Guid, RecipeTraits)> {
     let off = || {
-        crate::log!(
-            WARN,
-            "changes of selected recipes are off: this build does not reflect what they read, or the game's archive does not read"
-        );
+        let what = "the recipe layout a selection reads";
+        let _off = loader.fuse_off(&SELECTED_RECIPES_FUSE, what, UNREADABLE);
         Vec::new()
     };
     let facts = catalogue::Reflected(&loader.reflection);
@@ -96,24 +96,20 @@ pub(super) fn recipe_patch(
         return None;
     }
     let facts = catalogue::Reflected(&loader.reflection);
-    let Ok(layout) = RecipeLayout::resolve(&facts) else {
-        crate::log!(
-            WARN,
-            "recipe changes are off: this build does not reflect the recipes"
-        );
-        return None;
+    let layout = match RecipeLayout::resolve(&facts) {
+        Ok(layout) => layout,
+        Err(off) => {
+            let why = format!("does not resolve: {off}");
+            let _off = loader.fuse_off(&RECIPES_FUSE, crate::content::recipes::RECIPE_LAYOUT, &why);
+            return None;
+        }
     };
     let duration = catalogue::constant(catalogue::ids::RECIPE_DURATION, &loader.reflection)
         .and_then(|at| usize::try_from(at).ok());
     crate::log!(INFO, "{} recipes get changed values", recipes.len());
-    let patch: &'static RecipePatch = Box::leak(Box::new(RecipePatch { layout, duration }));
     let key = RECIPE_REGISTRY.key_by_hash(crate::engine::catalogue::types::RECIPE_REGISTRY);
-    let user = core::ptr::from_ref(patch).cast_mut().cast::<c_void>();
-    Some((
-        key,
-        build_recipes as enshwick_core::abi::ResourcePatchFn,
-        user,
-    ))
+    let (apply, user) = crate::content::served::own_patch(RecipePatch { layout, duration });
+    Some((key, apply, user))
 }
 
 /// Every recipe some change of `merged` from a mod `on` lets through moves,
@@ -160,16 +156,13 @@ pub(super) fn menu_patch(
         recipe_workshops(&layout, &registry)
     });
     let (Ok(layout), Some(workshops)) = (MenuLayout::resolve(&facts), workshops) else {
-        crate::log!(
-            WARN,
-            "recipes moved to other stations stay listed where they were: this build does not reflect the crafting menu"
-        );
+        let what = "the crafting menu layout";
+        let _off = loader.fuse_off(&MOVES_FUSE, what, UNREADABLE);
         return None;
     };
-    let patch: &'static MenuPatch = Box::leak(Box::new(MenuPatch { layout, workshops }));
     let key = UI_BUNDLE.key_by_hash(crate::engine::catalogue::types::UI_BUNDLE);
-    let user = core::ptr::from_ref(patch).cast_mut().cast::<c_void>();
-    Some((key, build_menu as enshwick_core::abi::ResourcePatchFn, user))
+    let (apply, user) = crate::content::served::own_patch(MenuPatch { layout, workshops });
+    Some((key, apply, user))
 }
 
 /// What the loader's patch of the crafting menu needs.
@@ -181,37 +174,30 @@ struct MenuPatch {
 
 /// The loader's patch of the crafting menu: the base with every recipe the
 /// mods still on move listed at its new station alone.
-unsafe extern "system" fn build_menu(
-    base: *const u8,
-    base_len: usize,
-    user: *mut c_void,
-    out: *mut *const u8,
-    out_len: *mut usize,
-) -> Status {
-    // SAFETY: `user` is the `MenuPatch` `menu_patch` leaked, which lives for
-    // the process.
-    let patch = unsafe { &*user.cast::<MenuPatch>() };
-    let mut bytes = vec![0; base_len];
-    // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at `base`,
-    // unchanged for the call.
-    unsafe { enshwick_core::raw::read_bytes_at(base, 0, &mut bytes) };
-    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let sealed = CHANGES.sealed.get()?;
-        let moves: Vec<(Guid, WorkshopId)> = stations(&sealed.merged(), |m| on(sealed.loader, m))
-            .into_iter()
-            .filter_map(|(recipe, id)| {
-                let workshop = patch.workshops.iter().find(|w| w.id() == id)?;
-                Some((recipe, *workshop))
-            })
-            .collect();
-        move_recipes(&patch.layout, &bytes, &moves)
-    }));
-    let Ok(Some(built)) = built else {
-        return Status::REFUSED;
-    };
-    // SAFETY: `run_patches` passes `out` and `out_len` pointing at locals,
-    // writable for the call.
-    unsafe { crate::content::served::hand_out(built, out, out_len) }
+impl OwnPatch for MenuPatch {
+    const SITE: &'static str = "a crafting menu patch";
+
+    fn fuse(&self) -> &Fuse {
+        &MOVES_FUSE
+    }
+
+    fn build(&self, bytes: Vec<u8>) -> Option<Vec<u8>> {
+        moved_recipes(self, &bytes)
+    }
+}
+
+/// The crafting menu `bytes` with every recipe the mods still on move
+/// listed at its new station alone.
+fn moved_recipes(patch: &MenuPatch, bytes: &[u8]) -> Option<Vec<u8>> {
+    let sealed = CHANGES.sealed.get()?;
+    let moves: Vec<(Guid, WorkshopId)> = stations(&sealed.merged(), |m| on(sealed.loader, m))
+        .into_iter()
+        .filter_map(|(recipe, id)| {
+            let workshop = patch.workshops.iter().find(|w| w.id() == id)?;
+            Some((recipe, *workshop))
+        })
+        .collect();
+    move_recipes(&patch.layout, bytes, &moves)
 }
 
 /// What the loader's patch of the recipe registry needs.
@@ -249,36 +235,40 @@ impl RecipeChanges for Live<'_> {
 
 /// The loader's patch of the recipe registry: the base with every recipe
 /// change of the mods still on.
-unsafe extern "system" fn build_recipes(
-    base: *const u8,
-    base_len: usize,
-    user: *mut c_void,
-    out: *mut *const u8,
-    out_len: *mut usize,
-) -> Status {
-    // SAFETY: `user` is the `RecipePatch` `recipe_patch` leaked, which lives
-    // for the process.
-    let patch = unsafe { &*user.cast::<RecipePatch>() };
-    let mut bytes = vec![0; base_len];
-    // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at `base`,
-    // unchanged for the call.
-    unsafe { enshwick_core::raw::read_bytes_at(base, 0, &mut bytes) };
-    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let sealed = CHANGES.sealed.get()?;
-        let merged = sealed.merged();
-        let live = Live {
-            loader: sealed.loader,
-            merged: &merged,
-        };
-        change_recipes_in(&patch.layout, patch.duration, &bytes, &live)
-    }));
-    let Ok(Some((built, changed))) = built else {
-        return Status::REFUSED;
-    };
-    if !crate::content::served::scratch() {
-        crate::log!(INFO, "{changed} recipes changed by data changes");
+impl OwnPatch for RecipePatch {
+    const SITE: &'static str = "a recipe registry patch";
+
+    fn fuse(&self) -> &Fuse {
+        &RECIPES_FUSE
     }
-    // SAFETY: `run_patches` passes `out` and `out_len` pointing at locals,
-    // writable for the call.
-    unsafe { crate::content::served::hand_out(built, out, out_len) }
+
+    fn build(&self, bytes: Vec<u8>) -> Option<Vec<u8>> {
+        changed_recipes(self, &bytes)
+    }
 }
+
+/// The recipe registry `bytes` with every recipe change of the mods still
+/// on.
+fn changed_recipes(patch: &RecipePatch, bytes: &[u8]) -> Option<Vec<u8>> {
+    let sealed = CHANGES.sealed.get()?;
+    let merged = sealed.merged();
+    let live = Live {
+        loader: sealed.loader,
+        merged: &merged,
+    };
+    change_recipes_in(&patch.layout, patch.duration, bytes, &live).map(|(built, changed)| {
+        if !crate::content::served::scratch() {
+            crate::log!(INFO, "{changed} recipes changed by data changes");
+        }
+        built
+    })
+}
+
+/// The switch of the changes of selected recipes, which needs the kind and
+/// workshop of every vanilla recipe.
+static SELECTED_RECIPES_FUSE: Fuse = Fuse::new("changes of selected recipes");
+/// The switch of the recipe changes.
+static RECIPES_FUSE: Fuse = Fuse::new("recipe changes");
+/// The switch of the recipes moved to another station in the client's
+/// crafting menu.
+static MOVES_FUSE: Fuse = Fuse::new("recipe moves in the crafting menu");

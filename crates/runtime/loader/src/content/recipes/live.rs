@@ -15,6 +15,7 @@ use enshwick_core::content::{Blob, Guid};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::engine::catalogue::{Reflected, types};
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::settings::LOADER_ID;
@@ -66,8 +67,6 @@ struct Live {
     names: Option<Arc<Names>>,
     /// The world's file, as last seen.
     stamps: (Option<PathBuf>, Stamp),
-    /// Whether the archive's registry failed to read, logged once.
-    unreadable: bool,
     /// The problems last logged, so the same ones are not logged again.
     problems: Vec<String>,
 }
@@ -75,9 +74,10 @@ struct Live {
 static DISABLED: LazyLock<ArcSwap<Disabled>> = LazyLock::new(ArcSwap::default);
 static LISTS: LazyLock<ArcSwap<Lists>> = LazyLock::new(ArcSwap::default);
 static LIVE: Mutex<Option<Live>> = Mutex::new(None);
-/// The loader part these rules are, as the status summary and the Mods
-/// screen name it.
-const PART: &str = "disabled recipes";
+/// The switch of the disabled recipes: off where the build does not reflect
+/// or read the recipe registry, and the rules mods set in init then do
+/// nothing.
+static DISABLED_FUSE: Fuse = Fuse::new("disabled recipes");
 static LAYOUT: OnceLock<Option<RecipeLayout>> = OnceLock::new();
 /// Set when the rules or what they resolve against changed.
 static DIRTY: AtomicBool = AtomicBool::new(true);
@@ -93,27 +93,45 @@ fn layout() -> Option<&'static RecipeLayout> {
 
 /// Sets disabled recipes up: the layout and the lookup hook. Before arming.
 pub(crate) fn init(loader: &'static Loader) {
-    if !keep_layout(RecipeLayout::resolve(&Reflected(&loader.reflection))) {
+    if !keep_layout(
+        loader,
+        RecipeLayout::resolve(&Reflected(&loader.reflection)),
+    ) {
         return;
     }
-    if !crate::engine::code::link_recipe_lookup(loader) {
-        crate::log!(
-            WARN,
-            "disabled recipes stay in the crafting menus: the recipe list lookup is off"
-        );
-    }
+    // Without the lookup, which turns itself off where players and admins
+    // see it, disabled recipes stay in the crafting menus and the rest of
+    // them holds.
+    let _linked = crate::engine::code::link_recipe_lookup(loader);
     DIRTY.store(true, Ordering::Release);
 }
 
-/// Keeps the resolved layout, or turns disabled recipes off where players
-/// and admins see it: the rules mods set in init then do nothing.
-fn keep_layout(resolved: Result<RecipeLayout, impl core::fmt::Display>) -> bool {
+/// Keeps the resolved layout, or turns disabled recipes off by their fuse.
+fn keep_layout(loader: &Loader, resolved: Result<RecipeLayout, impl core::fmt::Display>) -> bool {
     if let Err(off) = &resolved {
-        crate::log!(WARN, "disabled recipes off: {off}");
-        crate::engine::diag::part_off(PART, &off.to_string());
+        let why = format!("does not resolve: {off}");
+        let _off = loader.fuse_off(&DISABLED_FUSE, super::RECIPE_LAYOUT, &why);
     }
     let _first = LAYOUT.set(resolved.ok());
     layout().is_some()
+}
+
+/// Turns disabled recipes off: the recipe registry, the game's or the one
+/// mods served it, does not read with the layout the build reflects. The
+/// rules in force go too, since nothing applies new ones once it is off,
+/// and the crafting menus and the craft veto must not keep an old world's.
+#[cold]
+fn unreadable(loader: &Loader, registry: &str) {
+    let _off = loader.fuse_off(
+        &DISABLED_FUSE,
+        registry,
+        "does not read with the recipe layout",
+    );
+    let generation = DISABLED.load().generation + 1;
+    DISABLED.store(Arc::new(Disabled {
+        ids: FxHashSet::default(),
+        generation,
+    }));
 }
 
 /// The world's own recipe file, while a world runs.
@@ -133,7 +151,7 @@ fn stamp(path: &Path) -> Stamp {
 /// Looks at the world's recipe file and applies the rules when anything
 /// changed; on the settings thread, once a second.
 pub(crate) fn poll(loader: &Loader) {
-    if layout().is_none() {
+    if layout().is_none() || DISABLED_FUSE.is_off() {
         return;
     }
     let world = world_path();
@@ -168,18 +186,9 @@ fn ensure_index(loader: &Loader) -> Option<Arc<Index>> {
         .and_then(|registry| Index::read(layout()?, &registry))
         .map(|index| index.with_content(&content_names()));
     let Some(index) = read.map(Arc::new) else {
-        live(|l| {
-            if !l.unreadable {
-                l.unreadable = true;
-                crate::log!(
-                    WARN,
-                    "disabled recipes off: the recipe registry does not read"
-                );
-            }
-        });
+        unreadable(loader, "the game's recipe registry");
         return None;
     };
-    let _ = loader;
     live(|l| l.index = Some(Arc::clone(&index)));
     Some(index)
 }
@@ -380,10 +389,9 @@ pub(crate) fn registry_built(data: usize, len: usize) {
     // that live for the process and are not written again.
     let registry = unsafe { core::slice::from_raw_parts(data as *const u8, len) };
     let Some(index) = Index::read(layout, registry) else {
-        crate::log!(
-            WARN,
-            "disabled recipes off: the served recipe registry does not read"
-        );
+        if let Some(loader) = crate::engine::loader::loader() {
+            unreadable(loader, "the served recipe registry");
+        }
         return;
     };
     live(|l| l.index = Some(Arc::new(index.with_content(&content_names()))));
@@ -776,17 +784,35 @@ mod tests {
             Kind::Output,
             "a-guid".to_owned()
         ))));
-        assert!(!keep_layout(Err("no recipe layout")));
+        let loader = crate::start::tests::bare_loader();
+        assert!(!keep_layout(&loader, Err("no recipe layout")));
         assert!(
-            crate::engine::diag::parts_off()
-                .iter()
-                .any(|off| off.part == PART && off.reason == "no recipe layout"),
+            DISABLED_FUSE.is_off(),
+            "off by its fuse, not only in the log"
+        );
+        assert!(
+            crate::engine::diag::parts_off().iter().any(|off| {
+                off.part == DISABLED_FUSE.feature() && off.reason.contains("no recipe layout")
+            }),
             "the rules kept from init show as off"
         );
         assert_eq!(
             rule(owner, RecipeRuleKind::OUTPUT, "a-guid", true),
             Status::MISSING,
             "a build without the layout refuses"
+        );
+    }
+
+    #[test]
+    fn a_registry_that_does_not_read_turns_the_rules_in_force_off_with_the_feature() {
+        disable_for_test(&[5]);
+        assert!(is_disabled(5));
+        let loader = crate::start::tests::bare_loader();
+        unreadable(&loader, "the served recipe registry");
+        assert!(DISABLED_FUSE.is_off());
+        assert!(
+            !is_disabled(5),
+            "an off feature disables nothing, not the last world's rules"
         );
     }
 

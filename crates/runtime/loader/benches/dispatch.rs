@@ -149,6 +149,31 @@ fn fuse(c: &mut Criterion) {
             FUSE.run("bench", || black_box(&frame).iter().sum::<u32>())
         });
     });
+    // The text format, which every text the game shows passes, for a tag
+    // that is not the loader's: the set of its tags checked under the fuse,
+    // and before it, as the format link does.
+    let ours: rustc_hash::FxHashSet<u32> = (1000..1064).collect();
+    group.bench_function("format_under_fuse", |b| {
+        b.iter(|| {
+            let onward = Onward::new(|| original(black_box(7)));
+            onward.run(&FUSE, "bench", |onward| {
+                if ours.contains(&black_box(7)) {
+                    black_box(0)
+                } else {
+                    onward.call()
+                }
+            })
+        });
+    });
+    group.bench_function("format_gated", |b| {
+        b.iter(|| {
+            let onward = Onward::new(|| original(black_box(7)));
+            if !ours.contains(&black_box(7)) {
+                return onward.call();
+            }
+            onward.run(&FUSE, "bench", |_| black_box(0))
+        });
+    });
     group.finish();
 }
 

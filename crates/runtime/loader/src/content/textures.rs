@@ -27,7 +27,8 @@ use enshwick_core::raw::{
 use rustc_hash::FxHashMap;
 
 use crate::engine::catalogue::types::{TEMPLATE, UI_IMAGE};
-use crate::engine::chains::Next;
+use crate::engine::chains::{Next, Onward};
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
 use enshwick_base::Relock;
@@ -89,22 +90,17 @@ static LOADED: OnceLock<&'static Loader> = OnceLock::new();
 // SAFETY: `RequestFn` is the signature of the build table's
 // `textures.request`, and `link` uses this slot only as that function's next.
 static REQUEST_NEXT: Next<RequestFn> = unsafe { Next::new() };
-// SAFETY: `KeysFn` is the signature of the build table's `textures.keys`,
-// and `link` uses this slot only as that function's next.
-static KEYS_NEXT: Next<KeysFn> = unsafe { Next::new() };
-// SAFETY: `FillFn` is the signature of the build table's
-// `textures.registry_fill`, and `link` uses this slot only as that
-// function's next.
-static FILL_NEXT: Next<FillFn> = unsafe { Next::new() };
+
+/// The switch of the mod textures, of their two links: the content request
+/// and the UI registry's fill, which arm together or not at all. They need
+/// the key listing of [`TEMPLATES_FUSE`] as well, and pass the requests on
+/// while it is off.
+static TEXTURES_FUSE: Fuse = Fuse::new("mod textures");
+/// The switch of the mod templates, whose one link is the key listing,
+/// which lists the served UI images too while the mod textures are on.
+static TEMPLATES_FUSE: Fuse = Fuse::new("mod templates");
 
 type RequestFn = unsafe extern "system" fn(requester: *mut u8, requests: *mut Requests);
-type KeysFn = unsafe extern "system" fn(
-    out: *mut KeysOut,
-    database: *mut u8,
-    type_hash: u32,
-    found: *mut u32,
-) -> *mut KeysOut;
-type FillFn = unsafe extern "system" fn(registry: *mut u8);
 type SignalFn = unsafe extern "system" fn(event: *mut u8);
 
 /// The requests the game hands the content request, a slice.
@@ -174,52 +170,75 @@ const CHECKED: [pinned::Symbol; 8] = [
     pinned::textures::SIGNAL,
 ];
 
+/// The build's layout of the mod textures, read once; `None` turns them off
+/// by their fuse, naming what the build lacks.
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT
         .get_or_init(|| {
             if let Some(symbol) = CHECKED.iter().find(|s| !loader.code_holds(**s)) {
-                crate::log!(
-                    WARN,
-                    "mod textures off: {symbol} is not the code the loader knows"
-                );
+                let _off = loader.fuse_off(&TEXTURES_FUSE, symbol.id(), UNKNOWN_CODE);
                 return None;
             }
             if loader.offset(pinned::textures::KEY_SIZE) != Some(KEY) {
-                crate::log!(
-                    WARN,
-                    "mod textures off: this build's texture keys are not {KEY} bytes"
-                );
+                let id = pinned::textures::KEY_SIZE.id();
+                let _off = loader.fuse_off(&TEXTURES_FUSE, id, &format!("is not {KEY} bytes"));
                 return None;
             }
-            let o = |name: &str| loader.offset_by_name(&format!("textures.{name}"));
-            let signal = usize::try_from(loader.address(pinned::textures::SIGNAL)?).ok()?;
-            Some(Layout {
-                // SAFETY: the build table's `textures.signal` is the game's
-                // event signal with the `SignalFn` signature on this build,
-                // and its code held in `Loader::code_holds`.
-                signal: unsafe { core::mem::transmute::<usize, SignalFn>(signal) },
-                request_size: o("request_size")?,
-                request_hash: o("request_hash")?,
-                request_context: o("request_context")?,
-                request_offset: o("request_offset")?,
-                ring_records: o("ring_records")?,
-                ring_record_size: o("ring_record_size").filter(|&size| size <= RECORD_ROOM)?,
-                ring_record_context: o("ring_record_context").filter(|&at| {
-                    at > 0
-                        && at
-                            .checked_add(size_of::<[u8; 16]>())
-                            .zip(o("ring_record_size"))
-                            .is_some_and(|(end, size)| end <= size)
-                })?,
-                ring_head: o("ring_head")?,
-                ring_last: o("ring_last")?,
-                ring_tail: o("ring_tail")?,
-                ring_tail_next: o("ring_tail_next")?,
-                ring_event: o("ring_event")?,
-                registry_listed: o("registry_listed")?,
-            })
+            let read = read_layout(loader);
+            if read.is_none() {
+                let what = "are not all in this build, or a ring record runs past its room";
+                let _off = loader.fuse_off(&TEXTURES_FUSE, "the texture offsets", what);
+            }
+            read
         })
         .as_ref()
+}
+
+/// Why a hook of the textures does not link: its code is not what the
+/// table pins.
+const UNKNOWN_CODE: &str = "is not the code the loader knows";
+
+/// The build's offsets of the mod textures, once their code checked out;
+/// `None` when one is missing or a ring record would run past its room.
+fn read_layout(loader: &Loader) -> Option<Layout> {
+    let o = |name: &str| loader.offset_by_name(&format!("textures.{name}"));
+    let signal = usize::try_from(loader.address(pinned::textures::SIGNAL)?).ok()?;
+    let (ring_record_size, ring_record_context) =
+        (o("ring_record_size")?, o("ring_record_context")?);
+    if !record_fits(ring_record_size, ring_record_context) {
+        return None;
+    }
+    Some(Layout {
+        // SAFETY: the build table's `textures.signal` is the game's
+        // event signal with the `SignalFn` signature on this build,
+        // and its code held in `Loader::code_holds`.
+        signal: unsafe { core::mem::transmute::<usize, SignalFn>(signal) },
+        request_size: o("request_size")?,
+        request_hash: o("request_hash")?,
+        request_context: o("request_context")?,
+        request_offset: o("request_offset")?,
+        ring_records: o("ring_records")?,
+        ring_record_size,
+        ring_record_context,
+        ring_head: o("ring_head")?,
+        ring_last: o("ring_last")?,
+        ring_tail: o("ring_tail")?,
+        ring_tail_next: o("ring_tail_next")?,
+        ring_event: o("ring_event")?,
+        registry_listed: o("registry_listed")?,
+    })
+}
+
+/// Whether a ring's completion record of `size` bytes fits the loader's
+/// [`RECORD_ROOM`] and holds its 16-byte context at `context`, after the
+/// record's code byte.
+const fn record_fits(size: usize, context: usize) -> bool {
+    size <= RECORD_ROOM
+        && context > 0
+        && match context.checked_add(size_of::<[u8; 16]>()) {
+            Some(end) => end <= size,
+            None => false,
+        }
 }
 
 /// The hash a served `data` gets: its size, two FNV-1a words over it and
@@ -270,91 +289,78 @@ pub(crate) fn ready() -> bool {
         && RELISTED.load(Ordering::Acquire)
 }
 
-/// Links the content request, the key listing and the UI registry's fill
-/// on a client that serves UI images; on any side that serves templates of
-/// its own, the key listing alone when the images did not link it, so the
-/// game registers them.
+/// Links the key listing on any side that serves templates or UI images of
+/// its own, so the game registers them, and the content request and the UI
+/// registry's fill on a client that serves UI images.
 pub(crate) fn link(loader: &'static Loader) {
     let images = loader.side == Side::CLIENT
         && !crate::content::served::new_keys_of_type(UI_IMAGE).is_empty();
-    let mut keys_linked = false;
-    if images {
-        let _first = LOADED.set(loader);
-        if layout(loader).is_some() {
-            let none = HookFlags::NONE;
-            keys_linked = loader.link_feature(
-                "mod textures (content)",
-                Target::Pinned(pinned::textures::REQUEST),
-                &REQUEST_NEXT,
-                request as RequestFn,
-                none,
-            ) && loader.link_feature(
-                "mod textures (keys)",
-                Target::Pinned(pinned::textures::KEYS),
-                &KEYS_NEXT,
-                keys as KeysFn,
-                none,
-            );
-            let linked = keys_linked
-                && loader.link_feature(
-                    "mod textures (UI registry)",
-                    Target::Pinned(pinned::textures::REGISTRY_FILL),
-                    &FILL_NEXT,
-                    fill as FillFn,
-                    none,
-                );
-            if linked {
-                crate::log!(INFO, "mod textures: linked for the served UI images");
-            }
-        }
-    }
     let templates = !crate::content::served::new_keys_of_type(TEMPLATE).is_empty()
         || !crate::content::served::orphan_templates().is_empty();
-    if templates && !keys_linked {
-        link_templates(loader);
+    if !images && !templates {
+        return;
+    }
+    let listed = link_keys(loader);
+    if !images {
+        return;
+    }
+    if !listed {
+        let why = "is off, and the game would not list the served UI images";
+        let _off = loader.fuse_off(&TEXTURES_FUSE, TEMPLATES_FUSE.feature(), why);
+        return;
+    }
+    let _first = LOADED.set(loader);
+    if link_textures(loader) {
+        crate::log!(INFO, "mod textures: linked for the served UI images");
     }
 }
 
-/// Links the key listing alone, for served templates, once its code and key
-/// size check out.
-fn link_templates(loader: &'static Loader) {
+/// Links the content request and the UI registry's fill, both or none, once
+/// their code and layout check out; whether they linked.
+fn link_textures(loader: &Loader) -> bool {
+    if layout(loader).is_none() {
+        return false;
+    }
+    let none = HookFlags::NONE;
+    let (request_at, fill_at) = (
+        Target::Pinned(pinned::textures::REQUEST),
+        Target::Pinned(pinned::textures::REGISTRY_FILL),
+    );
+    loader.link_fused(&TEXTURES_FUSE, request_at, &REQUEST_NEXT, request, none)
+        && loader.link_fused(&TEXTURES_FUSE, fill_at, &FILL_NEXT, fill, none)
+}
+
+/// Links the key listing, for the served templates and UI images, once its
+/// code and key size check out; whether it linked.
+fn link_keys(loader: &Loader) -> bool {
     if !loader.code_holds(pinned::textures::KEYS) {
-        crate::log!(
-            WARN,
-            "mod templates off: {} is not the code the loader knows",
-            pinned::textures::KEYS
-        );
-        return;
+        let _off = loader.fuse_off(&TEMPLATES_FUSE, pinned::textures::KEYS.id(), UNKNOWN_CODE);
+        return false;
     }
     if loader.offset(pinned::textures::KEY_SIZE) != Some(KEY) {
-        crate::log!(
-            WARN,
-            "mod templates off: this build's resource keys are not {KEY} bytes"
-        );
-        return;
+        let id = pinned::textures::KEY_SIZE.id();
+        let _off = loader.fuse_off(&TEMPLATES_FUSE, id, &format!("is not {KEY} bytes"));
+        return false;
     }
-    let linked = loader.link_feature(
-        "mod templates (keys)",
-        Target::Pinned(pinned::textures::KEYS),
-        &KEYS_NEXT,
-        keys as KeysFn,
-        HookFlags::NONE,
-    );
+    let keys_at = Target::Pinned(pinned::textures::KEYS);
+    let linked = loader.link_fused(&TEMPLATES_FUSE, keys_at, &KEYS_NEXT, keys, HookFlags::NONE);
     if linked {
-        crate::log!(INFO, "mod templates: linked for the served templates");
+        crate::log!(INFO, "mod templates: the key listing is linked");
     }
+    linked
 }
 
-/// The switch of the mod textures.
-static TEXTURES_FUSE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("mod textures");
-
+/// The loader's link on the table's `textures.request`: answers the
+/// requests for served content and passes the rest on. Written by hand, not
+/// by `chain_detour!`, since it passes the rest of the chain only the
+/// requests it did not answer.
 unsafe extern "system" fn request(requester: *mut u8, requests: *mut Requests) {
     CONTENT_LINKED.store(true, Ordering::Release);
     let content = CONTENT.load();
     let layout = LAYOUT.get().copied().flatten();
     let Some(content) = content
         .as_ref()
-        .filter(|m| !m.is_empty() && !TEXTURES_FUSE.is_off())
+        .filter(|m| !m.is_empty() && !TEXTURES_FUSE.is_off() && !TEMPLATES_FUSE.is_off())
     else {
         // SAFETY: this detour runs only as the `textures.request` link, so
         // the slot holds the next function of that signature; the game's
@@ -535,31 +541,43 @@ unsafe fn post(layout: &Layout, requester: *mut u8, code: u8, context: [u8; 16])
     }
 }
 
-unsafe extern "system" fn keys(
-    out: *mut KeysOut,
-    database: *mut u8,
-    type_hash: u32,
-    found: *mut u32,
-) -> *mut KeysOut {
-    // SAFETY: this detour runs only as the `textures.keys` link, so the slot
-    // holds the next function of that signature; the game's arguments pass
-    // unchanged.
-    let result = unsafe { KEYS_NEXT.get()(out, database, type_hash, found) };
-    if !lists(type_hash, images_armed()) || out.is_null() {
-        return result;
+crate::engine::chains::chain_detour! {
+    /// The table's `textures.keys(out, database, type, found)`, the
+    /// database's key listing of a type: the served templates join it, and
+    /// so do the served UI images while the mod textures are on. It belongs
+    /// to the mod templates, so a fault in the textures leaves the
+    /// templates listed.
+    fn keys(out: *mut KeysOut, database: *mut u8, type_hash: u32, found: *mut u32) -> *mut KeysOut;
+    next KEYS_NEXT;
+    fuse &TEMPLATES_FUSE, "the keys";
+    |onward| {
+        let images = !TEXTURES_FUSE.is_off() && REQUEST_NEXT.wired().is_some();
+        // SAFETY: the game's own listing result, written by the rest of the
+        // chain, on the listing's thread.
+        unsafe { listed(onward, out, type_hash, images) }
     }
-    let _done = TEXTURES_FUSE.run("the keys", || {
-        // SAFETY: `out` is non-null by the check before it and is the hooked
-        // listing's result, which the listing has just written.
-        unsafe { append(out, type_hash) };
-    });
-    result
 }
 
-/// Whether the content request and the UI registry's fill are armed, without
-/// which a listed UI image could not load.
-fn images_armed() -> bool {
-    REQUEST_NEXT.wired().is_some() && FILL_NEXT.wired().is_some()
+/// The listing the rest of the chain `onward` writes to `out`, with the
+/// served keys of `type_hash` after the game's own when it lists them.
+///
+/// # Safety
+///
+/// - `out` is the game's own listing result, null or live and writable for
+///   the call, on the listing's thread, which alone touches it meanwhile.
+unsafe fn listed(
+    onward: &Onward<*mut KeysOut, impl Fn() -> *mut KeysOut>,
+    out: *mut KeysOut,
+    type_hash: u32,
+    images: bool,
+) -> *mut KeysOut {
+    let result = onward.call();
+    if lists(type_hash, images) && !out.is_null() {
+        // SAFETY: `out` is non-null by the check before it and is the
+        // listing's result, which the listing has just written.
+        unsafe { append(out, type_hash) };
+    }
+    result
 }
 
 /// Whether the listing of `type_hash` gets served keys: templates always,
@@ -695,40 +713,43 @@ fn with_aliases(keys: &mut Vec<[u8; KEY]>, aliases: &[([u8; 16], [u8; 16])]) {
     }
 }
 
-unsafe extern "system" fn fill(registry: *mut u8) {
-    if !RELISTED.load(Ordering::Acquire)
-        && !registry.is_null()
-        && let Some(layout) = LAYOUT.get().copied().flatten()
-    {
-        // The registry listed before the loader armed: list once more, so
-        // the served UI images join; the game skips keys it has.
-        // SAFETY: `registry` is non-null by the check before it and is the hooked
-        // fill's argument, used on the UI thread the game calls it on; its
-        // "listed" byte sits at the build table's `textures.registry_listed`
-        // offset, and only the fill reads it.
-        unsafe { write_at(registry, layout.registry_listed, 0u8) };
-        // SAFETY: this detour runs only as the `textures.registry_fill` link,
-        // so the slot holds the next function of that signature; the game's
-        // registry passes unchanged.
-        unsafe { FILL_NEXT.get()(registry) };
-        // SAFETY: `registry` is non-null by the check before it and is the hooked
-        // fill's argument, live for the call; its "listed" byte sits at the
-        // build table's `textures.registry_listed` offset.
-        let listed: u8 = unsafe { read_at(registry, layout.registry_listed) };
-        if listed == 1 {
-            RELISTED.store(true, Ordering::Release);
-            crate::log!(
-                INFO,
-                "mod textures: the UI registry knows the served images: {}",
-                LISTED.load(Ordering::Acquire)
-            );
+crate::engine::chains::chain_detour! {
+    /// The table's `textures.registry_fill(registry)`, the UI registry's
+    /// fill: once after arming, it lists again, so the served UI images
+    /// join. Every other call goes to the game at the cost of one load.
+    fn fill(registry: *mut u8) -> ();
+    next FILL_NEXT;
+    |onward| {
+        if RELISTED.load(Ordering::Acquire) || registry.is_null() {
+            return onward.call();
         }
-        return;
+        onward.run(&TEXTURES_FUSE, "the UI registry fill", |onward| {
+            let Some(layout) = LAYOUT.get().copied().flatten() else {
+                return onward.call();
+            };
+            // The registry listed before the loader armed: list once more,
+            // so the served UI images join; the game skips keys it has.
+            // SAFETY: `registry` is non-null by the check before it and is
+            // the hooked fill's argument, used on the UI thread the game
+            // calls it on; its "listed" byte sits at the build table's
+            // `textures.registry_listed` offset, and only the fill reads it.
+            unsafe { write_at(registry, layout.registry_listed, 0u8) };
+            onward.call();
+            // SAFETY: `registry` is non-null by the check before it and is
+            // the hooked fill's argument, live for the call; its "listed"
+            // byte sits at the build table's `textures.registry_listed`
+            // offset.
+            let listed: u8 = unsafe { read_at(registry, layout.registry_listed) };
+            if listed == 1 {
+                RELISTED.store(true, Ordering::Release);
+                crate::log!(
+                    INFO,
+                    "mod textures: the UI registry knows the served images: {}",
+                    LISTED.load(Ordering::Acquire)
+                );
+            }
+        });
     }
-    // SAFETY: this detour runs only as the `textures.registry_fill` link, so
-    // the slot holds the next function of that signature; the game's
-    // registry passes unchanged.
-    unsafe { FILL_NEXT.get()(registry) };
 }
 
 /// Reads the game's archive for a mod: the loader's own copy of `kfc`
@@ -742,6 +763,61 @@ pub(crate) fn content_of(hash: &ContentHash) -> Result<Vec<u8>, Status> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use enshwick_base::Relock;
+
+    /// The reason the status summary lists `feature` off for.
+    fn off_reason(feature: &str) -> Option<String> {
+        crate::engine::diag::parts_off()
+            .into_iter()
+            .find(|p| p.part == feature)
+            .map(|p| p.reason)
+    }
+
+    #[test]
+    fn a_ring_record_fits_only_inside_the_loaders_room_with_its_context_after_the_code() {
+        assert!(record_fits(RECORD_ROOM, RECORD_ROOM - 16));
+        assert!(record_fits(0x20, 1));
+        assert!(!record_fits(RECORD_ROOM + 1, 1), "past the loader's room");
+        assert!(!record_fits(0x20, 0), "the code byte comes first");
+        assert!(!record_fits(0x20, 0x11), "the context runs past the record");
+        assert!(!record_fits(0x20, usize::MAX), "an offset that overflows");
+    }
+
+    /// One test for both fuses, which a failed link turns off for the
+    /// process: the templates first, while the textures are still on.
+    #[test]
+    fn textures_and_templates_whose_code_does_not_hold_are_off_by_their_own_fuses() {
+        let loader = crate::start::tests::bare_loader();
+        assert!(!link_keys(&loader));
+        assert!(TEMPLATES_FUSE.is_off());
+        assert!(
+            !TEXTURES_FUSE.is_off(),
+            "the textures keep their own switch"
+        );
+        assert!(
+            off_reason("mod templates").is_some_and(|r| r.starts_with(pinned::textures::KEYS.id())),
+            "{:?}",
+            off_reason("mod templates")
+        );
+        assert!(!link_textures(&loader));
+        assert!(TEXTURES_FUSE.is_off());
+        assert!(
+            off_reason("mod textures").is_some_and(|r| r.starts_with(CHECKED[0].id())),
+            "{:?}",
+            off_reason("mod textures")
+        );
+        let mut chains = loader.chains.relock();
+        chains.seal();
+        assert!(chains.is_empty());
+    }
+
+    #[test]
+    fn the_key_listing_lists_templates_whether_or_not_the_textures_are_on() {
+        assert!(lists(TEMPLATE, false), "templates list without the images");
+        assert!(lists(TEMPLATE, true));
+        assert!(!lists(UI_IMAGE, false), "images list only while on");
+        assert!(lists(UI_IMAGE, true));
+    }
 
     #[test]
     fn every_client_table_offers_a_check_for_the_code_the_hooks_rely_on() {

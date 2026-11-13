@@ -1,15 +1,14 @@
 //! The loader's patch of each changed item: its stats and stack size, and
 //! the raise and kept size it notes.
 
-use core::ffi::c_void;
-
-use enshwick_core::abi::Status;
 use enshwick_core::content::changes::Field;
 use enshwick_gamedata::catalogue;
 use rustc_hash::FxHashMap;
 
 use super::{CHANGES, ItemPatch, on};
 use crate::content::data_changes::{ItemOffsets, Key, Raised, credited, edit_item, served};
+use crate::content::served::OwnPatch;
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use enshwick_base::Relock;
@@ -71,29 +70,17 @@ pub(super) fn item_offsets(loader: &Loader) -> ItemOffsets {
 }
 
 /// The loader's patch of an item: the base with its changed values.
-pub(super) unsafe extern "system" fn build_item(
-    base: *const u8,
-    base_len: usize,
-    user: *mut c_void,
-    out: *mut *const u8,
-    out_len: *mut usize,
-) -> Status {
-    // SAFETY: `user` is the `ItemPatch` `serve` leaked for this key, which
-    // lives for the process.
-    let patch = unsafe { &*user.cast::<ItemPatch>() };
-    let mut bytes = vec![0; base_len];
-    // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at `base`,
-    // unchanged for the call.
-    unsafe { enshwick_core::raw::read_bytes_at(base, 0, &mut bytes) };
-    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        changed_item(patch, &mut bytes);
-    }));
-    if built.is_err() {
-        return Status::REFUSED;
+impl OwnPatch for ItemPatch {
+    const SITE: &'static str = "an item patch";
+
+    fn fuse(&self) -> &Fuse {
+        &self.fuse
     }
-    // SAFETY: `run_patches` passes `out` and `out_len` pointing at locals,
-    // writable for the call.
-    unsafe { crate::content::served::hand_out(bytes, out, out_len) }
+
+    fn build(&self, mut bytes: Vec<u8>) -> Option<Vec<u8>> {
+        changed_item(self, &mut bytes);
+        Some(bytes)
+    }
 }
 
 /// Writes the changed stack size into the item `bytes`, and notes a raise.

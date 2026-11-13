@@ -392,3 +392,57 @@ fn a_served_read_whose_every_patch_fails_reads_a_vanilla_key_from_another_base_a
         Ok(vec![8])
     );
 }
+
+/// Runs `build` through [`patched`] under `fuse` on the base `[1, 2]`: the
+/// status and the bytes handed out.
+fn patch_with(
+    fuse: &Fuse,
+    build: impl FnOnce(Vec<u8>) -> Option<Vec<u8>>,
+) -> (Status, Option<Vec<u8>>) {
+    let base = [1u8, 2];
+    let (mut out, mut out_len) = (core::ptr::null::<u8>(), 0usize);
+    // SAFETY: `base` holds two readable bytes, and `out` and `out_len` are
+    // locals, writable for the call.
+    let status = unsafe {
+        patched(
+            fuse,
+            "a test patch",
+            (base.as_ptr(), base.len()),
+            (&raw mut out, &raw mut out_len),
+            build,
+        )
+    };
+    // SAFETY: a patch that built handed out `out_len` bytes at `out`, which
+    // stay for the process outside a build.
+    let made = (!out.is_null()).then(|| unsafe { core::slice::from_raw_parts(out, out_len) });
+    (status, made.map(<[u8]>::to_vec))
+}
+
+#[test]
+fn a_loader_patch_that_panics_turns_its_feature_off_and_refuses_from_then_on() {
+    static STACKS: Fuse = Fuse::new("test stacks");
+    let grown = patch_with(&STACKS, |mut bytes| {
+        bytes.push(3);
+        Some(bytes)
+    });
+    assert_eq!(grown, (Status::OK, Some(vec![1, 2, 3])));
+    assert_eq!(patch_with(&STACKS, |_| None), (Status::REFUSED, None));
+    assert!(!STACKS.is_off(), "a patch that builds nothing is no fault");
+    let broken = patch_with(&STACKS, |_| panic!("broken stack"));
+    assert_eq!(broken, (Status::REFUSED, None));
+    assert!(STACKS.is_off());
+    let mut ran = false;
+    let after = patch_with(&STACKS, |bytes| {
+        ran = true;
+        Some(bytes)
+    });
+    assert_eq!(after, (Status::REFUSED, None));
+    assert!(!ran, "an off feature's patch never runs");
+    let listed = crate::engine::diag::parts_off();
+    assert!(
+        listed
+            .iter()
+            .any(|p| p.part == "test stacks" && p.reason.contains("broken stack")),
+        "{listed:?}"
+    );
+}
