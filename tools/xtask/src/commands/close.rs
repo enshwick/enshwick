@@ -109,7 +109,12 @@ mod tests {
         write("api/changes/b.md", "### Fixed\n\n- Fix b.\n");
         write("api/changes/a.md", "### Added\n\n- Add a.\n");
         write("loader/CHANGELOG.md", head);
-        let packages = [package(LOADER, "loader"), package("api", "api")];
+        write("tool/Cargo.toml", "");
+        let packages = [
+            package(LOADER, "loader"),
+            package("api", "api"),
+            package("tool", "tool"),
+        ];
         let args = Args {
             date: "2026-11-13".to_owned(),
         };
@@ -117,6 +122,7 @@ mod tests {
         let read = |path: &str| std::fs::read_to_string(root.join(path)).unwrap();
         let (api, loader) = (read("api/CHANGELOG.md"), read("loader/CHANGELOG.md"));
         let left = root.join("api/changes").exists();
+        let tool_left_alone = !root.join("tool/CHANGELOG.md").exists();
         drop(std::fs::remove_dir_all(&root));
         assert_eq!(
             done,
@@ -135,6 +141,7 @@ mod tests {
             "{loader}"
         );
         assert!(!left, "the change files and their folder go");
+        assert!(tool_left_alone, "a package without a changelog is skipped");
     }
 
     #[test]
