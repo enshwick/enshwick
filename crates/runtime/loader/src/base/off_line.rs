@@ -110,7 +110,17 @@ pub(crate) fn skipped_off(
     loader
         .skipped
         .iter()
-        .filter(|skipped| skipped.counts_off(|id| loader.mods.iter().any(|m| m.id == id)))
+        .filter(|skipped| counts_off(loader, skipped))
+}
+
+/// Whether `skipped` counts as off on `loader`: all but a second copy of a
+/// mod it loaded.
+#[cfg(windows)]
+pub(crate) fn counts_off(
+    loader: &crate::engine::loader::Loader,
+    skipped: &crate::base::resolve::Skipped,
+) -> bool {
+    skipped.counts_off(|id| loader.mods.iter().any(|m| m.id == id))
 }
 
 /// What this server has off, by name: mods off, each mod's features off

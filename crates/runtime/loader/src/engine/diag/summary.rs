@@ -106,6 +106,21 @@ impl ModStatus {
     }
 }
 
+/// A mod skipped at start, in the summary.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SkippedMod {
+    /// The mod id.
+    pub id: String,
+    /// Its version.
+    pub version: String,
+    /// Its file relative to the game's folder.
+    pub file: String,
+    /// Why it does not load, as the log says it.
+    pub reason: String,
+    /// Whether it counts as off: all but a second copy of a loaded mod.
+    pub off: bool,
+}
+
 /// What mods serve to the game.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Served {
@@ -138,7 +153,7 @@ pub struct Summary {
     pub mods: Vec<ModStatus>,
     /// The mods skipped at start, which the summary lists after the loaded
     /// ones with their file and why.
-    pub skipped: Vec<crate::base::resolve::Skipped>,
+    pub skipped: Vec<SkippedMod>,
     /// The other mods' proxies that run beside the mods without the API.
     pub others: Vec<String>,
     /// Mods turned off, oldest first.
@@ -445,12 +460,9 @@ conflicts:"
         self.mods.len() + self.skipped_off().count()
     }
 
-    /// The mods skipped at start that count as off: all but a second copy
-    /// of a loaded mod.
-    fn skipped_off(&self) -> impl Iterator<Item = &crate::base::resolve::Skipped> {
-        self.skipped
-            .iter()
-            .filter(|s| s.counts_off(|id| self.mods.iter().any(|m| m.id == id)))
+    /// The mods skipped at start that count as off.
+    fn skipped_off(&self) -> impl Iterator<Item = &SkippedMod> {
+        self.skipped.iter().filter(|s| s.off)
     }
 
     /// A few lines for the console, in the reader's language.
@@ -487,7 +499,7 @@ conflicts:"
         for s in self.skipped_off().take(3) {
             lines.push(crate::engine::texts::fill(
                 "status.off",
-                &[("id", &s.file), ("reason", &s.reason.to_string())],
+                &[("id", &s.file), ("reason", &s.reason)],
             ));
         }
         for p in self.parts_off.iter().take(3) {

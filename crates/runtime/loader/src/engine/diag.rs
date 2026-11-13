@@ -19,7 +19,9 @@ pub use menu::{KeptLine, MenuNote, menu_line, menu_line_off};
 pub(crate) use summary::clock;
 #[cfg(windows)]
 pub(crate) use summary::{GAME_CRASHED, crash_heading};
-pub use summary::{HookStat, ModStatus, Served, Summary, duration, messages_line, part_line};
+pub use summary::{
+    HookStat, ModStatus, Served, SkippedMod, Summary, duration, messages_line, part_line,
+};
 
 use crate::engine::settings::Settings;
 use enshwick_base::Relock;
@@ -532,31 +534,26 @@ conflicts:
 
     #[test]
     fn a_mod_skipped_at_start_shows_with_its_file_and_reason_and_a_second_copy_is_not_counted() {
-        use crate::base::resolve::{Skip, Skipped};
-
-        let skipped = |id: &str, file: &str, reason| Skipped {
+        let skipped = |id: &str, file: &str, reason: &str, off| SkippedMod {
             id: id.into(),
             version: "0.2.0".into(),
-            label: id.into(),
             file: file.into(),
-            reason,
+            reason: reason.into(),
+            off,
         };
         let mut s = summary();
         s.skipped = vec![
             skipped(
                 "you.safes",
                 "you.safes/you.safes.dll",
-                Skip::Missing {
-                    id: "you.locks".into(),
-                },
+                "requires you.locks, which is not loaded",
+                true,
             ),
             skipped(
                 "you.lockers",
                 "old/you.lockers.dll",
-                Skip::Copy {
-                    id: "you.lockers".into(),
-                    first: 0,
-                },
+                "a second copy of you.lockers, after #0",
+                false,
             ),
         ];
         let text = s.render();
@@ -577,14 +574,6 @@ conflicts:
         assert!(
             !short.contains("old/you.lockers.dll"),
             "a second copy of a loaded mod is not off: {short}"
-        );
-        s.skipped[1].reason = Skip::Copy {
-            id: "you.gone".into(),
-            first: 0,
-        };
-        assert!(
-            s.render().contains("mods: 1 of 4 running"),
-            "a copy of a mod that did not load counts as off"
         );
     }
 

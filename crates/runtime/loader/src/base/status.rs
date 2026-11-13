@@ -154,7 +154,17 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
         last_crash: crate::engine::crash::last().map(str::to_owned),
         at: crate::engine::diag::now(),
         mods,
-        skipped: loader.skipped.clone(),
+        skipped: loader
+            .skipped
+            .iter()
+            .map(|s| crate::engine::diag::SkippedMod {
+                id: s.id.clone(),
+                version: s.version.clone(),
+                file: s.file.clone(),
+                reason: s.reason.to_string(),
+                off: crate::base::off_line::counts_off(loader, s),
+            })
+            .collect(),
         others: crate::engine::others::lines(&loader.others),
         turned_off: crate::engine::diag::history(),
         parts_off: crate::engine::diag::parts_off(),
