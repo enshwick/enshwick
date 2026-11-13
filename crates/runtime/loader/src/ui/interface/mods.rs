@@ -219,17 +219,17 @@ pub(super) fn frame() -> u64 {
 
 /// Links the menu hooks; the screen draws from the interface hook.
 pub(super) fn link(loader: &Loader, engine: &Engine) {
-    for (site, handler, part, id) in [
+    for (site, handler, fuse, id) in [
         (
             engine.main_menu_site,
             main_menu as enshwick_core::abi::MidHookFn,
-            Part::MAIN_MENU,
+            &MAIN_MENU_FUSE,
             pinned::ui::MAIN_MENU_SITE,
         ),
         (
             engine.pause_menu_site,
             pause_menu,
-            Part::PAUSE_MENU,
+            &PAUSE_MENU_FUSE,
             pinned::ui::PAUSE_MENU_SITE,
         ),
     ] {
@@ -237,7 +237,7 @@ pub(super) fn link(loader: &Loader, engine: &Engine) {
             continue;
         }
         loader.link_mid(
-            super::part_fuse(part),
+            fuse,
             Target::Found(id.id(), Some(site)),
             handler,
             enshwick_core::abi::HookFlags::NONE,
@@ -274,13 +274,22 @@ fn entry(from: u8, draw: impl FnOnce(&Engine, &super::engine::UiText) -> bool) {
 }
 
 /// Whether the mismatch screen can show on this build: the interface draws
-/// frames, the main menu's entry has run, and neither it nor the screen
-/// turned off.
+/// frames, the main menu's entry has run, and neither the interface, the
+/// entry nor the screen turned off.
 pub(crate) fn mismatch_screen_on() -> bool {
     FRAME.load(Ordering::Relaxed) > 0
         && MAIN_SEEN.load(Ordering::Relaxed) > 0
-        && !MAIN_MENU_FUSE.is_off()
-        && !super::MODS_SCREEN_FUSE.is_off()
+        && screen_drawn(
+            &super::INTERFACE_FUSE,
+            &MAIN_MENU_FUSE,
+            &super::MODS_SCREEN_FUSE,
+        )
+}
+
+/// Whether the Mods screen draws: the `interface` it draws in, the main
+/// menu's `entry` that opens it and the `screen` itself are on.
+pub(super) fn screen_drawn(interface: &Fuse, entry: &Fuse, screen: &Fuse) -> bool {
+    [interface, entry, screen].iter().all(|fuse| !fuse.is_off())
 }
 
 crate::engine::mid::mid_handler! {

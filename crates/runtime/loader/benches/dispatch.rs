@@ -174,9 +174,10 @@ fn fuse(c: &mut Criterion) {
             onward.run(&FUSE, "bench", |_| black_box(0))
         });
     });
-    // Six parts of one detour, each under its own fuse, that stop at the
-    // first panic: a guard per part, and one guard for the walk.
-    let parts = [&FUSE; 6];
+    // Six parts of one detour, each under its own static fuse as the
+    // interface's windows are, that stop at the first panic: a guard per
+    // part, and one guard for the walk.
+    let parts = [&PART_1, &PART_2, &PART_3, &PART_4, &PART_5, &PART_6];
     group.bench_function("six_parts_by_hand", |b| {
         let drew = |fuse: &Fuse| fuse.is_off() || fuse.run("bench", || black_box(7)).is_some();
         b.iter(|| parts.iter().all(|fuse| drew(fuse)));
@@ -185,7 +186,7 @@ fn fuse(c: &mut Criterion) {
         b.iter(|| {
             Fuse::run_in_turn(
                 &parts,
-                "bench",
+                |_| "bench",
                 |fuse| *fuse,
                 |_| {
                     black_box(7);
@@ -195,6 +196,14 @@ fn fuse(c: &mut Criterion) {
     });
     group.finish();
 }
+
+/// The six parts of [`fuse`]'s walks, each a static of its own.
+static PART_1: Fuse = Fuse::new("bench part 1");
+static PART_2: Fuse = Fuse::new("bench part 2");
+static PART_3: Fuse = Fuse::new("bench part 3");
+static PART_4: Fuse = Fuse::new("bench part 4");
+static PART_5: Fuse = Fuse::new("bench part 5");
+static PART_6: Fuse = Fuse::new("bench part 6");
 
 /// Whether a mod watches the hits of [`fuse`]'s gated case: none does.
 static WATCHED: AtomicBool = AtomicBool::new(false);

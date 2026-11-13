@@ -158,9 +158,9 @@ impl Ui {
     /// # Errors
     ///
     /// [`UiError::Refused`] past [`MAX_MARKERS`] or for a marker type the
-    /// registry does not list; [`UiError::Unavailable`] for a marker with a
-    /// type where the registry does not read. The mod's markers stay as
-    /// they were.
+    /// registry does not list; [`UiError::Unavailable`] on a server, where
+    /// the map markers are off, or for a marker with a type where the
+    /// registry does not read. The mod's markers stay as they were.
     ///
     /// # Examples
     ///

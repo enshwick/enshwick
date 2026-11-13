@@ -54,8 +54,11 @@ fn missing(site: bool, in_table: bool, look: bool) -> Option<Missing> {
             Missing::Entry(id)
         });
     }
-    (!look).then_some(Missing::Looks)
+    (!look).then_some(LOOK)
 }
+
+/// The version line's look the line needs from the game's look bundle.
+const LOOK: Missing = Missing::Reflected("the look bundle", "legalText or fontSizes.xsmall");
 
 /// The line for this frame in the frame's text arena, built again only when
 /// the count of mods off changed.
@@ -116,6 +119,11 @@ mod tests {
         assert_eq!(missing(true, true, true), None);
         assert_eq!(missing(false, false, false), Some(Missing::Entry(id)));
         assert_eq!(missing(false, true, true), Some(Missing::Bytes(id)));
-        assert_eq!(missing(true, true, false), Some(Missing::Looks));
+        let no_look = missing(true, true, false).map(|why| why.to_string());
+        assert_eq!(
+            no_look.as_deref(),
+            Some("legalText or fontSizes.xsmall of the look bundle is not reflected on this build"),
+            "the fields it lacks, apart from the whole interface's looks"
+        );
     }
 }

@@ -233,15 +233,16 @@ impl Fuse {
         }
     }
 
-    /// Runs `work` on each of `items` whose fuse is on, in order, as `site`,
-    /// under one unwind guard, until one panics: that item's fuse turns off
-    /// and the walk ends there for this call. For work whose later items
-    /// build on state an item that panicked part way may have left broken,
-    /// such as the game's window stack; [`Fuse::run_each`] goes on instead.
+    /// Runs `work` on each of `items` whose fuse is on, in order, under one
+    /// unwind guard, until one panics: that item's fuse turns off, naming
+    /// the item's `site`, and the walk ends there for this call. For work
+    /// whose later items build on state an item that panicked part way may
+    /// have left broken, such as the game's window stack; [`Fuse::run_each`]
+    /// goes on instead.
     #[inline]
     pub fn run_in_turn<'fuse, T>(
         items: &[T],
-        site: &str,
+        site: impl Fn(&T) -> &str,
         fuse: impl Fn(&T) -> &'fuse Fuse,
         mut work: impl FnMut(&T),
     ) {
@@ -255,7 +256,7 @@ impl Fuse {
             }
         }));
         if let (Err(payload), Some(item)) = (walked, items.get(running.get())) {
-            fuse(item).panicked(site, payload.as_ref());
+            fuse(item).panicked(site(item), payload.as_ref());
         }
     }
 
@@ -381,11 +382,12 @@ mod tests {
             Fuse::new("turn second"),
             Fuse::new("turn third"),
         ];
+        let sites = ["the first draw", "the second draw", "the third draw"];
         let mut ran = Vec::new();
         let walk = |ran: &mut Vec<usize>| {
             Fuse::run_in_turn(
                 &[0, 1, 2],
-                "a walk in turn",
+                |&i| sites[i],
                 |&i| &fuses[i],
                 |&i| {
                     ran.push(i);
@@ -397,6 +399,13 @@ mod tests {
         assert_eq!(ran, [0, 1], "the walk ends at the panic");
         let off: Vec<_> = fuses.iter().map(Fuse::is_off).collect();
         assert_eq!(off, [false, true, false]);
+        let listed = crate::engine::diag::parts_off();
+        let second = listed.iter().find(|p| p.part == "turn second");
+        assert_eq!(
+            second.map(|p| p.reason.as_str()),
+            Some("the loader panicked in the second draw: broken 1"),
+            "the fault names the site of the item that panicked"
+        );
         walk(&mut ran);
         assert_eq!(ran, [0, 1, 0, 2], "the next walk passes the blown item");
     }

@@ -15,7 +15,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub use menu::{KeptLine, MenuNote, menu_line, menu_line_off};
+pub use menu::{KeptLine, MenuNote, menu_line};
 pub(crate) use summary::clock;
 #[cfg(windows)]
 pub(crate) use summary::{GAME_CRASHED, crash_heading};
@@ -264,18 +264,6 @@ mod tests {
             menu_line("1.0.0", 2, 0, &[MenuNote::Developer, MenuNote::BadSettings]),
             "Enshwick 1.0.0 · mods: 2 · enshwick.toml has errors, see the log · DEVELOPER TOOLS ON"
         );
-    }
-
-    #[test]
-    fn the_menu_line_turns_off_alone_without_its_site_or_its_look() {
-        assert_eq!(menu_line_off(true, true, true), None);
-        let no_site = menu_line_off(false, false, true).unwrap();
-        assert!(no_site.contains("has no ui.legal_line_site"), "{no_site}");
-        let moved = menu_line_off(false, true, true).unwrap();
-        assert!(moved.contains("does not match"), "{moved}");
-        let no_look = menu_line_off(true, true, false).unwrap();
-        assert!(no_look.contains("legalText"), "{no_look}");
-        assert_eq!(menu_line_off(false, false, false), Some(no_site));
     }
 
     #[test]

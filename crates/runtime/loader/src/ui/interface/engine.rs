@@ -709,8 +709,10 @@ impl Optional {
                 loader.fuse_off(fuse, why.id(), &why.reason());
             }
         };
-        for (part, why) in parts_off.iter() {
-            off(super::part_fuse(*part))(why);
+        for (part, fuse) in Part::ALL.iter().zip(super::PART_FUSES) {
+            if let Some((_, why)) = parts_off.iter().find(|(off, _)| off == part) {
+                off(fuse)(why);
+            }
         }
         Self {
             menu: menu.ok(),

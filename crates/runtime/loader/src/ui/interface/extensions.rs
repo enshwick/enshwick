@@ -12,6 +12,7 @@ use std::sync::atomic::Ordering;
 use enshwick_core::abi::{Header, Side, Status, Str, UiExtension, UiFrame, UiFrameFn};
 use enshwick_gamedata::catalogue;
 
+use crate::engine::builds::ABSENT;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Registered};
 use crate::engine::mod_index::ModIndex;
@@ -25,8 +26,8 @@ use super::{DRAWING, Drawing, NEXT_TOKEN, copy};
 static SCREEN_NAMES_FUSE: Fuse = Fuse::new("open screen names");
 /// The interaction prompt in what mods' frames read.
 static PROMPT_FUSE: Fuse = Fuse::new("interaction prompt reads");
-/// Why a build lacks a part of what mods' frames read.
-const LACKS: &str = "this build's table lacks it";
+/// Why a reflected type the frames read fails on a build without it.
+const NOT_REFLECTED: &str = "is not reflected on this build";
 
 /// Each edge's window name, by edge, outside the `enshwick/<mod id>/` names
 /// of mods' own windows.
@@ -203,21 +204,29 @@ pub(super) fn seal() {
     let _sealed = EXTENSIONS.seal();
 }
 
-pub(super) fn link(loader: &Loader) {
+/// Turns a feature of what mods' frames read off: the feature, the entry
+/// the build lacks and why, as [`Loader::fuse_off`] takes them.
+type OffFn<'a> = &'a dyn Fn(&'static Fuse, &str, &str);
+
+/// Seals the extensions and reads where the screen, the prompt and the
+/// hosts sit. What this build lacks is listed off when mods' frames, HUD
+/// items (`frames`) or extensions read it, else only logged.
+pub(super) fn link(loader: &Loader, frames: bool) {
     let extensions = EXTENSIONS.seal();
-    let table = |id: pinned::Constant| loader.offset(id).ok_or(id.id());
-    let found = (|| {
-        Ok::<_, &str>(Linked {
-            context_state: table(pinned::map::CONTEXT_STATE)?,
-            state_play_data: table(pinned::map::STATE_PLAY_DATA)?,
-            hud_screen: table(pinned::ui::HUD_SCREEN)?,
-            names: screen_names(loader),
-            prompt: prompt_at(loader),
-            screen_host: loader.offset(pinned::ui::SCREEN_HOST),
-            open_screens: crate::actions::controls::open_screens(loader).unwrap_or(0),
-        })
-    })();
-    match found {
+    let used = frames || !extensions.is_empty();
+    let off = |fuse: &'static Fuse, id: &str, reason: &str| {
+        if used {
+            loader.fuse_off(fuse, id, reason);
+        } else {
+            let reason = loader.build.reason(id, reason);
+            crate::log!(
+                INFO,
+                "interface: no mod reads {}, which this build lacks: {id} {reason}",
+                fuse.feature()
+            );
+        }
+    };
+    match linked(loader, &off) {
         Ok(linked) => {
             let _first = LINKED.set(linked);
             if !extensions.is_empty() {
@@ -228,22 +237,37 @@ pub(super) fn link(loader: &Loader) {
                 );
             }
         }
-        Err(id) => {
-            loader.fuse_off(&super::READS_FUSE, id, LACKS);
-            loader.fuse_off(&super::EXTENSIONS_FUSE, id, LACKS);
-        }
+        Err(id) => screen_lacked(id, &off),
     }
 }
 
-fn screen_names(loader: &Loader) -> Vec<&'static str> {
+/// Where the screen, the prompt and the hosts sit on this build, or the
+/// first table entry the screen reads lack.
+fn linked(loader: &Loader, off: OffFn<'_>) -> Result<Linked, &'static str> {
+    let table = |id: pinned::Constant| loader.offset(id).ok_or(id.id());
+    Ok(Linked {
+        context_state: table(pinned::map::CONTEXT_STATE)?,
+        state_play_data: table(pinned::map::STATE_PLAY_DATA)?,
+        hud_screen: table(pinned::ui::HUD_SCREEN)?,
+        names: screen_names(loader, off),
+        prompt: prompt_at(loader, off),
+        screen_host: loader.offset(pinned::ui::SCREEN_HOST),
+        open_screens: crate::actions::controls::open_screens(loader).unwrap_or(0),
+    })
+}
+
+/// Turns the screen reads off, and the screen extensions placed by them,
+/// for the table entry `id` this build lacks.
+fn screen_lacked(id: &str, off: OffFn<'_>) {
+    off(&super::READS_FUSE, id, ABSENT);
+    off(&super::EXTENSIONS_FUSE, id, ABSENT);
+}
+
+fn screen_names(loader: &Loader, off: OffFn<'_>) -> Vec<&'static str> {
     let screens = catalogue::type_name(catalogue::ids::HUD_SCREEN_TYPE);
     let mut names = vec![""; usize::from(u8::MAX) + 1];
     let Ok(info) = loader.reflection.type_info(screens) else {
-        loader.fuse_off(
-            &SCREEN_NAMES_FUSE,
-            screens,
-            "is not reflected on this build",
-        );
+        off(&SCREEN_NAMES_FUSE, screens, NOT_REFLECTED);
         return names;
     };
     for constant in info.enum_values() {
@@ -259,7 +283,7 @@ fn screen_names(loader: &Loader) -> Vec<&'static str> {
 
 /// Where the play data keeps the interaction prompt, or `None` with its
 /// feature off when the table lacks an entry of it.
-fn prompt_at(loader: &Loader) -> Option<PromptAt> {
+fn prompt_at(loader: &Loader, off: OffFn<'_>) -> Option<PromptAt> {
     let table = |id: pinned::Constant| loader.offset(id).ok_or(id.id());
     let found = (|| {
         Ok::<_, &str>(PromptAt {
@@ -268,11 +292,7 @@ fn prompt_at(loader: &Loader) -> Option<PromptAt> {
             valid: table(pinned::ui::PROMPT_VALID)?,
         })
     })();
-    found
-        .inspect_err(|id| {
-            loader.fuse_off(&PROMPT_FUSE, id, LACKS);
-        })
-        .ok()
+    found.inspect_err(|id| off(&PROMPT_FUSE, id, ABSENT)).ok()
 }
 
 /// Runs `read` only for the in-game app state: a menu or loading frame may
@@ -539,22 +559,70 @@ unsafe fn run(registered: Registered<UiFrameFn>, context: usize, edge: u32, read
 mod tests {
     use super::*;
 
+    /// What `off` was asked to turn off: the feature, entry and reason.
+    type Asked = RefCell<Vec<(&'static str, String, String)>>;
+
+    fn recorder(asked: &Asked) -> impl Fn(&'static Fuse, &str, &str) + '_ {
+        |fuse, id, reason| {
+            asked
+                .borrow_mut()
+                .push((fuse.feature(), id.to_owned(), reason.to_owned()));
+        }
+    }
+
     #[test]
     fn a_build_without_the_screens_reflected_names_none_and_lists_the_names_off() {
-        let names = screen_names(&crate::start::tests::bare_loader());
+        let asked = Asked::default();
+        let names = screen_names(&crate::start::tests::bare_loader(), &recorder(&asked));
         assert_eq!(
             names.len(),
             usize::from(u8::MAX) + 1,
             "a slot per screen byte"
         );
         assert!(names.iter().all(|name| name.is_empty()));
-        assert!(SCREEN_NAMES_FUSE.is_off());
+        let screens = catalogue::type_name(catalogue::ids::HUD_SCREEN_TYPE);
+        assert_eq!(
+            asked.into_inner(),
+            [(
+                SCREEN_NAMES_FUSE.feature(),
+                screens.to_owned(),
+                NOT_REFLECTED.to_owned()
+            )]
+        );
     }
 
     #[test]
     fn a_build_without_the_prompt_reads_none_and_lists_the_prompt_off() {
-        assert!(prompt_at(&crate::start::tests::bare_loader()).is_none());
-        assert!(PROMPT_FUSE.is_off());
+        let asked = Asked::default();
+        assert!(prompt_at(&crate::start::tests::bare_loader(), &recorder(&asked)).is_none());
+        assert_eq!(
+            asked.into_inner(),
+            [(
+                PROMPT_FUSE.feature(),
+                pinned::ui::PROMPT_TITLE.id().to_owned(),
+                ABSENT.to_owned()
+            )],
+            "a missing row passes the build's diagnosis, not a text of its own"
+        );
+    }
+
+    #[test]
+    fn a_build_without_the_screen_reads_turns_them_and_the_extensions_off() {
+        let asked = Asked::default();
+        let lacked = linked(&crate::start::tests::bare_loader(), &recorder(&asked));
+        let Err(id) = lacked else {
+            panic!("a bare build has no screen reads");
+        };
+        screen_lacked(id, &recorder(&asked));
+        let features: Vec<_> = asked.borrow().iter().map(|(f, ..)| *f).collect();
+        assert_eq!(
+            features,
+            [
+                super::super::READS_FUSE.feature(),
+                super::super::EXTENSIONS_FUSE.feature()
+            ]
+        );
+        assert!(asked.borrow().iter().all(|(_, _, reason)| reason == ABSENT));
     }
 
     #[test]

@@ -23,6 +23,7 @@ mod extensions;
 mod map;
 mod menu_line;
 mod mods;
+mod off;
 
 use core::cell::{Cell, RefCell};
 use std::sync::OnceLock;
@@ -44,6 +45,7 @@ use crate::engine::chains::{Next, Onward};
 use crate::engine::fuse::Fuse;
 use crate::engine::interface_parts::Part;
 use crate::engine::loader::{Loader, Registered, Target};
+use off::{PART_FUSES, dialogs_drawn, drawn_no_more, parts_off_with_interface};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -259,32 +261,6 @@ static MODS_SCREEN_FUSE: Fuse = Fuse::new("Mods screen");
 static DIALOGS_FUSE: Fuse = Fuse::new("dialogs");
 /// The HUD part: its link on the game's HUD and the mods' HUD items.
 static HUD_FUSE: Fuse = Fuse::new(Part::HUD.name);
-/// The feature of each of the interface's optional parts in [`Part::ALL`]:
-/// its links and its work run under it.
-static PART_FUSES: [(Part, &Fuse); 3] = [
-    (Part::MAIN_MENU, &mods::MAIN_MENU_FUSE),
-    (Part::PAUSE_MENU, &mods::PAUSE_MENU_FUSE),
-    (Part::HUD, &HUD_FUSE),
-];
-
-/// The feature of `part`; for a part [`PART_FUSES`] lacks, the one its
-/// name keeps.
-fn part_fuse(part: Part) -> &'static Fuse {
-    PART_FUSES
-        .iter()
-        .find(|(listed, _)| *listed == part)
-        .map_or_else(|| Fuse::named(part.name), |&(_, fuse)| fuse)
-}
-
-/// Whether the dialogs draw in game: the interface and its dialogs are on.
-fn dialogs_drawn() -> bool {
-    both_on(&INTERFACE_FUSE, &DIALOGS_FUSE)
-}
-
-/// Whether `outer` and `inner`, a part drawn inside it, are both on.
-fn both_on(outer: &Fuse, inner: &Fuse) -> bool {
-    !outer.is_off() && !inner.is_off()
-}
 
 /// Frames a text copied into the arena stays readable.
 const ARENA_FRAMES: usize = 3;
@@ -500,6 +476,7 @@ pub(crate) fn link(loader: &'static Loader) {
         Ok(engine) => engine,
         Err(missing) => {
             loader.fuse_off(&INTERFACE_FUSE, missing.id(), &missing.reason());
+            parts_off_with_interface();
             return;
         }
     };
@@ -509,7 +486,7 @@ pub(crate) fn link(loader: &'static Loader) {
         menu_line::link(loader, engine);
     }
     if ENGINE.get().is_some_and(Engine::has_hud) {
-        link_hud(loader);
+        link_hud(loader, &HUD_FUSE);
     }
     if loader.link_fused(
         &INTERFACE_FUSE,
@@ -522,15 +499,17 @@ pub(crate) fn link(loader: &'static Loader) {
             INFO,
             "interface: {count} frame and {hud_count} HUD callbacks from mods"
         );
-        extensions::link(loader);
+        extensions::link(loader, count + hud_count > 0);
+    } else {
+        parts_off_with_interface();
     }
 }
 
-/// Links the HUD part under the feature its draw runs under, so a panic
-/// there wires the chain past it.
-fn link_hud(loader: &Loader) -> bool {
+/// Links the HUD part under `feature`, [`HUD_FUSE`] outside tests: the
+/// feature its draw runs under, so a panic there wires the chain past it.
+fn link_hud(loader: &Loader, feature: &'static Fuse) -> bool {
     loader.link_fused(
-        &HUD_FUSE,
+        feature,
         Target::Pinned(pinned::ui::HUD),
         &HUD_NEXT,
         hud_detour as HudFn,
@@ -587,6 +566,9 @@ unsafe extern "system" fn detour(state: *mut u8) {
         // `ui.popup`'s chain, which `onward` calls with `state`.
         unsafe { frame(state, next, onward) }
     });
+    if !dialogs_drawn() {
+        drawn_no_more();
+    }
 }
 
 /// One frame of the interface: the game's popup through `onward`, then the
@@ -646,7 +628,7 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
     };
     Fuse::run_in_turn(
         &DRAWS,
-        "the interface's windows",
+        |draw| draw.site,
         |draw| draw.fuse,
         |draw| {
             // SAFETY: `draw` is one of `DRAWS`, run in their order, inside the
@@ -687,6 +669,8 @@ struct Drawn<'frame> {
 /// One of the loader's windows, a feature of its own.
 struct Draw {
     fuse: &'static Fuse,
+    /// Where a panic came from, as its fault names it.
+    site: &'static str,
     /// Draws the window.
     ///
     /// # Safety
@@ -704,28 +688,33 @@ struct Draw {
 static DRAWS: [Draw; 6] = [
     Draw {
         fuse: &FRAMES_FUSE,
+        site: "the mods' frames",
         run: |drawn| frames(drawn.engine, drawn.context, drawn.reads),
     },
     Draw {
         fuse: &EXTENSIONS_FUSE,
+        site: "the screen extensions' draw",
         // SAFETY: `Draw::run`'s contract, and `frames` closed every window
         // a mod's callback left open.
         run: |drawn| unsafe { extensions::draw(drawn.engine, drawn.context, drawn.reads) },
     },
     Draw {
         fuse: &DEMO_FUSE,
+        site: "the demo's draw",
         // SAFETY: `Draw::run`'s contract, and `extensions::draw` ends each
         // window before it returns.
         run: |drawn| unsafe { demo::draw(drawn.engine, drawn.context) },
     },
     Draw {
         fuse: &CARRIED_FUSE,
+        site: "the carried windows' draw",
         // SAFETY: `Draw::run`'s contract, and `demo::draw` ends its window
         // before it returns.
         run: |drawn| unsafe { carried::draw(drawn.engine, drawn.context) },
     },
     Draw {
         fuse: &MODS_SCREEN_FUSE,
+        site: "the Mods screen's draw",
         run: |drawn| {
             if let Some(loader) = crate::engine::loader::loader() {
                 // SAFETY: `Draw::run`'s contract, `carried::draw` ends its
@@ -737,6 +726,7 @@ static DRAWS: [Draw; 6] = [
     },
     Draw {
         fuse: &DIALOGS_FUSE,
+        site: "the dialogs' draw",
         // SAFETY: `Draw::run`'s contract, and `drawn.next` is the rest of
         // `ui.popup`'s chain.
         run: |drawn| unsafe { dialog::draw(drawn.engine, drawn.next, drawn.context) },

@@ -417,7 +417,8 @@ call replaces them all, and `clear_markers` takes them off. It works from any
 thread and copies what it is handed. By default a marker uses one of the
 game's custom marker types with a label. The compass does not show them.
 When the game build lacks a part of the map's layout, the markers stay off
-and `set_markers` has no effect. The log and the Mods screen say why.
+and `set_markers` returns `UiError::Unavailable`. The log and the Mods
+screen say why.
 
 ```rust
 use enshwick::ui::{Marker, MarkerColor, Ui};

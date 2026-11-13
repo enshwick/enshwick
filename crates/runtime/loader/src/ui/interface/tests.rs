@@ -45,53 +45,62 @@ fn the_arena_turns_once_a_frame_whichever_hook_is_wired() {
 
 #[test]
 fn a_hud_that_cannot_link_is_off_for_its_draw_too() {
+    static HUD: Fuse = Fuse::new("test HUD");
     let loader = crate::start::tests::bare_loader();
-    assert!(!link_hud(&loader));
+    assert!(!link_hud(&loader, &HUD));
     assert!(
-        HUD_FUSE.is_off(),
+        HUD.is_off(),
         "the draw runs under the feature whose link failed"
     );
     let listed = crate::engine::diag::parts_off();
-    assert!(
-        listed.iter().any(|p| p.part == Part::HUD.name),
-        "{listed:?}"
-    );
+    assert!(listed.iter().any(|p| p.part == HUD.feature()), "{listed:?}");
 }
 
 #[test]
 fn each_optional_part_turns_off_the_feature_its_work_runs_under() {
     let same = |a: &Fuse, b: &Fuse| core::ptr::from_ref(a) == core::ptr::from_ref(b);
-    for part in Part::ALL {
-        let fuse = part_fuse(part);
-        assert_eq!(fuse.feature(), part.name);
+    for (part, fuse) in Part::ALL.iter().zip(PART_FUSES) {
+        assert_eq!(fuse.feature(), part.name, "in the order of Part::ALL");
         assert!(
             !same(fuse, Fuse::named(part.name)),
             "{} has a feature of its own, not one found by name",
             part.name
         );
     }
-    assert!(same(part_fuse(Part::MAIN_MENU), &mods::MAIN_MENU_FUSE));
-    assert!(same(part_fuse(Part::PAUSE_MENU), &mods::PAUSE_MENU_FUSE));
-    assert!(same(part_fuse(Part::HUD), &HUD_FUSE));
+    assert!(same(PART_FUSES[2], &HUD_FUSE));
 }
 
 #[test]
-fn a_build_without_the_screen_reads_turns_them_and_the_extensions_off() {
-    let loader = crate::start::tests::bare_loader();
-    extensions::link(&loader);
-    assert!(READS_FUSE.is_off(), "frames then read no screen");
-    assert!(EXTENSIONS_FUSE.is_off());
+fn the_mods_screen_shows_only_while_the_interface_its_entry_and_itself_are_on() {
+    let fuses = || {
+        [
+            Fuse::new("test interface"),
+            Fuse::new("test entry"),
+            Fuse::new("test screen"),
+        ]
+    };
+    let [interface, entry, screen] = fuses();
+    assert!(mods::screen_drawn(&interface, &entry, &screen));
+    for off in 0..3 {
+        let all = fuses();
+        all[off].blow("a test");
+        let [interface, entry, screen] = &all;
+        assert!(!mods::screen_drawn(interface, entry, screen), "{off} off");
+    }
 }
 
 #[test]
 fn dialogs_draw_in_game_only_while_the_interface_and_its_dialogs_are_on() {
     let (interface, dialogs) = (Fuse::new("test interface"), Fuse::new("test dialogs"));
-    assert!(both_on(&interface, &dialogs));
+    assert!(off::both_on(&interface, &dialogs));
     dialogs.blow("a test");
-    assert!(!both_on(&interface, &dialogs));
+    assert!(!off::both_on(&interface, &dialogs));
     let (interface, dialogs) = (Fuse::new("test interface"), Fuse::new("test dialogs"));
     interface.blow("a test");
-    assert!(!both_on(&interface, &dialogs), "the interface draws them");
+    assert!(
+        !off::both_on(&interface, &dialogs),
+        "the interface draws them"
+    );
 }
 
 #[test]

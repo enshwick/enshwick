@@ -161,6 +161,16 @@ impl LayoutError {
             Self::Reflection(id) => id,
         }
     }
+
+    /// Why it failed, after its [`LayoutError::id`]: a missing row as
+    /// [`crate::engine::builds::ABSENT`], which the build's diagnosis tells
+    /// apart.
+    const fn reason(&self) -> &'static str {
+        match self {
+            Self::Table(_) => crate::engine::builds::ABSENT,
+            Self::Reflection(_) => "is not reflected on this build, or out of range",
+        }
+    }
 }
 
 /// The map markers' state: the layout, the mods' markers and what the
@@ -244,6 +254,15 @@ fn label(marker: &UiMarker) -> Box<[u8]> {
 
 /// Replaces mod `owner`'s markers with `markers`.
 pub(crate) fn set(owner: ModIndex, given: &[UiMarker]) -> Status {
+    set_under(&MARKERS_FUSE, owner, given)
+}
+
+/// [`set`] while `feature`, [`MARKERS_FUSE`] outside tests, is on: missing
+/// once it is off, so a mod learns its markers will not show.
+fn set_under(feature: &Fuse, owner: ModIndex, given: &[UiMarker]) -> Status {
+    if feature.is_off() {
+        return Status::MISSING;
+    }
     if given.len() > MAX_MARKERS {
         return Status::BAD_ARGS;
     }
@@ -322,6 +341,9 @@ pub(super) fn note(context: usize) {
     let (Some(_), Some(layout)) = (NEXT.wired(), MARKERS.layout.get()) else {
         return;
     };
+    if MARKERS_FUSE.is_off() {
+        return;
+    }
     // SAFETY: the one caller passes the live interface context of the frame
     // it draws, on the interface thread; the offsets are the build table's.
     let data = unsafe { play_data(context, layout.context_state, layout.state_play_data) };
@@ -335,18 +357,24 @@ pub(super) fn note(context: usize) {
 /// Links the replicate system on the client, on a build whose table and
 /// reflection give the markers' whole layout.
 pub(crate) fn link(loader: &Loader) {
+    link_under(loader, &MARKERS_FUSE);
+}
+
+/// Links the replicate system under `feature`, [`MARKERS_FUSE`] outside
+/// tests.
+fn link_under(loader: &Loader, feature: &'static Fuse) {
     let layout = match Layout::read(loader) {
         Ok(layout) if layout.fits() => layout,
         Ok(_) => {
             loader.fuse_off(
-                &MARKERS_FUSE,
+                feature,
                 pinned::map::ENTRY_SIZE.id(),
                 "does not fit the loader's marker entries",
             );
             return;
         }
         Err(why) => {
-            loader.fuse_off(&MARKERS_FUSE, why.id(), &why.to_string());
+            loader.fuse_off(feature, why.id(), why.reason());
             return;
         }
     };
@@ -360,13 +388,7 @@ pub(crate) fn link(loader: &Loader) {
             .ok()
             .map(enshwick_gamedata::reflect::System::entry),
     );
-    loader.link_fused(
-        &MARKERS_FUSE,
-        target,
-        &NEXT,
-        detour as SystemFn,
-        HookFlags::NONE,
-    );
+    loader.link_fused(feature, target, &NEXT, detour as SystemFn, HookFlags::NONE);
 }
 
 crate::engine::chains::chain_detour! {
@@ -586,15 +608,28 @@ mod tests {
 
     #[test]
     fn markers_a_build_cannot_lay_out_are_listed_off_not_only_logged() {
+        static MARKERS_OFF: Fuse = Fuse::new("test map markers");
         let loader = crate::start::tests::bare_loader();
-        link(&loader);
-        assert!(MARKERS_FUSE.is_off());
+        link_under(&loader, &MARKERS_OFF);
+        assert!(MARKERS_OFF.is_off());
         assert!(NEXT.wired().is_none(), "nothing is linked");
         let listed = crate::engine::diag::parts_off();
-        let markers = listed.iter().find(|p| p.part == MARKERS_FUSE.feature());
+        let markers = listed.iter().find(|p| p.part == MARKERS_OFF.feature());
+        let id = catalogue::ids::MAP_MARKER_TYPE;
         assert!(
-            markers.is_some_and(|p| p.reason.starts_with(catalogue::ids::MAP_MARKER_TYPE)),
-            "the reason names what the build lacks first: {listed:?}"
+            markers.is_some_and(|p| p.reason.starts_with(id) && p.reason.matches(id).count() == 1),
+            "the reason names what the build lacks first, once: {listed:?}"
+        );
+    }
+
+    #[test]
+    fn markers_set_while_their_feature_is_off_answer_missing() {
+        let feature = Fuse::new("test markers off");
+        feature.blow("a test");
+        let none: [UiMarker; 0] = [];
+        assert_eq!(
+            set_under(&feature, ModIndex::LOADER, &none),
+            Status::MISSING
         );
     }
 
