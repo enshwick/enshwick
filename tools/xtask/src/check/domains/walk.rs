@@ -466,6 +466,19 @@ impl Cfg {
         self.can_be(true, allowed)
     }
 
+    /// The predicate with the option `name` known to be off: `any()`, which
+    /// never holds, in its place.
+    pub(super) fn with_off(&self, name: &str) -> Self {
+        let each = |parts: &[Self]| parts.iter().map(|part| part.with_off(name)).collect();
+        match self {
+            Self::Other(other) if other == name => Self::Any(Vec::new()),
+            Self::Not(inner) => Self::Not(Box::new(inner.with_off(name))),
+            Self::All(parts) => Self::All(each(parts)),
+            Self::Any(parts) => Self::Any(each(parts)),
+            Self::Feature(_) | Self::Other(_) => self.clone(),
+        }
+    }
+
     /// Whether the predicate can come out `value`.
     ///
     /// shortcut: an option named twice counts as two free ones, so a

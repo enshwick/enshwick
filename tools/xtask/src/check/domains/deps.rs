@@ -80,8 +80,11 @@ fn manifests(root: &Path, map: &Map) -> (Vec<String>, Vec<Edge>) {
     };
     let mut edges = Vec::new();
     for (dir, manifest, name) in &packages {
-        let deps: Vec<Dep> = dependencies(manifest)
+        let deps: Vec<Dep> = dependencies(manifest, "dependencies")
             .filter(|dep| internal.contains(&dep.package.as_str()))
+            .collect();
+        let tested: BTreeSet<String> = dependencies(manifest, "dev-dependencies")
+            .map(|dep| dep.package)
             .collect();
         let files = match sources(root, dir) {
             Ok(files) => files,
@@ -109,8 +112,17 @@ fn manifests(root: &Path, map: &Map) -> (Vec<String>, Vec<Edge>) {
                 problems.extend(
                     conditions
                         .iter()
-                        .filter(|(named, _)| named == ident)
-                        .filter_map(|(_, cfg)| ungated_use(&at, package, cfg, features, key)),
+                        .filter(|(named, _, _)| named == ident)
+                        .filter_map(|(_, cfg, file)| {
+                            // A dev-dependency is there whenever `test` is.
+                            let cfg = if tested.contains(package) {
+                                cfg.with_off("test")
+                            } else {
+                                cfg.clone()
+                            };
+                            let place = format!("{package} in src/{file}");
+                            ungated_use(&at, &place, &cfg, features, key)
+                        }),
                 );
             }
             if !named.contains(ident) {
@@ -152,13 +164,16 @@ fn sources(root: &Path, dir: &str) -> Result<Vec<(String, syn::File)>, String> {
         .collect()
 }
 
+/// Each crate a place names, the `cfg`s around that place and its file
+/// under `src`.
+type Places = BTreeSet<(String, Cfg, String)>;
+
 /// Of `idents`, the crates the code names where no feature turns it off,
-/// those it names at all, and each with the `cfg`s around a place that
-/// names it.
+/// those it names at all, and the [`Places`] that name them.
 fn usage(
     files: &[(String, syn::File)],
     idents: &[&str],
-) -> (BTreeSet<String>, BTreeSet<String>, BTreeSet<(String, Cfg)>) {
+) -> (BTreeSet<String>, BTreeSet<String>, Places) {
     let gated = declared_modules(files, |item| feature_only(item_attrs(item)));
     let contexts = contexts(files);
     let firsts = |named: Named| {
@@ -176,7 +191,11 @@ fn usage(
         }
         let context = contexts.get(&module).map_or(&[][..], Vec::as_slice);
         let mut found = paths_under(file, &module, idents, context);
-        conditions.append(&mut found.conditions);
+        conditions.extend(
+            std::mem::take(&mut found.conditions)
+                .into_iter()
+                .map(|(ident, cfg)| (ident, cfg, path.clone())),
+        );
         named.extend(firsts(found));
     }
     (always, named, conditions)
@@ -235,10 +254,10 @@ fn contexts(files: &[(String, syn::File)]) -> BTreeMap<Vec<String>, Vec<Cfg>> {
 
 /// The line of a problem when code names the optional dependency `key`
 /// under a `cfg` that can hold while every feature that turns it on is off,
-/// so that build fails.
+/// so that build fails; `place` names the package and the file.
 fn ungated_use(
     at: &str,
-    package: &str,
+    place: &str,
     cfg: &Cfg,
     features: &toml::Table,
     key: &str,
@@ -253,11 +272,11 @@ fn ungated_use(
         .collect();
     Some(if missing.is_empty() {
         format!(
-            "{at} names the optional {package} where no feature gates it: gate that code with a feature that turns it on, or make it required ({MAP})"
+            "{at} names the optional {place} under cfg({cfg}), which no feature gates: gate that code with a feature that turns it on, or make it required ({MAP})"
         )
     } else {
         format!(
-            "{at} names {package} under cfg({cfg}), which features [{}] meet without turning it on: turn it on with each of them ({MAP})",
+            "{at} names {place} under cfg({cfg}), which features [{}] meet without turning it on: turn it on with each of them ({MAP})",
             missing.join(", ")
         )
     })
@@ -301,16 +320,16 @@ fn turns_on(features: &toml::Table, key: &str, feature: &str) -> bool {
     false
 }
 
-/// The manifest's dependencies, in `[dependencies]` and every
-/// `[target.*.dependencies]`.
-fn dependencies(manifest: &toml::Table) -> impl Iterator<Item = Dep> {
+/// The manifest's dependencies of the table `kind` (`dependencies` or
+/// `dev-dependencies`), at the top and in every `[target.*]`.
+fn dependencies<'a>(manifest: &'a toml::Table, kind: &'a str) -> impl Iterator<Item = Dep> + 'a {
     let targets = manifest
         .get("target")
         .and_then(toml::Value::as_table)
         .into_iter()
         .flat_map(|targets| targets.values());
-    std::iter::once(manifest.get("dependencies"))
-        .chain(targets.map(|target| target.get("dependencies")))
+    std::iter::once(manifest.get(kind))
+        .chain(targets.map(move |target| target.get(kind)))
         .flatten()
         .filter_map(toml::Value::as_table)
         .flatten()
@@ -521,7 +540,7 @@ mod tests {
         let manifest: toml::Table = toml::from_str(
             "[dependencies]\nenshwick-base.workspace = true\nup = { package = \"enshwick-ui\", optional = true }\n\n[target.'cfg(windows)'.dependencies]\nenshwick-world = { workspace = true, optional = true }\n",
         )?;
-        let deps: Vec<(String, String, bool)> = dependencies(&manifest)
+        let deps: Vec<(String, String, bool)> = dependencies(&manifest, "dependencies")
             .map(|dep| (dep.package, dep.ident, dep.optional))
             .collect();
         let dep =
@@ -715,7 +734,7 @@ mod tests {
         assert_eq!(problems.len(), 1, "{problems:?}");
         assert!(
             problems[0].contains(
-                "enshwick-ui names enshwick-world under cfg(any(feature = \"unstable\", feature = \"fake\")), which features [fake] meet"
+                "enshwick-ui names enshwick-world in src/screens.rs under cfg(any(feature = \"unstable\", feature = \"fake\")), which features [fake] meet"
             ),
             "{problems:?}"
         );
@@ -756,8 +775,52 @@ mod tests {
         );
         assert_eq!(problems.len(), 1, "{problems:?}");
         assert!(
-            problems[0].contains("names the optional enshwick-world where no feature gates it"),
+            problems[0].contains(
+                "names the optional enshwick-world in src/lib.rs under cfg(any(feature = \"unstable\", windows)), which no feature gates"
+            ),
             "{problems:?}"
+        );
+    }
+
+    #[test]
+    fn two_ungated_places_name_each_its_own_file_and_cfg() {
+        let problems = screens(
+            "places",
+            "unstable = [\"dep:enshwick-world\"]\n",
+            "#[cfg(windows)]\nuse enshwick_world::W;\nmod screens;",
+            "#[cfg(any(test, windows))]\nuse enshwick_world::W;",
+        );
+        assert_eq!(problems.len(), 2, "{problems:?}");
+        assert!(
+            problems[0].contains("in src/lib.rs under cfg(windows)"),
+            "{problems:?}"
+        );
+        assert!(
+            problems[1].contains("in src/screens.rs under cfg(any(test, windows))"),
+            "{problems:?}"
+        );
+    }
+
+    #[test]
+    fn a_dev_dependency_counts_as_there_whenever_test_is() {
+        let features = "unstable = [\"dep:enshwick-world\"]\n[dev-dependencies]\nenshwick-world.workspace = true\n";
+        let tested = screens(
+            "tested",
+            features,
+            "#[cfg(any(test, feature = \"unstable\"))]\nuse enshwick_world::W;",
+            "",
+        );
+        assert!(tested.is_empty(), "{tested:?}");
+        let windows = screens(
+            "tested-windows",
+            features,
+            "#[cfg(any(test, windows))]\nuse enshwick_world::W;",
+            "",
+        );
+        assert_eq!(
+            windows.len(),
+            1,
+            "windows still needs a feature: {windows:?}"
         );
     }
 
