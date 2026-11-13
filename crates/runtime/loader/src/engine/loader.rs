@@ -458,7 +458,7 @@ impl Loader {
     /// `reason`, by [`Fuse::turn_off`]: one warning that names the build, the
     /// feature off on the Mods screen and in the status summary, and its
     /// links wired past. Always false, for the caller to return.
-    fn fuse_off(&self, feature: &'static Fuse, id: &str, reason: &str) -> bool {
+    pub(crate) fn fuse_off(&self, feature: &'static Fuse, id: &str, reason: &str) -> bool {
         let reason = self.build.reason(id, reason);
         feature.turn_off(&Off::build(feature.feature(), &self.build.name, id, reason));
         false

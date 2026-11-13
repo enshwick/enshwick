@@ -217,3 +217,53 @@ fn a_tilted_altar_has_no_zone() {
     assert_eq!(altar.tilted, 1);
     assert_eq!(altar.zone, Bounds::default());
 }
+
+#[test]
+fn the_altars_arm_both_systems_or_neither_and_report_why() {
+    let loader = crate::start::tests::bare_loader();
+    assert!(!link_systems(
+        &loader,
+        [Some(0x1000), None],
+        HookFlags::NONE
+    ));
+    assert!(ALTARS.is_off());
+    let mut chains = loader.chains.relock();
+    chains.seal();
+    assert!(
+        chains.is_empty(),
+        "the position pass went with the range pass, so its system is never patched"
+    );
+    drop(chains);
+    let listed = crate::engine::diag::parts_off();
+    assert!(
+        listed
+            .iter()
+            .any(|p| p.part == "altars" && p.reason.starts_with(UPGRADE_SYSTEM)),
+        "{listed:?}"
+    );
+}
+
+#[test]
+fn levels_are_read_after_vanilla_whenever_the_range_pass_writes_nothing() {
+    let ran = RefCell::new(Vec::new());
+    let run = |sized, wrote| {
+        ran.borrow_mut().clear();
+        tick(
+            sized,
+            || {
+                ran.borrow_mut().push("write");
+                wrote
+            },
+            || ran.borrow_mut().push("vanilla"),
+            || ran.borrow_mut().push("read"),
+        );
+        ran.borrow().clone()
+    };
+    assert_eq!(
+        run(true, true),
+        ["write"],
+        "the range pass replaces vanilla"
+    );
+    assert_eq!(run(true, false), ["write", "vanilla", "read"]);
+    assert_eq!(run(false, true), ["vanilla", "read"]);
+}
