@@ -259,6 +259,9 @@ pub struct Link {
     pub flags: HookFlags,
     /// The timed thunk in front of the link, with timing on.
     pub hop: Option<Hop>,
+    /// The loader feature the link belongs to, `None` for a mod's: once it
+    /// is off, the chain runs past the link.
+    pub feature: Option<&'static Fuse>,
 }
 
 impl Link {
@@ -266,6 +269,11 @@ impl Link {
     #[must_use]
     pub fn entry(&self) -> usize {
         self.hop.map_or(self.detour, |hop| hop.entry)
+    }
+
+    /// Whether the link's loader feature is off.
+    fn feature_off(&self) -> bool {
+        self.feature.is_some_and(Fuse::is_off)
     }
 }
 
@@ -285,17 +293,6 @@ pub struct Chain {
     /// Whether the chain captures the caller frame, as decided when the
     /// chains were sealed.
     pub frame: bool,
-    /// The feature of each of the loader's links, by the link's `next`
-    /// slot: once the feature is off, the chain runs past the link.
-    pub features: Vec<(&'static AtomicUsize, &'static Fuse)>,
-}
-
-/// Whether `link` belongs to a loader feature among `features` that is off.
-fn feature_off(features: &[(&'static AtomicUsize, &'static Fuse)], link: &Link) -> bool {
-    features
-        .iter()
-        .find(|(next, _)| core::ptr::eq(*next, link.next))
-        .is_some_and(|(_, feature)| feature.is_off())
 }
 
 impl Chain {
@@ -329,7 +326,7 @@ impl Chain {
         let after = |from: usize| {
             links[from..]
                 .iter()
-                .find(|l| !faulted(l.owner) && !feature_off(&self.features, l))
+                .find(|l| !faulted(l.owner) && !l.feature_off())
                 .map_or(original, |l| l.entry())
         };
         // From the end back to the head: a slot is pointed at a link only
@@ -376,7 +373,6 @@ impl Chains {
             original: 0,
             original_hop: None,
             frame: false,
-            features: Vec::new(),
         });
         let clash = chain
             .links
@@ -393,19 +389,6 @@ impl Chains {
         }
         chain.links.push(link);
         Status::OK
-    }
-
-    /// [`Chains::add`] for a link of the loader's `feature`, which the
-    /// chain passes once the feature is off.
-    pub fn add_feature(&mut self, target: u64, link: Link, feature: &'static Fuse) -> Status {
-        let next = link.next;
-        let status = self.add(target, link);
-        if let Some(chain) = self.by_target.get_mut(&target)
-            && status.is_ok()
-        {
-            chain.features.push((next, feature));
-        }
-        status
     }
 
     /// Whether `next` is already the slot of a link on any target.
@@ -432,8 +415,7 @@ impl Chains {
     pub fn seal(&mut self) {
         self.armed = true;
         for chain in self.by_target.values_mut() {
-            let features = &chain.features;
-            chain.links.retain(|l| !feature_off(features, l));
+            chain.links.retain(|l| !l.feature_off());
             chain.frame = chain.wants_caller_frame();
         }
         self.by_target.retain(|_, chain| !chain.links.is_empty());
@@ -454,6 +436,15 @@ impl Chains {
         self.by_target
             .get(&target)
             .map(|c| c.links.iter().map(|l| l.owner).collect())
+            .unwrap_or_default()
+    }
+
+    /// The loader features with a link on `target`.
+    #[must_use]
+    pub fn features_at(&self, target: u64) -> Vec<&'static Fuse> {
+        self.by_target
+            .get(&target)
+            .map(|c| c.links.iter().filter_map(|l| l.feature).collect())
             .unwrap_or_default()
     }
 
@@ -500,7 +491,13 @@ mod tests {
             priority,
             flags,
             hop: None,
+            feature: None,
         }
+    }
+
+    fn of(feature: &'static Fuse, mut link: Link) -> Link {
+        link.feature = Some(feature);
+        link
     }
 
     fn value(slot: &AtomicUsize) -> usize {
@@ -569,7 +566,7 @@ mod tests {
         static GLOW: Fuse = Fuse::new("chains glow");
         let mut chains = Chains::default();
         let ours = link(ModIndex::LOADER, 0xa, i32::MIN, HookFlags::NONE);
-        assert_eq!(chains.add_feature(0x10, ours, &GLOW), Status::OK);
+        assert_eq!(chains.add(0x10, of(&GLOW, ours)), Status::OK);
         assert_eq!(
             chains.add(0x10, link(ModIndex::new(0), 0xb, 0, HookFlags::NONE)),
             Status::OK
@@ -593,8 +590,8 @@ mod tests {
         let mut chains = Chains::default();
         let first = link(ModIndex::LOADER, 0xa, i32::MIN, HookFlags::NONE);
         let second = link(ModIndex::LOADER, 0xb, i32::MIN, HookFlags::NONE);
-        assert_eq!(chains.add_feature(0x10, first, &LAMP), Status::OK);
-        assert_eq!(chains.add_feature(0x20, second, &LAMP), Status::OK);
+        assert_eq!(chains.add(0x10, of(&LAMP, first)), Status::OK);
+        assert_eq!(chains.add(0x20, of(&LAMP, second)), Status::OK);
         assert_eq!(
             chains.add(0x20, link(ModIndex::new(0), 0xc, 0, HookFlags::NONE)),
             Status::OK

@@ -227,11 +227,10 @@ pub(crate) struct Loader {
 }
 
 /// Turns `feature` off for the warning `line` and the status `entry` a
-/// caller wrote, through [`Fuse::turn_off`]. Always false, for the caller
-/// to return.
-pub(crate) fn report_off(feature: &str, (line, entry): (String, String)) -> bool {
+/// caller wrote, through [`Fuse::turn_off`], with no error code: the cause
+/// is the caller's, not the game build's.
+pub(crate) fn report_off(feature: &str, (line, entry): (String, String)) {
     Fuse::named(feature).turn_off(&Off::reported(line, entry));
-    false
 }
 
 /// Wires every armed chain of the running loader past the mods that are off
@@ -320,22 +319,17 @@ pub(crate) fn take<T>(list: &Mutex<Vec<T>>) -> Vec<T> {
 
 /// Whether the mod at index `owner` is off; the loader's own links never are.
 pub(crate) fn is_off(owner: ModIndex) -> bool {
-    owner != ModIndex::LOADER
-        && loader().is_none_or(|loader| {
-            loader
-                .mods
-                .get(owner.get())
-                .is_none_or(|m| m.off.load(Ordering::Acquire))
-        })
+    loader().map_or(owner != ModIndex::LOADER, |loader| {
+        loader.passed(owner, false)
+    })
 }
 
 /// Whether the detours and mid-function hooks of `owner` are passed by: it
 /// is off, or waiting for a code patch. Only atomic loads, for hook calls.
 pub(crate) fn bypassed(owner: ModIndex) -> bool {
-    is_off(owner)
-        || loader()
-            .and_then(|l| l.mods.get(owner.get()))
-            .is_some_and(|m| m.waiting.load(Ordering::Acquire))
+    loader().map_or(owner != ModIndex::LOADER, |loader| {
+        loader.passed(owner, true)
+    })
 }
 
 /// Marks `owner` waiting for a code patch; the loader never waits. A plain
@@ -443,8 +437,9 @@ impl Loader {
             priority: i32::MIN,
             flags,
             hop: None,
+            feature: Some(feature),
         };
-        let status = self.chains.relock().add_feature(address, link, feature);
+        let status = self.chains.relock().add(address, link);
         if !status.is_ok() {
             return self.fuse_off(feature, id, &format!("refused the link ({})", status.0));
         }
@@ -469,6 +464,16 @@ impl Loader {
         false
     }
 
+    /// Turns off every loader feature with a link on `target`, the entry
+    /// `id` that could not be armed for `reason`, so the feature's links on
+    /// other targets are wired past too and no feature runs half armed.
+    pub(crate) fn unarmed(&self, target: u64, id: &str, reason: &str) {
+        let features = self.chains.relock().features_at(target);
+        for feature in features {
+            let _off = self.fuse_off(feature, id, reason);
+        }
+    }
+
     /// Wires every armed chain past the mods that are off or waiting for a
     /// code patch and the loader features that are off.
     pub(crate) fn rewire(&self) {
@@ -479,7 +484,9 @@ impl Loader {
 
     /// Whether the hooks and points of `owner` are passed by: the mod is
     /// off or unknown, or with `waiting`, it waits for a code patch. The
-    /// loader's own links never are.
+    /// loader's own links never are. The one rule [`is_off`] and
+    /// [`bypassed`] follow too; only atomic loads, for hook calls.
+    #[inline]
     fn passed(&self, owner: ModIndex, waiting: bool) -> bool {
         owner != ModIndex::LOADER
             && self.mods.get(owner.get()).is_none_or(|m| {

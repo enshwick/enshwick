@@ -225,8 +225,15 @@ pub(crate) fn link(loader: &Loader) {
         .system(SYSTEM)
         .ok()
         .map(enshwick_gamedata::reflect::System::entry);
+    // The link serves both features: it goes under one that is still on,
+    // or a feature already off would refuse it for the other.
+    let feature = if STATE.layout.get().is_some() {
+        FEATURE
+    } else {
+        HOST_FEATURE
+    };
     let linked = loader.link_feature(
-        FEATURE,
+        feature,
         Target::Found(SYSTEM, entry),
         &NEXT,
         player_ui as SystemFn,

@@ -26,7 +26,9 @@ pub(crate) struct Off {
     /// The reason the status summary and the Mods screen list.
     entry: String,
     level: Level,
-    code: Code,
+    /// The error code the line ends with; none when the cause is neither
+    /// the build nor a fault, such as two mods asking for one name.
+    code: Option<Code>,
 }
 
 impl Off {
@@ -38,7 +40,7 @@ impl Off {
             line: crate::engine::builds::off_line(feature, build, id, reason),
             entry: format!("{id} {reason}"),
             level: Level::WARN,
-            code: errors::FEATURES_OFF,
+            code: Some(errors::FEATURES_OFF),
         }
     }
 
@@ -50,7 +52,7 @@ impl Off {
             line: format!("{feature} off on {build}: {why}"),
             entry: why.to_owned(),
             level: Level::WARN,
-            code: errors::FEATURES_OFF,
+            code: Some(errors::FEATURES_OFF),
         }
     }
 
@@ -60,7 +62,7 @@ impl Off {
             line: format!("{feature} off: {reason}; the game runs it vanilla"),
             entry: reason.to_owned(),
             level: Level::ERROR,
-            code: errors::FEATURE_FAULT,
+            code: Some(errors::FEATURE_FAULT),
         }
     }
 
@@ -72,7 +74,7 @@ impl Off {
             line,
             entry,
             level: Level::WARN,
-            code: errors::FEATURES_OFF,
+            code: None,
         }
     }
 }
@@ -271,23 +273,26 @@ impl Fuse {
             .unwrap_or_else(|_sealed| leaked())
     }
 
-    /// Turns the feature off for `off`. The first time for its name, it
-    /// logs the line with its code, lists the feature for the status summary
-    /// and the Mods screen, and wires every chain past the links that name
-    /// it. Never call it with the chains held.
+    /// Turns the feature off for `off`. The first time, it logs the line
+    /// with its code, lists the feature for the status summary and the Mods
+    /// screen, and wires every chain past the links that carry this fuse;
+    /// another fuse of the same name stays as it is, since a name may be
+    /// shared by parts that must keep running. Never call it with the chains
+    /// held: it takes their lock.
     #[cold]
     #[inline(never)]
     pub(crate) fn turn_off(&self, off: &Off) {
-        let first = !self.off.swap(true, Ordering::AcqRel);
-        let named = Some(Self::named(self.feature)).filter(|named| !core::ptr::eq(*named, self));
-        let first_named = named.is_none_or(|named| !named.off.swap(true, Ordering::AcqRel));
-        if !(first && first_named) {
+        if self.off.swap(true, Ordering::AcqRel) {
             return;
         }
         let source = crate::engine::settings::LOADER_ID;
         if crate::engine::log::enabled(off.level, source) {
-            let line = format!("{} ({})", off.line, off.code);
-            crate::engine::log::write(off.level, source, &line);
+            match off.code {
+                Some(code) => {
+                    crate::engine::log::write(off.level, source, &format!("{} ({code})", off.line));
+                }
+                None => crate::engine::log::write(off.level, source, &off.line),
+            }
         }
         crate::engine::diag::part_off(self.feature, &off.entry);
         #[cfg(windows)]
@@ -341,12 +346,12 @@ mod tests {
     }
 
     #[test]
-    fn a_feature_and_its_named_twin_report_off_once_between_them() {
-        static TWIN: Fuse = Fuse::new("twin lamps");
-        crate::engine::log::capture();
-        Fuse::named("twin lamps").turn_off(&Off::fault("twin lamps", "the first site"));
-        TWIN.blow("a later site");
-        assert!(TWIN.is_off());
+    fn a_feature_reports_off_once_and_another_fuse_of_its_name_stays_on() {
+        static LAMPS: Fuse = Fuse::new("twin lamps");
+        let _turn = crate::engine::log::capture_turn();
+        LAMPS.turn_off(&Off::fault("twin lamps", "the first site"));
+        LAMPS.blow("a later site");
+        assert!(!Fuse::named("twin lamps").is_off());
         let reported = crate::engine::log::captured()
             .iter()
             .filter(|(_, _, line)| line.starts_with("twin lamps off"))

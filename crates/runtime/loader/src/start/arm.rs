@@ -27,7 +27,7 @@ pub(super) fn arm(loader: &Loader, frame: Option<FrameSlot>) {
     );
     let armed = (chains.len() + mids.len()).saturating_sub(failures.len());
     crate::engine::shipped::release();
-    let owners: Vec<(ModIndex, u64, &str)> = failures
+    let owners: Vec<(ModIndex, u64, &str, bool)> = failures
         .iter()
         .flat_map(|f| {
             let owners = if f.inside {
@@ -37,7 +37,7 @@ pub(super) fn arm(loader: &Loader, frame: Option<FrameSlot>) {
             };
             owners
                 .into_iter()
-                .map(move |owner| (owner, f.target, f.reason.as_str()))
+                .map(move |owner| (owner, f.target, f.reason.as_str(), f.inside))
         })
         .collect();
     let hooked: Vec<u64> = chains
@@ -63,10 +63,13 @@ pub(super) fn arm(loader: &Loader, frame: Option<FrameSlot>) {
             crate::engine::builds::off_line("hook", &loader.build.name, &id, &reason)
         );
     }
-    for (owner, target, reason) in owners {
+    for (owner, target, reason, inside) in owners {
         let id = named(target);
         if owner.is_loader() {
             crate::engine::diag::part_off(&id, &format!("its hook could not be armed: {reason}"));
+            if !inside {
+                loader.unarmed(target, &id, &format!("could not be armed: {reason}"));
+            }
         } else {
             loader.turn_off(
                 owner,

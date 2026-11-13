@@ -15,17 +15,19 @@ fn patch(owner: ModIndex, address: usize, expected: &[u8], replacement: &[u8]) -
 /// loader part: its line names the build, and the status lists it.
 #[test]
 fn a_missing_recipe_list_lookup_is_off_on_its_build_and_in_the_status() {
+    // Its own fuse, so the process's recipe list lookup stays linkable.
+    static LOOKUP: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new(LOOKUP_FEATURE);
     let Some(build) = crate::engine::builds::kept(enshwick_core::abi::Side::SERVER) else {
         return;
     };
     let off = LiftLimitError::NotInBuild {
         entry: pinned::recipe::LIST_LOOKUP.id().to_owned(),
     };
-    crate::engine::log::capture();
+    let _turn = crate::engine::log::capture_turn();
     let why = off.to_string();
     let reason = build.reason(off.entry(), &why);
     let off = crate::engine::fuse::Off::build(LOOKUP_FEATURE, &build.name, off.entry(), reason);
-    crate::engine::fuse::Fuse::named(LOOKUP_FEATURE).turn_off(&off);
+    LOOKUP.turn_off(&off);
     let line = format!(
         "recipe list lookup off on {}: recipe.list_lookup is found by no engine route or anchor ({})",
         build.name,

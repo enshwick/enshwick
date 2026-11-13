@@ -15,8 +15,101 @@ static THIRD_NEXT: Next<Lit> = unsafe { Next::new() };
 // the chain by hand and never calls the detour.
 static WICK_NEXT: Next<Lit> = unsafe { Next::new() };
 
+// SAFETY: as `WICK_NEXT`'s, for the armed link of the arming test.
+static LAMP_NEXT: Next<Lit> = unsafe { Next::new() };
+// SAFETY: as `WICK_NEXT`'s, for the link of the arming test whose target
+// fails to arm.
+static GLOW_NEXT: Next<Lit> = unsafe { Next::new() };
+
 unsafe extern "system" fn lit(glow: u32) -> u32 {
     glow
+}
+
+// SAFETY: as `WICK_NEXT`'s, for the link of the shared name test.
+static EMBER_NEXT: Next<Lit> = unsafe { Next::new() };
+
+#[test]
+fn a_panic_under_another_fuse_of_a_link_s_name_leaves_the_link_wired() {
+    static EMBERS: Fuse = Fuse::new("test embers");
+    let loader = crate::start::tests::bare_loader();
+    let target = Target::Found("ember.light", Some(0x7000));
+    assert!(loader.link_feature(EMBERS.feature(), target, &EMBER_NEXT, lit, HookFlags::NONE));
+    let head: &'static AtomicUsize = Box::leak(Box::new(AtomicUsize::new(0)));
+    {
+        let mut chains = loader.chains.relock();
+        chains.seal();
+        for chain in chains.iter_mut().filter(|c| c.target == 0x7000) {
+            chain.head = Some(head);
+            chain.original = 0xff;
+            chain.wire(|_| false);
+        }
+    }
+    EMBERS.blow("a test");
+    loader.rewire();
+    assert!(!Fuse::named(EMBERS.feature()).is_off());
+    assert_eq!(
+        head.load(Ordering::Acquire),
+        Next::<Lit>::address_of(lit),
+        "a name shared by two parts couples neither"
+    );
+}
+
+#[test]
+fn a_part_a_mod_clash_turns_off_is_logged_without_a_build_code() {
+    let turn = crate::engine::log::capture_turn();
+    report_off(
+        "test alias /lamp",
+        (
+            "test alias /lamp off: /lamp is taken".to_owned(),
+            "/lamp is taken".to_owned(),
+        ),
+    );
+    let lines = crate::engine::log::captured();
+    drop(turn);
+    assert!(
+        lines
+            .iter()
+            .any(|(_, _, line)| line == "test alias /lamp off: /lamp is taken"),
+        "{lines:?}"
+    );
+}
+
+#[test]
+fn a_feature_whose_target_fails_to_arm_is_wired_past_on_its_other_targets() {
+    let loader = crate::start::tests::bare_loader();
+    let feature = "test lamps";
+    let link = |id, at, next: &'static Next<Lit>| {
+        loader.link_feature(
+            feature,
+            Target::Found(id, Some(at)),
+            next,
+            lit,
+            HookFlags::NONE,
+        )
+    };
+    assert!(link("lamp.light", 0x5000, &LAMP_NEXT));
+    assert!(link("lamp.glow", 0x6000, &GLOW_NEXT));
+    let head: &'static AtomicUsize = Box::leak(Box::new(AtomicUsize::new(0)));
+    {
+        let mut chains = loader.chains.relock();
+        chains.seal();
+        for chain in chains.iter_mut().filter(|c| c.target == 0x5000) {
+            chain.head = Some(head);
+            chain.original = 0xff;
+            chain.wire(|_| false);
+        }
+    }
+    assert_eq!(head.load(Ordering::Acquire), Next::<Lit>::address_of(lit));
+    loader.unarmed(0x6000, "lamp.glow", "could not be armed: a test");
+    loader.rewire();
+    assert!(Fuse::named(feature).is_off());
+    assert_eq!(
+        head.load(Ordering::Acquire),
+        0xff,
+        "the armed half runs vanilla too"
+    );
+    let listed = crate::engine::diag::parts_off();
+    assert!(listed.iter().any(|p| p.part == feature), "{listed:?}");
 }
 
 #[test]

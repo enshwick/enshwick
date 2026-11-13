@@ -38,6 +38,7 @@ pub(crate) extern "system" fn hook(me: ModHandle, spec: *const HookSpec) -> Stat
             priority: spec.priority,
             flags: spec.flags,
             hop: None,
+            feature: None,
         };
         loader.chains.relock().add(spec.target, link)
     })

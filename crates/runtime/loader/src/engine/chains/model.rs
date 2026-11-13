@@ -29,6 +29,7 @@ mod tests {
             priority,
             flags: HookFlags::NONE,
             hop: None,
+            feature: None,
         }
     }
 

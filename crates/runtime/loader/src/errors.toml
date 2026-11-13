@@ -114,12 +114,12 @@ fix = "Поверніть powrprof.dll Enshwick у теку гри. powrprof.dll
 [[error]]
 code = "E1010"
 title = "An Enshwick feature turned itself off"
-cause = "Enshwick's own code for one feature failed while the game ran. Only that feature stops. The game runs that part without mods, and the other features and mods keep running."
+cause = "Enshwick's own code for one feature failed while the game ran. Only that feature stops, and the game runs that part without it. Mods and the other features keep running."
 fix = "Play on, or restart the game to turn the feature on again. Report the problem with the Enshwick report attached. The log and the Mods screen name the feature."
 
 [error.translations.uk]
 title = "Функція Enshwick вимкнула себе"
-cause = "Власний код Enshwick для однієї функції дав збій під час гри. Зупиняється лише ця функція. Гра виконує цю частину без модів, а інші функції й моди працюють далі."
+cause = "Власний код Enshwick для однієї функції дав збій під час гри. Зупиняється лише ця функція, і гра виконує цю частину без неї. Моди й інші функції працюють далі."
 fix = "Грайте далі або перезапустіть гру, щоб знову увімкнути функцію. Повідомте про проблему й додайте звіт Enshwick. Журнал і екран Mods називають функцію."
 
 [[error]]

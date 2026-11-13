@@ -296,24 +296,26 @@ pub(crate) fn link(loader: &'static Loader) {
         (wants(events) || own_link(symbol, leaves)).then_some(Target::Pinned(symbol))
     };
     let none = HookFlags::NONE;
-    let feature = "server events";
-    let stepped = link(&[], pinned::server::POST_STEP)
-        .is_some_and(|target| loader.link_feature(feature, target, &STEP_NEXT, step, none));
+    // A feature per link: each serves its own events, and one missing
+    // symbol must not take the step the whole loader runs on.
+    let stepped = link(&[], pinned::server::POST_STEP).is_some_and(|target| {
+        loader.link_feature(STEP_FUSE.feature(), target, &STEP_NEXT, step, none)
+    });
     crate::engine::ticks::set_stepped(stepped);
     if let Some(target) = link(
         &[Event::WORLD_LOADED, Event::SHUTDOWN_STARTED],
         pinned::server::SET_STATE,
     ) {
-        loader.link_feature(feature, target, &STATE_NEXT, set_state, none);
+        loader.link_feature(STATE_FUSE.feature(), target, &STATE_NEXT, set_state, none);
     }
     if let Some(target) = link(&[Event::WORLD_SAVED], pinned::server::SAVE_STEP) {
-        loader.link_feature(feature, target, &SAVE_NEXT, save, none);
+        loader.link_feature(SAVE_FUSE.feature(), target, &SAVE_NEXT, save, none);
     }
     if let Some(target) = link(
         &[Event::PLAYER_LEFT, Event::PLAYER_JOINED],
         pinned::server::PLAYER_REMOVE,
     ) {
-        loader.link_feature(feature, target, &REMOVE_NEXT, remove, none);
+        loader.link_feature(REMOVE_FUSE.feature(), target, &REMOVE_NEXT, remove, none);
     }
     // Building events wait in a queue only the step drains.
     if !stepped {
@@ -321,10 +323,16 @@ pub(crate) fn link(loader: &'static Loader) {
         return;
     }
     if let Some(target) = link(&[Event::BUILDING_PLACED], pinned::building::SPAWN_PROP) {
-        loader.link_feature(feature, target, &PLACE_NEXT, place, none);
+        loader.link_feature("building placed events", target, &PLACE_NEXT, place, none);
     }
     if let Some(target) = link(&[Event::BUILDING_REMOVED], pinned::building::PICKUP) {
-        loader.link_feature(feature, target, &PICKUP_NEXT, pickup, none);
+        loader.link_feature(
+            "building removed events",
+            target,
+            &PICKUP_NEXT,
+            pickup,
+            none,
+        );
     }
 }
 
