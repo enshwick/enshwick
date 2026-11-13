@@ -93,6 +93,19 @@ fn a_build_without_the_chat_layout_names_the_first_entry_it_lacks() {
 }
 
 #[test]
+fn a_build_without_the_chat_layout_lists_the_chat_lines_off() {
+    let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
+    link(loader);
+    assert!(CHAT_FUSE.is_off());
+    let listed = crate::engine::diag::parts_off();
+    let off = listed.iter().find(|p| p.part == CHAT_FUSE.feature());
+    assert!(
+        off.is_some_and(|p| p.reason.starts_with(pinned::chat::MARK_DELIVERED.id())),
+        "{listed:?}"
+    );
+}
+
+#[test]
 fn a_line_for_one_player_that_reached_others_lists_those_lines_off() {
     let before = delivery().1;
     assert!(to_one_player());

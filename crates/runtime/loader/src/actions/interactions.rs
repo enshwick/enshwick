@@ -187,6 +187,12 @@ pub(crate) fn reads_inputs() -> bool {
     READS_INPUTS.load(Ordering::Acquire) && !ACTIONS_FUSE.is_off()
 }
 
+/// Marks the link on [`ACTIONS_SYSTEM`] made, for tests of what follows it.
+#[cfg(test)]
+pub(crate) fn link_inputs_for_tests() {
+    READS_INPUTS.store(true, Ordering::Release);
+}
+
 /// Why the props stay open while transactions hold them: the link `off`,
 /// which the hold relies on, is off. Neither the build's fault nor a
 /// panic of the holds, so no error code.
@@ -889,6 +895,20 @@ mod tests {
                 .any(|(_, _, line)| line
                     == "prop removal by transactions off: inventory actions is off"),
             "{lines:?}"
+        );
+    }
+
+    #[test]
+    fn a_build_without_the_layout_lists_the_filters_actions_and_holds_off() {
+        let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
+        link(loader);
+        assert!(INTERACTIONS_FUSE.is_off() && ACTIONS_FUSE.is_off() && HOLDS_FUSE.is_off());
+        assert!(!reads_inputs());
+        let listed = crate::engine::diag::parts_off();
+        let holds = listed.iter().find(|p| p.part == HOLDS_FUSE.feature());
+        assert!(
+            holds.is_some_and(|p| p.reason == "interaction filters is off"),
+            "{listed:?}"
         );
     }
 

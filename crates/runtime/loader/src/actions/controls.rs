@@ -957,6 +957,19 @@ mod tests {
     }
 
     #[test]
+    fn controls_follow_game_actions_only_while_every_link_they_need_is_on() {
+        let _first = STATE.linked.set(Linked {
+            digital: 0,
+            follows: Vec::new(),
+        });
+        assert!(!linked(), "the input system never linked");
+        crate::actions::interactions::link_inputs_for_tests();
+        assert!(linked());
+        LINKED_FUSE.blow("a test");
+        assert!(!linked(), "their own fuse is off");
+    }
+
+    #[test]
     fn a_press_the_server_cannot_take_leaves_a_warning_in_the_log() {
         let turn = crate::engine::log::capture_turn();
         press("you.weather", "day");
