@@ -5,33 +5,49 @@ use enshwick_core::abi::{Header, Summon};
 use enshwick_core::altars::cell_of_fixed;
 use enshwick_core::raw::{read_at, write_at};
 
-use crate::engine::loader::Loader;
+use enshwick_core::abi::HookFlags;
 
-use super::{LOADED, SEALED, SPAWN_NEXT, SURVIVORS_FUSE, layout};
+use crate::engine::loader::{Loader, Target};
+use crate::engine::pinned;
 
-pub(super) unsafe extern "system" fn spawn_link(ctx: *mut u64, request: *mut u8) -> u8 {
-    // SAFETY: the game passes the spawn its non-null (checked first) live
-    // request, which the spawn reads only after this link returns.
-    let asked = (!request.is_null())
-        .then(|| SURVIVORS_FUSE.run("a summon", || unsafe { summon(request) }))
-        .flatten()
-        .flatten();
-    let call = match asked {
-        // A refused use spawns, moves and takes nothing, as a spawn the game
-        // turns down itself.
-        Some(Asked::Refused) => return 0,
-        Some(Asked::Use(call)) => Some(call),
-        None => None,
-    };
-    // SAFETY: the game's own arguments, passed on unchanged to the rest of
-    // the chain, which has the spawn's signature.
-    let done = unsafe { SPAWN_NEXT.get()(ctx, request) };
-    if done != 0
-        && let Some(call) = call
-    {
-        let _done = SURVIVORS_FUSE.run("a summon's answer", || summoned(call));
+use super::{LOADED, SEALED, STAFFS_FUSE, layout};
+
+/// Links the staffs' spawn; false once they are off.
+pub(super) fn link(loader: &Loader) -> bool {
+    loader.link_fused(
+        &STAFFS_FUSE,
+        Target::Pinned(pinned::survivors::SPAWN),
+        &SPAWN_NEXT,
+        spawn_link,
+        HookFlags::NONE,
+    )
+}
+
+crate::engine::chains::chain_detour! {
+    /// The game's `survivors.spawn(ctx, request)`, a staff's summon: asked of
+    /// the summon filters first, and told to them once it spawned.
+    fn spawn_link(ctx: *mut u64, request: *mut u8) -> u8;
+    next SPAWN_NEXT;
+    fuse &STAFFS_FUSE, "a summon";
+    |onward| {
+        // SAFETY: the game passes the spawn its non-null (checked first) live
+        // request, which the spawn reads only after this link returns.
+        let asked = (!request.is_null()).then(|| unsafe { summon(request) }).flatten();
+        let call = match asked {
+            // A refused use spawns, moves and takes nothing, as a spawn the
+            // game turns down itself.
+            Some(Asked::Refused) => return 0,
+            Some(Asked::Use(call)) => Some(call),
+            None => None,
+        };
+        let done = onward.call();
+        if done != 0
+            && let Some(call) = call
+        {
+            summoned(call);
+        }
+        done
     }
-    done
 }
 
 /// What the summon filters made of a use.

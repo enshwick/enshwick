@@ -43,7 +43,7 @@ use self::attach::find_pending;
 use self::carried::{JOIN_LOOK_EVERY, Joining, forget_carried, look_for_carried};
 pub(crate) use self::carried::{player_joined, player_left};
 pub(crate) use self::world_file::world_event;
-use crate::engine::chains::Next;
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
@@ -173,14 +173,9 @@ static DESTROYED: [AtomicU64; DESTROYED_CAP] = [const { AtomicU64::new(0) }; DES
 /// The round in the high word and the slots taken in it in the low one.
 static DESTROYED_COUNT: AtomicU64 = AtomicU64::new(1 << 32);
 
-/// `ecs.destroy_request(command_buffer, requester, entity)`: queues the
-/// entity's destroy for the playback after the next step; nonzero when
-/// queued.
-type DestroyFn = unsafe extern "system" fn(buffer: *mut u8, requester: u32, entity: u32) -> u8;
-// SAFETY: `DestroyFn` is the exact signature of the game function at the
-// table's `ecs.destroy_request`, and the slot is used only as the `next` of
-// the `destroy` link on that function.
-static DESTROY_NEXT: Next<DestroyFn> = unsafe { Next::new() };
+/// The switch of the destroy requests' follow-up; its work only stores
+/// atomics, so it turns off only when its link fails.
+static DESTROY_FUSE: Fuse = Fuse::new("mod data of destroyed entities");
 
 /// Whether `part` may be the name side of a kind id: 1 to 64 of `[a-z0-9_-]`.
 fn is_part(part: &str) -> bool {
@@ -303,8 +298,8 @@ pub(crate) fn link(loader: &Loader) {
     if !wanted() {
         return;
     }
-    loader.link_feature(
-        "mod data of destroyed entities",
+    let _linked = loader.link_fused(
+        &DESTROY_FUSE,
         Target::Pinned(pinned::ecs::DESTROY_REQUEST),
         &DESTROY_NEXT,
         destroy,
@@ -312,14 +307,20 @@ pub(crate) fn link(loader: &Loader) {
     );
 }
 
-unsafe extern "system" fn destroy(buffer: *mut u8, requester: u32, entity: u32) -> u8 {
-    // SAFETY: the game's own arguments, passed on unchanged to the rest of
-    // the chain, which has the destroy request's signature.
-    let queued = unsafe { DESTROY_NEXT.get()(buffer, requester, entity) };
-    if queued != 0 && entity != 0 && KEPT.load(Ordering::Relaxed) {
-        note_destroyed(Entity(entity));
+crate::engine::chains::chain_detour! {
+    /// `ecs.destroy_request(command_buffer, requester, entity)` at the
+    /// table's `ecs.destroy_request`: queues the entity's destroy for the
+    /// playback after the next step, nonzero when queued; a queued one is
+    /// noted for the mod data kept on it.
+    fn destroy(buffer: *mut u8, requester: u32, entity: u32) -> u8;
+    next DESTROY_NEXT;
+    |onward| {
+        let queued = onward.call();
+        if queued != 0 && entity != 0 && KEPT.load(Ordering::Relaxed) {
+            note_destroyed(Entity(entity));
+        }
+        queued
     }
-    queued
 }
 
 /// Notes that the game asked to destroy `entity`.
