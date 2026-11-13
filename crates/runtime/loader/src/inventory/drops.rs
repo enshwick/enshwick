@@ -6,10 +6,16 @@
 //! 26430253, `sys.random_pickup_loot_spawner`): the template carries the
 //! model setup, the interaction offer any player takes it by, gravity and
 //! `DoNotSave`, and `sys.pickup_item_setup` fills the rest from the item.
+//!
+//! The template is found by its name, which reads every template's name
+//! from the archive, about a tenth of a second on a dedicated server: the
+//! loader reads it on a thread of its own as the world loads, so no drop
+//! waits for it on the game thread.
 
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick_core::abi::{DropRequest, Header, SpawnRequest, Status};
+use enshwick_core::abi::{DropRequest, Event, Header, SpawnRequest, Status};
 use enshwick_core::affixes::ItemRarity;
 
 use crate::engine::loader::Loader;
@@ -31,22 +37,74 @@ struct Layout {
     amount: usize,
 }
 
-static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
+/// The pickup's layout, read once for the process off the game thread; a
+/// failure stays, as the reflection and the archive it comes from do.
+#[derive(Debug)]
+struct Reading {
+    started: AtomicBool,
+    layout: OnceLock<Option<Layout>>,
+}
 
-/// The layout, read once: the template by its name in the game's data,
-/// which reads every template's name the first time. A failure stays for
-/// the process, as the reflection and the archive it comes from do.
-fn layout(loader: &Loader) -> Option<&'static Layout> {
-    LAYOUT
-        .get_or_init(|| {
-            read_layout(loader)
-                .inspect_err(|why| {
-                    crate::log!(WARN, "item drops off: {why}");
-                    crate::engine::diag::part_off("item drops", &why.to_string());
-                })
-                .ok()
-        })
-        .as_ref()
+static READING: Reading = Reading::new();
+
+impl Reading {
+    const fn new() -> Self {
+        Self {
+            started: AtomicBool::new(false),
+            layout: OnceLock::new(),
+        }
+    }
+
+    /// Runs `read` on a thread of its own, unless a read started before.
+    fn start(
+        &'static self,
+        read: impl FnOnce() -> Result<Layout, ReadLayoutError> + Send + 'static,
+    ) {
+        if self.started.load(Ordering::Acquire) || self.started.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let work = move || {
+            let read = std::panic::catch_unwind(std::panic::AssertUnwindSafe(read))
+                .unwrap_or(Err(ReadLayoutError::Panicked));
+            self.finish(read);
+        };
+        if let Err(why) = std::thread::Builder::new()
+            .name("enshwick item drops".into())
+            .spawn(work)
+        {
+            self.finish(Err(ReadLayoutError::Thread(why.to_string())));
+        }
+    }
+
+    /// Keeps `read` for the process, logging a failure and turning drops off.
+    fn finish(&self, read: Result<Layout, ReadLayoutError>) {
+        let kept = read
+            .inspect_err(|why| {
+                crate::log!(WARN, "item drops off: {why}");
+                crate::engine::diag::part_off("item drops", &why.to_string());
+            })
+            .ok();
+        let _first = self.layout.set(kept);
+    }
+
+    /// The layout once read; [`Status::NOT_LOADED`] until then and
+    /// [`Status::MISSING`] when the read failed.
+    fn layout(&self) -> Result<&Layout, Status> {
+        match self.layout.get() {
+            Some(Some(layout)) => Ok(layout),
+            Some(None) => Err(Status::MISSING),
+            None => Err(Status::NOT_LOADED),
+        }
+    }
+}
+
+/// Starts reading the layout as a world loads, where a server runs.
+pub(crate) fn world_event(event: Event) {
+    if event == Event::WORLD_LOADED
+        && let Some(loader) = crate::engine::loader::loader()
+    {
+        READING.start(move || read_layout(loader));
+    }
 }
 
 fn read_layout(loader: &Loader) -> Result<Layout, ReadLayoutError> {
@@ -116,6 +174,12 @@ enum ReadLayoutError {
     /// The template is not found by its name in the game's data.
     #[error("{template}: {0}", template = TEMPLATE)]
     Template(String),
+    /// The read panicked.
+    #[error("the read of the pickup panicked")]
+    Panicked,
+    /// No thread could be started for the read.
+    #[error("no thread to read the pickup: {0}")]
+    Thread(String),
 }
 
 /// `PickupItem`'s bytes for `request` on `layout`, `None` for a count or a
@@ -137,9 +201,11 @@ fn pickup(layout: &Layout, request: &DropRequest) -> Option<Vec<u8>> {
 }
 
 /// Drops the stack `request` asks for; the pickup's entity.
-pub(crate) fn drop_items(loader: &Loader, request: &DropRequest) -> Result<u32, Status> {
+pub(crate) fn drop_items(loader: &'static Loader, request: &DropRequest) -> Result<u32, Status> {
     crate::engine::world::server()?;
-    let layout = layout(loader).ok_or(Status::MISSING)?;
+    // A drop before any world load reached the parts starts the read itself.
+    READING.start(move || read_layout(loader));
+    let layout = READING.layout()?;
     let bytes = pickup(layout, request).ok_or(Status::BAD_ARGS)?;
     crate::inventory::transactions::item_info(loader, request.item.get())
         .map_err(|_| Status::REFUSED)?;
@@ -194,8 +260,61 @@ mod tests {
 
     #[test]
     fn a_drop_without_a_server_world_hands_out_no_entity() {
-        let loader = crate::start::tests::bare_loader();
-        assert!(drop_items(&loader, &request(5, 0)).is_err());
+        let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
+        assert!(drop_items(loader, &request(5, 0)).is_err());
+    }
+
+    /// A reading of its own, which the test's threads share.
+    fn reading() -> &'static Reading {
+        Box::leak(Box::new(Reading::new()))
+    }
+
+    /// Waits for `reading`'s thread to keep what it read.
+    fn finished(reading: &Reading) {
+        let began = std::time::Instant::now();
+        while reading.layout.get().is_none() {
+            assert!(began.elapsed().as_secs() < 10, "the read never finished");
+            std::thread::yield_now();
+        }
+    }
+
+    #[test]
+    fn the_layout_is_read_once_and_a_failed_read_turns_drops_off_for_good() {
+        let reading = reading();
+        assert_eq!(
+            reading.layout().err(),
+            Some(Status::NOT_LOADED),
+            "not started"
+        );
+        let reads = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        for _ in 0..3 {
+            let reads = std::sync::Arc::clone(&reads);
+            reading.start(move || {
+                reads.fetch_add(1, Ordering::Relaxed);
+                Err(ReadLayoutError::Type)
+            });
+        }
+        finished(reading);
+        assert_eq!(reads.load(Ordering::Relaxed), 1);
+        assert_eq!(reading.layout().err(), Some(Status::MISSING));
+        reading.start(|| Ok(LAYOUT));
+        assert_eq!(
+            reading.layout().err(),
+            Some(Status::MISSING),
+            "no second read"
+        );
+    }
+
+    #[test]
+    fn a_read_layout_answers_every_drop_and_a_panicking_read_turns_drops_off() {
+        let read = reading();
+        read.start(|| Ok(LAYOUT));
+        finished(read);
+        assert_eq!(read.layout().map(|l| l.hash), Ok(LAYOUT.hash));
+        let panicked = reading();
+        panicked.start(|| panic!("a read that panics"));
+        finished(panicked);
+        assert_eq!(panicked.layout().err(), Some(Status::MISSING));
     }
 
     #[test]

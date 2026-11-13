@@ -118,6 +118,12 @@ pub(crate) static PARTS: &[&Part] = &[
         ..part!("stat steps", stats)
     },
     &Part {
+        world_event: Some(fused!("item drops at world events", |_, event| {
+            drops::world_event(event);
+        })),
+        ..part!("drops", drops)
+    },
+    &Part {
         table_ids: spawns::TABLE_IDS,
         forget: Some(|_| spawns::forget()),
         ..part!("spawns", spawns)

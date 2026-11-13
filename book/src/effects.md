@@ -214,9 +214,9 @@ change it:
 - `.level(n)` gives the item a level, as the game levels weapons and armour;
 - `.rarity(rarity)` gives it an `ItemRarity`.
 
-The first drop reads the names of the game's templates once, about a tenth of
-a second on a dedicated server. An item the game does not know is refused
-(`WorldError::Refused`).
+An item the game does not know is refused (`WorldError::Refused`). For about
+a tenth of a second after the world loads, while the loader reads the pickup
+off the game thread, a drop gives `WorldError::NotLoaded`.
 
 ```rust
 use enshwick::actions::{Action, Outcome};
