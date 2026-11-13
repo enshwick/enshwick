@@ -253,3 +253,39 @@ fn map_image(bytes: &[u8]) -> Result<(u64, &'static [u8]), DryRunError> {
     headers.copy(bytes, image);
     Ok((headers.base, image))
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::base::resolve::{Skip, Skipped};
+
+    #[test]
+    fn a_dry_run_lists_every_mod_the_loader_skipped_with_its_reason() {
+        let mut loader = crate::start::tests::bare_loader();
+        loader.skipped.push(Skipped {
+            id: "you.safes".into(),
+            version: "0.2.0".into(),
+            label: "Safes".into(),
+            file: "old/you.safes.dll".into(),
+            reason: Skip::Copy {
+                id: "you.safes".into(),
+            },
+        });
+        let [skipped] = super::outcomes(&loader, &[], &[]).try_into().unwrap();
+        assert_eq!(
+            (
+                skipped.file.as_str(),
+                skipped.id.as_str(),
+                skipped.version.as_str(),
+                skipped.running,
+                skipped.reason.as_str()
+            ),
+            (
+                "old/you.safes.dll",
+                "you.safes",
+                "0.2.0",
+                false,
+                "skipped: another copy of you.safes loads instead; delete this one"
+            )
+        );
+    }
+}
