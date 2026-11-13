@@ -27,6 +27,10 @@ pub(crate) static PARTS: &[&Part] = &[
         steps: &[step!(Follow, "level writes", |s| progress::after_step(
             s.loader
         ))],
+        end: Some(fused!("level writes at a game's end", |loader| {
+            progress::game_ended(loader);
+        })),
+        forget: Some(|_| progress::forget()),
         ..part!("progress", progress)
     },
     &Part {

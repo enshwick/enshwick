@@ -214,9 +214,9 @@ change it:
 - `.level(n)` gives the item a level, as the game levels weapons and armour;
 - `.rarity(rarity)` gives it an `ItemRarity`.
 
-An item the game does not know is refused (`WorldError::Refused`). For about
-a tenth of a second after the world loads, while the loader reads the pickup
-off the game thread, a drop gives `WorldError::NotLoaded`.
+An item the game does not know is refused (`WorldError::Refused`). The loader
+reads the pickup on a thread of its own as the world loads, about a tenth of
+a second. A drop asked for before that read ends waits for the rest of it.
 
 ```rust
 use enshwick::actions::{Action, Outcome};

@@ -144,6 +144,22 @@ impl Writes {
         self.any.store(!queue.waiting.is_empty(), Ordering::Release);
         heard
     }
+
+    /// Every outcome left when a hosted game ends: those heard, then each
+    /// write still waiting, dropped with its reason, since its character
+    /// and entity id go with the game.
+    fn game_ended(&self) -> Vec<(ModIndex, ProgressWriteData)> {
+        let mut queue = self.queue.relock();
+        let mut heard = core::mem::take(&mut queue.heard);
+        heard.extend(
+            queue
+                .waiting
+                .drain(..)
+                .map(|w| w.heard(w.why, Left::default())),
+        );
+        self.any.store(false, Ordering::Release);
+        heard
+    }
 }
 
 pub(super) static PENDING: Writes = Writes::new();
@@ -195,8 +211,25 @@ fn asks(entity: u32, what: u32) -> Result<bool, Status> {
 /// step: those the step applied, and those dropped as no level step could
 /// take them.
 pub(crate) fn after_step(loader: &Loader) {
+    tell(loader, PENDING.step_ended());
+}
+
+/// Tells each mod what became of its writes as a hosted game ends: none
+/// waits into the next game, where its entity id may name another
+/// character.
+pub(crate) fn game_ended(loader: &Loader) {
+    tell(loader, PENDING.game_ended());
+}
+
+/// Forgets the writes mods' handlers asked for as the hosted game ended.
+pub(crate) fn forget() {
+    let _told = PENDING.game_ended();
+}
+
+/// Raises each outcome for the mod it belongs to.
+fn tell(loader: &Loader, heard: Vec<(ModIndex, ProgressWriteData)>) {
     // Raised with the queue unlocked: a handler may write again.
-    for (owner, data) in PENDING.step_ended() {
+    for (owner, data) in heard {
         loader.emit(
             Event::PROGRESS_WRITTEN,
             Some(owner.get()),
@@ -479,6 +512,27 @@ mod tests {
         );
         assert_eq!((first.level, first.experience, first.gained), (0, 0, 0));
         assert_eq!(heard[1].1.outcome, ProgressWriteData::NO_LEVEL_STEP);
+    }
+
+    #[test]
+    fn a_game_s_end_tells_every_write_and_keeps_none_for_the_next_game() {
+        let pending = Writes::new();
+        let applied =
+            queued(PROGRESS_SET_LEVEL, 12).heard(ProgressWriteData::APPLIED, Left::default());
+        pending.queue.relock().heard.push(applied);
+        assert_eq!(pending.push(queued(PROGRESS_ADD_EXPERIENCE, 50)), Ok(()));
+        let told = pending.game_ended();
+        assert_eq!(
+            told.iter().map(|(_, d)| d.outcome).collect::<Vec<_>>(),
+            [ProgressWriteData::APPLIED, ProgressWriteData::NO_LEVEL_STEP]
+        );
+        assert!(!pending.any.load(Ordering::Acquire));
+        assert!(pending.step_ended().is_empty());
+        assert!(
+            pending.step_ended().is_empty(),
+            "nothing waits into the next game"
+        );
+        assert!(pending.queue.relock().waiting.is_empty());
     }
 
     #[test]

@@ -9,8 +9,8 @@
 //!
 //! The template is found by its name, which reads every template's name
 //! from the archive, about a tenth of a second on a dedicated server: the
-//! loader reads it on a thread of its own as the world loads, so no drop
-//! waits for it on the game thread.
+//! loader reads it on a thread of its own as the world loads, and only a
+//! drop asked for before the read ends waits for the rest of it.
 
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -106,14 +106,11 @@ impl Reading {
         let _first = self.layout.set(kept);
     }
 
-    /// The layout once read; [`Status::NOT_LOADED`] until then and
-    /// [`Status::MISSING`] when the read failed.
+    /// The layout, waiting for a read [`Reading::start`] began, so a drop
+    /// right after the world loads waits out the rest of the read instead
+    /// of failing; [`Status::MISSING`] when the read failed.
     fn layout(&self) -> Result<&Layout, Status> {
-        match self.layout.get() {
-            Some(Some(layout)) => Ok(layout),
-            Some(None) => Err(Status::MISSING),
-            None => Err(Status::NOT_LOADED),
-        }
+        self.layout.wait().as_ref().ok_or(Status::MISSING)
     }
 }
 
@@ -298,11 +295,7 @@ mod tests {
     #[test]
     fn the_layout_is_read_once_and_a_failed_read_turns_drops_off_for_good() {
         let reading = reading();
-        assert_eq!(
-            reading.layout().err(),
-            Some(Status::NOT_LOADED),
-            "not started"
-        );
+        assert!(reading.layout.get().is_none(), "not started");
         let reads = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         for _ in 0..3 {
             let reads = std::sync::Arc::clone(&reads);
@@ -320,6 +313,16 @@ mod tests {
             Some(Status::MISSING),
             "no second read"
         );
+    }
+
+    #[test]
+    fn a_drop_during_the_read_waits_for_it_instead_of_failing() {
+        let reading = reading();
+        reading.start(|| {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            Ok(LAYOUT)
+        });
+        assert_eq!(reading.layout().map(|l| l.hash), Ok(LAYOUT.hash));
     }
 
     #[test]

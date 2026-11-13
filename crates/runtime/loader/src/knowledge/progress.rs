@@ -61,7 +61,7 @@ const REGISTRY: usize = 22;
 mod writes;
 
 use writes::{PENDING, WRITERS, WRITES_FUSE};
-pub(crate) use writes::{after_step, write};
+pub(crate) use writes::{after_step, forget, game_ended, write};
 
 #[derive(Debug, Default)]
 struct Sealed {

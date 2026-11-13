@@ -144,8 +144,9 @@ impl Event {
     /// applied or dropped; data is a
     /// [`ProgressWriteData`](super::ProgressWriteData). Raised for that mod
     /// only, on the game thread after the step that applied the write, or
-    /// after the second step end with no level step that could take it.
-    /// The name is enshwick's. Server only. ABI 11.25.
+    /// after the second step end with no level step that could take it;
+    /// a write still waiting when a hosted game ends is heard as dropped
+    /// then. The name is enshwick's. Server only. ABI 11.25.
     pub const PROGRESS_WRITTEN: Self = Self(26);
 }
 
