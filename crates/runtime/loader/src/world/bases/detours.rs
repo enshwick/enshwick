@@ -193,6 +193,8 @@ crate::engine::chains::chain_detour! {
 /// - `bases` is the live `kind` object the game's grouping has just filled,
 ///   on the grouping's thread.
 unsafe fn regroup(bases: *mut u8, kind: Kind, sites: &Sites) -> Option<Grouped> {
+    // The new base code's link is armed with the grouping's, all or none.
+    let new_base = ADD_BASE_NEXT.wired()?;
     let window = past16::sites().map(past16::Sites::code);
     let ready = window.and_then(|code| {
         // SAFETY: the caller guarantees the live object on the grouping's
@@ -208,7 +210,7 @@ unsafe fn regroup(bases: *mut u8, kind: Kind, sites: &Sites) -> Option<Grouped> 
             bases,
             sites.fields,
             ASKED.bases(kind),
-            ADD_BASE_NEXT.get(),
+            new_base,
             ready.as_ref().map(|f| f as &dyn Fn(usize)),
         )
     }

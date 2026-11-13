@@ -629,6 +629,29 @@ mod tests {
     }
 
     #[test]
+    fn bases_past_16_whose_later_link_fails_arm_none_of_their_links() {
+        let loader = crate::start::tests::bare_loader();
+        assert!(loader.link_fused(
+            &PAST16,
+            Target::Found("create", Some(0x2000)),
+            &CLIENT_CREATE_NEXT,
+            create_client,
+            HookFlags::NONE,
+        ));
+        assert!(
+            !link_creates(&loader, false),
+            "this build has no server create"
+        );
+        assert!(PAST16.is_off());
+        let mut chains = enshwick_base::Relock::relock(&loader.chains);
+        chains.seal();
+        assert!(
+            chains.is_empty(),
+            "the first create went with the feature, so its target is never patched"
+        );
+    }
+
+    #[test]
     fn a_fault_in_the_teardown_stops_new_windows() {
         ARMED.store(true, Ordering::Release);
         assert!(armed());
