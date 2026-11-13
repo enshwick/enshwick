@@ -226,13 +226,6 @@ pub(crate) struct Loader {
     pub(crate) parts: crate::engine::parts::Parts,
 }
 
-/// Turns `feature` off for the warning `line` and the status `entry` a
-/// caller wrote, through [`Fuse::turn_off`], with no error code: the cause
-/// is the caller's, not the game build's.
-pub(crate) fn report_off(feature: &str, (line, entry): (String, String)) {
-    Fuse::named(feature).turn_off(&Off::reported(line, entry));
-}
-
 /// Wires every armed chain of the running loader past the mods that are off
 /// or waiting and the loader features that are off.
 pub(crate) fn rewire() {

@@ -273,7 +273,7 @@ pub(crate) fn link(loader: &Loader) {
             crate::log!(INFO, "controls: a server's controls stay off here: {why}");
         }
         Err(why) => {
-            loader.feature_off("mod control keys", why.id(), &why.to_string());
+            let _off = loader.fuse_off(&KEYS_FUSE, why.id(), &why.to_string());
         }
     }
 }
@@ -362,21 +362,20 @@ impl ReadGateError {
 }
 
 fn link_actions(loader: &Loader, declared: &[Declared]) {
-    const FEATURE: &str = "controls that follow game actions";
     if !declared.iter().any(|d| !d.link.is_empty()) {
         return;
     }
     if !crate::actions::interactions::reads_inputs() {
-        loader.feature_off(
-            FEATURE,
+        let _off = loader.fuse_off(
+            &LINKED_FUSE,
             crate::actions::interactions::ACTIONS_SYSTEM,
             "the link to the system that reads the players' input did not link",
         );
         return;
     }
     if !crate::engine::ticks::stepped() {
-        loader.feature_off(
-            FEATURE,
+        let _off = loader.fuse_off(
+            &LINKED_FUSE,
             pinned::server::POST_STEP.id(),
             "the link after the server's step, where they fire, did not link",
         );
@@ -386,8 +385,8 @@ fn link_actions(loader: &Loader, declared: &[Declared]) {
     let digital = catalogue::constant(catalogue::ids::PLAYER_INPUT_DIGITAL, &loader.reflection)
         .and_then(|v| usize::try_from(v).ok());
     let Some(digital) = digital else {
-        loader.feature_off(
-            FEATURE,
+        let _off = loader.fuse_off(
+            &LINKED_FUSE,
             catalogue::ids::PLAYER_INPUT_DIGITAL,
             "the build's reflection lacks it",
         );
@@ -916,10 +915,48 @@ pub(crate) use input::{capture_keys, focused, key_name};
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    unsafe extern "system" fn fired(_: *const ControlEvent, _: *mut c_void) {}
+
+    fn declared(link: &str) -> Declared {
+        Declared {
+            owner: ModIndex::new(0),
+            id: "you.test:jump".to_owned(),
+            name: "jump".to_owned(),
+            label: "Jump".to_owned(),
+            defaults: [0; 2],
+            link: link.to_owned(),
+            action: String::new(),
+            fires: 1,
+            hold_ms: 0,
+            callback: fired,
+            user: 0,
+        }
+    }
+
+    #[test]
+    fn controls_that_follow_game_actions_are_listed_off_when_the_input_system_did_not_link() {
+        let loader = crate::start::tests::bare_loader();
+        link_actions(&loader, &[declared("")]);
+        assert!(!LINKED_FUSE.is_off(), "no control follows a game action");
+        link_actions(&loader, &[declared(""), declared("Jump")]);
+        assert!(LINKED_FUSE.is_off());
+        assert!(!linked());
+        let listed = crate::engine::diag::parts_off();
+        let off = listed.iter().find(|p| p.part == LINKED_FUSE.feature());
+        assert!(
+            off.is_some_and(|p| p
+                .reason
+                .starts_with(crate::actions::interactions::ACTIONS_SYSTEM)),
+            "{listed:?}"
+        );
+    }
+
     #[test]
     fn a_press_the_server_cannot_take_leaves_a_warning_in_the_log() {
         let turn = crate::engine::log::capture_turn();
-        super::press("you.weather", "day");
+        press("you.weather", "day");
         let lines = crate::engine::log::captured();
         drop(turn);
         assert!(

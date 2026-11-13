@@ -55,26 +55,6 @@ fn a_panic_under_another_fuse_of_a_link_s_name_leaves_the_link_wired() {
 }
 
 #[test]
-fn a_part_a_mod_clash_turns_off_is_logged_without_a_build_code() {
-    let turn = crate::engine::log::capture_turn();
-    report_off(
-        "test alias /lamp",
-        (
-            "test alias /lamp off: /lamp is taken".to_owned(),
-            "/lamp is taken".to_owned(),
-        ),
-    );
-    let lines = crate::engine::log::captured();
-    drop(turn);
-    assert!(
-        lines
-            .iter()
-            .any(|(_, _, line)| line == "test alias /lamp off: /lamp is taken"),
-        "{lines:?}"
-    );
-}
-
-#[test]
 fn a_feature_whose_target_fails_to_arm_is_wired_past_on_its_other_targets() {
     let loader = crate::start::tests::bare_loader();
     let feature = "test lamps";

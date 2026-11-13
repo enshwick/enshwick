@@ -6,16 +6,16 @@ use std::cell::RefCell;
 use enshwick_core::abi::Interaction;
 use enshwick_core::raw::{read_at, write_at};
 
+use enshwick_core::abi::HookFlags;
+
 use super::{INTERACTIONS_FUSE, LOADED, allowed, interaction};
-use crate::engine::chains::Next;
+use crate::engine::loader::{Loader, Target};
 
-// SAFETY: `StockFn` is the signature of the build table's
-// `access.base_stock`, and the parent module's `link` uses this slot only as
-// that function's next.
-pub(super) static STOCK_NEXT: Next<StockFn> = unsafe { Next::new() };
-
-pub(super) type StockFn =
-    unsafe extern "system" fn(*mut u8, *mut [u64; 4], *mut u8, *mut u8, *const f32, u32) -> *mut u8;
+/// Links the base stock at `target` as one of the interaction filters'
+/// links; true when linked.
+pub(super) fn link(loader: &Loader, target: Target<'_>, flags: HookFlags) -> bool {
+    loader.link_fused(&INTERACTIONS_FUSE, target, &STOCK_NEXT, stock, flags)
+}
 
 /// Filtered copies of the base stock lists one thread handed out in one
 /// world step, by their ids.
@@ -59,47 +59,49 @@ fn kept_in_step(list: &[u32], step: u64) -> (*const u32, usize) {
     })
 }
 
-pub(super) unsafe extern "system" fn stock(
-    out: *mut u8,
-    lists: *mut [u64; 4],
-    server: *mut u8,
-    client: *mut u8,
-    position: *const f32,
-    player: u32,
-) -> *mut u8 {
-    if crate::world::transactions::holds().quiet() {
-        // SAFETY: this detour runs only as the `access.base_stock` link, so
-        // the slot holds the next function of that signature; the game's
-        // arguments pass unchanged.
-        return unsafe { STOCK_NEXT.get()(out, lists, server, client, position, player) };
-    }
-    // Asked by the client's own interface, which sees the client's world;
-    // read before the chain calls on.
-    let ui = LOADED.get().is_some_and(|(loader, layout, _)| {
-        if layout.stock_ui_return == 0 {
-            return false;
+crate::engine::chains::chain_detour! {
+    /// The table's `access.base_stock`: the lists it hands a server's
+    /// world leave out every inventory a filter refuses.
+    fn stock(
+        out: *mut u8,
+        lists: *mut [u64; 4],
+        server: *mut u8,
+        client: *mut u8,
+        position: *const f32,
+        player: u32,
+    ) -> *mut u8;
+    next STOCK_NEXT;
+    fuse &INTERACTIONS_FUSE, "the stock";
+    |onward| {
+        if crate::world::transactions::holds().quiet() {
+            return onward.call();
         }
-        let frame = (loader.caller_frame)();
-        // SAFETY: the link asks for `CALLER_FRAME` when `stock_ui_return` is
-        // set, so the frame was taken at entry of this chain and `rsp`,
-        // non-zero by the check before it, points at the live return
-        // address.
-        frame.rsp != 0 && unsafe { frame.return_address() } == layout.stock_ui_return
-    });
-    // SAFETY: this detour runs only as the `access.base_stock` link, so the
-    // slot holds the next function of that signature; the game's arguments
-    // pass unchanged.
-    let result = unsafe { STOCK_NEXT.get()(out, lists, server, client, position, player) };
-    // SAFETY: `out` is non-null by the check before it and is the base
-    // stock's result, whose first byte is the game's error code, 0 for
-    // success.
-    if ui || out.is_null() || lists.is_null() || unsafe { read_at::<u8>(out, 0) } != 0 {
-        return result;
+        // Asked by the client's own interface, which sees the client's
+        // world; read before the chain calls on.
+        let ui = LOADED.get().is_some_and(|(loader, layout, _)| {
+            if layout.stock_ui_return == 0 {
+                return false;
+            }
+            let frame = (loader.caller_frame)();
+            // SAFETY: the link asks for `CALLER_FRAME` when
+            // `stock_ui_return` is set, so the frame was taken at entry of
+            // this chain and `rsp`, non-zero by the check before it, points
+            // at the live return address.
+            frame.rsp != 0 && unsafe { frame.return_address() } == layout.stock_ui_return
+        });
+        let result = onward.call();
+        // SAFETY: `out` is non-null by the check before it and is the base
+        // stock's result, whose first byte is the game's error code, 0 for
+        // success.
+        if ui || out.is_null() || lists.is_null() || unsafe { read_at::<u8>(out, 0) } != 0 {
+            return result;
+        }
+        // SAFETY: `lists` is non-null by the check before it and is the base
+        // stock's lists argument, which the game has just filled, on its
+        // thread.
+        unsafe { filter_stock(lists, player) };
+        result
     }
-    // SAFETY: `lists` is non-null by the check before it and is the base stock's
-    // lists argument, which the game has just filled, on its thread.
-    let _done = INTERACTIONS_FUSE.run("the stock", || unsafe { filter_stock(lists, player) });
-    result
 }
 
 /// Leaves out of the stock lists every inventory a filter refuses.

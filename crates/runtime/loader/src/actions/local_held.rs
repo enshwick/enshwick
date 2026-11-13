@@ -15,7 +15,6 @@ use enshwick_core::Entity;
 use enshwick_core::abi::{HookFlags, Side, Status};
 use enshwick_gamedata::catalogue;
 
-use crate::engine::chains::Next;
 use crate::engine::ecs::Components;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
@@ -38,7 +37,6 @@ const HOST_FEATURE: &str = "the open screen's host template and position";
 /// How long a read stays the answer: past it, no step ran, as in a menu.
 const FRESH_MS: u64 = 1000;
 
-type SystemFn = unsafe extern "system" fn(*mut u64) -> u64;
 type RowEntity = unsafe extern "system" fn(ctx: *mut u64, out: *mut u32) -> *const u32;
 
 /// Where the mask is read on this build.
@@ -145,10 +143,10 @@ static STATE: State = State {
 };
 static FUSE: Fuse = Fuse::new(FEATURE);
 static HOST_FUSE: Fuse = Fuse::new(HOST_FEATURE);
-// SAFETY: `SystemFn` is the signature of a system entry, here the reflected
-// `player_ui` system's, and `link` uses this slot only as that function's
-// next.
-static NEXT: Next<SystemFn> = unsafe { Next::new() };
+/// The switch of the link on [`SYSTEM`], which both reads share: each read
+/// runs under its own fuse inside it, so a panic in one leaves the other
+/// linked.
+static LINK_FUSE: Fuse = Fuse::new("the local player's interface reads");
 
 fn now_ms() -> u64 {
     let start = STATE.start.get_or_init(Instant::now);
@@ -208,13 +206,13 @@ pub(crate) fn link(loader: &Loader) {
     match layout(loader) {
         Ok(layout) => any |= STATE.layout.set(layout).is_ok(),
         Err(id) => {
-            let _off = loader.feature_off(FEATURE, id, "this build lacks it");
+            let _off = loader.fuse_off(&FUSE, id, "this build lacks it");
         }
     }
     match host_layout(loader) {
         Ok(at) => any |= STATE.host_layout.set(at).is_ok(),
         Err(id) => {
-            let _off = loader.feature_off(HOST_FEATURE, id, "this build lacks it");
+            let _off = loader.fuse_off(&HOST_FUSE, id, "this build lacks it");
         }
     }
     if !any {
@@ -225,23 +223,26 @@ pub(crate) fn link(loader: &Loader) {
         .system(SYSTEM)
         .ok()
         .map(enshwick_gamedata::reflect::System::entry);
-    // The link serves both features: it goes under one that is still on,
-    // or a feature already off would refuse it for the other.
-    let feature = if STATE.layout.get().is_some() {
-        FEATURE
-    } else {
-        HOST_FEATURE
-    };
-    let linked = loader.link_feature(
-        feature,
-        Target::Found(SYSTEM, entry),
-        &NEXT,
-        player_ui as SystemFn,
-        HookFlags::NONE,
-    );
-    if !linked && STATE.host_layout.get().is_some() {
-        let _off = loader.feature_off(HOST_FEATURE, SYSTEM, "its system did not link");
+    let _linked = link_system(loader, entry);
+}
+
+/// Links the reads at `entry`, the system's; without it, each read whose
+/// layout this build has turns off too. True when linked.
+fn link_system(loader: &Loader, entry: Option<u64>) -> bool {
+    let target = Target::Found(SYSTEM, entry);
+    if loader.link_fused(&LINK_FUSE, target, &NEXT, player_ui, HookFlags::NONE) {
+        return true;
     }
+    let reads = [
+        (&FUSE, STATE.layout.get().is_some()),
+        (&HOST_FUSE, STATE.host_layout.get().is_some()),
+    ];
+    for (fuse, laid_out) in reads {
+        if laid_out {
+            let _off = loader.fuse_off(fuse, SYSTEM, "its system did not link");
+        }
+    }
+    false
 }
 
 /// Reads the local player's mask from `player_ui`'s context.
@@ -327,31 +328,33 @@ fn fresh(read: u64, now: u64) -> bool {
     read != 0 && now.saturating_sub(read) <= FRESH_MS
 }
 
-unsafe extern "system" fn player_ui(ctx: *mut u64) -> u64 {
-    // Until a mod asks, the system runs as the game's alone.
-    let host = STATE.host_wanted.load(Ordering::Relaxed);
-    if host != 0
-        && let Some(at) = STATE.host_layout.get()
-        && !ctx.is_null()
-    {
-        // SAFETY: `ctx` is non-null by the check before it and is the
-        // system's own context, at its entry on its thread.
-        let _read = HOST_FUSE.run(HOST_FEATURE, || unsafe { read_host(ctx, at, host) });
+crate::engine::chains::chain_detour! {
+    /// The reflected `player_ui` system's entry, where both reads run, each
+    /// under its own fuse, not this link's: a panic in one turns off only
+    /// that read. Until a mod asks, the system runs as the game's alone.
+    fn player_ui(ctx: *mut u64) -> u64;
+    next NEXT;
+    fuse &LINK_FUSE, "the local player's interface reads";
+    |onward| {
+        let host = STATE.host_wanted.load(Ordering::Relaxed);
+        if host != 0
+            && let Some(at) = STATE.host_layout.get()
+            && !ctx.is_null()
+        {
+            // SAFETY: `ctx` is non-null by the check before it and is the
+            // system's own context, at its entry on its thread.
+            let _read = HOST_FUSE.run(HOST_FEATURE, || unsafe { read_host(ctx, at, host) });
+        }
+        if STATE.asked.load(Ordering::Relaxed)
+            && let Some(layout) = STATE.layout.get()
+            && !ctx.is_null()
+        {
+            // SAFETY: `ctx` is non-null by the check before it and is the
+            // system's own context, at its entry on its thread.
+            let _read = FUSE.run(FEATURE, || unsafe { read(ctx, layout) });
+        }
+        onward.call()
     }
-    if STATE.asked.load(Ordering::Relaxed)
-        && let Some(layout) = STATE.layout.get()
-        && !ctx.is_null()
-    {
-        // SAFETY: `ctx` is non-null by the check before it and is the
-        // system's own context, at its entry on its thread.
-        let _read = FUSE.run(FEATURE, || unsafe {
-            read(ctx, layout);
-        });
-    }
-    // SAFETY: this detour runs only as the `player_ui` system's link, so the
-    // slot holds the next function of that signature; the game's context
-    // passes unchanged.
-    unsafe { NEXT.get()(ctx) }
 }
 
 /// The local player's held mask, or why not: [`Status::MISSING`] while no
@@ -371,6 +374,39 @@ pub(crate) fn held() -> Result<u64, Status> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_panic_in_the_held_read_leaves_the_host_reads_linked() {
+        use enshwick_base::Relock;
+
+        let loader = crate::start::tests::bare_loader();
+        assert!(link_system(&loader, Some(0x7000)));
+        let head: &'static core::sync::atomic::AtomicUsize =
+            Box::leak(Box::new(core::sync::atomic::AtomicUsize::new(0)));
+        {
+            let mut chains = loader.chains.relock();
+            chains.seal();
+            for chain in chains.iter_mut() {
+                chain.head = Some(head);
+                chain.original = 0xff;
+                chain.wire(|_| false);
+            }
+        }
+        let ours = crate::engine::chains::Next::address_of(
+            player_ui as unsafe extern "system" fn(*mut u64) -> u64,
+        );
+        assert_eq!(head.load(Ordering::Acquire), ours);
+        let caught = FUSE.run(FEATURE, || panic!("a test"));
+        assert_eq!(caught, None::<()>);
+        loader.rewire();
+        assert!(FUSE.is_off());
+        assert!(!HOST_FUSE.is_off() && !LINK_FUSE.is_off());
+        assert_eq!(
+            head.load(Ordering::Acquire),
+            ours,
+            "the host reads still run in the system"
+        );
+    }
 
     #[test]
     fn the_first_ask_starts_the_reads_and_answers_missing() {

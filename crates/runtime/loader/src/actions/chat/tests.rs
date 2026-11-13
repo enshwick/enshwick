@@ -24,24 +24,65 @@ fn a_line_to_one_player_needs_a_positive_byte_mask_and_overhead() {
         handle_slot: 0x7f,
         line_overhead: 0x17,
     };
-    assert_eq!(OneLine::from_rows(Some(0x7f), Some(0x17)), Some(one));
-    assert_eq!(OneLine::from_rows(None, Some(0x17)), None, "no mask");
-    assert_eq!(OneLine::from_rows(Some(0x7f), None), None, "no overhead");
+    let (mask, overhead) = (
+        Err(pinned::chat::HANDLE_SLOT.id()),
+        Err(pinned::chat::LINE_OVERHEAD.id()),
+    );
+    assert_eq!(OneLine::from_rows(Some(0x7f), Some(0x17)), Ok(one));
+    assert_eq!(OneLine::from_rows(None, Some(0x17)), mask, "no mask");
+    assert_eq!(
+        OneLine::from_rows(Some(0x7f), None),
+        overhead,
+        "no overhead"
+    );
     assert_eq!(
         OneLine::from_rows(Some(0x80), Some(0x17)),
-        None,
+        mask,
         "a negative mask"
     );
     assert_eq!(
         OneLine::from_rows(Some(0x7f), Some(0xe9)),
-        None,
+        overhead,
         "a negative overhead"
     );
-    assert_eq!(OneLine::from_rows(Some(0), Some(0x17)), None, "a zero mask");
+    assert_eq!(OneLine::from_rows(Some(0), Some(0x17)), mask, "a zero mask");
     assert_eq!(
         OneLine::from_rows(Some(0x7f), Some(0)),
-        None,
+        overhead,
         "a zero overhead"
+    );
+}
+
+#[test]
+fn a_build_without_the_chat_layout_lists_the_chat_lines_off_with_the_entry() {
+    let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
+    link(loader);
+    assert!(CHAT_FUSE.is_off());
+    assert_eq!(
+        send(0, "hello"),
+        Status::MISSING,
+        "mods' lines stay refused"
+    );
+    let listed = crate::engine::diag::parts_off();
+    let off = listed.iter().find(|p| p.part == "chat lines");
+    assert!(
+        off.is_some_and(|p| p.reason.starts_with("chat.mark_delivered ")),
+        "{listed:?}"
+    );
+}
+
+#[test]
+fn a_line_for_one_player_that_reached_others_lists_those_lines_off() {
+    assert!(to_one_player());
+    strayed(2);
+    strayed(1);
+    assert!(!to_one_player());
+    assert_eq!(delivery().1, 2, "every stray counts");
+    let listed = crate::engine::diag::parts_off();
+    let off = listed.iter().find(|p| p.part == "chat lines to one player");
+    assert!(
+        off.is_some_and(|p| p.reason.starts_with("a line for one player reached 2 ")),
+        "{listed:?}"
     );
 }
 

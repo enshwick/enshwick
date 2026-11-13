@@ -21,7 +21,9 @@ pub(crate) use said::{Rate, admit, register};
 use enshwick_core::abi::{ChatLine, HookFlags, Status};
 
 use crate::base::wire::{Drops, Outbox, strays};
-use crate::engine::chains::Next;
+use crate::engine::builds::ABSENT;
+use crate::engine::chains::{Next, Onward};
+use crate::engine::fuse::{Fuse, Off};
 use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
 use crate::engine::pinned::{Constant, Symbol};
@@ -115,13 +117,23 @@ struct OneLine {
 const MOST_BYTE: u64 = 0x7f; // bound, not a game offset: the largest positive imm8
 
 impl OneLine {
-    /// The handle mask and line overhead from the table's rows; `None`
-    /// without either or with one that is zero or past a positive byte.
-    fn from_rows(handle_slot: Option<u64>, line_overhead: Option<u64>) -> Option<Self> {
-        let byte = |value: Option<u64>| value.filter(|&value| (1..=MOST_BYTE).contains(&value));
-        Some(Self {
-            handle_slot: u32::try_from(byte(handle_slot)?).ok()?,
-            line_overhead: usize::try_from(byte(line_overhead)?).ok()?,
+    /// The handle mask and line overhead from the table's rows; the id of
+    /// the first missing, zero or past a positive byte.
+    fn from_rows(
+        handle_slot: Option<u64>,
+        line_overhead: Option<u64>,
+    ) -> Result<Self, &'static str> {
+        let byte = |value: Option<u64>, id: Constant| {
+            value
+                .filter(|&value| (1..=MOST_BYTE).contains(&value))
+                .ok_or(id.id())
+        };
+        let handle_slot = byte(handle_slot, pinned::chat::HANDLE_SLOT)?;
+        let line_overhead = byte(line_overhead, pinned::chat::LINE_OVERHEAD)?;
+        Ok(Self {
+            handle_slot: u32::try_from(handle_slot).map_err(|_| pinned::chat::HANDLE_SLOT.id())?,
+            line_overhead: usize::try_from(line_overhead)
+                .map_err(|_| pinned::chat::LINE_OVERHEAD.id())?,
         })
     }
 }
@@ -162,10 +174,6 @@ struct Delivery {
     dropped: Drops,
     /// Lines for one player that reached other players too.
     strayed: Drops,
-    /// Set when this build has no usable handle mask or line overhead, or
-    /// once a line for one player reached others: no line goes to one player
-    /// from then on, since this build's chat does not keep it there.
-    one_player_off: AtomicBool,
     /// Players' lines whose client sent a chat type other than typed text
     /// or an emote, which were dropped.
     foreign: Drops,
@@ -174,9 +182,13 @@ struct Delivery {
 static DELIVERY: Delivery = Delivery {
     dropped: Drops::new(),
     strayed: Drops::new(),
-    one_player_off: AtomicBool::new(false),
     foreign: Drops::new(),
 };
+
+/// The switch of the lines for one player: off on a build without a usable
+/// handle mask or line overhead, or once a line for one player reached
+/// others, since this build's chat does not keep it there.
+static ONE_FUSE: Fuse = Fuse::new("chat lines to one player");
 
 /// The lines for one player dropped and those that reached
 /// others, for the status summary.
@@ -186,7 +198,7 @@ pub(crate) fn delivery() -> (u64, u64) {
 
 /// Whether lines for one player go out: off once one reached others.
 pub(crate) fn to_one_player() -> bool {
-    !DELIVERY.one_player_off.load(Ordering::Relaxed)
+    !ONE_FUSE.is_off()
 }
 
 /// Queues `text` for the player with account key `to`, or for everyone.
@@ -230,11 +242,13 @@ fn dropped(count: usize) {
 #[cold]
 fn strayed(others: u32) {
     let _total = DELIVERY.strayed.add(1);
-    if !DELIVERY.one_player_off.swap(true, Ordering::Relaxed) {
-        crate::log!(
-            ERROR,
-            "mod messages to one player off: a line for one player reached {others} other players, since this game build's chat did not mark it delivered to them"
-        );
+    if !ONE_FUSE.is_off() {
+        ONE_FUSE.turn_off(&Off::fault(
+            ONE_FUSE.feature(),
+            &format!(
+                "a line for one player reached {others} other players, since this game build's chat did not mark it delivered to them"
+            ),
+        ));
     }
 }
 
@@ -277,56 +291,27 @@ fn replied(text: &str) -> impl Iterator<Item = &str> {
 }
 
 /// Links the chat post on the server; without it mods' chat lines and the
-/// messages clients send stay off and the log says so.
+/// messages clients send stay off, reported by [`CHAT_FUSE`].
 pub(crate) fn link(loader: &'static Loader) {
     said::seal();
-    let symbol = |name: Symbol| loader.build.symbol(name.id()).map(|rva| loader.base + rva);
-    let constant = |name: Constant| {
-        loader
-            .build
-            .constant(name.id())
-            .and_then(|v| usize::try_from(v).ok())
-    };
-    let layout = (|| {
-        let mark = usize::try_from(symbol(pinned::chat::MARK_DELIVERED)?).ok()?;
-        Some(Layout {
-            post_return: symbol(pinned::chat::POST_RETURN)?,
-            // SAFETY: `mark` is the build table's `chat.mark_delivered` in
-            // the loaded executable, the game function `MarkFn` types.
-            mark: unsafe { core::mem::transmute::<usize, MarkFn>(mark) },
-            store: constant(pinned::server::CHAT_STORE)?,
-            slots: constant(pinned::chat::STORE_SLOTS)?,
-            slot_size: constant(pinned::chat::STORE_SLOT_SIZE)?,
-            slot_count: constant(pinned::chat::STORE_SLOT_COUNT)?.min(32),
-            tail: constant(pinned::chat::STORE_TAIL)?,
-            delivered: constant(pinned::chat::NODE_DELIVERED)?,
-            max_text: constant(pinned::chat::MAX_TEXT)?,
-            reply_type: u8::try_from(constant(pinned::chat::REPLY_TYPE)?).ok()?,
-            one: OneLine::from_rows(
-                loader.build.constant(pinned::chat::HANDLE_SLOT.id()),
-                loader.build.constant(pinned::chat::LINE_OVERHEAD.id()),
-            ),
-        })
-    })();
-    let Some(layout) = layout else {
-        crate::log!(WARN, "chat lines off: this build has no chat layout");
-        return;
+    let (layout, one) = match layout(loader) {
+        Ok(found) => found,
+        Err((id, reason)) => {
+            let _off = loader.fuse_off(&CHAT_FUSE, id, reason);
+            return;
+        }
     };
     if LOADED.get().is_some() {
         return;
     }
-    if layout.one.is_none() {
+    if let Err(id) = one {
         // Refused at the queue, so callers and the status see them off.
-        DELIVERY.one_player_off.store(true, Ordering::Relaxed);
-        crate::log!(
-            WARN,
-            "chat lines to one player off: this build has no usable handle mask or line overhead"
-        );
+        let _off = loader.fuse_off(&ONE_FUSE, id, "is missing or not a positive byte");
     }
     // Linked first: without the post, mods' lines must stay refused.
     let target = Target::Pinned(pinned::chat::POST);
-    if !loader.link_feature(
-        "chat lines",
+    if !loader.link_fused(
+        &CHAT_FUSE,
         target,
         &POST_NEXT,
         post,
@@ -338,12 +323,53 @@ pub(crate) fn link(loader: &'static Loader) {
     crate::log!(INFO, "chat lines on");
 }
 
-/// The switch of the chat lines and the chat mute.
-static CHAT_FUSE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("chat lines");
+/// A table entry the chat lacks, and why.
+type Lacks = (&'static str, &'static str);
+
+/// The chat layout of this build, with what lines to one player need or
+/// the id of the row that keeps them off; else the id of the entry it
+/// lacks and why.
+fn layout(loader: &Loader) -> Result<(Layout, Result<OneLine, &'static str>), Lacks> {
+    let absent = |id: &'static str| (id, ABSENT);
+    let symbol = |id: Symbol| loader.address(id).ok_or(absent(id.id()));
+    let constant = |id: Constant| loader.offset(id).ok_or(absent(id.id()));
+    let mark = usize::try_from(symbol(pinned::chat::MARK_DELIVERED)?).map_err(|_| {
+        (
+            pinned::chat::MARK_DELIVERED.id(),
+            "is past the address space",
+        )
+    })?;
+    let reply_type = u8::try_from(constant(pinned::chat::REPLY_TYPE)?)
+        .map_err(|_| (pinned::chat::REPLY_TYPE.id(), "is not a byte"))?;
+    let one = OneLine::from_rows(
+        loader.build.constant(pinned::chat::HANDLE_SLOT.id()),
+        loader.build.constant(pinned::chat::LINE_OVERHEAD.id()),
+    );
+    let layout = Layout {
+        post_return: symbol(pinned::chat::POST_RETURN)?,
+        // SAFETY: `mark` is the build table's `chat.mark_delivered` in the
+        // loaded executable, the game function `MarkFn` types.
+        mark: unsafe { core::mem::transmute::<usize, MarkFn>(mark) },
+        store: constant(pinned::server::CHAT_STORE)?,
+        slots: constant(pinned::chat::STORE_SLOTS)?,
+        slot_size: constant(pinned::chat::STORE_SLOT_SIZE)?,
+        slot_count: constant(pinned::chat::STORE_SLOT_COUNT)?.min(32),
+        tail: constant(pinned::chat::STORE_TAIL)?,
+        delivered: constant(pinned::chat::NODE_DELIVERED)?,
+        max_text: constant(pinned::chat::MAX_TEXT)?,
+        reply_type,
+        one: one.ok(),
+    };
+    Ok((layout, one))
+}
+
+/// The switch of the loader's link on the chat post, and so of the chat
+/// lines, the chat mute and the type check on what players send.
+static CHAT_FUSE: Fuse = Fuse::new("chat lines");
 /// The switch of the chat lines mods filter and hear, apart from the mute.
-static MODS_FUSE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("chat lines for mods");
+static MODS_FUSE: Fuse = Fuse::new("chat lines for mods");
 /// The switch of the mods' commands typed in chat.
-static COMMANDS_FUSE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("chat commands");
+static COMMANDS_FUSE: Fuse = Fuse::new("chat commands");
 
 /// Takes a line the player of account `key` typed out of the chat when it
 /// is a mod's command, queued to run after the step; false for any other
@@ -409,6 +435,12 @@ fn next() -> Option<PostFn> {
 /// server's own lines on unchanged; it gives the queue's drain the
 /// rest of the chain to post through.
 ///
+/// Written by hand, not with `chain_detour!`: a line a chat filter rewrote
+/// goes on with a new text. It runs under [`CHAT_FUSE`] through [`Onward`]
+/// all the same; the commands, the mute check and the lines for mods run
+/// under fuses of their own inside it, so a panic in one of them leaves the
+/// post linked and the type check on what players send in force.
+///
 /// # Safety
 ///
 /// - Called only by the game through the chain on `chat.post`, with its own
@@ -425,83 +457,96 @@ unsafe extern "system" fn post(
     hash: u64,
     extra: *const [u64; 2],
 ) -> *mut u8 {
-    // SAFETY: this is the entry of the loader's link on `chat.post`, on the
-    // game's calling thread, by this function's `# Safety`.
-    let typed = unsafe { typed_line(out) };
-    if let Some(loader) = typed.filter(|_| crate::actions::commands::any()) {
-        let taken = COMMANDS_FUSE
-            .run("the chat command check", || {
-                // SAFETY: `text` is the game's own argument at the entry of
-                // `chat.post`, by this function's `# Safety`.
-                unsafe { command(loader, text, hash) }
-            })
-            .unwrap_or(false);
-        if taken {
-            // SAFETY: `typed` is set only for a non-null `out`, a result
-            // record of at least 8 writable bytes by this function's
-            // `# Safety`.
-            unsafe { enshwick_core::raw::write_at(out, 0, 0u64) };
-            return out;
-        }
-    }
-    let judged = match typed {
-        None => Verdict::Pass,
-        // A check that panicked turns its fuse off: the mute is gone for the
-        // process, but a player's line still keeps only a type a client may send.
-        Some(loader) => CHAT_FUSE
-            .run("the chat line check", || {
-                // SAFETY: `text` is the game's own argument at the entry of
-                // `chat.post`, by this function's `# Safety`.
-                unsafe { judge(loader, kind, text, hash) }
-            })
-            .unwrap_or_else(|| verdict(true, kind, false, false)),
-    };
-    if judged == Verdict::Drop {
-        if !sent_by_clients(kind) && DELIVERY.foreign.add(1).is_some() {
-            // shortcut: logs the first drop and every 100th, not once per player; a per-player set when the console needs it.
-            crate::log!(
-                DEBUG,
-                "chat: the client of {hash:016x} sent a line of chat type {kind}; it is dropped"
-            );
-        }
-        // SAFETY: only a player's line is dropped, and it is judged only
-        // for a non-null `out`, a result record of at least 8 writable
-        // bytes by this function's `# Safety`.
-        unsafe { enshwick_core::raw::write_at(out, 0, 0u64) };
-        return out;
-    }
-    let heard = MODS_FUSE
-        .run("the chat line for mods", || {
-            // SAFETY: `text` is the game's own argument at the entry of
-            // `chat.post`, by this function's `# Safety`.
-            unsafe { for_mods(typed.is_some(), kind, text, hash, [loca1, loca2]) }
-        })
-        .unwrap_or(Heard::Keep);
-    let rewritten = match heard {
-        Heard::Keep => None,
-        Heard::Drop => {
-            // SAFETY: a line is dropped only for a non-null `out` (a typed
-            // line), a result record of at least 8 writable bytes by this
-            // function's `# Safety`.
-            unsafe { enshwick_core::raw::write_at(out, 0, 0u64) };
-            return out;
-        }
-        Heard::Rewrite(new) => Some(new),
-    };
-    let span = rewritten
-        .as_ref()
-        .map(|new| [new.as_ptr().expose_provenance(), new.len()]);
-    let text = span.as_ref().map_or(text, |span| &raw const *span);
-    match next() {
+    let onward = Onward::new(|| match next() {
         // SAFETY: `next` is the rest of `chat.post`'s chain, wired while this
-        // detour runs, and the arguments are the game's own, the chat type
-        // bounded to typed text or an emote for a line a player's client
-        // sent; a text a
-        // filter rewrote is a span over `rewritten`, which lives past the
-        // call and holds at most the table's `chat.max_text` bytes.
+        // detour runs, and the arguments are the game's own, passed on
+        // unchanged.
         Some(next) => unsafe { next(out, store, kind, text, loca1, loca2, handle, hash, extra) },
         None => out,
-    }
+    });
+    onward.run(&CHAT_FUSE, "the chat post", |onward| {
+        // SAFETY: this is the entry of the loader's link on `chat.post`, on
+        // the game's calling thread, by this function's `# Safety`.
+        let typed = unsafe { typed_line(out) };
+        if let Some(loader) = typed.filter(|_| crate::actions::commands::any()) {
+            let taken = COMMANDS_FUSE
+                .run("the chat command check", || {
+                    // SAFETY: `text` is the game's own argument at the entry
+                    // of `chat.post`, by this function's `# Safety`.
+                    unsafe { command(loader, text, hash) }
+                })
+                .unwrap_or(false);
+            if taken {
+                // SAFETY: `typed` is set only for a non-null `out`, a result
+                // record of at least 8 writable bytes by this function's
+                // `# Safety`.
+                unsafe { enshwick_core::raw::write_at(out, 0, 0u64) };
+                return out;
+            }
+        }
+        let judged = match typed {
+            None => Verdict::Pass,
+            // SAFETY: `text` is the game's own argument at the entry of
+            // `chat.post`, by this function's `# Safety`.
+            Some(loader) => unsafe { judge(loader, kind, text, hash) },
+        };
+        if judged == Verdict::Drop {
+            if !sent_by_clients(kind) && DELIVERY.foreign.add(1).is_some() {
+                // shortcut: logs the first drop and every 100th, not once per player; a per-player set when the console needs it.
+                crate::log!(
+                    DEBUG,
+                    "chat: the client of {hash:016x} sent a line of chat type {kind}; it is dropped"
+                );
+            }
+            // SAFETY: only a player's line is dropped, and it is judged only
+            // for a non-null `out`, a result record of at least 8 writable
+            // bytes by this function's `# Safety`.
+            unsafe { enshwick_core::raw::write_at(out, 0, 0u64) };
+            return out;
+        }
+        let heard = MODS_FUSE
+            .run("the chat line for mods", || {
+                // SAFETY: `text` is the game's own argument at the entry of
+                // `chat.post`, by this function's `# Safety`.
+                unsafe { for_mods(typed.is_some(), kind, text, hash, [loca1, loca2]) }
+            })
+            .unwrap_or(Heard::Keep);
+        let new = match heard {
+            Heard::Keep => return onward.call(),
+            Heard::Drop => {
+                // SAFETY: a line is dropped only for a non-null `out` (a
+                // typed line), a result record of at least 8 writable bytes
+                // by this function's `# Safety`.
+                unsafe { enshwick_core::raw::write_at(out, 0, 0u64) };
+                return out;
+            }
+            Heard::Rewrite(new) => new,
+        };
+        let span = [new.as_ptr().expose_provenance(), new.len()];
+        match next() {
+            // SAFETY: `next` is the rest of `chat.post`'s chain, wired while
+            // this detour runs, and the arguments are the game's own but the
+            // text, the chat type bounded to typed text or an emote for a
+            // line a player's client sent; the text is a span over `new`,
+            // which lives past the call and holds at most the table's
+            // `chat.max_text` bytes. Nothing after the call can panic, so
+            // the chain runs once.
+            Some(next) => unsafe {
+                next(
+                    out,
+                    store,
+                    kind,
+                    &raw const span,
+                    loca1,
+                    loca2,
+                    handle,
+                    hash,
+                    extra,
+                )
+            },
+            None => out,
+        }
+    })
 }
 
 /// What mods made of a line the game posts.
@@ -638,8 +683,7 @@ unsafe fn judge(loader: &'static Loader, kind: u8, text: *const [usize; 2], key:
 
 /// The loader when the game posts a line a player's client sent, told by
 /// where the game posts it, the dispatcher of what clients send, never by
-/// its type byte; `None` for every other line and a null `out`. It holds no
-/// call that can panic, so it decides even while the chat fuse is off.
+/// its type byte; `None` for every other line and a null `out`.
 ///
 /// # Safety
 ///
@@ -733,7 +777,7 @@ pub(crate) fn drain() {
     };
     for line in lines {
         let to = match line.to {
-            To::Key(_) if DELIVERY.one_player_off.load(Ordering::Relaxed) => {
+            To::Key(_) if ONE_FUSE.is_off() => {
                 dropped(1);
                 continue;
             }

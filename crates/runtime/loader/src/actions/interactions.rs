@@ -11,16 +11,15 @@ use arc_swap::ArcSwapOption;
 use enshwick_core::abi::{Header, HookFlags, Interaction, InteractionFn, Side, Status};
 use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
-use crate::engine::chains::Next;
+use crate::engine::builds::ABSENT;
 use crate::engine::ecs::{Components, Engine};
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Registered, Target};
 use crate::engine::mod_index::ModIndex;
-use crate::engine::pinned;
+use crate::engine::pinned::{self, Constant, Symbol};
 use crate::engine::registry::Registry;
 
 mod stock;
-
-use stock::{STOCK_NEXT, stock};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -48,6 +47,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::access::TRANSFER_TARGET_SLOT.id(),
     pinned::access::UPGRADE_TARGET.id(),
     pinned::access::UPGRADE_VERSION.id(),
+    pinned::ecs::COMPONENT_READ_RAW.id(),
 ];
 
 /// The offer result the game writes when it does not offer an interaction.
@@ -91,71 +91,54 @@ static LOADED: OnceLock<(&'static Loader, Layout, Components)> = OnceLock::new()
 /// The players' character entities, read on the game thread now and then.
 static PLAYERS: ArcSwapOption<Vec<u32>> = ArcSwapOption::const_empty();
 
-// SAFETY: `OfferFn` is the signature of the build table's
-// `access.offer_test`, and `link` uses this slot only as that function's
-// next.
-static OFFER_NEXT: Next<OfferFn> = unsafe { Next::new() };
-// SAFETY: `ActionFn` is the signature of the build table's
-// `access.transfer`, and `link` uses this slot only as that function's next.
-static TRANSFER_NEXT: Next<ActionFn> = unsafe { Next::new() };
-// SAFETY: `ActionFn` is the signature of the build table's `access.sort`,
-// and `link` uses this slot only as that function's next.
-static SORT_NEXT: Next<ActionFn> = unsafe { Next::new() };
-// SAFETY: `DismantleFn` is the signature of the build table's
-// `access.dismantle_method`, and `link` uses this slot only as that
-// function's next.
-static DISMANTLE_NEXT: Next<DismantleFn> = unsafe { Next::new() };
-// SAFETY: `ActionsFn` is the signature of a system entry, here the
-// reflected `inventory_actions` system's, and `link` uses this slot only as
-// that function's next.
-static ACTIONS_NEXT: Next<ActionsFn> = unsafe { Next::new() };
+/// The switch of the interaction filters and of every link they make: a
+/// link this build cannot make turns them all off, and so does a panic in
+/// their work.
+static INTERACTIONS_FUSE: Fuse = Fuse::new("interaction filters");
+/// The switch of the link on [`ACTIONS_SYSTEM`], which the interaction
+/// filters, the item uses and the controls that follow game actions share;
+/// each runs under its own fuse inside it, so a panic in one leaves the
+/// others linked.
+static ACTIONS_FUSE: Fuse = Fuse::new("inventory actions");
+/// The report that props stay open to players while transactions hold them,
+/// when a link the hold relies on is off.
+static HOLDS_FUSE: Fuse = Fuse::new("prop removal by transactions");
 
-type OfferFn =
-    unsafe extern "system" fn(*mut u8, *mut u8, *mut u8, u32, *mut u8, *mut u8, u8, u32) -> *mut u8;
-type ActionFn = unsafe extern "system" fn(*mut u64, *mut u8);
-type DismantleFn = unsafe extern "system" fn(*mut u8, *mut u8, *mut u8, u8) -> u64;
-type ActionsFn = unsafe extern "system" fn(*mut u64) -> u64;
-
-fn layout(loader: &Loader) -> Option<Layout> {
-    let size = |name: &str| {
-        loader
-            .build
-            .constant(&format!("access.{name}"))
-            .and_then(|v| usize::try_from(v).ok())
+/// Where the layout comes from: the table entry or reflected type it lacks.
+fn layout(loader: &Loader) -> Result<Layout, &'static str> {
+    let size = |id: Constant| loader.offset(id).ok_or(id.id());
+    let hash = |name: &'static str| {
+        let descriptor = loader.reflection.type_info(name).map_err(|_| name)?.va();
+        crate::engine::world::type_hash(descriptor).ok_or(name)
     };
-    let hash = |name: &str| {
-        let descriptor = loader.reflection.type_info(name).ok()?.va();
-        crate::engine::world::type_hash(descriptor)
+    let stock_ui_return = if loader.side == Side::CLIENT {
+        let id = pinned::access::BASE_STOCK_UI_RETURN;
+        loader.address(id).ok_or(id.id())?
+    } else {
+        0
     };
-    Some(Layout {
-        state_input: size("state_input")?,
-        state_owner_index: size("state_owner_index")?,
-        transfer_source: size("transfer_source")?,
-        transfer_target: size("transfer_target")?,
-        transfer_source_slot: size("transfer_source_slot")?,
-        transfer_target_slot: size("transfer_target_slot")?,
-        sort_target: size("sort_target")?,
-        object_id: size("object_id")?,
-        object_kind: size("object_kind")?,
-        deposit_target: size("deposit_target")?,
-        deposit_version: size("deposit_version")?,
-        consumed_deposit: size("consumed_deposit")?,
-        upgrade_target: size("upgrade_target")?,
-        upgrade_version: size("upgrade_version")?,
-        consumed_upgrade: size("consumed_upgrade")?,
+    Ok(Layout {
+        state_input: size(pinned::access::STATE_INPUT)?,
+        state_owner_index: size(pinned::access::STATE_OWNER_INDEX)?,
+        transfer_source: size(pinned::access::TRANSFER_SOURCE)?,
+        transfer_target: size(pinned::access::TRANSFER_TARGET)?,
+        transfer_source_slot: size(pinned::access::TRANSFER_SOURCE_SLOT)?,
+        transfer_target_slot: size(pinned::access::TRANSFER_TARGET_SLOT)?,
+        sort_target: size(pinned::access::SORT_TARGET)?,
+        object_id: size(pinned::access::OBJECT_ID)?,
+        object_kind: size(pinned::access::OBJECT_KIND)?,
+        deposit_target: size(pinned::access::DEPOSIT_TARGET)?,
+        deposit_version: size(pinned::access::DEPOSIT_VERSION)?,
+        consumed_deposit: size(pinned::access::CONSUMED_DEPOSIT)?,
+        upgrade_target: size(pinned::access::UPGRADE_TARGET)?,
+        upgrade_version: size(pinned::access::UPGRADE_VERSION)?,
+        consumed_upgrade: size(pinned::access::CONSUMED_UPGRADE)?,
         offer_out: [
-            size("offer_out_u32")?,
-            size("offer_out_u64")?,
-            size("offer_out_tail")?,
+            size(pinned::access::OFFER_OUT_U32)?,
+            size(pinned::access::OFFER_OUT_U64)?,
+            size(pinned::access::OFFER_OUT_TAIL)?,
         ],
-        stock_ui_return: if loader.side == Side::CLIENT {
-            loader.base
-                + loader
-                    .build
-                    .symbol(pinned::access::BASE_STOCK_UI_RETURN.id())?
-        } else {
-            0
-        },
+        stock_ui_return,
         used_item: hash("keen::ecs::UsedItem")?,
         transform: hash("keen::ecs::CurrentTransform")?,
         player_input: hash("keen::ecs::PlayerInput")?,
@@ -172,7 +155,7 @@ pub(crate) fn register(
     if loader.delivery.get().is_some() || FILTERS.is_sealed() {
         return Status::TOO_LATE;
     }
-    if layout(loader).is_none()
+    if layout(loader).is_err()
         || Components::resolve(loader).is_none()
         || crate::engine::ecs::engine(loader).is_none()
     {
@@ -199,80 +182,94 @@ pub(crate) fn link(loader: &'static Loader) {
     let filters = FILTERS.seal();
     // Linked on every side, as any can host a world whose transactions hold
     // props; the detours act only in a server's world.
-    let (Some(layout), Some(components)) = (layout(loader), Components::resolve(loader)) else {
-        crate::world::transactions::holds().linked(filters.len(), false);
-        return;
+    let found = layout(loader).and_then(|layout| {
+        let components = Components::resolve(loader).ok_or(pinned::ecs::COMPONENT_READ_RAW.id())?;
+        Ok((layout, components))
+    });
+    let (filtered, actions) = match found {
+        Ok((layout, components)) => {
+            let _first = LOADED.set((loader, layout, components));
+            let stock_flags = if layout.stock_ui_return == 0 {
+                HookFlags::NONE
+            } else {
+                HookFlags::CALLER_FRAME
+            };
+            let entry = loader
+                .reflection
+                .system(ACTIONS_SYSTEM)
+                .ok()
+                .map(enshwick_gamedata::reflect::System::entry);
+            (
+                link_filters(loader, Target::Pinned, stock_flags),
+                loader.link_fused(
+                    &ACTIONS_FUSE,
+                    Target::Found(ACTIONS_SYSTEM, entry),
+                    &ACTIONS_NEXT,
+                    inventory_actions,
+                    HookFlags::NONE,
+                ),
+            )
+        }
+        Err(id) => {
+            for fuse in [&INTERACTIONS_FUSE, &ACTIONS_FUSE] {
+                let _off = loader.fuse_off(fuse, id, ABSENT);
+            }
+            (false, false)
+        }
     };
-    let _first = LOADED.set((loader, layout, components));
-    let actions = loader
-        .reflection
-        .system(ACTIONS_SYSTEM)
-        .ok()
-        .map(enshwick_gamedata::reflect::System::entry);
-    let stock_flags = if layout.stock_ui_return == 0 {
-        HookFlags::NONE
-    } else {
-        HookFlags::CALLER_FRAME
-    };
+    READS_INPUTS.store(actions, Ordering::Release);
+    let hold_ready = filtered && actions;
+    if !hold_ready {
+        let off = if filtered {
+            &ACTIONS_FUSE
+        } else {
+            &INTERACTIONS_FUSE
+        };
+        let _off = loader.fuse_off(&HOLDS_FUSE, off.feature(), "is off");
+    }
+    crate::world::transactions::holds().linked(filters.len(), hold_ready);
+    if filtered {
+        crate::log!(INFO, "interaction filters on");
+    }
+}
+
+/// Links every hook the filters screen under [`INTERACTIONS_FUSE`], each
+/// game function where `at` finds it: one that does not link turns the
+/// filters wholly off. True when all linked.
+fn link_filters(
+    loader: &Loader,
+    at: impl Fn(Symbol) -> Target<'static>,
+    stock_flags: HookFlags,
+) -> bool {
+    let fuse = &INTERACTIONS_FUSE;
     let none = HookFlags::NONE;
-    let offers = loader.link_feature(
-        "interaction offers",
-        Target::Pinned(pinned::access::OFFER_TEST),
+    loader.link_fused(
+        fuse,
+        at(pinned::access::OFFER_TEST),
         &OFFER_NEXT,
         offer,
         none,
-    );
-    let transfers = loader.link_feature(
-        "transfers",
-        Target::Pinned(pinned::access::TRANSFER),
+    ) && loader.link_fused(
+        fuse,
+        at(pinned::access::TRANSFER),
         &TRANSFER_NEXT,
-        transfer as ActionFn,
+        transfer,
         none,
-    );
-    let sorting = loader.link_feature(
-        "sorting",
-        Target::Pinned(pinned::access::SORT),
-        &SORT_NEXT,
-        sort as ActionFn,
-        none,
-    );
-    let _stock = loader.link_feature(
-        "base stock",
-        Target::Pinned(pinned::access::BASE_STOCK),
-        &STOCK_NEXT,
-        stock,
-        stock_flags,
-    );
-    let dismantling = loader.link_feature(
-        "dismantling",
-        Target::Pinned(pinned::access::DISMANTLE_METHOD),
-        &DISMANTLE_NEXT,
-        dismantle,
-        none,
-    );
-    let actions = loader.link_feature(
-        "inventory actions",
-        Target::Found(ACTIONS_SYSTEM, actions),
-        &ACTIONS_NEXT,
-        inventory_actions,
-        none,
-    );
-    READS_INPUTS.store(actions, Ordering::Release);
-    let hold_ready = offers && transfers && sorting && dismantling && actions;
-    if !hold_ready {
-        crate::log!(
-            WARN,
-            "prop removal by transactions off: a hook that keeps players from a prop did not link"
-        );
-    }
-    crate::world::transactions::holds().linked(filters.len(), hold_ready);
-    crate::log!(INFO, "interaction filters on");
+    ) && loader.link_fused(fuse, at(pinned::access::SORT), &SORT_NEXT, sort, none)
+        && stock::link(loader, at(pinned::access::BASE_STOCK), stock_flags)
+        && loader.link_fused(
+            fuse,
+            at(pinned::access::DISMANTLE_METHOD),
+            &DISMANTLE_NEXT,
+            dismantle,
+            none,
+        )
 }
 
-/// Whether the filter's fuse is off, after a panic in its work: a hold
-/// would not keep anyone out.
+/// Whether a hold would keep no one out: the filters or the link that
+/// refuses pending Quick Stash switches is off.
 pub(crate) fn filter_off() -> bool {
-    INTERACTIONS_FUSE.is_off()
+    INTERACTIONS_FUSE.is_off() || ACTIONS_FUSE.is_off()
 }
 
 pub(crate) fn after_step(loader: &Loader, step: u64) {
@@ -410,56 +407,42 @@ unsafe fn server_player(ctx: *mut u64) -> Option<u32> {
     Some(unsafe { engine.entity(ctx) })
 }
 
-/// The switch of the interaction filters.
-static INTERACTIONS_FUSE: crate::engine::fuse::Fuse =
-    crate::engine::fuse::Fuse::new("interaction filters");
-
-unsafe extern "system" fn offer(
-    out: *mut u8,
-    query: *mut u8,
-    hits: *mut u8,
-    candidate: u32,
-    shape: *mut u8,
-    transform: *mut u8,
-    permissions: u8,
-    range: u32,
-) -> *mut u8 {
-    if crate::world::transactions::holds().quiet() {
-        // SAFETY: this detour runs only as the `access.offer_test` link, so
-        // the slot holds the next function of that signature; the game's
-        // arguments pass unchanged.
-        return unsafe {
-            OFFER_NEXT.get()(
-                out,
-                query,
-                hits,
-                candidate,
-                shape,
-                transform,
-                permissions,
-                range,
-            )
+crate::engine::chains::chain_detour! {
+    /// The table's `access.offer_test`: an interaction a filter refuses is
+    /// not offered, as the game's own result for no offer says.
+    fn offer(
+        out: *mut u8,
+        query: *mut u8,
+        hits: *mut u8,
+        candidate: u32,
+        shape: *mut u8,
+        transform: *mut u8,
+        permissions: u8,
+        range: u32,
+    ) -> *mut u8;
+    next OFFER_NEXT;
+    fuse &INTERACTIONS_FUSE, "the offer";
+    |onward| {
+        if crate::world::transactions::holds().quiet() || out.is_null() || query.is_null() {
+            return onward.call();
+        }
+        let Some((_, layout, _)) = LOADED.get() else {
+            return onward.call();
         };
-    }
-    let refused = !out.is_null()
-        && !query.is_null()
-        && INTERACTIONS_FUSE
-            .run("the offer", || {
-                // SAFETY: `query` is non-null by the check before it and is the
-                // offer test's query state, which starts with its system
-                // context pointer.
-                let ctx = unsafe { read_ptr_at::<u64>(query, 0) };
-                // SAFETY: `ctx` is null or the system context of the running
-                // offer test, which runs inside its system on its thread.
-                let Some(player) = (unsafe { server_player(ctx) }) else {
-                    return false;
-                };
-                // SAFETY: `ctx` is the system context of the running offer
-                // test, on its system's thread.
-                !allowed(&unsafe { interaction(Interaction::OPEN, player, candidate, ctx) })
-            })
-            .unwrap_or(false);
-    if let Some((_, layout, _)) = LOADED.get().filter(|_| refused) {
+        // SAFETY: `query` is non-null by the check before it and is the
+        // offer test's query state, which starts with its system context
+        // pointer.
+        let ctx = unsafe { read_ptr_at::<u64>(query, 0) };
+        // SAFETY: `ctx` is null or the system context of the running offer
+        // test, which runs inside its system on its thread.
+        let Some(player) = (unsafe { server_player(ctx) }) else {
+            return onward.call();
+        };
+        // SAFETY: `ctx` is the system context of the running offer test, on
+        // its system's thread.
+        if allowed(&unsafe { interaction(Interaction::OPEN, player, candidate, ctx) }) {
+            return onward.call();
+        }
         let [word, wide, tail] = layout.offer_out;
         // SAFETY: `out` is non-null by the check before it and is the offer
         // test's out record, which starts with its u8 result.
@@ -476,22 +459,7 @@ unsafe extern "system" fn offer(
         // game zeroes for no offer sits at the build table's
         // `access.offer_out_tail`.
         unsafe { write_at(out, tail, 0u32) };
-        return out;
-    }
-    // SAFETY: this detour runs only as the `access.offer_test` link, so the
-    // slot holds the next function of that signature; the game's arguments
-    // pass unchanged.
-    unsafe {
-        OFFER_NEXT.get()(
-            out,
-            query,
-            hits,
-            candidate,
-            shape,
-            transform,
-            permissions,
-            range,
-        )
+        out
     }
 }
 
@@ -538,178 +506,194 @@ unsafe fn may_touch(
         .all(|target| allowed(&unsafe { interaction(kind, player, target, ctx) }))
 }
 
-unsafe extern "system" fn transfer(ctx: *mut u64, state: *mut u8) {
-    if crate::world::transactions::holds().quiet() {
-        // SAFETY: this detour runs only as the `access.transfer` link, so the
-        // slot holds the next function of that signature; the game's
-        // arguments pass unchanged.
-        return unsafe { TRANSFER_NEXT.get()(ctx, state) };
+crate::engine::chains::chain_detour! {
+    /// The table's `access.transfer`: a move a filter refuses is skipped,
+    /// and the caller marks the action consumed and resends the
+    /// inventories, undoing the client's move.
+    fn transfer(ctx: *mut u64, state: *mut u8) -> ();
+    next TRANSFER_NEXT;
+    fuse &INTERACTIONS_FUSE, "the transfer";
+    |onward| {
+        // SAFETY: `ctx` and `state` are the running transfer's own
+        // arguments, on its system's thread.
+        if !unsafe { transfer_refused(ctx, state) } {
+            onward.call();
+        }
     }
-    let refused = LOADED.get().is_some_and(|(_, layout, _)| {
-        !state.is_null()
-            && INTERACTIONS_FUSE
-                .run("the transfer", || {
-                    // SAFETY: `state` is non-null by the check before it and is
-                    // the transfer's action state; its pointer to the
-                    // player's input sits at the build table's
-                    // `access.state_input` offset.
-                    let input =
-                        unsafe { read_ptr_at::<u8>(state, layout.state_input) }.cast_const();
-                    if input.is_null() {
-                        return false;
-                    }
-                    // SAFETY: `input` is the player's non-null input by the
-                    // check before it; its u32 source sits at the build table's
-                    // `access.transfer_source` offset.
-                    let source: u32 = unsafe { read_at(input, layout.transfer_source) };
-                    // SAFETY: `input` is the player's non-null input; its u32
-                    // target sits at the build table's
-                    // `access.transfer_target` offset.
-                    let target: u32 = unsafe { read_at(input, layout.transfer_target) };
-                    // SAFETY: `input` is the player's non-null input; its u64
-                    // source slot sits at the build table's
-                    // `access.transfer_source_slot` offset.
-                    let source_slot: u64 = unsafe { read_at(input, layout.transfer_source_slot) };
-                    // SAFETY: `input` is the player's non-null input; its u64
-                    // target slot sits at the build table's
-                    // `access.transfer_target_slot` offset.
-                    let target_slot: u64 = unsafe { read_at(input, layout.transfer_target_slot) };
-                    // SAFETY: `ctx` and `state` are the running transfer's own
-                    // arguments, on its system's thread; `state` is non-null.
-                    !unsafe {
-                        may_touch(
-                            Interaction::MOVE,
-                            ctx,
-                            state,
-                            &[source, target],
-                            &[source_slot, target_slot],
-                        )
-                    }
-                })
-                .unwrap_or(false)
-    });
-    if refused {
-        // Skipped: the caller marks the action consumed and resends the
-        // inventories, undoing the client's move.
-        return;
-    }
-    // SAFETY: this detour runs only as the `access.transfer` link, so the
-    // slot holds the next function of that signature; the game's arguments
-    // pass unchanged.
-    unsafe { TRANSFER_NEXT.get()(ctx, state) }
 }
 
-unsafe extern "system" fn sort(ctx: *mut u64, state: *mut u8) {
-    if crate::world::transactions::holds().quiet() {
-        // SAFETY: this detour runs only as the `access.sort` link, so the
-        // slot holds the next function of that signature; the game's
-        // arguments pass unchanged.
-        return unsafe { SORT_NEXT.get()(ctx, state) };
-    }
-    let refused = LOADED.get().is_some_and(|(_, layout, _)| {
-        !state.is_null()
-            && INTERACTIONS_FUSE
-                .run("the sort", || {
-                    // SAFETY: `state` is non-null by the check before it and is
-                    // the sort's action state; its pointer to the player's
-                    // input sits at the build table's `access.state_input`
-                    // offset.
-                    let input =
-                        unsafe { read_ptr_at::<u8>(state, layout.state_input) }.cast_const();
-                    if input.is_null() {
-                        return false;
-                    }
-                    // SAFETY: `input` is the player's non-null input by the
-                    // check before it; its u32 sort target sits at the build
-                    // table's `access.sort_target` offset.
-                    let target: u32 = unsafe { read_at(input, layout.sort_target) };
-                    // SAFETY: `ctx` and `state` are the running sort's own
-                    // arguments, on its system's thread; `state` is non-null.
-                    !unsafe { may_touch(Interaction::SORT, ctx, state, &[target], &[]) }
-                })
-                .unwrap_or(false)
-    });
-    if refused {
-        return;
-    }
-    // SAFETY: this detour runs only as the `access.sort` link, so the slot
-    // holds the next function of that signature; the game's arguments pass
-    // unchanged.
-    unsafe { SORT_NEXT.get()(ctx, state) }
-}
-
-unsafe extern "system" fn dismantle(
-    ctx: *mut u8,
-    object: *mut u8,
-    held: *mut u8,
-    permissions: u8,
-) -> u64 {
-    // SAFETY: this detour runs only as the `access.dismantle_method` link, so
-    // the slot holds the next function of that signature; the game's
-    // arguments pass unchanged.
-    let method = unsafe { DISMANTLE_NEXT.get()(ctx, object, held, permissions) };
-    if crate::world::transactions::holds().quiet() {
-        return method;
-    }
-    if method.trailing_zeros() >= 8 || ctx.is_null() || object.is_null() {
-        return method;
+/// Whether a filter refuses the transfer of `state`, run in `ctx`.
+///
+/// # Safety
+///
+/// - `ctx` and `state` are the arguments of a running `access.transfer`,
+///   used on its system's thread: `ctx` null or its live system context,
+///   `state` null or its live action state.
+unsafe fn transfer_refused(ctx: *mut u64, state: *mut u8) -> bool {
+    if crate::world::transactions::holds().quiet() || state.is_null() {
+        return false;
     }
     let Some((_, layout, _)) = LOADED.get() else {
-        return method;
+        return false;
     };
-    let refused = INTERACTIONS_FUSE
-        .run("the dismantle", || {
-            // SAFETY: `object` is non-null by the check before it and is the
-            // dismantle's object; its u64 id sits at the build table's
-            // `access.object_id` offset.
-            let id: u64 = unsafe { read_at(object, layout.object_id) };
-            // SAFETY: `object` is non-null by the check before it and is the
-            // dismantle's object; its u64 kind, 0 for an entity, sits at the
-            // build table's `access.object_kind` offset.
-            let kind: u64 = unsafe { read_at(object, layout.object_kind) };
-            if kind != 0 {
-                return false;
-            }
-            // SAFETY: `ctx` is non-null by the check before it and is the
-            // cursor context, which starts with its system context pointer.
-            let system = unsafe { read_ptr_at::<u64>(ctx, 0) };
-            // SAFETY: `system` is null or the system context of the running
-            // cursor, which runs inside its system on its thread.
-            let Some(player) = (unsafe { server_player(system) }) else {
-                return false;
-            };
-            #[expect(
-                clippy::cast_possible_truncation,
-                reason = "the entity id is the low half"
-            )]
-            let target = id as u32;
-            // SAFETY: `system` is the running cursor's system context, on
-            // its thread.
-            !allowed(&unsafe { interaction(Interaction::DISMANTLE, player, target, system) })
-        })
-        .unwrap_or(false);
-    if refused { 0 } else { method }
+    // SAFETY: `state` is non-null by the check before it and is the
+    // transfer's action state; its pointer to the player's input sits at
+    // the build table's `access.state_input` offset.
+    let input = unsafe { read_ptr_at::<u8>(state, layout.state_input) }.cast_const();
+    if input.is_null() {
+        return false;
+    }
+    // SAFETY: `input` is the player's non-null input by the check before
+    // it; its u32 source sits at the build table's `access.transfer_source`
+    // offset.
+    let source: u32 = unsafe { read_at(input, layout.transfer_source) };
+    // SAFETY: `input` is the player's non-null input; its u32 target sits
+    // at the build table's `access.transfer_target` offset.
+    let target: u32 = unsafe { read_at(input, layout.transfer_target) };
+    // SAFETY: `input` is the player's non-null input; its u64 source slot
+    // sits at the build table's `access.transfer_source_slot` offset.
+    let source_slot: u64 = unsafe { read_at(input, layout.transfer_source_slot) };
+    // SAFETY: `input` is the player's non-null input; its u64 target slot
+    // sits at the build table's `access.transfer_target_slot` offset.
+    let target_slot: u64 = unsafe { read_at(input, layout.transfer_target_slot) };
+    // SAFETY: the caller's `ctx` and non-null `state`, on the system's
+    // thread.
+    !unsafe {
+        may_touch(
+            Interaction::MOVE,
+            ctx,
+            state,
+            &[source, target],
+            &[source_slot, target_slot],
+        )
+    }
 }
 
-unsafe extern "system" fn inventory_actions(ctx: *mut u64) -> u64 {
-    // SAFETY: `ctx` is the game's argument to the `inventory_actions` system,
-    // at its entry on its thread, which is all `screen_uses` asks.
-    unsafe { crate::inventory::item_actions::screen_uses(ctx) };
-    if !crate::world::transactions::holds().quiet() && LOADED.get().is_some() && !ctx.is_null() {
-        // SAFETY: `ctx` is non-null by the check before it and is the system's
-        // own context, at its entry on its thread.
-        let _done =
-            INTERACTIONS_FUSE.run("the inventory actions", || unsafe { refuse_pending(ctx) });
+crate::engine::chains::chain_detour! {
+    /// The table's `access.sort`: a sort a filter refuses is skipped.
+    fn sort(ctx: *mut u64, state: *mut u8) -> ();
+    next SORT_NEXT;
+    fuse &INTERACTIONS_FUSE, "the sort";
+    |onward| {
+        // SAFETY: `ctx` and `state` are the running sort's own arguments,
+        // on its system's thread.
+        if !unsafe { sort_refused(ctx, state) } {
+            onward.call();
+        }
     }
-    if crate::actions::controls::linked() && LOADED.get().is_some() && !ctx.is_null() {
-        // SAFETY: `ctx` is non-null by the check before it and is the system's
-        // own context, at its entry on its thread.
-        unsafe { player_inputs(ctx) };
+}
+
+/// Whether a filter refuses the sort of `state`, run in `ctx`.
+///
+/// # Safety
+///
+/// - `ctx` and `state` are the arguments of a running `access.sort`, used
+///   on its system's thread: `ctx` null or its live system context, `state`
+///   null or its live action state.
+unsafe fn sort_refused(ctx: *mut u64, state: *mut u8) -> bool {
+    if crate::world::transactions::holds().quiet() || state.is_null() {
+        return false;
     }
-    // SAFETY: this detour runs only as the `inventory_actions` system's link,
-    // so the slot holds the next function of that signature; the game's
-    // context passes unchanged.
-    unsafe { ACTIONS_NEXT.get()(ctx) }
+    let Some((_, layout, _)) = LOADED.get() else {
+        return false;
+    };
+    // SAFETY: `state` is non-null by the check before it and is the sort's
+    // action state; its pointer to the player's input sits at the build
+    // table's `access.state_input` offset.
+    let input = unsafe { read_ptr_at::<u8>(state, layout.state_input) }.cast_const();
+    if input.is_null() {
+        return false;
+    }
+    // SAFETY: `input` is the player's non-null input by the check before
+    // it; its u32 sort target sits at the build table's
+    // `access.sort_target` offset.
+    let target: u32 = unsafe { read_at(input, layout.sort_target) };
+    // SAFETY: the caller's `ctx` and non-null `state`, on the system's
+    // thread.
+    !unsafe { may_touch(Interaction::SORT, ctx, state, &[target], &[]) }
+}
+
+crate::engine::chains::chain_detour! {
+    /// The table's `access.dismantle_method`: an entity a filter keeps the
+    /// player from dismantling gets no method.
+    fn dismantle(ctx: *mut u8, object: *mut u8, held: *mut u8, permissions: u8) -> u64;
+    next DISMANTLE_NEXT;
+    fuse &INTERACTIONS_FUSE, "the dismantle";
+    |onward| {
+        let method = onward.call();
+        if crate::world::transactions::holds().quiet()
+            || method.trailing_zeros() >= 8
+            || ctx.is_null()
+            || object.is_null()
+        {
+            return method;
+        }
+        let Some((_, layout, _)) = LOADED.get() else {
+            return method;
+        };
+        // SAFETY: `object` is non-null by the check before it and is the
+        // dismantle's object; its u64 kind, 0 for an entity, sits at the
+        // build table's `access.object_kind` offset.
+        let kind: u64 = unsafe { read_at(object, layout.object_kind) };
+        if kind != 0 {
+            return method;
+        }
+        // SAFETY: `object` is non-null by the check before it and is the
+        // dismantle's object; its u64 id sits at the build table's
+        // `access.object_id` offset.
+        let id: u64 = unsafe { read_at(object, layout.object_id) };
+        // SAFETY: `ctx` is non-null by the check before it and is the cursor
+        // context, which starts with its system context pointer.
+        let system = unsafe { read_ptr_at::<u64>(ctx, 0) };
+        // SAFETY: `system` is null or the system context of the running
+        // cursor, which runs inside its system on its thread.
+        let Some(player) = (unsafe { server_player(system) }) else {
+            return method;
+        };
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "the entity id is the low half"
+        )]
+        let target = id as u32;
+        // SAFETY: `system` is the running cursor's system context, on its
+        // thread.
+        if allowed(&unsafe { interaction(Interaction::DISMANTLE, player, target, system) }) {
+            method
+        } else {
+            0
+        }
+    }
+}
+
+crate::engine::chains::chain_detour! {
+    /// The reflected `inventory_actions` system's entry, which the
+    /// interaction filters, the item uses and the controls that follow game
+    /// actions share. Each runs under its own fuse, not this link's: a panic
+    /// in one turns off only that one, and the others stay linked.
+    fn inventory_actions(ctx: *mut u64) -> u64;
+    next ACTIONS_NEXT;
+    fuse &ACTIONS_FUSE, "the inventory actions";
+    |onward| {
+        // SAFETY: `ctx` is the game's argument to the `inventory_actions`
+        // system, at its entry on its thread, which is all `screen_uses`
+        // asks.
+        unsafe { crate::inventory::item_actions::screen_uses(ctx) };
+        if ctx.is_null() || LOADED.get().is_none() {
+            return onward.call();
+        }
+        if !crate::world::transactions::holds().quiet() {
+            // SAFETY: `ctx` is non-null by the check before it and is the
+            // system's own context, at its entry on its thread.
+            let _done =
+                INTERACTIONS_FUSE.run("the inventory actions", || unsafe { refuse_pending(ctx) });
+        }
+        if crate::actions::controls::linked() {
+            // SAFETY: `ctx` is non-null by the check before it and is the
+            // system's own context, at its entry on its thread.
+            unsafe { player_inputs(ctx) };
+        }
+        onward.call()
+    }
 }
 
 /// Hands each player's `PlayerInput` in the server's world to the controls
@@ -824,5 +808,46 @@ mod tests {
         assert!(!read_due(7, true));
         assert!(read_due(PLAYERS_EVERY, true));
         assert!(read_due(2 * PLAYERS_EVERY, true));
+    }
+
+    #[test]
+    fn the_filters_are_wholly_off_when_their_stock_link_fails() {
+        use enshwick_base::Relock;
+
+        let loader = crate::start::tests::bare_loader();
+        let found = [
+            (pinned::access::OFFER_TEST, 0x1000),
+            (pinned::access::TRANSFER, 0x2000),
+            (pinned::access::SORT, 0x3000),
+            (pinned::access::DISMANTLE_METHOD, 0x4000),
+        ];
+        let at = |symbol: Symbol| {
+            let address = found
+                .iter()
+                .find(|(s, _)| s.id() == symbol.id())
+                .map(|&(_, address)| address);
+            Target::Found(symbol.id(), address)
+        };
+        assert!(
+            !filter_off(),
+            "a hold keeps players out while the filters run"
+        );
+        assert!(!link_filters(&loader, at, HookFlags::NONE));
+        assert!(INTERACTIONS_FUSE.is_off());
+        assert!(filter_off(), "a hold keeps no one out");
+        {
+            let mut chains = loader.chains.relock();
+            chains.seal();
+            assert!(
+                chains.is_empty(),
+                "the offer, transfer and sort links go with the stock's, never patched"
+            );
+        }
+        let listed = crate::engine::diag::parts_off();
+        let off = listed.iter().find(|p| p.part == "interaction filters");
+        assert!(
+            off.is_some_and(|p| p.reason.starts_with("access.base_stock ")),
+            "{listed:?}"
+        );
     }
 }
