@@ -50,7 +50,8 @@ mod tests {
         let loader = FakeHost::new().install();
         // SAFETY: `enshwick_mod_init` is the export of `declare_mod!` above.
         let first = unsafe { loader.init(enshwick_mod_init) };
-        // SAFETY: as above, run again as a loader that inits twice would.
+        // SAFETY: `enshwick_mod_init` is the export of `declare_mod!` above,
+        // run a second time on the same fake table.
         let second = unsafe { loader.init(enshwick_mod_init) };
         assert_eq!((first, second), (Status::OK, Status::REFUSED));
         assert!(loader.faults().is_empty(), "{:?}", loader.faults());
