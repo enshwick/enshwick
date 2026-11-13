@@ -1,9 +1,11 @@
 //! The sort of stock entities into bases, and the list of base ids.
 
+use enshwick_core::abi::HookFlags;
 use enshwick_core::raw::{read_at, write_at};
 
-use super::{Game, Layout, ObjWorldFn, append, point, rec, window_of, windowed};
-use crate::engine::chains::Next;
+use super::{Game, Layout, PAST16, append, point, rec, window_of, windowed};
+use crate::engine::loader::{Loader, Target};
+use crate::engine::pinned::bases;
 use crate::world::base_groups::lookup::{self, Bases};
 use crate::world::base_groups::window;
 
@@ -12,44 +14,48 @@ pub(super) const SORTED: u8 = 0x00;
 pub(super) const NOT_IN_A_BASE: u8 = 0x1f;
 pub(super) const GROW_FAILED: u8 = 0x27;
 
-pub(super) type SortFn = unsafe extern "system" fn(
-    out: *mut u8,
-    obj: *mut u8,
-    entity: *const u8,
-    filtered: u64,
-) -> *mut u8;
-pub(super) type BaseIdsFn = unsafe extern "system" fn(vec: *mut u8, obj: *mut u8) -> u64;
+/// Links the sorts and, with `base_ids`, the client's base id list, all
+/// under [`PAST16`]; true when every link is made.
+pub(super) fn link(loader: &Loader, base_ids: bool) -> bool {
+    let at = Target::Pinned;
+    loader.link_fused(
+        &PAST16,
+        at(bases::SORT),
+        &SORT_NEXT,
+        sort,
+        HookFlags::EXCLUSIVE,
+    ) && loader.link_fused(
+        &PAST16,
+        at(bases::SORT_ALL),
+        &SORT_ALL_NEXT,
+        sort_all,
+        HookFlags::NONE,
+    ) && (!base_ids
+        || loader.link_fused(
+            &PAST16,
+            at(bases::BASE_IDS),
+            &BASE_IDS_NEXT,
+            self::base_ids,
+            HookFlags::NONE,
+        ))
+}
 
-// SAFETY: `SortFn` is the signature of the sort the table's `bases.sort`
-// pins, and `link` uses this slot only as that function's next.
-pub(super) static SORT_NEXT: Next<SortFn> = unsafe { Next::new() };
-// SAFETY: `ObjWorldFn` is the signature of the sort of every entity the
-// table's `bases.sort_all` pins, and `link` uses this slot only as its next.
-pub(super) static SORT_ALL_NEXT: Next<ObjWorldFn> = unsafe { Next::new() };
-// SAFETY: `BaseIdsFn` is the signature of the base id list the table's
-// `bases.base_ids` pins, and `link` uses this slot only as its next.
-pub(super) static BASE_IDS_NEXT: Next<BaseIdsFn> = unsafe { Next::new() };
-
-pub(super) unsafe extern "system" fn sort(
-    out: *mut u8,
-    obj: *mut u8,
-    entity: *const u8,
-    filtered: u64,
-) -> *mut u8 {
-    // SAFETY: the sort's own object, in the serial bases update.
-    let game = unsafe { windowed(obj) };
-    if let (Some((game, layout)), false) = (game, out.is_null() || entity.is_null()) {
-        // SAFETY: the sort's own answer, entity and object.
-        let done = crate::world::bases::BASES_FUSE.run("the sort into bases", || unsafe {
-            sort_into(out, obj, &game, layout, entity, filtered & 0xff != 0);
-        });
-        if done.is_some() {
+crate::engine::chains::chain_detour! {
+    /// The table's `bases.sort`: one stock entity sorted into the bases,
+    /// over the window while the object holds more than 16.
+    fn sort(out: *mut u8, obj: *mut u8, entity: *const u8, filtered: u64) -> *mut u8;
+    next SORT_NEXT;
+    fuse &PAST16, "the sort into bases";
+    |onward| {
+        // SAFETY: the sort's own object, in the serial bases update.
+        let game = unsafe { windowed(obj) };
+        if let (Some((game, layout)), false) = (game, out.is_null() || entity.is_null()) {
+            // SAFETY: the sort's own answer, entity and object.
+            unsafe { sort_into(out, obj, &game, layout, entity, filtered & 0xff != 0) };
             return out;
         }
+        onward.call()
     }
-    // SAFETY: this detour runs only as the sort's link, so the slot holds the
-    // next function of that signature; the game's arguments pass unchanged.
-    unsafe { SORT_NEXT.get()(out, obj, entity, filtered) }
 }
 
 /// The sort over every base of `game`.
@@ -108,17 +114,20 @@ pub(super) unsafe fn sort_into(
     unsafe { write_at(out, 0, answer) };
 }
 
-pub(super) unsafe extern "system" fn sort_all(obj: *mut u8, world: *mut u8) {
-    // SAFETY: the object of the serial bases update.
-    if let Some((game, layout)) = unsafe { windowed(obj) } {
-        // SAFETY: the same live object, viewed by `game`.
-        let _done = crate::world::bases::BASES_FUSE.run("the sort of every entity", || unsafe {
-            empty_lists(obj, &game, layout);
-        });
+crate::engine::chains::chain_detour! {
+    /// The table's `bases.sort_all`, the sort of every entity, which empties
+    /// the window's stock lists as well while the object holds more than 16.
+    fn sort_all(obj: *mut u8, world: *mut u8) -> ();
+    next SORT_ALL_NEXT;
+    fuse &PAST16, "the sort of every entity";
+    |onward| {
+        // SAFETY: the object of the serial bases update.
+        if let Some((game, layout)) = unsafe { windowed(obj) } {
+            // SAFETY: the same live object, viewed by `game`.
+            unsafe { empty_lists(obj, &game, layout) };
+        }
+        onward.call();
     }
-    // SAFETY: this detour runs only as the sort of every entity's link, so
-    // the slot holds the next function of that signature.
-    unsafe { SORT_ALL_NEXT.get()(obj, world) };
 }
 
 /// Empties both stock lists of every window base of `game`, as the sort of
@@ -139,18 +148,21 @@ pub(super) unsafe fn empty_lists(obj: *mut u8, game: &Game, layout: &Layout) {
     }
 }
 
-pub(super) unsafe extern "system" fn base_ids(vec: *mut u8, obj: *mut u8) -> u64 {
-    // SAFETY: this detour runs only as the base id list's link, so the slot
-    // holds the next function of that signature.
-    let vanilla = unsafe { BASE_IDS_NEXT.get()(vec, obj) };
-    // SAFETY: the list's own object.
-    if let (Some((game, layout)), false) = (unsafe { windowed(obj) }, vec.is_null()) {
-        // SAFETY: the list's own container and object.
-        let _done = crate::world::bases::BASES_FUSE.run("the base ids", || unsafe {
-            append_ids(vec, obj, &game, layout);
-        });
+crate::engine::chains::chain_detour! {
+    /// The client's table `bases.base_ids`, the list of base ids, with the
+    /// window's appended while the object holds more than 16.
+    fn base_ids(vec: *mut u8, obj: *mut u8) -> u64;
+    next BASE_IDS_NEXT;
+    fuse &PAST16, "the base ids";
+    |onward| {
+        let vanilla = onward.call();
+        // SAFETY: the list's own object.
+        if let (Some((game, layout)), false) = (unsafe { windowed(obj) }, vec.is_null()) {
+            // SAFETY: the list's own container and object.
+            unsafe { append_ids(vec, obj, &game, layout) };
+        }
+        vanilla
     }
-    vanilla
 }
 
 /// Appends the id of every window base of `game` that has one, in index

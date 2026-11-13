@@ -37,9 +37,10 @@ use enshwick_core::altars::MAX_ZONES;
 use enshwick_core::raw::{read_at, read_ptr_at};
 
 use self::geometry::Placed;
-use crate::engine::chains::Next;
 use crate::engine::ecs::Engine;
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Registered, Target};
+use crate::engine::undo::Undo;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -236,20 +237,20 @@ static CHANGED: AtomicBool = AtomicBool::new(false);
 static STEP: AtomicU64 = AtomicU64::new(0);
 /// Bumped when the world goes, so threads drop what they held back from it.
 static WORLD: AtomicU64 = AtomicU64::new(0);
-/// Set when the loader's own work in a link went wrong: from then on the
-/// links run vanilla.
-static OFF: AtomicBool = AtomicBool::new(false);
+/// The altars' switch: both system links arm together or not at all, and a
+/// panic in either pass turns both off.
+static ALTARS: Fuse = Fuse::new("altars");
 /// The switch of the range pass's writes, off once a live trigger shape
-/// does not hold its found field; the other altar passes stay on.
-static RANGES_FUSE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("altar ranges");
-// SAFETY: `SystemFn` is the signature of every system entry, here the
-// reflected `add_buildzones_server`'s, and `link` uses this slot only as that
-// function's next.
-static ADD_ZONES_NEXT: Next<SystemFn> = unsafe { Next::new() };
-// SAFETY: `SystemFn` is the signature of every system entry, here the
-// reflected `upgrade_building_range`'s, and `link` uses this slot only as
-// that function's next.
-static UPGRADE_NEXT: Next<SystemFn> = unsafe { Next::new() };
+/// does not hold its found field; the other altar passes stay on. It links
+/// nothing of its own.
+static RANGES_FUSE: Fuse = Fuse::new("altar ranges");
+/// The switch of the mods' building zone filters, which need neither altar
+/// system.
+static ZONE_CHECKS: Fuse = Fuse::new("zone checks");
+/// The reflected system the position pass follows.
+const ZONES_SYSTEM: &str = "add_buildzones_server";
+/// The reflected system the range and level passes follow.
+const UPGRADE_SYSTEM: &str = "upgrade_building_range";
 
 type Filter = Registered<BuildingZoneCheckFn>;
 type Sizer = Registered<AltarZoneFn>;
@@ -266,10 +267,6 @@ struct SeamLayout {
 
 static FILTERS: Registry<Filter> = Registry::new();
 static SEAM: OnceLock<SeamLayout> = OnceLock::new();
-// SAFETY: `SeamFn` is the signature of the build table's
-// `building.seam_check`, and `link_seam` uses this slot only as that
-// function's next.
-static SEAM_NEXT: Next<SeamFn> = unsafe { Next::new() };
 
 thread_local! {
     static PLACED: RefCell<Vec<(u32, Placed)>> = const { RefCell::new(Vec::new()) };
@@ -289,9 +286,6 @@ fn drop_stale_buffers() {
         LEVELS.with_borrow_mut(Vec::clear);
     }
 }
-
-type SystemFn = unsafe extern "system" fn(ctx: *mut u64);
-type SeamFn = unsafe extern "system" fn(zones: *const u8, corners: *const i64, margin: f32) -> u8;
 
 /// Opens altars for mod `owner`; during init only.
 pub(crate) fn open(loader: &Loader, owner: ModIndex) -> Status {
@@ -548,14 +542,14 @@ pub(crate) fn link(loader: &'static Loader) {
         return;
     }
     if crate::engine::ecs::engine(loader).is_none() {
-        crate::log!(WARN, "altars off: this build lacks their engine helpers");
+        let _off = loader.fuse_off(&ALTARS, "ecs helpers", crate::engine::builds::ABSENT);
         return;
     }
     let checked = Fields::read(loader).and_then(|fields| {
-        crate::engine::ecs::components_match(loader, "add_buildzones_server", &ZONES_READS, &[])?;
+        crate::engine::ecs::components_match(loader, ZONES_SYSTEM, &ZONES_READS, &[])?;
         crate::engine::ecs::components_match(
             loader,
-            "upgrade_building_range",
+            UPGRADE_SYSTEM,
             &UPGRADE_READS,
             &UPGRADE_WRITES,
         )?;
@@ -566,8 +560,7 @@ pub(crate) fn link(loader: &'static Loader) {
             let _first = FIELDS.set(fields);
         }
         Err(why) => {
-            crate::log!(WARN, "altars off: {why}");
-            OFF.store(true, Ordering::Release);
+            let _off = loader.fuse_off(&ALTARS, "reflection", &why.to_string());
             return;
         }
     }
@@ -576,39 +569,44 @@ pub(crate) fn link(loader: &'static Loader) {
     } else {
         HookFlags::NONE
     };
-    for (system, next, detour, flags) in [
-        (
-            "add_buildzones_server",
-            &ADD_ZONES_NEXT,
-            add_zones as SystemFn,
-            HookFlags::NONE,
-        ),
-        (
-            "upgrade_building_range",
-            &UPGRADE_NEXT,
-            upgrade as SystemFn,
-            upgrade_flags,
-        ),
-    ] {
-        let entry = loader
+    let entry = |system| {
+        loader
             .reflection
             .system(system)
             .ok()
-            .map(enshwick_gamedata::reflect::System::entry);
-        if !loader.link_feature("altars", Target::Found(system, entry), next, detour, flags) {
-            OFF.store(true, Ordering::Release);
-            return;
-        }
+            .map(enshwick_gamedata::reflect::System::entry)
+    };
+    let entries = [entry(ZONES_SYSTEM), entry(UPGRADE_SYSTEM)];
+    if link_systems(loader, entries, upgrade_flags) {
+        crate::log!(
+            INFO,
+            "altars followed{}",
+            if controlled {
+                ", zones sized by a mod"
+            } else {
+                ""
+            }
+        );
     }
-    crate::log!(
-        INFO,
-        "altars followed{}",
-        if controlled {
-            ", zones sized by a mod"
-        } else {
-            ""
-        }
-    );
+}
+
+/// Links both altar systems at their reflected `entries`, all or none, under
+/// [`ALTARS`]; true when both are linked.
+fn link_systems(loader: &Loader, entries: [Option<u64>; 2], upgrade_flags: HookFlags) -> bool {
+    let [zones, upgrade_at] = entries;
+    loader.link_fused(
+        &ALTARS,
+        Target::Found(ZONES_SYSTEM, zones),
+        &ADD_ZONES_NEXT,
+        add_zones,
+        HookFlags::NONE,
+    ) && loader.link_fused(
+        &ALTARS,
+        Target::Found(UPGRADE_SYSTEM, upgrade_at),
+        &UPGRADE_NEXT,
+        upgrade,
+        upgrade_flags,
+    )
 }
 
 fn link_seam(loader: &'static Loader) {
@@ -617,9 +615,9 @@ fn link_seam(loader: &'static Loader) {
     if !wanted {
         return;
     }
-    let size = |name: Constant| loader.offset(name);
+    let size = |name: Constant| loader.offset(name).ok_or(name);
     let layout = (|| {
-        Some(SeamLayout {
+        Ok::<_, Constant>(SeamLayout {
             entries: size(pinned::building::ZONE_LIST_ENTRIES)?,
             count: size(pinned::building::ZONE_LIST_COUNT)?,
             entry_size: size(pinned::building::ZONE_ENTRY_SIZE)?,
@@ -628,20 +626,17 @@ fn link_seam(loader: &'static Loader) {
             corner_size: size(pinned::building::CORNER_SIZE)?,
         })
     })();
-    let Some(layout) = layout else {
-        crate::log!(WARN, "zone checks off: this build lacks the zone list");
-        return;
+    let layout = match layout {
+        Ok(layout) => layout,
+        Err(missing) => {
+            let _off = loader.fuse_off(&ZONE_CHECKS, missing.id(), crate::engine::builds::ABSENT);
+            return;
+        }
     };
     let _first = SEAM.set(layout);
     let target = Target::Pinned(pinned::building::SEAM_CHECK);
-    if loader.link_feature("zone checks", target, &SEAM_NEXT, seam, HookFlags::NONE) {
+    if loader.link_fused(&ZONE_CHECKS, target, &SEAM_NEXT, seam, HookFlags::NONE) {
         crate::log!(INFO, "zone checks on");
-    }
-}
-
-fn turn_off(why: &str) {
-    if !OFF.swap(true, Ordering::AcqRel) {
-        crate::log!(WARN, "altars off, vanilla from now on: {why}");
     }
 }
 
@@ -659,21 +654,20 @@ unsafe fn server_world(loader: &Loader, engine: &Engine, ctx: *mut u64) -> bool 
     unsafe { engine.is_world(ctx, crate::engine::world::server_world()) }
 }
 
-unsafe extern "system" fn add_zones(ctx: *mut u64) {
-    // SAFETY: this detour runs only as the `add_buildzones_server` link, so
-    // the slot holds the next system entry; the system's own context passes
-    // unchanged.
-    unsafe { ADD_ZONES_NEXT.get()(ctx) };
-    if OFF.load(Ordering::Acquire) {
-        return;
-    }
-    let (Some(loader), Some(engine)) = (
-        crate::engine::loader::loader(),
-        crate::engine::ecs::resolved(),
-    ) else {
-        return;
-    };
-    let run = || {
+crate::engine::chains::chain_detour! {
+    /// The reflected `add_buildzones_server` system entry: vanilla builds the
+    /// zones, then the position pass learns where they are.
+    fn add_zones(ctx: *mut u64) -> ();
+    next ADD_ZONES_NEXT;
+    fuse &ALTARS, "the position pass";
+    |onward| {
+        onward.call();
+        let (Some(loader), Some(engine)) = (
+            crate::engine::loader::loader(),
+            crate::engine::ecs::resolved(),
+        ) else {
+            return;
+        };
         // SAFETY: `ctx` is the hooked system's own live context, on its
         // thread.
         if unsafe { server_world(loader, engine, ctx) } {
@@ -681,55 +675,69 @@ unsafe extern "system" fn add_zones(ctx: *mut u64) {
             // on its thread after vanilla ran.
             unsafe { observe(engine, ctx) };
         }
-    };
-    if std::panic::catch_unwind(run).is_err() {
-        turn_off("the position pass panicked");
     }
 }
 
-unsafe extern "system" fn upgrade(ctx: *mut u64) {
-    let ready = (!OFF.load(Ordering::Acquire))
-        .then(|| crate::engine::loader::loader().zip(crate::engine::ecs::resolved()))
-        .flatten()
-        // SAFETY: `ctx` is the hooked system's own live context, on its
-        // thread.
-        .filter(|(loader, engine)| unsafe { server_world(loader, engine, ctx) });
-    let Some((loader, engine)) = ready else {
-        // SAFETY: this detour runs only as the `upgrade_building_range` link,
-        // so the slot holds the next system entry; the system's own context
-        // passes unchanged.
-        unsafe { UPGRADE_NEXT.get()(ctx) };
-        return;
-    };
-    if running_sizers().next().is_some() {
-        let build = &loader.build.name;
+crate::engine::chains::chain_detour! {
+    /// The reflected `upgrade_building_range` system entry, one [`tick`] of
+    /// it on the server's world.
+    fn upgrade(ctx: *mut u64) -> ();
+    next UPGRADE_NEXT;
+    fuse &ALTARS, "the range and level passes";
+    |onward| {
+        let ready = crate::engine::loader::loader()
+            .zip(crate::engine::ecs::resolved())
+            // SAFETY: `ctx` is the hooked system's own live context, on its
+            // thread.
+            .filter(|(loader, engine)| unsafe { server_world(loader, engine, ctx) });
+        let Some((loader, engine)) = ready else {
+            return onward.call();
+        };
+        let write = || {
+            // SAFETY: `ctx` is the hooked system's live context, on its
+            // thread until the rewind drops at the end of this pass.
+            let rows = unsafe { rewind(engine, ctx) };
+            // SAFETY: `ctx` is the live context of `upgrade_building_range`,
+            // on its thread, and vanilla has not run this tick.
+            let wrote = unsafe { write_ranges(engine, ctx, &loader.build.name) };
+            if wrote {
+                rows.keep();
+            }
+            wrote
+        };
         // SAFETY: `ctx` is the live context of `upgrade_building_range`, on
-        // its thread, and vanilla has not run this tick.
-        match std::panic::catch_unwind(|| unsafe { write_ranges(engine, ctx, build) }) {
-            Ok(true) => return,
-            // RANGES_FUSE logged it: only the ranges go vanilla.
-            Ok(false) => {}
-            Err(_) => turn_off("the range pass panicked"),
-        }
-        // Hand the tick to vanilla from the first row.
-        // SAFETY: `ctx` is the hooked system's own live context, which only
-        // its thread writes.
-        unsafe { engine.set_row(ctx, 0) };
-        // SAFETY: this detour runs only as the `upgrade_building_range` link,
-        // so the slot holds the next system entry; the system's own context
-        // passes unchanged.
-        unsafe { UPGRADE_NEXT.get()(ctx) };
+        // its thread after vanilla ran.
+        let read = || unsafe { read_levels(engine, ctx) };
+        let sized = !RANGES_FUSE.is_off() && running_sizers().next().is_some();
+        tick(sized, write, || onward.call(), read);
+    }
+}
+
+/// One tick of `upgrade_building_range`: when the zones are `sized`, the
+/// range pass `write`s in place of vanilla; when it writes nothing, or
+/// unsized, `vanilla` runs and the levels are `read` after it.
+fn tick(sized: bool, write: impl FnOnce() -> bool, vanilla: impl FnOnce(), read: impl FnOnce()) {
+    if sized && write() {
         return;
     }
-    // SAFETY: this detour runs only as the `upgrade_building_range` link, so
-    // the slot holds the next system entry; the system's own context passes
-    // unchanged.
-    unsafe { UPGRADE_NEXT.get()(ctx) };
-    // SAFETY: `ctx` is the live context of `upgrade_building_range`, on its
-    // thread after vanilla ran.
-    if std::panic::catch_unwind(|| unsafe { read_levels(engine, ctx) }).is_err() {
-        turn_off("the level pass panicked");
-    }
+    vanilla();
+    read();
+}
+
+/// Puts a system context's row counter back where it was when dropped,
+/// unless kept: vanilla runs the tick from its start after a range pass
+/// that wrote nothing or panicked part way, and after a walk of our own.
+///
+/// # Safety
+///
+/// - `ctx` is a live system context, used on its system's thread, which
+///   alone writes it, until the guard drops.
+unsafe fn rewind(engine: &Engine, ctx: *mut u64) -> Undo<impl FnOnce() + '_> {
+    // SAFETY: the caller guarantees the live context on its thread.
+    let row = unsafe { engine.row(ctx) };
+    // SAFETY: the caller guarantees the live context on its thread, which
+    // alone writes it, until the guard drops.
+    Undo::new(move || unsafe { engine.set_row(ctx, row) })
 }
 
 /// How many entries a thread holds back while the state is busy before it
@@ -766,23 +774,25 @@ fn merge(
     }
 }
 
-unsafe extern "system" fn seam(zones: *const u8, corners: *const i64, margin: f32) -> u8 {
-    // SAFETY: this detour runs only as the `building.seam_check` link, so the
-    // slot holds the next function of that signature; the game's arguments
-    // pass unchanged.
-    let vanilla = unsafe { SEAM_NEXT.get()(zones, corners, margin) };
-    if vanilla != 0 || zones.is_null() || corners.is_null() {
-        return vanilla;
+crate::engine::chains::chain_detour! {
+    /// The table's `building.seam_check`: vanilla's answer, or the mods'
+    /// filters accepting a placement vanilla refused.
+    fn seam(zones: *const u8, corners: *const i64, margin: f32) -> u8;
+    next SEAM_NEXT;
+    fuse &ZONE_CHECKS, "the zone check";
+    |onward| {
+        let vanilla = onward.call();
+        if vanilla != 0 || zones.is_null() || corners.is_null() {
+            return vanilla;
+        }
+        let (Some(layout), Some(filters)) = (SEAM.get(), FILTERS.sealed()) else {
+            return vanilla;
+        };
+        // SAFETY: `zones` and `corners` are non-null by the check before it
+        // and are the seam check's own arguments, the engine's zone list and
+        // the object's two corners, live for the call.
+        u8::from(unsafe { check(layout, filters, zones, corners, margin) })
     }
-    let (Some(layout), Some(filters)) = (SEAM.get(), FILTERS.sealed()) else {
-        return vanilla;
-    };
-    // SAFETY: `zones` and `corners` are non-null by the check before it and are
-    // the seam check's own arguments, the engine's zone list and the
-    // object's two corners, live for the call.
-    let accepted =
-        std::panic::catch_unwind(|| unsafe { check(layout, filters, zones, corners, margin) });
-    u8::from(accepted.unwrap_or(false))
 }
 
 /// Asks the filters about a placement vanilla refused.

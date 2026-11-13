@@ -1,16 +1,14 @@
 //! The client's logic entity sets: each base's set of logic graph entities
 //! in its zones, rebuilt when the zone list changes.
 
+use enshwick_core::abi::HookFlags;
 use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
-use super::{CODE, Code, Game, GrowFn, Layout, ObjWorldFn, RecordFields, point, rec, windowed};
-use crate::engine::chains::Next;
+use super::{CODE, Code, Game, GrowFn, Layout, PAST16, RecordFields, point, rec, windowed};
+use crate::engine::loader::{Loader, Target};
+use crate::engine::pinned::bases;
 use crate::world::base_groups::lookup::{self, Bases};
 use crate::world::base_groups::window;
-
-// SAFETY: `ObjWorldFn` is the signature of the rebuild the table's
-// `bases.rebuild` pins, and `link` uses this slot only as its next.
-pub(super) static REBUILD_NEXT: Next<ObjWorldFn> = unsafe { Next::new() };
 
 /// The rebuild's entity list: the game's container header over room of
 /// ours, which our callback grows; the game's query touches only the header.
@@ -50,7 +48,9 @@ pub(super) struct Element([u8; 0x40]);
 /// `wanted` asks for at least `-wanted` elements, else the capacity becomes
 /// `wanted`.
 unsafe extern "system" fn grow_found(vec: *mut u8, wanted: i64, _keep: u64) -> u8 {
-    let result = std::panic::catch_unwind(|| {
+    // The game's query calls it, not a chain, so it catches under the
+    // rebuild's own fuse; refused, the query stops growing the list.
+    let result = PAST16.run("the logic entity list's growth", || {
         #[expect(
             clippy::cast_ptr_alignment,
             reason = "the game hands back our own `Found`"
@@ -86,20 +86,33 @@ unsafe extern "system" fn grow_found(vec: *mut u8, wanted: i64, _keep: u64) -> u
     result.unwrap_or(0)
 }
 
-pub(super) unsafe extern "system" fn rebuild(obj: *mut u8, world: *mut u8) {
-    // SAFETY: the client's object in its serial bases update.
-    if let (Some((game, layout)), Some(code)) = (unsafe { windowed(obj) }, CODE.get()) {
-        // SAFETY: the rebuild's own object and world.
-        let done = crate::world::bases::BASES_FUSE.run("the logic entity sets", || unsafe {
-            rebuild_sets(obj, world, &game, layout, code);
-        });
-        if done.is_some() {
+/// Links the client's logic entity rebuild under [`PAST16`]; true when
+/// linked.
+pub(super) fn link(loader: &Loader) -> bool {
+    loader.link_fused(
+        &PAST16,
+        Target::Pinned(bases::REBUILD),
+        &REBUILD_NEXT,
+        rebuild,
+        HookFlags::EXCLUSIVE,
+    )
+}
+
+crate::engine::chains::chain_detour! {
+    /// The table's `bases.rebuild`, over every base of the window too while
+    /// the object holds more than 16.
+    fn rebuild(obj: *mut u8, world: *mut u8) -> ();
+    next REBUILD_NEXT;
+    fuse &PAST16, "the logic entity sets";
+    |onward| {
+        // SAFETY: the client's object in its serial bases update.
+        if let (Some((game, layout)), Some(code)) = (unsafe { windowed(obj) }, CODE.get()) {
+            // SAFETY: the rebuild's own object and world.
+            unsafe { rebuild_sets(obj, world, &game, layout, code) };
             return;
         }
+        onward.call();
     }
-    // SAFETY: this detour runs only as the rebuild's link, so the slot holds
-    // the next function of that signature.
-    unsafe { REBUILD_NEXT.get()(obj, world) };
 }
 
 /// Empties the set at `set`, keeping its room, as the game does.

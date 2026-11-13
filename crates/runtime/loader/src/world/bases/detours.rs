@@ -2,33 +2,96 @@
 //! new base code, the four zone lookups and the placement cursor.
 
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-use enshwick_core::abi::AltarLimit;
+use enshwick_core::abi::{AltarLimit, HookFlags};
 use enshwick_core::raw::read_at;
 
 use super::members::{Game, Side, side_of};
 use super::{
-    ADD_BASE_NEXT, ASKED, BASE_AT_NEXT, BASES_FUSE, CHECK_NEXT, Fields, GROUP_NEXT, HOLDER_AT_NEXT,
-    IN_BASE_NEXT, LIMITS, LimitFilter, MAX_ALTARS_NEXT, PLANNED, SITES, Sites, ZONE_COUNT, ZONES,
-    ZONES_AT_NEXT, base_limit, cursor, kind_index, lifecycle, members, past16, raised,
+    ALTAR_LIMIT, ASKED, BASE_CAP, Container, Fields, LIMITS, LimitFilter, PLANNED, RAISED_FUSE,
+    RAISED_ZONES, SITES, Sites, ZONE_COUNT, ZONES, base_limit, cursor, kind_index, lifecycle,
+    members, past16, raised,
 };
+use crate::engine::fuse::Off;
+use crate::engine::loader::{Loader, Target};
+use crate::engine::pinned;
+use crate::engine::undo::Undo;
 use crate::world::base_groups::grouping::Grouped;
 use crate::world::base_groups::limit::{Zone, Zones};
 use crate::world::base_groups::window::{self, Kind};
 
-pub(super) unsafe extern "system" fn max_altars(balancing: u64, flame_level: u32) -> u8 {
-    // SAFETY: this detour runs only as the `building.max_altars` link, so the
-    // slot holds the next function of that signature; the game's arguments
-    // pass unchanged.
-    let vanilla = unsafe { MAX_ALTARS_NEXT.get()(balancing, flame_level) };
-    let Some(limits) = LIMITS.sealed() else {
-        return vanilla;
-    };
-    let running = limits
-        .iter()
-        .filter(|f| !crate::engine::loader::is_off(f.owner));
-    chain_limit(flame_level, vanilla, base_limit().zones, running)
+/// Links the altar limit under [`ALTAR_LIMIT`]; true when linked.
+pub(super) fn link_limit(loader: &Loader) -> bool {
+    let target = Target::Pinned(pinned::building::MAX_ALTARS);
+    loader.link_fused(
+        &ALTAR_LIMIT,
+        target,
+        &MAX_ALTARS_NEXT,
+        max_altars,
+        HookFlags::NONE,
+    )
+}
+
+/// Links the new base code's cap under [`BASE_CAP`], then the grouping, the
+/// four lookups and the cursor, all or none, under [`RAISED_FUSE`]: a site
+/// left to the game would keep its limits beside the raised ones, and no
+/// zone list grows without the cap. True when every link is made.
+pub(super) fn link_raised(loader: &Loader) -> bool {
+    let at = Target::Pinned;
+    let none = HookFlags::NONE;
+    let only = HookFlags::EXCLUSIVE;
+    let fuse = &RAISED_FUSE;
+    let new_base = at(pinned::bases::NEW_BASE);
+    loader.link_fused(&BASE_CAP, new_base, &ADD_BASE_NEXT, add_base, none)
+        && loader.link_fused(fuse, at(pinned::bases::GROUPING), &GROUP_NEXT, group, none)
+        && loader.link_fused(
+            fuse,
+            at(pinned::bases::BASE_AT),
+            &BASE_AT_NEXT,
+            base_at,
+            only,
+        )
+        && loader.link_fused(
+            fuse,
+            at(pinned::bases::IN_BASE),
+            &IN_BASE_NEXT,
+            in_base,
+            only,
+        )
+        && loader.link_fused(
+            fuse,
+            at(pinned::bases::HOLDER_AT),
+            &HOLDER_AT_NEXT,
+            holder_at,
+            only,
+        )
+        && loader.link_fused(
+            fuse,
+            at(pinned::bases::ZONES_AT),
+            &ZONES_AT_NEXT,
+            zones_at,
+            only,
+        )
+        && loader.link_fused(fuse, at(pinned::bases::CURSOR), &CHECK_NEXT, check, none)
+}
+
+crate::engine::chains::chain_detour! {
+    /// The table's `building.max_altars`: the game's altar limit for a flame
+    /// level, through the mods' filters in load order.
+    fn max_altars(balancing: u64, flame_level: u32) -> u8;
+    next MAX_ALTARS_NEXT;
+    fuse &ALTAR_LIMIT, "the altar limit";
+    |onward| {
+        let vanilla = onward.call();
+        let Some(limits) = LIMITS.sealed() else {
+            return vanilla;
+        };
+        let running = limits
+            .iter()
+            .filter(|f| !crate::engine::loader::is_off(f.owner));
+        chain_limit(flame_level, vanilla, base_limit().zones, running)
+    }
 }
 
 /// Runs `filters` in order on the limit of `flame_level`, where the game
@@ -68,50 +131,58 @@ pub(super) fn chain_limit<'a>(
     limit.allowed.min(u8::try_from(zones).unwrap_or(u8::MAX))
 }
 
-pub(super) unsafe extern "system" fn group(bases: *mut u8, world: *mut u8) {
-    // SAFETY: `bases` is the grouping's own bases object when not null.
-    let kind = SITES
-        .get()
-        .filter(|_| !bases.is_null())
-        .map(|sites| unsafe { side_of(bases, &sites.fields) });
-    if let Some(kind) = kind {
-        PLANNED[kind_index(kind)].store(window::VANILLA, Ordering::Relaxed);
-    }
-    if let Some(sites) = SITES.get().filter(|_| raised() && !bases.is_null())
-        && let Some(loader) = crate::engine::loader::loader()
-        && BASES_FUSE.verify(&loader.build.name, || {
-            let image = usize::try_from(loader.base)
-                .ok()
-                .and_then(crate::engine::live::Image::at);
-            super::check::object_holds(bases.addr(), &sites.fields, image)
-        })
-    {
-        // SAFETY: `bases` is the grouping's own live object, non-null by the
-        // filter, before the game's grouping copies the world's zone list.
-        let _done = BASES_FUSE.run("the zone list", || unsafe {
-            members::let_zone_list_grow(bases, sites.fields);
-        });
-    }
-    // SAFETY: this detour runs only as the base grouping's link, so the slot
-    // holds the next function of that signature; the game's arguments pass
-    // unchanged.
-    unsafe { GROUP_NEXT.get()(bases, world) };
-    let (Some(sites), Some(kind)) = (SITES.get().filter(|_| raised()), kind) else {
-        return;
-    };
-    // SAFETY: `bases` is non-null, since `kind` is known, and is the bases
-    // object the grouping has just filled, on the grouping's thread; the
-    // game's new base code is what `ADD_BASE_NEXT` holds past our link.
-    let settled = BASES_FUSE.run("the base grouping", || unsafe {
-        regroup(bases, kind, sites)
-    });
-    if let Some(grouped) = settled.flatten() {
-        // SAFETY: `bases` is non-null and is the object the game's grouping
-        // and `settle` have just filled, on this thread.
-        unsafe { keep(bases, kind, sites.fields, &grouped) };
-    } else {
-        Side::of(kind).forget();
-        BASES_FUSE.blow("the base grouping's count");
+crate::engine::chains::chain_detour! {
+    /// The table's `bases.grouping`: the game's grouping, with its zone list
+    /// let grow before it and its bases settled after it while the limit is
+    /// raised.
+    fn group(bases: *mut u8, world: *mut u8) -> ();
+    next GROUP_NEXT;
+    fuse &RAISED_FUSE, "the base grouping";
+    |onward| {
+        let kind = SITES
+            .get()
+            .filter(|_| !bases.is_null())
+            // SAFETY: `bases` is the grouping's own bases object, non-null
+            // by the filter.
+            .map(|sites| unsafe { side_of(bases, &sites.fields) });
+        if let Some(kind) = kind {
+            PLANNED[kind_index(kind)].store(window::VANILLA, Ordering::Relaxed);
+        }
+        if let Some(sites) = SITES.get().filter(|_| raised() && !bases.is_null())
+            && let Some(loader) = crate::engine::loader::loader()
+            && RAISED_FUSE.verify(&loader.build.name, || {
+                let image = usize::try_from(loader.base)
+                    .ok()
+                    .and_then(crate::engine::live::Image::at);
+                super::check::object_holds(bases.addr(), &sites.fields, image)
+            })
+        {
+            // SAFETY: `bases` is the grouping's own live object, non-null by
+            // the filter, before the game's grouping copies the world's zone
+            // list.
+            unsafe { members::let_zone_list_grow(bases, sites.fields) };
+        }
+        onward.call();
+        let (Some(sites), Some(kind)) = (SITES.get().filter(|_| raised()), kind) else {
+            return;
+        };
+        // Unless the grouping settles, a panic part way included, the side
+        // table forgets what it half wrote.
+        let forget = Undo::new(|| Side::of(kind).forget());
+        // SAFETY: `bases` is non-null, since `kind` is known, and is the
+        // bases object the grouping has just filled, on the grouping's
+        // thread; the game's new base code is what `ADD_BASE_NEXT` holds past
+        // our link.
+        if let Some(grouped) = unsafe { regroup(bases, kind, sites) } {
+            // SAFETY: `bases` is non-null and is the object the game's
+            // grouping and `settle` have just filled, on this thread.
+            unsafe { keep(bases, kind, sites.fields, &grouped) };
+            forget.keep();
+        } else {
+            drop(forget);
+            let why = "the game's grouping left bases the loader cannot settle";
+            RAISED_FUSE.turn_off(&Off::fault(RAISED_ZONES, why));
+        }
     }
 }
 
@@ -123,6 +194,8 @@ pub(super) unsafe extern "system" fn group(bases: *mut u8, world: *mut u8) {
 /// - `bases` is the live `kind` object the game's grouping has just filled,
 ///   on the grouping's thread.
 unsafe fn regroup(bases: *mut u8, kind: Kind, sites: &Sites) -> Option<Grouped> {
+    // The cap links first, and the grouping never without it.
+    let new_base = ADD_BASE_NEXT.wired()?;
     let window = past16::sites().map(past16::Sites::code);
     let ready = window.and_then(|code| {
         // SAFETY: the caller guarantees the live object on the grouping's
@@ -138,7 +211,7 @@ unsafe fn regroup(bases: *mut u8, kind: Kind, sites: &Sites) -> Option<Grouped> 
             bases,
             sites.fields,
             ASKED.bases(kind),
-            ADD_BASE_NEXT.get(),
+            new_base,
             ready.as_ref().map(|f| f as &dyn Fn(usize)),
         )
     }
@@ -201,37 +274,54 @@ unsafe fn keep(bases: *const u8, kind: Kind, fields: Fields, grouped: &Grouped) 
     known.store(Arc::new(zones));
 }
 
-pub(super) unsafe extern "system" fn add_base(bases: *mut u8, zone: *const u8, index: u32) {
-    if let Some(fields) = SITES
-        .get()
-        .filter(|_| raised() && !bases.is_null())
-        .map(|sites| sites.fields)
-    {
-        // SAFETY: `bases` is non-null by the filter before it and is the
-        // bases object the grouping passes; its u32 base count sits at the
-        // build table's `bases.count`.
-        let started = unsafe { read_at::<u32>(bases, fields.count) };
-        // SAFETY: `bases` is non-null by the filter and is the live object
-        // the grouping passes to its new base code.
-        let kind = unsafe { side_of(bases, &fields) };
-        let planned = &PLANNED[kind_index(kind)];
-        if started == 0 {
+crate::engine::chains::chain_detour! {
+    /// The table's `bases.new_base`: the game's new base code, held back
+    /// past the bases the raised grouping plans, and past the game's 16
+    /// whatever the zone list holds.
+    fn add_base(bases: *mut u8, zone: *const u8, index: u32) -> ();
+    next ADD_BASE_NEXT;
+    fuse &BASE_CAP, "the base cap";
+    |onward| {
+        if let Some(fields) = SITES.get().filter(|_| !bases.is_null()).map(|sites| sites.fields) {
+            // SAFETY: `bases` is non-null by the filter before it and is the
+            // bases object the grouping passes; its u32 base count sits at
+            // the build table's `bases.count`.
+            let started = unsafe { read_at::<u32>(bases, fields.count) };
+            // SAFETY: `bases` is non-null by the filter and is the live
+            // object the grouping passes to its new base code.
+            let kind = unsafe { side_of(bases, &fields) };
             // SAFETY: the game's grouping calls the new base code only after
             // it refilled the object's zone list, on its own thread.
-            let plan = BASES_FUSE.run("the base plan", || unsafe {
-                members::planned(bases, fields, ASKED.bases(kind))
-            });
-            planned.store(plan.unwrap_or(window::VANILLA), Ordering::Relaxed);
+            let plan = || plan_bases(|| unsafe { members::planned(bases, fields, ASKED.bases(kind)) });
+            if !may_start(started, &PLANNED[kind_index(kind)], plan) {
+                return;
+            }
         }
-        let limit = planned.load(Ordering::Relaxed).min(window::VANILLA);
-        if usize::try_from(started).map_or(true, |n| n >= limit) {
-            return;
-        }
+        onward.call();
     }
-    // SAFETY: this detour runs only as the new base code's link, so the slot
-    // holds the next function of that signature; the game's arguments pass
-    // unchanged.
-    unsafe { ADD_BASE_NEXT.get()(bases, zone, index) };
+}
+
+/// The bases a grouping may start: what the raised limit `planned`, or the
+/// game's 16 while it is not raised. A plan that panics turns the raised
+/// limit off, never the cap, and leaves 16.
+pub(super) fn plan_bases(planned: impl FnOnce() -> usize) -> usize {
+    if !raised() {
+        return window::VANILLA;
+    }
+    RAISED_FUSE
+        .run("the base plan", planned)
+        .unwrap_or(window::VANILLA)
+}
+
+/// Whether a grouping may start base number `started`: below what it
+/// `plan`s, asked on its first base and kept in `planned`, and below the
+/// game's 16, which its array of bases holds.
+pub(super) fn may_start(started: u32, planned: &AtomicUsize, plan: impl FnOnce() -> usize) -> bool {
+    if started == 0 {
+        planned.store(plan(), Ordering::Relaxed);
+    }
+    let limit = planned.load(Ordering::Relaxed).min(window::VANILLA);
+    usize::try_from(started).is_ok_and(|n| n < limit)
 }
 
 /// The view of `bases` for a lookup, while the raised limit holds.
@@ -241,7 +331,7 @@ pub(super) unsafe extern "system" fn add_base(bases: *mut u8, zone: *const u8, i
 /// - `bases` is a live bases object, read on a thread the grouping does not
 ///   run beside.
 pub(super) unsafe fn view(bases: *const u8) -> Option<Game> {
-    let sites = SITES.get().filter(|_| raised() && !BASES_FUSE.is_off())?;
+    let sites = SITES.get().filter(|_| raised())?;
     // SAFETY: `bases` is non-null by the check, and `view`'s caller
     // guarantees a live object read beside no grouping.
     (!bases.is_null()).then(|| unsafe { Game::new(bases, sites.fields) })
@@ -257,124 +347,136 @@ unsafe fn point_of(point: *const [f32; 3]) -> Option<[f32; 3]> {
     (!point.is_null()).then(|| unsafe { read_at(point.cast(), 0) })
 }
 
-pub(super) unsafe extern "system" fn base_at(
-    out: *mut u8,
-    bases: *const u8,
-    point: *const [f32; 3],
-) -> *mut u8 {
-    // SAFETY: the lookup's own point, readable when not null.
-    let p = unsafe { point_of(point) };
-    // SAFETY: the lookup's own object, live, on a thread beside no grouping.
-    let game = unsafe { view(bases) };
-    if let (Some(p), Some(game), false) = (p, game, out.is_null()) {
-        // SAFETY: the lookup's own answer, writable for 0x10 bytes.
-        let done = BASES_FUSE.run("a base lookup", || unsafe {
-            members::base_at(out, &game, p);
-        });
-        if done.is_some() {
+crate::engine::chains::chain_detour! {
+    /// The table's `bases.base_at`: the base that holds a point, over every
+    /// base while the limit is raised.
+    fn base_at(out: *mut u8, bases: *const u8, point: *const [f32; 3]) -> *mut u8;
+    next BASE_AT_NEXT;
+    fuse &RAISED_FUSE, "a base lookup";
+    |onward| {
+        // SAFETY: the lookup's own point, readable when not null.
+        let p = unsafe { point_of(point) };
+        // SAFETY: the lookup's own object, live, on a thread beside no
+        // grouping.
+        let game = unsafe { view(bases) };
+        if let (Some(p), Some(game), false) = (p, game, out.is_null()) {
+            // SAFETY: the lookup's own answer, writable for 0x10 bytes.
+            unsafe { members::base_at(out, &game, p) };
             return out;
         }
+        onward.call()
     }
-    // SAFETY: this detour runs only as the lookup's link, so the slot holds
-    // the next function of that signature; the game's arguments pass
-    // unchanged.
-    unsafe { BASE_AT_NEXT.get()(out, bases, point) }
 }
 
-pub(super) unsafe extern "system" fn in_base(
-    bases: *const u8,
-    i: u64,
-    point: *const [f32; 3],
-) -> bool {
-    // SAFETY: the lookup's own point, readable when not null.
-    let p = unsafe { point_of(point) };
-    // SAFETY: the lookup's own object, live, on a thread beside no grouping.
-    let game = unsafe { view(bases) };
-    if let (Some(p), Some(game), Ok(i)) = (p, game, usize::try_from(i))
-        && game.holds_index(i)
-        && let Some(inside) = BASES_FUSE.run("a base lookup", || members::in_base(&game, i, p))
-    {
-        return inside;
+crate::engine::chains::chain_detour! {
+    /// The table's `bases.in_base`: whether base `i` holds a point, over
+    /// every base while the limit is raised.
+    fn in_base(bases: *const u8, i: u64, point: *const [f32; 3]) -> bool;
+    next IN_BASE_NEXT;
+    fuse &RAISED_FUSE, "a base lookup";
+    |onward| {
+        // SAFETY: the lookup's own point, readable when not null.
+        let p = unsafe { point_of(point) };
+        // SAFETY: the lookup's own object, live, on a thread beside no
+        // grouping.
+        let game = unsafe { view(bases) };
+        if let (Some(p), Some(game), Ok(i)) = (p, game, usize::try_from(i))
+            && game.holds_index(i)
+        {
+            return members::in_base(&game, i, p);
+        }
+        onward.call()
     }
-    // SAFETY: this detour runs only as the lookup's link, so the slot holds
-    // the next function of that signature; the game's arguments pass
-    // unchanged.
-    unsafe { IN_BASE_NEXT.get()(bases, i, point) }
 }
 
-pub(super) unsafe extern "system" fn holder_at(
-    out: *mut u8,
-    bases: *const u8,
-    point: *const [f32; 3],
-) -> *mut u8 {
-    // SAFETY: the lookup's own point, readable when not null.
-    let p = unsafe { point_of(point) };
-    // SAFETY: the lookup's own object, live, on a thread beside no grouping.
-    let game = unsafe { view(bases) };
-    if let (Some(p), Some(game), false) = (p, game, out.is_null()) {
-        // SAFETY: the lookup's own answer, writable for 0x30 bytes.
-        let done = BASES_FUSE.run("a zone lookup", || unsafe {
-            members::holder_at(out, &game, p);
-        });
-        if done.is_some() {
+crate::engine::chains::chain_detour! {
+    /// The table's `bases.holder_at`: the box that holds a point, over every
+    /// base while the limit is raised.
+    fn holder_at(out: *mut u8, bases: *const u8, point: *const [f32; 3]) -> *mut u8;
+    next HOLDER_AT_NEXT;
+    fuse &RAISED_FUSE, "a zone lookup";
+    |onward| {
+        // SAFETY: the lookup's own point, readable when not null.
+        let p = unsafe { point_of(point) };
+        // SAFETY: the lookup's own object, live, on a thread beside no
+        // grouping.
+        let game = unsafe { view(bases) };
+        if let (Some(p), Some(game), false) = (p, game, out.is_null()) {
+            // SAFETY: the lookup's own answer, writable for 0x30 bytes.
+            unsafe { members::holder_at(out, &game, p) };
             return out;
         }
+        onward.call()
     }
-    // SAFETY: this detour runs only as the lookup's link, so the slot holds
-    // the next function of that signature; the game's arguments pass
-    // unchanged.
-    unsafe { HOLDER_AT_NEXT.get()(out, bases, point) }
 }
 
-pub(super) unsafe extern "system" fn zones_at(
-    out: *mut u8,
-    list: *mut u8,
-    bases: *const u8,
-    point: *const [f32; 3],
-) -> *mut u8 {
-    // SAFETY: the lookup's own point, readable when not null.
-    let p = unsafe { point_of(point) };
-    // SAFETY: the lookup's own object, live, on a thread beside no grouping.
-    let game = unsafe { view(bases) };
-    if let (Some(p), Some(game), false) = (p, game, out.is_null() || list.is_null()) {
-        // SAFETY: the game's live zone box container.
-        let len = unsafe { members::list_len(list, &game.fields().container) };
-        // SAFETY: the lookup's own answer and the game's live zone box
-        // container with its own grow callback.
-        let done = BASES_FUSE.run("a zone list lookup", || unsafe {
-            members::zones_at(out, list, &game, p);
-        });
-        if done.is_some() {
+crate::engine::chains::chain_detour! {
+    /// The table's `bases.zones_at`: the zone boxes that hold a point, over
+    /// every base while the limit is raised.
+    fn zones_at(
+        out: *mut u8,
+        list: *mut u8,
+        bases: *const u8,
+        point: *const [f32; 3],
+    ) -> *mut u8;
+    next ZONES_AT_NEXT;
+    fuse &RAISED_FUSE, "a zone list lookup";
+    |onward| {
+        // SAFETY: the lookup's own point, readable when not null.
+        let p = unsafe { point_of(point) };
+        // SAFETY: the lookup's own object, live, on a thread beside no
+        // grouping.
+        let game = unsafe { view(bases) };
+        if let (Some(p), Some(game), false) = (p, game, out.is_null() || list.is_null()) {
+            // SAFETY: the game's live zone box container, used on this
+            // thread until the guard drops at the end of this lookup.
+            let guard = unsafe { list_len_undo(list, game.fields().container) };
+            // SAFETY: the lookup's own answer and the game's live zone box
+            // container with its own grow callback.
+            unsafe { members::zones_at(out, list, &game, p) };
+            guard.keep();
             return out;
         }
-        // SAFETY: the same container, whose boxes past `len` the game's own
-        // lookup appends again.
-        unsafe { members::set_list_len(list, &game.fields().container, len) };
+        onward.call()
     }
-    // SAFETY: this detour runs only as the lookup's link, so the slot holds
-    // the next function of that signature; the game's arguments pass
-    // unchanged.
-    unsafe { ZONES_AT_NEXT.get()(out, list, bases, point) }
 }
 
-pub(super) unsafe extern "system" fn check(
-    flags: *mut u32,
-    ctx: *const u8,
-    transform: *const i64,
-    item: *const u8,
-    mode: u64,
-    extra: u64,
-) {
-    // SAFETY: this detour runs only as the placement cursor's link, so the
-    // slot holds the next function of that signature; the game's arguments
-    // pass unchanged.
-    unsafe { CHECK_NEXT.get()(flags, ctx, transform, item, mode, extra) };
-    if !raised() || flags.is_null() || ctx.is_null() || transform.is_null() || item.is_null() {
-        return;
+/// Puts a zone box container's length back when dropped, unless kept, so
+/// after a lookup of ours panicked the game's own lookup appends to the
+/// boxes it had.
+///
+/// # Safety
+///
+/// - `list` is the game's live zone box container, laid out as `container`,
+///   used on this thread until the guard drops, and only appended to.
+pub(super) unsafe fn list_len_undo(list: *mut u8, container: Container) -> Undo<impl FnOnce()> {
+    // SAFETY: the caller guarantees the live container.
+    let len = unsafe { members::list_len(list, &container) };
+    // SAFETY: the caller guarantees the live container until the guard
+    // drops; it held `len` boxes then, which the lookup only appended to.
+    Undo::new(move || unsafe { members::set_list_len(list, &container, len) })
+}
+
+crate::engine::chains::chain_detour! {
+    /// The table's `bases.cursor`: the game's placement check, then an altar
+    /// past the raised limit refused.
+    fn check(
+        flags: *mut u32,
+        ctx: *const u8,
+        transform: *const i64,
+        item: *const u8,
+        mode: u64,
+        extra: u64,
+    ) -> ();
+    next CHECK_NEXT;
+    fuse &RAISED_FUSE, "the placement check";
+    |onward| {
+        onward.call();
+        if !raised() || flags.is_null() || ctx.is_null() || transform.is_null() || item.is_null() {
+            return;
+        }
+        // SAFETY: the cursor's own arguments, each non-null by the check
+        // before it, on the cursor's thread after the original ran.
+        unsafe { cursor::refuse_past_limit(flags, ctx, transform, item) };
     }
-    // SAFETY: the cursor's own arguments, each non-null by the check before it,
-    // on the cursor's thread after the original ran.
-    let _done = BASES_FUSE.run("the placement check", || unsafe {
-        cursor::refuse_past_limit(flags, ctx, transform, item);
-    });
 }

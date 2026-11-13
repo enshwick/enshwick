@@ -51,15 +51,12 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use arc_swap::ArcSwap;
-use enshwick_core::abi::{AltarLimitFilterFn, HookFlags, Status};
+use enshwick_core::abi::{AltarLimitFilterFn, Status};
 
-use self::detours::{
-    add_base, base_at, check, group, holder_at, in_base, max_altars, view, zones_at,
-};
 use crate::engine::builds::Unhooked;
-use crate::engine::chains::Next;
 use crate::engine::code::{CodePatch, Verdict};
-use crate::engine::loader::{Loader, Registered, Target};
+use crate::engine::fuse::Fuse;
+use crate::engine::loader::{Loader, Registered};
 use crate::engine::registry::Registry;
 use crate::world::base_groups::limit::{Limits, MAX_BASES, VANILLA_ZONES, Zones};
 use crate::world::base_groups::window::{self, Kind};
@@ -479,59 +476,7 @@ impl Asked {
     }
 }
 
-// SAFETY: `GroupFn` is the signature of the base grouping the table's
-// `bases.grouping` pins, and `link` uses this slot only as that function's
-// next.
-static GROUP_NEXT: Next<GroupFn> = unsafe { Next::new() };
-// SAFETY: `AddBaseFn` is the signature of the new base code the table's
-// `bases.new_base` pins, and `link` uses this slot only as that function's
-// next.
-static ADD_BASE_NEXT: Next<AddBaseFn> = unsafe { Next::new() };
-// SAFETY: `AnswerFn` is the signature of the lookup the table's
-// `bases.base_at` pins, and `link` uses this slot only as that function's
-// next.
-static BASE_AT_NEXT: Next<AnswerFn> = unsafe { Next::new() };
-// SAFETY: `InBaseFn` is the signature of the lookup the table's
-// `bases.in_base` pins, and `link` uses this slot only as that function's
-// next.
-static IN_BASE_NEXT: Next<InBaseFn> = unsafe { Next::new() };
-// SAFETY: `AnswerFn` is the signature of the lookup the table's
-// `bases.holder_at` pins, and `link` uses this slot only as that function's
-// next.
-static HOLDER_AT_NEXT: Next<AnswerFn> = unsafe { Next::new() };
-// SAFETY: `ZonesAtFn` is the signature of the lookup the table's
-// `bases.zones_at` pins, and `link` uses this slot only as that function's
-// next.
-static ZONES_AT_NEXT: Next<ZonesAtFn> = unsafe { Next::new() };
-// SAFETY: `CheckFn` is the signature of the placement cursor the table's
-// `bases.cursor` pins, and `link` uses this slot only as that function's
-// next.
-static CHECK_NEXT: Next<CheckFn> = unsafe { Next::new() };
-// SAFETY: `MaxAltarsFn` is the signature of the build table's
-// `building.max_altars`, and `link` uses this slot only as that function's
-// next.
-static MAX_ALTARS_NEXT: Next<MaxAltarsFn> = unsafe { Next::new() };
-
-type GroupFn = unsafe extern "system" fn(bases: *mut u8, world: *mut u8);
 type AddBaseFn = unsafe extern "system" fn(bases: *mut u8, zone: *const u8, index: u32);
-type AnswerFn =
-    unsafe extern "system" fn(out: *mut u8, bases: *const u8, point: *const [f32; 3]) -> *mut u8;
-type InBaseFn = unsafe extern "system" fn(bases: *const u8, i: u64, point: *const [f32; 3]) -> bool;
-type ZonesAtFn = unsafe extern "system" fn(
-    out: *mut u8,
-    list: *mut u8,
-    bases: *const u8,
-    point: *const [f32; 3],
-) -> *mut u8;
-type CheckFn = unsafe extern "system" fn(
-    flags: *mut u32,
-    ctx: *const u8,
-    transform: *const i64,
-    item: *const u8,
-    mode: u64,
-    extra: u64,
-);
-type MaxAltarsFn = unsafe extern "system" fn(balancing: u64, flame_level: u32) -> u8;
 
 fn too_late(loader: &Loader) -> bool {
     loader.delivery.get().is_some() || LIMITS.is_sealed()
@@ -622,7 +567,7 @@ fn find(loader: &Loader) -> Status {
     let fields = match Fields::read(&|id| loader.offset(id)) {
         Ok(fields) => fields,
         Err(why) => {
-            loader.feature_off(RAISED_ZONES, why.entry(), &why.to_string());
+            let _off = loader.fuse_off(&RAISED_FUSE, why.entry(), &why.to_string());
             return Status::MISSING;
         }
     };
@@ -636,7 +581,8 @@ fn find(loader: &Loader) -> Status {
             Status::OK
         }
         Err(symbol) => {
-            loader.feature_off(RAISED_ZONES, symbol.id(), &Unhooked::Absent.to_string());
+            let absent = Unhooked::Absent.to_string();
+            let _off = loader.fuse_off(&RAISED_FUSE, symbol.id(), &absent);
             Status::MISSING
         }
     }
@@ -695,7 +641,7 @@ pub(crate) fn report(loader: &Loader, already: &[&str]) {
 }
 
 fn raised() -> bool {
-    RAISED.load(Ordering::Acquire)
+    RAISED.load(Ordering::Acquire) && !RAISED_FUSE.is_off() && !BASE_CAP.is_off()
 }
 
 /// The zones and bases of the last grouping.
@@ -731,79 +677,13 @@ pub(crate) fn forget() {
 }
 
 pub(crate) fn link(loader: &'static Loader) {
-    let limits = LIMITS.seal();
-    if !limits.is_empty() {
-        loader.link_feature(
-            "altar limit",
-            Target::Pinned(pinned::building::MAX_ALTARS),
-            &MAX_ALTARS_NEXT,
-            max_altars,
-            HookFlags::NONE,
-        );
+    if !LIMITS.seal().is_empty() {
+        let _linked = detours::link_limit(loader);
     }
     let Some(sites) = SITES.get() else {
         return;
     };
-    // A refused link leaves its site unhooked, so arming keeps the game's
-    // limits; the other links then hand every call on unchanged.
-    let at = |symbol| Target::Pinned(symbol);
-    let none = HookFlags::NONE;
-    let only = HookFlags::EXCLUSIVE;
-    let refused = [
-        loader.link_feature(
-            RAISED_ZONES,
-            at(pinned::bases::GROUPING),
-            &GROUP_NEXT,
-            group,
-            none,
-        ),
-        loader.link_feature(
-            RAISED_ZONES,
-            at(pinned::bases::NEW_BASE),
-            &ADD_BASE_NEXT,
-            add_base,
-            none,
-        ),
-        loader.link_feature(
-            RAISED_ZONES,
-            at(pinned::bases::BASE_AT),
-            &BASE_AT_NEXT,
-            base_at,
-            only,
-        ),
-        loader.link_feature(
-            RAISED_ZONES,
-            at(pinned::bases::IN_BASE),
-            &IN_BASE_NEXT,
-            in_base,
-            only,
-        ),
-        loader.link_feature(
-            RAISED_ZONES,
-            at(pinned::bases::HOLDER_AT),
-            &HOLDER_AT_NEXT,
-            holder_at,
-            only,
-        ),
-        loader.link_feature(
-            RAISED_ZONES,
-            at(pinned::bases::ZONES_AT),
-            &ZONES_AT_NEXT,
-            zones_at,
-            only,
-        ),
-        loader.link_feature(
-            RAISED_ZONES,
-            at(pinned::bases::CURSOR),
-            &CHECK_NEXT,
-            check,
-            none,
-        ),
-    ]
-    .into_iter()
-    .filter(|linked| !linked)
-    .count();
-    if refused == 0 {
+    if detours::link_raised(loader) {
         let asked = ASKED.limits();
         crate::log!(
             INFO,
@@ -814,11 +694,16 @@ pub(crate) fn link(loader: &'static Loader) {
         if ASKED.asked_past_16() {
             past16::link(loader, sites.fields);
         }
-    } else {
-        crate::log!(WARN, "bases keep 16 altar zones: a link was refused");
     }
 }
 
-/// The raised limit's switch: off, every replaced lookup and the grouping
-/// run as the game's, and new bases stay within the game's 16.
-static BASES_FUSE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("more bases");
+/// The raised limit: its six links arm together or not at all, and once it
+/// is off every replaced lookup and the grouping run as the game's.
+static RAISED_FUSE: Fuse = Fuse::new(RAISED_ZONES);
+/// The cap on the game's new base code, apart from [`RAISED_FUSE`]: a zone
+/// list the raised limit let grow keeps its allocator, so the game's own
+/// grouping copies every zone after the limit turns off, and only the cap
+/// keeps it from a 17th base, which would write over the zone list.
+static BASE_CAP: Fuse = Fuse::new("the base cap");
+/// The mods' altar limit filters, apart from the raised limit.
+static ALTAR_LIMIT: Fuse = Fuse::new("altar limit");

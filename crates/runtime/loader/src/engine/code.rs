@@ -136,6 +136,15 @@ pub(crate) fn text_bytes(base: u64) -> Option<&'static [u8]> {
     Some(unsafe { core::slice::from_raw_parts(start as *const u8, len) })
 }
 
+/// Where the function that starts `offset` bytes into the game's code
+/// section `text` ends, as an offset into it too, by the image's function
+/// table; `None` when no function starts there.
+pub(crate) fn function_end(text: (usize, usize), offset: usize) -> Option<usize> {
+    let start = text.0.checked_add(offset)?;
+    let function = crate::engine::detour::function_around(start)?;
+    (function.begin == start).then(|| function.end - text.0)
+}
+
 /// The bytes the stub writes over the server's entry point while it holds
 /// it, `jmp [rip+0]` and the target, and writes back once released.
 pub(crate) const ENTRY_HOLD: usize = 14;

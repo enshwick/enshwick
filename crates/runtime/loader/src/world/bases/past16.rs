@@ -21,6 +21,7 @@ use super::loops;
 use crate::engine::builds::Unhooked;
 use crate::engine::chains::Next;
 use crate::engine::code::{CodePatch, Verdict};
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned::{Constant, Symbol, bases};
@@ -43,9 +44,6 @@ const CALLED: [Symbol; 7] = [
 ];
 /// `mov edx, imm32`, which each create loads the object's size with.
 const MOV_EDX: u8 = 0xBA;
-
-type CreateFn = unsafe extern "system" fn(allocator: *mut u8, part: *mut u8) -> *mut u8;
-type DestroyFn = unsafe extern "system" fn(obj: *mut u8) -> u64;
 
 /// Why a site of the window is not found, with the table entry it fails on.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
@@ -175,31 +173,21 @@ static LINKED: AtomicBool = AtomicBool::new(false);
 static ARMED: AtomicBool = AtomicBool::new(false);
 /// Set at arming, armed or not.
 static SETTLED: AtomicBool = AtomicBool::new(false);
-/// The window's own switch, apart from the lookups': a panic in the
-/// lifecycle stops making windows, and an object made before still frees
-/// its window.
-static LIFECYCLE: crate::engine::fuse::Fuse = crate::engine::fuse::Fuse::new("bases past 16");
+/// Set at arming when a size patch is skipped for good, not waiting.
+static SKIPPED: AtomicBool = AtomicBool::new(false);
+/// Bases past 16: the creates that fill windows and the loops that walk
+/// them, linked all or none. A fault in any of them turns them all off, and
+/// no window is made from then on.
+pub(super) static PAST16: Fuse = Fuse::new(PAST_16);
+/// The window teardown, apart from [`PAST16`], so a fault there leaves
+/// every window made before freed when its object goes. A fault here stops
+/// new windows, since none would be freed.
+static TEARDOWN: Fuse = Fuse::new("bases past 16 teardown");
 
-// SAFETY: `CreateFn` is the signature of the create the table's
-// `bases.server_create` pins, and `link` uses this slot only as that
-// function's next.
-static SERVER_CREATE_NEXT: Next<CreateFn> = unsafe { Next::new() };
-// SAFETY: `CreateFn` is the signature of the create the table's
-// `bases.client_create` pins, and `link` uses this slot only as that
-// function's next.
-static CLIENT_CREATE_NEXT: Next<CreateFn> = unsafe { Next::new() };
-// SAFETY: `DestroyFn` is the signature of the destroy the table's
-// `bases.server_destroy` pins, and `link` uses this slot only as that
-// function's next.
-static SERVER_DESTROY_NEXT: Next<DestroyFn> = unsafe { Next::new() };
-// SAFETY: `DestroyFn` is the signature of the destroy the table's
-// `bases.client_destroy` pins, and `link` uses this slot only as that
-// function's next.
-static CLIENT_DESTROY_NEXT: Next<DestroyFn> = unsafe { Next::new() };
-
-/// Whether bases past 16 are armed.
+/// Whether bases past 16 are armed, and neither the window nor its teardown
+/// turned off.
 pub(super) fn armed() -> bool {
-    ARMED.load(Ordering::Acquire)
+    ARMED.load(Ordering::Acquire) && !PAST16.is_off() && !TEARDOWN.is_off()
 }
 
 /// Whether arming has settled the window, armed or not.
@@ -304,7 +292,7 @@ fn find(
         slot_free: unsafe { core::mem::transmute::<usize, SlotFreeFn>(address(bases::SLOT_FREE)?) },
         window: geometry,
     };
-    Ok(Sites {
+    let mut sites = Sites {
         code: code_of,
         server_create: at(bases::SERVER_CREATE)?,
         server_destroy: at(bases::SERVER_DESTROY)?,
@@ -312,25 +300,27 @@ fn find(
         client_destroy: client.then(|| at(bases::CLIENT_DESTROY)).transpose()?,
         patches,
         loops,
-    })
+    };
+    // A size patch without the hooks grows objects nothing windows or
+    // frees: every patch waits for every hook of the window.
+    let targets: Box<[u64]> = sites.targets().collect();
+    for patch in &mut sites.patches {
+        patch.needs.clone_from(&targets);
+    }
+    Ok(sites)
 }
 
 /// Finds and links every site and registers the size patches, when a mod
 /// asked for more than 16 bases, for a base layout of `fields`; a miss is
 /// logged with the build and leaves 16.
 pub(super) fn link(loader: &'static Loader, fields: Fields) {
-    let build = &loader.build.name;
     let (Some(text), Some(code)) = (
         crate::engine::code::text(loader.base),
         crate::engine::code::text_bytes(loader.base),
     ) else {
         return;
     };
-    let extent = |offset: usize| {
-        let start = text.0.checked_add(offset)?;
-        let function = crate::engine::detour::function_around(start)?;
-        (function.begin == start).then(|| function.end - text.0)
-    };
+    let extent = |offset| crate::engine::code::function_end(text, offset);
     let pins = Pins {
         table: loader.build.resolved(),
         code_rva: text.0 as u64 - loader.base,
@@ -340,7 +330,7 @@ pub(super) fn link(loader: &'static Loader, fields: Fields) {
     let sites = match find(code, text.0, client, fields, &pins) {
         Ok(sites) => sites,
         Err(why) => {
-            loader.feature_off(PAST_16, why.entry(), &why.to_string());
+            let _off = loader.fuse_off(&PAST16, why.entry(), &why.to_string());
             return;
         }
     };
@@ -349,58 +339,65 @@ pub(super) fn link(loader: &'static Loader, fields: Fields) {
         .filter(|&id| client || id != bases::CLIENT_CREATE)
         .find(|&id| !loader.code_holds(id))
     {
-        loader.feature_off(PAST_16, moved.id(), &Unhooked::Moved.to_string());
+        let _off = loader.fuse_off(&PAST16, moved.id(), &Unhooked::Moved.to_string());
         return;
     }
     let sites = SITES.get_or_init(|| sites);
-    let status = crate::engine::code::register_all(sites.patches.clone(), text);
-    if !status.is_ok() {
-        crate::log!(
-            WARN,
-            "bases keep 16 on {build}: the size patches were refused ({})",
-            status.0
-        );
+    // The teardown first: no window is made that nothing would free. The
+    // patches only after every link, so a link that fails is told once.
+    if !(link_teardown(loader, client)
+        && link_creates(loader, client)
+        && loops::link(loader, &sites.loops))
+    {
         return;
     }
-    let none = HookFlags::NONE;
-    let at = |symbol| Target::Pinned(symbol);
-    let refused = [
-        loader.link_feature(
-            PAST_16,
-            at(bases::SERVER_CREATE),
-            &SERVER_CREATE_NEXT,
-            create_server,
-            none,
-        ),
-        !client
-            || loader.link_feature(
-                PAST_16,
-                at(bases::CLIENT_CREATE),
-                &CLIENT_CREATE_NEXT,
-                create_client,
-                none,
-            ),
-        loader.link_feature(
-            PAST_16,
-            at(bases::SERVER_DESTROY),
-            &SERVER_DESTROY_NEXT,
-            destroy_server,
-            none,
-        ),
-        !client
-            || loader.link_feature(
-                PAST_16,
-                at(bases::CLIENT_DESTROY),
-                &CLIENT_DESTROY_NEXT,
-                destroy_client,
-                none,
-            ),
-    ]
-    .into_iter()
-    .chain(loops::link(loader, &sites.loops))
-    .filter(|linked| !linked)
-    .count();
-    LINKED.store(refused == 0, Ordering::Release);
+    let status = crate::engine::code::register_all(sites.patches.clone(), text);
+    if !status.is_ok() {
+        let why = format!("were refused ({})", status.0);
+        let _off = loader.fuse_off(&PAST16, "the size patches", &why);
+        return;
+    }
+    LINKED.store(true, Ordering::Release);
+}
+
+/// Links the creates under [`PAST16`]; true when every link is made.
+fn link_creates(loader: &Loader, client: bool) -> bool {
+    link_sides(
+        loader,
+        &PAST16,
+        client,
+        [
+            (bases::SERVER_CREATE, &SERVER_CREATE_NEXT, create_server),
+            (bases::CLIENT_CREATE, &CLIENT_CREATE_NEXT, create_client),
+        ],
+    )
+}
+
+/// Links the destroys under [`TEARDOWN`]; true when every link is made.
+fn link_teardown(loader: &Loader, client: bool) -> bool {
+    link_sides(
+        loader,
+        &TEARDOWN,
+        client,
+        [
+            (bases::SERVER_DESTROY, &SERVER_DESTROY_NEXT, destroy_server),
+            (bases::CLIENT_DESTROY, &CLIENT_DESTROY_NEXT, destroy_client),
+        ],
+    )
+}
+
+/// Links the server's site of `sites` and, on a `client`, the client's,
+/// under `fuse`, all or none; true when every link is made.
+fn link_sides<F: Copy>(
+    loader: &Loader,
+    fuse: &'static Fuse,
+    client: bool,
+    [server, own]: [(Symbol, &'static Next<F>, F); 2],
+) -> bool {
+    let link = |(at, next, detour)| {
+        loader.link_fused(fuse, Target::Pinned(at), next, detour, HookFlags::NONE)
+    };
+    link(server) && (!client || link(own))
 }
 
 /// Settles, before arming writes anything, whether bases past 16 are armed:
@@ -408,25 +405,65 @@ pub(super) fn link(loader: &'static Loader, fields: Fields) {
 /// patch written. It runs before each round of writes and so only settles
 /// the state; [`report`] tells the outcome once, after the last round.
 pub(super) fn arming(patches: &[CodePatch], verdicts: &[Verdict], hooked: &[u64]) {
+    let verdict = |mine: &CodePatch| {
+        patches
+            .iter()
+            .zip(verdicts)
+            .find(|(p, _)| p.address == mine.address)
+            .map(|(_, v)| v)
+    };
+    let sites = SITES.get();
     let armed = LINKED.load(Ordering::Acquire)
-        && SITES.get().is_some_and(|sites| {
+        && sites.is_some_and(|sites| {
             sites.targets().all(|at| hooked.contains(&at))
-                && sites.patches.iter().all(|mine| {
-                    patches
-                        .iter()
-                        .zip(verdicts)
-                        .any(|(p, v)| p.address == mine.address && *v == Verdict::Write)
-                })
+                && sites
+                    .patches
+                    .iter()
+                    .all(|mine| verdict(mine) == Some(&Verdict::Write))
         });
+    let skipped = sites.is_some_and(|sites| {
+        sites
+            .patches
+            .iter()
+            .any(|mine| matches!(verdict(mine), Some(Verdict::Skip(_))))
+    });
     ARMED.store(armed, Ordering::Release);
+    SKIPPED.store(skipped, Ordering::Release);
     SETTLED.store(true, Ordering::Release);
 }
 
 /// Tells once, after the hooks are armed, that bases past 16 are off, unless
-/// a skipped patch already reported it among `already`.
+/// a skipped patch already reported it among `already`; a patch that waits
+/// leaves the window to its retry.
 pub(super) fn report(loader: &Loader, already: &[&str]) {
-    if SITES.get().is_some() && !armed() && !already.contains(&PAST_16) {
-        loader.feature_off(PAST_16, "bases", "a hook or a size patch is not armed");
+    let off = off_after_arming(
+        SITES.get().is_some(),
+        armed(),
+        already,
+        SKIPPED.load(Ordering::Acquire),
+    );
+    if let Some((id, why)) = off {
+        let _off = loader.fuse_off(&PAST16, id, why);
+    }
+}
+
+/// The entry and reason [`PAST16`] turns off for after arming, for a window
+/// `found` and not `armed`: a patch that named it among `already`
+/// leaves the window's own links to this fuse when `skipped` for good, and
+/// to the patch's retry when it waits.
+fn off_after_arming(
+    found: bool,
+    armed: bool,
+    already: &[&str],
+    skipped: bool,
+) -> Option<(&'static str, &'static str)> {
+    let reported = already.contains(&PAST_16);
+    if !found || armed || (reported && !skipped) {
+        None
+    } else if reported {
+        Some(("the size patches", "were skipped"))
+    } else {
+        Some(("bases", "a hook or a size patch is not armed"))
     }
 }
 
@@ -449,9 +486,7 @@ unsafe fn created(obj: *mut u8) {
     if let Some(sites) = sites() {
         // SAFETY: the caller guarantees the fresh object, grown by the size
         // patch since the window is armed, which no one else has yet.
-        let _done = LIFECYCLE.run("a bases create", || unsafe {
-            lifecycle::init(obj, &sites.code)
-        });
+        unsafe { lifecycle::init(obj, &sites.code) };
     }
 }
 
@@ -467,50 +502,63 @@ unsafe fn destroying(obj: *mut u8) {
     };
     super::members::forget_object(obj);
     // SAFETY: the caller guarantees the live object the game destroys, or
-    // null, which `destroy` finds windowed never; it ignores the fuse, so an
-    // object windowed before a panic still frees its window.
-    let freed = std::panic::catch_unwind(|| unsafe { lifecycle::destroy(obj, &sites.code) });
-    if freed.is_err() {
-        LIFECYCLE.blow("a bases destroy");
+    // null, which `destroy` finds windowed never; it frees windows whether
+    // [`PAST16`] still makes them, so one made before a fault goes too.
+    unsafe { lifecycle::destroy(obj, &sites.code) };
+}
+
+crate::engine::chains::chain_detour! {
+    /// The table's `bases.server_create`: the game's object, its window
+    /// filled while bases past 16 are armed.
+    fn create_server(allocator: *mut u8, part: *mut u8) -> *mut u8;
+    next SERVER_CREATE_NEXT;
+    fuse &PAST16, "a bases create";
+    |onward| {
+        let obj = onward.call();
+        // SAFETY: the object the create has just returned, or null.
+        unsafe { created(obj) };
+        obj
     }
 }
 
-unsafe extern "system" fn create_server(allocator: *mut u8, part: *mut u8) -> *mut u8 {
-    // SAFETY: this detour runs only as the server create's link, so the
-    // slot holds the next function of that signature; the game's arguments
-    // pass unchanged.
-    let obj = unsafe { SERVER_CREATE_NEXT.get()(allocator, part) };
-    // SAFETY: the object the create has just returned, or null.
-    unsafe { created(obj) };
-    obj
+crate::engine::chains::chain_detour! {
+    /// The table's `bases.client_create`: the game's object, its window
+    /// filled while bases past 16 are armed.
+    fn create_client(allocator: *mut u8, part: *mut u8) -> *mut u8;
+    next CLIENT_CREATE_NEXT;
+    fuse &PAST16, "a bases create";
+    |onward| {
+        let obj = onward.call();
+        // SAFETY: the object the create has just returned, or null.
+        unsafe { created(obj) };
+        obj
+    }
 }
 
-unsafe extern "system" fn create_client(allocator: *mut u8, part: *mut u8) -> *mut u8 {
-    // SAFETY: this detour runs only as the client create's link, so the
-    // slot holds the next function of that signature; the game's arguments
-    // pass unchanged.
-    let obj = unsafe { CLIENT_CREATE_NEXT.get()(allocator, part) };
-    // SAFETY: the object the create has just returned, or null.
-    unsafe { created(obj) };
-    obj
+crate::engine::chains::chain_detour! {
+    /// The table's `bases.server_destroy`: the object's window freed before
+    /// the game frees the object.
+    fn destroy_server(obj: *mut u8) -> u64;
+    next SERVER_DESTROY_NEXT;
+    fuse &TEARDOWN, "a bases destroy";
+    |onward| {
+        // SAFETY: the object the destroy got, or null.
+        unsafe { destroying(obj) };
+        onward.call()
+    }
 }
 
-unsafe extern "system" fn destroy_server(obj: *mut u8) -> u64 {
-    // SAFETY: the object the destroy got, or null.
-    unsafe { destroying(obj) };
-    // SAFETY: this detour runs only as the server destroy's link, so the
-    // slot holds the next function of that signature; the game's argument
-    // passes unchanged.
-    unsafe { SERVER_DESTROY_NEXT.get()(obj) }
-}
-
-unsafe extern "system" fn destroy_client(obj: *mut u8) -> u64 {
-    // SAFETY: the object the destroy got, or null.
-    unsafe { destroying(obj) };
-    // SAFETY: this detour runs only as the client destroy's link, so the
-    // slot holds the next function of that signature; the game's argument
-    // passes unchanged.
-    unsafe { CLIENT_DESTROY_NEXT.get()(obj) }
+crate::engine::chains::chain_detour! {
+    /// The table's `bases.client_destroy`: the object's window freed before
+    /// the game frees the object.
+    fn destroy_client(obj: *mut u8) -> u64;
+    next CLIENT_DESTROY_NEXT;
+    fuse &TEARDOWN, "a bases destroy";
+    |onward| {
+        // SAFETY: the object the destroy got, or null.
+        unsafe { destroying(obj) };
+        onward.call()
+    }
 }
 
 #[cfg(test)]
@@ -592,7 +640,123 @@ mod tests {
                 client || pins.at(bases::COUNT_GETTER).is_err(),
                 "{variable}"
             );
+            let targets: Vec<u64> = sites.targets().collect();
+            assert!(
+                sites.patches.iter().all(|p| *p.needs == *targets),
+                "{variable}: every patch waits for every hook of the window"
+            );
         }
+    }
+
+    #[test]
+    fn a_size_patch_skipped_for_good_turns_the_window_s_own_fuse_off_and_one_that_waits_does_not() {
+        let named = [PAST_16];
+        assert_eq!(
+            off_after_arming(true, false, &named, true).map(|o| o.0),
+            Some("the size patches")
+        );
+        assert_eq!(
+            off_after_arming(true, false, &named, false),
+            None,
+            "it waits for its retry"
+        );
+        assert_eq!(
+            off_after_arming(true, false, &[], false).map(|o| o.0),
+            Some("bases")
+        );
+        assert_eq!(off_after_arming(true, true, &named, true), None);
+        assert_eq!(off_after_arming(false, false, &[], true), None);
+    }
+
+    /// One test, in order: the steps share the window's two fuses, which
+    /// are the process's own, and nextest runs each test in a process of
+    /// its own.
+    #[test]
+    fn the_window_arms_all_or_none_and_its_teardown_outlives_it() {
+        let sites = [
+            (bases::SERVER_CREATE, &PAST16, false),
+            (bases::CLIENT_CREATE, &PAST16, true),
+            (bases::SERVER_DESTROY, &TEARDOWN, false),
+            (bases::CLIENT_DESTROY, &TEARDOWN, true),
+            (bases::SORT, &PAST16, false),
+            (bases::SORT_ALL, &PAST16, false),
+            (bases::BASE_IDS, &PAST16, true),
+            (bases::REBUILD, &PAST16, false),
+            (bases::STOCK_CACHE, &PAST16, false),
+            (bases::NPC_TOTALS, &PAST16, false),
+            (bases::SERVER_UPDATE, &PAST16, false),
+            (bases::BED_CLEANUP, &PAST16, false),
+            (bases::COMFORT_CLEANUP, &PAST16, false),
+            (bases::PROPS_CLEANUP, &PAST16, false),
+        ];
+        ARMED.store(true, Ordering::Release);
+        assert!(armed(), "armed with the window and its teardown on");
+        ARMED.store(false, Ordering::Release);
+        assert!(!armed());
+        let ids: Vec<Symbol> = sites.iter().map(|&(id, ..)| id).collect();
+        for client in [false, true] {
+            let side = if client { Side::CLIENT } else { Side::SERVER };
+            let loader = crate::start::tests::pinning_loader(side, &ids, &[]);
+            assert!(
+                link_teardown(&loader, client)
+                    && link_creates(&loader, client)
+                    && loops::link_parts(&loader, client),
+                "client {client}: every site the build pins links"
+            );
+            let chains = enshwick_base::Relock::relock(&loader.chains);
+            for (id, fuse, client_only) in sites {
+                let at = chains.features_at(loader.address(id).unwrap());
+                let linked = at.len() == 1 && core::ptr::eq(at[0], fuse);
+                assert_eq!(
+                    linked,
+                    client || !client_only,
+                    "client {client}: {id} linked under its own fuse, the client's on a client only"
+                );
+            }
+        }
+
+        let loader = crate::start::tests::bare_loader();
+        assert!(loader.link_fused(
+            &TEARDOWN,
+            Target::Found("destroy", Some(0x1000)),
+            &SERVER_DESTROY_NEXT,
+            destroy_server,
+            HookFlags::NONE,
+        ));
+        assert!(loader.link_fused(
+            &PAST16,
+            Target::Found("create", Some(0x2000)),
+            &CLIENT_CREATE_NEXT,
+            create_client,
+            HookFlags::NONE,
+        ));
+        assert!(
+            !link_creates(&loader, false),
+            "this build has no server create"
+        );
+        assert!(
+            PAST16.is_off(),
+            "a later link that fails turns the window off"
+        );
+        assert!(!TEARDOWN.is_off());
+        let mut chains = enshwick_base::Relock::relock(&loader.chains);
+        chains.seal();
+        assert!(
+            chains.features_at(0x2000).is_empty(),
+            "the first create went with the window, so its target is never patched"
+        );
+        let at_destroy = chains.features_at(0x1000);
+        assert!(
+            at_destroy.len() == 1 && core::ptr::eq(at_destroy[0], &raw const TEARDOWN),
+            "the destroy keeps freeing the windows made before"
+        );
+        drop(chains);
+
+        ARMED.store(true, Ordering::Release);
+        assert!(!armed(), "no window is made once the window is off");
+        TEARDOWN.blow("a test");
+        assert!(TEARDOWN.is_off());
+        assert!(!armed(), "nor once the teardown is off");
     }
 
     /// Where the function that starts at an offset into the code at
