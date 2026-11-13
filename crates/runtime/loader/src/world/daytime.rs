@@ -296,13 +296,13 @@ pub(crate) fn set_speed(loader: &Loader, owner: ModIndex, factor: f32) -> Result
     if !(0.0..=MAX_FACTOR).contains(&factor) {
         return Err(Status::BAD_ARGS);
     }
+    if SPEED_FUSE.is_off() {
+        return Err(Status::UNAVAILABLE);
+    }
     let slot = FACTORS
         .get()
         .and_then(|factors| factors.iter().find(|(id, _)| *id == owner))
         .ok_or(Status::REFUSED)?;
-    if SPEED_FUSE.is_off() {
-        return Err(Status::UNAVAILABLE);
-    }
     let (layout, world, daytime) = daytime(loader)?;
     let next = SPEED_NEXT.wired().ok_or(Status::MISSING)?;
     slot.1.store(factor.to_bits(), Ordering::Relaxed);
@@ -448,6 +448,17 @@ mod tests {
         assert_eq!(forward(10 * day + 50, 50, day), 10 * day + 50);
         assert_eq!(forward(10, 50, day), 50, "already ahead");
         assert_eq!(forward(10 * day, 50, 0), 50, "no day length");
+    }
+
+    #[test]
+    fn a_speed_set_once_the_time_speed_is_off_is_refused_as_unavailable() {
+        let loader = crate::start::tests::bare_loader();
+        SPEED_FUSE.blow("a test");
+        assert_eq!(
+            set_speed(&loader, ModIndex::new(0), 2.0),
+            Err(Status::UNAVAILABLE)
+        );
+        assert_eq!(SPEED_FUSE.feature(), "time speed", "its link's name");
     }
 
     #[test]

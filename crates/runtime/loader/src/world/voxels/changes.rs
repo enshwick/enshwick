@@ -20,7 +20,6 @@ use enshwick_core::abi::{ModHandle, VoxelChange};
 
 use crate::base::wire::Drops;
 #[cfg(windows)]
-use crate::engine::chains::Next;
 use crate::engine::fuse::Fuse;
 #[cfg(windows)]
 use crate::engine::loader::Loader;
@@ -40,16 +39,6 @@ pub(crate) struct Edit {
     size: [u32; 3],
     changes: Vec<VoxelChange>,
 }
-
-/// The game's commit: the editor, the box's new words, its size and its
-/// lowest corner, in voxels at the finest level (server 399 and 26430253).
-#[cfg(windows)]
-type CommitFn = unsafe extern "system" fn(
-    editor: *mut u8,
-    words: *const super::Words,
-    size: *const [u32; 3],
-    min: *const [u32; 3],
-) -> u64;
 
 /// What the link reads a box's image before the write with.
 #[cfg(windows)]
@@ -89,9 +78,6 @@ fn box_count(min: [u32; 3], size: [u32; 3], held: u64) -> Option<usize> {
 /// The state of the voxel edits: the link, the server's editor it hears,
 /// and the writes waiting for the end of the step.
 struct Edits {
-    fuse: Fuse,
-    #[cfg(windows)]
-    next: Next<CommitFn>,
     #[cfg(windows)]
     layout: OnceLock<Layout>,
     /// The server's voxel editor as of the last step, 0 while no server
@@ -103,12 +89,11 @@ struct Edits {
     dropped: Drops,
 }
 
+/// The switch of the voxel edits.
+#[cfg(windows)]
+static EDITS_FUSE: Fuse = Fuse::new("voxel edits");
+
 static EDITS: Edits = Edits {
-    fuse: Fuse::new("voxel edits"),
-    // SAFETY: `CommitFn` is the signature of `voxel.commit`, and this slot is
-    // the `next` of the one link on it, `commit`, the only caller of `get`.
-    #[cfg(windows)]
-    next: unsafe { Next::new() },
     #[cfg(windows)]
     layout: OnceLock::new(),
     editor: AtomicUsize::new(0),
@@ -253,13 +238,12 @@ pub(crate) fn link(loader: &'static Loader) {
     if !loader.subscribed(Event::VOXELS_CHANGED) {
         return;
     }
-    let feature = "voxel edits";
     let read_box = loader
         .address(pinned::voxel::READ_BOX)
         .and_then(|address| usize::try_from(address).ok());
     let Some(read_box) = read_box else {
-        loader.feature_off(
-            feature,
+        let _off = loader.fuse_off(
+            &EDITS_FUSE,
             pinned::voxel::READ_BOX.id(),
             "this build has no box read",
         );
@@ -278,7 +262,11 @@ pub(crate) fn link(loader: &'static Loader) {
         .into_iter()
         .find(|&id| loader.offset(id).is_none())
         .unwrap_or(pinned::voxel::FINEST_LEVEL);
-        loader.feature_off(feature, missing.id(), "this build has no voxel grid layout");
+        let _off = loader.fuse_off(
+            &EDITS_FUSE,
+            missing.id(),
+            "this build has no voxel grid layout",
+        );
         return;
     };
     // SAFETY: the table's `voxel.read_box` is the address of the game
@@ -288,10 +276,10 @@ pub(crate) fn link(loader: &'static Loader) {
     let target = crate::engine::loader::Target::Pinned(pinned::voxel::COMMIT);
     // The link passes every write through until the layout is set, so
     // `after_step` reads no editor while the link is refused.
-    if loader.link_feature(
-        feature,
+    if loader.link_fused(
+        &EDITS_FUSE,
         target,
-        &EDITS.next,
+        &COMMIT_NEXT,
         commit,
         enshwick_core::abi::HookFlags::NONE,
     ) && EDITS
@@ -307,36 +295,39 @@ pub(crate) fn link(loader: &'static Loader) {
     }
 }
 
-/// The link on the editor's commit.
-///
-/// # Safety
-///
-/// The game's own arguments to `voxel.commit`, on the thread it called it
-/// on: `editor` its voxel editor, `words` its buffer of the box's new words,
-/// `size` and `min` the box.
 #[cfg(windows)]
-unsafe extern "system" fn commit(
-    editor: *mut u8,
-    words: *const super::Words,
-    size: *const [u32; 3],
-    min: *const [u32; 3],
-) -> u64 {
-    let next = EDITS.next.get();
-    let server = EDITS.editor.load(Ordering::Acquire);
-    if let Some(&layout) = EDITS
-        .layout
-        .get()
-        .filter(|_| server != 0 && editor.addr() == server)
-    {
-        // SAFETY: the game's own arguments, by this function's `# Safety`,
-        // before the game's write.
-        let _noted = EDITS.fuse.run("the voxels a write changes", || unsafe {
-            note(layout, editor, words, size, min);
-        });
+crate::engine::chains::chain_detour! {
+    /// The editor's commit at the table's `voxel.commit`: the editor, the
+    /// box's new words, its size and its lowest corner, in voxels at the
+    /// finest level (server 399 and 26430253). A commit of the server's
+    /// editor notes the voxels it changes before the game writes them.
+    ///
+    /// # Safety
+    ///
+    /// The game's own arguments to `voxel.commit`, on the thread it called
+    /// it on: `editor` its voxel editor, `words` its buffer of the box's new
+    /// words, `size` and `min` the box.
+    fn commit(
+        editor: *mut u8,
+        words: *const super::Words,
+        size: *const [u32; 3],
+        min: *const [u32; 3],
+    ) -> u64;
+    next COMMIT_NEXT;
+    fuse &EDITS_FUSE, "the voxels a write changes";
+    |onward| {
+        let server = EDITS.editor.load(Ordering::Acquire);
+        if let Some(&layout) = EDITS
+            .layout
+            .get()
+            .filter(|_| server != 0 && editor.addr() == server)
+        {
+            // SAFETY: the game's own arguments, by this function's
+            // `# Safety`, before the game's write.
+            unsafe { note(layout, editor, words, size, min) };
+        }
+        onward.call()
     }
-    // SAFETY: this link runs only on `voxel.commit`, so the slot holds the
-    // next function of that signature; the game's arguments pass unchanged.
-    unsafe { next(editor, words, size, min) }
 }
 
 /// Queues the voxels the commit's new image of the box `size` and `min`

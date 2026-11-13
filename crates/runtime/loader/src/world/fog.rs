@@ -485,3 +485,41 @@ pub(crate) fn read(
         Err(ReadError::Short) => Status::BAD_ARGS,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_fog_whose_reveal_fails_to_link_is_wholly_off_and_its_destroy_never_armed() {
+        let mut loader = crate::start::tests::bare_loader();
+        loader.side = Side::CLIENT;
+        loader.build = Box::leak(Box::new(crate::engine::builds::with_rows(
+            "[symbols]\n\"map.fog_destroy\" = 0x1000\n[constants]\n\"map.fog_destroy.bytes\" = 1",
+        )));
+        let loader: &'static Loader = Box::leak(Box::new(loader));
+        assert_eq!(open(loader, ModIndex::new(0)), Status::OK);
+        link(loader);
+        assert!(FUSE.is_off() && COPY_FUSE.is_off());
+        assert!(!UNCOVERS.linked.load(Ordering::Acquire));
+        let mut chains = loader.chains.relock();
+        chains.seal();
+        assert!(chains.is_empty(), "the destroy went with its feature");
+        drop(chains);
+        let listed = crate::engine::diag::parts_off();
+        let reason = |part: &str| {
+            listed
+                .iter()
+                .find(|p| p.part == part)
+                .map(|p| p.reason.clone())
+        };
+        assert!(
+            reason("fog of war").is_some_and(|r| r.starts_with("map.fog_reveal ")),
+            "{listed:?}"
+        );
+        assert!(
+            reason("fog of war copy").is_some_and(|r| r.starts_with("map.fog_tile_edge_shift ")),
+            "listed for the Mods screen, not only logged: {listed:?}"
+        );
+    }
+}

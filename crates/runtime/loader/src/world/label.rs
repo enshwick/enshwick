@@ -160,7 +160,7 @@ pub(crate) fn link(loader: &'static Loader) {
         return;
     }
     if layout(loader).is_none() {
-        let _off = loader.fuse_off(&FUSE, LAYOUT_ENTRY, crate::engine::builds::ABSENT);
+        let _off = loader.fuse_off(&FUSE, LAYOUT_ENTRY, "is not all in this build");
         return;
     }
     let target = Target::Pinned(pinned::label::REPLACE);
@@ -389,6 +389,28 @@ fn renamer(loader: &Loader, machine: u32) -> Option<PlayerInfo> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    unsafe extern "system" fn allow(_: *const RenameCall, _: *mut c_void) -> u8 {
+        1
+    }
+
+    #[test]
+    fn rename_filters_on_a_build_without_the_label_layout_are_listed_off() {
+        assert_eq!(
+            register(ModIndex::new(0), allow, core::ptr::null_mut()),
+            Status::OK
+        );
+        let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
+        link(loader);
+        assert!(FUSE.is_off());
+        let listed = crate::engine::diag::parts_off();
+        assert!(
+            listed
+                .iter()
+                .any(|p| p.part == "rename filters" && p.reason.starts_with(LAYOUT_ENTRY)),
+            "listed for the Mods screen, not only logged: {listed:?}"
+        );
+    }
 
     #[test]
     fn labels_are_cut_at_character_boundaries() {
