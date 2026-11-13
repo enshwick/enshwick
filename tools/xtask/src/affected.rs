@@ -51,8 +51,17 @@ pub(crate) trait Texts {
     fn after(&self, path: &str) -> Option<String>;
 }
 
-/// Files whose every change reaches every package.
-const GLOBAL_FILES: &[&str] = &["rust-toolchain.toml", "clippy.toml", ".cargo/config.toml"];
+/// Files whose every change reaches every package; Cargo still reads its
+/// settings under the legacy name `.cargo/config`.
+const GLOBAL_FILES: &[&str] = &[
+    "rust-toolchain.toml",
+    "clippy.toml",
+    ".cargo/config.toml",
+    ".cargo/config",
+];
+/// Directories of tool settings every test run reads, such as nextest's
+/// `.config/nextest.toml`.
+const GLOBAL_DIRS: &[&str] = &[".config/"];
 /// The book's chapters, compiled as doctests of the API crate.
 const BOOK_DIR: &str = "book/src/";
 const BOOK_HARNESS: &str = "enshwick";
@@ -66,22 +75,29 @@ pub(crate) fn scope(files: &[String], packages: &[Package], texts: &dyn Texts) -
     let mut docs = BTreeSet::new();
     let mut luau = false;
     for file in files {
-        let shared = match file.as_str() {
-            shared::LOCK => Some(shared::locked(texts, packages)),
-            shared::MANIFEST => Some(shared::inherited(texts, packages)),
-            path if GLOBAL_FILES.contains(&path) => Some(None),
-            _ => None,
-        };
-        if let Some(reached) = shared {
-            let Some(reached) = reached else {
+        match file.as_str() {
+            shared::LOCK => {
+                let Some(reached) = shared::locked(texts, packages) else {
+                    return Scope::All;
+                };
+                changed.extend(reached);
+            }
+            shared::MANIFEST => {
+                let Some(reached) = shared::inherited(texts, packages) else {
+                    return Scope::All;
+                };
+                changed.extend(reached);
+            }
+            path if GLOBAL_FILES.contains(&path)
+                || GLOBAL_DIRS.iter().any(|dir| path.starts_with(dir)) =>
+            {
                 return Scope::All;
-            };
-            changed.extend(reached);
-        } else if file.starts_with(BOOK_DIR) {
-            docs.insert(BOOK_HARNESS.to_owned());
-            luau = true;
-        } else if let Some(package) = owner(file, packages) {
-            changed.insert(package.name.clone());
+            }
+            path if path.starts_with(BOOK_DIR) => {
+                docs.insert(BOOK_HARNESS.to_owned());
+                luau = true;
+            }
+            path => changed.extend(owner(path, packages).map(|package| package.name.clone())),
         }
     }
     let mut code = dependents(&changed, packages);
@@ -269,8 +285,14 @@ checksum = "cc"
     }
 
     #[test]
-    fn a_toolchain_lint_or_cargo_config_change_checks_everything() {
-        for file in ["rust-toolchain.toml", "clippy.toml", ".cargo/config.toml"] {
+    fn a_toolchain_lint_cargo_or_nextest_config_change_checks_everything() {
+        for file in [
+            "rust-toolchain.toml",
+            "clippy.toml",
+            ".cargo/config.toml",
+            ".cargo/config",
+            ".config/nextest.toml",
+        ] {
             assert_eq!(scope(&files(&[file]), &workspace()), Scope::All, "{file}");
         }
     }
@@ -390,21 +412,43 @@ checksum = "cc"
     }
 
     #[test]
-    fn a_new_member_checks_only_its_own_files() {
-        let mut packages = workspace();
-        packages.push(package("new-mod", "mods/new-mod", &["enshwick"]));
-        let tree = Tree::changed(
+    fn a_membership_change_checks_everything() {
+        // A changed glob or exclude can make a path dependency a member,
+        // whose own files and lock entry stay the same.
+        for (before, after) in [
+            ("", "exclude = [\"crates/runtime/legacy\"]\n"),
+            ("", "members = [\"vendor/*\"]\n"),
+        ] {
+            let tree = Tree::changed(
+                "Cargo.toml",
+                &format!("[workspace]\n{before}"),
+                &format!("[workspace]\n{after}"),
+            );
+            assert_eq!(
+                super::scope(&files(&["Cargo.toml"]), &workspace(), &tree),
+                Scope::All,
+                "{after}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_workspace_dependency_change_reaches_every_package_built_on_it() {
+        // Features unify: a member that gets `windows` without inheriting it
+        // builds with the new features too.
+        let mut tree = Tree::changed(
             "Cargo.toml",
-            "[workspace]\nmembers = [\"crates/*\"]\n",
-            "[workspace]\nmembers = [\"crates/*\", \"mods/new-mod\"]\n",
+            &manifest(
+                "[workspace.dependencies]\nwin = { package = \"windows\", version = \"0.1\" }\n",
+            ),
+            &manifest(
+                "[workspace.dependencies]\nwin = { package = \"windows\", version = \"0.1\", features = [\"Win32\"] }\n",
+            ),
         );
+        tree.after.insert("Cargo.lock".to_owned(), lock("bb"));
         assert_eq!(
-            code(super::scope(
-                &files(&["Cargo.toml", "mods/new-mod/src/lib.rs"]),
-                &packages,
-                &tree
-            )),
-            names(&["new-mod"])
+            code(super::scope(&files(&["Cargo.toml"]), &workspace(), &tree)),
+            names(&["loader", "my-mod"])
         );
     }
 

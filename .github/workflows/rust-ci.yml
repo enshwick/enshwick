@@ -5,9 +5,9 @@ name: Rust CI
 # build cached between runs; a push to main runs the full suite and fills the
 # caches pull requests start from. With `split` the host check, the doctests
 # and rustdoc, the Windows lint, the trybuild test and cargo-semver-checks run
-# as parallel jobs, the doctests and rustdoc only in the merge queue and on
-# main. The Windows tests run natively on a Windows runner. The job `check` sums them
-# up and is the required check.
+# as parallel jobs, the doctests and rustdoc only in the merge queue, on main
+# and with `full`. The Windows tests run natively on a Windows runner. The job
+# `check` sums them up and is the required check.
 
 on:
   workflow_call:
@@ -56,9 +56,10 @@ jobs:
           persist-credentials: false
 
       # Work already proven is not repeated: a merge queue group whose tree
-      # is its pull request's own head passed that pull request's check,
-      # which leaves out only the docs part, and a change to files that never build (documents outside the book,
-      # repository settings, other workflows) has nothing to compile or test.
+      # is its pull request's own head passed that pull request's check
+      # (split, all but the docs part), and a change to files that never
+      # build (documents outside the book, repository settings, other
+      # workflows) has nothing to compile or test.
       - name: What is left to prove
         id: scope
         env:
@@ -69,6 +70,7 @@ jobs:
           FULL: ${{ inputs.full || (github.event_name != 'pull_request' && github.event_name != 'merge_group') }}
           HEAD_REF: ${{ github.event.merge_group.head_ref }}
           GH_TOKEN: ${{ github.token }}
+          SPLIT: ${{ inputs.split }}
         run: |
           git cat-file -e "$BASE^{commit}" 2> /dev/null || git fetch -q origin "$BASE"
           reason=""
@@ -82,7 +84,9 @@ jobs:
               echo "branch=$(jq -r .head.ref <<< "$pr")" >> "$GITHUB_OUTPUT"
               git fetch -q origin "$head"
               if [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse "$head^{tree}")" ]; then
-                proven="the group's tree is pull request #$number's head, whose check passed"
+                passed="the group's tree is pull request #$number's head, whose check passed"
+                # Unsplit, the pull request ran the docs too.
+                if [ "$SPLIT" = true ]; then proven=$passed; else reason=$passed; fi
               fi
             fi
           fi
@@ -117,6 +121,7 @@ jobs:
         id: parts
         env:
           EVENT: ${{ github.event_name }}
+          FULL: ${{ inputs.full }}
           PROVEN: ${{ steps.scope.outputs.proven }}
           SEMVER: ${{ inputs.semver }}
           SPLIT: ${{ inputs.split }}
@@ -127,9 +132,11 @@ jobs:
             parts='{"part":"docs","xtask":true}'
           else
             parts='{"part":"host","xtask":true},{"part":"windows-lint","xtask":true},{"part":"trybuild","xtask":true}'
-            # The doctests and rustdoc run in the merge queue and on main,
-            # which keeps the pull request lane short.
-            if [ "$EVENT" != pull_request ]; then parts+=',{"part":"docs","xtask":true}'; fi
+            # The doctests and rustdoc run in the merge queue, on main and in
+            # the full suite, which keeps the pull request lane short.
+            if [ "$EVENT" != pull_request ] || [ "$FULL" = true ]; then
+              parts+=',{"part":"docs","xtask":true}'
+            fi
             # A pull request also fuzzes, briefly, the targets its change
             # reaches; a push to main fuzzes every target and fills the fuzz
             # build cache pull requests restore.
