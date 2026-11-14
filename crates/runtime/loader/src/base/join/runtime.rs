@@ -53,6 +53,11 @@ crate::engine::chains::chain_detour! {
     next NEXT;
     fuse &JOIN_FUSE, "the join check";
     |onward| {
+        // Only a join with a target leaves the lobby: a null pass names no new
+        // game and may come while the client stays in its lobby.
+        if !target.is_null() {
+            crate::base::lobby::left();
+        }
         let Some(layout) = LAYOUT.get() else {
             return onward.call();
         };

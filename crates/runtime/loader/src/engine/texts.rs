@@ -282,8 +282,16 @@ mod tests {
     }
 
     #[test]
-    fn every_text_exists_in_all_languages() {
-        assert_eq!(shipped().untranslated(), []);
+    fn every_text_exists_in_english_and_ukrainian_and_other_languages_fall_back() {
+        assert_eq!(shipped().missing_in(Language::REQUIRED), []);
+        let both = Texts::parse("[en]\nback = \"Back\"\n[uk]\nback = \"Назад\"\n").unwrap();
+        assert_eq!(both.missing_in(Language::REQUIRED), []);
+        assert_eq!(both.get("back", Language::DE_DE), Some("Back"));
+        let english_only = Texts::parse("[en]\nback = \"Back\"\n").unwrap();
+        assert_eq!(
+            english_only.missing_in(Language::REQUIRED),
+            [(Language::UK_UA, "back")]
+        );
     }
 
     /// Apostrophes other than `'`, the one the game's Ukrainian texts use:
@@ -332,7 +340,7 @@ mod tests {
     }
 
     #[test]
-    fn every_built_in_stat_kind_has_a_name_in_every_language() {
+    fn every_built_in_stat_kind_has_the_game_s_own_name_in_every_language_it_offers() {
         let texts = shipped();
         for (id, _) in enshwick_core::stats::builtin::ALL {
             let key = enshwick_core::stats::name_key(&id.to_string()).unwrap();
@@ -361,11 +369,6 @@ mod tests {
             shipped().get("mods.developer.off", Language::EN_US),
             Some(enshwick_core::mods::DEVELOPER_TOOL_OFF)
         );
-    }
-
-    #[test]
-    fn every_language_the_game_offers_has_every_text() {
-        assert_eq!(shipped().missing_in(Language::OFFERED), []);
     }
 
     #[test]

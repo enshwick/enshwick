@@ -29,8 +29,9 @@ starts each of the first three. The crates under
 are parts of the loader, and a mod never depends on them.
 
 A mod names itself in a manifest. It reads its settings, reacts to events, adds
-items and recipes, and offers players actions through its controls. It can
-carry its texts in every language the game offers ([Texts](content/texts.md)).
+items and recipes, and offers players actions through its controls. It
+carries its texts in English and Ukrainian, and in any other language the
+game offers ([Texts](content/texts.md)).
 Its unit tests run without the game against a fake host ([Testing](testing.md)).
 Where the API has no call, a Rust mod links hooks into game functions. When a
 mod fails, the loader turns that mod off, and the game runs vanilla where the

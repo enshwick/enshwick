@@ -413,6 +413,7 @@ pub(crate) fn joining(runs_enshwick: bool) {
     forget();
     crate::content::recipes::joining();
     crate::ui::interface::demo::forget();
+    crate::ui::interface::close_world_dialogs();
     STATE
         .server_runs_enshwick
         .store(runs_enshwick, Ordering::Release);

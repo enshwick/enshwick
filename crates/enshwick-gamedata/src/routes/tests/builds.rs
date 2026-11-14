@@ -138,6 +138,12 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ("1.0 server (26430253)", "server.console_handler", 0x57_ba80),
     // The application the handler stops and its exit reason, which the
     // handler spins on when set; read on 26430253.
+    ("1.0 server (1269579)", "server.application", 0x14c_85e0),
+    ("1.0 server (1269579)", "server.exit_reason", 0xaa0),
+    ("1.0 server (26083076)", "server.application", 0x14c_a5e0),
+    ("1.0 server (26083076)", "server.exit_reason", 0xaa0),
+    ("1.0 server (26319703)", "server.application", 0x14d_75f0),
+    ("1.0 server (26319703)", "server.exit_reason", 0xaa0),
     ("1.0 server (26430253)", "server.application", 0x14d_75f0),
     ("1.0 server (26430253)", "server.exit_reason", 0xaa0),
     // The editor's commit, which every terrain edit passes; on 26083076 and

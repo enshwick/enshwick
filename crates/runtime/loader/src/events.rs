@@ -40,6 +40,7 @@ use crate::{actions, world};
 pub(crate) static PART: Part = Part {
     table_ids: TABLE_IDS,
     link: Some(link),
+    forget: Some(forget),
     ..Part::new("events", module_path!())
 };
 
@@ -130,10 +131,19 @@ static PLACE_NEXT: Next<PlaceFn> = unsafe { Next::new() };
 // SAFETY: `PickupFn` is the signature of the build table's `building.pickup`,
 // and `link` uses this slot only as that function's next.
 static PICKUP_NEXT: Next<PickupFn> = unsafe { Next::new() };
-/// Building events from worker threads, raised after the step.
-static BUILDING: Pending<BuildingData> = Pending::new();
-/// The handle of the player seen joining in each slot, 0 for none.
-static JOINED: [AtomicU32; MAX_SLOTS] = [const { AtomicU32::new(0) }; MAX_SLOTS];
+/// The events domain's state of the running server's world, which a
+/// client's hosted game's end forgets.
+struct State {
+    /// Building events from worker threads, raised after the step.
+    building: Pending<BuildingData>,
+    /// The handle of the player seen joining in each slot, 0 for none.
+    joined: [AtomicU32; MAX_SLOTS],
+}
+
+static STATE: State = State {
+    building: Pending::new(),
+    joined: [const { AtomicU32::new(0) }; MAX_SLOTS],
+};
 /// One fuse per link: a panic in the loader's own work of a link turns off
 /// only that link's events, and the link forwards from then on.
 static STEP_FUSE: Fuse = Fuse::new("step events");
@@ -339,7 +349,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         offsets.server_world,
         offsets.entities,
     );
-    let built = BUILDING.take();
+    let built = STATE.building.take();
     if !BUILDING_FUSE.is_off() {
         guarded(&BUILDING_FUSE, "the post-step link", || {
             actions::console::remember(&built);
@@ -421,7 +431,7 @@ unsafe fn joins(loader: &'static Loader, offsets: &Offsets, server: *mut u8) {
     if server.is_null() {
         return;
     }
-    for (index, joined) in JOINED.iter().enumerate().take(offsets.slot_count) {
+    for (index, joined) in STATE.joined.iter().enumerate().take(offsets.slot_count) {
         let slot = server
             .cast_const()
             .wrapping_add(offsets.slots + index * offsets.slot_size);
@@ -493,8 +503,15 @@ fn periodic_ticks(step: u64, now: u64, time: StepTime, game: u64) -> usize {
     )
 }
 
+/// Forgets the players seen joining and the building events queued in a
+/// client's hosted game that ended.
+fn forget(_loader: &'static Loader) {
+    forget_joined();
+    STATE.building.clear();
+}
+
 fn forget_joined() {
-    for joined in &JOINED {
+    for joined in &STATE.joined {
         joined.store(0, Ordering::Relaxed);
     }
 }
@@ -507,8 +524,6 @@ fn end_session(loader: &'static Loader) {
     SESSION.change(Session::stop);
     crate::engine::world::release();
     loader.parts.end(loader);
-    forget_joined();
-    BUILDING.clear();
     crate::log!(
         INFO,
         "the hosted game stopped; server mods rest until the next"
@@ -628,7 +643,10 @@ unsafe extern "system" fn remove(server: *mut u8, slot: *mut u8) {
         // its u32 handle.
         let handle: u32 = unsafe { read_at(slot, 0) };
         if handle != 0
-            && let Some(joined) = JOINED.get(index).filter(|_| index < offsets.slot_count)
+            && let Some(joined) = STATE
+                .joined
+                .get(index)
+                .filter(|_| index < offsets.slot_count)
             && joined.load(Ordering::Relaxed) == handle
         {
             joined.store(0, Ordering::Relaxed);
@@ -659,7 +677,7 @@ fn queue(data: BuildingData) {
         return;
     }
     guarded(&BUILDING_FUSE, "a building link", || {
-        BUILDING.push(data);
+        STATE.building.push(data);
     });
 }
 
@@ -768,6 +786,21 @@ unsafe extern "system" fn pickup(context: *mut u8, target: *const u8, tool: u32)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_hosted_game_s_end_forgets_the_joined_players_and_the_queued_building_events() {
+        STATE.joined[3].store(42, Ordering::Relaxed);
+        STATE.building.push(bytemuck::Zeroable::zeroed());
+        let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
+        Part::forget_in(&[&PART], "events", loader);
+        assert!(
+            STATE
+                .joined
+                .iter()
+                .all(|joined| joined.load(Ordering::Relaxed) == 0)
+        );
+        assert!(STATE.building.take().is_empty());
+    }
 
     #[test]
     fn a_panic_in_a_link_s_work_turns_off_that_link_alone() {

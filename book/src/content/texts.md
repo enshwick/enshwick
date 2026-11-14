@@ -193,23 +193,21 @@ assert_eq!(texts.get("greeting", Language::FALLBACK), Some("Hi"));
 assert_eq!(Language::from_code("pt-BR"), Some(Language::PT_BR));
 ```
 
-A test holds the file complete without naming its languages.
-`missing_in(Language::OFFERED)` lists each language the game offers and each
-key it lacks, so a language the game adds shows up as missing texts.
-`untranslated()` catches a key one table forgot:
+A mod's own file needs no test for its languages: `texts!()` refuses to
+build when a key lacks English or Ukrainian. Another language may lack a key,
+and its players then see the English text. For texts read while the game
+runs, `missing_in(Language::REQUIRED)` lists each key that lacks a text in
+English or Ukrainian:
 
 ```rust
 use enshwick::i18n::{Language, Texts};
 
-// In a mod, `texts::TOML` of `enshwick::texts!()`.
+// Texts read at run time, such as a data pack's.
 const TEXTS: &str = "[en]\ngreeting = \"Hello\"\n[uk]\ngreeting = \"Привіт\"\n";
 
-// The body of the mod's test `every_text_exists_in_all_languages`.
 let texts = Texts::parse(TEXTS).unwrap();
-assert_eq!(texts.untranslated(), []);
-// The body of `every_language_the_game_offers_has_every_text`; this short
-// file lacks most of them.
-assert!(!texts.missing_in(Language::OFFERED).is_empty());
+assert_eq!(texts.missing_in(Language::REQUIRED), []);
+assert_eq!(texts.get("greeting", Language::DE_DE), Some("Hello"));
 ```
 
 On a client,

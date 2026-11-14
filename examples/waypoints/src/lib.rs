@@ -157,22 +157,11 @@ enshwick::declare_mod!(Waypoints);
 mod tests {
     use enshwick::abi::{ActionCall, Header, PlayerInfo, Side, Status};
     use enshwick::content::EngineFacts;
-    use enshwick::i18n::Texts;
     use enshwick::net::{Peer, SendError};
     use enshwick::test::{Drawn, FakeHost, facts};
     use enshwick::{Entity, PlayerKey};
 
-    use super::{Waypoint, texts};
-
-    #[test]
-    fn every_text_exists_in_both_languages() {
-        let texts = Texts::parse(texts::TOML).expect("the texts parse");
-        assert!(
-            texts.untranslated().is_empty(),
-            "{:?}",
-            texts.untranslated()
-        );
-    }
+    use super::Waypoint;
 
     #[test]
     fn the_actions_send_the_mark_and_its_clearing_and_need_a_position() {

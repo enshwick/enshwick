@@ -306,6 +306,26 @@ mod tests {
     }
 
     #[test]
+    fn an_off_pack_s_row_names_both_file_hashes() {
+        let rows = difference(
+            "you.post@1.0.0+abcd1234",
+            "",
+            "you.post@1.0.0+ffffffff",
+            true,
+        )
+        .rows();
+        assert_eq!(
+            rows[1],
+            Row::Line(
+                "you.post: needs 1.0.0+abcd1234, you have 1.0.0+ffffffff, off until you restart \
+                 the game"
+                    .into()
+            ),
+            "the player sees their files differ, so a restart alone does not let them in"
+        );
+    }
+
+    #[test]
     fn a_cut_server_list_counts_no_extra_mod() {
         let found = difference("a.b@1.0.0", "a.b@1.0.0,c.d@1.0.0", "", false);
         assert!(found.is_empty());

@@ -166,7 +166,10 @@ const fn entry_holds(size: usize, id: usize, value: usize) -> bool {
 }
 
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
-/// The quest ids, read once from the journal.
+/// The quest ids, read once from the journal. Set once holds: the journal's
+/// quests come only from patches served at init, built once per process
+/// and rebuilt only at the same length, so a second hosted world reads the
+/// same ids (server 26430253, client 26430625).
 static QUESTS: OnceLock<FxHashSet<u32>> = OnceLock::new();
 
 /// What the store follows of the running game, forgotten when a hosted game
